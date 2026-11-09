@@ -206,7 +206,7 @@ abstract contract RegFixture is Test {
 
     function _disable(address t, uint8 bit) internal {
         vm.prank(ownerA);
-        MetaTokenBase(t).disableFeature(bit);
+        NormalToken(t).disableFeature(bit);
     }
 
     function _now() internal view returns (uint64) {
@@ -225,7 +225,7 @@ abstract contract RegFixture is Test {
     function _uaSig(uint256 pk, address t, MetaTxLib.UAMetaTransaction memory m)
         internal view returns (IUARegistry.UASig memory s)
     {
-        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, MetaTokenBase(t).mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, NormalToken(t).mtxDigest(m));
         s.signature = abi.encodePacked(r, ss, v);
     }
 

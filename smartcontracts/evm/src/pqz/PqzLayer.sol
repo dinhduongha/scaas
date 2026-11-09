@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
+import {PqzSet} from "./PqzSet.sol";
+import {IFactoryToken} from "../factory/IFactoryToken.sol";
 
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
@@ -21,6 +23,12 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 import {GovernanceUse} from "../governance/GovernanceBase.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 
+/// @dev The token's `disclosureStatement` entry, for the self-call of `PqzLayer` (T66b: the entry is the face's).
+interface IPqzDisclosureStatement {
+    function disclosureStatement(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion)
+        external view returns (bytes memory);
+}
+
 /// @title The PQZ layer of the kinds `NORMAL_PQZ` and `WRAPPED_PQZ` (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1): the entry
 ///        points and views of pq-zero-knowledge.md §9.4; the state and the logic are the four libraries (`scaas.pqz`; D14).
 /// @notice **UNAUDITED.** Any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); never on Hedera.
@@ -40,7 +48,13 @@ import {GovernanceBits} from "../governance/GovernanceBits.sol";
 ///         beneficiary, shield target and auditor. The direct ops take explicit parameters (`IPqzToken`, TS-D17); each has a
 ///         signed overload (`UAEnvelope` first, `UASig` last; ua-mtx-merge R36) for native and derived ids, which runs it
 ///         through the ticket self-call, so the op's body and the statement's binding are the generic path's.
-abstract contract PqzLayer is MetaTokenBase, IPqzToken {
+abstract contract PqzLayer is MetaTokenBase {
+    /// @notice The PQZ parameter set this code was built at: its self-test hash (`PqzSet.SELFTEST`, rewritten by `at-set.sh`).
+    ///         Every body module of a PQZ kind answers it, and the implementation's constructor compares it (T66b, Fable P2-A).
+    function pqzSet() public pure returns (bytes32) {
+        return PqzSet.SELFTEST;
+    }
+
     // The address signed forms (`Envelope` + `bytes sig`) and their typehashes are in legacy/ua-mtx-merge/ (R36): the
     // `UA*` structs are the one signed form, native ids zero-padded.
     bytes32 private constant UA_ROLL_OVER_TYPEHASH = keccak256(
@@ -72,75 +86,75 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     }
 
     /// @dev `env.deps = [UAPqzVerifier]`, never on Hedera, a registry: `PqzStateLib.validateEnv`.
-    function _validateEnv(ChainEnv calldata env) internal view virtual override {
+    function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view virtual override {
         PqzStateLib.validateEnv(env.deps, env.hedera, env.registry);
     }
 
     /// @notice CTR-PQZ-15: the token signs under `"SCaaS PqzToken"`.
-    function _domainName() internal pure virtual override(ERC20MetaTx) returns (string memory) {
+    function _domainName() internal pure virtual override returns (string memory) {
         return "SCaaS PqzToken";
     }
 
     // ------------------------------------------------------------------ views
 
-    function verifier() external view returns (address) { return _pqzVerifier(); }
-    function precompile() external view returns (address) { return PqzCore.$().pqz; }
-    function proofSystemId() external view returns (bytes32) { return PqzCore.$().psid; }
-    function shieldScale() external view returns (uint256) { return PqzCore.$().shieldScale; }
-    function maxShielded() external view returns (uint256) { return PqzCore.$().maxShielded; }
-    function confidentialFee() external view returns (uint256) { return PqzCore.$().confidentialFee; }
-    function minDecoyFee() external view returns (uint256) { return PqzCore.$().minDecoyFee; }
-    function auditorUA() external view returns (bytes32) { return PqzCore.$().auditorUA; }
-    function auditorMode() external view returns (ZetherTypes.AuditorMode) { return PqzCore.$().auditorMode; }
-    function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return PqzCore.$().disclosureMode; }
-    function totalShielded() external view returns (uint256) { return PqzCore.$().totalShielded; }
-    function proofStore() external view returns (uint8) { return PqzCore.$().proofStore; }
+    function _verifierBody() internal view returns (address) { return _pqzVerifier(); }
+    function _precompileBody() internal view returns (address) { return PqzCore.$().pqz; }
+    function _proofSystemIdBody() internal view returns (bytes32) { return PqzCore.$().psid; }
+    function _shieldScaleBody() internal view returns (uint256) { return PqzCore.$().shieldScale; }
+    function _maxShieldedBody() internal view returns (uint256) { return PqzCore.$().maxShielded; }
+    function _confidentialFeeBody() internal view returns (uint256) { return PqzCore.$().confidentialFee; }
+    function _minDecoyFeeBody() internal view returns (uint256) { return PqzCore.$().minDecoyFee; }
+    function _auditorUABody() internal view returns (bytes32) { return PqzCore.$().auditorUA; }
+    function _auditorModeBody() internal view returns (ZetherTypes.AuditorMode) { return PqzCore.$().auditorMode; }
+    function _disclosureModeBody() internal view returns (ZetherTypes.DisclosureMode) { return PqzCore.$().disclosureMode; }
+    function _totalShieldedBody() internal view returns (uint256) { return PqzCore.$().totalShielded; }
+    function _proofStoreBody() internal view returns (uint8) { return PqzCore.$().proofStore; }
 
     /// @notice The account of `(ua, keyVersion)` (D13; group 3g KV-6): counters, the `acc` reference, `accUnits`, flags, the
     ///         UA's `sendCounter` (one for every version), `accHash`, `lastDebit` (group 3h PP-2).
-    function pqzAccount(bytes32 ua, uint64 keyVersion) external view override returns (AccountState memory) {
+    function _pqzAccountBody(bytes32 ua, uint64 keyVersion) internal view returns (IPqzToken.AccountState memory) {
         PqzCore.PqzStorage storage s = PqzCore.$();
         PqzCore.Account storage a = s.acct[ua][keyVersion];
-        return AccountState(a.pendingCount, a.rolled, a.floor, a.cleared, a.accBlob, a.accUnits, a.flags,
+        return IPqzToken.AccountState(a.pendingCount, a.rolled, a.floor, a.cleared, a.accBlob, a.accUnits, a.flags,
             s.sendCounter[ua], a.accHash, a.lastDebit);
     }
 
     /// @notice Group 3h (PP-2): the record of `ua`'s debit `counter` (`PqzViewLib.debitRecord`; spec §8 lever 1).
-    function pqzDebitRecord(bytes32 ua, uint64 counter) external view override returns (DebitRecordView memory) {
+    function _pqzDebitRecordBody(bytes32 ua, uint64 counter) internal view returns (IPqzToken.DebitRecordView memory) {
         return PqzViewLib.debitRecord(ua, counter);
     }
 
     /// @notice Pending slot `i` of `(ua, keyVersion)` (plan 5h D2): `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, `vOff =
     ///         0` a TRIVIAL entry with its amount in the low 64 bits of the blob field; every `i < pendingCount` (group 3h
     ///         PP-1: kept for good), 0 for an unwritten index.
-    function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view override returns (uint256) {
+    function _pqzPendingBody(bytes32 ua, uint64 keyVersion, uint64 i) internal view returns (uint256) {
         return PqzCore.$().acct[ua][keyVersion].pending[i];
     }
 
     /// @notice The `acc` ciphertext of `(ua, keyVersion)` from state (restore from state, D13, §3.5).
-    function pqzAcc(bytes32 ua, uint64 keyVersion) external view override returns (bytes memory) {
+    function _pqzAccBody(bytes32 ua, uint64 keyVersion) internal view returns (bytes memory) {
         return PqzStateLib.accOf(ua, keyVersion);
     }
 
     /// @notice Entry `i` of `(ua, keyVersion)` as a ciphertext from state (a TRIVIAL entry: `Trivial(digits(amount))`).
-    function pqzPendingCt(bytes32 ua, uint64 keyVersion, uint64 i) external view override returns (bytes memory) {
+    function _pqzPendingCtBody(bytes32 ua, uint64 keyVersion, uint64 i) internal view returns (bytes memory) {
         return PqzStateLib.pendingCt(ua, keyVersion, i);
     }
 
     /// @notice The op blob of a transfer as stored, `R ‖ v_f` packed at `PACK_BITS` (P46; `v_f` the trailing
     ///         `PqzCt.VP` bytes; D1, D13; both storage modes), empty if unknown.
-    function pqzEntryBlob(bytes32 entryRef) external view override returns (bytes memory) {
+    function _pqzEntryBlobBody(bytes32 entryRef) internal view returns (bytes memory) {
         address p = PqzCore.$().entryPtr[entryRef];
         return p == address(0) ? bytes("") : SSTORE2.read(p);
     }
 
     /// @notice `keccak256(R)` of the entry over the stored (packed, P46) `R`, read from its op blob (0 = unknown).
-    function transferCiphertextHash(bytes32 entryRef) external view returns (bytes32) {
+    function _transferCiphertextHashBody(bytes32 entryRef) internal view returns (bytes32) {
         return PqzCore.ciphertextHash(entryRef);
     }
 
     /// @notice The raw entry: `R` (BUNDLE), `keccak256(R) ‖ memo` (commit-reveal), empty (unknown).
-    function transferEntry(bytes32 entryRef) external view returns (bytes memory) {
+    function _transferEntryBody(bytes32 entryRef) internal view returns (bytes memory) {
         PqzCore.PqzStorage storage s = PqzCore.$();
         address p = s.entryPtr[entryRef];
         if (p == address(0)) return "";
@@ -152,18 +166,17 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @notice The op 7 statement the token builds for `t`, after every cheap check; a `sealedMemo` reads as commit-reveal.
     ///         `binding` 0 = a direct call, else the relayed call's envelope binding; the statement's word is either folded
     ///         with the mode (W-A, D15).
-    function transferStatement(PqzMultiArgs calldata t, bytes32 binding) external view returns (bytes memory) {
+    function _transferStatementBody(IPqzToken.PqzMultiArgs calldata t, bytes32 binding) internal view returns (bytes memory) {
         return PqzViewLib.multiStatement(_envOf(binding), t);
     }
 
     /// @notice The op 1 statement of `t` (`mtxConfidentialTransferSingle*`; `binding` as above).
-    function transferSingleStatement(PqzTransferArgs calldata t, bytes32 binding) external view returns (bytes memory) {
+    function _transferSingleStatementBody(IPqzToken.PqzTransferArgs calldata t, bytes32 binding) internal view returns (bytes memory) {
         return PqzViewLib.singleStatement(_envOf(binding), t);
     }
 
     /// @notice The burn (`amount > 0`) or refresh (`amount = 0`, `recipient = 0`) statement.
-    function burnStatement(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes32 binding)
-        external view returns (bytes memory)
+    function _burnStatementBody(IPqzToken.PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes32 binding) internal view returns (bytes memory)
     {
         PqzCore.Env memory e = _envOf(binding);
         (e.amount, e.recipient) = (amount, recipient);
@@ -174,8 +187,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     ///         2 `AUDITOR`); a single-recipient entry is leg 0. `R` is read from the entry's op blob (D11). Group 3g (KV-11):
     ///         `keyVersion` selects the registered key the opening is checked against (the leg owner's, the auditor's for
     ///         `AUDITOR`); a version not stored: `KeyVersionUnknown`. It does not attest which version the leg was for.
-    function disclosureStatement(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion)
-        external view returns (bytes memory)
+    function _disclosureStatementBody(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion) internal view returns (bytes memory)
     {
         return PqzViewLib.disclosureStatementOf(entryRef, leg, amount, kind, keyVersion, _envOf(0));
     }
@@ -183,11 +195,11 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @notice CTR-PQZ-14 / -26: the precompile's verdict on `proof` for `amount` in leg `leg` of `entryRef` (`R` from
     ///         the op blob, D11). A view; no attestation. An empty proof, an unknown entry, no leg `leg`, `kind > 2`
     ///         and `amount ≥ 2^64` are false; a precompile call that fails (out of gas) reverts (C2-6).
-    function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion,
-        bytes calldata proof) external view returns (bool)
+    function _verifyTransferAmountBody(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion,
+        bytes calldata proof) internal view returns (bool)
     {
         // group 3f (spec §5.4): an `OFFCHAIN` token cannot verify without a verdict; `false` would read "the wrong amount"
-        if (PqzCore.$().pqzVerifyMode != PqzCore.PRECOMPILE) revert PqzVerdictRequired();
+        if (PqzCore.$().pqzVerifyMode != PqzCore.PRECOMPILE) revert IPqzToken.PqzVerdictRequired();
         return _verifyAmount(entryRef, leg, amount, kind, keyVersion, proof);
     }
 
@@ -196,9 +208,8 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     ///         and `proof`; false on a mismatch, a refused signature, a revoked or changed verifier, and on the statement's
     ///         shape errors as above; a starved signature check reverts `UAVerifyGas`. A view: nothing recorded
     ///         (CTR-PQZ-14). The stronger check runs off chain: `pqz-ffi`'s verifier on `disclosureStatement` and `proof`.
-    function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion,
-        bytes calldata proof, PqzSignedVerdict calldata pqzVerdict)
-        external view returns (bool)
+    function _verifyTransferAmountBody(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion,
+        bytes calldata proof, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal view returns (bool)
     {
         if (PqzCore.$().pqzVerifyMode == PqzCore.PRECOMPILE) return _verifyAmount(entryRef, leg, amount, kind, keyVersion, proof);
         bytes memory st = proof.length == 0 ? bytes("") : _discStatement(entryRef, leg, amount, kind, keyVersion);
@@ -221,9 +232,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function _discStatement(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion)
         private view returns (bytes memory st)
     {
-        try this.disclosureStatement(entryRef, leg, amount, kind, keyVersion) returns (bytes memory r) { st = r; }
+        try IPqzDisclosureStatement(address(this)).disclosureStatement(entryRef, leg, amount, kind, keyVersion) returns (bytes memory r) { st = r; }
         catch (bytes memory err) {
-            if (err.length == 0 || bytes4(err) == KeyVersionUnknown.selector) assembly ("memory-safe") {
+            if (err.length == 0 || bytes4(err) == IPqzToken.KeyVersionUnknown.selector) assembly ("memory-safe") {
                 revert(add(err, 32), mload(err))
             }
         }
@@ -233,29 +244,29 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @notice The owner's transfer of a transferable `OFFCHAIN` verifier (`PqzStateLib.setVerifier`): propose, then
     ///         confirm after the notice period; through the router as `mtxPqzSetVerifier`.
-    function pqzSetVerifier(bytes32 next) external nonReentrant {
+    function _pqzSetVerifierBody(bytes32 next) internal {
         PqzStateLib.setVerifier(next, _govSubject(), _registry());
     }
 
     /// @notice The owner deletes a live pending transfer.
-    function pqzCancelVerifier() external nonReentrant {
+    function _pqzCancelVerifierBody() internal {
         PqzStateLib.cancelVerifier(_govSubject());
     }
 
     /// @notice The owner's immediate revocation of a transferable verifier (freeze only, spec §4.3).
-    function pqzRevokeVerifier() external nonReentrant {
+    function _pqzRevokeVerifierBody() internal {
         PqzStateLib.revokeVerifier(_govSubject());
     }
 
     /// @notice Group 3h (spec §5): bit 24 `PQZ_PROOF`'s power, `use(24)` (no scalar; disabling the bit freezes the value:
     ///         `FeatureNotSet`), then `PqzStateLib.setProofStore`; through the router as `mtxSetProofStore`.
-    function setProofStore(uint8 next) external nonReentrant {
+    function _setProofStoreBody(uint8 next) internal {
         GovernanceUse.use(GovernanceBits.PQZ_PROOF, _govSubject(), 0);
         PqzStateLib.setProofStore(next);
     }
 
     /// @notice Spec §4.4: mode, verifier, fixed, epoch, a live pending and its `eta`, the notice period.
-    function pqzVerifyConfig() external view returns (PqzVerifyConfig memory) {
+    function _pqzVerifyConfigBody() internal view returns (IPqzToken.PqzVerifyConfig memory) {
         return PqzStateLib.verifyConfig();
     }
 
@@ -263,7 +274,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     ///         `SCAAS-PQZ-UA-ENVELOPE-V1`, `from` as `bytes32` (native ids zero-padded); every envelope field except `data`,
     ///         plus `chainUid`. `executeMetaTransaction` keeps the address binding (`SCAAS-PQZ-ENVELOPE-V1` over its
     ///         `MetaTransaction`), which clients compute; its view is in legacy/ua-mtx-merge/.
-    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) {
+    function _envelopeBindingBody(MetaTxLib.UAMetaTransaction calldata m) internal view returns (bytes32) {
         return _uaEnvelopeBinding(m);
     }
 
@@ -271,15 +282,14 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @notice Moves `amount · shieldScale` public units of the signer to `SHIELD_POOL` (D19) into a TRIVIAL entry of
     ///         `toUA` (plan 5h D18); free, into any holder (owner 2026-10-20).
-    function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
+    function _mtxShieldBody(bytes32 toUA, uint256 amount) internal {
         _regPayer();
         PqzStateLib.shield(toUA, amount, _msgSender(), _registry());
         _toPool(amount);
     }
 
     /// @notice The signed `mtxShield` (TS-D14, TS-D16) over `UAShield`, an explicit `UASig` (R47).
-    function mtxShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bytes memory)
+    function _mtxShieldBody(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         return _namedUA(MetaTxLib.UA_SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), auth);
     }
@@ -290,27 +300,27 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     ///         default form: the bundle stored (BUNDLE token) or commit-reveal (COMPACT token). `accHint`: optional,
     ///         the materialised `acc` packed at `PACK_BITS` (P46: `PqzCt.CTP` bytes, `pack(pqzAcc(ua))`; `pqzAcc`
     ///         returns 64-bit lanes), used only when it hashes to `accHash`, else ignored (plan 5h D5).
-    function mtxConfidentialTransfer(PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes32)
+    function _mtxConfidentialTransferBody(IPqzToken.PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal returns (bytes32)
     {
         return _multi(_envTransfer(_defaultMode()), t, proof, pqzAuth, accHint, pqzVerdict);
     }
 
-    function mtxConfidentialTransferCompact(PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes32)
+    function _mtxConfidentialTransferCompactBody(IPqzToken.PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal returns (bytes32)
     {
         return _multi(_envTransfer(ZetherTypes.TransferMode.HASH), t, proof, pqzAuth, accHint, pqzVerdict);
     }
 
     /// @notice The single-recipient transfer, op 1 `R_TX` / `R_TX0` (§7.4), in the token's default form.
-    function mtxConfidentialTransferSingle(PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes32)
+    function _mtxConfidentialTransferSingleBody(IPqzToken.PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal returns (bytes32)
     {
         return _single(_envTransfer(_defaultMode()), t, proof, pqzAuth, accHint, pqzVerdict);
     }
 
-    function mtxConfidentialTransferSingleCompact(PqzTransferArgs calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes32)
+    function _mtxConfidentialTransferSingleCompactBody(IPqzToken.PqzTransferArgs calldata t, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal returns (bytes32)
     {
         return _single(_envTransfer(ZetherTypes.TransferMode.HASH), t, proof, pqzAuth, accHint, pqzVerdict);
     }
@@ -320,9 +330,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     ///         (Appendix X.1). Group 3f (spec §5.3, R2): `pqzVerdict` last, outside the struct (no
     ///         typehash moves), handed to the self-call: an unbound field like `relayer`, a relayer may swap it for another
     ///         valid one over the same hashes.
-    function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, PqzMultiArgs calldata t, bytes calldata proof,
+    function _mtxConfidentialTransferBody(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzMultiArgs calldata t, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth,
-        PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes32)
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal returns (bytes32)
     {
         bytes memory words = _multiWords(t, proof, accHint);
         bytes memory data = _multiData(IPqzToken.mtxConfidentialTransfer.selector, t, proof, pqzAuth, accHint, pqzVerdict);
@@ -330,9 +340,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         return _ref(ret);
     }
 
-    function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, PqzMultiArgs calldata t, bytes calldata proof,
+    function _mtxConfidentialTransferCompactBody(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzMultiArgs calldata t, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth,
-        PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes32)
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal returns (bytes32)
     {
         bytes memory words = _multiWords(t, proof, accHint);
         bytes memory data = _multiData(IPqzToken.mtxConfidentialTransferCompact.selector, t, proof, pqzAuth, accHint, pqzVerdict);
@@ -340,9 +350,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         return _ref(ret);
     }
 
-    function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, PqzTransferArgs calldata t, bytes calldata proof,
+    function _mtxConfidentialTransferSingleBody(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzTransferArgs calldata t, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth,
-        PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes32)
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal returns (bytes32)
     {
         bytes memory words = _singleWords(t, proof, accHint);
         bytes memory data = _singleData(IPqzToken.mtxConfidentialTransferSingle.selector, t, proof, pqzAuth, accHint, pqzVerdict);
@@ -350,9 +360,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         return _ref(ret);
     }
 
-    function mtxConfidentialTransferSingleCompact(MetaTxLib.UAEnvelope calldata e, PqzTransferArgs calldata t, bytes calldata proof,
+    function _mtxConfidentialTransferSingleCompactBody(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzTransferArgs calldata t, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth,
-        PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes32)
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal returns (bytes32)
     {
         bytes memory words = _singleWords(t, proof, accHint);
         bytes memory data = _singleData(IPqzToken.mtxConfidentialTransferSingleCompact.selector, t, proof, pqzAuth, accHint, pqzVerdict);
@@ -361,8 +371,8 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     }
 
     /// @dev Op 1 in the form of `e.mode`; the token pays what the library moved.
-    function _single(PqzCore.Env memory e, PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) private returns (bytes32 r)
+    function _single(PqzCore.Env memory e, IPqzToken.PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) private returns (bytes32 r)
     {
         _regSender(t.fromUA);
         if (t.shieldIn != 0) _regPayer();
@@ -375,8 +385,8 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @dev Op 7 in the form of `e.mode`: txFee to the beneficiary, then `decoyFee` to EVERY leg (the real recipient too;
     ///      owner 2026-10-20).
-    function _multi(PqzCore.Env memory e, PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) private returns (bytes32 r)
+    function _multi(PqzCore.Env memory e, IPqzToken.PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) private returns (bytes32 r)
     {
         _regSender(t.fromUA);
         if (t.shieldIn != 0) _regPayer();
@@ -392,26 +402,26 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     // What a signed entry hashes (TS-D17) and the op's call.
 
-    function _multiWords(PqzMultiArgs calldata t, bytes calldata proof, bytes calldata accHint)
+    function _multiWords(IPqzToken.PqzMultiArgs calldata t, bytes calldata proof, bytes calldata accHint)
         private pure returns (bytes memory)
     {
         return abi.encode(PqzViewLib.hashMulti(t), keccak256(proof), keccak256(accHint));
     }
 
-    function _singleWords(PqzTransferArgs calldata t, bytes calldata proof, bytes calldata accHint)
+    function _singleWords(IPqzToken.PqzTransferArgs calldata t, bytes calldata proof, bytes calldata accHint)
         private pure returns (bytes memory)
     {
         return abi.encode(PqzViewLib.hashTransfer(t), keccak256(proof), keccak256(accHint));
     }
 
-    function _multiData(bytes4 sel, PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) private pure returns (bytes memory)
+    function _multiData(bytes4 sel, IPqzToken.PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) private pure returns (bytes memory)
     {
         return abi.encodeWithSelector(sel, t, proof, pqzAuth, accHint, pqzVerdict);
     }
 
-    function _singleData(bytes4 sel, PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) private pure returns (bytes memory)
+    function _singleData(bytes4 sel, IPqzToken.PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) private pure returns (bytes memory)
     {
         return abi.encodeWithSelector(sel, t, proof, pqzAuth, accHint, pqzVerdict);
     }
@@ -426,9 +436,8 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @notice Burn `amount` into `amount · shieldScale` public units moved from `SHIELD_POOL` to `recipient` (D19): a
     ///         padded address (the pools refused) or a registered SIGNING UA, credited on the UA ledger (UA-5c);
     ///         `amount = 0` with `recipient = 0` is a refresh.
-    function mtxUnshield(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external nonReentrant
-    {
+    function _mtxUnshieldBody(IPqzToken.PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal {
         if (amount != 0) _regReceiver(recipient);
         if (!UAKinds.inNativeSpace(recipient)) _requireDerivedReceiver(recipient);
         _burn(_envBurn(amount, recipient), b, proof, pqzAuth, accHint, pqzVerdict);
@@ -436,24 +445,24 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     }
 
     /// @notice The signed `mtxUnshield`: `amount` and `recipient` flat in the struct, one `Payout` here.
-    function mtxUnshield(MetaTxLib.UAEnvelope calldata e, PqzBurnArgs calldata b, Payout calldata p, bytes calldata proof,
+    function _mtxUnshieldBody(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzBurnArgs calldata b, IPqzToken.Payout calldata p, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth,
-        PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes memory)
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal returns (bytes memory)
     {
         (bytes memory words, bytes memory data) = _unshieldCall(b, p, proof, pqzAuth, accHint, pqzVerdict);
         return _namedCallUA(UA_UNSHIELD_TYPEHASH, e, words, data, auth);
     }
 
-    function _unshieldCall(PqzBurnArgs calldata b, Payout calldata p, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) private pure returns (bytes memory, bytes memory)
+    function _unshieldCall(IPqzToken.PqzBurnArgs calldata b, IPqzToken.Payout calldata p, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) private pure returns (bytes memory, bytes memory)
     {
         return (abi.encode(PqzViewLib.hashBurn(b), p.amount, p.recipient, keccak256(proof), keccak256(accHint)),
             abi.encodeCall(IPqzToken.mtxUnshield, (b, p.amount, p.recipient, proof, pqzAuth, accHint, pqzVerdict)));
     }
 
     /// @dev The burn / refresh debit of `e` (also `mtxUnshieldUnwrap`'s); the token pays what the library moved.
-    function _burn(PqzCore.Env memory e, PqzBurnArgs calldata b, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) internal
+    function _burn(PqzCore.Env memory e, IPqzToken.PqzBurnArgs calldata b, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal
     {
         if (e.amount != 0) _regSender(b.fromUA); // a refresh (amount 0) names no sender (spec §4.2)
         if (b.shieldIn != 0) _regPayer();
@@ -467,24 +476,24 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @notice Anyone: the next `min(n, K_MAX − 1 − accUnits)` entries of `(ua, keyVersion)` into its `acc`, in order, each
     ///         at least `ROLL_AGE` blocks old; `1 ≤ n ≤ ROLL_MAX` (group 3g KV-10: any version whose key passes the check).
-    function mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n) external nonReentrant {
+    function _mtxRollOverBody(bytes32 ua, uint64 keyVersion, uint256 n) internal {
         PqzStateLib.rollOver(ua, keyVersion, n);
     }
 
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent), per key version.
-    function mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half) external nonReentrant {
+    function _mtxPrepareAccBody(bytes32 ua, uint64 keyVersion, uint256 half) internal {
         PqzStateLib.prepareAcc(ua, keyVersion, half, _registry());
     }
 
     /// @notice The signed rollover and prepare, as `mtxShield`'s (`UARollOver`, `UAPrepareAcc` with `keyVersion`).
-    function mtxRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint64 keyVersion, uint256 n,
-        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+    function _mtxRollOverBody(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint64 keyVersion, uint256 n,
+        IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         return _namedUA(UA_ROLL_OVER_TYPEHASH, IPqzToken.mtxRollOver.selector, e, abi.encode(ua, keyVersion, n), auth);
     }
 
-    function mtxPrepareAcc(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint64 keyVersion, uint256 half,
-        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+    function _mtxPrepareAccBody(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint64 keyVersion, uint256 half,
+        IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         return _namedUA(UA_PREPARE_ACC_TYPEHASH, IPqzToken.mtxPrepareAcc.selector, e, abi.encode(ua, keyVersion, half), auth);
     }
@@ -536,7 +545,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function _pullShieldIn(uint256 units) internal {
         PqzCore.PqzStorage storage s = PqzCore.$();
         uint256 room = s.maxShielded - s.totalShielded;
-        if (units > room) revert AmountOutOfRange(units, room);
+        if (units > room) revert IPqzToken.AmountOutOfRange(units, room);
         _toPool(units);
     }
 

@@ -5,7 +5,7 @@ import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
+import {UAMetaTxBase, UAMetaTxBaseCore} from "../../src/metatx/UAMetaTxBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -18,7 +18,7 @@ contract UAOnly is UAMetaTxBase {
     bytes32 public subject;
     address public sender;
 
-    constructor(bytes32 uid, address reg, address ska) UAMetaTxBase("SCaaS UAOnly", uid, reg, ska, false) {}
+    constructor(bytes32 uid, address reg, address ska) UAMetaTxBaseCore("SCaaS UAOnly", uid, reg, ska, false) {}
 
     function poke() external nonReentrant {
         subject = _subject();
@@ -52,7 +52,7 @@ contract UACancelListed is UAOnly {
 contract UAFeeModes is UAOnly {
     constructor(bytes32 uid, address reg) UAOnly(uid, reg, address(0)) {}
 
-    function supportedModes() public pure override returns (uint32) {
+    function _supportedModesBody() internal pure override returns (uint32) {
         return MetaTxLib.MODE_KNOWN_MASK;
     }
 }

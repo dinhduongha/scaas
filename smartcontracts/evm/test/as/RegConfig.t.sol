@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -25,6 +27,9 @@ import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {instanceEnv} from "../helpers/Catalogue.sol";
+import {WrappedZetherTokenA} from "../../src/zether/WrappedZetherTokenModules.sol";
+import {NormalZetherTokenA} from "../../src/zether/NormalZetherTokenModules.sol";
+import {WrappedPqzTokenA} from "../../src/pqz/WrappedPqzTokenModules.sol";
 
 // Plan T25 (regulated-kinds spec §2.4): `TokenConfig.reg` on the plain kinds 0-5, each refusing any non-zero field of it with
 // `ConfigFieldForOtherKind(6)` through the factory (the same config with `reg` empty is the positive control); the wrapped
@@ -52,9 +57,9 @@ abstract contract RegRows is Test {
         IFactoryToken.RegulatedParams memory none;
         c.reg = none;
         address t = f.createToken(kind, 1, abi.encode(c), "ok");
-        assertEq(MetaTokenBase(t).kind(), uint8(kind));
+        assertEq(NormalToken(t).kind(), uint8(kind));
         // plan T28 (M-10): a plain kind 0-5 does not answer `IRegulatedToken`
-        assertFalse(MetaTokenBase(t).supportsInterface(type(IRegulatedToken).interfaceId), "IRegulatedToken on a plain kind");
+        assertFalse(NormalToken(t).supportsInterface(type(IRegulatedToken).interfaceId), "IRegulatedToken on a plain kind");
     }
 
     /// The kind byte `init` wrote in `scaas.token` (creator 20 B, version 8 B, then kind).
@@ -69,7 +74,7 @@ abstract contract RegRows is Test {
     function _init(address impl, address fac, IFactoryToken.TokenConfig memory c) internal returns (address t) {
         t = EnvKit.clone(impl, _cloneEnv());
         vm.prank(fac);
-        MetaTokenBase(t).initialize(nid(address(this)), 1, abi.encode(c));
+        NormalToken(t).initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     /// `_init` expecting `err`.
@@ -77,7 +82,7 @@ abstract contract RegRows is Test {
         address t = EnvKit.clone(impl, _cloneEnv());
         vm.prank(fac);
         vm.expectRevert(err);
-        MetaTokenBase(t).initialize(nid(address(this)), 1, abi.encode(c));
+        NormalToken(t).initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     /// The three refusals and the stored kind that only the token's own kind id and masks give (`Masked*` below), each
@@ -85,7 +90,7 @@ abstract contract RegRows is Test {
     function _takesKindMasks(address real, address masked, address fac, IFactoryToken.TokenConfig memory c, uint8 kindId)
         internal
     {
-        assertEq(_storedKind(_init(real, fac, c)), MetaTokenBase(real).kind());
+        assertEq(_storedKind(_init(real, fac, c)), NormalToken(real).kind());
         assertEq(_storedKind(_init(masked, fac, c)), kindId);
         IFactoryToken.TokenConfig memory x = c; // the same memory: `c` is not read after this line
         x.features = 1 << GovernanceBits.PAYABLE; // outside the masked kind's valid bits
@@ -109,9 +114,10 @@ abstract contract RegRows is Test {
 }
 
 /// The masks a regulated wrapped kind passes differ from `WRAPPED_*`: here `PAYABLE` is not valid, `WRAP_DISABLEABLE` is
-/// no role, `MINTABLE` is contract-only, the kind id is 11.
-contract MaskedWrappedZether is WrappedZetherToken {
-    constructor(address f_, bytes memory a) WrappedZetherToken(f_, a) {}
+/// no role, `MINTABLE` is contract-only, the kind id is 11. T66b: `initialize` runs in the kind's module A, so the stand-in
+/// is A's twin: a clone of it runs the init body under this kind id and these masks (`onlyDelegated` holds in a clone).
+contract MaskedWrappedZether is WrappedZetherTokenA {
+    constructor(address f_, bytes memory a) WrappedZetherTokenA(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_ZETHER_REGULATED; }
     function _validBits() internal pure override returns (uint256) {
@@ -126,8 +132,8 @@ contract MaskedWrappedZether is WrappedZetherToken {
 }
 
 /// `MaskedWrappedZether`'s masks on `WrappedPqzToken`, kind id 13.
-contract MaskedWrappedPqz is WrappedPqzToken {
-    constructor(address f_, bytes memory a) WrappedPqzToken(f_, a) {}
+contract MaskedWrappedPqz is WrappedPqzTokenA {
+    constructor(address f_, bytes memory a) WrappedPqzTokenA(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_PQZ_REGULATED; }
     function _validBits() internal pure override returns (uint256) {
@@ -142,8 +148,8 @@ contract MaskedWrappedPqz is WrappedPqzToken {
 }
 
 /// `NormalZetherToken` under kind id 10: its raw decoder (`ZetherLib.initNormal`) writes the token's kind, not a fixed one.
-contract KindNormalZether is NormalZetherToken {
-    constructor(address f_, bytes memory a) NormalZetherToken(f_, a) {}
+contract KindNormalZether is NormalZetherTokenA {
+    constructor(address f_, bytes memory a) NormalZetherTokenA(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_NORMAL_ZETHER_REGULATED; }
 }
@@ -213,7 +219,7 @@ contract RegConfigZetherTest is ZetherFixture, RegRows {
     }
 
     function test_wrappedZetherInitTakesKindMasks() public {
-        address real = address(new WrappedZetherToken(address(factory), ""));
+        address real = address(new WrappedZetherToken(address(factory), kindArgs(3, address(factory), "")));
         address masked = address(new MaskedWrappedZether(address(factory), ""));
         _takesKindMasks(real, masked, address(factory), _wrapped(), TokenStore.KIND_WRAPPED_ZETHER_REGULATED);
     }
@@ -254,7 +260,7 @@ contract RegConfigPqzTest is PqzFixture, RegRows {
     }
 
     function test_wrappedPqzInitTakesKindMasks() public {
-        address real = address(new WrappedPqzToken(address(factory), ""));
+        address real = address(new WrappedPqzToken(address(factory), kindArgs(5, address(factory), "")));
         address masked = address(new MaskedWrappedPqz(address(factory), ""));
         _takesKindMasks(real, masked, address(factory), _wrapped(), TokenStore.KIND_WRAPPED_PQZ_REGULATED);
     }

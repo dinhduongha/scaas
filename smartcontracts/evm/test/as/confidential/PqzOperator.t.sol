@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {PqzRegFixture} from "./PqzRegFixture.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
@@ -27,7 +29,7 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
         IFactoryToken.TokenConfig memory c = _regCfg();
         c.features |= uint256(1) << GovernanceBits.OPERATOR_TRANSFER;
         c.grantDelay = 0; // the grant applies at once
-        tok = PqzLayer(factory.createToken(_kind(), 1, abi.encode(c), "pop"));
+        tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(c), "pop"));
         w = WrappedPqzToken(payable(address(tok)));
         vm.prank(ownerA);
         IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK));

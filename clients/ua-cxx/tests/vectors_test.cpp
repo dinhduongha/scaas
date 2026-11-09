@@ -832,7 +832,8 @@ static void pay_rows() {
         if (!f) { std::fprintf(stderr, "cannot open %s\n", n.c_str()); std::exit(2); }
         return json::parse(f);
     };
-    for (auto& r : read("paymeta.json")) {
+    // plan T83: the v2 rows (`payNo` text) in legacy/ua-mtx-merge/t83/ until ua-rs takes PayMeta v3 (ua-rs-sign sync)
+    for (auto& r : read("legacy/ua-mtx-merge/t83/paymeta.json")) {
         json i = {{"salt", r["salt"]}, {"payNo", r["payNo"]}, {"schema", r["schema"]}, {"body", r["body"]}};
         if (r["accepted"].get<bool>()) CHECK(json::parse(metaPayId(i.dump()))["payId"] == r["payId"], r["name"].get<std::string>());
         else CHECK(code_of([&] { metaPayId(i.dump()); }) == "UAArgument", r["name"].get<std::string>());

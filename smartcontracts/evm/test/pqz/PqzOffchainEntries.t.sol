@@ -38,7 +38,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     uint256 internal constant NKEY = 0x5161E5;
     bytes32 internal dId;
     bytes32 internal nId;
-    PqzLayer internal off;
+    NormalPqzToken internal off;
     WrappedPqzToken internal w; // PRECOMPILE wrapped
     WrappedPqzToken internal offW; // OFFCHAIN wrapped
     bytes32 internal constant TO = bytes32(uint256(0xD00D));
@@ -70,7 +70,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     // ------------------------------------------------------------------ the envelope of a signed form
 
     function _u(bytes32 from, address t) internal view returns (MetaTxLib.UAEnvelope memory) {
-        return MetaTxLib.UAEnvelope(from, LANE, PqzLayer(t).mtxNonce(from, LANE), block.timestamp + 300, 0, address(0), 0,
+        return MetaTxLib.UAEnvelope(from, LANE, NormalPqzToken(t).mtxNonce(from, LANE), block.timestamp + 300, 0, address(0), 0,
             address(0));
     }
 
@@ -95,31 +95,31 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     uint8 internal constant REFRESH = 5;
     uint8 internal constant UNWRAP = 6;
 
-    function _p(PqzLayer t) internal view returns (uint256) {
+    function _p(NormalPqzToken t) internal view returns (uint256) {
         return t.pqzAccount(alice, 0).pendingCount;
     }
 
-    function _singleA(PqzLayer t, bool compact) internal view returns (IPqzToken.PqzTransferArgs memory) {
+    function _singleA(NormalPqzToken t, bool compact) internal view returns (IPqzToken.PqzTransferArgs memory) {
         return _ts(_payload(_p(t), 0, alice, bob, bytes32(0), _out(11, false), compact ? _memo() : bytes("")));
     }
 
-    function _multiA(PqzLayer t, bool compact) internal view returns (IPqzToken.PqzMultiArgs memory) {
+    function _multiA(NormalPqzToken t, bool compact) internal view returns (IPqzToken.PqzMultiArgs memory) {
         bytes32[] memory legs = new bytes32[](2);
         (legs[0], legs[1]) = (bob, carol);
         bytes memory memo = compact ? bytes.concat(salt, _slice(_blob(0x3e31, 352), 0, 2 + 40 * 2)) : bytes("");
         return _ms(_mpayload(_p(t), 0, alice, bytes32(0), legs, _blob(13, _outLen(2, false)), memo));
     }
 
-    function _burnA(PqzLayer t) internal view returns (IPqzToken.PqzBurnArgs memory) {
+    function _burnA(NormalPqzToken t) internal view returns (IPqzToken.PqzBurnArgs memory) {
         return _bs(bytes.concat(abi.encode(_p(t), block.number + 50, uint256(0), alice, bytes32(0)), _blob(14, PqzCt.CT)));
     }
 
-    function _unwrapX(PqzLayer t) internal view returns (IConfidentialWrappedToken.Unwrap memory) {
+    function _unwrapX(NormalPqzToken t) internal view returns (IConfidentialWrappedToken.Unwrap memory) {
         return IConfidentialWrappedToken.Unwrap(WrappedPqzToken(payable(address(t))).underlyings()[0], TO, 10, 10 * SCALE);
     }
 
     /// The statement entry `op` builds on `t` under binding `b` (0: direct).
-    function _stmt(uint8 op, PqzLayer t, bytes32 b) internal view returns (bytes memory) {
+    function _stmt(uint8 op, NormalPqzToken t, bytes32 b) internal view returns (bytes memory) {
         if (op == SINGLE || op == SINGLE_COMPACT) return t.transferSingleStatement(_singleA(t, op == SINGLE_COMPACT), b);
         if (op == MULTI || op == COMPACT) return t.transferStatement(_multiA(t, op == COMPACT), b);
         if (op == UNSHIELD) return t.burnStatement(_burnA(t), 5, TO, b);
@@ -128,7 +128,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     }
 
     /// The calldata of entry `op` on `t` (direct, or signed in envelope `u` by `dId`) with verdict `sv`.
-    function _cd(uint8 op, PqzLayer t, MetaTxLib.UAEnvelope memory u, bool signed, IPqzToken.PqzSignedVerdict memory sv)
+    function _cd(uint8 op, NormalPqzToken t, MetaTxLib.UAEnvelope memory u, bool signed, IPqzToken.PqzSignedVerdict memory sv)
         internal view returns (bytes memory)
     {
         IUARegistry.UASig memory pa = _pqAuth();
@@ -182,7 +182,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     /// Runs entry `op` on the matching token (direct, or signed by `dId`): an OFFCHAIN token with the verifier's verdict, after
     /// the same call with the empty verdict is refused; a PRECOMPILE token with the empty verdict (the precompile mocked 1).
     function _entry(uint8 op, bool signed, bool offchain) internal {
-        PqzLayer t = PqzLayer(op == UNWRAP ? address(offchain ? offW : w) : address(offchain ? off : tok));
+        NormalPqzToken t = NormalPqzToken(op == UNWRAP ? address(offchain ? offW : w) : address(offchain ? off : tok));
         MetaTxLib.UAEnvelope memory u = _u(dId, address(t));
         bytes memory st = _stmt(op, t, signed ? _tag(address(t), u) : bytes32(0));
         if (offchain) {
@@ -286,11 +286,11 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
 
     // ------------------------------------------------------------------ disclosure (spec §5.4)
 
-    function _disclose6(PqzLayer t, bytes32 ref, uint256 amount) internal view returns (bool) {
+    function _disclose6(NormalPqzToken t, bytes32 ref, uint256 amount) internal view returns (bool) {
         return t.verifyTransferAmount(ref, 0, amount, 1, 0, VPROOF);
     }
 
-    function _disclose8(PqzLayer t, bytes32 ref, uint256 amount, IPqzToken.PqzSignedVerdict memory sv)
+    function _disclose8(NormalPqzToken t, bytes32 ref, uint256 amount, IPqzToken.PqzSignedVerdict memory sv)
         internal view returns (bool)
     {
         return t.verifyTransferAmount(ref, 0, amount, 1, 0, VPROOF, sv);
@@ -336,7 +336,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
         c.owner = nid(address(this));
-        off = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-owned"));
+        off = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-owned"));
         _shieldOn(off, alice, 100);
         (bytes32 ref, bytes memory st) = _sent(7);
         IPqzToken.PqzSignedVerdict memory sv = _sv(off, st);
@@ -360,7 +360,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
         c.owner = nId;
-        PqzLayer t = PqzLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-router"));
+        NormalPqzToken t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-router"));
         _rop(router, GovernanceRouterTypes.UA_PQZ_SET_VERIFIER, address(t), abi.encode(vB));
         assertEq(t.pqzVerifyConfig().verifier, vB, "notice 0: at once");
         _rop(router, GovernanceRouterTypes.UA_PQZ_CANCEL_VERIFIER, address(t), "");

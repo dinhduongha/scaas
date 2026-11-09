@@ -171,17 +171,19 @@ contract UADeployTest is Test {
         assertEq(h.gasNeed("NormalToken"), plain);
         assertEq(h.gasNeed("WrappedPqzToken"), conf);
         assertLt(plain, 80_000_000, "plain kinds: about 75 M");
-        assertGt(conf, 100_000_000, "confidential kinds: about 124 M");
-        assertLt(conf, 130_000_000);
+        // T66b (the window closed): WrappedPqzToken's row 62,022 -> 24,314 B, its gate 111.7 M -> 54.0 M: under 60 M
+        assertLt(conf, 60_000_000, "confidential kinds: about 54 M");
         // a contract over the EIP-170 limit is priced at its baseline size (SCaaSDex since the DEX round)
         assertEq(h.gasNeed("SCaaSDex"), vm.parseJsonUint(base, ".SCaaSDex") * 1530 + 16_777_216);
         // a contract under the EIP-170 limit is not in the baseline: priced at 24,576 B
         assertFalse(vm.keyExistsJson(base, ".UniswapExecutor"));
         assertEq(h.gasNeed("UniswapExecutor"), uint256(24_576) * 1530 + 16_777_216);
-        // an Ethereum-like 60 M block cannot hold any confidential release
-        vm.expectRevert(bytes(string.concat("block gas limit 60000000 < ", vm.toString(conf),
-            " needed to deploy the WrappedPqzToken release (NET-EVM-06)")));
+        // T66b: an Ethereum-like 60 M block holds the largest confidential release (it could not before the split); one
+        // gas below its need is refused by name
         h.checkGas("WrappedPqzToken", 60_000_000);
+        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(conf - 1), " < ", vm.toString(conf),
+            " needed to deploy the WrappedPqzToken release (NET-EVM-06)")));
+        h.checkGas("WrappedPqzToken", conf - 1);
         h.checkGas("WrappedPqzToken", conf);
         // the gate reads the chain's block gas limit (at the SCaaS testnet's declared code limit, GD-4: WrappedPqzToken
         // is above EIP-7954's 65,536 B, the default)
@@ -257,24 +259,32 @@ contract UADeployTest is Test {
         assertEq(address(_registry(31337, false)), reg);
     }
 
-    /// NET-EVM-06: the registry and `UARegistryLib` each have the gate of a release (typed-signing R2): the deploy refuses
-    /// one below each figure and reaches the next gate at it. ua-mtx-merge T2, meaning: `NormalToken` (35,289 B) now asks
-    /// less than `UARegistryLib` (36,192 B), so the library's figure binds a plain deploy (the DEX's is lower still); at
-    /// that figure the deploy goes through. Before T2 `NormalToken`'s gate came after the library's and bound it.
+    /// NET-EVM-06: the registry and each of its libraries have the gate of a release (typed-signing R2; T66b 3.1b: two
+    /// libraries): the deploy refuses one below each figure, in the deploy's order (the registry, `UARegistryCoreLib`,
+    /// `UARegistryAuxLib`), and goes through at the largest gate of a plain deploy (the libraries', `NormalToken`'s and the
+    /// DEX's, whichever is largest).
     function test_registryDeployGate() public {
         DeployHarness h = new DeployHarness();
         string memory base = vm.readFile("./size-baseline.json");
         uint256 need = h.gasNeed("UARegistry");
-        uint256 lib = h.gasNeed("UARegistryLib");
-        uint256 token = h.gasNeed("NormalToken");
+        uint256 lib = h.gasNeed("UARegistryCoreLib");
+        uint256 key = h.gasNeed("UARegistryAuxLib");
         assertEq(need, vm.parseJsonUint(base, ".UARegistry") * 1530 + 16_777_216);
-        assertEq(lib, vm.parseJsonUint(base, ".UARegistryLib") * 1530 + 16_777_216);
+        assertEq(lib, vm.parseJsonUint(base, ".UARegistryCoreLib") * 1530 + 16_777_216);
+        assertEq(key, vm.parseJsonUint(base, ".UARegistryAuxLib") * 1530 + 16_777_216);
         assertLt(need, lib);
-        assertLt(token, lib, "NormalToken's release now needs less than UARegistryLib's");
-        assertLt(h.gasNeed("SCaaSDex"), lib);
+        // T66b 3.1c / 3.1d (owner): the Aux library (20,192 B) is below the registry (28,165 B), so its gate is implied by the
+        // registry's, checked first (was `need < key` while the library was the larger)
+        assertLt(key, need);
         _refused(h, need - 1, need, "UARegistry");
-        _refused(h, need, lib, "UARegistryLib");
-        h.limitBlockGas(lib);
+        _refused(h, need, lib, "UARegistryCoreLib");
+        if (key > lib) _refused(h, lib, key, "UARegistryAuxLib");
+        uint256 top = lib > key ? lib : key;
+        uint256 token = h.gasNeed("NormalToken");
+        uint256 dex = h.gasNeed("SCaaSDex");
+        if (token > top) top = token;
+        if (dex > top) top = dex;
+        h.limitBlockGas(top);
         h.deploy(UID, false, ska);
     }
 

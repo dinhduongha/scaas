@@ -20,6 +20,7 @@ pub mod metatx;
 pub mod nonce;
 pub mod odoo;
 pub mod pqz;
+pub mod service;
 pub mod signer;
 pub mod store;
 pub mod submit;

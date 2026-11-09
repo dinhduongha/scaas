@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {Test} from "forge-std/Test.sol";
@@ -36,7 +38,7 @@ contract TokenKatTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(0), address(0), false)));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
         tok.mint(vm.addr(ALICE_PK), 1_000e6);
     }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
@@ -29,7 +31,7 @@ contract TradeKatTest is Test {
         vm.warp(1_800_000_000);
         address at = vm.parseJsonAddress(vj, ".tokenA");
         // no registry: a native signer's row needs none (C), and the domain does not name it
-        address impl = address(new NormalToken(address(this), ""));
+        address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         vm.etch(at, EnvKit.runtime(impl, EnvKit.env(vm.parseJsonBytes32(vj, ".chainUid"), address(0), address(0), false)));
         tok = NormalToken(at);
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("T", "T", 6, 0, address(this), address(this))));

@@ -1,0 +1,21 @@
+# T66b Step 2: runtime B of each kind in the forward spikes at the tip (fwd_spike.py of the library study; scratch worktree,
+# src of 7d653925). HEAD = today; V6 = every body but the signed pipeline and the ERC-20 core forwarded; V7 = all but the
+# ERC-20 core (the owner's forward form); V8 = everything; floor = gen_floor.py (the whole ABI as forward stubs). UNAUDITED.
+| kind | entries (floor stubs) | HEAD | V6 | V7 | V8 | floor |
+|---|---:|---:|---:|---:|---:|---:|
+| NormalToken | 86 | 33,889 | 20,461 | 13,031 | 11,437 | 7,405 |
+| WrappedToken | 115 | 44,635 | 24,289 | 16,373 | 14,767 | 10,541 |
+| NormalZetherToken | 122 | 42,222 | 25,760 | 17,939 | 16,341 | 10,027 |
+| WrappedZetherToken | 155 | 52,709 | 29,818 | 21,405 | 19,783 | 13,252 |
+| NormalPqzToken | 134 | 51,821 | 27,937 | 19,998 | 19,510 | 11,556 |
+| WrappedPqzToken | 169 | 61,174 | 33,393 | 24,784 | 24,272 | 15,405 |
+| NormalRegulatedToken | 105 | 41,561 | 23,939 | 16,198 | 14,595 | 9,229 |
+| WrappedRegulatedToken | 134 | 52,302 | 27,726 | 19,472 | 17,857 | 12,301 |
+| NormalZetherRegulatedToken | 141 | 50,030 | 29,024 | 20,831 | 19,224 | 11,590 |
+| WrappedZetherRegulatedToken | 174 | 60,724 | 33,249 | 24,438 | 22,807 | 14,959 |
+| NormalPqzRegulatedToken | 153 | 59,371 | 31,273 | 23,010 | 22,511 | 13,104 |
+| WrappedPqzRegulatedToken | 188 | 73,511 | 36,853 | 27,920 | 27,397 | 17,066 |
+| SCaaSDex | - | 34,929 | 33,202 | 33,202 | 33,202 | - |
+| UARegistry | - | 33,151 | 33,151 | 32,963 | 32,963 | - |
+| GovernanceRouter | - | 15,305 | 15,305 | 12,682 | 12,682 | - |
+| MandateWallet | - | 17,699 | 17,699 | 15,097 | 15,097 | - |

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -45,7 +47,7 @@ abstract contract MergeBase is UALedgerBase {
 
     function setUp() public virtual override {
         super.setUp();
-        tok0 = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        tok0 = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
         tok0.initialize(nid(address(this)), 1, abi.encode(normalInit("Zero", "ZRO", 6, 1_000_000, alice, address(this))));
         assertEq(tok0.registry(), address(0));
     }

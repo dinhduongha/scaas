@@ -14,7 +14,7 @@ import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
-import {GovernanceBase, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -43,7 +43,7 @@ contract TopBandApp is GovernanceBase {
     uint256 internal constant BITS = (uint256(1) << 128) | (uint256(1) << 255);
     mapping(uint8 => uint256) public acted;
 
-    constructor(address owner_) GovernanceBase(address(0)) {
+    constructor(address owner_) GovernanceBaseCore(address(0)) {
         GovernanceLib.Roles memory none;
         GovernanceLib.init(BITS, 0, nid(owner_), 0, address(0), none, BITS, BITS, 0, address(0));
     }
@@ -79,6 +79,27 @@ contract GovDexHolder {
         try dex.setExchangeTarget(address(0x53), true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
         try dex.setListedOnly(true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
         try dex.setFeeSplit(0, address(0xAA)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+    }
+}
+
+/// T66b §4.2 (the DEX's admin module D): the same holder calls the DEX's governance entries that its stubs forward to D,
+/// from inside a settlement, and records how each answered (0: it ran).
+contract GovDexForwardHolder {
+    SCaaSDex public dex;
+    bytes4[] public errs;
+
+    function setDex(SCaaSDex d) external { dex = d; }
+
+    function n() external view returns (uint256) { return errs.length; }
+
+    function hook() external {
+        if (errs.length != 0) return;
+        bytes32 other = bytes32(uint256(0x51));
+        try dex.grantRole(GovernanceBits.LISTING, other) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.revokeRole(GovernanceBits.LISTING, bytes32(uint256(uint160(address(this))))) { errs.push(0); }
+        catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.transferOwnership(other) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.renounceOwnership() { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
     }
 }
 
@@ -462,10 +483,10 @@ contract GovGrantTest is Test {
     function test_windowWithoutPerWindowRefused() public {
         IGovernance.GrantTerms memory g = _open();
         g.perWindow = 1;
-        _word(t, MINT, g, 3);
+        _word(IGovernance(address(t)), MINT, g, 3);
         g = _open();
         g.window = 1 days;
-        _word(t, MINT, g, 3);
+        _word(IGovernance(address(t)), MINT, g, 3);
         (g.perWindow, g.window) = (1, 1 days); // positive control
         _set(MANAGER, g);
         assertEq(t.grantOf(MINT, nid(MANAGER)).window, 1 days);
@@ -609,6 +630,37 @@ contract GovGrantTest is Test {
         assertTrue(d.supportsInterface(type(IERC165).interfaceId));
         assertFalse(d.supportsInterface(0xffffffff));
         assertTrue(t.supportsInterface(type(IGovernance).interfaceId)); // the same id on a token
+    }
+
+    /// T66b §4.2: the governance entries the DEX forwards to its admin module D are refused inside a settlement too (the
+    /// stub's `_guardIn`, S1), each one, while the settlement goes through; outside a settlement the owner's `grantRole` runs.
+    function test_dexForwardedGovernanceRefusedInsideASettlement() public {
+        GovDexForwardHolder h = new GovDexForwardHolder();
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0))), "d"));
+        h.setDex(d);
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.features, c.initialSupply, c.initialHolder) = ("A", "A", 1, 1e6, vm.addr(ALICE_PK));
+        NormalToken a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a"));
+        GovHookERC20 hk = new GovHookERC20();
+        vm.prank(address(h));
+        d.setMarket(address(a), address(hk), true);
+        vm.prank(address(h));
+        d.grantRole(GovernanceBits.LISTING, bytes32(uint256(0x52))); // control: outside a settlement it runs
+        hk.mint(vm.addr(DAVE_PK), 1e6);
+        address puller = d.puller();
+        vm.prank(vm.addr(DAVE_PK));
+        hk.approve(puller, type(uint256).max);
+        hk.setHook(address(h));
+        DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](1);
+        ss[0] = _hookSettlement(d, a, address(hk));
+        vm.prank(address(0xBEEF));
+        bool[] memory ok = d.mtxSettle(DexLegs.wire(ss));
+        assertTrue(ok[0], "the settlement runs");
+        assertEq(h.n(), 4);
+        bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
+        for (uint256 i; i < 4; ++i) assertEq(h.errs(i), guard);
+        assertEq(d.owner(), nid(address(h)), "nothing ran inside");
     }
 
     /// B-31: no governance entry runs inside a settlement. The DEX's owner holds both bits and calls each of the four

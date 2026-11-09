@@ -17,7 +17,7 @@ import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
-import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
+import {Catalogue, pqzEnv, pinned, withModules} from "../helpers/Catalogue.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
@@ -48,7 +48,7 @@ contract PqzNormalTest is PqzFixture {
 
     // ------------------------------------------------------------------ life cycle
 
-    function _amt(PqzLayer t, bytes32 ua, uint64 i) internal view returns (uint256) {
+    function _amt(NormalPqzToken t, bytes32 ua, uint64 i) internal view returns (uint256) {
         return (t.pqzPending(ua, 0, i) >> 96) & type(uint64).max;
     }
 
@@ -300,12 +300,12 @@ contract PqzNormalTest is PqzFixture {
 
     function test_auditorModes() public {
         aMode = uint8(ZetherTypes.AuditorMode.FULL);
-        PqzLayer full = _newToken("full");
+        NormalPqzToken full = _newToken("full");
         bytes memory off = _payload(0, 0, alice, bob, bytes32(0), _out(80, false), "");
         vm.expectRevert(IPqzToken.AuditorRequired.selector);
         full.mtxConfidentialTransferSingle(_ts(off), hex"01", _pqAuth(), "", noVerdict());
         aMode = uint8(ZetherTypes.AuditorMode.NONE);
-        PqzLayer none = _newToken("none");
+        NormalPqzToken none = _newToken("none");
         bytes memory on = _payload(0, 0, alice, bob, bytes32(0), _out(81, true), "");
         vm.expectRevert(IPqzToken.AuditorForbidden.selector);
         none.mtxConfidentialTransferSingle(_ts(on), hex"01", _pqAuth(), "", noVerdict());
@@ -335,7 +335,7 @@ contract PqzNormalTest is PqzFixture {
     /// `keccak256(R) ‖ memo`, `transferCiphertextHash` = `keccak256(R)`, `pqzEntryBlob` = `R ‖ v_f` (`R`, `v_f` packed, P46).
     function test_compactAndNoneRetired() public {
         dMode = uint8(ZetherTypes.DisclosureMode.COMPACT);
-        PqzLayer cpt = _newToken("compact");
+        NormalPqzToken cpt = _newToken("compact");
         bytes memory out = _out(90, true);
         bytes memory pl = _payload(0, 0, alice, bob, bytes32(0), out, "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, 0));
@@ -437,7 +437,7 @@ contract PqzNormalTest is PqzFixture {
         assertEq(factory.latestEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ), v1 + 1, "the next env version");
         assertEq(factory.releaseOf(IOpenFactory.TokenKind.NORMAL_PQZ, 2).envVersion, v1 + 1);
         assertEq(factory.releaseOf(IOpenFactory.TokenKind.NORMAL_PQZ, 1).envVersion, v1, "release 1 keeps its env");
-        PqzLayer t2 = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(1 << 40)), "r2"));
+        NormalPqzToken t2 = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(1 << 40)), "r2"));
         assertEq(t2.verifier(), address(fresh));
         assertEq(NormalPqzToken(impl2).verifier(), address(0), "chain-neutral: the release carries no env (plan T72)");
         assertEq(tok.verifier(), address(old), "release 1's tokens keep theirs");
@@ -465,11 +465,15 @@ contract PqzNormalTest is PqzFixture {
         (bad[1].deps[0], bad[1].deps[1]) = (address(pqv), address(pqv));
         bad[2].hedera = true;                                            // never on Hedera
         bad[3].deps[0] = address(0x1234);                                // a verifier without code
+        // T66b: release 1's body modules, named in implArgs and pinned in each env (the release constructs; its env is refused)
+        bytes memory args = Catalogue.argsOn(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1, "");
+        address[] memory ms = Catalogue.modulesOn(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1);
         for (uint256 i; i < bad.length; ++i) {
-            uint16 ev = Catalogue.env(factory, IOpenFactory.TokenKind.NORMAL_PQZ, bad[i]);
+            uint16 ev = Catalogue.env(factory, IOpenFactory.TokenKind.NORMAL_PQZ,
+                withModules(pinned(bad[i], IOpenFactory.TokenKind.NORMAL_PQZ), ms));
             vm.prank(registrar);
             vm.expectRevert(IPqzToken.BadInit.selector);
-            factory.deployImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, "");
+            factory.deployImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args);
         }
     }
 

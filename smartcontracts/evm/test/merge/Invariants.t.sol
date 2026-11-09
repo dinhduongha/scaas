@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
-import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
+import {UAMetaTxBase, UAMetaTxBaseCore} from "../../src/metatx/UAMetaTxBase.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -15,7 +15,7 @@ contract SubjectProbe is UAMetaTxBase {
     bytes32 public subject;
     address public sender;
 
-    constructor(bytes32 uid, address reg) UAMetaTxBase("SCaaS SubjectProbe", uid, reg, address(0), false) {}
+    constructor(bytes32 uid, address reg) UAMetaTxBaseCore("SCaaS SubjectProbe", uid, reg, address(0), false) {}
 
     function poke() external nonReentrant {
         subject = _subject();
@@ -303,12 +303,13 @@ contract MergeInvariantsTest is MergeBase {
 
     /// keccak256 of the deployed code without its CBOR metadata tail, deployed at a fixed address (the immutables hold
     /// `address(this)`), recorded at `ref/pre-ua-mtx-merge` (9a4b8c5a). ua-mtx-merge T3b: the `MandateWallet` and
-    /// `HederaMandateWallet` rows left (Q6 builds them in the merged form; `MandateWalletMerged.t.sol`).
+    /// `HederaMandateWallet` rows left (Q6 builds them in the merged form; `MandateWalletMerged.t.sol`). T66b (controller
+    /// 2026-11-09): the `<X>Core` + flat-face split moved it, 21,003 -> 21,085 B: 0xd201866a…5876 -> this.
     function test_walletsByteIdentical() public {
         bytes32 uid = keccak256("wallet-uid");
         address b = address(0xA002);
         deployCodeTo("SmartKeyAccount.sol:SmartKeyAccount", abi.encode(uid), b);
-        assertEq(_codeHash(b), 0xd201866a71d652a5d6bb0a15bc64efa1cdedec3cf92ffe02e2441c67f48a5876, "SmartKeyAccount");
+        assertEq(_codeHash(b), 0xbede204d12566a090b8389385fe356d6a6ae25485cad9869454d73f367473962, "SmartKeyAccount");
         // the artifact `deployCodeTo` reads is this contract's (compiled into this test)
         assertGt(type(SmartKeyAccount).creationCode.length, 0);
     }

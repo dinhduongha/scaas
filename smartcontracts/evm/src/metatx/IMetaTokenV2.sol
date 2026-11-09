@@ -14,20 +14,33 @@ interface IMetaTokenV2 is IERC20Payment {
     event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient,
                             uint256 fee);
 
-    /// @notice Every pay entry (CTR-MTX-26, pay-meta-tax spec §3.2), before the payment's events; never parsed.
-    event PaymentMeta(bytes32 indexed payId, string payNo, uint16 schema, bytes body);
+    /// @notice Every pay entry (CTR-MTX-26, pay-meta-tax spec §3.2), before the payment's events; never parsed. `payNo`
+    ///         indexed (plan T83): 0 = none; recommended a right-aligned UUIDv7 (unique without coordination, time-ordered,
+    ///         no business sequence number on chain); any 32-byte id accepted.
+    event PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body);
 
-    /// @notice A zero `salt`, or `schema == 0` and a non-empty `body` disagree.
+    /// @notice A zero `salt`, `schema == 0` and a non-empty `body` disagree, or `save` with `payNo == 0`.
     error PayMetaShape();
-    error PayNoTooLong(uint256 length);
     error PayMetaMismatch(bytes32 entryRef, bytes32 payId);
+    /// @notice A saved pay of `amount >= 2^192` (plan T83: `PayRecord.amount` is a `uint192`; fail closed).
+    error PayRecordAmount(uint256 amount);
     error ReceiverFeeShape();
     error ReceiverFeeExpired(uint256 validUntil, uint256 nowTs);
     error ReceiverFeeAmount(uint256 fee, uint256 value);
 
-    /// @notice CTR-MTX-26: `keccak256(abi.encodePacked("scaas.pay.meta.v2", salt, keccak256(abi.encode(payNo, schema,
-    ///         body))))`.
+    /// @notice CTR-MTX-26: `keccak256(abi.encodePacked("scaas.pay.meta.v3", salt, keccak256(abi.encode(payNo, save,
+    ///         schema, body))))`.
     function metaPayId(MetaTxLib.PayMeta calldata meta) external pure returns (bytes32);
+
+    /// @notice The stored payments of `payNo` (plan T83): one per public pay with `save`, never a confidential one.
+    function paymentCount(bytes32 payNo) external view returns (uint256);
+
+    /// @notice Records `[offset, offset + limit)` of `payNo`, cut at the end (a page past it is empty). Anyone may append
+    ///         (a 1-wei pay with any `payNo`): the reader keeps the records whose `to` is its own and adds them up itself.
+    ///         `payNo` recommended a right-aligned UUIDv7, one per payment request (unique without coordination,
+    ///         time-ordered so an indexer's or ERP's index stays compact, no business sequence number on chain).
+    function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
+        external view returns (MetaTxLib.PayRecord[] memory);
 
     function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
         external view returns (bytes32);

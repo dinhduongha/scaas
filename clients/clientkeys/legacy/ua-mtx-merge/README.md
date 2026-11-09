@@ -26,3 +26,7 @@ Not exported, not tested, not bundled.
 - `t66a/{src/ua.js,scripts/ua-portable-vectors.mjs}` (plan T66a, CTR-UA-32): as they stood at 05f23be2, a PQ-eligible `msig` a KEM
   holder (`holds` for the KEM key, `kemRecordMessage` for any kind); their vector copy:
   `smartcontracts/vectors/ua/legacy/ua-mtx-merge/t66a/{portable,nested}.json`.
+- `t83/{src/evm.js,test/paymeta.test.js,scripts/typed-ops-vectors.mjs,scripts/typed-ops-expected.mjs}` (plan T83, owner
+  2026-11-09): as they stood at 32d73310, `PayMeta {salt, payNo: text, schema, body}` under `scaas.pay.meta.v2`, `checkPayNo`
+  (UTF-8, control and bidi rules, 256 bytes); their vector copies: `smartcontracts/vectors/{metatx,typed,ua}/legacy/
+  ua-mtx-merge/t83/`.

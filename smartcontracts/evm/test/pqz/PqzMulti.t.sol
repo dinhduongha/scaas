@@ -43,7 +43,7 @@ contract PqzMultiTest is PqzFixture {
     }
 
     /// A direct op 7 transfer at `p = pendingCount`, `shieldIn = 0`; the client's mirror.
-    function _multi(PqzLayer t, bytes32 from, bytes32 ben, bytes32[] memory rec, uint256 seed, bool aud)
+    function _multi(NormalPqzToken t, bytes32 from, bytes32 ben, bytes32[] memory rec, uint256 seed, bool aud)
         internal returns (bytes32 ref, bytes memory out)
     {
         out = _blob(seed, _outLen(rec.length, aud));
@@ -52,7 +52,7 @@ contract PqzMultiTest is PqzFixture {
     }
 
     /// The client's payload: `p = pendingCount`, `shieldIn = 0`, the memo on a COMPACT token.
-    function _mplFor(PqzLayer t, bytes32 from, bytes32 ben, bytes32[] memory rec, bytes memory out)
+    function _mplFor(NormalPqzToken t, bytes32 from, bytes32 ben, bytes32[] memory rec, bytes memory out)
         internal view returns (bytes memory)
     {
         bytes memory memo = t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? _mmemo(rec.length) : bytes("");
@@ -216,18 +216,18 @@ contract PqzMultiTest is PqzFixture {
     /// commit-reveal with the `18 + 40·M`-byte memo of the payload's salt.
     function test_multi_modes() public {
         aMode = uint8(ZetherTypes.AuditorMode.FULL);
-        PqzLayer full = _newToken("full");
+        NormalPqzToken full = _newToken("full");
         bytes32[] memory rec = _legsOf(2);
         vm.expectRevert(IPqzToken.AuditorRequired.selector);
         full.mtxConfidentialTransfer(_ms(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, false)), "")), hex"01", _pqAuth(), "", noVerdict());
         aMode = uint8(ZetherTypes.AuditorMode.NONE);
-        PqzLayer noAud = _newToken("noaud");
+        NormalPqzToken noAud = _newToken("noaud");
         vm.expectRevert(IPqzToken.AuditorForbidden.selector);
         noAud.mtxConfidentialTransfer(_ms(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, true)), "")), hex"01", _pqAuth(), "", noVerdict());
 
         aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
         dMode = uint8(ZetherTypes.DisclosureMode.COMPACT);
-        PqzLayer cpt = _newToken("compact");
+        NormalPqzToken cpt = _newToken("compact");
         bytes memory out = _blob(2, _outLen(2, true));
         bytes memory noMemo = _mpayload(0, 0, alice, 0, rec, out, "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, 0));
@@ -344,7 +344,7 @@ contract PqzMultiTest is PqzFixture {
     /// the beneficiary; the statement's fee word is `txFee + M·d`, so `d` is bound by the proof; all out of the pool.
     function test_decoyFee_perLegUniform() public {
         minDecoy = 2;
-        PqzLayer t = _newToken("decoy");
+        NormalPqzToken t = _newToken("decoy");
         assertEq(t.minDecoyFee(), 2);
         _fund(t, alice, 1000);
         bytes32[] memory rec = _legsOf(4);
@@ -379,7 +379,7 @@ contract PqzMultiTest is PqzFixture {
     /// `d < minDecoyFee` and `d ≥ 2^64` are refused; `minDecoyFee = 0` takes `d = 0` (no payment).
     function test_decoyFee_bounds() public {
         minDecoy = 2;
-        PqzLayer t = _newToken("decoy");
+        NormalPqzToken t = _newToken("decoy");
         bytes32[] memory rec = _legsOf(2);
         decoy = 1;
         bytes memory pl = _mpayload(0, 0, alice, 0, rec, _blob(4, _outLen(2, true)), "");
@@ -446,7 +446,7 @@ contract PqzMultiTest is PqzFixture {
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
         vm.prank(registrar);
         factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
-        PqzLayer h = _newToken("pqzh");
+        NormalPqzToken h = _newToken("pqzh");
         assertEq(h.proofSystemId(), PQZH_ID);
         bytes32[] memory rec = _legsOf(8);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadRecipientCount.selector, 8));
@@ -462,7 +462,7 @@ contract PqzMultiTest is PqzFixture {
         h.mtxConfidentialTransferSingle(_ts(_payload(11, 0, alice, carol, bytes32(0), _out(3, true), "")), hex"01", _pqAuth(), "", noVerdict());
     }
 
-    function _transferOn(PqzLayer t, bytes32 from, bytes32 to, uint256 seed) internal {
+    function _transferOn(NormalPqzToken t, bytes32 from, bytes32 to, uint256 seed) internal {
         _transfer(t, from, to, bytes32(0), seed, true);
     }
 

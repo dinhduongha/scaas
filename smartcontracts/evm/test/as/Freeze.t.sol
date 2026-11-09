@@ -178,11 +178,11 @@ contract FreezeTest is RegFixture {
             address t = _ks()[i];
             _freeze(t, a);
             vm.prank(ownerA);
-            MetaTokenBase(t).revokeRole(5, nid(issuer)); // proposes
+            NormalToken(t).revokeRole(5, nid(issuer)); // proposes
             assertTrue(_r(t).isFrozen(a), "a proposal changes nothing");
             vm.warp(block.timestamp + GD);
             vm.prank(ownerA);
-            MetaTokenBase(t).revokeRole(5, nid(issuer));
+            NormalToken(t).revokeRole(5, nid(issuer));
             assertFalse(_r(t).isFrozen(a), "no root of bit 5");
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);
@@ -218,7 +218,7 @@ contract FreezeTest is RegFixture {
         c = new bytes[](native ? 5 : 4);
         MetaTxLib.UAMetaTransfer memory x;
         (x.from, x.to, x.value, x.batch, x.validUntil) = (from, nid(alice), 1, 1, block.timestamp + 60);
-        c[0] = abi.encodeCall(ERC20MetaTx.mtxExecuteTransfer, (x, _bad()));
+        c[0] = abi.encodeCall(NormalToken.mtxExecuteTransfer, (x, _bad()));
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(from, abi.encodeWithSignature("burn(uint256)", 1),
             1, 0, block.timestamp + 60, 0, address(0), 0, address(0));
         c[1] = abi.encodeCall(UAMetaTxBase.mtxExecute, (m, _bad()));
@@ -251,6 +251,6 @@ contract FreezeTest is RegFixture {
         UAMetaTxBase(t).mtxCancelNonce(e, 9, s);
         vm.revertToState(snap);
         UAMetaTxBase(t).mtxCancelNonce(e, 9, s);
-        assertEq(MetaTokenBase(t).mtxNonce(nid(bob), 9), 1, "the control: the lane bumped");
+        assertEq(NormalToken(t).mtxNonce(nid(bob), 9), 1, "the control: the lane bumped");
     }
 }

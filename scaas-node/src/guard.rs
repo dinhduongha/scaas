@@ -25,7 +25,7 @@ use alloy::primitives::{Address, Bytes, B256};
 use alloy::sol_types::{SolCall, SolValue};
 use tracing::warn;
 
-use crate::abi::{IMtxIds, IMtxRelayFee, IPqzToken, ISCaaSDex, IToken, IUALedger, IUARegistry};
+use crate::abi::{IMtxIds, IPqzToken, IRelayFeeRouter, ISCaaSDex, IToken, IUALedger, IUARegistry};
 use crate::chain::{BlockGas, Chain, SimError};
 use crate::config::ChainCfg;
 use crate::metatx::{Mtx, UaMtx};
@@ -70,7 +70,7 @@ pub fn rule_of(contract: &str) -> Option<Rule> {
     })
 }
 
-/// The allow-list: every selector the node sends, with its table row. `MtxRelayFee.relay` comes from the `UARelayFee` row
+/// The allow-list: every selector the node sends, with its table row. `RelayFeeRouter.relay` comes from the `UARelayFee` row
 /// (the token's `mtxRelayFee` only ever runs under the router). Anything else is refused.
 pub fn row(sel: [u8; 4], contract: &str) -> Option<&'static typed::Row> {
     typed::rows().iter().find(|r| r.sent == sel && !r.entry.is_empty() && r.contracts.contains(&contract))
@@ -227,7 +227,7 @@ pub fn allowed(rule: Rule, f: &Facts) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelayFee {
     pub router: Address,
-    /// `MtxRelayExecutor`: the router's first `CREATE` (constructor, nonce 1), so derived, never configured.
+    /// `RelayFeeExecutor`: the router's first `CREATE` (constructor, nonce 1), so derived, never configured.
     pub executor: Address,
     pub params: crate::config::RelayParams,
     /// `relay_fee.min_wei_value = { "<token>" = wei per base unit }`: the node's floor price of a fee token.
@@ -295,7 +295,7 @@ struct RelayCall {
 }
 
 fn relay_call(data: &[u8]) -> Option<RelayCall> {
-    let c = IMtxRelayFee::relayCall::abi_decode(data).ok()?;
+    let c = IRelayFeeRouter::relayCall::abi_decode(data).ok()?;
     let derived = crate::metatx::native(&c.from).is_none();
     Some(RelayCall { target: c.target, call: c.callData, token: c.token, from: c.from, payee: c.payee, value: c.value, derived })
 }
@@ -325,7 +325,7 @@ pub fn relay_call_ok(rf: &RelayFee, lane: Address, to: Address, data: &[u8], reg
     -> Result<Address, String>
 {
     if to != rf.router {
-        return Err(format!("CALL_TARGET_REFUSED: MtxRelayFee.relay on {to:#x}, not params.relay_fee.router"));
+        return Err(format!("CALL_TARGET_REFUSED: RelayFeeRouter.relay on {to:#x}, not params.relay_fee.router"));
     }
     let c = relay_call(data).ok_or_else(|| "BAD_PAYLOAD: not a relay call".to_string())?;
     if !registered(c.token) {
@@ -473,6 +473,10 @@ pub struct Guard {
     op_stack: bool,
     /// Group 3f: the PQZ verifier mode's verdict fill and shield switch (`[pqz_verifier]`), one rule on every path.
     pqz: crate::pqz::Verifier,
+    /// Proposed NODE-JOB-25: the configured services' entries (`[[chains.services]]`), what a job is built from.
+    svc: crate::service::Types,
+    /// The same services as read from the chain at startup ([`Guard::load_services`]): entries equal both ways, domain.
+    services: RwLock<HashMap<Address, Arc<crate::service::Service>>>,
 }
 
 impl Guard {
@@ -494,10 +498,76 @@ impl Guard {
                 Some(v) => anyhow::bail!("params.l1_fee must be \"op-stack\" (the chain charges an OP-stack L1 data fee), not {v}"),
             },
             pqz: crate::pqz::Verifier::new(&cfg.pqz_verifier)?,
+            svc: crate::service::Types::from_cfg(&cfg.services, cfg.relay_params()?.max_service_op_bytes)?,
+            services: Default::default(),
         })
     }
 
-    /// The chain's `MtxRelayFee` router (`params.relay_fee.router`), if any.
+    /// A job's `Work`, with this chain's services ([`crate::submit::work_from_job_with`]).
+    pub fn work(&self, job: &crate::odoo::Job, fee_recipient: Option<Address>) -> anyhow::Result<Work> {
+        crate::submit::work_from_job_with(job, fee_recipient, &self.svc)
+    }
+
+    /// Proposed NODE-JOB-25, at startup: every configured service's `servicePullEntries()` equals its config, both
+    /// directions, and its `eip712Domain()` is on this chain; otherwise `SERVICE_ENTRIES_MISMATCH` stops the lane.
+    pub async fn load_services(&self, chain: &Chain) -> anyhow::Result<()> {
+        for (s, entries) in &self.svc.entries {
+            let svc = crate::service::load(chain, *s, entries).await?;
+            if let Ok(mut m) = self.services.write() {
+                m.insert(*s, Arc::new(svc));
+            }
+        }
+        Ok(())
+    }
+
+    /// A configured service: one kind per address, so no other kind's row runs on it.
+    fn is_service(&self, a: Address) -> bool {
+        self.svc.entries.contains_key(&a)
+    }
+
+    /// The service rule (proposed NODE-JOB-25) on a call of `data` to the service `s`, direct or a relay fee's inner call:
+    /// a service read at startup, no registered token at its address, one of its entries in canonical encoding, §3.3 steps
+    /// 1-4, the pull token the contract's (`SERVICE_TOKEN_MISMATCH` against the job's `pullToken`), registered, bound,
+    /// with its UA ledger for a derived payer, and the payer's native signature over the pull in that token's domain.
+    async fn check_service(&self, chain: &Chain, s: Address, data: &[u8], job_token: Option<Address>) -> Result<(), Refusal> {
+        let refused = |why: String| Refusal::Policy(why);
+        let Some(svc) = self.services.read().ok().and_then(|m| m.get(&s).cloned()) else {
+            return Err(refused(format!("CALL_TARGET_REFUSED: {s:#x} is no service read at startup")));
+        };
+        if self.registered(s) {
+            return Err(refused(format!("CALL_TARGET_REFUSED: service {s:#x} is also a registered token (one kind per address)")));
+        }
+        let d = crate::service::decode(&svc.entries, data)
+            .ok_or_else(|| refused(format!("CALL_TARGET_REFUSED: the call on service {s:#x} is no entry of it")))?;
+        let pull = crate::service::shape(&svc, &d).map_err(Refusal::Policy)?;
+        if job_token.is_some_and(|j| j != pull) {
+            return Err(refused(format!("SERVICE_TOKEN_MISMATCH: the job's pullToken is not {pull:#x}, the token the service pulls")));
+        }
+        if !self.registered(pull) {
+            return Err(Self::not_served(pull));
+        }
+        self.require_bound(chain, pull).await?;
+        if crate::metatx::native(&d.t.from).is_none() {
+            self.require_ua_ledger(chain, pull).await?;
+        }
+        let Some(who) = crate::metatx::native(&d.t.from).filter(|_| d.auth.keyData.is_empty() && d.auth.members.is_empty()) else {
+            return Ok(());
+        };
+        if d.auth.signature.len() != 65 {
+            return Ok(()); // a 64-byte Hedera signature, a contract's: the token's
+        }
+        let digest = pull_digest(chain, pull, crate::metatx::UaMtx::Transfer(d.t.clone()).struct_hash()).await?;
+        if typed::recovers(digest, &d.auth.signature, who) {
+            return Ok(());
+        }
+        match chain.is_contract_at(who).await {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(refused(format!("BAD_SIGNATURE: not {who:#x}'s over the pull {digest:#x}"))),
+            Err(e) => Err(Refusal::Transport(format!("eth_getCode: {e:#}"))),
+        }
+    }
+
+    /// The chain's `RelayFeeRouter` (`params.relay_fee.router`), if any.
     pub fn router(&self) -> Option<Address> {
         self.relay_fee.as_ref().map(|r| r.router)
     }
@@ -564,6 +634,9 @@ impl Guard {
         };
         let contract = w.typed.as_ref().map_or("", |t| t.contract);
         let refused = |what: String| Refusal::Policy(format!("CALL_TARGET_REFUSED: {what}"));
+        if contract == "service" {
+            return self.check_service(chain, w.to, &w.data, w.typed.as_ref().map(|t| t.domain_of)).await;
+        }
         let Some(row) = row(sel, contract) else {
             return Err(refused(format!("0x{} is no named entry of a {contract:?} contract", alloy::hex::encode(sel))));
         };
@@ -572,19 +645,29 @@ impl Guard {
         if w.typed.as_ref().is_some_and(|t| t.derived_signer) && !row.ua() {
             return Err(refused(format!("{} ({}): a derived subject signs merged entries only (B)", row.entry, row.name)));
         }
-        if sel == IMtxRelayFee::relayCall::SELECTOR {
+        if sel == IRelayFeeRouter::relayCall::SELECTOR {
             let Some(rf) = &self.relay_fee else {
                 return Err(refused("no params.relay_fee.router on this chain".into()));
             };
             let target = relay_call_ok(rf, chain.address(), w.to, &w.data, |a| self.registered(a)).map_err(Refusal::Policy)?;
             relay_inner_ok(&self.gov_routers, &w.data).map_err(Refusal::Policy)?;
+            // proposed NODE-JOB-25 on the inner call: a service runs its entries only, under the service rule
+            if self.is_service(target) {
+                let c = relay_call(&w.data).ok_or_else(|| refused("not a relay call".into()))?;
+                return self.check_service(chain, target, &c.call, None).await;
+            }
             return self.require_bound(chain, target).await;
+        }
+        // one kind per address (proposed NODE-JOB-25): a service is no target of any other kind's row
+        if self.is_service(w.to) {
+            return Err(refused(format!("{} ({contract}) on {:#x}: a service takes its own entries only", row.entry, w.to)));
         }
         let Some(rule) = rule_of(contract) else { return Err(refused(format!("unknown contract kind {contract:?}"))) };
         self.check_payee(w.typed.as_ref().and_then(|t| t.payee))?;
-        // pay-meta-tax spec §7.1: `payNo + body` of a pay entry's `PayMeta`, before any read or simulation
+        // pay-meta-tax spec §7.1: the `body` of a pay entry's `PayMeta` (plan T83: `payNo` a fixed word), before any read or
+        // simulation
         if let Some(n) = w.typed.as_ref().map(|t| t.pay_meta_len).filter(|n| *n > self.max_pay_meta_bytes) {
-            return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: payNo + body is {n} B, above max_pay_meta_bytes {}",
+            return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: body is {n} B, above max_pay_meta_bytes {}",
                 self.max_pay_meta_bytes)));
         }
         if rule == Rule::Token {
@@ -754,12 +837,41 @@ pub async fn fill_digest(chain: &Chain, w: &mut Work) -> Result<(), SimError> {
     if t.digest.is_some() || t.struct_hash.is_none() {
         return Ok(());
     }
+    if t.contract == "service" {
+        let d = pull_digest(chain, t.domain_of, t.struct_hash.expect("checked")).await.map_err(|e| match e {
+            Refusal::Policy(r) => SimError::Revert(r),
+            Refusal::Transport(r) => SimError::Transport(r),
+        })?;
+        t.digest = Some(d);
+        if let Some(m) = &mut w.meta {
+            m.digest = Some(d);
+        }
+        return Ok(());
+    }
     let uid = chain.uid().await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
     t.digest = t.digest_on(chain.number, uid);
     if let Some(m) = &mut w.meta {
         m.digest = t.lane_digest_on(chain.number, uid);
     }
     Ok(())
+}
+
+/// A service pull's digest (proposed NODE-JOB-25): the `UAMetaTransfer` struct hash in the pulled token's salted domain, its
+/// name read from the token (`eip712Domain()`: a SCaaS token kind's, else `TOKEN_NOT_SERVED`).
+// ponytail: one eth_call per job and per check; cache by token if the read shows up in the submit latency
+async fn pull_digest(chain: &Chain, token: Address, struct_hash: B256) -> Result<B256, Refusal> {
+    let d = match chain.call_view(token, IToken::eip712DomainCall {}).await {
+        Ok(d) => d,
+        Err(SimError::Revert(e)) => return Err(Refusal::Policy(format!("TOKEN_NOT_SERVED: {token:#x} has no eip712Domain(): {e}"))),
+        Err(SimError::Transport(e)) => return Err(Refusal::Transport(format!("eip712Domain(): {e}"))),
+    };
+    let name = ["token", "zether", "pqz"].into_iter().filter_map(typed::domain_name).find(|n| *n == d.name)
+        .ok_or_else(|| Refusal::Policy(format!("TOKEN_NOT_SERVED: {token:#x} is no SCaaS token kind ({:?})", d.name)))?;
+    let uid = chain.uid().await.map_err(|e| Refusal::Transport(format!("chain_uid: {e:#}")))?;
+    let t = typed::Typed { contract: "service", domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer: None,
+        payee: None, digest: None, derived_signer: false, derived_side: false, pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false,
+        pqz_verdict: None };
+    Ok(t.digest_in(name, chain.number, uid).expect("a struct hash"))
 }
 
 /// Simulated gas → the gas limit, for the EVM submitter and the lane runner alike. Regular gas: a calldata floor over
@@ -859,7 +971,7 @@ mod tests {
     /// `typed_ops_kat_every_entry`.
     #[test]
     fn the_plain_rows_are_pinned() {
-        use crate::abi::{IMtxRelayFee as R, ISCaaSDex as D, IUARegistry as U};
+        use crate::abi::{IRelayFeeRouter as R, ISCaaSDex as D, IUARegistry as U};
         let kat = |f: &str, k: &str| -> Vec<u8> {
             let p = format!("{}/../smartcontracts/evm/test/vectors/{f}", env!("CARGO_MANIFEST_DIR"));
             let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
@@ -1086,6 +1198,168 @@ mod tests {
         assert!(matches!(g.check(&chain, &w(vec![], true)).await, Err(Refusal::Policy(_))));
     }
 
+    /// An RPC for the service tests (proposed NODE-JOB-25): `eth_call` answered by selector from a `servicepull.json` row —
+    /// `servicePullEntries()` (the row's, or `entries` when set), `eip712Domain()` of the service (the row's) and of the token
+    /// (`SCaaS MetaToken` on the row's chain and salt), `chainUid()` the row's salt — and `eth_getCode` empty.
+    async fn service_rpc(r: &serde_json::Value, entries: Option<Vec<u8>>) -> ChainCfg {
+        let h = |k: &serde_json::Value| alloy::hex::decode(k.as_str().unwrap()).unwrap();
+        let (svc, tok): (Address, Address) = (r["service"]["address"].as_str().unwrap().parse().unwrap(), r["token"]["address"].as_str().unwrap().parse().unwrap());
+        let uid: B256 = r["token"]["salt"].as_str().unwrap().parse().unwrap();
+        let entries = entries.unwrap_or_else(|| h(&r["service"]["entriesReturn"]));
+        let sdom = h(&r["service"]["domainReturn"]);
+        let tdom = IToken::eip712DomainCall::abi_encode_returns(&IToken::eip712DomainReturn { fields: alloy::primitives::FixedBytes([0x1f]),
+            name: "SCaaS MetaToken".into(), version: "1".into(), chainId: alloy::primitives::U256::from(7622), verifyingContract: tok, salt: uid,
+            extensions: vec![] });
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(q): axum::Json<serde_json::Value>| {
+            let (entries, sdom, tdom) = (entries.clone(), sdom.clone(), tdom.clone());
+            async move {
+                let p = &q["params"][0];
+                let to: Address = p["to"].as_str().unwrap_or("0x0000000000000000000000000000000000000000").parse().unwrap();
+                let input = alloy::hex::decode(p["input"].as_str().or(p["data"].as_str()).unwrap_or("0x")).unwrap_or_default();
+                let sel: [u8; 4] = input.get(..4).map(|x| x.try_into().unwrap()).unwrap_or_default();
+                let out = match q["method"].as_str().unwrap() {
+                    "eth_call" if sel == crate::abi::IServicePull::servicePullEntriesCall::SELECTOR && to == svc => Some(entries),
+                    "eth_call" if sel == IToken::eip712DomainCall::SELECTOR && to == svc => Some(sdom),
+                    "eth_call" if sel == IToken::eip712DomainCall::SELECTOR && to == tok => Some(tdom),
+                    "eth_call" if sel == IToken::chainUidCall::SELECTOR && to == tok => Some(uid.to_vec()),
+                    "eth_getCode" => Some(vec![]),
+                    _ => None,
+                };
+                let result = out.map_or(serde_json::Value::Null, |b| serde_json::json!(format!("0x{}", alloy::hex::encode(b))));
+                axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": q["id"], "result": result}))
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let cfg = crate::service::ServiceCfg { address: svc, entries: vec![
+            crate::service::EntryCfg { entry: "deposit".into(), op_type: r["service"]["entries"]["opTypes"][0].as_str().unwrap().into() },
+            crate::service::EntryCfg { entry: "note".into(), op_type: r["service"]["entries"]["opTypes"][1].as_str().unwrap().into() }] };
+        let mut rf = toml::Table::new();
+        rf.insert("router".into(), toml::Value::String(r["relayFee"]["router"].as_str().unwrap().into()));
+        let mut params = toml::Table::new();
+        params.insert("relay_fee".into(), toml::Value::Table(rf));
+        ChainCfg { evm_chain_number: 7622, rpc_urls: vec![url], chain_uid: Some(uid), services: vec![cfg], params, ..Default::default() }
+    }
+
+    fn sp_rows() -> Vec<serde_json::Value> {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/metatx/servicepull.json")).unwrap();
+        v["rows"].as_array().unwrap().clone()
+    }
+
+    fn sp_job(op: serde_json::Value) -> crate::odoo::Job {
+        serde_json::from_value(serde_json::json!({"id": 1, "kind": "ua_metatx", "op": op})).unwrap()
+    }
+
+    fn policy(e: Result<(), Refusal>) -> String {
+        match e {
+            Err(Refusal::Policy(r)) => r,
+            other => panic!("not a policy refusal: {other:?}"),
+        }
+    }
+
+    /// Proposed NODE-JOB-25 through the guard, on the vectors' service (the RPC answers as the chain would): the startup read
+    /// (entries equal, both directions), the job built from named fields and checked (§3.3 steps 1-4, the pull token the
+    /// contract's, registered, bound, the payer's signature over the pull in the token's domain), its in-flight digest and
+    /// lane the pull's (the payer held on the pulled token), and every refusal next to its control: the unbound
+    /// `feeRecipient`, `SERVICE_TOKEN_MISMATCH`, `TOKEN_NOT_SERVED`, a wrong signature, a service that is also a token, another
+    /// kind's row on the service, a contract whose entries differ from the config.
+    #[tokio::test]
+    async fn service_pull_through_the_guard() {
+        let rows = sp_rows();
+        let r = &rows[0];
+        let tok: Address = r["token"]["address"].as_str().unwrap().parse().unwrap();
+        let svc: Address = r["service"]["address"].as_str().unwrap().parse().unwrap();
+        let cfg = service_rpc(r, None).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let g = Guard::new(&cfg, Arc::new(RwLock::new(vec![tok]))).unwrap();
+        g.load_services(&chain).await.unwrap();
+        let mut w = g.work(&sp_job(r["job"].clone()), None).unwrap();
+        g.check(&chain, &w).await.unwrap();
+        fill_digest(&chain, &mut w).await.unwrap();
+        let want: B256 = r["transferDigest"].as_str().unwrap().parse().unwrap();
+        assert_eq!(w.digest(), Some(want), "the in-flight key is the pull's digest in the token's domain");
+        let m = w.meta.unwrap();
+        assert_eq!((m.token, m.digest, m.nonce), (tok, Some(want), alloy::primitives::U256::ZERO), "the lane and completion are the token's");
+        assert_eq!(g.subject(&w), Some((subject_key(tok, m.from), false)), "the payer is held on the pulled token");
+        // the relay-fee wrap: the service rule on the inner call; the fee in T holds the same subject
+        let f = &r["relayFee"];
+        let relay = |call: serde_json::Value| serde_json::json!({"entry": "mtxRelayFee", "contract": "token", "token": f["feeToken"], "call": call,
+            "args": {"from": r["t"]["from"], "payee": f["payee"], "value": f["value"], "batch": f["batch"], "nonce": f["nonce"],
+                     "validUntil": f["validUntil"], "relayer": f["router"]},
+            "auth": {"keyData": "0x", "signature": f["signature"], "members": []}});
+        let rw = g.work(&sp_job(relay(r["job"].clone())), None).unwrap();
+        g.check(&chain, &rw).await.unwrap();
+        assert_eq!(g.subject(&rw), Some((subject_key(tok, m.from), true)), "F = T: one hold for both nonces");
+        // refusals, one change from the control each
+        let refused = |e: String, code: &str| assert!(e.starts_with(code), "{code}: {e}");
+        let unbound = &rows[2];
+        refused(policy(g.check(&chain, &g.work(&sp_job(unbound["job"].clone()), None).unwrap()).await), "SERVICE_PULL_SHAPE: 2");
+        let mut j = relay(r["job"].clone());
+        j["call"]["args"]["op"]["salt"] = unbound["job"]["args"]["op"]["salt"].clone();
+        refused(policy(g.check(&chain, &g.work(&sp_job(j), None).unwrap()).await), "SERVICE_PULL_SHAPE: 3");
+        let mut j = r["job"].clone();
+        j["args"]["pullToken"] = serde_json::json!(format!("{:#x}", Address::repeat_byte(0x77)));
+        refused(policy(g.check(&chain, &g.work(&sp_job(j), None).unwrap()).await), "SERVICE_TOKEN_MISMATCH");
+        let mut j = r["job"].clone();
+        let sig = j["args"]["auth"]["signature"].as_str().unwrap().to_string();
+        j["args"]["auth"]["signature"] = serde_json::json!(format!("{}{}", &sig[..10], if &sig[10..12] == "00" { "01" } else { "00" }) + &sig[12..]);
+        refused(policy(g.check(&chain, &g.work(&sp_job(j), None).unwrap()).await), "BAD_SIGNATURE");
+        let unserved = Guard::new(&cfg, Arc::new(RwLock::new(vec![]))).unwrap();
+        unserved.load_services(&chain).await.unwrap();
+        refused(policy(unserved.check(&chain, &unserved.work(&sp_job(r["job"].clone()), None).unwrap()).await), "TOKEN_NOT_SERVED");
+        let also_token = Guard::new(&cfg, Arc::new(RwLock::new(vec![tok, svc]))).unwrap();
+        also_token.load_services(&chain).await.unwrap();
+        refused(policy(also_token.check(&chain, &also_token.work(&sp_job(r["job"].clone()), None).unwrap()).await), "CALL_TARGET_REFUSED");
+        // one kind per address, the reverse: another kind's row (a token's `mtxCancelNonce`) on the service
+        let mut tr = crate::typed::testkit::op_of("UACancelNonce", "token", &crate::typed::testkit::vectors()).unwrap();
+        tr["token"] = serde_json::json!(format!("{svc:#x}"));
+        let tw = g.work(&sp_job(tr), None).unwrap();
+        refused(policy(g.check(&chain, &tw).await), "CALL_TARGET_REFUSED");
+        assert!(policy(g.check(&chain, &tw).await).contains("a service takes its own entries only"));
+        // a contract whose entries are not the config's: the startup read stops the lane
+        let one = crate::abi::IServicePull::servicePullEntriesCall::abi_encode_returns(&crate::abi::IServicePull::servicePullEntriesReturn {
+            selectors: vec![alloy::primitives::FixedBytes(alloy::hex::decode(r["selector"].as_str().unwrap()).unwrap().try_into().unwrap())],
+            opTypes: vec![r["opType"].as_str().unwrap().into()], tokens: vec![tok] });
+        let cfg1 = service_rpc(r, Some(one)).await;
+        let g1 = Guard::new(&cfg1, Arc::new(RwLock::new(vec![tok]))).unwrap();
+        let e = g1.load_services(&Chain::with_signer(&cfg1, signer()).unwrap()).await.unwrap_err().to_string();
+        assert!(e.starts_with("SERVICE_ENTRIES_MISMATCH") && e.contains("is not the contract's"), "{e}");
+        refused(policy(g1.check(&chain, &g1.work(&sp_job(r["job"].clone()), None).unwrap()).await), "CALL_TARGET_REFUSED");
+    }
+
+    /// Startup bounds (proposed NODE-JOB-25): one kind per address against every configured kind, EVM only; the control.
+    #[test]
+    fn service_config_one_kind_per_address() {
+        let s = Address::repeat_byte(0x5e);
+        let svc = crate::service::ServiceCfg { address: s, entries: vec![crate::service::EntryCfg { entry: "deposit".into(),
+            op_type: "Deposit(bytes32 payer,uint256 amount,uint64 releaseAfter,bytes32 salt)".into() }] };
+        let base = ChainCfg { evm_chain_number: 7, services: vec![svc.clone()], ..Default::default() };
+        base.check_services().unwrap();
+        let router = |a: Address| {
+            let mut rf = toml::Table::new();
+            rf.insert("router".into(), toml::Value::String(format!("{a:#x}")));
+            let mut p = toml::Table::new();
+            p.insert("relay_fee".into(), toml::Value::Table(rf));
+            p
+        };
+        for (c, what) in [
+            (ChainCfg { dex: Some(s), ..base.clone() }, "dex"),
+            (ChainCfg { governance_routers: vec![s], ..base.clone() }, "governance_routers"),
+            (ChainCfg { ua_registry: Some(s), ..base.clone() }, "ua_registry"),
+            (ChainCfg { account_factory: Some(s), ..base.clone() }, "account_factory"),
+            (ChainCfg { token_factory: Some(s), ..base.clone() }, "token_factory"),
+            (ChainCfg { params: router(s), ..base.clone() }, "relay_fee.router"),
+            (ChainCfg { params: router(Address::repeat_byte(1)), services: vec![crate::service::ServiceCfg {
+                address: Address::repeat_byte(1).create(1), ..svc.clone() }], ..base.clone() }, "executor"),
+            (ChainCfg { services: vec![svc.clone(), svc.clone()], ..base.clone() }, "twice"),
+            (ChainCfg { family: "soroban".into(), ..base.clone() }, "EVM only"),
+        ] {
+            let e = c.check_services().unwrap_err().to_string();
+            assert!(e.contains(what), "{what}: {e}");
+        }
+    }
+
     #[test]
     fn each_rule_needs_its_target() {
         let bound = Facts { bound: true, ..Default::default() };
@@ -1243,7 +1517,7 @@ mod tests {
         };
         // pay-meta-tax T40: + `mtxPayWithTax`, the regulated kinds' own signed entry (a node row on each kind's class)
         const PAY_WITH_TAX: &str = "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,\
-address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))";
+address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))";
         let mut want = signed(&b);
         want.insert(PAY_WITH_TAX.to_string());
         assert_eq!(signed(&k), want, "{kind}: SIGNED entries are {base}'s and mtxPayWithTax, both directions");
@@ -1255,7 +1529,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             "pause(bytes32,uint64)", "unpause(bytes32)", "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
             "revokeOrder(bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
             // pay-meta-tax T39 / T40: bit 23's two powers, the direct payWithTax (the caller's own balance), mtxPayWithTax
-            "setTaxRate(uint32)", "setTaxRecipient(bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+            "setTaxRate(uint32)", "setTaxRecipient(bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
             PAY_WITH_TAX];
         assert_eq!(added.keys().map(|s| s.as_str()).collect::<std::collections::BTreeSet<_>>(), controls.into_iter().collect(), "{kind}");
         for (s, c) in added.iter().filter(|(s, _)| s.as_str() != PAY_WITH_TAX) {
@@ -1584,7 +1858,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let router = Address::repeat_byte(0x9a);
         let other = Address::repeat_byte(0x9b);
         let inner = |name: &str, kind: &str| crate::typed::Op::parse(&op_of(name, kind, &v).unwrap(), None).unwrap().data;
-        let relay = |to: Address, call: Bytes| IMtxRelayFee::relayCall { target: to, callData: call, token: Address::repeat_byte(1),
+        let relay = |to: Address, call: Bytes| IRelayFeeRouter::relayCall { target: to, callData: call, token: Address::repeat_byte(1),
             from: B256::repeat_byte(2), payee: B256::repeat_byte(3), value: alloy::primitives::U256::from(1),
             batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
             validUntil: alloy::primitives::U256::from(4_000_000_000u64),
@@ -1605,7 +1879,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
 
     /// The same rule where it runs, the guard's relay branch: a relay fee whose inner call is a router op passes on a configured router
     /// and is refused on any other bound contract; with no `governance_routers` it is refused (spec §12.7: "on the inner target of
-    /// `MtxRelayFee.relayCall`", one form since ua-mtx-merge R28).
+    /// `RelayFeeRouter.relayCall`", one form since ua-mtx-merge R28).
     #[tokio::test]
     async fn the_guards_relay_branch_runs_the_router_rule() {
         use crate::typed::testkit::{op_of, vectors};
@@ -1618,7 +1892,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         params.insert("relay_fee".into(), toml::Value::Table([("router".to_string(), toml::Value::String(format!("{rf:#x}")))].into_iter().collect()));
         let grant = crate::typed::Op::parse(&op_of("UAGrantRole", "gov_router", &v).unwrap(), None).unwrap().data;
         let work = |target: Address| {
-            let data = IMtxRelayFee::relayCall { target, callData: grant.clone(), token, from: B256::repeat_byte(2), payee: rf.into_word(),
+            let data = IRelayFeeRouter::relayCall { target, callData: grant.clone(), token, from: B256::repeat_byte(2), payee: rf.into_word(),
                 value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
                 validUntil: alloy::primitives::U256::from(4_000_000_000u64),
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();

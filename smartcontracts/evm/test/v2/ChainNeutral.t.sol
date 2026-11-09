@@ -6,7 +6,8 @@ import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {normalInit} from "./helpers/V2Fixture.sol";
 import {nid} from "../helpers/Ids.sol";
-import {plainEnv} from "../helpers/Catalogue.sol";
+import {plainEnv, withModules} from "../helpers/Catalogue.sol";
+import {deployKindModules} from "../../script/KindModules.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -197,9 +198,11 @@ contract ChainNeutralTest is Test {
 
     /// The NORMAL release without a registry and alice's token of it (the same steps on every chain).
     function _plainToken(OpenFactory f, address registrar) internal returns (address t) {
+        (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), ""); // T66b: its body modules, pinned
         vm.startPrank(registrar);
-        f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(f), address(0), bytes32(0), address(0), false));
-        f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, "");
+        f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1,
+            withModules(plainEnv(address(f), address(0), bytes32(0), address(0), false), ms));
+        f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
         vm.stopPrank();
         vm.prank(alice);
         t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("T", "T", 6, 1e12, alice, address(0))),

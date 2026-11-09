@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -560,7 +561,8 @@ contract DexTest is Test {
     }
 
     function test_classification_deprecatedAndUnregisteredAreOutside() public {
-        address impl = address(new NormalToken(address(f), ""));
+        address impl = address(new NormalToken(address(f), Catalogue.argsOn(f, IOpenFactory.TokenKind.NORMAL,
+            f.latestEnvVersion(IOpenFactory.TokenKind.NORMAL), ""))); // the env's pinned modules
         address u = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(normalInit("C", "C", 0, 1e6, alice, address(0))), "c");
         vm.startPrank(admin);
         dex.setMarket(address(a), u, true);

@@ -53,7 +53,7 @@ The signer travels in a
 transient slot, never in calldata ([CTR-MTX-18](#CTR-MTX-18)); what may run is a fixed **selector** allowlist per
 implementation ([CTR-MTX-19](#CTR-MTX-19)), never a target allowlist. A contract that does not support gasless
 operation is wrapped into a meta-tx token (an `WrappedToken`, [token-wrappers.md](token-wrappers.md)); a generic forwarder is
-never added. `MtxRelayFee` ([CTR-MTX-27](#CTR-MTX-27)) is not one: no target trusts it (each target checks its own
+never added. `RelayFeeRouter` ([CTR-MTX-27](#CTR-MTX-27)) is not one: no target trusts it (each target checks its own
 signer, as above), it calls targets from an unprivileged executor, and it only binds a token payment to a call that
 anyone could submit directly. **All or nothing, and the user never pays for an operation that did not happen:** transfer and payment
 check everything before the fee and cannot fail afterwards; a self-call runs **first** and pays its fee **after**
@@ -886,7 +886,7 @@ function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes
 function metaPayId(bytes32 salt, bytes calldata meta) external pure returns (bytes32);
 ```
 
-`MtxRelayFee` (CTR-MTX-27, `src/metatx/MtxRelayFee.sol`; stateless, no owner, `DeployBase` CREATE2) and its executor:
+`RelayFeeRouter` (CTR-MTX-27, `src/metatx/RelayFeeRouter.sol`; stateless, no owner, `DeployBase` CREATE2) and its executor:
 
 ```solidity
 event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, bytes32 payee, uint256 amount);
@@ -895,7 +895,7 @@ error RelayTargetNoCode(address target);
 function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value, uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external;
 function relayRef(address target, bytes calldata callData) public view returns (bytes32);
     // keccak256(abi.encodePacked("scaas.relayfee", block.chainid, target, keccak256(callData)))
-// MtxRelayExecutor (created by the router's constructor): error NotRouter(); exec(address target, bytes callData) router-only
+// RelayFeeExecutor (created by the router's constructor): error NotRouter(); exec(address target, bytes callData) router-only
 ```
 
 `MtxPipelineLib` (`src/metatx/MtxPipelineLib.sol`, linked; DELEGATECALL only, no state of its own) exposes `preCall`,
@@ -919,7 +919,7 @@ their errors are in [dex.md](dex.md#CTR-DEX-15); the kind functions (wrap, unwra
 | **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **BUILT** in the contracts (`mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; [receiver-pays](#receiver-pays)); the node refuses `receiver_fee` jobs until its receiver-pays job is built; the UA twin `uaPayReceiverFee` **BUILT** (UA-5a) |
 | Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)); on-chain `SponsorshipPool` **PLANNED** later |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
-| **Token fee for a fee-less call** | The payer signs a token payment bound to one call on another contract (a PqChat record, a `UARegistry` write); `MtxRelayFee` runs the call, then the payment, atomically ([CTR-MTX-27](#CTR-MTX-27)) | Relayer, paid in token by the payer | **BUILT** |
+| **Token fee for a fee-less call** | The payer signs a token payment bound to one call on another contract (a PqChat record, a `UARegistry` write); `RelayFeeRouter` runs the call, then the payment, atomically ([CTR-MTX-27](#CTR-MTX-27)) | Relayer, paid in token by the payer | **BUILT** |
 | Enterprise inbound gateway | Partners post signed intents to the company's gateway (`POST /v1/metatx`); the company relays with its lanes | Company | **BUILT** (EVM door A); intake rules that stop door A being a free gas faucet **SPECIFIED** ([NODE-GW-01](../node/gateway.md#NODE-GW-01)) |
 
 Per-family equivalents (the subject never pays, a relayer lane submits): Hedera — the same Solidity on HSCS, no
@@ -935,12 +935,23 @@ by a payment, the executor LogicSig sends only the target call with fee 0 ([netw
 
 The token fee for a fee-less call ([CTR-MTX-27](#CTR-MTX-27)) per family: Soroban — the `relay-fee` contract (payer auth rooted at its `relay` call, node adds a `SourceAccount` entry) with the `relay-executor` executor; Solana — static `relay_fee_<entry>` wrappers plus a generic `relay_fee` CPI router; Cosmos — `relayfee` router with the `relayexec` executor, no admin; Sui and Aptos — the `scaas::relayfee` module, one static wrapper per fee-less signed entry; GRAM — an escrow released only on a positive acknowledgment from a known SCaaS target; NEAR — static `relay_fee_<entry>` wrappers in the token plus an escrow router with an executor and a callback; Algorand — the `relayfee` app in one atomic group, the target sent by the executor LogicSig. Each is in the family's network document, section "Pay-meta and relay fee".
 
-<a id="CTR-MTX-27"></a>**CTR-MTX-27** — **`MtxRelayFee`: a token fee to the relayer for a fee-less mtx call.**
-**BUILT** on the EVM and every non-EVM family (owner 2026-10-26; metatx-split T9-T16; node T17, clients T18; decision [CTR-MTX-27](../decisions.md#ctr-mtx-27--mtxrelayfee-token-fee-for-a-fee-less-call)). NEAR: near-algorand T9-T10, node T16 ([NET-NEAR-14](../networks/near.md#NET-NEAR-14), [NET-NEAR-15](../networks/near.md#NET-NEAR-15)). Algorand: near-algorand T15, node T17 ([NET-ALG-12](../networks/algorand.md#NET-ALG-12)).
+<a id="CTR-MTX-27"></a>**CTR-MTX-27** — **`RelayFeeRouter`: a token fee to the relayer for a fee-less mtx call.**
+**BUILT** on the EVM and every non-EVM family (owner 2026-10-26; metatx-split T9-T16; node T17, clients T18; decision [CTR-MTX-27](../decisions.md#ctr-mtx-27--relayfeerouter-token-fee-for-a-fee-less-call)). NEAR: near-algorand T9-T10, node T16 ([NET-NEAR-14](../networks/near.md#NET-NEAR-14), [NET-NEAR-15](../networks/near.md#NET-NEAR-15)). Algorand: near-algorand T15, node T17 ([NET-ALG-12](../networks/algorand.md#NET-ALG-12)).
 Two payers: the relayer pays the native gas, and the payer pays the relayer, or another payee, in a token, for one call
 that has no fee of its own: a PqChat record, a `UARegistry` write, a `MandateWallet` action, or any SCaaS contract's
 entry with fee `NONE`. The call and its contract are unchanged: no token logic in them, records stay chain-independent
-(UA-7 / UA-8). The payment is optional: the same call can always be submitted without it.
+(UA-7 / UA-8).
+
+**Two ways to submit the same call** (owner 2026-11-09):
+- **No fee:** the relayer sends the call straight to the target. The router is not involved; the target checks the
+  payer's signature inside the call as always.
+- **A token fee:** the relayer sends `relay` to the router. Every `relay` carries a token payment (`UARelayFee`, signed by
+  the payer): the router exists only for that, and there is no `relay` without one.
+
+A service pull (a service contract taking the payer's tokens into its custody, SPECIFIED:
+[spec](../superpowers/specs/2026-11-09-service-pull.md)) follows the same two ways: the target is the service and its
+pull is the service's own operation, never the router's fee. The two compared (who pulls, what the signature binds, where
+the funds go): [service-pull spec §2.5](../superpowers/specs/2026-11-09-service-pull.md#25-the-relay-fee-and-a-service-pull-compared).
 
 **Deployment.** One stateless contract with no owner, no stored state and no constructor argument. `DeployBase`
 deploys it through the deterministic CREATE2 deployer, as `UARegistry` and the verifiers, so it has the same address
@@ -948,7 +959,7 @@ on every EVM chain. Its constructor creates its executor (`CREATE`, so the execu
 and no target needs to know either address: the payer's signature names the router (`relayer = router`).
 
 ```solidity
-// the router (`MtxRelayFee`): one entry on ids (ua-mtx-merge T2, R28), the payer's lane `batch` / `nonce`
+// the router (`RelayFeeRouter`): one entry on ids (ua-mtx-merge T2, R28), the payer's lane `batch` / `nonce`
 // (pay-meta-tax spec §4, O4); the address forms `relay` / `uaRelay`, `RelayFee`, `uaRelayFee` are in legacy/ua-mtx-merge/
 function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
                uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external; // nonReentrant
@@ -969,8 +980,8 @@ in this order (steps, not branches; the last one only in open mode), and any fai
 sequenceDiagram
     autonumber
     participant R as Relayer (lane key, pays gas)
-    participant F as Router (MtxRelayFee)
-    participant X as Executor (MtxRelayExecutor)
+    participant F as RelayFeeRouter
+    participant X as RelayFeeExecutor
     participant T as Target (a SCaaS contract)
     participant K as Token
     R->>F: relay(target, callData, token, from, payee, value, batch, nonce, validUntil, auth)
@@ -989,6 +1000,17 @@ sequenceDiagram
 Who signs what: the user signs the call itself (its own record, inside `callData`) and the payment `UARelayFee` with
 `relayer = router`; the relayer signs only the outer transaction. The target sees the executor as `msg.sender` and
 trusts only the user's signature inside `callData`.
+
+**Roles.**
+
+| Party | What it is | What it does | What it never does |
+|---|---|---|---|
+| **Payer** (the user) | the account that wants the call run and pays for it | signs the call (inside `callData`) and `UARelayFee` (payer, target, call hash, payee, value, lane, expiry, `relayer = router`) | sends a transaction or holds native gas |
+| **Relayer** | whoever submits the transaction (a node's lane key) | sends `relay` to the router, pays the native gas, is paid the fee in open mode | talks to the executor, the target or the token directly |
+| **Relay-fee router** (`RelayFeeRouter`) | the entry point: one stateless contract, no owner, no stored state, the same CREATE2 address on every EVM chain | runs the call through its executor, then makes the token collect the payment whose signed `relayer` it is, then forwards the fee to the relayer in open mode | calls a target itself, holds funds between transactions, grants authority to anyone |
+| **Executor** (`RelayFeeExecutor`) | a minimal contract the router creates in its constructor | `target.call(callData)`, only on its router's order (`NotRouter` otherwise) | holds funds or privileges, or is anyone's signed relayer: it exists so the router's identity, which payers sign as `relayer`, is never lent to the call. Never pay it or approve it |
+| **Target** | the SCaaS contract whose fee-less entry the payer wants run (a `UARegistry` write, a PqChat record, a `MandateWallet` action, any entry with fee `NONE`) | verifies the payer's own signature inside `callData` and runs, all or nothing ([CTR-MTX-16](#CTR-MTX-16)) | knows about the fee or trusts its caller; it must be a contract (code, not an EIP-7702 designator) |
+| **Token** | the token the fee is paid in | `mtxRelayFee`: checks `UARelayFee` with `relayer = msg.sender`, moves the fee from the payer's public balance to the payee, emits `UAPaymentSettled(…, ref)` | pays from a confidential balance |
 
 The payment is its own typed struct, `UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)` (`MetaTokenBase.sol` `UA_RELAY_FEE_TYPEHASH`), signed in the token's domain: a native payer with its own key, a derived UA through the token's registry. The token builds `UAMetaTransfer{from, to: payee, value, entryRef: ref, batch, nonce, validUntil, mode: MODE_RESTRICT_RELAYER, relayer: msg.sender}` with fee `NONE` and `ref = keccak256("scaas.relayfee" ‖ chainid ‖ target ‖ callDataHash)` (= `relayRef`). A caller other than the router therefore hashes itself as `relayer` and fails the signature (`MetaTxBadSignature`); `test_relayFeeDirectCallRefused`. A payment for another target, call or chain fails at the signature, after the target call ran, and the revert unwinds it. `mtxRelayFee` is in `IERC20MetaTx` (its ERC-165 id moved) and is not `PAYABLE`-gated, as `mtxExecuteTransfer` is not.
 
@@ -1025,6 +1047,13 @@ Why it holds:
   `mtxExecuteTransfer` of another router-bound payment, and the token would see the router as its bound relayer. The
   executor has no privilege, holds nothing, and only the router may call it.
 - **Atomic.** Steps 3–5 are one transaction, and any failure reverts all of them.
+- **The call first, the payment after.** Either order is safe, because one failure reverts both. The call comes first
+  so that a call which credits the payer (a withdrawal or refund from a service, an unwrap to the public balance) can
+  fund its own fee, as a self-call pays its fee after it runs ([CTR-MTX-16](#CTR-MTX-16)). A payer without the fee makes
+  the whole `relay` revert; the relayer simulates the whole `relay` before it submits (below), so a failing one is not
+  sent. What the order costs: a `relay` that still reverts on chain (state moved between simulation and inclusion)
+  burns the target call's gas before the payment fails, which a payment-first order would save (the owner asked
+  2026-11-09; the order is unchanged).
 - **One payment per signature** (pay-meta-tax spec §4, O4, F-29): a `UARelayFee` signature runs at most once (its
   nonce on the lane `(from, batch)`). A second signature for the same call pays only if the target call runs again,
   which a target with its own nonce or guard refuses, so the second `relay` reverts and pays nothing.

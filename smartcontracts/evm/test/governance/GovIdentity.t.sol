@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -64,7 +66,7 @@ contract GovIdentityTest is Test {
     }
 
     function _normal(bytes32 owner_, bytes32 minter) internal returns (NormalToken t) {
-        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), ""));
+        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         t = NormalToken(EnvKit.clone(normalImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.owner) = ("I", "I", 6, 1 | (uint256(1) << MINT), owner_);
@@ -80,13 +82,13 @@ contract GovIdentityTest is Test {
     }
 
     function _wrapped(IFactoryToken.TokenConfig memory c) internal returns (WrappedToken w) {
-        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), ""));
+        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
         w.initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
-        d = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), "")), _cenv()));
+        d = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), _cenv()));
         d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, address(0xAA), false, 0, address(0))));
     }
 
@@ -229,7 +231,7 @@ contract GovIdentityTest is Test {
         bytes32 derived = bytes32(uint256(uint160(address(this))) | (uint256(0xd1) << 160));
         IFactoryToken.TokenConfig memory c = _wrappedCfg(ISSUER);
         c.roles.rateAdmin = derived;
-        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), ""));
+        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         WrappedToken w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, RATE, derived));
         w.initialize(nid(address(this)), 1, abi.encode(c));
@@ -247,7 +249,7 @@ contract GovIdentityTest is Test {
     function test_poolsAndZeroRefusedAsOwnerAndHolder() public {
         bytes32[2] memory pools = [MetaTxLib.pad(MetaTxLib.UA_POOL), MetaTxLib.pad(MetaTxLib.SHIELD_POOL)];
         for (uint256 i; i < 2; ++i) {
-            if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), ""));
+            if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
             NormalToken n = NormalToken(EnvKit.clone(normalImpl, _cenv()));
             IFactoryToken.TokenConfig memory c;
             (c.name, c.symbol, c.decimals, c.features, c.owner) = ("I", "I", 6, 1 | (uint256(1) << MINT), pools[i]);

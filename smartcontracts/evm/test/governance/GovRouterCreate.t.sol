@@ -10,7 +10,8 @@ import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
-import {plainEnv} from "../helpers/Catalogue.sol";
+import {plainEnv, withModules} from "../helpers/Catalogue.sol";
+import {deployKindModules, deployDexModules} from "../../script/KindModules.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
@@ -51,11 +52,14 @@ contract GovRouterCreateTest is GovRouterFixture {
     function setUp() public override {
         super.setUp();
         f = EnvKit.factory(REGISTRAR, chainUidA, 0, address(router));
+        // T66b: the releases' body modules (the token's, the DEX's D), pinned in their envs
+        (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
+        (address[] memory dm, bytes memory dargs) = deployDexModules(address(f));
         vm.startPrank(REGISTRAR);
-        f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(f), address(0), chainUidA, PREG, false));
-        f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, "");
-        f.publishDexEnv(1, plainEnv(address(f), address(0), chainUidA, address(0), false));
-        f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, "");
+        f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(f), address(0), chainUidA, PREG, false), ms));
+        f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
+        f.publishDexEnv(1, withModules(plainEnv(address(f), address(0), chainUidA, address(0), false), dm));
+        f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, dargs);
         f.publishClassEnv(4, 0, 1, plainEnv(address(f), address(0), chainUidA, address(0), false));
         f.deployRelease(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
             type(NoteKind).creationCode, "");
@@ -159,9 +163,10 @@ contract GovRouterCreateTest is GovRouterFixture {
     function test_create_subjectZeroRefused_nonRouterSubjectIgnored() public {
         SubjectRouter r = new SubjectRouter(chainUidA);
         OpenFactory g = EnvKit.factory(REGISTRAR, chainUidA, 0, address(r));
+        (address[] memory ms, bytes memory args) = deployKindModules(0, address(g), ""); // T66b
         vm.startPrank(REGISTRAR);
-        g.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(g), address(0), chainUidA, PREG, false));
-        g.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, "");
+        g.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(g), address(0), chainUidA, PREG, false), ms));
+        g.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
         vm.stopPrank();
         vm.expectRevert(IOpenFactory.RouterSubjectZero.selector);
         r.create(g, bytes32(0), _tokenArgs());

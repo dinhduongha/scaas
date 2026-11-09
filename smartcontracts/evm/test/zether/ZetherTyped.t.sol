@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {UACall} from "../ua/UACall.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {stdJson} from "forge-std/StdJson.sol";
@@ -146,11 +148,11 @@ abstract contract ZetherNamedBase is ZetherFixture {
     }
 
     /// The address binding of `e` (`executeMetaTransaction`'s, CTR-ZTH-06), as a client computes it.
-    function _bindingOf(ZetherLayer t, MetaTxLib.Envelope memory e) internal view returns (bytes32) {
+    function _bindingOf(NormalZetherToken t, MetaTxLib.Envelope memory e) internal view returns (bytes32) {
         return _addrBinding(t, MetaTxLib.MetaTransaction(e.from, "", e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient));
     }
 
-    function _uaBindingOf(ZetherLayer t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
+    function _uaBindingOf(NormalZetherToken t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
         return t.envelopeBinding(MetaTxLib.UAMetaTransaction(u.from, "", u.batch, u.nonce, u.validUntil, u.mode, u.relayer, u.fee, u.feeRecipient));
     }
 
@@ -486,7 +488,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, s);
 
         // bound to this token's domain: another token's owner digest does not pass (`modeNonce` 0 there, so only the domain differs)
-        ZetherLayer other = _newToken(true, "other");
+        NormalZetherToken other = _newToken(true, "other");
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, aId));
         other.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, s);
     }
@@ -667,7 +669,7 @@ contract ZetherTypedWrappedTest is ZetherNamedBase {
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0, 0, bytes32(0), false, 0);
         w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "zw")));
-        tok = ZetherLayer(address(w));
+        tok = NormalZetherToken(address(w));
         _users();
         _ids();
         usd.mint(payer, 1_000 * SCALE);

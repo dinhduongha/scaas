@@ -41,15 +41,16 @@ test('the UAPayWithTax digest row: canonical payment hash, struct hash, digest i
 
 test('buildPayWithTax: mtxPayWithTax(t, uint8, uint256, UASig, PayMeta); the rate check; tax <= amount', () => {
   const pay = { token: '0x' + '7a'.repeat(20), chainId: 7622, chainUid: '0x' + 'c1'.repeat(32), from: padId('0x' + '11'.repeat(20)),
-    to: padId('0x' + '22'.repeat(20)), amount: 1000n, validUntil: 1800000600, meta: { salt: '0x' + '5a'.repeat(32), payNo: 'INV-1' },
+    to: padId('0x' + '22'.repeat(20)), amount: 1000n, validUntil: 1800000600, meta: { salt: '0x' + '5a'.repeat(32), payNo: '0x' + '00'.repeat(31) + '01', save: true },
     batch: 4, nonce: 9 };
   const p = buildPayWithTax({ ...pay, taxMode: 1, tax: 100, ratePpm: 100000, taxRecipient: padId('0x' + '7a0'.padStart(40, '0')) });
   assert.equal(p.typedData.primaryType, 'UAPayWithTax');
   assert.equal(p.typedData.message.payment.batch, '4', 'the payer\'s own lane');
-  assert.equal(p.shown.payNo, 'INV-1');
+  assert.equal(p.shown.payNo, '0x' + '00'.repeat(31) + '01');
+  assert.equal(p.shown.save, true);
   const cd = p.calldata(new Uint8Array(65).fill(9));
   assert.equal(hex(cd.subarray(0, 4)), sel('mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,'
-    + 'address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))'));
+    + 'address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))'));
   assert.throws(() => buildPayWithTax({ ...pay, taxMode: 1, tax: 101, ratePpm: 100000 }), /rate/);
   assert.throws(() => buildPayWithTax({ ...pay, taxMode: 2, tax: 1001 }), /more than the payment/);
   assert.throws(() => buildPayWithTax({ ...pay, taxMode: 0, tax: 0 }), /tax mode/);

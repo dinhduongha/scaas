@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {domainOf} from "../metatx/NamedEntry.t.sol";
 import {UACall} from "./UACall.sol";
@@ -233,7 +235,7 @@ contract UAReceiverFeeTest is UALedgerBase {
         _runRevert(t, 11, FEE_TO, until, abi.encodeWithSelector(IMetaTokenV2.ReceiverFeeAmount.selector, 11, 10));
         // `PAYABLE` off
         NormalToken np =
-            NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+            NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         IFactoryToken.TokenConfig memory c = normalInit("NP", "NP", 6, 0, address(0), address(this));
         c.features = (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
         np.initialize(nid(address(this)), 1, abi.encode(c));
@@ -335,7 +337,7 @@ contract UAReceiverFeeTest is UALedgerBase {
         MockWallet impl = new MockWallet(bob, 0, 100_000, address(0)); // ECDSA by bob after burning 100 k gas
         address payee = Clones.clone(address(impl));
         NormalToken t400 =
-            NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(impl), false)));
+            NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(impl), false)));
         t400.initialize(nid(address(this)), 1, abi.encode(normalInit("S", "S", 6, 0, address(0), address(this))));
         t400.mintToUA(uaP, 2 * N);
         NormalToken[2] memory ts = [tok, t400];

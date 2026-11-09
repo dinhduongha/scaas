@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Hashes} from "@openzeppelin/contracts/utils/cryptography/Hashes.sol";
@@ -108,7 +110,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         fac = new SmartKeyAccountFactory(UID_);
-        NormalToken impl = NormalToken(_envFor(address(new NormalToken(address(this), "")),
+        NormalToken impl = NormalToken(_envFor(address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
             EnvKit.env(UID_, address(0), fac.IMPLEMENTATION(), false)));
         t = NormalToken(_clone(address(impl), address(this), new address[](0),
             abi.encode(normalInit("Points", "PTS", 0, 0, address(this), address(this)))));

@@ -47,6 +47,7 @@ contract IndexImpl {
 
     function kind() external pure returns (uint8) { return 0; }
     function factory() external view returns (address) { return F; }
+    function modules() external pure returns (address[] memory) {} // T66b: no body module
     function chainUid() external view returns (bytes32) { return U; }
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function features() external pure returns (uint256) { return 0; }

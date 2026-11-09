@@ -3,7 +3,7 @@
 Plan: [2026-10-16-p6g-contracts.md](../../../../docs/superpowers/plans/2026-10-16-p6g-contracts.md) (D7, D15).
 Deploys the PQZ stack with raw transactions (forge's EVM has no `PQZ` / `MLDSA*` precompile, so `forge script`
 cannot simulate it) and runs the life cycle with real proofs: registry gen 1 (`mldsa44`, `mldsa65` on the
-precompiles, `pqz-mlwe`, `msig`; `UARegistryLib` linked and deployed with it), `OpenFactory`, `NORMAL_PQZ` / `WRAPPED_PQZ`,
+precompiles, `pqz-mlwe`, `msig`; `UARegistryCoreLib` and `UARegistryAuxLib` linked and deployed with it), `OpenFactory`, `NORMAL_PQZ` / `WRAPPED_PQZ`,
 register (one PQZ holder by `registerMsig`), shield, transfer, rollover, inline credits, burn, refresh, disclosure (all
 three kinds), relayed transfers on the generic entries, every PQZ op on its named entry (typed struct; ECDSA, ML-DSA-65
 and msig `UASig`), wrap-shield, commit-reveal `R_TX0`, unshield-unwrap.

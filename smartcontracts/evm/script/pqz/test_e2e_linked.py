@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory() as root:
     art(root, "Token2", [("MtxPipelineLib", 0)])
     assert D.linked("Token2")[1] == [hed, mtx]
     assert s.n == 3, "no library deployed twice"
-    # constructor arguments on linked code (UARegistry + UARegistryLib): the library first, its address in the init code
+    # constructor arguments on linked code (UARegistry + UARegistryCoreLib, UARegistryAuxLib): the library first, its address in the init code
     art(root, "RegLib", [])
     art(root, "Reg", [("RegLib", 1)])
     D.deploy("Reg", b"\xaa")

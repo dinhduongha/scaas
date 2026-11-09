@@ -228,6 +228,9 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | PQZ verifier mode (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T69 (the factory index group), before 3h (owner 2026-11-07); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); OFFCHAIN built over versioned keys (3g §5) |
 | Registry block (T66a) | T66a | **after T50 (3f), before 3h (owner 2026-11-08)**: T66b parts 1 (`requirePortable`), 2 (no KEM record for an `msig`) and 5 (`popSlotsOf` and the `pop` slot bitmap, with Soroban's twin) built early, one registry generation; contracts sequential in this worktree |
 | PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T66a (owner 2026-11-08; was after T50), before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
+| Relay-fee router rename (T82) | T82 | **after T66 (3h), first (owner 2026-11-09)**: `MtxRelayFee` → `RelayFeeRouter`, `MtxRelayExecutor` → `RelayFeeExecutor`; before 3i so its code uses the new names |
+| Service pull (3i) | T77 → T78; T79 ∥ T80; T81 last, lands in T19 | **after T82, before T66b's build (owner 2026-11-09)**: spec `2026-11-09-service-pull.md` (owner approved Q1–Q5 2026-11-09); no production contract changes, so T66b's sizes stand; its tests are T66b's regression net for the token's `mtxExecuteTransfer` path; T80 on `ua-rs-sign` at its next sync |
+| Pay number and pay records (T83) | T83 | **after T62a, before T66b's build (owner 2026-11-09)**: `payNo` → `bytes32`, the on-chain pay records; touches the pay bodies before T66b moves them into module P |
 | Registry generation, library review, size (T66b) | T66b | after T66, before 3c (owner 2026-11-07; parts 1, 2 and 5 moved to T66a, owner 2026-11-08): the `UARegistryLib` <-> `UARegistry` rebalance, then the review of every library and the size reduction to fit 60 M per deployed contract; sequential in this worktree |
 | Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T67–T76, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
@@ -2064,6 +2067,93 @@ spec §5.5 note); the operator note's `own_tag` and `PROOF_STORE_OVER_LANE_CAP` 
 - [ ] **Step 1:** Write each change; figures quoted from T58–T65 logs; BUILT only where code and tests exist.
 - [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
 
+### Task T62a: the NONE-header and relayed-binding vector rows (owner 2026-11-09)
+
+**Depends on:** T77 (test-only, beside 3i in this worktree). **Estimate:** 0.5. Asked by the `ua-rs-sign` T20d checkpoint
+(question 3, owner as recommended): no row ties the fields of a NONE call to the header the contract builds, and no row covers
+the binding of a relayed debit (T65 ran direct calls only). **Files:** `test/pqz/PqzStateVectors.t.sol` and its generator; rows
+by the generator, never by hand; old rows byte-identical. **Gates:** the affected forge directory at the four sets, `vectors-check`.
+Commit `ua-mtx-merge T62a: PQZ NONE-header and relayed-binding vector rows`. `ua-rs-sign` takes them at its next sync.
+
+### Task T83: `payNo` as `bytes32` and the on-chain pay records (owner 2026-11-09)
+
+**Depends on:** T62a. **Before:** T66b's build (the pay bodies move into module P there). **Estimate:** 3–4.
+
+**Owner rulings 2026-11-09** (each as recommended; supersedes the `string` form of the pay-meta-tax spec's O15):
+1. `PayMeta.payNo` is `bytes32` (was `string`, at most 256 bytes): `0` = none; the canonical form is a UUIDv7 **right-aligned**
+   (its 128 bits in the low 16 bytes, the high 16 bytes zero, as `MetaTxLib.pad` places an address); any other 32-byte id is
+   accepted; the contract never parses it. `PayNoTooLong` and the clients' UTF-8 / control / bidi rules for `payNo` go.
+2. The event is `PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body)`.
+3. The commitment's tag is `scaas.pay.meta.v3` (the type changed): `metaPayId = keccak256(abi.encodePacked("scaas.pay.meta.v3",
+   salt, keccak256(abi.encode(payNo, save, schema, body))))`; `PayMeta { bytes32 salt; bytes32 payNo; bool save; uint16 schema;
+   bytes body; }`.
+4. A human-readable document number stays off chain (the ERP) or goes in `body` (schema 2 or 4).
+5. **On-chain pay records (option 2):** logs are not kept for ever (EIP-4444), so an ERP must be able to ask the chain by
+   `payNo` alone with `eth_call`. Per token, in its own ERC-7201 namespace `scaas.pay.records`:
+   `mapping(bytes32 payNo => PayRecord[])`, `struct PayRecord { bytes32 to; uint192 amount; uint64 blockNumber; }` (two slots):
+   `to` the payee id, `amount` what the payee received (net of a fee or a tax withheld from it), `blockNumber` the block (owner 2026-11-09: the name `payNo` is kept, `blockNo` → `blockNumber`). Written by
+   every public pay entry that carries `PayMeta` with `save == true`, after the transfer (**`bool save`**, owner 2026-11-09:
+   option A, the payer's choice per payment, usually set by the payee's payment request; signed and inside the `payId`
+   commitment; `save` with `payNo == 0` is refused as a shape error; `save == false` costs what a pay costs today, `payNo`
+   still in the event); `amount >= 2^192` reverts (fail closed).
+   Keyed by `payNo` only, because an ERP may roll its receiving addresses: one document may be paid to several of them. No sum
+   on chain (the ERP filters `to` by its own addresses and adds). Views `paymentCount(bytes32 payNo)` and
+   `paymentsOf(bytes32 payNo, uint256 offset, uint256 limit) returns (PayRecord[])`. Anyone may append (a 1-wei payment
+   with any `payNo`): the reader filters by `to`; the spammer pays the gas; reads are paged. Confidential pays (PQZ, Zether)
+   are not recorded. The logs stay for the detail (`payId`, `from`). No node API is needed for it.
+6. Cost accepted: the first payment of a `payNo` about +300 k gas (three new slots: the length and one record), each later one
+   about +200 k (≈ $0.69 / $0.46 at 1 gwei and ETH $2,300; ≈ $0.003 / $0.002 on a layer 2 at 0.005 gwei); `mtxPay` is ≈ 185 k today.
+7. Every family follows with the same rule in its own round.
+
+**Files:** legacy copies first (MD-4); `src/common/MetaTxLib.sol` (`PayMeta`, the pay structs' typehashes), `src/metatx/
+MtxPipelineLib.sol` (`metaPayId`, `_payMeta`), `src/metatx/MetaTokenBase.sol` and every pay entry (`mtxPay`, the fee, tax and
+receiver-fee forms, the direct `payWithFee` forms), the records namespace and views, `IMetaTokenV2`; the layout pin
+(`test/v2/layout/`), typehash pins, gas pins old → new; `scaas-node` (`typed.rs`, `guard.rs`, `indexer.rs`, `submit.rs`: the
+`pay_no` field as 32 bytes); `clients/clientkeys` (the builder, UUIDv7 → `bytes32`, display); `smartcontracts/vectors/` (the
+`paymeta` rows regenerated by their generator; a records row); docs drafts for T19 (CTR-MTX-26, the O15 Change line, a
+`decisions.md` entry, the operator note: `pay_no` changes type).
+- [ ] Red first: the commitment row at the v3 tag, a record written per pay entry form with the net amount, `save = false`
+      writes nothing, `save = true` with `payNo = 0` refused, two payments of one `payNo` to two `to`, paging, `amount >= 2^192` reverts, a confidential pay writes nothing.
+- [ ] **Mutants:** the record written before the transfer; the gross amount recorded; `save = false` recorded; `save` outside
+      the commitment; the length not
+      advanced; a page past the end not empty; the v2 tag kept.
+- [ ] **Gates:** forge per directory (`test/metatx`, `test/v2`, `test/governance`, `test/as`, `test/merge`), the four PQZ sets
+      for the PQZ kinds, the size gate, the node tests named here and clippy, clientkeys, `vectors-check`, `docs_check.py check`.
+      Commit `ua-mtx-merge T83: payNo as bytes32 and the on-chain pay records (owner 2026-11-09)`. `ua-rs-sign` takes the new
+      `PayMeta` at its next sync.
+
+### Task T82: rename the relay-fee router and its executor (owner 2026-11-09)
+
+**Depends on:** T66 (3h landed); T66b's Steps 1–2 stopped (one worktree). **Before:** 3i. **Estimate:** 0.5–1.
+
+**Why:** `MtxRelayFee` named the payment, not the role, and read like the token's entry `mtxRelayFee`; the docs already call it
+"the router" and its executor holds it as `ROUTER`. Owner 2026-11-09: `RelayFeeRouter` and `RelayFeeExecutor`.
+
+**Renamed:** the contract `MtxRelayFee` → `RelayFeeRouter` (`src/metatx/MtxRelayFee.sol` → `RelayFeeRouter.sol`, `git mv`),
+`MtxRelayExecutor` → `RelayFeeExecutor`, their tests (`test/metatx/MtxRelayFee.t.sol` → `RelayFeeRouter.t.sol` and every other
+test naming them), `script/DeployBase.sol`, the size baseline key, the node (`scaas-node/src`), `clients/clientkeys`,
+`clients/ua-rs`, `pqz-core/nethermind`, and the current docs (`docs/contracts`, `docs/node`, `docs/networks`, the service-pull
+spec). **Unchanged:** the token entry `mtxRelayFee`, `UARelayFee`, `RelayFeePaid`, `relayRef`, the tag `scaas.relayfee`, the
+errors `RelayFeeShape`, `RelayTargetNoCode`, `NotRouter`, and the other families' module names (`relay-fee`, `relayfee`).
+**Not touched (records):** `legacy/`, `runs/`, `broadcast/`, `docs/history/`, `docs/research/`, older specs and plans. A pure
+rename: no legacy copy; a `decisions.md` Change line under CTR-MTX-27 names the old and the new names.
+
+- [ ] **Step 1:** The rename; the CREATE2 addresses of the router and the executor move (bytecode metadata): every pin and
+      vector that holds them regenerated by its generator (a `UARelayFee` digest signed for the router changes with it), old →
+      new in the commit message.
+- [ ] **Step 2:** Gates: forge `test/metatx` and every directory naming them (per directory), the size gate, the node's tests
+      naming the router, clientkeys, `vectors-check`, `docs_check.py check`. Commit `ua-mtx-merge T82: rename MtxRelayFee to
+      RelayFeeRouter and MtxRelayExecutor to RelayFeeExecutor (owner 2026-11-09)`.
+
+### Tasks T77–T81: service pull (group 3i, owner 2026-11-09)
+
+**Depends on:** T82. **Before:** T66b's build. **Estimate:** 11.5. The tasks, their files, tests (N1–N20 with N14b, the mutants,
+the shortfall invariant) and order are the spec's §14 (`docs/superpowers/specs/2026-11-09-service-pull.md`): T77 the reference
+service `RefServiceEscrow` and `ServicePull.t.sol` (test only), T78 vectors `servicepull.json` and the clientkeys builder, T79
+the node kind `service` (Q1 B), T80 `ua-rs` on `ua-rs-sign` (at its next sync), T81 the docs share, landing in T19. Commits
+`ua-mtx-merge T77: …` … `T81: …`. Gates: the affected forge directories at the default set and the four sets for the PQZ
+kinds, clientkeys, `vectors-check`, the node suite (`CAPPED_MEM=6G`, alone) for T79, `docs_check.py check`.
+
 ### Task T66b: the registry generation, the library review and the size reduction, after 3h (owner 2026-11-07)
 
 **Depends on:** T66 (3g, 3f and 3h landed). **Before:** 3c, whose `PqChat` needs `requirePortable`.
@@ -2130,7 +2220,21 @@ module is security-relevant).
       entry (CTR-GOV-19's ceiling).
 - [ ] **Step 4:** whole `forge test`, the four PQZ sets, size gate, gas pins old -> new, deploy-gas table for every contract against
       60 M, mutants of each split.
-- [ ] **Step 5: the full Hedera testnet deploy (owner 2026-11-08):** after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
+- [ ] **Step 5: the full deploy on the SCaaS testnet (owner 2026-11-09: "Deploy lên scaas testnet thì hợp lý hơn"; replaces
+      the Hedera deploy below).** After Step 4, on chain 7622 through its RPC only (no container, config or port of the live
+      stack changed; the controller confirms with the owner right before the first transaction): `DeployBase` and every
+      release of the split (kinds 0–13, their modules and libraries, the DEX, the registry pair, the factory), each
+      transaction within 60 M asked and the chain's own limits. First check that the node's PQZ precompile answers
+      `OP_SELFTEST` for the release's set. After it: each deployed code hash equals the build's; one relayed transfer, one
+      relay-fee call and one PQZ op 1 as a smoke. Addresses, tx hashes and gas in a runs note (no key, no absolute path).
+      The SCaaS testnet reset 2 (TODO item 4) still deploys the merged code after the merge and 3c.
+- **Not in T66b: the Hedera testnet deploy** (owner 2026-11-09). Hedera is a public chain like BSC or Polygon. A contract
+      deploys on a chain when its runtime fits the chain's max code size and its deploy transaction fits the chain's gas
+      limit (Hedera: 15 M per transaction). Until such a chain raises its code size (Glamsterdam or its own equivalent), the
+      token kinds, the DEX, the registry pair and the factory do not fit there, whatever the split; a small contract that
+      needs none of them can (for example a PqChat store, 3c)
+      (the public Hedera testnet refused runtime > 24,576 B in a simulation, `runs/2026-11-09-ua-mtx-merge-t66b/hedera-codesize.txt`).
+      A public-chain deploy waits for that chain's fork (owner 2026-10-21); no Hedera-specific split. The step as written (2026-11-08), kept for when Hedera can take it: after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
       public Hedera testnet (chain 296) from the testnet-only account (`SCAAS_TESTNET_MNEMONIC_FILE`, never a key in a file of the
       repo). Each transaction within Hedera's 15 M gas per transaction (Hedera charges at least 80 % of the limit: estimate + 20 %);
       HBAR from the faucet first (several hundred at 1,330 gwei-equivalent). Then the HIP-632 checks of `docs/networks/hedera.md`

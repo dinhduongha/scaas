@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Vm} from "forge-std/Test.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
@@ -50,8 +52,8 @@ abstract contract ZetherModesSuite is ZetherFixture {
         c = _cfg(auditor, uint256(1) << 40);
     }
 
-    function _newToken(bool auditor, bytes32 salt_, uint256) internal virtual override returns (ZetherLayer) {
-        return ZetherLayer(factory.createToken(_kind(), 1, abi.encode(_kindCfg(auditor)), salt_));
+    function _newToken(bool auditor, bytes32 salt_, uint256) internal virtual override returns (NormalZetherToken) {
+        return NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(_kindCfg(auditor)), salt_));
     }
 
     // ------------------------------------------------------------------ the matrix
@@ -270,7 +272,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         IFactoryToken.TokenConfig memory ok = _kindCfg(true);
         ok.conf.auditorMode = FULL;
         ok.conf.disclosureMode = COMPACT;
-        ZetherLayer t = ZetherLayer(factory.createToken(_kind(), 1, abi.encode(ok), "ok"));
+        NormalZetherToken t = NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(ok), "ok"));
         assertEq(uint8(t.auditorMode()), FULL);
         assertEq(uint8(t.disclosureMode()), COMPACT);
     }
@@ -379,7 +381,7 @@ contract ZetherModesWrappedTest is ZetherModesSuite {
     }
 
     /// @dev Public units by a USD wrap.
-    function _public(ZetherLayer t, address to, uint256 units) internal override {
+    function _public(NormalZetherToken t, address to, uint256 units) internal override {
         usd.mint(address(this), units);
         usd.approve(address(t), units);
         WrappedToken(payable(address(t))).wrap(address(usd), units);

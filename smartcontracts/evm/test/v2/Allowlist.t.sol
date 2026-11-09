@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
@@ -64,11 +66,11 @@ contract AllowlistTest is Test {
         vm.warp(1_800_000_000);
         u = new MockERC20("U", "U", 6);
         u2 = new MockERC20("U2", "U2", 6);
-        none = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(0), address(0), false)));
+        none = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
         none.initialize(nid(address(this)), 1, abi.encode(normalInit("P", "P", 6, 0, address(this), address(this))));
         stub = new StubUARegistry(UID);
         single = WrappedToken(
-            EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(UID, address(stub), address(0), false)));
+            EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID, address(stub), address(0), false)));
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(u);
@@ -76,16 +78,16 @@ contract AllowlistTest is Test {
         r1[0] = 1;
         single.initialize(nid(address(this)), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
         multi = WrappedToken(
-            EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(UID, address(stub), address(0), false)));
+            EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID, address(stub), address(0), false)));
         address[] memory two = new address[](2);
         (two[0], two[1]) = (address(u), address(u2));
         uint256[] memory r = new uint256[](2);
         (r[0], r[1]) = (1, 1);
         multi.initialize(nid(address(this)), 1, abi.encode(wrappedInit(two, r, r, 6, cfg, address(0), address(0))));
-        pts = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(stub), address(0), false)));
+        pts = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(stub), address(0), false)));
         pts.initialize(nid(address(this)), 1, abi.encode(normalInit("PTS", "PTS", 6, 0, address(this), address(this))));
         ledgered = WrappedToken(
-            EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(UID, address(stub), address(0), false)));
+            EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID, address(stub), address(0), false)));
         one[0] = address(pts);
         ledgered.initialize(nid(address(this)), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
         pts.mint(address(this), 10e6); // this fixture is a contract, so it may approve (CTR-TOK-01)
@@ -116,21 +118,21 @@ contract AllowlistTest is Test {
     function _run(address t, bytes memory data) internal {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) = _m(t, data, RR, 0);
         vm.prank(relayer);
-        MetaTokenBase(t).executeMetaTransaction(m, sig);
+        NormalToken(t).executeMetaTransaction(m, sig);
         (m, sig) = _m(t, data, RR, 0);
         vm.prank(relayer);
-        assertTrue(MetaTokenBase(t).executeMetaTransaction(m, sig));
+        assertTrue(NormalToken(t).executeMetaTransaction(m, sig));
     }
 
     function _refused(address t, bytes memory data) internal {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) = _m(t, data, RR, 0);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(data)));
-        MetaTokenBase(t).executeMetaTransaction(m, sig);
+        NormalToken(t).executeMetaTransaction(m, sig);
     }
 
     function _pin(address t, bytes4[] memory es, uint8[] memory ec, uint8[] memory ea) internal view {
-        (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = MetaTokenBase(t).mtxSelectors();
+        (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = NormalToken(t).mtxSelectors();
         assertEq(s.length, es.length);
         for (uint256 i; i < s.length; ++i) {
             assertEq(s[i], es[i]);
@@ -218,7 +220,7 @@ contract AllowlistTest is Test {
     /// enforces: ABSOLUTE refuses `PERCENT` at step 3; AMOUNT caps a `FIXED` fee at 1 % of the named argument, so
     /// `basis/100 + 1` trips `FeeExceedsCap(basis/100 + 1, basis/100)` (the basis is passed here independently).
     function _crossCheck(address t, bytes[] memory calls, uint256[] memory basis) internal {
-        (bytes4[] memory s, uint8[] memory c,) = MetaTokenBase(t).mtxSelectors();
+        (bytes4[] memory s, uint8[] memory c,) = NormalToken(t).mtxSelectors();
         assertEq(calls.length, s.length);
         for (uint256 i; i < s.length; ++i) {
             assertEq(bytes4(calls[i]), s[i]);
@@ -233,7 +235,7 @@ contract AllowlistTest is Test {
                 vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, basis[i] / 100 + 1, basis[i] / 100));
             }
             vm.prank(relayer);
-            MetaTokenBase(t).executeMetaTransaction(m, sig);
+            NormalToken(t).executeMetaTransaction(m, sig);
         }
     }
 
@@ -273,7 +275,7 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSignature("transferFrom(address,address,uint256)", alice, address(1), 1));
             _refused(t, abi.encodeWithSignature("approve(address,uint256)", address(this), 1));
             _refused(t, abi.encodeWithSignature(
-                "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+                "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
                 address(1), 1, 0, 0, address(0), bytes32(0), PayMetaKit.meta(0)));
             _refused(t, abi.encodeWithSignature("initialize(address,address[],uint64,bytes)",
                 alice, new address[](0), 1, ""));
@@ -281,13 +283,13 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSelector(IMetaTx.executeMetaTransaction.selector));
             _refused(t, abi.encodeWithSelector(UAMetaTxBase.mtxBatch.selector));
             _refused(t, abi.encodeWithSelector(UAMetaTxBase.mtxCancelNonce.selector));
-            _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxTransfer.selector));
-            _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxTransferWithFee.selector));
-            _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPay.selector));
+            _refused(t, abi.encodeWithSelector(NormalToken.mtxTransfer.selector));
+            _refused(t, abi.encodeWithSelector(NormalToken.mtxTransferWithFee.selector));
+            _refused(t, abi.encodeWithSelector(NormalToken.mtxPay.selector));
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxExecuteTransfer.selector));
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxBatchTransfer.selector));
-            _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPayReceiverFee.selector));
-            _refused(t, abi.encodeWithSelector(MetaTokenBase.payWithFeeToUA.selector));
+            _refused(t, abi.encodeWithSelector(NormalToken.mtxPayReceiverFee.selector));
+            _refused(t, abi.encodeWithSelector(NormalToken.payWithFeeToUA.selector));
         }
         _refused(address(none), abi.encodeCall(NormalToken.mint, (alice, 1)));
         _refused(address(none), abi.encodeCall(NormalToken.mintToUA, (UA, 1)));
@@ -340,7 +342,7 @@ contract AllowlistTest is Test {
     function test_reentryFromUnderlyingHook_reverts() public {
         ReenteringERC20 bad = new ReenteringERC20();
         WrappedToken w = WrappedToken(
-            EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(UID, address(0), address(0), false)));
+            EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(bad);

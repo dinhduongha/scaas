@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
@@ -19,7 +21,7 @@ import {DexLegs} from "../helpers/DexLegs.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {nid} from "../helpers/Ids.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
-import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
+import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 
 /// A relay target with code (pay-meta-tax T38): its call runs every time.
 contract RelayPing {
@@ -56,16 +58,16 @@ contract FeeLegsTest is RegFixture {
             MetaTxLib.UAMetaTransfer memory x;
             (x.from, x.to, x.value, x.batch, x.validUntil, x.mode, x.fee) =
                 (nid(alice), nid(bob), 100, 1, block.timestamp + 60, FIX, 1); // FIXED: at most 1 %
-            (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, MetaTokenBase(t).mtxTransferDigest(x));
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
             IUARegistry.UASig memory sig;
             sig.signature = abi.encodePacked(r, s, v);
             _freeze(t, nid(relayer));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(relayer)));
-            MetaTokenBase(t).mtxExecuteTransfer(x, sig);
+            NormalToken(t).mtxExecuteTransfer(x, sig);
             _unfreeze(t, nid(relayer));
             vm.prank(relayer);
-            MetaTokenBase(t).mtxExecuteTransfer(x, sig);
+            NormalToken(t).mtxExecuteTransfer(x, sig);
             assertEq(IERC20(t).balanceOf(relayer), 1);
         }
     }
@@ -95,14 +97,14 @@ contract FeeLegsTest is RegFixture {
             _freeze(t, nid(feeTo));
             vm.startPrank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(feeTo)));
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
+            NormalToken(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(feeTo)));
-            MetaTokenBase(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
+            NormalToken(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             vm.stopPrank();
             _unfreeze(t, nid(feeTo));
             vm.startPrank(alice);
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
-            MetaTokenBase(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
+            NormalToken(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
+            NormalToken(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             vm.stopPrank();
             assertEq(IERC20(t).balanceOf(feeTo), 2);
         }
@@ -110,16 +112,16 @@ contract FeeLegsTest is RegFixture {
 
     function _payTr(address t) internal view returns (MetaTxLib.UAMetaTransfer memory) {
         return MetaTxLib.UAMetaTransfer({from: nid(alice), to: nid(bob), value: 100, entryRef: PAYREF,
-            batch: MetaTokenBase(t).payLane(PAYREF), nonce: 0, validUntil: block.timestamp + 300, mode: RR,
+            batch: NormalToken(t).payLane(PAYREF), nonce: 0, validUntil: block.timestamp + 300, mode: RR,
             relayer: relayer, fee: 0, feeRecipient: address(0)});
     }
 
     function _rfSigs(address t, MetaTxLib.UAMetaTransfer memory x)
         internal view returns (IUARegistry.UASig memory ps, IUARegistry.UASig memory rs)
     {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, MetaTokenBase(t).mtxTransferDigest(x));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
         ps.signature = abi.encodePacked(r, s, v);
-        (v, r, s) = vm.sign(BOB_PK, MetaTokenBase(t).receiverFeeDigest(x, 3, feeTo, block.timestamp + 300));
+        (v, r, s) = vm.sign(BOB_PK, NormalToken(t).receiverFeeDigest(x, 3, feeTo, block.timestamp + 300));
         rs.signature = abi.encodePacked(r, s, v);
     }
 
@@ -135,15 +137,15 @@ contract FeeLegsTest is RegFixture {
             _freeze(t, nid(feeTo));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(feeTo)));
-            MetaTokenBase(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
+            NormalToken(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
             _unfreeze(t, nid(feeTo));
             _freeze(t, nid(bob));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(bob)));
-            MetaTokenBase(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
+            NormalToken(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
             _unfreeze(t, nid(bob));
             vm.prank(relayer);
-            MetaTokenBase(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
+            NormalToken(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
             assertEq(IERC20(t).balanceOf(bob), 97);
             assertEq(IERC20(t).balanceOf(feeTo), 3);
         }
@@ -154,7 +156,7 @@ contract FeeLegsTest is RegFixture {
     function test_relayFeeFrozenPayee() public {
         for (uint256 i; i < 2; ++i) {
             address t = _ks()[i];
-            bytes memory cd = abi.encodeCall(MetaTokenBase.mtxRelayFee,
+            bytes memory cd = abi.encodeCall(NormalToken.mtxRelayFee,
                 (nid(alice), address(0x7A), keccak256("call"), nid(feeTo), 5, 2, 0, block.timestamp + 60, _bad()));
             bytes4 ctl = _try(t, cd);
             assertTrue(ctl != 0 && ctl != IRegulatedToken.FeeRecipientFrozen.selector, "control");
@@ -198,7 +200,7 @@ contract FeeLegsTest is RegFixture {
     }
 
     function _wrapSig(address u, ITradeToken.UAWrapOrder memory o) internal view returns (IUARegistry.UASig memory a) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, MetaTokenBase(u).tradeOrderDigest(DexLegs.asTrade(o)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(u).tradeOrderDigest(DexLegs.asTrade(o)));
         a.signature = abi.encodePacked(r, s, v);
     }
 
@@ -251,7 +253,7 @@ contract FeeLegsTest is RegFixture {
     /// pay-meta-tax T38, O14 (spec §4.1): router open mode stays on the regulated kinds; its limitation pinned: a frozen
     /// submitter is still paid, because RK-6 checks the signed payee (the router), not the one the router forwards to.
     function test_relayFee_openModeFrozenSubmitterPaid() public {
-        MtxRelayFee router = new MtxRelayFee();
+        RelayFeeRouter router = new RelayFeeRouter();
         RelayPing target = new RelayPing();
         for (uint256 i; i < 2; ++i) {
             address t = _ks()[i];
@@ -263,7 +265,7 @@ contract FeeLegsTest is RegFixture {
     }
 
     /// `relayer` submits alice's open-mode relay fee of 5 for `ping()` on `target`.
-    function _openRelay(MtxRelayFee router, address target, address t) internal {
+    function _openRelay(RelayFeeRouter router, address target, address t) internal {
         bytes memory cd = abi.encodeCall(RelayPing.ping, ());
         uint256 vu = block.timestamp + 300;
         IUARegistry.UASig memory a = _relaySig(t, target, cd, address(router), vu);

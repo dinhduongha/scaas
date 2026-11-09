@@ -235,7 +235,7 @@ pub fn meta_pay_id(salt: &[u8; 32], meta: &[u8]) -> [u8; 32] {
 pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
     keccak(&[b"scaas.pay.lane", p])
 }
-/// CTR-MTX-27 (EVM `MtxRelayFee.relayRef`): `keccak256("scaas.relayfee" ‖ uint256 chain_id ‖ target ‖ keccak256(call_data))`.
+/// CTR-MTX-27 (EVM `RelayFeeRouter.relayRef`): `keccak256("scaas.relayfee" ‖ uint256 chain_id ‖ target ‖ keccak256(call_data))`.
 /// Other families use their own `ref` forms (salted, family address bytes); this is the EVM one only.
 pub fn relay_ref(chain_id: u64, target: &[u8; 20], call_data: &[u8]) -> [u8; 32] {
     keccak(&[b"scaas.relayfee", &word(chain_id), target, &keccak256(call_data)])

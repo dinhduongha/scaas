@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {WrappedPqzRegulatedTokenCore} from "../../../src/regulated/WrappedPqzRegulatedTokenCore.sol";
+
+import {NormalPqzTokenCore} from "../../../src/pqz/NormalPqzTokenCore.sol";
+
+import {WrappedPqzTokenCore} from "../../../src/pqz/WrappedPqzTokenCore.sol";
+
+import {NormalToken} from "../../../src/metatx/NormalToken.sol";
+
 import {ZetherRegFixture} from "./ZetherRegFixture.sol";
 import {IRegulatedToken} from "../../../src/regulated/IRegulatedToken.sol";
 import {IGovernance} from "../../../src/governance/IGovernance.sol";
@@ -77,9 +85,9 @@ abstract contract ZetherReceiverSuite is ZetherRegFixture {
         c.reg.requiredFlags = 1;
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(GovernanceBits.ALLOWLIST)));
         factory.createToken(_kind(), 1, abi.encode(c), "allow");
-        assertEq(MetaTokenBase(address(tok)).kind(), _isWrapped() ? TokenStore.KIND_WRAPPED_ZETHER_REGULATED
+        assertEq(NormalToken(address(tok)).kind(), _isWrapped() ? TokenStore.KIND_WRAPPED_ZETHER_REGULATED
             : TokenStore.KIND_NORMAL_ZETHER_REGULATED);
-        assertTrue(MetaTokenBase(address(tok)).supportsInterface(type(IRegulatedToken).interfaceId));
+        assertTrue(NormalToken(address(tok)).supportsInterface(type(IRegulatedToken).interfaceId));
     }
 }
 
@@ -90,9 +98,9 @@ contract ZetherReceiver10Test is ZetherReceiverSuite {
     /// two Zether kinds only; no PQZ source names it. Control: `ZetherLayer` does.
     function test_zetherHookNotInPqz() public view {
         assertTrue(vm.contains(vm.readFile("src/zether/ZetherLayer.sol"), "_regZetherSender"), "control");
-        string[8] memory pqz = ["src/pqz/PqzLayer.sol", "src/pqz/NormalPqzToken.sol", "src/pqz/WrappedPqzToken.sol",
+        string[8] memory pqz = ["src/pqz/PqzLayer.sol", "src/pqz/NormalPqzTokenCore.sol", "src/pqz/WrappedPqzTokenCore.sol",
             "src/pqz/PqzTransferLib.sol", "src/pqz/PqzBurnLib.sol", "src/pqz/PqzWrappedLib.sol",
-            "src/regulated/WrappedPqzRegulatedToken.sol", "src/regulated/RegulatedBase.sol"];
+            "src/regulated/WrappedPqzRegulatedTokenCore.sol", "src/regulated/RegulatedBase.sol"];
         for (uint256 i; i < pqz.length; ++i) assertFalse(vm.contains(vm.readFile(pqz[i]), "_regZetherSender"), pqz[i]);
     }
 }

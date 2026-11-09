@@ -357,7 +357,7 @@ exist on EVM alone. Aptos, Sui and Solana have no token of their own: they run o
 
 | Family | Chains | Language | Token | Mandate and DEX | Relay fee | Accounts | Universal Account |
 |---|---|---|---|---|---|---|---|
-| [EVM](docs/networks/evm.md) | SCaaS testnet; draft profiles Gnosis, Celo, BSC, Polygon, Base; TRON planned | Solidity | `MetaTokenBase` kinds (ERC-20) | `MandateWallet`, `SCaaSDex` (order book, exchange path) | `MtxRelayFee` router and executor | ERC-1271, passkey, native | registry and ledger |
+| [EVM](docs/networks/evm.md) | SCaaS testnet; draft profiles Gnosis, Celo, BSC, Polygon, Base; TRON planned | Solidity | `MetaTokenBase` kinds (ERC-20) | `MandateWallet`, `SCaaSDex` (order book, exchange path) | `RelayFeeRouter` and `RelayFeeExecutor` | ERC-1271, passkey, native | registry and ledger |
 | [Hedera](docs/networks/hedera.md) (on the EVM path) | Hedera | Solidity | `NORMAL`, `WRAPPED` with `IS_HEDERA` | `HederaMandateWallet`, `SCaaSDex` | the same router | native keys by HIP-632 | the same code; no round of its own |
 | [Cosmos](docs/networks/cosmos.md) | CosmWasm chains | Rust (CosmWasm) | `token` (CW20) + `metaop` | `mandate`, `dex` (two-leg) | `relayfee` + `relayexec` | ADR-036 secp256k1, passkey | none: base contracts only |
 | [Soroban](docs/networks/soroban.md) | Stellar, Pi Network | Rust (WASM) | `token` (SEP-41) | `mandate`, `dex` (two-leg, partial fills) | `relay-fee` + `relay-executor` | `smart-key-account` with `__check_auth` | `ua-registry` and a UA ledger, on a local network |

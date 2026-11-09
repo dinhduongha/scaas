@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -11,7 +12,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit, wrappedInit, Rate} from "./helpers/V2Fixture.sol";
-import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {plainEnv, pinned, withModules, Catalogue} from "../helpers/Catalogue.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
@@ -39,6 +40,7 @@ contract SelfDestructImpl {
 
     function kind() external pure returns (uint8) { return 0; }
     function factory() external view returns (address) { return F; }
+    function modules() external pure returns (address[] memory) {} // T66b: no body module
     function chainUid() external view returns (bytes32) { return ChainEnvCode.chainUid(); }
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function features() external pure returns (uint256) { return 0; }
@@ -70,6 +72,7 @@ contract LyingChainImpl {
 
     function kind() external pure returns (uint8) { return 0; }
     function factory() external view returns (address) { return F; }
+    function modules() external pure returns (address[] memory) {} // T66b: no body module
     function chainUid() external pure returns (bytes32) { return keccak256("x"); }
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function initialize(bytes32, uint64, bytes calldata) external {}
@@ -190,7 +193,7 @@ contract FactoryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 0, 0));
         f.deployImplementation(NORMAL, 2, 0, type(NormalToken).creationCode, "");
         // an older env stays usable for a new release: the registrar's choice, recorded in the release
-        address v2 = f.deployImplementation(NORMAL, 2, 1, type(NormalToken).creationCode, "");
+        address v2 = f.deployImplementation(NORMAL, 2, 1, type(NormalToken).creationCode, Catalogue.argsOn(f, NORMAL, 1, ""));
         vm.stopPrank();
         assertEq(f.releaseOf(NORMAL, 2).envVersion, 1);
         assertEq(f.releaseOf(NORMAL, 2).envHash, keccak256(abi.encode(f.envOf(NORMAL, 1))));
@@ -224,9 +227,10 @@ contract FactoryTest is Test {
     /// a later version on a newer env.
     function test_deployImplementation_checksKindFactoryAndChainUid() public {
         bytes memory code = type(NormalToken).creationCode;
+        bytes memory args = Catalogue.argsOn(f, NORMAL, 1, ""); // env 1's modules (T66b): NORMAL's release constructs
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, WRAPPED, 0));
-        f.deployImplementation(WRAPPED, 2, 1, code, "");
+        f.deployImplementation(WRAPPED, 2, 1, code, args);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, NORMAL, type(uint256).max));
         f.deployImplementation(NORMAL, 2, 1, type(Muted).creationCode, ""); // no kind()
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector,
@@ -254,12 +258,13 @@ contract FactoryTest is Test {
         assertEq(f.implementationOf(WRAPPED, 1), address(wrappedImpl));
         // the same init code on a newer env as version 2 (no recompile): a new address, the hashes in the event
         address stub = address(new StubUARegistry(UID_));
-        IFactoryToken.Env memory e2 = plainEnv(address(f), address(0), UID_, stub, false);
+        IFactoryToken.Env memory e2 = withModules(pinned(plainEnv(address(f), address(0), UID_, stub, false), NORMAL),
+            Catalogue.modulesOn(f, NORMAL, 1));
         uint16 ev = Catalogue.env(f, NORMAL, e2);
-        address predicted = Catalogue.predict(f, NORMAL, 2, code);
+        address predicted = Catalogue.predict(f, NORMAL, 2, code, args); // env 1's modules, pinned in env 2 too
         vm.recordLogs();
         vm.prank(registrar);
-        address v2 = f.deployImplementation(NORMAL, 2, ev, code, "");
+        address v2 = f.deployImplementation(NORMAL, 2, ev, code, args);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         Vm.Log memory l = logs[logs.length - 1];
         assertEq(l.topics[0], IOpenFactory.ImplementationDeployed.selector);
@@ -534,7 +539,7 @@ contract FactoryTest is Test {
     /// Plain kinds only (owner 2026-10-19): recorded as version 0 and not a registered token, so clients and the gateway
     /// treat it as unvetted; every confidential kind (2–7) is refused before any check.
     function test_createTokenUnregistered_isCheckedAndRecordedAsVersion0() public {
-        NormalToken mine = new NormalToken(address(f), "");
+        NormalToken mine = new NormalToken(address(f), Catalogue.argsOn(f, NORMAL, 1, "")); // env 1 pins its modules
         vm.prank(alice);
         address t = f.createTokenUnregistered(NORMAL, address(mine), abi.encode(_normal(alice)), "u");
         (, uint64 v) = f.versionOf(t);

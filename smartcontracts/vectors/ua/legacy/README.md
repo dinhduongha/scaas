@@ -34,3 +34,5 @@
 - ua-mtx-merge T66a (2026-11-08, plan MD-4, CTR-UA-32: an `msig` has no KEM key): `ua-mtx-merge/t66a/{portable,nested}.json` as
   they stood at 05f23be2, the `msig-pq/<set>` and `msig-nested-pq` registrations with a KEM key, their `kemRecords` rows and
   `msig-swapped-kem-pk/<set>` (UAPoP). The live files register those `msig`s without one and carry the refusal rows.
+- ua-mtx-merge T83 (2026-11-09, owner 2026-11-09, `payNo` as `bytes32`): `ua-mtx-merge/t83/{metatx3,pq_signatures}.json` as
+  they stood at 32d73310, the receiver-fee rows' `meta` with a text `payNo` and their `entryRef` under `scaas.pay.meta.v2`.

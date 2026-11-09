@@ -104,7 +104,7 @@ contract PauseTest is RegFixture {
             IERC20(t).transfer(bob, 1);
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
-            MetaTokenBase(t).transferToUA(UA_X, 1);
+            NormalToken(t).transferToUA(UA_X, 1);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
             ap.approve(t, address(f));
             if (t == t8) {
@@ -129,13 +129,13 @@ contract PauseTest is RegFixture {
             address t = _ks()[i];
             _pause(t, until);
             vm.prank(ownerA);
-            MetaTokenBase(t).revokeRole(7, nid(issuer));
+            NormalToken(t).revokeRole(7, nid(issuer));
             vm.warp(_now() + GD);
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
             IERC20(t).transfer(bob, 1); // proposed only: still paused
             vm.prank(ownerA);
-            MetaTokenBase(t).revokeRole(7, nid(issuer));
+            NormalToken(t).revokeRole(7, nid(issuer));
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);
             vm.warp(1_800_000_000);
@@ -235,7 +235,7 @@ contract PauseTest is RegFixture {
                 IRegulatedToken.TokenPaused.selector, "cancelNonce is not pause-open");
             MetaTxLib.UAMetaTransfer memory x;
             (x.from, x.to, x.value, x.batch, x.validUntil) = (nid(alice), nid(bob), 1, 1, block.timestamp + 60);
-            assertEq(_try(t, abi.encodeCall(ERC20MetaTx.mtxExecuteTransfer, (x, _bad()))),
+            assertEq(_try(t, abi.encodeCall(NormalToken.mtxExecuteTransfer, (x, _bad()))),
                 IRegulatedToken.TokenPaused.selector, "a typed transfer (sel 0)");
         }
     }

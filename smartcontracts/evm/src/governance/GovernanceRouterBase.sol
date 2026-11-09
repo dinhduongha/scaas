@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
+import {UAMetaTxBase, UAMetaTxBaseCore} from "../metatx/UAMetaTxBase.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -131,7 +131,7 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     bytes32 private constant _TARGET = 0xa1dd93cf1660937b99999b07adb12f34b563f6b0925eff1ae679d08fb0b5a482; // keccak256("scaas.govrouter.target")
 
     constructor(string memory domainName, bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
-        UAMetaTxBase(domainName, chainUid_, registry_, smartKeyAccountImpl_, hedera_)
+        UAMetaTxBaseCore(domainName, chainUid_, registry_, smartKeyAccountImpl_, hedera_)
     {}
 
     /// @notice The subject of the live call, to the live target only; 0 to any other caller and outside a call.
@@ -205,14 +205,12 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     }
 
     /// @dev The generic entries on ids refuse likewise (ua-mtx-merge T1: the `uaExecute` / `uaBatch` refusals, renamed).
-    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata)
-        public pure override returns (bytes memory)
+    function _mtxExecuteBody(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata) internal pure override returns (bytes memory)
     {
         revert MtxSelectorNotAllowed(bytes4(m.data));
     }
 
-    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata, IUARegistry.UASig[] calldata)
-        public pure override returns (bool)
+    function _mtxBatchBody(MetaTxLib.UAMetaTransaction[] calldata, IUARegistry.UASig[] calldata) internal pure override returns (bool)
     {
         revert MtxSelectorNotAllowed(bytes4(0));
     }
@@ -220,7 +218,7 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     /// @notice Empty: the generic path refuses every call (`_execute`, `mtxExecute`, `mtxBatch`), `cancelNonce` included, so
     ///         the router publishes no allow-list row; its typed entries are no row either (governance spec §3.2). The
     ///         node's list for the router equals this, both directions.
-    function mtxSelectors() public pure override returns (bytes4[] memory, uint8[] memory, uint8[] memory) {}
+    function _mtxSelectorsBody() internal pure override returns (bytes4[] memory, uint8[] memory, uint8[] memory) {}
 
     // ------------------------------------------------------------------ the flow
 
@@ -256,7 +254,7 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     /// @dev Step 3 of the pipeline for a typed op: fee class `ABSOLUTE`, on the UA allowlist of this entry only, against
     ///      `supportedModes()` (fee mode `NONE`).
     function _facts(bytes memory data) private view returns (MtxPipelineLib.CallFacts memory) {
-        return MtxPipelineLib.CallFacts(bytes4(data), data.length, FEE_CLASS_ABSOLUTE, 0, 0, 0, true, supportedModes());
+        return MtxPipelineLib.CallFacts(bytes4(data), data.length, FEE_CLASS_ABSOLUTE, 0, 0, 0, true, _supportedModesBody());
     }
 
     function _termsHash(IGovernance.GrantTerms calldata t) private pure returns (bytes32) {

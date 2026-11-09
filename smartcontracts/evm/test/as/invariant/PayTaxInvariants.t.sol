@@ -21,7 +21,7 @@ import {EnvKit} from "../../helpers/EnvKit.sol";
 ///         fails on a revert) and the effective rate never rises before `eta`; J5 the tax leg goes to the configured
 ///         recipient, never 0, a pool, the token or the payee, at most the value; `Σ balances == totalSupply`. Not here:
 ///         J6 is `PlusZero.t.sol`; J7 is `TaxConfidential.t.sol` (`vm.accesses` on a shield, a shielded transfer and an
-///         unshield of 10-13 with `TAX` set; the handlers of 10-13 have no tax entry to drive); J8 is `MtxRelayFee.t.sol`.
+///         unshield of 10-13 with `TAX` set; the handlers of 10-13 have no tax entry to drive); J8 is `RelayFeeRouter.t.sol`.
 ///         **UNAUDITED.**
 contract PayTaxInvariants is RegFixture {
     uint64 internal constant NOTICE = 3 days;

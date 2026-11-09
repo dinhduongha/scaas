@@ -47,8 +47,8 @@ contract MtxRegistryMock is MetaTxAddressBase {
         return super._mtxRule(sel);
     }
 
-    function mtxSelectors()
-        public view virtual override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal view virtual override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](4);
         c = new uint8[](4);

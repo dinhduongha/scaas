@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {V2Fixture, UID_, normalInit} from "./helpers/V2Fixture.sol";
@@ -46,7 +48,7 @@ contract Tier1Test is V2Fixture {
 
     /// P1c: "zero minter means fixed supply" is now "no `MINTABLE` flag".
     function test_noMintableMeansFixedSupply() public {
-        normalImpl = address(new NormalToken(address(this), ""));
+        normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         IFactoryToken.TokenConfig memory c = normalInit("Points", "PTS", 0, 100, address(this), address(0));
         c.features &= ~uint256(1 << 1); // no MINTABLE
         NormalToken t = NormalToken(_clone(normalImpl, address(this), new address[](0), abi.encode(c)));
@@ -99,7 +101,7 @@ contract Tier1Test is V2Fixture {
     }
 
     function test_initRefusesUnderlyings() public {
-        normalImpl = address(new NormalToken(address(this), ""));
+        normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         address[] memory us = new address[](1);
         us[0] = address(0x1234);
         // E5/E6: the underlyings are the config's `legs`, a field of another kind for NORMAL

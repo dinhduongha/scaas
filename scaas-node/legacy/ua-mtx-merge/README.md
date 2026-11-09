@@ -57,3 +57,7 @@ Group 3h (T59, spec 2026-11-06-pqz-proof-path §3.2), under `3h/`, as they stood
 structs without `ownTag`), `e2e.rs` (its op 1 args without `ownTag`). Not built.
 Group 3h (T63, spec §10, NODE-JOB-24), under `3h/`, as they stood at 77e9ddf4 (T62's tip): `submit.rs` (a PQZ debit over the lane's
 cap refused like any job, no `proofStore()` read), `indexer.rs` (no `ProofStoreSet` row or alert). Not built.
+Plan T83 (owner 2026-11-09, `payNo` as `bytes32`), under `t83/`, as they stood at 32d73310: `abi.rs` (`PayMeta` with `string
+payNo`, `PaymentMeta(payId, string payNo, schema, body)`, `PayNoTooLong`), `metatx.rs` (`meta_pay_id` v2, `PAY_NO_MAX`),
+`typed.rs` (a text `meta.payNo`, `PAY_NO_TOO_LONG`, `max_pay_meta_bytes` over `payNo + body`), `indexer.rs` (`pay_no` text).
+Not built.

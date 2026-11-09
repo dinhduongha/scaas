@@ -107,7 +107,7 @@ abstract contract PqzNamedBase is PqzFixture {
         u.validUntil = block.timestamp + 300;
     }
 
-    function _uaBindingOf(PqzLayer t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
+    function _uaBindingOf(NormalPqzToken t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
         return t.envelopeBinding(MetaTxLib.UAMetaTransaction(u.from, "", u.batch, u.nonce, u.validUntil, u.mode, u.relayer, u.fee, u.feeRecipient));
     }
 
@@ -138,19 +138,19 @@ abstract contract PqzNamedBase is PqzFixture {
         for (uint256 j = 2; j < m; ++j) r[j] = more[j];
     }
 
-    function _entryRef(PqzLayer t, uint256 counter) internal view returns (bytes32) {
+    function _entryRef(NormalPqzToken t, uint256 counter) internal view returns (bytes32) {
         return keccak256(abi.encode(PqzCore.TAG_ENTRY, block.chainid, PQZ_UID, address(t), alice, counter));
     }
 
-    function _mPl(PqzLayer t, bytes32 from, bytes32[] memory rec, bool aud, bytes memory memo, uint256 seed) internal view returns (bytes memory) {
+    function _mPl(NormalPqzToken t, bytes32 from, bytes32[] memory rec, bool aud, bytes memory memo, uint256 seed) internal view returns (bytes memory) {
         return _mpayload(t.pqzAccount(from, 0).pendingCount, 0, from, bytes32(0), rec, _blob(seed, _outLen(rec.length, aud)), memo);
     }
 
-    function _sPl(PqzLayer t, bytes32 from, bool aud, bytes memory memo, uint256 seed) internal view returns (bytes memory) {
+    function _sPl(NormalPqzToken t, bytes32 from, bool aud, bytes memory memo, uint256 seed) internal view returns (bytes memory) {
         return _payload(t.pqzAccount(from, 0).pendingCount, 0, from, bob, bytes32(0), _out(seed, aud), memo);
     }
 
-    function _bPl(PqzLayer t, bytes32 from, uint256 seed) internal view returns (bytes memory) {
+    function _bPl(NormalPqzToken t, bytes32 from, uint256 seed) internal view returns (bytes memory) {
         return bytes.concat(abi.encode(uint256(t.pqzAccount(from, 0).pendingCount), block.number + 5, uint256(0), from, bytes32(0)), _blob(seed, PqzCt.CT));
     }
 
@@ -168,7 +168,7 @@ abstract contract PqzNamedBase is PqzFixture {
         r = abi.decode(ret, (bytes));
     }
 
-    function _envAt(PqzLayer t, bytes32 binding, uint256 amount, bytes32 recipient, ZetherTypes.TransferMode m) internal view returns (PqzCore.Env memory) {
+    function _envAt(NormalPqzToken t, bytes32 binding, uint256 amount, bytes32 recipient, ZetherTypes.TransferMode m) internal view returns (PqzCore.Env memory) {
         return PqzCore.Env(address(reg), PQZ_UID, binding, amount, recipient, m, domainOf(address(t)));
     }
 
@@ -176,7 +176,7 @@ abstract contract PqzNamedBase is PqzFixture {
         usd.mint(address(this), amount * SCALE);
         usd.approve(address(w), amount * SCALE);
         w.mtxWrapShield(address(usd), amount * SCALE, ua);
-        _mirrorTrivial(w, ua, amount);
+        _mirrorTrivial(NormalPqzToken(address(w)), ua, amount);
     }
 }
 
@@ -310,14 +310,14 @@ contract PqzExplicitStatementTest is PqzNamedBase {
         _fund(tok, alice, 1000);
     }
 
-    function _checkSingle(PqzLayer t, bool aud, bool hash, bytes32 binding) internal {
+    function _checkSingle(NormalPqzToken t, bool aud, bool hash, bytes32 binding) internal {
         bytes memory pl = _sPl(t, alice, aud, hash ? _memo() : bytes(""), 11);
         ZetherTypes.TransferMode m = hash ? ZetherTypes.TransferMode.HASH : ZetherTypes.TransferMode.BUNDLE;
         assertEq(t.transferSingleStatement(_ts(pl), binding),
             _onRef(address(t), abi.encodeCall(PqzPackedRef.single, (_envAt(t, binding, 0, 0, m), pl))), "op 1");
     }
 
-    function _checkMulti(PqzLayer t, uint256 m, bool aud, bool hash, bytes32 binding) internal {
+    function _checkMulti(NormalPqzToken t, uint256 m, bool aud, bool hash, bytes32 binding) internal {
         bytes memory pl = _mPl(t, alice, _legsN(m), aud, hash ? _mem(m) : bytes(""), 12 + m);
         ZetherTypes.TransferMode md = hash ? ZetherTypes.TransferMode.HASH : ZetherTypes.TransferMode.BUNDLE;
         assertEq(t.transferStatement(_ms(pl), binding),
@@ -369,14 +369,14 @@ contract PqzExplicitStatementTest is PqzNamedBase {
     /// The burn the unwrap debits: the leg and `minOut` in the binding word, the amount and recipient in the header.
     function test_pqzExplicitStatementBytes_unshieldUnwrap() public {
         _wrapFund(alice, 100);
-        bytes memory pl = _bPl(w, alice, 14);
+        bytes memory pl = _bPl(NormalPqzToken(address(w)), alice, 14);
         IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 40, 40 * SCALE);
         bytes32 word = w.unwrapBinding(address(usd), x.minOut);
         assertEq(w.unshieldUnwrapStatement(_bs(pl), x, 0),
-            _onRef(address(w), abi.encodeCall(PqzPackedRef.burn, (_envAt(w, word, 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))));
+            _onRef(address(w), abi.encodeCall(PqzPackedRef.burn, (_envAt(NormalPqzToken(address(w)), word, 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))));
         bytes32 b = keccak256("envelope");
         assertEq(w.unshieldUnwrapStatement(_bs(pl), x, b),
-            _onRef(address(w), abi.encodeCall(PqzPackedRef.burn, (_envAt(w, keccak256(abi.encode(b, word)), 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))));
+            _onRef(address(w), abi.encodeCall(PqzPackedRef.burn, (_envAt(NormalPqzToken(address(w)), keccak256(abi.encode(b, word)), 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))));
     }
 
     /// Never lose ciphertext: what a debit leaves in state from the explicit parts is what the packed form stored: the op
@@ -618,7 +618,7 @@ contract PqzNamedTest is PqzNamedBase {
 
     function _runUnwrap(bool ua) internal {
         _wrapFund(alice, 100);
-        IPqzToken.PqzBurnArgs memory b = _bs(_bPl(w, alice, 53));
+        IPqzToken.PqzBurnArgs memory b = _bs(_bPl(NormalPqzToken(address(w)), alice, 53));
         IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 40, 40 * SCALE);
         bytes memory proof = hex"c0de";
         MetaTxLib.Envelope memory e = _env(0);
@@ -629,7 +629,7 @@ contract PqzNamedTest is PqzNamedBase {
             w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig), noVerdict());
             return;
         }
-        bytes memory st = w.unshieldUnwrapStatement(b, x, _uaBindingOf(w, u));
+        bytes memory st = w.unshieldUnwrapStatement(b, x, _uaBindingOf(NormalPqzToken(address(w)), u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, proof));
         vm.prank(relayer);
         w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig), noVerdict());
@@ -689,7 +689,7 @@ contract PqzNamedTest is PqzNamedBase {
     /// A named entry is no allowlisted op (TS-D14): its selector inside a validly signed `executeMetaTransaction` or
     /// `mtxExecute` is refused at the gate of each path, `MtxSelectorNotAllowed`. ua-mtx-merge T5, meaning (R36): the
     /// selectors are the merged entries' (the `ua*` and address forms have none); `WrapShield` keeps its address row.
-    function _refused(PqzLayer t, bytes4 sel) internal {
+    function _refused(NormalPqzToken t, bytes4 sel) internal {
         bytes memory data = bytes.concat(sel, new bytes(64));
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(signer, data, LANE, 0, block.timestamp + 300, 0, address(0), 0, address(0));
         bytes memory sig = ecdsa(PK, MtxDigest.metaTx(address(t), m));
@@ -703,7 +703,7 @@ contract PqzNamedTest is PqzNamedBase {
     }
 
     /// `data` relayed through `mtxExecute` by the native signer at fee 0.
-    function _execute(PqzLayer t, bytes memory data) internal {
+    function _execute(NormalPqzToken t, bytes memory data) internal {
         MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(MetaTxLib.pad(signer), data, LANE + data.length + uint8(data[3]), 0, block.timestamp + 300, 0, address(0), 0, address(0));
         bytes memory sig = ecdsa(PK, t.mtxDigest(u));
         t.mtxExecute(u, UACall.auth(u.from, sig));
@@ -738,7 +738,7 @@ contract PqzNamedTest is PqzNamedBase {
         }
     }
 
-    function executeExt(PqzLayer t, bytes memory data) external {
+    function executeExt(NormalPqzToken t, bytes memory data) external {
         _execute(t, data);
     }
 
@@ -748,11 +748,11 @@ contract PqzNamedTest is PqzNamedBase {
             IPqzMergedT5.mtxConfidentialTransferCompact.selector, IPqzMergedT5.mtxUnshield.selector, IPqzMergedT5.mtxShield.selector,
             IPqzMergedT5.mtxRollOver.selector, IPqzMergedT5.mtxPrepareAcc.selector];
         for (uint256 i; i < sels.length; ++i) {
-            _refused(w, sels[i]);
+            _refused(NormalPqzToken(address(w)), sels[i]);
             _refused(tok, sels[i]);
         }
-        _refused(w, IPqzMergedT5.mtxUnshieldUnwrap.selector);
-        _refused(w, bytes4(VM.parseJsonBytes(vm.readFile(TYPED_OPS), domainField("WrapShield", "pqz", "selector"))));
+        _refused(NormalPqzToken(address(w)), IPqzMergedT5.mtxUnshieldUnwrap.selector);
+        _refused(NormalPqzToken(address(w)), bytes4(VM.parseJsonBytes(vm.readFile(TYPED_OPS), domainField("WrapShield", "pqz", "selector"))));
     }
 
     // ------------------------------------------------------------------ an outer fee

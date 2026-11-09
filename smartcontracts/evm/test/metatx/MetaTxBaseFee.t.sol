@@ -35,7 +35,7 @@ contract FeeProbe is MtxRegistryMock {
 
     constructor(bytes32 uid) MtxRegistryMock("SCaaS TestRegistry", uid) {}
 
-    function supportedModes() public pure override returns (uint32) {
+    function _supportedModesBody() internal pure override returns (uint32) {
         return MetaTxLib.MODE_KNOWN_MASK;
     }
 

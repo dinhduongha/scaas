@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
@@ -88,8 +90,8 @@ contract UnwrapOpTest is V2Fixture {
         bytes memory s = _signCall(PK, w, m);
         vm.prank(relayer);
         vm.expectRevert(err);
-        MetaTokenBase(w).executeMetaTransaction(m, s);
-        assertEq(MetaTokenBase(w).mtxNonce(MetaTxLib.pad(alice), m.batch), 0);
+        NormalToken(w).executeMetaTransaction(m, s);
+        assertEq(NormalToken(w).mtxNonce(MetaTxLib.pad(alice), m.batch), 0);
     }
 
     function test_gaslessUnwrapPaysTheRecipient() public {

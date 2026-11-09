@@ -659,7 +659,7 @@ equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `
 `chain_contract` row): its 38 typed `mtx<Op>` and `ua<Op>` entries (the owner's and a
 holder's operations and the token and DEX powers, `target` a named field) are rows of the table, relayed at fee 0, target one
 of the chain's routers (config `governance_routers`, a list: a second router is a config row), `chainUid()` equal to
-`chain.chain_uid`. The rule runs on the direct path and on the inner target of `MtxRelayFee.relayCall` and `uaRelayCall`,
+`chain.chain_uid`. The rule runs on the direct path and on the inner target of `RelayFeeRouter.relayCall` and `uaRelayCall`,
 both directions: a relayed call on a router is one of its rows, and a router-only entry runs only on a configured router.
 Its generic entries (`mtxExecute`, `mtxBatch`, `executeMetaTransaction`, `uaExecute`, `uaBatch`) are refused by the contract
 and are no rows. `gov_router` joins `ALL` (`CancelNonce`) and `UACancelNonce`'s contracts; no factory row exists and a

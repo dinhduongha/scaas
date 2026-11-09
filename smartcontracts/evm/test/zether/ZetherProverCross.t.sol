@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
@@ -46,14 +48,14 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     }
 
     /// @dev curve, alice's key, chainId, chainUid, token.
-    function _base(ZetherLayer t) internal view returns (string memory) {
+    function _base(NormalZetherToken t) internal view returns (string memory) {
         return string.concat(
             "{", _q("curve", bls ? "bls12381" : "bn254"), ',"key":{', _q("x", vm.toString(bytes32(alice.x))), '},"chainId":',
             vm.toString(block.chainid), ",", _q("chainUid", vm.toString(t.chainUid())), ",", _q("token", vm.toString(address(t)))
         );
     }
 
-    function _token(uint8 d, uint8 a, bool auditor, bytes32 name) internal returns (ZetherLayer t) {
+    function _token(uint8 d, uint8 a, bool auditor, bytes32 name) internal returns (NormalZetherToken t) {
         (dMode, aMode) = (d, a);
         t = _newToken(auditor, name);
         _fund(t, alice, B);
@@ -61,7 +63,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     }
 
     /// @dev The prove request: alice's state, the fee to carol, the modes, `yAud` (null = left out), `extra` fields.
-    function _req(ZetherLayer t, string memory dm, string memory am, bool aud, string memory extra)
+    function _req(NormalZetherToken t, string memory dm, string memory am, bool aud, string memory extra)
         internal view returns (string memory)
     {
         IZetherToken.AccountState memory st = t.accountState(alice.ua);
@@ -91,7 +93,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     }
 
     /// @dev Multi-recipient, direct: statement bytes, settlement, stored form, recovery.
-    function _multi(ZetherLayer t, string memory dm, string memory am, bool aud, string memory extra) internal {
+    function _multi(NormalZetherToken t, string memory dm, string memory am, bool aud, string memory extra) internal {
         string memory out = _cli("proveTransferMulti", _req(t, dm, am, aud, string.concat(extra, _recipients())));
         ZetherTypes.TransferMode tm = _mode(out.readString(".mode"));
         assertEq(stm.transferStatement(address(t), _zMulti(out.readBytes(".payload"), carol.ua), tm, 0), out.readBytes(".statement"),
@@ -101,7 +103,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         _settled(t, out, abi.decode(ret, (bytes32)), tm);
     }
 
-    function _settled(ZetherLayer t, string memory out, bytes32 ref, ZetherTypes.TransferMode tm) internal {
+    function _settled(NormalZetherToken t, string memory out, bytes32 ref, ZetherTypes.TransferMode tm) internal {
         assertEq(ref, out.readBytes32(".entryRef"), "entryRef");
         for (uint256 j; j < 3; ++j) assertTrue(_holds(t, rs[j], amts[j], false), "recipient pending");
         assertTrue(_holds(t, alice, B - 1277 - FEE - 3 * dFee, true), "sender acc");
@@ -117,7 +119,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     /// @dev From storage only: the record `R` (`transferEntry`) and, for commit-reveal, the memo (`transferMemo`):
     ///      openMemo (the auditor flag) → recoverTransfer.
-    function _recover(ZetherLayer t, bytes32 ref, bytes memory e, ZetherTypes.TransferMode tm) internal returns (string memory) {
+    function _recover(NormalZetherToken t, bytes32 ref, bytes memory e, ZetherTypes.TransferMode tm) internal returns (string memory) {
         string memory q = string.concat(_base(t), ',"sendCounter":0,"tableBits":18,"boundBits":24,', _q("entry", vm.toString(e)));
         string memory ya = t.auditorKey().length == 0 ? "null" : string.concat('"', vm.toString(t.auditorKey()), '"');
         if (tm == ZetherTypes.TransferMode.BUNDLE) return _cli("recoverTransfer", string.concat(q, ',"yAud":', ya, "}"));
@@ -151,7 +153,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     /// @dev COMPACT/OPTIONAL, auditor left out, relayed: the statement with the envelope binding, settled by `mtxExecute`.
     function test_compactOptional_relayed_optOut() public {
-        ZetherLayer t = _token(1, 2, true, "c-opt");
+        NormalZetherToken t = _token(1, 2, true, "c-opt");
         _public(t, vm.addr(PAYER_PK), 1000);
         MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
             from: vm.addr(PAYER_PK), data: "", batch: 7, nonce: t.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 7),
@@ -175,7 +177,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     // ------------------------------------------------------------------ the prover's `namedCall` settles on the merged entries
 
     /// @dev The `UAEnvelope` fields of the next relayed op of `from` (the `data` filled by the caller).
-    function _envMt(bytes32 from, ZetherLayer t, uint32 mode, uint256 fee) internal view returns (MetaTxLib.UAMetaTransaction memory) {
+    function _envMt(bytes32 from, NormalZetherToken t, uint32 mode, uint256 fee) internal view returns (MetaTxLib.UAMetaTransaction memory) {
         return MetaTxLib.UAMetaTransaction({
             from: from, data: "", batch: 7, nonce: t.mtxNonce(from, 7), validUntil: block.timestamp + 300, mode: mode,
             relayer: relayer, fee: fee, feeRecipient: address(0)
@@ -183,7 +185,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     }
 
     /// @dev The payer EOA's envelope: relayer bound, a fixed fee of 3.
-    function _payerMt(ZetherLayer t) internal view returns (MetaTxLib.UAMetaTransaction memory) {
+    function _payerMt(NormalZetherToken t) internal view returns (MetaTxLib.UAMetaTransaction memory) {
         return _envMt(MetaTxLib.pad(vm.addr(PAYER_PK)), t, MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, 3);
     }
 
@@ -201,7 +203,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     /// @dev The prover's `uaEnvelope` of `m` (R35): its binding equals the token's `envelopeBinding` view and its digest the
     ///      token's `mtxDigest`; returned as the `envelopeBinding` field of a prove request.
-    function _uaBinding(ZetherLayer t, MetaTxLib.UAMetaTransaction memory m) internal returns (string memory) {
+    function _uaBinding(NormalZetherToken t, MetaTxLib.UAMetaTransaction memory m) internal returns (string memory) {
         string memory out = string.concat(
             '{"chainId":', vm.toString(block.chainid), ",", _q("chainUid", vm.toString(t.chainUid())), ",", _q("token", vm.toString(address(t))),
             ',"meta":{', _q("from", vm.toString(m.from)), ",", _q("data", vm.toString(m.data)), ",", _q("batch", vm.toString(bytes32(m.batch))));
@@ -214,7 +216,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         return string.concat(",", _q("envelopeBinding", vm.toString(b)));
     }
 
-    function _namedReq(ZetherLayer t, string memory op, MetaTxLib.UAMetaTransaction memory m, string memory out, string memory extra)
+    function _namedReq(NormalZetherToken t, string memory op, MetaTxLib.UAMetaTransaction memory m, string memory out, string memory extra)
         private view returns (string memory)
     {
         string memory head = string.concat(
@@ -229,7 +231,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     /// @dev `namedCall` through the real binary: the digest it returns, signed by the payer's EOA here (`sig` raw: `UASig{signature}`),
     ///      then the merged entry's calldata.
-    function _named(ZetherLayer t, string memory op, MetaTxLib.UAMetaTransaction memory m, string memory out, string memory extra)
+    function _named(NormalZetherToken t, string memory op, MetaTxLib.UAMetaTransaction memory m, string memory out, string memory extra)
         internal returns (bytes memory)
     {
         string memory q = _namedReq(t, op, m, out, extra);
@@ -239,7 +241,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     /// @dev One changed byte in a signed field (the `validUntil` word of the envelope) is refused (`MetaTxBadSignature` for a native
     ///      payer); the good call then settles, the nonce of `from` consumed.
-    function _settleNamed(ZetherLayer t, bytes memory cd, bytes32 from, bytes4 refusal) internal returns (bytes memory ret) {
+    function _settleNamed(NormalZetherToken t, bytes memory cd, bytes32 from, bytes4 refusal) internal returns (bytes memory ret) {
         bytes memory bad = abi.encodePacked(cd);
         bad[4 + 32 * 3 + 31] = bytes1(uint8(bad[4 + 32 * 3 + 31]) ^ 1);
         vm.prank(relayer);
@@ -254,7 +256,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         assertEq(t.mtxNonce(from, 7), 1, "nonce consumed");
     }
 
-    function _settlePayer(ZetherLayer t, bytes memory cd) internal returns (bytes memory ret) {
+    function _settlePayer(NormalZetherToken t, bytes memory cd) internal returns (bytes memory ret) {
         address payer = vm.addr(PAYER_PK);
         ret = _settleNamed(t, cd, MetaTxLib.pad(payer), IMetaTx.MetaTxBadSignature.selector);
         assertEq(t.balanceOf(payer), 1000 - 3, "relay fee paid");
@@ -263,7 +265,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     /// @dev ua-mtx-merge T12 (R35): the prover's UA binding and `UAMetaTransaction` digest equal the token's views for a native
     ///      (padded) and a derived subject; the address binding of `executeMetaTransaction` is another word.
     function test_uaEnvelopeEqualsTheToken() public {
-        ZetherLayer t = _token(0, 2, true, "u-env");
+        NormalZetherToken t = _token(0, 2, true, "u-env");
         MetaTxLib.UAMetaTransaction memory m = _payerMt(t);
         m.data = hex"deadbeef";
         _uaBinding(t, m);
@@ -277,7 +279,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     /// @dev Relayed `mtxConfidentialTransferCompact(UAEnvelope, …, UASig)` (multi, commit-reveal) on a COMPACT token.
     function test_named_multi_relayed() public {
-        ZetherLayer t = _token(1, 2, true, "n-multi");
+        NormalZetherToken t = _token(1, 2, true, "n-multi");
         _public(t, vm.addr(PAYER_PK), 1000);
         MetaTxLib.UAMetaTransaction memory m = _payerMt(t);
         string memory out = _cli("proveTransferMulti", _req(t, "compact", "optional", false,
@@ -288,7 +290,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     /// @dev Relayed `mtxConfidentialTransferSingle(UAEnvelope, …, UASig)` (BUNDLE / FULL): balances and the stored record.
     function test_named_single_relayed() public {
-        ZetherLayer t = _token(0, 1, true, "n-single");
+        NormalZetherToken t = _token(0, 1, true, "n-single");
         _public(t, vm.addr(PAYER_PK), 1000);
         MetaTxLib.UAMetaTransaction memory m = _payerMt(t);
         string memory out = _cli("proveTransfer", _req(t, "bundle", "full", true, string.concat(
@@ -301,7 +303,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     /// @dev Relayed `mtxUnshield(UAEnvelope, …, UASig)`: the recipient is credited `amount * shieldScale` public units.
     function test_named_unshield_relayed() public {
-        ZetherLayer t = _token(0, 2, true, "n-unshield");
+        NormalZetherToken t = _token(0, 2, true, "n-unshield");
         address to = address(0xAB1E);
         _public(t, vm.addr(PAYER_PK), 1000);
         MetaTxLib.UAMetaTransaction memory m = _payerMt(t);
@@ -315,7 +317,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     /// @dev A derived subject (R35): alice's Zether UA relays her own single transfer, fee 0, signed through the prover (`uaSig`,
     ///      purpose `metatx`: the registry's `requireAuthorized` message), `sig` as the explicit `UASig` object.
     function test_named_single_relayed_derived() public {
-        ZetherLayer t = _token(0, 1, true, "n-derived");
+        NormalZetherToken t = _token(0, 1, true, "n-derived");
         bytes32 a = ZetherTypes.UA.unwrap(alice.ua);
         MetaTxLib.UAMetaTransaction memory m = _envMt(a, t, 0, 0);
         string memory out = _cli("proveTransfer", _req(t, "bundle", "full", true, string.concat(
@@ -335,9 +337,9 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     ///      changes the statement's shape, every auditor setting and both forms; bytes only (`_settled` knows three legs). M stops at 7,
     ///      the most every cell can send: the prover refuses M = 8 in the dearest form (EIP-7825 cap, `check_gas`).
     function test_statementDifferential() public {
-        ZetherLayer none = _token(0, 0, false, "d-none");
-        ZetherLayer opt = _token(0, 2, true, "d-opt");
-        ZetherLayer full = _token(0, 1, true, "d-full");
+        NormalZetherToken none = _token(0, 0, false, "d-none");
+        NormalZetherToken opt = _token(0, 2, true, "d-opt");
+        NormalZetherToken full = _token(0, 1, true, "d-full");
         uint256[5] memory ms = [uint256(1), 2, 3, 4, 7];
         string memory r = ',"recipients":[';
         uint256 done;
@@ -354,7 +356,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         }
     }
 
-    function _statement(ZetherLayer t, string memory am, bool aud, string memory legs) internal {
+    function _statement(NormalZetherToken t, string memory am, bool aud, string memory legs) internal {
         string[2] memory forms = ["bundle", "compact"];
         for (uint256 f; f < 2; ++f) {
             string memory out = _cli("proveTransferMulti", _req(t, "bundle", am, aud, string.concat(",", _q("mode", forms[f]), legs)));
@@ -366,7 +368,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     /// @dev The single format (BUNDLE/FULL): `transferStatementSingle`, the stored record.
     function test_single_bundleFull() public {
-        ZetherLayer t = _token(0, 1, true, "s-full");
+        NormalZetherToken t = _token(0, 1, true, "s-full");
         string memory out = _cli("proveTransfer", _req(t, "bundle", "full", true,
             string.concat(",", _q("yTo", vm.toString(rs[0].y)), ',"amount":1200')));
         assertEq(stm.transferStatementSingle(address(t), _zSingle(out.readBytes(".payload"), carol.ua), 0), out.readBytes(".statement"),

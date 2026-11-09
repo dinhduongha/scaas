@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
+
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
@@ -231,7 +233,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     }
 
     function _normal(bytes32 owner_, bytes32 minter, uint64 delay) internal returns (NormalToken t) {
-        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), ""));
+        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         t = NormalToken(EnvKit.clone(normalImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.owner, c.grantDelay) =
@@ -241,7 +243,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     }
 
     function _wrapped(bytes32 owner_, bytes32 guardian, bytes32 rateAdmin) internal returns (WrappedToken w) {
-        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), ""));
+        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.owner) =
@@ -254,7 +256,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     }
 
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
-        if (dexImpl == address(0)) dexImpl = address(new SCaaSDex(address(this), ""));
+        if (dexImpl == address(0)) dexImpl = address(new SCaaSDex(address(this), dexArgs(address(this))));
         d = SCaaSDex(EnvKit.clone(dexImpl, _cenv()));
         d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, TREASURY, false, 0, address(0))));
     }
@@ -833,7 +835,7 @@ contract GovRouterRegulatedTest is GovRouterFixture {
 
     /// Kind 8 with `FREEZE`, `FORCE`, `PAUSE`, `RECORD`, `OPERATOR_TRANSFER`; owner `eoa`, no grant delay; `BOB` holds 1,000.
     function _regulated(bytes32 issuer, bytes32 compliance, bytes32 operator) internal returns (NormalRegulatedToken t) {
-        if (regImpl == address(0)) regImpl = address(new NormalRegulatedToken(address(this), regArgs()));
+        if (regImpl == address(0)) regImpl = address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs())));
         t = NormalRegulatedToken(EnvKit.clone(regImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.owner) = ("R", "R", 6, eoa);

@@ -340,6 +340,11 @@ pub struct ChainCfg {
     /// checked against the chain's `eth_getCode` when the venue loads; another code or none stops it (fail closed).
     #[serde(default)]
     pub compliance_registry_codehash: Option<B256>,
+    /// Proposed NODE-JOB-25 (spec 2026-11-09-service-pull §8): the chain's services, `[[chains.services]] address, entries =
+    /// [{entry, op_type}]`, at most 32 entries each and 1,024 bytes per `op_type`; equal to the contract's
+    /// `servicePullEntries()` both directions at startup; one kind per address. EVM only.
+    #[serde(default)]
+    pub services: Vec<crate::service::ServiceCfg>,
     /// Ví lạnh nhận phí của meta-tx không ràng buộc `feeRecipient` (R84, EVM/Hedera); không phải khoá lane.
     /// Không đặt ⇒ ghi 0: contract trả phí cho `msg.sender` (lane gửi).
     #[serde(default)]
@@ -458,6 +463,7 @@ impl Default for ChainCfg {
             governance_routers: vec![],
             compliance_registry: None,
             compliance_registry_codehash: None,
+            services: vec![],
             fee_recipient: None,
             poll_ms: default_poll(),
             stuck_after_secs: default_stuck(),
@@ -655,6 +661,7 @@ impl Config {
                 c.canonical(&t.address).with_context(|| format!("chain {key}: token {}", t.address))?;
             }
             c.relay_params().with_context(|| format!("chain {key}"))?;
+            c.check_services().with_context(|| format!("chain {key}"))?;
             if !(1..=100).contains(&c.breaker.call_budget_pct) {
                 bail!("chain {key}: breaker.call_budget_pct is a share of the budget, 1 to 100");
             }
@@ -924,6 +931,9 @@ pub struct RelayParams {
     pub relay_bound_payee: bool,
     /// `max_pay_meta_bytes` (default 2,048, spec §9): the cap on a pay-meta `meta`.
     pub max_pay_meta_bytes: usize,
+    /// `max_service_op_bytes` (default 2,048; proposed NODE-JOB-25): the cap on one `bytes` / `string` field of a service
+    /// job's `<Op>`.
+    pub max_service_op_bytes: usize,
 }
 
 pub const DEFAULT_MAX_PAY_META_BYTES: usize = 2048;
@@ -931,7 +941,8 @@ pub const DEFAULT_MAX_PAY_META_BYTES: usize = 2048;
 impl Default for RelayParams {
     /// The defaults of an unset key set: no router, `min_amount` 1, no bound-payee relays, 2,048 B of meta.
     fn default() -> Self {
-        Self { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: DEFAULT_MAX_PAY_META_BYTES }
+        Self { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: DEFAULT_MAX_PAY_META_BYTES,
+            max_service_op_bytes: crate::service::DEFAULT_MAX_OP_BYTES }
     }
 }
 
@@ -943,6 +954,10 @@ impl ChainCfg {
         let max_pay_meta_bytes = match self.params.get("max_pay_meta_bytes") {
             None => DEFAULT_MAX_PAY_META_BYTES,
             Some(v) => uint(v, "max_pay_meta_bytes")? as usize,
+        };
+        let max_service_op_bytes = match self.params.get("max_service_op_bytes") {
+            None => crate::service::DEFAULT_MAX_OP_BYTES,
+            Some(v) => uint(v, "max_service_op_bytes")? as usize,
         };
         let t = match self.params.get("relay_fee") {
             None => None,
@@ -986,7 +1001,7 @@ impl ChainCfg {
             None => false,
             Some(v) => v.as_bool().with_context(|| format!("params.relay_fee.relay_bound_payee must be true or false, not {v}"))?,
         };
-        Ok(RelayParams { router, min_amount, relay_bound_payee, max_pay_meta_bytes })
+        Ok(RelayParams { router, min_amount, relay_bound_payee, max_pay_meta_bytes, max_service_op_bytes })
     }
 
     /// Dạng chuẩn của một địa chỉ trên chain này (`addresses::canonical`, như Odoo `canonical_for_chain`).
@@ -994,6 +1009,35 @@ impl ChainCfg {
         let prefix = self.params.get("prefix").and_then(|v| v.as_str());
         let ton_testnet = (self.family == "ton").then_some(()).and(self.network.as_deref()).map(|n| n == "-3");
         crate::addresses::canonical(&self.family, value, prefix, ton_testnet)
+    }
+
+    /// Proposed NODE-JOB-25 at startup: EVM only, each service under its bounds ([`crate::service::entries_of`]), no address
+    /// twice, and one kind per address: a service is no other configured kind (the DEX, a `GovernanceRouter`, the UA registry,
+    /// the account or token factory, the relay-fee router or its executor). A registered token is refused at run time (the
+    /// list is the client's).
+    pub fn check_services(&self) -> Result<()> {
+        if self.services.is_empty() {
+            return Ok(());
+        }
+        if !self.is_evm() {
+            bail!("[[chains.services]] is EVM only (spec §9: each family's form in its own round)");
+        }
+        let router = self.relay_params()?.router.map(|r| crate::metatx::addr(&r)).transpose()?;
+        let mut others: Vec<(Address, &str)> = vec![];
+        others.extend(self.dex.map(|a| (a, "dex")));
+        others.extend(self.governance_routers.iter().map(|a| (*a, "governance_routers")));
+        others.extend(self.ua_registry.map(|a| (a, "ua_registry")));
+        others.extend(self.account_factory.map(|a| (a, "account_factory")));
+        others.extend(self.token_factory.map(|a| (a, "token_factory")));
+        others.extend(router.map(|r| (r, "relay_fee.router")));
+        others.extend(router.map(|r| (r.create(1), "the relay-fee executor")));
+        crate::service::Types::from_cfg(&self.services, crate::service::DEFAULT_MAX_OP_BYTES)?;
+        for s in &self.services {
+            if let Some((_, k)) = others.iter().find(|(a, _)| *a == s.address) {
+                bail!("service {:#x} is also {k} (one kind per address)", s.address);
+            }
+        }
+        Ok(())
     }
 
     pub fn is_evm(&self) -> bool {
@@ -1086,15 +1130,16 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     fn relay_params_default_and_refuse_invalid_values() {
         let c: Config = toml::from_str(OK).unwrap();
         assert_eq!(c.chains[0].relay_params().unwrap(),
-            RelayParams { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: 2048 });
+            RelayParams { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: 2048, max_service_op_bytes: 2048 });
         let with = |p: &str| -> Result<RelayParams> {
             let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\nparams = {{ {p} }}")))?;
             c.validate()?;
             c.chains[0].relay_params()
         };
-        let p = with(r#"max_pay_meta_bytes = 4096, relay_fee = { router = "0x7f", min_amount = 0, relay_bound_payee = true }"#).unwrap();
-        assert_eq!(p, RelayParams { router: Some("0x7f".into()), min_amount: 0, relay_bound_payee: true, max_pay_meta_bytes: 4096 });
-        for bad in ["max_pay_meta_bytes = -1", r#"max_pay_meta_bytes = "2048""#, "relay_fee = 7", "relay_fee = { router = 7 }",
+        let p = with(r#"max_pay_meta_bytes = 4096, max_service_op_bytes = 512, relay_fee = { router = "0x7f", min_amount = 0, relay_bound_payee = true }"#).unwrap();
+        assert_eq!(p, RelayParams { router: Some("0x7f".into()), min_amount: 0, relay_bound_payee: true, max_pay_meta_bytes: 4096,
+            max_service_op_bytes: 512 });
+        for bad in ["max_pay_meta_bytes = -1", "max_service_op_bytes = -1", r#"max_service_op_bytes = "2048""#, r#"max_pay_meta_bytes = "2048""#, "relay_fee = 7", "relay_fee = { router = 7 }",
                     "relay_fee = { min_amount = -1 }", r#"relay_fee = { min_amount = "9" }"#, "relay_fee = { min_amount = 1.5 }",
                     r#"relay_fee = { relay_bound_payee = "yes" }"#, "relay_fee = { min_ammount = 5 }",
                     "relay_fee = { min_ton_value = {} }", "relay_fee = { min_lamports_value = {} }"] {

@@ -62,7 +62,7 @@ contract GasProbe {
 contract UAGasTest is UARegistryBase {
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
     uint256 internal constant MSIG_MEMBER_GAS = 45_000; // UARegistry.MSIG_MEMBER_GAS
-    uint256 internal constant MSIG_ACCEPTED_GAS = 2_500; // UARegistryLib.MSIG_ACCEPTED_GAS: once per authorization
+    uint256 internal constant MSIG_ACCEPTED_GAS = 2_500; // UARegistryCoreLib.MSIG_ACCEPTED_GAS: once per authorization
 
     bytes internal _big;
     bytes internal _memberPop; // `_derivedOverhead`'s registration pop when set (I1: a padded pop)

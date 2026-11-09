@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
-import {GovernanceBase, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -33,7 +33,7 @@ contract RelaxApp is GovernanceBase {
     uint256 internal constant DELAYED = (1 << 5) | (1 << 6) | (1 << 7);
     address internal immutable REG;
 
-    constructor(address reg) GovernanceBase(address(0)) {
+    constructor(address reg) GovernanceBaseCore(address(0)) {
         REG = reg;
     }
 

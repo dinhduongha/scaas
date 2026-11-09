@@ -158,13 +158,28 @@ library MetaTxLib {
         "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
-    /// @notice The payment metadata, the last parameter of every pay entry (CTR-MTX-26, pay-meta-tax spec §3.1, O2, O11):
-    ///         never empty; `entryRef == metaPayId(meta)`, which the contract checks and never parses further.
+    /// @notice The payment metadata, the last parameter of every pay entry (CTR-MTX-26, pay-meta-tax spec §3.1, O2, O11;
+    ///         plan T83, owner 2026-11-09): never empty; `entryRef == metaPayId(meta)`, which the contract checks and never
+    ///         parses further. `payNo`: 0 = none; **recommended: a UUIDv7, right-aligned** (its 128 bits in the low 16
+    ///         bytes, the high 16 bytes zero, as `pad` places an address): unique without coordination, time-ordered so an
+    ///         indexer's or ERP's index stays compact, and no business sequence number on chain. Any other 32-byte id is
+    ///         accepted; the contract never parses it. A readable document number stays off chain or goes in `body`.
+    ///         `save`: the payer's choice to store a `PayRecord` under `payNo` (`paymentsOf`); `save` with `payNo == 0` is
+    ///         refused (`PayMetaShape`).
     struct PayMeta {
         bytes32 salt;    // 32 bytes from a CSPRNG; never 0
-        string  payNo;   // optional business document number; "" = none; at most 256 bytes
+        bytes32 payNo;   // the payment request's id; 0 = none; recommended a right-aligned UUIDv7
+        bool    save;    // store a `PayRecord` under `payNo` after the transfer
         uint16  schema;  // 0 = no body; 1 note, 2 structured reference, 3 bound call, 4 encrypted
         bytes   body;    // the schema's encoding; empty iff schema == 0
+    }
+
+    /// @notice One stored payment of a `payNo` (plan T83, owner 2026-11-09), two slots: `to` the payee id, `amount` what
+    ///         the payee received (net of a fee or a tax withheld from it), `blockNumber` the block.
+    struct PayRecord {
+        bytes32 to;
+        uint192 amount;
+        uint64  blockNumber;
     }
 
     function hashStruct(UAMetaTransaction memory m) internal pure returns (bytes32) {

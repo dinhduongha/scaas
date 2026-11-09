@@ -817,7 +817,8 @@ TestCase {
 
     // pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row
     function test_pay_rows() {
-        for (const r of vectors.load("../metatx/paymeta.json")) {
+        // plan T83: the v2 rows (`payNo` text) in legacy/ua-mtx-merge/t83/ until ua-rs takes PayMeta v3 (ua-rs-sign sync)
+        for (const r of vectors.load("../metatx/legacy/ua-mtx-merge/t83/paymeta.json")) {
             const o = UaKinds.metaPayIdV2(JSON.stringify({ salt: r.salt, payNo: r.payNo, schema: r.schema, body: r.body }))
             if (r.accepted) compare(JSON.parse(o).payId, r.payId, r.name)
             else { compare(o, "", r.name); compare(UaKinds.lastError, "UAArgument", r.name) }

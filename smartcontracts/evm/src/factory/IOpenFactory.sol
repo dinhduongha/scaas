@@ -135,6 +135,11 @@ interface IOpenFactory {
     error EnvInvalid();
     /// @notice A linked library of the env does not have its published code hash (checked at each release deployment).
     error LibraryCodeHashMismatch(address library_, bytes32 expected, bytes32 got);
+    /// @notice A body module the release names in `modules()` is not one of its env's `libs` (T66b §4.5), so its code hash
+    ///         is pinned by no env.
+    error ModuleNotPinned(address module);
+    /// @notice The release does not answer `modules()` with one well-formed `address[]` (T66b §4.5; fail closed).
+    error ModulesUnreadable(address implementation);
     /// @notice The `CREATE2` of a release failed without revert data (a constructor's revert is bubbled), e.g. a
     ///         runtime over the chain's code-size limit. Init code over the chain's init-code limit (EIP-3860) is an
     ///         exceptional halt of the factory's call frame instead: the registrar's call consumes all its gas and

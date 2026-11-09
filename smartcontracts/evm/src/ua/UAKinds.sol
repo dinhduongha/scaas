@@ -157,7 +157,7 @@ library UAKinds {
         return isSigning(kind) || isZether(kind);
     }
 
-    /// `msig` itself since owner 2026-11-02: one level down only, `UARegistryLib._worst` refuses an `msig` that holds one as a member.
+    /// `msig` itself since owner 2026-11-02: one level down only, `UARegistryCoreLib._worst` refuses an `msig` that holds one as a member.
     function isMember(uint16 kind, bool hederaNative) internal pure returns (bool) {
         return _singleSigning(kind) || kind == MSIG || kind == EVM_EOA || kind == EVM_CONTRACT || (hederaNative && kind == HEDERA_NATIVE);
     }

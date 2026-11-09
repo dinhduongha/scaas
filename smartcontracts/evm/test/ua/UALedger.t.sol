@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {OrderJson} from "../helpers/OrderJson.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {domainOf, h, n} from "../metatx/NamedEntry.t.sol";
@@ -16,6 +18,7 @@ import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {MockWallet} from "./UARegistryBase.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
@@ -159,6 +162,33 @@ contract UALedgerTest is UALedgerBase {
         vm.prank(alice);
         tok.cancelNonce(1);
         assertEq(tok.mtxNonce(_pad(alice), 1), 3);
+    }
+
+    /// T66b rule 4 (spec §4.1): module P runs `MtxPipelineLib`'s code compiled in, so the token's relayed typed transfer,
+    /// the signed cancel, the address path and the digests make no DELEGATECALL to the library; positive control: the
+    /// library's own entry answers a call (the path of the router, the wallets and the modules W, Z, Q).
+    function test_rule4_pipelineCallsNoMtxPipelineLib() public {
+        MtxPipelineLib.Envelope memory none;
+        MtxPipelineLib.callDigest(bytes32(0), MetaTxLib.UAMETATX_TYPEHASH, none); // control: linked here, it answers
+        _fund(uaP, 1_000);
+        MetaTxLib.UAMetaTransfer memory t = _t(uaP, _pad(bob), 500);
+        MetaTxLib.UAEnvelope memory e = _cancelEnv(uaP, block.timestamp + 60);
+        bytes memory c = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_METATX, _cancelJsonDigest(e, 9));
+        MetaTxLib.MetaTransaction memory v2 = MetaTxLib.MetaTransaction({
+            from: alice, data: abi.encodeCall(IMetaTx.cancelNonce, (9)), batch: 1, nonce: 0,
+            validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
+        });
+        bytes memory a2 = _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), v2));
+        MetaTxLib.UAMetaTransaction memory m;
+        vm.expectCall(address(MtxPipelineLib), "", 0);
+        tok.mtxDigest(m);
+        _xfer(t); // preTransferUA, transferDigest
+        tok.mtxCancelNonce(e, 9, UACall.auth(uaP, c)); // preNamedUA
+        vm.prank(RELAYER);
+        tok.executeMetaTransaction(v2, a2); // preCall
+        assertEq(tok.balanceOf(bob), 500);
+        assertEq(tok.mtxNonce(uaP, 9), 1);
+        assertEq(tok.mtxNonce(_pad(alice), 1), 1);
     }
 
     // ----- T-V3-3: receivers, allowlist, fee recipient -----
@@ -464,7 +494,7 @@ contract UALedgerTest is UALedgerBase {
     // ----- registry binding (CTR-UA-19) -----
 
     function test_registryOff() public {
-        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 100, alice, address(this))));
         assertEq(off.registry(), address(0));
         assertFalse(off.supportsInterface(type(IUALedger).interfaceId));

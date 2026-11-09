@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -23,8 +25,10 @@ import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {ZUID} from "./helpers/ZetherFixture.sol";
-import {zetherEnv} from "../helpers/Catalogue.sol";
+import {zetherEnv, closureLibs} from "../helpers/Catalogue.sol";
+import {kindArgs} from "../../script/KindModules.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
+import {envClosure} from "../helpers/ProbeModules.sol";
 
 /// @notice `DeployBase` with `DEPLOY_ZETHER` deploys and registers the Zether stack (kinds 2 and 3, the gate on) on any
 ///         chain but Hedera (owner ruling 2026-10-31: no dev-chain allowlist); without it (the default) none of it.
@@ -64,7 +68,8 @@ contract ZetherDeployTest is Test {
             assertEq(e.deps[1], bv);
             assertEq(e.deps[2], ip);
             assertEq(e.deps[3], _at(h, type(ZetherDisclosure).creationCode));
-            assertEq(e.libs.length, k == 2 ? 5 : 7); // NORMAL_ZETHER: no WrappedLib, no ZetherWrappedLib
+            e = envClosure(e, rel.implementation); // T66b: the release's body modules pinned after its closure
+            assertEq(e.libs.length, closureLibs(IOpenFactory.TokenKind(k)).length); // NORMAL_ZETHER: no WrappedLib, no ZetherWrappedLib
             for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash);
         }
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_verifier_", key)), tv);
@@ -73,7 +78,7 @@ contract ZetherDeployTest is Test {
         for (uint8 k = 2; k <= 3; ++k) {
             // chain-neutral releases (plan T72): a release carries no env (its `curve()` has no verifier to ask); the
             // published env names the verifiers, every clone reads them from its code
-            ZetherLayer rel = ZetherLayer(f.implementationOf(IOpenFactory.TokenKind(k), c + 1));
+            NormalZetherToken rel = NormalZetherToken(f.implementationOf(IOpenFactory.TokenKind(k), c + 1));
             assertEq(address(rel.verifier()), address(0));
             assertEq(address(rel.burnVerifier()), address(0));
         }
@@ -117,16 +122,16 @@ contract ZetherDeployTest is Test {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
         c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0);
-        ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
+        NormalZetherToken t = NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
         assertEq(t.curve(), "bls12-381");
         assertEq(t.chainUid(), ZUID);
         assertEq(t.registry(), reg, "the clone's env");
         assertEq(address(t.disclosure()), dis);
-        assertEq(MetaTokenBase(address(t)).SMART_KEY_ACCOUNT_IMPL(), ska);
+        assertEq(NormalToken(address(t)).SMART_KEY_ACCOUNT_IMPL(), ska);
         // minDecoyFee on both layers (owner 2026-10-20): a Zether token takes a non-zero one (bounds: ZetherMulti)
         c.conf.minDecoyFee = 1;
-        assertEq(ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
+        assertEq(NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
     }
 
     /// Q4 (CTR-MTX-30, R40), ua-mtx-merge T10: on a chain that declares the public gate the two Zether releases are each
@@ -212,7 +217,9 @@ contract ZetherDeployTest is Test {
         address ip = address(new ZetherInnerProductVerifierBls12381());
         bytes memory ipArg = abi.encode(ip);
         // the factory's append (chain-neutral releases, plan T72): abi.encode(factory, implArgs); the env is the clones'
-        bytes memory zArgs = abi.encode(address(this), bytes(""));
+        // T66b: each kind's `implArgs` names its body modules (deployed here for this factory, their own transactions)
+        bytes memory zArgs = abi.encode(address(this), kindArgs(2, address(this), ""));
+        bytes memory wArgs = abi.encode(address(this), kindArgs(3, address(this), ""));
         bytes[7] memory codes = [
             type(ZetherDisclosure).creationCode,
             type(ZetherStatements).creationCode,
@@ -220,7 +227,7 @@ contract ZetherDeployTest is Test {
             abi.encodePacked(type(ZetherTransferVerifierBls12381).creationCode, ipArg),
             abi.encodePacked(type(ZetherBurnVerifierBls12381).creationCode, ipArg),
             abi.encodePacked(type(NormalZetherToken).creationCode, zArgs),
-            abi.encodePacked(type(WrappedZetherToken).creationCode, zArgs)
+            abi.encodePacked(type(WrappedZetherToken).creationCode, wArgs)
         ];
         Create2Probe probe = new Create2Probe();
         for (uint256 i; i < codes.length; ++i) {

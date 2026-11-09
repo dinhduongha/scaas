@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -73,10 +75,10 @@ abstract contract UALedgerBase is UARegistryBase {
             "");
         (alice, bob) = (vm.addr(ALICE_PK), vm.addr(BOB_PK));
         vm.warp(1_800_000_000);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
         und = new MockERC20("Und", "UND", 6);
-        wrp = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        wrp = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(und), 1);
@@ -93,7 +95,7 @@ abstract contract UALedgerBase is UARegistryBase {
 
     /// The same at rate `num/den` (units per leg unit).
     function _wrapperAt(address leg, uint256 num, uint256 den) internal returns (WrappedToken w) {
-        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory n = new uint256[](1);
         uint256[] memory d = new uint256[](1);

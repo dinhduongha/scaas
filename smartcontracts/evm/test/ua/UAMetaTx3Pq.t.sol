@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
@@ -57,7 +59,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
         for (uint256 p; p < 2; ++p) reg.cacheExpandedKey(0x0131, pk1, p);
         UACall.register(reg, 0x0131, pk1, _none(), vm.parseJsonBytes(pj, ".extraKeys[0].pop.sig"), "");
         address token = vm.parseJsonAddress(pj, ".metatx3.token");
-        address impl = address(new NormalToken(address(this), ""));
+        address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         vm.etch(token, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_A, address(0), false)));
         tok = NormalToken(token);
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(0), address(this))));
@@ -235,8 +237,9 @@ contract UAMetaTx3PqTest is UARegistryBase {
 
     /// The row's `PayMeta` (pay-meta-tax T41), its commitment checked against the payment's `entryRef`.
     function _rowMeta(string memory pj, string memory p, bytes32 entryRef) internal pure returns (MetaTxLib.PayMeta memory m) {
-        m = MetaTxLib.PayMeta(vm.parseJsonBytes32(pj, string.concat(p, "salt")), vm.parseJsonString(pj, string.concat(p, "payNo")),
-            uint16(vm.parseJsonUint(pj, string.concat(p, "schema"))), vm.parseJsonBytes(pj, string.concat(p, "body")));
+        m = MetaTxLib.PayMeta(vm.parseJsonBytes32(pj, string.concat(p, "salt")), vm.parseJsonBytes32(pj, string.concat(p, "payNo")),
+            vm.parseJsonBool(pj, string.concat(p, "save")), uint16(vm.parseJsonUint(pj, string.concat(p, "schema"))),
+            vm.parseJsonBytes(pj, string.concat(p, "body")));
         assertEq(PayMetaKit.id(m), entryRef, "the row's entryRef commits to its PayMeta");
     }
 

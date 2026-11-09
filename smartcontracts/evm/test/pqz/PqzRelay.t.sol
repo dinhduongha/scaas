@@ -57,8 +57,8 @@ contract PqzRelayTest is PqzFixture {
             MetaTxLib.pad(0x1111111111111111111111111111111111111111), hex"c0de", 3, 4, 5,
             MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, 0x2222222222222222222222222222222222222222, 6,
             0x3333333333333333333333333333333333333333);
-        assertEq(PqzLayer(at).chainUid(), PQZ_UID);
-        assertEq(PqzLayer(at).envelopeBinding(m), 0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33);
+        assertEq(NormalPqzToken(at).chainUid(), PQZ_UID);
+        assertEq(NormalPqzToken(at).envelopeBinding(m), 0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33);
     }
 
     function test_v1BindingAndFee() public {

@@ -915,7 +915,113 @@ each library ≤ 24,576 B.
   Every token implementation now needs a chain with 64 KiB code (anvil `--code-size-limit 65536`, SCaaS testnet), and
   `deploy.sh` and the node e2e pass `--code-size-limit 65536` to `forge script` (`deploy.sh` also `--slow`: one tx per block; parallel broadcast can strand a deploy tx that doesn't fit the block's remaining gas).
   **Flag:** with P2a `NormalToken` is over its 20,480 B budget (still under EIP-170).
-  **Ceiling (BUILT on branch `governance`, T2, `7edcad34`; [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)):** `size_gate.py` refuses a runtime above 131,072 B and an init code above 262,144 B, and the baseline's sorted `_above64KiB` list names every contract above 65,536 B; a computed list that differs from it in either direction fails, so a kind that crosses is named in a commit. Today the list is `WrappedPqzToken` (72,160 B). Baseline runtimes: `NormalToken` 40,853 B, `WrappedToken` 52,297 B, `NormalZetherToken` 50,547 B, `WrappedZetherToken` 62,472 B, `NormalPqzToken` 56,191 B, `WrappedPqzToken` 72,160 B, `SCaaSDex` 33,574 B, `GovernanceLib` 13,181 B. A kind above 64 KiB deploys only where the chain's code limit allows it (`CHAIN_CODE_LIMIT`, [networks/evm.md](../networks/evm.md#NET-EVM-06)); size reduction is decided later.
+  **Ceiling (BUILT on branch `governance`, T2, `7edcad34`; [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)):** `size_gate.py` refuses a runtime above 131,072 B and an init code above 262,144 B, and the baseline's sorted `_above64KiB` list names every contract above 65,536 B; a computed list that differs from it in either direction fails, so a kind that crosses is named in a commit. Today the list is `WrappedPqzToken` (72,160 B). Baseline runtimes: `NormalToken` 40,853 B, `WrappedToken` 52,297 B, `NormalZetherToken` 50,547 B, `WrappedZetherToken` 62,472 B, `NormalPqzToken` 56,191 B, `WrappedPqzToken` 72,160 B, `SCaaSDex` 33,574 B, `GovernanceLib` 13,181 B. A kind above 64 KiB deploys only where the chain's code limit allows it (`CHAIN_CODE_LIMIT`, [networks/evm.md](../networks/evm.md#NET-EVM-06)); size reduction is decided later. **Change (owner 2026-11-07, T66b, `816f226d`):** the window is closed: no contract is above 65,536 B ([CTR-TOK-30](#CTR-TOK-30)), `_above64KiB` and the `.init` rows are gone, and the stop line is the 60 M line of each row's form (an error; the 57 M line a notice): release 35,386 / 33,594 B, body module 35,570 / 33,780 B, library 35,694 / 33,903 B, plain 35,286 / 33,516 B, each form pinned in `_forms`; the ceiling stays. The figures above are the old baseline.
+
+<a id="CTR-TOK-30"></a>**CTR-TOK-30** — **Body modules: every body but the ERC-20 core runs in a `DELEGATECALL` module of its kind** (owner
+2026-11-07, lever L in its forward form, [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)'s
+Change; the owner's rulings of 2026-11-09 below; **BUILT** on branch `ua-mtx-merge`, T66b; UNAUDITED). Every deployed contract
+fits one transaction of 60 M (`asked = (regular + state) × 1.05`, regular × 1.05 < 2^24), so no release needs a chain's
+own code limit above 65,536 B.
+
+- **The token keeps every entry point** (signature, mutability, ABI, events and errors as before; each face also declares
+  the events and errors of its kind's interfaces, so a client decodes a module's or a library's log and revert) and these
+  bodies: the ERC-20 core (`transfer`, `transferFrom`, `approve`, `balanceOf`, `allowance`, `totalSupply`, `name`,
+  `symbol`, `decimals`, `balanceOfUA`, `transferToUA`), the identity views (`kind`, `factory`, `FACTORY`, `implementation`,
+  `modules`), the env words read on chain (`registry`, `chainUid`, `IS_HEDERA`, `SMART_KEY_ACCOUNT_IMPL`, and
+  `REGISTRY_CODEHASH`, `RATE_WINDOW` where the kind has them), `_update` with its hooks, `_msgSender` and the one guard.
+  Every other entry is a stub that forwards the unchanged calldata by `DELEGATECALL` to one module of its kind.
+- **Stubs.** A stub carries no modifier. A guarded entry (`nonReentrant` or `governed` before) calls `_forward(module)`:
+  enter the guard, `DELEGATECALL` of `msg.data`, on failure revert with the module's revert data verbatim (the revert undoes
+  the enter), exit the guard, return the module's return data verbatim. An unguarded entry calls `_forwardRaw(module)`, the
+  same without the guard; a `view` or `pure` entry forwards through a cast and keeps its mutability. A stub never re-encodes.
+- **A module** is compiled from its kind's own core (bases and hooks) and holds one group of bodies. Its constructor takes
+  the kind's constructor arguments without a module list (`(factory_)` on 0–5, `(factory_, abi.encode(bytes32
+  registryCodehash))` on 8–13), so every immutable a moved body reads holds the implementation's value. Every entry of a
+  module face is `onlyDelegated` (`NotDelegated()` on a direct call); the identity views (`kind`, `moduleGroup`, `factory`,
+  `FACTORY`, `REGISTRY_CODEHASH`, `pqzSet`) read no value-bearing state and answer a direct call. A module entry has no
+  `nonReentrant` and no `governed` (the stub holds the guard for the frame) and the token entry's mutability exactly
+  (`payable` where the token's is). No `SELFDESTRUCT`, no `CALLCODE`, `DELEGATECALL` only to the release's libraries; no
+  state variable of its own (its storage layout equals its kind's, pinned per module); one hop: a module never calls
+  another module, and reaches another group's body only by the self-call the body made before. `implementation()` stays a
+  view of the token.
+- **Wiring.** The module addresses are immutables of the implementation, from its `implArgs`, one named struct decoded once:
+  `abi.encode(ImplArgs{address[] modules})` on 0–5 and the DEX, `abi.encode(RegulatedImplArgs{bytes32 registryCodehash;
+  address[] modules})` on 8–13. The implementation's constructor checks each module: code present and the count
+  (`ModuleMissing(i)`), then `kind()`, `moduleGroup()` for its slot, `factory()`, `REGISTRY_CODEHASH()` on 8–13 and
+  `pqzSet()` (the set's self-test hash) on 4, 5, 12, 13 (`ModuleMismatch(i)`); `modules()` lists them. The release's env pins
+  each module's code hash beside the libraries (`LibraryCodeHashMismatch`), and `OpenFactory` refuses a release whose
+  `modules()` names an address outside its env (`ModuleNotPinned`; `ModulesUnreadable` when the view fails) on
+  `deployImplementation`, `deployDexImplementation` and `createTokenUnregistered`. A module holds no chain value: it is
+  deployed by CREATE2 through the deterministic deployer with `DEPLOY_SALT`, at the same address on every chain.
+- **Rule 4, one cold account where there was one.** Module P compiles `MtxPipelineLib`'s code in (the library's entries are
+  thin wrappers of internal twins; P overrides the 15 pipeline hooks), T compiles `TradeLib`'s core and the trade
+  authorisation in, A the two payment views. W, Z, Q, `GovernanceRouter` and the wallets keep the library call.
+  `MtxPipelineLib` and `TradeLib` stay libraries: the router, the wallets and the DEX call them.
+
+| Group | id | Bodies | Links |
+|---|---|---|---|
+| **P** | 1 | the signed pipeline, named transfers, pay and the relay fee; the tax entries on 8–13 | `HederaLib`; `RegulatedLib` on 8–13 |
+| **T** | 2 | trade | — |
+| **A** | 3 | governance, `initialize`, `validateEnv`, the tables and token meta; `mint`, `mintToUA`, `burn` on the normal kinds | `GovernanceLib`; the kind's init / env libraries |
+| **W** | 4 | wrapped (1, 3, 5, 9, 11, 13) and the regulated powers (8–13) | `WrappedLib`, `RegulatedLib` |
+| **Z** | 5 | Zether (2, 3, 10, 11) | `ZetherLib`, `ZetherWrappedLib` |
+| **Q** | 6 | PQZ (4, 5, 12, 13): the ops and their verdict entries | `PqzTransferLib`, `PqzBurnLib`, `PqzStateLib`, `PqzViewLib`, `PqzWrappedLib` |
+| **Q2** | 8 | on 5 and 13: the PQZ state, setters and views (Q split by the rule below) | the PQZ libraries |
+| **D** | 10 | the DEX's 22 governance entries (`SCaaSDexD`) | `GovernanceLib` |
+
+Ids 7 (P2, pay) and 9 (G, governance) are reserved for the splits below. **Modules per kind and runtime (B)**, release
+first (`forge build src --sizes`, T66b 4.4):
+
+| Kind | Release | P | T | A | W | Z | Q | Q2 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 `NormalToken` | 13,734 | 24,300 | 14,259 | 23,994 | | | | |
+| 1 `WrappedToken` | 17,808 | 24,728 | 15,635 | 19,629 | 21,873 | | | |
+| 2 `NormalZetherToken` | 17,088 | 25,288 | 14,253 | 23,463 | | 21,948 | | |
+| 3 `WrappedZetherToken` | 21,520 | 25,835 | 15,635 | 16,746 | 21,697 | 27,996 | | |
+| 4 `NormalPqzToken` | 19,045 | 25,495 | 14,309 | 26,411 | | | 30,641 | |
+| 5 `WrappedPqzToken` | 24,314 | 26,086 | 15,684 | 16,875 | 21,903 | | 28,283 | 18,216 |
+| 8 `NormalRegulatedToken` | 17,484 | 28,943 | 15,527 | 25,702 | 11,778 | | | |
+| 9 `WrappedRegulatedToken` | 21,249 | 29,378 | 16,996 | 21,348 | 28,021 | | | |
+| 10 `NormalZetherRegulatedToken` | 20,619 | 29,960 | 15,527 | 25,190 | 11,778 | 23,880 | | |
+| 11 `WrappedZetherRegulatedToken` | 24,995 | 30,507 | 16,996 | 18,481 | 29,011 | 28,865 | | |
+| 12 `NormalPqzRegulatedToken` | 22,556 | 30,177 | 15,576 | 28,131 | 11,827 | | 32,423 | |
+| 13 `WrappedPqzRegulatedToken` | 27,713 | 30,783 | 17,045 | 18,594 | 29,202 | | 29,465 | 19,038 |
+
+55 token modules and the DEX's D (6,459 B; `SCaaSDex` 32,991 B). **Which entry runs where** (`script/t66b/entries.json`, the
+generator's input; a kind has the subset it declares):
+
+| Group | Entries |
+|---|---|
+| kept in the token | `allowance`, `approve`, `balanceOf`, `balanceOfUA`, `chainUid`, `decimals`, `FACTORY`, `factory`, `implementation`, `IS_HEDERA`, `kind`, `modules`, `name`, `RATE_WINDOW`, `registry`, `REGISTRY_CODEHASH`, `SMART_KEY_ACCOUNT_IMPL`, `symbol`, `totalSupply`, `transfer`, `transferFrom`, `transferToUA` |
+| P | `cancelNonce`, `executeMetaTransaction`, `metaPayId`, `mtxBatch`, `mtxBatchTransfer`, `mtxCancelNonce`, `mtxDigest`, `mtxExecute`, `mtxExecuteTransfer`, `mtxNonce`, `mtxPay`, `mtxPayReceiverFee`, `mtxPayWithTax`, `mtxRelayFee`, `mtxTransfer`, `mtxTransferDigest`, `mtxTransferWithFee`, `payLane`, `payWithFee`, `payWithFeeToUA`, `payWithTax`, `receiverFeeDigest`, `setTaxRate`, `setTaxRecipient`, `supportedModes`, `taxConfig` |
+| T | `cancelOrderDigest`, `invalidateNoncesDigest`, `minNonce`, `mtxCancelOrder`, `mtxInvalidateNonces`, `mtxTrade`, `mtxWrapOrder`, `pulled`, `restorePulled`, `tradeOrderDigest` |
+| A | `acceptOwnership`, `bitLabel`, `burn`, `cancelGrant`, `chainEnv`, `creator`, `disableFeature`, `eip712Domain`, `features`, `GOV_ROUTER`, `grantDelay`, `grantOf`, `grantRole`, `hasRole`, `holderCount`, `initialize`, `lastProposedAt`, `lockedFeatures`, `mint`, `mintToUA`, `mtxBurn`, `mtxSelectors`, `owner`, `paymentCount`, `paymentsOf`, `pendingGrant`, `pendingOwner`, `renounceOwnership`, `renounceRole`, `rescue`, `rescueTo`, `revokeRole`, `setGrant`, `supportsInterface`, `transferOwnership`, `underlyings`, `validateEnv`, `validBits`, `version` |
+| W | `addReserve`, `cancelRate`, `canReceive`, `collateralValue`, `disableFeature`, `disableWrap`, `executeRate`, `forceTransfer`, `freeze`, `freezeOf`, `isFrozen`, `legOf`, `maxRateStepBps`, `maxSupply`, `mint`, `mintToUA`, `mtxAddReserve`, `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA`, `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `operatorTransfer`, `order`, `pause`, `pendingRate`, `previewUnwrap`, `previewWrap`, `proposeRate`, `rateAdjustable`, `rateDelay`, `recordOrder`, `regulatedConfig`, `rescue`, `revokeOrder`, `underlying`, `underlyings`, `unfreeze`, `unpause`, `unwrap`, `unwrapToUA`, `wrap`, `wrapToUA` |
+| Z | `accountState`, `auditorKey`, `auditorMode`, `burnVerifier`, `confidentialFee`, `curve`, `disableFeature`, `disclosure`, `disclosureMode`, `envelopeBinding`, `executeRate`, `maxDecryptableShielded`, `minDecoyFee`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferSingle`, `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode`, `mtxShield`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxWrapShield`, `registered`, `rescue`, `sendCounter`, `shieldScale`, `totalShielded`, `transferEntry`, `transferMemo`, `underlyings`, `verifier` |
+| Q | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disableFeature`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `executeRate`, `maxShielded`, `minDecoyFee`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferSingle`, `mtxConfidentialTransferSingleCompact`, `mtxPrepareAcc`, `mtxRollOver`, `mtxShield`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxWrapShield`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `rescue`, `setProofStore`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `verifier`, `verifyTransferAmount` |
+| Q2 (5, 13) | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `maxShielded`, `minDecoyFee`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `setProofStore`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `underlyings`, `unshieldUnwrapStatement`, `unwrapBinding`, `verifier` |
+
+An entry in two rows runs in the module of the kind's own override: `disableFeature` in A on 0, 2, 4, in W on 1 and 8–13, in
+Z on 3, in Q on 5; `mint`, `mintToUA` in A on the normal kinds, in W on the wrapped ones; `rescue`, `underlyings` in A on
+0, 2, 4, 8, 10, 12, in W on 1, 9, 11, 13, in Z on 3, in Q on 5; `executeRate` in W on 1, 9, in Z on 3, 11, in Q on 5, 13; the
+confidential entries in Z on the Zether kinds and in Q on the PQZ kinds. On 5 and 13 every PQZ `view` / `pure` entry but
+`verifyTransferAmount`, and the four setters, run in Q2.
+
+- **Splitting rule and growth (owner 2026-11-09, T66b spec §11 (b), (e), (g)).** A module that passes 33,780 B of runtime
+  (≈ 57 M asked; hard line 35,570 B ≈ 60 M) splits along its domains and never forwards to its sibling: Q into the ops and
+  their verdicts (Q) and the state, setters and views (Q2), built on 5 and 13; P into the pipeline and named transfers (P)
+  and pay with the relay fee (P2), on no kind today (the largest P 30,783 B); A into A and G, the governance entries, when
+  A passes the line; the DEX's D the same. A later governance version grows `GovernanceLib` first (14,513 B; lines 33,903 B
+  and 35,694 B). The byte lines are fitted estimates; the asked gas decides.
+- **Pay stays in P, one per kind (§11 (g), kept as specified).** The T66b 4.4 comparison on the final tree (every kind's P split, a comparison build only): the twelve pay modules would be 15,336–15,407 B on 0–5 and 19,883–19,962 B on 8–13, and they all differ with immutables, link references and metadata zeroed (first difference at byte 22–23, the dispatcher's jump targets; the nearest pairs, kinds 0 / 2 and 8 / 10, at bytes 72 and 515): each kind's hooks (`_mtxRule`, `_uaAllowed`, `_update`, the regulated hooks) are compiled into its pay bodies. A shared pay module (one regulated module for 10–13,
+  or one per family) is recorded for a later switch: it needs those hooks as data, a cross-kind check, one storage layout for
+  the pay namespaces and its own review; a switch is a new release of the kinds.
+- **Costs, measured old → new.** A named transfer runs in P with the pipeline compiled in (`mtxTransfer` 86,118 → 83,668 on
+  `NormalToken`); a governed op pays the forward hop (`mtxMint` through the router 100,152 → 103,532). A relayed PQZ op crosses
+  two more frames (the stub to P, the self-call's stub to Q), each copying the envelope: the split-overhead bounds are PQZL
+  99,000 and PQZH 335,000 gas (owner 2026-11-09, §11 (i); inside the PQZ calldata cost accepted 2026-11-07) and
+  `PQZ_DEBIT_MIN_GAS` moved with it ([pq-zero-knowledge.md](pq-zero-knowledge.md), §11 (j)). The named path is held to
+  `named < generic + 7,000` (owner 2026-11-09, §11 (h): `mtxUnwrap` 160,749, the generic `mtxExecute` 154,866).
 
 **Transitional (BUILT, P1d).** `MetaTokenBase` state is in `scaas.token`, the legs in `scaas.underlying`
 (`0x38d6f7ed…cd1000`); the rest is OpenZeppelin ERC-20 slots 0–4 only.

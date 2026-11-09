@@ -161,7 +161,8 @@ contract MandateWalletTest is MandateFixture {
         assertLt(pm, ps, "PaymentMeta before PaymentSettled");
         assertEq(logs[pm].topics[1], _ref(keccak256("pm")));
         MetaTxLib.PayMeta memory m = _meta(keccak256("pm"));
-        assertEq(logs[pm].data, abi.encode(m.payNo, m.schema, m.body));
+        assertEq(logs[pm].topics[2], m.payNo);
+        assertEq(logs[pm].data, abi.encode(m.save, m.schema, m.body));
         assertEq(t.balanceOf(npp), 700);
     }
 
@@ -597,7 +598,7 @@ contract MandateWalletTest is MandateFixture {
     function test_allowlistPinned() public view {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = w.mtxSelectors();
         bytes4[7] memory want = [IMetaTx.cancelNonce.selector,
-            bytes4(keccak256("payUnderMandate(address,bytes32,uint256,bytes32,uint64,(bytes32,string,uint16,bytes))")),
+            bytes4(keccak256("payUnderMandate(address,bytes32,uint256,bytes32,uint64,(bytes32,bytes32,bool,uint16,bytes))")),
             bytes4(keccak256("revoke(address,uint64)")),
             bytes4(keccak256("setMandate(address,bytes32,uint128,uint128,uint64,uint64)")),
             bytes4(keccak256("setPayee(address,bytes32,bool)")),

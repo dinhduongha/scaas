@@ -33,7 +33,7 @@ import {EnvKit} from "../../helpers/EnvKit.sol";
 abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     OpenFactory internal factory;
     NormalPqzToken internal normalImpl;
-    PqzLayer internal tok;
+    NormalPqzToken internal tok;
     PqzCtHarness internal ct;
     address internal registrar = address(0xF00D);
     uint256 internal constant SCALE = 10_000;
@@ -98,8 +98,8 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         );
     }
 
-    function _newToken(bytes32 s) internal returns (PqzLayer) {
-        return PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
+    function _newToken(bytes32 s) internal returns (NormalPqzToken) {
+        return NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
     }
 
     function _releaseWrapped() internal {
@@ -185,7 +185,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     /// The client's mirror of a TRIVIAL entry (D18), the merge rule computed here, not read from the token: merge into
     /// the tail when it is TRIVIAL, of this block and at an index `≥ max(floor, rolled)`, else append; the token must
     /// agree. `pend` holds "" and `triv` the amount (16.5 KB of test storage per entry would cost ≈ 11 M gas).
-    function _mirrorTrivial(PqzLayer t, bytes32 ua, uint256 amount) internal {
+    function _mirrorTrivial(NormalPqzToken t, bytes32 ua, uint256 amount) internal {
         IPqzToken.AccountState memory a = t.pqzAccount(ua, 0);
         uint256 n = pend[ua].length;
         uint256 lo = a.floor > a.rolled ? a.floor : a.rolled;
@@ -227,20 +227,20 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         return ct.sumMixed(base, cs, am);
     }
 
-    function _public(PqzLayer t, address to, uint256 units) internal {
+    function _public(NormalPqzToken t, address to, uint256 units) internal {
         NormalPqzToken(address(t)).mint(to, units);
         minted += units;
     }
 
     /// Shield `amount` from the test's public balance (a TRIVIAL entry, D18).
-    function _fund(PqzLayer t, bytes32 ua, uint256 amount) internal {
+    function _fund(NormalPqzToken t, bytes32 ua, uint256 amount) internal {
         _public(t, address(this), amount * SCALE);
         t.mtxShield(ua, amount);
         _mirrorTrivial(t, ua, amount);
     }
 
     /// A direct transfer at `p = pendingCount` (the client's rule), `shieldIn = 0`, no hint; the client's mirror.
-    function _transfer(PqzLayer t, bytes32 from, bytes32 to, bytes32 ben, uint256 seed, bool withAud)
+    function _transfer(NormalPqzToken t, bytes32 from, bytes32 to, bytes32 ben, uint256 seed, bool withAud)
         internal returns (bytes32 ref, bytes memory out)
     {
         out = _out(seed, withAud);
@@ -251,7 +251,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         if (ben != 0) feeIn[ben] += t.confidentialFee(); // txFee: the beneficiary's public balance (D19)
     }
 
-    function _payloadFor(PqzLayer t, bytes32 from, bytes32 to, bytes32 ben, bytes memory out)
+    function _payloadFor(NormalPqzToken t, bytes32 from, bytes32 to, bytes32 ben, bytes memory out)
         internal view returns (bytes memory)
     {
         bytes memory memo = t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? _memo() : bytes("");
@@ -264,14 +264,14 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     }
 
     /// Both halves of the account's `acc` words (D8), once.
-    function _prepare(PqzLayer t, bytes32 ua) internal {
+    function _prepare(NormalPqzToken t, bytes32 ua) internal {
         uint8 f = t.pqzAccount(ua, 0).flags;
         if (f & 2 == 0) t.mtxPrepareAcc(ua, 0, 0);
         if (f & 4 == 0) t.mtxPrepareAcc(ua, 0, 1);
     }
 
     /// Anyone's rollover of up to `n` entries after `ROLL_AGE` blocks; the client's mirror adds what was rolled.
-    function _roll(PqzLayer t, bytes32 ua, uint256 n) internal {
+    function _roll(NormalPqzToken t, bytes32 ua, uint256 n) internal {
         _prepare(t, ua);
         vm.roll(block.number + ROLL_AGE);
         uint256 r = t.pqzAccount(ua, 0).rolled;
@@ -280,7 +280,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     }
 
     /// D19: shields, unshields and fees move public units to / from `SHIELD_POOL`; nothing is minted or burnt.
-    function _assertConservation(PqzLayer t) internal view {
+    function _assertConservation(NormalPqzToken t) internal view {
         assertEq(t.totalSupply(), minted, "totalSupply = created");
         assertEq(t.balanceOf(MetaTxLib.SHIELD_POOL), t.totalShielded() * SCALE, "pool = totalShielded * scale");
     }
@@ -298,7 +298,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     /// @dev `executeMetaTransaction`'s binding (CTR-PQZ-21: `SCAAS-PQZ-ENVELOPE-V1` over the address `MetaTransaction`), as
     ///      a client computes it: the token has no view of it since ua-mtx-merge T5 (R36; its `envelopeBinding` is the UA
     ///      one of the merged entries).
-    function _addrBinding(PqzLayer t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
+    function _addrBinding(NormalPqzToken t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);
         return keccak256(bytes.concat(
             abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), block.chainid, t.chainUid(), address(t), m.from, m.batch),

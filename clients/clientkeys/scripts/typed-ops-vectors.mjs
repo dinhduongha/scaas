@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
-import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedData, padId, payLane, buildRelayFee, payMeta, metaPayId,
+import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedData, padId, payLane, buildRelayFee, payMeta, payNoFromUuid, metaPayId,
   EMPTY_PQZ_VERDICT,
 } from '../src/evm.js';
 import { confPublic, g1 } from '../src/zether.js';
@@ -65,8 +65,9 @@ const envelope = (op) => {
   return { batch: 7, nonce: 0, validUntil: VALID_UNTIL, mode, relayer: RELAYER, fee, feeRecipient: noFee ? '0x' + '00'.repeat(20) : FEE_TO };
 };
 const ZETHER_UA = confPublic('bls12381', 0xb0bn).UA; // `bob` of ZetherFixture
-// pay-meta-tax T41: every pay row's `entryRef` is the commitment of one `PayMeta` (its `extra.meta`, the entry's last parameter)
-const META = payMeta({ salt: hex(hash('paymeta.salt')), payNo: 'INV-2026-0042' });
+// pay-meta-tax T41: every pay row's `entryRef` is the commitment of one `PayMeta` (its `extra.meta`, the entry's last parameter);
+// plan T83: `payNo` a right-aligned UUIDv7, `save` on
+const META = payMeta({ salt: hex(hash('paymeta.salt')), payNo: payNoFromUuid('019a6e3c-5f00-7a3b-8c4d-5e6f708192a3'), save: true });
 const META_ID = metaPayId(META);
 const pay = (id, to) => {
   const entryRef = META_ID;

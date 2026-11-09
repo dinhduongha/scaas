@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {V2Fixture, BaseHarness, GasBurner1271, UID_} from "./helpers/V2Fixture.sol";
@@ -72,13 +74,13 @@ contract BaseTest is V2Fixture {
         IFactoryToken.TokenConfig memory cfg;
         // chain-neutral spec §2.1 (Fable P3-4): the implementation carries no env, refused before its lock
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
-        MetaTokenBase(impl).initialize(nid(address(this)), 1, abi.encode(cfg));
+        NormalToken(impl).initialize(nid(address(this)), 1, abi.encode(cfg));
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
         t.initialize(nid(address(this)), 1, abi.encode(cfg));
         address c = Clones.clone(impl);
         vm.prank(address(0xBAD));
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        MetaTokenBase(c).initialize(nid(address(0xBAD)), 1, abi.encode(cfg));
+        NormalToken(c).initialize(nid(address(0xBAD)), 1, abi.encode(cfg));
     }
 
     // ------------------------------------------------------------------ pipeline

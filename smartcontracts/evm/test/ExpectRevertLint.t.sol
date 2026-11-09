@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {SaltedEIP712Core} from "../src/common/SaltedEIP712.sol";
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {GovernanceRouter} from "../src/governance/GovernanceRouter.sol";
 import {SaltedEIP712} from "../src/common/SaltedEIP712.sol";
@@ -21,7 +23,7 @@ contract ExpectRevertLintTest is Test {
     /// A src contract whose constructor reverts (the router's `chain_uid` 0; chain-neutral releases moved the factory's
     /// to `configureChain`, plan T71).
     function probeTail() external {
-        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
         new GovernanceRouter(bytes32(0), address(0), address(0), false);
         revert("tail reached");
     }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {UACall} from "../ua/UACall.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
@@ -269,7 +271,11 @@ contract NamedUnwrapTest is V2Fixture {
         w.executeMetaTransaction(m, gsig);
         uint256 alias_ = vm.lastCallGas().gasTotalUsed;
         console2.log("mtxUnwrap / mtxExecute(unwrap) / executeMetaTransaction(unwrap), warm lane", named, generic, alias_);
-        assertLt(named, generic + 2_000);
+        // T66b rule 4: the generic path runs the pipeline compiled into module P; a named entry of A, W, Z or Q keeps the
+        // library call (those modules do not take the pipeline in: +3.3 to +3.4 KB each). 23955351 -> T66b 4.1: named
+        // 160,958 -> 160,749, generic 163,269 -> 154,866, alias 161,038 -> 153,462; the bound 2,000 -> 7,000 (owner
+        // 2026-11-09, T66b spec §11 (h)).
+        assertLt(named, generic + 7_000);
     }
 
     /// C1: the `UAUnwrap` row byte for byte on the C0 entry, and run under this token's domain. ua-mtx-merge T3, meaning:
@@ -445,7 +451,7 @@ contract NamedShieldZetherTest is ZetherFixture {
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0, 0, bytes32(0), false, 0);
         w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "zw")));
-        tok = ZetherLayer(address(w));
+        tok = NormalZetherToken(address(w));
         _users();
         usd.mint(signer, 100 * SCALE);
         vm.startPrank(signer);

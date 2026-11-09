@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
@@ -34,8 +36,8 @@ contract RegulatedInitTest is RegFixture {
     /// The fixture's tokens: kind 8 and 9, `controls` and `termsHash` written, kind 8's initial supply minted through the
     /// mint row (`R` with both lists off: no call).
     function test_createsKinds8And9() public view {
-        assertEq(MetaTokenBase(t8).kind(), 8);
-        assertEq(MetaTokenBase(t9).kind(), 9);
+        assertEq(NormalToken(t8).kind(), 8);
+        assertEq(NormalToken(t9).kind(), 9);
         assertEq(IERC20(t8).balanceOf(alice), SUPPLY);
         for (uint256 i; i < 2; ++i) {
             IRegulatedToken.RegulatedConfig memory c = _r(_ks()[i]).regulatedConfig();

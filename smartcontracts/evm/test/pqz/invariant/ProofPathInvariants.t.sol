@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {console2} from "forge-std/Test.sol";
 import {PqzFixture} from "../helpers/PqzFixture.sol";
 import {ProofPathHandler} from "./ProofPathHandler.t.sol";
@@ -30,7 +32,7 @@ contract ProofPathInvariantsTest is PqzFixture {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features |= uint256(1) << GovernanceBits.PQZ_PROOF;
         (c.owner, c.roles.issuer, c.lockedFeatures) = (nid(address(h)), nid(address(h)), 0);
-        tok = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "proof-path-inv"));
+        tok = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "proof-path-inv"));
         h.setToken(tok);
         _public(tok, address(h), 1_000_000 * SCALE);
         targetContract(address(h));
@@ -167,12 +169,15 @@ contract ProofPathInvariantsTest is PqzFixture {
     }
 
     /// P7: no Zether gas pin moved in 3h (the plus-zero rows as at 7558a364; layout and selectors are the Zether suite's).
+    /// The rows moved since, each with its task's old -> new (plus_zero_gas.json): T83 (ba280ade, the pay records) 86,106 /
+    /// 86,084 / 69,133 / 69,133 / 46,434 / 46,456 / 142,438 / 142,450 -> 86,128 / 86,106 / 69,133 / 69,155 / 46,434 / 46,478 /
+    /// 142,389 / 142,468; T66b (the body modules) -> the values below. The test keeps P7's claim as: these rows are the pins.
     function test_P7_zetherPinsUnchanged() public view {
         string memory j = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/plus_zero_gas.json"));
         string[8] memory k = ["mtxTransfer_normalZether", "mtxTransfer_wrappedZether", "transferToUA_normalZether",
             "transferToUA_wrappedZether", "transfer_normalZether", "transfer_wrappedZether", "uaExecuteTransfer_normalZether",
             "uaExecuteTransfer_wrappedZether"];
-        uint256[8] memory at7558 = [uint256(86106), 86084, 69133, 69133, 46434, 46456, 142438, 142450];
+        uint256[8] memory at7558 = [uint256(83689), 83667, 69104, 69104, 46440, 46462, 139389, 139446]; // T66b
         for (uint256 i; i < 8; ++i) assertEq(vm.parseJsonUint(j, string.concat(".", k[i])), at7558[i], k[i]);
     }
 }

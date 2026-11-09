@@ -19,10 +19,12 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         address path's signature rule and the UA authorization rule. The token passes its immutables in `Ctx`. `data` itself stays
 ///         in the token (owner 2026-10-21): `preCall` takes `keccak256(data)`, `preNamed` and `preNamedUA` take `args`,
 ///         the op's parameters as struct words, which they hash into the entry's struct. No state variable, no immutable,
-///         no constructor; the one slot written is the nonce of `scaas.metatx`, whose constant and struct are defined
-///         here only.
-/// @dev The check bodies are the internal functions; the external ones compose them for the tokens, and `MetaTxBase`
-///      calls the same internal functions inlined (no link), so the wallets keep their own composition (§3.7).
+///         no constructor; the slots written are the nonce of `scaas.metatx` and the pay records of `scaas.pay.records`
+///         (plan T83), whose constants and structs are defined here only.
+/// @dev The check bodies are the internal functions; the external ones compose them for the router, the wallets and
+///      the token modules other than P (each a thin wrapper of its internal twin, T66b rule 4: module P compiles the twins
+///      in), and `MetaTxBase` calls the same internal functions inlined (no link), so the wallets keep their own
+///      composition (§3.7).
 library MtxPipelineLib {
     /// @notice Fee classes of `MtxRule` (CTR-MTX-20). 0 = not allowlisted.
     uint8 internal constant FEE_CLASS_ABSOLUTE = 1;
@@ -78,24 +80,26 @@ library MtxPipelineLib {
     // keccak256(abi.encode(uint256(keccak256("scaas.metatx")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 internal constant STORAGE_SLOT = 0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00;
 
-    // ------------------------------------------------------------------ external (the tokens, by DELEGATECALL)
+    // ------------------------------------------------------------------ external (by DELEGATECALL)
+
+    // T66b rule 4 (spec 2026-11-09-t66b-library-organisation.md §4.1, §4.3): each external entry is a thin wrapper of its
+    // internal twin. A token's body module P compiles the twins in (the token-side hooks `_pipe*` of `UAMetaTxBaseCore`);
+    // the router, the wallets and every other module keep the library call.
 
     /// @notice CTR-MTX-17 steps 1-4 and the fee amount of the address path (`executeMetaTransaction`, R3): envelope
     ///         (`SelfSender`), digest, signature, call shape, nonce, fee.
     function preCall(Ctx calldata c, Envelope calldata e, CallFacts calldata f, bytes calldata sig)
         external returns (Out memory)
     {
-        return _pre(c, e, _structHash(MetaTxLib.METATX_TYPEHASH, e), f, sig);
+        return _preCall(c, e, f, sig);
     }
 
     /// @notice The same steps on an id (ua-mtx-merge, R47: a `UASig`): envelope, digest, `authorize(PURPOSE_METATX)`,
     ///         the allowlist (B: `MetaTxUnknownOp` for a derived id off `_uaAllowed`), call shape, nonce, fee.
     function preCallUA(Ctx calldata c, Envelope calldata e, CallFacts calldata f, IUARegistry.UASig calldata auth)
-        external returns (Out memory o)
+        external returns (Out memory)
     {
-        o.digest = _open(c, e, _structHash(MetaTxLib.UAMETATX_TYPEHASH, e));
-        _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
-        _close(o, e, f, true);
+        return _preCallUA(c, e, f, auth);
     }
 
     /// @notice `preCall` of a named entry (TS-D14): the same steps, the same lanes, over the entry's own struct
@@ -103,16 +107,14 @@ library MtxPipelineLib {
     function preNamed(Ctx calldata c, bytes32 typehash, Envelope calldata e, bytes calldata args, CallFacts calldata f,
         bytes calldata sig) external returns (Out memory)
     {
-        return _pre(c, e, _namedHash(typehash, e, args), f, sig);
+        return _preNamed(c, typehash, e, args, f, sig);
     }
 
     /// @notice `preNamed` on an id (TS-D14): the same steps, the `UASig` as `preCallUA`.
     function preNamedUA(Ctx calldata c, bytes32 typehash, Envelope calldata e, bytes calldata args, CallFacts calldata f,
-        IUARegistry.UASig calldata auth) external returns (Out memory o)
+        IUARegistry.UASig calldata auth) external returns (Out memory)
     {
-        o.digest = _open(c, e, _namedHash(typehash, e, args));
-        _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
-        _close(o, e, f, true);
+        return _preNamedUA(c, typehash, e, args, f, auth);
     }
 
     /// @notice CTR-MTX-23 steps 1-4 of the typed path on ids (ua-mtx-merge T2: the one typed path; the address
@@ -121,12 +123,9 @@ library MtxPipelineLib {
     ///         payer's balance, read by the token before the call. `signed` = the struct hash the signer signed when it is
     ///         not `t`'s own (`UARelayFee`, TS-D19), else 0.
     function preTransferUA(Ctx calldata c, MetaTxLib.UAMetaTransfer calldata t, bytes32 signed, uint256 have,
-        IUARegistry.UASig calldata auth) external returns (Out memory o)
+        IUARegistry.UASig calldata auth) external returns (Out memory)
     {
-        MetaTxLib.UAMetaTransfer memory m = t;
-        o.digest = _openTransfer(c, m, signed);
-        _authorize(c, m.from, UAKinds.PURPOSE_METATX, o.digest, auth);
-        _closeTransfer(c, m, have, o);
+        return _preTransferUA(c, t, signed, have, auth);
     }
 
     /// @notice The address path's signature rule (CTR-MTX-25, CTR-TOK-23).
@@ -145,27 +144,83 @@ library MtxPipelineLib {
     function callDigest(bytes32 domainSeparator, bytes32 typehash, Envelope calldata e)
         external pure returns (bytes32)
     {
-        return MessageHashUtils.toTypedDataHash(domainSeparator, _structHash(typehash, e));
+        return _callDigest(domainSeparator, typehash, e);
     }
 
     /// @notice The digest of a `UAMetaTransfer`.
     function transferDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t)
         external pure returns (bytes32)
     {
-        return MessageHashUtils.toTypedDataHash(domainSeparator, _structHash(t));
+        return _transferDigest(domainSeparator, t);
     }
 
     /// @notice The payee's digest of receiver-pays (TS-D19): `UAReceiverFee`, nesting the payer's payment.
     function receiverFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
         address feeRecipient, uint256 validUntil) external pure returns (bytes32)
     {
-        return MessageHashUtils.toTypedDataHash(domainSeparator, keccak256(abi.encode(
-            UA_RECEIVER_FEE_TYPEHASH, _structHash(t), fee, feeRecipient, validUntil)));
+        return _receiverFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
     }
 
     /// @notice The payer's struct hash of a payment with its tax (pay-meta-tax spec §5.2, lever 6): `UAPayWithTax`, nesting
     ///         the payment's canonical struct hash (an unbound relayer / fee recipient zeroed).
     function payWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax) external pure returns (bytes32) {
+        return _payWithTaxHash(t, taxMode, tax);
+    }
+
+    // ------------------------------------------------------------------ the twins (T66b rule 4)
+
+    function _preCall(Ctx memory c, Envelope memory e, CallFacts memory f, bytes calldata sig)
+        internal returns (Out memory)
+    {
+        return _pre(c, e, _structHash(MetaTxLib.METATX_TYPEHASH, e), f, sig);
+    }
+
+    function _preCallUA(Ctx memory c, Envelope memory e, CallFacts memory f, IUARegistry.UASig calldata auth)
+        internal returns (Out memory o)
+    {
+        o.digest = _open(c, e, _structHash(MetaTxLib.UAMETATX_TYPEHASH, e));
+        _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
+        _close(o, e, f, true);
+    }
+
+    function _preNamed(Ctx memory c, bytes32 typehash, Envelope memory e, bytes memory args, CallFacts memory f,
+        bytes calldata sig) internal returns (Out memory)
+    {
+        return _pre(c, e, _namedHash(typehash, e, args), f, sig);
+    }
+
+    function _preNamedUA(Ctx memory c, bytes32 typehash, Envelope memory e, bytes memory args, CallFacts memory f,
+        IUARegistry.UASig calldata auth) internal returns (Out memory o)
+    {
+        o.digest = _open(c, e, _namedHash(typehash, e, args));
+        _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
+        _close(o, e, f, true);
+    }
+
+    function _preTransferUA(Ctx memory c, MetaTxLib.UAMetaTransfer memory t, bytes32 signed, uint256 have,
+        IUARegistry.UASig calldata auth) internal returns (Out memory o)
+    {
+        o.digest = _openTransfer(c, t, signed);
+        _authorize(c, t.from, UAKinds.PURPOSE_METATX, o.digest, auth);
+        _closeTransfer(c, t, have, o);
+    }
+
+    function _callDigest(bytes32 domainSeparator, bytes32 typehash, Envelope memory e) internal pure returns (bytes32) {
+        return MessageHashUtils.toTypedDataHash(domainSeparator, _structHash(typehash, e));
+    }
+
+    function _transferDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t) internal pure returns (bytes32) {
+        return MessageHashUtils.toTypedDataHash(domainSeparator, _structHash(t));
+    }
+
+    function _receiverFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
+        address feeRecipient, uint256 validUntil) internal pure returns (bytes32)
+    {
+        return MessageHashUtils.toTypedDataHash(domainSeparator, keccak256(abi.encode(
+            UA_RECEIVER_FEE_TYPEHASH, _structHash(t), fee, feeRecipient, validUntil)));
+    }
+
+    function _payWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax) internal pure returns (bytes32) {
         return keccak256(abi.encode(UA_PAY_WITH_TAX_TYPEHASH, _structHash(t), taxMode, tax));
     }
 
@@ -297,7 +352,7 @@ library MtxPipelineLib {
     // ------------------------------------------------------------------ private
 
     /// @dev What runs before a transfer's signature: envelope, digest of `signed` (0: `m`'s own struct).
-    function _openTransfer(Ctx calldata c, MetaTxLib.UAMetaTransfer memory m, bytes32 signed)
+    function _openTransfer(Ctx memory c, MetaTxLib.UAMetaTransfer memory m, bytes32 signed)
         private view returns (bytes32)
     {
         if (_checkEnvelope(m.from, m.batch, m.nonce, m.validUntil, m.mode, m.relayer)) revert IMetaTx.SelfSender();
@@ -305,13 +360,13 @@ library MtxPipelineLib {
     }
 
     /// @dev What runs after it: receiver, fee, balance, nonce.
-    function _closeTransfer(Ctx calldata c, MetaTxLib.UAMetaTransfer memory m, uint256 have, Out memory o) private {
+    function _closeTransfer(Ctx memory c, MetaTxLib.UAMetaTransfer memory m, uint256 have, Out memory o) private {
         (o.fee, o.feeTo) = _checkTransfer(c.registry, m, have);
         _useNonce(m.from, m.batch);
     }
 
     /// @dev The steps of `preCall` and `preNamed` (address path) over either struct hash.
-    function _pre(Ctx calldata c, Envelope calldata e, bytes32 structHash, CallFacts calldata f, bytes calldata sig)
+    function _pre(Ctx memory c, Envelope memory e, bytes32 structHash, CallFacts memory f, bytes calldata sig)
         private returns (Out memory o)
     {
         o.digest = _open(c, e, structHash);
@@ -321,7 +376,7 @@ library MtxPipelineLib {
 
     /// @dev What runs before the signature: envelope, digest. No registry check (C: `_authorize` asks for one only for a
     ///      derived id).
-    function _open(Ctx calldata c, Envelope calldata e, bytes32 structHash) private view returns (bytes32) {
+    function _open(Ctx memory c, Envelope memory e, bytes32 structHash) private view returns (bytes32) {
         if (_checkEnvelope(e.from, e.batch, e.nonce, e.validUntil, e.mode, e.relayer)) revert IMetaTx.SelfSender();
         return MessageHashUtils.toTypedDataHash(c.domainSeparator, structHash);
     }
@@ -329,7 +384,7 @@ library MtxPipelineLib {
     /// @dev What runs after it: the UA allowlist (B: a derived id only; inside the self-call it is `UA_POOL`, so it may
     ///      reach `_uaAllowed` and nothing else; a native id keeps the whole `_mtxRule` list, CTR-MTX-19), call shape,
     ///      nonce, fee.
-    function _close(Out memory o, Envelope calldata e, CallFacts calldata f, bool ua) private {
+    function _close(Out memory o, Envelope memory e, CallFacts memory f, bool ua) private {
         if (ua && !UAKinds.inNativeSpace(e.from) && (f.len < 4 || !f.uaAllowed)) revert IUALedger.MetaTxUnknownOp(f.sel);
         _checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, f.supported);
         _useNonce(e.from, e.batch);
@@ -339,7 +394,7 @@ library MtxPipelineLib {
 
     /// @dev EOA, ERC-1271 (cap by the clone code hash) or, on Hedera, HIP-632 for a 64-byte signature from an address
     ///      without code (through `HederaLib`, in the token's context).
-    function _requireSignature(Ctx calldata c, address from, bytes32 digest, bytes calldata sig) private view {
+    function _requireSignature(Ctx memory c, address from, bytes32 digest, bytes calldata sig) internal view {
         if (c.hedera && sig.length == 64 && !SigCheck.isContract(from)) return HederaLib.requireValid(from, digest, sig);
         if (!SigCheck.isValid(from, digest, sig, _erc1271Gas(c, from))) revert IMetaTx.MetaTxBadSignature();
     }
@@ -348,8 +403,8 @@ library MtxPipelineLib {
     ///      `UALedgerOff` by name), then `requireAuthorized` under `purpose`. A native id (whatever the purpose): no
     ///      registry call (B); R17: `signature` only, a `keyData` or `members` is refused, not ignored; then
     ///      `_authorizeNative`.
-    function _authorize(Ctx calldata c, bytes32 from, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata auth)
-        private view
+    function _authorize(Ctx memory c, bytes32 from, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata auth)
+        internal view
     {
         if (!UAKinds.inNativeSpace(from)) {
             if (c.registry == address(0)) revert IUALedger.UALedgerOff();
@@ -361,7 +416,7 @@ library MtxPipelineLib {
 
     /// @dev 0 and the pools refused (C5-2, C5-3), then CTR-UA-24 (`SigCheck.isValid`) or HIP-632 on Hedera.
 
-    function _authorizeNative(Ctx calldata c, bytes32 from, bytes32 digest, bytes calldata auth) private view {
+    function _authorizeNative(Ctx memory c, bytes32 from, bytes32 digest, bytes calldata auth) private view {
         address a = address(uint160(uint256(from)));
         if (a == address(0)) revert IUALedger.UANotRegistered(from);
         if (a == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
@@ -376,7 +431,7 @@ library MtxPipelineLib {
         return address(uint160(uint256(id)));
     }
 
-    function _erc1271Gas(Ctx calldata c, address from) private view returns (uint256) {
+    function _erc1271Gas(Ctx memory c, address from) private view returns (uint256) {
         bytes32 h = c.skaCloneCodehash;
         return h != bytes32(0) && from.codehash == h ? SMART_KEY_1271_GAS : SigCheck.ERC1271_GAS;
     }
@@ -387,18 +442,83 @@ library MtxPipelineLib {
 
     // ------------------------------------------------------------------ the pay entries' metadata (pay-meta-tax spec §3)
 
-    /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v2`.
-    function metaPayId(MetaTxLib.PayMeta calldata m) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked("scaas.pay.meta.v2", m.salt, keccak256(abi.encode(m.payNo, m.schema, m.body))));
+    /// @custom:storage-location erc7201:scaas.pay.records
+    /// @dev Plan T83 (owner 2026-11-09): the stored payments of each `payNo`, per token, appended by a public pay entry
+    ///      whose `PayMeta.save` is set; never removed, never summed.
+    struct PayRecordStorage {
+        mapping(bytes32 payNo => MetaTxLib.PayRecord[]) records;
     }
 
-    /// @notice Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, `payNo` at most 256 bytes,
+    // keccak256(abi.encode(uint256(keccak256("scaas.pay.records")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 internal constant PAY_RECORDS_SLOT = 0x51f719d8931af2fa9a126c65fc0e6dd2bb24ee24e9808e19427ae58097f31a00;
+
+    /// @notice CTR-MTX-26 (spec §3.1, plan T83): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v3`
+    ///         (`payNo` a `bytes32`, `save` committed).
+    function metaPayId(MetaTxLib.PayMeta calldata m) public pure returns (bytes32) {
+        return _metaPayId(m);
+    }
+
+    /// @dev The twins of the pay entries (T66b rule 4): module P compiles them in.
+    function _metaPayId(MetaTxLib.PayMeta calldata m) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked("scaas.pay.meta.v3", m.salt,
+            keccak256(abi.encode(m.payNo, m.save, m.schema, m.body))));
+    }
+
+    /// @notice Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, no `save` without a `payNo`,
     ///         `entryRef == metaPayId(m)`; then `PaymentMeta` (under `DELEGATECALL`: the token's log). Writes nothing.
     function payMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m) public {
-        if (m.salt == 0 || (m.schema == 0) != (m.body.length == 0)) revert IMetaTokenV2.PayMetaShape();
-        if (bytes(m.payNo).length > 256) revert IMetaTokenV2.PayNoTooLong(bytes(m.payNo).length);
-        bytes32 id = metaPayId(m);
+        _payMeta(entryRef, m);
+    }
+
+    function _payMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m) internal {
+        if (m.salt == 0 || (m.schema == 0) != (m.body.length == 0) || (m.save && m.payNo == 0)) {
+            revert IMetaTokenV2.PayMetaShape();
+        }
+        bytes32 id = _metaPayId(m);
         if (entryRef != id) revert IMetaTokenV2.PayMetaMismatch(entryRef, id);
-        emit IMetaTokenV2.PaymentMeta(id, m.payNo, m.schema, m.body);
+        emit IMetaTokenV2.PaymentMeta(id, m.payNo, m.save, m.schema, m.body);
+    }
+
+    /// @notice Plan T83: appends `(to, amount, block.number)` to `payNo`'s records, after the transfer (the pay entry calls
+    ///         it last, only with `save`); `amount` is what `to` received; `amount >= 2^192` reverts `PayRecordAmount`
+    ///         (fail closed).
+    function payRecord(bytes32 payNo, bytes32 to, uint256 amount) public {
+        _payRecord(payNo, to, amount);
+    }
+
+    function _payRecord(bytes32 payNo, bytes32 to, uint256 amount) internal {
+        if (amount > type(uint192).max) revert IMetaTokenV2.PayRecordAmount(amount);
+        _payRecords().records[payNo].push(MetaTxLib.PayRecord(to, uint192(amount), uint64(block.number)));
+    }
+
+    /// @notice The number of `payNo`'s records.
+    function paymentCount(bytes32 payNo) public view returns (uint256) {
+        return _paymentCount(payNo);
+    }
+
+    function _paymentCount(bytes32 payNo) internal view returns (uint256) {
+        return _payRecords().records[payNo].length;
+    }
+
+    /// @notice Records `[offset, offset + limit)` of `payNo`, cut at the end; empty from the end on.
+    function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
+        public view returns (MetaTxLib.PayRecord[] memory)
+    {
+        return _paymentsOf(payNo, offset, limit);
+    }
+
+    function _paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
+        internal view returns (MetaTxLib.PayRecord[] memory page)
+    {
+        MetaTxLib.PayRecord[] storage r = _payRecords().records[payNo];
+        uint256 n = r.length;
+        if (offset >= n) return page;
+        uint256 end = n - offset > limit ? offset + limit : n;
+        page = new MetaTxLib.PayRecord[](end - offset);
+        for (uint256 i; i < page.length; ++i) page[i] = r[offset + i];
+    }
+
+    function _payRecords() internal pure returns (PayRecordStorage storage $) {
+        assembly ("memory-safe") { $.slot := PAY_RECORDS_SLOT }
     }
 }

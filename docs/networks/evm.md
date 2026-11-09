@@ -320,6 +320,29 @@ disclosure view (`SENDER_S`), and on a `WRAPPED_ZETHER` token over a test ERC-20
 prints gasUsed per transaction from the receipts.
 Integration tests use `anvil --hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536` (`scaas-node/tests/e2e.rs`, `e2e_hedera.rs`: neither deploys a kind above 64 KiB) and `--code-size-limit 131072` (`scripts/e2e-zether.sh`, the limit of the SCaaS testnet's next reset), each at the SCaaS testnet's 200 M block gas limit ([NET-EVM-06](#NET-EVM-06)); owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there.
 
+<a id="body-module-releases"></a>**Operator note: releases with body modules** (T66b, [CTR-TOK-30](../contracts/token-wrappers.md#CTR-TOK-30);
+BUILT on branch `ua-mtx-merge`, UNAUDITED).
+
+- **Deploy order.** The registry trio first: `UARegistryCoreLib`, then `UARegistryAuxLib` (it links the core), then
+  `UARegistry` (it names both). Then per release: its libraries, its body modules, each its own CREATE2 transaction through
+  the deterministic deployer with `DEPLOY_SALT` and its own gate (a module already at its address is reused), the env with
+  the modules pinned after the libraries, then the implementation through `deployImplementation`; the DEX the same, its
+  admin module D first, then `deployDexImplementation`. `DeployBase`, `deploy.sh evm` and `script/pqz/e2e.py` follow it.
+- **`releases.json`** gets a row per module: class 0 (no factory class), the token kind (0 for the DEX's D), version 1, its
+  address, the init-code hash and the hash of its constructor arguments. A module holds no chain value and has no
+  `chainUid()`: it lands at the same address on every chain, and its code hash is the release's pin.
+- **Gas per transaction.** Every contract deploys in one transaction of at most 60 M asked (`(regular + state) × 1.05`,
+  regular × 1.05 < 2^24): the largest are `UARegistryCoreLib` 56.64 M, `SCaaSDex` 55.70 M and the module `NormalPqzRegulatedTokenQ`
+  54.76 M; a token release asks 23.53–47.02 M plus the factory frame of 0.31 M (93 contracts in all, the table in
+  `smartcontracts/evm/runs/2026-11-09-ua-mtx-merge-t66b-build/summary.txt`).
+- **The relayer's gas share.** A relayed op crosses more call frames (a PQZ op: clone, implementation, P, the self-call,
+  clone, implementation, Q, its library, the precompile: 7 frames against 5), and each frame keeps 1/64 of the gas it passes
+  on, about 10.4 % of the gas sent against 7.6 % before. A relayer that sets its limit from `eth_estimateGas` changes nothing;
+  a figure hard-coded for an op grows by about 3 %. The node reads nothing from `releases.json` and filters every log by the
+  configured contract addresses, so a module body run under another contract's `DELEGATECALL` (its log carries that
+  contract's address) is never taken for a token's.
+
+
 Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version deployed by the factory
 plus a voluntary migration.
@@ -410,13 +433,13 @@ state a pruned node lacks. Topology, enodes, start / stop order and recovery: [R
 
 Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
 
-Mermaid, the relay-fee flow (`MtxRelayFee.relay`, one transaction, all or nothing):
+Mermaid, the relay-fee flow (`RelayFeeRouter.relay`, one transaction, all or nothing):
 
 ```mermaid
 sequenceDiagram
   participant R as Relayer
-  participant F as MtxRelayFee (router)
-  participant X as MtxRelayExecutor
+  participant F as RelayFeeRouter
+  participant X as RelayFeeExecutor
   participant T as Target
   participant K as Token
   R->>F: relay(target, callData, token, t, sig)
@@ -432,7 +455,7 @@ sequenceDiagram
   then exactly `mtxPay` / `uaPay` (lane `payLane(payId)`, nonce 0). `meta` is hashed and logged, never parsed. Body encodings
   (schemas 1-3) and the shared vectors `smartcontracts/vectors/metatx/paymeta.json`: decisions CTR-MTX-26 (T7 fix 1). The
   contract has no length cap; the node caps by policy (`max_pay_meta_bytes`, 2,048).
-- **Relay fee.** `src/metatx/MtxRelayFee.sol` (router) and its one-shot `MtxRelayExecutor`, deployed by `DeployBase` CREATE2;
+- **Relay fee.** `src/metatx/RelayFeeRouter.sol` (router) and its one-shot `RelayFeeExecutor`, deployed by `DeployBase` CREATE2;
   `relay` (address payer) and `uaRelay` (UA payer). The router refuses `t.to == EXECUTOR` (UA: `pad(EXECUTOR)`), a target with
   no code or an EIP-7702 designator (`RelayTargetNoCode`), and re-entry (a transient flag); it holds no balance after a call. `RelayFeePaid.payee` is
   `bytes32`. Clients: never pay or approve the executor; if the inner call is an mtx envelope with `MODE_RESTRICT_RELAYER`,
@@ -442,7 +465,7 @@ sequenceDiagram
   `MetaTxGasV2` rows (+8.9 k `unwrap`; cancel 0), data-size bound 7.9-9.1 k small and 8.9-11.5 k largest envelope
   (`runs/2026-10-27-metatx-split-overhead.txt`). Node: `guard::erc1271_floor(len)` for a contract signer.
 - **UA payers in the node** (BUILT, node-ua-jobs 2026-10-30): the `ua_metatx` job kind relays `uaExecute`,
-  `uaExecuteTransfer` and `uaPayMeta`; `MtxRelayFee.uaRelay` is a `call` job with its own call-table row, priced at
+  `uaExecuteTransfer` and `uaPayMeta`; `RelayFeeRouter.uaRelay` is a `call` job with its own call-table row, priced at
   `params.relay_fee.min_wei_value` against the quote (gas limit × 2 × the first max fee per gas, + the L1 data fee on an
   OP-stack chain with `params.l1_fee = "op-stack"`, e.g. Base and Celo); the indexer reads `UAPaymentSettled` as a
   `PaymentSettled` row, a derived UA as `UA_POOL` + `from_ua` / `to_ua` ([job-api.md](../node/job-api.md#paymeta-relayfee-jobs)).

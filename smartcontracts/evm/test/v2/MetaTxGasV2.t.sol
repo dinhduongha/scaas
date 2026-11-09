@@ -171,7 +171,7 @@ contract MetaTxGasV2Test is Test {
 
     function _cool(address t) internal {
         vm.cool(t);
-        vm.cool(MetaTokenBase(t).implementation());
+        vm.cool(NormalToken(t).implementation());
         vm.cool(signer);
         vm.cool(relayer);
         vm.cool(recipient);
@@ -260,6 +260,39 @@ contract MetaTxGasV2Test is Test {
         // no longer holds on `ERC20MetaTx` (mtxPay ≈ +2.6k over mtxExecuteTransfer on a fresh lane: the PAYABLE gate's cold SLOAD): logged, not asserted
         emit log_named_uint("P mtxPay", gn);
         emit log_named_uint("P mtxExecuteTransfer", g2);
+    }
+
+    /// Plan T83 (owner 2026-11-09): `mtxPay` on a fresh lane with a `payNo` (a right-aligned UUIDv7), `save` off; `save` on,
+    /// the first payment of the `payNo` (three new slots: the length and the record's two words); `save` on, a later one
+    /// (the length warm-written, two new slots). Logged, not asserted (the old figure is the commit's).
+    function test_gasP_paySave_logOnly() public {
+        bytes32 no = bytes32(uint256(0x019a6e3c5f007a3b8c4d5e6f708192a3));
+        uint256[3] memory g;
+        for (uint256 k; k < 3; ++k) {
+            MetaTxLib.PayMeta memory m = PayMetaKit.saved(keccak256(abi.encode("gas.save", k)), no);
+            m.save = k != 0;
+            if (k == 2) {
+                MetaTxLib.PayMeta memory first = PayMetaKit.saved("gas.save.first", no);
+                MetaTxLib.UAMetaTransfer memory y = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, 0, 0, 0, address(0));
+                (y.entryRef, y.batch) = (PayMetaKit.id(first), 77);
+                IUARegistry.UASig memory ya = _sigT(address(v2), y);
+                vm.prank(relayer);
+                v2.mtxPay(y, ya, first);
+                assertEq(v2.paymentCount(no), 1);
+            }
+            MetaTxLib.UAMetaTransfer memory x = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, 0, 0, 0, address(0));
+            x.entryRef = PayMetaKit.id(m);
+            x.batch = v2.payLane(x.entryRef);
+            bytes memory cn = abi.encodeWithSelector(v2.mtxPay.selector, x, _sigT(address(v2), x), m);
+            uint256 s = _snap();
+            g[k] = _measure(address(v2), cn);
+            assertEq(v2.paymentCount(no), k == 0 ? 0 : k);
+            vm.revertToState(s);
+        }
+        console.log("P mtxPay with payNo: save off / save first / save later", g[0], g[1], g[2]);
+        emit log_named_uint("P mtxPay save off", g[0]);
+        emit log_named_uint("P mtxPay save first", g[1]);
+        emit log_named_uint("P mtxPay save later", g[2]);
     }
 
     function test_gasH_cancel() public {

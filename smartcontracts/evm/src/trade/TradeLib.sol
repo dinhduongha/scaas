@@ -105,6 +105,11 @@ library TradeLib {
     /// @notice EIP-712 struct hash of the cancel of a token's order: the nested struct the order was signed in (TS-D19).
     ///         A library call: a rare path, and two type strings the tokens need not carry.
     function cancelHash(ITradeToken.UATradeOrder memory c) public pure returns (bytes32) {
+        return _cancelHash(c);
+    }
+
+    /// @dev The body of `cancelHash` (T66b rule 4): a token's module T compiles it in; `cancelHash` is the DEX's library call.
+    function _cancelHash(ITradeToken.UATradeOrder memory c) internal pure returns (bytes32) {
         bytes32 t = c.dex == c.receiveToken ? CANCEL_UA_WRAP_ORDER_TYPEHASH : CANCEL_UA_ORDER_TYPEHASH;
         return keccak256(abi.encode(t, orderHash(c)));
     }
@@ -129,6 +134,13 @@ library TradeLib {
     function precheck(ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f, bytes32 h, address caller,
         address token) public view
     {
+        _precheck(o, f, h, caller, token);
+    }
+
+    /// @dev The body of `precheck` (T66b rule 4): a token's module T compiles it in; `precheck` is the DEX's library call.
+    function _precheck(ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f, bytes32 h, address caller,
+        address token) internal view
+    {
         if (caller != o.dex) revert ITradeToken.NotDex(caller);
         if (!SigCheck.isContract(o.dex)) revert ITradeToken.DexNotContract(o.dex);
         if (o.from == pad(token) || o.dex == token) revert ITradeToken.SelfOrder(h);
@@ -148,6 +160,13 @@ library TradeLib {
     /// @return move the amount the token transfers from `o.from` to `o.dex`
     function record(ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f, bytes32 h, bool ua)
         public returns (uint256 move)
+    {
+        return _record(o, f, h, ua);
+    }
+
+    /// @dev The body of `record` (T66b rule 4): a token's module T compiles it in; `record` is the DEX's library call.
+    function _record(ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f, bytes32 h, bool ua)
+        internal returns (uint256 move)
     {
         TradeStorage storage s = $();
         uint256 p = s.pulled[h];
@@ -184,6 +203,11 @@ library TradeLib {
     ///         transaction (a hybrid's refunded leftover): `pulled[h]` is lower by it, fillable again. An IOC order stays
     ///         closed (`OrderClosed`).
     function restore(ITradeToken.UATradeOrder memory o, bytes32 h, uint256 amount, address caller) public {
+        _restore(o, h, amount, caller);
+    }
+
+    /// @dev The body of `restore` (T66b rule 4): a token's module T compiles it in; `restore` is the DEX's library call.
+    function _restore(ITradeToken.UATradeOrder memory o, bytes32 h, uint256 amount, address caller) internal {
         if (caller != o.dex) revert ITradeToken.NotDex(caller);
         if (o.flags & IOC != 0) revert ITradeToken.OrderClosed(h);
         bytes32 t = _inTx(h);
@@ -198,6 +222,11 @@ library TradeLib {
     /// @notice After the cancel's signature: closed forever; an already closed order is a no-op. Either way this
     ///         transaction's pulls can no longer be restored (DX7).
     function cancel(bytes32 h, uint256 amount, bytes32 from, bool ua) public {
+        _cancel(h, amount, from, ua);
+    }
+
+    /// @dev The body of `cancel` (T66b rule 4): a token's module T compiles it in; `cancel` is the DEX's library call.
+    function _cancel(bytes32 h, uint256 amount, bytes32 from, bool ua) internal {
         bytes32 t = _inTx(h);
         assembly ("memory-safe") { tstore(t, 0) }
         TradeStorage storage s = $();
@@ -209,6 +238,11 @@ library TradeLib {
 
     /// @notice After the `InvalidateNonces` / `UAInvalidateNonces` signature: strictly increasing, capped at `2^128`.
     function invalidate(bytes32 from, uint256 batch, uint256 newMin, bool ua) public {
+        _invalidate(from, batch, newMin, ua);
+    }
+
+    /// @dev The body of `invalidate` (T66b rule 4): a token's module T compiles it in; `invalidate` is the DEX's library call.
+    function _invalidate(bytes32 from, uint256 batch, uint256 newMin, bool ua) internal {
         TradeStorage storage s = $();
         uint256 cur = s.minNonce[from][batch];
         if (newMin <= cur) revert ITradeToken.MinNonceNotIncreasing(cur, newMin);

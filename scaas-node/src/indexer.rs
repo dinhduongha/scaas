@@ -9,7 +9,7 @@ use alloy::sol_types::SolEvent;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::abi::{IGovernance, IMtxRelayFee, IPqzEvents, IPqzToken, IRegulatedToken, IToken, IUALedger, IUARegistry};
+use crate::abi::{IGovernance, IPqzEvents, IPqzToken, IRegulatedToken, IRelayFeeRouter, IToken, IUALedger, IUARegistry};
 use crate::chain::Chain;
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
@@ -62,11 +62,14 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["amount"] = json!(e.value.to_string());
     } else if topic0 == IToken::PaymentMeta::SIGNATURE_HASH {
         // joined to its PaymentSettled, never sent alone (`join_pay_events`)
-        // pay-meta-tax spec §3.2: named fields (the old `PaymentMeta(bytes32, bytes)` is in legacy/ua-mtx-merge/3e/indexer.rs)
+        // pay-meta-tax spec §3.2: named fields (the old `PaymentMeta(bytes32, bytes)` is in legacy/ua-mtx-merge/3e/indexer.rs);
+        // plan T83: `pay_no` the indexed `bytes32` as 0x-hex (0 = none; the v2 text form in legacy/ua-mtx-merge/t83/indexer.rs),
+        // `meta_save` whether the token stored the payment's record (`paymentsOf(pay_no)`)
         let e = log.log_decode::<IToken::PaymentMeta>().ok()?.inner.data;
         v["event"] = json!("PaymentMeta");
         v["entry_ref"] = json!(format!("{:#x}", e.payId));
-        v["pay_no"] = json!(e.payNo);
+        v["pay_no"] = json!(format!("{:#x}", e.payNo));
+        v["meta_save"] = json!(e.save);
         v["meta_schema"] = json!(e.schema);
         v["meta_body"] = json!(format!("0x{}", alloy::hex::encode(&e.body)));
     } else if topic0 == crate::abi::IRegulatedToken::PaymentTaxed::SIGNATURE_HASH {
@@ -100,8 +103,8 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["digest"] = json!(format!("{:#x}", e.digest));
         v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
         v["fee"] = json!(e.fee.to_string());
-    } else if topic0 == IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH {
-        let e = log.log_decode::<IMtxRelayFee::RelayFeePaid>().ok()?.inner.data;
+    } else if topic0 == IRelayFeeRouter::RelayFeePaid::SIGNATURE_HASH {
+        let e = log.log_decode::<IRelayFeeRouter::RelayFeePaid>().ok()?.inner.data;
         v["event"] = json!("RelayFeePaid");
         v["entry_ref"] = json!(format!("{:#x}", e.r#ref));
         v["target"] = json!(format!("{:#x}", e.target));
@@ -422,7 +425,7 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
         if let Some(j) = j {
             taken[j] = true;
             // EVM: the named fields (spec §3.2); the non-EVM families' decoders keep `meta` hex until their round (spec §8)
-            for k in ["meta", "pay_no", "meta_schema", "meta_body"].into_iter().filter(|k| !m[*k].is_null()) {
+            for k in ["meta", "pay_no", "meta_save", "meta_schema", "meta_body"].into_iter().filter(|k| !m[*k].is_null()) {
                 events[j][k] = m[k].clone();
             }
         }
@@ -484,7 +487,7 @@ pub fn pay_filter_with(from: u64, to: u64, addrs: &mut Vec<Address>, router: Opt
         IToken::MetaTransactionExecuted::SIGNATURE_HASH,
         IToken::PaymentMeta::SIGNATURE_HASH,
         crate::abi::IRegulatedToken::PaymentTaxed::SIGNATURE_HASH,
-        IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH,
+        IRelayFeeRouter::RelayFeePaid::SIGNATURE_HASH,
         IUALedger::UAPaymentSettled::SIGNATURE_HASH,
         IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH,
     ];
@@ -496,7 +499,7 @@ pub fn pay_filter_with(from: u64, to: u64, addrs: &mut Vec<Address>, router: Opt
 
 /// `pay_filter`'s logs ⇒ Odoo's events: a `RelayFeePaid` only from the router, a token event only from a token.
 pub fn pay_events(logs: &[Log], router: Option<Address>) -> Vec<Value> {
-    let rf = IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH;
+    let rf = IRelayFeeRouter::RelayFeePaid::SIGNATURE_HASH;
     let ours = |l: &&Log| (l.topic0() == Some(&rf)) == (Some(l.address()) == router);
     join_pqz_verified(join_pay_events(logs.iter().filter(ours).filter_map(encode_event).collect()))
 }
@@ -793,8 +796,9 @@ mod tests {
         let (p, r) = (B256::repeat_byte(4), B256::repeat_byte(5));
         let settled = |from: Address, to: Address, amount: u64, entry_ref: B256| IToken::PaymentSettled { from, to,
             amount: U256::from(amount), feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: entry_ref }.encode_log_data();
-        let meta = IToken::PaymentMeta { payId: p, payNo: "INV-1".into(), schema: 1, body: vec![0xab, 0xcd].into() }.encode_log_data();
-        let fee_by = |token: Address, payer: Address, amount: u64| IMtxRelayFee::RelayFeePaid { r#ref: r, target: shop, token,
+        let no = B256::left_padding_from(&[0x01, 0x9a, 0x6e, 0x3c, 0x5f, 0x00, 0x7a, 0x3b, 0x8c, 0x4d, 0x5e, 0x6f, 0x70, 0x81, 0x92, 0xa3]);
+        let meta = IToken::PaymentMeta { payId: p, payNo: no, save: true, schema: 1, body: vec![0xab, 0xcd].into() }.encode_log_data();
+        let fee_by = |token: Address, payer: Address, amount: u64| IRelayFeeRouter::RelayFeePaid { r#ref: r, target: shop, token,
             payer: payer.into_word(), payee: Address::repeat_byte(0x1a).into_word(), amount: U256::from(amount) }.encode_log_data();
         let fee = |token: Address, amount: u64| fee_by(token, alice, amount);
         let logs = vec![
@@ -828,7 +832,8 @@ mod tests {
         let with_meta: Vec<(&str, u64)> = out.iter().filter(|v| !v["meta_body"].is_null())
             .map(|v| (v["tx_hash"].as_str().unwrap(), v["log_index"].as_u64().unwrap())).collect();
         assert_eq!(with_meta, [(format!("{:#x}", B256::repeat_byte(1)).as_str(), 2)], "only the payment right after its meta");
-        assert_eq!((out[1]["meta_body"].as_str(), out[1]["pay_no"].as_str(), out[1]["meta_schema"].as_u64()), (Some("0xabcd"), Some("INV-1"), Some(1)));
+        assert_eq!((out[1]["meta_body"].as_str(), out[1]["meta_schema"].as_u64(), out[1]["meta_save"].as_bool()), (Some("0xabcd"), Some(1), Some(true)));
+        assert_eq!(out[1]["pay_no"], "0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3", "plan T83: the bytes32, 0x-hex");
         assert_eq!(out[1]["from"], format!("{alice:#x}"));
         let relayed: Vec<&str> = out.iter().filter(|v| !v["relay_payee"].is_null()).map(|v| v["tx_hash"].as_str().unwrap()).collect();
         assert_eq!(relayed, [format!("{:#x}", B256::repeat_byte(4))], "the expected token's payment, same (from, ref), amount and payee or router");
@@ -891,8 +896,8 @@ mod tests {
         assert_eq!(crate::metatx::ua_pool(), Address::from_word(alloy::primitives::keccak256("scaas.ua.pool.v1")), "MetaTxLib.UA_POOL");
         let settled = |from: B256, to: B256, amount: u64, entry_ref: B256| IUALedger::UAPaymentSettled { from, to,
             amount: U256::from(amount), feeAmount: U256::from(1u64), feeRecipient: lane, entryRef: entry_ref }.encode_log_data();
-        let meta = IToken::PaymentMeta { payId: p, payNo: String::new(), schema: 1, body: vec![0xab].into() }.encode_log_data();
-        let fee = |payer: B256, payee: B256| IMtxRelayFee::RelayFeePaid { r#ref: r, target: token, token, payer, payee,
+        let meta = IToken::PaymentMeta { payId: p, payNo: B256::ZERO, save: false, schema: 1, body: vec![0xab].into() }.encode_log_data();
+        let fee = |payer: B256, payee: B256| IRelayFeeRouter::RelayFeePaid { r#ref: r, target: token, token, payer, payee,
             amount: U256::from(5u64) }.encode_log_data();
         let exec = IUALedger::UAMetaTransactionExecuted { from: ua, relayer: lane, batch: U256::from(7u64), nonce: U256::ZERO,
             digest: B256::repeat_byte(0xd1), feeRecipient: lane, fee: U256::from(1u64) }.encode_log_data();
@@ -962,10 +967,10 @@ mod tests {
         let settled = |to: Address, amount: u64, entry_ref: B256| IUALedger::UAPaymentSettled { from: eoa.into_word(), to: to.into_word(),
             amount: U256::from(amount), feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: entry_ref }.encode_log_data();
         let logs = vec![
-            log_at(token, 1, 0, IToken::PaymentMeta { payId: p, payNo: String::new(), schema: 1, body: vec![0xab].into() }.encode_log_data()),
+            log_at(token, 1, 0, IToken::PaymentMeta { payId: p, payNo: B256::ZERO, save: false, schema: 1, body: vec![0xab].into() }.encode_log_data()),
             log_at(token, 1, 1, settled(shop, 100, p)),
             log_at(token, 2, 0, settled(router, 5, r)),
-            log_at(router, 2, 1, IMtxRelayFee::RelayFeePaid { r#ref: r, target: shop, token, payer: eoa.into_word(), payee: lane.into_word(),
+            log_at(router, 2, 1, IRelayFeeRouter::RelayFeePaid { r#ref: r, target: shop, token, payer: eoa.into_word(), payee: lane.into_word(),
                 amount: U256::from(5u64) }.encode_log_data()),
         ];
         let out = pay_events(&logs, Some(router));

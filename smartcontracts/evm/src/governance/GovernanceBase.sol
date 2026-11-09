@@ -25,7 +25,7 @@ library GovernanceUse {
 ///        over `GovernanceLib`, the masks of compile-time constants, nothing of its own in storage. Every power runs
 ///        through `GovernanceUse.use`; `hasRole` is a view (listed, not able to act). Every identity is a UA id
 ///        (`bytes32`, CTR-GOV-01 Change, owner 2026-11-04), and `_govSubject()` names the caller.
-abstract contract GovernanceBase is IGovernance {
+abstract contract GovernanceBaseCore {
     /// @dev This chain's router, a constructor immutable; 0 on a factory-made contract, which reads its clone's code.
     address private immutable _GOV_ROUTER;
 
@@ -36,7 +36,7 @@ abstract contract GovernanceBase is IGovernance {
     /// @notice This chain's `GovernanceRouter` (0 = none on this chain): a call from it acts for the UA it authenticated
     ///         (spec `2026-11-04-governance-ua-identity.md` §2). Factory-made: the instance's `ChainEnv.govRouter`, from its
     ///         clone's code (CTR-TOK-29; the name of the immutable it was).
-    function GOV_ROUTER() external view returns (address) {
+    function _GOV_ROUTERBody() internal view returns (address) {
         return _govRouter();
     }
 
@@ -87,53 +87,145 @@ abstract contract GovernanceBase is IGovernance {
         return parent == child;
     }
 
-    function features() external view returns (uint256) { return GovernanceLib.$().features; }
-    function lockedFeatures() external view returns (uint256) { return GovernanceLib.$().lockedFeatures; }
-    function owner() external view returns (bytes32) { return GovernanceLib.$().owner; }
-    function pendingOwner() external view returns (bytes32) { return GovernanceLib.$().pendingOwner; }
-    function hasRole(uint8 bit, bytes32 account) external view returns (bool) { return GovernanceLib.hasRole(bit, account); }
-    function validBits() external pure returns (uint256) { return _validBits(); }
-    function holderCount(uint8 bit) external view returns (uint256) { return GovernanceLib.$().counts[bit].holders; }
-    function grantDelay() external view returns (uint64) { return GovernanceLib.$().grantDelay; }
-    function lastProposedAt() external view returns (uint64) { return GovernanceLib.$().lastProposedAt; }
-    function pendingGrant(uint8 bit, bytes32 account) external view returns (uint64, bytes32, bytes32, bool) {
+    function _featuresBody() internal view returns (uint256) { return GovernanceLib.$().features; }
+    function _lockedFeaturesBody() internal view returns (uint256) { return GovernanceLib.$().lockedFeatures; }
+    function _ownerBody() internal view returns (bytes32) { return GovernanceLib.$().owner; }
+    function _pendingOwnerBody() internal view returns (bytes32) { return GovernanceLib.$().pendingOwner; }
+    function _hasRoleBody(uint8 bit, bytes32 account) internal view returns (bool) { return GovernanceLib.hasRole(bit, account); }
+    function _validBitsBody() internal pure returns (uint256) { return _validBits(); }
+    function _holderCountBody(uint8 bit) internal view returns (uint256) { return GovernanceLib.$().counts[bit].holders; }
+    function _grantDelayBody() internal view returns (uint64) { return GovernanceLib.$().grantDelay; }
+    function _lastProposedAtBody() internal view returns (uint64) { return GovernanceLib.$().lastProposedAt; }
+    function _pendingGrantBody(uint8 bit, bytes32 account) internal view returns (uint64, bytes32, bytes32, bool) {
         return GovernanceLib.pendingGrant(bit, account);
     }
-    function grantOf(uint8 bit, bytes32 holder) external view returns (Grant memory) {
+    function _grantOfBody(uint8 bit, bytes32 holder) internal view returns (IGovernance.Grant memory) {
         return GovernanceLib.$().grants[bit][holder];
     }
 
     /// @notice Bits 128-255 only (CTR-GOV-10); a contract with no application bit answers with a refusal.
-    function bitLabel(uint8 bit) external view virtual returns (BitType, bytes4, string memory) {
-        revert FeatureInvalidForKind(bit);
+    function _bitLabelBody(uint8 bit) internal view virtual returns (IGovernance.BitType, bytes4, string memory) {
+        revert IGovernance.FeatureInvalidForKind(bit);
     }
 
-    function grantRole(uint8 bit, bytes32 account) external governed {
+    function _grantRoleBody(uint8 bit, bytes32 account) internal {
         GovernanceLib.grantRole(bit, account, _govSubject(), _roleBits(), _contractOnlyBits(), _uaRegistry());
     }
     /// @notice The owner sets any holder's grant, a widening in two calls (spec §1.6); a holder with a `delegable` grant sets
     ///         a narrower leaf at once. Spent is carried.
-    function setGrant(uint8 bit, bytes32 holder, GrantTerms calldata terms) external governed {
+    function _setGrantBody(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) internal {
         (bool leaf, bytes32 parentScope) = GovernanceLib.setGrant(bit, holder, terms, _govSubject(), _roleBits(),
             _contractOnlyBits(), _scalarBits(), _scopeBits(), _uaRegistry(), _delayedRelaxBits());
-        if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert GrantNotNarrower(7);
+        if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert IGovernance.GrantNotNarrower(7);
     }
 
-    function cancelGrant(uint8 bit, bytes32 account) external governed {
+    function _cancelGrantBody(uint8 bit, bytes32 account) internal {
         GovernanceLib.cancelGrant(bit, account, _govSubject());
     }
-    function revokeRole(uint8 bit, bytes32 account) external governed {
+    function _revokeRoleBody(uint8 bit, bytes32 account) internal {
         GovernanceLib.revokeRole(bit, account, _govSubject(), _delayedRelaxBits());
     }
-    function renounceRole(uint8 bit) external governed {
+    function _renounceRoleBody(uint8 bit) internal {
         GovernanceLib.renounceRole(bit, _govSubject(), _delayedRelaxBits());
     }
-    function disableFeature(uint8 bit) external virtual governed {
+    function _disableFeatureBody(uint8 bit) internal virtual {
         GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
     }
-    function transferOwnership(bytes32 newOwner) external governed {
+    function _transferOwnershipBody(bytes32 newOwner) internal {
         GovernanceLib.transferOwnership(newOwner, _govSubject());
     }
-    function acceptOwnership() external governed { GovernanceLib.acceptOwnership(_govSubject()); }
-    function renounceOwnership() external governed { GovernanceLib.renounceOwnership(_govSubject(), _roleBits()); }
+    function _acceptOwnershipBody() internal { GovernanceLib.acceptOwnership(_govSubject()); }
+    function _renounceOwnershipBody() internal { GovernanceLib.renounceOwnership(_govSubject(), _roleBits()); }
+}
+
+/// @notice `GovernanceBaseCore` with its external entries, each calling its body (T66b, spec 2026-11-09-t66b-library-organisation.md §4.4):
+///         the form its non-token users inherit, ABI and modifiers unchanged. UNAUDITED.
+abstract contract GovernanceBase is GovernanceBaseCore, IGovernance {
+    function GOV_ROUTER() external view returns (address) {
+        return _GOV_ROUTERBody();
+    }
+
+    function features() external view override returns (uint256) {
+        return _featuresBody();
+    }
+
+    function lockedFeatures() external view override returns (uint256) {
+        return _lockedFeaturesBody();
+    }
+
+    function owner() external view override returns (bytes32) {
+        return _ownerBody();
+    }
+
+    function pendingOwner() external view override returns (bytes32) {
+        return _pendingOwnerBody();
+    }
+
+    function hasRole(uint8 bit, bytes32 account) external view override returns (bool) {
+        return _hasRoleBody(bit, account);
+    }
+
+    function validBits() external pure override returns (uint256) {
+        return _validBitsBody();
+    }
+
+    function holderCount(uint8 bit) external view override returns (uint256) {
+        return _holderCountBody(bit);
+    }
+
+    function grantDelay() external view override returns (uint64) {
+        return _grantDelayBody();
+    }
+
+    function lastProposedAt() external view override returns (uint64) {
+        return _lastProposedAtBody();
+    }
+
+    function pendingGrant(uint8 bit, bytes32 account) external view override returns (uint64, bytes32, bytes32, bool) {
+        return _pendingGrantBody(bit, account);
+    }
+
+    function grantOf(uint8 bit, bytes32 holder) external view override returns (Grant memory) {
+        return _grantOfBody(bit, holder);
+    }
+
+    function bitLabel(uint8 bit) external view virtual override returns (BitType, bytes4, string memory) {
+        return _bitLabelBody(bit);
+    }
+
+    function grantRole(uint8 bit, bytes32 account) external override governed {
+        _grantRoleBody(bit, account);
+    }
+
+    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) external override governed {
+        _setGrantBody(bit, holder, terms);
+    }
+
+    function cancelGrant(uint8 bit, bytes32 account) external override governed {
+        _cancelGrantBody(bit, account);
+    }
+
+    function revokeRole(uint8 bit, bytes32 account) external override governed {
+        _revokeRoleBody(bit, account);
+    }
+
+    function renounceRole(uint8 bit) external override governed {
+        _renounceRoleBody(bit);
+    }
+
+    function disableFeature(uint8 bit) external virtual override governed {
+        _disableFeatureBody(bit);
+    }
+
+    function transferOwnership(bytes32 newOwner) external override governed {
+        _transferOwnershipBody(newOwner);
+    }
+
+    function acceptOwnership() external override governed {
+        _acceptOwnershipBody();
+    }
+
+    function renounceOwnership() external override governed {
+        _renounceOwnershipBody();
+    }
 }

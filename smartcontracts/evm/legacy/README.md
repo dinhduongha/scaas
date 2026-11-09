@@ -371,3 +371,19 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   T61 (bit 24 `PQZ_PROOF`): `src/governance/{GovernanceBits,GovernanceRouter,GovernanceRouterBase}.sol` (no bit 24, no
   `mtxSetProofStore`), `src/pqz/NormalPqzToken.sol`, `src/regulated/{NormalPqzRegulatedToken,WrappedPqzRegulatedToken,
   RegulatedBase}.sol` (the masks without bit 24), as they stood at 7558a364.
+  T83 (owner 2026-11-09, `payNo` as `bytes32`, `PayMeta.save`, the on-chain pay records), under `ua-mtx-merge/t83/`, as they
+  stood at 32d73310: `src/common/MetaTxLib.sol` (`PayMeta {salt, string payNo, schema, body}`), `src/metatx/{IMetaTokenV2,
+  MtxPipelineLib,MetaTokenBase}.sol` (`metaPayId` under `scaas.pay.meta.v2`, `PayNoTooLong`, `PaymentMeta(payId, string payNo,
+  schema, body)`, no records), `src/regulated/RegulatedBase.sol` (the tax entries without a record),
+  `test/metatx/PayMeta.t.sol` and `test/helpers/PayMetaKit.sol` (the v2 rows and formula), `test/vectors/legacy/ua-mtx-merge/
+  t83/mandate_kat.json` (the pay calldata with the v2 tuple). Not built.
+  T66b (spec 2026-11-09-t66b-library-organisation.md, the library organisation and the 60 M fit), under `ua-mtx-merge/t66b/`, as
+  they stood at 5e5fbce2: task 3.1 (the registry pair, R-1 then R-2) `src/ua/{UARegistry,UARegistryLib}.sol` (every `pure` view
+  in the registry, every writer in the library). Not built.
+  Task 4.1 (the token split: bodies to internal functions, faces, body modules), as they stood at 83cfa8b8 (the 3.1b
+  commit): the token tree `src/metatx/{ERC20MetaTx,MetaTokenBase,MetaTxBase,UAMetaTxBase,NormalToken,WrappedToken,
+  IERC20MetaTx}.sol`, `src/zether/{ZetherLayer,NormalZetherToken,WrappedZetherToken}.sol`, `src/pqz/{PqzLayer,NormalPqzToken,
+  WrappedPqzToken}.sol`, `src/regulated/` (RegulatedBase and the six kinds), `src/common/SaltedEIP712.sol`,
+  `src/governance/{GovernanceBase,GovernanceRouterBase}.sol`, the shared bases' other users `src/{dex/SCaaSDex,
+  wallet/MandateWallet,account/SmartKeyAccount}.sol`, and `src/factory/{OpenFactory,IFactoryToken}.sol` (the release checks).
+  Not built.

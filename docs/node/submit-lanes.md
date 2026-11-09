@@ -626,7 +626,7 @@ batches them.** For gasless unwrap ops ([CTR-MTX-12](../contracts/metatx.md#CTR-
 - Unwrap items are **never batched** (`mtxBatch`): their failure modes are outside the signer's and the relayer's
   control. The outer gas limit comes from the simulation plus the usual margin; `max_gas_per_tx` applies unchanged.
 
-<a id="relay-fee-lane"></a>**Relay-fee and pay-meta on the lane (CTR-MTX-26 / -27; BUILT, metatx-split T17).** A `MtxRelayFee.relay`
+<a id="relay-fee-lane"></a>**Relay-fee and pay-meta on the lane (CTR-MTX-26 / -27; BUILT, metatx-split T17).** A `RelayFeeRouter.relay`
 job is simulated whole (the call and the payment) and sent only when the payment reaches this lane (open mode, or bound to it) and
 is at least the operator's `params.relay_fee.min_amount`: there is no token price feed and no gas price or limit is assumed, so
 the fee-covers-gas rule is the operator's floor (TON: `min_ton_value` prices the TON the escrow ties up; Solana: `min_lamports_value`

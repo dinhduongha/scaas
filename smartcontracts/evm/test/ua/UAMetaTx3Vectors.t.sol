@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -55,7 +57,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
                 "");
         }
         address token = vm.parseJsonAddress(vj, ".token");
-        address impl = address(new NormalToken(address(this), ""));
+        address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         vm.etch(token, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_A, address(0), false)));
         tok = NormalToken(token);
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(0), address(this))));
@@ -245,7 +247,8 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
 
     function _metaAt(string memory p) internal view returns (MetaTxLib.PayMeta memory m) {
         m.salt = vm.parseJsonBytes32(vj, string.concat(p, "salt"));
-        m.payNo = vm.parseJsonString(vj, string.concat(p, "payNo"));
+        m.payNo = vm.parseJsonBytes32(vj, string.concat(p, "payNo"));
+        m.save = vm.parseJsonBool(vj, string.concat(p, "save"));
         m.schema = uint16(vm.parseJsonUint(vj, string.concat(p, "schema")));
         m.body = vm.parseJsonBytes(vj, string.concat(p, "body"));
     }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -35,7 +37,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         bytes memory a = _authM(token, m);
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(RELAYER);
-        MetaTokenBase(token).mtxExecute(m, UACall.auth(m.from, a));
+        NormalToken(token).mtxExecute(m, UACall.auth(m.from, a));
     }
 
     function _withFee(MetaTxLib.UAMetaTransaction memory m, uint256 fee)
@@ -69,7 +71,7 @@ contract UAAllowlist5aTest is UALedgerBase {
             abi.encodeWithSelector(IUALedger.UAInsufficientBalance.selector, uaP, 596, 597));
         // `BURNABLE` off: the feature error of `burn`
         NormalToken nb =
-            NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+            NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         IFactoryToken.TokenConfig memory c = normalInit("NB", "NB", 6, 0, address(0), address(this));
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE);
         nb.initialize(nid(address(this)), 1, abi.encode(c));
@@ -163,7 +165,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         bytes[6] memory calls = [
             abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1, uaB)),
             abi.encodeCall(NormalToken.mintToUA, (uaB, 1)),
-            abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref(bytes32("ref")), PayMetaKit.meta(bytes32("ref")))),
+            abi.encodeCall(NormalToken.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref(bytes32("ref")), PayMetaKit.meta(bytes32("ref")))),
             abi.encodeWithSignature("addReserve(address,uint256)", address(und), 1),
             abi.encodeCall(IERC20.approve, (address(this), 1)),
             abi.encodeWithSelector(ITradeToken.mtxTrade.selector)

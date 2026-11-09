@@ -1,0 +1,325 @@
+# ua-mtx-merge T66b Step 5 (plan T66b Step 5, spec §12 row 5): the full deploy of the split on the SCaaS testnet (chain 7622), through
+# its RPC only (no container, config or port of the live stack touched). Branch ua-mtx-merge, tree 6eda1616 + this note. UNAUDITED.
+# Full tool output in git-ignored .log files beside this note (step5-dry, step5-deploy, step5-smoke, step5-pqz-7622).
+# Chain: chain id 7622, genesis / chain_uid 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164, block gas limit
+# 200,000,000, base fee 3 wei, maxCodeSize 0x20000; the deterministic deployer 0x4e59b448… present.
+
+## The four conditions, checked before the first transaction
+1. Gates green apart from the known ROLL_MAX rows: the four-set gate (test/pqz, test/research, UA-8 gas rows at n2048, n2304,
+   n2560, n2816), forge per directory at the default set, the five top-level files, the size gate, the 93-row deploy-gas table
+   (summary.txt; commits 516cb71a, 6eda1616).
+2. The local dry run of the same deploy: `forge script script/Deploy.s.sol` without --broadcast on the RPC's fork, with the same key,
+   salt and flags: SIMULATION COMPLETE, 104 transactions, the release list written (49 rows: every release, module, linked library,
+   the factory, the DEX and D); the PQZ part: script/pqz/e2e.py --proof-path-only --split on the local copy, 299 ok, 0 failures.
+3. The node's PQZ precompile: OP_SELFTEST (eth_call 0x…5caa0f01, 0x0600000000) = 0xd6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d,
+   the n2304-kmax4096 self-test hash of the release's set.
+4. Every deploy transaction fits 60 M asked and the chain's limits: the largest asked (regular + state) x 1.05 is UARegistryCoreLib
+   56,633,057 (simulation's "release gas |" rows; 56,635,241 in the forge table); forge's gas limit for that transaction
+   (eth_estimateGas x 1.05, deploy.sh's multiplier) is 61,800,392, within the 200 M block.
+
+## Deploy (smartcontracts/scripts/deploy.sh evm; FOUNDRY_PROFILE=scaas-testnet, RELEASE_GAS_GATE=public, DEPLOY_WRAPPED=1,
+## DEPLOY_REGULATED=1, DEPLOY_ZETHER=1, DEPLOY_SALT = keccak256("scaas.deploy.t66b.1"), NOTICE_PERIOD=0, DEMO_SUPPLY=10^12,
+## DEMO_HOLDER = test key 0x…03, COMPLIANCE_ADMIN = 0x4e59b448… (a contract that can attest nothing: no compliance admin on
+## this deploy), RELEASES_JSON = the dry run's list, checked row by row)
+Deployer 0x85528c7E75Ab86B58A166E263A49449927b15b02 (the testnet-only account, index 0 of SCAAS_TESTNET_MNEMONIC_FILE), funded first
+by test key 0x…04: 100 coins, tx 0xff39901ea978c5e47bc5cc19d807a93f04eee2f5dbf9e3abf72e65dc985f8b5d, block 83541, gasUsed 204,600.
+104 transactions, blocks 83557-83763, all status 1, gasUsed total 2,165,830,059, largest 52,317,793 (UARegistryCoreLib).
+
+## deployments/7622.json (git-ignored; copy)
+chain_uid 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164
+compliance_registry 0xa58c9a77cA2d94Ec5Da5567034aBe03A09ec446A
+compliance_registry_codehash 0x8e2d42b6304131a9159832ae910e4e39f609cd9fdbffbd6c91a090cec2f43f0c
+demo_token 0x83ebdbBAD51fdB123220e4f9E2bf832748A3020c
+demo_token_2 0x5A47A4fEDbc81327174b5d90A8e83D8c5aff0fAa
+dex_implementation 0x4811E49551182523E5F44DD7374CD85665FA33cd
+governance_router 0xBdbc3c2638796684D862E185d14808F8e12577bC
+implementation_normal 0x20e37855dF4208447b64e4CbC743F6315F669d6B
+implementation_normal_regulated 0xCd83F4103FC003b9e9D8022b4263a361e603787a
+implementation_normal_zether_bls12381 0x4587CdfeDa46aEa87882E2771680aaFb58eD7905
+implementation_normal_zether_regulated_bls12381 0x6c01e47C536d5f914E4a39135077b189df420A21
+implementation_wrapped 0x2155992CCF783b9a9A9BBc48Da58aB2735bF9fb4
+implementation_wrapped_regulated 0x95ef82703409359b8Fb5c82191f7b9dA91a22198
+implementation_wrapped_zether_bls12381 0x8e9E403F7571b93590c59388Ba0690D0aa1C4d1E
+implementation_wrapped_zether_regulated_bls12381 0x7eB3ecC8360C9c249229B319F602110156728Ba8
+relay_fee_executor 0x79CEB163052ADF88E6EE9DbFFeF8D213d4E81D08
+relay_fee_router 0x936B3fc2dBC6AA0652E46e954A0FF0E3318c05ef
+smart_key_account_factory 0x69a5CCa7Fbf31f93C7ff5b5C2d5b899310B24f1a
+smart_key_account_implementation 0xb2Af39a3A99D6c8d0399cD88B911B7cC82676753
+token_factory 0xA1102131A7834C8d024689e8C45b81269a06e1Fa
+ua_registry 0x5c3a8415A6a14eb23B86FBFF60d8d05Bedb03C73
+ua_registry_aux_lib 0x4f7cD9ae82151740e2960cf0DD17392642b2fD24
+ua_registry_core_lib 0x2f097e218CA75F77fd52cEeBAF1Ff88401E6044A
+zether_burn_verifier_bls12381 0x58c857428A5CF6B44847E06347e7ADF35BEd1304
+zether_disclosure 0xC8F2495ed418179111D8b46B8528c43a1024d33e
+zether_inner_product_verifier_bls12381 0x87b27AEA5958014Aa146150D6a4E990E5D8f18D0
+zether_registry 0x5c3a8415A6a14eb23B86FBFF60d8d05Bedb03C73
+zether_statements 0xe412e11aC4865ADFB7aD4425f76807c03fb2F3a3
+zether_verifier_bls12381 0x6897355c430F237663BF3e78b0956e1B98CB259B
+
+## Code at every address against the build
+Release list (DeployBase rows from the dry run, runtime code hash; checked by the broadcast run before sending, then on chain):
+NormalRegulatedToken | 0xCd83F4103FC003b9e9D8022b4263a361e603787a | 17484 B | equal
+NormalRegulatedTokenA | 0xC30EE46f7d331584909f59A4fa9b0531d3538f93 | 25702 B | equal
+NormalRegulatedTokenP | 0x2E9Ff22eaBAc6FA1A47896d0Fa143b7d666cC25e | 28943 B | equal
+NormalRegulatedTokenT | 0x9163115A8cE5EE3eF17125C38D43746a47993463 | 15527 B | equal
+NormalRegulatedTokenW | 0x4753f35E3C3A96DA3164dB40909d9d17357B2fFD | 11778 B | equal
+NormalToken | 0x20e37855dF4208447b64e4CbC743F6315F669d6B | 13734 B | equal
+NormalTokenA | 0x2772ceF8956A5E0840cc04b78c3e16A2c2Cd2241 | 23994 B | equal
+NormalTokenP | 0x72Dda6Ba295EA9fe7DC66465AEDae8cdfd9d5aD8 | 24300 B | equal
+NormalTokenT | 0x1d64A10e3a6d79bB195e71f5D5d03829851b94dD | 14259 B | equal
+NormalZetherRegulatedToken | 0x6c01e47C536d5f914E4a39135077b189df420A21 | 20619 B | equal
+NormalZetherRegulatedTokenA | 0x77111000Dfc4631d74b50502c0fE6DBD793fAEE1 | 25190 B | equal
+NormalZetherRegulatedTokenP | 0xa400b315B8AC07F110C677d76BbD657b16aa9Cad | 29960 B | equal
+NormalZetherRegulatedTokenT | 0x391cF19fF0a4aCD3742b05e16A2F2388abEC3EF4 | 15527 B | equal
+NormalZetherRegulatedTokenW | 0x9D52B83c1D0D7068a821E2F33e071c9981DC6413 | 11778 B | equal
+NormalZetherRegulatedTokenZ | 0xaFfE0907B9058CacFaF81EFC215e5CC8A0763456 | 23880 B | equal
+NormalZetherToken | 0x4587CdfeDa46aEa87882E2771680aaFb58eD7905 | 17088 B | equal
+NormalZetherTokenA | 0x8984BF8Cff3493ba03de6D92E44Db564c6D6CedE | 23463 B | equal
+NormalZetherTokenP | 0xc325298D78014aA94116725A1cCDb19f2063E33D | 25288 B | equal
+NormalZetherTokenT | 0x541761ae2B1fcCcf3cb3DbD7941143345d0373Ff | 14253 B | equal
+NormalZetherTokenZ | 0xb384a19a5bD2de0a07660361704F0848069b468f | 21948 B | equal
+OpenFactory | 0xA1102131A7834C8d024689e8C45b81269a06e1Fa | 29225 B | equal
+SCaaSDex | 0x4811E49551182523E5F44DD7374CD85665FA33cd | 32991 B | equal
+SCaaSDexD | 0xb56684e501b1fbdcf00b57689b1C7b0e2b3d48F4 | 6459 B | equal
+WrappedRegulatedToken | 0x95ef82703409359b8Fb5c82191f7b9dA91a22198 | 21249 B | equal
+WrappedRegulatedTokenA | 0x07109Dc0A7aa3a2B45557606905Be6aeFD1a009B | 21348 B | equal
+WrappedRegulatedTokenP | 0x8eec47A73519ba238827b7cB61d8cDa5762157d5 | 29378 B | equal
+WrappedRegulatedTokenT | 0xDe361eEa3f931C261A63256e1751c87A81FF5b4f | 16996 B | equal
+WrappedRegulatedTokenW | 0x1554c501eFf01F36aC275F0b074E8cAB2B8C052B | 28021 B | equal
+WrappedToken | 0x2155992CCF783b9a9A9BBc48Da58aB2735bF9fb4 | 17808 B | equal
+WrappedTokenA | 0xcf932eFb526165ce7cA3527AF6cCdAD751E751E7 | 19629 B | equal
+WrappedTokenP | 0xAF6Bd0c81AB482a36362AbEDbE8011814744E14c | 24728 B | equal
+WrappedTokenT | 0xecA9096f7bFECd8e88Bb86E60d2Ca9ADDceE6091 | 15635 B | equal
+WrappedTokenW | 0xB2cd5589bad07b71da0bF6C42878D65ab50Ee12c | 21873 B | equal
+WrappedZetherRegulatedToken | 0x7eB3ecC8360C9c249229B319F602110156728Ba8 | 24995 B | equal
+WrappedZetherRegulatedTokenA | 0x4a122b4C7406D10739c6E241C75916891E7D1fA8 | 18481 B | equal
+WrappedZetherRegulatedTokenP | 0x56Dd5Ba40762402cdC60fC1a2c5De0086467a5E4 | 30507 B | equal
+WrappedZetherRegulatedTokenT | 0xdEd6244Db9AE9042C3e302B61038209D26A1FEB1 | 16996 B | equal
+WrappedZetherRegulatedTokenW | 0xdFEa66Dd909489623Fc3B32d2B37B1537743fC99 | 29011 B | equal
+WrappedZetherRegulatedTokenZ | 0x4c93B8873509CD50FbbCC232C216f25f356841e1 | 28865 B | equal
+WrappedZetherToken | 0x8e9E403F7571b93590c59388Ba0690D0aa1C4d1E | 21520 B | equal
+WrappedZetherTokenA | 0xcb2265344eD61c03Fe535CA868Cd9da1518e3d84 | 16746 B | equal
+WrappedZetherTokenP | 0xCB0C01cE3e5B9Fa31A6fb6C30cc15Ef902BE571f | 25835 B | equal
+WrappedZetherTokenT | 0x437F89636FC954C181c53035B155b2079528FbDF | 15635 B | equal
+WrappedZetherTokenW | 0x70ed91f8FdDBBeb357d9eCF3E5316c6e90f4a7A0 | 21697 B | equal
+WrappedZetherTokenZ | 0xbf66f661f663Cc26C1389f0169A0Ab14378Af23b | 27996 B | equal
+lib-0x18752Fbc1D975094BDE0C5952eE892e3D6345052 | 0x18752Fbc1D975094BDE0C5952eE892e3D6345052 | 14513 B | equal
+lib-0x28Cd4b69209f1827c2a5a2Fd6415C8Fd6EA081D9 | 0x28Cd4b69209f1827c2a5a2Fd6415C8Fd6EA081D9 | 767 B | equal
+lib-0xF3B3Eb0073A6D2B606ea30df05e5F38CF2a10d56 | 0xF3B3Eb0073A6D2B606ea30df05e5F38CF2a10d56 | 12460 B | equal
+49 rows: 48 contracts equal; the registrar row is the deployer EOA (no code)
+Every address of deployments/7622.json against the forge artifacts (immutables, link slots and a library's own address masked):
+compliance_registry | 0xa58c9a77cA2d94Ec5Da5567034aBe03A09ec446A | 2538 B | = ComplianceRegistry
+demo_token | 0x83ebdbBAD51fdB123220e4f9E2bf832748A3020c | 140 B | no artifact of this length matches (an instance, e.g. a clone)
+demo_token_2 | 0x5A47A4fEDbc81327174b5d90A8e83D8c5aff0fAa | 140 B | no artifact of this length matches (an instance, e.g. a clone)
+dex_implementation | 0x4811E49551182523E5F44DD7374CD85665FA33cd | 32991 B | = SCaaSDex; links 9
+governance_router | 0xBdbc3c2638796684D862E185d14808F8e12577bC | 15572 B | = GovernanceRouter; links 3
+implementation_normal | 0x20e37855dF4208447b64e4CbC743F6315F669d6B | 13734 B | = NormalToken
+implementation_normal_regulated | 0xCd83F4103FC003b9e9D8022b4263a361e603787a | 17484 B | = NormalRegulatedToken
+implementation_normal_zether_bls12381 | 0x4587CdfeDa46aEa87882E2771680aaFb58eD7905 | 17088 B | = NormalZetherToken
+implementation_normal_zether_regulated_bls12381 | 0x6c01e47C536d5f914E4a39135077b189df420A21 | 20619 B | = NormalZetherRegulatedToken
+implementation_wrapped | 0x2155992CCF783b9a9A9BBc48Da58aB2735bF9fb4 | 17808 B | = WrappedToken
+implementation_wrapped_regulated | 0x95ef82703409359b8Fb5c82191f7b9dA91a22198 | 21249 B | = WrappedRegulatedToken
+implementation_wrapped_zether_bls12381 | 0x8e9E403F7571b93590c59388Ba0690D0aa1C4d1E | 21520 B | = WrappedZetherToken
+implementation_wrapped_zether_regulated_bls12381 | 0x7eB3ecC8360C9c249229B319F602110156728Ba8 | 24995 B | = WrappedZetherRegulatedToken
+relay_fee_executor | 0x79CEB163052ADF88E6EE9DbFFeF8D213d4E81D08 | 554 B | = RelayFeeExecutor
+relay_fee_router | 0x936B3fc2dBC6AA0652E46e954A0FF0E3318c05ef | 2552 B | = RelayFeeRouter
+smart_key_account_factory | 0x69a5CCa7Fbf31f93C7ff5b5C2d5b899310B24f1a | 1264 B | = SmartKeyAccountFactory
+smart_key_account_implementation | 0xb2Af39a3A99D6c8d0399cD88B911B7cC82676753 | 21085 B | = SmartKeyAccount
+token_factory | 0xA1102131A7834C8d024689e8C45b81269a06e1Fa | 29225 B | = OpenFactory
+ua_registry | 0x5c3a8415A6a14eb23B86FBFF60d8d05Bedb03C73 | 28165 B | = UARegistry; links 28
+ua_registry_aux_lib | 0x4f7cD9ae82151740e2960cf0DD17392642b2fD24 | 20192 B | = UARegistryAuxLib; links 1
+ua_registry_core_lib | 0x2f097e218CA75F77fd52cEeBAF1Ff88401E6044A | 33685 B | = UARegistryCoreLib
+zether_burn_verifier_bls12381 | 0x58c857428A5CF6B44847E06347e7ADF35BEd1304 | 5938 B | = ZetherBurnVerifierBls12381
+zether_disclosure | 0xC8F2495ed418179111D8b46B8528c43a1024d33e | 5107 B | = ZetherDisclosure
+zether_inner_product_verifier_bls12381 | 0x87b27AEA5958014Aa146150D6a4E990E5D8f18D0 | 9335 B | = ZetherInnerProductVerifierBls12381
+zether_registry | 0x5c3a8415A6a14eb23B86FBFF60d8d05Bedb03C73 | 28165 B | = UARegistry; links 28
+zether_statements | 0xe412e11aC4865ADFB7aD4425f76807c03fb2F3a3 | 9146 B | = ZetherStatements
+zether_verifier_bls12381 | 0x6897355c430F237663BF3e78b0956e1B98CB259B | 12985 B | = ZetherTransferVerifierBls12381
+bad 0
+
+## Deploy transactions (tx hash, block, gasUsed)
+# | contract / call | tx hash | block | gasUsed | status
+1 | GovernanceLib -> 0x18752fbc1d975094bde0c5952ee892e3d6345052 | 0xdf33e77b81aaec9393c316966acfd8c7ba95beb89da9e56c2b232448c0b762d6 | 83557 | 22,660,229 | 1
+2 | HederaLib -> 0x28cd4b69209f1827c2a5a2fd6415c8fd6ea081d9 | 0x1d764f56928643dc8ba4c50414ef06d65a43c463fde7164f6e92a4329d7e6cf8 | 83559 | 1,397,746 | 1
+3 | ZetherLib -> 0xb22bdc43244b06943935b24a750977ad8ad50d6e | 0x922195ee19b23c336fbbd9d46d5ebf96e4ff7cc3aecba0eaaca290928136f8f2 | 83561 | 41,963,265 | 1
+4 | WrappedLib -> 0x4849fb6e39d24ec684541003934841141ab17a1f | 0x80522594ab7cab9047690efa5e70b136c16b81011766fb35bbe827b98a585e29 | 83563 | 26,654,573 | 1
+5 | ZetherWrappedLib -> 0x75aa5b2777a31d5f4982b24c09533bd61fad092c | 0xd4d8252288d930ebec3967b11f51e54f276dae06c39a0138e36331c889454129 | 83565 | 18,876,678 | 1
+6 | UARegistryCoreLib -> 0x2f097e218ca75f77fd52ceebaf1ff88401e6044a | 0x62b711d8419bf18113d1c3eea7b3121a36db99e408e58d65e427bbbf0fcf2ea8 | 83567 | 52,317,793 | 1
+7 | UARegistryAuxLib -> 0x4f7cd9ae82151740e2960cf0dd17392642b2fd24 | 0x4bcec0e2084a7db64bd13ad1f89148e6b8c0dfcb052bc5c98638cce785b982fa | 83569 | 31,445,670 | 1
+8 | RegulatedLib -> 0x3e5c43b6317fddd4e8792b465ae5ee0f89ea4f48 | 0xe34f63a3a62f2d1574c938dee2b6b013ecfdec64e5e91bc4078e34d8c4ea3254 | 83571 | 16,325,700 | 1
+9 | MtxPipelineLib -> 0xf3b3eb0073a6d2b606ea30df05e5f38cf2a10d56 | 0xe35288d9d5da262086be0ea3980b52c9d2c64119a95cfb39a5852fcff2115cee | 83573 | 19,484,916 | 1
+10 | TradeLib -> 0xab7830c9f0121caaab45c547dda0c048db1a14eb | 0xf6755fd9fe9db70e0ccb2d7b3c8bd3c220c7096dc591437f830635a730e46b37 | 83575 | 7,819,981 | 1
+11 | SmartKeyAccountFactory -> 0x69a5cca7fbf31f93c7ff5b5c2d5b899310b24f1a | 0xbd066d96526ec2ee4a7447f9b184405f85ad6e56f75838ebbd27464332e8a708 | 83577 | 35,104,139 | 1
+12 | OpenFactory -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x0cfb77ee274973941c6be4f14dd44b1305fc183430414e8452c0435d319c593d | 83579 | 45,528,553 | 1
+13 | WebAuthnP256Verifier -> 0xbc186910a2e41472774bc70309b520bc6c91c377 | 0x424997fc2485fa945e80d08e3db8008e65c91f088b23c9f9116b83571efff007 | 83581 | 9,043,723 | 1
+14 | P256Verifier -> 0x5413a1ebb4532ccb5fae826c9f988a2f4ab491b9 | 0x15cc8e6aec48fe6d4fcfa6744cf18ba645917c648064b41393fba973a4103274 | 83583 | 5,215,294 | 1
+15 | Ed25519Verifier -> 0x8fe751cd903738f3a97fe907599c76fe5b990c56 | 0xbf2a1be5955dfb270f9c98cea6b23ae99176e73d844e4a5c0977cbbc101827ef | 83585 | 27,344,592 | 1
+16 | Bip340Verifier -> 0x4928c005b33041f3e1c76a00c9091c43c930c0c3 | 0xd598617096e6247153edcde1e981b9d3871f38a38812386ab8ce22865ae930f9 | 83587 | 2,489,674 | 1
+17 | Secp256k1Verifier -> 0xa83e3322e92b3ad98aa8640ecc67aa5a7fa73b17 | 0xb0bf2112b2152f042e6789350091c132b9cb7fafdd46524ea62a510b88dc73f1 | 83589 | 1,583,472 | 1
+18 | SchnorrBn254Verifier -> 0x1db18239bc33375db786d5400c349819e1c40088 | 0x4a13a2c5c9c3723cddd3813af6a43b7d65755aec7f39cd8944bfef0cf2465f3a | 83591 | 5,666,661 | 1
+19 | SchnorrBls12381Verifier -> 0x6c38a4728c97207648fc18e7e7b355f7a357562d | 0x25a127b9c1ea670d3612a09035b689621c02c55fd9feb625249e4e800dafbc13 | 83593 | 5,666,661 | 1
+20 | BlsMinSigBls12381Verifier -> 0xcd4a9c294ed124a1c168c9290f0039a907da4ff6 | 0xba34f4a29394f598dcb7469e93b6e292232e464f9fc198be085ea1c7c0fd27a5 | 83595 | 7,602,446 | 1
+21 | BlsMinSigBn254Verifier -> 0x36ea0cbbca4675e437cc7e5706ea2f084d165f2f | 0xbbdfc69fda9a7d7e5feb55b7aa941b86de0d038b1077037fc906432eb61b34aa | 83597 | 4,650,274 | 1
+22 | Musig2Secp256k1Verifier -> 0xaf6673eeb81c7ddf3f3c7be31773543364920bb4 | 0x72f514e94c92192c48f74754904144b696b62af31aa22189bbca27607fb6a82a | 83599 | 6,031,284 | 1
+23 | UAFrostSecp256k1Verifier -> 0x423df3b68abd3b956fe548474eb5a725cfc20465 | 0x4c31c9a97a965ce751ef0821c60e07d63b2008c9ef85c8d98c07e4b224a57174 | 83601 | 7,283,321 | 1
+24 | Musig2Bn254Verifier -> 0xc87bd16c2fcc769c8f9b656a705e54a2eebb013e | 0x9450dfeac86a6faafe79919716e5c75cd9963460eea576ac8b2ecd5ce5c527a6 | 83603 | 8,385,970 | 1
+25 | FrostBn254Verifier -> 0x7efb601126ace67bce7c41c677d42020bf92b214 | 0x80a97702bb138fde450663f5c1a0cb119abb52b557779d3cb9ec3d08267cd920 | 83605 | 7,317,589 | 1
+26 | ZetherSchnorrBls12381Verifier -> 0xbc3d1bf1401cadbe794e2da2e2b13fff06d81511 | 0x35352948ab103365baeefb965597029fabec02a082f857b6821e142130bd1f55 | 83607 | 5,682,027 | 1
+27 | UAMldsaVerifier -> 0x341f2e6b9076cb674ac7550e9adf18459d893d00 | 0xc66135b4fcc592c412300fac88c7331e31c1d53bb162badfa8e2e173a997b381 | 83609 | 18,004,932 | 1
+28 | UAMldsaVerifier -> 0xc14253172b6f91fcd796380e34cec79f23a7df75 | 0x850d8fb870d0e093b2f0c82dbcd3f081d6cb7c74277108cb438172c823f3d2cf | 83611 | 18,005,024 | 1
+29 | UAFndsaVerifier -> 0x96093a8e1217d8f570548b4bcfd8620c2938e62a | 0x8782019dcab05be2bc37eab22a2e987877cbfb38222b0e1a7a19664d5c8abebf | 83613 | 11,004,616 | 1
+30 | UASlhdsaVerifier -> 0xda0701e649a6104d028c5956338c1f5bfcf9bbb1 | 0x43fe88438909d0c7cb6ab60d462ba7e32c9d3c5dbac31bdfab8dc9452790b8df | 83615 | 3,711,963 | 1
+31 | UAFndsaVerifier -> 0x1241f1cf26116373806c592b96ea356ec956bc26 | 0xbcecdad8da69b187e1476732119e168717e9f369dc16beb98d9796a42d30a5d6 | 83617 | 11,004,646 | 1
+32 | UARegistry -> 0x5c3a8415a6a14eb23b86fbff60d8d05bedb03c73 | 0x2b90f40161a6fe2eb232ea65c2f4c02627c9f2c59b7df8c2213e956548d18e9b | 83619 | 43,992,181 | 1
+33 | GovernanceRouter -> 0xbdbc3c2638796684d862e185d14808f8e12577bc | 0x613daa1c0580687ed9bde5aee8501f717f3466b21e3c11070346019e6a462d01 | 83621 | 24,310,779 | 1
+34 | RelayFeeRouter -> 0x936b3fc2dbc6aa0652e46e954a0ff0e3318c05ef | 0x8563ba17a333d52e7acf7cb81a728542afd4c0c6ab818d1927ed0d910df457e2 | 83623 | 5,211,921 | 1
+35 | ComplianceRegistry -> 0xa58c9a77ca2d94ec5da5567034abe03a09ec446a | 0xdb9811402f2754bc2227ca2f88fc171700c3b187c1719b5b757a9538f8cec150 | 83625 | 4,250,837 | 1
+36 | OpenFactory configureChain -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xb4478b188f318e08f335d84b050ed3c75c9d0c50d2d266559c63da964f84d478 | 83627 | 247,509 | 1
+37 | NormalTokenP -> 0x72dda6ba295ea9fe7dc66465aedae8cdfd9d5ad8 | 0x07889d3670db00e7ebd1f34d5e5bf062a27439dc91a3f88931ec0ff0d3182f16 | 83629 | 37,936,105 | 1
+38 | NormalTokenT -> 0x1d64a10e3a6d79bb195e71f5d5d03829851b94dd | 0x683523a6b6cffad6426946eaee95784022962999e8030d102d13d3823d5161c7 | 83631 | 22,405,640 | 1
+39 | NormalTokenA -> 0x2772cef8956a5e0840cc04b78c3e16a2c2cd2241 | 0x062a6023e26c89e6b0ffe119ac81f11daed332ab35828859f6a4b4be32c12140 | 83633 | 37,456,860 | 1
+40 | OpenFactory publishEnv -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xe1930d7f6ed2a39dde0299a4b88102bb48f03c54e178ddaaf1c2d04bcee185a4 | 83635 | 2,030,251 | 1
+41 | OpenFactory deployImplementation -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x47735c13faadb71e471ddecc98fda777972e2044f6ed74d7c4d2fc784c5d60e4 | 83637 | 22,156,571 | 1
+42 | SCaaSDexD -> 0xb56684e501b1fbdcf00b57689b1c7b0e2b3d48f4 | 0x5eeba51c2b085ffa8cbd7f986028fbb1e6697724132b9b19d793d55ad760e4a6 | 83639 | 10,202,712 | 1
+43 | OpenFactory publishDexEnv -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x12e0cd46daf4cce97079dbd3cee4db47b6616b25565d697e710efa37974a91e6 | 83641 | 1,251,740 | 1
+44 | OpenFactory deployDexImplementation -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x6387d846d3fed1825d836e15ab02199fc7775a7a9bccb7828f31d26a90775545 | 83643 | 51,902,717 | 1
+45 | WrappedTokenP -> 0xaf6bd0c81ab482a36362abedbe8011814744e14c | 0x04637be2ae503f0bfb6ee196de6fce035965500c206280be7f353a43343786a5 | 83645 | 38,598,224 | 1
+46 | WrappedTokenT -> 0xeca9096f7bfecd8e88bb86e60d2ca9addcee6091 | 0xa2d8f283646d2ffb1bf450d33e13528a74175a72886b25cc7c3cc70adeddd86b | 83647 | 24,533,975 | 1
+47 | WrappedTokenA -> 0xcf932efb526165ce7ca3527af6ccdad751e751e7 | 0xddd48e2ce12830819355228a5e64a5e05be9fa02edf35755896a8f37008aa699 | 83649 | 30,706,706 | 1
+48 | WrappedTokenW -> 0xb2cd5589bad07b71da0bf6c42878d65ab50ee12c | 0x5734ad9ab8da65d6998150ec0136b8cbf45acceedcb445a850c8fd2205893383 | 83651 | 34,177,558 | 1
+49 | OpenFactory publishEnv -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x563ee77652f3548c9ab522fd72cf2e494a2397448069acf74c3f1f9541f565bc | 83653 | 2,474,127 | 1
+50 | OpenFactory deployImplementation -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x48c29e480dd95182263f5b78d6b9560ed31f48262f60e08bcb8cb16960f75970 | 83655 | 28,483,538 | 1
+51 | NormalRegulatedTokenP -> 0x2e9ff22eabac6fa1a47896d0fa143b7d666cc25e | 0x5517bfdb2e43bb3e2ce2c97a169413d4b6dbf9638fbc7d94800d2e819924062d | 83657 | 45,118,979 | 1
+52 | NormalRegulatedTokenT -> 0x9163115a8ce5ee3ef17125c38d43746a47993463 | 0x017e01dbfbd26d223ad56e7cbede4922372bf4a1d7f4186d949f8163c77c32ff | 83659 | 24,369,007 | 1
+53 | NormalRegulatedTokenA -> 0xc30ee46f7d331584909f59a4fa9b0531d3538f93 | 0x715ca6b7846eb9fa68f6f2dba76f88a0901d8699c1af49edb96f3a7fc8030932 | 83661 | 40,101,221 | 1
+54 | NormalRegulatedTokenW -> 0x4753f35e3c3a96da3164db40909d9d17357b2ffd | 0x0ff0b9eb95eec03bdb84304958436a952c06d8b1358175ff4516a9e90ddfaf8e | 83663 | 18,569,215 | 1
+55 | OpenFactory publishEnv -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x799efb096aa6f7fc48ac917973c105dc68584cf0cc7cc54b6e7139e7fa9d0292 | 83665 | 2,474,139 | 1
+56 | OpenFactory deployImplementation -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xebe1bb9c146fc63286d2f798c1a78555e6c2b4e51a3761ba58e0d3eb491ab92b | 83667 | 27,990,972 | 1
+57 | WrappedRegulatedTokenP -> 0x8eec47a73519ba238827b7cb61d8cda5762157d5 | 0x87f21c632a004b3b571dc398bca00e1ad1747f0a8cac807536b8b09b654bde2e | 83669 | 45,791,914 | 1
+58 | WrappedRegulatedTokenT -> 0xde361eea3f931c261a63256e1751c87a81ff5b4f | 0xa3ccc0e7e31b4c5088e62373ca48f35b8f54c8454d84529a652cd5718fab6d69 | 83671 | 26,641,200 | 1
+59 | WrappedRegulatedTokenA -> 0x07109dc0a7aa3a2b45557606905be6aefd1a009b | 0xfed1e7acdb3467628413f61f1b9d55f2b91801e7a37f27e51770ec177e9e539f | 83673 | 33,367,798 | 1
+60 | WrappedRegulatedTokenW -> 0x1554c501eff01f36ac275f0b074e8cab2b8c052b | 0xf6a0cb325b73d4157961f220452de49987b35169a2dfffafa015e43db9d70ba5 | 83675 | 43,687,194 | 1
+61 | OpenFactory publishEnv -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x8a9fdc319a26d9ee16c63c26a4237f0dee5e0c7f3ff95bf451aa5d366d7c4417 | 83677 | 2,696,036 | 1
+62 | OpenFactory deployImplementation -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x9b8b3dda1d6a5fe19721b575dcacd0cf3e32eb642fc5d625b00fd2a45fc4f628 | 83679 | 33,825,119 | 1
+63 | OpenFactory setKindEnabled -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xa627e374936cf6d00a82cd839817fbca089242937be96cf60d217594ee3ff51d | 83681 | 29,904 | 1
+64 | OpenFactory setKindEnabled -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x6c05a138b6772c6992586faa830ce3e4604e2115b137482daf228f9cf8c48923 | 83683 | 29,904 | 1
+65 | ZetherStatements -> 0xe412e11ac4865adfb7ad4425f76807c03fb2f3a3 | 0x2b65889d419bf3d316d3b97335059f821d34b99c90dad47aed76c6fc55ed5eb7 | 83685 | 14,358,539 | 1
+66 | ZetherDisclosure -> 0xc8f2495ed418179111d8b46b8528c43a1024d33e | 0xe5a1d4c59b8e9d874276ca1c224fa467b9551fe4bacda711a7b50585a5f7d182 | 83687 | 8,110,894 | 1
+67 | ZetherInnerProductVerifierBls12381 -> 0x87b27aea5958014aa146150d6a4e990e5d8f18d0 | 0x486726121ffabf19f017914ca02df1f8c15fb2ae908ee65da5c0b9c54d6633da | 83689 | 47,444,477 | 1
+68 | ZetherTransferVerifierBls12381 -> 0x6897355c430f237663bf3e78b0956e1b98cb259b | 0x11a45bf880b5c6ac3313bd9e05ac3832156fe18262f132213cb2c3e2713af87b | 83691 | 20,311,485 | 1
+69 | ZetherBurnVerifierBls12381 -> 0x58c857428a5cf6b44847e06347e7adf35bed1304 | 0x3c337d5ffa65385e6313aa0c4a44ac195981010151aa085b7d70d850858205f5 | 83693 | 9,410,512 | 1
+70 | NormalZetherTokenP -> 0xc325298d78014aa94116725a1ccdb19f2063e33d | 0x4e111dfaff9a8eda8911625917b3afda0146a7a75a5e2dfd1b546f0650f2c433 | 83695 | 39,464,930 | 1
+71 | NormalZetherTokenT -> 0x541761ae2b1fcccf3cb3dbd7941143345d0373ff | 0x603803c8986eaf101402ae644c63dd31998c73de46b91269e867d3b25ddf8772 | 83697 | 22,396,648 | 1
+72 | NormalZetherTokenA -> 0x8984bf8cff3493ba03de6d92e44db564c6d6cede | 0x81905ca13625c71ddd1140fbdeb39cc5d9954aabb78acfdc3f9d2e9ad54647db | 83699 | 36,635,894 | 1
+73 | NormalZetherTokenZ -> 0xb384a19a5bd2de0a07660361704f0848069b468f | 0x38a486278e9cb243de9d71fcbf496ead24a00001a449a1f520e2771433640b13 | 83701 | 34,293,343 | 1
+74 | OpenFactory publishEnv -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x81a49346a4692fe4499b4ad17e3d0e17b9e87c04bb634d1bcab8f3716121380c | 83703 | 3,025,092 | 1
+75 | OpenFactory deployImplementation -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x22a8ad70d50a201bd5891f7e6fba428024067fd1920f49c5c20f764f984ee1cd | 83705 | 27,400,603 | 1
+76 | WrappedZetherTokenP -> 0xcb0c01ce3e5b9fa31a6fb6c30cc15ef902be571f | 0xfb710ff955325696698589923a0a32734ccfcecdcedc6f6c5d010db8045436e3 | 83707 | 40,311,161 | 1
+77 | WrappedZetherTokenT -> 0x437f89636fc954c181c53035b155b2079528fbdf | 0xa0c0d3e498674b05bafdb8f44a8d72bbcfe6cf1955b4d689c29c412d92496ae6 | 83709 | 24,534,379 | 1
+78 | WrappedZetherTokenA -> 0xcb2265344ed61c03fe535ca868cd9da1518e3d84 | 0x7d5706d619fee01c536d685b843e8fabf33b11a3bf084d5002350dd2162379f4 | 83711 | 26,247,385 | 1
+79 | WrappedZetherTokenW -> 0x70ed91f8fddbbeb357d9ecf3e5316c6e90f4a7a0 | 0x614dacfa947e0105c0109e1f3541e3a32675538cd922240db11bb7c3fea39cbe | 83713 | 33,906,704 | 1
+80 | WrappedZetherTokenZ -> 0xbf66f661f663cc26c1389f0169a0ab14378af23b | 0xd1e84a3bc9b71291a97a27f6d969050f926ef1033f6a7379e41000f3ffc107f2 | 83715 | 43,647,531 | 1
+81 | OpenFactory publishEnv -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x7749aabe522bb6196dfac4e284b0b14f0ec2d2386b082102034630b6febf15d4 | 83717 | 3,690,877 | 1
+82 | OpenFactory deployImplementation -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x66cdcf3ec0c1a07ffedb3a751dfb59f827e6a58fe8e184316fe239b4926b6960 | 83719 | 34,294,590 | 1
+83 | OpenFactory setKindEnabled -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xd43fefc68c0df852037b1f59575bf0190d0872de47e2d2b1ac5fc38c8ae85132 | 83721 | 29,904 | 1
+84 | OpenFactory setKindEnabled -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x7755ba0d0b0dbb5bdb45b27b813e8706db0d90c95a49739a748b279de27406dc | 83723 | 29,904 | 1
+85 | NormalZetherRegulatedTokenP -> 0xa400b315b8ac07f110c677d76bbd657b16aa9cad | 0xf1bb729de6255e5a79402a5de76acaf4f75993e2b500cffeafb429ee58bd4959 | 83725 | 46,692,826 | 1
+86 | NormalZetherRegulatedTokenT -> 0x391cf19ff0a4acd3742b05e16a2f2388abec3ef4 | 0xde8f8e60324d3f73265a7354bee2dc4f38a24eec8ed8d850b3f414f1e88475d7 | 83727 | 24,369,555 | 1
+87 | NormalZetherRegulatedTokenA -> 0x77111000dfc4631d74b50502c0fe6dbd793faee1 | 0x02335f6c5010aec723dfb34895a2dd47719ffbe744ed813c61104e9770720a16 | 83729 | 39,309,747 | 1
+88 | NormalZetherRegulatedTokenW -> 0x9d52b83c1d0d7068a821e2f33e071c9981dc6413 | 0x085b3a79b4b5066a76cfaca05a8ab5f27bcbc6436904e304586b9c1315bd2838 | 83731 | 18,569,763 | 1
+89 | NormalZetherRegulatedTokenZ -> 0xaffe0907b9058cacfaf81efc215e5cc8a0763456 | 0xca7679a982a091561553dc1372cd7dda60c457d333cdffbe2c3bdbd70b7937f3 | 83733 | 37,284,341 | 1
+90 | OpenFactory publishEnv -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x9f9934bba9c814ad688204fa9039a4f80f2c0485900d292ff2f6bac7be402e3b | 83735 | 3,468,945 | 1
+91 | OpenFactory deployImplementation -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xa33c68d1669f0ab9fb83daff0b9c270dfdafcdcee5951cddf0920a284a67e3a2 | 83737 | 32,899,079 | 1
+92 | WrappedZetherRegulatedTokenP -> 0x56dd5ba40762402cdc60fc1a2c5de0086467a5e4 | 0x4739c043c2c3ed508f09d2cd8495b6ec37d99f6afdc240ad9739989879b230d8 | 83739 | 47,539,024 | 1
+93 | WrappedZetherRegulatedTokenT -> 0xded6244db9ae9042c3e302b61038209d26a1feb1 | 0x137e7c8d2eb8a0ebee28afb6314238acc4890c91219ddbe4ed25ed6b1284db08 | 83741 | 26,641,737 | 1
+94 | WrappedZetherRegulatedTokenA -> 0x4a122b4c7406d10739c6e241c75916891e7d1fa8 | 0xf04bf522607cf2e17ca96b8012d46fdf5dd470f4371e1aafd8fe5a2c8ca3f468 | 83743 | 28,933,333 | 1
+95 | WrappedZetherRegulatedTokenW -> 0xdfea66dd909489623fc3b32d2b37b1537743fc99 | 0x05bb440d61f7d6710a731e3b5a509c29f2887fbb2a575a5de9bfd1457d1835bd | 83745 | 45,219,385 | 1
+96 | WrappedZetherRegulatedTokenZ -> 0x4c93b8873509cd50fbbcc232c216f25f356841e1 | 0xe93e9e225b4f0ad2c47cb2f2f4488a32c8fe242fd012b6668f1895ad25938f02 | 83747 | 44,994,911 | 1
+97 | OpenFactory publishEnv -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xeef9826372783fa8b314882598fc90bdb2a1e670a91b2a09c2f17bc13e787048 | 83749 | 3,912,809 | 1
+98 | OpenFactory deployImplementation -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xbb7d374e4cda779cb5b4761db675936020c826013a00dfb6fff4f1925507dd1d | 83751 | 39,690,217 | 1
+99 | OpenFactory setKindEnabled -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x9769e1ca171512951ef4d55838a3428cd992224cbf7f13a00648f2dfd76c9e97 | 83753 | 29,904 | 1
+100 | OpenFactory setKindEnabled -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xd326be2f9ac8d524aff1de757d940ef637601dfd8b1eec2ef967c3f2d7b17b18 | 83755 | 29,904 | 1
+101 | OpenFactory createToken -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0x5fd0cd3485bc97474e00dbdcec234680539ddf239b648e1bcdd277e0e79f0754 | 83757 | 2,155,211 | 1
+102 | OpenFactory createToken -> 0xa1102131a7834c8d024689e8c45b81269a06e1fa | 0xb3cf1d2a1adb4b4fd3d155f499e3f6154dcbac8b3d3df9044bb1a4fc692c2b0b | 83759 | 1,959,419 | 1
+103 | transfer -> 0x83ebdbbad51fdb123220e4f9e2bf832748a3020c | 0x62bd1a6bb68ed8298e0d6fb8fb76f3ab9a45c846dbd0d9a26fa21f1307af54c1 | 83761 | 144,566 | 1
+104 | transfer -> 0x5a47a4fedbc81327174b5d90a8e83d8c5aff0faa | 0x6040fe3877a2c26c66381c8c7266dfbbb0560317f0f92ce2d95fb560ee0975d9 | 83763 | 144,566 | 1
+
+## Smoke 1 and 2 (runs/2026-11-09-ua-mtx-merge-t66b-build/Smoke.s.sol: forge script, simulated, then broadcast)
+On the demo token 0x83ebdbBAD51fdB123220e4f9E2bf832748A3020c (NormalToken clone, 6 decimals): the payer is the deployer (signs only), the relayer test key
+0x…03 sends; the recipient is the relayer's own id. 1. a relayed mtxTransfer of 1 unit (payer-signed UAMetaTransfer, relayer
+unbound); 2. RelayFeeRouter.relay (0x936B3fc2dBC6AA0652E46e954A0FF0E3318c05ef) running a second payer-signed mtxTransfer through its executor and
+the payer's UARelayFee of 1 unit, open mode (paid to the caller). The script checked both lanes' nonces after; 'smoke ok'.
+mtxTransfer | 0x697756343e8a09a2862458291ac5db988d5ec5a3cf08f55148f6e7b8513fef82 | block 83800 | gasUsed 182,095 | status 1 | logs 2
+relay | 0xe9ab59cd8e7f23d97223a5e2322bd81ba4626c92d73e65c2d439d58488744435 | block 83802 | gasUsed 243,835 | status 1 | logs 7
+
+## The PQZ kinds and smoke 3, PQZ op 1 (script/pqz/e2e.py --proof-path-only --split, PQZ_SET n2304-kmax4096, test keys 0x…01-03
+## as on the earlier resets; record runs/2026-11-10-ua-mtx-merge-t66b-step5-pqz-7622.txt)
+Its own registry trio, factory and the releases 0, 4, 5, 12, 13 with their modules (each module its own CREATE2 transaction):
+NormalToken 22,156,571 gas, NormalPqzToken 30,444,561, WrappedPqzToken 38,657,185, NormalPqzRegulatedToken 35,914,018,
+WrappedPqzRegulatedToken (kind 13) 43,936,325. 122 transactions, every one status 1, none above 60 M gas used (largest a relayed
+op 7 M = 4 under LOG, 52,816,686); 289 checks ok, 1,235 s.
+PQZ op 1 (smoke 3): tx 0x1348ee3bd97c38ee280fb4e68484065ddc3058aa87e92821e91c598722a7e3e5, block 83999, gasUsed 26,747,768 (op 1
+alice -> bob 50, auditor on, NONE); its statement rebuilt from the §9 interface equals the proven one and pqz-ffi verifies it
+(d1), and so do d2 (op 1 after a rollover, 0x4031091e4a7180fa0ca14bf045a176225154eb6957f769332ddefc95aaf188c8) and d7 (the
+migration).
+5 failures, all in the off-chain reference rebuild, none on chain: the five LOG debits (d3, d4, d5, d6, d8) read their
+PqzDebitProof log by eth_getLogs from block 0, and this RPC refuses a range of more than 100 blocks without the log index
+("Logs request reads 84053 blocks without the log index, over the maximum of 100"); the local copy has no such limit (0 failures
+there). For the same reason the LOG negatives "fail the lookup" here without testing anything; the NONE negatives (wrong
+shieldIn, version boundary, P of another debit) verify 0 as they should. A finding for the harness and for indexers: a
+PqzDebitProof lookup needs a bounded block range (the debit's block) or the log index.
+Code at every address the run deployed against the build (out/t66b-e2e, masked as above): 49 contracts equal, 4 token clones.
+GovernanceLib | 0xf8466c6af264dda1c5b4eecdae416fd708deb3e7 | 14513 B | = GovernanceLib
+GovernanceRouter | 0xcacca1bf4b16355487fb8d4904ed2996f8b7f76d | 15572 B | = GovernanceRouter; links 3
+HederaLib | 0x877036e4679f49bf012a968ee3dd3f678bd1ef87 | 767 B | = HederaLib
+MockERC20 | 0xd83084ed6ee7ce82df8b27e1c5bd89dd9459c43b | 1910 B | = MockERC20
+MtxPipelineLib | 0xcfda8dd5a33b5bca870dc7252a540197b65afe4c | 12460 B | = MtxPipelineLib; links 2
+NormalPqzRegulatedToken release | 0x0af7d9c4340eac727dca295db50bd8e80787a39e | 22556 B | = NormalPqzRegulatedToken
+NormalPqzRegulatedTokenA | 0xc36bc24af1d6b6527661d9d1e1cfd3c9ce6c2a7d | 28131 B | = NormalPqzRegulatedTokenA; links 16
+NormalPqzRegulatedTokenP | 0xa91b739fa2499ce59cd9eb859f23aa243676e23d | 30177 B | = NormalPqzRegulatedTokenP; links 7
+NormalPqzRegulatedTokenQ | 0x03e3fef347635d782ff5707c1f3c894f3dd3d108 | 32423 B | = NormalPqzRegulatedTokenQ; links 25
+NormalPqzRegulatedTokenT | 0xe2694259d985d3c99ccffbeb61ab02780a7e27da | 15576 B | = NormalPqzRegulatedTokenT; links 1
+NormalPqzRegulatedTokenW | 0x7350b4f0a5b5ca0ad17e3610a33a981289b04ef0 | 11827 B | = NormalPqzRegulatedTokenW; links 9
+NormalPqzToken release | 0xc340f8755e31dfc53b62bf4171a812d746ecb0e1 | 19045 B | = NormalPqzToken
+NormalPqzTokenA | 0x0095199a645bea14e16aad24640324145c7fe292 | 26411 B | = NormalPqzTokenA; links 16
+NormalPqzTokenP | 0xeb09bc9a0e4c642e24f1da28a5ffe665b9ac87b9 | 25495 B | = NormalPqzTokenP; links 2
+NormalPqzTokenQ | 0xed63626351fa5e04a26d557316eb6fd5a9883303 | 30641 B | = NormalPqzTokenQ; links 25
+NormalPqzTokenT | 0x8f7e3e67399ed8870271ebf9102b3cc74399e9d7 | 14309 B | = NormalPqzTokenT; links 1
+NormalToken release | 0x406d03bc90693b5fc1b4d95d090317ac2b7c97df | 13734 B | = NormalToken
+NormalTokenA | 0xbf3f1ac5611f85c9a4417f2117a0449a0d628504 | 23994 B | = NormalTokenA; links 14
+NormalTokenP | 0x9d9a3d547be8e2dfc9f5d3d8486d0e4467d2c909 | 24300 B | = NormalTokenP; links 2
+NormalTokenT | 0x0b57d101d59d43a6133a83f8213957c63bf59e7e | 14259 B | = NormalTokenT; links 1
+OpenFactory | 0xa13ac45069a1a1cd588776f5824bbf893eba980e | 29225 B | = OpenFactory
+PqzBurnLib | 0x06d092041995fe765872dcf85b67f82f8fc4faff | 15404 B | = PqzBurnLib
+PqzStateLib | 0x02527e38ac89cf0324ba597234cf1bf95b125c16 | 14062 B | = PqzStateLib
+PqzTransferLib | 0x484918a0eaaf29718f5fc529cbc32ccebd09e488 | 24456 B | = PqzTransferLib
+PqzViewLib | 0xc5ddf67eef7c8aa2f01043bbe72be5cb0dbd41c4 | 24201 B | = PqzViewLib
+PqzWrappedLib | 0x930b793f778bbf43fab1080abf1840e018831cde | 5563 B | = PqzWrappedLib; links 2
+RegulatedLib | 0x4cdf169aad3444ee604288ea7a7d871b55758183 | 10418 B | = RegulatedLib; links 1
+Secp256k1Verifier | 0x9a8c5008e9920d969f5241b9425606bea7146b25 | 887 B | = Secp256k1Verifier
+UAMldsaVerifier | 0x46080822b1906e932858bb9580a90610b2028e9b | 11486 B | = UAMldsaVerifier
+UAMldsaVerifier#2 | 0x08608fb306daec8af1f77f02e80e01ae27dfacdd | 11486 B | = UAMldsaVerifier
+UAPqzVerifier | 0x56dd67b7c0a88a3e046829bef3e4138d65d9f6aa | 1280 B | = UAPqzVerifier
+UARegistry | 0x6c56d2f9a1a139e2edb04b0875e7e1cc3d4e3684 | 28165 B | = UARegistry; links 28
+UARegistryAuxLib | 0xbb093a1c23a44802e9da884260c8872511dbc983 | 20192 B | = UARegistryAuxLib; links 1
+UARegistryCoreLib | 0xb4431369bc6d511eaf461743af7979c3f955992e | 33685 B | = UARegistryCoreLib
+WrappedLib | 0x9af7b9d2cdf8c5e716d86e325eb16a241fd3e3be | 17095 B | = WrappedLib; links 2
+WrappedPqzRegulatedToken release | 0xceae95faeee0b0f74ea00aa5ffb8a18ae6375bd5 | 27713 B | = WrappedPqzRegulatedToken
+WrappedPqzRegulatedTokenA | 0xdc609b2ab62c6eaeb0abff9d998955183d0bc050 | 18594 B | = WrappedPqzRegulatedTokenA; links 13
+WrappedPqzRegulatedTokenP | 0x828851cf14c7a494573ef5dc553179bb4c1c607e | 30783 B | = WrappedPqzRegulatedTokenP; links 7
+WrappedPqzRegulatedTokenQ | 0xc7e3d70d87a5de062e54afdfd0ec2127f00a2b4b | 29465 B | = WrappedPqzRegulatedTokenQ; links 20
+WrappedPqzRegulatedTokenQ2 | 0xa2d0278ad041815649a1eb8e47814e90f5b452b1 | 19038 B | = WrappedPqzRegulatedTokenQ2; links 14
+WrappedPqzRegulatedTokenT | 0x2c7529d6b41a30f58c612675493b5f95312aa20d | 17045 B | = WrappedPqzRegulatedTokenT; links 2
+WrappedPqzRegulatedTokenW | 0x1cb93a9390cabf638f89b75a17c9d8a86f264094 | 29202 B | = WrappedPqzRegulatedTokenW; links 28
+WrappedPqzToken release | 0x2f2519f16639f686322bcaa14582451d2766ba85 | 24314 B | = WrappedPqzToken
+WrappedPqzTokenA | 0xd9633efcf1f261feda51b0fc3975d7c382a812d1 | 16875 B | = WrappedPqzTokenA; links 12
+WrappedPqzTokenP | 0x62f84159329befe5ce8ca98a4c0ed69df9ba9b1a | 26086 B | = WrappedPqzTokenP; links 2
+WrappedPqzTokenQ | 0x72c95da7cb6253e37712befaf971faad8d28220c | 28283 B | = WrappedPqzTokenQ; links 23
+WrappedPqzTokenQ2 | 0x6b2915091b32ce42596af5c1790a41b2b87d9b2b | 18216 B | = WrappedPqzTokenQ2; links 14
+WrappedPqzTokenT | 0x4125e87fce77de5af0fc507d8ca8f14032a06b9f | 15684 B | = WrappedPqzTokenT; links 2
+WrappedPqzTokenW | 0xec3e116ebdfacbbcdbf31cfe737c678216350290 | 21903 B | = WrappedPqzTokenW; links 17
+pqPP | 0x56e924660155bf145b28169e71dd5153e4290c35 | 160 B | no artifact of this length matches (an instance, e.g. a clone)
+pqPW | 0x8d65a25097f7187a439f21e4fc57e875f0e1f358 | 160 B | no artifact of this length matches (an instance, e.g. a clone)
+pqUSD | 0x5a94167bc4c71054a713e7651dc60f6354e2e63b | 160 B | no artifact of this length matches (an instance, e.g. a clone)
+pqW | 0x9c02294c771765a613f656dd56980741cbbe0a41 | 160 B | no artifact of this length matches (an instance, e.g. a clone)
+bad 0

@@ -1,0 +1,6 @@
+# T66b 3.1c: UA-8 gas pins moved (UARegistryUA8.t.sol _pin, regular / state), old -> new. UNAUDITED.
+setKemKey fndsa512/v2 n2048-kmax1024 | 2516110 / 3947400 | 2524077 / 3947400
+setKemKey fndsa512/v2 n2304-kmax4096 | 2516110 / 3947400 | 2524077 / 3947400
+setKemKey fndsa512/v2 n2560-kmax16384 | 2516110 / 3947400 | 2524077 / 3947400
+setKemKey fndsa512/v2 n2816-kmax65536 | 2516110 / 3947400 | 2524077 / 3947400
+4 rows

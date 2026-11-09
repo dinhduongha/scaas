@@ -37,8 +37,13 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
     // grows quadratically with the large envelopes). Before 3f: PQZL 5,909 / PQZH 9,213 at n2304-kmax4096. Owner ruling
     // 2026-11-08: PQZH 13,000 -> 14,000, the 13,000 having come from the ecdsa row only; measured at n2304-kmax4096: ecdsa
     // 12,673, mldsa65 13,039, fndsa512 13,055.
-    uint256 internal constant BOUND = 9_000;
-    uint256 internal constant BOUND_PQZH = 14_000;
+    // T66b, owner 2026-11-09, spec §11 (i); the PQZ calldata cost accepted 2026-11-07: the body modules forward the envelope
+    // through two more frames (the stub to P, the self-call's stub to Q), each copying it into fresh memory, so the overhead
+    // grows with the data by design. Measured (difference, ecdsa / mldsa65 / fndsa512): n2304-kmax4096 PQZL 75,487 / 77,225
+    // / 75,774, PQZH 299,515 / 303,659 / 300,232; n2048-kmax1024 PQZL 88,268 / 90,196 / 88,591, PQZH 268,825 / 272,715 /
+    // 269,497; bounds the largest of both sets + about 10 %: PQZL 9,000 -> 99,000, PQZH 14,000 -> 335,000.
+    uint256 internal constant BOUND = 99_000;
+    uint256 internal constant BOUND_PQZH = 335_000;
     string internal pre;
     bytes32 internal fnFee2;
 

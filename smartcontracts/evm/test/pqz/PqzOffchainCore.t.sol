@@ -28,7 +28,7 @@ import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
 /// `validUntil`, the domain, the signer, starvation), revocation and shape, the mode at init, the zero-dep release, the
 /// key rule of each mode (KV-12) and the 3g items moved here (owner 2026-11-07: 3g before 3f). UNAUDITED.
 contract PqzOffchainCoreTest is PqzOffchainBase {
-    PqzLayer internal off;
+    NormalPqzToken internal off;
 
     function setUp() public {
         _offStack();
@@ -164,7 +164,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
 
     /// A -> B -> A (notice 0: each transfer applies at once): A's withheld epoch-0 signature is refused at epoch 2.
     function test_pqzVerdict_epochABA() public {
-        PqzLayer t = _owned(vA, false);
+        NormalPqzToken t = _owned(vA, false);
         _shieldOn(t, alice, 10);
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op1Of(t, alice, bob, 5, true);
         IPqzToken.PqzSignedVerdict memory old = _sv(t, st);
@@ -178,7 +178,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     }
 
     function test_pqzVerdict_revokedRefuses() public {
-        PqzLayer t = _owned(vA, false);
+        NormalPqzToken t = _owned(vA, false);
         _shieldOn(t, alice, 10);
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op1Of(t, alice, bob, 5, true);
         IPqzToken.PqzSignedVerdict memory sv = _sv(t, st);
@@ -272,7 +272,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         (vMode, vUA, vFixed) = (1, vA, false);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        PqzLayer t = PqzLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "zero-dep-off"));
+        NormalPqzToken t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "zero-dep-off"));
         assertEq(t.verifier(), address(0));
         assertEq(t.precompile(), address(0));
         assertEq(t.proofSystemId(), PqzSet.PQZL_ID);
@@ -358,7 +358,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     /// An unproven auditor at init: OFFCHAIN passes, PRECOMPILE refused.
     function test_auditor_unproven_offchain() public {
         aud = _unprovenUA(_pk(43), 43);
-        PqzLayer t = _offToken("aud-unproven-off", vA, false);
+        NormalPqzToken t = _offToken("aud-unproven-off", vA, false);
         assertEq(t.auditorUA(), aud);
     }
 
@@ -433,7 +433,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
 
     /// On a registry without the verifier a version becomes current only once its proof bytes are stored.
     function test_offchain_noVerifierNeedsBytes() public {
-        (PqzLayer t, UARegistry r2) = _noVerifierToken(vA);
+        (NormalPqzToken t, UARegistry r2) = _noVerifierToken(vA);
         bytes32 dan = UACall.register(r2, UAKinds.MLDSA65, _mlPk(45), _pqzAttrs(_pk(45)), new bytes(ML65_SIG), hex"aa");
         _shieldOn(t, dan, 1);
         r2.setPqzKey(dan, 1, _pk(46), keccak256("b1"), UACall.sig(new bytes(ML65_SIG)));
@@ -464,7 +464,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     /// Two UAs that stored one key on a registry without the verifier (unproven: no `keyOwner` refusal to rely on), both
     /// legs of an op 7 of an OFFCHAIN token: `KeyReused` (KV-9, M-T6). Control: distinct keys land.
     function test_keyReused_legs_offchain() public {
-        (PqzLayer t, UARegistry r2) = _noVerifierToken(vA);
+        (NormalPqzToken t, UARegistry r2) = _noVerifierToken(vA);
         bytes32 s1 = UACall.register(r2, UAKinds.MLDSA65, _mlPk(51), _pqzAttrs(_pk(51)), new bytes(ML65_SIG), hex"aa");
         bytes32 l1 = UACall.register(r2, UAKinds.MLDSA65, _mlPk(52), _pqzAttrs(_pk(52)), new bytes(ML65_SIG), hex"aa");
         bytes32 l2 = UACall.register(r2, UAKinds.MLDSA65, _mlPk(53), _pqzAttrs(_pk(52)), new bytes(ML65_SIG), hex"aa");
@@ -503,12 +503,12 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     // ------------------------------------------------------------------ helpers
 
     /// An OFFCHAIN token with this test as its owner (the governance entries' caller) on the fixture's factory (notice 0).
-    function _owned(bytes32 v, bool fixed_) internal returns (PqzLayer t) {
+    function _owned(bytes32 v, bool fixed_) internal returns (NormalPqzToken t) {
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, v, fixed_);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
         c.owner = bytes32(uint256(uint160(address(this))));
-        t = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), keccak256(abi.encode(v, fixed_,
+        t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), keccak256(abi.encode(v, fixed_,
             gasleft()))));
     }
 }

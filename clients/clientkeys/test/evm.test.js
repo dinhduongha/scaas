@@ -132,7 +132,8 @@ test('mandate_kat.json equals the builders (pay and delegate revoke): UAPayUnder
     assert.equal(hex(hashStruct(td.types, td.primaryType, td.message)), k.struct_hash, row);
     assert.equal(hex(hashTypedData(td)), k.digest, row);
     // pay-meta-tax T37 / T41: the pay takes its `PayMeta` last, unsigned; the signed `entryRef` is its commitment
-    const meta = row === 'pay' ? { salt: k.meta_salt, payNo: k.meta_pay_no, schema: Number(k.meta_schema), body: k.meta_body } : undefined;
+    const meta = row === 'pay' ? { salt: k.meta_salt, payNo: k.meta_pay_no, save: k.meta_save, schema: Number(k.meta_schema),
+      body: k.meta_body } : undefined;
     if (meta) assert.equal(metaPayId(meta), args.entryRef, 'the entryRef commits to the PayMeta');
     assert.equal(hex(calldata(td, k.signature, meta && { meta })), k.calldata, row);
     const r = secp256k1.Signature.fromBytes(fromHex(k.signature).subarray(0, 64), 'compact').addRecoveryBit(fromHex(k.signature)[64] - 27);
@@ -620,7 +621,7 @@ test('UA-5a: UAReceiverFee typed data and the receivers\' calldata (`cast callda
   const REF = metaPayId(META);
   const pw = hex(payWithFeeToUACalldata(TO, 100000000n, 2, 100000n, '0x0000000000000000000000000000000000000fee', REF, META));
   assert.equal(pw.slice(0, 10), hex(keccak_256(utf8ToBytes(
-    'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))')).subarray(0, 4)));
+    'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))')).subarray(0, 4)));
   assert.equal(pw.slice(10, 10 + 64 * 7), 'ab'.repeat(32) + W(100000000n) + W(2n) + W(100000n) + W(0xfeen) + REF.slice(2) + W(224n));
   assert.equal(pw.slice(10 + 64 * 7, 10 + 64 * 8), '5a'.repeat(32), 'the tuple starts with the salt');
   // checkCall decodes the two allowlisted receivers; payWithFeeToUA is never signed as a call (as payWithFee)

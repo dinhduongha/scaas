@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {noVerdict} from "../helpers/PqzVerdicts.sol";
 import {PqzFixture} from "../helpers/PqzFixture.sol";
@@ -50,7 +52,7 @@ contract ProofPathHandler is PqzFixture {
     }
 
     /// Once, by the test's `setUp` (a later call, the fuzzer's, does nothing).
-    function setToken(PqzLayer t) external {
+    function setToken(NormalPqzToken t) external {
         if (address(tok) == address(0)) tok = t;
     }
 

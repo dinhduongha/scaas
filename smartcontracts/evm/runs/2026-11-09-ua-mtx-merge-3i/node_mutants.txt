@@ -1,0 +1,8 @@
+M0-red-first-no-shape-no-equality | guard::tests::service_pull_through_the_guard, service::tests::entries_equal_both_directions, service::tests::servicepull_kat_every_row, service::tests::shape_refusals | 101
+M1-guard-another-kind-on-a-service | guard::tests::service_pull_through_the_guard | 101
+M2-relay-inner-service-rule-dropped | guard::tests::service_pull_through_the_guard | 101
+M3-shape-check3-dropped | guard::tests::service_pull_through_the_guard, service::tests::shape_refusals | 101
+M4-entries-one-direction-only | guard::tests::service_pull_through_the_guard, service::tests::entries_equal_both_directions | 101
+M5-fee-nonce-dropped | service::tests::servicepull_kat_relay_fee | 101
+M6-op-bytes-bound-dropped | service::tests::note_decode_bounds | 101
+M7-pull-token-from-the-job | guard::tests::service_pull_through_the_guard | 101

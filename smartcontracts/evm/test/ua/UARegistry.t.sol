@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {SaltedEIP712Core} from "../../src/common/SaltedEIP712.sol";
+
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -1028,7 +1030,7 @@ contract UARegistryTest is UARegistryBase {
         assertEq(rB.kindOf(ua), 0x0104);
         _assertDomain(rB, uidB);
         // chainUid 0 refused
-        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
         new UARegistry(0, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
     }
 

@@ -258,8 +258,7 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
     }
 
     /// @notice The allowlist (CTR-MTX-19): the base `cancelNonce`, then the six self-only functions; fee `NONE` only.
-    function mtxSelectors()
-        public pure override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody() internal pure override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](7);
         c = new uint8[](7);

@@ -46,8 +46,8 @@ contract PqzVerifierTest is PqzOffchainBase {
     }
 
     /// An OFFCHAIN token with verifier `v` on the factory `f` (owner: this test).
-    function _tok(OpenFactory f, bytes32 v, bool fixed_) internal returns (PqzLayer) {
-        return PqzLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfgOf(v, fixed_, me)),
+    function _tok(OpenFactory f, bytes32 v, bool fixed_) internal returns (NormalPqzToken) {
+        return NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfgOf(v, fixed_, me)),
             keccak256(abi.encode(v, fixed_, gasleft()))));
     }
 
@@ -161,7 +161,7 @@ contract PqzVerifierTest is PqzOffchainBase {
         bytes32 id = keccak256("never registered");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PqzVerifierUnregistered.selector, id));
         _tryCreateStrict(id);
-        PqzLayer t = _tok(fN, vA, false);
+        NormalPqzToken t = _tok(fN, vA, false);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PqzVerifierUnregistered.selector, id));
         t.pqzSetVerifier(id);
         _asKind(id, UAKinds.MLDSA87);
@@ -174,7 +174,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     // ------------------------------------------------------------------ the frozen shape (spec §4.1, C3)
 
     /// A shape from mocks: a 2-of-3 with an EOA member (`vB`), `secp256k1`, `mldsa65`; the third slot not yet accepted.
-    function _msigVerifier() internal returns (bytes32 ms, PqzLayer t) {
+    function _msigVerifier() internal returns (bytes32 ms, NormalPqzToken t) {
         ms = keccak256("verifier msig");
         _asMsig(ms, 2, _three(UAKinds.EVM_EOA, UAKinds.SECP256K1, UAKinds.MLDSA65), _ids(vB, keccak256("s"), keccak256("m")),
             _acc(true, true, false));
@@ -184,14 +184,14 @@ contract PqzVerifierTest is PqzOffchainBase {
         vm.mockCall(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ms), "");
     }
 
-    function _msigOp(PqzLayer t) internal view returns (IPqzToken.PqzTransferArgs memory a, IPqzToken.PqzSignedVerdict memory sv) {
+    function _msigOp(NormalPqzToken t) internal view returns (IPqzToken.PqzTransferArgs memory a, IPqzToken.PqzSignedVerdict memory sv) {
         bytes memory st;
         (a, st) = _op1Of(t, alice, bob, 5, true);
         sv.pqzVerdict = _verdict(t, st, VPROOF);
     }
 
     function test_pqzVerdict_shapeChanged_msigMemberCode() public {
-        (, PqzLayer t) = _msigVerifier();
+        (, NormalPqzToken t) = _msigVerifier();
         (IPqzToken.PqzTransferArgs memory a, IPqzToken.PqzSignedVerdict memory sv) = _msigOp(t);
         uint256 snap = vm.snapshotState();
         t.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", sv); // control
@@ -202,7 +202,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     }
 
     function test_pqzVerdict_shapeChanged_slotAccepted() public {
-        (bytes32 ms, PqzLayer t) = _msigVerifier();
+        (bytes32 ms, NormalPqzToken t) = _msigVerifier();
         (IPqzToken.PqzTransferArgs memory a, IPqzToken.PqzSignedVerdict memory sv) = _msigOp(t);
         vm.mockCall(address(reg), abi.encodeCall(IUARegistry.memberAccepted, (ms, uint256(2))), abi.encode(true));
         vm.expectRevert(IPqzToken.PqzVerifierChanged.selector);
@@ -211,7 +211,7 @@ contract PqzVerifierTest is PqzOffchainBase {
 
     /// A re-assignment through the notice accepts the new shape.
     function test_shape_reassignAccepts() public {
-        PqzLayer t = _tok(factory, vA, false); // notice 0
+        NormalPqzToken t = _tok(factory, vA, false); // notice 0
         _shieldOn(t, alice, 10);
         vm.etch(address(uint160(uint256(vA))), hex"ef0100000000000000000000000000000000000000c0de"); // a 7702 designator
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op1Of(t, alice, bob, 5, true);
@@ -226,7 +226,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     // ------------------------------------------------------------------ the transfer (spec §4.2, AV-4)
 
     function test_transfer_notReady() public {
-        PqzLayer t = _tok(fN, vA, false);
+        NormalPqzToken t = _tok(fN, vA, false);
         uint64 eta = uint64(block.timestamp) + NOTICE;
         vm.expectEmit(address(t));
         emit IPqzToken.PqzVerifierProposed(vA, vB, eta);
@@ -242,7 +242,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     }
 
     function test_transfer_atEta() public {
-        PqzLayer t = _tok(fN, vA, false);
+        NormalPqzToken t = _tok(fN, vA, false);
         t.pqzSetVerifier(vB);
         vm.warp(block.timestamp + NOTICE);
         vm.expectEmit(address(t));
@@ -264,7 +264,7 @@ contract PqzVerifierTest is PqzOffchainBase {
 
     /// A confirm by anyone but the proposer: `NotProposer`; a proposal by a non-owner: `NotOwner`.
     function test_transfer_notProposer() public {
-        PqzLayer t = _tok(fN, vA, false);
+        NormalPqzToken t = _tok(fN, vA, false);
         vm.prank(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, nid(address(0xBEEF))));
         t.pqzSetVerifier(vB);
@@ -283,7 +283,7 @@ contract PqzVerifierTest is PqzOffchainBase {
 
     /// An owner change between proposal and confirm kills the pending (`ownerGeneration`).
     function test_transfer_ownerChanged() public {
-        PqzLayer t = _tok(fN, vA, false);
+        NormalPqzToken t = _tok(fN, vA, false);
         t.pqzSetVerifier(vB);
         address o2 = address(0x0A2);
         IGovernance(address(t)).transferOwnership(nid(o2));
@@ -298,7 +298,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     }
 
     function test_transfer_fixed() public {
-        PqzLayer t = _tok(fN, vA, true);
+        NormalPqzToken t = _tok(fN, vA, true);
         vm.expectRevert(IPqzToken.PqzVerifierFixed.selector);
         t.pqzSetVerifier(vB);
         vm.expectRevert(IPqzToken.PqzVerifierFixed.selector);
@@ -306,7 +306,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     }
 
     function test_transfer_same() public {
-        PqzLayer t = _tok(fN, vA, false);
+        NormalPqzToken t = _tok(fN, vA, false);
         vm.expectRevert(IPqzToken.PqzVerifierSame.selector);
         t.pqzSetVerifier(vA);
         t.pqzSetVerifier(vB);
@@ -321,7 +321,7 @@ contract PqzVerifierTest is PqzOffchainBase {
 
     /// A factory notice period 0: the first call applies at once.
     function test_transfer_zeroNotice() public {
-        PqzLayer t = _tok(factory, vA, false);
+        NormalPqzToken t = _tok(factory, vA, false);
         assertEq(t.pqzVerifyConfig().noticePeriod, 0);
         t.pqzSetVerifier(vB);
         assertEq(t.pqzVerifyConfig().verifier, vB);
@@ -335,7 +335,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     function test_transfer_precompileRefused() public {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.owner = me;
-        PqzLayer t = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "precompile-owned"));
+        NormalPqzToken t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "precompile-owned"));
         vm.expectRevert(IPqzToken.PqzVerifyConfigInvalid.selector);
         t.pqzSetVerifier(vB);
         vm.expectRevert(IPqzToken.PqzVerifyConfigInvalid.selector);
@@ -347,7 +347,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     // ------------------------------------------------------------------ revocation (spec §4.3, R4)
 
     function test_revoke_immediate() public {
-        PqzLayer t = _tok(fN, vA, false);
+        NormalPqzToken t = _tok(fN, vA, false);
         vm.expectEmit(address(t));
         emit PqzVerifierRevoked(vA, 1);
         t.pqzRevokeVerifier();
@@ -367,7 +367,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     }
 
     function test_revoke_deletesPending() public {
-        PqzLayer t = _tok(fN, vA, false);
+        NormalPqzToken t = _tok(fN, vA, false);
         t.pqzSetVerifier(vB);
         t.pqzRevokeVerifier();
         assertEq(t.pqzVerifyConfig().pending, 0);
@@ -377,7 +377,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     }
 
     function test_revoke_fixedRefused() public {
-        PqzLayer t = _tok(fN, vA, true);
+        NormalPqzToken t = _tok(fN, vA, true);
         vm.expectRevert(IPqzToken.PqzVerifierFixed.selector);
         t.pqzRevokeVerifier();
     }

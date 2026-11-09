@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IUALedger} from "../../../src/metatx/IUALedger.sol";
+import {NormalZetherToken} from "../../../src/zether/NormalZetherToken.sol";
+
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {noVerdict} from "../../pqz/helpers/PqzVerdicts.sol";
 import {PayMetaKit} from "../../helpers/PayMetaKit.sol";
 import {Test} from "forge-std/Test.sol";
@@ -144,12 +149,12 @@ abstract contract RegCore is Test {
     {
         (cT, cReg, cAttester, cAdmin) = (t, reg, att[0], att[1]);
         (cGov, cWrapped, cLeg, cMinter) = (gov, wrapped, leg, minter);
-        cGd = MetaTokenBase(t).grantDelay();
+        cGd = NormalToken(t).grantDelay();
         for (uint256 k; k < cIds.length; ++k) gUntil[cIds[k]] = IRegulatedToken(t).freezeOf(cIds[k]).until;
         // bit 22 to the operator: the owner's two calls (grantRole keeps two calls on every bit, spec §3.6)
         for (uint256 i; i < 2; ++i) {
             vm.prank(gov[0]);
-            MetaTokenBase(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(gov[4]));
+            NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(gov[4]));
             if (i == 0) vm.warp(block.timestamp + cGd);
         }
     }
@@ -179,7 +184,7 @@ abstract contract RegCore is Test {
     }
 
     function _bal(bytes32 a) internal view returns (uint256) {
-        return ERC20MetaTx(cT).balanceOfUA(a);
+        return NormalToken(cT).balanceOfUA(a);
     }
 
     function _legsHash() internal view returns (bytes32) {
@@ -197,10 +202,10 @@ abstract contract RegCore is Test {
         }
         pP = _paused();
         pCtl = IRegulatedToken(cT).regulatedConfig().controls;
-        pFeat = MetaTokenBase(cT).features();
+        pFeat = NormalToken(cT).features();
         pSupply = IERC20(cT).totalSupply();
         pLegs = _legsHash();
-        pMint = cMinter != 0 && MetaTokenBase(cT).hasRole(GovernanceBits.MINTABLE, cMinter);
+        pMint = cMinter != 0 && NormalToken(cT).hasRole(GovernanceBits.MINTABLE, cMinter);
         pShield = _shieldHash();
         vm.recordLogs();
     }
@@ -363,14 +368,14 @@ abstract contract RegCore is Test {
         if (!_i1Extra()) _flag(1, "balanceOf(SHIELD_POOL) != totalShielded x scale");
         // I6, I12
         uint8 c = IRegulatedToken(cT).regulatedConfig().controls;
-        uint256 f = MetaTokenBase(cT).features();
+        uint256 f = NormalToken(cT).features();
         ++hits[12];
         if (c != uint8((f >> 5) & 0x3F)) _flag(12, "controls != (features >> 5) & 0x3F");
         ++hits[6];
         if (c & ~pCtl != 0) _flag(6, "controls gained a bit");
         if (kind >= K_CTRL && kind <= K_GOV) {
             if (_legsHash() != pLegs) _flag(6, "a regulated call moved a leg's reserve, rate or wrapEnabled");
-            if (cMinter != 0 && MetaTokenBase(cT).hasRole(GovernanceBits.MINTABLE, cMinter) != pMint) _flag(6, "the minter moved");
+            if (cMinter != 0 && NormalToken(cT).hasRole(GovernanceBits.MINTABLE, cMinter) != pMint) _flag(6, "the minter moved");
         }
         // I7
         for (uint256 k; k < cIds.length; ++k) _i7(cIds[k], k);
@@ -606,7 +611,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         vm.prank(alice);
         IERC20(t).transfer(bob, SUPPLY / 4);
         vm.prank(alice);
-        ERC20MetaTx(t).transferToUA(UA_X, SUPPLY / 4);
+        NormalToken(t).transferToUA(UA_X, SUPPLY / 4);
         _coreInit(t, creg, [attester, cadmin], [ownerA, address(0x0B22), issuer, compliance, address(0x0BE7), address(0x5EE)],
             which == 1, address(usd), which == 0 ? nid(address(this)) : bytes32(0));
         if (which == 1) usd.approve(t, type(uint256).max);
@@ -623,7 +628,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         bytes32 to = _id(j);
         amount = bound(amount, 0, 500);
         _op(K_MOVE, from, uint256(to) >> 160 == 0 ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
-            : abi.encodeCall(ERC20MetaTx.transferToUA, (to, amount)));
+            : abi.encodeCall(IUALedger.transferToUA, (to, amount)));
     }
 
     /// The generic `mtxExecute` of `inner` signed by EOA `i`, relayed by `rel` (an EOA or `relayer`), fee `fee` (0: `NONE`).
@@ -635,7 +640,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         uint32 mode = feeBearing ? MetaTxLib.MODE_FEE_FIXED : MetaTxLib.MODE_FEE_NONE;
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(nid(from), inner, ++cLane, 0,
             block.timestamp + 300, mode, address(0), feeBearing ? fee % 7 : 0, address(0));
-        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pk, MetaTokenBase(cT).mtxDigest(m));
+        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pk, NormalToken(cT).mtxDigest(m));
         IUARegistry.UASig memory s;
         s.signature = abi.encodePacked(rr, ss, v);
         (r,) = rel % 4 == 3 ? (relayer, 0) : _eoa(rel);
@@ -650,12 +655,12 @@ contract RegPublicHandler is RegFixture, RegCore {
         MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer(nid(from), _id(j), bound(amount, 0, 500), CREF, ++cLane,
             0, block.timestamp + 300, fb ? MetaTxLib.MODE_FEE_FIXED : MetaTxLib.MODE_FEE_NONE, address(0), fb ? fee % 7 : 0,
             address(0));
-        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pk, ERC20MetaTx(cT).mtxTransferDigest(t));
+        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pk, NormalToken(cT).mtxTransferDigest(t));
         IUARegistry.UASig memory s;
         s.signature = abi.encodePacked(rr, ss, v);
         (address r,) = rel % 4 == 3 ? (relayer, 0) : _eoa(rel);
         pGasCap = 200_000; // I10: a `_regPre` refusal, before the signature
-        _op(K_MOVE, r, abi.encodeCall(ERC20MetaTx.mtxExecuteTransfer, (t, s)));
+        _op(K_MOVE, r, abi.encodeCall(NormalToken.mtxExecuteTransfer, (t, s)));
     }
 
     function pubPay(uint256 i, uint256 j, uint256 amount, uint256 fee, uint256 rel) external {
@@ -663,7 +668,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         (address to,) = _eoa(j);
         (address feeTo,) = rel % 4 == 3 ? (relayer, 0) : _eoa(rel);
         if (feeTo == to) feeTo = relayer;
-        _op(K_MOVE, from, abi.encodeCall(MetaTokenBase.payWithFee, (to, bound(amount, 0, 500), FeeMode.FIXED, fee % 5,
+        _op(K_MOVE, from, abi.encodeCall(NormalToken.payWithFee, (to, bound(amount, 0, 500), FeeMode.FIXED, fee % 5,
             feeTo, PayMetaKit.ref(CREF), PayMetaKit.meta(CREF))));
     }
 
@@ -720,7 +725,7 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         setUp();
         IFactoryToken.TokenConfig memory c = _regCfg();
         c.features |= 1 << GovernanceBits.OPERATOR_TRANSFER;
-        tok = PqzLayer(factory.createToken(_kind(), 1, abi.encode(c), "inv"));
+        tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(c), "inv"));
         w = WrappedPqzToken(payable(address(tok)));
         cConf = true;
         (leg0, leg1) = (more[3], more[4]);
@@ -854,7 +859,7 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         bytes32 to = _id(j);
         amount = bound(amount, 0, 5000);
         _op(K_MOVE, from, uint256(to) >> 160 == 0 ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
-            : abi.encodeCall(ERC20MetaTx.transferToUA, (to, amount)));
+            : abi.encodeCall(IUALedger.transferToUA, (to, amount)));
     }
 }
 
@@ -885,7 +890,7 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         setUp();
         IFactoryToken.TokenConfig memory c = _regCfg(true, uint256(1) << 40);
         c.features |= 1 << GovernanceBits.OPERATOR_TRANSFER;
-        tok = ZetherLayer(factory.createToken(_kind(), 1, abi.encode(c), "inv"));
+        tok = NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(c), "inv"));
         cConf = true;
         (us[0], us[1], us[2]) = (alice, bob, carol);
         _public(tok, address(this), 1e10);
@@ -1022,7 +1027,7 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         bytes32 to = _id(j);
         amount = bound(amount, 0, 5000);
         _op(K_MOVE, from, uint256(to) >> 160 == 0 ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
-            : abi.encodeCall(ERC20MetaTx.transferToUA, (to, amount)));
+            : abi.encodeCall(IUALedger.transferToUA, (to, amount)));
     }
 }
 

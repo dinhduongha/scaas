@@ -33,10 +33,10 @@ contract UALedgerHandler is Test {
     address internal constant RELAYER = address(0xBEEF);
     address internal constant FEE_TO = address(0xFEE);
 
-    MetaTokenBase internal immutable tok;
-    MetaTokenBase internal immutable wrp;
-    MetaTokenBase internal immutable wrpL;
-    MetaTokenBase internal immutable wrpN;
+    NormalToken internal immutable tok;
+    NormalToken internal immutable wrp;
+    NormalToken internal immutable wrpL;
+    NormalToken internal immutable wrpN;
     MockERC20 internal immutable und;
     UARegistry internal immutable reg;
     address internal immutable minter;
@@ -52,7 +52,8 @@ contract UALedgerHandler is Test {
         NormalToken tok_, WrappedToken wrp_, WrappedToken wrpL_, WrappedToken wrpN_, MockERC20 und_,
         UARegistry reg_, address minter_, bytes32[2] memory uas_, bytes[2] memory keys_, uint16[2] memory kinds_
     ) {
-        (tok, wrp, wrpL, wrpN, und, reg, minter) = (tok_, wrp_, wrpL_, wrpN_, und_, reg_, minter_);
+        (tok, wrp, wrpL, wrpN, und, reg, minter) = (tok_, NormalToken(address(wrp_)), NormalToken(address(wrpL_)),
+            NormalToken(address(wrpN_)), und_, reg_, minter_);
         (uas, keys, kinds) = (uas_, keys_, kinds_);
         replay[address(tok_)][vm.addr(pks[0])] = int256(tok_.balanceOf(vm.addr(pks[0])));
         vm.recordLogs();
@@ -329,7 +330,7 @@ contract UALedgerHandler is Test {
     /// `from`/`to` index 0–2 a native holder, 3–4 a UA; `withFee` adds a FIXED fee to `FEE_TO` (1 % cap). `seed` picks
     /// the token (NORMAL or `wrp`) and the entry (`mtxExecuteTransfer`, the named form, `mtxBatchTransfer`).
     function mtxTransfer(uint256 from, uint256 to, uint256 amount, bool withFee, uint256 seed) external {
-        MetaTokenBase t_ = seed % 2 == 0 ? tok : wrp;
+        NormalToken t_ = seed % 2 == 0 ? tok : wrp;
         bytes32 f = _id(from % 5);
         bytes32 t = _id(to % 5);
         uint256 have = t_.balanceOfUA(f);
@@ -357,7 +358,7 @@ contract UALedgerHandler is Test {
 
     /// A contract spender cannot pull from `UA_POOL` outside a UA self-call: `transferFrom(UA_POOL, x, 0)` reverts.
     function poolTransferFrom(uint256 seed, uint256 to) external {
-        MetaTokenBase t_ = seed % 2 == 0 ? tok : wrp;
+        NormalToken t_ = seed % 2 == 0 ? tok : wrp;
         try t_.transferFrom(MetaTxLib.UA_POOL, vm.addr(pks[to % 3]), 0) returns (bool) {
             revert("transferFrom(UA_POOL) must revert");
         } catch (bytes memory err) {
@@ -367,7 +368,7 @@ contract UALedgerHandler is Test {
 
     // ----- helpers -----
 
-    function _submit(MetaTokenBase t_, MetaTxLib.UAMetaTransfer memory x, bytes memory auth, uint256 entry) internal {
+    function _submit(NormalToken t_, MetaTxLib.UAMetaTransfer memory x, bytes memory auth, uint256 entry) internal {
         if (entry == 1 && x.fee == 0) {
             t_.mtxTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, UACall.auth(x.from, auth));
         } else if (entry == 1) {
@@ -404,7 +405,7 @@ contract UALedgerHandler is Test {
     }
 
     /// A `UAMetaTransaction` of `f` on `t_`, lane 1, with a bound FIXED fee to `FEE_TO` when `fee ≠ 0`.
-    function _uaCall(MetaTokenBase t_, bytes32 f, bytes memory data, uint256 fee)
+    function _uaCall(NormalToken t_, bytes32 f, bytes memory data, uint256 fee)
         internal view returns (MetaTxLib.UAMetaTransaction memory m)
     {
         m = MetaTxLib.UAMetaTransaction({
@@ -418,20 +419,20 @@ contract UALedgerHandler is Test {
     }
 
     /// Replays this call's `Transfer` and `UATransfer` logs and checks the event counts.
-    function _settle(MetaTokenBase t_, uint256 wantUATransfers, uint256 wantTransfers) internal {
+    function _settle(NormalToken t_, uint256 wantUATransfers, uint256 wantTransfers) internal {
         _replay(vm.getRecordedLogs(), t_, wantUATransfers, wantTransfers);
         vm.recordLogs();
     }
 
     /// The same for a call that moves two tokens.
-    function _settle2(MetaTokenBase a, uint256 uaA, uint256 trA, MetaTokenBase b, uint256 uaB, uint256 trB) internal {
+    function _settle2(NormalToken a, uint256 uaA, uint256 trA, NormalToken b, uint256 uaB, uint256 trB) internal {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         _replay(logs, a, uaA, trA);
         _replay(logs, b, uaB, trB);
         vm.recordLogs();
     }
 
-    function _replay(Vm.Log[] memory logs, MetaTokenBase t_, uint256 wantUATransfers, uint256 wantTransfers) internal {
+    function _replay(Vm.Log[] memory logs, NormalToken t_, uint256 wantUATransfers, uint256 wantTransfers) internal {
         uint256 transfers;
         uint256 uaTransfers;
         for (uint256 i; i < logs.length; ++i) {
@@ -477,7 +478,7 @@ contract UALedgerInvariantTest is UALedgerBase {
         targetContract(address(h));
     }
 
-    function _check(MetaTokenBase t) internal view {
+    function _check(NormalToken t) internal view {
         address[8] memory a = h.natives();
         uint256 sum;
         for (uint256 i; i < a.length; ++i) {
@@ -499,18 +500,18 @@ contract UALedgerInvariantTest is UALedgerBase {
     }
 
     function invariant_T_V3_2_wrapped() public view {
-        _check(wrp);
+        _check(NormalToken(address(wrp)));
         assertEq(wrp.totalSupply(), und.balanceOf(address(wrp)), "1:1 backing");
     }
 
     function invariant_T_V3_2_ledgerLeg() public view {
-        _check(wrpL);
+        _check(NormalToken(address(wrpL)));
         (,, uint256 reserve,,) = wrpL.legOf(address(tok));
         assertEq(tok.balanceOf(address(wrpL)), reserve, "leg balance == reserve (no donation)");
     }
 
     function invariant_T_V3_2_nativeLeg() public view {
-        _check(wrpN);
+        _check(NormalToken(address(wrpN)));
         assertEq(wrpN.totalSupply(), address(wrpN).balance, "1:1 backing");
     }
 

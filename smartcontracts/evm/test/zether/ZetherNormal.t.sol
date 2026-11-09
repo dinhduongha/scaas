@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {console2} from "forge-std/Test.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
@@ -153,7 +155,7 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         vm.expectRevert(err);
         tok.mtxShield(ZetherTypes.UA.unwrap(bob.ua), 1);
         // the cap counts every account: room = max − totalShielded
-        ZetherLayer small = _newToken(false, "small", 100);
+        NormalZetherToken small = _newToken(false, "small", 100);
         _public(small, address(this), 101 * SCALE);
         small.mtxShield(ZetherTypes.UA.unwrap(alice.ua), 60);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 41, 40));
@@ -376,7 +378,7 @@ abstract contract ZetherNormalSuite is ZetherFixture {
 
     /// Same verifier, registry, accSeq/sendCounter on another token: the header (token) differs ⇒ refused.
     function test_replayAcrossTokensRejected() public {
-        ZetherLayer other = _newToken(true, "zusd-2");
+        NormalZetherToken other = _newToken(true, "zusd-2");
         _fund(tok, alice, 500);
         _fund(other, alice, 500);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);

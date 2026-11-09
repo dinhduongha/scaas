@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {console2, Vm} from "forge-std/Test.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
@@ -30,7 +32,7 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         for (uint256 j; j < m; ++j) to[j] = rs[j];
     }
 
-    function _send(ZetherLayer t, ZetherTypes.TransferMode mode, Tx memory x, ZetherTypes.UA ben) internal returns (bytes32) {
+    function _send(NormalZetherToken t, ZetherTypes.TransferMode mode, Tx memory x, ZetherTypes.UA ben) internal returns (bytes32) {
         if (mode == ZetherTypes.TransferMode.HASH) return t.mtxConfidentialTransferCompact(_zMulti(x.payload, ben), x.proof);
         return t.mtxConfidentialTransfer(_zMulti(x.payload, ben), x.proof);
     }

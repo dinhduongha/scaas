@@ -38,7 +38,7 @@ contract PqzGuardsTest is PqzFixture {
     }
 
     /// A release (and one token) of the PQZH verifier at this set.
-    function _pqzh(bytes32 salt_) internal returns (PqzLayer) {
+    function _pqzh(bytes32 salt_) internal returns (NormalPqzToken) {
         pqv = _newPqzVerifier(PQZH_ID);
         factory = EnvKit.factory(registrar, PQZ_UID, 0);
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
@@ -74,7 +74,7 @@ contract PqzGuardsTest is PqzFixture {
 
     function test_pqzhValue_msigHolderRefused() public {
         vm.skip(!PqzSet.PQZH_VALUE);
-        PqzLayer h = _pqzh("pqzh");
+        NormalPqzToken h = _pqzh("pqzh");
         _fund(h, alice, 1000);
         _kind(bob, UAKinds.MSIG);
         bytes memory err = abi.encodeWithSelector(IPqzToken.PqzhHolderKind.selector, bob, UAKinds.MSIG);
@@ -98,7 +98,7 @@ contract PqzGuardsTest is PqzFixture {
 
     function test_pqzhValue_singleKeyHolders() public {
         vm.skip(!PqzSet.PQZH_VALUE);
-        PqzLayer h = _pqzh("pqzh");
+        NormalPqzToken h = _pqzh("pqzh");
         _fund(h, alice, 1000);
         uint16[5] memory ks = [UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.FNDSA512, UAKinds.MLDSA87, UAKinds.FNDSA1024]; // CTR-UA-39 / -40 Q2
         for (uint256 i; i < 5; ++i) {

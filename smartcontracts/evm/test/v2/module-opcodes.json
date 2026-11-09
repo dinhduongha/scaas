@@ -1,0 +1,227 @@
+{
+ "_comment": "T66b \u00a74.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures.",
+ "NormalTokenP": [
+  2,
+  0
+ ],
+ "NormalTokenT": [
+  1,
+  0
+ ],
+ "NormalTokenA": [
+  9,
+  0
+ ],
+ "WrappedTokenP": [
+  2,
+  0
+ ],
+ "WrappedTokenT": [
+  2,
+  0
+ ],
+ "WrappedTokenA": [
+  5,
+  0
+ ],
+ "WrappedTokenW": [
+  18,
+  0
+ ],
+ "NormalZetherTokenP": [
+  2,
+  0
+ ],
+ "NormalZetherTokenT": [
+  1,
+  0
+ ],
+ "NormalZetherTokenA": [
+  12,
+  0
+ ],
+ "NormalZetherTokenZ": [
+  5,
+  0
+ ],
+ "WrappedZetherTokenP": [
+  2,
+  0
+ ],
+ "WrappedZetherTokenT": [
+  2,
+  0
+ ],
+ "WrappedZetherTokenA": [
+  6,
+  0
+ ],
+ "WrappedZetherTokenW": [
+  16,
+  0
+ ],
+ "WrappedZetherTokenZ": [
+  13,
+  1
+ ],
+ "NormalPqzTokenP": [
+  2,
+  0
+ ],
+ "NormalPqzTokenT": [
+  1,
+  0
+ ],
+ "NormalPqzTokenA": [
+  10,
+  0
+ ],
+ "NormalPqzTokenQ": [
+  19,
+  0
+ ],
+ "WrappedPqzTokenP": [
+  2,
+  0
+ ],
+ "WrappedPqzTokenT": [
+  2,
+  0
+ ],
+ "WrappedPqzTokenA": [
+  6,
+  0
+ ],
+ "WrappedPqzTokenW": [
+  16,
+  0
+ ],
+ "WrappedPqzTokenQ": [
+  21,
+  0
+ ],
+ "WrappedPqzTokenQ2": [
+  8,
+  0
+ ],
+ "NormalRegulatedTokenP": [
+  7,
+  0
+ ],
+ "NormalRegulatedTokenT": [
+  1,
+  0
+ ],
+ "NormalRegulatedTokenA": [
+  9,
+  0
+ ],
+ "NormalRegulatedTokenW": [
+  7,
+  0
+ ],
+ "WrappedRegulatedTokenP": [
+  7,
+  0
+ ],
+ "WrappedRegulatedTokenT": [
+  2,
+  0
+ ],
+ "WrappedRegulatedTokenA": [
+  6,
+  0
+ ],
+ "WrappedRegulatedTokenW": [
+  22,
+  0
+ ],
+ "NormalZetherRegulatedTokenP": [
+  7,
+  0
+ ],
+ "NormalZetherRegulatedTokenT": [
+  1,
+  0
+ ],
+ "NormalZetherRegulatedTokenA": [
+  12,
+  0
+ ],
+ "NormalZetherRegulatedTokenW": [
+  7,
+  0
+ ],
+ "NormalZetherRegulatedTokenZ": [
+  5,
+  0
+ ],
+ "WrappedZetherRegulatedTokenP": [
+  7,
+  0
+ ],
+ "WrappedZetherRegulatedTokenT": [
+  2,
+  0
+ ],
+ "WrappedZetherRegulatedTokenA": [
+  7,
+  0
+ ],
+ "WrappedZetherRegulatedTokenW": [
+  22,
+  0
+ ],
+ "WrappedZetherRegulatedTokenZ": [
+  11,
+  1
+ ],
+ "NormalPqzRegulatedTokenP": [
+  7,
+  0
+ ],
+ "NormalPqzRegulatedTokenT": [
+  1,
+  0
+ ],
+ "NormalPqzRegulatedTokenA": [
+  10,
+  0
+ ],
+ "NormalPqzRegulatedTokenW": [
+  7,
+  0
+ ],
+ "NormalPqzRegulatedTokenQ": [
+  19,
+  0
+ ],
+ "WrappedPqzRegulatedTokenP": [
+  7,
+  0
+ ],
+ "WrappedPqzRegulatedTokenT": [
+  2,
+  0
+ ],
+ "WrappedPqzRegulatedTokenA": [
+  7,
+  0
+ ],
+ "WrappedPqzRegulatedTokenW": [
+  22,
+  0
+ ],
+ "WrappedPqzRegulatedTokenQ": [
+  18,
+  0
+ ],
+ "WrappedPqzRegulatedTokenQ2": [
+  8,
+  0
+ ],
+ "SCaaSDexD": [
+  6,
+  0
+ ]
+}

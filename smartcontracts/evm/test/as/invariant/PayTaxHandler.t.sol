@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../../src/metatx/NormalToken.sol";
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -57,7 +59,7 @@ contract PayTaxHandler is Test {
     function _x(uint256 i, uint256 j, uint256 v, bytes32 ref, uint256 lane)
         internal view returns (MetaTxLib.UAMetaTransfer memory x)
     {
-        x = MetaTxLib.UAMetaTransfer(nid(eoas[i]), nid(eoas[j]), v, ref, lane, MetaTokenBase(t).mtxNonce(nid(eoas[i]), lane),
+        x = MetaTxLib.UAMetaTransfer(nid(eoas[i]), nid(eoas[j]), v, ref, lane, NormalToken(t).mtxNonce(nid(eoas[i]), lane),
             block.timestamp + 300, RR, RELAYER, 0, address(0));
     }
 
@@ -103,17 +105,17 @@ contract PayTaxHandler is Test {
         v = bound(v, 0, IERC20(t).balanceOf(eoas[i]));
         (MetaTxLib.PayMeta memory m, bytes32 ref) = _meta();
         MetaTxLib.UAMetaTransfer memory x = _x(i, j, v, ref, lane);
-        IUARegistry.UASig memory s = _sign(i, MetaTokenBase(t).mtxTransferDigest(x));
+        IUARegistry.UASig memory s = _sign(i, NormalToken(t).mtxTransferDigest(x));
         vm.recordLogs();
         vm.prank(RELAYER);
-        MetaTokenBase(t).mtxPay(x, s, m);
+        NormalToken(t).mtxPay(x, s, m);
         _j1(ref);
         // J2: the same signature never lands twice, on this entry or the plain transfer
         ++hits[2];
         vm.prank(RELAYER);
-        try MetaTokenBase(t).mtxPay(x, s, m) returns (bool) { _bad(2, "mtxPay replayed"); } catch {}
+        try NormalToken(t).mtxPay(x, s, m) returns (bool) { _bad(2, "mtxPay replayed"); } catch {}
         vm.prank(RELAYER);
-        try MetaTokenBase(t).mtxExecuteTransfer(x, s) returns (bool) { _bad(2, "replayed as a plain transfer"); } catch {}
+        try NormalToken(t).mtxExecuteTransfer(x, s) returns (bool) { _bad(2, "replayed as a plain transfer"); } catch {}
     }
 
     function payDirect(uint256 i, uint256 j, uint256 v) external {
@@ -123,7 +125,7 @@ contract PayTaxHandler is Test {
         (MetaTxLib.PayMeta memory m, bytes32 ref) = _meta();
         vm.recordLogs();
         vm.prank(eoas[i]);
-        MetaTokenBase(t).payWithFee(eoas[j], v, FeeMode.NONE, 0, address(0), ref, m);
+        NormalToken(t).payWithFee(eoas[j], v, FeeMode.NONE, 0, address(0), ref, m);
         _j1(ref);
     }
 

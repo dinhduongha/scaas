@@ -325,7 +325,7 @@ whose payee bounces still uses up that `(payer, payId)` (its lane is spent), so 
 it, and never pays or approves the router's executor or marker.** Status: clientkeys (EVM) **BUILT** (metatx split T18;
 [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27)). `relayRef(chainId, target, callData)` (`keccak256("scaas.relayfee" ‖
 uint256 chainId ‖ target ‖ keccak256(callData))`, vectors `smartcontracts/vectors/metatx/relayref.json`, written by forge
-against `MtxRelayFee` itself; `scaas-ua` `relay_ref`, QML `UaKinds.relayRef`), `mtxExecuteCalldata(td, signature)` and
+against `RelayFeeRouter` itself; `scaas-ua` `relay_ref`, QML `UaKinds.relayRef`), `mtxExecuteCalldata(td, signature)` and
 `buildRelayFee`: it returns the inner call's typed data to sign first (an inner `MetaTransaction` with
 `MODE_RESTRICT_RELAYER` gets the **executor** as its relayer; left open it stays open; bound to anything else, or on
 another contract than `target`, refused), one `prompt` with both intents (the call: target, data, signer, relayer; the

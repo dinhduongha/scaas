@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
+
 import {IGovernanceRouter} from "../../src/governance/IGovernanceRouter.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
@@ -13,7 +15,7 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTxBase} from "../../src/metatx/MetaTxBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
-import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
+import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind, AccountSig} from "../../src/account/SmartKeyAccount.sol";
@@ -81,7 +83,8 @@ string constant UA_CANCEL_NONCE = "mtxCancelNonce((bytes32,uint256,uint256,uint2
 function rowMeta(string memory j, string memory op, string memory kind) pure returns (MetaTxLib.PayMeta memory m) {
     string memory p = domainField(op, kind, "extra.meta.");
     m.salt = VM.parseJsonBytes32(j, string.concat(p, "salt"));
-    m.payNo = VM.parseJsonString(j, string.concat(p, "payNo"));
+    m.payNo = VM.parseJsonBytes32(j, string.concat(p, "payNo"));
+    m.save = VM.parseJsonBool(j, string.concat(p, "save"));
     m.schema = uint16(VM.parseJsonUint(j, string.concat(p, "schema")));
     m.body = VM.parseJsonBytes(j, string.concat(p, "body"));
 }
@@ -223,7 +226,7 @@ contract TypedOpsTest is UALedgerBase {
 
     /// A SCaaS ledger token at a row's address, its supply here.
     function _tokenAt(address at) internal returns (NormalToken l) {
-        address impl = address(new NormalToken(address(this), ""));
+        address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         vm.etch(at, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_L, address(0), false)));
         l = NormalToken(at);
         l.initialize(nid(address(this)), 1, abi.encode(normalInit("Leg", "LEG", 6, SUPPLY, address(this), address(this))));
@@ -1109,7 +1112,7 @@ contract TypedOpsTest is UALedgerBase {
         string memory op = "UABurn";
         MetaTxLib.UAEnvelope memory e = _uaEnv(op);
         uint256 amount = _uint(op, "amount");
-        NormalToken other = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        NormalToken other = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         other.initialize(nid(address(this)), 1, abi.encode(normalInit("Other", "OTH", 6, SUPPLY,
             address(uint160(uint256(e.from))), address(this))));
         IUARegistry.UASig memory sig;
@@ -1132,7 +1135,7 @@ contract TypedOpsTest is UALedgerBase {
         und.approve(address(wrp), 1_000);
         wrp.wrap(1_000);
         vm.stopPrank();
-        MtxRelayFee router = new MtxRelayFee();
+        RelayFeeRouter router = new RelayFeeRouter();
         MetaTxLib.Envelope memory e = _env(alice, 0, RR, 0, address(0));
         e.relayer = router.EXECUTOR();
         bytes memory cd = abi.encodeCall(WrappedToken.mtxUnwrap, (_uaE(e, _pad(alice)), 100, bob, 0, _unwrapSig(ALICE_PK, wrp, e, 100)));
@@ -1354,9 +1357,9 @@ contract TypedOpsRouterTest is UALedgerBase {
         assertEq(me, bytes32(uint256(uint160(signer))), "the key's UA is its native id");
         router = vm.parseJsonAddress(j, domainField("UAGrantRole", K, "domain.verifyingContract"));
         deployCodeTo("GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false), router);
-        normalImpl = address(new NormalToken(address(this), ""));
-        wrappedImpl = address(new WrappedToken(address(this), ""));
-        dexImpl = address(new SCaaSDex(address(this), ""));
+        normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
+        dexImpl = address(new SCaaSDex(address(this), dexArgs(address(this))));
     }
 
     // ------------------------------------------------------------------ the row, the targets
@@ -1781,7 +1784,7 @@ contract TypedOpsRouterTest is UALedgerBase {
     function _regAt(string memory op, bool keyIsIssuer) internal returns (NormalRegulatedToken t) {
         vm.warp(REG_NOW);
         if (regImpl == address(0)) {
-            regImpl = address(new NormalRegulatedToken(address(this), regArgs()));
+            regImpl = address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs())));
             regOther = address(new Holder());
         }
         t = NormalRegulatedToken(_addr(op, "target"));

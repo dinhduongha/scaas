@@ -176,7 +176,7 @@ and the node never carries such an order. Cost: a new DEX needs a chain-profile 
 <a id="order-router"></a><a id="4-tradeengine"></a><a id="trade-engine"></a><a id="NODE-DEX-17"></a>**NODE-DEX-17** — **The `OrderRouter` executes orders against AMMs through
 `mtxExchange`/`mtxExchangeVia`** ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)); off unless the chain enables it. It
 routes one order to the best liquidity: the book, AMMs, or both in one hybrid call. For the book it calls the matching
-engine ([§2](#2-matching)), a separate part that is built; the Soroban relay-fee router and `MtxRelayFee` are other
+engine ([§2](#2-matching)), a separate part that is built; the Soroban relay-fee router and `RelayFeeRouter` are other
 things. Named `OrderRouter` by the owner on 2026-11-03 (before: TradeEngine). Status:
 **SPECIFIED** (the planner, quoter, routes, jobs and `GET /v1/dex/exchanges/{ref}` are built in TODO step 6, `OrderRouter`
 EVM; the contracts it drives — [CTR-DEX-27](../contracts/dex.md#CTR-DEX-27), [-28](../contracts/dex.md#CTR-DEX-28),

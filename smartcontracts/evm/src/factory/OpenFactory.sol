@@ -169,6 +169,7 @@ contract OpenFactory is IOpenFactory {
         (implementation, r) = _deploy(uint8(kind), envVersion, keccak256(abi.encode(kind, version)), initcode,
             abi.encode(address(this), implArgs));
         _checkImplementation(kind, implementation, _chainEnv(uint8(kind), envVersion));
+        _checkModules(implementation, uint8(kind), envVersion);
         _releases[kind][version] = r;
         if (version > _latest[kind]) _latest[kind] = version;
         emit ImplementationDeployed(kind, version, implementation, r.envVersion, r.envHash, keccak256(initcode),
@@ -224,6 +225,7 @@ contract OpenFactory is IOpenFactory {
         uint16 v = _latestEnv[uint8(kind)];
         if (v == 0) revert EnvUnknown(uint8(kind), 0);
         _checkImplementation(kind, implementation, _chainEnv(uint8(kind), v));
+        _checkModules(implementation, uint8(kind), v);
         return _create(kind, 0, implementation, v, initArgs, salt);
     }
 
@@ -292,6 +294,7 @@ contract OpenFactory is IOpenFactory {
         (bool ok, uint256 got) = _word(implementation, bytes4(keccak256("factory()")));
         if (!ok || got != uint256(uint160(address(this)))) revert ImplementationFactoryMismatch(implementation);
         _validateEnv(implementation, _chainEnv(DEX_DOMAIN, envVersion));
+        _checkModules(implementation, DEX_DOMAIN, envVersion);
         _dexReleases[version] = r;
         if (version > _latestDex) _latestDex = version;
         emit DexImplementationDeployed(version, implementation, r.envVersion, r.envHash, keccak256(initcode),
@@ -577,6 +580,22 @@ contract OpenFactory is IOpenFactory {
         (ok, got) = _word(implementation, bytes4(keccak256("factory()")));
         if (!ok || got != uint256(uint160(address(this)))) revert ImplementationFactoryMismatch(implementation);
         _validateEnv(implementation, env);
+    }
+
+    /// @dev T66b §4.5: every body module the release names in `modules()` is one of env `v`'s `libs`, whose code hashes
+    ///      `_deploy` checked; an answer that is not one ABI-encoded `address[]` is `ModulesUnreadable`.
+    function _checkModules(address implementation, uint32 domain, uint16 v) private view {
+        (bool ok, bytes memory ret) = implementation.staticcall(abi.encodeWithSignature("modules()"));
+        if (!ok || ret.length < 64 || ret.length % 32 != 0) revert ModulesUnreadable(implementation);
+        (uint256 offset, uint256 n) = abi.decode(ret, (uint256, uint256));
+        if (offset != 32 || n != (ret.length - 64) / 32) revert ModulesUnreadable(implementation);
+        address[] memory ms = abi.decode(ret, (address[]));
+        address[] storage libs = _envs[domain][v].libs;
+        for (uint256 i; i < ms.length; ++i) {
+            uint256 j;
+            while (j < libs.length && libs[j] != ms[i]) ++j;
+            if (j == libs.length) revert ModuleNotPinned(ms[i]);
+        }
     }
 
     /// @dev The release's own checks of the env (`validateEnv`, by staticcall): its revert bubbled, an empty one

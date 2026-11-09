@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Test} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -138,7 +140,7 @@ contract MandateWalletKatTest is MtxKatBase {
     function test_mandateWalletKat() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(0), address(0), false)));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
         w = new MandateWallet(MetaTxLib.pad(vm.addr(OWNER_PK)), UID, address(0), false);
         tok.mint(address(w), 1_000e6);
@@ -189,7 +191,8 @@ contract MandateWalletKatTest is MtxKatBase {
         // pay-meta-tax T41: the `PayMeta` the entry takes last (unsigned; `entryRef` its commitment), for the readers
         MetaTxLib.PayMeta memory m = PayMetaKit.meta(keccak256("scaas.kat.entryRef"));
         vm.serializeBytes32("pay", "meta_salt", m.salt);
-        vm.serializeString("pay", "meta_pay_no", m.payNo);
+        vm.serializeBytes32("pay", "meta_pay_no", m.payNo); // plan T83: a `bytes32`, `save` committed
+        vm.serializeBool("pay", "meta_save", m.save);
         vm.serializeUint("pay", "meta_schema", m.schema);
         vm.serializeBytes("pay", "meta_body", m.body);
         return (_entry("pay", UA_PAY_UNDER_MANDATE, e, args, digest, a.signature, cd), digest);
