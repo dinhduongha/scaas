@@ -380,3 +380,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   T66b (spec 2026-11-09-t66b-library-organisation.md, the library organisation and the 60 M fit), under `ua-mtx-merge/t66b/`, as
   they stood at 5e5fbce2: task 3.1 (the registry pair, R-1 then R-2) `src/ua/{UARegistry,UARegistryLib}.sol` (every `pure` view
   in the registry, every writer in the library). Not built.
+  Task 4.1 (the token split: bodies to internal functions, faces, body modules), as they stood at 83cfa8b8 (the 3.1b
+  commit): the token tree `src/metatx/{ERC20MetaTx,MetaTokenBase,MetaTxBase,UAMetaTxBase,NormalToken,WrappedToken,
+  IERC20MetaTx}.sol`, `src/zether/{ZetherLayer,NormalZetherToken,WrappedZetherToken}.sol`, `src/pqz/{PqzLayer,NormalPqzToken,
+  WrappedPqzToken}.sol`, `src/regulated/` (RegulatedBase and the six kinds), `src/common/SaltedEIP712.sol`,
+  `src/governance/{GovernanceBase,GovernanceRouterBase}.sol`, the shared bases' other users `src/{dex/SCaaSDex,
+  wallet/MandateWallet,account/SmartKeyAccount}.sol`, and `src/factory/{OpenFactory,IFactoryToken}.sol` (the release checks).
+  Not built.
