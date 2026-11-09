@@ -132,15 +132,16 @@ contract PqzWrappedTest is PqzFixture {
     /// as the registrar's transaction: intrinsic + calldata + the call.
     function test_largestImplementationFitsOneOsakaTx() public {
         bytes memory code = type(WrappedPqzToken).creationCode;
+        bytes memory args = Catalogue.argsOn(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, ""); // T66b: env 1's modules
         vm.prank(registrar);
-        address a = factory.deployImplementation(IOpenFactory.TokenKind.WRAPPED_PQZ, 2, 1, code, "");
+        address a = factory.deployImplementation(IOpenFactory.TokenKind.WRAPPED_PQZ, 2, 1, code, args);
         // F185: the call is its own transaction (`isolate`); under Amsterdam EIP-7825's 2^24 caps the REGULAR gas, which
         // `lastCallGas` reports with the intrinsic and the calldata (or the EIP-7976 floor), and EIP-8037 state gas (the
         // 64 KiB of code, the new slots) comes apart: it needs a limit above 2^24, which a transaction may have.
         Vm.Gas memory vg = vm.lastCallGas();
         uint256 txGas = vg.gasTotalUsed;
         emit log_named_uint("WrappedPqzToken deployImplementation state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
-        uint256 init = code.length + abi.encode(address(factory), bytes("")).length; // chain-neutral: no env appended
+        uint256 init = code.length + abi.encode(address(factory), args).length; // chain-neutral: no env appended
         emit log_named_uint("WrappedPqzToken init code bytes (with the factory's append)", init);
         emit log_named_uint("WrappedPqzToken runtime bytes", a.code.length);
         emit log_named_uint("WrappedPqzToken deployImplementation tx gas", txGas);

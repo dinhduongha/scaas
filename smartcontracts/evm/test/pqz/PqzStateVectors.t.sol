@@ -16,6 +16,9 @@ import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 
 /// @notice ua-rs-sign T15e (spec no-decryption-oracle §4.4, §5): the PQZ state vectors of the build's set. A token in several
 ///         account states (`acc` never debited, a reference to the last debit's blob, materialised by a rollover; TRIVIAL and
@@ -106,6 +109,23 @@ contract PqzStateVectorsTest is PqzSlots {
     function _shield(bytes32 ua, uint256 amount) internal {
         _public(tok, address(this), amount * SCALE);
         tok.mtxShield(ua, amount);
+    }
+
+    /// `_newWrapped` with its leg at the state rows' `underlying` (T66b: the body modules `_releaseWrapped` deploys move this
+    /// test's CREATE nonces, so a `new` leg would land elsewhere; the rows keep their bytes). A set without state vectors: as
+    /// `_newWrapped`.
+    function _newWrappedAtRows(bytes32 s) internal returns (WrappedPqzToken) {
+        string memory f = string.concat(_vecDir(), "state.json");
+        if (!vm.exists(f)) return _newWrapped(s);
+        address u = vm.parseAddress(vm.split(vm.split(vm.readFile(f), "\"underlying\": \"")[1], "\"")[0]);
+        deployCodeTo("Mocks.sol:MockERC20", abi.encode("USD", "USD", uint8(6)), u);
+        IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
+        c.features = (1 << GovernanceBits.PAYABLE);
+        c.lockedFeatures = 0; // as `_newWrapped`
+        c.roles.minter = 0;
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(u, 1, 1);
+        return WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), s)));
     }
 
     function _build() internal {
@@ -484,7 +504,7 @@ contract PqzStateVectorsTest is PqzSlots {
         _nb(_burnArgs(tok, bytes32(0), 84, "T62a refresh relayed"), 0, 0, _uEnv(tok, 9, 0, address(0xBEE4), 0, address(0xFEE4)),
             "refresh relayed carol; relayer and fee recipient unbound, both non-zero");
         _releaseWrapped();
-        wt = _newWrapped("t62a");
+        wt = _newWrappedAtRows("t62a");
         MockERC20 usd = MockERC20(wt.underlyings()[0]);
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(wt), 100 * SCALE);

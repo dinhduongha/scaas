@@ -17,7 +17,7 @@ import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
-import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
+import {Catalogue, pqzEnv, pinned, withModules} from "../helpers/Catalogue.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
@@ -465,11 +465,15 @@ contract PqzNormalTest is PqzFixture {
         (bad[1].deps[0], bad[1].deps[1]) = (address(pqv), address(pqv));
         bad[2].hedera = true;                                            // never on Hedera
         bad[3].deps[0] = address(0x1234);                                // a verifier without code
+        // T66b: release 1's body modules, named in implArgs and pinned in each env (the release constructs; its env is refused)
+        bytes memory args = Catalogue.argsOn(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1, "");
+        address[] memory ms = Catalogue.modulesOn(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1);
         for (uint256 i; i < bad.length; ++i) {
-            uint16 ev = Catalogue.env(factory, IOpenFactory.TokenKind.NORMAL_PQZ, bad[i]);
+            uint16 ev = Catalogue.env(factory, IOpenFactory.TokenKind.NORMAL_PQZ,
+                withModules(pinned(bad[i], IOpenFactory.TokenKind.NORMAL_PQZ), ms));
             vm.prank(registrar);
             vm.expectRevert(IPqzToken.BadInit.selector);
-            factory.deployImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, "");
+            factory.deployImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args);
         }
     }
 
