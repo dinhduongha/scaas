@@ -12,15 +12,20 @@ import subprocess
 import sys
 
 R, Q, P = "clients/ua-rs/", "clients/ua-rs/src/facade/pqz.rs", "clients/ua-rs/src/facade/pqz_pack.rs"
+H = "            Memo::Mode(_) => crate::keccak256(&[sealed.as_deref().unwrap_or_default(), &tag[..]].concat()),"
 CAPPED = os.path.abspath("scripts/capped")
 ENV = {"CARGO_NET_OFFLINE": "true", "CARGO_BUILD_JOBS": "2"}
 T = lambda *names: (R, [CAPPED, "cargo", "test", "--locked", "--offline", "-j2", "--test", "facade_pqz_state", *names])
 
 M = [
-    ("op 1 HASH: memoHash left 0", [(Q, "                (crate::keccak256(&m), Some(m))\n            }\n            Memo::Mode(Mode::Bundle) => ([0; 32], None),",
-                                    "                ([0; 32], Some(m))\n            }\n            Memo::Mode(Mode::Bundle) => ([0; 32], None),")], T("op1_memo_per_mode")),
-    ("op 1 BUNDLE: memoHash set", [(Q, "            Memo::Mode(Mode::Bundle) => ([0; 32], None),", "            Memo::Mode(Mode::Bundle) => ([1; 32], None),")], T("op1_memo_per_mode")),
-    ("op 1 HASH: the salt dropped from the hash", [(Q, "                (crate::keccak256(&m), Some(m))", "                (crate::keccak256(m.get(16..).unwrap_or_default()), Some(m))")],
+    # T20d2: the strings at release 3h's formula (memoHash = keccak256(memo ‖ ownTag), the memo empty on BUNDLE and a burn)
+    ("op 1 HASH: memoHash left 0", [(Q, H, "            Memo::Mode(_) => [0; 32],")], T("op1_memo_per_mode")),
+    ("op 1 BUNDLE: memoHash set (the memo sealed and hashed on BUNDLE too)",
+     [(Q, "            _ => None,\n        };\n        let (_, dr)",
+       "            _ => pqz_ffi::memo::seal(d.memo_key(seed32), &hd, pk_a.is_some(), &[(amount, *to_ua)]),\n        };\n        let (_, dr)")],
+     T("op1_memo_per_mode")),
+    ("op 1 HASH: the salt dropped from the hash",
+     [(Q, H, "            Memo::Mode(_) => crate::keccak256(&[sealed.as_deref().and_then(|m| m.get(16..)).unwrap_or_default(), &tag[..]].concat()),")],
      T("op1_memo_per_mode")),
     ("op 1: a default mode (BUNDLE without the field)", [(Q, "                memo: Memo::Mode(f.mode()?),", "                memo: Memo::Mode(f.mode().unwrap_or(Mode::Bundle)),")],
      T("op1_memo_per_mode")),
@@ -28,11 +33,11 @@ M = [
      T("op1_memo_per_mode")),
     ("op 1 HASH: auditorOn not in the memo's flags", [(Q, "&hd, pk_a.is_some(), &[(amount, *to_ua)])", "&hd, false, &[(amount, *to_ua)])")], T("op1_memo_per_mode")),
     ("burn: a free memoHash taken", [(Q, '"proveBurn" => debit(&["amount", "recipient"]),', '"proveBurn" => debit(&["amount", "recipient", "memoHash"]),'),
-                                      (Q, 'recipient: f.word("recipient")?, t: o.t, memo_hash: [0; 32] }', 'recipient: f.word("recipient")?, t: o.t, memo_hash: f.word("memoHash").unwrap_or_default() }')],
-     T("burn_and_refresh_memo_hash_is_zero")),
+                                      (Q, 'recipient: f.word("recipient")?, t: o.t, memo_hash: None }', 'recipient: f.word("recipient")?, t: o.t, memo_hash: f.word("memoHash").ok() }')],
+     T("burn_and_refresh_memo_hash_is_the_tags")),
     ("refresh: a free memoHash taken", [(Q, '"proveRefresh" => debit(&[]),', '"proveRefresh" => debit(&["memoHash"]),'),
-                                         (Q, "(Req::Refresh { id, h, t: o.t, memo_hash: [0; 32] }", '(Req::Refresh { id, h, t: o.t, memo_hash: f.word("memoHash").unwrap_or_default() }')],
-     T("burn_and_refresh_memo_hash_is_zero")),
+                                         (Q, "(Req::Refresh { id, h, t: o.t, memo_hash: None }", '(Req::Refresh { id, h, t: o.t, memo_hash: f.word("memoHash").ok() }')],
+     T("burn_and_refresh_memo_hash_is_the_tags")),
 ]
 
 if sys.argv[1:] == ["check"]:

@@ -2,8 +2,9 @@
 //! The PQZ stored form (P46, owner 2026-10-21; `PqzCt.sol` on `ua-mtx-merge`): what a PQZ token stores (the SSTORE2 op blobs and a
 //! materialised `acc`) holds each coefficient in `B = PACK_BITS = ⌈log2 q⌉` bits; one 64-bit-lane word (four coefficients
 //! `c0 ‖ c1 ‖ c2 ‖ c3`) becomes `GROUP = B / 2` bytes, the four fields big-endian, `c0` first. Calldata, the statement and the
-//! precompile keep the 64-bit lanes (`be8` per coefficient). This module unpacks only: the facade reads stored words, it never
-//! writes them (ua-rs-sign T15e; spec no-decryption-oracle §4.4). UNAUDITED.
+//! precompile keep the 64-bit lanes (`be8` per coefficient). The facade reads stored words and never writes them (ua-rs-sign
+//! T15e; spec no-decryption-oracle §4.4); it packs only to hash its own fresh ciphertexts for `ownTag`, whose message takes
+//! `keccak256(P(u) ‖ P(v_f))` (proof-path spec PP-3; ua-rs-sign T20d2). UNAUDITED.
 use pqz_ffi::stmt::{PK_BYTES, Q, V_BYTES};
 
 /// Bits per stored coefficient: `⌈log2 q⌉`, the bits of `q − 1` (`PqzSet.PACK_BITS`; 42 / 46 / 50 / 54 at the four sets).
@@ -40,4 +41,28 @@ pub fn unpack(packed: &[u8]) -> Option<Vec<u8>> {
         }
     }
     Some(out)
+}
+
+/// The stored form of 64-bit lanes (`PqzCt.packMem`; the inverse of [`unpack`]): each coefficient's `B` bits, big-endian, in
+/// order; `None` when `lanes` is not a whole number of words or a coefficient does not fit `B` bits.
+pub fn pack(lanes: &[u8]) -> Option<Vec<u8>> {
+    if !lanes.len().is_multiple_of(32) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(lanes.len() / 32 * GROUP);
+    let (mut acc, mut held) = (0u128, 0usize);
+    for c in lanes.chunks_exact(8) {
+        let x = u64::from_be_bytes(c.try_into().ok()?);
+        if x >> B != 0 {
+            return None;
+        }
+        acc = acc << B | u128::from(x);
+        held += B;
+        while held >= 8 {
+            held -= 8;
+            out.push((acc >> held) as u8);
+            acc &= (1u128 << held) - 1;
+        }
+    }
+    (held == 0).then_some(out)
 }

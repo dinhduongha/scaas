@@ -15,7 +15,9 @@ import sys
 R = "clients/ua-rs/"
 Q = R + "src/facade/pqz.rs"
 CAPPED = os.path.abspath("scripts/capped")
-T = (R, [CAPPED, "cargo", "test", "--locked", "--offline", "-j2", "--features", "vectors", "--test", "facade_pqz", "multi"])
+# T20d2: the op 7 formula tests run on the words command (facade_pqz_state.rs), the raw form takes the vector file's memoHash
+T = (R, [CAPPED, "cargo", "test", "--locked", "--offline", "-j2", "--features", "vectors", "--test", "facade_pqz", "--test", "facade_pqz_state",
+         "multi"])
 
 M = [
     # the plan's three
@@ -23,17 +25,18 @@ M = [
      [(Q, "            Mode::Bundle => None,\n",
        "            Mode::Bundle => Some(pqz_ffi::memo::seal(memo_key, &hd, aud, &memo_legs).ok_or(Error::Argument)?),\n")], T),
     ("the salt dropped from the hash: keccak256(sealedMemo)",
-     [(Q, "memo.as_deref().map_or([0; 32], crate::keccak256);",
-       "memo.as_deref().map_or([0; 32], |m| crate::keccak256(m.get(16..).unwrap_or_default()));")], T),
+     [(Q, "None => crate::keccak256(&[memo.as_deref().unwrap_or_default(), &tag[..]].concat()),",
+       "None => crate::keccak256(&[memo.as_deref().and_then(|m| m.get(16..)).unwrap_or_default(), &tag[..]].concat()),")], T),
     ("a default mode: no `mode` is HASH",
      [(Q, "        match self.get(\"mode\")?.as_str() {", "        match self.get(\"mode\").ok().and_then(Value::as_str).or(Some(\"HASH\")) {")], T),
     # the controller's
-    ("memoHash 0 on HASH too", [(Q, "memo.as_deref().map_or([0; 32], crate::keccak256);", "[0; 32];")], T),
+    ("memoHash 0 on HASH too", [(Q, "None => crate::keccak256(&[memo.as_deref().unwrap_or_default(), &tag[..]].concat()),", "None => [0; 32],")], T),
     ("HASH read as BUNDLE", [(Q, "Some(\"HASH\") => Ok(Mode::Hash),", "Some(\"HASH\") => Ok(Mode::Bundle),")], T),
     ("any other string read as BUNDLE", [(Q, "Some(\"BUNDLE\") => Ok(Mode::Bundle),", "Some(_) => Ok(Mode::Bundle),")], T),
     ("BUNDLE returns the memo", [(Q, "if let (Some(o), Some(memo)) = (v.as_object_mut(), memo) {",
                                   "if let (Some(o), Some(memo)) = (v.as_object_mut(), memo.or_else(|| pqz_ffi::memo::seal(memo_key, &hd, aud, &memo_legs))) {")], T),
-    ("`mode` off the allow-list", [(Q, "has(&[\"proofSystemId\", \"legs\", \"pkA\", \"T\", \"mode\"])", "has(&[\"proofSystemId\", \"legs\", \"pkA\", \"T\"])")], T),
+    ("`mode` off the allow-list", [(Q, "has(&[\"proofSystemId\", \"legs\", \"pkA\", \"T\", \"mode\", \"memoHash\"])",
+                                    "has(&[\"proofSystemId\", \"legs\", \"pkA\", \"T\", \"memoHash\"])")], T),
 ]
 
 if sys.argv[1:] == ["check"]:

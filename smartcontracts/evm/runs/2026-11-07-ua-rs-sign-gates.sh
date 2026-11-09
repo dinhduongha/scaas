@@ -19,7 +19,9 @@
 # several nodes, owner 2026-11-08: 2026-11-08-ua-rs-sign-t20b3; the third sync, after 3f and T66a: 2026-11-08-ua-rs-sign-t20b4;
 # T20c, an imported key registers its own derived kind (owner 2026-11-08): 2026-11-08-ua-rs-sign-t20c; the fourth sync, after 3h's
 # T58-T65: 2026-11-09-ua-rs-sign-t20b6; T20d1, 3h's formats in every client: 2026-11-09-ua-rs-sign-t20d1; T20d3, the proof path's
-# record and tail parsers: 2026-11-09-ua-rs-sign-t20d3), T20's stay.
+# record and tail parsers: 2026-11-09-ua-rs-sign-t20d3; T20d2, ownTag and the 3h memoHash in every debit: 2026-11-09-ua-rs-sign-t20d2),
+# T20's stay. (T20d2 renamed two names below to the 3h rule: multi_bundle_memo_hash_is_zero and burn_and_refresh_memo_hash_is_zero
+# are now ..._is_the_tags, keccak256(ownTag); the op 7 formula tests run on the words command, facade_pqz_state.rs.)
 P=${GATES_P:-2026-11-08-ua-rs-sign}
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
 STEPS=${STEPS-"docs clientkeys vectors-check forge-ua ua-rs-nodefault ua-rs-wallet ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-rs-vectors ua-rs-zether ua-rs-pqz ua-rs-pqz-n2048 ua-deny ua-fuzz ua-sizes ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs ua-dart cargo-zether-prover wasm-zether-prover scaas-ct no-oracle no-oracle-n2048 no-oracle-ua-py wallet-rows test-features mutant-logs pqz-read read-balance named-tests summary"}
@@ -154,7 +156,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n \
                           2026-11-07-ua-rs-sign-t15n2 2026-11-08-ua-rs-sign-t15o 2026-11-08-ua-rs-sign-t20b1 \
                           2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 \
-                          2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 \
+                          2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 2026-11-09-ua-rs-sign-t20d2 \
                           ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
@@ -496,7 +498,7 @@ ua-rs|cargo|command_json_is_bounded_and_typed
 ua-rs-vectors|cargo|transfer_and_disclosures_verify
 ua-rs-vectors|cargo|burn_and_refresh_verify
 ua-rs-vectors|cargo|transfer_multi_memo_and_sender_disclosure
-ua-rs-vectors|cargo|multi_bundle_memo_hash_is_zero
+ua-rs-vectors|cargo|multi_bundle_memo_hash_is_the_tags
 ua-rs-vectors|cargo|multi_hash_memo_hash_matches_contract
 ua-rs-vectors|cargo|multi_without_mode_refused
 ua-rs|cargo|key_record_register_verifies
@@ -519,7 +521,7 @@ ua-rs|cargo|sender_disclosure_negatives
 ua-rs|cargo|open_memo_binds_the_entry
 ua-rs|cargo|memo_hash_is_the_contracts
 ua-rs|cargo|op1_memo_per_mode
-ua-rs|cargo|burn_and_refresh_memo_hash_is_zero
+ua-rs|cargo|burn_and_refresh_memo_hash_is_the_tags
 ua-rs|cargo|forge_rows_on_another_handle_are_refused_before_the_key
 ua-rs|cargo|conf_and_viewing_keys_are_r33_keys
 ua-rs|cargo|key_use_other_than_conf_or_viewing_is_refused
@@ -853,6 +855,12 @@ ua-rs-pqz|cargo|record_rows_are_the_contracts_view
 ua-rs-pqz|cargo|record_refusals
 ua-rs-pqz|cargo|tail_rows_are_the_contracts
 ua-rs-pqz|cargo|tail_refusals
+ua-rs-pqz|cargo|bundle_shape_of_the_rows
+ua-rs-pqz|cargo|bundle_shape_refuses_two_fits
+ua-rs|cargo|own_tag_and_memo_hash_kat
+ua-rs|cargo|own_tag_of_every_debit
+ua-rs-vectors|cargo|own_tag_and_memo_hash_kat
+ua-rs-vectors|cargo|multi_raw_memo_per_mode
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

@@ -160,7 +160,7 @@ def pqz_seeds():
     b = bytes.fromhex(m["stmt"])
     out.append(qc("rawProveTransferMulti", {**header(m), "proofSystemId": pqzl, "pkA": h(b[640 + 2 * PK:640 + 3 * PK]),
                                          "legs": [{"pk": h(b[640 + PK:640 + 2 * PK]), "ua": word(m["objects"]["uas"][0]), "amount": 123456}],
-                                         "T": h(b[640 + 3 * PK:640 + 3 * PK + CT]), "mode": "HASH"}))
+                                         "T": h(b[640 + 3 * PK:640 + 3 * PK + CT]), "mode": "HASH", "memoHash": word(m["header"]["memoHash"])}))
     for r in pload("statement_disclose.json")["rows"]:
         if r["form"] == "DISCLOSE-SENDER":
             out.append(qc("rawProveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,

@@ -186,7 +186,7 @@ fn set_mismatch_refused() {
         ("rawProveBurn", merge(header(1), json!({"amount": 1, "recipient": hx(&[3; 32]), "T": hx(&t), "memoHash": hx(&[0; 32])}))),
         ("rawProveRefresh", merge(header(1), json!({"T": hx(&t), "memoHash": hx(&[0; 32])}))),
         ("rawProveTransfer", merge(header(1), json!({"toUA": hx(&[2; 32]), "pkT": hx(&k.pk()), "T": hx(&t), "amount": 1, "memoHash": hx(&[0; 32])}))),
-        ("rawProveTransferMulti", merge(header(1), json!({"legs": [{"pk": hx(&k.pk()), "ua": hx(&[2; 32]), "amount": 1}], "T": hx(&t), "mode": "HASH"}))),
+        ("rawProveTransferMulti", merge(header(1), json!({"legs": [{"pk": hx(&k.pk()), "ua": hx(&[2; 32]), "amount": 1}], "T": hx(&t), "mode": "HASH", "memoHash": hx(&[0; 32])}))),
     ]);
     for (cmd, base) in &cmds {
         let ok = merge(base.clone(), json!({"proofSystemId": hx(&PQZL_ID)}));
@@ -278,7 +278,7 @@ fn base_request(k: &PqzKey, cmd: &str) -> Value {
         "rawProveTransfer" => merge(header(1), json!({"proofSystemId": id, "toUA": hx(&[2; 32]), "pkT": pk, "T": t, "amount": 1, "memoHash": hx(&[0; 32])})),
         "rawProveBurn" => merge(header(1), json!({"proofSystemId": id, "amount": 1, "recipient": hx(&[3; 32]), "T": t, "memoHash": hx(&[0; 32])})),
         "rawProveRefresh" => merge(header(1), json!({"proofSystemId": id, "T": t, "memoHash": hx(&[0; 32])})),
-        "rawProveTransferMulti" => merge(header(1), json!({"proofSystemId": id, "legs": [leg], "T": t, "mode": "BUNDLE"})),
+        "rawProveTransferMulti" => merge(header(1), json!({"proofSystemId": id, "legs": [leg], "T": t, "mode": "BUNDLE", "memoHash": hx(&[0; 32])})),
         "rawProveDiscloseSender" => json!({"stmt": sstmt, "fromUA": hx(&[1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": true}),
         "rawProveDisclose" => json!({"stmt": stmt}),
         "rawOpenMemo" => json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])}),
@@ -443,7 +443,7 @@ fn a_key_field_in_command_json_is_refused() {
             assert_eq!(call(&k, cmd, &top).err(), Some(Error::Argument), "{cmd}: call with {field}");
         }
     }
-    let mut nested = merge(header(1), json!({"proofSystemId": id, "legs": [leg.clone()], "T": t, "mode": "HASH"}));
+    let mut nested = merge(header(1), json!({"proofSystemId": id, "legs": [leg.clone()], "T": t, "mode": "HASH", "memoHash": hx(&[0; 32])}));
     nested["legs"][0]["key"] = secret.clone();
     assert_eq!(PqzCmd::from_json("rawProveTransferMulti", nested.to_string().as_bytes()).err(), Some(Error::Argument), "key inside a leg");
     #[cfg(feature = "vectors")]
@@ -576,12 +576,12 @@ fn transfer_multi_memo_and_sender_disclosure() {
     let (a, b, c, z) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap(), w.pqz_key(2, 0).unwrap(), w.pqz_key(3, 0).unwrap());
     let t = balance(&a, 1000);
     let legs = json!([{"pk": hx(&b.pk()), "ua": hx(&[0xB0; 32]), "amount": 250}, {"pk": hx(&z.pk()), "ua": hx(&[0xB1; 32]), "amount": 0}]);
-    let req = merge(header(9), json!({"proofSystemId": hx(&PQZL_ID), "legs": legs, "pkA": hx(&c.pk()), "T": hx(&t), "mode": "HASH"}));
+    let req = merge(header(9), json!({"proofSystemId": hx(&PQZL_ID), "legs": legs, "pkA": hx(&c.pk()), "T": hx(&t), "mode": "HASH", "memoHash": hx(&[0xD1; 32])}));
     let p = call(&a, "rawProveTransferMulti", &req).unwrap();
     let (stmt, memo) = (h(&p["stmt"]), h(&p["memo"]));
     assert!(verify(7, &stmt, &h(&p["proof"])));
     let Stmt::Multi(m) = st::parse(7, &stmt).unwrap() else { panic!() };
-    assert_eq!(m.header[st::H_MEMO_HASH], scaas_ua::keccak256(&memo));
+    assert_eq!(m.header[st::H_MEMO_HASH], [0xD1; 32], "the raw form: the given word (3h's formula: facade_pqz_state.rs)");
     assert_eq!(m.header[st::H_RECIPIENTS_HASH], scaas_ua::keccak256(&[[0xB0; 32], [0xB1; 32]].concat()));
     assert_eq!(dec(&b, &[m.u(0), m.v(0)].concat(), 0), Ok(250));
     assert_eq!(dec(&a, &[m.u(0), m.v_f].concat(), 0), Ok(743));
@@ -602,45 +602,30 @@ fn transfer_multi_memo_and_sender_disclosure() {
     assert_eq!(call(&a, "rawProveTransferMulti", &three).err(), Some(Error::Argument));
 }
 
-/// T15b (F10, owner 2026-11-06): an op 7 request for `M` legs of `mode`, from a balance of 1,000.
+/// T15b (F10, owner 2026-11-06): an op 7 request for `M` legs of `mode`, from a balance of 1,000 (the raw form: `memoHash` given).
 #[cfg(feature = "vectors")]
 fn multi_req(a: &PqzKey, b: &PqzKey, mode: &str) -> Value {
     let legs = json!([{"pk": hx(&b.pk()), "ua": hx(&[0xB0; 32]), "amount": 250}]);
-    merge(header(9), json!({"proofSystemId": hx(&PQZL_ID), "legs": legs, "T": hx(&balance(a, 1000)), "mode": mode}))
+    merge(header(9), json!({"proofSystemId": hx(&PQZL_ID), "legs": legs, "T": hx(&balance(a, 1000)), "mode": mode, "memoHash": hx(&[0; 32])}))
 }
 
-/// `PqzCore._parseMulti` on BUNDLE: no memo (`sealedMemo` empty) and `memoHash` 0. The facade's statement has word
-/// `H_MEMO_HASH` 0, the answer no `memo`, and the proof verifies.
+/// The raw op 7 per `mode` (T20d2: the raw debits take `memoHash` as the vector files give it, 3h's formula is the words
+/// command's, `multi_*` in facade_pqz_state.rs): HASH answers the memo `salt ‖ sealedMemo`, BUNDLE none; the given word in both
+/// statements, which verify.
 #[cfg(feature = "vectors")]
 #[test]
-fn multi_bundle_memo_hash_is_zero() {
+fn multi_raw_memo_per_mode() {
     unlock();
     let w = wallet();
     let (a, b) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap());
-    let p = call(&a, "rawProveTransferMulti", &multi_req(&a, &b, "BUNDLE")).unwrap();
-    let stmt = h(&p["stmt"]);
-    assert!(verify(7, &stmt, &h(&p["proof"])));
-    let Stmt::Multi(m) = st::parse(7, &stmt).unwrap() else { panic!() };
-    assert_eq!(m.header[st::H_MEMO_HASH], [0; 32], "BUNDLE: memoHash 0");
-    assert_eq!(p.get("memo"), None, "BUNDLE: no memo");
-}
-
-/// `PqzCore._parseMulti` on HASH: `memoHash = keccak256(abi.encodePacked(t.salt, t.sealedMemo))`, `salt` the header's
-/// low 16 bytes and `sealedMemo` `2 + 40·M` bytes. The facade's `memo` is `salt ‖ sealedMemo`.
-#[cfg(feature = "vectors")]
-#[test]
-fn multi_hash_memo_hash_matches_contract() {
-    unlock();
-    let w = wallet();
-    let (a, b) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap());
-    let p = call(&a, "rawProveTransferMulti", &multi_req(&a, &b, "HASH")).unwrap();
-    let (stmt, memo) = (h(&p["stmt"]), h(&p["memo"]));
-    assert!(verify(7, &stmt, &h(&p["proof"])));
-    let Stmt::Multi(m) = st::parse(7, &stmt).unwrap() else { panic!() };
-    let salt = &m.header[st::H_SALT][16..];
-    let sealed = &memo[16..];
-    assert_eq!((&memo[..16], sealed.len()), (salt, 2 + 40), "memo = salt ‖ sealedMemo");
-    assert_eq!(m.header[st::H_MEMO_HASH], scaas_ua::keccak256(&[salt, sealed].concat()), "keccak256(salt ‖ sealedMemo)");
+    for mode in ["HASH", "BUNDLE"] {
+        let p = call(&a, "rawProveTransferMulti", &merge(multi_req(&a, &b, mode), json!({"memoHash": hx(&[0xD1; 32])}))).unwrap();
+        let stmt = h(&p["stmt"]);
+        assert!(verify(7, &stmt, &h(&p["proof"])), "{mode}");
+        let Stmt::Multi(m) = st::parse(7, &stmt).unwrap() else { panic!() };
+        assert_eq!(m.header[st::H_MEMO_HASH], [0xD1; 32], "{mode}: the given word");
+        assert_eq!(p.get("memo").map(|x| h(x).len()), (mode == "HASH").then_some(16 + 2 + 40), "{mode}: the memo");
+    }
 }
 
 /// No default mode: a request without `mode`, or with any other value, is refused before the key is used.
@@ -659,6 +644,10 @@ fn multi_without_mode_refused() {
         let r = merge(req.clone(), json!({"mode": bad}));
         refused_before_the_prover(&format!("mode {bad}"), || call(&a, "rawProveTransferMulti", &r));
     }
+    // T20d2: the raw form has no formula of its own: no `memoHash`, no statement
+    let mut no_hash = req.clone();
+    no_hash.as_object_mut().unwrap().remove("memoHash");
+    refused_before_the_prover("no memoHash", || call(&a, "rawProveTransferMulti", &no_hash));
 }
 
 /// The `setPqzKey` `R_REG` (`ua_message(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))`, ua8's `pqz_reg_message`
@@ -815,9 +804,9 @@ mod vectors {
         assert!(n > 0);
     }
 
-    /// T15b (F10): every op 7 statement row at the generator's randomness, per `mode`: HASH gives the row's statement (its
-    /// `memoHash` is `keccak256(salt ‖ sealedMemo)`, the contract's) and its memo; BUNDLE gives the same statement with
-    /// `memoHash` 0 (`PqzCore._parseMulti` leaves it unset) and no memo. No other word or byte depends on the mode.
+    /// T15b (F10): every op 7 statement row at the generator's randomness, per `mode`, the row's `memoHash` given (T20d2:
+    /// pqz-core's rows carry `keccak256(salt ‖ sealedMemo)`, a statement word and not a release's formula): HASH gives the row's
+    /// statement and its memo; BUNDLE the same statement and no memo. No word or byte depends on the mode.
     #[test]
     fn multi_rows_per_mode() {
         unlock();
@@ -825,12 +814,12 @@ mod vectors {
         let mut n = 0;
         for st_row in f["rows"].as_array().unwrap() {
             let want = h(&st_row["stmt"]);
-            let Stmt::Multi(mut m) = st::parse(7, &want).unwrap() else { panic!() };
+            let Stmt::Multi(m) = st::parse(7, &want).unwrap() else { panic!() };
             let o = &st_row["objects"];
             let legs: Vec<Value> = (0..m.m)
                 .map(|j| json!({"pk": hx(&pk_of(&o["pks"][j])), "ua": word(&o["uas"][j]), "amount": o["out"]["values"][j]}))
                 .collect();
-            let mut req = merge(header_of(st_row), json!({"proofSystemId": hx(&PQZL_ID), "legs": legs, "T": hx(m.t)}));
+            let mut req = merge(header_of(st_row), json!({"proofSystemId": hx(&PQZL_ID), "legs": legs, "T": hx(m.t), "memoHash": word(&st_row["header"]["memoHash"])}));
             if m.pk_a.is_some() {
                 req["pkA"] = json!(hx(&pk_of(&o["pk_a"])));
             }
@@ -845,10 +834,9 @@ mod vectors {
             assert_eq!(h(&hash["stmt"]), with_id(&want, &PQZL_ID), "{case}: HASH statement");
             let memo = h(&hash["memo"]);
             assert_eq!(memo, h(&st_row["memo"]["memo"]), "{case}: HASH memo");
-            assert_eq!(m.header[st::H_MEMO_HASH], scaas_ua::keccak256(&memo), "{case}: the row's memoHash");
+            assert_eq!(m.header[st::H_MEMO_HASH], scaas_ua::keccak256(&memo), "{case}: the row's memoHash (pqz-core's word)");
             let bundle = run("BUNDLE");
-            m.header[st::H_MEMO_HASH] = [0; 32];
-            assert_eq!(h(&bundle["stmt"]), with_id(&m.encode().unwrap(), &PQZL_ID), "{case}: BUNDLE statement");
+            assert_eq!(h(&bundle["stmt"]), with_id(&want, &PQZL_ID), "{case}: BUNDLE statement");
             assert_eq!(bundle.get("memo"), None, "{case}: BUNDLE memo");
             n += 1;
         }
@@ -898,7 +886,8 @@ mod vectors {
                     let legs: Vec<Value> = (0..m.m)
                         .map(|j| json!({"pk": hx(&pk_of(&o["pks"][j])), "ua": word(&o["uas"][j]), "amount": o["out"]["values"][j]}))
                         .collect();
-                    let mut req = merge(header_of(st_row), json!({"proofSystemId": idh, "legs": legs, "T": hx(m.t), "mode": "HASH"}));
+                    let mut req = merge(header_of(st_row), json!({"proofSystemId": idh, "legs": legs, "T": hx(m.t), "mode": "HASH",
+                        "memoHash": word(&st_row["header"]["memoHash"])}));
                     if m.pk_a.is_some() {
                         req["pkA"] = json!(hx(&pk_of(&o["pk_a"])));
                     }

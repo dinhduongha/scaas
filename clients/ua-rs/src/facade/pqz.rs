@@ -26,9 +26,13 @@
 //!   `proveRegister` / `proveKeyRecord` (op 3 `R_REG` over `pqz_reg_message` / the `setPqzKey` message of the named key
 //!   `version`: `UAPqzKey` at 0, `UAPqzKeyVersion` from 1, group 3g), `proveTransfer`
 //!   (op 1, `R_TX` / `R_TX0`) and `proveTransferMulti` (op 7), each with an explicit `mode` (owner 2026-11-06; T15b, T15k): `HASH`
-//!   with the sender memo `memo::seal` under `seed32` (op 1: op 7's encoding with M = 1, `PqzCore.SEALED` = 42, T36a) and
-//!   `memoHash = keccak256(salt ‖ sealedMemo)`, `BUNDLE` with neither, as `PqzCore._parseTransfer` / `_parseMulti`;
-//!   `proveBurn`, `proveRefresh` (op 2; `memoHash` 0, as `PqzCore.prepareBurn` leaves it), `proveDiscloseSender` (op 4 of the
+//!   with the sender memo `memo::seal` under `seed32` (op 1: op 7's encoding with M = 1, `PqzCore.SEALED` = 42, T36a),
+//!   `BUNDLE` without; `proveBurn`, `proveRefresh` (op 2). Every debit carries release 3h's `ownTag` (proof-path spec PP-3, C4:
+//!   `HMAC-SHA256(HKDF-SHA256(seed32, "", "PQZ/owntag/v1", 32), chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖
+//!   keccak256(P(u) ‖ P(v_f)))`, `u` its `u_0` / `u′`, `P` the stored form, `seed32` the debited version's) in its answer and
+//!   `memoHash = keccak256(memo ‖ ownTag)` in its statement (C3; the memo `salt ‖ sealedMemo` on `HASH`, empty on `BUNDLE`,
+//!   a burn and a refresh), as the 3h `PqzCore` statements; the pre-3h words are in `legacy/ua-rs-sign/`, never built
+//!   (ua-rs-sign T20d2). `proveDiscloseSender` (op 4 of the
 //!   sender's own entry: `r, e1, e2_j` re-derived, the amount read from the entry, T15l), `proveDisclose` (op 5, receiver or
 //!   auditor), `openMemo`. Statements are `pqz-stmt`'s builders, witnesses pqz-ffi's layouts (`fixture::wit_*`), proofs
 //!   `pqz_ffi::prove` with `rnd32` from the OS RNG (hedged, CTR-PQZ-19). The debit's balance is `Dec(T)` with the handle's key.
@@ -39,7 +43,7 @@
 //!   AAD `pqz-cache:<set>`, the box `{iv, ct}` in unpadded base64url.
 //!
 //! Not exposed: the verifiers, the precompile, the self-test, `test-hooks`, `fuzz`, the C core (spec §10). The raw debits
-//! (feature `vectors`) take `memoHash` as the vector files give it. The fixed-randomness entry points
+//! (feature `vectors`) take `memoHash` as the vector files give it (pqz-core's statement rows, not a release's formula). The fixed-randomness entry points
 //! exist only under feature `vectors`. Residual (spec §8.2): pqz-core's copies of `seed32`, `s`, `e` and the witness on its
 //! worker thread and in the prover. UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
@@ -84,7 +88,7 @@ pub const CMD_DEPTH: usize = 8;
 pub const BOX_MAX: usize = 2 << 20;
 pub const BOX_DEPTH: usize = 1;
 /// The longest answer of [`PqzKey::call`]: a statement and its proof fit in the precompile's `MAX_INPUT` (in hex: twice),
-/// plus the memo (at most 18 + 40·8 bytes), the `R_REG` message and the JSON. A proof's length varies from build to build
+/// plus the memo (at most 18 + 40·8 bytes), a debit's `ownTag` (32), the `R_REG` message and the JSON. A proof's length varies from build to build
 /// (rejection sampling), so a caller sizes its buffer by this bound, never by an earlier answer.
 pub const OUT_MAX: usize = 2 * pqz_ffi::MAX_INPUT + 4096;
 /// The set-description JSON's caps ([`PqzSet::from_json`]).
@@ -190,7 +194,8 @@ pub fn enc(pks: &[Vec<u8>], values: &[u64]) -> Result<(Vec<u8>, Vec<Vec<u8>>)> {
 ///   inline window on a PQZH token is `INLINE_MAX_PQZH`, false for op 1 / op 2);
 /// - `proveTransfer {…balance, chainId, registry, beneficiaryUA?, fee, validUntilBlock, shieldIn, envelopeBinding, toUA, pkT,
 ///   pkA?, amount, mode}`, `proveBurn {…, amount, recipient}`, `proveRefresh {…}`,
-///   `proveTransferMulti {…, legs, pkA?, mode}` → `{stmt, proof, p}` (+ `memo` on op 7 `HASH`): `T`, `p` and `sendCounter` from the words;
+///   `proveTransferMulti {…, legs, pkA?, mode}` → `{stmt, proof, p, ownTag}` (+ `memo` on `HASH`; `ownTag` the debit's 3h tag, the
+///   typed args' `ownTag`): `T`, `p` and `sendCounter` from the words;
 ///   group 3g's rules (KV-8, KV-9; T15o) before any key use: a debit names its `keyVersion`, at most the registry's `current`; a
 ///   stale one (below `current`) only migrates (`proveTransfer` with `toUA` the debited UA, `pkT` its current key) or refreshes
 ///   (`proveRefresh`); `toUA` equal to the debited UA at the current version is the contract's `SelfTransfer`; every key a
@@ -321,7 +326,7 @@ fn allowed(cmd: &str, field: &str) -> bool {
         #[cfg(feature = "vectors")]
         "rawProveRefresh" => has(HEADER) || has(&["proofSystemId", "T", "memoHash"]),
         #[cfg(feature = "vectors")]
-        "rawProveTransferMulti" => has(HEADER) || has(&["proofSystemId", "legs", "pkA", "T", "mode"]),
+        "rawProveTransferMulti" => has(HEADER) || has(&["proofSystemId", "legs", "pkA", "T", "mode", "memoHash"]),
         #[cfg(feature = "vectors")]
         "rawProveDiscloseSender" => has(&["stmt", "fromUA", "sendCounter", "salt", "auditorOn", "M", "leg"]),
         "proveDiscloseSender" => has(LOC) || has(ENTRY) || has(&["registry", "leg", "legKeyRecords"]),
@@ -499,7 +504,8 @@ impl Header {
 }
 
 /// Op 7's storage mode (`ZetherTypes.TransferMode`, a named request field with no default; owner 2026-11-06): `HASH`
-/// (commit-reveal) keeps the sender memo and its `memoHash`, `BUNDLE` has no memo and `memoHash` 0 (`PqzCore._parseMulti`).
+/// (commit-reveal) keeps the sender memo, `memoHash = keccak256(salt ‖ sealedMemo ‖ ownTag)`; `BUNDLE` has no memo,
+/// `memoHash = keccak256(ownTag)` (release 3h, `PqzCore._parseMulti`).
 /// The token's `disclosureMode` decides which one a caller may use; the facade does not guess it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {
@@ -826,9 +832,11 @@ enum Req {
     KeyRecord { id: Word, ua: Word, version: u64 },
     Balance { t: Vec<u8>, p: u64, send_counter: u64 },
     Transfer { id: Word, h: Header, to_ua: Word, pk_t: Vec<u8>, pk_a: Option<Vec<u8>>, t: Vec<u8>, amount: u64, memo: Memo },
-    Burn { id: Word, h: Header, amount: u64, recipient: Word, t: Vec<u8>, memo_hash: Word },
-    Refresh { id: Word, h: Header, t: Vec<u8>, memo_hash: Word },
-    Multi { id: Word, h: Header, legs: Vec<(Vec<u8>, Word, u64)>, pk_a: Option<Vec<u8>>, t: Vec<u8>, mode: Mode },
+    /// `memo_hash`: `None` the 3h word `keccak256(ownTag)` (no-oracle spec §4.14.5), `Some` the vector file's (feature `vectors`)
+    Burn { id: Word, h: Header, amount: u64, recipient: Word, t: Vec<u8>, memo_hash: Option<Word> },
+    Refresh { id: Word, h: Header, t: Vec<u8>, memo_hash: Option<Word> },
+    /// `memo_hash`: `None` the 3h word `keccak256(memo ‖ ownTag)`, `Some` the vector file's (feature `vectors`)
+    Multi { id: Word, h: Header, legs: Vec<(Vec<u8>, Word, u64)>, pk_a: Option<Vec<u8>>, t: Vec<u8>, mode: Mode, memo_hash: Option<Word> },
     #[cfg(feature = "vectors")]
     DiscloseSender { stmt: Vec<u8>, from_ua: Word, send_counter: u64, salt: [u8; 16], aud: bool, multi: Option<(usize, usize)> },
     /// Op 4 of leg `j` of the sender's own entry (`proveDiscloseSender`): the statement's words (the amount filled from the
@@ -914,15 +922,23 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
                 amount: f.u64("amount")?,
                 recipient: f.word("recipient")?,
                 t: f.ct("T")?,
-                memo_hash: f.word("memoHash")?,
+                memo_hash: Some(f.word("memoHash")?),
             },
             None,
         ),
         #[cfg(feature = "vectors")]
-        "rawProveRefresh" => (Req::Refresh { id: f.id()?, h: f.header()?, t: f.ct("T")?, memo_hash: f.word("memoHash")? }, None),
+        "rawProveRefresh" => (Req::Refresh { id: f.id()?, h: f.header()?, t: f.ct("T")?, memo_hash: Some(f.word("memoHash")?) }, None),
         #[cfg(feature = "vectors")]
         "rawProveTransferMulti" => (
-            Req::Multi { id: f.id()?, h: f.header()?, legs: f.legs()?, pk_a: f.opt_pk("pkA")?, t: f.ct("T")?, mode: f.mode()? },
+            Req::Multi {
+                id: f.id()?,
+                h: f.header()?,
+                legs: f.legs()?,
+                pk_a: f.opt_pk("pkA")?,
+                t: f.ct("T")?,
+                mode: f.mode()?,
+                memo_hash: Some(f.word("memoHash")?),
+            },
             None,
         ),
         #[cfg(feature = "vectors")]
@@ -993,11 +1009,11 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
             if o.stale {
                 return Err(Error::Argument); // KV-8: a stale version burns nothing (its refresh is `proveRefresh`)
             }
-            (Req::Burn { id, h, amount: f.u64("amount")?, recipient: f.word("recipient")?, t: o.t, memo_hash: [0; 32] }, Some(o.key))
+            (Req::Burn { id, h, amount: f.u64("amount")?, recipient: f.word("recipient")?, t: o.t, memo_hash: None }, Some(o.key))
         }
         "proveRefresh" => {
             let (id, o, h) = debit(false)?;
-            (Req::Refresh { id, h, t: o.t, memo_hash: [0; 32] }, Some(o.key))
+            (Req::Refresh { id, h, t: o.t, memo_hash: None }, Some(o.key))
         }
         "proveTransferMulti" => {
             let (id, o, h) = debit(true)?;
@@ -1006,7 +1022,7 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
             }
             let pks: Vec<Vec<u8>> = f.legs()?.into_iter().map(|l| l.0).chain(f.opt_pk("pkA")?).collect();
             distinct(&std::iter::once(&o.key[..]).chain(pks.iter().map(|k| &k[..])).collect::<Vec<_>>())?;
-            (Req::Multi { id, h, legs: f.legs()?, pk_a: f.opt_pk("pkA")?, t: o.t, mode: f.mode()? }, Some(o.key))
+            (Req::Multi { id, h, legs: f.legs()?, pk_a: f.opt_pk("pkA")?, t: o.t, mode: f.mode()?, memo_hash: None }, Some(o.key))
         }
         "auditRead" | "proveDisclose" => {
             let id = system(&f.word("psid")?)?;
@@ -1328,6 +1344,43 @@ fn seed_enc(seed32: &[u8], chain_uid: &Word, token: &[u8; 20], from_ua: &Word, s
     Ok(out)
 }
 
+/// `ownTag` (proof-path spec §3.1 PP-3, C4; no-oracle spec §4.14.5): `K = HKDF-SHA256(seed32, "", "PQZ/owntag/v1", 32)` of the
+/// debited version's seed, `ownTag = HMAC-SHA256(K, chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖ keccak256(P(u) ‖ P(v_f)))`, the
+/// location from the debit's header `hd`, `u` its `u_0` / `u′` and `v_f` in 64-bit lanes, `P` the stored form. A counter at or
+/// above 2^32 is `Argument` (as `seed_enc`).
+fn own_tag(seed32: &[u8], hd: &[Word; 20], u: &[u8], v_f: &[u8]) -> Result<Word> {
+    let w = |i: usize| hd.get(i).ok_or(Error::Argument);
+    let ctr = u32::try_from(pqz_ffi::stmt::word_u64(w(H_SEND_COUNTER)?).ok_or(Error::Argument)?).map_err(|_| Error::Argument)?;
+    let parts = [super::pqz_pack::pack(u).ok_or(Error::Argument)?, super::pqz_pack::pack(v_f).ok_or(Error::Argument)?].concat();
+    let token = w(H_TOKEN)?.get(12..).ok_or(Error::Argument)?;
+    let msg = [&w(H_CHAIN_UID)?[..], token, &w(H_FROM)?[..], &ctr.to_be_bytes(), &crate::keccak256(&parts)].concat();
+    Ok(crate::wallet::hmac_sha256(&own_tag_key(seed32)?, &msg))
+}
+
+/// `K = HKDF-SHA256(seed32, "", "PQZ/owntag/v1", 32)`.
+fn own_tag_key(seed32: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+    hkdf_sha256(seed32, &[], OWN_TAG_LABEL, 32)
+}
+
+/// `ownTag`'s HKDF info (proof-path spec PP-3).
+const OWN_TAG_LABEL: &[u8] = b"PQZ/owntag/v1";
+
+/// Test-only (feature `vectors`): `K` of a given seed and `HMAC-SHA256(K, message)`, so the shared KAT rows (`pq_kat.json`
+/// `ownTag`) are reproduced here; a release build has no seed-taking entry.
+#[cfg(feature = "vectors")]
+pub fn vectors_own_tag(seed32: &[u8], message: &[u8]) -> Result<(Vec<u8>, Word)> {
+    let k = own_tag_key(seed32)?;
+    Ok((k.to_vec(), crate::wallet::hmac_sha256(&k, message)))
+}
+
+/// A debit's answer with its `ownTag` (the payload's `ownTag` field, a node job's `args.ownTag`).
+fn with_tag(mut v: Value, tag: &Word) -> Value {
+    if let Some(o) = v.as_object_mut() {
+        o.insert("ownTag".into(), to_hex(tag).into());
+    }
+    v
+}
+
 /// A PQZ key handle (spec §8.2): the wallet's store, the generation and the slot of `seed32`, and the public `pk`; no secret
 /// bytes of its own. Neither `Clone` nor `Debug`:
 /// ```compile_fail,E0277
@@ -1472,17 +1525,17 @@ impl PqzKey {
             Req::Transfer { id, h, to_ua, pk_t, pk_a, t, amount, memo } => {
                 with_p(self.with_sk(|seed32, sk| self.transfer(seed32, sk, d, id, h, to_ua, pk_t, pk_a.as_deref(), t, *amount, memo))?, h)
             }
-            Req::Burn { id, h, amount, recipient, t, memo_hash } => self.with_sk(|_, sk| {
+            Req::Burn { id, h, amount, recipient, t, memo_hash } => self.with_sk(|seed32, sk| {
                 let mut hd = h.fill(Debit::header(Form::Burn, id));
                 *hd.get_mut(H_AMOUNT).ok_or(Error::Argument)? = u64_word(*amount);
                 *hd.get_mut(H_RECIPIENT).ok_or(Error::Argument)? = *recipient;
-                self.debit_own(sk, d, Form::Burn, hd, t, amount.checked_add(h.fee), memo_hash)
+                self.debit_own(seed32, sk, d, Form::Burn, hd, t, amount.checked_add(h.fee), memo_hash.as_ref())
             }).map(|v| with_p(v, h))?,
-            Req::Refresh { id, h, t, memo_hash } => self.with_sk(|_, sk| {
-                self.debit_own(sk, d, Form::Refresh, h.fill(Debit::header(Form::Refresh, id)), t, Some(h.fee), memo_hash)
+            Req::Refresh { id, h, t, memo_hash } => self.with_sk(|seed32, sk| {
+                self.debit_own(seed32, sk, d, Form::Refresh, h.fill(Debit::header(Form::Refresh, id)), t, Some(h.fee), memo_hash.as_ref())
             }).map(|v| with_p(v, h))?,
-            Req::Multi { id, h, legs, pk_a, t, mode } => {
-                with_p(self.with_sk(|seed32, sk| self.multi(seed32, sk, d, id, h, legs, pk_a.as_deref(), t, *mode))?, h)
+            Req::Multi { id, h, legs, pk_a, t, mode, memo_hash } => {
+                with_p(self.with_sk(|seed32, sk| self.multi(seed32, sk, d, id, h, legs, pk_a.as_deref(), t, *mode, memo_hash.as_ref()))?, h)
             }
             #[cfg(feature = "vectors")]
             Req::DiscloseSender { stmt, from_ua, send_counter, salt, aud, multi } => {
@@ -1564,11 +1617,13 @@ impl PqzKey {
         Ok((rest, digits(rest)))
     }
 
-    /// Op 2 (burn, refresh): `Enc(pk_f, balance − debit)` from a fresh seed (CTR-PQZ-19: never the counter's).
+    /// Op 2 (burn, refresh): `Enc(pk_f, balance − debit)` from a fresh seed (CTR-PQZ-19: never the counter's); `memoHash =
+    /// keccak256(ownTag)` (3h, the memo empty) or, feature `vectors`, the vector file's word.
     #[allow(clippy::too_many_arguments)]
-    fn debit_own(&self, sk: &Sk, d: &Draw, form: Form, mut hd: [Word; 20], t: &[u8], debit: Option<u64>, memo_hash: &Word) -> Result<Value> {
+    fn debit_own(
+        &self, seed32: &[u8], sk: &Sk, d: &Draw, form: Form, mut hd: [Word; 20], t: &[u8], debit: Option<u64>, memo_hash: Option<&Word>,
+    ) -> Result<Value> {
         system(hd.get(1).ok_or(Error::Argument)?)?;
-        *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = *memo_hash;
         let (_, dr) = Self::rest(sk, t, debit)?;
         let seed = Zeroizing::new(match d.seed_enc {
             Some(s) => s,
@@ -1576,15 +1631,21 @@ impl PqzKey {
         });
         let c = Wiped(pqzl::enc(&[&sk.0.pk], &[dr], &seed).ok_or(Error::Argument)?);
         let v_f = c.0.vs.first().ok_or(Error::Argument)?;
+        // 3h (proof-path spec C3): `memoHash = keccak256(ownTag)` on a burn, a refresh and an unwrap (the memo is empty)
+        let tag = own_tag(seed32, &hd, &c.0.u[..], v_f)?;
+        *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = match memo_hash {
+            Some(w) => *w,
+            None => crate::keccak256(&tag),
+        };
         let st = Debit { form, header: hd, pk_f: &sk.0.pk[..], pk_t: None, pk_a: None, t, u: &c.0.u[..], v_t: None, v_f, v_a: None };
         let stmt = Stmt::Debit(st).encode().map_err(|_| Error::Argument)?;
         let wit = Zeroizing::new(wit_debit(&sk.0, &c.0, &[dr]));
-        Ok(proved(&stmt, &prove(form.op(), &stmt, &wit, &d.rnd32)?))
+        Ok(with_tag(proved(&stmt, &prove(form.op(), &stmt, &wit, &d.rnd32)?), &tag))
     }
 
     /// Op 1: `Enc([pk_t, pk_f, pk_a], [amount, balance − amount − fee, amount])` from CTR-PQZ-19's `seed_enc`; on `HASH` the
-    /// sender memo in op 7's encoding with the one leg `(amount, toUA)` (`PqzCore.SEALED` = 42, T36a) and `memoHash =
-    /// keccak256(salt ‖ sealedMemo)`, on `BUNDLE` no memo and `memoHash` 0 (`PqzCore._parseTransfer`; T15k).
+    /// sender memo in op 7's encoding with the one leg `(amount, toUA)` (`PqzCore.SEALED` = 42, T36a), on `BUNDLE` none;
+    /// `memoHash = keccak256(memo ‖ ownTag)` over `u_0` and `v_f` (3h, `PqzCore._parseTransfer`; T15k, T20d2).
     #[allow(clippy::too_many_arguments)]
     fn transfer(
         &self, seed32: &[u8], sk: &Sk, d: &Draw, id: &Word, h: &Header, to_ua: &Word, pk_t: &[u8], pk_a: Option<&[u8]>, t: &[u8],
@@ -1595,16 +1656,12 @@ impl PqzKey {
         let mut hd = h.fill(Debit::header(form, id));
         *hd.get_mut(H_TO).ok_or(Error::Argument)? = *to_ua;
         hd.get_mut(H_SALT).ok_or(Error::Argument)?.iter_mut().skip(16).zip(salt).for_each(|(o, b)| *o = b);
-        let (memo_hash, sealed) = match memo {
+        let sealed = match memo {
             Memo::Mode(Mode::Hash) => {
-                let m = pqz_ffi::memo::seal(d.memo_key(seed32), &hd, pk_a.is_some(), &[(amount, *to_ua)]).ok_or(Error::Argument)?;
-                (crate::keccak256(&m), Some(m))
+                Some(pqz_ffi::memo::seal(d.memo_key(seed32), &hd, pk_a.is_some(), &[(amount, *to_ua)]).ok_or(Error::Argument)?)
             }
-            Memo::Mode(Mode::Bundle) => ([0; 32], None),
-            #[cfg(feature = "vectors")]
-            Memo::Given(w) => (*w, None),
+            _ => None,
         };
-        *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = memo_hash;
         let (_, dr) = Self::rest(sk, t, amount.checked_add(h.fee))?;
         let seed = Zeroizing::new(match d.seed_enc {
             Some(s) => s,
@@ -1619,6 +1676,13 @@ impl PqzKey {
         }
         let c = Wiped(pqzl::enc(&pks, &msgs, &seed).ok_or(Error::Argument)?);
         let v = |i: usize| c.0.vs.get(i).map(|v| &v[..]).ok_or(Error::Argument);
+        // 3h (proof-path spec C3): `memoHash = keccak256(memo ‖ ownTag)`, the memo `salt ‖ sealedMemo` on HASH, empty on BUNDLE
+        let tag = own_tag(seed32, &hd, &c.0.u[..], v(1)?)?;
+        *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = match memo {
+            #[cfg(feature = "vectors")]
+            Memo::Given(w) => *w,
+            Memo::Mode(_) => crate::keccak256(&[sealed.as_deref().unwrap_or_default(), &tag[..]].concat()),
+        };
         let st = Debit {
             form,
             header: hd,
@@ -1633,7 +1697,7 @@ impl PqzKey {
         };
         let stmt = Stmt::Debit(st).encode().map_err(|_| Error::Argument)?;
         let wit = Zeroizing::new(wit_debit(&sk.0, &c.0, &[dv, dr]));
-        let mut v = proved(&stmt, &prove(form.op(), &stmt, &wit, &d.rnd32)?);
+        let mut v = with_tag(proved(&stmt, &prove(form.op(), &stmt, &wit, &d.rnd32)?), &tag);
         if let (Some(o), Some(m)) = (v.as_object_mut(), sealed) {
             o.insert("memo".into(), to_hex(&m).into());
         }
@@ -1641,11 +1705,12 @@ impl PqzKey {
     }
 
     /// Op 7: `pqzl::enc_multi` from CTR-PQZ-19's `seed_enc`, `recipientsHash` over the legs' UAs; on `HASH` the sender memo
-    /// `salt ‖ sealedMemo` under `seed32` and `memoHash = keccak256(salt ‖ sealedMemo)`, on `BUNDLE` no memo and `memoHash` 0.
+    /// `salt ‖ sealedMemo` under `seed32`, on `BUNDLE` none; `memoHash = keccak256(memo ‖ ownTag)` over `u_0` and `v_f` (3h) or,
+    /// feature `vectors`, the vector file's word.
     #[allow(clippy::too_many_arguments)]
     fn multi(
         &self, seed32: &[u8], sk: &Sk, d: &Draw, id: &Word, h: &Header, legs: &[(Vec<u8>, Word, u64)], pk_a: Option<&[u8]>, t: &[u8],
-        mode: Mode,
+        mode: Mode, memo_hash: Option<&Word>,
     ) -> Result<Value> {
         let (m, aud) = (legs.len(), pk_a.is_some());
         if !built_legs(id).contains(&m) {
@@ -1663,7 +1728,6 @@ impl PqzKey {
             Mode::Hash => Some(pqz_ffi::memo::seal(memo_key, &hd, aud, &memo_legs).ok_or(Error::Argument)?),
             Mode::Bundle => None,
         };
-        *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = memo.as_deref().map_or([0; 32], crate::keccak256);
         let seed = Zeroizing::new(match d.seed_enc {
             Some(s) => s,
             None => seed_enc(seed32, &h.chain_uid, &h.token, &h.from_ua, h.send_counter, &salt)?,
@@ -1672,6 +1736,12 @@ impl PqzKey {
         let enc_legs: Vec<(&[u8; PK_BYTES], [u8; 16])> = legs.iter().zip(&d_legs).map(|(l, dl)| Ok((pk_ref(&l.0)?, *dl))).collect::<Result<_>>()?;
         let pk_a_ref = pk_a.map(pk_ref).transpose()?;
         let c = WipedMulti(pqzl::enc_multi(&sk.0.pk, df, &enc_legs, pk_a_ref, &seed).ok_or(Error::Argument)?);
+        // 3h (proof-path spec C3): `memoHash = keccak256(memo ‖ ownTag)` over `u_0` and `v_f`, the memo empty on BUNDLE
+        let tag = own_tag(seed32, &hd, &c.0.groups.first().ok_or(Error::Argument)?.u[..], &c.0.v_f[..])?;
+        *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = match memo_hash {
+            Some(w) => *w,
+            None => crate::keccak256(&[memo.as_deref().unwrap_or_default(), &tag[..]].concat()),
+        };
         let pks = legs.iter().flat_map(|l| l.0.iter().copied()).collect::<Vec<u8>>();
         let us = c.0.groups.iter().flat_map(|g| g.u.iter().copied()).collect::<Vec<u8>>();
         let (vs, v_as) = (c.0.v.concat(), c.0.v_a.concat());
@@ -1689,7 +1759,7 @@ impl PqzKey {
         };
         let stmt = st.encode().map_err(|_| Error::Argument)?;
         let wit = Zeroizing::new(wit_multi(&sk.0, &c.0, &d_legs, df));
-        let mut v = proved(&stmt, &prove(pqz_ffi::stmt::OP_TRANSFER_MULTI, &stmt, &wit, &d.rnd32)?);
+        let mut v = with_tag(proved(&stmt, &prove(pqz_ffi::stmt::OP_TRANSFER_MULTI, &stmt, &wit, &d.rnd32)?), &tag);
         if let (Some(o), Some(memo)) = (v.as_object_mut(), memo) {
             o.insert("memo".into(), to_hex(&memo).into());
         }

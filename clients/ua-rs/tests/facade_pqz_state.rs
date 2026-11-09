@@ -98,6 +98,7 @@ impl World {
         let p = call(self.key(from), "proveTransfer", &self.debit(from, extra)).unwrap();
         let stmt = h(&p["stmt"]);
         assert!(verify(1, &stmt, &h(&p["proof"])), "op 1 over rebuilt words verifies");
+        self.c.own_tag = tag(&p);
         self.c.settle1(&stmt, None)
     }
     /// Op 7 from `from` to `legs`, verified and settled; the entry and the answer.
@@ -112,6 +113,7 @@ impl World {
         assert!(verify(7, &stmt, &h(&p["proof"])), "op 7 over rebuilt words verifies");
         note_legs(&legs.iter().map(|l| l.0).collect::<Vec<_>>());
         let memo = p.get("memo").map(h);
+        self.c.own_tag = tag(&p);
         (self.c.settle7(&stmt, memo.as_deref()), p)
     }
 }
@@ -139,6 +141,13 @@ fn stored_form_is_the_contracts() {
     assert_eq!(unpack(&g[1..]), None, "not a whole group");
     let lanes: Vec<u8> = (0..st::PK_BYTES / 8 + 16).flat_map(|i| ((i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) % st::Q).to_be_bytes()).collect();
     assert_eq!(unpack(&pack(&lanes)).unwrap(), lanes, "round trip");
+    // T20d2: the facade's packer (for `ownTag`'s `P(u) ‖ P(v_f)`) is the test's, and refuses what has no stored form
+    assert_eq!(scaas_ua::facade::pqz_pack::pack(&lanes), Some(pack(&lanes)), "the facade's packer");
+    assert_eq!(scaas_ua::facade::pqz_pack::pack(&want), Some(g.clone()), "the hand vector, packed by the facade");
+    let mut wide = want.clone();
+    wide[7 - B / 8] |= 1 << (B % 8);
+    assert_eq!(scaas_ua::facade::pqz_pack::pack(&wide), None, "a coefficient of B + 1 bits");
+    assert_eq!(scaas_ua::facade::pqz_pack::pack(&want[..24]), None, "not a whole word");
     // the forge rows: leg 0 of every op 1 entry, unpacked from the stored blob, is the contract's
     let r = rows();
     assert_eq!(r["set"], st::SET);
@@ -147,6 +156,8 @@ fn stored_form_is_the_contracts() {
         let d = &h(&e["blob"]["code"])[1..];
         let ct = [unpack(&d[16..16 + PKP]).unwrap(), unpack(&d[16 + PKP..16 + PKP + VP]).unwrap()].concat();
         assert_eq!(hx(&ct), e["legs"][0]["ct"].as_str().unwrap(), "{}", e["name"]);
+        let stored = &d[16..16 + PKP + VP];
+        assert_eq!(scaas_ua::facade::pqz_pack::pack(&ct).as_deref(), Some(stored), "{}: packed back to the contract's bytes", e["name"]);
         n += 1;
     }
     assert!(n >= 4);
@@ -626,9 +637,11 @@ fn open_memo_binds_the_entry() {
 // T15k (Fable P3-5; ua-mtx-merge T36a): op 1's memo per `mode`, op 2's `memoHash` 0, as the contract's statements.
 // ---------------------------------------------------------------------------------------------------------------------------
 
-/// The forge rows' statement words (`PqzStateVectors.t.sol`, the token's statement views): op 1 and op 7 on HASH carry
-/// `keccak256(salt ‖ sealedMemo)` with op 1's `sealedMemo` 42 bytes (op 7's encoding, M = 1: `PqzCore.SEALED`), op 1 on
-/// BUNDLE and a burn 0. The facade's formula is checked against them.
+/// The forge rows' statement words (`PqzStateVectors.t.sol`, the 3h token's statement views): every debit's `memoHash` is
+/// `keccak256(memo ‖ ownTag)` (proof-path spec C3), the memo `salt ‖ sealedMemo` on HASH (op 1's `sealedMemo` 42 bytes, op
+/// 7's encoding with M = 1: `PqzCore.SEALED`) and empty on BUNDLE and a burn. The test's formula ([`memo_hash`]), which the
+/// facade's statements are checked against below, is checked against them; the pre-3h words (`keccak256(salt ‖ sealedMemo)`,
+/// 0) are not the contract's.
 #[test]
 fn memo_hash_is_the_contracts() {
     let r = rows();
@@ -636,23 +649,146 @@ fn memo_hash_is_the_contracts() {
     assert_eq!(rows.len(), 4);
     for m in rows {
         let (op, mode) = (m["op"].as_u64().unwrap(), m["mode"].as_str().unwrap());
-        let want = h(&m["memoHash"]);
-        if mode == "HASH" {
+        let (want, own_tag): (Vec<u8>, Word) = (h(&m["memoHash"]), h(&m["ownTag"]).try_into().unwrap());
+        let memo = if mode == "HASH" {
             let (salt, sealed) = (h(&m["salt"]), h(&m["sealedMemo"]));
             assert_eq!(salt.len(), 16);
             if op == 1 {
                 assert_eq!(sealed.len(), pqz_ffi::memo::memo_len(1) - 16, "op 1: op 7's encoding, M = 1");
             }
-            assert_eq!(scaas_ua::keccak256(&[salt, sealed].concat()).to_vec(), want, "op {op} HASH");
+            assert_ne!(scaas_ua::keccak256(&[&salt[..], &sealed].concat()).to_vec(), want, "op {op} HASH: not the pre-3h word");
+            [salt, sealed].concat()
         } else {
-            assert_eq!(want, vec![0; 32], "op {op} {mode}: 0");
-        }
+            assert_ne!(want, vec![0; 32], "op {op} {mode}: not the pre-3h 0");
+            vec![]
+        };
+        assert_eq!(memo_hash(&memo, &own_tag).to_vec(), want, "op {op} {mode}: keccak256(memo ‖ ownTag)");
     }
 }
 
-/// Op 1 per `mode` (no default): HASH answers the memo `salt ‖ sealedMemo` (58 bytes, the statement's salt) with
-/// `memoHash = keccak256(salt ‖ sealedMemo)` in the statement, and the sender opens it from the settled entry to its one leg
-/// `(amount, toUA)`; BUNDLE has `memoHash` 0 and no memo; both verify. A request without `mode`, with another value, or with
+/// The test's 3h formulas (proof-path spec C3, C4), written from the spec and not from the facade: `memoHash = keccak256(memo ‖
+/// ownTag)`; `ownTag = HMAC-SHA256(HKDF-SHA256(seed32, "", "PQZ/owntag/v1", 32), chainUid ‖ token ‖ fromUA ‖ be32(sendCounter)
+/// ‖ keccak256(P(u) ‖ P(v_f)))`, the location from the statement's header and `P` the test's packer.
+fn memo_hash(memo: &[u8], own_tag: &Word) -> Word {
+    scaas_ua::keccak256(&[memo, &own_tag[..]].concat())
+}
+fn tag_message(chain_uid: &[u8], token: &[u8], from_ua: &[u8], counter: u32, ct_hash: &[u8]) -> Vec<u8> {
+    assert_eq!((chain_uid.len(), token.len(), from_ua.len(), ct_hash.len()), (32, 20, 32, 32));
+    [chain_uid, token, from_ua, &counter.to_be_bytes(), ct_hash].concat()
+}
+fn tag_mac(seed32: &[u8], message: &[u8]) -> Word {
+    scaas_ua::wallet::hmac_sha256(&scaas_ua::wallet::hkdf_sha256(seed32, &[], b"PQZ/owntag/v1", 32).unwrap(), message)
+}
+fn own_tag_of(seed32: &[u8], hd: &[Word; 20], u: &[u8], v_f: &[u8]) -> Word {
+    let counter = u32::try_from(st::word_u64(&hd[st::H_SEND_COUNTER]).unwrap()).unwrap();
+    let ct_hash = scaas_ua::keccak256(&[pack(u), pack(v_f)].concat());
+    tag_mac(seed32, &tag_message(&hd[st::H_CHAIN_UID], &hd[st::H_TOKEN][12..], &hd[st::H_FROM], counter, &ct_hash))
+}
+/// An answer's `ownTag`.
+fn tag(p: &Value) -> Word {
+    h(&p["ownTag"]).try_into().unwrap()
+}
+/// The `seed32` of `account`'s key of version `v` (the test's view of the wallet, through the marker export).
+fn seed_of(w: &Wallet, account: u32, v: u64) -> [u8; 32] {
+    *w.export_pqz_leaf_raw_version(account, 0, v, scaas_ua::facade::pqz::AllowSecretExport).unwrap()
+}
+
+/// T20d2 (C-PP-4, the shared KAT of both 3h specs): `pq_kat.json` `ownTag` (three rows: versions 0 and 1, the label
+/// `PQZ/owntag/v1`) and `memoHash` (HASH, BUNDLE, burn) reproduced by the test's formulas, and (feature `vectors`) by the
+/// facade's own key and HMAC.
+#[test]
+fn own_tag_and_memo_hash_kat() {
+    let p = format!("{}/../../smartcontracts/vectors/ua/pq_kat.json", env!("CARGO_MANIFEST_DIR"));
+    let k: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+    let tags = k["ownTag"].as_array().unwrap();
+    assert_eq!(tags.len(), 3);
+    for r in tags {
+        assert_eq!(r["label"], "PQZ/owntag/v1");
+        let (seed, ctr) = (h(&r["seed32"]), u32::try_from(r["sendCounter"].as_u64().unwrap()).unwrap());
+        let msg = tag_message(&h(&r["chainUid"]), &h(&r["token"]), &h(&r["fromUA"]), ctr, &h(&r["ctHash"]));
+        assert_eq!(hx(&msg), r["message"].as_str().unwrap(), "version {} counter {ctr}: the message", r["version"]);
+        assert_eq!(hx(&tag_mac(&seed, &msg)), r["ownTag"].as_str().unwrap(), "version {} counter {ctr}", r["version"]);
+        #[cfg(feature = "vectors")]
+        {
+            let (key, t) = scaas_ua::facade::pqz::vectors_own_tag(&seed, &msg).unwrap();
+            assert_eq!((hx(&key), hx(&t)), (r["key"].as_str().unwrap().to_string(), r["ownTag"].as_str().unwrap().to_string()), "the facade's K and tag");
+        }
+    }
+    assert_ne!(tags[0]["seed32"], tags[2]["seed32"], "version 1's seed is not version 0's");
+    let memo_rows = k["memoHash"].as_array().unwrap();
+    assert_eq!(memo_rows.iter().map(|r| r["form"].as_str().unwrap()).collect::<Vec<_>>(), ["hash", "bundle", "burn"]);
+    for r in memo_rows {
+        let (memo, t): (Vec<u8>, Word) = (h(&r["memo"]), h(&r["ownTag"]).try_into().unwrap());
+        assert_eq!(memo.len(), if r["form"] == "hash" { 16 + 42 } else { 0 }, "{}", r["form"]);
+        assert_eq!(hx(&memo_hash(&memo, &t)), r["memoHash"].as_str().unwrap(), "{}", r["form"]);
+    }
+}
+
+/// T20d2 (C-PP-4): every path (A) debit form answers its `ownTag` and carries `memoHash = keccak256(memo ‖ ownTag)` in its
+/// statement, the tag recomputed here from the debited version's seed, the statement's location words and its own `u_0` /
+/// `u′` and `v_f` in the stored form: op 1 HASH and BUNDLE, op 7 HASH and BUNDLE (with the auditor), burn, refresh, and a
+/// stale version's refresh and migration (the stale version's seed; version 1's seed at the same message gives another tag).
+/// Each statement verifies; the settled blobs carry the facade's tag.
+#[test]
+fn own_tag_of_every_debit() {
+    let mut wd = World::new();
+    wd.c.shield(&A, 1000);
+    let seed_a = seed_of(&wd._w, 0, 0);
+    let check = |what: &str, op: u8, p: &Value, seed: &[u8]| -> Word {
+        let stmt = h(&p["stmt"]);
+        assert!(verify(op, &stmt, &h(&p["proof"])), "{what}: verifies");
+        let memo = p.get("memo").map(h).unwrap_or_default();
+        let (hd, u, v_f) = match st::parse(op, &stmt).unwrap() {
+            Stmt::Debit(d) => (d.header, d.u.to_vec(), d.v_f.to_vec()),
+            Stmt::Multi(m) => (m.header, m.u(0).to_vec(), m.v_f.to_vec()),
+            _ => panic!("{what}"),
+        };
+        let t = own_tag_of(seed, &hd, &u, &v_f);
+        assert_eq!(tag(p), t, "{what}: ownTag");
+        assert_eq!(hd[st::H_MEMO_HASH], memo_hash(&memo, &t), "{what}: memoHash = keccak256(memo ‖ ownTag)");
+        t
+    };
+    let to_bob = |mode: &str| json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "pkA": wd.pk(&AUD), "amount": 10, "mode": mode});
+    let (hash1, bundle1) = (to_bob("HASH"), to_bob("BUNDLE"));
+    let ka = wd.key(&A);
+    let p = call(ka, "proveTransfer", &wd.debit(&A, hash1)).unwrap();
+    let t1 = check("op 1 HASH", 1, &p, &seed_a);
+    assert_eq!(h(&p["memo"]).len(), 16 + 42);
+    let p = call(ka, "proveTransfer", &wd.debit(&A, bundle1)).unwrap();
+    let t2 = check("op 1 BUNDLE", 1, &p, &seed_a);
+    assert_ne!(t1, t2, "a fresh ciphertext, another tag at the same counter");
+    for mode in ["HASH", "BUNDLE"] {
+        let l = json!([{"pk": wd.pk(&BOB), "ua": hx(&BOB), "amount": 5}, {"pk": wd.pk(&Z), "ua": hx(&Z), "amount": 0}]);
+        let p = call(ka, "proveTransferMulti", &wd.debit(&A, json!({"legs": l, "pkA": wd.pk(&AUD), "mode": mode}))).unwrap();
+        check(&format!("op 7 {mode}"), 7, &p, &seed_a);
+    }
+    let p = call(ka, "proveBurn", &wd.debit(&A, json!({"amount": 10, "recipient": hx(&[3; 32])}))).unwrap();
+    check("burn", 2, &p, &seed_a);
+    let p = call(ka, "proveRefresh", &wd.debit(&A, json!({}))).unwrap();
+    check("refresh", 2, &p, &seed_a);
+    // the settled blobs carry the facade's tag (`World::pay` feeds it to the model)
+    let e = wd.pay(&A, &BOB, 300, true);
+    let blob = &wd.c.blobs[&wd.c.entries[&e].ptr];
+    let at = blob.len() - 1 - 8 * *blob.last().unwrap() as usize;
+    assert_eq!(&blob[at - 32..at], &wd.c.own_tag[..], "the stored tail's ownTag");
+    // a stale version: its refresh and its migration carry the stale version's tag
+    let a1 = wd._w.pqz_key_version(0, 0, 1).unwrap();
+    let seed_a1 = seed_of(&wd._w, 0, 1);
+    let ka = wd._w.pqz_key(0, 0).unwrap();
+    let mut c = std::mem::take(&mut wd.c);
+    c.add_version(A, &a1.pk(), true);
+    let r = call(&ka, "proveRefresh", &debit_at(&c, &A, 0, json!({}))).unwrap();
+    check("stale refresh", 2, &r, &seed_a);
+    let m = call(&ka, "proveTransfer", &debit_at(&c, &A, 0, json!({"toUA": hx(&A), "pkT": hx(&a1.pk()), "amount": 650, "mode": "BUNDLE"}))).unwrap();
+    let tm = check("migration", 1, &m, &seed_a);
+    let ms = h(&m["stmt"]);
+    let Stmt::Debit(d) = st::parse(1, &ms).unwrap() else { panic!() };
+    assert_ne!(own_tag_of(&seed_a1, &d.header, d.u, d.v_f), tm, "version 1's seed: another tag at the same message");
+}
+
+/// Op 1 per `mode` (no default): HASH answers the memo `salt ‖ sealedMemo` (58 bytes, the statement's salt) with 3h's
+/// `memoHash = keccak256(salt ‖ sealedMemo ‖ ownTag)` in the statement, and the sender opens it from the settled entry to its one
+/// leg `(amount, toUA)`; BUNDLE has `memoHash = keccak256(ownTag)` and no memo; both verify. A request without `mode`, with another value, or with
 /// a `memoHash` field is refused before the key.
 #[test]
 fn op1_memo_per_mode() {
@@ -668,7 +804,7 @@ fn op1_memo_per_mode() {
     let b = call(ka, "proveTransfer", &merge(base.clone(), json!({"mode": "BUNDLE"}))).unwrap();
     let st_b = h(&b["stmt"]);
     let Stmt::Debit(d) = st::parse(1, &st_b).unwrap() else { panic!() };
-    assert_eq!((d.header[st::H_MEMO_HASH], b.get("memo")), ([0; 32], None), "BUNDLE: memoHash 0, no memo");
+    assert_eq!((d.header[st::H_MEMO_HASH], b.get("memo")), (memo_hash(&[], &tag(&b)), None), "BUNDLE: keccak256(ownTag), no memo");
     assert!(verify(1, &st_b, &h(&b["proof"])));
     let p = call(ka, "proveTransfer", &merge(base, json!({"mode": "HASH"}))).unwrap();
     let (stmt, memo) = (h(&p["stmt"]), h(&p["memo"]));
@@ -676,15 +812,45 @@ fn op1_memo_per_mode() {
     let Stmt::Debit(d) = st::parse(1, &stmt).unwrap() else { panic!() };
     assert_eq!(memo.len(), 16 + 42, "salt ‖ sealedMemo, PqzCore.SEALED = 42");
     assert_eq!(&memo[..16], &d.header[st::H_SALT][16..], "the statement's salt");
-    assert_eq!(d.header[st::H_MEMO_HASH], scaas_ua::keccak256(&memo), "keccak256(salt ‖ sealedMemo)");
+    assert_eq!(d.header[st::H_MEMO_HASH], memo_hash(&memo, &tag(&p)), "keccak256(salt ‖ sealedMemo ‖ ownTag)");
+    wd.c.own_tag = tag(&p);
     let e = wd.c.settle1(&stmt, Some(&memo));
     let o = call(wd.key(&A), "openMemo", &merge(wd.c.entry(&e, &A), json!({"memo": hx(&memo)}))).unwrap();
     assert_eq!(o, json!({"auditorOn": true, "legs": [{"amount": 300, "ua": hx(&BOB)}]}));
 }
 
-/// Burn and refresh carry `memoHash` 0 (`PqzCore.prepareBurn` never sets it): no `memoHash` or `mode` field is taken.
+/// `PqzCore._parseMulti` on BUNDLE (3h, T20d2; was T15b's `memoHash` 0): no memo (`sealedMemo` empty) and `memoHash =
+/// keccak256(ownTag)`; the answer no `memo`, the proof verifies.
 #[test]
-fn burn_and_refresh_memo_hash_is_zero() {
+fn multi_bundle_memo_hash_is_the_tags() {
+    let mut wd = World::new();
+    wd.c.shield(&A, 1000);
+    let (_, p) = wd.pay_multi(&A, &[(BOB, 250)], false, "BUNDLE");
+    let stmt = h(&p["stmt"]);
+    let Stmt::Multi(m) = st::parse(7, &stmt).unwrap() else { panic!() };
+    assert_eq!(m.header[st::H_MEMO_HASH], memo_hash(&[], &tag(&p)), "BUNDLE: keccak256(ownTag)");
+    assert_eq!(p.get("memo"), None, "BUNDLE: no memo");
+}
+
+/// `PqzCore._parseMulti` on HASH (3h): `memoHash = keccak256(abi.encodePacked(t.salt, t.sealedMemo, t.ownTag))`, `salt` the
+/// header's low 16 bytes and `sealedMemo` `2 + 40·M` bytes; the facade's `memo` is `salt ‖ sealedMemo`.
+#[test]
+fn multi_hash_memo_hash_matches_contract() {
+    let mut wd = World::new();
+    wd.c.shield(&A, 1000);
+    let (_, p) = wd.pay_multi(&A, &[(BOB, 250)], false, "HASH");
+    let memo = h(&p["memo"]);
+    let stmt = h(&p["stmt"]);
+    let Stmt::Multi(m) = st::parse(7, &stmt).unwrap() else { panic!() };
+    let salt = &m.header[st::H_SALT][16..];
+    assert_eq!((&memo[..16], memo.len() - 16), (salt, 2 + 40), "memo = salt ‖ sealedMemo");
+    assert_eq!(m.header[st::H_MEMO_HASH], scaas_ua::keccak256(&[salt, &memo[16..], &tag(&p)[..]].concat()), "keccak256(salt ‖ sealedMemo ‖ ownTag)");
+}
+
+/// Burn and refresh carry 3h's `memoHash = keccak256(ownTag)` (the memo empty; `PqzCore.prepareBurn`): no `memoHash` or
+/// `mode` field is taken.
+#[test]
+fn burn_and_refresh_memo_hash_is_the_tags() {
     let wd = {
         let mut w = World::new();
         w.c.shield(&A, 1000);
@@ -699,7 +865,7 @@ fn burn_and_refresh_memo_hash_is_zero() {
         let p = call(k, cmd, &req).unwrap();
         let s = h(&p["stmt"]);
         let Stmt::Debit(d) = st::parse(2, &s).unwrap() else { panic!() };
-        assert_eq!(d.header[st::H_MEMO_HASH], [0; 32], "{cmd}: memoHash 0");
+        assert_eq!(d.header[st::H_MEMO_HASH], memo_hash(&[], &tag(&p)), "{cmd}: memoHash = keccak256(ownTag)");
         assert!(verify(2, &s, &h(&p["proof"])), "{cmd}");
     }
 }
