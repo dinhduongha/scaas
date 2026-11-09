@@ -11,3 +11,15 @@ killed     | M6 op 1 HASH: auditorOn not in the memo's flags | clients/ua-rs/src
 killed     | M7 burn: a free memoHash taken | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: burn_and_refresh_memo_hash_is_zero
 killed     | M8 refresh: a free memoHash taken | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: burn_and_refresh_memo_hash_is_zero
 mutants M1-M8 of 8, survived or not loaded: 0
+# T20d2 re-run (2026-11-09, release 3h: memoHash = keccak256(memo ‖ ownTag), the memo empty on BUNDLE and a burn): M1-M3, M7 and M8's
+# strings brought to HEAD (M2 now seals and hashes a memo on BUNDLE; M7, M8's test renamed burn_and_refresh_memo_hash_is_the_tags); all
+# eight run again:
+killed     | M1 op 1 HASH: memoHash left 0 | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode | at 84a33fb5
+killed     | M2 op 1 BUNDLE: memoHash set (the memo sealed and hashed on BUNDLE too) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode | at 84a33fb5
+killed     | M3 op 1 HASH: the salt dropped from the hash | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode | at 84a33fb5
+killed     | M4 op 1: a default mode (BUNDLE without the field) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode | at 84a33fb5
+killed     | M5 op 1 HASH: the memo's leg not (amount, toUA) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode | at 84a33fb5
+killed     | M6 op 1 HASH: auditorOn not in the memo's flags | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode | at 84a33fb5
+killed     | M7 burn: a free memoHash taken | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: burn_and_refresh_memo_hash_is_the_tags | at 84a33fb5
+killed     | M8 refresh: a free memoHash taken | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: burn_and_refresh_memo_hash_is_the_tags | at 84a33fb5
+# T20d2 re-run: 8 killed, 0 survived, 0 not loaded (git diff --exit-code 0 after the run)

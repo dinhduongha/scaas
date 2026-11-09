@@ -485,6 +485,10 @@ refresh and unwrap (proof-path spec C3). The output carries `ownTag`; the caller
 shared KAT is `smartcontracts/vectors/ua/pq_kat.json` `ownTag` and `memoHash` (proof-path spec C4). Changes §4.10 and T15k: their
 pre-3h formulas move to `clients/ua-rs/legacy/ua-rs-sign/` (owner ruling §7 item 8).
 
+Path (A): **BUILT** (2026-11-09, ua-rs-sign T20d2): every words debit command answers `ownTag` and carries 3h's `memoHash`; unwrap is
+`proveBurn`'s op 2 statement, a migration `proveTransfer` from a stale version. The raw debits (feature `vectors`, never in a
+release) take `memoHash` as the vector files give it. Path (B)'s commands take the same builder (T20d5).
+
 #### 4.14.6 Where the words may come from
 
 | Use | Words | Source |
