@@ -1,0 +1,19 @@
+# 2026-11-09-ua-rs-sign-t20d8b at commit bcea8f90
+step | commit | rc | counts
+docs | bcea8f90 | 0 | -
+ua-rs-pqz | bcea8f90 | 0 | 80 passed 0 failed 3 ignored (cargo) 
+ua-sizes | bcea8f90 | 0 | -
+pqz-read | bcea8f90 | 0 | 10 passed 0 failed 0 ignored (cargo) 
+mutant-logs | bcea8f90 | 0 | -
+
+# result lines
+ua-rs-pqz: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.12s
+ua-rs-pqz: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-pqz: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.00s
+ua-rs-pqz: test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 56.87s
+ua-rs-pqz: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 35.28s
+ua-rs-pqz: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.12s
+ua-rs-pqz: test result: ok. 2 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-rs-pqz: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+pqz-read: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+pqz-read: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 22.81s

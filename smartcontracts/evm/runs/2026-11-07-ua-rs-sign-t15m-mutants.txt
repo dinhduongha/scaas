@@ -31,3 +31,6 @@ killed     | M11 R5: a Zether kind accepted | clients/ua-rs/src/bin/pqz-read.rs 
 killed     | M1 R1: the same --rpc twice accepted | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 2 failed: reading_layer_against_anvil, the_holders_configuration_is_required | one node named twice | at 7bde6bd9
 killed     | M12 R6: the registered key not compared with the handle's | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: reading_layer_against_anvil | a version the registry does not hold: error: ua-rs refused the words: Argument | at 7bde6bd9
 # T20b several-node re-run: 2 killed, 0 survived, 0 not loaded (the other mutants above stand, every string checked at HEAD)
+# T20d8 re-run (2026-11-09, bcea8f90: the entryRef formula moved into one helper the reader's auditRead and balanceProven share): M20 run again:
+killed     | M20 entryRef of another chain id | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 2 failed: balance_proven_against_anvil, reading_layer_against_anvil | called `Result::unwrap()` on an `Err` value: "error: NONE: no sendCounter of the call's fromUA gives the Credited entryRef\n" | at bcea8f90
+# T20d8 re-run: 1 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)
