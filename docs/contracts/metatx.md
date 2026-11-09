@@ -990,6 +990,17 @@ Who signs what: the user signs the call itself (its own record, inside `callData
 `relayer = router`; the relayer signs only the outer transaction. The target sees the executor as `msg.sender` and
 trusts only the user's signature inside `callData`.
 
+**Roles.**
+
+| Party | What it is | What it does | What it never does |
+|---|---|---|---|
+| **Payer** (the user) | the account that wants the call run and pays for it | signs the call (inside `callData`) and `UARelayFee` (payer, target, call hash, payee, value, lane, expiry, `relayer = router`) | sends a transaction or holds native gas |
+| **Relayer** | whoever submits the transaction (a node's lane key) | sends `relay` to the router, pays the native gas, is paid the fee in open mode | talks to the executor, the target or the token directly |
+| **Relay-fee router** (`MtxRelayFee`) | the entry point: one stateless contract, no owner, no stored state, the same CREATE2 address on every EVM chain | runs the call through its executor, then makes the token collect the payment whose signed `relayer` it is, then forwards the fee to the relayer in open mode | calls a target itself, holds funds between transactions, grants authority to anyone |
+| **Executor** (`MtxRelayExecutor`) | a minimal contract the router creates in its constructor | `target.call(callData)`, only on its router's order (`NotRouter` otherwise) | holds funds or privileges, or is anyone's signed relayer: it exists so the router's identity, which payers sign as `relayer`, is never lent to the call. Never pay it or approve it |
+| **Target** | the SCaaS contract whose fee-less entry the payer wants run (a `UARegistry` write, a PqChat record, a `MandateWallet` action, any entry with fee `NONE`) | verifies the payer's own signature inside `callData` and runs, all or nothing ([CTR-MTX-16](#CTR-MTX-16)) | knows about the fee or trusts its caller; it must be a contract (code, not an EIP-7702 designator) |
+| **Token** | the token the fee is paid in | `mtxRelayFee`: checks `UARelayFee` with `relayer = msg.sender`, moves the fee from the payer's public balance to the payee, emits `UAPaymentSettled(…, ref)` | pays from a confidential balance |
+
 The payment is its own typed struct, `UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)` (`MetaTokenBase.sol` `UA_RELAY_FEE_TYPEHASH`), signed in the token's domain: a native payer with its own key, a derived UA through the token's registry. The token builds `UAMetaTransfer{from, to: payee, value, entryRef: ref, batch, nonce, validUntil, mode: MODE_RESTRICT_RELAYER, relayer: msg.sender}` with fee `NONE` and `ref = keccak256("scaas.relayfee" ‖ chainid ‖ target ‖ callDataHash)` (= `relayRef`). A caller other than the router therefore hashes itself as `relayer` and fails the signature (`MetaTxBadSignature`); `test_relayFeeDirectCallRefused`. A payment for another target, call or chain fails at the signature, after the target call ran, and the revert unwinds it. `mtxRelayFee` is in `IERC20MetaTx` (its ERC-165 id moved) and is not `PAYABLE`-gated, as `mtxExecuteTransfer` is not.
 
 Steps (`relay`):
@@ -1025,6 +1036,13 @@ Why it holds:
   `mtxExecuteTransfer` of another router-bound payment, and the token would see the router as its bound relayer. The
   executor has no privilege, holds nothing, and only the router may call it.
 - **Atomic.** Steps 3–5 are one transaction, and any failure reverts all of them.
+- **The call first, the payment after.** Either order is safe, because one failure reverts both. The call comes first
+  so that a call which credits the payer (a withdrawal or refund from a service, an unwrap to the public balance) can
+  fund its own fee, as a self-call pays its fee after it runs ([CTR-MTX-16](#CTR-MTX-16)). A payer without the fee makes
+  the whole `relay` revert; the relayer simulates the whole `relay` before it submits (below), so a failing one is not
+  sent. What the order costs: a `relay` that still reverts on chain (state moved between simulation and inclusion)
+  burns the target call's gas before the payment fails, which a payment-first order would save (owner question
+  2026-11-09, open).
 - **One payment per signature** (pay-meta-tax spec §4, O4, F-29): a `UARelayFee` signature runs at most once (its
   nonce on the lane `(from, batch)`). A second signature for the same call pays only if the target call runs again,
   which a target with its own nonce or guard refuses, so the second `relay` reverts and pays nothing.
