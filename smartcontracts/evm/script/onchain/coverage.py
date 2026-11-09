@@ -193,6 +193,8 @@ def views(a):
     n = ok = 0
     with open(os.path.join(a.out, f"records-{a.net}-views.jsonl"), "w") as f:
         for addr, lb in sorted(book.items()):
+            if lb not in lab or _rpc(a.rpc, "eth_getCode", [addr, "latest"]) in ("0x", None):
+                continue  # not a contract on this node (a group's local fork is gone after its run)
             for e in lab.get(lb, {}).get("entries", []):
                 w = _static_words(e["sig"]) if e["mut"] in ("view", "pure") else None
                 if w is None:
@@ -212,10 +214,15 @@ def views(a):
 def table(a):
     cov = json.load(open(os.path.join(a.out, "coverage.json")))
     books = {}
+    own = {}  # per net and group: its own book over the base book (local groups run on separate forks of one state, so
+    # one key at one nonce makes the same address in two groups: a record's frames are labelled by its own group's book)
     for n in a.net:
-        books[n] = {}
+        books[n], own[n] = {}, {}
+        base = os.path.join(EVM, f"deployments/onchain-{n}-base.json")
         for b in sorted(glob.glob(os.path.join(EVM, f"deployments/onchain-{n}-*.json"))):
             books[n].update(_book(b))
+            g = os.path.basename(b)[len(f"onchain-{n}-"):-len(".json")]
+            own[n][g] = {**(_book(base) if os.path.exists(base) else {}), **_book(b)}
     lab = {lb: c for cs in cov["groups"].values() for lb, c in cs.items()}
     for c in lab.values():
         for e in c["entries"]:
@@ -225,7 +232,8 @@ def table(a):
             if r["status"] == 2:
                 continue  # a negative refused as expected: listed in the note, not counted as a call
             hits = [(r.get("label") or books[n].get(r["to"], ""), r["sel"], "outer", r["status"])]
-            hits += [(books[n].get(t, ""), s, "inner", ok) for t, s, _, ok in r.get("frames", [])]
+            bk = own[n].get(r.get("script", ""), books[n])
+            hits += [(bk.get(t, ""), s, "inner", ok) for t, s, _, ok in r.get("frames", [])]
             for lb, s, how, ok in hits:
                 for e in lab.get(lb, {}).get("entries", []):
                     if e["sel"] == s:
