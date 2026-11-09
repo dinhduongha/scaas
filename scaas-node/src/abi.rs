@@ -304,6 +304,14 @@ sol! {
         error RelayTargetNoCode(address target);
     }
 
+    /// A service of the contract kind `service` (proposed NODE-JOB-25, spec 2026-11-09-service-pull §3.1, §8): each entry's
+    /// selector, its `<Op>`'s EIP-712 `encodeType`, the token it pulls (0: `<Op>` names it in `address token`); its domain is
+    /// ERC-5267 `eip712Domain()` (`IToken`'s).
+    #[derive(Debug)]
+    interface IServicePull {
+        function servicePullEntries() external view returns (bytes4[] selectors, string[] opTypes, address[] tokens);
+    }
+
     /// The OP-stack `GasPriceOracle` predeploy (`0x420…0F`): the L1 data fee of a transaction's bytes.
     #[derive(Debug)]
     interface IGasPriceOracle {

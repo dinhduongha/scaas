@@ -683,7 +683,7 @@ fn pay_meta_json(v: &Val) -> Option<Value> {
     Some(o)
 }
 
-fn take(fields: &[(String, String)], o: &Map<String, Value>, path: &str) -> Result<Vec<Val>> {
+pub(crate) fn take(fields: &[(String, String)], o: &Map<String, Value>, path: &str) -> Result<Vec<Val>> {
     if let Some(k) = o.keys().find(|k| pos(fields, k).is_none()) {
         bail!("BAD_PAYLOAD: {path}.{k}: unknown field");
     }
@@ -942,10 +942,19 @@ impl Typed {
     }
 
     fn hashed(&self, h: B256, chain_id: u64, chain_uid: B256) -> Option<B256> {
-        let name = domain_name(self.contract)?;
-        let sep = crate::dex::domain(name, chain_id, self.domain_of, chain_uid).separator();
-        Some(keccak256([&[0x19, 0x01][..], sep.as_slice(), h.as_slice()].concat()))
+        Some(salted_digest(domain_name(self.contract)?, chain_id, self.domain_of, chain_uid, h))
     }
+
+    /// The typed digest in the salted domain named `name` (a `service` job's pull, whose token kind is read from the chain:
+    /// [`crate::guard::fill_digest`]).
+    pub fn digest_in(&self, name: &str, chain_id: u64, chain_uid: B256) -> Option<B256> {
+        Some(salted_digest(name, chain_id, self.domain_of, chain_uid, self.struct_hash?))
+    }
+}
+
+fn salted_digest(name: &str, chain_id: u64, contract: Address, chain_uid: B256, h: B256) -> B256 {
+    let sep = crate::dex::domain(name, chain_id, contract, chain_uid).separator();
+    keccak256([&[0x19, 0x01][..], sep.as_slice(), h.as_slice()].concat())
 }
 
 /// The 65-byte native signature `sig` recovers to `who` over `digest`.
@@ -994,9 +1003,20 @@ fn find(entry: &str, contract: Option<&str>, name: Option<&str>) -> Result<(&'st
     }
 }
 
+/// The row of every `service` job (proposed NODE-JOB-25): its entries are the chain's `[[chains.services]]`, not this table; a
+/// `ua_metatx` job (its signature a `UASig`), never a relay fee.
+pub static SERVICE_ROW: LazyLock<Row> = LazyLock::new(|| Row { name: "UAServicePull", entry: "", contracts: &["service"],
+    fields: vec![], enveloped: false, typed: true, plan: vec![], sig: Some(Sig::Ua), selector: [0; 4], sent: [0; 4] });
+
 impl Op {
-    /// `op` as job-api.md: the only way a named entry reaches a lane or the gateway.
+    /// `op` as job-api.md: the only way a named entry reaches a lane or the gateway. No `service` entry: [`Op::parse_with`].
     pub fn parse(op: &Value, fee_recipient: Option<Address>) -> Result<Self> {
+        Self::parse_with(op, fee_recipient, &crate::service::Types::default())
+    }
+
+    /// [`Op::parse`] with the chain's services (`contract: "service"`, [`crate::service::op`]), on the direct path and as a
+    /// relay fee's inner call.
+    pub fn parse_with(op: &Value, fee_recipient: Option<Address>, services: &crate::service::Types) -> Result<Self> {
         if op.is_string() {
             return Err(hex_refused("op"));
         }
@@ -1016,6 +1036,9 @@ impl Op {
         let entry = text("entry")?.ok_or_else(|| anyhow!("BAD_PAYLOAD: op.entry missing"))?;
         if entry == "mtxPayMeta" {
             bail!("ENTRY_RETIRED: mtxPayMeta: a pay is mtxPay(t, auth, meta) with its PayMeta (pay-meta-tax spec §7.1)");
+        }
+        if text("contract")? == Some("service") {
+            return crate::service::op(o, entry, services);
         }
         let (row, contract) = find(entry, text("contract")?, text("struct")?)?;
         let token = addr(text("token")?.ok_or_else(|| anyhow!("BAD_PAYLOAD: op.token missing"))?).map_err(|e| anyhow!("BAD_PAYLOAD: op.token: {e}"))?;
@@ -1070,7 +1093,7 @@ impl Op {
                 }
                 // no `fee_recipient`: the payer hashed these bytes (`callDataHash`), the lane must not rewrite them; an unbound
                 // `relayer` / `feeRecipient` of the inner call goes as 0, which is what the client hashes (job-api.md §5.3)
-                let c = Op::parse(c, None)?;
+                let c = Op::parse_with(c, None, services)?;
                 if c.row.relay_fee() {
                     bail!("BAD_PAYLOAD: a relay fee does not relay a relay fee");
                 }
@@ -1083,6 +1106,9 @@ impl Op {
             (false, None) => None,
         };
         let a = assemble(row, envelope.as_ref(), &args, sig, fee_recipient)?;
+        if let Some(c) = &inner {
+            crate::service::fee_nonce(c, token, &a.vals["from"], &a.vals["batch"], &a.vals["nonce"])?;
+        }
         if let Some(m) = a.vals.get("meta") {
             // spec §7.1: `entryRef == metaPayId(meta)` before any simulation (`PAY_META_MISMATCH`), the contract's own check
             let id = crate::metatx::meta_pay_id(&pay_meta_of(m).ok_or_else(|| anyhow!("BAD_PAYLOAD: meta"))?);

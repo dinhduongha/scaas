@@ -16,7 +16,7 @@ use crate::finality::{quorum_ok, safe_head, Mode};
 use crate::guard::{self, Guard};
 use crate::indexer::{pay_events, pay_filter};
 use crate::odoo::Job;
-use crate::submit::{job_digest, work_from_job};
+use crate::submit::job_digest;
 
 pub struct EvmAdapter {
     key: String,
@@ -82,7 +82,8 @@ impl ChainAdapter for EvmAdapter {
         for c in &self.chains {
             c.uid().await?;
         }
-        Ok(())
+        // proposed NODE-JOB-25: the configured services equal the contracts' entries, both directions, or the chain stops
+        self.guard.load_services(&self.chains[0]).await
     }
 
     fn refresh_tokens(&self, nc: &crate::odoo::NodeConfig) {
@@ -92,23 +93,23 @@ impl ChainAdapter for EvmAdapter {
     }
 
     fn already_done(&self, job: &Job, reason: &str) -> bool {
-        work_from_job(job, self.fee_recipient).is_ok_and(|w| guard::already_invalidated(&w.data, reason))
+        self.guard.work(job, self.fee_recipient).is_ok_and(|w| guard::already_invalidated(&w.data, reason))
     }
 
     fn call_key(&self, job: &Job) -> Option<B256> {
-        let w = work_from_job(job, self.fee_recipient).ok()?;
+        let w = self.guard.work(job, self.fee_recipient).ok()?;
         w.typed.as_ref()?.struct_hash.map(|_| w.call_key())
     }
 
     async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
-        let Ok(mut w) = work_from_job(job, self.fee_recipient) else { return Ok(None) };
+        let Ok(mut w) = self.guard.work(job, self.fee_recipient) else { return Ok(None) };
         let chain = self.lane(0).map_err(|e| SimError::Transport(e.to_string()))?;
         guard::fill_digest(chain, &mut w).await?;
         Ok(w.digest().or_else(|| job_digest(job)))
     }
 
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let mut w = work_from_job(job, self.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let mut w = self.guard.work(job, self.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let chain = self.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
         self.guard.check(chain, &w).await?;
         self.guard.pqz_fill(chain, &mut w).await?; // group 3f: a PQZ debit's verdict, before the simulation
@@ -158,7 +159,7 @@ impl ChainAdapter for EvmAdapter {
     }
 
     fn subject(&self, job: &Job) -> Option<(B256, bool)> {
-        self.guard.subject(&work_from_job(job, self.fee_recipient).ok()?)
+        self.guard.subject(&self.guard.work(job, self.fee_recipient).ok()?)
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {

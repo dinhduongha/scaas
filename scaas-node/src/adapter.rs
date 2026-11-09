@@ -683,7 +683,8 @@ pub(crate) mod tests {
         }
         assert!(k(json!({"salt": "0x00"})).is_err() && k(json!({"meta": "0x"})).is_err(), "a pay-meta without its kind");
         assert_eq!(op_kind(&json!({"kind": "wrap"}), &["pay_meta", "wrap"]).unwrap(), Some("wrap"), "a family's own kind");
-        let p = crate::config::RelayParams { router: None, min_amount: 10, relay_bound_payee: false, max_pay_meta_bytes: 2048 };
+        let p = crate::config::RelayParams { router: None, min_amount: 10, relay_bound_payee: false, max_pay_meta_bytes: 2048,
+            max_service_op_bytes: 2048 };
         assert!(relay_fee_ours(true, false, 10, &p).is_ok());
         assert!(relay_fee_ours(true, false, 9, &p).unwrap_err().to_string().contains("min_amount"));
         assert!(relay_fee_ours(false, true, 10, &p).is_ok(), "bound to the lane");

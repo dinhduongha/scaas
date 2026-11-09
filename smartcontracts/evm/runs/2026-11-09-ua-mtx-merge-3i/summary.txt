@@ -48,3 +48,26 @@ tamper (one nibble of row 0's entryRef, SERVICEPULL_FILE) | T78 | 0 | the cross-
 red-first (HEAD's clientkeys evm.js before T78) | T78 | 0 | red: no buildServicePull
 clientkeys npm test | T78 | 0 | 298 tests, 296 passed, 0 failed, 2 skipped (bundle checks); new test/servicepull.test.js 4 passed
 other vector files | T78 | - | none touched
+
+T79: the node kind `service` (proposed NODE-JOB-25, Q1 B). Tree: 9fe6253d (T78) + the T79 files. Node logs in
+scaas-node/runs/2026-11-09-ua-mtx-merge-3i-*.log (git-ignored).
+step | commit | rc | counts
+cargo test --lib service (dev, red-first is node mutant M0) | T79 | 0 | 10 passed (service::tests 7, guard::tests 2, submit::tests 1)
+node mutants (node_mutants.py, 8, each alone, cargo test --lib service) | T79 | - | 8 of 8 killed, table below
+cargo clippy --all-targets -- -D warnings | T79 | 0 | 0 warnings
+cargo test (the whole suite, CAPPED_MEM=6G, no other capped job of this group live; the ua-rs-sign agent's forge test -j 2 held the other slot from start to end) | T79 | 0 | lib 696 passed (686 + 10 new), fuzz 4, mesh_vectors 1 passed; e2e suites ignored (anvil, not run here)
+docs_check.py check | T79 | 0 | 0 errors, 5 warnings (line budgets, unchanged)
+
+node mutant | tests that went red | rc (from node_mutants.txt)
+M0-red-first-no-shape-no-equality (shape() and check_entries() accept anything: the rule before its implementation) | guard::tests::service_pull_through_the_guard, service::tests::entries_equal_both_directions, service::tests::servicepull_kat_every_row, service::tests::shape_refusals | 101
+M1-guard-another-kind-on-a-service (the one-kind-per-address guard rule) | guard::tests::service_pull_through_the_guard | 101
+M2-relay-inner-service-rule-dropped | guard::tests::service_pull_through_the_guard | 101
+M3-shape-check3-dropped | guard::tests::service_pull_through_the_guard, service::tests::shape_refusals | 101
+M4-entries-one-direction-only | guard::tests::service_pull_through_the_guard, service::tests::entries_equal_both_directions | 101
+M5-fee-nonce-dropped | service::tests::servicepull_kat_relay_fee | 101
+M6-op-bytes-bound-dropped | service::tests::note_decode_bounds | 101
+M7-pull-token-from-the-job (SERVICE_TOKEN_MISMATCH dropped) | guard::tests::service_pull_through_the_guard | 101
+
+Findings (T79): the node has no chain_contract table and no registration path (store.md is SPECIFIED ahead of the code): the
+services are [[chains.services]] only and "at registration" is at startup; intN (C3) is refused at startup, as by the clientkeys
+builder (no vector row has it).

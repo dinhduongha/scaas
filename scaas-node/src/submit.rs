@@ -210,6 +210,11 @@ struct Sent {
 /// `feeRecipient` are normalized here (`fee_recipient` = `[[chains]] fee_recipient`), never relayed as the job carries them.
 /// The dedup key is the typed digest of what is built here (`guard::fill_digest`), never the job's `digest` field.
 pub fn work_from_job(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
+    work_from_job_with(job, fee_recipient, &crate::service::Types::default())
+}
+
+/// [`work_from_job`] with the chain's services (`Guard::work`): a `service` job (proposed NODE-JOB-25) is built only here.
+pub fn work_from_job_with(job: &Job, fee_recipient: Option<Address>, services: &crate::service::Types) -> Result<Work> {
     // T17 (one job-kind rule): an EVM job is `metatx`, `ua_metatx` or `call`; any other kind is refused, never guessed.
     if let Some(k) = job.kind.as_deref().filter(|k| !matches!(*k, "metatx" | "ua_metatx" | "call")) {
         anyhow::bail!("unknown job kind {k:?} (metatx | ua_metatx | call)");
@@ -227,7 +232,7 @@ pub fn work_from_job(job: &Job, fee_recipient: Option<Address>) -> Result<Work> 
         return Err(hex_refused("data"));
     }
     if let Some(op) = &job.op {
-        return op_work(job, op, fee_recipient);
+        return op_work(job, op, fee_recipient, services);
     }
     if job.kind.as_deref() == Some("ua_metatx") {
         return ua_work(job, fee_recipient);
@@ -254,11 +259,11 @@ pub fn transfer_typed(contract: Option<&str>, token: Address, struct_hash: B256,
 }
 
 /// A named entry: everything comes out of one [`Op::parse`]; a job carries it or a transfer struct, never both.
-fn op_work(job: &Job, op: &serde_json::Value, fee_recipient: Option<Address>) -> Result<Work> {
+fn op_work(job: &Job, op: &serde_json::Value, fee_recipient: Option<Address>, services: &crate::service::Types) -> Result<Work> {
     if job.metatx.is_some() || job.m.is_some() || job.signature.is_some() || job.auth.is_some() || job.token.is_some() {
         anyhow::bail!("BAD_PAYLOAD: an op job is {{kind, op}}: token, signature and auth live in the op");
     }
-    let (w, ua) = work_of_op(Some(job.id), op, fee_recipient)?;
+    let (w, ua) = work_of_op_with(Some(job.id), op, fee_recipient, services)?;
     // R43: the per-kind call table: a merged entry (a `UA*` struct) is a `ua_metatx` job, an address entry a `metatx` one
     if (job.kind.as_deref() == Some("ua_metatx")) != ua {
         let want = if ua { "ua_metatx" } else { "metatx" };
@@ -269,10 +274,18 @@ fn op_work(job: &Job, op: &serde_json::Value, fee_recipient: Option<Address>) ->
 
 /// `(work, a ua* entry)`, one [`Op::parse`]: the job path and the gateway.
 pub fn work_of_op(job_id: Option<i64>, op: &serde_json::Value, fee_recipient: Option<Address>) -> Result<(Work, bool)> {
-    let p = Op::parse(op, fee_recipient)?;
+    work_of_op_with(job_id, op, fee_recipient, &crate::service::Types::default())
+}
+
+fn work_of_op_with(job_id: Option<i64>, op: &serde_json::Value, fee_recipient: Option<Address>, services: &crate::service::Types)
+    -> Result<(Work, bool)>
+{
+    let p = Op::parse_with(op, fee_recipient, services)?;
     let ua = p.row.ua();
     let addr_nonce = p.typed.contract == "account";
-    let meta = p.lane.map(|(from, batch, nonce)| MetaRef { token: p.to, from, batch, nonce, digest: None, ua, addr_nonce });
+    // a service pull's nonce and its `UAMetaTransactionExecuted` are the pulled token's (spec §8), its target the service
+    let token = if p.typed.contract == "service" { p.typed.domain_of } else { p.to };
+    let meta = p.lane.map(|(from, batch, nonce)| MetaRef { token, from, batch, nonce, digest: None, ua, addr_nonce });
     Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
 }
 
@@ -305,6 +318,12 @@ fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     let data = m.calldata(auth);
     let meta = Some(MetaRef::of_ua(token, &m, None));
     Ok(Work { job_id: Some(job.id), to: token, data, valid_until: m.valid_until().saturating_to(), meta, entry: false, typed })
+}
+
+/// The relayer of a landed meta-transaction is this lane's, or, for a service pull (its token not the target), the
+/// service: the service calls the token, so its `UAMetaTransactionExecuted` names the service (spec §8).
+fn ours(m: &MetaRef, to: Address, relayer: Address, lane: Address) -> bool {
+    relayer == lane || (m.token != to && relayer == to)
 }
 
 pub fn now() -> u64 {
@@ -347,6 +366,8 @@ impl Submitter {
         let breaker = Arc::new(Mutex::new(Breaker::new(cfg.breaker.clone())));
         let tokens = std::sync::RwLock::new(nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect());
         let guard = Guard::new(&cfg, Arc::new(tokens))?;
+        // proposed NODE-JOB-25: a configured service whose entries or domain are not the contract's stops the lane
+        guard.load_services(&chain).await?;
         let mut me = Self {
             chain,
             odoo,
@@ -371,7 +392,7 @@ impl Submitter {
             let (Some(n), Some(h)) = (j.nonce, j.tx_hash.as_deref()) else { continue };
             let Ok(hash) = h.parse::<B256>() else { continue };
             let fees = me.chain.fees().await?;
-            let work = match work_from_job(&j.payload, me.cfg.fee_recipient) {
+            let work = match me.guard.work(&j.payload, me.cfg.fee_recipient) {
                 Ok(mut w) => {
                     if let Err(e) = guard::fill_digest(&me.chain, &mut w).await {
                         anyhow::bail!("typed digest: {e:?}");
@@ -710,9 +731,9 @@ impl Submitter {
     }
 
     /// §8.5 — chỉ là nhãn cho `last_error` ở Odoo; `landed_elsewhere` do indexer quyết khi `final`.
-    async fn classify(&self, m: &MetaRef) -> &'static str {
+    async fn classify(&self, m: &MetaRef, to: Address) -> &'static str {
         match self.chain.meta_executed(m, CLASSIFY_LOOKBACK).await {
-            Ok(Some((d, r))) if Some(d) == m.digest && r == self.chain.address() => "landed",
+            Ok(Some((d, r))) if Some(d) == m.digest && ours(m, to, r, self.chain.address()) => "landed",
             Ok(Some((d, _))) if Some(d) == m.digest => "landed_elsewhere",
             Ok(Some(_)) if m.digest.is_some() => "superseded",
             _ => "unknown",
@@ -722,7 +743,7 @@ impl Submitter {
     /// G6: job của ta không bao giờ `dead`/`reverted` chỉ vì người khác đã thực thi nó.
     async fn report_consumed(&self, w: &Work) {
         let Some(m) = &w.meta else { return };
-        let kind = self.classify(m).await;
+        let kind = self.classify(m, w.to).await;
         warn!(job = ?w.job_id, from = %m.from, nonce = %m.nonce, kind, "meta-tx nonce consumed");
         if let Some(id) = w.job_id {
             self.report(id, "consumed", None, None, Some(kind.into())).await;
@@ -745,7 +766,7 @@ impl Submitter {
 
     /// N2: the job's typed digest or bytes are in flight on another path.
     async fn held(&self, job: &Job) -> bool {
-        let Ok(mut w) = work_from_job(job, self.cfg.fee_recipient) else { return false };
+        let Ok(mut w) = self.guard.work(job, self.cfg.fee_recipient) else { return false };
         // an unreadable chain_uid: not known to be held, the submit path answers for it
         let _ = guard::fill_digest(&self.chain, &mut w).await;
         w.digest().is_some_and(|d| self.digests.contains(&d) || self.digests.contains(&w.call_key()))
@@ -950,7 +971,7 @@ impl Submitter {
                     continue;
                 }
             }
-            match work_from_job(&job, self.cfg.fee_recipient) {
+            match self.guard.work(&job, self.cfg.fee_recipient) {
                 Ok(w) => self.submit(w).await,
                 Err(e) => {
                     let _ = self.report(job.id, "dead", None, None, Some(format!("bad payload: {e:#}"))).await;
@@ -995,6 +1016,18 @@ pub(crate) mod tests {
     use super::*;
     use crate::abi::{IToken, MetaTransfer, UAMetaTransfer};
     use crate::adapter::tests::{fake_odoo, Fake, Shared};
+
+    /// Proposed NODE-JOB-25: a service pull's `UAMetaTransactionExecuted` names the service as relayer (it called the token);
+    /// any other meta-transaction is ours only from this lane.
+    #[test]
+    fn a_service_pull_lands_with_the_service_as_relayer() {
+        let (tok, svc, lane, other) = (Address::repeat_byte(0x70), Address::repeat_byte(0x5e), Address::repeat_byte(1), Address::repeat_byte(2));
+        let m = MetaRef { token: tok, from: B256::ZERO, batch: U256::ZERO, nonce: U256::ZERO, digest: None, ua: true, addr_nonce: false };
+        assert!(ours(&m, svc, svc, lane), "the service relayed it");
+        assert!(ours(&m, svc, lane, lane));
+        assert!(!ours(&m, svc, other, lane), "another contract");
+        assert!(!ours(&m, tok, svc, lane), "a token job: the lane only");
+    }
 
     const D: &str = "0x7777777777777777777777777777777777777777777777777777777777777777";
     /// The fake chain's `chain_uid`: pinned in the config (the fake serves no block 0) and answered by `chainUid()`.

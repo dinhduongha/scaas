@@ -145,6 +145,17 @@ max_index_lag = 100                              # /readyz fails when final head
 # Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.
 # Amounts in the gas coin's smallest unit (wei); strings for values above 2^63.
 breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_relayer_balance = "100000000000000000" }
+# Services (proposed NODE-JOB-25, the contract kind `service`; spec docs/superpowers/specs/2026-11-09-service-pull.md §8):
+# a contract that takes a payer's signed pull (its job: {entry, contract = "service", token = <the service>, args = {op,
+# pullToken, t, auth}}). Its entries must equal the contract's servicePullEntries(), both directions, and its eip712Domain()
+# must be on this chain, at startup (else SERVICE_ENTRIES_MISMATCH stops the lane); at most 32 entries, op_type at most
+# 1,024 bytes, C3 fields only (address, bool, bytesN, uintN, bytes, string; at most 16; the first `bytes32 payer`). A
+# service is no other kind's address (dex, governance_routers, ua_registry, the factories, the relay-fee router or its
+# executor, a registered token). params.max_service_op_bytes (default 2048) caps one bytes / string field. Must follow
+# every key of this [[chains]] table (a TOML sub-table):
+# [[chains.services]]
+# address = "0x..."
+# entries = [{ entry = "deposit", op_type = "Deposit(bytes32 payer,uint256 amount,uint64 releaseAfter,bytes32 salt)" }]
 
 # ---- Other network families (R58): one [[chains]] each; delete the ones you do not run. ----
 # They run the generic lane runner (one tx in flight per lane, `signed` journaled in Odoo before sending,
