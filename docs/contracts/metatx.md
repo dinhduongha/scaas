@@ -1041,8 +1041,8 @@ Why it holds:
   fund its own fee, as a self-call pays its fee after it runs ([CTR-MTX-16](#CTR-MTX-16)). A payer without the fee makes
   the whole `relay` revert; the relayer simulates the whole `relay` before it submits (below), so a failing one is not
   sent. What the order costs: a `relay` that still reverts on chain (state moved between simulation and inclusion)
-  burns the target call's gas before the payment fails, which a payment-first order would save (owner question
-  2026-11-09, open).
+  burns the target call's gas before the payment fails, which a payment-first order would save (the owner asked
+  2026-11-09; the order is unchanged).
 - **One payment per signature** (pay-meta-tax spec §4, O4, F-29): a `UARelayFee` signature runs at most once (its
   nonce on the lane `(from, batch)`). A second signature for the same call pays only if the target call runs again,
   which a target with its own nonce or guard refuses, so the second `relay` reverts and pays nothing.
