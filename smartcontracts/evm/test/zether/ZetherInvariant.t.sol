@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
@@ -56,13 +58,13 @@ contract ZetherHandler is ZetherFixture {
         c.legs[1] = IFactoryToken.Leg(address(leg[1]), 3, 7);
         c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, MIN_DECOY, 0, bytes32(0), false, 0);
         w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "inv")));
-        tok = ZetherLayer(address(w));
+        tok = NormalZetherToken(address(w));
         _users();
         (us[0], us[1], us[2]) = (alice, bob, carol);
     }
 
     /// @dev At least `units` public units by a leg-0 wrap of `⌈units·den/num⌉` (the rate may have changed).
-    function _public(ZetherLayer t, address to, uint256 units) internal override {
+    function _public(NormalZetherToken t, address to, uint256 units) internal override {
         (uint96 num, uint96 den,,,) = w.legOf(address(leg[0]));
         uint256 inAmt = (units * den + num - 1) / num;
         leg[0].mint(address(this), inAmt);

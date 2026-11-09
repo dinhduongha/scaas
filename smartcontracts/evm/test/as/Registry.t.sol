@@ -312,8 +312,8 @@ contract RegistryTest is RegFixture {
         for (uint256 i; i < 2; ++i) {
             address impl = f.implementationOf(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED
                 : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1);
-            assertEq(RegulatedBase(payable(impl)).REGISTRY_CODEHASH(), REGISTRY_CODEHASH, "release");
-            assertEq(RegulatedBase(payable(_ks()[i])).REGISTRY_CODEHASH(), REGISTRY_CODEHASH, "token");
+            assertEq(NormalRegulatedToken(payable(impl)).REGISTRY_CODEHASH(), REGISTRY_CODEHASH, "release");
+            assertEq(NormalRegulatedToken(payable(_ks()[i])).REGISTRY_CODEHASH(), REGISTRY_CODEHASH, "token");
         }
     }
 

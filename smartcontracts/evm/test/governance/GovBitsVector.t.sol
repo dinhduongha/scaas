@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {GovernanceBits as B} from "../../src/governance/GovernanceBits.sol";
 import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
@@ -342,7 +344,7 @@ contract GovBitsVectorTest is Test {
 
     /// The regulated rows' masks are kind 8's: its `validBits()` is its base kind's plus `REG`.
     function test_regulatedRowsEqualKind8() public {
-        address impl = address(new NormalRegulatedToken(address(this), regArgs()));
+        address impl = address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs())));
         assertEq(NormalRegulatedToken(impl).validBits(), B.NORMAL_BITS | REG);
     }
 

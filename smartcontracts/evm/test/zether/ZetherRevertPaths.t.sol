@@ -230,7 +230,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         for (uint256 i; i < ok.length; ++i) {
             IFactoryToken.TokenConfig memory c = _cfg(false, max);
             c.conf.confidentialFee = ok[i];
-            ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), bytes32(i + 900)));
+            NormalZetherToken z = NormalZetherToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), bytes32(i + 900)));
             assertEq(z.confidentialFee(), ok[i]);
         }
         uint256[2] memory bad = [max, (uint256(1) << 64) - 1];
@@ -417,7 +417,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_minterMintsPublicUnitsOnly() public {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         (c.initialSupply, c.initialHolder) = (7 * SCALE, address(0xA77));
-        ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "supply"));
+        NormalZetherToken z = NormalZetherToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "supply"));
         assertEq(z.balanceOf(address(0xA77)), 7 * SCALE);
         assertEq(z.totalShielded(), 0);
         _public(tok, address(0xA77), 5 * SCALE);

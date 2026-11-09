@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -107,7 +109,7 @@ contract ForceTest is RegFixture {
             vm.prank(issuer);
             _r(t).forceTransfer(r, 1);
             vm.prank(compliance);
-            MetaTokenBase(t).renounceRole(10);
+            NormalToken(t).renounceRole(10);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, r));
             _r(t).forceTransfer(r, 1);
@@ -140,13 +142,13 @@ contract ForceTest is RegFixture {
         for (uint256 i; i < 2; ++i) {
             address t = _ks()[i];
             vm.prank(alice);
-            MetaTokenBase(t).transferToUA(ux, 500);
+            NormalToken(t).transferToUA(ux, 500);
             bytes32 r = _order(t, "o1", ux, uy, 100, _now() + 90 days);
             _freezeRecord(t, ux, r);
             vm.prank(issuer);
             _r(t).forceTransfer(r, 100);
-            assertEq(MetaTokenBase(t).balanceOfUA(ux), 400);
-            assertEq(MetaTokenBase(t).balanceOfUA(uy), 100);
+            assertEq(NormalToken(t).balanceOfUA(ux), 400);
+            assertEq(NormalToken(t).balanceOfUA(uy), 100);
         }
     }
 }

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
+import {NormalZetherToken} from "../../../src/zether/NormalZetherToken.sol";
+
 import {Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PqzRegFixture} from "./PqzRegFixture.sol";
@@ -94,7 +98,7 @@ abstract contract TaxPqzRows is PqzRegFixture {
         IFactoryToken.TokenConfig memory c = _regCfg();
         c.features |= uint256(1) << GovernanceBits.TAX;
         c.reg.taxRecipient = nid(TaxRows.TAX_TO);
-        tok = PqzLayer(factory.createToken(_kind(), 1, abi.encode(c), "ptax"));
+        tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(c), "ptax"));
         w = WrappedPqzToken(payable(address(tok)));
         _shieldTo(alice, 300);
         _pub(address(this), PUB);
@@ -168,7 +172,7 @@ abstract contract TaxZetherRows is ZetherRegFixture {
         IFactoryToken.TokenConfig memory c = _regCfg(true, 1 << 40);
         c.features |= uint256(1) << GovernanceBits.TAX;
         c.reg.taxRecipient = nid(TaxRows.TAX_TO);
-        tok = ZetherLayer(factory.createToken(_kind(), 1, abi.encode(c), "ztax"));
+        tok = NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(c), "ztax"));
         _funded(BAL);
         _public(tok, address(this), PUB);
     }

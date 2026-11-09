@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
@@ -111,7 +113,7 @@ contract KindPairsTest is UALedgerBase {
 
     function setUp() public override {
         super.setUp();
-        off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         wOff = _wrapperOff(address(und));
         wOffL = _wrapperOff(address(off));
@@ -128,7 +130,7 @@ contract KindPairsTest is UALedgerBase {
     }
 
     function _wrapperOff(address leg) internal returns (WrappedToken w) {
-        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (leg, 1);
@@ -142,7 +144,7 @@ contract KindPairsTest is UALedgerBase {
     function _e(address t, bytes32 from) internal view returns (MetaTxLib.UAEnvelope memory e) {
         e.from = from;
         e.batch = LANE;
-        e.nonce = MetaTokenBase(t).mtxNonce(from, LANE);
+        e.nonce = NormalToken(t).mtxNonce(from, LANE);
         e.validUntil = block.timestamp + 300;
     }
 
@@ -307,7 +309,7 @@ contract KindPairsTest is UALedgerBase {
         c.roles.minter = nid(address(0x313));
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(tok), 1, 1);
-        WrappedToken w = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), "")),
+        WrappedToken w = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
             EnvKit.env(chainUidA, REG_L, address(0), false))));
         w.initialize(nid(address(this)), 1, abi.encode(c));
         _wrapOrder(w, address(tok), _o(w, _pad(alice), CAP, 1));

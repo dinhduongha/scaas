@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Test} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -138,7 +140,7 @@ contract MandateWalletKatTest is MtxKatBase {
     function test_mandateWalletKat() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(0), address(0), false)));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
         w = new MandateWallet(MetaTxLib.pad(vm.addr(OWNER_PK)), UID, address(0), false);
         tok.mint(address(w), 1_000e6);

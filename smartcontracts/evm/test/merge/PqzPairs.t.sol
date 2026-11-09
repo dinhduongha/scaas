@@ -130,7 +130,7 @@ contract PqzPairsTest is PqzNamedBase {
     // ------------------------------------------------------------------ the envelope, the bindings, the signatures
 
     function _u(bytes32 from, address t) internal view returns (MetaTxLib.UAEnvelope memory u) {
-        u = MetaTxLib.UAEnvelope(from, LANE, PqzLayer(t).mtxNonce(from, LANE), block.timestamp + 300, 0, address(0), 0, address(0));
+        u = MetaTxLib.UAEnvelope(from, LANE, NormalPqzToken(t).mtxNonce(from, LANE), block.timestamp + 300, 0, address(0), 0, address(0));
     }
 
     /// CTR-PQZ-21 / R36: the merged entries' binding, `from` as `bytes32`.

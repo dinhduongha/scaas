@@ -23,6 +23,7 @@ import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
+import {deployKindModules} from "../../script/KindModules.sol";
 
 /// @notice A regulated release's `implArgs` (regulated-kinds spec §5, F-11; plan T29): the canonical `ComplianceRegistry`
 ///         runtime's code hash, `REGISTRY_CODEHASH`.
@@ -111,6 +112,16 @@ function pinned(IFactoryToken.Env memory e, IOpenFactory.TokenKind kind) view re
     return e;
 }
 
+/// @notice `e` with the release's body modules pinned too (T66b §4.5: `OpenFactory` refuses a module outside the env).
+function withModules(IFactoryToken.Env memory e, address[] memory ms) view returns (IFactoryToken.Env memory) {
+    address[] memory l = new address[](e.libs.length + ms.length);
+    bytes32[] memory h = new bytes32[](l.length);
+    for (uint256 i; i < e.libs.length; ++i) (l[i], h[i]) = (e.libs[i], e.libCodeHashes[i]);
+    for (uint256 i; i < ms.length; ++i) (l[e.libs.length + i], h[e.libs.length + i]) = (ms[i], ms[i].codehash);
+    (e.libs, e.libCodeHashes) = (l, h);
+    return e;
+}
+
 /// @notice The registrar's catalogue calls for tests (plan 5g-Z2): publish an env, deploy a release from init code.
 ///         Each call pranks the registrar once, so a caller must not hold a `startPrank`.
 library Catalogue {
@@ -134,10 +145,13 @@ library Catalogue {
     }
 
     /// @dev As above with the release's `implArgs` (a regulated kind 8-13: `regArgs()`, plan T29).
+    ///      T66b: the kind's body modules are deployed for `f` first, pinned in the env beside its link closure, and named in
+    ///      the release's `implArgs` (`coreArgs` is the kind's own: "" or `regArgs()`).
     function release(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, IFactoryToken.Env memory e,
-        bytes memory code, bytes memory implArgs) internal returns (address)
+        bytes memory code, bytes memory coreArgs) internal returns (address)
     {
-        uint16 v = env(f, kind, e);
+        (address[] memory ms, bytes memory implArgs) = deployKindModules(uint8(kind), address(f), coreArgs);
+        uint16 v = env(f, kind, withModules(e.libs.length == 0 ? pinned(e, kind) : e, ms));
         vm.prank(f.registrar());
         return f.deployImplementation(kind, version, v, code, implArgs);
     }

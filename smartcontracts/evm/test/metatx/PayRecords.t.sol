@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {Vm} from "forge-std/Test.sol";
 import {UACall} from "../ua/UACall.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -58,9 +60,9 @@ contract PayRecordsTest is PayRigBase {
             vm.roll(100 + i);
             MetaTxLib.PayMeta memory m = _saved(i, NO);
             _pay(t, _ut(PayMetaKit.id(m), 7, 0), m);
-            assertEq(MetaTokenBase(t).balanceOf(FEE_TO), FEE, kinds[i]);
-            assertEq(MetaTokenBase(t).paymentCount(NO), 1, kinds[i]);
-            MetaTxLib.PayRecord[] memory r = MetaTokenBase(t).paymentsOf(NO, 0, 10);
+            assertEq(NormalToken(t).balanceOf(FEE_TO), FEE, kinds[i]);
+            assertEq(NormalToken(t).paymentCount(NO), 1, kinds[i]);
+            MetaTxLib.PayRecord[] memory r = NormalToken(t).paymentsOf(NO, 0, 10);
             assertEq(r.length, 1, kinds[i]);
             _eq(r[0], PAYEE, AMOUNT, 100 + i, kinds[i]);
         }
@@ -73,9 +75,9 @@ contract PayRecordsTest is PayRigBase {
             MetaTxLib.PayMeta memory m = _saved(i, NO);
             m.save = false;
             _pay(t, _ut(PayMetaKit.id(m), 7, 0), m);
-            assertEq(MetaTokenBase(t).balanceOf(PAYEE), AMOUNT, kinds[i]);
-            assertEq(MetaTokenBase(t).paymentCount(NO), 0, kinds[i]);
-            assertEq(MetaTokenBase(t).paymentsOf(NO, 0, 10).length, 0, kinds[i]);
+            assertEq(NormalToken(t).balanceOf(PAYEE), AMOUNT, kinds[i]);
+            assertEq(NormalToken(t).paymentCount(NO), 0, kinds[i]);
+            assertEq(NormalToken(t).paymentsOf(NO, 0, 10).length, 0, kinds[i]);
             assertEq(vm.load(t, _lengthSlot(NO)), bytes32(0), kinds[i]);
         }
     }
@@ -90,11 +92,11 @@ contract PayRecordsTest is PayRigBase {
             vm.roll(201);
             MetaTxLib.PayMeta memory b = _saved(20 + i, NO);
             _pay(t, _utTo(PayMetaKit.id(b), 1, PAYEE2, 777), b);
-            assertEq(MetaTokenBase(t).paymentCount(NO), 2, kinds[i]);
-            MetaTxLib.PayRecord[] memory r = MetaTokenBase(t).paymentsOf(NO, 0, 2);
+            assertEq(NormalToken(t).paymentCount(NO), 2, kinds[i]);
+            MetaTxLib.PayRecord[] memory r = NormalToken(t).paymentsOf(NO, 0, 2);
             _eq(r[0], PAYEE, AMOUNT, 200, kinds[i]);
             _eq(r[1], PAYEE2, 777, 201, kinds[i]);
-            assertEq(MetaTokenBase(t).paymentCount(bytes32(uint256(NO) + 1)), 0, kinds[i]);
+            assertEq(NormalToken(t).paymentCount(bytes32(uint256(NO) + 1)), 0, kinds[i]);
         }
     }
 
@@ -106,7 +108,7 @@ contract PayRecordsTest is PayRigBase {
             MetaTxLib.PayMeta memory m = _saved(30 + k, NO);
             _pay(t, _utTo(PayMetaKit.id(m), k, PAYEE, AMOUNT + k), m);
         }
-        MetaTokenBase tok = MetaTokenBase(t);
+        NormalToken tok = NormalToken(t);
         assertEq(tok.paymentCount(NO), 3);
         MetaTxLib.PayRecord[] memory r = tok.paymentsOf(NO, 0, 2);
         assertEq(r.length, 2);
@@ -136,15 +138,15 @@ contract PayRecordsTest is PayRigBase {
             MetaTxLib.PayMeta memory m = _saved(40 + i, NO);
             vm.prank(signer);
             vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayRecordAmount.selector, big));
-            MetaTokenBase(t).payWithFee(PAYEE, big, FeeMode.NONE, 0, address(0), PayMetaKit.id(m), m);
+            NormalToken(t).payWithFee(PAYEE, big, FeeMode.NONE, 0, address(0), PayMetaKit.id(m), m);
             vm.prank(signer);
-            MetaTokenBase(t).payWithFee(PAYEE, big - 1, FeeMode.FIXED, 3, FEE_TO, PayMetaKit.id(m), m);
-            _eq(MetaTokenBase(t).paymentsOf(NO, 0, 1)[0], PAYEE, big - 1, block.number, kinds[i]);
+            NormalToken(t).payWithFee(PAYEE, big - 1, FeeMode.FIXED, 3, FEE_TO, PayMetaKit.id(m), m);
+            _eq(NormalToken(t).paymentsOf(NO, 0, 1)[0], PAYEE, big - 1, block.number, kinds[i]);
             m.save = false;
             vm.prank(signer);
-            MetaTokenBase(t).payWithFee(PAYEE, big, FeeMode.NONE, 0, address(0), PayMetaKit.id(m), m);
-            assertEq(MetaTokenBase(t).paymentCount(NO), 1, kinds[i]);
-            assertEq(MetaTokenBase(t).balanceOf(PAYEE), 2 * big - 1, kinds[i]);
+            NormalToken(t).payWithFee(PAYEE, big, FeeMode.NONE, 0, address(0), PayMetaKit.id(m), m);
+            assertEq(NormalToken(t).paymentCount(NO), 1, kinds[i]);
+            assertEq(NormalToken(t).balanceOf(PAYEE), 2 * big - 1, kinds[i]);
         }
     }
 
@@ -158,12 +160,12 @@ contract PayRecordsTest is PayRigBase {
                 MetaTxLib.MODE_RESTRICT_RELAYER, REL, 0, address(0));
             IUARegistry.UASig memory pa = _sigOf(t, x);
             IUARegistry.UASig memory qa = UACall.auth(x.to,
-                _ecdsa(PAYEE_PK, MetaTokenBase(t).receiverFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+                _ecdsa(PAYEE_PK, NormalToken(t).receiverFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
             uint256 vu = block.timestamp + 300;
             vm.prank(REL);
-            MetaTokenBase(t).mtxPayReceiverFee(x, pa, 10, RF_TO, vu, qa, m);
-            assertEq(MetaTokenBase(t).balanceOf(vm.addr(PAYEE_PK)), AMOUNT - 10, kinds[i]);
-            _eq(MetaTokenBase(t).paymentsOf(NO, 0, 1)[0], vm.addr(PAYEE_PK), AMOUNT - 10, block.number, kinds[i]);
+            NormalToken(t).mtxPayReceiverFee(x, pa, 10, RF_TO, vu, qa, m);
+            assertEq(NormalToken(t).balanceOf(vm.addr(PAYEE_PK)), AMOUNT - 10, kinds[i]);
+            _eq(NormalToken(t).paymentsOf(NO, 0, 1)[0], vm.addr(PAYEE_PK), AMOUNT - 10, block.number, kinds[i]);
         }
     }
 
@@ -173,7 +175,7 @@ contract PayRecordsTest is PayRigBase {
         for (uint256 i; i < toks.length; ++i) {
             address t = toks[i];
             vm.record();
-            MetaTokenBase(t).balanceOf(PAYEE);
+            NormalToken(t).balanceOf(PAYEE);
             (bytes32[] memory reads,) = vm.accesses(t);
             bytes32 bal = reads[reads.length - 1];
             MetaTxLib.PayMeta memory m = _saved(60 + i, NO);
@@ -181,7 +183,7 @@ contract PayRecordsTest is PayRigBase {
             IUARegistry.UASig memory a = _sigOf(t, x);
             vm.startStateDiffRecording();
             vm.prank(REL);
-            MetaTokenBase(t).mtxPay(x, a, m);
+            NormalToken(t).mtxPay(x, a, m);
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             (uint256 n, uint256 atBal, uint256 atLen) = (0, type(uint256).max, type(uint256).max);
             for (uint256 k; k < acc.length; ++k) {
@@ -224,9 +226,9 @@ contract PayRecordsTest is PayRigBase {
         _pay(t, _utTo(PayMetaKit.id(b), 1, PAYEE2, 777), b);
         bytes32 len = _lengthSlot(NO);
         bytes32 data = keccak256(abi.encode(len));
-        MetaTxLib.PayRecord[] memory r = MetaTokenBase(t).paymentsOf(NO, 0, 2);
-        bytes[4] memory cd = [abi.encodeCall(MetaTokenBase.paymentCount, (NO)), abi.encodeCall(MetaTokenBase.paymentsOf,
-            (NO, 0, 10)), abi.encodeCall(MetaTokenBase.paymentsOf, (NO, 1, 1)), abi.encodeCall(MetaTokenBase.paymentsOf,
+        MetaTxLib.PayRecord[] memory r = NormalToken(t).paymentsOf(NO, 0, 2);
+        bytes[4] memory cd = [abi.encodeCall(NormalToken.paymentCount, (NO)), abi.encodeCall(NormalToken.paymentsOf,
+            (NO, 0, 10)), abi.encodeCall(NormalToken.paymentsOf, (NO, 1, 1)), abi.encodeCall(NormalToken.paymentsOf,
             (NO, 2, 1))];
         bytes[4] memory ret;
         for (uint256 k; k < 4; ++k) {

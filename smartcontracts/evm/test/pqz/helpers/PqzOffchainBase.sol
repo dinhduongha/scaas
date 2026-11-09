@@ -51,7 +51,7 @@ abstract contract PqzOffchainBase is PqzFixture {
     }
 
     /// An `OFFCHAIN` `NORMAL_PQZ` token of the fixture's factory with verifier `v`.
-    function _offToken(bytes32 s, bytes32 v, bool fixed_) internal returns (PqzLayer t) {
+    function _offToken(bytes32 s, bytes32 v, bool fixed_) internal returns (NormalPqzToken t) {
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, v, fixed_);
         t = _newToken(s);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
@@ -59,12 +59,12 @@ abstract contract PqzOffchainBase is PqzFixture {
 
     /// The token's EIP-712 domain separator from its ERC-5267 view.
     function _sepOf(address t) internal view returns (bytes32) {
-        (, string memory n, string memory ver, uint256 cid, address vc, bytes32 salt_,) = PqzLayer(t).eip712Domain();
+        (, string memory n, string memory ver, uint256 cid, address vc, bytes32 salt_,) = NormalPqzToken(t).eip712Domain();
         return keccak256(abi.encode(EIP712_DOMAIN, keccak256(bytes(n)), keccak256(bytes(ver)), cid, vc, salt_));
     }
 
     /// The verdict the verifier would sign for `st` and `proof` on `t` now (valid ten minutes).
-    function _verdict(PqzLayer t, bytes memory st, bytes memory proof) internal view returns (IPqzToken.PqzVerdict memory) {
+    function _verdict(NormalPqzToken t, bytes memory st, bytes memory proof) internal view returns (IPqzToken.PqzVerdict memory) {
         return IPqzToken.PqzVerdict(address(t), block.chainid, t.proofSystemId(), keccak256(st), keccak256(proof),
             t.pqzVerifyConfig().pqzVerifierEpoch, uint64(block.timestamp + 600));
     }
@@ -85,19 +85,19 @@ abstract contract PqzOffchainBase is PqzFixture {
         sv.sig.signature = abi.encodePacked(r_, s_, w);
     }
 
-    function _sign(PqzLayer t, uint256 key, IPqzToken.PqzVerdict memory v)
+    function _sign(NormalPqzToken t, uint256 key, IPqzToken.PqzVerdict memory v)
         internal view returns (IPqzToken.PqzSignedVerdict memory)
     {
         return _signAt(address(t), key, v);
     }
 
     /// The verifier `VKEY`'s verdict over `st` and `VPROOF`.
-    function _sv(PqzLayer t, bytes memory st) internal view returns (IPqzToken.PqzSignedVerdict memory) {
+    function _sv(NormalPqzToken t, bytes memory st) internal view returns (IPqzToken.PqzSignedVerdict memory) {
         return _sign(t, VKEY, _verdict(t, st, VPROOF));
     }
 
     /// An op 1 of `from` to `to` on `t` at its `pendingCount`, no fee; its statement (direct).
-    function _op1Of(PqzLayer t, bytes32 from, bytes32 to, uint256 seed, bool withAud)
+    function _op1Of(NormalPqzToken t, bytes32 from, bytes32 to, uint256 seed, bool withAud)
         internal view returns (IPqzToken.PqzTransferArgs memory a, bytes memory st)
     {
         a = _ts(_payloadFor(t, from, to, bytes32(0), _out(seed, withAud)));
@@ -105,7 +105,7 @@ abstract contract PqzOffchainBase is PqzFixture {
     }
 
     /// A burn (`amount`, `recipient`; 0, 0 a refresh) of `from` at its `pendingCount`; its statement (direct).
-    function _burnOf(PqzLayer t, bytes32 from, uint256 amount, bytes32 recipient, uint256 seed)
+    function _burnOf(NormalPqzToken t, bytes32 from, uint256 amount, bytes32 recipient, uint256 seed)
         internal view returns (IPqzToken.PqzBurnArgs memory b, bytes memory st)
     {
         b = _bs(bytes.concat(abi.encode(uint256(t.pqzAccount(from, 0).pendingCount), block.number + 50, uint256(0), from,
@@ -114,7 +114,7 @@ abstract contract PqzOffchainBase is PqzFixture {
     }
 
     /// Shield `amount` into `ua` on `t` from the test's public balance.
-    function _shieldOn(PqzLayer t, bytes32 ua, uint256 amount) internal {
+    function _shieldOn(NormalPqzToken t, bytes32 ua, uint256 amount) internal {
         _public(t, address(this), amount * SCALE);
         t.mtxShield(ua, amount);
     }
@@ -122,7 +122,7 @@ abstract contract PqzOffchainBase is PqzFixture {
     /// A second registry like the fixture's but WITHOUT the `0x0142` verifier (`pqz-mlwe` not enabled: every PQZ key is
     /// unproven, `current` the highest version whose proof bytes are stored, KV-12), its factory and `NORMAL_PQZ` release,
     /// and an `OFFCHAIN` token on it with verifier `v`.
-    function _noVerifierToken(bytes32 v) internal returns (PqzLayer t, UARegistry r2) {
+    function _noVerifierToken(bytes32 v) internal returns (NormalPqzToken t, UARegistry r2) {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
         r2 = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
@@ -137,6 +137,6 @@ abstract contract PqzOffchainBase is PqzFixture {
         c.conf.auditorKey = "";
         c.conf.auditorMode = 0;
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        t = PqzLayer(f2.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "noverifier"));
+        t = NormalPqzToken(f2.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "noverifier"));
     }
 }

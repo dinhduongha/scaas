@@ -12,7 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
-import {GovernanceBase, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -25,7 +25,7 @@ contract BranchApp is GovernanceBase {
     uint8 internal constant APPROVE = 128;
     mapping(bytes32 => uint256) public approved;
 
-    constructor(address owner_) GovernanceBase(address(0)) {
+    constructor(address owner_) GovernanceBaseCore(address(0)) {
         GovernanceLib.Roles memory none;
         GovernanceLib.init(uint256(1) << APPROVE, 0, nid(owner_), 0, address(0), none, uint256(1) << APPROVE, uint256(1) << APPROVE, 0,
             address(0));

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {OrderJson} from "../helpers/OrderJson.sol";
 import {domainOf} from "../metatx/NamedEntry.t.sol";
@@ -296,7 +298,7 @@ contract UATradeTest is UALedgerBase {
     }
 
     function test_ledgerOff_everyUATradeFunction() public {
-        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")),
+        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
             EnvKit.env(chainUidA, address(0), address(0), false)));
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         ITradeToken.UATradeOrder memory o = _o(_pad(alice), 1000, 2000);

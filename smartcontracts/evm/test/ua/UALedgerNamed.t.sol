@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {UACall} from "./UACall.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -84,7 +86,7 @@ contract UALedgerNamedTest is UALedgerBase {
     function test_uaPay_needsPayable() public {
         IFactoryToken.TokenConfig memory c = normalInit("NoPay", "NP", 6, 0, address(0), address(this));
         c.features = 1 << GovernanceBits.MINTABLE;
-        NormalToken np = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        NormalToken np = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         np.initialize(nid(address(this)), 1, abi.encode(c));
         MetaTxLib.UAMetaTransfer memory g = _t(uaP, uaB, 1);
         g.entryRef = PayMetaKit.ref("p");

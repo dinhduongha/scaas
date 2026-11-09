@@ -9,7 +9,7 @@ import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
+import {UAMetaTxBase, UAMetaTxBaseCore} from "../../src/metatx/UAMetaTxBase.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -38,7 +38,7 @@ contract NamespaceProbe is UAMetaTxBase {
     bytes32 internal constant U = NamespaceProbeIds.U;
     bytes32 internal constant V = NamespaceProbeIds.V;
 
-    constructor() UAMetaTxBase("P", bytes32(uint256(1)), address(0), address(0), false) {}
+    constructor() UAMetaTxBaseCore("P", bytes32(uint256(1)), address(0), address(0), false) {}
 
     function poke() external {
         TokenStore.TokenStorage storage t = TokenStore.$();

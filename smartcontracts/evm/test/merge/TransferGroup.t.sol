@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -187,7 +189,7 @@ contract TransferGroupTest is Test {
 
     function _wrappedOff() internal returns (address w) {
         MockERC20 u = new MockERC20("U", "U", 6);
-        w = EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(bytes32(uint256(7)), address(0), address(0), false));
+        w = EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(bytes32(uint256(7)), address(0), address(0), false));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(u), 1);
@@ -198,7 +200,7 @@ contract TransferGroupTest is Test {
         u.approve(w, 10_000_000);
         WrappedToken(payable(w)).wrap(10_000_000);
         vm.stopPrank();
-        assertEq(MetaTokenBase(w).registry(), address(0));
+        assertEq(NormalToken(w).registry(), address(0));
     }
 
     // ------------------------------------------------------------------ helpers
@@ -220,7 +222,7 @@ contract TransferGroupTest is Test {
         x.to = dst;
         x.value = v;
         x.batch = lane;
-        x.nonce = MetaTokenBase(t).mtxNonce(f, lane);
+        x.nonce = NormalToken(t).mtxNonce(f, lane);
         x.validUntil = block.timestamp + 600;
     }
 
@@ -277,7 +279,7 @@ contract TransferGroupTest is Test {
         x.to = to;
         x.value = v;
         x.entryRef = payId;
-        x.batch = MetaTokenBase(t).payLane(payId);
+        x.batch = NormalToken(t).payLane(payId);
         x.validUntil = block.timestamp + 600;
         x.mode = mode;
         x.relayer = REL;
@@ -311,7 +313,7 @@ contract TransferGroupTest is Test {
         r.payee = p;
         r.value = v;
         r.validUntil = block.timestamp + 600;
-        (r.batch, r.nonce) = (RF_LANE, MetaTokenBase(t).mtxNonce(from, RF_LANE));
+        (r.batch, r.nonce) = (RF_LANE, NormalToken(t).mtxNonce(from, RF_LANE));
         r.auth = _sig(PK, MtxDigest.typed(t, _relayHash(UA_RELAY_FEE_TYPEHASH, from, r)));
     }
 
@@ -376,7 +378,7 @@ contract TransferGroupTest is Test {
         address t = k.t;
         MetaTxLib.UAMetaTransfer memory x = _x(t, from, to, 7, 11);
         uint256 b0 = IERC20(t).balanceOf(payee);
-        address reg = MetaTokenBase(t).registry();
+        address reg = NormalToken(t).registry();
         IUARegistry.UASig memory s = _s(t, x);
         if (reg != address(0) && !_noCallSet[reg]) {
             vm.expectCall(reg, bytes(""), 0); // no call to this registry for the rest of the test
@@ -386,13 +388,13 @@ contract TransferGroupTest is Test {
         emit IERC20.Transfer(signer, payee, 7);
         assertTrue(_transfer(t, x, s), k.kind);
         assertEq(IERC20(t).balanceOf(payee), b0 + 7, k.kind);
-        assertEq(MetaTokenBase(t).mtxNonce(from, 11), x.nonce + 1, k.kind);
+        assertEq(NormalToken(t).mtxNonce(from, 11), x.nonce + 1, k.kind);
     }
 
     function test_mtxTransfer_eoaToEoa_registry() public {
         uint256 n;
         for (uint256 i; i < ks.length; ++i) {
-            if (MetaTokenBase(ks[i].t).registry() == address(0)) continue;
+            if (NormalToken(ks[i].t).registry() == address(0)) continue;
             _eoaToEoa(ks[i]);
             ++n;
         }
@@ -403,7 +405,7 @@ contract TransferGroupTest is Test {
     function test_mtxTransfer_eoaToEoa_registry0() public {
         uint256 n;
         for (uint256 i; i < ks.length; ++i) {
-            if (MetaTokenBase(ks[i].t).registry() != address(0)) continue;
+            if (NormalToken(ks[i].t).registry() != address(0)) continue;
             _eoaToEoa(ks[i]);
             ++n;
         }
@@ -423,12 +425,12 @@ contract TransferGroupTest is Test {
 
     function _eoaToUA(address t, bytes32 ua, string memory kind) internal {
         MetaTxLib.UAMetaTransfer memory x = _x(t, from, ua, 9, 12);
-        uint256 u0 = MetaTokenBase(t).balanceOfUA(ua);
+        uint256 u0 = NormalToken(t).balanceOfUA(ua);
         IUARegistry.UASig memory s = _s(t, x);
         vm.expectEmit(true, true, false, true, t);
         emit IUALedger.UATransfer(from, ua, 9);
         _transfer(t, x, s);
-        assertEq(MetaTokenBase(t).balanceOfUA(ua), u0 + 9, kind);
+        assertEq(NormalToken(t).balanceOfUA(ua), u0 + 9, kind);
     }
 
     /// C on the receiver: with no registry a derived `to` is `UALedgerOff` by name, not an empty revert.
@@ -600,7 +602,7 @@ contract TransferGroupTest is Test {
         _oldPayOnMerged(t, _payX(t, _payId(2000 + i), 2, MetaTxLib.MODE_RESTRICT_RELAYER));
         _oldSelectors(t, x, kind);
         _oldPaySelector(t, _payX(t, _payId(2000 + i), 2, MetaTxLib.MODE_RESTRICT_RELAYER), kind);
-        assertEq(MetaTokenBase(t).mtxNonce(from, 61), x.nonce, string.concat(kind, ": nothing ran"));
+        assertEq(NormalToken(t).mtxNonce(from, 61), x.nonce, string.concat(kind, ": nothing ran"));
     }
 
     /// The address signature of the same transfer in a `UASig`, on the three transfer entries.

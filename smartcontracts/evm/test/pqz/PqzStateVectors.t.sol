@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -487,7 +489,7 @@ contract PqzStateVectorsTest is PqzSlots {
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(wt), 100 * SCALE);
         wt.mtxWrapShield(address(usd), 100 * SCALE, carol);
-        PqzLayer w = PqzLayer(address(wt));
+        NormalPqzToken w = NormalPqzToken(address(wt));
         _nu(_burnArgs(w, bytes32(0), 85, "T62a unwrap direct"), IConfidentialWrappedToken.Unwrap(address(usd), rcp, 10, 10 * SCALE), d,
             "unwrap 10 direct carol to 0xd00d (a WRAPPED_PQZ token)");
         _nu(_burnArgs(w, bob, 86, "T62a unwrap relayed"), IConfidentialWrappedToken.Unwrap(address(usd), rcp, 5, 4 * SCALE),
@@ -495,23 +497,23 @@ contract PqzStateVectorsTest is PqzSlots {
             "unwrap 5 relayed carol to 0xd00d, minOut below the quote, beneficiary bob (a WRAPPED_PQZ token); relayer bound");
     }
 
-    function _pc(PqzLayer t) internal view returns (uint256) {
+    function _pc(NormalPqzToken t) internal view returns (uint256) {
         return t.pqzAccount(carol, 0).pendingCount;
     }
 
-    function _uEnv(PqzLayer t, uint256 batch, uint32 mode, address relayer, uint256 fee, address feeRecipient)
+    function _uEnv(NormalPqzToken t, uint256 batch, uint32 mode, address relayer, uint256 fee, address feeRecipient)
         internal view returns (MetaTxLib.UAEnvelope memory)
     {
         return MetaTxLib.UAEnvelope(carol, batch, t.mtxNonce(carol, batch), block.timestamp + 300, mode, relayer, fee, feeRecipient);
     }
 
     /// The statement views' `binding`: 0 direct, the token's `envelopeBinding` of the envelope relayed (`data` is not bound).
-    function _eb(PqzLayer t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
+    function _eb(NormalPqzToken t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
         return u.from == 0 ? bytes32(0) : t.envelopeBinding(MetaTxLib.UAMetaTransaction(u.from, "", u.batch, u.nonce, u.validUntil,
             u.mode, u.relayer, u.fee, u.feeRecipient));
     }
 
-    function _burnArgs(PqzLayer t, bytes32 ben, uint256 seed, string memory tag) internal view returns (IPqzToken.PqzBurnArgs memory b) {
+    function _burnArgs(NormalPqzToken t, bytes32 ben, uint256 seed, string memory tag) internal view returns (IPqzToken.PqzBurnArgs memory b) {
         b = _bs(bytes.concat(abi.encode(_pc(t), block.number + 100, uint256(0), carol, ben), _blob(seed, PqzCt.CT)));
         b.ownTag = keccak256(bytes(tag));
     }
@@ -567,7 +569,7 @@ contract PqzStateVectorsTest is PqzSlots {
     function _nu(IPqzToken.PqzBurnArgs memory b, IConfidentialWrappedToken.Unwrap memory x, MetaTxLib.UAEnvelope memory u,
         string memory name) internal
     {
-        PqzLayer t = PqzLayer(address(wt));
+        NormalPqzToken t = NormalPqzToken(address(wt));
         bytes32 eb = _eb(t, u);
         bytes memory st = wt.unshieldUnwrapStatement(b, x, eb);
         _row(t, name, "unwrap", u, eb, st, _fu(b, x));
@@ -615,7 +617,7 @@ contract PqzStateVectorsTest is PqzSlots {
 
     /// A row: the token's words, the sender's `sendCounter` before the call, the form's fields, the envelope (relayed), the
     /// views' `binding` as `envelopeBinding`, header word 17 and the 640 header bytes of the statement the view built.
-    function _row(PqzLayer t, string memory name, string memory form, MetaTxLib.UAEnvelope memory u, bytes32 eb, bytes memory st,
+    function _row(NormalPqzToken t, string memory name, string memory form, MetaTxLib.UAEnvelope memory u, bytes32 eb, bytes memory st,
         string memory fields) internal
     {
         string memory c = string.concat("{\"name\": ", _q(name), ", \"form\": ", _q(form), ", \"path\": ", _q(u.from == 0 ? "direct" : "relayed"),
@@ -636,7 +638,7 @@ contract PqzStateVectorsTest is PqzSlots {
     }
 
     /// The debit just made is recorded under `NONE` (its P is the call's calldata, spec §9.5).
-    function _sealed(PqzLayer t) internal view {
+    function _sealed(NormalPqzToken t) internal view {
         assertEq(t.pqzDebitRecord(carol, t.pqzAccount(carol, 0).sendCounter - 1).proofStore, PqzCore.NONE, "a NONE debit");
     }
 

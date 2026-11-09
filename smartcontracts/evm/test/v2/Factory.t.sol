@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -534,7 +536,7 @@ contract FactoryTest is Test {
     /// Plain kinds only (owner 2026-10-19): recorded as version 0 and not a registered token, so clients and the gateway
     /// treat it as unvetted; every confidential kind (2–7) is refused before any check.
     function test_createTokenUnregistered_isCheckedAndRecordedAsVersion0() public {
-        NormalToken mine = new NormalToken(address(f), "");
+        NormalToken mine = new NormalToken(address(f), kindArgs(0, address(f), ""));
         vm.prank(alice);
         address t = f.createTokenUnregistered(NORMAL, address(mine), abi.encode(_normal(alice)), "u");
         (, uint64 v) = f.versionOf(t);

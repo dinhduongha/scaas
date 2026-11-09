@@ -3,13 +3,13 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
-import {GovernanceBase, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {nid} from "../helpers/Ids.sol";
 
 /// The part every example shares: an application on the base with a `grantDelay`, no guard of its own, the caller as is.
 abstract contract ExampleApp is GovernanceBase {
-    constructor() GovernanceBase(address(0)) {}
+    constructor() GovernanceBaseCore(address(0)) {}
 
     function _initApp(address owner_, uint64 delay, uint256 bits) internal {
         GovernanceLib.Roles memory none;
@@ -40,7 +40,7 @@ contract LoanBook is ExampleApp {
     function _scalarBits() internal pure override returns (uint256) { return BITS; }
     function _scopeBits() internal pure override returns (uint256) { return BITS; }
 
-    function bitLabel(uint8 bit) external pure override returns (BitType, bytes4, string memory) {
+    function _bitLabelBody(uint8 bit) internal pure override returns (BitType, bytes4, string memory) {
         if (bit != APPROVE_LOAN) revert FeatureInvalidForKind(bit);
         return (BitType.POWER, this.approveLoan.selector, "approve a loan");
     }

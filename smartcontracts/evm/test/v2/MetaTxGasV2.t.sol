@@ -171,7 +171,7 @@ contract MetaTxGasV2Test is Test {
 
     function _cool(address t) internal {
         vm.cool(t);
-        vm.cool(MetaTokenBase(t).implementation());
+        vm.cool(NormalToken(t).implementation());
         vm.cool(signer);
         vm.cool(relayer);
         vm.cool(recipient);

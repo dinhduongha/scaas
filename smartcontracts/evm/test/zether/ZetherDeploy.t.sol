@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -73,7 +75,7 @@ contract ZetherDeployTest is Test {
         for (uint8 k = 2; k <= 3; ++k) {
             // chain-neutral releases (plan T72): a release carries no env (its `curve()` has no verifier to ask); the
             // published env names the verifiers, every clone reads them from its code
-            ZetherLayer rel = ZetherLayer(f.implementationOf(IOpenFactory.TokenKind(k), c + 1));
+            NormalZetherToken rel = NormalZetherToken(f.implementationOf(IOpenFactory.TokenKind(k), c + 1));
             assertEq(address(rel.verifier()), address(0));
             assertEq(address(rel.burnVerifier()), address(0));
         }
@@ -117,16 +119,16 @@ contract ZetherDeployTest is Test {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
         c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0);
-        ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
+        NormalZetherToken t = NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
         assertEq(t.curve(), "bls12-381");
         assertEq(t.chainUid(), ZUID);
         assertEq(t.registry(), reg, "the clone's env");
         assertEq(address(t.disclosure()), dis);
-        assertEq(MetaTokenBase(address(t)).SMART_KEY_ACCOUNT_IMPL(), ska);
+        assertEq(NormalToken(address(t)).SMART_KEY_ACCOUNT_IMPL(), ska);
         // minDecoyFee on both layers (owner 2026-10-20): a Zether token takes a non-zero one (bounds: ZetherMulti)
         c.conf.minDecoyFee = 1;
-        assertEq(ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
+        assertEq(NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
     }
 
     /// Q4 (CTR-MTX-30, R40), ua-mtx-merge T10: on a chain that declares the public gate the two Zether releases are each

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {SaltedEIP712Core} from "../../src/common/SaltedEIP712.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -53,7 +55,7 @@ contract ChainNeutralKindsTest is Test {
     /// The factory plays itself: `initialize` from its address on a clone `c`.
     function _initAsFactory(address c) internal {
         vm.prank(address(f));
-        MetaTokenBase(c).initialize(nid(address(this)), 1, _cfg());
+        NormalToken(c).initialize(nid(address(this)), 1, _cfg());
     }
 
     // ------------------------------------------------------------------ the implementation signs nothing (P2-1)
@@ -63,14 +65,14 @@ contract ChainNeutralKindsTest is Test {
         assertEq(impl.registry(), address(0));
         assertEq(impl.GOV_ROUTER(), address(0));
         assertFalse(impl.IS_HEDERA());
-        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
         impl.eip712Domain();
         MetaTxLib.UAMetaTransfer memory x;
-        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
         impl.mtxTransferDigest(x);
         MetaTxLib.UAMetaTransaction memory m;
         IUARegistry.UASig memory a;
-        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
         impl.mtxExecute(m, a);
         // positive control: the clone, on the same code
         assertEq(tok.chainUid(), UID_);
@@ -105,7 +107,7 @@ contract ChainNeutralKindsTest is Test {
         address bare = Clones.clone(address(impl));
         vm.prank(address(f));
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
-        MetaTokenBase(bare).initialize(nid(address(this)), 1, _cfg());
+        NormalToken(bare).initialize(nid(address(this)), 1, _cfg());
         // a truncated env: the head without its counts
         address cut;
         bytes memory code = abi.encodePacked(hex"363d3d373d3d3d363d73", address(impl), hex"5af43d82803e903d91602b57fd5bf3",
@@ -114,32 +116,32 @@ contract ChainNeutralKindsTest is Test {
         vm.etch(cut, code);
         vm.prank(address(f));
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
-        MetaTokenBase(cut).initialize(nid(address(this)), 1, _cfg());
+        NormalToken(cut).initialize(nid(address(this)), 1, _cfg());
         // `chain_uid` 0
         address z = EnvKit.clone(address(impl), EnvKit.env(bytes32(0), address(ureg), address(0), false));
         vm.prank(address(f));
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
-        MetaTokenBase(z).initialize(nid(address(this)), 1, _cfg());
+        NormalToken(z).initialize(nid(address(this)), 1, _cfg());
         // more deps or params than the format holds
         IFactoryToken.ChainEnv memory e = EnvKit.env(UID_, address(ureg), address(0), false);
         e.deps = new address[](5);
         address five = EnvKit.clone(address(impl), e);
         vm.prank(address(f));
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
-        MetaTokenBase(five).initialize(nid(address(this)), 1, _cfg());
+        NormalToken(five).initialize(nid(address(this)), 1, _cfg());
         e.deps = new address[](4);
         e.params = new bytes32[](3);
         address three = EnvKit.clone(address(impl), e);
         vm.prank(address(f));
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
-        MetaTokenBase(three).initialize(nid(address(this)), 1, _cfg());
+        NormalToken(three).initialize(nid(address(this)), 1, _cfg());
         // trailing bytes past the counts
         bytes memory longer = bytes.concat(EnvKit.runtime(address(impl), EnvKit.env(UID_, address(ureg), address(0), false)),
             hex"00");
         vm.etch(address(0xC08), longer);
         vm.prank(address(f));
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
-        MetaTokenBase(address(0xC08)).initialize(nid(address(this)), 1, _cfg());
+        NormalToken(address(0xC08)).initialize(nid(address(this)), 1, _cfg());
         // positive control: four deps, two params, exact length
         e.params = new bytes32[](2);
         address ok = EnvKit.clone(address(impl), e);
@@ -152,7 +154,7 @@ contract ChainNeutralKindsTest is Test {
     function test_initialize_onlyTheFactoryAndOnce() public {
         address forged = EnvKit.clone(address(impl), EnvKit.env(keccak256("forged"), address(ureg), address(0), false));
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        MetaTokenBase(forged).initialize(nid(address(this)), 1, _cfg());
+        NormalToken(forged).initialize(nid(address(this)), 1, _cfg());
         assertFalse(f.isToken(forged));
         vm.prank(address(f));
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
@@ -165,7 +167,7 @@ contract ChainNeutralKindsTest is Test {
         address c = EnvKit.clone(address(impl), EnvKit.env(UID_, address(ureg), address(0), false));
         bytes32 derived = 0xcafe00000000000000000000000000000000000000000000000000000000a11a;
         vm.prank(address(f));
-        MetaTokenBase(c).initialize(derived, 1, _cfg());
+        NormalToken(c).initialize(derived, 1, _cfg());
         assertEq(NormalToken(c).creator(), address(0));
         assertEq(tok.creator(), address(this), "native: its address");
     }
@@ -181,7 +183,7 @@ contract ChainNeutralKindsTest is Test {
         assertEq(SCaaSDex(d).SMART_KEY_ACCOUNT_IMPL(), address(0xBEEF));
         assertEq(dImpl.chainUid(), bytes32(0));
         assertEq(dImpl.SMART_KEY_ACCOUNT_IMPL(), address(0));
-        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
         dImpl.eip712Domain();
         vm.prank(address(f));
         vm.expectRevert(IFactoryToken.EnvMissing.selector);

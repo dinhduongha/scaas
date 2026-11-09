@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -39,7 +41,7 @@ contract RegulatedHederaTest is RegFixture {
         internal view returns (MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s)
     {
         (x.from, x.to, x.value, x.batch, x.validUntil) = (nid(hed), nid(bob), 10, batch, block.timestamp + 300);
-        (bytes32 r, bytes32 vs) = vm.signCompact(HED_KEY, MetaTokenBase(t).mtxTransferDigest(x));
+        (bytes32 r, bytes32 vs) = vm.signCompact(HED_KEY, NormalToken(t).mtxTransferDigest(x));
         s.signature = abi.encodePacked(r, vs);
     }
 
@@ -49,19 +51,19 @@ contract RegulatedHederaTest is RegFixture {
             assertTrue(UAMetaTxBase(t).IS_HEDERA());
             (MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s) = _hip632(t, 1);
             vm.prank(relayer);
-            MetaTokenBase(t).mtxExecuteTransfer(x, s); // the control
+            NormalToken(t).mtxExecuteTransfer(x, s); // the control
             assertEq(IERC20(t).balanceOf(bob), 10);
             _freeze(t, nid(hed));
             (x, s) = _hip632(t, 2);
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(hed)));
-            MetaTokenBase(t).mtxExecuteTransfer(x, s);
+            NormalToken(t).mtxExecuteTransfer(x, s);
             vm.prank(hed);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(hed)));
             IERC20(t).transfer(bob, 1);
             _unfreeze(t, nid(hed));
             vm.prank(relayer);
-            MetaTokenBase(t).mtxExecuteTransfer(x, s);
+            NormalToken(t).mtxExecuteTransfer(x, s);
             assertEq(IERC20(t).balanceOf(bob), 20);
         }
     }
@@ -74,14 +76,14 @@ contract RegulatedHederaTest is RegFixture {
             (MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s) = _hip632(t, 1);
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
-            MetaTokenBase(t).mtxExecuteTransfer(x, s);
+            NormalToken(t).mtxExecuteTransfer(x, s);
             vm.prank(hed);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
             IERC20(t).transfer(bob, 1);
             vm.prank(issuer);
             _r(t).unpause(REF);
             vm.prank(relayer);
-            MetaTokenBase(t).mtxExecuteTransfer(x, s);
+            NormalToken(t).mtxExecuteTransfer(x, s);
             assertEq(IERC20(t).balanceOf(bob), 10);
         }
     }

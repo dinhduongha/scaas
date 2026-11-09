@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Errors} from "@openzeppelin/contracts/utils/Errors.sol";
 import {V2Fixture, UID_, Rate, wrappedInit} from "./helpers/V2Fixture.sol";
@@ -268,7 +270,7 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_decimalsOnHederaAre8() public {
-        WrappedToken h = WrappedToken(_clone(_envFor(address(new WrappedToken(address(this), "")), EnvKit.env(UID_, address(0), address(0), true)),
+        WrappedToken h = WrappedToken(_clone(_envFor(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID_, address(0), address(0), true)),
             address(this), _one(address(0)), _singleInit(address(0), 8, 1, 1, _fixedRate())));
         (,,, uint8 dec,) = h.legOf(address(0));
         assertEq(dec, 8);

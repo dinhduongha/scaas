@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {IGovernanceRouter} from "../../src/governance/IGovernanceRouter.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
@@ -224,7 +226,7 @@ contract TypedOpsTest is UALedgerBase {
 
     /// A SCaaS ledger token at a row's address, its supply here.
     function _tokenAt(address at) internal returns (NormalToken l) {
-        address impl = address(new NormalToken(address(this), ""));
+        address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         vm.etch(at, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_L, address(0), false)));
         l = NormalToken(at);
         l.initialize(nid(address(this)), 1, abi.encode(normalInit("Leg", "LEG", 6, SUPPLY, address(this), address(this))));
@@ -1110,7 +1112,7 @@ contract TypedOpsTest is UALedgerBase {
         string memory op = "UABurn";
         MetaTxLib.UAEnvelope memory e = _uaEnv(op);
         uint256 amount = _uint(op, "amount");
-        NormalToken other = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        NormalToken other = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         other.initialize(nid(address(this)), 1, abi.encode(normalInit("Other", "OTH", 6, SUPPLY,
             address(uint160(uint256(e.from))), address(this))));
         IUARegistry.UASig memory sig;
@@ -1355,8 +1357,8 @@ contract TypedOpsRouterTest is UALedgerBase {
         assertEq(me, bytes32(uint256(uint160(signer))), "the key's UA is its native id");
         router = vm.parseJsonAddress(j, domainField("UAGrantRole", K, "domain.verifyingContract"));
         deployCodeTo("GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false), router);
-        normalImpl = address(new NormalToken(address(this), ""));
-        wrappedImpl = address(new WrappedToken(address(this), ""));
+        normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         dexImpl = address(new SCaaSDex(address(this), ""));
     }
 
@@ -1782,7 +1784,7 @@ contract TypedOpsRouterTest is UALedgerBase {
     function _regAt(string memory op, bool keyIsIssuer) internal returns (NormalRegulatedToken t) {
         vm.warp(REG_NOW);
         if (regImpl == address(0)) {
-            regImpl = address(new NormalRegulatedToken(address(this), regArgs()));
+            regImpl = address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs())));
             regOther = address(new Holder());
         }
         t = NormalRegulatedToken(_addr(op, "target"));

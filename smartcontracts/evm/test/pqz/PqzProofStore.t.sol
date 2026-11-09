@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {PqzOffchainBase} from "./helpers/PqzOffchainBase.sol";
@@ -20,7 +22,7 @@ contract PqzProofStoreTest is PqzOffchainBase {
     bytes32 internal constant D00D = bytes32(uint256(uint160(address(0xD00D))));
     bytes32 internal constant EV = keccak256("PqzDebitProof(address,bytes32,uint64,bytes,bytes)");
 
-    PqzLayer internal logT;
+    NormalPqzToken internal logT;
 
     function setUp() public {
         _offStack();
@@ -30,7 +32,7 @@ contract PqzProofStoreTest is PqzOffchainBase {
         pStore = 0;
     }
 
-    function _shieldT(PqzLayer t, bytes32 ua, uint256 amount) internal {
+    function _shieldT(NormalPqzToken t, bytes32 ua, uint256 amount) internal {
         _public(t, address(this), amount * SCALE);
         t.mtxShield(ua, amount);
     }
@@ -49,7 +51,7 @@ contract PqzProofStoreTest is PqzOffchainBase {
 
     /// Under `LOG` exactly one event, its header the statement's first 640 bytes (the one the proof was checked over), its
     /// proof the calldata proof, `blob` the debit's op blob; the record says `LOG`. Under `NONE` no event, the record `NONE`.
-    function _check(PqzLayer t, bytes32 from, uint64 k, bytes memory st, uint8 mode) internal {
+    function _check(NormalPqzToken t, bytes32 from, uint64 k, bytes memory st, uint8 mode) internal {
         (Vm.Log[] memory ls, uint256 n) = _logs(address(t));
         assertEq(t.pqzDebitRecord(from, k).proofStore, mode, "the record's mode");
         if (mode == PqzCore.NONE) {
@@ -65,7 +67,7 @@ contract PqzProofStoreTest is PqzOffchainBase {
         assertEq(proof, PROOF, "the calldata proof");
     }
 
-    function _op1(PqzLayer t, bool log) internal {
+    function _op1(NormalPqzToken t, bool log) internal {
         _shieldT(t, alice, 10);
         IPqzToken.PqzTransferArgs memory a = _ts(_payload(1, 0, alice, bob, bytes32(0), _out(5, false), ""));
         bytes memory st = t.transferSingleStatement(a, 0);
@@ -74,7 +76,7 @@ contract PqzProofStoreTest is PqzOffchainBase {
         _check(t, alice, 0, st, log ? PqzCore.LOG : PqzCore.NONE);
     }
 
-    function _op7(PqzLayer t, bool log) internal {
+    function _op7(NormalPqzToken t, bool log) internal {
         _shieldT(t, alice, 10);
         IPqzToken.PqzMultiArgs memory m = _ms(_mpayload(1, 0, alice, bytes32(0), _two(bob, carol), _blob(6, _outLen(2, true)), ""));
         bytes memory st = t.transferStatement(m, 0);
@@ -83,7 +85,7 @@ contract PqzProofStoreTest is PqzOffchainBase {
         _check(t, alice, 0, st, log ? PqzCore.LOG : PqzCore.NONE);
     }
 
-    function _burn(PqzLayer t, bool log) internal {
+    function _burn(NormalPqzToken t, bool log) internal {
         _shieldT(t, alice, 10);
         IPqzToken.PqzBurnArgs memory b = _bs(bytes.concat(abi.encode(uint256(1), block.number + 50, uint256(0), alice, bytes32(0)),
             _blob(7, PqzCt.CT)));
@@ -109,7 +111,7 @@ contract PqzProofStoreTest is PqzOffchainBase {
     /// `OFFCHAIN` (3f): the verdict replaces the precompile, the event is the same (the header as verified, the calldata proof).
     function test_proofStore_offchain() public {
         pStore = PqzCore.LOG;
-        PqzLayer off = _offToken("off-log", vA, false);
+        NormalPqzToken off = _offToken("off-log", vA, false);
         pStore = 0;
         _shieldOn(off, alice, 10);
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op1Of(off, alice, bob, 5, false);
@@ -143,7 +145,7 @@ contract PqzProofStoreTest is PqzOffchainBase {
             tok.pqzDebitRecord(alice, 2).proofStore), abi.encode(PqzCore.NONE, PqzCore.LOG, PqzCore.NONE), "each record its own");
     }
 
-    function _setByte23(PqzLayer t, uint8 m) internal {
+    function _setByte23(NormalPqzToken t, uint8 m) internal {
         uint256 w = uint256(vm.load(address(t), PqzCore._STORAGE));
         w = (w & ~(uint256(0xff) << 184)) | (uint256(m) << 184);
         vm.store(address(t), PqzCore._STORAGE, bytes32(w));

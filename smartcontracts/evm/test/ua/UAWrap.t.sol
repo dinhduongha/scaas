@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
@@ -147,7 +149,7 @@ contract UAWrapTest is UALedgerBase {
 
     /// A wrapper whose own ledger is off mints to a native destination, and refuses a derived one (`UALedgerOff`).
     function test_ledgerOffWrapper() public {
-        WrappedToken w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")),
+        WrappedToken w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
             EnvKit.env(chainUidA, address(0), address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);

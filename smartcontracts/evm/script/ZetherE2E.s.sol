@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../src/zether/NormalZetherToken.sol";
+
 import {Script, console} from "forge-std/Script.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {stdJson} from "forge-std/StdJson.sol";
@@ -165,7 +167,7 @@ contract ZetherE2E is Script {
     /// fixed fee.
     function _envelope() internal view returns (MetaTxLib.UAMetaTransaction memory m) {
         bytes32 from = MetaTxLib.pad(vm.addr(PAYER_PK));
-        m = MetaTxLib.UAMetaTransaction(from, "", 7, ZetherLayer(t).mtxNonce(from, 7), block.timestamp + 1 days,
+        m = MetaTxLib.UAMetaTransaction(from, "", 7, NormalZetherToken(t).mtxNonce(from, 7), block.timestamp + 1 days,
             MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, me, RELAY_FEE, address(0));
     }
 
@@ -195,10 +197,10 @@ contract ZetherE2E is Script {
         internal returns (bytes memory ret)
     {
         m.data = out.readBytes(".directCalldata");
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, ZetherLayer(t).mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, NormalZetherToken(t).mtxDigest(m));
         IUARegistry.UASig memory auth;
         auth.signature = abi.encodePacked(r, s, v);
-        ret = ZetherLayer(t).mtxExecute(m, auth);
+        ret = NormalZetherToken(t).mtxExecute(m, auth);
         console.log(string.concat("ok    ", label, " (mtxExecute, the payer's UASig)"));
     }
 
@@ -265,9 +267,9 @@ contract ZetherE2E is Script {
         (c.initialSupply, c.initialHolder, c.conf) = (1_000_000, me, _conf());
         t = fac.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), salt);
         console.log(string.concat("      NORMAL_ZETHER token at ", vm.toString(t)));
-        ZetherLayer(t).mtxShield(uas[0], SHIELDED);
+        NormalZetherToken(t).mtxShield(uas[0], SHIELDED);
         _expect(t, 0, 0, SHIELDED, "shield 1234 to alice");
-        ZetherLayer(t).mtxRollOver(uas[0], 1);
+        NormalZetherToken(t).mtxRollOver(uas[0], 1);
         _expect(t, 0, SHIELDED, 0, "alice roll-over");
         bal = SHIELDED;
     }
@@ -304,7 +306,7 @@ contract ZetherE2E is Script {
         _expect(t, 0, bal, 0, "alice after the BUNDLE M = 2 transfer");
         _expect(t, 2, 0, MULTI2, "carol after the BUNDLE M = 2 transfer");
 
-        ZetherLayer(t).mtxRollOver(uas[1], 1);
+        NormalZetherToken(t).mtxRollOver(uas[1], 1);
         _expect(t, 1, SINGLE + MULTI4, 0, "bob roll-over");
     }
 
@@ -316,7 +318,7 @@ contract ZetherE2E is Script {
         bal -= UNSHIELD;
         require(IERC20(t).balanceOf(me) == pub + UNSHIELD, "unshield: public balance");
         _expect(t, 0, bal, 0, "unshield 200 to the deployer (public +200)");
-        require(ZetherLayer(t).totalShielded() == SHIELDED - UNSHIELD, "totalShielded");
+        require(NormalZetherToken(t).totalShielded() == SHIELDED - UNSHIELD, "totalShielded");
     }
 
     /// The relayed proofs: every one a payer EOA's signature, the deployer the relayer: three over the merged generic entry
@@ -334,7 +336,7 @@ contract ZetherE2E is Script {
         require(IERC20(t).balanceOf(payer) == 0, "relayed: six fees from the payer");
         require(IERC20(t).balanceOf(me) == before + RELAYED_UNSHIELD + NAMED_UNSHIELD,
             "relayed: the fees back to the deployer, the unshields");
-        require(ZetherLayer(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD, "relayed: totalShielded");
+        require(NormalZetherToken(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD, "relayed: totalShielded");
     }
 
     function _relayedSingle() internal {
@@ -445,7 +447,7 @@ contract ZetherE2E is Script {
         console.log(string.concat("      WRAPPED_ZETHER token at ", vm.toString(wt)));
         IERC20(und).approve(wt, WRAPPED);
         WrappedZetherToken(payable(wt)).mtxWrapShield(und, WRAPPED, uas[0]);
-        ZetherLayer(wt).mtxRollOver(uas[0], 1);
+        NormalZetherToken(wt).mtxRollOver(uas[0], 1);
         _expect(wt, 0, WRAPPED, 0, "wrap-shield 500 to alice + roll-over (wrapped)");
         require(IERC20(und).balanceOf(wt) == WRAPPED, "wrapped reserve");
     }
@@ -484,7 +486,7 @@ contract ZetherE2E is Script {
         _expect(t, 1, SINGLE + MULTI4, RELAYED_SINGLE + RELAYED_MULTI + NAMED_SINGLE + NAMED_MULTI, "chain: bob");
         _expect(t, 2, 0, MULTI2, "chain: carol");
         for (uint256 i = 3; i < N; ++i) _expect(t, i, 0, 0, string.concat("chain: decoy ", vm.toString(i - 2)));
-        require(ZetherLayer(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD, "chain: totalShielded");
+        require(NormalZetherToken(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD, "chain: totalShielded");
         _expect(wt, 0, WRAPPED, 0, "chain: alice (wrapped)");
         require(dis.verifyTransferAmount(t, e.readBytes32(".entry_single"), 0, SINGLE, ITransferDisclosure.OpeningKind.SENDER_S,
             abi.encode(e.readBytes32(".s_single"))), "chain: disclosure view");

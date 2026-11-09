@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MetaTokenBase} from "../../../src/metatx/MetaTokenBase.sol";
@@ -76,7 +78,7 @@ abstract contract KindRig is Test {
         doms = new bytes32[](tks.length);
         for (uint256 i; i < tks.length; ++i) {
             (kinds[i], toks[i]) = (tks[i].kind, tks[i].t);
-            (, string memory n, string memory v, uint256 cid, address vc, bytes32 salt,) = MetaTokenBase(tks[i].t).eip712Domain();
+            (, string memory n, string memory v, uint256 cid, address vc, bytes32 salt,) = NormalToken(tks[i].t).eip712Domain();
             doms[i] = keccak256(abi.encode(keccak256(bytes(n)), keccak256(bytes(v)), cid, vc, salt));
         }
     }
@@ -99,7 +101,7 @@ contract PlainRig is UALedgerBase, KindRig {
         wrp.transferToUA(uaP, 2_000_000);
         tks.push(Tk("WRAPPED", address(wrp), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 1, address(und), dex, 0, 0));
         // NONE with no UA registry (the ledger off)
-        address off = EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false));
+        address off = EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false));
         NormalToken(off).initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 10_000_000, alice, address(this))));
         tks.push(Tk("NORMAL_LEDGEROFF", off, ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, 0, 2, address(0), dex, 0, 0));
     }
@@ -147,7 +149,7 @@ contract PqzRig is PqzFixture, KindRig {
     function _pClone(address impl, IFactoryToken.TokenConfig memory c) internal returns (address t) {
         t = EnvKit.clone(impl, instanceEnv(pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), PQZ_UID, address(0)));
         vm.prank(address(factory));
-        MetaTokenBase(t).initialize(nid(address(this)), 1, abi.encode(c));
+        NormalToken(t).initialize(nid(address(this)), 1, abi.encode(c));
     }
 }
 
@@ -167,7 +169,7 @@ contract ZetherRig is ZetherFixture, KindRig {
         address t = _pClone(address(normalImpl), _cfg(true, uint256(1) << 40));
         NormalZetherToken(t).mint(signer, 20_000_000);
         vm.prank(signer);
-        MetaTokenBase(t).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
+        NormalToken(t).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
         tks.push(Tk("NORMAL_ZETHER", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 0, address(0), dex, 0, 0));
         // WRAPPED_ZETHER: one 1:1 leg
         MockERC20 usd = new MockERC20("USD", "USD", 6);
@@ -192,6 +194,6 @@ contract ZetherRig is ZetherFixture, KindRig {
     function _pClone(address impl, IFactoryToken.TokenConfig memory c) internal returns (address t) {
         t = EnvKit.clone(impl, instanceEnv(_zenv(), factory.chainUid(), address(0)));
         vm.prank(address(factory));
-        MetaTokenBase(t).initialize(nid(address(this)), 1, abi.encode(c));
+        NormalToken(t).initialize(nid(address(this)), 1, abi.encode(c));
     }
 }

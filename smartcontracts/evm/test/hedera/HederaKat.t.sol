@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -35,7 +37,7 @@ contract HederaKatTest is Test {
 
     function setUp() public {
         vm.chainId(296);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(0), address(0), true)));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), true)));
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("HBUSD", "HBUSD", 6, 0, address(this), address(this))));
     }
 

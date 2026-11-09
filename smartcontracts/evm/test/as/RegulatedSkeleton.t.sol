@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -131,17 +133,17 @@ contract RegulatedSkeletonTest is PqzFixture {
         IFactoryToken.TokenConfig memory c = _wrappedCfg();
         IFactoryToken.ConfidentialConfig memory none;
         c.conf = none;
-        assertEq(MetaTokenBase(factory.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "r9")).kind(), 9);
-        assertEq(MetaTokenBase(factory.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(c), "w1")).kind(), 1);
+        assertEq(NormalToken(factory.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "r9")).kind(), 9);
+        assertEq(NormalToken(factory.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(c), "w1")).kind(), 1);
         c.features |= 1 << 8;
         c.reg.termsHash = keccak256("terms");
         vm.expectRevert(IRegulatedToken.RegulatedConfigInvalid.selector);
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "r9b");
 
         c = _wrappedCfg();
-        assertEq(MetaTokenBase(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13"))
+        assertEq(NormalToken(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13"))
             .kind(), 13);
-        assertEq(MetaTokenBase(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w5")).kind(), 5);
+        assertEq(NormalToken(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w5")).kind(), 5);
         c.features |= 1 << 8;
         c.reg.termsHash = keccak256("terms");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(8)));
@@ -185,7 +187,7 @@ contract RegulatedSkeletonTest is PqzFixture {
         MetaTxLib.UAMetaTransfer memory t;
         (t.from, t.to, t.value, t.batch, t.validUntil, t.mode) = (alice, bob, 1, 1, block.timestamp + 60, mode);
         IUARegistry.UASig memory none;
-        return abi.encodeCall(ERC20MetaTx.mtxExecuteTransfer, (t, none));
+        return abi.encodeCall(NormalToken.mtxExecuteTransfer, (t, none));
     }
 
     /// `_wrappedCfg`, without the confidential config on a public kind (`ConfigFieldForOtherKind(4)` otherwise).

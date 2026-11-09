@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MetaTxBaseCore} from "../../src/metatx/MetaTxBase.sol";
+
 import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
 import {MtxFixture} from "../helpers/MtxFixture.sol";
 import {MtxRegistryMock, ReenterHook} from "../helpers/MtxRegistryMock.sol";
@@ -207,7 +209,7 @@ contract MetaTxBaseTest is MtxFixture {
         assertEq(s[2], MtxRegistryMock.bump.selector);
         assertEq(s[3], MtxRegistryMock.poke.selector);
         for (uint256 i; i < s.length; ++i) {
-            MetaTxBase.MtxRule memory r = reg.exposedRule(s[i]);
+            MetaTxBaseCore.MtxRule memory r = reg.exposedRule(s[i]);
             assertEq(r.feeClass, c[i]);
             assertEq(r.amountArg, a[i]);
         }

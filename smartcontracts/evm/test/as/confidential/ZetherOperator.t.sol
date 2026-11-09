@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../../src/zether/NormalZetherToken.sol";
+
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {ZetherRegFixture} from "./ZetherRegFixture.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
@@ -30,7 +32,7 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
         IFactoryToken.TokenConfig memory c = _regCfg(true, uint256(1) << 40);
         c.features |= uint256(1) << GovernanceBits.OPERATOR_TRANSFER;
         c.grantDelay = 0; // the grant applies at once
-        tok = ZetherLayer(factory.createToken(_kind(), 1, abi.encode(c), "zop"));
+        tok = NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(c), "zop"));
         vm.prank(ownerA);
         IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK));
         _funded(300);

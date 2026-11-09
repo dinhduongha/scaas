@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {noVerdict} from "../helpers/PqzVerdicts.sol";
 import {PqzOffchainBase} from "../helpers/PqzOffchainBase.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
@@ -21,8 +23,8 @@ import {UARegistry} from "../../../src/ua/UARegistry.sol";
 /// proof). Every transfer and revocation must raise the epoch (I3). During every `off` call the precompile is made to revert
 /// (I5). Ghosts count what a rule forbids and happened anyway; no action reverts. UNAUDITED.
 contract PqzVerdictHandler is PqzOffchainBase {
-    PqzLayer public pre;
-    PqzLayer public off;
+    NormalPqzToken public pre;
+    NormalPqzToken public off;
     uint256 public refusedValid; // I2: a valid current verdict refused (or `off` reached the precompile, I5)
     uint256 public acceptedBad; // I2 / I3: a debit accepted with a stale, revoked or changed-shape verifier
     uint256 public wrongRefusal; // I2: refused, but not by the revocation / the changed shape it is
@@ -36,13 +38,13 @@ contract PqzVerdictHandler is PqzOffchainBase {
     uint256 internal keyNow = VKEY; // the current verifier's key (0 when revoked)
     bool internal coded; // the current native verifier holds code
 
-    constructor(PqzLayer pre_, UARegistry r, bytes32 a_, bytes32 b_, bytes32 c_) {
+    constructor(NormalPqzToken pre_, UARegistry r, bytes32 a_, bytes32 b_, bytes32 c_) {
         (pre, reg, alice, bob, carol) = (pre_, r, a_, b_, c_);
         vA = bytes32(uint256(uint160(vm.addr(VKEY))));
         vB = bytes32(uint256(uint160(vm.addr(VKEY2))));
     }
 
-    function setOff(PqzLayer o) external {
+    function setOff(NormalPqzToken o) external {
         if (address(off) == address(0)) off = o; // once, by the suite's setUp (and no action: `targetSelector`)
     }
 
@@ -70,7 +72,7 @@ contract PqzVerdictHandler is PqzOffchainBase {
 
     /// The statement of debit `kind` (0 op 1 alice -> bob, 1 op 7 alice -> [bob, carol], 2 a burn of 1, 3 a refresh) on `t`
     /// and its calldata with verdict `sv`.
-    function _debit(PqzLayer t, uint8 kind, uint256 seed, IPqzToken.PqzSignedVerdict memory sv, bool withVerdict)
+    function _debit(NormalPqzToken t, uint8 kind, uint256 seed, IPqzToken.PqzSignedVerdict memory sv, bool withVerdict)
         internal view returns (bytes memory st, bytes memory cd)
     {
         uint256 p = t.pqzAccount(alice, 0).pendingCount;

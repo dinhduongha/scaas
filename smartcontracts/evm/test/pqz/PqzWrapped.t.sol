@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
+
 import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {console2, Vm} from "forge-std/Test.sol";
 import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
@@ -38,7 +40,7 @@ contract PqzWrappedTest is PqzFixture {
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         w = WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w")));
-        tok = PqzLayer(address(w));
+        tok = NormalPqzToken(address(w));
     }
 
     function PQZ_UID_() internal pure returns (bytes32) {

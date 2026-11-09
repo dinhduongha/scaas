@@ -19,7 +19,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 /// @notice **UNAUDITED.** Plan T28: `F`, `P`, the pause-open set, the mirror sync, the views and FREEZE, RECORD, FORCE,
 ///         PAUSE in `RegulatedLib`. Plan T29: `R` through the bounded `hasFlags` call, `canReceive`, `REGISTRY_CODEHASH`.
 ///         Plan T32: `operatorTransfer` (bit 22, CTR-GOV-20). Bit 21 `MODERATE` has no body (owner 2026-11-05).
-abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
+abstract contract RegulatedBase is MetaTokenBase {
     /// @dev The bits the regulated kinds add to their base kind's `_validBits()` (spec §2.1, bit 22 CTR-GOV-20): 5-10, 21,
     ///      22 on 8 and 9; without `ALLOWLIST` (8) on the confidential kinds 10-13 (CTR-GOV-17).
     uint256 internal constant REG_BITS = GovernanceBits.REGULATED | (1 << GovernanceBits.RECORD)
@@ -51,7 +51,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
 
     constructor(bytes memory implArgs) {
         bytes32 h = abi.decode(implArgs, (bytes32));
-        if (h == 0) revert RegulatedConfigInvalid();
+        if (h == 0) revert IRegulatedToken.RegulatedConfigInvalid();
         REGISTRY_CODEHASH = h;
     }
 
@@ -76,61 +76,60 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     }
 
     /// @notice Kinds 0-5's answer, and `IRegulatedToken` (M-10).
-    function supportsInterface(bytes4 id) public view virtual override returns (bool) {
-        return id == type(IRegulatedToken).interfaceId || super.supportsInterface(id);
+    function _supportsInterfaceBody(bytes4 id) internal view virtual override returns (bool) {
+        return id == type(IRegulatedToken).interfaceId || super._supportsInterfaceBody(id);
     }
 
     /// @notice The mirror (`controls`) follows `features` only when the disable applied (Codex 3): a proposal changes nothing.
-    function disableFeature(uint8 bit) external virtual override nonReentrant {
+    function _disableFeatureBody(uint8 bit) internal virtual override {
         if (GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) _regDisabled(bit);
     }
 
     // ------------------------------------------------------------------ the controls (spec §3.1): thin stubs
 
-    function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external nonReentrant {
+    function _freezeBody(bytes32 account, bytes32 ref, bytes32 recordId) internal {
         RegulatedLib.freeze(account, ref, recordId, _govSubject());
     }
 
-    function unfreeze(bytes32 account, bytes32 ref) external nonReentrant {
+    function _unfreezeBody(bytes32 account, bytes32 ref) internal {
         RegulatedLib.unfreeze(account, ref, _govSubject());
     }
 
     /// @notice The library checks the record and counts it; the token checks the beneficiary as a receiver (`R`, a derived
     ///         one registered SIGNING) and moves the public balance on `_poolMove` (no hook: the subject is frozen,
     ///         CTR-GOV-08 Change).
-    function forceTransfer(bytes32 recordId, uint256 amount) external nonReentrant {
+    function _forceTransferBody(bytes32 recordId, uint256 amount) internal {
         (bytes32 from, bytes32 to) = RegulatedLib.forceTransfer(recordId, amount, _govSubject());
         _eligible(to);
         MtxPipelineLib._checkTo(_registry(), to);
         _poolMove(from, to, amount);
     }
 
-    function pause(bytes32 ref, uint64 until) external nonReentrant {
+    function _pauseBody(bytes32 ref, uint64 until) internal {
         RegulatedLib.pause(ref, until, _govSubject());
     }
 
-    function unpause(bytes32 ref) external nonReentrant {
+    function _unpauseBody(bytes32 ref) internal {
         RegulatedLib.unpause(ref, _govSubject());
     }
 
-    function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount,
-        uint64 freezeUntil) external nonReentrant
-    {
+    function _recordOrderBody(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount,
+        uint64 freezeUntil) internal {
         RegulatedLib.recordOrder(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil, _govSubject());
     }
 
-    function revokeOrder(bytes32 recordId, bytes32 reasonRef) external nonReentrant {
+    function _revokeOrderBody(bytes32 recordId, bytes32 reasonRef) internal {
         RegulatedLib.revokeOrder(recordId, reasonRef, _govSubject());
     }
 
     /// @notice Bit 23 (pay-meta-tax spec §6.2): the one PERCENT rate; the factory's `noticePeriod()` read by the library
     ///         from the `FACTORY` passed here, after the holder check (F-20).
-    function setTaxRate(uint32 ratePpm) external nonReentrant {
+    function _setTaxRateBody(uint32 ratePpm) internal {
         RegulatedLib.setTaxRate(ratePpm, FACTORY, _govSubject());
     }
 
     /// @notice Bit 23: the tax recipient, at once (Q4); the library's checks, then `R` here (F-15).
-    function setTaxRecipient(bytes32 taxRecipient) external nonReentrant {
+    function _setTaxRecipientBody(bytes32 taxRecipient) internal {
         RegulatedLib.setTaxRecipient(taxRecipient, _govSubject(), _registry());
         _eligible(taxRecipient);
     }
@@ -139,8 +138,8 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     ///         (`t`, `taxMode`, `tax`); `PAYABLE` and `TAX`; `PayMeta`; the tax checked (PERCENT against the effective rate,
     ///         AMOUNT as signed) and its recipient read here (`R`, `F` at the fee-leg seat, RK-6); then one execution:
     ///         payer -> payee `value - tax`, payer -> recipient `tax` (O13); `UAPaymentSettled` gross; `PaymentTaxed`.
-    function mtxPayWithTax(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax, IUARegistry.UASig calldata auth,
-        MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool)
+    function _mtxPayWithTaxBody(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax, IUARegistry.UASig calldata auth,
+        MetaTxLib.PayMeta calldata meta) internal returns (bool)
     {
         _taxGates(t.entryRef, meta);
         bytes32 r = _taxTo(t.to, t.value, taxMode, tax);
@@ -152,8 +151,8 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
 
     /// @notice The direct twin for a contract payer (spec §5.6, O13): the caller pays, no signature, nonce or fee; not on
     ///         the generic self-call's allow-list (`mtxPayWithTax` is the relayed form).
-    function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef,
-        MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool)
+    function _payWithTaxBody(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta) internal returns (bool)
     {
         _taxGates(entryRef, meta);
         MtxPipelineLib._checkTo(_registry(), to);
@@ -178,40 +177,40 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     }
 
     /// @notice The library refuses and `use`s; the move is `_uaMove`, hooked, so `P`, `F(from)` and `R(to)` apply (§3.4).
-    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external nonReentrant {
+    function _operatorTransferBody(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) internal {
         RegulatedLib.operatorTransfer(from, to, amount, ref, _govSubject(), _registry());
         _uaMove(from, to, amount);
     }
 
     // ------------------------------------------------------------------ views
 
-    function regulatedConfig() external view returns (RegulatedConfig memory) {
+    function _regulatedConfigBody() internal view returns (IRegulatedToken.RegulatedConfig memory) {
         RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
-        return RegulatedConfig(r.complianceRegistry, r.controls, r.requiredFlags, r.deniedFlags, r.termsHash, r.pausedUntil,
+        return IRegulatedToken.RegulatedConfig(r.complianceRegistry, r.controls, r.requiredFlags, r.deniedFlags, r.termsHash, r.pausedUntil,
             r.pauseCooldownUntil);
     }
-    function freezeOf(bytes32 account) external view returns (FreezeState memory) { return RegulatedLib.$().freezes[account]; }
+    function _freezeOfBody(bytes32 account) internal view returns (IRegulatedToken.FreezeState memory) { return RegulatedLib.$().freezes[account]; }
 
     /// @notice What a wallet and the node read to build and check a taxed payment (pay-meta-tax spec §6.2).
-    function taxConfig() external view returns (TaxConfig memory c) {
+    function _taxConfigBody() internal view returns (IRegulatedToken.TaxConfig memory c) {
         RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
-        TaxRate memory t = r.taxRate;
-        c = TaxConfig(r.taxRecipient, GovernanceLib.hasFeature(GovernanceBits.TAX), t.ratePpm, t.pendingPpm, t.eta,
+        IRegulatedToken.TaxRate memory t = r.taxRate;
+        c = IRegulatedToken.TaxConfig(r.taxRecipient, GovernanceLib.hasFeature(GovernanceBits.TAX), t.ratePpm, t.pendingPpm, t.eta,
             RegulatedLib.effectiveRate(), IOpenFactory(FACTORY).noticePeriod());
     }
-    function isFrozen(bytes32 account) external view returns (bool) { return RegulatedLib.frozen(account); }
+    function _isFrozenBody(bytes32 account) internal view returns (bool) { return RegulatedLib.frozen(account); }
 
     /// @notice `R(account)` with its reason (spec §3.1): 1 not attested or flags missing, 2 expired, 3 attester disabled,
     ///         4 denied; (true, 0) when it may receive, and with both lists off, without a call. Two bounded calls
     ///         (`attestationOf`, `attesterEnabled`); `ok` equals `hasFlags` on the same masks.
-    function canReceive(bytes32 account) external view returns (bool ok, uint8 reason) {
+    function _canReceiveBody(bytes32 account) internal view returns (bool ok, uint8 reason) {
         RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
         uint8 c = r.controls;
         if (c & RegulatedLib.C_LISTS == 0) return (true, 0);
         address reg = r.complianceRegistry;
         uint256[3] memory a = _regCall(reg, abi.encodeCall(IComplianceRegistry.attestationOf, (account)), 96);
         uint256 on = _regCall(reg, abi.encodeCall(IComplianceRegistry.attesterEnabled, (uint32(a[2]))), 32)[0];
-        if (on > 1) revert RegistryUnavailable(reg);
+        if (on > 1) revert IRegulatedToken.RegistryUnavailable(reg);
         bool active = on == 1 && a[1] >= block.timestamp;
         uint256 req = c & RegulatedLib.C_ALLOW != 0 ? r.requiredFlags : 0;
         if (req != 0 && !(active && (a[0] & req == req || a[0] & ELIGIBLE_CONTRACT != 0))) {
@@ -220,7 +219,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
         if (c & RegulatedLib.C_DENY != 0 && active && a[0] & r.deniedFlags != 0) return (false, 4);
         return (true, 0);
     }
-    function order(bytes32 recordId) external view returns (OrderRecord memory) { return RegulatedLib.$().orders[recordId]; }
+    function _orderBody(bytes32 recordId) internal view returns (IRegulatedToken.OrderRecord memory) { return RegulatedLib.$().orders[recordId]; }
 
     // ------------------------------------------------------------------ the hooks (spec §2.2, the rows of §3.2)
 
@@ -266,15 +265,15 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     // ------------------------------------------------------------------ the checks (spec §3.2)
 
     function _notPaused() internal view {
-        if (RegulatedLib.paused()) revert TokenPaused(RegulatedLib.$().pausedUntil);
+        if (RegulatedLib.paused()) revert IRegulatedToken.TokenPaused(RegulatedLib.$().pausedUntil);
     }
 
     function _notFrozen(bytes32 a) internal view {
-        if (RegulatedLib.frozen(a)) revert Frozen(a);
+        if (RegulatedLib.frozen(a)) revert IRegulatedToken.Frozen(a);
     }
 
     function _feeRecipient(bytes32 a) internal view {
-        if (RegulatedLib.frozen(a)) revert FeeRecipientFrozen(a);
+        if (RegulatedLib.frozen(a)) revert IRegulatedToken.FeeRecipientFrozen(a);
         _eligible(a);
     }
 
@@ -287,8 +286,8 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
         address reg = r.complianceRegistry;
         uint256 w = _regCall(reg, abi.encodeCall(IComplianceRegistry.hasFlags, (a,
             c & RegulatedLib.C_ALLOW != 0 ? r.requiredFlags : 0, c & RegulatedLib.C_DENY != 0 ? r.deniedFlags : 0)), 32)[0];
-        if (w > 1) revert RegistryUnavailable(reg);
-        if (w == 0) revert NotEligible(a, 0);
+        if (w > 1) revert IRegulatedToken.RegistryUnavailable(reg);
+        if (w == 0) revert IRegulatedToken.NotEligible(a, 0);
     }
 
     /// @dev The bounded call (spec §5, Codex 4, F-11): never through a Solidity interface. With less than
@@ -297,14 +296,14 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     ///      succeeded and returned exactly `len` bytes, else `RegistryUnavailable`. A failure never means eligible.
     function _regCall(address reg, bytes memory cd, uint256 len) private view returns (uint256[3] memory out) {
         uint256 left = gasleft();
-        if (left < REGISTRY_GAS * 64 / 63 + REGISTRY_GAS_MARGIN) revert RegistryGasStarved(REGISTRY_GAS, left);
+        if (left < REGISTRY_GAS * 64 / 63 + REGISTRY_GAS_MARGIN) revert IRegulatedToken.RegistryGasStarved(REGISTRY_GAS, left);
         bool ok;
         uint256 size;
         assembly ("memory-safe") {
             ok := staticcall(REGISTRY_GAS, reg, add(cd, 0x20), mload(cd), out, len)
             size := returndatasize()
         }
-        if (!ok || size != len) revert RegistryUnavailable(reg);
+        if (!ok || size != len) revert IRegulatedToken.RegistryUnavailable(reg);
     }
 
     /// @dev Clears `bit` in the mirror when it is one of 5-10, once the disable applied (Codex 3, I12).

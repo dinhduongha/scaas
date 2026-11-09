@@ -29,7 +29,7 @@ abstract contract PqzSlots is PqzFixture {
     }
 
     /// `accUnits` (bits 192..224 of the account's slot 1) written directly.
-    function _setUnits(PqzLayer t, bytes32 ua, uint256 units) internal {
+    function _setUnits(NormalPqzToken t, bytes32 ua, uint256 units) internal {
         bytes32 k = bytes32(_acctSlot(ua) + 1);
         uint256 w = uint256(vm.load(address(t), k));
         w = (w & ~(uint256(type(uint32).max) << 192)) | (units << 192);
@@ -49,7 +49,7 @@ abstract contract PqzSlots is PqzFixture {
         return _sumRange(ref, ua, lastP, p, shieldIn);
     }
 
-    function _flags(PqzLayer t, bytes32 ua) internal view returns (uint8) {
+    function _flags(NormalPqzToken t, bytes32 ua) internal view returns (uint8) {
         return t.pqzAccount(ua, 0).flags;
     }
 }
@@ -602,7 +602,7 @@ contract PqzStateTest is PqzSlots {
 /// The handler checks each debit's `T` against `ref + Σ [lastP, p)`; the invariant checks `acc` and the pending
 /// ciphertexts against the mirror.
 contract PqzStateHandler is Test, PqzArgs {
-    PqzLayer internal tok;
+    NormalPqzToken internal tok;
     PqzCtHarness internal ct;
     bytes32 internal alice;
     bytes32 internal bob;
@@ -619,7 +619,7 @@ contract PqzStateHandler is Test, PqzArgs {
     uint256 public debits;
     uint256 public rolls;
 
-    constructor(PqzLayer t, PqzCtHarness c, bytes32 a, bytes32 b, bytes32 cr) {
+    constructor(NormalPqzToken t, PqzCtHarness c, bytes32 a, bytes32 b, bytes32 cr) {
         (tok, ct, alice, bob, carol) = (t, c, a, b, cr);
         ref = new bytes(PqzCt.CT);
     }

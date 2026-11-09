@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {console2} from "forge-std/Test.sol";
 import {PqzFixture} from "../helpers/PqzFixture.sol";
 import {ProofPathHandler} from "./ProofPathHandler.t.sol";
@@ -30,7 +32,7 @@ contract ProofPathInvariantsTest is PqzFixture {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features |= uint256(1) << GovernanceBits.PQZ_PROOF;
         (c.owner, c.roles.issuer, c.lockedFeatures) = (nid(address(h)), nid(address(h)), 0);
-        tok = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "proof-path-inv"));
+        tok = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "proof-path-inv"));
         h.setToken(tok);
         _public(tok, address(h), 1_000_000 * SCALE);
         targetContract(address(h));

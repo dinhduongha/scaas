@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {noVerdict} from "../../pqz/helpers/PqzVerdicts.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 // via PqzPairs.t.sol: it and PqzTyped.t.sol import each other, and entering at PqzTyped orders PqzPairsTest before its base
@@ -103,7 +105,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
         creg.setAttester(attester, true);
         usd = new MockERC20("USD", "USD", 6);
         gasProbe = new GasProbe();
-        tok = PqzLayer(factory.createToken(_kind(), 1, abi.encode(_regCfg()), "pr"));
+        tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(_regCfg()), "pr"));
         w = WrappedPqzToken(payable(address(tok)));
     }
 

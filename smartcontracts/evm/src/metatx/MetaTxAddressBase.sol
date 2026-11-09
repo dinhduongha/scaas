@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {MetaTxBase} from "./MetaTxBase.sol";
+import {MetaTxBase, MetaTxBaseCore} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IMetaTxAddress} from "./IMetaTxAddress.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -17,7 +17,7 @@ abstract contract MetaTxAddressBase is MetaTxBase, IMetaTxAddress {
         "CancelNonce(address from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
-    constructor(string memory domainName, bytes32 chainUid_) MetaTxBase(domainName, chainUid_) {}
+    constructor(string memory domainName, bytes32 chainUid_) MetaTxBaseCore(domainName, chainUid_) {}
 
     function mtxNonce(address from, uint256 batch) public view returns (uint256) {
         return _nonce(MetaTxLib.pad(from), batch);

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
@@ -55,7 +57,7 @@ contract ZetherStateVectorsTest is ZetherFixture {
         dave = _user(XD, address(0xD4));
         IFactoryToken.TokenConfig memory c = _cfg(true, uint256(1) << 40);
         c.conf.auditorKey = ZetherKeys.pub(XAUD, bls);
-        tok = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "zether-state"));
+        tok = NormalZetherToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "zether-state"));
     }
 
     // ------------------------------------------------------------------ the state

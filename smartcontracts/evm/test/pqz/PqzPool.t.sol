@@ -252,7 +252,7 @@ contract PqzPoolWrappedTest is PqzFixture {
         _stack();
         _releaseWrapped();
         w = _newWrapped("w");
-        tok = PqzLayer(address(w));
+        tok = NormalPqzToken(address(w));
         usd = MockERC20(w.underlyings()[0]);
     }
 
@@ -289,7 +289,7 @@ contract PqzPoolWrappedTest is PqzFixture {
         m.from = vm.addr(KEY);
         m.data = abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_bs(pl), x, hex"c0de", _pqAuth(), bytes(""), noVerdict()));
         m.validUntil = block.timestamp + 1 hours;
-        bytes32 env = _addrBinding(PqzLayer(address(w)), m);
+        bytes32 env = _addrBinding(NormalPqzToken(address(w)), m);
         bytes32 want = keccak256(abi.encode(env, w.unwrapBinding(address(usd), 7)));
         bytes memory st = w.unshieldUnwrapStatement(_bs(pl), x, env);
         assertEq(bytes32(_cut(st, 544, 32)), want, "envelope and leg / minOut folded");
@@ -427,7 +427,7 @@ contract PqzPoolInvariantTest is PqzFixture {
         _releaseWrapped();
         minDecoy = 1;
         w = _newWrapped("inv");
-        tok = PqzLayer(address(w));
+        tok = NormalPqzToken(address(w));
         bytes32[] memory u = new bytes32[](5);
         (u[0], u[1], u[2]) = (alice, bob, carol);
         u[3] = _pqzUA(_pk(40), 40);

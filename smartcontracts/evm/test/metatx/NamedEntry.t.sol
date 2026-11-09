@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {UACall} from "../ua/UACall.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
@@ -445,7 +447,7 @@ contract NamedShieldZetherTest is ZetherFixture {
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0, 0, bytes32(0), false, 0);
         w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "zw")));
-        tok = ZetherLayer(address(w));
+        tok = NormalZetherToken(address(w));
         _users();
         usd.mint(signer, 100 * SCALE);
         vm.startPrank(signer);

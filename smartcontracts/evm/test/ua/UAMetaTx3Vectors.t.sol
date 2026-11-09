@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -55,7 +57,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
                 "");
         }
         address token = vm.parseJsonAddress(vj, ".token");
-        address impl = address(new NormalToken(address(this), ""));
+        address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         vm.etch(token, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_A, address(0), false)));
         tok = NormalToken(token);
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(0), address(this))));

@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
+import {UAMetaTxBase, UAMetaTxBaseCore} from "../metatx/UAMetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IERC20Payment} from "../metatx/IERC20Payment.sol";
@@ -78,7 +78,7 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
     /// @param registry_ the chain's UA registry, needed only when a side is derived (0: `UALedgerOff` for a derived id).
     /// @param hedera_   HIP-632 for a 64-byte signature from an account without code (`HederaMandateWallet`).
     constructor(bytes32 owner_, bytes32 chainUid_, address registry_, bool hedera_)
-        UAMetaTxBase("SCaaS MandateWallet", chainUid_, registry_, address(0), hedera_)
+        UAMetaTxBaseCore("SCaaS MandateWallet", chainUid_, registry_, address(0), hedera_)
     {
         if (owner_ == 0) revert ZeroOwner();
         owner = owner_;
@@ -239,7 +239,7 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
     }
 
     /// @notice The allowlist (CTR-MTX-19): the base `cancelNonce`, the delegate's two, the owner's four; fee `NONE` only.
-    function mtxSelectors() public pure override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a) {
+    function _mtxSelectorsBody() internal pure override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a) {
         s = new bytes4[](7);
         c = new uint8[](7);
         a = new uint8[](7);

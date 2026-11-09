@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
+import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
-import {MetaTxBase} from "./MetaTxBase.sol";
-import {UAMetaTxBase} from "./UAMetaTxBase.sol";
+import {MetaTxBase, MetaTxBaseCore} from "./MetaTxBase.sol";
+import {UAMetaTxBase, UAMetaTxBaseCore} from "./UAMetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -30,13 +31,13 @@ import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 ///         pipelines on the same lanes. Every signature (the
 ///         relayed paths, trade, cancel, invalidate, receiver-fee) is checked in `MtxPipelineLib` (`requireSignature`
 ///         / `authorize`; a derived UA by the registry's `requireAuthorized`), never here (owner 2026-10-27).
-abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken, IUALedger, IUALedgerViews {
+abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
     using MetaTxLib for MetaTxLib.UAMetaTransaction;
     using MetaTxLib for MetaTxLib.UAMetaTransfer;
 
     /// @dev A factory-made token (`MetaTokenBase`, CTR-TOK-29) passes 0s and reads its clone's code instead.
     constructor(bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
-        ERC20("", "") UAMetaTxBase(_domainName(), chainUid_, registry_, smartKeyAccountImpl_, hedera_)
+        ERC20("", "") UAMetaTxBaseCore(_domainName(), chainUid_, registry_, smartKeyAccountImpl_, hedera_)
     {}
 
     /// @notice The EIP-712 domain name (CTR-MTX-02): `"SCaaS MetaToken"`; a confidential kind overrides it.
@@ -47,24 +48,23 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     // ------------------------------------------------------------------ views
 
     /// @notice `0xF3`: both flags and every fee mode (a token holds the charged balance).
-    function supportedModes() public pure override(IMetaTx, MetaTxBase) returns (uint32) {
+    function _supportedModesBody() internal pure override returns (uint32) {
         return MetaTxLib.MODE_KNOWN_MASK;
     }
 
     // `UAMetaTxBase` holds these three and `IUALedger` / `IUALedgerViews` name them too: the join spelled out.
 
-    function registry() public view override(IUALedger, UAMetaTxBase) returns (address) {
-        return UAMetaTxBase.registry();
+    function registry() public view  returns (address) {
+        return UAMetaTxBaseCore._registryBody();
     }
 
-    function mtxNonce(bytes32 from, uint256 batch) public view override(IUALedgerViews, UAMetaTxBase) returns (uint256) {
-        return UAMetaTxBase.mtxNonce(from, batch);
+    function _mtxNonceBody(bytes32 from, uint256 batch) internal view override returns (uint256) {
+        return UAMetaTxBaseCore._mtxNonceBody(from, batch);
     }
 
-    function mtxDigest(MetaTxLib.UAMetaTransaction calldata m)
-        public view override(IUALedgerViews, UAMetaTxBase) returns (bytes32)
+    function _mtxDigestBody(MetaTxLib.UAMetaTransaction calldata m) internal view override returns (bytes32)
     {
-        return UAMetaTxBase.mtxDigest(m);
+        return UAMetaTxBaseCore._mtxDigestBody(m);
     }
 
     /// @notice A native id reads the ERC-20 balance of its address; a derived UA its UA-ledger balance.
@@ -72,7 +72,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         return UAKinds.inNativeSpace(ua) ? balanceOf(address(uint160(uint256(ua)))) : _ua().balance[ua];
     }
 
-    function mtxTransferDigest(MetaTxLib.UAMetaTransfer calldata t) external view returns (bytes32) {
+    function _mtxTransferDigestBody(MetaTxLib.UAMetaTransfer calldata t) internal view returns (bytes32) {
         return MtxPipelineLib.transferDigest(_domainSeparatorV4(), t);
     }
 
@@ -81,24 +81,24 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     // views (`mtxTrade(TradeOrder, bytes, …)`, `mtxCancelOrder(TradeOrder, bytes)`, `mtxInvalidateNonces(address, …)`,
     // `restorePulled(TradeOrder, …)`, the address digests and `minNonce(address, …)`) are in legacy/ua-mtx-merge/.
 
-    function tradeOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
+    function _tradeOrderDigestBody(ITradeToken.UATradeOrder calldata o) internal view returns (bytes32) {
         return _hashTypedDataV4(TradeLib.orderHash(o));
     }
 
-    function cancelOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
+    function _cancelOrderDigestBody(ITradeToken.UATradeOrder calldata o) internal view returns (bytes32) {
         return _hashTypedDataV4(TradeLib.cancelHash(o));
     }
 
-    function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) public view returns (bytes32) {
+    function _invalidateNoncesDigestBody(bytes32 from, uint256 batch, uint256 newMin) internal view returns (bytes32) {
         return _hashTypedDataV4(keccak256(abi.encode(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
     }
 
-    function pulled(bytes32 orderHash) external view returns (uint256) {
+    function _pulledBody(bytes32 orderHash) internal view returns (uint256) {
         return TradeLib.$().pulled[orderHash];
     }
 
     /// @notice One floor per id (a native address zero-padded); a store apart from the meta-tx nonces.
-    function minNonce(bytes32 from, uint256 batch) external view returns (uint256) {
+    function _minNonceBody(bytes32 from, uint256 batch) internal view returns (uint256) {
         return TradeLib.$().minNonce[from][batch];
     }
 
@@ -108,9 +108,9 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     ///         `UATransfer`). A registry is needed only for a derived seller (C, R9: `authorize` refuses it
     ///         `UALedgerOff` by name). The signature is checked once: a later fill of an order already pulled
     ///         (`pulled[h] ≠ 0`, `h` binds every field) skips it (CTR-DEX-15 step 4).
-    function mtxTrade(UATradeOrder calldata o, IUARegistry.UASig calldata auth, TradeFill calldata f) external nonReentrant {
-        bytes32 h = tradeOrderDigest(o);
-        UATradeOrder memory c = o;
+    function _mtxTradeBody(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth, ITradeToken.TradeFill calldata f) internal {
+        bytes32 h = _tradeOrderDigestBody(o);
+        ITradeToken.UATradeOrder memory c = o;
         TradeLib.precheck(c, f, h, msg.sender, address(this));
         if (TradeLib.$().pulled[h] == 0) MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, h, auth);
         _uaMove(o.from, TradeLib.pad(o.dex), TradeLib.record(c, f, h, true));
@@ -118,20 +118,18 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
 
     /// @notice DX7: only `o.dex`, at most what it pulled for the order in this transaction (`TradeLib.restore`); a
     ///         direct read of the caller, never allowlisted.
-    function restorePulled(UATradeOrder calldata o, uint256 amount) external nonReentrant {
-        TradeLib.restore(o, tradeOrderDigest(o), amount, msg.sender);
+    function _restorePulledBody(ITradeToken.UATradeOrder calldata o, uint256 amount) internal {
+        TradeLib.restore(o, _tradeOrderDigestBody(o), amount, msg.sender);
     }
 
     /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one. A native id needs no registry (C).
-    function mtxCancelOrder(UATradeOrder calldata o, IUARegistry.UASig calldata auth) external nonReentrant {
-        MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, cancelOrderDigest(o), auth);
-        TradeLib.cancel(tradeOrderDigest(o), o.amount, o.from, true);
+    function _mtxCancelOrderBody(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth) internal {
+        MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, _cancelOrderDigestBody(o), auth);
+        TradeLib.cancel(_tradeOrderDigestBody(o), o.amount, o.from, true);
     }
 
-    function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth)
-        external nonReentrant
-    {
-        MtxPipelineLib.authorize(_mtxCtx(), from, UAKinds.PURPOSE_TRADE, invalidateNoncesDigest(from, batch, newMin), auth);
+    function _mtxInvalidateNoncesBody(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) internal {
+        MtxPipelineLib.authorize(_mtxCtx(), from, UAKinds.PURPOSE_TRADE, _invalidateNoncesDigestBody(from, batch, newMin), auth);
         TradeLib.invalidate(from, batch, newMin, true);
     }
 
@@ -169,26 +167,26 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
         ret = _selfCall(MetaTxLib.pad(m.from), m.data, _envelopeBinding(m));                                 // 5
         if (o.fee != 0) _transfer(m.from, o.feeTo, o.fee);                                                    // 6
-        emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee);         // 7
+        emit IMetaTx.MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee);         // 7
     }
 
     // ------------------------------------------------------------------ allowance (CTR-TOK-01)
 
     /// @notice Caller and spender must both be contracts: no EOA grants or holds an allowance.
-    function approve(address spender, uint256 value) public virtual override(ERC20, IERC20) returns (bool) {
+    function approve(address spender, uint256 value) public virtual override returns (bool) {
         address caller = _msgSender();
-        if (!SigCheck.isContract(caller)) revert CallerNotContract(caller);
-        if (!SigCheck.isContract(spender)) revert SpenderNotContract(spender);
+        if (!SigCheck.isContract(caller)) revert IERC20MetaTx.CallerNotContract(caller);
+        if (!SigCheck.isContract(spender)) revert IERC20MetaTx.SpenderNotContract(spender);
         _regPayer();
         return super.approve(spender, value);
     }
 
     /// @notice Only a contract spends an allowance; checked before the allowance.
     function transferFrom(address from, address to, uint256 value)
-        public virtual override(ERC20, IERC20) returns (bool)
+        public virtual override returns (bool)
     {
         address caller = _msgSender();
-        if (!SigCheck.isContract(caller)) revert CallerNotContract(caller);
+        if (!SigCheck.isContract(caller)) revert IERC20MetaTx.CallerNotContract(caller);
         return super.transferFrom(from, to, value);
     }
 
@@ -198,15 +196,15 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     ///      slot is Σ of the UA balances and only `_uaMove` writes it (CTR-UA-18): no native move, mint or burn reaches
     ///      it, except a self-call under a derived UA (`mtxExecute`), which spends that UA's own balance through it.
     function _update(address from, address to, uint256 value) internal virtual override {
-        if (to == address(this)) revert TransferToSelf();
-        if (to == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
-        if (to == MetaTxLib.SHIELD_POOL || from == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable(); // D19
+        if (to == address(this)) revert IERC20MetaTx.TransferToSelf();
+        if (to == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
+        if (to == MetaTxLib.SHIELD_POOL || from == MetaTxLib.SHIELD_POOL) revert IUALedger.ShieldPoolNotPayable(); // D19
         bytes32 f = MetaTxLib.pad(from);
         if (from == MetaTxLib.UA_POOL) {
             bytes32 ua = _ticketSubject();
-            if (UAKinds.inNativeSpace(ua)) revert UAPoolNotPayable();
+            if (UAKinds.inNativeSpace(ua)) revert IUALedger.UAPoolNotPayable();
             _uaDebit(ua, value);
-            emit UATransfer(ua, MetaTxLib.pad(to), value);
+            emit IUALedger.UATransfer(ua, MetaTxLib.pad(to), value);
             f = ua;
         }
         _regMove(f, MetaTxLib.pad(to), value);
@@ -227,20 +225,18 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     /// @notice The typed transfer or payment of any id (ua-mtx-merge T2: today's `uaExecuteTransfer` under this name): a
     ///         native `from` signs `UAMetaTransfer` with its own key and moves its ERC-20 balance, a derived one through
     ///         the registry and its UA-ledger balance.
-    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bool)
+    function _mtxExecuteTransferBody(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth) internal returns (bool)
     {
         _uaExecuteTransfer(t, 0, auth, 0, 0);
         return true;
     }
 
     /// @notice Atomic, items in order; never mixed with `UAMetaTransaction`s (CTR-MTX-24).
-    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
-        external nonReentrant returns (bool)
+    function _mtxBatchTransferBody(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths) internal returns (bool)
     {
         uint256 n = ts.length;
-        if (n == 0) revert MtxBatchEmpty();
-        if (n != auths.length) revert MtxBatchLengthMismatch();
+        if (n == 0) revert IMetaTx.MtxBatchEmpty();
+        if (n != auths.length) revert IMetaTx.MtxBatchLengthMismatch();
         for (uint256 i; i < n; ++i) _uaExecuteTransfer(ts[i], 0, auths[i], 0, 0);
         return true;
     }
@@ -264,8 +260,8 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
         if (o.fee != 0) _uaMove(t.from, MetaTxLib.pad(o.feeTo), o.fee);                                // 5
         _uaSplit(t.from, t.to, t.value, withheld, withheldTo);
-        if (t.entryRef != 0) emit UAPaymentSettled(t.from, t.to, t.value, o.fee, o.feeTo, t.entryRef);
-        emit UAMetaTransactionExecuted(t.from, msg.sender, t.batch, t.nonce, o.digest, o.feeTo, o.fee); // 6
+        if (t.entryRef != 0) emit IUALedger.UAPaymentSettled(t.from, t.to, t.value, o.fee, o.feeTo, t.entryRef);
+        emit IUALedger.UAMetaTransactionExecuted(t.from, msg.sender, t.batch, t.nonce, o.digest, o.feeTo, o.fee); // 6
         return o.digest;
     }
 
@@ -280,7 +276,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     ///      native id belongs to the address twin (`UANotRegistered`).
     function _requireDerivedReceiver(bytes32 to) internal view {
         _uaOn();
-        if (UAKinds.inNativeSpace(to)) revert UANotRegistered(to);
+        if (UAKinds.inNativeSpace(to)) revert IUALedger.UANotRegistered(to);
         MtxPipelineLib._checkTo(_registry(), to); // the one receiver rule (internal: inlined, no DELEGATECALL)
     }
 
@@ -298,7 +294,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     function _uaMove(bytes32 from, bytes32 to, uint256 value) internal {
         // D19: no UA-ledger caller reaches `SHIELD_POOL` (its moves bypass `_update`); only `_poolMove` does.
         if (from == MetaTxLib.pad(MetaTxLib.SHIELD_POOL) || to == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)) {
-            revert ShieldPoolNotPayable();
+            revert IUALedger.ShieldPoolNotPayable();
         }
         _regMove(from, to, value);
         _poolMove(from, to, value);
@@ -308,25 +304,25 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     function _poolMove(bytes32 from, bytes32 to, uint256 value) internal {
         bool fromUA = !UAKinds.inNativeSpace(from);
         bool toUA = !UAKinds.inNativeSpace(to);
-        if (!toUA && address(uint160(uint256(to))) == address(this)) revert TransferToSelf(); // CTR-MTX-18
+        if (!toUA && address(uint160(uint256(to))) == address(this)) revert IERC20MetaTx.TransferToSelf(); // CTR-MTX-18
         if (fromUA) _uaDebit(from, value);
         if (toUA) _ua().balance[to] += value;
         if (!(fromUA && toUA)) {
             ERC20._update(fromUA ? MetaTxLib.UA_POOL : address(uint160(uint256(from))),
                 toUA ? MetaTxLib.UA_POOL : address(uint160(uint256(to))), value);
         }
-        if (fromUA || toUA) emit UATransfer(from, to, value);
+        if (fromUA || toUA) emit IUALedger.UATransfer(from, to, value);
     }
 
     function _uaDebit(bytes32 ua, uint256 value) private {
         UALedgerStorage storage $ = _ua();
         uint256 b = $.balance[ua];
-        if (b < value) revert UAInsufficientBalance(ua, b, value);
+        if (b < value) revert IUALedger.UAInsufficientBalance(ua, b, value);
         unchecked { $.balance[ua] = b - value; }
     }
 
-    function _msgSender() internal view virtual override(Context, MetaTxBase) returns (address) {
-        return MetaTxBase._msgSender();
+    function _msgSender() internal view virtual override(Context, MetaTxBaseCore) returns (address) {
+        return MetaTxBaseCore._msgSender();
     }
 
     // ------------------------------------------------------------------ regulated hooks (regulated-kinds spec §2.2)

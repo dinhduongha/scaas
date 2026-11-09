@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
-import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
+import {UAMetaTxBase, UAMetaTxBaseCore} from "../../src/metatx/UAMetaTxBase.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -15,7 +15,7 @@ contract SubjectProbe is UAMetaTxBase {
     bytes32 public subject;
     address public sender;
 
-    constructor(bytes32 uid, address reg) UAMetaTxBase("SCaaS SubjectProbe", uid, reg, address(0), false) {}
+    constructor(bytes32 uid, address reg) UAMetaTxBaseCore("SCaaS SubjectProbe", uid, reg, address(0), false) {}
 
     function poke() external nonReentrant {
         subject = _subject();

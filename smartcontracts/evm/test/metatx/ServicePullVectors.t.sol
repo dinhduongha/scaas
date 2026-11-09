@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RefServiceEscrow} from "./helpers/RefServiceEscrow.sol";
@@ -67,7 +69,7 @@ contract ServicePullVectorsTest is Test {
     function _place() internal returns (address tok, RefServiceEscrow s) {
         vm.chainId(_u(".chainId"));
         tok = _a(".token.address");
-        vm.etch(tok, EnvKit.runtime(address(new NormalToken(address(this), "")), EnvKit.env(_b32(".token.salt"), address(0), address(0), false)));
+        vm.etch(tok, EnvKit.runtime(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(_b32(".token.salt"), address(0), address(0), false)));
         s = RefServiceEscrow(_a(".service.address"));
         vm.etch(address(s), address(new RefServiceEscrow(tok)).code);
         assertEq(s.TOKEN(), tok);
@@ -108,7 +110,7 @@ contract ServicePullVectorsTest is Test {
         }
         assertEq(ref, _b32(".entryRef"), name);
         assertEq(t.entryRef, ref, name);
-        assertEq(MetaTokenBase(tok).mtxTransferDigest(t), _b32(".transferDigest"), name);
+        assertEq(NormalToken(tok).mtxTransferDigest(t), _b32(".transferDigest"), name);
         assertEq(cd, _b(".calldata"), name);
         assertEq(bytes4(cd), bytes4(_b(".selector")), name);
         // the landings
@@ -133,7 +135,7 @@ contract ServicePullVectorsTest is Test {
         assertTrue(ok, name);
         assertEq(IERC20(tok).balanceOf(address(s)), t.value, name);
         assertEq(IERC20(tok).balanceOf(REL), _u(".relayFee.value"), name);
-        assertEq(MetaTokenBase(tok).mtxNonce(t.from, t.batch), 2, name);
+        assertEq(NormalToken(tok).mtxNonce(t.from, t.batch), 2, name);
         assertEq(keccak256(cd), _b32(".relayFee.callDataHash"), name);
         assertEq(keccak256(abi.encodePacked("scaas.relayfee", block.chainid, address(s), keccak256(cd))),
             _b32(".relayFee.relayRef"), name);

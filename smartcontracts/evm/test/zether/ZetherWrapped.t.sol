@@ -93,7 +93,7 @@ contract ZetherWrappedTest is ZetherFixture {
         uint256[] memory nums = new uint256[](2);
         (nums[0], nums[1]) = (1, 2); // 1 EUR raw = 2 public units
         w = _wrapper(legs, nums, _ones(2), "zw", true);
-        tok = ZetherLayer(address(w));
+        tok = NormalZetherToken(address(w));
         _users();
     }
 
@@ -125,7 +125,7 @@ contract ZetherWrappedTest is ZetherFixture {
     }
 
     /// Public units by a 1:1 USD wrap.
-    function _public(ZetherLayer t, address to, uint256 units) internal override {
+    function _public(NormalZetherToken t, address to, uint256 units) internal override {
         usd.mint(address(this), units);
         usd.approve(address(t), units);
         WrappedToken(payable(address(t))).wrap(address(usd), units);
@@ -134,7 +134,7 @@ contract ZetherWrappedTest is ZetherFixture {
     }
 
     /// The reserve invariant (CTR-ZTH-44) and Σ plaintext == totalShielded.
-    function _assertConservation(ZetherLayer t, uint256 max) internal view override {
+    function _assertConservation(NormalZetherToken t, uint256 max) internal view override {
         User[3] memory us = [alice, bob, carol];
         uint256 sum;
         for (uint256 i; i < 3; ++i) {
@@ -327,7 +327,7 @@ contract ZetherWrappedTest is ZetherFixture {
             mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer: relayer, fee: 9,
             feeRecipient: address(0)
         });
-        (bytes memory pl, bytes memory pr) = _unwrapProof(10, 30, address(0xB0C), address(usd), 0, _addrBinding(ZetherLayer(address(w)), m));
+        (bytes memory pl, bytes memory pr) = _unwrapProof(10, 30, address(0xB0C), address(usd), 0, _addrBinding(NormalZetherToken(address(w)), m));
         m.data = abi.encodeCall(IZetherWrappedToken.mtxUnshieldUnwrap, (_zBurn(pl, _none()), IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xB0C)))), 10, 0), pr));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(w), m));
         bytes memory sig = abi.encodePacked(r, s, v);
@@ -469,7 +469,7 @@ contract ZetherWrappedTest is ZetherFixture {
         uint256[] memory dens = new uint256[](1);
         dens[0] = 1e12;
         WrappedZetherToken z = _wrapper(legs, _ones(1), dens, "native2", false);
-        ZetherLayer zt = ZetherLayer(address(z));
+        NormalZetherToken zt = NormalZetherToken(address(z));
         vm.deal(address(this), 1 ether);
         z.mtxWrapShield{value: 3e16}(address(0), 3e16, ZetherTypes.UA.unwrap(alice.ua)); // 1 shielded unit = SCALE·1e12 wei
         zt.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
@@ -508,9 +508,9 @@ contract ZetherWrappedTest is ZetherFixture {
         hook.arm(address(z), abi.encodeCall(IZetherToken.mtxRollOver, (ZetherTypes.UA.unwrap(bob.ua), 1)));
         vm.expectRevert(IMetaTx.Reentrancy.selector);
         z.mtxWrapShield(address(hook), SCALE, ZetherTypes.UA.unwrap(alice.ua));
-        bytes memory pl = _unshieldPayload(ZetherLayer(address(z)), alice);
+        bytes memory pl = _unshieldPayload(NormalZetherToken(address(z)), alice);
         bytes memory st = stm.unshieldUnwrapStatement(address(z), _zBurn(pl, _none()), 10, bytes32(uint256(uint160(address(0xD00D)))), address(hook), 0, 0);
-        bytes memory pr = _proveU(alice, st, 10, 30, _none(), ZetherLayer(address(z)));
+        bytes memory pr = _proveU(alice, st, 10, 30, _none(), NormalZetherToken(address(z)));
         vm.expectRevert(IMetaTx.Reentrancy.selector);
         z.mtxUnshieldUnwrap(_zBurn(pl, _none()), IConfidentialWrappedToken.Unwrap(address(hook), bytes32(uint256(uint160(address(0xD00D)))), 10, 0), pr);
         hook.arm(address(0), "");
@@ -619,7 +619,7 @@ contract ZetherWrappedTest is ZetherFixture {
     /// burns its public UA balance through `UA_POOL`.
     function test_normalZether_burnUnderUA() public {
         signer = _signingUA();
-        ZetherLayer nz = _newToken(false, "nz");
+        NormalZetherToken nz = _newToken(false, "nz");
         NormalZetherToken(address(nz)).mint(address(this), 100);
         nz.transferToUA(signer, 100);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
@@ -651,7 +651,7 @@ contract ZetherWrappedTest is ZetherFixture {
         for (uint256 i; i < s.length; ++i) {
             // the owner-signed pair has its own relayed tests (ZetherUA5c)
             if (s[i] == IZetherToken.mtxRollOverSigned.selector || s[i] == IZetherToken.mtxSetRollOverMode.selector) continue;
-            bytes memory data = _k3Call(s[i], bal, _addrBinding(ZetherLayer(address(w)), _envOf(300 + i)));
+            bytes memory data = _k3Call(s[i], bal, _addrBinding(NormalZetherToken(address(w)), _envOf(300 + i)));
             uint256 sc = w.accountState(alice.ua).sendCounter;
             bool single = s[i] == bytes4(keccak256("wrap(uint256)")) || s[i] == bytes4(keccak256("unwrap(uint256,address,uint256)"));
             bytes memory err = single ? abi.encodeWithSelector(IWrappedToken.UnderlyingRequired.selector) : bytes("");
@@ -714,7 +714,7 @@ contract ZetherWrappedTest is ZetherFixture {
     function _uaUnwrapProof(WrappedZetherToken z, uint256 amount, uint256 b, bytes32 recipient, address u, bytes32 envB)
         internal view returns (bytes memory pl, bytes memory pr)
     {
-        ZetherLayer t = ZetherLayer(address(z));
+        NormalZetherToken t = NormalZetherToken(address(z));
         pl = _unshieldPayload(t, alice);
         bytes memory st = stm.unshieldUnwrapStatement(address(z), _zBurn(pl, _none()), amount, recipient, u, 0, envB);
         pr = _proveU(alice, st, amount, b, _none(), t);
@@ -723,7 +723,7 @@ contract ZetherWrappedTest is ZetherFixture {
     /// UA-5c (b): an unshield-unwrap to a derived UA pays it in a SCaaS ledger leg (`transferToUA`); an outside leg
     /// reverts `UALegNotLedger` (after the proof, atomically).
     function test_unshieldUnwrap_toUA_ledgerLeg() public {
-        ZetherLayer legTok = _newToken(false, "leg");
+        NormalZetherToken legTok = _newToken(false, "leg");
         NormalZetherToken(address(legTok)).mint(address(this), 100 * SCALE);
         address[] memory one = new address[](1);
         one[0] = address(legTok);

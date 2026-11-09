@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
@@ -328,20 +330,20 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("N", "N", 6);
         _govern(c, address(0));
-        nt = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), e));
+        nt = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), e));
         nt.initialize(nid(address(this)), 1, abi.encode(c));
         IFactoryToken.TokenConfig memory w;
         (w.name, w.symbol, w.decimals) = ("W", "W", 6);
         _govern(w, address(new MockERC20("Leg", "LEG", 6)));
-        wt = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), "")), e)));
+        wt = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), e)));
         wt.initialize(nid(address(this)), 1, abi.encode(w));
         dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), "")), e));
         dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0))));
         _regulate(c);
-        nr = NormalRegulatedToken(EnvKit.clone(address(new NormalRegulatedToken(address(this), regArgs())), e));
+        nr = NormalRegulatedToken(EnvKit.clone(address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs()))), e));
         nr.initialize(nid(address(this)), 1, abi.encode(c));
         _regulate(w);
-        wr = WrappedRegulatedToken(payable(EnvKit.clone(address(new WrappedRegulatedToken(address(this), regArgs())), e)));
+        wr = WrappedRegulatedToken(payable(EnvKit.clone(address(new WrappedRegulatedToken(address(this), kindArgs(9, address(this), regArgs()))), e)));
         wr.initialize(nid(address(this)), 1, abi.encode(w));
     }
 

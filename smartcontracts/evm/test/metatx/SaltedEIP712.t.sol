@@ -4,10 +4,10 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ShortStrings} from "@openzeppelin/contracts/utils/ShortStrings.sol";
-import {SaltedEIP712} from "../../src/common/SaltedEIP712.sol";
+import {SaltedEIP712, SaltedEIP712Core} from "../../src/common/SaltedEIP712.sol";
 
 contract SaltedHarness is SaltedEIP712 {
-    constructor(string memory n, bytes32 uid) SaltedEIP712(n, "1", uid) {}
+    constructor(string memory n, bytes32 uid) SaltedEIP712Core(n, "1", uid) {}
 
     function separator() external view returns (bytes32) {
         return _domainSeparatorV4();
@@ -72,7 +72,7 @@ contract SaltedEIP712Test is Test {
     }
 
     function test_zeroChainUidRefused() public {
-        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
         new SaltedHarness("SCaaS TestRegistry", bytes32(0));
     }
 }

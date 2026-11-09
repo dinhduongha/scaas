@@ -14,7 +14,7 @@ import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
-import {GovernanceBase, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -43,7 +43,7 @@ contract TopBandApp is GovernanceBase {
     uint256 internal constant BITS = (uint256(1) << 128) | (uint256(1) << 255);
     mapping(uint8 => uint256) public acted;
 
-    constructor(address owner_) GovernanceBase(address(0)) {
+    constructor(address owner_) GovernanceBaseCore(address(0)) {
         GovernanceLib.Roles memory none;
         GovernanceLib.init(BITS, 0, nid(owner_), 0, address(0), none, BITS, BITS, 0, address(0));
     }

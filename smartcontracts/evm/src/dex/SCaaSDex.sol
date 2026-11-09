@@ -10,7 +10,7 @@ import {ITradeToken} from "../trade/ITradeToken.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
-import {SaltedEIP712} from "../common/SaltedEIP712.sol";
+import {SaltedEIP712, SaltedEIP712Core} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
@@ -18,7 +18,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {DexPuller} from "./DexPuller.sol";
 import {TokenCall} from "./TokenCall.sol";
-import {GovernanceBase, GovernanceUse} from "../governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../governance/GovernanceBase.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
@@ -141,7 +141,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     /// @dev The factory's append (`OpenFactory.deployDexImplementation`, chain-neutral spec §2.1): its address; no
     ///      `implArgs`. The chain values (`chain_uid`, the router, the `SmartKeyAccount` implementation) are the clone's
     ///      env, in its code (CTR-TOK-29).
-    constructor(address factory_, bytes memory) SaltedEIP712("SCaaS Dex", "1", bytes32(0)) GovernanceBase(address(0)) {
+    constructor(address factory_, bytes memory) SaltedEIP712Core("SCaaS Dex", "1", bytes32(0)) GovernanceBaseCore(address(0)) {
         FACTORY = factory_;
         _s().initialized = true;
     }
@@ -290,7 +290,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     function _chainUidRaw() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
 
     /// @notice ERC-5267 under the clone's `chain_uid` (`ChainUidZero` on the implementation).
-    function eip712Domain() public view override returns (
+    function _eip712DomainBody() internal view override returns (
         bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory
     ) {
         return _eip712DomainUnder(_chainUid());

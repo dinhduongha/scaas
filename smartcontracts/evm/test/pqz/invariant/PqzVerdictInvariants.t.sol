@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {PqzOffchainBase} from "../helpers/PqzOffchainBase.sol";
 import {PqzVerdictHandler} from "./PqzVerdictHandler.t.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
@@ -17,7 +19,7 @@ import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 /// revert); I6 the pool equals `totalShielded · shieldScale` in both. Mocked proofs (the fixture's). UNAUDITED.
 contract PqzVerdictInvariantsTest is PqzOffchainBase {
     PqzVerdictHandler internal h;
-    PqzLayer internal off;
+    NormalPqzToken internal off;
 
     function setUp() public {
         _offStack();
@@ -28,7 +30,7 @@ contract PqzVerdictInvariantsTest is PqzOffchainBase {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
         c.owner = bytes32(uint256(uint160(address(h))));
-        off = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "inv-off"));
+        off = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "inv-off"));
         h.setOff(off);
         _shieldOn(tok, alice, 1_000_000);
         _shieldOn(off, alice, 1_000_000);
@@ -39,7 +41,7 @@ contract PqzVerdictInvariantsTest is PqzOffchainBase {
         targetSelector(FuzzSelector(address(h), sel));
     }
 
-    function _mode(PqzLayer t) internal view returns (uint8) {
+    function _mode(NormalPqzToken t) internal view returns (uint8) {
         return uint8(uint256(vm.load(address(t), PqzCore._STORAGE)) >> 176);
     }
 

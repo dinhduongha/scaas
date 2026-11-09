@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
+import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 
-import {MetaTxBase} from "./MetaTxBase.sol";
+import {MetaTxBase, MetaTxBaseCore} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -17,7 +18,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///         `ERC20MetaTx` overrides `_uaChargeFee` with its UA ledger. An op body reads `_subject()`. The address path
 ///         (`executeMetaTransaction`, R3) takes the same `Ctx` signature rule. `SmartKeyAccount` keeps the address entries
 ///         (`MetaTxAddressBase`).
-abstract contract UAMetaTxBase is MetaTxBase {
+abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
     /// @custom:storage-location erc7201:scaas.ua.ledger
     /// @dev `balance` is the UA ledger's (`ERC20MetaTx`). `cancelUsed` served the unordered `uaCancelNonce`
     ///      (legacy/ua-mtx-merge/); unused since, kept because the layout is pinned (test/v2/layout/).
@@ -41,7 +42,7 @@ abstract contract UAMetaTxBase is MetaTxBase {
     bool private immutable _IS_HEDERA;
 
     constructor(string memory domainName, bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
-        MetaTxBase(domainName, chainUid_)
+        MetaTxBaseCore(domainName, chainUid_)
     {
         _REGISTRY = registry_;
         _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
@@ -51,12 +52,12 @@ abstract contract UAMetaTxBase is MetaTxBase {
 
     // ------------------------------------------------------------------ views
 
-    function registry() public view virtual returns (address) {
+    function _registryBody() internal view virtual returns (address) {
         return _registry();
     }
 
     /// @notice CTR-TOK-23: the Hedera flag (the name of the immutable it was).
-    function IS_HEDERA() external view returns (bool) {
+    function _IS_HEDERABody() internal view returns (bool) {
         return _hedera();
     }
 
@@ -65,30 +66,28 @@ abstract contract UAMetaTxBase is MetaTxBase {
     function _hedera() internal view virtual returns (bool) { return _IS_HEDERA; }
 
     /// @notice The one nonce map (CTR-UA-26), keyed by id: a native address zero-padded, a derived UA as itself.
-    function mtxNonce(bytes32 from, uint256 batch) public view virtual returns (uint256) {
+    function _mtxNonceBody(bytes32 from, uint256 batch) internal view virtual returns (uint256) {
         return _nonce(from, batch);
     }
 
-    function mtxDigest(MetaTxLib.UAMetaTransaction calldata m) public view virtual returns (bytes32) {
+    function _mtxDigestBody(MetaTxLib.UAMetaTransaction calldata m) internal view virtual returns (bytes32) {
         return MtxPipelineLib.callDigest(_domainSeparatorV4(), MetaTxLib.UAMETATX_TYPEHASH, _uaEnvelopeOf(m));
     }
 
     // ------------------------------------------------------------------ entry points
 
     /// @notice The generic entry (R47: an explicit `UASig`, no packed `bytes auth`).
-    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth)
-        public virtual nonReentrant returns (bytes memory)
+    function _mtxExecuteBody(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth) internal virtual returns (bytes memory)
     {
         return _uaExecute(m, auth);
     }
 
     /// @notice Atomic: items run in order, each with a fresh ticket; any failure reverts all (CTR-MTX-11).
-    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths)
-        public virtual nonReentrant returns (bool)
+    function _mtxBatchBody(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths) internal virtual returns (bool)
     {
         uint256 n = ms.length;
-        if (n == 0) revert MtxBatchEmpty();
-        if (n != auths.length) revert MtxBatchLengthMismatch();
+        if (n == 0) revert IMetaTx.MtxBatchEmpty();
+        if (n != auths.length) revert IMetaTx.MtxBatchLengthMismatch();
         for (uint256 i; i < n; ++i) {
             _requireBatchable(bytes4(ms[i].data));
             _uaExecute(ms[i], auths[i]);
@@ -100,15 +99,14 @@ abstract contract UAMetaTxBase is MetaTxBase {
     ///         `preNamedUA` like every named op, so nonce-ordered on its own lane `e.batch`, relayer-bound by the mode,
     ///         fee 0 or more, native and derived alike, under the named op's purpose (MD-5). The body bumps `lane` for
     ///         `e.from` itself: no self-call of `cancelNonce`, which refuses a derived subject (`UA_POOL` there).
-    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
-        public virtual nonReentrant returns (bytes memory)
+    function _mtxCancelNonceBody(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth) internal virtual returns (bytes memory)
     {
         MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, abi.encodeCall(IMetaTx.cancelNonce, (lane)));
         _regPre(m.from, IMetaTx.cancelNonce.selector, m.mode);
         // the facts of `cancelNonce(lane)`, fixed: no self-call follows, so no allowlist is asked (a derived id too)
         MtxPipelineLib.Out memory o = MtxPipelineLib.preNamedUA(_mtxCtx(), MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
             _uaEnvelopeOf(m, 0), abi.encode(lane), MtxPipelineLib.CallFacts(IMetaTx.cancelNonce.selector, 36,
-            FEE_CLASS_ABSOLUTE, 0, 36, 0, true, supportedModes()), auth);
+            FEE_CLASS_ABSOLUTE, 0, 36, 0, true, _supportedModesBody()), auth);
         _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
         emit IUALedger.UANonceCancelled(e.from, lane, _bumpNonce(e.from, lane));
         if (o.fee != 0) _uaChargeFee(m, o.feeTo, o.fee);
@@ -138,7 +136,7 @@ abstract contract UAMetaTxBase is MetaTxBase {
             f.basis = basis;
         }
         if (ua) f.uaAllowed = _uaAllowed(f.sel);
-        f.supported = supportedModes();
+        f.supported = _supportedModesBody();
     }
 
     /// @notice The signer as an id: the subject of the live ticket, else the direct caller padded.
@@ -225,7 +223,7 @@ abstract contract UAMetaTxBase is MetaTxBase {
     /// @notice Step 6, fee ≠ 0 only: no ledger to charge => refused, as `_chargeFee` on the address path (CTR-MTX-22).
     ///         Reached only by a contract whose `supportedModes()` claims a fee mode.
     function _uaChargeFee(MetaTxLib.UAMetaTransaction memory m, address, uint256) internal virtual {
-        revert MetaTxUnknownMode(m.mode);
+        revert IMetaTx.MetaTxUnknownMode(m.mode);
     }
 
     /// @notice The envelope binding a proof inside the UA path's self-call carries (CTR-PQZ-15, P6g plan D4,
@@ -256,4 +254,63 @@ abstract contract UAMetaTxBase is MetaTxBase {
     ///         pipeline's `feeTo` and `fee`; and the fee legs of `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`,
     ///         `mtxRelayFee`, `mtxWrapOrder`.
     function _regFeeTo(bytes32 /* feeTo */, uint256 /* fee */) internal view virtual {}
+}
+
+/// @notice `UAMetaTxBaseCore` with its external entries, each calling its body (T66b, spec 2026-11-09-t66b-library-organisation.md §4.4):
+///         the form its non-token users inherit, ABI and modifiers unchanged. UNAUDITED.
+abstract contract UAMetaTxBase is UAMetaTxBaseCore, IERC5267, IMetaTx {
+    function registry() public view virtual returns (address) {
+        return _registryBody();
+    }
+
+    function IS_HEDERA() external view returns (bool) {
+        return _IS_HEDERABody();
+    }
+
+    function mtxNonce(bytes32 from, uint256 batch) public view virtual returns (uint256) {
+        return _mtxNonceBody(from, batch);
+    }
+
+    function mtxDigest(MetaTxLib.UAMetaTransaction calldata m) public view virtual returns (bytes32) {
+        return _mtxDigestBody(m);
+    }
+
+    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth) public virtual nonReentrant returns (bytes memory) {
+        return _mtxExecuteBody(m, auth);
+    }
+
+    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths) public virtual nonReentrant returns (bool) {
+        return _mtxBatchBody(ms, auths);
+    }
+
+    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth) public virtual nonReentrant returns (bytes memory) {
+        return _mtxCancelNonceBody(e, lane, auth);
+    }
+
+    function chainUid() external view virtual override returns (bytes32) {
+        return _chainUidBody();
+    }
+
+    function supportedModes() public view virtual override returns (uint32) {
+        return _supportedModesBody();
+    }
+
+    function mtxSelectors() public view virtual override returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg) {
+        return _mtxSelectorsBody();
+    }
+
+    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external override nonReentrant returns (bool) {
+        return _executeMetaTransactionBody(m, signature);
+    }
+
+    function cancelNonce(uint256 batch) external override nonReentrant {
+        _cancelNonceBody(batch);
+    }
+
+    function eip712Domain() public view virtual override returns (
+            bytes1 fields, string memory name, string memory version, uint256 chainId,
+            address verifyingContract, bytes32 salt, uint256[] memory extensions
+        ) {
+        return _eip712DomainBody();
+    }
 }

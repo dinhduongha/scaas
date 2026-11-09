@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -21,7 +23,7 @@ contract MirrorTest is RegFixture {
     }
 
     function _mirrorHolds(address t) internal view {
-        assertEq(uint256(_r(t).regulatedConfig().controls), (MetaTokenBase(t).features() >> 5) & 0x3F, "I12");
+        assertEq(uint256(_r(t).regulatedConfig().controls), (NormalToken(t).features() >> 5) & 0x3F, "I12");
     }
 
     function _on(address t, uint8 bit) internal view returns (bool) {
@@ -62,13 +64,13 @@ contract MirrorTest is RegFixture {
         assertTrue(_on(t, bit), "after the proposal");
         _mirrorHolds(t);
         vm.prank(ownerA);
-        MetaTokenBase(t).cancelGrant(bit, 0);
+        NormalToken(t).cancelGrant(bit, 0);
         assertTrue(_on(t, bit), "after the cancellation");
         _disable(t, bit); // proposal again
         vm.warp(block.timestamp + GD - 1);
         vm.prank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotReady.selector, bit, bytes32(0), uint64(_now() + 1)));
-        MetaTokenBase(t).disableFeature(bit);
+        NormalToken(t).disableFeature(bit);
         assertTrue(_on(t, bit), "after an early confirm");
         vm.warp(block.timestamp + 1 + GD + 1); // past eta + grantDelay: the pending is dead
         _disable(t, bit); // proposes anew

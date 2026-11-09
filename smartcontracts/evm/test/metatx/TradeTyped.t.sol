@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -392,7 +394,7 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
 
     /// A fresh clone: `vm.copyStorage` copies what this test has touched, not `setUp`'s account.
     function _normalKind() internal override returns (NormalToken t) {
-        t = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        t = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         t.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
     }
 

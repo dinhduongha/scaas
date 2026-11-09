@@ -13,7 +13,7 @@ import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {DexPuller} from "../../src/dex/DexPuller.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IRescuable} from "../../src/governance/IRescuable.sol";
-import {GovernanceBase} from "../../src/governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceBaseCore} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -25,7 +25,7 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 contract DelayApp is GovernanceBase {
     uint8 internal constant APPROVE = 128;
 
-    constructor(address owner_, uint64 delay) GovernanceBase(address(0)) {
+    constructor(address owner_, uint64 delay) GovernanceBaseCore(address(0)) {
         GovernanceLib.Roles memory none;
         uint256 b = uint256(1) << APPROVE;
         GovernanceLib.init(b, 0, nid(owner_), delay, address(0), none, b, b, 0, address(0));

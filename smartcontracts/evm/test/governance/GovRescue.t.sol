@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -99,13 +101,13 @@ contract GovRescueTest is Test {
     }
 
     function _normalClone() internal returns (NormalToken) {
-        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), ""));
+        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         return NormalToken(EnvKit.clone(normalImpl, EnvKit.env(UID, address(0), address(0), false)));
     }
 
     function _wrappedClone() internal returns (WrappedToken) {
         if (wrappedImpl == address(0)) {
-            wrappedImpl = address(new WrappedToken(address(this), ""));
+            wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         }
         return WrappedToken(payable(EnvKit.clone(wrappedImpl, EnvKit.env(UID, address(0), address(0), false))));
     }
@@ -383,10 +385,10 @@ contract GovRescueTest is Test {
 
     function test_tokenAnswersIRescuableOnlyWithTheBit() public {
         bytes4 id = type(IRescuable).interfaceId;
-        assertTrue(MetaTokenBase(address(_normal(TO))).supportsInterface(id));
-        assertFalse(MetaTokenBase(address(_normal(address(0)))).supportsInterface(id));
-        assertTrue(MetaTokenBase(address(_wrapped(_one(address(usd)), TO))).supportsInterface(id));
-        assertFalse(MetaTokenBase(address(_wrapped(_one(address(usd)), address(0)))).supportsInterface(id));
+        assertTrue(NormalToken(address(_normal(TO))).supportsInterface(id));
+        assertFalse(NormalToken(address(_normal(address(0)))).supportsInterface(id));
+        assertTrue(NormalToken(address(_wrapped(_one(address(usd)), TO))).supportsInterface(id));
+        assertFalse(NormalToken(address(_wrapped(_one(address(usd)), address(0)))).supportsInterface(id));
     }
 }
 
@@ -462,8 +464,8 @@ contract GovRescueDexTest is Test {
             ("N", "N", 6, 1 | (uint256(1) << GovernanceBits.RESCUABLE), nid(OWNER), TO);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "t");
         assertTrue(d.supportsInterface(type(IGovernance).interfaceId));
-        assertTrue(MetaTokenBase(t).supportsInterface(type(IGovernance).interfaceId));
-        assertTrue(MetaTokenBase(t).supportsInterface(type(IRescuable).interfaceId));
+        assertTrue(NormalToken(t).supportsInterface(type(IGovernance).interfaceId));
+        assertTrue(NormalToken(t).supportsInterface(type(IRescuable).interfaceId));
         assertFalse(d.supportsInterface(type(IRescuable).interfaceId), "not on SCaaSDex");
         assertTrue(type(IGovernance).interfaceId != type(IRescuable).interfaceId);
     }
@@ -498,7 +500,7 @@ abstract contract GovRescueConfRows is Test {
         IRescuable(w).rescue(address(usd_));
         assertEq(usd_.balanceOf(TO_), 30, "the surplus only");
         assertEq(usd_.balanceOf(w), 100);
-        assertTrue(MetaTokenBase(w).supportsInterface(type(IRescuable).interfaceId));
+        assertTrue(NormalToken(w).supportsInterface(type(IRescuable).interfaceId));
     }
 }
 

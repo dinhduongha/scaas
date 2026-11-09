@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {UACall} from "../ua/UACall.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -79,14 +81,14 @@ abstract contract PayRigBase is Test {
     }
 
     function _sigOf(address t, MetaTxLib.UAMetaTransfer memory x) internal view returns (IUARegistry.UASig memory) {
-        return UACall.auth(x.from, _ecdsa(PK, MetaTokenBase(t).mtxTransferDigest(x)));
+        return UACall.auth(x.from, _ecdsa(PK, NormalToken(t).mtxTransferDigest(x)));
     }
 
     /// `mtxPay(x, sig, m)` from `REL`.
     function _pay(address t, MetaTxLib.UAMetaTransfer memory x, MetaTxLib.PayMeta memory m) internal {
         IUARegistry.UASig memory a = _sigOf(t, x);
         vm.prank(REL);
-        MetaTokenBase(t).mtxPay(x, a, m);
+        NormalToken(t).mtxPay(x, a, m);
     }
 
     /// The index of the first log of `t` with `topic0` from `start`; reverts when there is none.
@@ -117,13 +119,13 @@ contract PayMetaTest is PayRigBase {
             address t = toks[i];
             uint256 snap = vm.snapshotState();
             _pay(t, _ut(PayMetaKit.id(m), 7, 0), m);
-            assertEq(MetaTokenBase(t).balanceOf(PAYEE), AMOUNT, kinds[i]);
+            assertEq(NormalToken(t).balanceOf(PAYEE), AMOUNT, kinds[i]);
             vm.revertToState(snap);
             MetaTxLib.UAMetaTransfer memory x = _ut(PayMetaKit.id(bad), 7, 0);
             IUARegistry.UASig memory a = _sigOf(t, x);
             vm.prank(REL);
             vm.expectRevert(err);
-            MetaTokenBase(t).mtxPay(x, a, bad);
+            NormalToken(t).mtxPay(x, a, bad);
         }
     }
 
@@ -187,7 +189,7 @@ contract PayMetaTest is PayRigBase {
                 vm.prank(REL);
                 vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, x.entryRef,
                     PayMetaKit.id(sent)));
-                MetaTokenBase(t).mtxPay(x, s, sent);
+                NormalToken(t).mtxPay(x, s, sent);
                 _pay(t, x, signed); // control
             }
         }
@@ -205,7 +207,7 @@ contract PayMetaTest is PayRigBase {
             IUARegistry.UASig memory s = _sigOf(t, x);
             vm.prank(REL);
             vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, x.entryRef, PayMetaKit.id(b)));
-            MetaTokenBase(t).mtxPay(x, s, b);
+            NormalToken(t).mtxPay(x, s, b);
             _pay(t, x, a); // control
         }
     }
@@ -226,8 +228,8 @@ contract PayMetaTest is PayRigBase {
                 IUARegistry.UASig memory s = _sigOf(t, x);
                 vm.prank(REL);
                 vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, old[j], PayMetaKit.id(m)));
-                MetaTokenBase(t).mtxPay(x, s, m);
-                assertEq(MetaTokenBase(t).metaPayId(m), PayMetaKit.id(m), kinds[i]);
+                NormalToken(t).mtxPay(x, s, m);
+                assertEq(NormalToken(t).metaPayId(m), PayMetaKit.id(m), kinds[i]);
             }
         }
     }
@@ -238,7 +240,7 @@ contract PayMetaTest is PayRigBase {
             address t = toks[i];
             MetaTxLib.PayMeta memory m = _meta(100 + i);
             MetaTxLib.UAMetaTransfer memory x = _ut(PayMetaKit.id(m), 9, 0);
-            bytes32 d = MetaTokenBase(t).mtxTransferDigest(x);
+            bytes32 d = NormalToken(t).mtxTransferDigest(x);
             vm.recordLogs();
             _pay(t, x, m);
             Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -255,7 +257,7 @@ contract PayMetaTest is PayRigBase {
             assertEq(uint256(logs[ex].topics[3]), 9, kinds[i]);
             assertEq(nonce, 0, kinds[i]);
             assertEq(digest, d, kinds[i]);
-            assertEq(MetaTokenBase(t).balanceOf(FEE_TO), FEE, kinds[i]);
+            assertEq(NormalToken(t).balanceOf(FEE_TO), FEE, kinds[i]);
         }
     }
 
@@ -270,7 +272,7 @@ contract PayMetaTest is PayRigBase {
             MetaTxLib.UAMetaTransfer memory x = _ut(PayMetaKit.id(m), 7, 0);
             IUARegistry.UASig memory s = _sigOf(t, x);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));
-            MetaTokenBase(t).mtxPay(x, s, m);
+            NormalToken(t).mtxPay(x, s, m);
         }
     }
 
@@ -281,11 +283,11 @@ contract PayMetaTest is PayRigBase {
             MetaTxLib.PayMeta memory m = _meta(500 + i);
             vm.prank(signer);
             vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, bytes32(0), PayMetaKit.id(m)));
-            MetaTokenBase(t).payWithFee(PAYEE, AMOUNT, FeeMode.NONE, 0, address(0), bytes32(0), m);
+            NormalToken(t).payWithFee(PAYEE, AMOUNT, FeeMode.NONE, 0, address(0), bytes32(0), m);
             vm.recordLogs();
             vm.prank(signer);
-            MetaTokenBase(t).payWithFee(PAYEE, AMOUNT, FeeMode.NONE, 0, address(0), PayMetaKit.id(m), m);
-            assertEq(MetaTokenBase(t).balanceOf(PAYEE), AMOUNT, kinds[i]);
+            NormalToken(t).payWithFee(PAYEE, AMOUNT, FeeMode.NONE, 0, address(0), PayMetaKit.id(m), m);
+            assertEq(NormalToken(t).balanceOf(PAYEE), AMOUNT, kinds[i]);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             assertEq(_count(logs, t, IMetaTokenV2.PaymentMeta.selector), 1, kinds[i]);
         }
@@ -371,23 +373,23 @@ contract PayMetaTest is PayRigBase {
             bytes32 payId = vm.parseJsonBytes32(f, string.concat(p, ".payId"));
             assertEq(payId, PayMetaKit.id(m), "payId formula");
             assertEq(vm.parseJsonBool(f, string.concat(p, ".accepted")), _accepted(m), "accepted");
-            for (uint256 k; k < toks.length; ++k) assertEq(MetaTokenBase(toks[k]).metaPayId(m), payId, kinds[k]);
+            for (uint256 k; k < toks.length; ++k) assertEq(NormalToken(toks[k]).metaPayId(m), payId, kinds[k]);
             // each row submitted: an accepted row lands with its `PaymentMeta` (and its record when saved), the refused one
             // by name
             MetaTxLib.UAMetaTransfer memory x = _ut(payId, 11, i);
             IUARegistry.UASig memory s = _sigOf(t, x);
-            uint256 before = MetaTokenBase(t).paymentCount(m.payNo);
+            uint256 before = NormalToken(t).paymentCount(m.payNo);
             if (!_accepted(m)) {
                 vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaShape.selector));
                 vm.prank(REL);
-                MetaTokenBase(t).mtxPay(x, s, m);
+                NormalToken(t).mtxPay(x, s, m);
                 vm.prank(REL);
-                MetaTokenBase(t).mtxExecuteTransfer(x, s); // the refused row consumed nothing: nonce `i` still free
+                NormalToken(t).mtxExecuteTransfer(x, s); // the refused row consumed nothing: nonce `i` still free
             } else {
                 vm.prank(REL);
-                MetaTokenBase(t).mtxPay(x, s, m);
+                NormalToken(t).mtxPay(x, s, m);
             }
-            assertEq(MetaTokenBase(t).paymentCount(m.payNo), before + (m.save && _accepted(m) ? 1 : 0), "record");
+            assertEq(NormalToken(t).paymentCount(m.payNo), before + (m.save && _accepted(m) ? 1 : 0), "record");
             if (vm.keyExistsJson(f, string.concat(p, ".payNoUuid"))) {
                 assertEq(m.payNo, ROW_UUID, "the UUIDv7 right-aligned");
                 assertEq(vm.parseJsonString(f, string.concat(p, ".payNoUuid")), ROW_UUID_TEXT, "its text");

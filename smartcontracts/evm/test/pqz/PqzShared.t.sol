@@ -81,7 +81,7 @@ contract PqzSharedTest is PqzFixture {
     /// The unshield-unwrap to a UA pays it in a SCaaS ledger leg (`transferToUA`); an outside ERC-20 leg reverts
     /// `UALegNotLedger`.
     function test_unshieldUnwrap_toUA() public {
-        PqzLayer legTok = _newToken("leg");
+        NormalPqzToken legTok = _newToken("leg");
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         _releaseWrapped();
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
@@ -105,7 +105,7 @@ contract PqzSharedTest is PqzFixture {
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usd)));
         w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(usd), fan, 10, 0), hex"c0de", _pqAuth(), "", noVerdict());
         // the UA allowlist of the kind: not `mtxWrapShield` (a UA wrap-shields in two steps)
-        _uaRefused(PqzLayer(address(w)), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), SCALE, alice)));
+        _uaRefused(NormalPqzToken(address(w)), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), SCALE, alice)));
         (bytes4[] memory s, uint8[] memory cl,) = w.mtxSelectors();
         bytes4[18] memory want = [
             IMetaTx.cancelNonce.selector, bytes4(keccak256("wrap(uint256)")), bytes4(keccak256("unwrap(uint256,address,uint256)")),
@@ -125,7 +125,7 @@ contract PqzSharedTest is PqzFixture {
 
     // ------------------------------------------------------------------ allow-lists
 
-    function _uaRefused(PqzLayer t, bytes memory data) internal {
+    function _uaRefused(NormalPqzToken t, bytes memory data) internal {
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fan;
         m.data = data;

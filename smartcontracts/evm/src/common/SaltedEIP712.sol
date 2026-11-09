@@ -16,7 +16,7 @@ import {ShortString, ShortStrings} from "@openzeppelin/contracts/utils/ShortStri
 ///         `_domainSeparatorV4` and `_chainUidRaw` with its clone's code (`_eip712DomainUnder`, `_separator`, `_chainUid`,
 ///         which reverts `ChainUidZero` on 0: the implementation builds no domain, Fable P2-1); the code of every other
 ///         contract is unchanged by the hook (`SmartKeyAccount` byte for byte).
-abstract contract SaltedEIP712 is IERC5267 {
+abstract contract SaltedEIP712Core {
     using ShortStrings for ShortString;
 
     /// @notice NET-ALL-22: `chain_uid` is a non-zero bytes32.
@@ -50,8 +50,7 @@ abstract contract SaltedEIP712 is IERC5267 {
         _cachedDomainSeparator = _buildDomainSeparator();
     }
 
-    function eip712Domain()
-        public view virtual returns (
+    function _eip712DomainBody() internal view virtual returns (
             bytes1 fields, string memory name, string memory version, uint256 chainId,
             address verifyingContract, bytes32 salt, uint256[] memory extensions
         )
@@ -99,5 +98,16 @@ abstract contract SaltedEIP712 is IERC5267 {
         )
     {
         return (hex"1f", _name.toString(), _version.toString(), block.chainid, address(this), salt, new uint256[](0));
+    }
+}
+
+/// @notice `SaltedEIP712Core` with its external entries, each calling its body (T66b, spec 2026-11-09-t66b-library-organisation.md §4.4):
+///         the form its non-token users inherit, ABI and modifiers unchanged. UNAUDITED.
+abstract contract SaltedEIP712 is SaltedEIP712Core, IERC5267 {
+    function eip712Domain() public view virtual override returns (
+            bytes1 fields, string memory name, string memory version, uint256 chainId,
+            address verifyingContract, bytes32 salt, uint256[] memory extensions
+        ) {
+        return _eip712DomainBody();
     }
 }

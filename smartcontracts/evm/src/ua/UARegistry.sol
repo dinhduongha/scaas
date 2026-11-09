@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {SaltedEIP712} from "../common/SaltedEIP712.sol";
+import {SaltedEIP712, SaltedEIP712Core} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 import {IUARegistry} from "./IUARegistry.sol";
@@ -168,7 +168,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         address smartKeyAccountImpl_,
         bool msig_,
         KindConfig[] memory kinds_
-    ) SaltedEIP712("SCaaS UARegistry", predecessor_ == address(0) ? "1" : "2", chainUid_) {
+    ) SaltedEIP712Core("SCaaS UARegistry", predecessor_ == address(0) ? "1" : "2", chainUid_) {
         if (verifyBudget_ == 0 || (smartKeyAccountImpl_ != address(0) && !SigCheck.isContract(smartKeyAccountImpl_))) {
             revert UAConfig(0);
         }

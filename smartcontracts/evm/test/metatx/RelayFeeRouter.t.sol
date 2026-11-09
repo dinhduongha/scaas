@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -86,7 +88,7 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
         ml = _mldsaUA(7);
         tok.mintToUA(ml, 1_000);
@@ -628,7 +630,7 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         assertEq(target.count(bob), 0, "the call rolled back");
         assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 0);
 
-        NormalToken tok2 = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
+        NormalToken tok2 = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
         tok2.initialize(nid(address(this)), 1, abi.encode(normalInit("Other", "OTH", 6, 1_000_000, alice, address(this))));
         bytes memory s = _sig(t);
         vm.prank(REL);

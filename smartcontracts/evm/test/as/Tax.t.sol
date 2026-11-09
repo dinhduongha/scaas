@@ -245,7 +245,7 @@ contract TaxTest is RegFixture {
     /// alice -> bob `v` on lane 5, relayer bound, `PayMetaKit.meta(seed)`.
     function _tx(address t, bytes32 seed, uint256 v) internal view returns (MetaTxLib.UAMetaTransfer memory x) {
         x = MetaTxLib.UAMetaTransfer(nid(alice), nid(bob), v, PayMetaKit.ref(seed), 5,
-            MetaTokenBase(t).mtxNonce(nid(alice), 5), block.timestamp + 300, RR, relayer, 0, address(0));
+            NormalToken(t).mtxNonce(nid(alice), 5), block.timestamp + 300, RR, relayer, 0, address(0));
     }
 
     function _taxDigest(address t, MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax) internal view returns (bytes32) {
@@ -492,7 +492,7 @@ contract TaxTest is RegFixture {
         vm.roll(301);
         vm.prank(alice);
         IRegulatedToken(t8t).payWithTax(nid(bob), V, 2, 30, PayMetaKit.id(d), d);
-        MetaTxLib.PayRecord[] memory r = MetaTokenBase(t8t).paymentsOf(no, 0, 5);
+        MetaTxLib.PayRecord[] memory r = NormalToken(t8t).paymentsOf(no, 0, 5);
         assertEq(r.length, 2);
         assertEq(r[0].to, nid(bob));
         assertEq(r[0].amount, V - 100);
@@ -503,8 +503,8 @@ contract TaxTest is RegFixture {
         assertEq(IERC20(t8t).balanceOf(bob), 2 * V - 130);
         _payTax(t8t, "rec3", V, 1, 100, ""); // `PayMetaKit.meta`: `save` off
         _direct(t8t, nid(bob), V, 2, 1, "rec4", "");
-        assertEq(MetaTokenBase(t8t).paymentCount(no), 2);
-        assertEq(MetaTokenBase(t8t).paymentCount(0), 0);
+        assertEq(NormalToken(t8t).paymentCount(no), 2);
+        assertEq(NormalToken(t8t).paymentCount(0), 0);
     }
 
     function _direct(address t, bytes32 to, uint256 v, uint8 mode, uint256 tax, bytes32 seed, bytes memory err) internal {

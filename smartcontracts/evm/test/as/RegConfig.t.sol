@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -52,9 +54,9 @@ abstract contract RegRows is Test {
         IFactoryToken.RegulatedParams memory none;
         c.reg = none;
         address t = f.createToken(kind, 1, abi.encode(c), "ok");
-        assertEq(MetaTokenBase(t).kind(), uint8(kind));
+        assertEq(NormalToken(t).kind(), uint8(kind));
         // plan T28 (M-10): a plain kind 0-5 does not answer `IRegulatedToken`
-        assertFalse(MetaTokenBase(t).supportsInterface(type(IRegulatedToken).interfaceId), "IRegulatedToken on a plain kind");
+        assertFalse(NormalToken(t).supportsInterface(type(IRegulatedToken).interfaceId), "IRegulatedToken on a plain kind");
     }
 
     /// The kind byte `init` wrote in `scaas.token` (creator 20 B, version 8 B, then kind).
@@ -69,7 +71,7 @@ abstract contract RegRows is Test {
     function _init(address impl, address fac, IFactoryToken.TokenConfig memory c) internal returns (address t) {
         t = EnvKit.clone(impl, _cloneEnv());
         vm.prank(fac);
-        MetaTokenBase(t).initialize(nid(address(this)), 1, abi.encode(c));
+        NormalToken(t).initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     /// `_init` expecting `err`.
@@ -77,7 +79,7 @@ abstract contract RegRows is Test {
         address t = EnvKit.clone(impl, _cloneEnv());
         vm.prank(fac);
         vm.expectRevert(err);
-        MetaTokenBase(t).initialize(nid(address(this)), 1, abi.encode(c));
+        NormalToken(t).initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     /// The three refusals and the stored kind that only the token's own kind id and masks give (`Masked*` below), each
@@ -85,7 +87,7 @@ abstract contract RegRows is Test {
     function _takesKindMasks(address real, address masked, address fac, IFactoryToken.TokenConfig memory c, uint8 kindId)
         internal
     {
-        assertEq(_storedKind(_init(real, fac, c)), MetaTokenBase(real).kind());
+        assertEq(_storedKind(_init(real, fac, c)), NormalToken(real).kind());
         assertEq(_storedKind(_init(masked, fac, c)), kindId);
         IFactoryToken.TokenConfig memory x = c; // the same memory: `c` is not read after this line
         x.features = 1 << GovernanceBits.PAYABLE; // outside the masked kind's valid bits
@@ -213,7 +215,7 @@ contract RegConfigZetherTest is ZetherFixture, RegRows {
     }
 
     function test_wrappedZetherInitTakesKindMasks() public {
-        address real = address(new WrappedZetherToken(address(factory), ""));
+        address real = address(new WrappedZetherToken(address(factory), kindArgs(3, address(factory), "")));
         address masked = address(new MaskedWrappedZether(address(factory), ""));
         _takesKindMasks(real, masked, address(factory), _wrapped(), TokenStore.KIND_WRAPPED_ZETHER_REGULATED);
     }
@@ -254,7 +256,7 @@ contract RegConfigPqzTest is PqzFixture, RegRows {
     }
 
     function test_wrappedPqzInitTakesKindMasks() public {
-        address real = address(new WrappedPqzToken(address(factory), ""));
+        address real = address(new WrappedPqzToken(address(factory), kindArgs(5, address(factory), "")));
         address masked = address(new MaskedWrappedPqz(address(factory), ""));
         _takesKindMasks(real, masked, address(factory), _wrapped(), TokenStore.KIND_WRAPPED_PQZ_REGULATED);
     }

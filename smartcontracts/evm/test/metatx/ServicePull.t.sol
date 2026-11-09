@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {UALedgerBase} from "../ua/UALedgerBase.sol";
@@ -218,7 +220,7 @@ contract ServicePullTest is UALedgerBase {
         vm.etch(HAS, type(MockHederaAccountService).runtimeCode);
         address ha = address(uint160(1_234_567));
         MockHederaAccountService(HAS).setEdKey(ha, vm.addr(0xA11CE5));
-        NormalToken h = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), true)));
+        NormalToken h = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), true)));
         h.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 5_000, ha, address(this))));
         RefServiceEscrow sh = new RefServiceEscrow(address(h));
         RefServiceEscrow.Deposit memory op = _dep(_pad(ha), "hedera");
@@ -540,7 +542,7 @@ contract ServicePullTest is UALedgerBase {
 
     /// N15: a derived payer on a token with the UA ledger off.
     function test_N15_derivedLedgerOff() public {
-        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         RefServiceEscrow so = new RefServiceEscrow(address(off));
         RefServiceEscrow.Deposit memory c = _dep(_pad(alice), "n15c");
@@ -636,11 +638,11 @@ contract ServicePullRegTest is RegFixture {
         internal view returns (MetaTxLib.UAMetaTransfer memory)
     {
         return spPull(op.payer, address(svc), op.amount, spDepositRef(address(svc), block.chainid, op), LANE,
-            MetaTokenBase(t).mtxNonce(op.payer, LANE), block.timestamp + 300);
+            NormalToken(t).mtxNonce(op.payer, LANE), block.timestamp + 300);
     }
 
     function _sigOf(uint256 pk, address t, MetaTxLib.UAMetaTransfer memory x) internal view returns (IUARegistry.UASig memory a) {
-        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, MetaTokenBase(t).mtxTransferDigest(x));
+        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, NormalToken(t).mtxTransferDigest(x));
         a.signature = abi.encodePacked(r, ss, v);
     }
 
@@ -725,10 +727,10 @@ contract ServicePullRegTest is RegFixture {
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "sp-op");
         address clerk = address(0xC1E2);
         vm.prank(ownerA);
-        MetaTokenBase(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk));
+        NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk));
         vm.warp(block.timestamp + GD);
         vm.prank(ownerA);
-        MetaTokenBase(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk));
+        NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk));
         RefServiceEscrow svc = new RefServiceEscrow(t);
         _deposit(ALICE_PK, svc, _dep(alice, "e"));
         vm.prank(clerk);

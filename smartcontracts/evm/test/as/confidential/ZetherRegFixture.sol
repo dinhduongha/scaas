@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../../src/zether/NormalZetherToken.sol";
+
 import {ZetherNamedBase, typedDigest, multiJson, singleJson, T_G1, T_LEG, T_MULTI, T_SINGLE} from "../../zether/ZetherTyped.t.sol";
 import {Holder} from "../helpers/RegFixture.sol";
 import {MockERC20} from "../../helpers/Mocks.sol";
@@ -124,12 +126,12 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         return _isWrapped() ? IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED : IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED;
     }
 
-    function _newToken(bool auditor, bytes32 s, uint256 maxShielded) internal override returns (ZetherLayer) {
-        return ZetherLayer(factory.createToken(_kind(), 1, abi.encode(_regCfg(auditor, maxShielded)), s));
+    function _newToken(bool auditor, bytes32 s, uint256 maxShielded) internal override returns (NormalZetherToken) {
+        return NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(_regCfg(auditor, maxShielded)), s));
     }
 
     /// Kind 10: a mint; kind 11: a 1:1 wrap of `usd` by this test, then a transfer.
-    function _public(ZetherLayer t, address to, uint256 units) internal override {
+    function _public(NormalZetherToken t, address to, uint256 units) internal override {
         if (!_isWrapped()) return super._public(t, to, units);
         usd.mint(address(this), units);
         usd.approve(address(t), units);

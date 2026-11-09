@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {noVerdict} from "../../pqz/helpers/PqzVerdicts.sol";
 import {PqzRegFixture} from "./PqzRegFixture.sol";
@@ -48,7 +50,7 @@ abstract contract PqzVerdictKinds is PqzRegFixture {
     }
 
     function _sepOf(address t) internal view returns (bytes32) {
-        (, string memory n, string memory ver, uint256 cid, address vc, bytes32 salt_,) = PqzLayer(t).eip712Domain();
+        (, string memory n, string memory ver, uint256 cid, address vc, bytes32 salt_,) = NormalPqzToken(t).eip712Domain();
         return keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
             keccak256(bytes(n)), keccak256(bytes(ver)), cid, vc, salt_));
@@ -68,7 +70,7 @@ abstract contract PqzVerdictKinds is PqzRegFixture {
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, nid(vm.addr(VKEY)), false);
         IFactoryToken.TokenConfig memory c = _regCfg();
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        tok = PqzLayer(factory.createToken(_kind(), 1, abi.encode(c), "pr-off"));
+        tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(c), "pr-off"));
         w = WrappedPqzToken(payable(address(tok)));
     }
 

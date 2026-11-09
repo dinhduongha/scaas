@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
+
 import {noVerdict} from "../helpers/PqzVerdicts.sol";
 import {PqzFixture} from "../helpers/PqzFixture.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
@@ -31,7 +33,7 @@ contract PqzVerHandler is PqzFixture {
     uint256 public downs; // J3: current went down
     uint256 internal nonce = 1;
 
-    constructor(PqzLayer t, UARegistry r, bytes32[] memory u) {
+    constructor(NormalPqzToken t, UARegistry r, bytes32[] memory u) {
         (tok, reg, uas) = (t, r, u);
     }
 

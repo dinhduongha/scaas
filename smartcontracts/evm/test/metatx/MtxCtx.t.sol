@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -79,7 +81,7 @@ contract MtxCtxTest is PqzRegistryBase {
     }
 
     function _token(address ska, bool hedera) internal returns (NormalToken t) {
-        NormalToken impl = new NormalToken(address(this), "");
+        NormalToken impl = new NormalToken(address(this), kindArgs(0, address(this), ""));
         t = NormalToken(EnvKit.clone(address(impl), EnvKit.env(PQZ_UID, address(reg), ska, hedera)));
         t.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
     }
@@ -260,8 +262,8 @@ contract MtxCtxTest is PqzRegistryBase {
         assertEq(n, 7, "NORMAL, WRAPPED, NORMAL_LEDGEROFF, NORMAL_PQZ, WRAPPED_PQZ, NORMAL_ZETHER, WRAPPED_ZETHER");
         _checkCtx(address(tok), "NONE+SKA");
         _checkCtx(address(htok), "NONE+HEDERA");
-        assertTrue(MetaTokenBase(address(tok)).SMART_KEY_ACCOUNT_IMPL() != address(0));
-        assertTrue(MetaTokenBase(address(htok)).IS_HEDERA());
+        assertTrue(NormalToken(address(tok)).SMART_KEY_ACCOUNT_IMPL() != address(0));
+        assertTrue(NormalToken(address(htok)).IS_HEDERA());
     }
 
     function _checkCtx(address t, string memory kind) internal {
@@ -274,7 +276,7 @@ contract MtxCtxTest is PqzRegistryBase {
             (MetaTxLib.MetaTransaction(address(0), "", 0, 0, 0, 0, address(0), 0, address(0)), "")),
             MtxPipelineLib.preCall.selector);
         assertEq(keccak256(abi.encode(c)), keccak256(abi.encode(c2)), string.concat(kind, ": one Ctx on every path"));
-        MetaTokenBase k = MetaTokenBase(t);
+        NormalToken k = NormalToken(t);
         assertEq(c.domainSeparator, _separator(t), string.concat(kind, ": domainSeparator"));
         assertEq(c.registry, k.registry(), string.concat(kind, ": registry"));
         address ska = k.SMART_KEY_ACCOUNT_IMPL();
@@ -292,7 +294,7 @@ contract MtxCtxTest is PqzRegistryBase {
     /// The separator of `t`'s `eip712Domain()` (ERC-5267).
     function _separator(address t) internal view returns (bytes32) {
         (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) =
-            MetaTokenBase(t).eip712Domain();
+            NormalToken(t).eip712Domain();
         assertEq(vc, t);
         return keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
     }
@@ -312,10 +314,10 @@ contract MtxCtxTest is PqzRegistryBase {
         // metatx_kat.json / metatransfer_kat.json (ua-mtx-merge T2): the token's own views
         j = vm.readFile("test/vectors/metatx_kat.json");
         at = _etchNormal(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 7622);
-        assertEq(MetaTokenBase(at).mtxDigest(_katUaTx(j)), vm.parseJsonBytes32(j, ".digest"), "metatx_kat");
+        assertEq(NormalToken(at).mtxDigest(_katUaTx(j)), vm.parseJsonBytes32(j, ".digest"), "metatx_kat");
         j = vm.readFile("test/vectors/metatransfer_kat.json");
         assertEq(vm.parseJsonAddress(j, ".verifying_contract"), at);
-        assertEq(MetaTokenBase(at).mtxTransferDigest(_katTransfer(j)), vm.parseJsonBytes32(j, ".digest"), "metatransfer_kat");
+        assertEq(NormalToken(at).mtxTransferDigest(_katTransfer(j)), vm.parseJsonBytes32(j, ".digest"), "metatransfer_kat");
 
         // clientkeys' UA vectors (metatx3.json, context A)
         j = vm.readFile("../vectors/ua/metatx3.json");
@@ -331,7 +333,7 @@ contract MtxCtxTest is PqzRegistryBase {
         at = vm.parseJsonAddress(j, ".token");
         vm.etch(at, zs[0].code); // the rig's clone with its env
         vm.chainId(vm.parseJsonUint(j, ".chainId"));
-        assertEq(vm.parseJsonBytes32(j, ".chainUid"), MetaTokenBase(zs[0]).chainUid());
+        assertEq(vm.parseJsonBytes32(j, ".chainUid"), NormalToken(zs[0]).chainUid());
         assertEq(MtxDigest.metaTx(at, _envelopeTx(j)), vm.parseJsonBytes32(j, ".digest"), "zether-prover envelope");
     }
 
@@ -396,7 +398,7 @@ contract MtxCtxTest is PqzRegistryBase {
         for (; vm.keyExistsJson(j, string.concat(list, vm.toString(n), "]")); ++n) {
             string memory r = string.concat(list, vm.toString(n), "].");
             string memory p = string.concat(r, "typedData.message.");
-            bytes32 got = transfer ? MetaTokenBase(at).mtxTransferDigest(_ut3(j, p)) : MetaTokenBase(at).mtxDigest(_um3(j, p));
+            bytes32 got = transfer ? NormalToken(at).mtxTransferDigest(_ut3(j, p)) : NormalToken(at).mtxDigest(_um3(j, p));
             assertEq(got, vm.parseJsonBytes32(j, string.concat(r, "digest")), string.concat("metatx3 ", list));
         }
     }
@@ -429,7 +431,7 @@ contract MtxCtxTest is PqzRegistryBase {
 
     function _etchNormal(address at, bytes32 uid, uint256 chainId) internal returns (address) {
         vm.chainId(chainId);
-        NormalToken impl = new NormalToken(address(this), "");
+        NormalToken impl = new NormalToken(address(this), kindArgs(0, address(this), ""));
         vm.etch(at, EnvKit.runtime(address(impl), EnvKit.env(uid, address(0), address(0), false)));
         return at;
     }

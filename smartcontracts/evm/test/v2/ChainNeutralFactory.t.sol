@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -238,7 +240,7 @@ contract ChainNeutralFactoryTest is Test {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, t));
         f.createToken(NORMAL, 2, _cfg(alice), "same");
-        NormalToken mine = new NormalToken(address(f), "");
+        NormalToken mine = new NormalToken(address(f), kindArgs(0, address(f), ""));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, t));
         f.createTokenUnregistered(NORMAL, address(mine), _cfg(alice), "same");

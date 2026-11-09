@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {noVerdict} from "../pqz/helpers/PqzVerdicts.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -64,7 +66,7 @@ contract GovHybridTest is UALedgerBase {
     }
 
     function _clone() internal returns (WrappedToken) {
-        if (impl == address(0)) impl = address(new WrappedToken(address(this), ""));
+        if (impl == address(0)) impl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         return WrappedToken(payable(EnvKit.clone(impl, EnvKit.env(chainUidA, REG_L, address(0), false))));
     }
 

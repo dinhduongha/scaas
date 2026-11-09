@@ -7,11 +7,11 @@ import {ERC20MetaTx} from "./ERC20MetaTx.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {TokenStore} from "./TokenStore.sol";
-import {GovernanceBase} from "../governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceBaseCore} from "../governance/GovernanceBase.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {IRescuable} from "../governance/IRescuable.sol";
 import {IMetaTx} from "./IMetaTx.sol";
-import {MetaTxBase} from "./MetaTxBase.sol";
+import {MetaTxBase, MetaTxBaseCore} from "./MetaTxBase.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
@@ -35,7 +35,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         Hedera, the dependencies) are the instance's `ChainEnv`, appended to its clone's code by the factory and read
 ///         from there (`ChainEnvCode`); the implementation reads an all-zero env and can sign nothing. Hedera
 ///         (`IS_HEDERA()`, CTR-TOK-23): HIP-632 signatures through `MtxPipelineLib` (which calls `HederaLib`).
-abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, GovernanceBase, IRescuable {
+abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     /// @dev Pay-meta-tax spec §4 (O4): the payer's own lane `(from, batch)` and `nonce`; the struct without them is in
     ///      legacy/ua-mtx-merge/3e/.
     bytes32 private constant UA_RELAY_FEE_TYPEHASH = keccak256(
@@ -51,11 +51,24 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     error MtxModeShape(uint32 mode);
     /// @notice Wrong underlying count for the tier (0 / 1 / 2–8).
     error UnderlyingCountInvalid(uint256 n);
+    /// @notice T66b (spec 2026-11-09-t66b-library-organisation.md §4.5): module `i` of `implArgs` has no code.
+    error ModuleMissing(uint256 i);
+    /// @notice Module `i` is of another kind, group, factory, registry code hash or PQZ set (§4.5, Fable P2-1, P2-A).
+    error ModuleMismatch(uint256 i);
+    /// @notice A module-face entry called other than by DELEGATECALL from its token (M2).
+    error NotDelegated();
+
+    /// @dev M2: a body module's entry runs only by DELEGATECALL from a token's stub; called directly, `address(this)` is the
+    ///      module itself (`_SELF`, its own immutable), and it reverts.
+    modifier onlyDelegated() {
+        if (address(this) == _SELF) revert NotDelegated();
+        _;
+    }
 
     /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. Chain-neutral (chain-neutral spec
     ///      §2.1, plan T72): the factory's address and `implArgs` (values the same on every chain; plain kinds take none)
     ///      are the only arguments `OpenFactory.deployImplementation` appends.
-    constructor(address factory_) ERC20MetaTx(bytes32(0), address(0), address(0), false) GovernanceBase(address(0)) {
+    constructor(address factory_) ERC20MetaTx(bytes32(0), address(0), address(0), false) GovernanceBaseCore(address(0)) {
         FACTORY = factory_;
         _SELF = address(this);
         TokenStore.$().initialized = true;
@@ -65,7 +78,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     ///         (`EnvMissing`, Fable P3-4). `creatorId` the creator's UA id; `creator()` keeps an address, 0 for a derived
     ///         creator (whose id is in the factory's record; spec §4.4, Fable P2-3). `initArgs = abi.encode(TokenConfig)`
     ///         (the kinds of this repository). The registry's `chain_uid` is the factory's check, once per env (P3-1).
-    function initialize(bytes32 creatorId_, uint64 version_, bytes calldata initArgs) external {
+    function _initializeBody(bytes32 creatorId_, uint64 version_, bytes calldata initArgs) internal {
         if (msg.sender != FACTORY) revert NotFactory();
         ChainEnvCode.requirePresent();
         TokenStore.TokenStorage storage t = TokenStore.$();
@@ -79,12 +92,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     // ------------------------------------------------------------------ the chain environment (CTR-TOK-29)
 
     /// @notice This instance's env, decoded from its code; all zero on the implementation.
-    function chainEnv() external view returns (ChainEnv memory) {
+    function _chainEnvBody() internal view returns (IFactoryToken.ChainEnv memory) {
         return ChainEnvCode.decode();
     }
 
     /// @notice The kind's checks of an env, by the factory at release deployment (the constructor checks of before).
-    function validateEnv(ChainEnv calldata env) external view {
+    function _validateEnvBody(IFactoryToken.ChainEnv calldata env) internal view {
         _validateEnv(env);
     }
 
@@ -95,17 +108,17 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     }
 
     /// @dev Plain kinds check nothing; a confidential layer overrides it (its library holds the body).
-    function _validateEnv(ChainEnv calldata env) internal view virtual {}
+    function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view virtual {}
 
     function _chainUidInCode() internal pure override returns (bool) { return true; }
 
     function _chainUidRaw() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
 
     /// @notice This instance's `chain_uid`; 0 on the implementation (a view: no revert).
-    function chainUid() external view override(IMetaTx, MetaTxBase) returns (bytes32) { return ChainEnvCode.chainUid(); }
+    function chainUid() external view  returns (bytes32) { return ChainEnvCode.chainUid(); }
 
     /// @notice ERC-5267 under the clone's `chain_uid` (`ChainUidZero` on the implementation): the salt every digest uses.
-    function eip712Domain() public view override returns (
+    function _eip712DomainBody() internal view override returns (
         bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory
     ) {
         return _eip712DomainUnder(_chainUid());
@@ -131,31 +144,31 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     }
 
     /// @notice No underlying (the `NORMAL*` kinds); `WrappedToken` lists its legs. Read by the factory's index.
-    function underlyings() public view virtual returns (address[] memory us) {}
+    function _underlyingsBody() internal view virtual returns (address[] memory us) {}
 
     /// @dev The kind checks its fields of `cfg` (`ConfigFieldForOtherKind` for another kind's), calls `_setMetadata`
     ///      and `GovernanceLib.init`.
-    function _init(TokenConfig memory cfg) internal virtual;
+    function _init(IFactoryToken.TokenConfig memory cfg) internal virtual;
 
     /// @dev `_init` of the decoded config; a kind near the size ceiling hands the raw bytes to a library instead, so no
     ///      `TokenConfig` coder stays in it (`ZetherWrappedLib`, size lever 1, owner 2026-11-01).
     function _initRaw(bytes calldata initArgs) internal virtual {
-        _init(abi.decode(initArgs, (TokenConfig)));
+        _init(abi.decode(initArgs, (IFactoryToken.TokenConfig)));
     }
 
     /// @dev `ConfigFieldForOtherKind` for a set field the kind does not use; `conf` is used only by `*_ZETHER`; `maxSupply`
     ///      only by `WRAPPED*`, as `legs`; `reg` only by the regulated kinds (`requireRegOfKind` on `kind()`).
-    function _requireUnused(TokenConfig memory cfg, bool supply, bool legs, bool rate, bool conf) internal pure {
+    function _requireUnused(IFactoryToken.TokenConfig memory cfg, bool supply, bool legs, bool rate, bool conf) internal pure {
         requireRegOfKind(kind(), cfg.reg);
-        if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert ConfigFieldForOtherKind(1);
-        if (legs && cfg.legs.length != 0) revert ConfigFieldForOtherKind(2);
-        if (legs && cfg.maxSupply != 0) revert ConfigFieldForOtherKind(5);
-        if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert ConfigFieldForOtherKind(3);
-        ConfidentialConfig memory c = cfg.conf;
+        if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert IFactoryToken.ConfigFieldForOtherKind(1);
+        if (legs && cfg.legs.length != 0) revert IFactoryToken.ConfigFieldForOtherKind(2);
+        if (legs && cfg.maxSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
+        if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert IFactoryToken.ConfigFieldForOtherKind(3);
+        IFactoryToken.ConfidentialConfig memory c = cfg.conf;
         if (conf && (c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0
             || c.confidentialFee != 0 || c.disclosureMode != 0 || c.auditorMode != 0 || c.minDecoyFee != 0
             || c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0)) {
-            revert ConfigFieldForOtherKind(4);
+            revert IFactoryToken.ConfigFieldForOtherKind(4);
         }
     }
 
@@ -173,13 +186,63 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
 
     function factory() external view returns (address) { return FACTORY; }
     function implementation() external view returns (address) { return _SELF; }
-    function creator() external view returns (address) { return TokenStore.$().creator; }
-    function version() external view returns (uint64) { return TokenStore.$().version; }
+    function IS_HEDERA() external view returns (bool) { return _IS_HEDERABody(); }
+    function _creatorBody() internal view returns (address) { return TokenStore.$().creator; }
+    function _versionBody() internal view returns (uint64) { return TokenStore.$().version; }
     /// @notice CTR-TOK-21 kind: 0 `NORMAL`, 1 `WRAPPED`, 2 `NORMAL_ZETHER`, 3 `WRAPPED_ZETHER`; a constant of the
     ///         implementation, so the factory can check it before any clone exists.
     function kind() public pure virtual returns (uint8);
 
     // ------------------------------------------------------------------ features, owner, roles (CTR-TOK-22)
+
+    // ------------------------------------------------------------------ the forward stubs (T66b, spec §4.1 rule 2, S1, S2)
+
+    /// @dev S1: a guarded entry (today's `nonReentrant` or `governed`; on a token `_guardIn` is `_enter`): enter the one guard,
+    ///      DELEGATECALL this call's calldata to `module`, its revert data verbatim on failure (the revert undoes the enter), else
+    ///      exit the guard and return its return data verbatim. Never a modifier with an assembly return (Fable P1-1): its exit
+    ///      would not run, the guard would stay set for the rest of the transaction.
+    function _forward(address module) internal {
+        bool outer = _enter();
+        (bool ok, bytes memory ret) = module.delegatecall(msg.data);
+        if (!ok) {
+            assembly ("memory-safe") {
+                revert(add(ret, 32), mload(ret))
+            }
+        }
+        _exit(outer);
+        assembly ("memory-safe") {
+            return(add(ret, 32), mload(ret))
+        }
+    }
+
+    /// @dev S2: an unguarded entry: the same copy and return, no guard.
+    function _forwardRaw(address module) internal {
+        (bool ok, bytes memory ret) = module.delegatecall(msg.data);
+        assembly ("memory-safe") {
+            if iszero(ok) { revert(add(ret, 32), mload(ret)) }
+            return(add(ret, 32), mload(ret))
+        }
+    }
+
+    /// @dev S2: a `view` entry (the module's body writes nothing): `_forwardRaw` under the registry's R2 cast.
+    function _forwardView(address module) internal view {
+        function(address) f = _forwardRaw;
+        function(address) view v;
+        assembly ("memory-safe") {
+            v := f
+        }
+        v(module);
+    }
+
+    /// @dev S2: a `pure` entry, the same cast.
+    function _forwardPure(address module) internal pure {
+        function(address) f = _forwardRaw;
+        function(address) pure v;
+        assembly ("memory-safe") {
+            v := f
+        }
+        v(module);
+    }
 
     /// @dev One guard over every entry point (CTR-MTX-18), the role and owner functions too (W-Q).
     function _guardIn() internal override returns (bool) { return _enter(); }
@@ -195,7 +258,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function _uaRegistry() internal view override returns (address) { return _registry(); }
 
     /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is.
-    function supportsInterface(bytes4 id) public view virtual returns (bool) {
+    function _supportsInterfaceBody(bytes4 id) internal view virtual returns (bool) {
         return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
             || id == type(IERC20MetaTx).interfaceId || id == type(IGovernance).interfaceId
             || (id == type(IERC20Payment).interfaceId && GovernanceLib.hasFeature(GovernanceBits.PAYABLE))
@@ -205,28 +268,28 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
 
     /// @notice CTR-GOV-06 (spec §6.2): one direct entry on every kind, anyone, not allowlisted; `NORMAL*` pays the whole
     ///         balance (`GovernanceLib.rescue`), `WRAPPED*` overrides it with `WrappedLib.rescue`.
-    function rescue(address asset) external virtual nonReentrant {
+    function _rescueBody(address asset) internal virtual {
         GovernanceLib.rescue(asset);
     }
 
     /// @notice Immutable: set by `init` with bit 17, no writer after.
-    function rescueTo() external view returns (address) {
+    function _rescueToBody() internal view returns (address) {
         return GovernanceLib.$().rescueTo;
     }
 
     /// @notice A client convention, not enforced (pay-meta-tax spec O3): a client that wants one payment per request
     ///         signs on this lane at nonce 0; the contract does not care.
-    function payLane(bytes32 payId) public pure returns (uint256) {
+    function _payLaneBody(bytes32 payId) internal pure returns (uint256) {
         return uint256(keccak256(abi.encodePacked("scaas.pay.lane", payId)));
     }
 
     // ------------------------------------------------------------------ named functions (CTR-MTX-09, CTR-UA-26)
 
     /// @notice `mtxExecuteTransfer(UAMetaTransfer{from, to, amount, 0, batch, nonce, validUntil, mode, relayer, 0, 0})`.
-    function mtxTransfer(
+    function _mtxTransferBody(
         bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
         uint32 mode, address relayer, IUARegistry.UASig calldata auth
-    ) external nonReentrant returns (bool) {
+    ) internal returns (bool) {
         if (mode & ~MetaTxLib.MODE_RESTRICT_RELAYER != 0) revert MtxModeShape(mode);
         MetaTxLib.UAMetaTransfer memory t;
         t.from = from;
@@ -241,10 +304,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         return true;
     }
 
-    function mtxTransferWithFee(
+    function _mtxTransferWithFeeBody(
         bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
         uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth
-    ) external nonReentrant returns (bool) {
+    ) internal returns (bool) {
         _requireFeeShape(mode, feeRecipient);
         MetaTxLib.UAMetaTransfer memory t;
         t.from = from;
@@ -263,8 +326,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
 
     /// @notice The payment `t` with its metadata (CTR-MTX-10, CTR-MTX-26; pay-meta-tax spec §2.1): any lane, the nonce
     ///         space of `mtxExecuteTransfer` (O3); `t.entryRef == metaPayId(meta)` (O11), `PaymentMeta` first.
-    function mtxPay(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta)
-        external nonReentrant returns (bool)
+    function _mtxPayBody(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta) internal returns (bool)
     {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(t.entryRef, meta);
@@ -274,7 +336,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     }
 
     /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v3`.
-    function metaPayId(MetaTxLib.PayMeta calldata meta) public pure returns (bytes32) {
+    function _metaPayIdBody(MetaTxLib.PayMeta calldata meta) internal pure returns (bytes32) {
         return MtxPipelineLib.metaPayId(meta);
     }
 
@@ -291,21 +353,19 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     }
 
     /// @notice Plan T83: the stored payments of `payNo` (`PayMeta.save`); a confidential pay is never recorded.
-    function paymentCount(bytes32 payNo) external view returns (uint256) {
+    function _paymentCountBody(bytes32 payNo) internal view returns (uint256) {
         return MtxPipelineLib.paymentCount(payNo);
     }
 
     /// @notice Records `[offset, offset + limit)` of `payNo`, cut at the end; the reader filters `to` and adds up itself.
-    function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
-        external view returns (MetaTxLib.PayRecord[] memory)
+    function _paymentsOfBody(bytes32 payNo, uint256 offset, uint256 limit) internal view returns (MetaTxLib.PayRecord[] memory)
     {
         return MtxPipelineLib.paymentsOf(payNo, offset, limit);
     }
 
     // ------------------------------------------------------------------ receiver-pays (CTR-MTX-05, CTR-MTX-06)
 
-    function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
-        public view returns (bytes32)
+    function _receiverFeeDigestBody(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) internal view returns (bytes32)
     {
         return MtxPipelineLib.receiverFeeDigest(_domainSeparatorV4(), t, fee, feeRecipient, validUntil);
     }
@@ -315,11 +375,11 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     ///         HIP-632), a derived one through the registry under `receiver-fee` — and pays `fee` out of what it
     ///         received. A `UA_POOL` recipient is refused before any move (a move to the pool's address would credit its
     ///         slot with no UA balance behind it).
-    function mtxPayReceiverFee(
+    function _mtxPayReceiverFeeBody(
         MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
         uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth,
         MetaTxLib.PayMeta calldata meta
-    ) external nonReentrant returns (bool) {
+    ) internal returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(t.entryRef, meta); // `entryRef` ≠ 0 with it; any lane (spec §2.5, O3)
         _receiverFee(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth);
@@ -333,20 +393,20 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth
     ) private {
         if (t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0
-            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || feeRecipient == address(0)) revert ReceiverFeeShape();
-        if (block.timestamp > rfValidUntil) revert ReceiverFeeExpired(rfValidUntil, block.timestamp);
-        if (fee == 0 || fee > t.value) revert ReceiverFeeAmount(fee, t.value);
+            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || feeRecipient == address(0)) revert IMetaTokenV2.ReceiverFeeShape();
+        if (block.timestamp > rfValidUntil) revert IMetaTokenV2.ReceiverFeeExpired(rfValidUntil, block.timestamp);
+        if (fee == 0 || fee > t.value) revert IMetaTokenV2.ReceiverFeeAmount(fee, t.value);
         bytes32 to = MetaTxLib.pad(feeRecipient);
-        if (to == t.to) revert FeeRecipientIsPayee();
+        if (to == t.to) revert IERC20MetaTx.FeeRecipientIsPayee();
         // early only: without it the fee's `_uaMove` reverts the whole call with the same `TransferToSelf`
-        if (feeRecipient == address(this)) revert TransferToSelf();
-        if (feeRecipient == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+        if (feeRecipient == address(this)) revert IERC20MetaTx.TransferToSelf();
+        if (feeRecipient == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
         _regFeeTo(to, fee);
         bytes32 d = _uaExecuteTransfer(t, 0, payerAuth, 0, 0);
         MtxPipelineLib.authorize(_mtxCtx(), t.to, UAKinds.PURPOSE_RECEIVER_FEE,
-            receiverFeeDigest(t, fee, feeRecipient, rfValidUntil), payeeAuth);
+            _receiverFeeDigestBody(t, fee, feeRecipient, rfValidUntil), payeeAuth);
         _uaMove(t.to, to, fee);
-        emit UAReceiverFeePaid(d, t.to, feeRecipient, fee);
+        emit IMetaTokenV2.UAReceiverFeePaid(d, t.to, feeRecipient, fee);
     }
 
     // ------------------------------------------------------------------ relay fee (CTR-MTX-27, TS-D19)
@@ -355,9 +415,8 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     ///         `UARelayFee` with the router as `relayer`, so only the router's own call matches the signature; `payee`
     ///         gets `value` on the payer's lane `(from, batch)` at `nonce` (pay-meta-tax spec §4, O4: one signature runs
     ///         once, a call may be paid by several), fee `NONE`, `ref` = the router's `relayRef(target, callData)`.
-    function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch,
-        uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
-    {
+    function _mtxRelayFeeBody(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch,
+        uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) internal {
         _regFeeTo(payee, value);
         MetaTxLib.UAMetaTransfer memory t;
         t.from = from;
@@ -397,10 +456,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     // ------------------------------------------------------------------ direct path
 
     /// @notice The caller pays gas itself; the fee is on top, `amount` arrives whole; never to the payee (CTR-MTX-08).
-    function payWithFee(
+    function _payWithFeeBody(
         address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
         MetaTxLib.PayMeta calldata meta
-    ) external nonReentrant returns (bool) {
+    ) internal returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(entryRef, meta);
         address payer = _msgSender();
@@ -408,21 +467,21 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         FeePolicy.validateRecipient(feeMode, feeRecipient);
         _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);
         if (feeAmount != 0) {
-            if (feeRecipient == to) revert FeeRecipientIsPayee();
+            if (feeRecipient == to) revert IERC20MetaTx.FeeRecipientIsPayee();
             _transfer(payer, feeRecipient, feeAmount);
         }
         _transfer(payer, to, amount);
-        emit PaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+        emit IERC20Payment.PaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
         _payRecord(meta, MetaTxLib.pad(to), amount); // the fee is on top
         return true;
     }
 
     /// @notice `payWithFee` to a derived payee (CTR-UA-28): the caller pays `amount` into `to`'s UA balance and the fee
     ///         on top to `feeRecipient` (an address: never the payee; `UA_POOL` and the token are refused by `_update`).
-    function payWithFeeToUA(
+    function _payWithFeeToUABody(
         bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
         MetaTxLib.PayMeta calldata meta
-    ) external nonReentrant returns (bool) {
+    ) internal returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(entryRef, meta);
         _requireDerivedReceiver(to);
@@ -432,7 +491,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);
         if (feeAmount != 0) _transfer(_msgSender(), feeRecipient, feeAmount);
         _uaMove(payer, to, amount);
-        emit UAPaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+        emit IUALedger.UAPaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
         _payRecord(meta, to, amount);
         return true;
     }

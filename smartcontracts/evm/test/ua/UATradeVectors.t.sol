@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -101,7 +103,7 @@ contract UATradeVectorsTest is UARegistryBase {
     }
 
     function _token(address at) internal returns (NormalToken t) {
-        address impl = address(new NormalToken(address(this), ""));
+        address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         vm.etch(at, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_A, address(0), false)));
         t = NormalToken(at);
         t.initialize(nid(address(this)), 1, abi.encode(normalInit("T", "T", 6, 1e15, address(this), address(this))));

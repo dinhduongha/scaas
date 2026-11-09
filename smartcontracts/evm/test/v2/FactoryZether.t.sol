@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {SaltedEIP712Core} from "../../src/common/SaltedEIP712.sol";
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -168,7 +170,7 @@ contract FactoryZetherTest is Test {
         assertEq(salt, UID_);
         (, n,,,,,) = MockWrappedZether(payable(w)).eip712Domain();
         assertEq(n, "SCaaS MetaToken", "a kind that does not override keeps the base name");
-        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
         normalZ.eip712Domain();
     }
 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {stdJson} from "forge-std/StdJson.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -272,7 +274,7 @@ contract ZetherPairsTest is ZetherFixture {
         internal view returns (bytes memory)
     {
         return _proveU(alice, stm.unshieldUnwrapStatement(address(w), b, x.amount, x.recipient, x.underlying, x.minOut, bd),
-            x.amount, bal, _none(), ZetherLayer(address(w)));
+            x.amount, bal, _none(), NormalZetherToken(address(w)));
     }
 
     function _uwMsg(IZetherToken.ZetherBurn memory b, IConfidentialWrappedToken.Unwrap memory x, bytes memory pr)
@@ -286,7 +288,7 @@ contract ZetherPairsTest is ZetherFixture {
     function _unshieldUnwrapCd(MetaTxLib.UAEnvelope memory u, uint256 bal, bytes32 binding) internal view returns (bytes memory) {
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(TO), 10, 10 * SCALE);
-        IZetherToken.ZetherBurn memory b = _zBurn(_unshieldPayload(ZetherLayer(address(w)), alice), _none());
+        IZetherToken.ZetherBurn memory b = _zBurn(_unshieldPayload(NormalZetherToken(address(w)), alice), _none());
         bytes memory pr = _uwProof(b, x, bal, _bind(address(w), u, binding));
         IUARegistry.UASig memory s = _auth(address(w), u, "UAZetherUnshieldUnwrap",
             '{"name":"args","type":"ZetherBurn"},{"name":"unwrap","type":"Unwrap"},{"name":"proof","type":"bytes"}',

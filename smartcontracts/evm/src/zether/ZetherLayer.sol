@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
+import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IUALedger} from "../metatx/IUALedger.sol";
 
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
@@ -30,7 +32,7 @@ import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 ///         (`IZetherToken`, TS-D17); each has one signed overload (`UAEnvelope` first, `UASig` last, ua-mtx-merge R35)
 ///         for native and derived ids, which runs it through the ticket self-call, so the op's body and the statement's
 ///         binding are the generic path's.
-abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
+abstract contract ZetherLayer is MetaTokenBase {
     bytes32 private constant UA_ROLL_OVER_TYPEHASH = keccak256(
         "UARollOver(bytes32 from,bytes32 ua,uint256 n,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
@@ -57,52 +59,52 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         return IZetherBurnVerifier(ChainEnvCode.dep(ENV_ZETHER_BURN));
     }
 
-    function _validateEnv(ChainEnv calldata env) internal view virtual override {
+    function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view virtual override {
         ZetherLib.validateEnv(env.deps, env.hedera, env.registry);
     }
 
     /// @notice CTR-MTX-02: confidential tokens sign under `"SCaaS ZetherToken"`.
-    function _domainName() internal pure virtual override(ERC20MetaTx) returns (string memory) {
+    function _domainName() internal pure virtual override returns (string memory) {
         return "SCaaS ZetherToken";
     }
 
     // ------------------------------------------------------------------ views
 
-    function verifier() external view returns (IZetherVerifier) { return _transferVerifier(); }
-    function burnVerifier() external view returns (IZetherBurnVerifier) { return _burnVerifier(); }
-    function curve() external view returns (string memory) { return _transferVerifier().curveName(); }
-    function disclosure() external view returns (ITransferDisclosure) {
+    function _verifierBody() internal view returns (IZetherVerifier) { return _transferVerifier(); }
+    function _burnVerifierBody() internal view returns (IZetherBurnVerifier) { return _burnVerifier(); }
+    function _curveBody() internal view returns (string memory) { return _transferVerifier().curveName(); }
+    function _disclosureBody() internal view returns (ITransferDisclosure) {
         return ITransferDisclosure(ChainEnvCode.dep(ENV_ZETHER_DISCLOSURE));
     }
-    function shieldScale() external view returns (uint256) { return ZetherLib.$().shieldScale; }
-    function maxDecryptableShielded() external view returns (uint256) { return ZetherLib.$().maxShielded; }
-    function confidentialFee() external view returns (uint256) { return ZetherLib.$().confidentialFee; }
-    function minDecoyFee() external view returns (uint256) { return ZetherLib.$().minDecoyFee; }
-    function auditorKey() external view returns (bytes memory) { return ZetherLib.$().auditorKey; }
-    function auditorMode() external view returns (ZetherTypes.AuditorMode) { return ZetherLib.$().auditorMode; }
-    function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return ZetherLib.$().disclosureMode; }
-    function totalShielded() external view returns (uint256) { return ZetherLib.$().totalShielded; }
+    function _shieldScaleBody() internal view returns (uint256) { return ZetherLib.$().shieldScale; }
+    function _maxDecryptableShieldedBody() internal view returns (uint256) { return ZetherLib.$().maxShielded; }
+    function _confidentialFeeBody() internal view returns (uint256) { return ZetherLib.$().confidentialFee; }
+    function _minDecoyFeeBody() internal view returns (uint256) { return ZetherLib.$().minDecoyFee; }
+    function _auditorKeyBody() internal view returns (bytes memory) { return ZetherLib.$().auditorKey; }
+    function _auditorModeBody() internal view returns (ZetherTypes.AuditorMode) { return ZetherLib.$().auditorMode; }
+    function _disclosureModeBody() internal view returns (ZetherTypes.DisclosureMode) { return ZetherLib.$().disclosureMode; }
+    function _totalShieldedBody() internal view returns (uint256) { return ZetherLib.$().totalShielded; }
     /// @notice The record `R` for `disclosure()`, always from state: inline (BUNDLE, single) or read from its SSTORE2
     ///         pointer (commit-reveal); empty for an unknown ref.
-    function transferEntry(bytes32 entryRef) external view returns (bytes memory) {
+    function _transferEntryBody(bytes32 entryRef) internal view returns (bytes memory) {
         address ptr = ZetherLib.$().entryPtrs[entryRef];
         return ptr != address(0) ? SSTORE2.read(ptr) : ZetherLib.$().entries[entryRef];
     }
 
     /// @notice The sender memo of a commit-reveal entry (CTR-ZTH-50), empty otherwise.
-    function transferMemo(bytes32 entryRef) external view returns (bytes memory) { return ZetherLib.$().memos[entryRef]; }
-    function sendCounter(ZetherTypes.UA ua) external view returns (uint256) { return ZetherLib.$().acct[ua].sendCounter; }
+    function _transferMemoBody(bytes32 entryRef) internal view returns (bytes memory) { return ZetherLib.$().memos[entryRef]; }
+    function _sendCounterBody(ZetherTypes.UA ua) internal view returns (uint256) { return ZetherLib.$().acct[ua].sendCounter; }
 
     /// @notice Registered as this token's Zether kind (`registry.kindOf`, accounts.md §1.13).
-    function registered(ZetherTypes.UA ua) external view returns (bool) {
+    function _registeredBody(ZetherTypes.UA ua) internal view returns (bool) {
         return ZetherLib.registeredOn(_registry(), ua);
     }
 
-    function accountState(ZetherTypes.UA ua) external view returns (AccountState memory) {
+    function _accountStateBody(ZetherTypes.UA ua) internal view returns (IZetherToken.AccountState memory) {
         ZetherLib.ZetherStorage storage s = ZetherLib.$();
         ZetherLib.Account storage a = s.acct[ua];
         uint256 p = s.p;
-        return AccountState({
+        return IZetherToken.AccountState({
             accC: ZetherLib._pt(a.accC, p), accD: ZetherLib._pt(a.accD, p), pendingC: ZetherLib._pt(a.pendC, p),
             pendingD: ZetherLib._pt(a.pendD, p), accSeq: a.accSeq, pendingSeq: a.pendingSeq, sendCounter: a.sendCounter,
             modeNonce: a.modeNonce, mode: a.mode
@@ -114,7 +116,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///         `data` (which carries the proof), plus `chainUid`. `executeMetaTransaction` keeps the address binding
     ///         (`SCAAS-ZETHER-ENVELOPE-V1` over its `MetaTransaction`, CTR-ZTH-06), which clients compute; its view is in
     ///         legacy/ua-mtx-merge/.
-    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) {
+    function _envelopeBindingBody(MetaTxLib.UAMetaTransaction calldata m) internal view returns (bytes32) {
         return _uaEnvelopeBinding(m);
     }
 
@@ -123,7 +125,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     /// @notice Moves `amount · shieldScale` public units of the signer to `SHIELD_POOL` (D19: a transfer, not a burn);
     ///         `pending[toUA] += [amount]G`. The Zether key is the UA (CTR-UA-30): `toUA` must be registered as this
     ///         token's Zether kind. A derived UA signer pays from its UA-ledger balance.
-    function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
+    function _mtxShieldBody(bytes32 toUA, uint256 amount) internal {
         _regPayer();
         address m = _msgSender();
         ZetherLib.shield(ZetherTypes.UA.wrap(toUA), amount, _registry(), m);
@@ -132,8 +134,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     }
 
     /// @notice The signed `mtxShield` (TS-D14, TS-D16) over `UAShield`, an explicit `UASig` (R47).
-    function mtxShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bytes memory)
+    function _mtxShieldBody(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         return _namedUA(MetaTxLib.UA_SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), auth);
     }
@@ -142,21 +143,21 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     /// @notice The token's default: the record stored (`BUNDLE` token) or commit-reveal (`COMPACT` token). The body is
     ///         `ZetherLib`'s, which reads `t` and `proof` from this call's own arguments (CTR-ZTH-94).
-    function mtxConfidentialTransfer(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
+    function _mtxConfidentialTransferBody(IZetherToken.ZetherMulti calldata t, bytes calldata proof) internal returns (bytes32) {
         proof;
         _regZetherSender(t.yFrom);
         _regName(t.beneficiaryUA);
         return _multi(t.beneficiaryUA, ZetherLib.defaultMode());
     }
 
-    function mtxConfidentialTransferCompact(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
+    function _mtxConfidentialTransferCompactBody(IZetherToken.ZetherMulti calldata t, bytes calldata proof) internal returns (bytes32) {
         proof;
         _regZetherSender(t.yFrom);
         _regName(t.beneficiaryUA);
         return _multi(t.beneficiaryUA, ZetherTypes.TransferMode.HASH);
     }
 
-    function mtxConfidentialTransferSingle(ZetherSingle calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
+    function _mtxConfidentialTransferSingleBody(IZetherToken.ZetherSingle calldata t, bytes calldata proof) internal returns (bytes32) {
         proof;
         _regZetherSender(t.yFrom);
         _regName(t.beneficiaryUA);
@@ -168,22 +169,22 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     /// @notice The signed forms (TS-D14, TS-D16): the struct's `args` and `proof` by hash, as a wallet shows them;
     ///         `ZetherLib` builds the struct's words and the op's call from this call's own arguments (CTR-ZTH-94).
-    function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, ZetherMulti calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes32)
+    function _mtxConfidentialTransferBody(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t, bytes calldata proof,
+        IUARegistry.UASig calldata auth) internal returns (bytes32)
     {
         (t, proof);
         return _ref(_namedZUA(ZetherLib.uaMultiCall.selector, false, e, auth));
     }
 
-    function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, ZetherMulti calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes32)
+    function _mtxConfidentialTransferCompactBody(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t, bytes calldata proof,
+        IUARegistry.UASig calldata auth) internal returns (bytes32)
     {
         (t, proof);
         return _ref(_namedZUA(ZetherLib.uaMultiCall.selector, true, e, auth));
     }
 
-    function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, ZetherSingle calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes32)
+    function _mtxConfidentialTransferSingleBody(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherSingle calldata t, bytes calldata proof,
+        IUARegistry.UASig calldata auth) internal returns (bytes32)
     {
         (t, proof);
         return _ref(_namedZUA(ZetherLib.uaSingleCall.selector, false, e, auth));
@@ -194,7 +195,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     /// @notice The unshield statement binds `amount` and `recipient`; moves `amount · shieldScale` public units from
     ///         `SHIELD_POOL` to `recipient` (D19): a padded address (not a pool) or a registered SIGNING UA, credited on
     ///         the UA ledger (CTR-ZTH-51); then the fee to the beneficiary. The proof part is `ZetherLib`'s (CTR-ZTH-94).
-    function mtxUnshield(ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof) external nonReentrant {
+    function _mtxUnshieldBody(IZetherToken.ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof) internal {
         proof;
         _regZetherSender(b.yFrom);
         _regName(b.beneficiaryUA);
@@ -206,8 +207,8 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     }
 
     /// @notice The signed `mtxUnshield`: `amount` and `recipient` flat in the struct, as in the op.
-    function mtxUnshield(MetaTxLib.UAEnvelope calldata e, ZetherBurn calldata b, uint256 amount, bytes32 recipient,
-        bytes calldata proof, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+    function _mtxUnshieldBody(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherBurn calldata b, uint256 amount, bytes32 recipient,
+        bytes calldata proof, IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         (b, amount, recipient, proof);
         return _namedZUA(ZetherLib.uaUnshieldCall.selector, false, e, auth);
@@ -216,56 +217,51 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     // ------------------------------------------------------------------ roll-over (all four allowlisted, CTR-ZTH-34)
 
     /// @notice The one aggregated pending of `ua` into `acc` for any `n ≥ 1` (`RollOverRange` for 0).
-    function mtxRollOver(bytes32 ua, uint256 n) external nonReentrant {
-        if (n == 0) revert RollOverRange(n);
+    function _mtxRollOverBody(bytes32 ua, uint256 n) internal {
+        if (n == 0) revert IZetherToken.RollOverRange(n);
         ZetherLib.rollOver(ZetherTypes.UA.wrap(ua));
     }
 
-    function mtxRollOverBatch(ZetherTypes.UA[] calldata uas) external nonReentrant {
+    function _mtxRollOverBatchBody(ZetherTypes.UA[] calldata uas) internal {
         ZetherLib.rollOverBatch(uas);
     }
 
     /// @dev Owner roll-over: a registered Zether UA only (`AccountNotRegistered` otherwise).
-    function mtxRollOverSigned(ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig)
-        external nonReentrant
-    {
+    function _mtxRollOverSignedBody(ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig) internal {
         ZetherLib.rollOverSigned(ua, expectedPendingSeq, validUntilBlock, ownerSig, _env());
     }
 
     /// @dev Owner mode change: a registered Zether UA only (`AccountNotRegistered` otherwise).
-    function mtxSetRollOverMode(
+    function _mtxSetRollOverModeBody(
         ZetherTypes.UA ua,
         ZetherTypes.RollOverMode mode,
         uint64 validUntilBlock,
         IUARegistry.UASig calldata ownerSig
-    ) external nonReentrant {
+    ) internal {
         ZetherLib.setRollOverMode(ua, mode, validUntilBlock, ownerSig, _env());
     }
 
     /// @notice The signed roll-overs; the owner's signature travels beside the struct, never in it (Appendix X.1).
-    function mtxRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bytes memory)
+    function _mtxRollOverBody(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n, IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         return _namedUA(UA_ROLL_OVER_TYPEHASH, IZetherToken.mtxRollOver.selector, e, abi.encode(ua, n), auth);
     }
 
-    function mtxRollOverBatch(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA[] calldata uas, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bytes memory)
+    function _mtxRollOverBatchBody(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA[] calldata uas, IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         (bytes memory words, bytes memory data) = _batchCall(uas);
         return _namedCallUA(UA_ROLL_OVER_BATCH_TYPEHASH, e, words, data, auth);
     }
 
-    function mtxRollOverSigned(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock,
-        IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+    function _mtxRollOverSignedBody(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         (bytes memory words, bytes memory data) = _signedCall(ua, expectedPendingSeq, validUntilBlock, ownerSig);
         return _namedCallUA(UA_ROLL_OVER_SIGNED_TYPEHASH, e, words, data, auth);
     }
 
-    function mtxSetRollOverMode(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode,
-        uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bytes memory)
+    function _mtxSetRollOverModeBody(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode,
+        uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         (bytes memory words, bytes memory data) = _modeCall(ua, rollOverMode, validUntilBlock, ownerSig);
         return _namedCallUA(UA_SET_MODE_TYPEHASH, e, words, data, auth);
@@ -276,8 +272,8 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     /// @dev A public payee of an unshield: not `SHIELD_POOL`, not `UA_POOL`; the token is refused by the move and zero by
     ///      `prepareUnshield` (`ZeroRecipient`).
     function _requirePayee(address to) internal pure {
-        if (to == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
-        if (to == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+        if (to == MetaTxLib.SHIELD_POOL) revert IUALedger.ShieldPoolNotPayable();
+        if (to == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
     }
 
     /// @dev The recipient id of `mtxUnshield` (CTR-ZTH-51): a padded address (`_requirePayee`) or a registered SIGNING
@@ -415,7 +411,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     /// @notice Regulated hook (regulated-kinds spec §2.2, §4.1), empty here ("+0"): each direct Zether transfer and
     ///         unshield entry, before `_multi` or the library; the raw `yFrom` (the override computes `ZetherLib.uaOf`).
-    function _regZetherSender(G1 calldata /* yFrom */) internal view virtual {}
+    function _regZetherSender(IZetherToken.G1 calldata /* yFrom */) internal view virtual {}
 
     function _zetherBinding(MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);

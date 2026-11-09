@@ -111,10 +111,10 @@ contract ReceiverTest is RegFixture {
             _attest(nid(bob), KYC, MAX);
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(feeTo), uint8(0)));
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
+            NormalToken(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             _attest(nid(feeTo), KYC, MAX);
             vm.prank(alice);
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
+            NormalToken(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
 
             bytes32 rid = _order(t, keccak256("o"), nid(alice), nid(address(0xBE11)), 10, 0);
             _freeze(t, nid(alice));
@@ -194,35 +194,35 @@ contract ReceiverTest is RegFixture {
             MetaTxLib.UAMetaTransfer memory x;
             (x.from, x.to, x.value, x.batch, x.validUntil, x.mode, x.fee) =
                 (nid(alice), nid(bob), 100, 1, block.timestamp + 60, FIX, 1);
-            (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, MetaTokenBase(t).mtxTransferDigest(x));
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
             IUARegistry.UASig memory sig;
             sig.signature = abi.encodePacked(r, s, v);
             _countStart();
             vm.prank(relayer);
-            MetaTokenBase(t).mtxExecuteTransfer(x, sig);
+            NormalToken(t).mtxExecuteTransfer(x, sig);
             _budget(3, "relayed transfer with a fee");
 
             _countStart();
             vm.prank(alice);
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
+            NormalToken(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             _budget(3, "payWithFee");
             _countStart();
             vm.prank(alice);
-            MetaTokenBase(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PayMetaKit.ref(keccak256("request-2")), PayMetaKit.meta(keccak256("request-2")));
+            NormalToken(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PayMetaKit.ref(keccak256("request-2")), PayMetaKit.meta(keccak256("request-2")));
             _budget(3, "payWithFeeToUA");
 
             MetaTxLib.UAMetaTransfer memory p = MetaTxLib.UAMetaTransfer({from: nid(alice), to: nid(bob), value: 100,
-                entryRef: PayMetaKit.ref("request-3"), batch: MetaTokenBase(t).payLane(PayMetaKit.ref("request-3")), nonce: 0,
+                entryRef: PayMetaKit.ref("request-3"), batch: NormalToken(t).payLane(PayMetaKit.ref("request-3")), nonce: 0,
                 validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
             IUARegistry.UASig memory ps;
             IUARegistry.UASig memory rs;
-            (v, r, s) = vm.sign(ALICE_PK, MetaTokenBase(t).mtxTransferDigest(p));
+            (v, r, s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(p));
             ps.signature = abi.encodePacked(r, s, v);
-            (v, r, s) = vm.sign(BOB_PK, MetaTokenBase(t).receiverFeeDigest(p, 3, feeTo, block.timestamp + 300));
+            (v, r, s) = vm.sign(BOB_PK, NormalToken(t).receiverFeeDigest(p, 3, feeTo, block.timestamp + 300));
             rs.signature = abi.encodePacked(r, s, v);
             _countStart();
             vm.prank(relayer);
-            MetaTokenBase(t).mtxPayReceiverFee(p, ps, 3, feeTo, block.timestamp + 300, rs, PayMetaKit.meta("request-3"));
+            NormalToken(t).mtxPayReceiverFee(p, ps, 3, feeTo, block.timestamp + 300, rs, PayMetaKit.meta("request-3"));
             _budget(3, "mtxPayReceiverFee");
         }
     }
@@ -242,7 +242,7 @@ contract ReceiverTest is RegFixture {
         ITradeToken.UAWrapOrder memory o;
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill, o.fee) = (nid(alice), w, 1000, 3000, 1000, 1_000);
         (o.batch, o.nonce, o.validUntil) = (7, 1, block.timestamp + 300);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, MetaTokenBase(u).tradeOrderDigest(DexLegs.asTrade(o)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(u).tradeOrderDigest(DexLegs.asTrade(o)));
         IUARegistry.UASig memory a;
         a.signature = abi.encodePacked(r, s, v);
         _countStart();

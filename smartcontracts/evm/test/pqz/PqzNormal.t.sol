@@ -48,7 +48,7 @@ contract PqzNormalTest is PqzFixture {
 
     // ------------------------------------------------------------------ life cycle
 
-    function _amt(PqzLayer t, bytes32 ua, uint64 i) internal view returns (uint256) {
+    function _amt(NormalPqzToken t, bytes32 ua, uint64 i) internal view returns (uint256) {
         return (t.pqzPending(ua, 0, i) >> 96) & type(uint64).max;
     }
 
@@ -300,12 +300,12 @@ contract PqzNormalTest is PqzFixture {
 
     function test_auditorModes() public {
         aMode = uint8(ZetherTypes.AuditorMode.FULL);
-        PqzLayer full = _newToken("full");
+        NormalPqzToken full = _newToken("full");
         bytes memory off = _payload(0, 0, alice, bob, bytes32(0), _out(80, false), "");
         vm.expectRevert(IPqzToken.AuditorRequired.selector);
         full.mtxConfidentialTransferSingle(_ts(off), hex"01", _pqAuth(), "", noVerdict());
         aMode = uint8(ZetherTypes.AuditorMode.NONE);
-        PqzLayer none = _newToken("none");
+        NormalPqzToken none = _newToken("none");
         bytes memory on = _payload(0, 0, alice, bob, bytes32(0), _out(81, true), "");
         vm.expectRevert(IPqzToken.AuditorForbidden.selector);
         none.mtxConfidentialTransferSingle(_ts(on), hex"01", _pqAuth(), "", noVerdict());
@@ -335,7 +335,7 @@ contract PqzNormalTest is PqzFixture {
     /// `keccak256(R) ‖ memo`, `transferCiphertextHash` = `keccak256(R)`, `pqzEntryBlob` = `R ‖ v_f` (`R`, `v_f` packed, P46).
     function test_compactAndNoneRetired() public {
         dMode = uint8(ZetherTypes.DisclosureMode.COMPACT);
-        PqzLayer cpt = _newToken("compact");
+        NormalPqzToken cpt = _newToken("compact");
         bytes memory out = _out(90, true);
         bytes memory pl = _payload(0, 0, alice, bob, bytes32(0), out, "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, 0));
@@ -437,7 +437,7 @@ contract PqzNormalTest is PqzFixture {
         assertEq(factory.latestEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ), v1 + 1, "the next env version");
         assertEq(factory.releaseOf(IOpenFactory.TokenKind.NORMAL_PQZ, 2).envVersion, v1 + 1);
         assertEq(factory.releaseOf(IOpenFactory.TokenKind.NORMAL_PQZ, 1).envVersion, v1, "release 1 keeps its env");
-        PqzLayer t2 = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(1 << 40)), "r2"));
+        NormalPqzToken t2 = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(1 << 40)), "r2"));
         assertEq(t2.verifier(), address(fresh));
         assertEq(NormalPqzToken(impl2).verifier(), address(0), "chain-neutral: the release carries no env (plan T72)");
         assertEq(tok.verifier(), address(old), "release 1's tokens keep theirs");

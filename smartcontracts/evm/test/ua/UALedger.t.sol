@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {OrderJson} from "../helpers/OrderJson.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {domainOf, h, n} from "../metatx/NamedEntry.t.sol";
@@ -464,7 +466,7 @@ contract UALedgerTest is UALedgerBase {
     // ----- registry binding (CTR-UA-19) -----
 
     function test_registryOff() public {
-        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 100, alice, address(this))));
         assertEq(off.registry(), address(0));
         assertFalse(off.supportsInterface(type(IUALedger).interfaceId));

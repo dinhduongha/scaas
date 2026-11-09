@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {OrderJson} from "../helpers/OrderJson.sol";
 import {domainOf, h, n, a as a_} from "../metatx/NamedEntry.t.sol";
@@ -40,7 +42,7 @@ contract ReceiverPaysTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        address impl = address(new NormalToken(address(this), ""));
+        address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         t = NormalToken(EnvKit.clone(impl, EnvKit.env(UID, address(0), address(0), false)));
         t.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
         t.mint(payer, 1_000e6);

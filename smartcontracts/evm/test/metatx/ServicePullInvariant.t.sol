@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture} from "../as/helpers/RegFixture.sol";
@@ -56,7 +58,7 @@ contract ServicePullHandler is Test {
     }
 
     function _sign(uint256 pk, MetaTxLib.UAMetaTransfer memory x) internal view returns (IUARegistry.UASig memory a) {
-        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, MetaTokenBase(t).mtxTransferDigest(x));
+        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, NormalToken(t).mtxTransferDigest(x));
         a.signature = abi.encodePacked(r, ss, v);
     }
 
@@ -67,7 +69,7 @@ contract ServicePullHandler is Test {
     function _try(RefServiceEscrow.Deposit memory op, uint256 pk) internal returns (bool ok, bytes memory ret, bytes32 ref) {
         ref = spDepositRef(address(s), block.chainid, op);
         MetaTxLib.UAMetaTransfer memory x = spPull(op.payer, address(s), op.amount, ref, LANE,
-            MetaTokenBase(t).mtxNonce(op.payer, LANE), block.timestamp + 300);
+            NormalToken(t).mtxNonce(op.payer, LANE), block.timestamp + 300);
         IUARegistry.UASig memory a = _sign(pk, x);
         (ok, ret) = address(s).call(abi.encodeCall(RefServiceEscrow.deposit, (op, x, a)));
     }

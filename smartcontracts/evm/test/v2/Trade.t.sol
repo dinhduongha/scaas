@@ -481,7 +481,7 @@ contract TradeTest is V2Fixture {
             bytes memory sig = _signCall(ALICE_PK, address(t), m);
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(data[i])));
-            MetaTokenBase(address(t)).executeMetaTransaction(m, sig);
+            NormalToken(address(t)).executeMetaTransaction(m, sig);
         }
     }
 

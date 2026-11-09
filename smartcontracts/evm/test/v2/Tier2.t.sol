@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {V2Fixture, Rate} from "./helpers/V2Fixture.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
@@ -317,7 +319,7 @@ contract Tier2Test is V2Fixture {
         IFactoryToken.TokenConfig memory cfg =
             abi.decode(_singleInit(c, 6, 1, 1, _fixedRate()), (IFactoryToken.TokenConfig));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnderlyingInvalid.selector, c));
-        MetaTokenBase(c).initialize(nid(address(this)), 1, abi.encode(cfg));
+        NormalToken(c).initialize(nid(address(this)), 1, abi.encode(cfg));
     }
 
     function test_boundsAreInclusive() public {

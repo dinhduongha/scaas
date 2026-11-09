@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IRig, PlainRig, PqzRig, ZetherRig} from "./helpers/KindRigs.sol";
@@ -58,7 +60,7 @@ contract ServicePullKindsTest is Test {
     }
 
     function _sig(address t, MetaTxLib.UAMetaTransfer memory x) internal view returns (IUARegistry.UASig memory a) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, MetaTokenBase(t).mtxTransferDigest(x));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, NormalToken(t).mtxTransferDigest(x));
         a.signature = abi.encodePacked(r, s, v);
     }
 

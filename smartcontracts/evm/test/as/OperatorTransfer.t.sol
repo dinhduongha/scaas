@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture, Holder} from "./helpers/RegFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -52,11 +54,11 @@ contract OperatorTransferTest is RegFixture {
     /// `WHOLE` for `who`: a widening, so proposed, then confirmed after `grantDelay`.
     function _grant(address t, bytes32 who) internal {
         vm.prank(ownerA);
-        MetaTokenBase(t).grantRole(OP, who);
+        NormalToken(t).grantRole(OP, who);
         vm.warp(block.timestamp + GD);
         vm.prank(ownerA);
-        MetaTokenBase(t).grantRole(OP, who);
-        assertTrue(MetaTokenBase(t).hasRole(OP, who));
+        NormalToken(t).grantRole(OP, who);
+        assertTrue(NormalToken(t).hasRole(OP, who));
     }
 
     function _op(address t, bytes32 from, bytes32 to, uint256 amount) internal {
@@ -82,10 +84,10 @@ contract OperatorTransferTest is RegFixture {
             assertEq(IERC20(t).balanceOf(alice), SUPPLY - 100);
             assertEq(IERC20(t).balanceOf(bob), 100);
             _op(t, a, ux, 50);
-            assertEq(MetaTokenBase(t).balanceOfUA(ux), 50);
+            assertEq(NormalToken(t).balanceOfUA(ux), 50);
             _op(t, ux, uy, 20);
-            assertEq(MetaTokenBase(t).balanceOfUA(ux), 30);
-            assertEq(MetaTokenBase(t).balanceOfUA(uy), 20);
+            assertEq(NormalToken(t).balanceOfUA(ux), 30);
+            assertEq(NormalToken(t).balanceOfUA(uy), 20);
             _op(t, uy, b, 20);
             assertEq(IERC20(t).balanceOf(bob), 120);
             assertEq(IERC20(t).totalSupply(), SUPPLY, "a move, no mint or burn");
@@ -101,10 +103,10 @@ contract OperatorTransferTest is RegFixture {
         for (uint256 i; i < 2; ++i) {
             address t = ts[i];
             vm.prank(ownerA);
-            MetaTokenBase(t).setGrant(OP, nid(pos), g);
+            NormalToken(t).setGrant(OP, nid(pos), g);
             vm.warp(block.timestamp + GD);
             vm.prank(ownerA);
-            MetaTokenBase(t).setGrant(OP, nid(pos), g);
+            NormalToken(t).setGrant(OP, nid(pos), g);
             uint256 day = block.timestamp - block.timestamp % 1 days;
             vm.warp(day + 1 hours);
             vm.startPrank(pos);
@@ -227,11 +229,11 @@ contract OperatorTransferTest is RegFixture {
                 : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), bytes32(uint256(200 + i)));
             if (i == 1) _wrapFor(t, alice, SUPPLY);
             vm.prank(ownerA);
-            MetaTokenBase(t).grantRole(GovernanceBits.MODERATE, nid(mod));
+            NormalToken(t).grantRole(GovernanceBits.MODERATE, nid(mod));
             vm.warp(block.timestamp + GD);
             vm.prank(ownerA);
-            MetaTokenBase(t).grantRole(GovernanceBits.MODERATE, nid(mod));
-            assertTrue(MetaTokenBase(t).hasRole(GovernanceBits.MODERATE, nid(mod)), "bit 21 held");
+            NormalToken(t).grantRole(GovernanceBits.MODERATE, nid(mod));
+            assertTrue(NormalToken(t).hasRole(GovernanceBits.MODERATE, nid(mod)), "bit 21 held");
             vm.prank(mod);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, OP, nid(mod)));
             _r(t).operatorTransfer(a, b, 1, REF);
