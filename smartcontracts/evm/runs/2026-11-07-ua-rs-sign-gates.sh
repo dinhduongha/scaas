@@ -154,7 +154,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n \
                           2026-11-07-ua-rs-sign-t15n2 2026-11-08-ua-rs-sign-t15o 2026-11-08-ua-rs-sign-t20b1 \
                           2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 \
-                          2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 \
+                          2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 \
                           ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
@@ -849,6 +849,10 @@ ua-go|go|TestImportedUAKeyRows
 ua-cs|cs|ImportedUAKeyRows
 ua-dart-frb|dart|imported_ua_key: keys.json / sign.json imported, the scheme kind only (T20c)
 ua-rs-wallet|cargo|proof_path_rows_canon
+ua-rs-pqz|cargo|record_rows_are_the_contracts_view
+ua-rs-pqz|cargo|record_refusals
+ua-rs-pqz|cargo|tail_rows_are_the_contracts
+ua-rs-pqz|cargo|tail_refusals
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
