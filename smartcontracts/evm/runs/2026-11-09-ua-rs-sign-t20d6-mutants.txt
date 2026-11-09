@@ -1,0 +1,6 @@
+# ua-rs-sign T20d6 mutants (2026-11-09-ua-rs-sign-t20d6-mutants.py: path (B)'s seal advice and the own tag's counter, facade/pqz/proven.rs), one per run on a clean tree at 30c62cde, four foreground runs (M1-M4), git diff --exit-code 0 after the run; positive control: the command (--features vectors --test facade_pqz_proof, 10 tests) passes on the clean tree first. UNAUDITED.
+killed     | M1 unsealed from rolled, not p_last | clients/ua-rs/src/facade/pqz/proven.rs | rc=101 | 1 failed: seal_advice | assertion `left == right` failed | at 30c62cde
+killed     | M2 unsealed from p, not pendingCount | clients/ua-rs/src/facade/pqz/proven.rs | rc=101 | 1 failed: seal_advice | assertion `left == right` failed | at 30c62cde
+killed     | M3 sealAdvised past one entry only | clients/ua-rs/src/facade/pqz/proven.rs | rc=101 | 1 failed: seal_advice | assertion `left == right` failed | at 30c62cde
+killed     | M4 the own tag over lastDebit, not lastDebit − 1 | clients/ua-rs/src/facade/pqz/proven.rs | rc=101 | 6 failed: a_tag_proves_authorship_not_inclusion, balance_proven_equals_path_a, proven_debits_equal_path_a, rotation_migration_by_reencryption_or_p, seal_advice, session_rules_and_open_negatives | called `Result::unwrap()` on an `Err` value: Argument | at 30c62cde
+mutants M1-M4 of 4: 4 killed, 0 survived, 0 not loaded
