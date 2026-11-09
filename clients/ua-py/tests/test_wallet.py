@@ -1084,9 +1084,10 @@ class Pqz(Case):
         swapped['pending'][0]['word'] = word(swapped['pending'][0]['word'], 22, (16 + pkp + vp + 32).to_bytes(2, 'big'))
         s = json.loads(kb.call('provenOpen', swapped))
         self.assertEqual(json.loads(kb.call('provenAdd', dict(b['add'], session=s['session'])))['refused'], [0], 'a swapped leg')
-        # more than K_MAX parts: the account's units at K_MAX
+        # more than K_MAX parts: the account's units at K_MAX (no window: the bound alone refuses it, not the window's length)
         wide = json.loads(json.dumps(b['open']))
         wide['account'][1] = word(wide['account'][1], 4, kmax.to_bytes(4, 'big'))
+        wide['pending'] = []
         self.assertEqual(code(lambda: kb.call('provenOpen', wide)), 'UAArgument', 'more than K_MAX parts')
         # a forged ownTag: one bit of A v0's accBlob tag
         c = bytearray(own0)

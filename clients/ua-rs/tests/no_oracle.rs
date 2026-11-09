@@ -471,10 +471,14 @@ fn proof_path_negatives() {
         if let Some(f) = forged {
             c.blobs.insert(blob, f);
         }
-        let uses = key_uses();
+        let (uses, ver) = (key_uses(), verifies());
         let r = call(&k1, "provenAdd", &c.add_request(&o["session"], std::slice::from_ref(&x))).unwrap();
         assert_eq!(r, json!({"accepted": [], "refused": [0]}), "{what}");
         assert_eq!(key_uses(), uses, "{what}: the key unused");
+        if what == "a non-canonical coefficient" && cfg!(feature = "vectors") {
+            // the facade's own check, not the precompile's decode of the rebuilt statement
+            assert_eq!(verifies(), ver, "{what}: refused before its P");
+        }
         c.blobs.insert(blob, code.clone());
     }
     // the session kept: the true words pass, the value is the holder's
@@ -490,11 +494,12 @@ fn proof_path_negatives() {
     let s = call(&k1, "provenOpen", &swapped).unwrap();
     let r = call(&k1, "provenAdd", &c.add_request(&s["session"], std::slice::from_ref(&c0))).unwrap();
     assert_eq!(r["refused"], json!([0]), "a swapped leg");
-    // more than K_MAX parts: the account's units at K_MAX
+    // more than K_MAX parts: the account's units at K_MAX (no window: the bound alone refuses it, not the window's length)
     let mut wide = merge(c.proven_open(&A, 1), psid.clone());
     let mut s1 = h(&wide["account"][1]);
     s1[4..8].copy_from_slice(&(K_MAX as u32).to_be_bytes());
     wide["account"][1] = json!(hx(&s1));
+    wide["pending"] = json!([]);
     assert_eq!(call(&k1, "provenOpen", &wide).err(), Some(Error::Argument), "more than K_MAX parts");
     // a forged ownTag (version 0's accBlob, one bit of its tag)
     let ok = merge(c.proven_open(&A, 0), psid.clone());

@@ -83,8 +83,8 @@ for n, (name, reps, (cwd, cmd)) in enumerate(M[lo - 1:hi], lo):
             open(f, "w", encoding="utf-8").write(s)
     for f, s in orig.items():
         assert open(f, encoding="utf-8").read() == s
-    failed = sorted(set(re.findall(r"^test (.+?) \.\.\. FAILED", out, re.M)))
-    why = re.findall(r"^thread '.*' .*panicked at .*\n(.*)$", out, re.M)
+    failed = sorted(set(re.findall(r"^test (.+?) \.\.\. FAILED", out, re.M) + re.findall(r"^(?:FAIL|ERROR): (\S+)", out, re.M)))
+    why = re.findall(r"^thread '.*' .*panicked at .*\n(.*)$", out, re.M) + re.findall(r"^(?:AssertionError|\w+Error): (.*)$", out, re.M)
     verdict = "NOT-LOADED" if NOT_BUILT.search(out) else "SURVIVED  " if rc == 0 else "killed    "
     bad += verdict != "killed    "
     print(f"{verdict} | M{n} {name} | {', '.join(sorted(orig))} | rc={rc} | {len(failed)} failed: {', '.join(failed)[:300]}"
