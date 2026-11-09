@@ -357,6 +357,10 @@ std::string pqzSet() {
     load();
     return std::string(ffi::pqz_set());
 }
+std::string pqzCheck(const std::string& requestJson) {
+    load();
+    return call([&] { return std::string(ffi::pqz_check(str(requestJson))); });
+}
 void pqzCheckSet(const std::string& deployedJson) {
     load();
     call([&] { ffi::pqz_check_set(str(deployedJson)); });

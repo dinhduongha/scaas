@@ -22,7 +22,7 @@
 # record and tail parsers: 2026-11-09-ua-rs-sign-t20d3; T20d2, ownTag and the 3h memoHash in every debit: 2026-11-09-ua-rs-sign-t20d2;
 # T20d4, path (B)'s balanceProven: 2026-11-09-ua-rs-sign-t20d4; T20d5, its debits: 2026-11-09-ua-rs-sign-t20d5; T20d6,
 # seal advice: 2026-11-09-ua-rs-sign-t20d6, which runs T20d5's steps too; T20d7, the quorum's check: 2026-11-09-ua-rs-sign-t20d7, which T20d8's run covers; T20d8, the bounds and the reader:
-# 2026-11-09-ua-rs-sign-t20d8),
+# 2026-11-09-ua-rs-sign-t20d8; T20d9, the C ABI and bindings: 2026-11-09-ua-rs-sign-t20d9),
 # T20's stay. (T20d2 renamed two names below to the 3h rule: multi_bundle_memo_hash_is_zero and burn_and_refresh_memo_hash_is_zero
 # are now ..._is_the_tags, keccak256(ownTag); the op 7 formula tests run on the words command, facade_pqz_state.rs.)
 P=${GATES_P:-2026-11-08-ua-rs-sign}
@@ -917,6 +917,8 @@ ua-rs-pqz|cargo|credits_from_interleaved_sender_versions
 pqz-read|cargo|balance_proven_against_anvil
 pqz-read|cargo|tests::proof_log_rows_decode
 pqz-read|cargo|tests::transfer_entries_are_the_typed_rows
+ua-rs|cargo|proven_rows_through_the_facade
+ua-rs-pqz|cargo|proven_rows_through_the_facade
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

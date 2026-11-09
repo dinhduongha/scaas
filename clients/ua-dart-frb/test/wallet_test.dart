@@ -687,9 +687,28 @@ void main() {
     // T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs under
     // `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
     final w = await walletOf('pq_kat');
-    for (final r in load_('../pqz/n2304-kmax4096/wallet_state.json')['rows']) {
+    final ws = load_('../pqz/n2304-kmax4096/wallet_state.json');
+    for (final r in ws['rows']) {
       final q = await w.pqzKeyVersion(account: r['account'], index: r['index'], version: BigInt.from(r['version']));
       expect(jsonDecode(await q.call(cmd: 'balance', requestJson: jsonEncode(r['request'])))['value'], r['value'], reason: r['name']);
+    }
+    // T20d9 (C-PP-8): the proof path's commands are in COMMANDS; each proven row end to end, the quorum's row by pqzCheck
+    for (final c in ['provenOpen', 'provenAdd', 'provenCancel', 'balanceProven', 'proveTransferProven', 'proveTransferMultiProven', 'proveBurnProven', 'proveRefreshProven']) {
+      expect(release, contains(c));
+    }
+    for (final r in ws['proven']) {
+      final q = await w.pqzKeyVersion(account: r['account'], index: r['index'], version: BigInt.from(r['version']));
+      final o = jsonDecode(await q.call(cmd: 'provenOpen', requestJson: jsonEncode(r['open'])));
+      final add = Map<String, dynamic>.from(r['add'])..['session'] = o['session'];
+      expect(jsonDecode(await q.call(cmd: 'provenAdd', requestJson: jsonEncode(add)))['accepted'], o['need'], reason: r['name']);
+      final b = jsonDecode(await q.call(cmd: 'balanceProven', requestJson: jsonEncode({'session': o['session']})));
+      expect(b['value'], r['value'], reason: r['name']);
+      expect([for (final p in b['parts']) p['kind']], r['kinds'], reason: r['name']);
+    }
+    for (final r in ws['check']) {
+      expect(jsonDecode(await pqzCheck(requestJson: jsonEncode(r['request']))), r['answer'], reason: r['name']);
+      final bad = Map<String, dynamic>.from(r['request'])..['keyRecord'] = '0x${'00' * 32}';
+      expect(await code(() => pqzCheck(requestJson: jsonEncode(bad))), 'UAArgument');
     }
   });
 

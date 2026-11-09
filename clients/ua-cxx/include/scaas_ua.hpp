@@ -457,5 +457,7 @@ public:
 };
 std::string pqzSet();                            // {set, pkLen, pqzlId, pqzhId} of this build
 void pqzCheckSet(const std::string& deployedJson);  // UAPqzSetMismatch for another set
+// checkProven (no-oracle spec §4.14.8): an MPC quorum member's keyless check before a partial, no handle; {parts, sum}
+std::string pqzCheck(const std::string& requestJson);
 
 }  // namespace scaas::ua

@@ -1412,13 +1412,54 @@ func TestPqzWordsOnTheForgeRows(t *testing.T) {
 	// T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs under
 	// `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
 	w := f.fresh("pq_kat")
-	for _, r := range rows(vec(t, "smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json")["rows"]) {
+	ws := vec(t, "smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json")
+	for _, r := range rows(ws["rows"]) {
 		q := must(w.PqzKeyVersion(uint32(r["account"].(float64)), uint32(r["index"].(float64)), uint64(r["version"].(float64))))
 		out := must(q.Call("balance", js(r["request"])))
 		q.Close()
 		var got obj
 		if err := json.Unmarshal([]byte(out), &got); err != nil || got["value"] != r["value"] {
 			t.Fatal(r["name"], out, err)
+		}
+	}
+	// T20d9 (C-PP-8): the proof path's commands are in COMMANDS; each proven row end to end, the quorum's row by PqzCheck
+	for _, c := range []string{"provenOpen", "provenAdd", "provenCancel", "balanceProven", "proveTransferProven", "proveTransferMultiProven", "proveBurnProven", "proveRefreshProven"} {
+		if !in(release, c) {
+			t.Fatal(c, "not in COMMANDS")
+		}
+	}
+	dec := func(s string) (o obj) {
+		if err := json.Unmarshal([]byte(s), &o); err != nil {
+			t.Fatal(s, err)
+		}
+		return
+	}
+	for _, r := range rows(ws["proven"]) {
+		q := must(w.PqzKeyVersion(uint32(r["account"].(float64)), uint32(r["index"].(float64)), uint64(r["version"].(float64))))
+		o := dec(must(q.Call("provenOpen", js(r["open"]))))
+		add := r["add"].(map[string]any)
+		add["session"] = o["session"]
+		if a := dec(must(q.Call("provenAdd", js(add)))); js(a["accepted"]) != js(o["need"]) {
+			t.Fatal(r["name"], a)
+		}
+		b := dec(must(q.Call("balanceProven", js(obj{"session": o["session"]}))))
+		q.Close()
+		kinds := []any{}
+		for _, p := range b["parts"].([]any) {
+			kinds = append(kinds, p.(map[string]any)["kind"])
+		}
+		if b["value"] != r["value"] || js(kinds) != js(r["kinds"]) {
+			t.Fatal(r["name"], b)
+		}
+	}
+	for _, r := range rows(ws["check"]) {
+		if got := must(PqzCheck(js(r["request"]))); js(dec(got)) != js(r["answer"]) {
+			t.Fatal(r["name"], got)
+		}
+		bad := r["request"].(map[string]any)
+		bad["keyRecord"] = "0x" + strings.Repeat("00", 32)
+		if _, err := PqzCheck(js(bad)); code(err) != "UAArgument" {
+			t.Fatal("a keyRecord of the quorum", err)
 		}
 	}
 }

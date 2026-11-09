@@ -334,6 +334,10 @@ Future<Uint8List> webauthnAssertion({
 /// `{set, pkLen, pqzlId, pqzhId}` of this build.
 Future<String> pqzSet() => ScaasUa.instance.api.crateApiWalletPqzSet();
 
+/// `checkProven` (no-oracle spec §4.14.8): an MPC quorum member's keyless check before a partial, no handle; `{parts, sum}`.
+Future<String> pqzCheck({required String requestJson}) =>
+    ScaasUa.instance.api.crateApiWalletPqzCheck(requestJson: requestJson);
+
 Future<void> pqzCheckSet({required String deployedJson}) =>
     ScaasUa.instance.api.crateApiWalletPqzCheckSet(deployedJson: deployedJson);
 

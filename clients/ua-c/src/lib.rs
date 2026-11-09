@@ -2510,7 +2510,9 @@ pub extern "C" fn scaas_ua_pqz_public(k: *const ScaasUaPqzKey, out: *mut u8, out
 }
 
 /// PQZ command `cmd` (enc, proveRegister, proveKeyRecord and, on raw storage words, balance, proveTransfer, proveBurn,
-/// proveRefresh, proveTransferMulti, auditRead, proveDisclose, proveDiscloseSender, openMemo; pickDecoys: decoys, no key, T15n) on `request_json` (named fields, bytes "0x"
+/// proveRefresh, proveTransferMulti, auditRead, proveDisclose, proveDiscloseSender, openMemo; pickDecoys: decoys, no key, T15n;
+/// the proof path of release 3h, ua-rs-sign T20d4-T20d6: provenOpen, provenAdd, provenCancel, balanceProven, proveTransferProven,
+/// proveTransferMultiProven, proveBurnProven, proveRefreshProven, one session per handle) on `request_json` (named fields, bytes "0x"
 /// hex, u64 numbers; at most 4 MiB, depth 8) with the handle's key: its JSON answer into `out_json`. Every field is checked against
 /// the command's allow-list: a `key`, `seed32` or any other field not on it is SCAAS_UA_ERR_ARGUMENT, a `proofSystemId` or `psid`
 /// of another set SCAAS_UA_ERR_PQZ_SET_MISMATCH, a prover refusal SCAAS_UA_ERR_ARGUMENT (no detail). Pass `out_json` of
@@ -2533,6 +2535,24 @@ pub extern "C" fn scaas_ua_pqz_call(
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (k, cmd, request_json, out_json, out_len);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+/// `checkProven` (no-oracle spec §4.14.8; ua-rs-sign T20d7, T20d9) with no handle: the keyless check an MPC quorum's member runs
+/// before any partial decryption. `request_json` as scaas-ua `facade::pqz::check_proven` takes it (the account's words without any
+/// key word of the quorum, `pk` from the member's own record of the key generation, `own`, `blobs`, `credits`; at most 4 MiB,
+/// depth 8) gives `{parts, sum}` in `out_json` (a size query checks again). Any failure, a key record of the quorum at the
+/// version checked among them, is SCAAS_UA_ERR_ARGUMENT (no parts). Decrypts nothing and uses no key.
+#[no_mangle]
+pub extern "C" fn scaas_ua_pqz_check(request_json: *const c_char, out_json: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "pqz")]
+        return write_str(out_json, out_len, &ua::facade::pqz::check_proven(cstr(request_json)?)?);
+        #[cfg(not(feature = "pqz"))]
+        {
+            let _ = (request_json, out_json, out_len);
             Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
         }
     })

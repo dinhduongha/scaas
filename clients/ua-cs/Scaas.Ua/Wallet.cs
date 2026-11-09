@@ -205,6 +205,7 @@ internal static unsafe class Native
     [DllImport(L)] internal static extern int scaas_ua_pqz_open_balance_cache(PqzHandle k, byte* box, byte* o, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_pqz_set(byte* o, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_pqz_check_set(byte* deployed);
+    [DllImport(L)] internal static extern int scaas_ua_pqz_check(byte* req, byte* o, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_export_pqz_leaf_raw(WalletHandle w, uint account, uint index, byte* o);
     [DllImport(L)] internal static extern int scaas_ua_wallet_pqz_key_version(WalletHandle w, uint account, uint index, ulong version, out PqzHandle k);
     [DllImport(L)] internal static extern int scaas_ua_export_pqz_leaf_raw_version(WalletHandle w, uint account, uint index, ulong version, byte* o);
@@ -545,6 +546,18 @@ public static unsafe class UaLib
     {
         Load();
         return OutStr(1024, (o, ref n) => Native.scaas_ua_pqz_set(o, ref n));
+    }
+
+    /// <summary><c>checkProven</c> (no-oracle spec §4.14.8): an MPC quorum member's keyless check before a partial, with no
+    /// handle; its JSON answer <c>{parts, sum}</c>, in one call into <see cref="PqzOutMax"/> bytes.</summary>
+    public static string PqzCheck(string request)
+    {
+        Load();
+        using var a = new Args();
+        var buf = new byte[PqzOutMax];
+        nuint n = PqzOutMax;
+        fixed (byte* o = buf) Check(Native.scaas_ua_pqz_check(a.Str(request), o, ref n));
+        return Encoding.UTF8.GetString(buf, 0, (int)n - 1);
     }
 
     /// <summary>Throws UAPqzSetMismatch unless <paramref name="deployed"/> (a token's PqzSet JSON) is this build's set.</summary>

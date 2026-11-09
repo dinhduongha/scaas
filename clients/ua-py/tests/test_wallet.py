@@ -938,9 +938,22 @@ class Pqz(Case):
         # T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs
         # under `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
         w = self.new_wallet('pq_kat')
-        for r in json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())['rows']:
+        ws = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())
+        for r in ws['rows']:
             q = self.keep(w.pqz_key(r['account'], r['index'], r['version']))
             self.assertEqual(json.loads(q.call('balance', r['request']))['value'], r['value'], r['name'])
+        # T20d9 (C-PP-8): the proof path's commands are in COMMANDS; each proven row end to end, the quorum's row by pqz_check
+        for c in ['provenOpen', 'provenAdd', 'provenCancel', 'balanceProven', 'proveTransferProven', 'proveTransferMultiProven', 'proveBurnProven', 'proveRefreshProven']:
+            self.assertIn(c, release, c)
+        for r in ws['proven']:
+            q = self.keep(w.pqz_key(r['account'], r['index'], r['version']))
+            o = json.loads(q.call('provenOpen', r['open']))
+            self.assertEqual(json.loads(q.call('provenAdd', dict(r['add'], session=o['session'])))['accepted'], o['need'], r['name'])
+            b = json.loads(q.call('balanceProven', {'session': o['session']}))
+            self.assertEqual((b['value'], [p['kind'] for p in b['parts']]), (r['value'], r['kinds']), r['name'])
+        for r in ws['check']:
+            self.assertEqual(json.loads(W.pqz_check(r['request'])), r['answer'], r['name'])
+            self.assertEqual(code(lambda: W.pqz_check(dict(r['request'], keyRecord='0x' + '00' * 32))), 'UAArgument')
 
     def test_no_oracle(self):
         """T15i (ARCH-POS-13; spec no-decryption-oracle §5): ua-rs tests/no_oracle.rs's harness through the C ABI. The 8·K

@@ -106,7 +106,7 @@ _SIGNATURES = [
     ('zether_call', st, [P, P, P, P, P]), ('zether_seal_balance_cache', st, [P, P, sz, P, P]),
     ('zether_open_balance_cache', st, [P, P, P, P]),
     ('wallet_pqz_key', st, [P, u32, u32, P]), ('pqz_key_free', None, [P]), ('pqz_public', st, [P, P, P]),
-    ('pqz_call', st, [P, P, P, P, P]), ('pqz_seal_balance_cache', st, [P, P, sz, P, P]), ('pqz_open_balance_cache', st, [P, P, P, P]),
+    ('pqz_call', st, [P, P, P, P, P]), ('pqz_check', st, [P, P, P]), ('pqz_seal_balance_cache', st, [P, P, sz, P, P]), ('pqz_open_balance_cache', st, [P, P, P, P]),
     ('pqz_set', st, [P, P]), ('pqz_check_set', st, [P]), ('export_pqz_leaf_raw', st, [P, u32, u32, P]),
     ('wallet_pqz_key_version', st, [P, u32, u32, u64, P]), ('export_pqz_leaf_raw_version', st, [P, u32, u32, u64, P]),
 ]
@@ -778,6 +778,14 @@ class PqzKey(_Handle):
 def pqz_set():
     """This build's PQZ parameter set (JSON ``{set, pkLen, pqzlId, pqzhId}``)."""
     return _str(_c('pqz_set'))
+
+
+def pqz_check(request):
+    """``checkProven`` (no-oracle spec §4.14.8): an MPC quorum member's keyless check before a partial, with no handle; its JSON
+    answer ``{parts, sum}``. One call into ``PQZ_OUT_MAX`` bytes."""
+    out, n = C.create_string_buffer(PQZ_OUT_MAX), sz(PQZ_OUT_MAX)
+    _ok(_c('pqz_check')(_text(request), out, C.byref(n)))
+    return out.raw[:n.value - 1].decode()
 
 
 def pqz_check_set(deployed):

@@ -238,3 +238,5 @@ Future<List<int>> webauthnAssertion(
         keyData: keyData, expectedChallenge: expectedChallenge, authData: authData, clientDataJson: clientDataJson, r: r, s: s));
 Future<String> pqzSet() => _loaded(g.pqzSet);
 Future<void> pqzCheckSet({required String deployedJson}) => _loaded(() => g.pqzCheckSet(deployedJson: deployedJson));
+/// checkProven (no-oracle spec §4.14.8): an MPC quorum member's keyless check before a partial, no handle; {parts, sum}.
+Future<String> pqzCheck({required String requestJson}) => _loaded(() => g.pqzCheck(requestJson: requestJson));

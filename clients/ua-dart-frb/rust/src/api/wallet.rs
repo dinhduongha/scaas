@@ -448,6 +448,10 @@ pub fn webauthn_assertion(
 pub fn pqz_set() -> String {
     fpqz::pqz_set().to_json()
 }
+/// `checkProven` (no-oracle spec §4.14.8): an MPC quorum member's keyless check before a partial, no handle; `{parts, sum}`.
+pub fn pqz_check(request_json: String) -> R<String> {
+    Ok(fpqz::check_proven(request_json.as_bytes())?)
+}
 pub fn pqz_check_set(deployed_json: String) -> R<()> {
     Ok(fpqz::check_set(&fpqz::PqzSet::from_json(deployed_json.as_bytes())?)?)
 }

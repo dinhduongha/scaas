@@ -189,6 +189,7 @@ mod ffi {
         fn pqz_open_balance_cache(k: &PqzKey, box_json: &str) -> Result<Vec<u8>>;
         fn pqz_set() -> String;
         fn pqz_check_set(deployed_json: &str) -> Result<()>;
+        fn pqz_check(request_json: &str) -> Result<String>;
     }
 }
 
@@ -747,6 +748,9 @@ fn pqz_open_balance_cache(k: &PqzKey, box_json: &str) -> R<Vec<u8>> {
 }
 fn pqz_set() -> String {
     fpqz::pqz_set().to_json()
+}
+fn pqz_check(request_json: &str) -> R<String> {
+    guard(|| Ok(fpqz::check_proven(request_json.as_bytes())?))
 }
 fn pqz_check_set(deployed_json: &str) -> R<()> {
     guard(|| Ok(fpqz::check_set(&fpqz::PqzSet::from_json(deployed_json.as_bytes())?)?))

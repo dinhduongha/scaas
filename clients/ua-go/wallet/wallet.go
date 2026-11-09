@@ -1284,6 +1284,24 @@ func PqzSet() (string, error) {
 	return loadedStr(1024, func(o unsafe.Pointer, n *C.size_t) C.ScaasUaStatus { return C.scaas_ua_pqz_set((*C.char)(o), n) })
 }
 
+// PqzCheck is checkProven (no-oracle spec §4.14.8): an MPC quorum member's keyless check before a partial, with no handle; its
+// JSON answer {parts, sum}, in one call into PqzOutMax bytes.
+func PqzCheck(request string) (string, error) {
+	if err := Load(); err != nil {
+		return "", err
+	}
+	var a args
+	defer a.done()
+	buf := make([]byte, PqzOutMax)
+	n := C.size_t(PqzOutMax)
+	if err := call(func() C.ScaasUaStatus {
+		return C.scaas_ua_pqz_check(a.str(request), (*C.char)(unsafe.Pointer(&buf[0])), &n)
+	}); err != nil {
+		return "", err
+	}
+	return string(buf[:n-1]), nil
+}
+
 // PqzCheckSet is nil if deployed (a token's PqzSet JSON) is this build's set, else UAPqzSetMismatch.
 func PqzCheckSet(deployed string) error {
 	if err := Load(); err != nil {

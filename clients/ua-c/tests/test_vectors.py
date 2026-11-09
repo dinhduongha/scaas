@@ -995,6 +995,7 @@ for name, res, args in [
     ('wallet_pqz_key', st, [P, u32, u32, P]), ('pqz_key_free', None, [P]), ('pqz_public', st, [P, P, P]),
     ('pqz_call', st, [P, u8, u8, P, P]), ('pqz_seal_balance_cache', st, [P, u8, sz, P, P]),
     ('pqz_open_balance_cache', st, [P, u8, P, P]), ('pqz_set', st, [P, P]), ('pqz_check_set', st, [u8]),
+    ('pqz_check', st, [u8, P, P]),
     ('export_pqz_leaf_raw', st, [P, u32, u32, P]),
     ('wallet_pqz_key_version', st, [P, u32, u32, u64, P]), ('export_pqz_leaf_raw_version', st, [P, u32, u32, u64, P]),
     ('pqz_seed_backup', st, [P, P, u8, sz, u64, C.c_uint8, P, sz, P, P]),
@@ -2139,9 +2140,27 @@ class WalletPqz(WalletCase):
         # T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs
         # under `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance through the C ABI
         w = self.qw()
-        for r in json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())['rows']:
+        ws = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())
+        for r in ws['rows']:
             st_, out = self.call(self.qk(w, r['account'], r['index'], r['version']), 'balance', r['request'])
             self.assertEqual((st_, out and out['value']), (name_of(OK), r['value']), r['name'])
+        # T20d9 (C-PP-8): the proof path's commands are in COMMANDS; each proven row end to end (provenOpen, provenAdd with the
+        # session, balanceProven), and the quorum's row through scaas_ua_pqz_check (no handle)
+        for c in ['provenOpen', 'provenAdd', 'provenCancel', 'balanceProven', 'proveTransferProven', 'proveTransferMultiProven', 'proveBurnProven', 'proveRefreshProven']:
+            self.assertIn(c, commands('pqz')[0], c)
+        for r in ws['proven']:
+            k = self.qk(w, r['account'], r['index'], r['version'])
+            st_, o = self.call(k, 'provenOpen', r['open'])
+            self.assertEqual(st_, name_of(OK), r['name'])
+            st_, a = self.call(k, 'provenAdd', dict(r['add'], session=o['session']))
+            self.assertEqual((st_, a['accepted']), (name_of(OK), o['need']), r['name'])
+            st_, b = self.call(k, 'balanceProven', {'session': o['session']})
+            self.assertEqual((b['value'], [p['kind'] for p in b['parts']]), (r['value'], r['kinds']), r['name'])
+        for r in ws['check']:
+            buf, n = C.create_string_buffer(PQZ_OUT_MAX), sz(PQZ_OUT_MAX)
+            self.assertEqual(name_of(L.pqz_check(jb(r['request']), buf, C.byref(n))), name_of(OK), r['name'])
+            self.assertEqual(json.loads(buf.raw[:n.value - 1]), r['answer'], r['name'])
+            self.assertEqual(name_of(L.pqz_check(jb(dict(r['request'], keyRecord='0x' + '00' * 32)), buf, C.byref(n))), 'UAArgument')
 
     def test_pqz_handle_after_lock_and_free_is_KEY_REVOKED(self):
         w = self.qw()

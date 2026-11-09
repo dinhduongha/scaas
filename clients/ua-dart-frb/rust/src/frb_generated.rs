@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -280241179;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1692172928;
 
 // Section: executor
 
@@ -4146,6 +4146,39 @@ fn wire__crate__api__ua__portable_record_digest_impl(
         },
     )
 }
+fn wire__crate__api__wallet__pqz_check_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "pqz_check",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request_json = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                    let output_ok = crate::api::wallet::pqz_check(api_request_json)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__wallet__pqz_check_set_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -6875,58 +6908,59 @@ fn pde_ffi_dispatcher_primary_impl(
         79 => wire__crate__api__wallet__key_kem_key_impl(port, ptr, rust_vec_len, data_len),
         80 => wire__crate__api__wallet__key_list_new_impl(port, ptr, rust_vec_len, data_len),
         83 => wire__crate__api__wallet__link_session_new_impl(port, ptr, rust_vec_len, data_len),
-        95 => wire__crate__api__wallet__pqz_check_set_impl(port, ptr, rust_vec_len, data_len),
-        101 => wire__crate__api__wallet__pqz_set_impl(port, ptr, rust_vec_len, data_len),
-        107 => wire__crate__api__wallet__seal_impl(port, ptr, rust_vec_len, data_len),
-        109 => wire__crate__api__wallet__seed_backup_verify_impl(port, ptr, rust_vec_len, data_len),
-        117 => wire__crate__api__wallet__uasig_impl(port, ptr, rust_vec_len, data_len),
-        119 => wire__crate__api__wallet__vault_enable_prf_impl(port, ptr, rust_vec_len, data_len),
-        120 => wire__crate__api__wallet__vault_needs_rewrap_impl(port, ptr, rust_vec_len, data_len),
-        121 => wire__crate__api__wallet__vault_rewrap_pin_impl(port, ptr, rust_vec_len, data_len),
-        122 => wire__crate__api__wallet__wallet_backup_seal_impl(port, ptr, rust_vec_len, data_len),
-        123 => wire__crate__api__wallet__wallet_from_link_impl(port, ptr, rust_vec_len, data_len),
-        124 => {
+        95 => wire__crate__api__wallet__pqz_check_impl(port, ptr, rust_vec_len, data_len),
+        96 => wire__crate__api__wallet__pqz_check_set_impl(port, ptr, rust_vec_len, data_len),
+        102 => wire__crate__api__wallet__pqz_set_impl(port, ptr, rust_vec_len, data_len),
+        108 => wire__crate__api__wallet__seal_impl(port, ptr, rust_vec_len, data_len),
+        110 => wire__crate__api__wallet__seed_backup_verify_impl(port, ptr, rust_vec_len, data_len),
+        118 => wire__crate__api__wallet__uasig_impl(port, ptr, rust_vec_len, data_len),
+        120 => wire__crate__api__wallet__vault_enable_prf_impl(port, ptr, rust_vec_len, data_len),
+        121 => wire__crate__api__wallet__vault_needs_rewrap_impl(port, ptr, rust_vec_len, data_len),
+        122 => wire__crate__api__wallet__vault_rewrap_pin_impl(port, ptr, rust_vec_len, data_len),
+        123 => wire__crate__api__wallet__wallet_backup_seal_impl(port, ptr, rust_vec_len, data_len),
+        124 => wire__crate__api__wallet__wallet_from_link_impl(port, ptr, rust_vec_len, data_len),
+        125 => {
             wire__crate__api__wallet__wallet_from_mnemonic_impl(port, ptr, rust_vec_len, data_len)
         }
-        125 => wire__crate__api__wallet__wallet_generate_impl(port, ptr, rust_vec_len, data_len),
-        126 => wire__crate__api__wallet__wallet_import_native_key_impl(
+        126 => wire__crate__api__wallet__wallet_generate_impl(port, ptr, rust_vec_len, data_len),
+        127 => wire__crate__api__wallet__wallet_import_native_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        127 => wire__crate__api__wallet__wallet_open_label_vault_impl(
+        128 => wire__crate__api__wallet__wallet_open_label_vault_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        128 => wire__crate__api__wallet__wallet_open_vault_impl(port, ptr, rust_vec_len, data_len),
-        129 => {
+        129 => wire__crate__api__wallet__wallet_open_vault_impl(port, ptr, rust_vec_len, data_len),
+        130 => {
             wire__crate__api__wallet__wallet_restore_backup_impl(port, ptr, rust_vec_len, data_len)
         }
-        130 => wire__crate__api__wallet__wallet_restore_backup_over_impl(
+        131 => wire__crate__api__wallet__wallet_restore_backup_over_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        131 => wire__crate__api__wallet__wallet_restore_backup_rollback_impl(
+        132 => wire__crate__api__wallet__wallet_restore_backup_rollback_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        132 => wire__crate__api__wallet__wallet_seal_label_vault_impl(
+        133 => wire__crate__api__wallet__wallet_seal_label_vault_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        133 => wire__crate__api__wallet__wallet_seal_vault_impl(port, ptr, rust_vec_len, data_len),
-        134 => wire__crate__api__wallet__wallet_unlock_impl(port, ptr, rust_vec_len, data_len),
-        135 => wire__crate__api__wallet__webauthn_assertion_impl(port, ptr, rust_vec_len, data_len),
-        136 => wire__crate__api__wallet__webauthn_challenge_impl(port, ptr, rust_vec_len, data_len),
+        134 => wire__crate__api__wallet__wallet_seal_vault_impl(port, ptr, rust_vec_len, data_len),
+        135 => wire__crate__api__wallet__wallet_unlock_impl(port, ptr, rust_vec_len, data_len),
+        136 => wire__crate__api__wallet__webauthn_assertion_impl(port, ptr, rust_vec_len, data_len),
+        137 => wire__crate__api__wallet__webauthn_challenge_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -6996,25 +7030,25 @@ fn pde_ffi_dispatcher_sync_impl(
         92 => wire__crate__api__ua__pay_digest_impl(ptr, rust_vec_len, data_len),
         93 => wire__crate__api__ua__portable_domain_separator_impl(ptr, rust_vec_len, data_len),
         94 => wire__crate__api__ua__portable_record_digest_impl(ptr, rust_vec_len, data_len),
-        96 => wire__crate__api__ua__pqz_key_digest_impl(ptr, rust_vec_len, data_len),
-        97 => wire__crate__api__ua__pqz_key_record_digest_impl(ptr, rust_vec_len, data_len),
-        98 => wire__crate__api__ua__pqz_key_record_message_impl(ptr, rust_vec_len, data_len),
-        99 => wire__crate__api__ua__pqz_key_record_message_with_impl(ptr, rust_vec_len, data_len),
-        100 => wire__crate__api__ua__pqz_reg_message_impl(ptr, rust_vec_len, data_len),
-        102 => wire__crate__api__ua__purpose_tag_impl(ptr, rust_vec_len, data_len),
-        103 => wire__crate__api__ua__purpose_tag_v_impl(ptr, rust_vec_len, data_len),
-        104 => wire__crate__api__ua__registration_args_impl(ptr, rust_vec_len, data_len),
-        105 => wire__crate__api__ua__registration_digest_impl(ptr, rust_vec_len, data_len),
-        106 => wire__crate__api__ua__replayed_member_sig_impl(ptr, rust_vec_len, data_len),
-        108 => wire__crate__api__wallet__secret_alloc_impl(ptr, rust_vec_len, data_len),
-        110 => wire__crate__api__ua__set_kem_key_args_impl(ptr, rust_vec_len, data_len),
-        111 => wire__crate__api__ua__set_pqz_key_args_impl(ptr, rust_vec_len, data_len),
-        112 => wire__crate__api__ua__tag_impl(ptr, rust_vec_len, data_len),
-        113 => wire__crate__api__ua__ua_auth_digest_impl(ptr, rust_vec_len, data_len),
-        114 => wire__crate__api__ua__ua_auth_domain_separator_impl(ptr, rust_vec_len, data_len),
-        115 => wire__crate__api__ua__ua_message_impl(ptr, rust_vec_len, data_len),
-        116 => wire__crate__api__ua__ua_of_impl(ptr, rust_vec_len, data_len),
-        118 => wire__crate__api__ua__validate_key_data_impl(ptr, rust_vec_len, data_len),
+        97 => wire__crate__api__ua__pqz_key_digest_impl(ptr, rust_vec_len, data_len),
+        98 => wire__crate__api__ua__pqz_key_record_digest_impl(ptr, rust_vec_len, data_len),
+        99 => wire__crate__api__ua__pqz_key_record_message_impl(ptr, rust_vec_len, data_len),
+        100 => wire__crate__api__ua__pqz_key_record_message_with_impl(ptr, rust_vec_len, data_len),
+        101 => wire__crate__api__ua__pqz_reg_message_impl(ptr, rust_vec_len, data_len),
+        103 => wire__crate__api__ua__purpose_tag_impl(ptr, rust_vec_len, data_len),
+        104 => wire__crate__api__ua__purpose_tag_v_impl(ptr, rust_vec_len, data_len),
+        105 => wire__crate__api__ua__registration_args_impl(ptr, rust_vec_len, data_len),
+        106 => wire__crate__api__ua__registration_digest_impl(ptr, rust_vec_len, data_len),
+        107 => wire__crate__api__ua__replayed_member_sig_impl(ptr, rust_vec_len, data_len),
+        109 => wire__crate__api__wallet__secret_alloc_impl(ptr, rust_vec_len, data_len),
+        111 => wire__crate__api__ua__set_kem_key_args_impl(ptr, rust_vec_len, data_len),
+        112 => wire__crate__api__ua__set_pqz_key_args_impl(ptr, rust_vec_len, data_len),
+        113 => wire__crate__api__ua__tag_impl(ptr, rust_vec_len, data_len),
+        114 => wire__crate__api__ua__ua_auth_digest_impl(ptr, rust_vec_len, data_len),
+        115 => wire__crate__api__ua__ua_auth_domain_separator_impl(ptr, rust_vec_len, data_len),
+        116 => wire__crate__api__ua__ua_message_impl(ptr, rust_vec_len, data_len),
+        117 => wire__crate__api__ua__ua_of_impl(ptr, rust_vec_len, data_len),
+        119 => wire__crate__api__ua__validate_key_data_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

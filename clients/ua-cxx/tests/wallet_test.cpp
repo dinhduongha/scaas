@@ -866,6 +866,26 @@ static void pqz_words() {
         PqzKey q = w.pqzKey(r["account"].get<uint32_t>(), r["index"].get<uint32_t>(), r["version"].get<uint64_t>());
         CHECK(json::parse(q.call("balance", r["request"].dump()))["value"] == r["value"], r["name"].get<std::string>());
     }
+    // T20d9 (C-PP-8): the proof path's commands are in COMMANDS; each proven row end to end, the quorum's row by pqzCheck
+    for (const char* c : {"provenOpen", "provenAdd", "provenCancel", "balanceProven", "proveTransferProven", "proveTransferMultiProven", "proveBurnProven", "proveRefreshProven"})
+        CHECK(std::find(release.begin(), release.end(), std::string(c)) != release.end(), c);
+    for (auto& r : ws["proven"]) {
+        PqzKey q = w.pqzKey(r["account"].get<uint32_t>(), r["index"].get<uint32_t>(), r["version"].get<uint64_t>());
+        json o = json::parse(q.call("provenOpen", r["open"].dump()));
+        json add = r["add"];
+        add["session"] = o["session"];
+        CHECK(json::parse(q.call("provenAdd", add.dump()))["accepted"] == o["need"], r["name"].get<std::string>());
+        json b = json::parse(q.call("balanceProven", json{{"session", o["session"]}}.dump()));
+        json kinds = json::array();
+        for (auto& p : b["parts"]) kinds.push_back(p["kind"]);
+        CHECK(b["value"] == r["value"] && kinds == r["kinds"], r["name"].get<std::string>());
+    }
+    for (auto& r : ws["check"]) {
+        CHECK(json::parse(pqzCheck(r["request"].dump())) == r["answer"], r["name"].get<std::string>());
+        json bad = r["request"];
+        bad["keyRecord"] = "0x" + std::string(64, '0');
+        CHECK(code_of([&] { pqzCheck(bad.dump()); }) == "UAArgument", "a keyRecord of the quorum");
+    }
 }
 
 // Group 3g C8 (T15o): pqzKey / exportPqzLeafRaw at a key version give pq_kat.json's pqzSeeds; version 0 is the default; one key

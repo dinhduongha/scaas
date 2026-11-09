@@ -839,11 +839,35 @@ public class WalletTests : IDisposable
         // T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs under
         // vectors, gen_wallet_state.sh): each row's own handle decrypts its balance
         var w = Fresh("pq_kat");
-        foreach (var r in Rows(Load("smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json"), "rows"))
+        var ws = Load("smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json");
+        foreach (var r in Rows(ws, "rows"))
         {
             var q = Keep(w.PqzKey(r.GetProperty("account").GetUInt32(), r.GetProperty("index").GetUInt32(), r.GetProperty("version").GetUInt64()));
             var got = JsonDocument.Parse(q.Call("balance", r.GetProperty("request").GetRawText())).RootElement.GetProperty("value");
             Assert.True(got.GetUInt64() == r.GetProperty("value").GetUInt64(), S(r, "name"));
+        }
+        // T20d9 (C-PP-8): the proof path's commands are in COMMANDS; each proven row end to end, the quorum's row by PqzCheck
+        foreach (var c in new[] { "provenOpen", "provenAdd", "provenCancel", "balanceProven", "proveTransferProven", "proveTransferMultiProven", "proveBurnProven", "proveRefreshProven" }) Assert.Contains(c, release);
+        foreach (var r in Rows(ws, "proven"))
+        {
+            var q = Keep(w.PqzKey(r.GetProperty("account").GetUInt32(), r.GetProperty("index").GetUInt32(), r.GetProperty("version").GetUInt64()));
+            var o = JsonNode.Parse(q.Call("provenOpen", r.GetProperty("open").GetRawText()))!;
+            var add = JsonNode.Parse(r.GetProperty("add").GetRawText())!;
+            add["session"] = o["session"]!.GetValue<string>();
+            var a = JsonNode.Parse(q.Call("provenAdd", add.ToJsonString()))!;
+            Assert.Equal(o["need"]!.ToJsonString(), a["accepted"]!.ToJsonString());
+            var b = JsonNode.Parse(q.Call("balanceProven", new JsonObject { ["session"] = o["session"]!.GetValue<string>() }.ToJsonString()))!;
+            Assert.True(b["value"]!.GetValue<ulong>() == r.GetProperty("value").GetUInt64(), S(r, "name"));
+            var kinds = new JsonArray(b["parts"]!.AsArray().Select(p => (JsonNode?)JsonValue.Create(p!["kind"]!.GetValue<string>())).ToArray());
+            Assert.Equal(r.GetProperty("kinds").GetRawText().Replace(" ", ""), kinds.ToJsonString());
+        }
+        foreach (var r in Rows(ws, "check"))
+        {
+            var got = JsonNode.Parse(UaLib.PqzCheck(r.GetProperty("request").GetRawText()))!;
+            Assert.True(JsonNode.DeepEquals(got, JsonNode.Parse(r.GetProperty("answer").GetRawText())), S(r, "name"));
+            var bad = JsonNode.Parse(r.GetProperty("request").GetRawText())!;
+            bad["keyRecord"] = "0x" + new string('0', 64);
+            Assert.Equal("UAArgument", Code(() => UaLib.PqzCheck(bad.ToJsonString())));
         }
     }
 

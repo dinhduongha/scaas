@@ -41,6 +41,7 @@ export 'src/rust/api/wallet.dart'
         webauthnAssertion,
         pqzSet,
         pqzCheckSet,
+        pqzCheck,
         secretAlloc;
 export 'src/wallet.dart';
 
