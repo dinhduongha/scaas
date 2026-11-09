@@ -1211,6 +1211,9 @@ mod tests {
                     let bc = BurnCall { beneficiary_ua: w(&r["beneficiaryUA"]), fee: fee(0), amount: n(&r["amount"]), recipient: w(&r["recipient"]),
                         valid_until_block: n(&r["validUntilBlock"]), binding: w(&r["envelopeBinding"]),
                         unwrap: (f == OwnForm::Unwrap).then(|| (h(&r["underlying"]).try_into().unwrap(), n(&r["minOut"]))) };
+                    // one change from the row: a refresh moves no amount, a burn or an unwrap one
+                    let wrong = BurnCall { amount: if f == OwnForm::Refresh { 1 } else { 0 }, ..bc.clone() };
+                    assert_eq!(burn_header(&o, &rec, k, f, &wrong, &tl), Err(Error::Argument), "{name}: the amount of its form");
                     burn_header(&o, &rec, k, f, &bc, &tl).unwrap()
                 }
             };
