@@ -2164,7 +2164,10 @@ module is security-relevant).
       entry (CTR-GOV-19's ceiling).
 - [ ] **Step 4:** whole `forge test`, the four PQZ sets, size gate, gas pins old -> new, deploy-gas table for every contract against
       60 M, mutants of each split.
-- [ ] **Step 5: the full Hedera testnet deploy (owner 2026-11-08):** after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
+- [ ] **Step 5: the full Hedera testnet deploy — DEFERRED (owner 2026-11-09: "tạm chưa quan tâm Hedera, theo 60 M"; not now,
+      the owner did not ask for a Hedera deploy in this task). T66b follows the 60 M goal only; no Hedera-specific split (the
+      spec's part 4b is not built). The public Hedera testnet refused runtime > 24,576 B in a simulation (T66b Step 2,
+      `runs/2026-11-09-ua-mtx-merge-t66b/hedera-codesize.txt`). The step as written (2026-11-08):** after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
       public Hedera testnet (chain 296) from the testnet-only account (`SCAAS_TESTNET_MNEMONIC_FILE`, never a key in a file of the
       repo). Each transaction within Hedera's 15 M gas per transaction (Hedera charges at least 80 % of the limit: estimate + 20 %);
       HBAR from the faucet first (several hundred at 1,330 gwei-equivalent). Then the HIP-632 checks of `docs/networks/hedera.md`
