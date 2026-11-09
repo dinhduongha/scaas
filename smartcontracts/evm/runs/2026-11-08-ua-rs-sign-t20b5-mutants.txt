@@ -13,3 +13,6 @@ killed     | M11 UAPqzCancelVerifier dropped | clients/ua-rs/src/wallet/eip712.r
 killed     | M12 zether-prover: UAPqzSetVerifier not listed | clients/zether-prover/tests/typed_ops.rs | rc=101 | 1 failed: every_zether_row_digest_equals_the_vector | assertion `left == right` failed: a row left out must be listed in NOT_ZETHER with its reason | at 0653d030
 killed     | M13 C header: the msig KEM rule unstated | clients/ua-c/include/scaas_ua.h, clients/ua-c/src/lib.rs | rc=101 | 1 failed: header_states_its_rules | header rule missing: an msig never holds a KEM key | at 0653d030
 mutants M1-M13 of 13: 13 killed, 0 survived, 0 not loaded
+# T20d1 re-run (2026-11-09, after the fourth sync, ua-mtx-merge 7d653925: 3h's UASetProofStore makes NOT_ZETHER 59 rows): the replacement string brought to HEAD (58 -> 59, 57 -> 58), the mutant run again:
+killed     | M12 zether-prover: UAPqzSetVerifier not listed | clients/zether-prover/tests/typed_ops.rs | rc=101 | 1 failed: every_zether_row_digest_equals_the_vector | assertion `left == right` failed: a row left out must be listed in NOT_ZETHER with its reason | at c62c3e48
+# T20d1 re-run: 1 killed, 0 survived, 0 not loaded (the other mutants above stand, every string checked at HEAD)
