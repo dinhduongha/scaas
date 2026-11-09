@@ -320,6 +320,29 @@ disclosure view (`SENDER_S`), and on a `WRAPPED_ZETHER` token over a test ERC-20
 prints gasUsed per transaction from the receipts.
 Integration tests use `anvil --hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536` (`scaas-node/tests/e2e.rs`, `e2e_hedera.rs`: neither deploys a kind above 64 KiB) and `--code-size-limit 131072` (`scripts/e2e-zether.sh`, the limit of the SCaaS testnet's next reset), each at the SCaaS testnet's 200 M block gas limit ([NET-EVM-06](#NET-EVM-06)); owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there.
 
+<a id="body-module-releases"></a>**Operator note: releases with body modules** (T66b, [CTR-TOK-30](../contracts/token-wrappers.md#CTR-TOK-30);
+BUILT on branch `ua-mtx-merge`, UNAUDITED).
+
+- **Deploy order.** The registry trio first: `UARegistryCoreLib`, then `UARegistryAuxLib` (it links the core), then
+  `UARegistry` (it names both). Then per release: its libraries, its body modules, each its own CREATE2 transaction through
+  the deterministic deployer with `DEPLOY_SALT` and its own gate (a module already at its address is reused), the env with
+  the modules pinned after the libraries, then the implementation through `deployImplementation`; the DEX the same, its
+  admin module D first, then `deployDexImplementation`. `DeployBase`, `deploy.sh evm` and `script/pqz/e2e.py` follow it.
+- **`releases.json`** gets a row per module: class 0 (no factory class), the token kind (0 for the DEX's D), version 1, its
+  address, the init-code hash and the hash of its constructor arguments. A module holds no chain value and has no
+  `chainUid()`: it lands at the same address on every chain, and its code hash is the release's pin.
+- **Gas per transaction.** Every contract deploys in one transaction of at most 60 M asked (`(regular + state) × 1.05`,
+  regular × 1.05 < 2^24): the largest are `UARegistryCoreLib` 56.64 M, `SCaaSDex` 55.70 M and the module `NormalPqzRegulatedTokenQ`
+  54.76 M; a token release asks 23.53–47.02 M plus the factory frame of 0.31 M (93 contracts in all, the table in
+  `smartcontracts/evm/runs/2026-11-09-ua-mtx-merge-t66b-build/summary.txt`).
+- **The relayer's gas share.** A relayed op crosses more call frames (a PQZ op: clone, implementation, P, the self-call,
+  clone, implementation, Q, its library, the precompile: 7 frames against 5), and each frame keeps 1/64 of the gas it passes
+  on, about 10.4 % of the gas sent against 7.6 % before. A relayer that sets its limit from `eth_estimateGas` changes nothing;
+  a figure hard-coded for an op grows by about 3 %. The node reads nothing from `releases.json` and filters every log by the
+  configured contract addresses, so a module body run under another contract's `DELEGATECALL` (its log carries that
+  contract's address) is never taken for a token's.
+
+
 Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version deployed by the factory
 plus a voluntary migration.
