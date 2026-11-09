@@ -377,3 +377,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   schema, body)`, no records), `src/regulated/RegulatedBase.sol` (the tax entries without a record),
   `test/metatx/PayMeta.t.sol` and `test/helpers/PayMetaKit.sol` (the v2 rows and formula), `test/vectors/legacy/ua-mtx-merge/
   t83/mandate_kat.json` (the pay calldata with the v2 tuple). Not built.
+  T66b (spec 2026-11-09-t66b-library-organisation.md, the library organisation and the 60 M fit), under `ua-mtx-merge/t66b/`, as
+  they stood at 5e5fbce2: task 3.1 (the registry pair, R-1 then R-2) `src/ua/{UARegistry,UARegistryLib}.sol` (every `pure` view
+  in the registry, every writer in the library). Not built.
