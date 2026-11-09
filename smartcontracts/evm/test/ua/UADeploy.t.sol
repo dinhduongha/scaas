@@ -171,17 +171,19 @@ contract UADeployTest is Test {
         assertEq(h.gasNeed("NormalToken"), plain);
         assertEq(h.gasNeed("WrappedPqzToken"), conf);
         assertLt(plain, 80_000_000, "plain kinds: about 75 M");
-        assertGt(conf, 100_000_000, "confidential kinds: about 124 M");
-        assertLt(conf, 130_000_000);
+        // T66b (the window closed): WrappedPqzToken's row 62,022 -> 24,314 B, its gate 111.7 M -> 54.0 M: under 60 M
+        assertLt(conf, 60_000_000, "confidential kinds: about 54 M");
         // a contract over the EIP-170 limit is priced at its baseline size (SCaaSDex since the DEX round)
         assertEq(h.gasNeed("SCaaSDex"), vm.parseJsonUint(base, ".SCaaSDex") * 1530 + 16_777_216);
         // a contract under the EIP-170 limit is not in the baseline: priced at 24,576 B
         assertFalse(vm.keyExistsJson(base, ".UniswapExecutor"));
         assertEq(h.gasNeed("UniswapExecutor"), uint256(24_576) * 1530 + 16_777_216);
-        // an Ethereum-like 60 M block cannot hold any confidential release
-        vm.expectRevert(bytes(string.concat("block gas limit 60000000 < ", vm.toString(conf),
-            " needed to deploy the WrappedPqzToken release (NET-EVM-06)")));
+        // T66b: an Ethereum-like 60 M block holds the largest confidential release (it could not before the split); one
+        // gas below its need is refused by name
         h.checkGas("WrappedPqzToken", 60_000_000);
+        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(conf - 1), " < ", vm.toString(conf),
+            " needed to deploy the WrappedPqzToken release (NET-EVM-06)")));
+        h.checkGas("WrappedPqzToken", conf - 1);
         h.checkGas("WrappedPqzToken", conf);
         // the gate reads the chain's block gas limit (at the SCaaS testnet's declared code limit, GD-4: WrappedPqzToken
         // is above EIP-7954's 65,536 B, the default)

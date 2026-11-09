@@ -295,9 +295,14 @@ contract GovDeployTest is Test {
         DeployHarness h = new DeployHarness();
         h.setWrapped(true);
         uint256 need = h.gasNeed("WrappedToken");
-        h.limitBlockGas(need - 1);
+        // T66b: the release (17,808 B) now needs less than the UA registry before it, so a deploy at `need - 1` stops at the
+        // registry's gate first; the WRAPPED release's own gate is checked by name
         vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(need - 1), " < ", vm.toString(need),
             " needed to deploy the WrappedToken release (NET-EVM-06)")));
+        h.checkGas("WrappedToken", need - 1);
+        h.checkGas("WrappedToken", need);
+        h.limitBlockGas(need - 1);
+        vm.expectRevert(); // nothing of the release is sent: the deploy refuses before it
         h.deploy(ZUID, false, ska);
         h.limitBlockGas(0);
         // ua-mtx-merge T1: `size-baseline.json`'s WrappedToken row 52,297 -> 51,436 B, so the control moves with it;
@@ -306,10 +311,11 @@ contract GovDeployTest is Test {
         // T39: 43,714 -> 43,711 B; T40: 43,711 -> 43,503 B (lever 5: `_payMeta` in `MtxPipelineLib`); chain-neutral T72:
         // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`); 3f T44: 44,456 -> 44,610 B (the
         // three PQZ verifier fields refused by `_requireUnused`); 3h T60: 44,610 -> 44,635 B (`proofStore` refused there too);
-        // T83: 44,635 -> 45,522 B (the pay records' views and `_payRecord`, the v3 `PayMeta` tuple)
-        h.limitCode(45_521);
-        vm.expectRevert(bytes("WrappedToken runtime 45522 B > chain code limit 45521 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
-        h.deploy(ZUID, false, ska);
+        // T83: 44,635 -> 45,522 B (the pay records' views and `_payRecord`, the v3 `PayMeta` tuple); T66b (the body
+        // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name
+        h.limitCode(17_807);
+        vm.expectRevert(bytes("WrappedToken runtime 17808 B > chain code limit 17807 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        h.requireGas("WrappedToken");
     }
 
     /// Spec S8, §3.1: one `GovernanceRouter` per chain, CREATE2 before every release, gated by `chainUid()`, named by every
@@ -437,7 +443,9 @@ contract GovDeployTest is Test {
         g.limitBlockGas(most);
         (OpenFactory gf,) = g.deploy(ZUID, false, ska);
         assertTrue(gf.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length != 0, "at the largest ask: deployed");
-        assertLt(most, h.gasNeed("WrappedToken"), "a limit at which the testnet gate refuses the WrappedToken release");
+        // T66b: the token releases fell under the public asks (WrappedToken's formula 86.4 M -> 44.0 M); the UA registry keeps
+        // the illustration
+        assertLt(most, h.gasNeed("UARegistry"), "a limit at which the testnet gate refuses the UARegistry release");
     }
 
     /// Q4: the public gate also refuses a release whose regular gas x 1.05 reaches 2^24 (EIP-7825), whatever the block
