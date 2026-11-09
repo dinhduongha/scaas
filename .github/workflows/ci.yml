@@ -31,7 +31,7 @@
 #                          cargo deny --all-features check in ua-rs; cargo deny --all-features --config ../ua-rs/deny.toml check in ua-c and zether-prover (cargo-deny 0.20.2);
 #                          cargo audit --ignore <each ignore of ua-rs/deny.toml> in the same three (cargo-audit 0.22.2)
 #   clients/ua-py:         (cd clients/ua-c && cargo build --release --locked); python3 -m unittest tests.test_vectors tests.test_wallet (the wallet over libscaas_ua_c, no_oracle included)
-#   clients/ua-go:         (cd clients/ua-c && cargo build --release --locked); go vet ./...; go test ./... (wallet/ links clients/ua-c/target/release)
+#   clients/ua-go:         (cd clients/ua-c && cargo build --release --locked); go vet ./...; go test -count=1 ./... (wallet/ links clients/ua-c/target/release)
 #   clients/ua-cs:         (cd clients/ua-c && cargo build --release --locked); dotnet test Scaas.Ua.Tests
 #   clients/ua-cxx:        cargo clippy --locked --all-targets -- -D warnings; cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
 #   clients/ua-c:          cargo clippy --locked --all-targets -- -D warnings; cargo build --locked; cargo test --locked (header drift); cc ... tests/smoke.c (C99 smoke); python3 -m unittest -v tests.test_vectors;
@@ -822,7 +822,8 @@ jobs:
       - name: vet
         run: go vet ./...
       - name: vectors
-        run: go test ./...
+        # -count=1: setup-go restores GOCACHE, and Go's test cache does not recheck a file outside the module (the vectors)
+        run: go test -count=1 ./...
 
   ua-cs:
     needs: changes

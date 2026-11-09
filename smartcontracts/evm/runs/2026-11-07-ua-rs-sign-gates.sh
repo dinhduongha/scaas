@@ -103,7 +103,8 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
     ua-dart-frb) cd clients/ua-dart-frb && cap sh -c "dart pub get --enforce-lockfile && cargo build $C --manifest-path rust/Cargo.toml &&
         cargo test $C --manifest-path rust/Cargo.toml && dart test -r expanded -j 1" ;;
     ua-py) release_ua_c && cd clients/ua-py && python3 -m unittest -v tests.test_vectors tests.test_wallet ;;
-    ua-go) release_ua_c && cd clients/ua-go && cap sh -c 'go vet ./... && go test -v ./...' ;;
+    # -count=1: Go's test cache does not recheck a file outside the module (the shared vectors), so a cached PASS hid a red row
+    ua-go) release_ua_c && cd clients/ua-go && cap sh -c 'go vet ./... && go test -count=1 -v ./...' ;;
     ua-cs) release_ua_c || return 1
       cd clients/ua-cs && cap dotnet test Scaas.Ua.Tests --logger 'console;verbosity=normal'; local rc=$?
       dotnet build-server shutdown > /dev/null 2>&1; return $rc ;; # VBCSCompiler would keep the capped slot
