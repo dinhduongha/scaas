@@ -1141,13 +1141,27 @@ stream)` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; the p
 are deleted (`cleared` and, when passed, `floor` follow); emit `RolledOver(ua, rolled, accUnits, accHash)`. No calldata besides
 `(ua, n)`, no proof, no signature: rollover cannot hurt anyone. It is also an allowlisted envelope op on both paths (Task R, owner 2026-10-20, [CTR-PQZ-21](#CTR-PQZ-21)): anyone calls it
 directly or through a relayer. **`ROLL_MAX` per set** (plan 5h Task 8d part 2b; `set.toml` `roll_max` → `gen_set.py` →
-`PqzSet.ROLL_MAX`): the largest multiple of 16 whose rollover, as a **relayed full transaction on either relay path**
-(`mtxExecute`, the ECDSA envelope, and `uaExecute`, an `mldsa65` fee UA; outer fee FIXED) on a prepared account with
-every entry from its own cold blob (every coefficient `q − 1`), stays under `0.75 · 2^24 = 12,582,912` regular gas; the
-costlier path, `uaExecute`, binds (3,360 B more calldata, the ML-DSA-65 verification at 68,006 [estimate], the fee UA's
-record and ledger: 157,115–157,139 gas more per rollover). Pinned by `PqzStatePinGasTest` (`ROLL_MAX` fits on both paths,
-`ROLL_MAX + 16` does not on the costlier), measured by a build with a larger constant
-(`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-<set>.txt`, Foundry 1.8.5, Amsterdam):
+`PqzSet.ROLL_MAX`; rule of owner 2026-11-10): an **owner-set multiple of 16** whose rollover, as a **relayed full
+transaction on both relay paths** (`mtxExecute`, the ECDSA envelope, and `uaExecute`, an `mldsa65` fee UA; outer fee FIXED)
+on a prepared account with every entry from its own cold blob (every coefficient `q − 1`), fits `0.75 · 2^24 = 12,582,912`
+regular gas; the largest fitting multiple of 16 is measured and reported, not required. The costlier path, `uaExecute`,
+binds (3,360 B more calldata, the ML-DSA-65 verification at 68,006 [estimate], the fee UA's record and ledger: about
+159,000 gas more per rollover). `PqzStatePinGasTest.test_gas_rollMax_relayedFullTx` asserts the fit on both paths and logs
+the largest fitting multiple of 16 (the linear fit through a `ROLL_MAX / 2` rollover; a larger value needs a build with a
+larger constant, since the token refuses `n > ROLL_MAX`) and the headroom; it stays red-capable: a build at
+`n2304-kmax4096` with `ROLL_MAX` 112 fails it (`mtxExecute` 13,483,008). The values 96 / 80 / 64 / 32 stand (owner
+2026-11-10). Today (T66b tree, Foundry 1.8.5, Amsterdam; `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-rollmax.txt`):
+
+| Set | `ROLL_MAX` | relayed full tx at `ROLL_MAX`, regular: `mtxExecute`; `uaExecute` | per entry | headroom (`uaExecute`) | largest fitting multiple of 16 |
+|---|---|---|---|---|---|
+| `n2048-kmax1024` | 96 | 10,697,626; 10,856,706 | 62,256 | 1,726,206 | 112 |
+| `n2304-kmax4096` | 80 | 11,269,324; 11,428,404 | 69,178 | 1,154,508 | 96 |
+| `n2560-kmax16384` | 64 | 11,733,066; 11,892,146 | 76,127 | 690,766 | 64 |
+| `n2816-kmax65536` | 32 | 10,732,998; 10,892,078 | 83,097 | 1,690,834 | 48 |
+
+The 8d2b measurement (2026-10-26, before the metatx split and T66b; the rule was then "the largest multiple of 16"),
+with `ROLL_MAX + 16` measured by a build with a larger constant
+(`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-<set>.txt`):
 
 | Set | `ROLL_MAX` | relayed full tx at `ROLL_MAX` / at `ROLL_MAX + 16`: `mtxExecute`; `uaExecute` | direct: fixed + per entry (fit) | 1 / 16 entries (direct) | after a TRIVIAL-only rollover | `mtxPrepareAcc` half 0 / half 1 (relayed full tx, regular: `mtxExecute`; `uaExecute`; state) |
 |---|---|---|---|---|---|---|
@@ -1159,8 +1173,7 @@ record and ledger: 157,115–157,139 gas more per rollover). Pinned by `PqzState
 The fixed part is the `ACC_WORDS` cold rewrites (EIP-8038: 2,100 + 10,000 each); a rollover writes no new slot, so its
 state gas is only the envelope's (195,840). `n2816-kmax65536`'s `ROLL_MAX` is 32 since the review fix round of 2026-10-26
 (48 held on `mtxExecute` alone, 7,296 gas under the cap, but not on `uaExecute`: 12,732,731; controller proposal, owner
-may override). Margins under the rule on the binding `uaExecute` path: 712,704 / 305,390 / **6,032** / 1,334,868 gas (re-measured on the metatx split bytecode, `runs/2026-10-27-metatx-split-gas-<set>.txt` and `...-rollscan-n2560-kmax16384.txt`; the `ROLL_MAX + 16` column is measured at every set on the split bytecode, a linear fit from `ROLL_MAX` (the gas logs' `ROLL_MAX + 16, relayed full transaction (…, linear fit)` lines);
-`n2560-kmax16384`'s is tight (any contract change re-runs the scan). The halves of `mtxPrepareAcc` are far under
+may override). Margins on the binding `uaExecute` path on the metatx split bytecode: 712,704 / 305,390 / 6,032 / 1,334,868 gas (`runs/2026-10-27-metatx-split-gas-<set>.txt` and `...-rollscan-n2560-kmax16384.txt`); today's headroom is in the first table. The halves of `mtxPrepareAcc` are far under
 `0.75 · 2^24` in regular gas on both paths; their new slots are EIP-8037 state gas (≈ 97,920 per slot), which counts
 in the transaction's `tx.gas` (regular plus state), and that must fit the block gas limit for inclusion (both halves of `n2816-kmax65536` ≈ 59 M, so one half per transaction). Logs
 `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-gas-<set>.txt`.
