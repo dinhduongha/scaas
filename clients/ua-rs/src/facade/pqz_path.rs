@@ -6,7 +6,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 use super::pqz_pack::VP;
 use crate::wallet::{Error, Result};
-use pqz_ffi::stmt::Word;
+use pqz_ffi::stmt::{groups, Word};
 
 /// `PqzCore` record flags: `RECORD` always set, `WIDE` when `w1` was written.
 const RECORD: u8 = 1;
@@ -84,10 +84,30 @@ pub(crate) fn tail(d: &[u8]) -> Result<Tail> {
     Ok(Tail { r_len, own_tag, kv })
 }
 
+/// The shape `(G, M, auditorOn)` of a transfer op blob's `R` (`PqzCore._bundleShape`: `salt(16) ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖
+/// UA_j)_{j<M}`, op 1 as `M = 1`) from `R`'s length, `pkp` and `vp` the set's packed `u` and `v` lengths: **exactly one** `(M,
+/// auditorOn)` with `1 ≤ M ≤ 8` must fit, two fits or none is `Argument` (no-oracle spec §4.14.4 step 1, Fable P3-6 on the T20d0
+/// delta: the same rule for path (A)'s entries and path (B)'s credits).
+pub(crate) fn bundle_shape(r_len: usize, pkp: usize, vp: usize) -> Result<(usize, usize, bool)> {
+    let rem = r_len.checked_sub(16 + pkp).ok_or(Error::Argument)?;
+    let g = 1 + rem.checked_div(pkp).ok_or(Error::Argument)?;
+    let rem = rem.checked_rem(pkp).ok_or(Error::Argument)?;
+    let mut fit = None;
+    for aud in [true, false] {
+        let ls = 32 + vp * (1 + aud as usize);
+        let m = rem / ls;
+        if m != 0 && m <= 8 && rem == ls * m && groups(m, aud) == g && fit.replace((g, m, aud)).is_some() {
+            return Err(Error::Argument);
+        }
+    }
+    fit.ok_or(Error::Argument)
+}
+
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 mod tests {
     use super::*;
+    use crate::facade::pqz_pack::PKP;
     use pqz_ffi::stmt as st;
     use serde_json::Value;
 
@@ -191,5 +211,38 @@ mod tests {
         assert_eq!(tail(&[0u8; 32]), no, "shorter than a tail");
         assert_eq!(tail(&[vec![0u8; 33 + VP - 1], vec![0]].concat()[1..]), no, "no room for P(v_f)");
         assert_eq!(tail(&[vec![0u8; VP + 32], vec![0]].concat()).unwrap().r_len, 0, "R empty, the shortest tail");
+    }
+
+    /// `state.json` `tails`: every transfer blob's `R` has exactly one shape, and it is the one its tail names (`n = M +
+    /// auditorOn`, the auditor copy where the row's name says so); a burn's `R` (`P(u′)` alone) has none.
+    #[test]
+    fn bundle_shape_of_the_rows() {
+        let Some(r) = rows() else { return };
+        let mut seen = (false, false);
+        for x in r["tails"].as_array().unwrap() {
+            let (name, r_len) = (x["name"].as_str().unwrap(), n(&x["rLen"]) as usize);
+            if name.starts_with("burn") {
+                assert_eq!(bundle_shape(r_len, PKP, VP), Err(Error::Argument), "{name}");
+                continue;
+            }
+            let (_, m, aud) = bundle_shape(r_len, PKP, VP).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            assert_eq!((m + aud as usize) as u64, n(&x["n"]), "{name}: n");
+            assert_eq!(aud, name.contains("audited"), "{name}: the auditor copy");
+            seen = (seen.0 || (aud && m > 1), seen.1 || (!aud && m > 1));
+        }
+        assert_eq!(seen, (true, true), "op 7 rows with and without the auditor");
+    }
+
+    /// Two fits are refused, not resolved by order (Fable P3-6). No real set has two (the two leg strides `32 + 2·VP` and `32 + VP`
+    /// share no multiple below 9 legs), so the sizes here are made up: `vp = 0` makes both strides 32.
+    #[test]
+    fn bundle_shape_refuses_two_fits() {
+        assert_eq!(bundle_shape(16 + 1000 + 32, 1000, 0), Err(Error::Argument), "two fits");
+        // `vp = 16`: strides 64 (with the auditor) and 48 (without)
+        assert_eq!(bundle_shape(16 + 1000 + 64, 1000, 16), Ok((1, 1, true)), "positive control: M = 1 with the auditor");
+        assert_eq!(bundle_shape(16 + 1000 + 2 * 48, 1000, 16), Ok((1, 2, false)), "positive control: M = 2 without");
+        assert_eq!(bundle_shape(16 + 1000 + 3 * 48, 1000, 16), Ok((1, 3, false)), "positive control: M = 3 without");
+        assert_eq!(bundle_shape(16 + 1000 + 33, 1000, 16), Err(Error::Argument), "none fits");
+        assert_eq!(bundle_shape(15, 1000, 16), Err(Error::Argument), "shorter than salt and u_0");
     }
 }

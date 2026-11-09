@@ -52,7 +52,7 @@ use pqz_ffi::fixture::{wit_debit, wit_ds, wit_key, wit_multi};
 use pqz_ffi::pqzl::{self, Key, CT_BYTES, PK_BYTES};
 use pqz_ffi::selftest::digits;
 use pqz_ffi::stmt::{
-    built_legs, check_pk, coeffs_ok, groups, legs_per_group, u64_word, Debit, Disclose, Form, Multi, Register, Stmt, Word, DELTA,
+    built_legs, check_pk, coeffs_ok, legs_per_group, u64_word, Debit, Disclose, Form, Multi, Register, Stmt, Word, DELTA,
     DISC_WORDS, DW_AMOUNT, H_AMOUNT, H_BENEFICIARY, H_CHAIN_ID, H_CHAIN_UID, H_ENVELOPE, H_FEE, H_FROM, H_MEMO_HASH, H_PLAIN_USED, H_P,
     H_RECIPIENT, H_RECIPIENTS_HASH, H_REGISTRY, H_SALT, H_SEND_COUNTER, H_TO, H_TOKEN, H_VALID_UNTIL, K_MAX, PQZH_ID, PQZL_ID, Q,
 };
@@ -752,18 +752,9 @@ fn entry(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Entry> {
     only_low(&ptr, 20)?;
     let d = blobs.data(&lo_addr(&ptr, 0)?)?;
     let r = d.get(..super::pqz_path::tail(d)?.r_len).ok_or(Error::Argument)?.to_vec();
-    // `PqzCore._bundleShape`: `salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}`, unique by length for M ≤ 8
-    let rem = r.len().checked_sub(16 + PKP).ok_or(Error::Argument)?;
-    let g = 1 + rem / PKP;
-    let rem = rem % PKP;
-    for aud in [true, false] {
-        let ls = 32 + VP * (1 + aud as usize);
-        let m = rem / ls;
-        if m != 0 && m <= 8 && rem == ls * m && groups(m, aud) == g {
-            return Ok(Entry { r, g, m, aud, entry_ref: er });
-        }
-    }
-    Err(Error::Argument)
+    // `PqzCore._bundleShape`, exactly one fit (Fable P3-6)
+    let (g, m, aud) = super::pqz_path::bundle_shape(r.len(), PKP, VP)?;
+    Ok(Entry { r, g, m, aud, entry_ref: er })
 }
 
 impl Entry {

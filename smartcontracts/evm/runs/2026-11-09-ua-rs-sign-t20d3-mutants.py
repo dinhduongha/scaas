@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """ua-rs-sign T20d3, the proof path's word parsers (C-PP-1; no-oracle spec §4.14.4): each mutant undoes one rule of the debit
 record parser or the op blob's tail parser (`clients/ua-rs/src/facade/pqz_path.rs`) and names the test that must catch it (the
-module's own tests over `state.json`'s `records` and `tails`, and their refusals). One mutant per run on a clean tree, its
+module's own tests over `state.json`'s `records` and `tails`, and their refusals; M11, after the controller's ruling on
+Fable P3-6, the one-fit rule of a transfer blob's shape, which path (A)'s entry parse now shares). One mutant per run on a clean tree, its
 command, every file restored byte for byte after it (the caller also runs `git diff --exit-code`). A failing command kills; a
 build that does not compile is NOT-LOADED (a finding); a mutant whose command passes SURVIVED (a finding, exit 1).
   python3 -I smartcontracts/evm/runs/2026-11-09-ua-rs-sign-t20d3-mutants.py [first last]   (from the worktree root, foreground)
@@ -36,6 +37,9 @@ M = [
     ("record: Δp bytes swapped", [(P, "u16::from_be_bytes([delta_hi, delta_lo])", "u16::from_be_bytes([delta_lo, delta_hi])")], LIB),
     ("record: a narrow w1 taken", [(P, "    } else if *w1 != [0; 32] {\n        return Err(Error::Argument);\n    } else if has_prev {",
                                     "    } else if has_prev {")], LIB),
+    # the shape of a transfer blob's R (Fable P3-6, path (A)'s entries and path (B)'s credits alike)
+    ("bundle_shape: the first fit taken", [(P, " && fit.replace((g, m, aud)).is_some() {\n            return Err(Error::Argument);",
+                                            " {\n            return Ok((g, m, aud));")], LIB),
 ]
 
 if sys.argv[1:] == ["count"]:
