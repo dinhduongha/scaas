@@ -615,12 +615,14 @@ contract MandateWalletMergedTest is MergeBase {
     }
 
     /// `SmartKeyAccount` keeps its address surface (Q6): its code without the CBOR tail, as at `ref/pre-ua-mtx-merge`.
+    /// T66b (controller 2026-11-09): the `<X>Core` + flat-face split of `UAMetaTxBase` / `MetaTxBase` moved it, 21,003 -> 21,085 B:
+    /// 0xd201866a…5876 -> this; its ABI and behaviour unchanged.
     function test_smartKeyAccountByteIdentical() public {
         address at = address(0xA002);
         deployCodeTo("SmartKeyAccount.sol:SmartKeyAccount", abi.encode(keccak256("wallet-uid")), at);
         bytes memory c = at.code;
         uint256 meta = (uint256(uint8(c[c.length - 2])) << 8 | uint8(c[c.length - 1])) + 2;
         assembly ("memory-safe") { mstore(c, sub(mload(c), meta)) }
-        assertEq(keccak256(c), 0xd201866a71d652a5d6bb0a15bc64efa1cdedec3cf92ffe02e2441c67f48a5876);
+        assertEq(keccak256(c), 0xbede204d12566a090b8389385fe356d6a6ae25485cad9869454d73f367473962);
     }
 }

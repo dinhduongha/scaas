@@ -495,8 +495,9 @@ contract GovDeployTest is Test {
         // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0x3d0DB1d457Ac07B199e8Bd65676AFF7fF127330E ->
         // 0x8B56809BBf5f6595351F648a499E194292B6100C; T82 (the metadata hash: the contract's new name and file, owner
         // 2026-11-09): -> 0x6e5ADaD0b26E45d76250564dC569D2C05a082762; T83 (the metadata hash: `MetaTxLib.PayMeta` v3 and
-        // `PayRecord`, owner 2026-11-09): -> this
-        assertEq(rf, 0x70ba50D63EC511e4a39bf34d8EE01F3e85D3cEaC, "RelayFeeRouter");
+        // `PayRecord`, owner 2026-11-09): -> 0x70ba50D63EC511e4a39bf34d8EE01F3e85D3cEaC; T66b (the metadata hash: the
+        // T66b sources it imports, the `IERC20MetaTx` comment of f0c03715 among them; its code unchanged): -> this
+        assertEq(rf, 0xd981282EC3f2F979B953BDE7c7c3c4100caDfe89, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -517,8 +518,10 @@ contract GovDeployTest is Test {
         // 3h T60 (the metadata hash: `proofStore`'s error, event and view; `ConfidentialConfig.proofStore`): ->
         // 0xB95B3fA6EDD80605484A95ffBa63B6e2e873C0C6; T61 (`mtxSetProofStore`, bit 24): -> 0x8D4632FcCd353fb46400D356B79A7171eE44d2d0;
         // T83 (the metadata hash: `IMetaTokenV2`'s pay-record views, `PaymentMeta` v3): -> 0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03
-        // T66b 3.1b (the metadata hash: `UAKinds` / `UAStore` comments naming `UARegistryCoreLib`): -> this
-        assertEq(router, 0x13CBB3D5DCb0736f87F136ad13276568A80d1aa9, "GovernanceRouter");
+        // T66b 3.1b (the metadata hash: `UAKinds` / `UAStore` comments naming `UARegistryCoreLib`): ->
+        // 0x13CBB3D5DCb0736f87F136ad13276568A80d1aa9; T66b 4.1 (the `<X>Core` + flat-face split of `GovernanceRouterBase`,
+        // 15,305 -> 15,572 B runtime): -> this
+        assertEq(router, 0x639e34f93Ac69d6Ba31D773AC915894542180723, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

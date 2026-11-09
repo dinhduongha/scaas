@@ -1706,7 +1706,8 @@ mod tests {
         assert_eq!(row_of("UAOperatorTransfer", "gov_router").fields[2], ("bytes32".into(), "account".into()));
     }
 
-    /// The selectors a list of `MandateWallet.sol` names, read from its source: `X.selector` (its last segment) and the `_REVOKE_*`
+    /// The selectors a list of `MandateWallet.sol` names, read from its source (T66b: `mtxSelectors` answers from its body
+    /// `_mtxSelectorsBody`, which the wallet overrides): `X.selector` (its last segment) and the `_REVOKE_*`
     /// constants, in the body of `function <f>` (to its closing brace at four spaces).
     fn wallet_list(src: &str, f: &str) -> BTreeSet<String> {
         let i = src.find(f).unwrap_or_else(|| panic!("{f}"));
@@ -1724,7 +1725,7 @@ mod tests {
     #[test]
     fn wallet_rows_are_ua_structs() {
         let src = std::fs::read_to_string(format!("{}/../smartcontracts/evm/src/wallet/MandateWallet.sol", env!("CARGO_MANIFEST_DIR"))).unwrap();
-        let (native, derived) = (wallet_list(&src, "function mtxSelectors()"), wallet_list(&src, "function _uaAllowed("));
+        let (native, derived) = (wallet_list(&src, "function _mtxSelectorsBody()"), wallet_list(&src, "function _uaAllowed("));
         assert_eq!(native.len(), 7, "{native:?}");
         // the row's operation: what `mtx<Op>` self-calls (`MandateWallet.sol`); the cancel bumps the lane itself
         let op_of_row = |n: &str| match n {
