@@ -521,3 +521,45 @@ kind 0 or kind 8 is at byte 22-23 (the dispatcher's jump targets) for every pair
 NormalRegulatedToken / NormalZetherRegulatedToken (byte 515): each kind's hooks (`_mtxRule`, `_uaAllowed`, `_update`, the regulated
 hooks) are compiled into its pay bodies, so a shared pay module (C or B of §11 (g)) needs those hooks as data. No P2 is built (the
 largest P 30,783 B < 33,780 B).
+
+Task 4.4, the T65 e2e on the local copy with kind 13 (no --skip-kind; never the live stack): pqz-core/nethermind/chain/copy.sh, the
+T65 copy wiped and started from its genesis (image scaas/nethermind-pqz:2.2.0-pqz7, n2304-kmax4096, 200 M block, maxCodeSize
+0x20000; docker mem_limit 1700 MB per node); contracts built at the default set into out/t66b-e2e (forge build src
+test/helpers/Mocks.sol); script/pqz/e2e.py --proof-path-only through the signer's RPC inside the copy's network.
+step | rc | counts
+e2e.py --self-test (EVM_OUT=out/t66b-e2e) | 0 | 0 failures (kind 13's implArgs 320 B, the module list)
+e2e.py --proof-path-only, n2304-kmax4096 | 0 | 289 checks ok, 0 failures, 1,134 s; record runs/2026-11-10-ua-mtx-merge-t66b-e2e-n2304.txt
+The five releases with their modules, each module its own CREATE2 transaction: NormalToken 22,156,559 gas, NormalPqzToken
+30,444,573, WrappedPqzToken 38,657,185, NormalPqzRegulatedToken 35,914,018, WrappedPqzRegulatedToken (kind 13) 43,936,313 (T65:
+DeployFailed() under the RPC's 100 M estimate cap; now within 60 M). Section 7 as T65: 8 debits rebuilt from the §9 interface
+equal the proven statements and verify, 9 negatives fail. The largest transactions of the run are not deploys: the PQZ holders'
+one-call registrations (register + pqz-mlwe key + KEM, R_REG proof in the same call) at 91.6-91.7 M gas (T65: 91,741,247 for
+alice; now 91,735,941), above 60 M and within the copy's 200 M block; e2e.py --split (register, then storePqzPop) is the form
+that keeps each under 60 M (next run).
+
+Task 4.4, forge per directory on the final tree at the default set (forge-dirs.sh, label t66b-q44; test/pqz and test/research are
+the four-set rows above at n2304-kmax4096, the default):
+step | rc | counts | reds
+test/v2 | 0 | 654 passed | -
+test/governance | 0 | 425 passed | -
+test/merge | 0 | 341 passed | -
+test/zether | 0 | 441 passed, 4 skipped | -
+test/as | 0 | 463 passed | -
+test/metatx | 1 | 541 passed, 1 failed, 1 skipped | ROLL_MAX only (the known red)
+test/wallet | 0 | 181 passed | -
+test/account | 0 | 98 passed | -
+test/hedera | 0 | 20 passed | -
+test/confidential | 0 | 5 passed | -
+test/fork | 0 | 1 skipped | -
+test/p6f | 0 | 4 passed | -
+test/pqzh | 0 | 42 passed | -
+test/vectors | 0 | no tests (compiles) | -
+test/ua without UARegistryUA8 | 0 | 644 passed | -
+test/ua UARegistryUA8 alone (-j 1) | 0 | 88 passed | -
+test/t66b (gates.sh t66b: the pre-split d142b57c build, then the suites) | 0 | 11 suites, 32 passed | -
+Not rerun: the five files directly in test/ (sparse mode compiles every test directory; last run 29 passed at the migration
+checkpoint, before 4.3's B, (i), (j) and 4.4: a gap, reported).
+e2e.py --proof-path-only --split, n2304-kmax4096 (the copy wiped and started again) | 0 | 299 checks ok, 0 failures, 1,235 s;
+  record runs/2026-11-10-ua-mtx-merge-t66b-e2e-n2304-split.txt; 122 transactions, none above 60 M gas used: the largest a relayed
+  op 7 M = 4 under LOG 52,816,021, the library UARegistryCoreLib 52,299,751, the module NormalPqzRegulatedTokenQ 50,497,243.
+  This is the form Step 5 runs on the SCaaS testnet.
