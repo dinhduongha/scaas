@@ -336,7 +336,10 @@ items 10–12 the owner's rulings on its questions). Built by plan T20d4 (2026-1
 than per credit (§4.14.9's "a code listed once per request"), `provenOpen`'s `chainId` and `registry` (a NONE header's token
 words), and a credit's mode taken from its record); the proven debits by T20d5 (`prove*Proven`, path (A)'s builders over the
 session's `T`; `provenOpen`'s `forOp7` must be the debit's: op 7's `p` on a PQZH token); `unsealed` and `sealAdvised` (§4.14.7)
-by T20d6. UNAUDITED.
+by T20d6; `checkProven` (§4.14.8) by T20d7 (`facade::pqz::check_proven`, no handle; `own` is `{form, senderPending,
+keyRecords, proof, header | call}`, its `(fromUA, k)` the quorum's `(ua, lastDebit − 1)` and its record `lastRecord`; any
+failure is `Argument`, no parts; TRIVIAL entries are public amounts and not in `sum`; the burn, refresh and unwrap `call`
+shapes of §4.14.4 step 4 built there). UNAUDITED.
 
 #### 4.14.1 What path (B) gives, and what it does not
 

@@ -11,6 +11,7 @@ mod pqz_chain;
 use pqz_chain::*;
 use pqz_ffi::stmt::{self as st, Word};
 use scaas_ua::facade::pqz::PqzKey;
+use scaas_ua::facade::pqz_pack::{unpack, PKP, VP};
 use scaas_ua::wallet::{Error, Wallet};
 use serde_json::{json, Value};
 
@@ -139,13 +140,39 @@ impl World {
     }
     /// A refresh of `ua` at version `v` on handle `k` (its own debit: a fresh `v_f` with its tag).
     fn refresh(&mut self, k: &PqzKey, ua: &Word, v: u64, o: Opt) {
-        let (d, _) = self.debit(ua, v, "BUNDLE", o, json!({}));
-        let p = call(k, "proveRefresh", &d).unwrap();
+        self.op2(k, ua, v, 0, None, o);
+    }
+    /// A burn (`amount` > 0) of `ua`'s version 0 on handle `k`; `unwrap` `(underlying, minOut)`: its envelope is
+    /// `unwrapBinding(underlying, minOut)`, relayed `keccak256(abi.encode(binding, unwrapBinding))` (`WrappedPqzToken._envUnwrap`).
+    fn burn(&mut self, k: &PqzKey, ua: &Word, amount: u64, unwrap: Option<([u8; 20], u64)>, o: Opt) {
+        self.op2(k, ua, 0, amount, unwrap, o);
+    }
+    /// Op 2 with its NONE call fields (§4.14.4 step 4: a burn's binding is its envelope word as given).
+    fn op2(&mut self, k: &PqzKey, ua: &Word, v: u64, amount: u64, unwrap: Option<([u8; 20], u64)>, o: Opt) {
+        let extra = if amount == 0 { json!({}) } else { json!({"amount": amount, "recipient": hx(&[3; 32])}) };
+        let (mut d, _) = self.debit(ua, v, "BUNDLE", o, extra);
+        let env = match unwrap {
+            Some((u, min)) => {
+                let mut a = [0u8; 32];
+                a[12..].copy_from_slice(&u);
+                let w = scaas_ua::keccak256(&[scaas_ua::keccak256(b"SCAAS-PQZ-UNWRAP-V1"), a, st::u64_word(min)].concat());
+                if o.binding == [0; 32] { w } else { scaas_ua::keccak256(&[o.binding, w].concat()) }
+            }
+            None => o.binding,
+        };
+        d["envelopeBinding"] = json!(hx(&env));
+        let recipient = if amount == 0 { [0; 32] } else { [3; 32] };
+        let mut cl = json!({"fee": 0, "amount": amount, "recipient": hx(&recipient), "validUntilBlock": d["validUntilBlock"], "binding": hx(&o.binding)});
+        if let Some((u, min)) = unwrap {
+            cl["underlying"] = json!(hx(&u));
+            cl["minOut"] = json!(min);
+        }
+        let p = call(k, if amount == 0 { "proveRefresh" } else { "proveBurn" }, &d).unwrap();
         let (stmt, proof) = (h(&p["stmt"]), h(&p["proof"]));
         assert!(verify(2, &stmt, &proof));
         self.c.proof_store = o.log as u8;
         self.c.own_tag = h(&p["ownTag"]).try_into().unwrap();
-        self.c.note_proof(2, &stmt, &proof, json!({}));
+        self.c.note_proof(2, &stmt, &proof, cl);
         self.c.settle_burn(&stmt);
     }
     /// Every credit of `(ua, v)`'s window.
@@ -676,4 +703,152 @@ fn a_tag_proves_authorship_not_inclusion() {
     assert_eq!(o["need"], json!([]));
     let b = call(&kb, "balanceProven", &json!({"session": o["session"]})).unwrap();
     assert_eq!((&b["value"], kinds(&b)), (&json!(300), vec!["own".to_string()]), "a past balance");
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// T20d7 (C-PP-6): the MPC quorum's check before a partial (`checkProven`, no handle).
+// ---------------------------------------------------------------------------------------------------------------------------
+
+fn check(v: &Value) -> Result<Value, Error> {
+    scaas_ua::facade::pqz::check_proven(v.to_string().as_bytes()).map(|s| serde_json::from_str(&s).unwrap())
+}
+
+/// The stored form of `Σ cts mod q` (64-bit lanes), as `checkProven`'s `sum`.
+fn packed_sum(cts: &[Vec<u8>]) -> String {
+    let mut c = vec![0u64; cts[0].len() / 8];
+    for ct in cts {
+        for (a, b) in c.iter_mut().zip(ct.chunks_exact(8)) {
+            *a = (*a + u64::from_be_bytes(b.try_into().unwrap())) % st::Q;
+        }
+    }
+    hx(&pack(&c.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<_>>()))
+}
+
+/// The ciphertext a slot of `(ua, v)` names, and the own `(u, v_f)` of its `accBlob`.
+fn slot_ct(c: &Chain, ua: &Word, v: u64, i: u64) -> Vec<u8> {
+    let w = c.accts[&(*ua, v)].pending[&i];
+    let d = &c.blobs[&<[u8; 20]>::try_from(&w[..20]).unwrap()][1..];
+    let (u, x) = (u16::from_be_bytes([w[20], w[21]]) as usize, u16::from_be_bytes([w[22], w[23]]) as usize);
+    [unpack(&d[u..u + PKP]).unwrap(), unpack(&d[x..x + VP]).unwrap()].concat()
+}
+fn own_ct(c: &Chain, ua: &Word, v: u64) -> Vec<u8> {
+    let a = &c.accts[&(*ua, v)];
+    let d = &c.blobs[&a.acc_blob][1..];
+    let (u, x) = (a.acc_u as usize, a.acc_v as usize);
+    [unpack(&d[u..u + PKP]).unwrap(), unpack(&d[x..x + VP]).unwrap()].concat()
+}
+
+/// A quorum member's check (no-oracle spec §4.14.8): the quorum's own last debit (a NONE refresh, its call shape) and every
+/// credit since (op 1 NONE, op 7 LOG with the auditor), each by its P with the member's record of the quorum's `pk`; `sum` is
+/// the parts' sum (feature `vectors`: it decrypts, with the quorum's key, to path (A)'s balance less the public TRIVIAL entries).
+/// Each refused with no parts: a `keyRecord` (a key word of the quorum: Fable P1-1), a `keyRecords` entry of the quorum at the
+/// version checked, the own debit's or a credit's P of another debit, a credit twice, `own` missing.
+#[test]
+fn quorum_check_before_a_partial() {
+    let mut wd = World::new(0);
+    for (ua, v) in [(A, 1000), (X, 100)] {
+        wd.c.shield(&ua, v);
+    }
+    wd.pay(&A, &BOB, 300, true, "BUNDLE", LOG);
+    let kb = wd.w.pqz_key(1, 0).unwrap();
+    wd.refresh(&kb, &BOB, 0, NONE);
+    wd.pay(&A, &BOB, 20, false, "HASH", NONE);
+    wd.c.shield(&BOB, 4);
+    wd.pay_multi(&X, &[(BOB, 7), (Y, 1)], true, "BUNDLE", LOG);
+    let pk = h(&json!(wd.pk(&BOB)));
+    let own = wd.c.proven_own(&BOB, 0);
+    let ix = wd.c.window_credits(&BOB, 0);
+    let cs: Vec<Cred> = ix.iter().map(|i| wd.c.proven_credit(&BOB, 0, *i)).collect();
+    let req = wd.c.check_request(&BOB, 0, &pk, Some(&own), &cs);
+    let r = check(&req).unwrap();
+    let kinds: Vec<&str> = r["parts"].as_array().unwrap().iter().map(|p| p["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["own", "credit", "credit"]);
+    let mut cts = vec![own_ct(&wd.c, &BOB, 0)];
+    cts.extend(ix.iter().map(|i| slot_ct(&wd.c, &BOB, 0, *i)));
+    assert_eq!(r["sum"], packed_sum(&cts), "the parts' sum, stored form");
+    #[cfg(feature = "vectors")]
+    {
+        let ct = unpack(&h(&r["sum"])).unwrap();
+        assert_eq!(call(&kb, "dec", &json!({"ct": hx(&ct)})).unwrap()["value"], 327, "path (A)'s 331 less the TRIVIAL 4");
+    }
+    // a batch: the member adds the batches' sums
+    let b1 = check(&wd.c.check_request(&BOB, 0, &pk, Some(&own), &cs[..1])).unwrap();
+    assert_eq!(b1["sum"], packed_sum(&cts[..2]));
+    // negatives, each with no parts
+    let mut with_key = req.clone();
+    with_key["keyRecord"] = json!(hx(&wd.c.key_record(&BOB)));
+    let mut ours = cs.clone();
+    ours[0].0["keyRecords"].as_array_mut().unwrap().push(json!({"ua": hx(&BOB), "version": 0, "word": hx(&wd.c.key_record(&BOB))}));
+    let mut own_p = own.clone();
+    own_p.0["proof"] = cs[0].0["proof"].clone();
+    let mut credit_p = cs.clone();
+    credit_p[0].0["proof"] = cs[1].0["proof"].clone();
+    let mut no_own = req.clone();
+    no_own.as_object_mut().unwrap().remove("own");
+    for (what, v) in [
+        ("a keyRecord of the quorum (Fable P1-1)", with_key),
+        ("a keyRecords entry of the quorum at the version checked", wd.c.check_request(&BOB, 0, &pk, Some(&own), &ours)),
+        ("the own debit's P of another debit", wd.c.check_request(&BOB, 0, &pk, Some(&own_p), &cs)),
+        ("a credit's P of another debit", wd.c.check_request(&BOB, 0, &pk, Some(&own), &credit_p)),
+        ("a credit twice", wd.c.check_request(&BOB, 0, &pk, Some(&own), &[cs[0].clone(), cs[0].clone()])),
+        ("own missing", no_own),
+        ("another key as the quorum's", wd.c.check_request(&BOB, 0, &h(&json!(wd.pk(&Y))), Some(&own), &cs)),
+    ] {
+        assert_eq!(check(&v).err(), Some(Error::Argument), "{what}");
+    }
+}
+
+/// The quorum's own last debit in each form, by its P (op 1 LOG with the auditor, op 7 NONE, a burn NONE, an unwrap NONE direct
+/// and relayed, a refresh LOG): `parts` the own part alone, `sum` its `(u, v_f)`.
+#[test]
+fn quorum_own_debit_in_each_form() {
+    let mut wd = World::new(0);
+    wd.c.shield(&A, 1000);
+    wd.pay(&A, &BOB, 900, false, "BUNDLE", LOG);
+    let pk = h(&json!(wd.pk(&BOB)));
+    let mut forms = vec![];
+    let mut step = |wd: &mut World, f: &dyn Fn(&mut World)| {
+        f(wd);
+        let own = wd.c.proven_own(&BOB, 0);
+        let r = check(&wd.c.check_request(&BOB, 0, &pk, Some(&own), &[])).unwrap();
+        assert_eq!(r["sum"], packed_sum(&[own_ct(&wd.c, &BOB, 0)]), "{}", own.0["form"]);
+        forms.push(own.0["form"].as_str().unwrap().to_string());
+    };
+    step(&mut wd, &|wd| {
+        wd.pay(&BOB, &X, 10, true, "HASH", LOG);
+    });
+    step(&mut wd, &|wd| {
+        wd.pay_multi(&BOB, &[(X, 3), (Y, 2)], false, "BUNDLE", NONE);
+    });
+    step(&mut wd, &|wd| wd.burn(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 5, None, NONE));
+    step(&mut wd, &|wd| wd.burn(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 6, Some(([0x77; 20], 4)), NONE));
+    step(&mut wd, &|wd| wd.burn(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 7, Some(([0x77; 20], 4)), Opt { binding: [0xB7; 32], ..NONE }));
+    step(&mut wd, &|wd| wd.refresh(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 0, LOG));
+    assert_eq!(forms, ["transfer", "transferMulti", "burn", "unwrap", "unwrap", "refresh"]);
+}
+
+/// Fable re-check P3-A: across the quorum's own migration (version 0 to 1), the check at version 1 takes the migration credit by
+/// its P with `pk_f` the quorum's older key from `keyRecords` (a sender key), and refuses a `keyRecords` entry at version 1; at
+/// version 0 the migration is the own last debit, its `pk_t` the version-1 key from `keyRecords`.
+#[test]
+fn quorum_across_its_own_migration() {
+    let mut wd = World::new(0);
+    wd.c.shield(&A, 1000);
+    wd.pay(&A, &BOB, 300, false, "BUNDLE", LOG);
+    let (b0, b1) = (wd.w.pqz_key(1, 0).unwrap(), wd.w.pqz_key_version(1, 0, 1).unwrap());
+    wd.c.add_version(BOB, &b1.pk(), true);
+    let (d, cl) = wd.debit(&BOB, 0, "BUNDLE", NONE, json!({"toUA": hx(&BOB), "pkT": hx(&b1.pk()), "amount": 260, "mode": "BUNDLE"}));
+    let m = call(&b0, "proveTransfer", &d).unwrap();
+    wd.settle(1, &m, cl, NONE, &[]);
+    let ix = wd.c.window_credits(&BOB, 1);
+    let cs: Vec<Cred> = ix.iter().map(|i| wd.c.proven_credit(&BOB, 1, *i)).collect();
+    let r = check(&wd.c.check_request(&BOB, 1, &b1.pk(), None, &cs)).unwrap();
+    assert_eq!(r["parts"], json!([{"index": ix[0], "kind": "migration"}]), "the older key a sender key");
+    let mut ours = cs.clone();
+    ours[0].0["keyRecords"].as_array_mut().unwrap().push(json!({"ua": hx(&BOB), "version": 1, "word": hx(&wd.c.key_record_at(&BOB, 1))}));
+    assert_eq!(check(&wd.c.check_request(&BOB, 1, &b1.pk(), None, &ours)).err(), Some(Error::Argument), "the checked version's key");
+    let own = wd.c.proven_own(&BOB, 0);
+    assert_eq!(own.0["form"], "transfer");
+    let r = check(&wd.c.check_request(&BOB, 0, &b0.pk(), Some(&own), &[])).unwrap();
+    assert_eq!(r["sum"], packed_sum(&[own_ct(&wd.c, &BOB, 0)]), "the migration as the own debit at version 0");
 }

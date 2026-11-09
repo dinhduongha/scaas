@@ -90,6 +90,9 @@ pub(super) struct Open {
     /// Group 3g: the version is below the registry's `current` (KV-8: it only migrates or refreshes); `forOp7` (its `p`).
     stale: bool,
     op7: bool,
+    /// `accBlob` (the last own debit's op blob) and that debit's record (`lastRecord`).
+    acc_blob: [u8; 20],
+    last: Option<Record>,
     /// `(counter, ownTag, u ‖ v_f)` of the last own debit (`lastDebit > 0`): the tag as stored, the ciphertext in 64-bit lanes.
     own: Option<(u64, Word, Vec<u8>)>,
     trivial: Vec<(u64, u64)>,
@@ -192,9 +195,17 @@ fn window(list: &[Value], from: u64, to: u64) -> Result<Vec<(u64, Word)>> {
 /// `provenOpen` (§4.14.2): the account of key version `keyVersion` of `ua`, its last record and the window `[p_last, p)`; the
 /// registered key the handle must hold.
 pub(super) fn open(f: &Fields<'_>) -> Result<(Open, Vec<u8>)> {
-    let id = system(&f.word("psid")?)?;
     let mut blobs = Blobs::new(f)?;
     let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+    let o = open_words(f, &mut blobs)?;
+    blobs.done()?;
+    Ok((o, key))
+}
+
+/// [`open`]'s words without the key: the account, `lastRecord`, the window (the quorum's check reads them too, with no key
+/// word of the quorum).
+fn open_words(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Open> {
+    let id = system(&f.word("psid")?)?;
     let is_stale = stale(f)?;
     let a = acct(&f.words("account")?, &f.word("sendCounterWord")?)?;
     if !(a.cleared <= a.floor && a.floor <= a.rolled && a.rolled <= a.count) {
@@ -202,8 +213,8 @@ pub(super) fn open(f: &Fields<'_>) -> Result<(Open, Vec<u8>)> {
     }
     let (chain_uid, token) = (f.word("chainUid")?, f.arr("token")?);
     // the last own debit: its record gives `p_last`, `accBlob` its `(u, v_f)` and tag (rollovers keep `accBlob`)
-    let (p_last, own) = match (a.last_debit, f.has("lastRecord")) {
-        (0, false) if a.acc_blob == [0; 20] => (0, None),
+    let (p_last, own, last) = match (a.last_debit, f.has("lastRecord")) {
+        (0, false) if a.acc_blob == [0; 20] => (0, None, None),
         (n, true) if n > 0 => {
             let lr = Fields::new(f.get("lastRecord")?.as_object().ok_or(Error::Argument)?, &["w0", "w1"])?;
             let rec = record(&lr.word("w0")?, &lr.word("w1")?, n - 1)?;
@@ -216,7 +227,7 @@ pub(super) fn open(f: &Fields<'_>) -> Result<(Open, Vec<u8>)> {
             if !coeffs_ok(&ct) {
                 return Err(Error::Argument);
             }
-            (rec.p, Some((n - 1, t.own_tag, ct)))
+            (rec.p, Some((n - 1, t.own_tag, ct)), Some(rec))
         }
         _ => return Err(Error::Argument),
     };
@@ -250,8 +261,7 @@ pub(super) fn open(f: &Fields<'_>) -> Result<(Open, Vec<u8>)> {
             }
         }
     }
-    blobs.done()?;
-    let o = Open {
+    Ok(Open {
         id,
         chain_id: f.u64("chainId")?,
         registry: f.arr("registry")?,
@@ -267,12 +277,13 @@ pub(super) fn open(f: &Fields<'_>) -> Result<(Open, Vec<u8>)> {
         send_counter: a.send_counter,
         stale: is_stale,
         op7,
+        acc_blob: a.acc_blob,
+        last,
         own,
         trivial,
         need,
         acc,
-    };
-    Ok((o, key))
+    })
 }
 
 /// `provenAdd`'s `blobs` (each address once) and `credits` (at most `K_MAX`), typed; a field missing or of another type is
@@ -380,13 +391,11 @@ struct Leg {
 /// Step 1 of §4.14.4: the tail, the one shape, the leg to `(ua, v)` (op 1 `toUA` and `kv[0]`; op 7 the one `j` with `UA_j == ua`
 /// and `kv[j] == v`) and the pairing `(u_{g(j)}, v_j)` the relation defines, derived from `j`; the slot's offsets must be those.
 fn leg(d: &[u8], multi: bool, ua: &Word, v: u64, slot: &Slot) -> Result<Leg> {
-    let t = tail(d)?;
-    let r = d.get(..t.r_len).ok_or(Error::Argument)?.to_vec();
-    let (g, m, aud) = bundle_shape(r.len(), PKP, VP)?;
-    if t.kv.len() != m + aud as usize || (!multi && m != 1) {
+    let (t, e) = shape(d)?;
+    let (m, aud) = (e.m, e.aud);
+    if !multi && m != 1 {
         return Err(Error::Argument);
     }
-    let e = Entry { r, g, m, aud, entry_ref: [0; 32] };
     let mut js = (0..m).filter(|j| e.owner(*j).is_ok_and(|w| w == *ua) && t.kv.get(*j) == Some(&v));
     let j = js.next().ok_or(Error::Argument)?;
     if js.next().is_some() {
@@ -397,6 +406,17 @@ fn leg(d: &[u8], multi: bool, ua: &Word, v: u64, slot: &Slot) -> Result<Leg> {
         return Err(Error::Argument);
     }
     Ok(Leg { t, e, j, u_off, v_off })
+}
+
+/// A transfer op blob's tail and `R` with its one shape (`n = M + auditorOn`).
+fn shape(d: &[u8]) -> Result<(Tail, Entry)> {
+    let t = tail(d)?;
+    let r = d.get(..t.r_len).ok_or(Error::Argument)?.to_vec();
+    let (g, m, aud) = bundle_shape(r.len(), PKP, VP)?;
+    if t.kv.len() != m + aud as usize {
+        return Err(Error::Argument);
+    }
+    Ok((t, Entry { r, g, m, aud, entry_ref: [0; 32] }))
 }
 
 /// `T_k` by the proof-path spec §2.3: `prevBlob`'s `(u, v_f)` (zero without one) `+ Σ` the sender's window `[p − Δp, p)` `+
@@ -540,10 +560,10 @@ impl PqzKey {
         if c.from_ua == o.ua && rec.key_version < o.v && !c.multi {
             match self.old_seed(o, &rec, c, blobs) {
                 Some(seed) => return Ok(self.reencrypted(o, c, slot, &seed, blobs).ok().map(|ct| (ct, Kind::Migration))),
-                None => return self.by_proof(o, &rec, c, slot, blobs).map(|r| r.map(|ct| (ct, Kind::Migration))),
+                None => return by_proof(&self.pk, o, &rec, c, slot, blobs).map(|r| r.map(|ct| (ct, Kind::Migration))),
             }
         }
-        self.by_proof(o, &rec, c, slot, blobs).map(|r| r.map(|ct| (ct, Kind::Credit)))
+        by_proof(&self.pk, o, &rec, c, slot, blobs).map(|r| r.map(|ct| (ct, Kind::Credit)))
     }
 
     /// The seed of the debited version `rec.keyVersion` from the handle's own store: a derived handle's `(account, index, v_old)`,
@@ -584,134 +604,157 @@ impl PqzKey {
             Err(Error::Argument)
         }
     }
+}
 
-    /// A credit by its sender's P (§4.14.4 steps 1–6): `Some(u_{g(j)} ‖ v_j)` when `pqz_ffi::precompile` accepts the rebuilt
-    /// statement, `None` when a check fails; `Argument` when the credit lacks P's fields.
-    fn by_proof(&self, o: &Open, rec: &Record, c: &Credit, slot: &Slot, blobs: &mut Blobs) -> Result<Option<Vec<u8>>> {
-        let (Some(window), Some(keys), Some(proof)) = (&c.sender_pending, &c.key_records, &c.proof) else { return Err(Error::Argument) };
-        if c.header.is_none() && c.call.is_none() {
-            return Err(Error::Argument);
-        }
-        Ok(self.verified(o, rec, c, slot, window, keys, proof, blobs).ok())
+/// A credit by its sender's P (§4.14.4 steps 1–6), `holder` the key at the holder's leg (the handle's `pk`, or a quorum member's
+/// record of the quorum's): `Some(u_{g(j)} ‖ v_j)` when `pqz_ffi::precompile` accepts the rebuilt statement, `None` when a check
+/// fails; `Argument` when the credit lacks P's fields.
+fn by_proof(holder: &[u8], o: &Open, rec: &Record, c: &Credit, slot: &Slot, blobs: &mut Blobs) -> Result<Option<Vec<u8>>> {
+    let (Some(window), Some(keys), Some(proof)) = (&c.sender_pending, &c.key_records, &c.proof) else { return Err(Error::Argument) };
+    if c.header.is_none() && c.call.is_none() {
+        return Err(Error::Argument);
     }
+    Ok(verified(holder, o, rec, c, slot, window, keys, proof, blobs).ok())
+}
 
-    #[allow(clippy::too_many_arguments)]
-    fn verified(
-        &self, o: &Open, rec: &Record, c: &Credit, slot: &Slot, window: &[(u64, Word)], keys: &[(Word, u64, Word)], proof: &[u8],
-        blobs: &mut Blobs,
-    ) -> Result<Vec<u8>> {
-        // the record's mode names where P is: LOG an event's header, NONE the call
-        if (rec.proof_store == 1) != c.header.is_some() {
-            return Err(Error::Argument);
-        }
-        let d = blobs.data(&slot.ptr)?.to_vec();
-        let l = leg(&d, c.multi, &o.ua, o.v, slot)?;
-        let (aud, m, r) = (l.e.aud, l.e.m, &l.e.r);
-        let ct = load(&d, l.u_off, l.v_off)?;
-        if !coeffs_ok(&ct) {
-            return Err(Error::Argument);
-        }
-        // step 2: `T_k`
-        let t = t_k(rec, window, blobs)?;
-        // step 3: the keys, the holder's leg its own `pk`, never a source's
-        let mut key = |ua: &Word, v: u64| -> Result<Vec<u8>> {
-            let (_, _, w) = keys.iter().find(|(u, x, _)| u == ua && *x == v).ok_or(Error::Argument)?;
-            registered_key(w, blobs)
-        };
-        let pk_f = key(&c.from_ua, rec.key_version)?;
-        let mut pks = Vec::with_capacity(m);
-        for j in 0..m {
-            pks.push(if j == l.j { self.pk.clone() } else { key(&l.e.owner(j)?, *l.t.kv.get(j).ok_or(Error::Argument)?)? });
-        }
-        let pk_a = if aud { Some(key(&o.auditor_ua, *l.t.kv.get(m).ok_or(Error::Argument)?)?) } else { None };
-        distinct(&std::iter::once(&pk_f[..]).chain(pks.iter().map(|k| &k[..])).chain(pk_a.as_deref()).collect::<Vec<_>>())?;
-        // step 4: the header, the event's (LOG) or built from the call (NONE); the words the facade knows must be its
-        let op_tag = if c.multi { OP_TAG_TRANSFER_MULTI } else if aud { Form::Transfer.op_tag() } else { Form::Transfer0.op_tag() };
-        let hd = match (&c.header, &c.call) {
-            (Some(h), _) => *h,
-            (None, Some(call)) => self.none_header(o, rec, c, call, &l)?,
-            _ => return Err(Error::Argument),
-        };
-        for (i, w) in [
-            (H_OPTAG, op_tag),
-            (H_ID, o.id),
-            (H_CHAIN_ID, u64_word(o.chain_id)),
-            (H_TOKEN, addr(&o.token)),
-            (H_REGISTRY, addr(&o.registry)),
-            (H_FROM, c.from_ua),
-            (H_SEND_COUNTER, u64_word(c.k)),
-            (H_P, u64_word(rec.p)),
-            (H_PLAIN_USED, u64_word(rec.shield_in)),
-            (H_CHAIN_UID, o.chain_uid),
-        ] {
-            if hd.get(i) != Some(&w) {
-                return Err(Error::Argument);
-            }
-        }
-        // step 5: the body in the form's layout; step 6: P over it
-        let v_f = part(&d, l.t.r_len, VP)?;
-        let stmt = if c.multi {
-            let us = (0..l.e.g).map(|g| part(r, 16 + PKP * g, PKP)).collect::<Result<Vec<_>>>()?.concat();
-            let vs = (0..m).map(|j| part(r, l.e.leg_at(j), VP)).collect::<Result<Vec<_>>>()?.concat();
-            let v_as = if aud { Some((0..m).map(|j| part(r, l.e.leg_at(j) + VP, VP)).collect::<Result<Vec<_>>>()?.concat()) } else { None };
-            let pks = pks.concat();
-            Multi { header: hd, m, pk_f: &pk_f, pks: &pks, pk_a: pk_a.as_deref(), t: &t, us: &us, vs: &vs, v_f: &v_f, v_as: v_as.as_deref() }
-                .encode()
-        } else {
-            let (u, v_t) = (part(r, 16, PKP)?, part(r, 16 + PKP, VP)?);
-            let v_a = if aud { Some(part(r, 16 + PKP + VP, VP)?) } else { None };
-            let form = if aud { Form::Transfer } else { Form::Transfer0 };
-            let pk_t = pks.first().ok_or(Error::Argument)?;
-            Stmt::Debit(Debit { form, header: hd, pk_f: &pk_f, pk_t: Some(pk_t), pk_a: pk_a.as_deref(), t: &t, u: &u, v_t: Some(&v_t), v_f: &v_f, v_a: v_a.as_deref() })
-                .encode()
-        }
-        .map_err(|_| Error::Argument)?;
-        let op = if c.multi { pqz_ffi::stmt::OP_TRANSFER_MULTI } else { Form::Transfer.op() };
-        if pqz_ffi::precompile(&pqz_ffi::stmt::input(op, &stmt, proof)) != Ok(pqz_ffi::VALID) {
-            return Err(Error::Argument);
-        }
-        Ok(ct)
+/// The key of `(ua, v)` from a credit's `keyRecords` (its code in the request's blobs).
+fn key_of(keys: &[(Word, u64, Word)], blobs: &mut Blobs, ua: &Word, v: u64) -> Result<Vec<u8>> {
+    let (_, _, w) = keys.iter().find(|(u, x, _)| u == ua && *x == v).ok_or(Error::Argument)?;
+    registered_key(w, blobs)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verified(
+    holder: &[u8], o: &Open, rec: &Record, c: &Credit, slot: &Slot, window: &[(u64, Word)], keys: &[(Word, u64, Word)], proof: &[u8],
+    blobs: &mut Blobs,
+) -> Result<Vec<u8>> {
+    // the record's mode names where P is: LOG an event's header, NONE the call
+    if (rec.proof_store == 1) != c.header.is_some() {
+        return Err(Error::Argument);
     }
+    let d = blobs.data(&slot.ptr)?.to_vec();
+    let l = leg(&d, c.multi, &o.ua, o.v, slot)?;
+    let ct = load(&d, l.u_off, l.v_off)?;
+    if !coeffs_ok(&ct) {
+        return Err(Error::Argument);
+    }
+    // step 2: `T_k`
+    let t = t_k(rec, window, blobs)?;
+    // step 3: the keys, the holder's leg its own `pk`, never a source's
+    let pk_f = key_of(keys, blobs, &c.from_ua, rec.key_version)?;
+    let (m, aud) = (l.e.m, l.e.aud);
+    let mut pks = Vec::with_capacity(m);
+    for j in 0..m {
+        pks.push(if j == l.j { holder.to_vec() } else { key_of(keys, blobs, &l.e.owner(j)?, *l.t.kv.get(j).ok_or(Error::Argument)?)? });
+    }
+    let pk_a = if aud { Some(key_of(keys, blobs, &o.auditor_ua, *l.t.kv.get(m).ok_or(Error::Argument)?)?) } else { None };
+    // step 4: the header, the event's (LOG) or built from the call (NONE)
+    let hd = match (&c.header, &c.call) {
+        (Some(h), _) => *h,
+        (None, Some(call)) => transfer_header(o, rec, &c.from_ua, c.k, c.multi, call, &l.t, &l.e)?,
+        _ => return Err(Error::Argument),
+    };
+    // steps 5 and 6
+    transfer_proven(o, rec, &c.from_ua, c.k, c.multi, hd, &pk_f, &pks, pk_a.as_deref(), &t, &d, &l.t, &l.e, proof)?;
+    Ok(ct)
+}
 
-    /// A NONE transfer's header (§4.14.4 step 4, op 1 and op 7): the call's words, the record's `p` and `shieldIn`, the debit's
-    /// `fromUA` and `k`, the token's words, the blob's `salt`, `toUA` or `recipientsHash`, `M` and `auditorOn`; the envelope
-    /// binding of the call's mode and `memoHash = keccak256(memo ‖ ownTag_s)`.
-    fn none_header(&self, o: &Open, rec: &Record, c: &Credit, call: &Call, l: &Leg) -> Result<[Word; 20]> {
-        let (r, m, aud) = (&l.e.r, l.e.m, l.e.aud);
-        let salt = r.get(..16).ok_or(Error::Argument)?;
-        let memo = match (&call.sealed_memo, call.mode) {
-            (Some(s), Mode::Hash) if s.len() + 16 == pqz_ffi::memo::memo_len(m) => [salt, s].concat(),
-            (None, Mode::Bundle) => Vec::new(),
-            _ => return Err(Error::Argument),
-        };
-        let mut hd = Header {
-            chain_id: o.chain_id,
-            token: o.token,
-            registry: o.registry,
-            from_ua: c.from_ua,
-            beneficiary_ua: call.beneficiary_ua,
-            fee: call.fee,
-            send_counter: c.k,
-            p: rec.p,
-            valid_until_block: call.valid_until_block,
-            plain_used: rec.shield_in,
-            chain_uid: o.chain_uid,
-            envelope_binding: bind_mode(&call.binding, call.mode),
+/// A transfer debit's statement (op 1 / op 7, §4.14.4 steps 4–6) from its header `hd`, keys, `T_k` and op blob `d`, verified: the
+/// words the facade knows must be the header's, the keys pairwise distinct (`KeyReused`), `pqz_ffi::precompile` must accept it.
+#[allow(clippy::too_many_arguments)]
+fn transfer_proven(
+    o: &Open, rec: &Record, from: &Word, k: u64, multi: bool, hd: [Word; 20], pk_f: &[u8], pks: &[Vec<u8>], pk_a: Option<&[u8]>,
+    t: &[u8], d: &[u8], tl: &Tail, e: &Entry, proof: &[u8],
+) -> Result<()> {
+    let (m, aud, r) = (e.m, e.aud, &e.r);
+    distinct(&std::iter::once(pk_f).chain(pks.iter().map(|k| &k[..])).chain(pk_a).collect::<Vec<_>>())?;
+    let op_tag = if multi { OP_TAG_TRANSFER_MULTI } else if aud { Form::Transfer.op_tag() } else { Form::Transfer0.op_tag() };
+    known(o, &hd, &op_tag, from, k, rec)?;
+    let v_f = part(d, tl.r_len, VP)?;
+    let stmt = if multi {
+        let us = (0..e.g).map(|g| part(r, 16 + PKP * g, PKP)).collect::<Result<Vec<_>>>()?.concat();
+        let vs = (0..m).map(|j| part(r, e.leg_at(j), VP)).collect::<Result<Vec<_>>>()?.concat();
+        let v_as = if aud { Some((0..m).map(|j| part(r, e.leg_at(j) + VP, VP)).collect::<Result<Vec<_>>>()?.concat()) } else { None };
+        let pks = pks.concat();
+        Multi { header: hd, m, pk_f, pks: &pks, pk_a, t, us: &us, vs: &vs, v_f: &v_f, v_as: v_as.as_deref() }.encode()
+    } else {
+        let (u, v_t) = (part(r, 16, PKP)?, part(r, 16 + PKP, VP)?);
+        let v_a = if aud { Some(part(r, 16 + PKP + VP, VP)?) } else { None };
+        let form = if aud { Form::Transfer } else { Form::Transfer0 };
+        let pk_t = pks.first().ok_or(Error::Argument)?;
+        Stmt::Debit(Debit { form, header: hd, pk_f, pk_t: Some(pk_t), pk_a, t, u: &u, v_t: Some(&v_t), v_f: &v_f, v_a: v_a.as_deref() }).encode()
+    }
+    .map_err(|_| Error::Argument)?;
+    verify_p(if multi { pqz_ffi::stmt::OP_TRANSFER_MULTI } else { Form::Transfer.op() }, &stmt, proof)
+}
+
+/// The header words the facade knows (§4.14.4 step 4): opTag, the build's id, the token's words, `fromUA`, `k`, the record's `p`
+/// and `shieldIn`.
+fn known(o: &Open, hd: &[Word; 20], op_tag: &Word, from: &Word, k: u64, rec: &Record) -> Result<()> {
+    for (i, w) in [
+        (H_OPTAG, *op_tag),
+        (H_ID, o.id),
+        (H_CHAIN_ID, u64_word(o.chain_id)),
+        (H_TOKEN, addr(&o.token)),
+        (H_REGISTRY, addr(&o.registry)),
+        (H_FROM, *from),
+        (H_SEND_COUNTER, u64_word(k)),
+        (H_P, u64_word(rec.p)),
+        (H_PLAIN_USED, u64_word(rec.shield_in)),
+        (H_CHAIN_UID, o.chain_uid),
+    ] {
+        if hd.get(i) != Some(&w) {
+            return Err(Error::Argument);
         }
-        .fill(if c.multi {
-            Multi::header(&o.id, m, aud)
-        } else {
-            Debit::header(if aud { Form::Transfer } else { Form::Transfer0 }, &o.id)
-        });
-        let to = if c.multi {
-            crate::keccak256(&(0..m).map(|j| l.e.owner(j)).collect::<Result<Vec<_>>>()?.concat())
-        } else {
-            l.e.owner(0)?
-        };
-        *hd.get_mut(H_TO).ok_or(Error::Argument)? = to;
-        hd.get_mut(H_SALT).ok_or(Error::Argument)?.iter_mut().skip(16).zip(salt).for_each(|(x, b)| *x = *b);
-        *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = crate::keccak256(&[&memo[..], &l.t.own_tag[..]].concat());
-        Ok(hd)
+    }
+    Ok(())
+}
+
+/// `pqz_ffi::precompile` (the chain's own function, panics caught) over `op ‖ statement ‖ proof` answers `…01`.
+fn verify_p(op: u8, stmt: &[u8], proof: &[u8]) -> Result<()> {
+    if pqz_ffi::precompile(&pqz_ffi::stmt::input(op, stmt, proof)) != Ok(pqz_ffi::VALID) {
+        return Err(Error::Argument);
+    }
+    Ok(())
+}
+
+/// A NONE transfer's header (§4.14.4 step 4, op 1 and op 7): the call's words, the record's `p` and `shieldIn`, the debit's
+/// `fromUA` and `k`, the token's words, the blob's `salt`, `toUA` or `recipientsHash`, `M` and `auditorOn`; the envelope
+/// binding of the call's mode and `memoHash = keccak256(memo ‖ ownTag_s)`.
+#[allow(clippy::too_many_arguments)]
+fn transfer_header(o: &Open, rec: &Record, from: &Word, k: u64, multi: bool, call: &Call, tl: &Tail, e: &Entry) -> Result<[Word; 20]> {
+    let (r, m, aud) = (&e.r, e.m, e.aud);
+    let salt = r.get(..16).ok_or(Error::Argument)?;
+    let memo = match (&call.sealed_memo, call.mode) {
+        (Some(s), Mode::Hash) if s.len() + 16 == pqz_ffi::memo::memo_len(m) => [salt, s].concat(),
+        (None, Mode::Bundle) => Vec::new(),
+        _ => return Err(Error::Argument),
+    };
+    let mut hd = header_of(o, rec, from, k, call.beneficiary_ua, call.fee, call.valid_until_block, bind_mode(&call.binding, call.mode))
+        .fill(if multi { Multi::header(&o.id, m, aud) } else { Debit::header(if aud { Form::Transfer } else { Form::Transfer0 }, &o.id) });
+    let to = if multi { crate::keccak256(&(0..m).map(|j| e.owner(j)).collect::<Result<Vec<_>>>()?.concat()) } else { e.owner(0)? };
+    *hd.get_mut(H_TO).ok_or(Error::Argument)? = to;
+    hd.get_mut(H_SALT).ok_or(Error::Argument)?.iter_mut().skip(16).zip(salt).for_each(|(x, b)| *x = *b);
+    *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = crate::keccak256(&[&memo[..], &tl.own_tag[..]].concat());
+    Ok(hd)
+}
+
+/// The header words a NONE debit's call and record give, before the form's.
+#[allow(clippy::too_many_arguments)]
+fn header_of(o: &Open, rec: &Record, from: &Word, k: u64, beneficiary_ua: Word, fee: u64, valid_until_block: u64, env: Word) -> Header {
+    Header {
+        chain_id: o.chain_id,
+        token: o.token,
+        registry: o.registry,
+        from_ua: *from,
+        beneficiary_ua,
+        fee,
+        send_counter: k,
+        p: rec.p,
+        valid_until_block,
+        plain_used: rec.shield_in,
+        chain_uid: o.chain_uid,
+        envelope_binding: env,
     }
 }
 
@@ -840,4 +883,247 @@ impl PqzKey {
         *g = None;
         Ok(out)
     }
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// The MPC quorum's check (no-oracle spec §4.14.8; T20d7, C-PP-6): keyless, no handle. A member runs it before any partial
+// decryption: the quorum's own last debit and every credit since, each by its P, at the quorum's leg the member's own record
+// of the quorum's key (its DKG record), never a source's.
+// ------------------------------------------------------------------------------------------------------------------------------
+
+/// The forms of the quorum's own last debit (§4.14.4's `form`, its `own` field).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum OwnForm {
+    Transfer,
+    Multi,
+    Burn,
+    Refresh,
+    Unwrap,
+}
+
+/// A NONE burn, refresh or unwrap call (§4.14.4 step 4): `binding` 0 direct, else the relayed envelope's; an unwrap's
+/// `underlying` and `minOut`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct BurnCall {
+    beneficiary_ua: Word,
+    fee: u64,
+    amount: u64,
+    recipient: Word,
+    valid_until_block: u64,
+    binding: Word,
+    unwrap: Option<([u8; 20], u64)>,
+}
+
+/// The quorum's own last debit (`own`): `(fromUA, k)` is `(ua, lastDebit − 1)` and its record `lastRecord`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct OwnDebit {
+    form: OwnForm,
+    sender_pending: Vec<(u64, Word)>,
+    key_records: Vec<(Word, u64, Word)>,
+    proof: Vec<u8>,
+    header: Option<[Word; 20]>,
+    call: Option<Call>,
+    burn_call: Option<BurnCall>,
+}
+
+/// `checkProven`'s request: the account's words (no key word of the quorum), `pk`, `own`, the codes and the credits.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Check {
+    open: Open,
+    pk: Vec<u8>,
+    own: Option<OwnDebit>,
+    codes: Codes,
+    credits: Vec<Credit>,
+}
+
+/// `{index, word}` entries.
+fn entries(l: &[Value]) -> Result<Vec<(u64, Word)>> {
+    if l.len() > K_MAX {
+        return Err(Error::Argument);
+    }
+    l.iter()
+        .map(|e| {
+            let e = Fields::new(e.as_object().ok_or(Error::Argument)?, &["index", "word"])?;
+            Ok((e.u64("index")?, e.word("word")?))
+        })
+        .collect()
+}
+
+/// `{ua, version, word}` entries.
+fn key_records(l: &[Value]) -> Result<Vec<(Word, u64, Word)>> {
+    if l.len() > KEY_RECORDS_MAX {
+        return Err(Error::Argument);
+    }
+    l.iter()
+        .map(|e| {
+            let e = Fields::new(e.as_object().ok_or(Error::Argument)?, &["ua", "version", "word"])?;
+            Ok((e.word("ua")?, e.u64("version")?, e.word("word")?))
+        })
+        .collect()
+}
+
+/// `own`'s fields: `{form, senderPending, keyRecords, proof, header | call}`.
+fn own_debit(v: &Value) -> Result<OwnDebit> {
+    let f = Fields::new(v.as_object().ok_or(Error::Argument)?, &["form", "senderPending", "keyRecords", "proof", "header", "call"])?;
+    let form = match f.get("form")?.as_str() {
+        Some("transfer") => OwnForm::Transfer,
+        Some("transferMulti") => OwnForm::Multi,
+        Some("burn") => OwnForm::Burn,
+        Some("refresh") => OwnForm::Refresh,
+        Some("unwrap") => OwnForm::Unwrap,
+        _ => return Err(Error::Argument),
+    };
+    let header: Option<[Word; 20]> = f.has("header").then(|| f.words("header")?.try_into().map_err(|_| Error::Argument)).transpose()?;
+    let (call, burn_call) = match (f.has("call"), form) {
+        (false, _) => (None, None),
+        (true, OwnForm::Transfer | OwnForm::Multi) => (Some(call(f.get("call")?)?), None),
+        (true, _) => (None, Some(burn_call(f.get("call")?, form == OwnForm::Unwrap)?)),
+    };
+    if header.is_some() == f.has("call") {
+        return Err(Error::Argument);
+    }
+    Ok(OwnDebit {
+        form,
+        sender_pending: entries(f.list("senderPending")?)?,
+        key_records: key_records(f.list("keyRecords")?)?,
+        proof: f.bytes("proof")?,
+        header,
+        call,
+        burn_call,
+    })
+}
+
+/// A burn, refresh or unwrap call: `{beneficiaryUA?, fee, amount, recipient, validUntilBlock, binding}`, an unwrap's
+/// `underlying` and `minOut` too.
+fn burn_call(v: &Value, unwrap: bool) -> Result<BurnCall> {
+    let mut list = vec!["beneficiaryUA", "fee", "amount", "recipient", "validUntilBlock", "binding"];
+    if unwrap {
+        list.extend(["underlying", "minOut"]);
+    }
+    let c = Fields::new(v.as_object().ok_or(Error::Argument)?, &list)?;
+    Ok(BurnCall {
+        beneficiary_ua: c.opt_word("beneficiaryUA")?,
+        fee: c.u64("fee")?,
+        amount: c.u64("amount")?,
+        recipient: c.word("recipient")?,
+        valid_until_block: c.u64("validUntilBlock")?,
+        binding: c.word("binding")?,
+        unwrap: if unwrap { Some((c.arr("underlying")?, c.u64("minOut")?)) } else { None },
+    })
+}
+
+/// `checkProven`'s request, typed (no key word of the quorum: the allow-list has no `keyRecord`; `pk` the member's record).
+pub(super) fn check_request(f: &Fields<'_>) -> Result<Check> {
+    let mut blobs = Blobs::new(f)?;
+    let open = open_words(f, &mut blobs)?;
+    let pk = f.pk("pk")?;
+    let own = match (open.own.is_some(), f.has("own")) {
+        (true, true) => Some(own_debit(f.get("own")?)?),
+        (false, false) => None,
+        _ => return Err(Error::Argument),
+    };
+    let (codes, credits) = credits(f)?;
+    Ok(Check { open, pk, own, codes, credits })
+}
+
+/// `checkProven` (§4.14.8): every part by its P with the member's `pk` at the quorum's leg and as its own debit's `pk_f`; any
+/// failure, a key word of the quorum at the version checked among the `keyRecords`, or a credit outside the window or given twice
+/// is `Argument` (no parts). `{parts, sum}`: the parts' indexes and kinds and the stored form of their sum mod `q`, which the
+/// member's MPC step (later) opens; TRIVIAL entries are public amounts and not in it. It decrypts nothing and uses no key.
+pub(super) fn check(c: &Check) -> Result<Value> {
+    let o = &c.open;
+    let mut blobs = Blobs(c.codes.iter().map(|(a, d)| (*a, d.clone(), false)).collect());
+    // Fable P1-1: the source names no key the check certifies against
+    let ours = |k: &[(Word, u64, Word)]| k.iter().any(|(u, v, _)| *u == o.ua && *v == o.v);
+    if c.own.as_ref().is_some_and(|w| ours(&w.key_records)) || c.credits.iter().any(|x| x.key_records.as_deref().is_some_and(ours)) {
+        return Err(Error::Argument);
+    }
+    let mut sum = vec![0u64; CT_BYTES / 8];
+    let mut parts = Vec::new();
+    if let (Some(w), Some((k, _, ct)), Some(rec)) = (&c.own, &o.own, &o.last) {
+        own_proven(&c.pk, o, rec, *k, w, &mut blobs)?;
+        add_mod(&mut sum, ct);
+        parts.push(json!({"index": null, "kind": Kind::Own.name()}));
+    }
+    let mut seen = BTreeSet::new();
+    for x in &c.credits {
+        let slot = o.need.get(&x.index).filter(|_| seen.insert(x.index)).ok_or(Error::Argument)?;
+        let rec = record(&x.record.0, &x.record.1, x.k)?;
+        let ct = by_proof(&c.pk, o, &rec, x, slot, &mut blobs)?.ok_or(Error::Argument)?;
+        add_mod(&mut sum, &ct);
+        let kind = if x.from_ua == o.ua && rec.key_version < o.v { Kind::Migration } else { Kind::Credit };
+        parts.push(json!({"index": x.index, "kind": kind.name()}));
+    }
+    let lanes: Vec<u8> = sum.iter().flat_map(|x| x.to_be_bytes()).collect();
+    let packed = crate::facade::pqz_pack::pack(&lanes).ok_or(Error::Argument)?;
+    Ok(json!({"parts": parts, "sum": to_hex(&packed)}))
+}
+
+/// The quorum's own last debit `(ua, k)` by its P (§4.14.8): its statement rebuilt as §4.14.4 with `pk_f` the member's `pk`,
+/// `T` by §2.3; no tag (no seed). A transfer's keys from `keyRecords` by the tail's `kv`; a burn, refresh or unwrap has none.
+fn own_proven(pk: &[u8], o: &Open, rec: &Record, k: u64, w: &OwnDebit, blobs: &mut Blobs) -> Result<()> {
+    if (rec.proof_store == 1) != w.header.is_some() {
+        return Err(Error::Argument);
+    }
+    let d = blobs.data(&o.acc_blob)?.to_vec();
+    let t = t_k(rec, &w.sender_pending, blobs)?;
+    match w.form {
+        OwnForm::Transfer | OwnForm::Multi => {
+            let multi = w.form == OwnForm::Multi;
+            let (tl, e) = shape(&d)?;
+            if !multi && e.m != 1 {
+                return Err(Error::Argument);
+            }
+            let pks = (0..e.m).map(|j| key_of(&w.key_records, blobs, &e.owner(j)?, *tl.kv.get(j).ok_or(Error::Argument)?)).collect::<Result<Vec<_>>>()?;
+            let pk_a = if e.aud { Some(key_of(&w.key_records, blobs, &o.auditor_ua, *tl.kv.get(e.m).ok_or(Error::Argument)?)?) } else { None };
+            let hd = match (&w.header, &w.call) {
+                (Some(h), _) => *h,
+                (None, Some(call)) => transfer_header(o, rec, &o.ua, k, multi, call, &tl, &e)?,
+                _ => return Err(Error::Argument),
+            };
+            transfer_proven(o, rec, &o.ua, k, multi, hd, pk, &pks, pk_a.as_deref(), &t, &d, &tl, &e, &w.proof)
+        }
+        OwnForm::Burn | OwnForm::Refresh | OwnForm::Unwrap => {
+            let tl = tail(&d)?;
+            if tl.r_len != PKP || !tl.kv.is_empty() {
+                return Err(Error::Argument);
+            }
+            let form = if w.form == OwnForm::Refresh { Form::Refresh } else { Form::Burn };
+            let hd = match (&w.header, &w.burn_call) {
+                (Some(h), _) => *h,
+                (None, Some(bc)) => burn_header(o, rec, k, w.form, bc, &tl)?,
+                _ => return Err(Error::Argument),
+            };
+            known(o, &hd, &form.op_tag(), &o.ua, k, rec)?;
+            let (u, v_f) = (part(&d, 0, PKP)?, part(&d, PKP, VP)?);
+            let stmt = Stmt::Debit(Debit { form, header: hd, pk_f: pk, pk_t: None, pk_a: None, t: &t, u: &u, v_t: None, v_f: &v_f, v_a: None })
+                .encode()
+                .map_err(|_| Error::Argument)?;
+            verify_p(form.op(), &stmt, &w.proof)
+        }
+    }
+}
+
+/// A NONE burn, refresh or unwrap header (§4.14.4 step 4, `PqzCore.prepareBurn`, `WrappedPqzToken._envUnwrap`): opTag REFRESH
+/// when `amount = 0`, else BURN (a refresh's amount is 0, a burn's and an unwrap's not); `envelopeBinding` the call's `binding`
+/// (burn, refresh) or `unwrapBinding(underlying, minOut)`, relayed `keccak256(abi.encode(binding, unwrapBinding))`; `memoHash
+/// = keccak256(ownTag)`.
+fn burn_header(o: &Open, rec: &Record, k: u64, form: OwnForm, bc: &BurnCall, tl: &Tail) -> Result<[Word; 20]> {
+    let env = match (form, &bc.unwrap) {
+        (OwnForm::Unwrap, Some((underlying, min_out))) => {
+            let w = crate::keccak256(&[crate::keccak256(b"SCAAS-PQZ-UNWRAP-V1"), addr(underlying), u64_word(*min_out)].concat());
+            if bc.binding == [0; 32] { w } else { crate::keccak256(&[bc.binding, w].concat()) }
+        }
+        (OwnForm::Burn | OwnForm::Refresh, None) => bc.binding,
+        _ => return Err(Error::Argument),
+    };
+    if (form == OwnForm::Refresh) != (bc.amount == 0) {
+        return Err(Error::Argument);
+    }
+    let f = if bc.amount == 0 { Form::Refresh } else { Form::Burn };
+    let mut hd = header_of(o, rec, &o.ua, k, bc.beneficiary_ua, bc.fee, bc.valid_until_block, env).fill(Debit::header(f, &o.id));
+    *hd.get_mut(H_AMOUNT).ok_or(Error::Argument)? = u64_word(bc.amount);
+    *hd.get_mut(H_RECIPIENT).ok_or(Error::Argument)? = bc.recipient;
+    *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = crate::keccak256(&tl.own_tag);
+    Ok(hd)
 }

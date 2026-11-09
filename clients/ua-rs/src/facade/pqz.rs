@@ -375,6 +375,10 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "proveTransferMultiProven" => field == "session" || has(DEBIT) || has(&["legs", "pkA", "mode"]),
         "proveBurnProven" => field == "session" || has(DEBIT) || has(&["amount", "recipient"]),
         "proveRefreshProven" => field == "session" || has(DEBIT),
+        // no handle (`check_proven`): no `keyRecord`, the quorum's key is `pk`, the member's record
+        "checkProven" => {
+            (has(LOC) && field != "keyRecord") || has(ACCT) || has(&["forOp7", "lastRecord", "auditorUA", "chainId", "registry", "pk", "own", "credits"])
+        }
         _ => false,
     }
 }
@@ -1432,6 +1436,23 @@ fn with_tag(mut v: Value, tag: &Word) -> Value {
         o.insert("ownTag".into(), to_hex(tag).into());
     }
     v
+}
+
+/// `checkProven` (no-oracle spec §4.14.8; T20d7, C-PP-6), the keyless check an MPC quorum's member runs before any partial
+/// decryption, with no handle (`scaas_ua_pqz_check`): `provenOpen`'s location and account fields without any key word of the
+/// quorum (no `keyRecord`), `pk` (the quorum's key from the member's own record of the key generation), `own` (`{form,
+/// senderPending, keyRecords, proof, header | call}` of the last debit, present exactly when `lastDebit > 0`; `form` also
+/// `burn`, `refresh`, `unwrap`), `blobs` and `credits` (as `provenAdd`'s) → `{parts, sum}`: the own last debit and each credit by
+/// its P with `pk` at the quorum's leg and as the own debit's `pk_f` (a source names no key the check certifies against: a
+/// `keyRecords` entry of the quorum at the version checked is `Argument`; an older version's key is a sender key), the stored
+/// form of the parts' sum mod `q`; any failure is `Argument` (no parts). The bounds of [`PqzKey::call`]: [`CMD_MAX`],
+/// [`CMD_DEPTH`], at most `K_MAX` parts. Decrypts nothing, uses no key.
+pub fn check_proven(request_json: &[u8]) -> Result<String> {
+    let Value::Object(v) = bounded::json(request_json, CMD_MAX, CMD_DEPTH)? else { return Err(Error::Argument) };
+    if !v.keys().all(|k| allowed("checkProven", k)) {
+        return Err(Error::Argument);
+    }
+    Ok(proven::check(&proven::check_request(&Fields(&v))?)?.to_string())
 }
 
 /// A PQZ key handle (spec §8.2): the wallet's store, the generation and the slot of `seed32`, and the public `pk`; no secret

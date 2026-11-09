@@ -21,7 +21,7 @@
 # T58-T65: 2026-11-09-ua-rs-sign-t20b6; T20d1, 3h's formats in every client: 2026-11-09-ua-rs-sign-t20d1; T20d3, the proof path's
 # record and tail parsers: 2026-11-09-ua-rs-sign-t20d3; T20d2, ownTag and the 3h memoHash in every debit: 2026-11-09-ua-rs-sign-t20d2;
 # T20d4, path (B)'s balanceProven: 2026-11-09-ua-rs-sign-t20d4; T20d5, its debits: 2026-11-09-ua-rs-sign-t20d5; T20d6,
-# seal advice: 2026-11-09-ua-rs-sign-t20d6, which runs T20d5's steps too),
+# seal advice: 2026-11-09-ua-rs-sign-t20d6, which runs T20d5's steps too; T20d7, the quorum's check: 2026-11-09-ua-rs-sign-t20d7),
 # T20's stay. (T20d2 renamed two names below to the 3h rule: multi_bundle_memo_hash_is_zero and burn_and_refresh_memo_hash_is_zero
 # are now ..._is_the_tags, keccak256(ownTag); the op 7 formula tests run on the words command, facade_pqz_state.rs.)
 P=${GATES_P:-2026-11-08-ua-rs-sign}
@@ -160,6 +160,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 \
                           2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 2026-11-09-ua-rs-sign-t20d2 \
                           2026-11-09-ua-rs-sign-t20d4 2026-11-09-ua-rs-sign-t20d5 2026-11-09-ua-rs-sign-t20d6 \
+                          2026-11-09-ua-rs-sign-t20d7 \
                           ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
@@ -894,6 +895,15 @@ ua-rs-pqz|cargo|seal_advice
 ua-rs|cargo|a_tag_proves_authorship_not_inclusion
 ua-rs-vectors|cargo|a_tag_proves_authorship_not_inclusion
 ua-rs-pqz|cargo|a_tag_proves_authorship_not_inclusion
+ua-rs|cargo|quorum_check_before_a_partial
+ua-rs-vectors|cargo|quorum_check_before_a_partial
+ua-rs-pqz|cargo|quorum_check_before_a_partial
+ua-rs|cargo|quorum_own_debit_in_each_form
+ua-rs-vectors|cargo|quorum_own_debit_in_each_form
+ua-rs-pqz|cargo|quorum_own_debit_in_each_form
+ua-rs|cargo|quorum_across_its_own_migration
+ua-rs-vectors|cargo|quorum_across_its_own_migration
+ua-rs-pqz|cargo|quorum_across_its_own_migration
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

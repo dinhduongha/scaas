@@ -589,3 +589,84 @@ impl Chain {
         json!({"session": session, "blobs": self.blobs_json(&blobs), "credits": cs.iter().map(|c| c.0.clone()).collect::<Vec<_>>()})
     }
 }
+
+impl Chain {
+    /// `checkProven`'s `own` for `(ua, v)`'s last debit (no-oracle spec §4.14.8): its form (a burn's by its amount, an unwrap's by
+    /// its call), its window, the keys by the tail's `kv`, P with the header (LOG) or the call (NONE); the blob addresses it names.
+    pub fn proven_own(&self, ua: &Word, v: u64) -> (Value, Vec<[u8; 20]>) {
+        let a = &self.accts[&(*ua, v)];
+        let k = a.last_debit - 1;
+        let r = self.recs[&(*ua, k)];
+        let (prev, p, dp, ps, _, kv_s) = rec_fields(&r);
+        let mut blobs = vec![a.acc_blob];
+        if prev != [0; 20] {
+            blobs.push(prev);
+        }
+        let sp = &self.accts[&(*ua, kv_s)].pending;
+        let window: Vec<Value> = (p - dp..p)
+            .map(|x| {
+                let pw = sp[&x];
+                if pw[22..24] != [0, 0] {
+                    blobs.push(pw[..20].try_into().unwrap());
+                }
+                json!({"index": x, "word": hx(&pw)})
+            })
+            .collect();
+        let (op, stmt, proof, call) = &self.proofs[&(*ua, k)];
+        let mut keys = vec![];
+        let form = match op {
+            2 => {
+                let st::Stmt::Debit(d) = st::parse(2, stmt).unwrap() else { panic!() };
+                if call.get("underlying").is_some() {
+                    "unwrap"
+                } else if d.header[st::H_AMOUNT] == [0; 32] {
+                    "refresh"
+                } else {
+                    "burn"
+                }
+            }
+            _ => {
+                let d = &self.blobs[&a.acc_blob][1..];
+                let n = *d.last().unwrap() as usize;
+                let kv: Vec<u64> = (0..n).map(|j| u64::from_be_bytes(d[d.len() - 1 - 8 * (n - j)..][..8].try_into().unwrap())).collect();
+                let (_, uas, aud) = self.legs_of(ua, k);
+                keys.extend(uas.iter().enumerate().map(|(j, u)| (*u, kv[j])));
+                if aud {
+                    keys.push((self.auditor.unwrap(), kv[uas.len()]));
+                }
+                if *op == 7 { "transferMulti" } else { "transfer" }
+            }
+        };
+        blobs.extend(keys.iter().map(|x| self.keys[x]));
+        let krs: Vec<Value> = keys.iter().map(|(u, x)| json!({"ua": hx(u), "version": x, "word": hx(&self.key_record_at(u, *x))})).collect();
+        let mut c = json!({"form": form, "senderPending": window, "keyRecords": krs, "proof": hx(proof)});
+        if ps == 1 {
+            c["header"] = json!((0..20).map(|x| hx(&stmt[32 * x..32 * x + 32])).collect::<Vec<_>>());
+        } else {
+            c["call"] = call.clone();
+        }
+        (c, blobs)
+    }
+    /// `checkProven`'s request for `(ua, v)` (no `keyRecord`; `pk` the member's record of the quorum's key): `provenOpen`'s
+    /// words, `own` and the credits, every code once.
+    pub fn check_request(&self, ua: &Word, v: u64, pk: &[u8], own: Option<&(Value, Vec<[u8; 20]>)>, cs: &[(Value, Vec<[u8; 20]>)]) -> Value {
+        let mut o = self.proven_open(ua, v);
+        o.as_object_mut().unwrap().remove("keyRecord");
+        let a = self.accts.get(&(*ua, v)).cloned().unwrap_or_default();
+        let mut blobs = if a.last_debit > 0 { vec![a.acc_blob] } else { vec![] };
+        blobs.extend(own.iter().flat_map(|x| x.1.clone()));
+        blobs.extend(cs.iter().flat_map(|c| c.1.clone()));
+        o["blobs"] = json!(self.blobs_json(&blobs));
+        o["pk"] = json!(hx(pk));
+        if let Some(w) = own {
+            o["own"] = w.0.clone();
+        }
+        o["credits"] = json!(cs.iter().map(|c| c.0.clone()).collect::<Vec<_>>());
+        o
+    }
+    /// The non-TRIVIAL indexes of `(ua, v)`'s window `[p_last, p)`.
+    pub fn window_credits(&self, ua: &Word, v: u64) -> Vec<u64> {
+        let o = self.proven_open(ua, v);
+        o["pending"].as_array().unwrap().iter().filter(|e| h(&e["word"])[22..24] != [0, 0]).map(|e| e["index"].as_u64().unwrap()).collect()
+    }
+}
