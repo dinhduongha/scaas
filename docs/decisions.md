@@ -307,6 +307,15 @@ dishonest or broken node cannot change.
 **Cost if wrong.** A label on code its round did not cover would overstate; the commit in the label and the "changed after its round" rule prevent it.
 **Source.** owner 2026-11-08 (chat): "crypto là AI AUDITED (Fable, Opus, GPT-6.1-Sol, Gemini 4 Argon)", "NOT YET AI-AUDITED => UNAUDITED", the 22776 gate "đủ".
 
+<a id="ARCH-POS-16"></a>
+### ARCH-POS-16 — No temporary or machine path in a committed file
+- old: — · status: current · owner: yes · date: 2026-11-10 · normative: decisions.md#ARCH-POS-16 · superseded-by: —
+
+**Rule.** Owner 2026-11-10: no committed file (scripts, gate runners, CI, run logs and evidence, notes, docs, plans, test strings) carries a temporary path such as one under the system temp directory, or another path of one machine. Scripts make their temp directory at run time (`mktemp -d` with a trap, Python `tempfile`, CI `$RUNNER_TEMP`) or use a git-ignored path in the tree; logs and notes write `<tmp>/name`. `*/legacy/*` and `docs/history/*` are left as they are. A CI step in the `docs` job (`git grep` for the temp prefix outside those two) refuses a new one. Built on `ua-mtx-merge` 2026-11-10 (`098a5de1`, `e9bbfd57`, `2da8f841`, `5a23e1a7`).
+**Why.** The repository is public; such paths are one machine's noise, and the summary-only rule for gate logs already asks for no absolute paths.
+**Cost if wrong.** None in behaviour: only where a script writes its scratch files changes.
+**Source.** owner 2026-11-10 (chat): "không đưa cả đường dẫn tạm tmp lên".
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
