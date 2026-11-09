@@ -33,7 +33,7 @@ import {nid} from "../helpers/Ids.sol";
 
 /// Exposes `_uaMint` (accounts.md CTR-UA-28).
 contract UAMintHarness is NormalToken {
-    constructor() NormalToken(msg.sender, "") {}
+    constructor() NormalToken(msg.sender, kindArgs(0, msg.sender, "")) {} // T66b: its body modules
 
     function mintUA(bytes32 to, uint256 v) external {
         _uaMint(to, v);
