@@ -10,7 +10,7 @@ T66b, before 3c.
 **The owner's request (2026-11-09).** `approve` is gone: under [CTR-TOK-01](../../contracts/token-wrappers.md#CTR-TOK-01) an EOA
 or UA never holds or grants an allowance on a SCaaS token. A service contract that must take a payer's tokens into its custody
 and then run its own logic needs another standard path. That logic must run atomically and relayed. Examples: an auction bond,
-escrow, staking, bonds, subscriptions. The path may differ from `MtxRelayFee`, whose purpose is close.
+escrow, staking, bonds, subscriptions. The path may differ from `RelayFeeRouter`, whose purpose is close.
 
 **Rules this spec applies, not reopens:**
 - [CTR-TOK-01](../../contracts/token-wrappers.md#CTR-TOK-01) and [CTR-UA-27](../../contracts/accounts.md#CTR-UA-27): no allowance
@@ -20,7 +20,7 @@ escrow, staking, bonds, subscriptions. The path may differ from `MtxRelayFee`, w
 - [CTR-MTX-16](../../contracts/metatx.md#CTR-MTX-16): no forwarder.
 - [CTR-MTX-19](../../contracts/metatx.md#CTR-MTX-19): every write is relayable, even at fee 0.
 - [CTR-MTX-23](../../contracts/metatx.md#CTR-MTX-23): the typed path.
-- [CTR-MTX-27](../../contracts/metatx.md#CTR-MTX-27): `MtxRelayFee`. Its doc text lags the code; the code follows pay-meta-tax
+- [CTR-MTX-27](../../contracts/metatx.md#CTR-MTX-27): `RelayFeeRouter`. Its doc text lags the code; the code follows pay-meta-tax
   §4 O4: one `relay` on ids with `batch` / `nonce`.
 - [CTR-MTX-29](../../decisions.md#ctr-mtx-29--every-parameter-is-explicit): explicit parameters.
 - [CTR-MTX-30](../../decisions.md#CTR-MTX-30): the merge, one form on ids with `UASig`.
@@ -168,7 +168,7 @@ sequenceDiagram
     autonumber
     actor P as Payer (from)
     participant R as Relayer lane
-    participant M as MtxRelayFee (router)
+    participant M as RelayFeeRouter
     participant X as Executor
     participant S as Service S
     participant T as Token T (pulled)
@@ -189,7 +189,7 @@ sequenceDiagram
     Note over M,F: RelayFeePaid(ref, S, F, payer, payee = pad(R) in open mode, fee)
 ```
 
-The order is from `MtxRelayFee.sol:72-73`: the target runs first, then the fee. Open mode is `MtxRelayFee.sol:93-97`. When `F = T`,
+The order is from `RelayFeeRouter.sol:72-73`: the target runs first, then the fee. Open mode is `RelayFeeRouter.sol:93-97`. When `F = T`,
 both signatures spend the payer's one nonce space on T. On one lane, the pull takes nonce `n` and the fee `n + 1`, because the pull
 runs first. Two lanes also work. `callData` contains `auth`, so the payer signs `t` before `UARelayFee`.
 
@@ -345,7 +345,7 @@ on a mismatch and shows both (§10). Every other signer is blind (§7).
 
 | Option | Defects |
 |---|---|
-| **A. Compose with `MtxRelayFee`; the pull at fee `NONE`** (recommended) | One extra signature when a fee is wanted |
+| **A. Compose with `RelayFeeRouter`; the pull at fee `NONE`** (recommended) | One extra signature when a fee is wanted |
 | B. The transfer's own fee mode | The open recipient is `msg.sender`, which is S, not the relayer (`MtxPipelineLib.sol:258`). An unbound recipient is written by whoever calls S, unsigned. A bound one pays a single relayer. It is capped at 1 % of `value` (`FeePolicy.sol:47-50`) and paid in the pulled token only. It is a second fee rule for contracts other than the token. |
 
 **Recommendation: A**, by "one rule". CTR-MTX-27 already pays a relayer for every fee-less call:
@@ -353,7 +353,7 @@ on a mismatch and shows both (§10). Every other signer is blind (§7).
 - only after the exact call ran (pay-meta-tax J8);
 - with open mode unchanged (O14).
 
-The rule: every service pull has fee mode `NONE` (§3.3 step 2). The relayer is paid by `MtxRelayFee` or not at all, and fee 0 is
+The rule: every service pull has fee mode `NONE` (§3.3 step 2). The relayer is paid by `RelayFeeRouter` or not at all, and fee 0 is
 still relayable. This is CTR-TND-01's "fee `NONE`", made general.
 
 ## 6. Token kinds — SPECIFIED (verified on the code)
@@ -426,7 +426,7 @@ still relayable. This is CTR-TND-01's "fee `NONE`", made general.
     `(selector(entry, op_type), op_type)` must equal the contract's, in both directions, and the domain's chainId must equal the
     chain's. Otherwise the service is refused (`SERVICE_ENTRIES_MISMATCH`, a startup error or a refused registration).
   - **One kind per address, both ways.** A service is never a registered token, the factory, a `GovernanceRouter`, the UA
-    registry, a DEX, a `SmartKeyAccount` or `MandateWallet` (`Rule::SelfAuth`), the `MtxRelayFee` router or its executor, or a
+    registry, a DEX, a `SmartKeyAccount` or `MandateWallet` (`Rule::SelfAuth`), the `RelayFeeRouter` or its executor, or a
     `chain_contract` of another kind. The reverse also holds: a `service` address is refused as the target of every other
     kind's row, as NODE-JOB-19 does for `gov_router`.
   - These rows are also **the chain profile's service list**, beside the DEX list (NET-ALL-24). Clients read it as advisory,
@@ -548,7 +548,7 @@ product contract.
 **Positive controls** (`test/metatx/ServicePull.t.sol`):
 - deposit and release by a native EOA, a derived single-key UA, an `msig` UA, a `SmartKeyAccount` (ERC-1271) and a Hedera
   64-byte payer;
-- relayed directly, and through `MtxRelayFee` with the fee in T on one lane (`n`, `n + 1`) and in another token;
+- relayed directly, and through `RelayFeeRouter` with the fee in T on one lane (`n`, `n + 1`) and in another token;
 - every kind through `test/metatx/helpers/KindRigs.sol`: plain, wrapped, the public side of Zether and PQZ, and regulated 8–13
   with S eligible.
 
@@ -644,7 +644,7 @@ One rule, one place. Each lands in the docs share (T81, in T19), tagged SPECIFIE
 - **Recommendation: A, if the owner accepts the blind-commitment residual**, as for `PayMeta`. `ua-rs` recomputes the digest
   and refuses on a mismatch.
 
-**Q3. Relayer fee: only `MtxRelayFee`, with every pull at fee `NONE` (§5 A), or also the transfer's own fee mode (§5 B)?**
+**Q3. Relayer fee: only `RelayFeeRouter`, with every pull at fee `NONE` (§5 A), or also the transfer's own fee mode (§5 B)?**
 **Recommendation: A**: one fee rule for every fee-less call, as CTR-TND-01 already requires.
 
 **Q4. A repeated operation: may one `op` be pulled twice, by two signatures, or does S refuse an `entryRef` it has seen?**

@@ -1,4 +1,4 @@
-//! CTR-MTX-27 executor of the relay-fee router (EVM `MtxRelayFee`'s executor parity; controller ruling 2026-10-31
+//! CTR-MTX-27 executor of the relay-fee router (EVM `RelayFeeRouter`'s executor parity; controller ruling 2026-10-31
 //! after the T8 review): the router never calls a target as itself. Soroban grants a contract's authority to every
 //! contract it calls directly, so a target called by the router would see `router.require_auth()` satisfied (a
 //! router-bound `ua_pay` settled without its call, a router balance drained). The router calls `exec`, and the

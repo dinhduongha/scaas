@@ -410,13 +410,13 @@ state a pruned node lacks. Topology, enodes, start / stop order and recovery: [R
 
 Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
 
-Mermaid, the relay-fee flow (`MtxRelayFee.relay`, one transaction, all or nothing):
+Mermaid, the relay-fee flow (`RelayFeeRouter.relay`, one transaction, all or nothing):
 
 ```mermaid
 sequenceDiagram
   participant R as Relayer
-  participant F as MtxRelayFee (router)
-  participant X as MtxRelayExecutor
+  participant F as RelayFeeRouter
+  participant X as RelayFeeExecutor
   participant T as Target
   participant K as Token
   R->>F: relay(target, callData, token, t, sig)
@@ -432,7 +432,7 @@ sequenceDiagram
   then exactly `mtxPay` / `uaPay` (lane `payLane(payId)`, nonce 0). `meta` is hashed and logged, never parsed. Body encodings
   (schemas 1-3) and the shared vectors `smartcontracts/vectors/metatx/paymeta.json`: decisions CTR-MTX-26 (T7 fix 1). The
   contract has no length cap; the node caps by policy (`max_pay_meta_bytes`, 2,048).
-- **Relay fee.** `src/metatx/MtxRelayFee.sol` (router) and its one-shot `MtxRelayExecutor`, deployed by `DeployBase` CREATE2;
+- **Relay fee.** `src/metatx/RelayFeeRouter.sol` (router) and its one-shot `RelayFeeExecutor`, deployed by `DeployBase` CREATE2;
   `relay` (address payer) and `uaRelay` (UA payer). The router refuses `t.to == EXECUTOR` (UA: `pad(EXECUTOR)`), a target with
   no code or an EIP-7702 designator (`RelayTargetNoCode`), and re-entry (a transient flag); it holds no balance after a call. `RelayFeePaid.payee` is
   `bytes32`. Clients: never pay or approve the executor; if the inner call is an mtx envelope with `MODE_RESTRICT_RELAYER`,
@@ -442,7 +442,7 @@ sequenceDiagram
   `MetaTxGasV2` rows (+8.9 k `unwrap`; cancel 0), data-size bound 7.9-9.1 k small and 8.9-11.5 k largest envelope
   (`runs/2026-10-27-metatx-split-overhead.txt`). Node: `guard::erc1271_floor(len)` for a contract signer.
 - **UA payers in the node** (BUILT, node-ua-jobs 2026-10-30): the `ua_metatx` job kind relays `uaExecute`,
-  `uaExecuteTransfer` and `uaPayMeta`; `MtxRelayFee.uaRelay` is a `call` job with its own call-table row, priced at
+  `uaExecuteTransfer` and `uaPayMeta`; `RelayFeeRouter.uaRelay` is a `call` job with its own call-table row, priced at
   `params.relay_fee.min_wei_value` against the quote (gas limit × 2 × the first max fee per gas, + the L1 data fee on an
   OP-stack chain with `params.l1_fee = "op-stack"`, e.g. Base and Celo); the indexer reads `UAPaymentSettled` as a
   `PaymentSettled` row, a derived UA as `UA_POOL` + `from_ua` / `to_ua` ([job-api.md](../node/job-api.md#paymeta-relayfee-jobs)).

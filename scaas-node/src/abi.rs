@@ -290,10 +290,10 @@ sol! {
         function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, UASig auth) external;
     }
 
-    /// `MtxRelayFee` (CTR-MTX-27, ua-mtx-merge T2 / R28): a token fee to the relayer for a fee-less call; `from` and `payee` ids
+    /// `RelayFeeRouter` (CTR-MTX-27, ua-mtx-merge T2 / R28): a token fee to the relayer for a fee-less call; `from` and `payee` ids
     /// (one `relay`, the old `uaRelay` under this name; the address `relay` is in `legacy/ua-mtx-merge/abi.rs`).
     #[derive(Debug)]
-    interface IMtxRelayFee {
+    interface IRelayFeeRouter {
         function relay(address target, bytes callData, address token, bytes32 from, bytes32 payee, uint256 value,
             uint256 batch, uint256 nonce, uint256 validUntil, UASig auth) external;
         function relayRef(address target, bytes callData) external view returns (bytes32);
@@ -621,7 +621,7 @@ pub fn decode_revert(data: &[u8]) -> String {
     if let Ok(e) = IMandateWallet::IMandateWalletErrors::abi_decode(data) {
         return format!("{e:?}");
     }
-    if let Ok(e) = IMtxRelayFee::IMtxRelayFeeErrors::abi_decode(data) {
+    if let Ok(e) = IRelayFeeRouter::IRelayFeeRouterErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     if let Ok(e) = IUALedger::IUALedgerErrors::abi_decode(data) {

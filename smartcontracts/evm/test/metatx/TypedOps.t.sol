@@ -13,7 +13,7 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTxBase} from "../../src/metatx/MetaTxBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
-import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
+import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind, AccountSig} from "../../src/account/SmartKeyAccount.sol";
@@ -1132,7 +1132,7 @@ contract TypedOpsTest is UALedgerBase {
         und.approve(address(wrp), 1_000);
         wrp.wrap(1_000);
         vm.stopPrank();
-        MtxRelayFee router = new MtxRelayFee();
+        RelayFeeRouter router = new RelayFeeRouter();
         MetaTxLib.Envelope memory e = _env(alice, 0, RR, 0, address(0));
         e.relayer = router.EXECUTOR();
         bytes memory cd = abi.encodeCall(WrappedToken.mtxUnwrap, (_uaE(e, _pad(alice)), 100, bob, 0, _unwrapSig(ALICE_PK, wrp, e, 100)));

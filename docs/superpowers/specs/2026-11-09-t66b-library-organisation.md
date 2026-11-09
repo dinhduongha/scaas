@@ -383,7 +383,7 @@ on single functions.
 ## 11. Questions for the owner (each with a recommendation)
 
 **Q1. Hedera keeps EIP-170 (24,576 B), and Step 5 deploys there.** Measured today by simulation: 24,577 B is refused. Step 5's
-release set (`DeployHedera.s.sol`: the factory, the router, the registry pair, the DEX, `MtxRelayFee`, the Hedera kinds 0, 1, 8,
+release set (`DeployHedera.s.sol`: the factory, the router, the registry pair, the DEX, `RelayFeeRouter`, the Hedera kinds 0, 1, 8,
 9 and their modules, the libraries they link, the wallets) holds four contracts above 24,576 B after this organisation: the
 registry pair (≈ 69.6 KB together after R-1: at least three contracts), `SCaaSDex` (34.9 KB), `OpenFactory` (28.4 KB). The kinds
 0, 1, 8, 9 fit with V7 (13.0–19.5 KB) and their modules mostly fit (largest upper bounds P 22.5 KB on kind 9 before the pipeline

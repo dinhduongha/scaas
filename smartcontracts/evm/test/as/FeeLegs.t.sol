@@ -19,7 +19,7 @@ import {DexLegs} from "../helpers/DexLegs.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {nid} from "../helpers/Ids.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
-import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
+import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 
 /// A relay target with code (pay-meta-tax T38): its call runs every time.
 contract RelayPing {
@@ -251,7 +251,7 @@ contract FeeLegsTest is RegFixture {
     /// pay-meta-tax T38, O14 (spec §4.1): router open mode stays on the regulated kinds; its limitation pinned: a frozen
     /// submitter is still paid, because RK-6 checks the signed payee (the router), not the one the router forwards to.
     function test_relayFee_openModeFrozenSubmitterPaid() public {
-        MtxRelayFee router = new MtxRelayFee();
+        RelayFeeRouter router = new RelayFeeRouter();
         RelayPing target = new RelayPing();
         for (uint256 i; i < 2; ++i) {
             address t = _ks()[i];
@@ -263,7 +263,7 @@ contract FeeLegsTest is RegFixture {
     }
 
     /// `relayer` submits alice's open-mode relay fee of 5 for `ping()` on `target`.
-    function _openRelay(MtxRelayFee router, address target, address t) internal {
+    function _openRelay(RelayFeeRouter router, address target, address t) internal {
         bytes memory cd = abi.encodeCall(RelayPing.ping, ());
         uint256 vu = block.timestamp + 300;
         IUARegistry.UASig memory a = _relaySig(t, target, cd, address(router), vu);

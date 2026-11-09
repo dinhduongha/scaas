@@ -113,7 +113,7 @@ governance_routers = ["0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0", "0xFeC9586a1
                                                  # since reset 1 (2026-11-04): deployments/7622.json's and 7622-pqz.json's;
                                                  # the ua*/mtx* merge moves the router's bytecode, so a deploy of it (reset 2)
                                                  # lists new CREATE2 addresses here (GovDeploy.t.sol
-                                                 # test_routerAndRelayFeeNewAddresses)
+                                                 # test_routerAndRelayFeeRouterNewAddresses)
 # compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<id>.json,
                                                  # DEPLOY_REGULATED=1): the canonical registry the regulated kinds 8-13
                                                  # pin; the DEX venue's pre-check reads it (NODE-DEX-11). An address, no
@@ -127,7 +127,7 @@ governance_routers = ["0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0", "0xFeC9586a1
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)
 # params = { relay_fee = { router = "0x...", min_amount = 1, min_wei_value = { "0x<token>" = "100000000000" } } }
-#                                                # MtxRelayFee ("mtx_relay_fee" in deployments/<id>.json; one CREATE2
+#                                                # RelayFeeRouter ("relay_fee_router" in deployments/<id>.json; one CREATE2
 #                                                # address on every chain, new with the ua*/mtx* merge); min_wei_value:
 #                                                # wei per token base unit (or "<wei>/<10^k>" per 10^k units), the floor
 #                                                # price a relay fee must reach the quote at (gas limit x 2 x first max fee

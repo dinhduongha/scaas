@@ -53,7 +53,7 @@ const PLAN = {
   UAPayUnderMandate: '0xadbc54026c0db2f3af4387e08d6db8d717cb74af436468a089f09d377d6f0119',
   UADelegateRevoke: '0x774892773810b24a4c22164980cf38c17d181e11c99acc17c7229238a11035e0',
   UAExecute: '0x0d4d513cf9b5169c6422cb757a9af6c10be34ccd883caa3a1d18d165cf9ea413',
-  // pay-meta-tax T41: `UARelayFee` with batch, nonce (T38, MtxRelayFee.t.sol's pin); `UAPayWithTax` (paytax.json, forge-written)
+  // pay-meta-tax T41: `UARelayFee` with batch, nonce (T38, RelayFeeRouter.t.sol's pin); `UAPayWithTax` (paytax.json, forge-written)
   UAPayWithTax: '0x4a5f25751af8f3abdc633328e8e9871ea0ebeb4084608bb83ae8140803a21857',
 };
 

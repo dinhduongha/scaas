@@ -16,7 +16,7 @@ use alloy::sol_types::SolCall;
 use anyhow::{anyhow, bail, Result};
 use serde_json::{json, Map, Value};
 
-use crate::abi::IMtxRelayFee;
+use crate::abi::IRelayFeeRouter;
 use crate::metatx::{addr, check_mode, native, uint, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
 
 /// The envelope after `from` (`MetaTxLib.Envelope` without it); `E` in a row's fields expands to it.
@@ -415,7 +415,7 @@ fn build() -> Vec<Row> {
         };
         let s = selector(entry, &plan, &fields);
         let sent = match *name {
-            "UARelayFee" => IMtxRelayFee::relayCall::SELECTOR,
+            "UARelayFee" => IRelayFeeRouter::relayCall::SELECTOR,
             _ => s,
         };
         let sig = plan.iter().find_map(|t| match t {
@@ -2170,7 +2170,7 @@ mod tests {
             assert_eq!(p.to, args["relayer"].as_str().unwrap().parse::<Address>().unwrap(), "the signed router");
             assert_eq!(p.data[..4], row.sent);
             assert_ne!(p.data[..4], row.selector, "never the direct entry");
-            let c = IMtxRelayFee::relayCall::abi_decode(&p.data).unwrap();
+            let c = IRelayFeeRouter::relayCall::abi_decode(&p.data).unwrap();
             assert_eq!((c.target, c.callData.to_vec(), c.token), (burn.to, burn.data.to_vec(), token));
             // the payer hashed the inner bytes: a node's `fee_recipient` leaves them alone
             let ours = Some(Address::repeat_byte(0x99));
@@ -2239,7 +2239,7 @@ mod tests {
         let rf = Op::parse(&op_of("UAReceiverFee", "token", &v).unwrap(), FEE).unwrap();
         assert!(rf.typed.lane_hash.is_some(), "a receiver fee is matched by its payment's digest");
         let d = &v["ops"]["UARelayFee"]["domains"]["token"];
-        let c = IMtxRelayFee::relayCall::abi_decode(&hex(&d["routerCalldata"])).unwrap();
+        let c = IRelayFeeRouter::relayCall::abi_decode(&hex(&d["routerCalldata"])).unwrap();
         assert_eq!((c.batch, c.nonce), (U256::from(7), U256::ZERO), "the payer's lane in the router call");
     }
 

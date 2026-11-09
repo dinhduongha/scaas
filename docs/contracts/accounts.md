@@ -1729,8 +1729,8 @@ ticket (self-call) is unchanged. **While an account is delegated it cannot call 
 through relayed `mtx*` / `ua*` signed with its own key (the fee may be 0), or it first clears its delegation (a type-4
 transaction authorising `address(0)`, signed by its key). Open roles are unchanged: any submitter of a relayed call (a PQZ
 op reads its caller only to pull a non-zero `shieldIn` from it, no7702 review m1), the
-`mtxWrap` / `uaWrap` fee mint, the `MtxRelayFee` open-mode payee, the DEX settle submitter and its order-relayer binding, the
-`OpenFactory` creator. **SCaaS never calls into a designator where it picks the callee:** a `MtxRelayFee` target must be a
+`mtxWrap` / `uaWrap` fee mint, the `RelayFeeRouter` open-mode payee, the DEX settle submitter and its order-relayer binding, the
+`OpenFactory` creator. **SCaaS never calls into a designator where it picks the callee:** a `RelayFeeRouter` target must be a
 contract (`RelayTargetNoCode`; before, a designator pointing at a code-less address passed and the payer paid for an empty
 call), a native-coin unwrap recipient (`unwrap`, the Zether / PQZ unshield-unwrap) that is a designator is refused
 (`UnwrapRecipientInvalid`), and every deployer-, registrar- or creator-chosen code dependency (`OpenFactory` DEX and token

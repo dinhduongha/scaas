@@ -1,5 +1,5 @@
 //! scaas-ua's metatx-split hashes (T18) against smartcontracts/vectors/metatx/ (written by forge: PayMeta.t.sol,
-//! MtxRelayFee.t.sol): CTR-MTX-26 `meta_pay_id` / `pay_lane`, CTR-MTX-27 `relay_ref` (EVM).
+//! RelayFeeRouter.t.sol): CTR-MTX-26 `meta_pay_id` / `pay_lane`, CTR-MTX-27 `relay_ref` (EVM).
 use scaas_ua::{meta_pay_id, pay_lane, relay_ref};
 use serde_json::Value;
 

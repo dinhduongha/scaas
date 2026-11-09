@@ -7,7 +7,7 @@
 #   env BLOCKSCOUT_API (default http://192.168.1.72:4000/api), RPC (default http://192.168.1.72:8545),
 #   FOUNDRY_PROFILE (default scaas-testnet)
 # Run after every 7622 reset or deploy. Broadcast: the CREATE / CREATE2 rows and the contracts they create
-# (additionalContracts: MtxRelayExecutor, the SmartKeyAccount implementation, the token / DEX implementations); the
+# (additionalContracts: RelayFeeExecutor, the SmartKeyAccount implementation, the token / DEX implementations); the
 # constructor arguments are the tail of each init code after the artifact's creation bytecode. A child forge cannot
 # name: an EIP-1167 clone (a factory token, `createToken`) is checked as below, an SSTORE2 data contract (code starting
 # 0x00: the inner-product verifier's generators, registry records, memos) is listed as skip (data, nothing to verify).

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The EVM pay entries off chain (pay-meta-tax spec §3-§5, ua-mtx-merge T41): `PayMeta` v2 and its commitment
 //! `metaPayId`, the `payNo` text rules, and the digests a payer signs: `UAMetaTransfer` (`mtxPay`), `UAPayWithTax`
-//! (`mtxPayWithTax`, kinds 8-13) and `UARelayFee` with `batch` / `nonce` (`MtxRelayFee.relay`). An unbound `relayer` /
+//! (`mtxPayWithTax`, kinds 8-13) and `UARelayFee` with `batch` / `nonce` (`RelayFeeRouter.relay`). An unbound `relayer` /
 //! `feeRecipient` is hashed as 0 (`MetaTxLib.canon`). Pinned by `smartcontracts/vectors/metatx/{paymeta,paytax}.json`
 //! (forge) and `typed/typed_ops.json` (clientkeys). The contract decides; nothing here is a check of record. UNAUDITED.
 use crate::{address_word, keccak, keccak256, word, DOMAIN_TYPE};

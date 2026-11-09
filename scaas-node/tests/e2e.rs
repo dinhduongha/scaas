@@ -533,10 +533,10 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
         (Some("1000"), Some("INV-77"), Some(format!("0x{}", alloy::hex::encode(b"hello")).as_str())));
 
     // T17 (CTR-MTX-27) on the real router: a fee-less `cancelNonce(77)` of the payer, its fee of 10 in open mode; the
-    // node relays `relay` (call-table row MtxRelayFee.relay, the `UARelayFee` of the payer's padded id), the fee reaches the
+    // node relays `relay` (call-table row RelayFeeRouter.relay, the `UARelayFee` of the payer's padded id), the fee reaches the
     // lane, the indexer joins RelayFeePaid
-    let router: Address = dep["mtx_relay_fee"].as_str().expect("mtx_relay_fee in the deploy JSON").parse().unwrap();
-    let out = p.call(TransactionRequest::default().to(router).input(scaas_node::abi::IMtxRelayFee::EXECUTORCall {}.abi_encode().into()))
+    let router: Address = dep["relay_fee_router"].as_str().expect("relay_fee_router in the deploy JSON").parse().unwrap();
+    let out = p.call(TransactionRequest::default().to(router).input(scaas_node::abi::IRelayFeeRouter::EXECUTORCall {}.abi_encode().into()))
         .await.unwrap();
     assert_eq!(Address::abi_decode(&out).unwrap(), router.create(1), "the executor the node derives (never paid)");
     let inner = signed_op(&payer, cancel_op(payer.address(), token, 77, 8), chain_id, d.salt);
@@ -1325,7 +1325,7 @@ fn quote_covers(sent: &[(u64, u128)], spent: U256, what: &str) -> u128 {
 }
 
 /// `ua_metatx` (job-api.md) on the real token: a derived secp256k1 UA, registered and funded on the UA ledger, pays
-/// (1) a pay-meta job (`mtxPayMeta` on ids), and (2) a relay fee for a fee-less call through `MtxRelayFee.relay` (`UARelayFee`,
+/// (1) a pay-meta job (`mtxPayMeta` on ids), and (2) a relay fee for a fee-less call through `RelayFeeRouter.relay` (`UARelayFee`,
 /// open mode: the fee reaches the lane); the node's quote covers the lane's real ETH cost of each, a fee worth less than
 /// the quote at `min_wei_value` is refused before any signature, and the indexer gives the UA payments (ids) their meta
 /// and relay fee.
@@ -1339,7 +1339,7 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     let dep = deploy(&rpc, chain_id, payer.address());
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
     let registry: Address = dep["ua_registry"].as_str().unwrap().parse().unwrap();
-    let router: Address = dep["mtx_relay_fee"].as_str().unwrap().parse().unwrap();
+    let router: Address = dep["relay_fee_router"].as_str().unwrap().parse().unwrap();
     let (relayer, deployer) = (key(RELAYER), key(DEPLOYER));
     let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
 

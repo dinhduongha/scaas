@@ -573,7 +573,7 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
    `PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=scaas-testnet CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh
    evm http://127.0.0.1:8545`: 31 transactions, all status 1, through the genesis CREATE2 deployer (UA registry with 17
    `KindConfig`s + `msig`: no `zether-bls12381`, no `0x0142` — the run predates the branch's rebase onto `zether-ungate`;
-   OpenFactory, MtxRelayFee + executor, the NormalToken and SCaaSDex releases); `deployments/7622.json`
+   OpenFactory, the relay-fee router (formerly `MtxRelayFee`) + executor, the NormalToken and SCaaSDex releases); `deployments/7622.json`
    (git-ignored; copy in `smartcontracts/evm/runs/2026-10-31-fs3-t13-deploy-7622.txt`). UniswapExecutor: no deploy
    script (plan decision PD7). **Superseded 2026-10-31** by the [salt-v2 set with Zether](#zether-on-the-scaas-testnet-executed-2026-10-31)
    (kept on chain, still verified on Blockscout).
@@ -640,12 +640,12 @@ owner before 22776's gen-1 registry and for the audit).
    | ZetherDisclosure | `0xbC37b9B6a32Ece60aD8c9b0bFD69dFc7d64AD893` |
    | ZetherStatements | `0xF0279b8b5B455802AA0bd5B8AbDdb1E6659bd4d8` |
    | ZetherLib / WrappedLib / MtxPipelineLib | `0xD212702BF26d833f1904736C90354492d8eD2801` / `0xBfb57C6354384d9ba15966039ae5F823CaB92c60` / `0x9aabC1959D99b5C2F1021DA8BCeD5807eDDc4C01` |
-   | MtxRelayFee / its executor | `0x738720b3Fa18aB3E04eB2d5dbB600427f9CD6A5D` / `0x81e86a75de7E23b7b9a9d1C78313A868589ABe69` |
+   | RelayFeeRouter (formerly `MtxRelayFee`, the name it was verified under) / its executor | `0x738720b3Fa18aB3E04eB2d5dbB600427f9CD6A5D` / `0x81e86a75de7E23b7b9a9d1C78313A868589ABe69` |
    | SmartKeyAccountFactory / implementation | `0xbbFcF863ADc64cD6a2701C3e3d6D5edC895282A5` / `0xB2d07a27A1f7e187DFeAc6c0b458210F55dC3AB6` |
 
    The UA verifiers of the other kinds are listed in the deploy log. **Superseded:** the phase C set (registry
    `0x06d03D56…9776`, OpenFactory `0xC037D039a21646060E5b4ae441c1138e87000BDE`, NormalToken `0xCDb98d83…a551`, SCaaSDex
-   `0xe77d3D68…D3D9`, MtxRelayFee `0x7FB42079…fa48`, SmartKeyAccountFactory `0x3fAF952D…619D`) stays on chain and verified on
+   `0xe77d3D68…D3D9`, the relay-fee router (formerly `MtxRelayFee`) `0x7FB42079…fa48`, SmartKeyAccountFactory `0x3fAF952D…619D`) stays on chain and verified on
    Blockscout; nothing new is built on it (2026-10-31; reason above).
 3. The releases are usable `noticePeriod` (600 s) after `deployImplementation`; the e2e started after that.
 4. E2E: `RPC=http://192.168.1.72:8545 PRIVATE_KEY=<key 4> FOUNDRY_PROFILE=scaas-testnet scripts/capped scripts/e2e-zether.sh`
@@ -1015,7 +1015,7 @@ docker compose stop sc-verifier
 `broadcast/ZetherE2E.s.sol/7622/run-latest.json` when present, and every `runs/*.txt` whose
 `# P6g e2e on chain 7622` header names the current genesis hash; `BLOCKSCOUT_API`, `RPC` default
 `http://192.168.1.72:8545`, `FOUNDRY_PROFILE` default `scaas-testnet`): one `forge verify-contract … --verifier blockscout`
-per CREATE / CREATE2 row and per factory child of the broadcast (MtxRelayExecutor, the SmartKeyAccount implementation,
+per CREATE / CREATE2 row and per factory child of the broadcast (RelayFeeExecutor, the SmartKeyAccount implementation,
 the NormalToken / SCaaSDex implementations), constructor arguments from the init code; for the PQZ e2e
 (`script/pqz/e2e.py`, no broadcast file; `deployments/7622-pqz.json` holds only its last run) every
 `<Name> at 0x…` line of its run logs (constructor arguments from the creation transaction) and every

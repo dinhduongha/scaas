@@ -1641,9 +1641,9 @@ pub(crate) mod tests {
     fn call_job(id: i64, target: Address, data: Vec<u8>) -> Value {
         let until = (now() + 300).to_string();
         let sel: [u8; 4] = data[..4].try_into().unwrap();
-        if sel == crate::abi::IMtxRelayFee::relayCall::SELECTOR {
+        if sel == crate::abi::IRelayFeeRouter::relayCall::SELECTOR {
             // one `relay` on ids (R28): a native payer's own key (the `0x11…` sentinel [`resign`] replaces), a derived one's 96 bytes
-            let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(&data).unwrap();
+            let c = crate::abi::IRelayFeeRouter::relayCall::abi_decode(&data).unwrap();
             let args = json!({"from": format!("{:#x}", c.from), "payee": format!("{:#x}", c.payee), "value": c.value.to_string(),
                 "batch": c.batch.to_string(), "nonce": c.nonce.to_string(), "validUntil": c.validUntil.to_string(),
                 "relayer": format!("{target:#x}")});
@@ -2473,7 +2473,7 @@ pub(crate) mod tests {
     /// A relay of `TARGET`'s call paying `value` to `to`, as the router's calldata.
     fn relay_data(to: Address, value: u64) -> Vec<u8> {
         let call: Bytes = IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode().into();
-        crate::abi::IMtxRelayFee::relayCall { target: TARGET, callData: call, token: TOKEN, from: payer().into_word(), payee: to.into_word(),
+        crate::abi::IRelayFeeRouter::relayCall { target: TARGET, callData: call, token: TOKEN, from: payer().into_word(), payee: to.into_word(),
             value: U256::from(value), batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(now() + 600),
             auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x11; 65]), members: vec![] } }.abi_encode()
     }
@@ -2500,8 +2500,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert_eq!(check(ROUTER, &relay_data(ROUTER, 100)), Ok(TARGET));
         assert!(check(TARGET, &relay_data(ROUTER, 100)).unwrap_err().starts_with("CALL_TARGET_REFUSED"), "only the router");
         assert!(check(ROUTER, &[1, 2, 3, 4]).unwrap_err().starts_with("BAD_PAYLOAD"));
-        let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(&relay_data(ROUTER, 100)).unwrap();
-        let other = crate::abi::IMtxRelayFee::relayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
+        let c = crate::abi::IRelayFeeRouter::relayCall::abi_decode(&relay_data(ROUTER, 100)).unwrap();
+        let other = crate::abi::IRelayFeeRouter::relayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
         assert!(check(ROUTER, &other).unwrap_err().starts_with("TOKEN_NOT_SERVED"), "a registered token only");
         assert!(check(ROUTER, &relay_data(ROUTER.create(1), 100)).unwrap_err().starts_with("RELAY_FEE_SHAPE"), "never the executor");
         // config: a router that is not an address fails at startup, in every module that reads it
@@ -2538,7 +2538,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         let (r, rpc) = go(relay_data(ROUTER, 100), vec![], Evm::default()).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "open mode at min_amount: {r:?}");
         let sent = rpc.lock().unwrap().sent[0].clone();
-        assert_eq!((sent.1, &sent.2[..4]), (ROUTER, &crate::abi::IMtxRelayFee::relayCall::SELECTOR[..]));
+        assert_eq!((sent.1, &sent.2[..4]), (ROUTER, &crate::abi::IRelayFeeRouter::relayCall::SELECTOR[..]));
         assert_eq!(rpc.lock().unwrap().gas[0], 0x30000 * 6 / 5, "the simulated relay +20 %");
         let (r, rpc) = go(relay_data(ROUTER, 99), vec![], Evm::default()).await;
         assert!(r[0].0 == "dead" && r[0].1.contains("below relay_fee.min_amount 100"), "{r:?}");
@@ -2670,11 +2670,11 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     /// `relay` for a derived payer `UA`: its `UARelayFee` of `value` to `to` for `TARGET`'s call.
     fn ua_relay_data(to: B256, value: u64) -> Vec<u8> {
         let call: Bytes = IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode().into();
-        crate::abi::IMtxRelayFee::relayCall { target: TARGET, callData: call, token: TOKEN, from: UA, payee: to, value: U256::from(value),
+        crate::abi::IRelayFeeRouter::relayCall { target: TARGET, callData: call, token: TOKEN, from: UA, payee: to, value: U256::from(value),
             batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(now() + 600), auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x22; 96]), members: vec![] } }.abi_encode()
     }
 
-    /// CTR-MTX-27 for a derived payer: the call-table row `MtxRelayFee.relay` takes the router's shape on ids (payee never
+    /// CTR-MTX-27 for a derived payer: the call-table row `RelayFeeRouter.relay` takes the router's shape on ids (payee never
     /// the executor's id) and `min_amount`; the lane's cost is known only after the simulation (a UA verify costs what its
     /// kind costs, millions of gas for a PQ kind), so the fee must also be worth, at the token's `relay_fee.min_wei_value`, at
     /// least the quote = the gas limit × the max fee per gas the lane signs with. A token without a price is refused for a
@@ -2682,7 +2682,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     #[tokio::test]
     async fn ua_relay_fee_needs_a_price_and_covers_the_quote() {
         let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
-        assert_eq!(crate::abi::IMtxRelayFee::relayCall::SELECTOR,
+        assert_eq!(crate::abi::IRelayFeeRouter::relayCall::SELECTOR,
             sig("relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
         let mut cfg = test_cfg("http://127.0.0.1:9");
         relay_params(&mut cfg, &[]);
@@ -2694,8 +2694,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert!(check(&ua_relay_data(open, 99)).unwrap_err().contains("below relay_fee.min_amount 100"));
         assert_eq!(check(&ua_relay_data(lane1().into_word(), 100)), Ok(TARGET), "bound to this lane");
         assert!(check(&ua_relay_data(B256::repeat_byte(0x5e), 100)).unwrap_err().contains("relay_bound_payee"));
-        let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(&ua_relay_data(open, 100)).unwrap();
-        let other = crate::abi::IMtxRelayFee::relayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
+        let c = crate::abi::IRelayFeeRouter::relayCall::abi_decode(&ua_relay_data(open, 100)).unwrap();
+        let other = crate::abi::IRelayFeeRouter::relayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
         assert!(check(&other).unwrap_err().starts_with("TOKEN_NOT_SERVED"));
         // on the lane: no price ⇒ refused before any signature; then exactly the quote passes, one wei less does not
         let price = |p: u128| -> Vec<(&'static str, toml::Value)> {
@@ -2715,7 +2715,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             let e = rpc.lock().unwrap();
             (e.gas[0], e.fees[0], e.sent[0].2[..4].to_vec())
         };
-        assert_eq!(sel, crate::abi::IMtxRelayFee::relayCall::SELECTOR);
+        assert_eq!(sel, crate::abi::IRelayFeeRouter::relayCall::SELECTOR);
         // fix 1 (I1): the quote is taken at the job's fee ceiling, FEE_HEADROOM x the first max fee
         let quote = u128::from(gas) * guard::FEE_HEADROOM * fee;
         assert_eq!(guard::relay_quote(gas, guard::fee_ceiling(fee), 0), quote);

@@ -9,11 +9,11 @@ import {SigCheck} from "../common/SigCheck.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 
-/// @title The unprivileged caller of `MtxRelayFee`'s targets (CTR-MTX-27, spec §7.1).
+/// @title The unprivileged caller of `RelayFeeRouter`'s targets (CTR-MTX-27, spec §7.1).
 /// @notice Created by the router's constructor (CREATE). Holds nothing, is trusted by nothing, and runs a call only for
 ///         its router: a target sees this address, never the router, so a `callData` that is a token's
 ///         `mtxExecuteTransfer` of another router-bound payment fails that payment's relayer binding.
-contract MtxRelayExecutor {
+contract RelayFeeExecutor {
     error NotRouter();
 
     address public immutable ROUTER;
@@ -30,7 +30,7 @@ contract MtxRelayExecutor {
     }
 }
 
-/// @title `MtxRelayFee`: a token fee to the relayer for a fee-less call (CTR-MTX-27, spec §7.1).
+/// @title `RelayFeeRouter`: a token fee to the relayer for a fee-less call (CTR-MTX-27, spec §7.1).
 /// @notice Stateless, no owner, no constructor argument; deployed by CREATE2 (`DeployBase`), so it and its executor
 ///         have the same addresses on every EVM chain. It grants no authority (CTR-MTX-16): every target checks its own
 ///         signer, the router calls targets only through its executor, and it only binds a payment the payer signed for
@@ -39,7 +39,7 @@ contract MtxRelayExecutor {
 ///         signed in the token's own domain, so a fake token moves nothing real (a bound payee reads the expected
 ///         token's `UAPaymentSettled`). ua-mtx-merge T2 (R28): one `relay` on ids, today's `uaRelay` under this name;
 ///         the address `relay` and `RelayFee` are in legacy/ua-mtx-merge/, so this contract has a new CREATE2 address.
-contract MtxRelayFee is ReentrancyGuardTransient {
+contract RelayFeeRouter is ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
     /// @notice `payer` and `payee` are ids: an address zero-padded, or a derived UA id. `payee` is the one paid:
@@ -56,7 +56,7 @@ contract MtxRelayFee is ReentrancyGuardTransient {
     address public immutable EXECUTOR;
 
     constructor() {
-        EXECUTOR = address(new MtxRelayExecutor());
+        EXECUTOR = address(new RelayFeeExecutor());
     }
 
     /// @notice CTR-MTX-27 steps 1-6: the shape, `target` called by the executor, then `token.mtxRelayFee(…, auth)`
@@ -69,7 +69,7 @@ contract MtxRelayFee is ReentrancyGuardTransient {
                    uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
     {
         _shape(target, payee);
-        MtxRelayExecutor(EXECUTOR).exec(target, callData);
+        RelayFeeExecutor(EXECUTOR).exec(target, callData);
         IERC20MetaTx(token).mtxRelayFee(from, target, keccak256(callData), payee, value, batch, nonce, validUntil, auth);
         emit RelayFeePaid(relayRef(target, callData), target, token, from, _payee(token, payee, value), value);
     }

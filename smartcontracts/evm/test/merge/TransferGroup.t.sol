@@ -8,7 +8,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
-import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
+import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
@@ -48,7 +48,7 @@ interface IMergedT2 {
         uint256 validUntil) external view returns (bytes32);
 }
 
-/// `MtxRelayFee.relay` on ids (R28: today's `uaRelay` under the name `relay`).
+/// `RelayFeeRouter.relay` on ids (R28: today's `uaRelay` under the name `relay`).
 interface IRelayT2 {
     function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
         uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external;
@@ -111,7 +111,7 @@ contract HookedNormal is NormalToken {
 }
 
 /// T2: the transfer group (`mtxTransfer`, `mtxTransferWithFee`, `mtxExecuteTransfer`, `mtxBatchTransfer`), payments
-/// (`mtxPay`, `mtxPayMeta`), receiver-pays (`mtxPayReceiverFee`) and the relay fee (`mtxRelayFee`, `MtxRelayFee.relay`)
+/// (`mtxPay`, `mtxPayMeta`), receiver-pays (`mtxPayReceiverFee`) and the relay fee (`mtxRelayFee`, `RelayFeeRouter.relay`)
 /// in today's `ua*` form under the `mtx*` name, on the six kinds of the parity rigs plus `NORMAL` and `WRAPPED` with no
 /// registry. The signer of every rig is `0xA11CE`, an EOA that signs the `UA…` structs with its own key (B).
 contract TransferGroupTest is Test {
@@ -137,11 +137,11 @@ contract TransferGroupTest is Test {
     bytes32 internal from;
     bytes32 internal to;
     Tk[] internal ks; // the seven rig tokens, then `WRAPPED` with no registry
-    MtxRelayFee internal router;
+    RelayFeeRouter internal router;
     RelayProbe internal probe;
     mapping(address => bool) internal _noCallSet; // registries already under `expectCall(…, 0)` (once per test)
 
-    /// One `MtxRelayFee.relay` call; a struct so the call's eight arguments come from memory, not the stack.
+    /// One `RelayFeeRouter.relay` call; a struct so the call's eight arguments come from memory, not the stack.
     struct RelayArgs {
         address t;
         bytes cd;
@@ -181,7 +181,7 @@ contract TransferGroupTest is Test {
         assertEq(ks.length, 8, "six kinds, NORMAL and WRAPPED with no registry");
         for (uint256 i; i < ks.length; ++i) assertEq(ks[i].signer, signer, ks[i].kind);
         (from, to) = (MetaTxLib.pad(signer), MetaTxLib.pad(payee));
-        router = new MtxRelayFee();
+        router = new RelayFeeRouter();
         probe = new RelayProbe();
     }
 
@@ -532,7 +532,7 @@ contract TransferGroupTest is Test {
         RelayArgs memory r = _relayArgs(t, 8, to);
         bytes32 ref = router.relayRef(address(probe), r.cd);
         vm.expectEmit(true, true, true, true, address(router));
-        emit MtxRelayFee.RelayFeePaid(ref, address(probe), t, from, to, 8);
+        emit RelayFeeRouter.RelayFeePaid(ref, address(probe), t, from, to, 8);
         _relayWith(r);
         assertTrue(probe.ran(), kind);
         assertEq(probe.seen(), p0, string.concat(kind, ": the call ran before its fee"));

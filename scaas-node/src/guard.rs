@@ -25,7 +25,7 @@ use alloy::primitives::{Address, Bytes, B256};
 use alloy::sol_types::{SolCall, SolValue};
 use tracing::warn;
 
-use crate::abi::{IMtxIds, IMtxRelayFee, IPqzToken, ISCaaSDex, IToken, IUALedger, IUARegistry};
+use crate::abi::{IMtxIds, IPqzToken, IRelayFeeRouter, ISCaaSDex, IToken, IUALedger, IUARegistry};
 use crate::chain::{BlockGas, Chain, SimError};
 use crate::config::ChainCfg;
 use crate::metatx::{Mtx, UaMtx};
@@ -70,7 +70,7 @@ pub fn rule_of(contract: &str) -> Option<Rule> {
     })
 }
 
-/// The allow-list: every selector the node sends, with its table row. `MtxRelayFee.relay` comes from the `UARelayFee` row
+/// The allow-list: every selector the node sends, with its table row. `RelayFeeRouter.relay` comes from the `UARelayFee` row
 /// (the token's `mtxRelayFee` only ever runs under the router). Anything else is refused.
 pub fn row(sel: [u8; 4], contract: &str) -> Option<&'static typed::Row> {
     typed::rows().iter().find(|r| r.sent == sel && !r.entry.is_empty() && r.contracts.contains(&contract))
@@ -227,7 +227,7 @@ pub fn allowed(rule: Rule, f: &Facts) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelayFee {
     pub router: Address,
-    /// `MtxRelayExecutor`: the router's first `CREATE` (constructor, nonce 1), so derived, never configured.
+    /// `RelayFeeExecutor`: the router's first `CREATE` (constructor, nonce 1), so derived, never configured.
     pub executor: Address,
     pub params: crate::config::RelayParams,
     /// `relay_fee.min_wei_value = { "<token>" = wei per base unit }`: the node's floor price of a fee token.
@@ -295,7 +295,7 @@ struct RelayCall {
 }
 
 fn relay_call(data: &[u8]) -> Option<RelayCall> {
-    let c = IMtxRelayFee::relayCall::abi_decode(data).ok()?;
+    let c = IRelayFeeRouter::relayCall::abi_decode(data).ok()?;
     let derived = crate::metatx::native(&c.from).is_none();
     Some(RelayCall { target: c.target, call: c.callData, token: c.token, from: c.from, payee: c.payee, value: c.value, derived })
 }
@@ -325,7 +325,7 @@ pub fn relay_call_ok(rf: &RelayFee, lane: Address, to: Address, data: &[u8], reg
     -> Result<Address, String>
 {
     if to != rf.router {
-        return Err(format!("CALL_TARGET_REFUSED: MtxRelayFee.relay on {to:#x}, not params.relay_fee.router"));
+        return Err(format!("CALL_TARGET_REFUSED: RelayFeeRouter.relay on {to:#x}, not params.relay_fee.router"));
     }
     let c = relay_call(data).ok_or_else(|| "BAD_PAYLOAD: not a relay call".to_string())?;
     if !registered(c.token) {
@@ -497,7 +497,7 @@ impl Guard {
         })
     }
 
-    /// The chain's `MtxRelayFee` router (`params.relay_fee.router`), if any.
+    /// The chain's `RelayFeeRouter` (`params.relay_fee.router`), if any.
     pub fn router(&self) -> Option<Address> {
         self.relay_fee.as_ref().map(|r| r.router)
     }
@@ -572,7 +572,7 @@ impl Guard {
         if w.typed.as_ref().is_some_and(|t| t.derived_signer) && !row.ua() {
             return Err(refused(format!("{} ({}): a derived subject signs merged entries only (B)", row.entry, row.name)));
         }
-        if sel == IMtxRelayFee::relayCall::SELECTOR {
+        if sel == IRelayFeeRouter::relayCall::SELECTOR {
             let Some(rf) = &self.relay_fee else {
                 return Err(refused("no params.relay_fee.router on this chain".into()));
             };
@@ -859,7 +859,7 @@ mod tests {
     /// `typed_ops_kat_every_entry`.
     #[test]
     fn the_plain_rows_are_pinned() {
-        use crate::abi::{IMtxRelayFee as R, ISCaaSDex as D, IUARegistry as U};
+        use crate::abi::{IRelayFeeRouter as R, ISCaaSDex as D, IUARegistry as U};
         let kat = |f: &str, k: &str| -> Vec<u8> {
             let p = format!("{}/../smartcontracts/evm/test/vectors/{f}", env!("CARGO_MANIFEST_DIR"));
             let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
@@ -1584,7 +1584,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let router = Address::repeat_byte(0x9a);
         let other = Address::repeat_byte(0x9b);
         let inner = |name: &str, kind: &str| crate::typed::Op::parse(&op_of(name, kind, &v).unwrap(), None).unwrap().data;
-        let relay = |to: Address, call: Bytes| IMtxRelayFee::relayCall { target: to, callData: call, token: Address::repeat_byte(1),
+        let relay = |to: Address, call: Bytes| IRelayFeeRouter::relayCall { target: to, callData: call, token: Address::repeat_byte(1),
             from: B256::repeat_byte(2), payee: B256::repeat_byte(3), value: alloy::primitives::U256::from(1),
             batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
             validUntil: alloy::primitives::U256::from(4_000_000_000u64),
@@ -1605,7 +1605,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
 
     /// The same rule where it runs, the guard's relay branch: a relay fee whose inner call is a router op passes on a configured router
     /// and is refused on any other bound contract; with no `governance_routers` it is refused (spec §12.7: "on the inner target of
-    /// `MtxRelayFee.relayCall`", one form since ua-mtx-merge R28).
+    /// `RelayFeeRouter.relayCall`", one form since ua-mtx-merge R28).
     #[tokio::test]
     async fn the_guards_relay_branch_runs_the_router_rule() {
         use crate::typed::testkit::{op_of, vectors};
@@ -1618,7 +1618,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         params.insert("relay_fee".into(), toml::Value::Table([("router".to_string(), toml::Value::String(format!("{rf:#x}")))].into_iter().collect()));
         let grant = crate::typed::Op::parse(&op_of("UAGrantRole", "gov_router", &v).unwrap(), None).unwrap().data;
         let work = |target: Address| {
-            let data = IMtxRelayFee::relayCall { target, callData: grant.clone(), token, from: B256::repeat_byte(2), payee: rf.into_word(),
+            let data = IRelayFeeRouter::relayCall { target, callData: grant.clone(), token, from: B256::repeat_byte(2), payee: rf.into_word(),
                 value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
                 validUntil: alloy::primitives::U256::from(4_000_000_000u64),
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();

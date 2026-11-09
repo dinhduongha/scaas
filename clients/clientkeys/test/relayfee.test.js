@@ -1,5 +1,5 @@
-// CTR-MTX-27 (metatx split T18): a token fee for a fee-less call through `MtxRelayFee`. `relayref.json` is written by
-// forge (test/metatx/MtxRelayFee.t.sol `test_relayRefVectors`) against the router itself.
+// CTR-MTX-27 (metatx split T18): a token fee for a fee-less call through `RelayFeeRouter`. `relayref.json` is written by
+// forge (test/metatx/RelayFeeRouter.t.sol `test_relayRefVectors`) against the router itself.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -141,5 +141,5 @@ test('buildRelayFee: the lane and nonce are the payer\'s and required (T38 / T41
   assert.throws(() => buildRelayFee({ ...noLane, batch: 1 }), /nonce is required/);
   assert.equal(TYPED_OPS.UARelayFee.typeString, 'UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,'
     + 'uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)');
-  assert.equal(TYPED_OPS.UARelayFee.typehash, '0x220269b9987739caf1274adfea8055b107d8e0a4b237683de5b13ae493e43ea5', 'MtxRelayFee.t.sol pin');
+  assert.equal(TYPED_OPS.UARelayFee.typehash, '0x220269b9987739caf1274adfea8055b107d8e0a4b237683de5b13ae493e43ea5', 'RelayFeeRouter.t.sol pin');
 });

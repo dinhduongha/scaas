@@ -11,11 +11,11 @@ import {Test} from "forge-std/Test.sol";
 /// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
 /// say why.
 contract MsgSenderLintTest is Test {
-    // ua-mtx-merge MD-6: + MetaTxAddressBase (the address bodies moved out of MetaTxBase), MtxRelayFee, the PQZ token files,
+    // ua-mtx-merge MD-6: + MetaTxAddressBase (the address bodies moved out of MetaTxBase), RelayFeeRouter, the PQZ token files,
     // ZetherWrappedLib; `PqzLayer` and `SCaaSDex` read `this.` on purpose (pinned in `test_noExternalSelfCalls`)
     // ua-mtx-merge T3b (MD-6's way): + the mandate wallets, on `UAMetaTxBase` (Q6)
     // ua-mtx-merge T27: + the regulated layer and kinds (`src/regulated/`), none reading `msg.sender`; T28: + kind 8; T31: + kind 12
-    string[32] internal FILES = ["src/wallet/MandateWallet.sol", "src/hedera/HederaMandateWallet.sol", "src/metatx/MetaTxAddressBase.sol", "src/metatx/MtxRelayFee.sol", "src/pqz/NormalPqzToken.sol",
+    string[32] internal FILES = ["src/wallet/MandateWallet.sol", "src/hedera/HederaMandateWallet.sol", "src/metatx/MetaTxAddressBase.sol", "src/metatx/RelayFeeRouter.sol", "src/pqz/NormalPqzToken.sol",
         "src/pqz/WrappedPqzToken.sol", "src/pqz/PqzWrappedLib.sol", "src/zether/ZetherWrappedLib.sol", "src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
         "src/governance/GovernanceLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
@@ -84,8 +84,8 @@ contract MsgSenderLintTest is Test {
         // ua-mtx-merge MD-6: the files the merge rewrites, at their base counts (MetaTxAddressBase: new, the address
         // bodies moved out of MetaTxBase, which kept its 8)
         assertEq(_count("src/metatx/MetaTxAddressBase.sol", "msg.sender", false), 0, "MetaTxAddressBase");
-        assertEq(_count("src/metatx/MtxRelayFee.sol", "msg.sender", false), 4,
-            "MtxRelayFee: ROUTER at construction, the router check, the open-mode payee x2 (pay and pad)");
+        assertEq(_count("src/metatx/RelayFeeRouter.sol", "msg.sender", false), 4,
+            "RelayFeeRouter: ROUTER at construction, the router check, the open-mode payee x2 (pay and pad)");
         assertEq(_count("src/pqz/PqzLayer.sol", "msg.sender", false), 0, "PqzLayer");
         assertEq(_count("src/pqz/NormalPqzToken.sol", "msg.sender", false), 0, "NormalPqzToken");
         assertEq(_count("src/pqz/WrappedPqzToken.sol", "msg.sender", false), 0, "WrappedPqzToken");

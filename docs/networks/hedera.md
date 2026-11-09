@@ -396,7 +396,7 @@ registry gets no `zether-bls12381` ([CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-
 
 Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
 
-Hedera runs the same EVM contracts, so `mtxPayMeta` / `uaPayMeta` and `MtxRelayFee` (CTR-MTX-26 / -27) are the EVM ones
+Hedera runs the same EVM contracts, so `mtxPayMeta` / `uaPayMeta` and `RelayFeeRouter` (CTR-MTX-26 / -27) are the EVM ones
 ([evm.md](evm.md#paymeta-relayfee)). What differs is the signature rule, which the split keeps inside `MtxPipelineLib`
 (`requireSignature`): a 64-byte signature from an address with no code goes to the HIP-632 `HederaLib.requireValid`
 (a library the pipeline library links); otherwise the ERC-1271 / ECDSA rule. The Hedera mandate wallet and

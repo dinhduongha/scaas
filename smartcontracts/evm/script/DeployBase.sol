@@ -30,7 +30,7 @@ import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
 import {UARegistryLib} from "../src/ua/UARegistryLib.sol";
-import {MtxRelayFee, MtxRelayExecutor} from "../src/metatx/MtxRelayFee.sol";
+import {RelayFeeRouter, RelayFeeExecutor} from "../src/metatx/RelayFeeRouter.sol";
 import {UAKinds} from "../src/ua/UAKinds.sol";
 import {PqUA} from "../src/ua/PqUA.sol";
 import {WebAuthnP256Verifier} from "../src/ua/verifiers/WebAuthnP256Verifier.sol";
@@ -336,7 +336,7 @@ abstract contract DeployBase is Script {
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
     ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
     ///         `ua_registry_lib`,
-    ///         `mtx_relay_fee`, `mtx_relay_executor`, `governance_router`, `chain_uid` into the JSON object `"deploy"`; with
+    ///         `relay_fee_router`, `relay_fee_executor`, `governance_router`, `chain_uid` into the JSON object `"deploy"`; with
     ///         `DEPLOY_WRAPPED` also the `WRAPPED` release (`_deployWrapped`, GD-12), with `DEPLOY_ZETHER` the Zether stack
     ///         (`_deployZether`, not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger).
     ///         Each release is refused first when its runtime exceeds the chain's declared `CHAIN_CODE_LIMIT`
@@ -355,7 +355,7 @@ abstract contract DeployBase is Script {
         f = new OpenFactory{salt: salt}(registrar);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera); // before every release: its address is in the env
-        _deployRelayFee();
+        _deployRelayFeeRouter();
         if (deployRegulated) _deployComplianceRegistry();
         if (register) _configureChain(f, registrar);
         vm.serializeAddress("deploy", "token_factory", address(f));
@@ -448,15 +448,15 @@ abstract contract DeployBase is Script {
         return keccak256(type(ComplianceRegistry).runtimeCode);
     }
 
-    /// @notice `MtxRelayFee` (CTR-MTX-27) by CREATE2, the same address on every chain (no constructor argument, no
-    ///         `chainUid()`: it is stateless); its executor is its CREATE at nonce 1. JSON `mtx_relay_fee`,
-    ///         `mtx_relay_executor`.
-    function _deployRelayFee() internal {
-        MtxRelayFee rf = new MtxRelayFee{salt: salt}();
+    /// @notice `RelayFeeRouter` (CTR-MTX-27) by CREATE2, the same address on every chain (no constructor argument, no
+    ///         `chainUid()`: it is stateless); its executor is its CREATE at nonce 1. JSON `relay_fee_router`,
+    ///         `relay_fee_executor`.
+    function _deployRelayFeeRouter() internal {
+        RelayFeeRouter rf = new RelayFeeRouter{salt: salt}();
         address ex = rf.EXECUTOR();
-        require(ex.code.length != 0 && MtxRelayExecutor(ex).ROUTER() == address(rf), "MtxRelayFee executor");
-        vm.serializeAddress("deploy", "mtx_relay_fee", address(rf));
-        vm.serializeAddress("deploy", "mtx_relay_executor", ex);
+        require(ex.code.length != 0 && RelayFeeExecutor(ex).ROUTER() == address(rf), "RelayFeeRouter executor");
+        vm.serializeAddress("deploy", "relay_fee_router", address(rf));
+        vm.serializeAddress("deploy", "relay_fee_executor", ex);
     }
 
     /// @notice The chain's `GovernanceRouter` (CTR-GOV-15 Change, owner 2026-11-04; plan T11) by CREATE2: no owner, no

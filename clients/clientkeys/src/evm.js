@@ -1018,7 +1018,7 @@ export function checkPayMeta(td, { meta, entryRef, ...opts }) {
 // ------------------------------------------------------------------ CTR-MTX-27: a token fee for a fee-less call
 
 /** `relayRef(target, callData) = keccak256("scaas.relayfee" ‖ uint256 chainid ‖ target ‖ keccak256(callData))` on chain
- *  `chainId` (EVM, `MtxRelayFee.relayRef`; other families use their own `ref` forms). */
+ *  `chainId` (EVM, `RelayFeeRouter.relayRef`; other families use their own `ref` forms). */
 export function relayRef(chainId, target, callData) {
   const t = fromHex(target);
   if (t.length !== 20) refuse('the target is not an address');
@@ -1053,7 +1053,7 @@ export function mtxExecuteTransferCalldata(td, signature) {
     [abiValue('UAMetaTransfer', td.message), abiValue('UASig', uaSigOf(signature))]);
 }
 
-/** A relay-fee job (CTR-MTX-27, TS-D19) on `router` (`MtxRelayFee`, executor `executor`): `inner` (optional) is the call's
+/** A relay-fee job (CTR-MTX-27, TS-D19) on `router` (`RelayFeeRouter`, executor `executor`): `inner` (optional) is the call's
  *  own typed data on `target`, a named entry's or a `MetaTransaction`; a relayer it binds (`MODE_RESTRICT_RELAYER`) is set
  *  to the executor (left open otherwise; bound to anything else: refused). Open mode by default (`payee` unset: the payment
  *  goes to the router, which pays whoever submits); `payee` binds it (never the executor). The payer `from` and `payee` are

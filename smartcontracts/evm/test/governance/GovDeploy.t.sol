@@ -25,7 +25,7 @@ import {WrappedZetherRegulatedToken} from "../../src/regulated/WrappedZetherRegu
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
-import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
+import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 import {plainEnv, pinned, closureLibs, regArgs} from "../helpers/Catalogue.sol";
 import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {IComplianceRegistry} from "../../src/regulated/IComplianceRegistry.sol";
@@ -466,28 +466,30 @@ contract GovDeployTest is Test {
         assertEq(regular + state, 0, "nothing measured");
     }
 
-    /// Plan T10 (T2 and T7 moved the bytecode): `MtxRelayFee` (no constructor argument: one address on every chain) and the
+    /// Plan T10 (T2 and T7 moved the bytecode): `RelayFeeRouter` (no constructor argument: one address on every chain) and the
     /// `GovernanceRouter` (here on the SCaaS testnet's reset-1 inputs: chain_uid, registry, `SmartKeyAccount`
     /// implementation, not Hedera) at their deploy CREATE2 addresses (the deterministic deployer, the default
     /// `DEPLOY_SALT`), not the reset-1 ones (`deployments/7622.json`, which `node.example.toml`'s `governance_routers`
     /// names): a deploy of this tree lists the new ones.
-    function test_routerAndRelayFeeNewAddresses() public pure {
+    function test_routerAndRelayFeeRouterNewAddresses() public pure {
         bytes32 deploySalt = keccak256("scaas.deploy.v1");
         address deployer = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-        address rf = vm.computeCreate2Address(deploySalt, keccak256(type(MtxRelayFee).creationCode), deployer);
+        address rf = vm.computeCreate2Address(deploySalt, keccak256(type(RelayFeeRouter).creationCode), deployer);
         address router = vm.computeCreate2Address(deploySalt, keccak256(abi.encodePacked(type(GovernanceRouter).creationCode,
             abi.encode(bytes32(0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164),
                 address(0x838b5D28fbc07844a070818012A8a68980688C26), address(0x428C6e1Cad562Dc16b2bf19515B9b08dD0361e8f), false))),
             deployer);
-        assertTrue(rf != 0xD5D8d5e1cD81f1E83C5B6c1a4Fd9AcfF02d89BB2, "not reset 1's MtxRelayFee");
+        assertTrue(rf != 0xD5D8d5e1cD81f1E83C5B6c1a4Fd9AcfF02d89BB2, "not reset 1's RelayFeeRouter");
         assertTrue(router != 0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0, "not reset 1's GovernanceRouter");
         // pay-meta-tax T37: 0xaf843Ac33a5A73A2baf3E979F922Bd3c1feD6B43 -> 0x616AEe61C11e53a1a5104d448eba7574e5AE2a8b (the
         // metadata hash: `MetaTxLib` gains `PayMeta`); T38: -> 0xa615f3672E60a2e91F92463bB4Df8b4374245C8A (`relay` with
         // `batch`, `nonce`); 3g T51: 0xF1D87045dAef620300637Ed6DE7123B42f23f9aB (the metadata hash: `IUARegistry`'s versioned PQZ
         // key records); T66a item 1: -> this (the metadata hash: `IUARegistry.requirePortable`)
         // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0xC9C1aC557303551b16d78DBce193f02e414CAA39 -> this
-        // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0x3d0DB1d457Ac07B199e8Bd65676AFF7fF127330E -> this
-        assertEq(rf, 0x8B56809BBf5f6595351F648a499E194292B6100C, "MtxRelayFee");
+        // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0x3d0DB1d457Ac07B199e8Bd65676AFF7fF127330E ->
+        // 0x8B56809BBf5f6595351F648a499E194292B6100C; T82 (the metadata hash: the contract's new name and file, owner
+        // 2026-11-09): -> this
+        assertEq(rf, 0x6e5ADaD0b26E45d76250564dC569D2C05a082762, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
