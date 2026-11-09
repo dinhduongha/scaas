@@ -879,7 +879,8 @@ fn bounds_refused_before_any_proof_is_checked() {
     let o = call(kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
     let cs = wd.credits(&BOB, 0, &o["need"]);
     let add = |c: &[Cred]| wd.c.add_request(&o["session"], c);
-    let bare = json!({"index": 0, "fromUA": hx(&A), "sendCounter": 0, "form": "transfer", "record": cs[0].0["record"]});
+    // (an index outside `need`: each such credit alone is refused without a check, so only the count bound makes the call Argument)
+    let bare = json!({"index": 99, "fromUA": hx(&A), "sendCounter": 0, "form": "transfer", "record": cs[0].0["record"]});
     let many = json!({"session": o["session"], "blobs": [], "credits": vec![bare; st::K_MAX + 1]});
     let mut wide = cs[0].clone();
     let w0 = wide.0["senderPending"][0].clone();
