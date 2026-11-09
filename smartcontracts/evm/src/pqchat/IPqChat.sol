@@ -237,6 +237,26 @@ interface IPqChat {
     ///         of memory in an `eth_call`, under the 50 M default call gas cap of common clients.
     function STORED_RANGE_MAX() external view returns (uint256);
 
+    /// @notice Recovery from state alone (owner 2026-11-10): the sessions `ua` was listed in, one entry at `createSession` per
+    ///         member and one at a `rekey` per member it adds; append-only (a removed or leaving member keeps its entry:
+    ///         clients check `leftIn` and the latest epoch's members); a member added again gets another entry.
+    function sessionCount(bytes32 ua) external view returns (uint256);
+    /// @notice Entries `[offset, min(offset + min(limit, SESSIONS_RANGE_MAX), count))`; an offset past the end is empty.
+    function sessionsOf(bytes32 ua, uint256 offset, uint256 limit) external view returns (bytes32[] memory);
+    /// @notice The largest `sessionsOf` page: 128 ids, 4 KiB returned, about 0.3 M gas of cold reads in an `eth_call`.
+    function SESSIONS_RANGE_MAX() external view returns (uint256);
+    /// @notice The session's epochs (owner 2026-11-10), epoch 0 (the `sessionId`) first once complete, then each epoch >= 1
+    ///         in the order it completed here: in the home instance a child completes only by taking its parent's slot
+    ///         (P9), so the list is the winning chain 0..n; in a replica it is every complete epoch in completion order,
+    ///         competing children included (a replica orders nothing, P18: clients follow the home's list).
+    function epochCount(bytes32 sessionId) external view returns (uint256);
+    /// @notice Entries `[offset, min(offset + min(limit, EPOCHS_RANGE_MAX), count))`; an offset past the end is empty.
+    function epochsOf(bytes32 sessionId, uint256 offset, uint256 limit) external view returns (bytes32[] memory);
+    /// @notice The largest `epochsOf` page: 128 ids, as `SESSIONS_RANGE_MAX`.
+    function EPOCHS_RANGE_MAX() external view returns (uint256);
+    /// @notice The last entry of `epochsOf` (zero while the session is not complete here); no slot of its own.
+    function latestEpoch(bytes32 sessionId) external view returns (bytes32 epochId);
+
     // ------------------------------------------------------------------ public topics (topics spec §5)
 
     function createTopic(PqTopic calldata t, IUARegistry.UASig calldata sig) external returns (bytes32 topicId);

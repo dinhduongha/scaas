@@ -26,6 +26,10 @@ contract PqChat is IPqChat {
     uint256 internal constant WRAP_BYTES = 1688;
     /// @inheritdoc IPqChat
     uint256 public constant STORED_RANGE_MAX = 16;
+    /// @inheritdoc IPqChat
+    uint256 public constant SESSIONS_RANGE_MAX = 128;
+    /// @inheritdoc IPqChat
+    uint256 public constant EPOCHS_RANGE_MAX = 128;
 
     address public immutable FACTORY;
     uint64 internal immutable VERSION;
@@ -91,6 +95,8 @@ contract PqChat is IPqChat {
         mapping(bytes32 => bytes32[]) posts;
         mapping(bytes32 => bytes32[]) replies;
         mapping(bytes32 => bytes32[]) byAuthor;
+        mapping(bytes32 => bytes32[]) sessions; // per UA (owner 2026-11-10)
+        mapping(bytes32 => bytes32[]) chain; // per session: its epochs >= 1 in completion order (epoch 0 implied)
     }
 
     /// @dev `keccak256(abi.encode(uint256(keccak256("scaas.pqchat")) - 1)) & ~bytes32(uint256(0xff))`.
@@ -158,6 +164,7 @@ contract PqChat is IPqChat {
         ep.wraps = uint32(s.members.length);
         ep.home = s.homeChain == uid && s.homeContract == address(this);
         emit PqChatSessionCreated(sid, s.creator, s.homeChain);
+        for (uint256 i; i < s.members.length; ++i) _s().sessions[s.members[i].ua].push(sid);
         _land(sid, ep, 0, wraps, s.members, s.wrapHashes, limit);
     }
 
@@ -176,8 +183,7 @@ contract PqChat is IPqChat {
         external returns (bytes32 eid)
     {
         (IUARegistry reg, uint256 limit,) = _env();
-        Epoch storage pe = _parentOf(e);
-        _rights(reg, pe, e);
+        _indexAdded(e, _rights(reg, _parentOf(e), e));
         _auth(reg, e.author, PqChatTypes.hashEpoch(e), sig);
         _useNonce(PqChatTypes.scopeEpoch(e.sessionId, e.author), e.nonce);
         eid = PqChatTypes.epochId(e.sessionId, e.author, e.nonce);
@@ -200,15 +206,28 @@ contract PqChat is IPqChat {
         }
     }
 
-    function _rights(IUARegistry reg, Epoch storage pe, PqChatEpoch calldata e) internal view {
+    /// @dev The rights of P10 (3C-D7); returns the parent's member ids.
+    function _rights(IUARegistry reg, Epoch storage pe, PqChatEpoch calldata e) internal view returns (bytes32[] memory pu) {
         MemberKey[] memory members = e.members;
         bytes32[] memory admins = e.admins;
         _checkLists(reg, admins, members, e.wrapHashes.length, 1);
         (bytes32[] memory pa, MemberKey[] memory pm,) = _lists(pe);
-        if (_keeps(pe, pa, admins) && _keeps(pe, _uas(pm), _uas(members))) {
+        pu = _uas(pm);
+        if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {
             if (_memberAt(pm, e.author) == type(uint256).max) revert PqChatNotMember(e.author);
         } else if (!_has(pa, e.author)) {
             revert PqChatNotAdmin(e.author);
+        }
+    }
+
+    /// @dev Owner 2026-11-10: `sessionsOf` gains the session for each member `e` adds to the parent (both sorted). Runs
+    ///      before the signature check; a refused record reverts it with the rest.
+    function _indexAdded(PqChatEpoch calldata e, bytes32[] memory parent) internal {
+        uint256 i;
+        for (uint256 j; j < e.members.length; ++j) {
+            bytes32 ua = e.members[j].ua;
+            while (i < parent.length && parent[i] < ua) ++i;
+            if (i == parent.length || parent[i] != ua) _s().sessions[ua].push(e.sessionId);
         }
     }
 
@@ -354,6 +373,42 @@ contract PqChat is IPqChat {
         uint256 end = n - offset > limit ? offset + limit : n;
         page = new bytes[](end - offset);
         for (uint256 i; i < page.length; ++i) page[i] = SSTORE2.read(l[offset + i]);
+    }
+
+    function sessionCount(bytes32 ua) external view returns (uint256) {
+        return _s().sessions[ua].length;
+    }
+
+    function sessionsOf(bytes32 ua, uint256 offset, uint256 limit) external view returns (bytes32[] memory page) {
+        bytes32[] storage l = _s().sessions[ua];
+        uint256 n = l.length;
+        if (offset >= n) return page;
+        if (limit > SESSIONS_RANGE_MAX) limit = SESSIONS_RANGE_MAX;
+        uint256 end = n - offset > limit ? offset + limit : n;
+        page = new bytes32[](end - offset);
+        for (uint256 i; i < page.length; ++i) page[i] = l[offset + i];
+    }
+
+    /// @dev Epoch 0 implied (no slot) once the session is complete here; then `chain` (owner 2026-11-10).
+    function epochCount(bytes32 sessionId) public view returns (uint256) {
+        Epoch storage ep = _s().epochs[sessionId];
+        if (ep.sessionId != sessionId || sessionId == 0 || ep.landed != ep.wraps) return 0;
+        return 1 + _s().chain[sessionId].length;
+    }
+
+    function epochsOf(bytes32 sessionId, uint256 offset, uint256 limit) external view returns (bytes32[] memory page) {
+        uint256 n = epochCount(sessionId);
+        if (offset >= n) return page;
+        if (limit > EPOCHS_RANGE_MAX) limit = EPOCHS_RANGE_MAX;
+        uint256 end = n - offset > limit ? offset + limit : n;
+        page = new bytes32[](end - offset);
+        bytes32[] storage c = _s().chain[sessionId];
+        for (uint256 i; i < page.length; ++i) page[i] = offset + i == 0 ? sessionId : c[offset + i - 1];
+    }
+
+    function latestEpoch(bytes32 sessionId) external view returns (bytes32) {
+        uint256 n = epochCount(sessionId);
+        return n == 0 ? bytes32(0) : n == 1 ? sessionId : _s().chain[sessionId][n - 2];
     }
 
     // ------------------------------------------------------------------ public topics
@@ -519,7 +574,10 @@ contract PqChat is IPqChat {
         ep.landed = landed;
         emit PqChatWraps(epochId, uint32(first), uint32(n));
         if (landed == ep.wraps && n != 0) {
-            if (ep.epoch != 0 && _s().epochs[ep.sessionId].home) _s().childOf[ep.parent] = epochId;
+            if (ep.epoch != 0) {
+                if (_s().epochs[ep.sessionId].home) _s().childOf[ep.parent] = epochId; // P9: the slot, home only
+                _s().chain[ep.sessionId].push(epochId); // owner 2026-11-10: `epochsOf`
+            }
             emit PqChatEpochComplete(epochId);
         }
     }
