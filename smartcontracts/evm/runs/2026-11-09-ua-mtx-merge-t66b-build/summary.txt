@@ -334,3 +334,40 @@ build only. Measured at 5a8fccda with every kind split (out/t66b-pay, not commit
 kinds 0-5 and 19,883-19,962 B on 8-13; the twelve P2 runtimes, immutables zeroed and metadata cut, are all different (twelve
 hashes; first difference at byte 22-23 against kinds 0 and 8, the dispatcher's jump targets: each kind's hooks, `_mtxRule`,
 `_uaAllowed`, `_update` and the regulated hooks, are compiled into its P2). A shared pay module needs those hooks as data (§7).
+
+Task 4.2 (1c7f59a0, 3344959b): OpenFactory `_checkModules` (ModuleNotPinned, ModulesUnreadable) on deployImplementation,
+deployDexImplementation, createTokenUnregistered; DeployBase modules by CREATE2 (DEPLOY_SALT), env pins, implArgs, D in the
+DEX env, releases.json rows; TradeLib out of the token closures; e2e.py modules + self-test closure; LinkClosure §4.5 closure
+and module opcode scan; DeployGas.t.sol with modules. OpenFactory 28,438 -> 29,225 B (49,282,524 asked); size-baseline row moved.
+Deploy gas (DeployGas.t.sol, every contract its own CREATE2): max asked UARegistryCoreLib 56,635,241; SCaaSDex 55,703,974;
+largest module NormalPqzRegulatedTokenQ 32,423 B / 54,760,898. e2e.py --self-test: 0 failures.
+
+Task 4.3, the test migration (fork commits 7f50bc68 v2, 543bc276 governance, 3922013a merge, 2f4bab2b pqz, 2732a769 as,
+0646db77 zether; 2f65cbaa ua UAReceivers) and the §10 tests so far (6ec405b9, 7d55ed52: test/t66b, differential per entry on
+every kind and the DEX, module checks, path tests). Gates, label t66b-c1 (forge-dirs.sh, the tree at 2f65cbaa / 7d55ed52):
+step | rc | counts | reds
+test/v2 | 1 | 652 passed, 2 failed | SmartKeyAccount byte pin; Wrapped test_libraryErrorsAreInTheTokenAbi (R4: the faces' ABI lacks
+  the interface errors; fix B approved, after the checkpoint)
+test/governance | 1 | 399 passed, 25 failed | 24 PlusZero gas pins (old != new in the failure text); RelayFeeRouter address pin
+test/merge | 1 | 339 passed, 2 failed | SmartKeyAccount / wallet byte pins
+test/pqz | 1 | 592 passed, 6 failed, 4 skipped | byte pin; MtxSplitOverhead bound (owner pending: PQZL diff 75,487 / 77,225 /
+  75,774 vs 9,000, PQZH 299,515 / 303,659 / 300,232 vs 14,000, n2304-kmax4096); P7 zether gas pin 86,106 -> 86,128;
+  PqzWrapped init > 49,152 now 28,126 B (fits EIP-3860: a size relation to flip); ROLL_MAX
+test/as | 1 | 461 passed, 2 failed | byte pin; regulated_kat.json stale (addresses / digests of the new code)
+test/zether | 1 | 440 passed, 1 failed, 4 skipped | byte pin
+test/metatx | 1 | 537 passed, 5 failed, 1 skipped | self-call lint non-vacuity (4.1's `I<X>.f.selector` leaves 0 `this.` reads);
+  TokenKat x2; MandateWallet byte pin; ROLL_MAX
+test/ua (without UARegistryUA8) | 1 | 643 passed, 1 failed | byte pin
+test/ua UARegistryUA8 (alone, -j 1) | 0 | 88 passed (its gas pins at the default set unchanged)
+test/wallet | 1 | 180 passed, 1 failed | byte pin
+test/account | 1 | 96 passed, 2 failed | MandateWallet KAT address, byte pin
+test/hedera | 1 | 18 passed, 2 failed | KAT address and digest
+test/research | 1 | 354 passed, 5 failed, 7 skipped | byte pin; ROLL_MAX; set.toml debit_min_gas pinned 7,468,120, measured
+  7,513,388 (a set parameter: the owner's)
+test/confidential | 0 | 5 passed
+test/fork | 0 | 1 skipped
+test/p6f | 0 | 4 passed
+test/pqzh | 0 | 42 passed
+test/vectors | 0 | no tests (compiles)
+top (test/*.t.sol, from a copy dir: sparse mode compiles every test dir) | 0 | 29 passed
+test/t66b (gates.sh t66b, label q43, + DiffPqzRegulated) | 0 | 11 suites, 30 passed
