@@ -854,8 +854,8 @@ public class WalletTests : IDisposable
             var o = JsonNode.Parse(q.Call("provenOpen", r.GetProperty("open").GetRawText()))!;
             var add = JsonNode.Parse(r.GetProperty("add").GetRawText())!;
             add["session"] = o["session"]!.GetValue<string>();
-            var a = JsonNode.Parse(q.Call("provenAdd", add.ToJsonString()))!;
-            Assert.Equal(o["need"]!.ToJsonString(), a["accepted"]!.ToJsonString());
+            var added = JsonNode.Parse(q.Call("provenAdd", add.ToJsonString()))!;
+            Assert.Equal(o["need"]!.ToJsonString(), added["accepted"]!.ToJsonString());
             var b = JsonNode.Parse(q.Call("balanceProven", new JsonObject { ["session"] = o["session"]!.GetValue<string>() }.ToJsonString()))!;
             Assert.True(b["value"]!.GetValue<ulong>() == r.GetProperty("value").GetUInt64(), S(r, "name"));
             var kinds = new JsonArray(b["parts"]!.AsArray().Select(p => (JsonNode?)JsonValue.Create(p!["kind"]!.GetValue<string>())).ToArray());
