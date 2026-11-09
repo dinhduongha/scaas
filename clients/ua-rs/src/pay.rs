@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! The EVM pay entries off chain (pay-meta-tax spec §3-§5, ua-mtx-merge T41): `PayMeta` v2 and its commitment
-//! `metaPayId`, the `payNo` text rules, and the digests a payer signs: `UAMetaTransfer` (`mtxPay`), `UAPayWithTax`
-//! (`mtxPayWithTax`, kinds 8-13) and `UARelayFee` with `batch` / `nonce` (`RelayFeeRouter.relay`). An unbound `relayer` /
-//! `feeRecipient` is hashed as 0 (`MetaTxLib.canon`). Pinned by `smartcontracts/vectors/metatx/{paymeta,paytax}.json`
-//! (forge) and `typed/typed_ops.json` (clientkeys). The contract decides; nothing here is a check of record. UNAUDITED.
+//! The EVM pay entries off chain (pay-meta-tax spec §3-§5, ua-mtx-merge T41, T83): `PayMeta` v3 and its commitment
+//! `metaPayId`, the `payNo` UUIDv7 form, the pay records a payee reads by `eth_call`, and the digests a payer signs:
+//! `UAMetaTransfer` (`mtxPay`), `UAPayWithTax` (`mtxPayWithTax`, kinds 8-13) and `UARelayFee` with `batch` / `nonce`
+//! (`RelayFeeRouter.relay`). An unbound `relayer` / `feeRecipient` is hashed as 0 (`MetaTxLib.canon`). Pinned by
+//! `smartcontracts/vectors/metatx/{paymeta,payrecords,paytax}.json` (forge) and `typed/typed_ops.json` (clientkeys). The v2
+//! `payNo` text form is in `legacy/ua-rs-sign/pay_meta_v2.rs`. The contract decides; nothing here is a check of record. UNAUDITED.
 use crate::{address_word, keccak, keccak256, word, DOMAIN_TYPE};
 
-pub const PAY_NO_MAX: usize = 256;
 pub const UA_METATRANSFER_TYPE: &str = "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,\
 uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
 pub const UA_PAY_WITH_TAX_TYPE: &str = "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,\
@@ -17,37 +17,22 @@ uint256 batch,uint256 nonce,uint256 validUntil,address relayer)";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PayError {
-    /// `salt == 0`, or `schema == 0` and a body, or a schema above 0 and none (`PayMetaShape`).
+    /// `salt == 0`, or `schema == 0` and a body, or a schema above 0 and none, or `save` with `payNo == 0` (`PayMetaShape`).
     Shape,
-    /// `payNo` over 256 bytes (`PayNoTooLong`).
-    PayNoTooLong,
-    /// A control character or a bidirectional mark, embedding, override or isolate in `payNo` (display spoofing).
-    PayNoText,
     /// `taxMode` not 1 (PERCENT) or 2 (AMOUNT), or `tax > value`.
     Tax,
 }
 
-/// `PayMeta {salt, payNo, schema, body}`, the last parameter of every pay entry (spec §3.1).
+/// `PayMeta {salt, payNo, save, schema, body}`, the last parameter of every pay entry (spec §3.1, ua-mtx-merge T83): `payNo`
+/// 32 bytes, 0 = none, recommended a right-aligned UUIDv7 ([`pay_no_from_uuid`]), any other id accepted and never parsed;
+/// `save` the payer's choice to store the payment's record under `payNo` on chain (`paymentsOf`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PayMeta {
     pub salt: [u8; 32],
-    pub pay_no: String,
+    pub pay_no: [u8; 32],
+    pub save: bool,
     pub schema: u16,
     pub body: Vec<u8>,
-}
-
-/// A `payNo` a wallet signs (spec §3.1): at most 256 bytes of UTF-8 (a Rust `str` is valid UTF-8), no C0 / C1 control
-/// or DEL, no bidirectional mark, embedding, override or isolate (U+061C, U+200E, U+200F, U+202A-202E, U+2066-2069).
-pub fn check_pay_no(pay_no: &str) -> Result<(), PayError> {
-    if pay_no.len() > PAY_NO_MAX {
-        return Err(PayError::PayNoTooLong);
-    }
-    let bad = |c: char| c.is_control()
-        || matches!(c, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}');
-    if pay_no.chars().any(bad) {
-        return Err(PayError::PayNoText);
-    }
-    Ok(())
 }
 
 fn padded(b: &[u8]) -> Vec<u8> {
@@ -57,20 +42,80 @@ fn padded(b: &[u8]) -> Vec<u8> {
     v
 }
 
-/// `metaPayId(m) = keccak256("scaas.pay.meta.v2" ‖ salt ‖ keccak256(abi.encode(string payNo, uint16 schema, bytes body)))`
-/// (CTR-MTX-26 Change), after the shape and `payNo` checks of `_payMeta` and the wallet rules.
-pub fn meta_pay_id_v2(m: &PayMeta) -> Result<[u8; 32], PayError> {
-    if m.salt == [0; 32] || (m.schema == 0) != m.body.is_empty() {
+/// `metaPayId(m) = keccak256("scaas.pay.meta.v3" ‖ salt ‖ keccak256(abi.encode(bytes32 payNo, bool save, uint16 schema,
+/// bytes body)))` (CTR-MTX-26, T83), after the shape checks of `_payMeta`.
+pub fn meta_pay_id_v3(m: &PayMeta) -> Result<[u8; 32], PayError> {
+    if m.salt == [0; 32] || (m.schema == 0) != m.body.is_empty() || (m.save && m.pay_no == [0; 32]) {
         return Err(PayError::Shape);
     }
-    check_pay_no(&m.pay_no)?;
-    let (no, body) = (padded(m.pay_no.as_bytes()), padded(&m.body));
-    let mut enc = word(0x60).to_vec();
-    enc.extend_from_slice(&word(m.schema as u64));
-    enc.extend_from_slice(&word(0x60 + no.len() as u64));
-    enc.extend(no);
-    enc.extend(body);
-    Ok(keccak(&[b"scaas.pay.meta.v2", &m.salt, &keccak256(&enc)]))
+    let enc = [&m.pay_no[..], &word(m.save as u64), &word(m.schema as u64), &word(0x80), &padded(&m.body)].concat();
+    Ok(keccak(&[b"scaas.pay.meta.v3", &m.salt, &keccak256(&enc)]))
+}
+
+/// clientkeys `payNoFromUuid`: a UUIDv7 in its canonical text (`8-4-4-4-12` hex digits, any case; version 7, variant 10)
+/// right-aligned in 32 bytes, the high 16 bytes zero (as an address is padded). `None` for anything else.
+pub fn pay_no_from_uuid(uuid: &str) -> Option<[u8; 32]> {
+    let parts: Vec<&str> = uuid.split('-').collect();
+    if parts.iter().map(|p| p.len()).ne([8, 4, 4, 4, 12]) || !parts.iter().all(|p| p.bytes().all(|c| c.is_ascii_hexdigit())) {
+        return None;
+    }
+    let h = parts.concat();
+    let mut w = [0u8; 32];
+    for (i, b) in w.iter_mut().skip(16).enumerate() {
+        *b = u8::from_str_radix(h.get(2 * i..2 * i + 2)?, 16).ok()?;
+    }
+    uuid_v7(&w).then_some(w)
+}
+
+/// The UUIDv7 rule on a right-aligned `payNo`: the high 16 bytes zero, version 7, variant 10.
+fn uuid_v7(w: &[u8; 32]) -> bool {
+    w[..16] == [0; 16] && w[22] >> 4 == 7 && w[24] >> 6 == 2
+}
+
+/// clientkeys `payNoToUuid`, for display: the UUID text (lowercase) of a right-aligned UUIDv7 `payNo`, else `None` (0, or
+/// another 32-byte id: shown as hex).
+pub fn pay_no_to_uuid(pay_no: &[u8; 32]) -> Option<String> {
+    if !uuid_v7(pay_no) {
+        return None;
+    }
+    let h: String = pay_no[16..].iter().map(|b| format!("{b:02x}")).collect();
+    Some(format!("{}-{}-{}-{}-{}", &h[..8], &h[8..12], &h[12..16], &h[16..20], &h[20..]))
+}
+
+/// `MetaTxLib.PayRecord {bytes32 to, uint192 amount, uint64 blockNumber}` (T83): one payment saved under a `payNo`; `amount`
+/// what `to` received, as a big-endian word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PayRecord {
+    pub to: [u8; 32],
+    pub amount: [u8; 32],
+    pub block_number: u64,
+}
+
+/// `paymentCount(bytes32 payNo)`'s calldata, for `eth_call` on the token.
+pub fn payment_count_call(pay_no: &[u8; 32]) -> Vec<u8> {
+    [&keccak256(b"paymentCount(bytes32)")[..4], pay_no].concat()
+}
+
+/// `paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)`'s calldata, for `eth_call` on the token (paged).
+pub fn payments_of_call(pay_no: &[u8; 32], offset: u64, limit: u64) -> Vec<u8> {
+    [&keccak256(b"paymentsOf(bytes32,uint256,uint256)")[..4], pay_no, &word(offset), &word(limit)].concat()
+}
+
+/// `paymentsOf`'s return data, `abi.encode(PayRecord[])`, read canonical only: the offset 32, the exact length for its count,
+/// `amount < 2^192`, `blockNumber < 2^64`. `None` for anything else (an untrusted node's answer).
+pub fn decode_pay_records(ret: &[u8]) -> Option<Vec<PayRecord>> {
+    let w = |i: usize| -> Option<&[u8]> { ret.get(32 * i..32 * i + 32) };
+    let n = usize::try_from(u64::from_be_bytes(w(1)?.get(24..)?.try_into().ok()?)).ok()?;
+    if w(0)? != word(32) || w(1)?[..24] != [0; 24] || ret.len() != n.checked_mul(96)?.checked_add(64)? {
+        return None;
+    }
+    (0..n)
+        .map(|i| {
+            let (to, amount, block) = (w(2 + 3 * i)?, w(3 + 3 * i)?, w(4 + 3 * i)?);
+            (amount[..8] == [0; 8] && block[..24] == [0; 24]).then_some(())?;
+            Some(PayRecord { to: to.try_into().ok()?, amount: amount.try_into().ok()?, block_number: u64::from_be_bytes(block[24..].try_into().ok()?) })
+        })
+        .collect()
 }
 
 /// `MetaTxLib.UAMetaTransfer`, uint256 fields as big-endian words.

@@ -170,10 +170,11 @@ pub mod qobject {
         /// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
         #[qinvokable] #[cxx_name = "payDigest"]
         fn pay_digest(self: Pin<&mut Self>, input: &QString) -> QString;
-        /// `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
-        /// `payNo` is `UAArgument`.
-        #[qinvokable] #[cxx_name = "metaPayIdV2"]
-        fn meta_pay_id_v2(self: Pin<&mut Self>, input: &QString) -> QString;
+        /// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41, T83): in `{salt, payNo?, save?, schema, body}` (`payNo` 32
+        /// bytes, absent 0; `save` a bool, absent false), out `{payId, payNo, payNoUuid, save}` (`payNoUuid` the UUID text of a
+        /// right-aligned UUIDv7 `payNo`, else null: show the hex); a refused shape (`save` with `payNo` 0 included) is `UAArgument`.
+        #[qinvokable] #[cxx_name = "metaPayIdV3"]
+        fn meta_pay_id_v3(self: Pin<&mut Self>, input: &QString) -> QString;
     }
 }
 
@@ -492,7 +493,7 @@ impl qobject::UaKinds {
     pub fn pay_digest(self: Pin<&mut Self>, input: &QString) -> QString {
         QString::from(&self.run(|| from_json(ua::json::pay_digest_json(&s(input)))))
     }
-    pub fn meta_pay_id_v2(self: Pin<&mut Self>, input: &QString) -> QString {
+    pub fn meta_pay_id_v3(self: Pin<&mut Self>, input: &QString) -> QString {
         QString::from(&self.run(|| from_json(ua::json::meta_pay_id_json(&s(input)))))
     }
     pub fn encode_msig(self: Pin<&mut Self>, threshold: i32, members: &QString) -> QString {

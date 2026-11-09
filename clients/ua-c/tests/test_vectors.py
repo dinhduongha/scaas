@@ -912,13 +912,15 @@ class GovernanceBits(unittest.TestCase):
             self.assertEqual(code_of(lambda: text(L.governance_bit, bit)), 'UAArgument', bit)
 
     def test_pay_digest_and_meta_pay_id(self):
-        """pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row."""
+        """pay-meta-tax T41, T83: paymeta.json v3 rows (save without a payNo refused; the UUIDv7 shown) and paytax.json's
+        UAPayWithTax digest row."""
         meta = VEC.parent / 'metatx'
-        # plan T83: the v2 rows (`payNo` text) in legacy/ua-mtx-merge/t83/ until ua-rs takes PayMeta v3 (ua-rs-sign sync)
-        for r in json.loads((meta / 'legacy' / 'ua-mtx-merge' / 't83' / 'paymeta.json').read_text()):
-            i = json.dumps({k: r[k] for k in ('salt', 'payNo', 'schema', 'body')}).encode()
+        for r in json.loads((meta / 'paymeta.json').read_text()):
+            i = json.dumps({k: r[k] for k in ('salt', 'payNo', 'save', 'schema', 'body')}).encode()
             if r['accepted']:
-                self.assertEqual(json.loads(text(L.meta_pay_id, i))['payId'], r['payId'], r['name'])
+                got = json.loads(text(L.meta_pay_id, i))
+                self.assertEqual((got['payId'], got['save']), (r['payId'], r['save']), r['name'])
+                self.assertEqual(got['payNoUuid'], r.get('payNoUuid'), r['name'])
             else:
                 self.assertEqual(code_of(lambda: text(L.meta_pay_id, i)), 'UAArgument', r['name'])
         r = next(x for x in json.loads((meta / 'paytax.json').read_text()) if x['name'] == 'digest_unbound_relayer_fee_recipient')

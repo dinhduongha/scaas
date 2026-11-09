@@ -339,7 +339,7 @@ const Q = (td) => JSON.parse(JSON.stringify(td));
 const set = (td, f) => { const c = Q(td); f(c); return c; };
 const W = { chainId: 7622, chainUid: CHAIN_UID, now: NOW };
 // ua-mtx-merge (R12, R20, R39, R46): a payment, a receiver fee, a SCaaS sell token's order and a wrap order are the `UA` structs
-// between 32-byte ids (`padId` of a native address); `PayMeta` v2 (CTR-MTX-26 Change) is `{salt, payNo, schema, body}`.
+// between 32-byte ids (`padId` of a native address); `PayMeta` v3 (CTR-MTX-26, T83) is `{salt, payNo, save, schema, body}`.
 const [UA_ACCOUNT, UA_PAYEE] = [evm.padId(ACCOUNT), evm.padId(PAYEE)];
 const payment = evm.uaMetaTransferTypedData({ ...domainOf, message: { from: UA_ACCOUNT, to: UA_PAYEE, value: '125000500000', entryRef: REF,
   batch: evm.payLane(REF), nonce: '0', validUntil: String(NOW + 300), mode: 1, relayer: RELAYER } });
@@ -351,7 +351,7 @@ const rfee = evm.uaReceiverFeeTypedData({ ...domainOf, message: { payment: { fro
 const rfeeExpect = { check: 'ReceiverFee', payee: UA_PAYEE, ...W, amount: '125000.5', decimals: 6, entryRef: REF, expectedToken: TOKEN,
   maxFee: '1000', feeRecipient: FEE_TO };
 const PM = JSON.parse(readFileSync(join(VECTORS, 'metatx/paymeta.json'), 'utf8')).find((r) => r.name === 'note_utf8');
-const PM_META = { salt: PM.salt, payNo: PM.payNo, schema: PM.schema, body: PM.body };
+const PM_META = { salt: PM.salt, payNo: PM.payNo, save: PM.save, schema: PM.schema, body: PM.body };
 const payMeta = evm.buildPay({ name: 'SCaaS MetaToken', token: TOKEN, chainId: 7622, chainUid: CHAIN_UID, from: UA_ACCOUNT, to: UA_PAYEE,
   amount: '1000', meta: PM_META, validUntil: NOW + 600, mode: 1, relayer: RELAYER }).typedData;
 const payMetaExpect = { check: 'PayMeta', meta: PM_META, account: UA_ACCOUNT, ...W, amount: '1000', decimals: 0, payee: UA_PAYEE,

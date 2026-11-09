@@ -825,18 +825,20 @@ static void governance_bits_rows() {
     for (int bit : {25, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
 }
 
-// pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row
+// pay-meta-tax T41, T83: paymeta.json v3 rows (save without a payNo refused; the UUIDv7 shown) and paytax.json's UAPayWithTax digest row
 static void pay_rows() {
     auto read = [](const std::string& n) {
         std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../metatx/" + n);
         if (!f) { std::fprintf(stderr, "cannot open %s\n", n.c_str()); std::exit(2); }
         return json::parse(f);
     };
-    // plan T83: the v2 rows (`payNo` text) in legacy/ua-mtx-merge/t83/ until ua-rs takes PayMeta v3 (ua-rs-sign sync)
-    for (auto& r : read("legacy/ua-mtx-merge/t83/paymeta.json")) {
-        json i = {{"salt", r["salt"]}, {"payNo", r["payNo"]}, {"schema", r["schema"]}, {"body", r["body"]}};
-        if (r["accepted"].get<bool>()) CHECK(json::parse(metaPayId(i.dump()))["payId"] == r["payId"], r["name"].get<std::string>());
-        else CHECK(code_of([&] { metaPayId(i.dump()); }) == "UAArgument", r["name"].get<std::string>());
+    for (auto& r : read("paymeta.json")) {
+        json i = {{"salt", r["salt"]}, {"payNo", r["payNo"]}, {"save", r["save"]}, {"schema", r["schema"]}, {"body", r["body"]}};
+        if (r["accepted"].get<bool>()) {
+            json o = json::parse(metaPayId(i.dump()));
+            CHECK(o["payId"] == r["payId"] && o["save"] == r["save"], r["name"].get<std::string>());
+            CHECK(o["payNoUuid"] == (r.contains("payNoUuid") ? r["payNoUuid"] : json()), r["name"].get<std::string>());
+        } else CHECK(code_of([&] { metaPayId(i.dump()); }) == "UAArgument", r["name"].get<std::string>());
     }
     for (auto& r : read("paytax.json")) {
         if (r["name"] != "digest_unbound_relayer_fee_recipient") continue;

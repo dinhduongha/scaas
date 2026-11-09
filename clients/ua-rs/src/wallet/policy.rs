@@ -14,7 +14,7 @@ use super::eip712::{
 };
 use super::signer::{SignRequest, Signer};
 use super::{bounded, Error, NativeKey, Result};
-use crate::pay::{meta_pay_id_v2, PayMeta};
+use crate::pay::{meta_pay_id_v3, PayMeta};
 use crate::{keccak256, pay_lane};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -93,7 +93,7 @@ pub enum Expect {
         now: u64,
         max_window: u64,
     },
-    /// `checkPayMeta`: a payment whose `entryRef` is `metaPayId(meta)` (`PayMeta` v2, CTR-MTX-26 Change) of the metadata the
+    /// `checkPayMeta`: a payment whose `entryRef` is `metaPayId(meta)` (`PayMeta` v3, CTR-MTX-26, T83) of the metadata the
     /// client holds.
     PayMeta {
         meta: PayMeta,
@@ -435,20 +435,18 @@ impl Expect {
     }
 }
 
-/// clientkeys `payMeta` input `{salt, payNo, schema, body}` (`payNo` "" and `schema` 0 by default, `body` hex, empty by default; the
-/// salt is required here: a check holds the metadata it was shown). Its rules are `metaPayId`'s, at the check.
+/// clientkeys `payMeta` input `{salt, payNo, save, schema, body}` (T83: `payNo` 32 bytes, 0 by default; `save` false, `schema` 0
+/// by default; `body` hex, empty by default; the salt is required here: a check holds the metadata it was shown). Its rules are
+/// `metaPayId`'s, at the check.
 fn pay_meta(v: Value) -> Result<PayMeta> {
     let Value::Object(m) = v else { return Err(Error::Argument) };
     let mut m = In(m);
     let salt = m.b32("salt")?;
-    let pay_no = match m.take("payNo") {
-        None => String::new(),
-        Some(Value::String(s)) => s,
-        Some(_) => return Err(Error::Argument),
-    };
+    let pay_no = m.take("payNo").map(|v| In::fixed(&v)).transpose()?.unwrap_or([0; 32]);
+    let save = m.flag("save")?;
     let schema = u16::try_from(m.opt_u64("schema", 0)?).map_err(|_| Error::Argument)?;
     let body = m.take("body").map(|b| In::hex(&b)).transpose()?.unwrap_or_default();
-    m.done(PayMeta { salt, pay_no, schema, body })
+    m.done(PayMeta { salt, pay_no, save, schema, body })
 }
 
 fn addrs(v: Option<Value>) -> Result<Vec<[u8; 20]>> {
@@ -501,7 +499,7 @@ fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
             now, max_window,
         } => {
             // clientkeys `payMetaParts`: the checked `PayMeta`, its commitment, the request's `entryRef`, the body read strictly
-            let pay_id = meta_pay_id_v2(meta).map_err(|_| Error::PolicyRefused)?;
+            let pay_id = meta_pay_id_v3(meta).map_err(|_| Error::PolicyRefused)?;
             if entry_ref.is_some_and(|e| e != pay_id) {
                 return refuse();
             }
@@ -803,12 +801,19 @@ fn check_op(
         .map_err(|_| Error::PolicyRefused)
 }
 
-/// The selectors never signed as a call (CLI-SGN-34, CLI-SGN-36): moving funds and approvals.
+/// The selectors never signed as a call (CLI-SGN-34, CLI-SGN-36): moving funds and approvals; clientkeys `NEVER_CALLED`, the
+/// pay entries in every `PayMeta` form (v2 `(bytes32,string,uint16,bytes)`, gone with T83, and v3).
 fn never_called(selector: &[u8]) -> bool {
     [
         "transfer(address,uint256)", "transferFrom(address,address,uint256)", "approve(address,uint256)",
         "payWithFee(address,uint256,uint8,uint256,address,bytes32)", "pay(bytes32)",
         "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32)",
+        "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+        "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+        "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+        "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
+        "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
+        "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
     ]
     .iter()
     .any(|s| keccak256(s.as_bytes()).get(..4) == Some(selector))
@@ -985,9 +990,9 @@ fn padded(b: &[u8]) -> Vec<u8> {
 fn utf8(b: &[u8]) -> Result<()> {
     std::str::from_utf8(b).map(|_| ()).map_err(|_| Error::PolicyRefused)
 }
-/// clientkeys `decodeMetaBody` (CTR-MTX-26 Change, `PayMeta` v2): the body of `schema` read strictly: 0 none; 1 a non-empty UTF-8
-/// note; 2 `abi.encode(string creditorRef, uint64 dueDate)` in canonical form, UTF-8; 3 exactly 96 bytes (a bound call); 4 the
-/// ciphertext; any other schema is opaque data (shown as such, never as facts).
+/// clientkeys `decodeMetaBody` (CTR-MTX-26, `PayMeta` v3; the body rules unchanged since v2): the body of `schema` read
+/// strictly: 0 none; 1 a non-empty UTF-8 note; 2 `abi.encode(string creditorRef, uint64 dueDate)` in canonical form, UTF-8; 3
+/// exactly 96 bytes (a bound call); 4 the ciphertext; any other schema is opaque data (shown as such, never as facts).
 fn decode_meta_body(schema: u16, b: &[u8]) -> Result<()> {
     match schema {
         0 if b.is_empty() => Ok(()),

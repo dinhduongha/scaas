@@ -7,7 +7,7 @@
 use scaas_ua::ua8::PORTABLE_DOMAIN_SEPARATOR;
 use scaas_ua::verify::native_ecdsa;
 use scaas_ua::wallet::{pqz_verdict_typed_data, scaas_typed_data, ua_sig, Error, Expect, Network, TypedData, Wallet};
-use scaas_ua::pay::{meta_pay_id_v2, PayMeta};
+use scaas_ua::pay::{meta_pay_id_v3, PayMeta};
 use scaas_ua::ua8::is_portable_purpose;
 use scaas_ua::{keccak256, pay_lane, purpose_tag, ua_auth_digest, ua_auth_domain_separator, Domain};
 use serde_json::{json, Value};
@@ -374,6 +374,47 @@ fn sign_json_policy_rows() {
     assert_eq!((signed, refused), (10, 14));
 }
 
+/// CLI-SGN-34 / CLI-SGN-36 (clientkeys `NEVER_CALLED`, T83): moving funds is never a call, even with the selector on the
+/// contract's allowlist: every pay entry in each `PayMeta` form, v2 and v3. Positive control: the row's own allowlisted call.
+#[test]
+fn never_called_pay_entries() {
+    let s = load("ua/sign.json");
+    let w = wallet();
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let r = policy_row(&s, "call cancelNonce");
+    let run = |sig: &str| {
+        let sel = format!("0x{}", hex::encode(&keccak256(sig.as_bytes())[..4]));
+        let data = format!("{sel}{}", &r["expect"]["call"]["data"].as_str().unwrap()[10..]);
+        let (mut t, mut e) = (r["td"].clone(), r["expect"].clone());
+        t["message"]["data"] = json!(data);
+        e["call"]["data"] = json!(data);
+        e["allowlist"] = json!([{"selector": sel, "name": "x", "feeClass": 1}]);
+        key.sign_typed(&td(&t).unwrap(), expect(&e).unwrap()).map(|_| ())
+    };
+    assert!(run("cancelNonce(uint256)").is_ok(), "positive control");
+    let list = [
+        "transfer(address,uint256)", "transferFrom(address,address,uint256)", "approve(address,uint256)", "pay(bytes32)",
+        "payWithFee(address,uint256,uint8,uint256,address,bytes32)", "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32)",
+        "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+        "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+        "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+        "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
+        "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
+        "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
+    ];
+    for sig in list {
+        assert_eq!(run(sig).err(), Some(Error::PolicyRefused), "{sig}");
+    }
+    // the same set as clientkeys' `NEVER_CALLED` (src/evm.js), both ways
+    let js = std::fs::read_to_string(format!("{}/../clientkeys/src/evm.js", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let set = js.split("const NEVER_CALLED = new Set([").nth(1).unwrap().split("].map(sel)").next().unwrap();
+    let mut theirs: Vec<&str> = set.split('\'').skip(1).step_by(2).collect();
+    let mut ours = list.to_vec();
+    theirs.sort_unstable();
+    ours.sort_unstable();
+    assert_eq!(ours, theirs);
+}
+
 fn policy_row<'a>(s: &'a Value, id: &str) -> &'a Value {
     arr(s, "policy").iter().find(|r| r["id"] == id).unwrap()
 }
@@ -593,12 +634,13 @@ fn trade_order_takes_the_ua_struct() {
     assert_eq!(run(json!({"ua": true, "outside": true})).err(), Some(Error::PolicyRefused), "ua outside");
 }
 
-/// `PayMeta` v2 (CTR-MTX-26 Change; clientkeys `payMeta`, `decodeMetaBody`): the server's payment carries `metaPayId(meta)` on its
+/// `PayMeta` v3 (CTR-MTX-26, T83; clientkeys `payMeta`, `decodeMetaBody`): the server's payment carries `metaPayId(meta)` on its
 /// lane, and each schema's body is read strictly before anything is signed: 1 a UTF-8 note, 2 `abi.encode(string, uint64)` in
-/// canonical form, 3 exactly 96 bytes, an unknown schema opaque; the salt, `schema == 0` iff no body and the `payNo` rules are
-/// `metaPayId`'s. Each case changes one thing of the row's metadata and re-points the payment at its id.
+/// canonical form, 3 exactly 96 bytes, an unknown schema opaque; the salt, `schema == 0` iff no body and `save` only with a
+/// `payNo` are `metaPayId`'s; `payNo` is 32 bytes, never text. Each case changes one thing of the row's metadata and re-points the
+/// payment at its id.
 #[test]
-fn pay_meta_v2_body_rules() {
+fn pay_meta_v3_body_rules() {
     let s = load("ua/sign.json");
     let w = wallet(); // a key handle lives as long as its wallet
     let key = w.native_key(Network::Evm, 0, None).unwrap();
@@ -607,9 +649,9 @@ fn pay_meta_v2_body_rules() {
     let run = |meta: &Value| {
         let mut e = r["expect"].clone();
         e["meta"] = meta.clone();
-        let m = PayMeta { salt: b32(&meta["salt"]), pay_no: meta["payNo"].as_str().unwrap().into(),
+        let m = PayMeta { salt: b32(&meta["salt"]), pay_no: b32(&meta["payNo"]), save: meta["save"].as_bool().unwrap(),
             schema: meta["schema"].as_u64().unwrap() as u16, body: bytes(&meta["body"]) };
-        let id = meta_pay_id_v2(&m).unwrap_or([0x11; 32]); // a meta metaPayId refuses: any id
+        let id = meta_pay_id_v3(&m).unwrap_or([0x11; 32]); // a meta metaPayId refuses: any id
         let mut t = r["td"].clone();
         t["message"]["entryRef"] = json!(format!("0x{}", hex::encode(id)));
         t["message"]["batch"] = json!(dec(&pay_lane(&id)));
@@ -649,7 +691,19 @@ fn pay_meta_v2_body_rules() {
     assert_eq!(run(&body(3, format!("0x{}", "00".repeat(64)))).err(), refused, "a bound call of 64 bytes");
     assert!(run(&body(9, "0x01".into())).is_ok(), "an unknown schema: opaque data");
     assert_eq!(run(&body(0, "0x01".into())).err(), refused, "schema 0 with a body");
-    assert_eq!(run(&with("payNo", json!("INV\u{202e}1"))).err(), refused, "a bidi override in payNo");
+    let uuid = json!("0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3");
+    let mut saved = with("payNo", uuid.clone());
+    saved["save"] = json!(true);
+    assert!(run(&with("payNo", uuid)).is_ok(), "a UUIDv7 payNo");
+    assert!(run(&saved).is_ok(), "a payNo saved");
+    assert_eq!(run(&with("save", json!(true))).err(), refused, "save without a payNo");
+    let mut e = r["expect"].clone();
+    e["meta"]["payNo"] = json!("INV-2026-0042");
+    assert_eq!(expect(&e).err(), Some(Error::Argument), "a text payNo (v2)");
+    e["meta"]["payNo"] = json!(format!("0x{}", "01".repeat(31)));
+    assert_eq!(expect(&e).err(), Some(Error::Argument), "31 bytes");
+    e["meta"] = with("save", json!("true"));
+    assert_eq!(expect(&e).err(), Some(Error::Argument), "save not a bool");
     assert_eq!(run(&with("salt", json!(format!("0x{}", "00".repeat(32))))).err(), refused, "salt 0");
 }
 

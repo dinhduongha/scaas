@@ -289,11 +289,19 @@ pub fn pay_digest_json(t: &str) -> JsonResult<String> {
     Ok(json!({ "structHash": hx(&sh), "digest": hx(&typed_digest(&ds, &sh)) }).to_string())
 }
 
-/// `{salt, payNo, schema, body}` → `{payId}`: `metaPayId` under `scaas.pay.meta.v2`, after the shape and `payNo` checks
-/// (`Argument` when refused).
+/// `{salt, payNo?, save?, schema, body}` → `{payId, payNo, payNoUuid, save}`: `metaPayId` under `scaas.pay.meta.v3` (T83), after
+/// the shape checks (`Argument` when refused); `payNo` 32 bytes (absent: 0), `save` a bool (absent: false). The output is what a
+/// sign screen shows of it: `payNoUuid` the UUID text when `payNo` is a right-aligned UUIDv7, else `null` (show the hex).
 pub fn meta_pay_id_json(t: &str) -> JsonResult<String> {
+    use crate::pay::{meta_pay_id_v3, pay_no_to_uuid, PayMeta};
     let v = parse(t)?;
-    let m = crate::pay::PayMeta { salt: ua_in(&v["salt"])?, pay_no: v["payNo"].as_str().unwrap_or("").to_string(),
-        schema: small_in(&v["schema"])?, body: unhex(&v["body"])? };
-    Ok(json!({ "payId": hx(&crate::pay::meta_pay_id_v2(&m).map_err(|_| Argument)?) }).to_string())
+    let pay_no = if v["payNo"].is_null() { [0; 32] } else { ua_in(&v["payNo"])? };
+    let save = match &v["save"] {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        _ => return Err(Argument),
+    };
+    let m = PayMeta { salt: ua_in(&v["salt"])?, pay_no, save, schema: small_in(&v["schema"])?, body: unhex(&v["body"])? };
+    let id = meta_pay_id_v3(&m).map_err(|_| Argument)?;
+    Ok(json!({ "payId": hx(&id), "payNo": hx(&pay_no), "payNoUuid": pay_no_to_uuid(&pay_no), "save": save }).to_string())
 }

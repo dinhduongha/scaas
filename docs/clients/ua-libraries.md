@@ -76,9 +76,20 @@ ua-dart-frb export `keccak256(data)` (ua-rs `keccak256`; ua-qt hex in and out, `
 `meta_pay_id(salt, meta)` (`keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`), `pay_lane(p)` (`keccak256("scaas.pay.lane"
 ‖ p)`, 32 bytes) and `relay_ref(chain_id, target, call_data)` (the EVM router's `ref`; other families' forms differ, see
 [CLI-SGN-39](signers-clientkeys.md#CLI-SGN-39)); QML `UaKinds.metaPayId(saltHex, metaHex)`, `payLane(hex)`,
-`relayRef(chainId, targetHex, callDataHex)` (chain id exact to 2^53). Vectors: `smartcontracts/vectors/metatx/paymeta.json`
+`relayRef(chainId, targetHex, callDataHex)` (chain id exact to 2^53). Vectors: `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`
 and `relayref.json` (written by forge); the JS twins are in `clientkeys` `evm.js`. The C, C++ and Dart bindings and the
 independent ports do not carry them yet.
+
+**`PayMeta` v3 (`ua-mtx-merge` T83; ua-rs-sign T20e1).** `scaas_ua::pay`: `PayMeta {salt, pay_no: [u8; 32], save, schema, body}`
+and `meta_pay_id_v3` (tag `scaas.pay.meta.v3` over `abi.encode(bytes32 payNo, bool save, uint16 schema, bytes body)`; `save`
+with `payNo` 0 refused as a shape error); `pay_no_from_uuid` / `pay_no_to_uuid` (a UUIDv7 right-aligned in 32 bytes, clientkeys
+`payNoFromUuid` / `payNoToUuid`); the pay records an ERP reads by `eth_call` (`payment_count_call`, `payments_of_call`,
+`decode_pay_records`, canonical return data only). `meta_pay_id_json` (C `scaas_ua_meta_pay_id`, C++ `metaPayId`, Dart
+`metaPayId`, QML `UaKinds.metaPayIdV3`) answers `{payId, payNo, payNoUuid, save}`: what a sign screen shows, the UUID text when
+`payNo` is a right-aligned UUIDv7, else `null` and the hex. The wallet policy's `PayMeta` check takes `save`, and a pay entry in
+any `PayMeta` form is never signed as a call (CLI-SGN-34). The v2 text form is in `clients/ua-rs/legacy/ua-rs-sign/pay_meta_v2.rs`.
+Vectors `metatx/paymeta.json`, `metatx/payrecords.json`. No `ua-*` library decodes the `PaymentMeta` log or the
+`PayRecordAmount` revert (the node's indexer reads the log). **BUILT.** UNAUDITED.
 
 **Bindings (the identity calls; the wallet surface: [below](#the-wallet-surface-of-ua-rs-built)).** C: the caller owns every buffer and nothing is freed; a fixed-size argument points to 32 bytes (20 for
 `registry20`), a variable output takes `(out, size_t *out_len)` and returns `SCAAS_UA_ERR_BUFFER` with the size needed

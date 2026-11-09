@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! pay-meta-tax T41: `scaas_ua::pay` against the files forge and clientkeys write: `metatx/paymeta.json` (v2 commitments, the
-//! 257-byte refusal), `metatx/paytax.json` (the PERCENT floor, the `UAPayWithTax` digest row with a non-zero unbound
+//! pay-meta-tax T41, ua-mtx-merge T83: `scaas_ua::pay` against the files forge and clientkeys write: `metatx/paymeta.json`
+//! (v3 commitments, `save` without a `payNo` refused, the UUIDv7 rows), `metatx/payrecords.json` (the calls and return data an
+//! ERP reads by `eth_call`), `metatx/paytax.json` (the PERCENT floor, the `UAPayWithTax` digest row with a non-zero unbound
 //! `relayer` / `feeRecipient`) and `typed/typed_ops.json`'s `UAPayWithTax` and `UARelayFee` rows (struct hash, digest).
 use scaas_ua::pay::{
-    check_pay_no, meta_pay_id_v2, pay_with_tax_hash, percent_tax, relay_fee_hash, token_domain_separator, transfer_hash,
-    typed_digest, PayError, PayMeta, RelayFee, UAMetaTransfer,
+    decode_pay_records, meta_pay_id_v3, pay_no_from_uuid, pay_no_to_uuid, pay_with_tax_hash, payment_count_call, payments_of_call,
+    percent_tax, relay_fee_hash, token_domain_separator, transfer_hash, typed_digest, PayError, PayMeta, PayRecord, RelayFee,
+    UAMetaTransfer,
 };
 use serde_json::Value;
 
@@ -55,33 +57,107 @@ fn transfer(m: &Value) -> UAMetaTransfer {
     }
 }
 
-#[test]
-fn paymeta_v2_rows() {
-    let rows = load("metatx/legacy/ua-mtx-merge/t83/paymeta.json");
-    assert_eq!(rows.as_array().unwrap().len(), 9);
-    for r in rows.as_array().unwrap() {
-        let m = PayMeta { salt: b32(&r["salt"]), pay_no: r["payNo"].as_str().unwrap().into(),
-            schema: r["schema"].as_u64().unwrap() as u16, body: bytes(&r["body"]) };
-        if r["accepted"].as_bool().unwrap() {
-            assert_eq!(meta_pay_id_v2(&m).unwrap(), b32(&r["payId"]), "{}", r["name"]);
-        } else {
-            assert_eq!(meta_pay_id_v2(&m), Err(PayError::PayNoTooLong), "{}", r["name"]);
-        }
-    }
+fn meta(r: &Value) -> PayMeta {
+    PayMeta { salt: b32(&r["salt"]), pay_no: b32(&r["payNo"]), save: r["save"].as_bool().unwrap(),
+        schema: r["schema"].as_u64().unwrap() as u16, body: bytes(&r["body"]) }
 }
 
+/// T83: every accepted row is `metaPayId(PayMeta)` under the v3 tag; `save` with `payNo == 0` refused; the v2 tag and `save`
+/// off give other commitments; the UUIDv7 rows right-aligned both ways, any other id shown as hex.
 #[test]
-fn pay_meta_shape_and_pay_no_text() {
-    let m = |salt: u8, schema: u16, body: &[u8]| PayMeta { salt: [salt; 32], pay_no: String::new(), schema, body: body.to_vec() };
-    assert_eq!(meta_pay_id_v2(&m(0, 0, b"")), Err(PayError::Shape));
-    assert_eq!(meta_pay_id_v2(&m(1, 0, b"x")), Err(PayError::Shape));
-    assert_eq!(meta_pay_id_v2(&m(1, 1, b"")), Err(PayError::Shape));
-    assert!(meta_pay_id_v2(&m(1, 1, b"x")).is_ok());
-    assert_eq!(check_pay_no(&"A".repeat(256)), Ok(()));
-    assert_eq!(check_pay_no(&"A".repeat(257)), Err(PayError::PayNoTooLong));
-    for bad in ["INV\u{202e}1", "INV\u{2066}x\u{2069}", "INV\n1", "INV\u{85}", "a\u{200f}b", "x\u{61c}"] {
-        assert_eq!(check_pay_no(bad), Err(PayError::PayNoText), "{bad:?}");
+fn paymeta_v3_rows() {
+    let rows = load("metatx/paymeta.json");
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 9);
+    for r in rows {
+        if r["accepted"].as_bool().unwrap() {
+            assert_eq!(meta_pay_id_v3(&meta(r)).unwrap(), b32(&r["payId"]), "{}", r["name"]);
+        } else {
+            assert_eq!(meta_pay_id_v3(&meta(r)), Err(PayError::Shape), "{}", r["name"]);
+        }
+        match r["payNoUuid"].as_str() {
+            Some(u) => {
+                assert_eq!(pay_no_from_uuid(u), Some(b32(&r["payNo"])), "{}", r["name"]);
+                assert_eq!(pay_no_to_uuid(&b32(&r["payNo"])).as_deref(), Some(u), "{}", r["name"]);
+            }
+            None => assert_eq!(pay_no_to_uuid(&b32(&r["payNo"])), None, "{}: shown as hex", r["name"]),
+        }
     }
+    let row = |n: &str| rows.iter().find(|r| r["name"] == n).unwrap();
+    let saved = row("payno_uuidv7_save");
+    assert_eq!(meta_pay_id_v3(&PayMeta { save: false, ..meta(saved) }).unwrap(), b32(&saved["saveOffPayId"]), "save committed");
+    let v2 = row("payno_uuidv7");
+    assert_ne!(b32(&v2["v2TagPayId"]), b32(&v2["payId"]), "the v2 tag commits otherwise");
+    assert!(rows.iter().any(|r| !r["accepted"].as_bool().unwrap()), "a refused row");
+}
+
+/// The shape rules before anything is signed (positive control first).
+#[test]
+fn pay_meta_shape() {
+    let m = |salt: u8, schema: u16, body: &[u8]| PayMeta { salt: [salt; 32], pay_no: [0; 32], save: false, schema, body: body.to_vec() };
+    assert!(meta_pay_id_v3(&m(1, 1, b"x")).is_ok());
+    assert_eq!(meta_pay_id_v3(&m(0, 0, b"")), Err(PayError::Shape));
+    assert_eq!(meta_pay_id_v3(&m(1, 0, b"x")), Err(PayError::Shape));
+    assert_eq!(meta_pay_id_v3(&m(1, 1, b"")), Err(PayError::Shape));
+    assert_eq!(meta_pay_id_v3(&PayMeta { save: true, ..m(1, 0, b"") }), Err(PayError::Shape), "save needs a payNo");
+    assert!(meta_pay_id_v3(&PayMeta { save: true, pay_no: [1; 32], ..m(1, 0, b"") }).is_ok());
+}
+
+/// clientkeys `payNoFromUuid` / `payNoToUuid`: UUIDv7 only, right-aligned, any case in, lowercase out.
+#[test]
+fn pay_no_uuid_helpers() {
+    let u = "019a6e3c-5f00-7a3b-8c4d-5e6f708192a3";
+    let mut w = [0u8; 32];
+    w[16..].copy_from_slice(&hex::decode(u.replace('-', "")).unwrap());
+    assert_eq!(pay_no_from_uuid(u), Some(w));
+    assert_eq!(pay_no_from_uuid(&u.to_uppercase()), Some(w));
+    assert_eq!(pay_no_to_uuid(&w).as_deref(), Some(u));
+    for bad in ["019a6e3c-5f00-4a3b-8c4d-5e6f708192a3", "019a6e3c-5f00-7a3b-cc4d-5e6f708192a3", "019a6e3c5f007a3b8c4d5e6f708192a3",
+        "INV-2026-0042", "019a6e3c-5f00-7a3b-8c4d-5e6f708192a", "019a6e3c-5f00-7a3b-8c4d-5e6f708192a3-", "019a6e3c-5f00-7a3b-8c4d-5e6f708192ag",
+        "+19a6e3c-5f00-7a3b-8c4d-5e6f708192a3"]
+    {
+        assert_eq!(pay_no_from_uuid(bad), None, "{bad}");
+    }
+    let mut high = w;
+    high[0] = 1;
+    assert_eq!(pay_no_to_uuid(&high), None, "the high 16 bytes set");
+    let mut v4 = w;
+    v4[22] = 0x4a;
+    assert_eq!(pay_no_to_uuid(&v4), None, "version 4: hex");
+    let mut var = w;
+    var[24] = 0xcc;
+    assert_eq!(pay_no_to_uuid(&var), None, "variant 110: hex");
+}
+
+/// T83's records row: the calls an ERP sends by `eth_call` and their answers, read canonical only.
+#[test]
+fn payrecords_rows() {
+    let r = load("metatx/payrecords.json");
+    let no = b32(&r["payNo"]);
+    assert_eq!(pay_no_from_uuid(r["payNoUuid"].as_str().unwrap()), Some(no));
+    assert_eq!(payment_count_call(&no), bytes(&r["paymentCount"]["calldata"]));
+    assert_eq!(bytes(&r["paymentCount"]["returndata"]), [[0u8; 31].as_slice(), &[r["length"].as_u64().unwrap() as u8]].concat());
+    let recs: Vec<PayRecord> = r["records"].as_array().unwrap().iter().map(|x| PayRecord { to: b32(&x["to"]),
+        amount: uint_word(&x["amount"]), block_number: x["blockNumber"].as_u64().unwrap() }).collect();
+    for (k, off, limit, want) in [("paymentsOfAll", 0, 10, &recs[..]), ("paymentsOfSecond", 1, 1, &recs[1..]), ("paymentsOfPastEnd", 2, 1, &[])] {
+        assert_eq!(payments_of_call(&no, off, limit), bytes(&r[k]["calldata"]), "{k}");
+        assert_eq!(decode_pay_records(&bytes(&r[k]["returndata"])).as_deref(), Some(want), "{k}");
+    }
+    let all = bytes(&r["paymentsOfAll"]["returndata"]);
+    let bad = |f: &dyn Fn(&mut Vec<u8>)| {
+        let mut b = all.clone();
+        f(&mut b);
+        decode_pay_records(&b)
+    };
+    assert!(bad(&|_| ()).is_some(), "positive control");
+    assert_eq!(bad(&|b| b.push(0)), None, "a trailing byte");
+    assert_eq!(bad(&|b| b.truncate(b.len() - 32)), None, "a record short");
+    assert_eq!(bad(&|b| b[31] = 0x40), None, "another offset");
+    assert_eq!(bad(&|b| b[63] = 3), None, "a count past the data");
+    assert_eq!(bad(&|b| b[32] = 1), None, "a count past 2^64");
+    assert_eq!(bad(&|b| b[64 + 32] = 1), None, "amount at 2^192");
+    assert_eq!(bad(&|b| b[64 + 64 + 23] = 1), None, "blockNumber at 2^64");
+    assert_eq!(decode_pay_records(&[]), None);
 }
 
 #[test]
@@ -149,11 +225,28 @@ fn typed_ops_relay_fee_row() {
 #[test]
 fn json_surface() {
     use scaas_ua::json::{meta_pay_id_json, pay_digest_json};
-    let p = load("metatx/legacy/ua-mtx-merge/t83/paymeta.json");
-    let r = &p[1];
-    let got: Value = serde_json::from_str(&meta_pay_id_json(&r.to_string()).unwrap()).unwrap();
-    assert_eq!(got["payId"], r["payId"]);
-    assert!(meta_pay_id_json(&p[3].to_string()).is_err(), "257 bytes refused");
+    let p = load("metatx/paymeta.json");
+    for r in p.as_array().unwrap() {
+        let got = meta_pay_id_json(&r.to_string());
+        if !r["accepted"].as_bool().unwrap() {
+            assert!(got.is_err(), "{}: refused", r["name"]);
+            continue;
+        }
+        let got: Value = serde_json::from_str(&got.unwrap()).unwrap();
+        assert_eq!(got["payId"], r["payId"], "{}", r["name"]);
+        assert_eq!(got["payNo"], r["payNo"], "{}", r["name"]);
+        assert_eq!(got["save"], r["save"], "{}", r["name"]);
+        assert_eq!(got["payNoUuid"], r.get("payNoUuid").cloned().unwrap_or(Value::Null), "{}: the UUID, else null", r["name"]);
+    }
+    let salt_only = serde_json::json!({ "salt": p[0]["salt"], "schema": 0, "body": "0x" });
+    let got: Value = serde_json::from_str(&meta_pay_id_json(&salt_only.to_string()).unwrap()).unwrap();
+    assert_eq!(got["payId"], p[0]["payId"], "payNo and save absent: 0 and false");
+    let mut text = p[1].clone();
+    text["payNo"] = "INV-2026-0042".into();
+    assert!(meta_pay_id_json(&text.to_string()).is_err(), "a text payNo (v2) refused");
+    let mut save = p[1].clone();
+    save["save"] = "true".into();
+    assert!(meta_pay_id_json(&save.to_string()).is_err(), "save not a bool");
     let v = load("metatx/paytax.json");
     let r = v.as_array().unwrap().iter().find(|r| r["name"] == "digest_unbound_relayer_fee_recipient").unwrap();
     let mut payment = r.clone();
