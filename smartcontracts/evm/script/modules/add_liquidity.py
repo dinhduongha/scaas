@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """ua-mtx-liquidity L2 (spec 2026-11-10-dex-liquidity.md §5): add `mtxLiquidityPull` to module T of every kind in
 `entries.json`, and its event and errors to each face's ABI-only interface (`face_abi.json`), sorted as the generator
-writes them. Idempotent. usage (from smartcontracts/evm): python3 script/t66b/add_liquidity.py; then gen_faces.py."""
+writes them. Idempotent. usage (from smartcontracts/evm): python3 script/modules/add_liquidity.py; then gen_faces.py."""
 import json
 
 ORDER = ('(bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,'
@@ -30,15 +30,15 @@ def put(rows, row, key):
         rows.sort(key=lambda r: r[key])
 
 
-E = json.load(open('script/t66b/entries.json'))
+E = json.load(open('script/modules/entries.json'))
 for k, rows in E['kinds'].items():
     put(rows, dict(ROW), 'name')
 E['imports'].setdefault('ILiquidityPullToken', 'src/trade/ITradeToken.sol')
 E['imports'] = dict(sorted(E['imports'].items()))
-open('script/t66b/entries.json', 'w').write(json.dumps(E, indent=1))
-A = json.load(open('script/t66b/face_abi.json'))
+open('script/modules/entries.json', 'w').write(json.dumps(E, indent=1))
+A = json.load(open('script/modules/face_abi.json'))
 for k, abi in A['kinds'].items():
     put(abi['event'], dict(EVENT), 'name')
     for e in ERRORS:
         put(abi['error'], dict(e), 'name')
-open('script/t66b/face_abi.json', 'w').write(json.dumps(A, indent=1))
+open('script/modules/face_abi.json', 'w').write(json.dumps(A, indent=1))

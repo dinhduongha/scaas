@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """T66b task 4.3: a test's `new <Kind>(factory, coreArgs)` becomes `new <Kind>(factory, kindArgs(<id>, factory, coreArgs))`
 (the kind's body modules deployed first, `script/KindModules.sol`), and the file imports `kindArgs`. One-shot.
-usage (from smartcontracts/evm): python3 script/t66b/migrate_new.py <file> ...   UNAUDITED tooling."""
+usage (from smartcontracts/evm): python3 script/modules/migrate_new.py <file> ...   UNAUDITED tooling."""
 import os
 import re
 import sys

@@ -1,5 +1,5 @@
 {
-  "_comment": "T66b Step 5b: the deployed contracts by group (coverage.py). A contract: label, artifact (out/<file>/<name>.json, read for its methodIdentifiers) or t66b (a token kind: its entries from script/t66b/entries.json), optional needs (an environment this run does not have) and via (a library: its entries run inside these callers). A group is added by name; pqchat: PqChat and its body module PqChatTopics (plan 3c T95, script/onchain/PqChat.s.sol).",
+  "_comment": "T66b Step 5b: the deployed contracts by group (coverage.py). A contract: label, artifact (out/<file>/<name>.json, read for its methodIdentifiers) or t66b (a token kind: its entries from script/modules/entries.json), optional needs (an environment this run does not have) and via (a library: its entries run inside these callers). A group is added by name; pqchat: PqChat and its body module PqChatTopics (plan 3c T95, script/onchain/PqChat.s.sol).",
   "groups": {
     "tokens": [
       {"label": "NormalToken", "kind": 0, "t66b": "NormalToken"},

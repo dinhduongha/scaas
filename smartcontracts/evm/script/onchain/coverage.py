@@ -4,7 +4,7 @@
 
   coverage.py gen [--groups G] [--out O]          every external entry of every contract of groups.json (name, selector,
                                                   state-changing or view), from the build (out/) and, for a token kind,
-                                                  script/t66b/entries.json (its module letter too) -> O/coverage.json
+                                                  script/modules/entries.json (its module letter too) -> O/coverage.json
   coverage.py forge <net> <book> <run.json>       a forge broadcast (broadcast/<Group>.s.sol/<chain>/run-latest.json) as
                                                   records: one per transaction (to, selector, hash, gasUsed, status)
                                                   -> O/records-<net>-<group>.jsonl (replaced)
@@ -37,7 +37,7 @@ BUILD = os.path.join(EVM, os.environ.get("ONCHAIN_OUT", "out/onchain"))  # the b
 
 def _entries(c):
     if "t66b" in c:
-        rows = json.load(open(os.path.join(EVM, "script/t66b/entries.json")))["kinds"][c["t66b"]]
+        rows = json.load(open(os.path.join(EVM, "script/modules/entries.json")))["kinds"][c["t66b"]]
         return [{"sig": r["sig"], "sel": r["sel"], "mut": r["mut"], "module": r["group"]} for r in rows]
     a = json.load(open(os.path.join(BUILD, c["artifact"] + ".json")))
     muts = {}

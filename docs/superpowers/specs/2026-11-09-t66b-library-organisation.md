@@ -232,7 +232,7 @@ module. Per-kind release gas (token + modules, each transaction ≤ 60 M): ≈ 9
 **Amended (owner 2026-11-10, CTR-TOK-30's Change):** the modules are split by function on every kind, letters A admin, P
 pipeline / pay, T trade, W wrap only, R regulated only, Z Zether, Q PQZ, S the PQZ state (was Q2); kinds 8, 10, 12 rename
 their W to R, kinds 9, 11, 13 split their W into W and R (one more module each: 58 token modules), kinds 5 and 13 rename Q2 to
-S. Built in `script/t66b/gen_faces.py` (`R_ENTRIES`, `S_SETTERS`); sizes and deploy gas in CTR-TOK-30's table.
+S. Built in `script/modules/gen_faces.py` (`R_ENTRIES`, `S_SETTERS`); sizes and deploy gas in CTR-TOK-30's table.
 
 **Modules per kind** after the expected splits: 3 (kind 0), 4 (1, 2, 4, 8, 9), 5 (3, 10), 6 (5, 11), 6–7 (12), 7 (13): 58–59 for
 the twelve kinds; D for the DEX (≈ 5–9 KB [estimate]; the DEX 33,202 B, ≈ 56.3 M, T-2 met). On the normal regulated kinds (8, 10, 12)

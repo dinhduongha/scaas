@@ -3,7 +3,7 @@
 errors, `onlyDelegated` and the `_forward*` stubs' helpers in `MetaTokenBase`; `ITokenModule.sol` (the `implArgs` structs, the
 module identity views); `pqzSet()` and the self-call interface of `PqzLayer`; the `burn` selector of the normal kinds (its
 entry is the face's). One run, after transform.py, before gen_faces.py. usage (from smartcontracts/evm): python3
-script/t66b/post.py   UNAUDITED tooling."""
+script/modules/post.py   UNAUDITED tooling."""
 import json
 
 
@@ -15,7 +15,7 @@ def edit(p, pairs):
     open(p, 'w').write(s)
 
 
-D = json.loads(open('script/t66b/post.json').read())
+D = json.loads(open('script/modules/post.json').read())
 edit('src/metatx/MetaTokenBase.sol', [
     ('    error UnderlyingCountInvalid(uint256 n);\n', '    error UnderlyingCountInvalid(uint256 n);\n' + D['blk1']),
     ('    /// @dev One guard over every entry point (CTR-MTX-18)', D['blk2'] + '    /// @dev One guard over every entry point (CTR-MTX-18)')])

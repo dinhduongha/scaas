@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """T66b task 4.3: a test's or script's cast to a token base (`MetaTokenBase(x).f(...)`, `ZetherLayer(x).f`, ...) and an entry's
 selector through it (`MetaTokenBase.f.selector`) name a kind's face instead (the bases hold no entries since the split): the
-face of the base's own kind, imported where it is missing. One-shot. usage: python3 script/t66b/migrate_casts.py <file> ...
+face of the base's own kind, imported where it is missing. One-shot. usage: python3 script/modules/migrate_casts.py <file> ...
 UNAUDITED tooling."""
 import json
 import os
@@ -12,7 +12,7 @@ FACE = {'MetaTokenBase': ('NormalToken', 'src/metatx/NormalToken.sol'), 'ERC20Me
         'ZetherLayer': ('NormalZetherToken', 'src/zether/NormalZetherToken.sol'),
         'PqzLayer': ('NormalPqzToken', 'src/pqz/NormalPqzToken.sol'),
         'RegulatedBase': ('NormalRegulatedToken', 'src/regulated/NormalRegulatedToken.sol')}
-E = json.load(open('script/t66b/entries.json'))
+E = json.load(open('script/modules/entries.json'))
 ENTRY = {e['name'] for es in E['kinds'].values() for e in es}
 for path in sys.argv[1:]:
     s = open(path).read()

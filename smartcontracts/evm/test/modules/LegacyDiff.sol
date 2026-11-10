@@ -13,7 +13,7 @@ interface ILive {
 }
 
 /// @notice T66b §10, the differential test per entry (the registry's R2 `test_diff` pattern): the pre-split body (the
-///         release at d142b57c, built by `script/t66b/legacy_artifacts.py build` into out/t66b-legacy/, its libraries by
+///         release at d142b57c, built by `script/modules/legacy_artifacts.py build` into out/t66b-legacy/, its libraries by
 ///         CREATE2) against stub + module, on the same clone, state and caller. The clone's code is the EIP-1167 proxy with
 ///         its env; swapping the 20-byte implementation address in it (`vm.etch`) runs the same address and storage
 ///         through the other implementation. Per call: success, return or revert data, logs (emitter, topics, data), every

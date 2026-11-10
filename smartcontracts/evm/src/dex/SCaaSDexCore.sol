@@ -17,7 +17,7 @@ import {TokenCall} from "./TokenCall.sol";
 ///        a payout and a balance read run under the same rules in both. No state variable: the state is `scaas.dex`.
 ///        UNAUDITED.
 abstract contract SCaaSDexCore {
-    /// @notice The liquidity module's `moduleGroup()` (`script/t66b/gen_faces.py` `GROUP_ID`).
+    /// @notice The liquidity module's `moduleGroup()` (`script/modules/gen_faces.py` `GROUP_ID`).
     uint8 internal constant GROUP_LIQUIDITY = 11;
     uint256 internal constant PPM = 1_000_000;
     uint8 internal constant KIND_SCAAS = 1;

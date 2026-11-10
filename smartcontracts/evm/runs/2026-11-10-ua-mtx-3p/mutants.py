@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """ua-mtx-3p mutants (owner rulings 2026-11-10): one at a time, each edit applied to its file (a generated face, the generator
-`script/t66b/gen_faces.py` then regenerated, or `PqChatTopics.sol`), forge through `scripts/capped` on its suite, every touched
+`script/modules/gen_faces.py` then regenerated, or `PqChatTopics.sol`), forge through `scripts/capped` on its suite, every touched
 or regenerated file restored in the same process and checked byte-equal (sha256) to its content before the run. Each must
 turn a test red while the original stays green.
 
@@ -19,11 +19,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.dirname(os.path.dirname(HERE))
 CAPPED = os.path.join(EVM, "..", "..", "scripts", "capped")
 FORGE = os.path.expanduser("~/.foundry/bin/forge")
-GEN = "script/t66b/gen_faces.py"
+GEN = "script/modules/gen_faces.py"
 TOPICS = "src/pqchat/PqChatTopics.sol"
 GENERATED = sorted(glob.glob(os.path.join(EVM, "src/*/*Token.sol")) + glob.glob(os.path.join(EVM, "src/*/*TokenModules.sol"))
                    + [os.path.join(EVM, "script/KindModules.sol")] + glob.glob(os.path.join(EVM, "test/helpers/*Whole.sol")))
-T66B = ("test/t66b", "^(GroupsTest|ModulesTest)$")
+T66B = ("test/modules", "^(GroupsTest|ModulesTest)$")
 CHAT = ("test/pqchat", "^PqTopicsTest$")
 
 

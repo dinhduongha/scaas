@@ -975,8 +975,8 @@ own code limit above 65,536 B.
   entries: the same 14 on every regulated kind), one more module per release; kinds 5 and 13 rename Q2 to S. The compliance
   hooks that wrap and unwrap call are internal and stay compiled into W; only the regulated entries move. The token ABI, the
   storage (a module has its core's layout), the call count (one hop) and every rule are unchanged; the group ids keep their
-  values (W 4, S 8 as Q2's) and R takes 12. `script/t66b/gen_faces.py` assigns the entries (`R_ENTRIES`, `S_SETTERS`), and
-  `test/t66b/Groups.t.sol` pins which module holds which entry and that every stub reaches its module.
+  values (W 4, S 8 as Q2's) and R takes 12. `script/modules/gen_faces.py` assigns the entries (`R_ENTRIES`, `S_SETTERS`), and
+  `test/modules/Groups.t.sol` pins which module holds which entry and that every stub reaches its module.
 - **Rule 4, one cold account where there was one.** Module P compiles `MtxPipelineLib`'s code in (the library's entries are
   thin wrappers of internal twins; P overrides the 15 pipeline hooks), T compiles `TradeLib`'s core and the trade
   authorisation in, A the two payment views. W, R, Z, Q, S, `GovernanceRouter` and the wallets keep the library call.
@@ -1016,7 +1016,7 @@ are in [decisions.md](../decisions.md#ctr-tok-30--body-modules-every-body-but-th
 
 58 token modules (55 before 2026-11-10: 9, 11, 13 split W into W and R) and the DEX's D (6,459 B; `SCaaSDex` 32,991 B at T66b 4.4). Liquidity (ua-mtx-liquidity, measured,
 [CTR-DEX-30](dex.md#CTR-DEX-30)): T 17,418-20,219 B per kind (+3.1-3.2 KB: `mtxLiquidityPull`), A +27 B, the faces +154-181 B,
-`SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B. **Which entry runs where** (`script/t66b/entries.json`, the
+`SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B. **Which entry runs where** (`script/modules/entries.json`, the
 generator's input; a kind has the subset it declares):
 
 | Group | Entries |

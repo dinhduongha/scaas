@@ -11,7 +11,7 @@ FACE = {'MetaTokenBase': ('NormalToken', 'src/metatx/NormalToken.sol'), 'ERC20Me
         'ZetherLayer': ('NormalZetherToken', 'src/zether/NormalZetherToken.sol'),
         'PqzLayer': ('NormalPqzToken', 'src/pqz/NormalPqzToken.sol'),
         'RegulatedBase': ('NormalRegulatedToken', 'src/regulated/NormalRegulatedToken.sol')}
-E = json.load(open('script/t66b/entries.json'))
+E = json.load(open('script/modules/entries.json'))
 ENTRY = {e['name'] for es in E['kinds'].values() for e in es}
 PAT = re.compile(r'\b(' + '|'.join(FACE) + r')\b')
 for path in sys.argv[1:]:

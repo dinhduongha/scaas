@@ -35,10 +35,10 @@ step() {
       (cd $EVM && rm -rf test-m3p-top && mkdir test-m3p-top && cp test/*.t.sol test-m3p-top/ && FOUNDRY_TEST=test-m3p-top \
         FOUNDRY_SCRIPT=test-m3p-top FOUNDRY_OUT=out/t66b-top FOUNDRY_CACHE_PATH=cache/t66b-top "$C" forge test -j 2; r=$?
         rm -rf test-m3p-top; exit $r) ;;
-    forge-t66b) # T66b §10: the differential against the pre-split releases (out/t66b-legacy, legacy_artifacts.py build once);
+    forge-modules) # T66b §10: the differential against the pre-split releases (out/t66b-legacy, legacy_artifacts.py build once);
       # the imported fixtures' own suites run in their own directories
-      (cd $EVM && { [ -f out/t66b-legacy/dex.json ] || python3 script/t66b/legacy_artifacts.py build; } && FOUNDRY_TEST=test/t66b \
-        FOUNDRY_SCRIPT=test/t66b FOUNDRY_OUT=out/t66a-test-t66b FOUNDRY_CACHE_PATH=cache/t66a-test-t66b "$C" forge test -j 2 \
+      (cd $EVM && { [ -f out/t66b-legacy/dex.json ] || python3 script/modules/legacy_artifacts.py build; } && FOUNDRY_TEST=test/modules \
+        FOUNDRY_SCRIPT=test/modules FOUNDRY_OUT=out/t66a-test-modules FOUNDRY_CACHE_PATH=cache/t66a-test-modules "$C" forge test -j 2 \
         --match-contract '^(Diff|Modules|Paths|Groups)') ;;
     liquidity-mldsa) # the CI clientkeys job's ffi case: an mldsa65 UA's two SCaaS inputs, signed by clientkeys' ML-DSA-65
       (cd $EVM && MLDSA_CLIENTKEYS=../../clients/clientkeys FOUNDRY_TEST=test/liquidity FOUNDRY_SCRIPT=test/liquidity \
@@ -53,12 +53,12 @@ step() {
     scripts) (cd $EVM && FOUNDRY_OUT=out/m3p-scripts FOUNDRY_CACHE_PATH=cache/m3p-scripts "$C" forge build \
         script/Deploy.s.sol script/onchain/Liquidity.s.sol script/onchain/WrapLimits.s.sol script/onchain/Misc.s.sol \
         script/onchain/Dex.s.sol script/onchain/Gov.s.sol script/onchain/Tokens.s.sol) ;;
-    gen) (cd $EVM && python3 script/t66b/gen_faces.py --check && python3 -I ../../pqz-core/params/sets/gen_set.py --all --check \
+    gen) (cd $EVM && python3 script/modules/gen_faces.py --check && python3 -I ../../pqz-core/params/sets/gen_set.py --all --check \
         && python3 -c "import ast, sys; [ast.parse(open(f).read(), f) for f in sys.argv[1:]]" script/onchain/basebook.py script/onchain/pq.py script/onchain/verifiers.py script/pqz/e2e.py \
         && python3 script/onchain/test_vcheck.py) ;;
     node-test) (cd scaas-node && CAPPED_MEM=6G "$C" cargo test -j 2 --lib) ;;
     node-clippy) (cd scaas-node && CAPPED_MEM=6G "$C" cargo clippy -j 2 --all-targets -- -D warnings) ;;
-    node-e2e) (cd scaas-node && CAPPED_MEM=6G "$C" cargo test -j 2 --test e2e -- --ignored) ;;
+    node-e2e) (cd scaas-node && CAPPED_MEM=6G "$C" cargo test -j 2 --test e2e -- --ignored --test-threads=1) ;; # as CI: one at a time (22 tests in parallel were OOM-killed at 6 GB)
     clientkeys) (cd clients/clientkeys && "$C" npm test) ;;
     ua-rs) (cd clients/ua-rs && "$C" cargo test -j 2 && "$C" cargo clippy -j 2 --all-targets -- -D warnings \
         && "$C" cargo test -j 2 --features signers && "$C" cargo test -j 2 --features json && "$C" cargo test -j 2 --features pq) ;;

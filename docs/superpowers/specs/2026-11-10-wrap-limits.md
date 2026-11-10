@@ -555,7 +555,7 @@ changed signatures: `wrap(…, bytes32 receiver)`, the quotes `(…, bytes32 hol
 `wrapBySigUA` takes its ids from the order. New library functions: `setWrapLimits`, `setWrapMember`, `checkControlsOff(bit)` and
 the three views; the redeemer read is `GovernanceLib`'s role read (internal, no new library). The token's new entries
 (`setWrapLimits`, `setWrapMember`, `wrapLimits`, `wrapQuotaOf`, `wrapQuotaTotal`) go to module W, beside `disableWrap` and the rate
-entries (T66b §4.2; `script/t66b/entries.json`, faces regenerated); the `disableFeature` refusal goes where `_disableFeatureBody`
+entries (T66b §4.2; `script/modules/entries.json`, faces regenerated); the `disableFeature` refusal goes where `_disableFeatureBody`
 already is (A on 1, 3, 5; W on 9, 11, 13).
 
 **Growth [estimate]; lines from CTR-GOV-19's Change: module 33,780 B (57 M) / 35,570 B (60 M), release 33,594 / 35,386 B, library

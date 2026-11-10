@@ -3,7 +3,7 @@
 in. `TradeLib`'s public functions become thin wrappers of `internal` twins (`_<name>`), so the DEX's library calls and their ABI
 are unchanged; the token's trade bodies (`ERC20MetaTx`) call the twins: one cold account less on a trade (no DELEGATECALL to
 `TradeLib`), and `TradeLib` leaves the token kinds' link closure. One run on the tree after post.py (recipe: transform.py,
-post.py, post2.py, gen_faces.py). usage (from smartcontracts/evm): python3 script/t66b/post2.py   UNAUDITED tooling."""
+post.py, post2.py, gen_faces.py). usage (from smartcontracts/evm): python3 script/modules/post2.py   UNAUDITED tooling."""
 import re
 
 
