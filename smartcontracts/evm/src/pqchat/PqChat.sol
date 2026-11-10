@@ -509,8 +509,21 @@ contract PqChat is IPqChat {
         emit PqTopicEntryEdited(d.entryId, d.version, sig);
     }
 
-    function voteEntry(PqTopicVote calldata, IUARegistry.UASig calldata) external {
-        revert PqTopicShape();
+    /// @notice P40, D21: one slot per (entry, voter UA), `seq == stored + 1`; a new value moves the counts (old - 1, new + 1).
+    function voteEntry(PqTopicVote calldata v, IUARegistry.UASig calldata sig) external {
+        (IUARegistry reg,,) = _env();
+        if (_s().entries[v.entryId].record == address(0)) revert PqTopicUnknown(v.entryId);
+        if (v.value < -1 || v.value > 1) revert PqTopicVoteValue(v.value);
+        Vote storage vt = _s().votes[v.entryId][v.voter];
+        if (v.seq != vt.seq + 1) revert PqTopicSeq(vt.seq + 1, v.seq);
+        _auth(reg, v.voter, PqChatTypes.hashVote(v), sig);
+        Score storage sc = _s().scores[v.entryId];
+        if (vt.value == 1) --sc.up;
+        else if (vt.value == -1) --sc.down;
+        if (v.value == 1) ++sc.up;
+        else if (v.value == -1) ++sc.down;
+        (vt.value, vt.seq) = (v.value, v.seq);
+        emit PqTopicVoted(v.entryId, v.voter, v.value, v.seq);
     }
 
     function topicOf(bytes32 topicId) external view returns (PqTopic memory t, uint64 seq) {
@@ -556,12 +569,14 @@ contract PqChat is IPqChat {
         return (w.granted, w.seq);
     }
 
-    function scoreOf(bytes32) external view returns (uint128, uint128) {
-        revert PqTopicShape();
+    function scoreOf(bytes32 entryId) external view returns (uint128 up, uint128 down) {
+        Score storage sc = _s().scores[entryId];
+        return (sc.up, sc.down);
     }
 
-    function voteOf(bytes32, bytes32) external view returns (int8, uint64) {
-        revert PqTopicShape();
+    function voteOf(bytes32 entryId, bytes32 ua) external view returns (int8 value, uint64 seq) {
+        Vote storage vt = _s().votes[entryId][ua];
+        return (vt.value, vt.seq);
     }
 
     function topics(uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
