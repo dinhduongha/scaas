@@ -124,5 +124,26 @@ the prime-order subgroup; MuSig2 / FROST layouts of valid points with sorted mem
 layout and member rules; FN-DSA header and coefficients `< 12289`; ML-DSA, SLH-DSA and `pqz-mlwe` by length. Precompile calls (EIP-2537 G1MSM / G2MSM, the bn254 pairing) are capped at 2× their EIP price; a gas
 shortage reverts `UAVerifyGas`, never `UAKeyData`; on a chain that prices those precompiles above 2× the EIP price, valid keys fail with `UAVerifyGas` (check the prices before enabling the kinds). Registration status, KeyAgg, the FROST DKG check, PoP and the structure gas bound are the registry's.
 
+**PQZ verifier mode and key versions** (groups 3f, 3g). A PQZ verifier is a UA like any other: `ua-rs` signs `PqzVerdict` under
+the `pqz-verdict` purpose, and the libraries carry the versioned PQZ key records (`UAPqzKeyVersionRecord`, `pqzKeyAt`,
+[CTR-UA-42](../contracts/accounts.md#CTR-UA-42)); SPECIFIED, branch `ua-rs-sign`. The JS reference is `clientkeys`
+([CLI-SGN-49](signers-clientkeys.md#CLI-SGN-49), [verdict](signers-clientkeys.md#pqz-verdict-clients)).
+
+<a id="pqchat-clients"></a>**PqChat** (SPECIFIED; the contract is [pqchat.md](../contracts/pqchat.md), BUILT on EVM). Every
+client builds and signs the thirteen typed records exactly as [CTR-CHAT-03](../contracts/pqchat.md#CTR-CHAT-03) states (domain
+`"SCaaS PqChat"` without chain or contract, `uaMessage(kind, PURPOSE_PQCHAT, typed(record))`, a portable `UASig`, an `msig` in
+minimal form), fills `homeChain` / `homeChatContract` from an instance the factory lists as class 3, makes device ids by
+[CTR-CHAT-12](../contracts/pqchat.md#CTR-CHAT-12) (a restored device a new one), recovers from the views alone by
+[CTR-CHAT-14](../contracts/pqchat.md#CTR-CHAT-14), runs the key schedule, wraps, sealed info, sender chains, envelope and
+payload of the UA-7 spec ([§6](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#6-key-schedule),
+[§7](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#7-transports)), checks every record it reads (signature, membership
+by the home's order, nonce scope, dedupe by `messageId`, drop on failure), renders topic Markdown with raw HTML off and resolves a
+`ref` on its chain before showing it as verified, relays with named-field `call` jobs ([job-api.md](../node/job-api.md#pqchat-calls)),
+and reproduces every row of `smartcontracts/vectors/pqchat/` (`records.json`, `topics.json`, `keys.json`, `messages.json`). Test
+with every unbound field non-zero in some row (`via`, `device`, `parents`, `ref`). Built today: the JS vector generator
+`clientkeys/src/pqchat.js` (**BUILT**, 3c T84, `test/pqchat.test.js`); `ua-rs` first, then every `ua-*` (PLANNED, UA-7
+T11–T14, T17–T20). Which device-id version a client defaults to is open (a controller proposal: v4 for a device that posts on
+chain, since v7 puts its creation time on chain).
+
 **Not here.** Signing (`UAKey`, the per-kind signers), PoP signatures and group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android, iOS and web builds (the web build needs nightly Rust, wasm-bindgen-cli and COOP/COEP headers; whether `scaas-ua` compiles to wasm is open), and Qt packaging for Windows and macOS.

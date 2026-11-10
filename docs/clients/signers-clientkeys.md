@@ -346,6 +346,13 @@ its vectors):
 4. **TON**: do not queue an op at lane nonce `n + 1` behind a revocable order at `n`: a revoke moves the lane to `n + 2`,
    so the queued op fails.
 
+<a id="service-pull-builder"></a>**Service pull** ([CTR-MTX-32](../contracts/metatx.md#CTR-MTX-32)). `clientkeys`
+`buildServicePull` (`src/evm.js`, **BUILT**, group 3i T78, `test/servicepull.test.js` reading
+`smartcontracts/vectors/metatx/servicepull.json`) builds the pull at fee `NONE`, `entryRef` from the operation's typed data
+in the service's domain; it refuses an operation outside the node-relayable field types (and `intN`), another payer, another
+chain and a zero amount; with a fee, `buildRelayFee` on the same lane at `nonce + 1`. The `ua-rs` builder and its display
+(recompute `entryRef`, refuse a mismatch) land with branch `ua-rs-sign`: SPECIFIED here.
+
 <a id="CLI-SGN-41"></a>**CLI-SGN-41** — **A portable UA record is signed as typed data, and a registry call is built from named fields, by one
 builder per library** (owner 2026-10-31, the portable records and the explicit-parameter rule; builder names are controller calls, owner may
 override). Status: clientkeys, `ua-rs`, the wrappers and the reproducers **BUILT** (`typed-signing`). `portableTypedData(primaryType, message)` (`clients/clientkeys/src/ua.js`)
@@ -943,6 +950,37 @@ existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzTok
 `UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA
 vectors (`smartcontracts/vectors/ua/kinds.json`) carry the `pqz-mlwe` scheme row (seed → pk, keyHash, `pqz_reg_message`). Protocol detail:
 [contracts/pq-zether](../contracts/pq-zero-knowledge.md). SPECIFIED.
+
+<a id="CLI-SGN-49"></a>**CLI-SGN-49** — **A PQZ key has versions: the seed of version v ≥ 1 appends `be64(v)`, an `msig` draws
+each version fresh, vault and backup keys name `(ua, version, pqzKeyHash)`, and the builders refuse a broken sequence.** Status:
+**BUILT** in `clientkeys` (group 3g T54; `src/pq.js` `pqzKeySeed(seed, account, index, version)`, `src/ua.js`
+`pqzKeyVersionRecordMessage`, `pqzKeyVersionRecordOf`, `pqzDecoyCandidates`, `pqzVaultKey`, `src/evm.js` `checkPqzDebit`,
+`src/ua-verify.js` `verifyPqzKeyVersionRecord`; `test/pqz-versions.test.js`, `pq_kat.json` `pqzSeeds`); **SPECIFIED** for
+`ua-rs` (branch `ua-rs-sign`) and the other `ua-*`. Registry rule [CTR-UA-42](../contracts/accounts.md#CTR-UA-42).
+- `seed32_v = HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", "scaas.ua.pqz-mlwe.v1" ‖ u32 account ‖ u32 index [‖ be64 v])`:
+  version 0 keeps the info without the suffix (today's keys stay), every v ≥ 1 appends `be64(v)`. An `msig` operator draws
+  each version's `seed32` fresh, never from this.
+- A vault or backup entry is keyed by `(ua, version, pqzKeyHash)`, so two keys at one number stay apart.
+- Decoys: never a UA whose latest version is pending (stored, its proof not yet stored), `pqzDecoyCandidates`.
+- `checkPqzDebit(td, {current})`: at the current version every debit; a stale version only migrates (op 1 to the UA itself)
+  or refreshes (a burn of 0); above current none.
+- The version builders refuse a replacement of version 0, a gap (`v ≠ latest + 1`), a version without version 0, and a key
+  the UA already holds at another version. This replaces "one PQZ key per UA, ever" above for versions ≥ 1; version 0 stays
+  write-once.
+
+<a id="pqz-verdict-clients"></a>**PQZ verifier mode in the clients** (group 3f). `clientkeys` builds the `PqzVerdict` digest,
+the empty and the signed `PqzSignedVerdict`, the proof-carrying entries with the verdict last and the creation fields
+`pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` (**BUILT**, T46: `test/pqz-verdict.test.js`, reading
+`smartcontracts/vectors/pqz/verdict.json`); `ua-rs` and its wrappers sign `PqzVerdict` under the `pqz-verdict` purpose like any
+other UA message (**SPECIFIED**, branch `ua-rs-sign`). Contract rule:
+[pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md#pqz-verifier-mode).
+
+<a id="pqchat-signing"></a>**What a wallet shows before signing a PqChat record** (SPECIFIED; contract records
+[CTR-CHAT-03](../contracts/pqchat.md#CTR-CHAT-03)). A session or an epoch: the instance (chain name, address, listed by the
+factory as class 3), the member UAs with their KEM fingerprints (`kemPkHash`), the admins, and "plain rekey" or "membership
+change: adds X, removes Y"; a warning when two UAs list the same KEM key. A message posted on chain: "public forever and costs
+gas", and the device id's kind (a v7 id shows the device's creation time, [CTR-CHAT-12](../contracts/pqchat.md#CTR-CHAT-12)).
+A topic write: "public forever, nothing can be removed".
 
 An `msig` member accepts its place with `membershipMessage({ ua, member })` (`digest` for a native member, `memberDigest` under `member` for a derived one), sent as `acceptMembership` by anyone ([CTR-UA-37](../contracts/accounts.md#CTR-UA-37)). Listing in `msigOf` is no consent: a client adds the weights of the slots where `memberAccepted` is true, shows the `msig` as not active below the threshold, and does not name it as a signer, party, role holder or payer until then (**SPECIFIED**: no client reads `memberAccepted` yet; `membershipMessage` is built in clientkeys and every library has the digest). Below the threshold it can authorize nothing on a registry with this rule, for any purpose on any contract.
 

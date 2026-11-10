@@ -466,6 +466,14 @@ admitted peers after a private window (`bus.private_window_secs`, default 120 s)
 leaves the relayer unbound only when the company's scope is `open`; delegated (mandate) payments are `call` jobs and stay
 `restricted`.
 
+<a id="pay-no"></a>**Payment numbers and on-chain pay records** (EVM, BUILT, plan T83; rule
+[CTR-MTX-26](contracts/metatx.md#CTR-MTX-26)). Issue one `payNo` per payment request when each request must be matched: a
+UUIDv7 right-aligned in 32 bytes (`clientkeys` `payNoFromUuid`, shown with `payNoToUuid`), unique without coordination,
+time-ordered, with no business sequence number on chain; keep the readable invoice number in the ERP or in `body` (schema 2,
+or 4 encrypted). Ask the payer to set `save` in the request when the ERP must find the payment later without logs (EIP-4444):
+then read `paymentCount(payNo)` and `paymentsOf(payNo, offset, limit)` on the token by `eth_call` (no node API), keep the
+records whose `to` is one of your receiving addresses and add the amounts; anyone may append to a `payNo`, so filter by `to`.
+
 ## 8. Wallets and custody
 
 <a id="receiving-wallets"></a>
@@ -631,6 +639,35 @@ reconciles from the amount the counterparty discloses (`ITransferDisclosure` ope
 per company. The token keeps ElGamal `acc/pending` balances with a decrypt bound of 2^40; design history:
 [zether design](history/specs/2026-10-03-zether-design.md). Zether is **UNAUDITED** and runs on every chain with the BLS12-381
 precompiles once enabled ([contracts/zether](contracts/zether.md)).
+
+<a id="pqz-offchain-checks"></a>**PQZ tokens in `OFFCHAIN` mode: checking a disclosed amount and auditing an accepted proof**
+(SPECIFIED; the contract side BUILT, group 3f, [CTR-PQZ-27](contracts/pq-zero-knowledge.md#CTR-PQZ-27)). Read
+`pqzVerifyConfig()` once per token: mode, verifier, fixed or transferable, epoch, a pending transfer and its `eta`, the notice
+period. On an `OFFCHAIN` token the chain accepts a proof because the token's verifier UA signed it, so a client that must not
+trust that UA checks the proof itself. Both recipes use public bytes only: nothing is decrypted and no ciphertext is sent to
+anyone ([ARCH-POS-13](decisions.md#ARCH-POS-13)). **UNAUDITED.**
+
+*A disclosed amount.* The counterparty hands over `(entryRef, leg, amount, kind, keyVersion, proof)`.
+1. Read `disclosureStatement(entryRef, leg, amount, kind, keyVersion)` from the token at a finalized block; check its length is
+   the set's disclosure statement length and its word 32 (`proofSystemId`) is the token's `proofSystemId()`.
+2. Run `pqz-ffi`'s verifier (`pqz_precompile`, byte for byte the precompile's answer) on `u8(op) ‖ be32(len(statement)) ‖
+   statement ‖ proof`, `op` 4 for `SENDER_S`, 5 for `RECEIVER_X` and `AUDITOR`. `…01`: the amount is proven; `…00`: it is not.
+3. `verifyTransferAmount(…, proof, pqzVerdict)` with a verdict answers only what the verifier signed; the verdict-less form
+   reverts `PqzVerdictRequired()` on an `OFFCHAIN` token ("cannot verify", never "wrong amount").
+
+*An accepted proof (audit).* Every accepted proof leaves `PqzVerified(statementHash, proofHash, verifier, pqzVerifierEpoch)` in
+the op's transaction; the node's feed joins it to the op's `ConfidentialTransfer*` / `Unshielded` event with the transaction's
+position ([indexer-feeds.md](node/indexer-feeds.md)).
+1. Take the transaction's calldata: the entry's arguments, the proof and `pqzVerdict`.
+2. Replay at the transaction's **exact position** (its parent block's state with every earlier transaction of the block
+   applied, and the transaction's own path and envelope): an earlier transaction of the block can change the account (a
+   rollover, a shield) or the verifier (a confirm, a revocation).
+3. Rebuild the statement there with the entry's statement view (`transferSingleStatement`, `transferStatement`,
+   `burnStatement`, `unshieldUnwrapStatement`) and the path's binding; require `keccak256(statement) == statementHash` and
+   `keccak256(proof) == proofHash`.
+4. Run `pqz-ffi` as above with the entry's op. `…00` means the verifier signed a false proof: the calldata verdict and
+   `PqzVerified` name it and its epoch. Not slashable on chain; the response is the containment of
+   [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md#verifier-containment).
 
 ## 11. Procure-to-pay
 
@@ -875,6 +912,17 @@ key under a second kind (`UAKeyInUse`).
   never legal evidence: workflows with legal recourse require the account-bound KB-JWT with `nonce` = deal reference /
   `intent_id`.
 
+<a id="pqz-key-rotation"></a>**Rotating a PQZ key** (contracts and `clientkeys` BUILT, group 3g; the rule is
+[CTR-UA-42](contracts/accounts.md#CTR-UA-42); UNAUDITED). Rotate on an operator change or when a share holder leaves.
+1. Read `pqzKeyLatest(ua)` and the `UAPqzKeyAdded` events on every chain the UA uses; replay an existing version `v+1` where it
+   is missing; generate a new key only for a number no chain holds.
+2. Sign the `UAPqzKeyVersionRecord` (an `msig` by its m-of-n), then `setPqzKey(ua, v+1, …)` and `storePqzPop(ua, v+1, …)` on
+   every chain in one sitting: until the proof is stored the version is pending (decoys skip it, the node refuses debits to
+   it by name).
+3. For an `msig`: fresh shares of `v+1` to the current members only.
+4. Migrate: op 1 from `(ua, v)` to the UA itself (drain a long queue by rollovers or refreshes on `v` first); unshield only
+   after the migration. In-flight credits to a rotating UA are refused by name and re-proved.
+
 ## 14. Regulated-token compliance
 
 <a id="regulated-assets"></a>
@@ -1038,6 +1086,9 @@ commitment computationally unlinkable (2^256 preimage space); the on-chain value
 | Node unreachable | Push/sync transport errors | Retry with backoff; jobs stay `local`/`sent`; signatures live until `validUntil` — expired requests are re-issued (new `entryRef` or same request after expiry per client policy) |
 | Simulation revert (insufficient balance, expired, bad signature) | Snapshot `dead` with decoded `error` (`MetaTxBadNonce`, `MetaTxExpired`, …) | Request stays open; ask the payer to fund and re-sign |
 | Lost race / paid elsewhere | `consumed` then a range with `MetaTransactionExecuted(digest)` | Mark final, `landed_elsewhere = true`; no business failure |
+| `PQZ_VERDICT_MISSING` | `dead` / refusal with that error, nothing sent | The `OFFCHAIN` token's verifier gave no verdict (none sent, none fetched). Retry once it answers; if it is revoked or gone, the token's owner sets a new one through the notice ([CTR-PQZ-28](contracts/pq-zero-knowledge.md#CTR-PQZ-28)) |
+| `PQZ_VERDICT_NOT_EXPECTED` | refusal per item | The token is `PRECOMPILE`: drop `args.pqz_verdict` and re-push |
+| `PQZ_VERIFIER_UNREACHABLE` | refusal of a shield or wrap-shield job | The operator refuses shields into an `OFFCHAIN` token whose verifier is revoked or unreachable (opt-in); do not shield until it is served again |
 | Superseded intent | `consumed`, no event by `valid_until + grace + 1 h` | Mark dead; the subject spent that lane nonce on another intent — investigate if unexpected |
 | Stuck transaction | `signed`/`broadcast` for a long time | Nothing to do client-side; the node replaces at ×1.25 up to its fee cap; operator may raise the cap |
 | Reverted on chain | `reverted` (rare: state changed between simulation and inclusion) | Re-push with `generation + 1` after operator requeue if still wanted; the subject nonce was not consumed |

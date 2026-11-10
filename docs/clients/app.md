@@ -525,6 +525,12 @@ the implementation's allowlist ([CLI-SGN-34](signers-clientkeys.md#CLI-SGN-34));
 data}`) or `MultiSig.sol` submit data, never as an EIP-681 link (an EOA sender reverts); the guardian acts directly. Issuer
 wizards build Safe transactions the same way.
 
+<a id="pqz-verifier-display"></a>**PQZ tokens in `OFFCHAIN` mode** (SPECIFIED; contract rule
+[CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)). The app reads `pqzVerifyConfig()` and shows the mode, the
+verifier UA, fixed or transferable, the epoch, a pending transfer with its `eta`, and a revocation; before a shield into an
+`OFFCHAIN` token, and in the creation wizard, it shows the trust model with the maximum loss `min(totalShielded, maxShielded) ·
+shieldScale` public units. A proposal is submitted only with a probe verdict signed by the proposed verifier.
+
 ## 10. Screens
 
 <a id="screens"></a><a id="node-screens"></a>
