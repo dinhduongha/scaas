@@ -13,6 +13,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Test, stdStorage, StdStorage} from "forge-std/Test.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {MetaTxBase} from "../../src/metatx/MetaTxBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
@@ -1431,6 +1432,22 @@ contract TypedOpsRouterTest is UALedgerBase {
         vm.etch(signer, "");
     }
 
+    /// Group 3l (wrap limits spec §9): a hybrid with bits 25-27 at the row's `target`, owner the row's key, one leg `leg`.
+    function _hybridAt(string memory op, address leg) internal returns (WrappedToken w) {
+        if (leg.code.length == 0) deployCodeTo("Mocks.sol:MockERC20", abi.encode("Leg", "LEG", uint8(6)), leg);
+        w = WrappedToken(payable(_addr(op, "target")));
+        _clone(wrappedImpl, address(w));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.owner, c.maxSupply) = ("H", "H", 6, me, 1e30);
+        c.features = 1 | (uint256(1) << GovernanceBits.MINTABLE) | GovernanceBits.WRAP_CONTROLS;
+        c.roles.minter = me;
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
+        vm.etch(signer, hex"00");
+        w.initialize(nid(address(this)), 1, abi.encode(c));
+        vm.etch(signer, "");
+    }
+
     function _dexAt(string memory op) internal returns (SCaaSDex d) {
         d = SCaaSDex(_addr(op, "target"));
         _clone(dexImpl, address(d));
@@ -1632,6 +1649,30 @@ contract TypedOpsRouterTest is UALedgerBase {
             _row(f[i]);
             assertEq(t.balanceOfUA(_b32(f[i], "to")), _uint(f[i], "amount"), f[i]);
         }
+    }
+
+    /// Group 3l: the owner's limits verbatim (the row's leg array, the net rule on).
+    function test_routerRow_SetWrapLimits() public {
+        string memory op = "UASetWrapLimits";
+        WrappedToken w = _hybridAt(op, 0x5Ca00000000000000000000000000000000000C3);
+        _row(op);
+        (IWrappedToken.WrapLegLimits[] memory legs, bool net,,,,,,) = w.wrapLimits();
+        assertEq(legs[0].wrapShort.perUser, 100000);
+        assertEq(legs[0].wrapLong.tokenWide, 5000000);
+        assertEq(legs[0].decayDays, 730);
+        assertTrue(net);
+    }
+
+    /// Group 3l: bit 26's membership verbatim, the row's key a holder of bit 26 (granted by itself as the owner).
+    function test_routerRow_SetWrapMember() public {
+        string memory op = "UASetWrapMember";
+        WrappedToken w = _hybridAt(op, 0x5Ca00000000000000000000000000000000000C3);
+        vm.prank(signer);
+        w.grantRole(GovernanceBits.WRAP_LIST, me);
+        _row(op);
+        bytes32 root = 0x8338ae7a3cc0bfc024cc8dc02945ad44a577ebed1c8a715e7136501207e79700; // scaas.wraplimit
+        bytes32 slot = keccak256(abi.encode(_b32(op, "account"), uint256(root) + 3));
+        assertEq(uint256(vm.load(address(w), slot)), 3, "canWrap and canUnwrap");
     }
 
     function test_routerRow_DisableWrap() public {
