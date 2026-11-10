@@ -1,6 +1,8 @@
 # Regulated token kinds 8–13: one regulated implementation per kind — design (draft for the owner)
 
-**Status:** revised after the Fable and Codex reviews (2026-11-05). SPECIFIED; nothing is built. Work order item 3b. **Owner
+**Status:** revised after the Fable and Codex reviews (2026-11-05). **BUILT** on branch `ua-mtx-merge`, T24–T36 (UNAUDITED);
+the normative home is [asset-suite.md §2](../../contracts/asset-suite.md#2-regulated-controls), RK-1…RK-11 are
+CTR-AS-20…CTR-AS-30 (T19). The section tags below are the design's. Work order item 3b. **Owner
 2026-11-05:** all six regulated kinds are built **inside branch `ua-mtx-merge`**, as task group T24–T36 after T18 and before T19
 (docs) and T22 (review), so the round's docs, review and PR cover them; before the EVM freeze, so the audit covers them; no
 governance or voting token. The reviews: [Fable](../../research/regulated-kinds-fable-review.md) (0 P0, 5 P1, 14 P2, 18 P3),

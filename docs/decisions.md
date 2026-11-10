@@ -1808,6 +1808,7 @@ Change (2026-11-07, chain-neutral releases, CTR-TOK-29): the `chain_uid` of a fa
 **Why.** `_update` and `_uaMove` read no governance slot today; a `features` read there would charge every holder of every plain token for a control their token does not have. Two implementations meet the rule by construction.
 **Cost if wrong.** More catalogue rows and more artifacts in the size gate and the audit. The alternatives were immutable-args clones (every clone address formula changes, factory bytecode before the freeze) or accepting the read (the rule breaks on the entry that matters most).
 **Source.** `research/governance/permission-model.md` §2.5, §6; `research/governance/permission-model-attack.md` A17; owner statement 2026-11-02 on the confidential kinds.
+Change (2026-11-10, ua-mtx-merge T19; status: BUILT on branch `ua-mtx-merge`, UNAUDITED): the regulated half. Each of the kinds 8–13 is one regulated implementation, its base kind's source with the hooks overridden ([CTR-AS-17](contracts/asset-suite.md#CTR-AS-17), asset-suite §2.1): T27 `23a86992`, T28 `3a0c99fb` (8, 9), T30 `da66a98b` (10, 11), T31 `65caf46f` (12, 13), the releases T33 `63aa8696`. The plain kinds 0–5 refuse 5–10, 21 and 22 with `FeatureInvalidForKind` (regulated-kinds spec Q3, T25 `23eb0f37`; `FeatureNotBuilt` stays declared), and "+0" is pinned in slots and gas on every plain row (T26 `f55f43c0`, `test/governance/PlusZero.t.sol`, `test/vectors/plus_zero_gas.json`).
 
 ### CTR-GOV-04 — Two-call grantDelay and holderCount
 - old: governance:D4 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-04 · superseded-by: —
@@ -1858,6 +1859,7 @@ Change (2026-11-07, chain-neutral releases, CTR-TOK-29): the `chain_uid` of a fa
 **Change (owner 2026-11-03).** `forceTransfer` moves on an unhooked body with its own refusals of both pools and `this`: a hook would stop it on the frozen account it exists for. `moderatedTransfer` stays on the hooked path: "passes `FREEZE` and `ALLOWLIST`" above means it is subject to them, so a frozen `from` is refused, a paused token refuses it and the receiver check applies (`permission-model.md` F11). A review read the word as a bypass and the controller relayed that; corrected the same day.
 **Change (owner 2026-11-05).** The entry moves to bit 22. Old: bit 21 `MODERATE` carries `moderatedTransfer`, a contract-only holder moving units with no record. New: the transfer power, its entry and its refusals move unchanged to bit 22 `OPERATOR_TRANSFER` as `operatorTransfer` ([CTR-GOV-20](#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds)), any holder; bit 21 keeps its name and its contract-only rule (CTR-AS-03, RK-1) and is re-scoped by the owner to "other hierarchical moderation", meaning TBD, no body built. Why: the loyalty / point-of-sale case needs the transfer power for any holder within a daily cap, which is not what a moderation bit means. Cost if wrong: bit 21's meaning stays open until the owner states it. Status: SPECIFIED (`superpowers/specs/2026-11-05-regulated-kinds.md` §3.4).
 **Source.** `research/governance/permission-model.md` §3, §6; `research/governance/permission-model-attack.md` A4.
+Change (2026-11-10, ua-mtx-merge T19; owner 2026-11-05; status: the bit BUILT, its body SPECIFIED): bit 21 `MODERATE` is in the masks of the kinds 8–13 and contract-only (an `msig` UA counts, [CTR-AS-20](contracts/asset-suite.md#CTR-AS-20); T24 `295e073b`, T25 `23eb0f37`); the owner re-scoped it to "other hierarchical moderation", meaning to be stated, so no body is built. The transfer power this entry drafted is bit 22 `OPERATOR_TRANSFER`, any holder ([CTR-GOV-20](#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds), BUILT T32 `e46cdb71`).
 
 ### CTR-GOV-09 — Delayed relaxing and RECORD: later, with the asset suite
 - old: governance:D9 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-09 · superseded-by: —
@@ -1870,6 +1872,7 @@ Change (2026-11-07, chain-neutral releases, CTR-TOK-29): the `chain_uid` of a fa
 **Change (owner 2026-11-03).** The relaxing rule counts live roots, not listed holders. An edit that makes a protected power end before `now + grantDelay` takes the delay, not only an expiry already past.
 **Change (owner 2026-11-03).** an expired root counts as live until it is revoked, for the relaxing rule and for the renounce rule of CTR-GOV-02. `Counts.roots` is a stored number, and the chain sees an expiry only by a walk.
 **Source.** `research/governance/permission-model.md` §3 A9, escalation F6, §6; `research/governance/permission-model-attack.md` A9.
+Change (2026-11-10, ua-mtx-merge T19; status: BUILT on branch `ua-mtx-merge`, UNAUDITED): `_delayedRelaxBits()` is 5, 6, 7 on the kinds 8–13 (0 elsewhere), with the relaxation state machine of [CTR-AS-21](contracts/asset-suite.md#CTR-AS-21) / [CTR-AS-22](contracts/asset-suite.md#CTR-AS-22) (T24 `295e073b`, `test/governance/GovRelax.t.sol`); bit 10 `RECORD` has its body (T28 `3a0c99fb`, `test/as/Record.t.sol`); the emergency runbook of the regulated-kinds spec §3.6 is in the operator note ([ops.md](node/ops.md#operator-notes)).
 
 ### CTR-GOV-10 — Bit bands: 0-127 one meaning, 128-255 per application, none refused
 - old: governance:bands · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-10 · superseded-by: —
@@ -1910,6 +1913,7 @@ Change (2026-11-07, group 3h, CTR-GOV-22): bit 24 `PQZ_PROOF` is allocated: a po
 **Why.** A shielded balance cannot be moved without its owner's proof.
 **Cost if wrong.** A regulator of a confidential kind has no moderator's reach over shielded value.
 **Source.** Owner 2026-11-02.
+Change (2026-11-10, ua-mtx-merge T19; status: BUILT for bit 22, UNAUDITED): `operatorTransfer` (bit 22, [CTR-GOV-20](#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds)) moves public balances only, on every regulated kind, the confidential ones included (T32 `e46cdb71`; `test/as/OperatorTransfer.t.sol`, `confidential/ZetherOperator.t.sol`, `PqzOperator.t.sol`); bit 21 has no body (CTR-GOV-08's Change).
 
 ### CTR-GOV-14 — Bits 13 and 14 stay unallocated; a party fixed at creation holds no bit; no tender rescue
 - old: governance:bits-13-14 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-14 · superseded-by: —
@@ -1941,6 +1945,7 @@ Change (2026-11-10, the `ua*` / `mtx*` merge, [CTR-MTX-30](contracts/metatx.md#C
 **Why.** A kind named in a comment does not decode: `createToken` with kind 8 reverts. After a freeze a regulated kind could only come from a second factory, whose token is an outside leg to [CTR-GOV-05](#ctr-gov-05--a-wrapped-kind-refuses-a-scaas-leg-with-force-or-moderate) and `KIND_OUTSIDE` to the DEX (attack B-03).
 **Cost if wrong.** A few unused enum values.
 **Source.** Owner 2026-11-02; `research/governance/permission-model-v2-attack.md` B-03.
+Change (2026-11-10, ua-mtx-merge T19; status: BUILT on branch `ua-mtx-merge`, UNAUDITED): the kinds 8–13 have their implementations and releases (T33 `63aa8696`: the regulated releases and the `ComplianceRegistry` deploy in `DeployBase`); `TokenStore.KIND_*_REGULATED` 8–13 and `kind()` per kind (T25 `23eb0f37`).
 
 ### CTR-GOV-17 — Regulated confidential kinds: the rules
 - old: governance:regulated-confidential · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-17 · superseded-by: —
@@ -1955,6 +1960,7 @@ Change (2026-11-10, the `ua*` / `mtx*` merge, [CTR-MTX-30](contracts/metatx.md#C
 **Why.** Regulation needs to stop an account and the token and to reach public value, without weakening what a shielded balance promises: only its owner's proof moves it.
 **Cost if wrong.** A regulator cannot seize shielded value on chain: it must wait for an unshield, which FREEZE blocks.
 **Source.** Owner 2026-11-02.
+Change (2026-11-10, ua-mtx-merge T19; status: BUILT on branch `ua-mtx-merge`, UNAUDITED): the regulated confidential kinds 10–13 (T30 `da66a98b` Zether, T31 `65caf46f` PQZ; four PQZ sets): the hooks at the confidential sites before the proof, a confidential balance frozen but never seized, bit 8 outside their mask, the PQZ refresh open ([CTR-AS-30](contracts/asset-suite.md#CTR-AS-30)); Zether and PQZ kept apart. The size question is answered: after the T66b module split every regulated release's core and module is under 32 KiB runtime (`size-baseline.json`), none above 64 KiB.
 
 ### CTR-GOV-18 — Receiver check: two feature bits, ALLOWLIST and DENYLIST, off by default
 - old: governance:denied-flags · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-18 · superseded-by: —
@@ -1966,6 +1972,7 @@ Both on means: known, and not denied. `ELIGIBLE_CONTRACT` satisfies `requiredFla
 **Why.** One bit, one meaning: a wallet reads the two controls directly. Money for general use, such as a CBDC or a stablecoin, turns on `DENYLIST`; a security needing known holders turns on `ALLOWLIST`. `FREEZE` stops a sender and expires; a denied account cannot receive; a sanctioned account takes both.
 **Cost if wrong.** A token created with both off can never stop anyone. A denylist acts after the fact.
 **Source.** Owner 2026-11-02.
+Change (2026-11-10, ua-mtx-merge T19; status: BUILT on branch `ua-mtx-merge`, UNAUDITED): `ALLOWLIST` (bit 8, kinds 8, 9) and `DENYLIST` (bit 9, kinds 8–13) with `ComplianceRegistry` keyed by `bytes32`, the bounded call and the codehash pin ([CTR-AS-28](contracts/asset-suite.md#CTR-AS-28); T29 `7411a468`; `test/as/Receiver.t.sol`, `Registry.t.sol`, `RegistryFailure.t.sol`).
 
 ### CTR-GOV-19 — Build first on the SCaaS testnet at a higher code size ceiling; reduce later
 - old: governance:pqz-size · status: current · owner: yes · date: 2026-11-03 · normative: decisions.md#CTR-GOV-19 · superseded-by: —
@@ -3350,6 +3357,7 @@ Change (2026-11-04, governance T17; owner rulings CTR-GOV-08, -18): the disclosu
 **Source.** `history/specs/2026-10-06-asset-suite-design.md:87`
 Change (2026-11-04, governance T17; owner rulings CTR-GOV-01, -02 and -09 with their Changes): holders per bit. `issuer` names the holders of bits 5–7, `compliance` those of bit 10 `RECORD`, each a contract; one holder is refused both `FORCE` and `RECORD`; losing a role relaxes when no live root of the bit is left, an expired root counting until it is revoked; `_delayedRelaxBits()` replaces "at once" when built. Status: SPECIFIED; the refusals of `roles.issuer` and `roles.compliance` at creation BUILT on branch `governance` (T3 `7825361b`).
 **Change (owner 2026-11-05, regulated-kinds review F-01).** Who may hold a contract-only regulated bit. Old: bits 5–7 and 10 are contract-only, a holder is a native id whose address has code (a derived UA never holds such a bit). New: bits 5–7, 10 and 21 are contract-only, and a holder is a native id whose address has code **or a threshold (`msig`) UA**, the same on every family; on EVM `GovernanceLib._check` accepts a derived id on these bits iff the governed contract's UA registry answers `kindOf(id) == msig`, read at grant and init only; `RATE_ADJUSTABLE` keeps a native id with code. Why: CTR-GOV-01's Change (owner 2026-11-04) lets a PQ or `msig` issuer hold a power under its own id with no per-issuer contract; a threshold record is the family-neutral form of "a contract". Cost if wrong: an issuer's threshold then rests on the registry's `msig` rule (CTR-UA-37) instead of a contract's code; one registry view per grant, none per use. Status: SPECIFIED (`superpowers/specs/2026-11-05-regulated-kinds.md` §2.1, plan `superpowers/plans/2026-11-04-ua-mtx-merge.md` task T24).
+Change (2026-11-10, ua-mtx-merge T19; status: the 2026-11-05 Change BUILT on branch `ua-mtx-merge`, T24 `295e073b`, UNAUDITED): `GovernanceLib._check` accepts an `msig` UA on the contract-only bits 5–7, 10, 21 ([CTR-AS-20](contracts/asset-suite.md#CTR-AS-20); `test/governance/GovRelax.t.sol` `test_msigIssuerGranted`, `test_singleKeyDerivedIssuerRefused`).
 
 ### CTR-AS-04 — Forced transfer only against a recorded order
 - old: R203 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-04 · superseded-by: —
@@ -3459,6 +3467,94 @@ Change (owner 2026-11-06): the `ELIGIBLE_CONTRACT` rows of a DEX venue and its `
 **Cost if wrong.** Separate regulated kinds multiply implementations (three tiers times Hedera times Zether); a confidential balance can be frozen but not seized on public chains.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §2 (T8, T11), §5.
 Change (2026-11-02, owner, CTR-GOV-03, CTR-GOV-11; applied to `contracts/asset-suite.md` on 2026-11-04, owner): the flags move from "on the ordinary kinds" to "on the ABI of one regulated implementation per kind", and are flags 5–9 with `DENYLIST` (CTR-GOV-18), held by UA ids (CTR-GOV-01), code in `GovernanceLib`. Why: a `features` read on the hot path is +2,100 gas cold on every plain transfer, measured. "+0" is no new read, not an equal gas figure: every added selector reshapes the dispatcher. The cost this entry names, "separate regulated kinds multiply implementations", stands in part: per kind, not per feature. Status: not built (the regulated implementations are SPECIFIED).
+
+### CTR-AS-20 — A threshold UA counts as a contract for bits 5-7, 10, 21; bit 22 takes any holder
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-20 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T24 `295e073b` (`GovernanceLib._check`, `GovernanceBits.REGULATED_ROLES`), T32 `e46cdb71` (bit 22's entry); UNAUDITED. Tests `test/governance/GovRelax.t.sol`, `test/as/RegulatedInit.t.sol`.
+**Why.** A regulated role needs a holder that can be a multisig; on a family without contract wallets the threshold UA is that multisig. The loyalty case of bit 22 needs a clerk's single key.
+**Cost if wrong.** A single-key derived UA as issuer is one stolen key from freezing and seizing every holder.
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-1, §2.1 (F-01, owner 2026-11-05); CTR-AS-03's Change; CTR-GOV-20.
+
+### CTR-AS-21 — A relaxation of a delay-masked bit is one pending per (bit, account), confirmed by its proposer
+- old: — · status: current · owner: no · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-21 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T24 `295e073b` (`GovernanceLib`: the commitment, `RelaxProposed`, `NotProposer`); UNAUDITED. Tests `test/governance/GovRelax.t.sol`, `GovDelay.t.sol`.
+**Why.** Fable F-03 and Codex 2 showed the existing pending record let a revoke act at once, a renounce delete the pending, and any id confirm another's proposal; the owner's instruction (2026-11-05) was to apply every P1 and every Codex finding.
+**Cost if wrong.** A compromised owner relaxes a regulated control with no public window, or an owner's proposal is confirmed by a holder (or the reverse).
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-2, §3.6; CTR-GOV-09.
+
+### CTR-AS-22 — A relaxation proposal changes nothing until its confirm
+- old: — · status: current · owner: no · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-22 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T24 `295e073b` (`disableFeature` returns `applied`), T28 `3a0c99fb` (the regulated mirror sync, I12); UNAUDITED. Tests `GovRelax.t.sol`, `test/as/Mirror.t.sol`.
+**Why.** Codex 3: a void `disableFeature` let a caller act on a disable that was only proposed.
+**Cost if wrong.** `controls` and `features` disagree: a hook relaxes a freeze or pause the governance record still holds.
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-3, §2.2.
+
+### CTR-AS-23 — A freeze's until never decreases except by unfreeze and revokeOrder
+- old: — · status: current · owner: no · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-23 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T28 `3a0c99fb` (`RegulatedLib`, transitions T1-T9); UNAUDITED. Tests `test/as/Freeze.t.sol`, `Record.t.sol`.
+**Why.** Fable F-04: the draft's `until = freezeUntil` let a record shorten a running freeze.
+**Cost if wrong.** An issuer ends another's freeze by recording a short order.
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-4, §3.3.
+
+### CTR-AS-24 — RECORD disabled: no record is live, FORCE stops, revokeOrder runs on the role
+- old: — · status: current · owner: no · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-24 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T28 `3a0c99fb`; UNAUDITED. Test `test/as/Record.t.sol` (T8).
+**Why.** Fable F-02: `revokeOrder` under `use(10)` reverted `FeatureNotSet` once the feature was disabled.
+**Cost if wrong.** The audit trail is no longer writable after a disable, or a record-backed freeze outlives its basis.
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-5, §3.3.
+
+### CTR-AS-25 — Every fee leg of a token checks its recipient before effects
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-25 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T26 `f55f43c0` (the `_regFeeTo` seats), T28 `3a0c99fb`; UNAUDITED. Test `test/as/FeeLegs.t.sol`.
+**Why.** Codex 1, Fable F-15: `payWithFee`, `mtxWrapOrder`, `mtxPayReceiverFee` and `mtxRelayFee` moved a fee to an unchecked recipient. Owner 2026-11-05: the DEX relayer share is an ordinary credit; a frozen payee cannot pay a receiver fee.
+**Cost if wrong.** A frozen or ineligible account receives the token through a fee.
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-6, §3.2, the owner's five calls 1 and 2.
+
+### CTR-AS-26 — The pause-open set: unwrap x2, unwrapToUA and burn at fee mode NONE, on every path
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-26 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T28 `3a0c99fb` (`RegulatedBase`, by the inner selector), T30, T31 (no confidential selector); UNAUDITED. Tests `test/as/Pause.t.sol`, `confidential/ZetherPause.t.sol`, `PqzPause.t.sol`.
+**Why.** Codex 5, Fable F-27: the draft named the outer entries and missed `burn`; owner 2026-11-05: a percent fee that computes to zero stays paused.
+**Cost if wrong.** A pause stops the exits it promises to keep open, or lets a fee-bearing op through.
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-7, §3.2, the owner's five calls 3.
+
+### CTR-AS-27 — P and F(from) of a meta-tx op run before the pipeline's checks; mtxCancelNonce is a meta-tx op
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-27 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T26 `f55f43c0` (`_regPre` at every seat), T28 `3a0c99fb`; UNAUDITED. Tests `test/as/Freeze.t.sol`, `FeeLegs.t.sol`.
+**Why.** Fable F-09: authorization and the nonce run inside `MtxPipelineLib.pre*`, so a frozen `from` would cost the relayer a full verify; Codex 7 and owner 2026-11-05: no exception for `mtxCancelNonce`.
+**Cost if wrong.** A frozen account burns relayer gas with PQ verifies that can never land, or cancels its own nonces while frozen.
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-8, §2.2, the owner's five calls 4.
+
+### CTR-AS-28 — A registry call is a bounded STATICCALL; failure reverts by name; the registry is pinned by codehash
+- old: — · status: current · owner: no · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-28 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T29 `7411a468`; UNAUDITED. Tests `test/as/RegistryFailure.t.sol`, `RegulatedInit.t.sol`.
+**Why.** Fable F-11, Codex 4: a Solidity view call forwards all gas and decodes any output; a registry checked for code only can be any code.
+**Cost if wrong.** A hostile or failing registry starves a settlement, or a failure reads as eligible.
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-9, §5.
+
+### CTR-AS-29 — Hook arguments are raw
+- old: — · status: current · owner: no · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-29 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T26 `f55f43c0` (the "+0" pins in slots and gas, `test/governance/PlusZero.t.sol`), T30 `da66a98b` (`_regZetherSender`); UNAUDITED.
+**Why.** Fable F-10: `ZetherLib.uaOf` hashes 128 calldata bytes; computed at the call site it would cost every plain kind.
+**Cost if wrong.** The plain kinds pay for a control they do not have (CTR-GOV-11 broken).
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-10, §2.2.
+
+### CTR-AS-30 — A PQZ refresh is open under FREEZE and PAUSE; its shieldIn parties are still checked
+- old: — · status: current · owner: no · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-30 · superseded-by: —
+
+**Status.** BUILT on branch `ua-mtx-merge`, T31 `65caf46f`; UNAUDITED. Test `test/as/confidential/PqzRefresh.t.sol`.
+**Why.** Fable F-23: the refresh (`mtxUnshield` with `amount = 0`) moves no value, and refusing it would leave a frozen account's ciphertext unrefreshable.
+**Cost if wrong.** A frozen holder's confidential balance cannot be refreshed, or a refresh carries a public payer past the check.
+**Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-11, §4.2.
 
 ### CTR-ZTH-01 — Full classical Zether, unaudited
 - old: R34(scope), UD:§12, UD:§12.2, UD:§12.3, UD:§12.4, UD:§12.7.6, UD:§15:D2, UD:§19:curve-param, UD:§20.1, UD:§25, UD:§25:flipped, UD:§25:ruling, canon:D1, canon:D2, canon:D17 · status: current · owner: yes · date: 2026-10-03 · normative: contracts/zether.md#CTR-ZTH-01 · superseded-by: —

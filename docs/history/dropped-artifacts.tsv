@@ -1216,3 +1216,14 @@ meta_tx.data	obsolete	the selector of a UAMetaTransaction's data (ua_meta_tx) or
 evm.ua_meta_tx = {token, m: UAMetaTransaction (hex fields), auth}	obsolete	the UA body as built: evm.ua_meta_tx = the wire UAMetaTransfer or UAMetaTransaction with evm.auth: node/mesh.md#NODE-MESH-18
 token.features ∋ ua	obsolete	the UA-ledger gate of a ua_metatx job; since ua-mtx-merge only a derived from or to needs registry() != 0: node/job-api.md#intake
 features ∋ ua	obsolete	the /v1/ua-metatx gate; since ua-mtx-merge only a derived from or to needs registry() != 0: node/gateway.md#routes
+issuer()	obsolete	the single-issuer view of the asset-suite draft; holders per bit by hasRole and regulatedConfig(): contracts/asset-suite.md#CTR-AS-03
+compliance()	obsolete	the single-compliance view of the asset-suite draft; holders per bit by hasRole: contracts/asset-suite.md#CTR-AS-03
+_checkOp	obsolete	the shape-step override of the draft; the built hook is _regPre before MtxPipelineLib.pre*: contracts/asset-suite.md#CTR-AS-08
+_regIsContract	obsolete	the draft's code-check hook; holders are checked by GovernanceLib._check (code or an msig UA): contracts/asset-suite.md#CTR-AS-20
+RoleNotContract(a)	renamed	RoleNotContract(bit, account): contracts/asset-suite.md#22-configuration-and-init
+NotEligible(creator, reason)	renamed	NotEligible(account, reason) on the initial-supply recipient: contracts/asset-suite.md#22-configuration-and-init
+requiredFlags u64 ‖ cooldownUntil u64	obsolete	the slot before DENYLIST; slot +1 is requiredFlags ‖ deniedFlags ‖ pauseCooldownUntil: contracts/asset-suite.md#22-configuration-and-init
+mapping(address ⇒ FreezeState)	renamed	mapping(bytes32 account ⇒ FreezeState), ids as bytes32: contracts/asset-suite.md#22-configuration-and-init
+ (the hot path reads slot a only); 	extraction-artifact	contracts/asset-suite.md#22-configuration-and-init (the storage table)
+m.feeRecipient == 0 ? msg.sender : m.feeRecipient	obsolete	the draft's shape-step fee resolution; the fee row is _regFeeTo after pre*: contracts/asset-suite.md#CTR-AS-25
+super._checkOp(m)	obsolete	the draft's shape-step placement; built as _regPre / _regFeeTo / _regMove: contracts/asset-suite.md#CTR-AS-08

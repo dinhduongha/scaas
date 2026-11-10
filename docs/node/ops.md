@@ -893,3 +893,20 @@ only. **UNAUDITED.**
 | Pay selectors changed with the `PayMeta` tuple: `mtxPay`, `mtxPayReceiverFee`, `payWithFee`, `payWithFeeToUA`, `mtxPayWithTax`, `payWithTax`, `MandateWallet.payUnderMandate`, `mtxPayUnderMandate` (BUILT) | anyone hand-building calldata | build from named fields; the old tuple reaches no function |
 | An `msig` registered with a KEM key is refused `UAKemHolder` (BUILT, T66a, [CTR-UA-32](../contracts/accounts.md#CTR-UA-32)) | clients on the old builders | register the `msig` without a KEM key; senders seal to each accepted member's own key |
 | A factory creator is a 32-byte UA id (canonical; a native id still in its 20-byte form) in a feed, job field or export (PLANNED: the node decodes no `TokenCreated` / `DexCreated` today, so no node shape moves) | feed consumers | read creators as `bytes32` ids ([CTR-TOK-27](../contracts/token-wrappers.md#CTR-TOK-27)) |
+| The regulated kinds 8–13 and `ComplianceRegistry` (BUILT, T24–T36, [asset-suite §2](../contracts/asset-suite.md#2-regulated-controls)); `TokenConfig` gained field 6 `reg` for every kind (a plain kind sends it zero, else `ConfigFieldForOtherKind(6)`); the plain kinds refuse bits 5–10, 21, 22 with `FeatureInvalidForKind` | token creators, the wizard, deployers | encode `reg` on every kind; deploy the regulated releases and the registry with the release set (deployments JSON `compliance_registry`, `compliance_registry_codehash`) |
+| The `GovernanceRouter` gained the eight control ops `mtxFreeze`, `mtxUnfreeze`, `mtxForceTransfer`, `mtxPause`, `mtxUnpause`, `mtxRecordOrder`, `mtxRevokeOrder`, `mtxOperatorTransfer` (BUILT, T32); the token has no `mtx` twin | issuers, compliance holders, node call tables | relay a holder's control as a router job (`gov_router`), fee 0; a contract holder signs by ERC-1271, an `msig` holder through the registry |
+| Regulated refusals by name at the node and the venue (`Frozen`, `TokenPaused`, `NotEligible`, `FeeRecipientFrozen`, `RegistryUnavailable`, `RegistryGasStarved`), regulated legs and alerts (BUILT, T35, [regulated legs](#regulated-legs)) | node operators, venues, wallets | set the registry keys for a venue; watch the alerts; use the runbook below |
+
+**Regulated kinds: emergency runbook** (regulated-kinds spec §3.6, F-06, M-06; [CTR-GOV-09](../decisions.md#ctr-gov-09--delayed-relaxing-and-record-later-with-the-asset-suite),
+[CTR-AS-21](../contracts/asset-suite.md#CTR-AS-21)): who stops what at once, who only after `grantDelay` (≤ 30 d).
+
+| Threat | At once | After `grantDelay` |
+|---|---|---|
+| Compromised issuer (bits 5–7) | its harm is bounded: ≤ 30 d per issuer-only freeze (≤ 60 d per episode), ≤ 7 d pause, then cooldowns; `unfreeze` and `unpause` by another issuer root | owner `revokeRole(5/6/7)` or `disableFeature`, confirmed by the proposer |
+| Compromised `FORCE` holder | compliance `revokeOrder` of each live record; or owner `revokeRole(10, ·)` of every compliance root; or `disableFeature(RECORD)`; each stops `FORCE` | owner `revokeRole(6)` |
+| Compromised compliance (bit 10) | owner `revokeRole(10, holder)` (not delayed); `FORCE` still needs a frozen subject and the issuer | — |
+| Registry hostile, unavailable or gas-starving | owner `disableFeature(8)` / `(9)` when not locked (not delayed); a locked bit has no recovery, as disclosed | — |
+| Owner proposes a relaxation | `RelaxProposed` is public for `grantDelay`; the node alerts | the proposer confirms in the window |
+
+Alerts: the indexer marks `alert` on `OrderRecorded`, `RelaxProposed`, `AccountFrozen` and `Paused` (BUILT, T35,
+`scaas-node/src/indexer.rs` `ALERTS`); an alert on `FeatureDisabled` is SPECIFIED.
