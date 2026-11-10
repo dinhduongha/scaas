@@ -61,6 +61,21 @@ RPC_7622=http://127.0.0.1:8545 ../../scripts/capped sh script/onchain/matrix.sh 
 
 `MATRIX_GROUPS="tokens misc"` runs some groups; groups run one after another (one set of keys and nonces).
 
+## Several targets in one call
+
+Each target in turn, in its own process (its env, temp dir, anvil / copy, teardown); one that fails does not stop the
+next; a summary (target | group | ok / fail / not run) at the end, exit non-zero if any target failed. Local, then the
+SCaaS testnet:
+
+```sh
+cd smartcontracts/evm
+RPC_7622=http://127.0.0.1:8545 COPY=$PWD/../../scratchpad/onchain-copy \
+  ../../scripts/capped sh script/onchain/matrix.sh local scaas-testnet
+```
+
+A named target `<name>` reads `ONCHAIN_RPC_<NAME>`, `PRIVATE_KEY_<NAME>`, `ONCHAIN_K1_<NAME>`… (upper case, `-` as
+`_`); the plain names only when it is the only named target; else the mnemonic file as below.
+
 ## Another testnet through RPC
 
 - **The chain must have:** the Amsterdam rules (NET-EVM-06, EIP-8037 included); a code size limit and a block gas limit
@@ -69,7 +84,8 @@ RPC_7622=http://127.0.0.1:8545 ../../scripts/capped sh script/onchain/matrix.sh 
   `0x4e59b44847b379578588920cA78FbF26c0B4956C` (NET-EVM-05); its `chain_uid` profile (a `chain-uids.json` row, or
   `CHAIN_UID` for `deploy.sh`); funded accounts.
 - **Deploy first:** `MATRIX_DEPLOY=1` runs `deploy.sh evm` as for local when `deployments/<chainid>.json` is missing.
-- **Keys:** `PRIVATE_KEY` (the deployer) and `ONCHAIN_K1..K3`, or else indices 0-3 of the testnet-only mnemonic in
+- **Keys:** `PRIVATE_KEY_<NAME>` (the deployer) and `ONCHAIN_K1_<NAME>..K3` (the plain names when it is the only named
+  target), or else indices 0-3 of the testnet-only mnemonic in
   `SCAAS_TESTNET_MNEMONIC_FILE` (`source ~/.profile`): `matrix.sh` copies its `mnemonic:` line into its private temp dir
   for `cast` and keeps the keys in its own environment; never printed, never written into the repo. Fund the four first.
 - **PQZ:** with the PQZ precompile, PRECOMPILE mode (`ONCHAIN_PQZ=precompile`: pq and pqoff); without it, a PQZ token runs
@@ -81,7 +97,7 @@ RPC_7622=http://127.0.0.1:8545 ../../scripts/capped sh script/onchain/matrix.sh 
 ```sh
 cd smartcontracts/evm
 source ~/.profile
-ONCHAIN_RPC=https://<rpc> MATRIX_DEPLOY=1 ../../scripts/capped sh script/onchain/matrix.sh sepolia
+ONCHAIN_RPC_SEPOLIA=https://<rpc> MATRIX_DEPLOY=1 ../../scripts/capped sh script/onchain/matrix.sh sepolia
 ```
 
 ## Gas
@@ -95,6 +111,12 @@ in the scripts' own runs, carries a fixed `{gas: …}` (Misc's `REFUND_GAS`, `DE
 ML-DSA-signed `mtxShield` short: 448 k asked, 453 k needed).
 
 ## Outputs
+
+Stdout is never silent and stays short: one line per event, `[target] start` (chain id, PQZ mode), anvil / copy up and
+down, `[target] deploy …` / `deploy ok N txs`, `[target/group] start`, then `ok N/M txs, negatives n/m (Xs)` or
+`FAIL <entry>: <named error>`, and a heartbeat every 30 s (`[target/group] … 42 txs, 95s`). Public ids only (chain id,
+addresses, tx hashes), never a key or a mnemonic; forge's and every step's full output go to the git-ignored
+`runs/…/matrix-<target>.log` and `<group>-<target>.log`.
 
 Named by target: `runs/2026-11-10-ua-mtx-merge-t66b-step5b/records-<target>-<group>.jsonl` (one line per transaction:
 contract, selector, tx hash, gasUsed, status; a negative with the error expected and got), `table-<target>.txt`,
