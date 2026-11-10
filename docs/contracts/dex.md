@@ -178,6 +178,7 @@ never a loss.
 
 <a id="CTR-DEX-15"></a>**CTR-DEX-15** — **The sell token verifies the order and moves funds only into `dex`.** In the
 base `ERC20MetaTx` ([CTR-MTX-07](metatx.md#CTR-MTX-07)):
+Change (2026-11-10, [CTR-DEX-30](#CTR-DEX-30)): the token has a second DEX-only pull, `mtxLiquidityPull(LiquidityOrder, UASig, amount, submitter)` in module T of every kind: the token computes `h` in the DEX domain of `msg.sender`, requires its caller to answer `liquidityOrderDigest(o) == h` (a capped `staticcall`, the capability check T7: a DEX release without the liquidity module cannot make it pull; CTR-DEX-19 unchanged), checks relayer, expiry, its own lane, that it is exactly one input and `0 < amount ≤ max`, verifies `h` under `trade` always, pulls once (`pulled[h]`) into the caller. BUILT.
 
 ```solidity
 struct TradeFill { uint256 sellFill; uint256 receiveFill; uint256 dexFee; address submitter; }
@@ -604,6 +605,7 @@ held could be spent by `outsideToken.transferFrom(victim, attacker, x)`. SCaaS t
 `DexPuller.rescue(token)`, callable by anyone, sends the puller's whole balance of `token` to its immutable `rescueTo`
 (`DexConfig.rescueTo`; 0 = no rescue, `RescueOff`; never `UA_POOL`, `SHIELD_POOL`, the DEX or the puller, `RescueConfigInvalid` at `initialize`); it calls only `balanceOf` and `transfer`, so no allowance is spent
 ([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto); BUILT on branch `governance`, T10 `dc9bfde0`). The DEX itself has no `rescue`.
+Change (2026-11-10, [CTR-DEX-30](#CTR-DEX-30)): the puller also pulls a given ERC-721 position by its unchanged `pull(manager, from, id)` (ERC-721 `transferFrom` shares ERC-20's selector); the DEX then checks `ownerOf(id) == DEX`, so the selector's double meaning decides nothing. BUILT.
 
 <a id="CTR-DEX-23"></a>**CTR-DEX-23** — **What an interaction may call; listed targets** (owner). (a) refuses an
 interaction unless `target ∉ {DEX, puller}` (`ForbiddenTarget`), `data.length ≥ 4` and `bytes4(data) ∉
@@ -616,6 +618,7 @@ when any leg sets `LISTED_POOLS` **or** the DEX's listed-only mode (`LISTING`) i
 residual allowance moves nothing, because between calls the DEX holds no user funds. Grief (a target that reverts or
 burns gas) fails only its own plan.
 **Transitional (BUILT, P2c).** `SCaaSDex`: `mtxExchange`, `mtxExchangeVia`, `IExchangeExecutor`, `setExchangeTarget`, `setListedOnly`, `exchangeTarget`, `tokenKnown` (a side of at least one listed market, counted per market; a delisted token is unknown, its recorded kind stays); `NoLegs`, `TokenNotKnown`, `ForbiddenTarget`, `ForbiddenSelector(target, selector)` (`bytes4(data)`, zero-padded: 0 for empty `data`), `TargetNotListed`, `InsufficientOutput`. Path A bounds are checked at the pull by the token (by `TradeLib` on the DEX for an outside leg), Path B bounds by the DEX, as in `mtxSettle`; after the pulls each sell token's balance must have risen by exactly what was pulled (`ConservationBroken`: a fee-on-transfer or rebasing sell token fails before any interaction); a sold-only or intermediate leftover fails the final conservation check; every allowance an `approve` interaction granted is set back to 0 after the last interaction, by a gas-capped call that drops the token's revert data (W-O, as every other token call of the DEX; DEX round final fix); `increaseAllowance` and Permit2 `approve` are refused as `ForbiddenSelector` too (controller ruling, pending the owner); other allowance-raising calls (e.g. `increaseApproval`) are neither refused nor reset, so a holder of `LISTING` lists only targets whose flows do not need them, and conservation still bounds a call; under the listing condition a token an interaction calls (`approve`, `transfer`) is a target and must be listed too; `receivedFloor` is the gross floor (controller ruling, pending the owner). The fork test with real Uniswap bytecode is built, opt-in ([CTR-DEX-29](#CTR-DEX-29)).
+Change (2026-11-10, [CTR-DEX-30](#CTR-DEX-30)): `mtxLiquidityPull` (`0x85fdfd38`) and ERC-721 `setApprovalForAll` (`0xa22cb465`) are refused in **every** interaction of every DEX entry (the shared `_interact`, `SCaaSDexCore`); `mtxLiquidity`'s own loop also refuses an `approve` aimed at the position manager. The DEX holds no key and implements no ERC-1271, so no signature-based grant (`permit`, `permitForAll`, Permit2 `permit`) can succeed for it (an invariant of the build, pinned by a test). BUILT.
 
 <a id="hybrid"></a>
 <a id="CTR-DEX-27"></a>**CTR-DEX-27** — **`mtxHybrid` / `mtxHybridVia`: one listed-market taker against the book's makers at
@@ -829,6 +832,51 @@ partial CoW of two outside orders with the net imbalance through v3; Universal R
 no allowance. Run 2026-10-30: 9 passed, 0 failed, rc 0 —
 `smartcontracts/evm/runs/2026-10-30-dex-round-fork.txt`. Real Uniswap is the point of the test and CI cannot depend on a
 paid RPC; the mocks of `DexExchange.t.sol` and the executor's unit tests stay the CI coverage.
+
+## 7a. Liquidity
+
+<a id="CTR-DEX-30"></a>**CTR-DEX-30** — **`mtxLiquidity` executes one signed `LiquidityOrder` against AMM pools through the DEX,
+outcomes only** (owner 2026-11-10, the rulings of the [liquidity spec](../superpowers/specs/2026-11-10-dex-liquidity.md) §2).
+The signer signs one typed `LiquidityOrder` in the DEX's own salted domain (`"SCaaS Dex"`, `"1"`, the clone, `chain_uid`;
+the UA form, a native signer zero-padded): up to eight ERC-20 inputs with a maximum each, up to eight ERC-20 outputs with a
+minimum each, optionally a position given (`positionIn`) and one received (`positionPool`, its range, `minLiquidity`, read
+by a listed reader, [CTR-DEX-31](#CTR-DEX-31)), a recipient, the fee rate, the relayer, the lane, the nonce and the
+deadline. Anyone submits `mtxLiquidity(LiquidityPlan, Interaction[])`; the plan names the pulls (`0 < pull[i] ≤ max`), the
+received position's id and the extra hop tokens. The stub holds the DEX's transient guard and DELEGATECALLs the liquidity
+module `SCaaSDexLiquidityModule` (group 11; an S1 variant: the modifier around a DELEGATECALL with a normal return). Steps,
+atomic, no `try`: (1) check — shape (`LiquidityShape` 1–5: an input and an output, at most eight each, distinct and
+disjoint non-zero tokens, the position fields consistent, `positionId ≠ 0` iff one is received, a recipient that is not
+the DEX, its puller, a plan token or the manager), relayer, expiry, `nonce < 2^128`, the DEX's lane, `flags ⊆
+LISTED_POOLS`, fee ≤ 1 %, one-shot (`pulled[h] = 1` on the DEX's `TradeLib` map), the pull bounds, the kinds from the
+DEX's record, the UA rules of [CTR-UA-27](accounts.md#CTR-UA-27) (a derived signer gives only SCaaS inputs with the ledger on and
+no position; a derived recipient receives only such outputs and no position), and the DEX's own verify of `h` when any input
+is outside or a position is given; (2) snapshot (a token without code yet holds 0: only the plan can create it, a v2 pair);
+(3) pull — a SCaaS input by its token's `mtxLiquidityPull` ([CTR-DEX-15](#CTR-DEX-15)), an outside input and a given
+position by the puller ([CTR-DEX-22](#CTR-DEX-22)), each balance up by exactly its pull; (4) the interactions under
+[CTR-DEX-23](#CTR-DEX-23), and no `approve` aimed at the position manager; (5) the received position (owned by the DEX,
+the reader listed and bound to the manager, the signed pool and range, not encumbered, at least `minLiquidity`), moved to
+the recipient by `transferFrom`; a given position not received back is **spent whole** (bounded by the output minima; one
+the DEX still owns goes back to `from`, a reverting `ownerOf` is burnt); (6) every output measured **at the DEX**: `got −
+⌈got · fee / 10⁶⌉ ≥ min`, paid to the recipient, the recipient's delta ≥ min too (the fee-on-transfer backstop, before the
+fee shares), then the shares ([CTR-DEX-17](#CTR-DEX-17)); (7) every input's leftover to `from`, fee-free, **with no
+upper bound** (a position's collected fees may exceed the pull); (8) conservation of every plan token and of the DEX's
+position balance; (9) `LiquiditySettled`. No `RelayFeeRouter` wrap of `mtxLiquidity` in this round (C10): it is relayed
+directly at its signed `relayer` and `fee`, `fee = 0` included. Cancel by a lane (the DEX's `mtxInvalidateNonces`, or an
+input token's) or expiry. Status **BUILT** on EVM: `src/dex/SCaaSDexLiquidityModule.sol`, `SCaaSDexCore.sol`,
+`src/trade/LiquidityLib.sol`; tests `test/liquidity/` (UNAUDITED). **Size stop (spec §9.3):** the built `SCaaSDex` is 33,628 B,
+34 B over its 33,594 B release margin (57 M) and under the 35,386 B line (60 M); the build stopped there for the owner's
+decision (the spec's lever: forward `mtxCancelOrders`, `mtxInvalidateNonces` and their digest views into the liquidity module,
+≈ −0.5 to −0.9 KB [estimate]); `size-baseline.json` is not moved.
+
+<a id="CTR-DEX-31"></a>**CTR-DEX-31** — **A received position is bound by a signed, listed, read-only reader** (owner
+2026-11-10, Q1 = A). `IPositionReader { manager(); position(id) → (poolId, tickLower, tickUpper, liquidity, encumbered) }`, one
+per position-manager family (`V3PositionReader`, `V4PositionReader`), no state, no admin. The order signs the reader; the
+DEX requires `exchangeTarget[reader]` and `reader.manager() == positionManager`, reads `position(id)` gas-capped with its
+revert data dropped and at least five words (`PositionUnreadable`), compares each word raw (`PositionMismatch`) and the
+liquidity (`PositionBelowMin`). In a fixed pool and range, liquidity is a value bound as strong as an LP minimum.
+`exchangeTarget` carries three roles (interaction target, executor, position reader): a holder of `LISTING` lists one with
+the others; safe, since a contract that is no reader answers no `manager()` and a reader called as a target is a view.
+Status **BUILT** (the readers' Uniswap layouts are [inference] until the opt-in fork test checks them).
 
 ## 8. The named `dex`
 

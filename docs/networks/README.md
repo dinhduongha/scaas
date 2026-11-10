@@ -301,7 +301,8 @@ deployed with CREATE, until the salted contracts replace them (nothing is deploy
 and its list of SCaaS DEX contracts.** Status: **SPECIFIED**. Every EVM and Hedera chain profile — the node's chain row
 with its registered contracts ([store.md](../node/store.md)), the signer's own pinned profile
 ([CLI-SGN-08](../clients/signers-clientkeys.md#CLI-SGN-08)) and the app's chain configuration — holds `chain_uid` and
-the list of DEX contracts deployed by SCaaS on that chain (each with its `chainUid()` checked).
+the list of DEX contracts deployed by SCaaS on that chain (each with its `chainUid()` checked), each DEX row with its
+liquidity mark (a module of group 11 among its `modules()`, [CTR-DEX-30](../contracts/dex.md#CTR-DEX-30); SPECIFIED).
 
 Clients fill
 `domain.salt` from `chain_uid` and refuse to build or sign a trade order whose `dex` is not on the list
