@@ -62,6 +62,10 @@ window fits; was ≈ 15.9 years), `perUser ≤ 2^19 − 1` quanta (was `2^24 −
 may alias to "active" and refuse for at most one period (was 31.9 years). One new owner question, **Q17** (§12): the shielded id
 of the confidential kinds is not the public id.
 
+**Owner rulings 2026-11-10, after the build:** **R26 accepted** with the bounds its repacking sets: a window start is 21 bits, so a
+period is at most `2^20 − 1` minutes (≈ 728 days); a used count is 19 bits, so at most 524,287 quanta per user per window. **Q17
+ruled (a):** the shielded id is not always the public id; this is disclosed (§1, row 36) and no new rule is added.
+
 **Contents**
 
 1. [Scope: kinds and paths](#1-scope-kinds-and-paths--specified)
@@ -115,7 +119,7 @@ names its account, a PQZ burn its `fromUA`), so the limits leak nothing new. **T
 the id that wrapped only when the same id wrapped (a wrap-shield to `toUA`, or a `wrapToUA` into that registered UA). A native
 address that wraps publicly, shields and then unshield-unwraps is refused under the net rule (its Zether or PQZ id has `b = 0`),
 and the reverse likewise; a fresh confidential key is a fresh id (Sybil, R10). The wallet reads `wrapQuotaOf` for both ids and
-offers the path of the id that holds the entitlement; tests pin both refusals; the fix, if any, is Q17's. The DEX's `mtxExchange` (CTR-DEX-20) and every trade of
+offers the path of the id that holds the entitlement; tests pin both refusals; Q17 is ruled (a), owner 2026-11-10: disclosed, no new rule. The DEX's `mtxExchange` (CTR-DEX-20) and every trade of
 wrapped units against the underlying on a market move no reserve and are not unwraps.
 
 ## 2. The model — SPECIFIED
@@ -720,7 +724,7 @@ came from this design.
 | Q16 | The round trip | R25: accepted and disclosed |
 | (Fable P1-2) | The weighted start in days | R26: an absolute minute as `uint64`, one slot by repacking (§5) |
 | (Fable P1-1) | The redeemer as a bare role | R27: bit 27 scalar, `use(REDEEMER, holder, excess)` |
-| Q17 | **Open (Fable P2-5):** the shielded id of 3, 5, 11, 13 is not always the public id that wrapped | **Recommendation (a):** no new rule; disclose it, pin the refusal (row 36), the wallet offers the matched path (wrap-shield then unshield-unwrap on the confidential id, public wrap then public unwrap on the public id). (b), not recommended: move `b` on `mtxShield` / `mtxUnshield` (their amounts are public) from the public id to the shielded id and back; it adds a write to every shield and cannot follow a confidential transfer between accounts. The build implements (a) and does not guess further |
+| Q17 | (Fable P2-5) The shielded id of 3, 5, 11, 13 is not always the public id that wrapped | **Ruled (a), owner 2026-11-10:** no new rule; disclose it, pin the refusal (row 36), the wallet offers the matched path (wrap-shield then unshield-unwrap on the confidential id, public wrap then public unwrap on the public id). (b), not recommended: move `b` on `mtxShield` / `mtxUnshield` (their amounts are public) from the public id to the shielded id and back; it adds a write to every shield and cannot follow a confidential transfer between accounts. The build implements (a) and does not guess further |
 
 ## 13. Tasks and estimates — SPECIFIED
 

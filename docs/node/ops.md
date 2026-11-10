@@ -732,6 +732,15 @@ figures are estimates to be **measured** by a load test run alone.
 
 Above the rated load: a second node on **different chains**, not a bigger store.
 
+**Lane gas cap for post-quantum signers.** A lane's `max_gas_per_tx` defaults to 3,000,000 (`config.rs`), enough for classical
+signers only. Each SCaaS input of a job verifies its signer's signature once, at the kind's verify cap
+([CTR-DEX-26](../contracts/dex.md#CTR-DEX-26): `mldsa65` 5,950,000), so a lane that serves PQ signers needs a higher cap: an
+`mldsa65`-signed liquidity order with two SCaaS inputs measured 12,143,505 regular gas, plus 979,200 EIP-8037 state gas
+(`smartcontracts/evm/runs/2026-11-10-ua-mtx-liquidity/summary.txt`). Set the cap to at least the largest job the lane accepts
+(regular + state gas under Amsterdam; regular stays ≤ 2^24, [submit-lanes.md#amsterdam-gas](submit-lanes.md#amsterdam-gas)).
+Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE` for a liquidity plan
+([NODE-DEX-19](dex-venue.md#NODE-DEX-19)), a gas refusal for any other job. `node.example.toml` carries the same note.
+
 ## 13. Post-quantum Zether chains
 
 <a id="pqz"></a>Operator recommendations for a chain that runs post-quantum Zether tokens

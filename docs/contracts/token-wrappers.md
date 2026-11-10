@@ -1097,8 +1097,8 @@ token's creation with any of them is refused (`WrapControlNeedsHybrid`), the nor
   without the bits, or never configured, reads nothing new on a wrap or an unwrap.
 - **Disclosed** (`governance_bits.json` bits 25–27): the fixed-window burst, Sybil splitting, a first-come token-wide cap, the
   notice that may be 0, pre-configuration ids with `b = 0`, minted units never count, a rate rise not redeemable under the rule,
-  entitlement for hire, the round trip that makes the start younger, the shielded id apart from the public id (open question
-  Q17), the redeemer's reach and the instant stops that remain (a member removed, a redeemer revoked).
+  entitlement for hire, the round trip that makes the start younger, the shielded id apart from the public id (Q17,
+  ruled (a) by the owner 2026-11-10: disclosed, no new rule), the redeemer's reach and the instant stops that remain (a member removed, a redeemer revoked).
 
 ## 9. Gas
 

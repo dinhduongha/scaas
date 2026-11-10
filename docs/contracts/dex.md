@@ -425,7 +425,8 @@ The DEX decodes each leg into one internal form with ids as `bytes32` and runs t
 | `fndsa512` | 2,500,000 | 666 B | 6 | 5 |
 | `slhdsa128s` | 1,400,000 | 7,856 B | 10 | 9 |
 | `ed25519` | 210,000 | 96 B | ≈ 50 | ≈ 45 |
-| classical (`bip340`, `p256`, native) | ≤ 50,000 | ≤ 400 B | > 90 (settlement work bounds it) | > 80 |
+| `p256`, `webauthn-p256` | 400,000 (the registry's, `DeployBase`; owner 2026-11-10) | ≤ 400 B | ≈ 31 | ≈ 28 |
+| classical (`bip340`, `secp256k1`, native) | ≤ 50,000 | ≤ 400 B | > 90 (settlement work bounds it) | > 80 |
 | `msig` at `verifyBudget` | up to 12,000,000 | Σ members | 1, plus classical legs | 1 |
 
 A PQ taker against one PQ maker fits everywhere; against two `mldsa65` makers it does not, and the node splits it. A

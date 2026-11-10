@@ -463,8 +463,10 @@ pub fn verify_cap(kind: u16) -> Option<u64> {
         0x0132 => 2_500_000, // fndsa512
         0x0133 => 1_400_000, // slhdsa128s
         0x0102 => 210_000,   // ed25519
-        // the classical row (CTR-DEX-26, <= 50,000): p256, webauthn-p256, bip340, secp256k1 (L6d; the deploy's cap), a native id
-        0x0101 | 0x0100 | 0x0103 | 0x0108 | 0 => 50_000,
+        // p256, webauthn-p256: the registry's cap (DeployBase), CTR-DEX-26's row (owner 2026-11-10; was the classical 50,000)
+        0x0101 | 0x0100 => 400_000,
+        // the classical row (CTR-DEX-26, <= 50,000): bip340, secp256k1 (L6d; the deploy's cap), a native id
+        0x0103 | 0x0108 | 0 => 50_000,
         _ => return None,
     })
 }
@@ -2303,6 +2305,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         assert!(liquidity_too_large(9, 0x0999, 1).is_none(), "a kind the table does not name: the simulation's");
         // CTR-DEX-26's classical row (<= 50,000) holds secp256k1 too (the deploy's cap, DeployBase.sol)
         assert_eq!(verify_cap(0x0108), Some(50_000), "secp256k1");
+        // p256 and webauthn-p256 at the registry's 400,000 (DeployBase.sol, owner 2026-11-10): 40 SCaaS inputs need
+        // 17,000,000 gas, above the 2^24 transaction cap; at the old 50,000 they fitted (3,000,000)
+        assert_eq!((verify_cap(0x0101), verify_cap(0x0100)), (Some(400_000), Some(400_000)), "p256, webauthn-p256");
+        assert!(liquidity_too_large(40, 0x0101, MAX_TX_GAS).is_some_and(|m| m.contains("need about 17000000 gas")));
+        assert!(liquidity_too_large(39, 0x0100, MAX_TX_GAS).is_none(), "39 x 400,000 + the base = 16,600,000");
         let sel = ISCaaSDex::mtxLiquidityCall::SELECTOR;
         assert!(liquidity_starved(&[sel[0], sel[1], sel[2], sel[3], 0], "NotLiquidityDex(0x00000000000000000000000000000000000000d1)"));
         assert!(!liquidity_starved(&[sel[0], sel[1], sel[2], sel[3]], "OrderClosed(0x01)"));

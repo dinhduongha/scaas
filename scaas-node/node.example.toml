@@ -146,6 +146,9 @@ poll_ms = 1000
 stuck_after_secs = 60
 max_gas_per_tx = 64000000                        # regular + state gas (Amsterdam): PQZ op 1 ≈ 43 M (owner 2026-10-22);
                                                  # regular stays ≤ 2^24, and the block gas limit is read from the chain
+                                                 # PQ signers need a higher cap than the default 3000000: each SCaaS
+                                                 # input verifies its signer once (mldsa65 cap 5.95 M), and an mldsa65
+                                                 # two-input liquidity order is ≈ 12.1 M regular (docs/node/ops.md §12)
 max_fee_cap_gwei = 500
 max_index_lag = 100                              # /readyz fails when final head - indexed > this
 # Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.
