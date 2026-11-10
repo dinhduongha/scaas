@@ -8974,9 +8974,11 @@ mutant records: `smartcontracts/evm/runs/2026-11-09-ua-rs-sign-t20d*`. Not revie
 - **clientkeys `test/typed-ops.test.js`** (`ua-mtx-merge`'s file): T66b moved three kinds' `mtxSelectors` tables into their
   `<X>Core` files and the test's source paths did not follow (red on `ua-mtx-merge` `cd48e32b` too); repointed here
   (`f721be0e`), the same change is due on `ua-mtx-merge`.
-**Status.** BUILT (2026-11-10, branch `ua-rs-sign`, plan T20e): the merge `2abd107f`; T20e1 (`fb232151`, mutants
-`77b745c5`, 11 of 11 killed); T20e2 (`703903f1`, `ea6c7a58`, 15 of 15); T20e3 (`d0ec7d9c`, `955e11ef`, `9b50a44a`, 10 of 10);
-T20e4 nothing moved; T20e5 the runner (`cec7abba`) and the clientkeys test (`f721be0e`). Not reviewed as built (plan T21). UNAUDITED.
+**Status.** BUILT (2026-11-10, branch `ua-rs-sign`, plan T20e): the merge `2abd107f`; T20e1 (`fb232151`, mutants `77b745c5`,
+11 of 11 killed); T20e2 (`703903f1`, `ea6c7a58`, 15 of 15; the plan's fee-recipient mutant M16 `1feb4370`, killed); T20e3
+(`d0ec7d9c`, `955e11ef`, `9b50a44a`, 10 of 10); T20e4 nothing moved; T20e5 the runner (`cec7abba`), the clientkeys test
+(`f721be0e`), the t20d8 harness's string (`5e31b4cf`), the size baseline (`5e41cdbe`, MD-12). Not reviewed as built (plan T21).
+UNAUDITED.
 **Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20e; `smartcontracts/evm/runs/2026-11-10-ua-rs-sign-t20e-summary.txt`.
 
 ## 40. Integration — ERP
