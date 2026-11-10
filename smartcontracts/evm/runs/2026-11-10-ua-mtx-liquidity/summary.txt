@@ -112,3 +112,7 @@ cargo test --lib (whole) | L6d | 0 | 702 passed
 e2e liquidity_pre_checks_on_a_chain | L6d | 0 | 1 passed
 cargo clippy --all-targets -- -D warnings | L6d | 0 | clean
 node mutants M-N7..M-N14 | L6d | - | 8 of 8 killed (node-mutants.txt), the original green first
+
+CI: the clientkeys job gains the step (as zether-prover's ZetherProverCross step): foundry v1.8.5, evm_libs.sh install,
+MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol; the header
+list updated. Local run of the same command | CI | 0 | 2 passed. ci.yml parses; ci_changes.py self-test passes (no new job id).

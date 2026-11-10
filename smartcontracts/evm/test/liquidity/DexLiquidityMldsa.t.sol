@@ -27,7 +27,8 @@ import {MockV2Factory, MockV2LiquidityPair} from "./LiquidityMocks.sol";
 /// 5.95 M cap), both pull, and the plan fits one transaction of 2^24 gas. The key, its PoP and the signature over the `h` of
 /// this run come from script/pqz/mldsa.mjs (noble post-quantum, FIPS 204) through `vm.ffi`: skipped without
 /// `MLDSA_CLIENTKEYS` (the dir whose node_modules holds the noble post-quantum package), run as
-/// `MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol`.
+/// `MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol` (CI: the
+/// clientkeys job).
 contract DexLiquidityMldsaTest is UARegistryBase {
     address internal constant REG_M = 0x5Ca0000000000000000000000000000000000065;
     uint16 internal constant ML65 = 0x0131;

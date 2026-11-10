@@ -17,7 +17,8 @@
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths;
 #                  ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security)
-#   clients/clientkeys:    npm ci --ignore-scripts; npm test
+#   clients/clientkeys:    npm ci --ignore-scripts; npm test; its ML-DSA-65 signer (script/pqz/mldsa.mjs) against the DEX:
+#                          MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol
 #   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke); zether-cli against the tokens (ZetherProverCross)
 #   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration), --features json (the JSON shim the wrappers call) and --features pq (the off-chain verifier's PQ kinds, ua8::check_*)
 #   clients/ua-py:         python3 -m unittest tests.test_vectors
@@ -384,6 +385,16 @@ jobs:
       # The vendored-bundle tests skip here: the bundle lives in the client repo that embeds scaas.
       - name: unit tests and vectors
         run: npm test
+      # As zether-prover's ZetherProverCross: the forge test signs through ffi with this job's node_modules (@noble/post-quantum),
+      # skipped by the default profile, run here (ua-mtx-liquidity L1d: an mldsa65 UA's two SCaaS inputs within 2^24).
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - name: ML-DSA-65 liquidity plan against the DEX (DexLiquidityMldsa, ffi)
+        run: |
+          cd ../../smartcontracts/evm
+          ../../scripts/evm_libs.sh install
+          MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol
 
   # P6e Task 10 / gate A / gate B, at one parameter set (PQZ_SET below) — KAT, the tbox / SV fix checks, the vectors byte for byte
   # (Rust generator and the independent Python checker), the crates' tests, a fuzz smoke on the committed corpora.
