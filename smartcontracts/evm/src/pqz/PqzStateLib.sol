@@ -99,13 +99,13 @@ library PqzStateLib {
 
     // ------------------------------------------------------------------ the verifier UA (group 3f, spec §4.2, §4.3)
 
-    /// @notice The owner's transfer of a transferable `OFFCHAIN` verifier (spec §4.2, AV-4; no bit, C4): a first call
-    ///         proposes `next` (owner; not the current, `PqzVerifierSame`; spec §4.1's kinds, `verifierShape` strict; none
+    /// @notice The admin's transfer of a transferable `OFFCHAIN` verifier (spec §4.2, AV-4; no bit, C4): a first call
+    ///         proposes `next` (admin; not the current, `PqzVerifierSame`; spec §4.1's kinds, `verifierShape` strict; none
     ///         live, else `PqzVerifierPending`) with `eta = now + noticePeriod`; the second, with the same `next`, by the
-    ///         same proposer, still the owner, in the same owner generation and in `[eta, eta + noticePeriod]`, confirms
-    ///         (before `eta`: `PqzVerifierNotReady`): the verifier, its shape and `pqzVerifierEpoch + 1` written. An owner
+    ///         same proposer, still the admin, in the same admin generation and in `[eta, eta + noticePeriod]`, confirms
+    ///         (before `eta`: `PqzVerifierNotReady`): the verifier, its shape and `pqzVerifierEpoch + 1` written. An admin
     ///         change, or the window passed, leaves the pending dead. A notice period 0 applies the first call at once.
-    ///         After the owner check: `PRECOMPILE` `PqzVerifyConfigInvalid`, fixed `PqzVerifierFixed`. A confirm by
+    ///         After the admin check: `PRECOMPILE` `PqzVerifyConfigInvalid`, fixed `PqzVerifierFixed`. A confirm by
     ///         another caller than the proposer: `NotProposer` (no bit: 0, `account` the pending verifier).
     function setVerifier(bytes32 next, bytes32 caller, address registry) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
@@ -113,7 +113,7 @@ library PqzStateLib {
         bool live = _live(s, g);
         bool confirm = live && next == s.pqzPendingVerifier;
         if (confirm && caller != s.pqzProposer) revert IGovernance.NotProposer(0, next, s.pqzProposer);
-        _owner(caller, g);
+        _admin(caller, g);
         _transferable(s);
         if (confirm) {
             if (block.timestamp < s.eta) revert IPqzToken.PqzVerifierNotReady(s.eta);
@@ -132,22 +132,22 @@ library PqzStateLib {
         (s.pqzPendingVerifier, s.pqzProposer, s.pqzProposerGeneration, s.eta) = (next, caller, g.adminGeneration, eta);
     }
 
-    /// @notice The owner deletes a live pending transfer (`PqzVerifierCancelled`); none live: nothing happens.
+    /// @notice The admin deletes a live pending transfer (`PqzVerifierCancelled`); none live: nothing happens.
     function cancelVerifier(bytes32 caller) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
-        _owner(caller, g);
+        _admin(caller, g);
         _transferable(s);
         if (!_live(s, g)) return;
         emit IPqzToken.PqzVerifierCancelled(s.pqzPendingVerifier);
         _dropPending(s);
     }
 
-    /// @notice The owner's immediate revocation (spec §4.3, R4; freeze only): verifier 0, `pqzVerifierEpoch + 1`, any pending
+    /// @notice The admin's immediate revocation (spec §4.3, R4; freeze only): verifier 0, `pqzVerifierEpoch + 1`, any pending
     ///         deleted; every proof-carrying op then refuses `PqzVerifierRevoked` until a transfer sets a new verifier.
     function revokeVerifier(bytes32 caller) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
-        _owner(caller, GovernanceLib.$());
+        _admin(caller, GovernanceLib.$());
         _transferable(s);
         bytes32 previous = s.pqzVerifierUA;
         s.pqzVerifierUA = 0;
@@ -179,9 +179,9 @@ library PqzStateLib {
             live ? s.pqzPendingVerifier : bytes32(0), live ? s.eta : 0, s.noticePeriod);
     }
 
-    /// @dev The owner first (a stranger learns nothing of the configuration), then an `OFFCHAIN` token with a transferable
+    /// @dev The admin first (a stranger learns nothing of the configuration), then an `OFFCHAIN` token with a transferable
     ///      verifier.
-    function _owner(bytes32 caller, GovernanceLib.GovernanceStorage storage g) private view {
+    function _admin(bytes32 caller, GovernanceLib.GovernanceStorage storage g) private view {
         if (caller == 0 || caller != g.admin) revert IGovernance.NotAdmin(caller);
     }
 
@@ -190,7 +190,7 @@ library PqzStateLib {
         if (s.pqzVerifierFixed) revert IPqzToken.PqzVerifierFixed();
     }
 
-    /// @dev A pending transfer still confirmable: proposed in this owner generation, its window `[eta, eta + notice]` not
+    /// @dev A pending transfer still confirmable: proposed in this admin generation, its window `[eta, eta + notice]` not
     ///      passed.
     function _live(PqzCore.PqzStorage storage s, GovernanceLib.GovernanceStorage storage g) private view returns (bool) {
         return s.pqzPendingVerifier != 0 && s.pqzProposerGeneration == g.adminGeneration

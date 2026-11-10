@@ -28,7 +28,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 /// @title Common root of the v2 tiers on `ERC20MetaTx` (TW2 §3.3, §7; CTR-MTX-07). EIP-1167 clones.
 /// @notice The named functions (CTR-MTX-09) only build the `UAMetaTransfer` of their operation and run its pipeline;
 ///         receiver-pays (CTR-MTX-05/06); one form per operation for native and derived ids (ua-mtx-merge T2: today's
-///         `ua*` bodies under the `mtx*` names, the address bodies in legacy/ua-mtx-merge/). Features, owner and roles
+///         `ua*` bodies under the `mtx*` names, the address bodies in legacy/ua-mtx-merge/). Features, admin and roles
 ///         (CTR-GOV-01) live in `GovernanceBase`, init and provenance in the ERC-7201 namespace `scaas.token`. Pay
 ///         (`mtxPay`, `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`, each with `PayMeta` last) works only with `PAYABLE`; a
 ///         `UAMetaTransfer` through `mtxExecuteTransfer` (with or without `entryRef`) is never gated. Chain-neutral code
@@ -194,7 +194,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     ///         implementation, so the factory can check it before any clone exists.
     function kind() public pure virtual returns (uint8);
 
-    // ------------------------------------------------------------------ features, owner, roles (CTR-TOK-22)
+    // ------------------------------------------------------------------ features, admin, roles (CTR-TOK-22)
 
     // ------------------------------------------------------------------ the forward stubs (T66b, spec §4.1 rule 2, S1, S2)
 
@@ -245,7 +245,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         v(module);
     }
 
-    /// @dev One guard over every entry point (CTR-MTX-18), the role and owner functions too (W-Q).
+    /// @dev One guard over every entry point (CTR-MTX-18), the role and admin functions too (W-Q).
     function _guardIn() internal override returns (bool) { return _enter(); }
     function _guardOut(bool outer) internal override { _exit(outer); }
 

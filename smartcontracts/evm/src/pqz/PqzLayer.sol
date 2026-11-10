@@ -242,18 +242,18 @@ abstract contract PqzLayer is MetaTokenBase {
 
     // ------------------------------------------------------------------ the verifier UA (group 3f, spec §4.2-§4.4)
 
-    /// @notice The owner's transfer of a transferable `OFFCHAIN` verifier (`PqzStateLib.setVerifier`): propose, then
+    /// @notice The admin's transfer of a transferable `OFFCHAIN` verifier (`PqzStateLib.setVerifier`): propose, then
     ///         confirm after the notice period; through the router as `mtxPqzSetVerifier`.
     function _pqzSetVerifierBody(bytes32 next) internal {
         PqzStateLib.setVerifier(next, _govSubject(), _registry());
     }
 
-    /// @notice The owner deletes a live pending transfer.
+    /// @notice The admin deletes a live pending transfer.
     function _pqzCancelVerifierBody() internal {
         PqzStateLib.cancelVerifier(_govSubject());
     }
 
-    /// @notice The owner's immediate revocation of a transferable verifier (freeze only, spec §4.3).
+    /// @notice The admin's immediate revocation of a transferable verifier (freeze only, spec §4.3).
     function _pqzRevokeVerifierBody() internal {
         PqzStateLib.revokeVerifier(_govSubject());
     }

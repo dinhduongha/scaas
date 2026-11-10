@@ -140,7 +140,7 @@ library WrappedLib {
         mapping(bytes32 account => uint8) member; // bit 0 canWrap, bit 1 canUnwrap
         bytes32 pendingCommit;
         uint64 pendingEta;
-        uint32 pendingGeneration; // the owner generation at the proposal
+        uint32 pendingGeneration; // the admin generation at the proposal
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.wraplimit")) - 1)) & ~bytes32(uint256(0xff))
@@ -162,7 +162,7 @@ library WrappedLib {
     // ------------------------------------------------------------------ init
 
     /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
-    ///         flags/owner/roles of `kind` (`GovernanceLib.init` with the kind's masks, spec §1.2), the rate config, then
+    ///         flags/admin/roles of `kind` (`GovernanceLib.init` with the kind's masks, spec §1.2), the rate config, then
     ///         the legs in their given order (never changes).
     function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind, uint256 valid, uint256 roleBits,
         uint256 contractOnly, address uaRegistry) public
@@ -816,11 +816,11 @@ library WrappedLib {
         revert IWrappedToken.UnwrapperNotListed(id);
     }
 
-    // ----- the owner's configuration (spec §6)
+    // ----- the admin's configuration (spec §6)
 
-    /// @notice The owner's limits (R6, R13, R21): `legs` in leg order, each naming its underlying. A wrap-side relaxation
+    /// @notice The admin's limits (R6, R13, R21): `legs` in leg order, each naming its underlying. A wrap-side relaxation
     ///         or an unwrap-side tightening waits `noticePeriod()` of `factory` in two calls (`_delayedRelaxBits`'s
-    ///         shape): the first proposes, the same call again by the owner in `[eta, eta + delay]` under the same owner
+    ///         shape): the first proposes, the same call again by the admin in `[eta, eta + delay]` under the same admin
     ///         generation applies; anything else applies at once and clears a pending. The first configuration on a bit-25
     ///         token fixes every leg's `unitExp` and starts the tracking.
     function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList,
@@ -835,20 +835,20 @@ library WrappedLib {
         emit IWrappedToken.WrapLimitsSet(caller, legs, netUnwrap, wrapList, unwrapList);
     }
 
-    /// @dev The owner, the leg count, the bits, every leg's checks; `slow`: R6 / R13, the wrap side looser or the unwrap side
+    /// @dev The admin, the leg count, the bits, every leg's checks; `slow`: R6 / R13, the wrap side looser or the unwrap side
     ///      tighter (the lists and the net rule included); `ctl` the copy the configuration writes.
     function _classify(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList,
         bytes32 caller) private view returns (bool slow, uint8 ctl)
     {
-        bool has25 = _ownerAndBits(legs.length, netUnwrap, wrapList, unwrapList, caller);
+        bool has25 = _adminAndBits(legs.length, netUnwrap, wrapList, unwrapList, caller);
         uint8 old = $().legs[0].ctl;
         slow = (old & CTL_WLIST != 0 && !wrapList) || (old & CTL_ULIST == 0 && unwrapList) || (old & CTL_NET == 0 && netUnwrap);
         slow = _legsSlow(legs, has25, old & CTL_TRACK != 0) || slow;
         ctl = (has25 ? CTL_TRACK : 0) | (netUnwrap ? CTL_NET : 0) | (wrapList ? CTL_WLIST : 0) | (unwrapList ? CTL_ULIST : 0);
     }
 
-    /// @dev The owner, the leg count, the bits a field needs: 25 the limits, `unitExp`, the decay and the net rule, 26 the lists.
-    function _ownerAndBits(uint256 n, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 caller)
+    /// @dev The admin, the leg count, the bits a field needs: 25 the limits, `unitExp`, the decay and the net rule, 26 the lists.
+    function _adminAndBits(uint256 n, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 caller)
         private view returns (bool has25)
     {
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();

@@ -283,7 +283,7 @@ abstract contract WrappedTokenCore is MetaTokenBase {
         if (bit >= GovernanceBits.WRAP_LIMIT && bit <= GovernanceBits.REDEEMER) WrappedLib.controlsOff(bit);
     }
 
-    /// @notice The owner's limits (spec §6), the subject from the router (`_govSubject`).
+    /// @notice The admin's limits (spec §6), the subject from the router (`_govSubject`).
     function _setWrapLimitsBody(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList)
         internal
     {
