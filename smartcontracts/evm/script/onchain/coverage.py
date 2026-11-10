@@ -214,6 +214,11 @@ def views(a):
 
 
 def table(a):
+    # fail closed: a net with no book would recount its records unlabelled and write empty runs over the tally
+    missing = [n for n in a.net if not glob.glob(os.path.join(EVM, f"deployments/onchain-{n}-*.json"))]
+    if missing:
+        sys.exit(f"coverage.py table: no book for {', '.join(missing)} (deployments/onchain-<net>-*.json); "
+                 f"{os.path.join(a.out, 'coverage.json')} left as it was")
     cov = json.load(open(os.path.join(a.out, "coverage.json")))
     books = {}
     own = {}  # per net and group: its own book over the base book (local groups run on separate forks of one state, so
@@ -227,8 +232,8 @@ def table(a):
             own[n][g] = {**(_book(base) if os.path.exists(base) else {}), **_book(b)}
     lab = {lb: c for cs in cov["groups"].values() for lb, c in cs.items()}
     for c in lab.values():
-        for e in c["entries"]:
-            e["runs"] = {}
+        for e in c["entries"]:  # recount only the nets asked for; another net's tally stays
+            e["runs"] = {k: v for k, v in e.get("runs", {}).items() if k not in a.net}
     for n in a.net:
         for r in (json.loads(x) for p in sorted(glob.glob(os.path.join(a.out, f"records-{n}-*.jsonl"))) for x in open(p)):
             if r["status"] == 2:

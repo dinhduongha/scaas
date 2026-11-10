@@ -299,7 +299,15 @@ for g in $GROUPS; do
   row "$g" "$res"
   [ "$res" = "not run" ] || [ "$tgt" = local ] || [ "$g" = verify ] || verify "$g"
 done
+STAGE=table
+# coverage.py refuses a target with no book and leaves coverage.json as it was; the table file is replaced only on success
+if python3 -I script/onchain/coverage.py table --net "$tgt" > "$T/table.txt" 2>> "$LOG"; then
+  mv "$T/table.txt" "$OUTD/table-$tgt.txt"
+else
+  rc=1
+  say "" "FAIL table: $(tail -1 "$LOG")"
+  row table fail
+fi
 STAGE=done
-python3 -I script/onchain/coverage.py table --net "$tgt" > "$OUTD/table-$tgt.txt"
 say "" "done: rc $rc (table $OUTD/table-$tgt.txt, log $LOG)"
 exit $rc
