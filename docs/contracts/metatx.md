@@ -913,16 +913,26 @@ interface IMetaTx {                       // MetaTxBase: every SCaaS contract
     error MtxFeeClass(bytes4 selector, uint32 mode); error Reentrancy(); error SelfSender();
     error MtxBatchEmpty(); error MtxBatchLengthMismatch();
 
-    function mtxNonce(address from, uint256 batch) external view returns (uint256);
-    function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
-    function mtxExecute(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external returns (bytes memory);
     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external returns (bool success);
-    function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
     function mtxSelectors() external view returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg);
-    function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig) external returns (bytes memory);   // typed-signing C2: id 0x2f1aa7fe
     function chainUid() external view returns (bytes32);
     function supportedModes() external view returns (uint32);   // 0xF3 on tokens, 0x03 elsewhere
     function cancelNonce(uint256 batch) external;
+}
+
+// UAMetaTxBase (tokens, the mandate wallets): the merged generic entries (CTR-MTX-30), native and derived ids
+function mtxNonce(bytes32 from, uint256 batch) external view returns (uint256);
+function mtxDigest(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32);
+function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth) external returns (bytes memory);
+function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths) external returns (bool);
+function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth) external returns (bytes memory);
+
+interface IMetaTxAddress {               // MetaTxAddressBase: SmartKeyAccount only (MD-1)
+    function mtxNonce(address from, uint256 batch) external view returns (uint256);
+    function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
+    function mtxExecute(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external returns (bytes memory);
+    function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
+    function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig) external returns (bytes memory);   // typed-signing C2: id 0x2f1aa7fe
 }
 
 interface IERC20MetaTx is IERC20, IMetaTx {  // ERC20MetaTx: every token
