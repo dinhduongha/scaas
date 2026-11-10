@@ -312,9 +312,10 @@ contract GovDeployTest is Test {
         // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`); 3f T44: 44,456 -> 44,610 B (the
         // three PQZ verifier fields refused by `_requireUnused`); 3h T60: 44,610 -> 44,635 B (`proofStore` refused there too);
         // T83: 44,635 -> 45,522 B (the pay records' views and `_payRecord`, the v3 `PayMeta` tuple); T66b (the body
-        // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name
-        h.limitCode(17_807);
-        vm.expectRevert(bytes("WrappedToken runtime 17808 B > chain code limit 17807 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name;
+        // group 3l: 17,808 -> 19,366 B (the five wrap-limit stubs)
+        h.limitCode(19_365);
+        vm.expectRevert(bytes("WrappedToken runtime 19366 B > chain code limit 19365 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 
