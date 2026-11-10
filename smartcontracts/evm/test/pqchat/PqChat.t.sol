@@ -132,6 +132,37 @@ contract PqChatTest is PqChatBase {
             type(PqChat).creationCode, _args());
     }
 
+    /// CTR-TOK-30 (owner 2026-11-10): the factory refuses a release whose `modules()` names a module its env does not pin
+    /// (`ModuleNotPinned`), on the generic path as on the token path; the env that pins it is the control.
+    function test_deployRelease_moduleNotPinnedRefused() public {
+        IFactoryToken.Env memory e = _classEnv(address(p), LIMIT);
+        (e.libs, e.libCodeHashes) = (new address[](0), new bytes32[](0));
+        vm.prank(REGISTRAR);
+        f.publishClassEnv(3, 0, 2, e);
+        vm.prank(REGISTRAR);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, address(topics)));
+        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+            type(PqChat).creationCode, _args());
+        vm.prank(REGISTRAR);
+        f.publishClassEnv(3, 0, 3, _classEnv(address(p), LIMIT));
+        vm.prank(REGISTRAR);
+        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+            type(PqChat).creationCode, _args());
+    }
+
+    /// CTR-TOK-30 (owner 2026-11-10): the factory reads `modules()` once, at the release, so the answer is fixed by code
+    /// (immutables): an initialized clone answers the release's set, and still after a write to its state.
+    function test_modules_fixedByCode() public {
+        address[] memory want = new address[](1);
+        want[0] = address(topics);
+        bytes32 m = keccak256(abi.encode(PqChat(impl).modules()));
+        assertEq(m, keccak256(abi.encode(want)), "the release");
+        assertEq(keccak256(abi.encode(chat.modules())), m, "the initialized clone");
+        (bytes32 sid,) = _newSession(3);
+        assertTrue(chat.epochComplete(sid), "state written");
+        assertEq(keccak256(abi.encode(chat.modules())), m, "after the write");
+    }
+
     /// CTR-TOK-30, 3C-D2: `implArgs` names the body module of this factory; no code there, or another factory's module,
     /// refused. The module called directly has no env; through an instance it runs in the instance's state.
     function test_constructor_refusesAnotherModule() public {

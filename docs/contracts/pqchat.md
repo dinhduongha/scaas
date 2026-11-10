@@ -100,8 +100,9 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
   path (sessions, wraps, epochs, leave, `postMessage`, `storeMessage`, every recovery view); each topic entry forwards its
   calldata unchanged by `DELEGATECALL` to the module, whose revert or return data comes back verbatim, so the module runs
   in the instance's state and env (`PqChatCore`: the namespace, the env read, the signature check, the nonces, the blobs).
-  Called directly, the module has no env and refuses every write `PqChatEnv`. `modules()` lists it. No 1:1 entry pays for
-  the split (§12).
+  Called directly, the module has no env and refuses every write `PqChatEnv`. `modules()` lists it (an immutable), and the
+  factory refuses the release when its env does not pin it (`ModuleNotPinned`, [CTR-TOK-30](token-wrappers.md#CTR-TOK-30):
+  every class's release is module-checked). No 1:1 entry pays for the split (§12).
 - **Instances share nothing**: each keeps its sessions, epochs, messages, stored messages and topics in its own ERC-7201
   namespace `scaas.pqchat` (no plain slot; layout pinned in `test/v2/layout/PqChat.json` and `PqChatLayout.t.sol`). A
   client and the node take as a `PqChat` only an address the chain's factory lists as class 3 with version ≠ 0

@@ -57,6 +57,9 @@ abstract contract GenericKindBase {
 
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
 
+    /// No body module (CTR-TOK-30: every class's release answers `modules()`; an empty list is allowed).
+    function modules() external view virtual returns (address[] memory) {}
+
     function chainEnv() external view returns (IFactoryToken.ChainEnv memory) {
         return ChainEnvCode.decode();
     }
@@ -119,6 +122,11 @@ contract BadKind is GenericKindBase, INoteKind {
     uint8 internal constant OTHER_CHAIN_AFTER_INIT = 15;
     uint8 internal constant NESTED = 16;
     uint8 internal constant OTHER_VERSION_AFTER_INIT = 17;
+    // modes of the body-module check at release deployment (CTR-TOK-30, owner 2026-11-10)
+    uint8 internal constant FOREIGN_MODULE = 18;
+    uint8 internal constant NO_MODULES = 19;
+    /// The module `FOREIGN_MODULE` names (a test gives it code and pins it in the env, or not).
+    address public constant MODULE = address(0x30D0);
     /// `creating()` as `initialize` saw it after its nested creation (T68: the restore is visible only inside the
     /// transaction; EIP-1153 clears it at the end).
     bytes32 public seenAfter;
@@ -161,6 +169,14 @@ contract BadKind is GenericKindBase, INoteKind {
             assembly ("memory-safe") {
                 return(add(r, 32), n)
             }
+        }
+    }
+
+    function modules() external view override returns (address[] memory m) {
+        if (MODE == NO_MODULES) revert();
+        if (MODE == FOREIGN_MODULE) {
+            m = new address[](1);
+            m[0] = MODULE;
         }
     }
 

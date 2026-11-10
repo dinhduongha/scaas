@@ -373,7 +373,8 @@ contract OpenFactory is IOpenFactory {
     }
 
     /// @dev The generic release `id`: `CREATE2` of `initcode ‖ abi.encode(id, factory, implArgs)` under the salt
-    ///      `keccak256(abi.encode("release", id))`, then its checks (`_checkRelease`).
+    ///      `keccak256(abi.encode("release", id))`, then its checks (`_checkRelease`) and its body modules
+    ///      (`_checkModules`, CTR-TOK-30: every class's release, owner 2026-11-10).
     function _newRelease(uint32 d, ReleaseId calldata id, uint16 envVersion, bytes4 interfaceId, bytes calldata initcode,
         bytes calldata implArgs) private returns (Release memory r)
     {
@@ -383,6 +384,7 @@ contract OpenFactory is IOpenFactory {
         }
         IFactoryToken.ChainEnv memory e = _chainEnv(d, envVersion);
         _checkRelease(id, r.implementation, interfaceId, e);
+        _checkModules(r.implementation, d, envVersion);
     }
 
     /// @dev A checked generic release into the catalogue: its row, the latest version, the class and kind lists.
@@ -582,8 +584,9 @@ contract OpenFactory is IOpenFactory {
         _validateEnv(implementation, env);
     }
 
-    /// @dev T66b §4.5: every body module the release names in `modules()` is one of env `v`'s `libs`, whose code hashes
-    ///      `_deploy` checked; an answer that is not one ABI-encoded `address[]` is `ModulesUnreadable`.
+    /// @dev T66b §4.5, CTR-TOK-30: every body module the release names in `modules()` is one of env `v`'s `libs`, whose
+    ///      code hashes `_deploy` checked; an answer that is not one ABI-encoded `address[]` is `ModulesUnreadable`. Every
+    ///      release of every class answers (an empty list allowed), read once here: its answer is fixed by its code.
     function _checkModules(address implementation, uint32 domain, uint16 v) private view {
         (bool ok, bytes memory ret) = implementation.staticcall(abi.encodeWithSignature("modules()"));
         if (!ok || ret.length < 64 || ret.length % 32 != 0) revert ModulesUnreadable(implementation);

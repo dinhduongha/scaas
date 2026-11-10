@@ -1,0 +1,16 @@
+# ua-mtx-merge: every class's release is module-checked (CTR-TOK-30, owner 2026-11-10: "fix it so every class is
+# checked"). OpenFactory's generic class path (deployRelease -> _newRelease) now runs _checkModules as the token-kind
+# and DEX paths do. Full output in the git-ignored .log files of runs/2026-11-10-ua-mtx-merge-generic-modules/. UNAUDITED.
+# Base: 565305c7. The factory deploy gas: a top-level ReleaseProbe CREATE2 of OpenFactory's init code under isolate
+# (DeployBase._measuredGas's method: regular = lastCallGas x 64/63, state = EIP-8037's), asked = (regular + state) x 1.05.
+step | commit | rc | counts
+red-v2 | 565305c7 + tests | 1 | FactoryGenericKind 11 passed, 1 failed: test_generic_modulesChecked (next call did not revert as expected)
+red-pqchat | 565305c7 + tests | 1 | PqChat 3 passed, 1 failed: test_deployRelease_moduleNotPinnedRefused (next call did not revert as expected); test_modules_fixedByCode passed (the release's answer already fixed by code)
+green-generic | fix | 0 | FactoryGenericKind 12 passed
+green-pqchat | fix | 0 | FOUNDRY_TEST=test/pqchat: 9 suites, 94 passed, 0 failed
+green-v2 | fix | 1 -> 0 | Factory, FactoryGenericKind, FactoryIndex, FactoryZether, LinkClosure, ChainNeutral, ChainNeutralFactory, ChainNeutralKinds, Layout, Create3Kat: 107 passed, 1 failed (Factory test_sizes: 29238 > 29225, the size ratchet), then the baseline row moved (below)
+mutant | fix - the call | 1 (killed) | runs/2026-11-10-ua-mtx-merge-generic-modules-mutant.sh (one capped slot, the source put back on exit): test_generic_modulesChecked and test_deployRelease_moduleNotPinnedRefused both fail (next call did not revert as expected), 0 passed; the call present again after it
+size-gate | fix | 0 | forge build src --sizes --json; scripts/size_gate.py: 0 errors, 159 contracts; OpenFactory 29,225 -> 29,238 B (size-baseline.json row moved, reason in its _comment); Factory test_sizes passes after the move (24 passed)
+govdeploy | fix | 0 | FOUNDRY_TEST=test/governance GovDeploy.t.sol: 19 passed (test_deployPqChatPath: the real PqChat release through DeployBase)
+gas-old | 565305c7 | 0 | OpenFactory runtime 29,225 B; regular 1,937,887, state 44,995,770, asked 49,280,339
+gas-new | fix | 0 | OpenFactory runtime 29,238 B; regular 1,937,887, state 45,015,660, asked 49,301,224 (NET-EVM-11: under 60 M)

@@ -216,6 +216,36 @@ contract FactoryGenericKindTest is Test {
         f.deployRelease(_id(4, 0, 1), 1, sel, iface, code, abi.encode(uint8(0))); // positive control
     }
 
+    /// CTR-TOK-30 (owner 2026-11-10): every class's release is module-checked, the generic path too. A release naming a
+    /// module outside its env is `ModuleNotPinned`, one that does not answer `modules()` `ModulesUnreadable`; the controls:
+    /// the same release on an env that pins its module, and a release with an empty `modules()`.
+    function test_generic_modulesChecked() public {
+        _publish(4, 0, 1);
+        bytes memory code = type(BadKind).creationCode;
+        bytes4 sel = INoteKind.initialize.selector;
+        bytes4 iface = type(INoteKind).interfaceId;
+        address mod = address(0x30D0); // BadKind.MODULE
+        vm.etch(mod, hex"00");
+        vm.prank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, mod));
+        f.deployRelease(_id(4, 0, 1), 1, sel, iface, code, abi.encode(uint8(18)));
+        address at = vm.computeCreate2Address(keccak256(abi.encode("release", _id(4, 0, 1))),
+            keccak256(bytes.concat(code, abi.encode(_id(4, 0, 1), address(f), abi.encode(uint8(19))))), address(f));
+        vm.prank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModulesUnreadable.selector, at));
+        f.deployRelease(_id(4, 0, 1), 1, sel, iface, code, abi.encode(uint8(19)));
+        // the controls
+        IFactoryToken.Env memory e = _env();
+        (e.libs, e.libCodeHashes) = (new address[](1), new bytes32[](1));
+        (e.libs[0], e.libCodeHashes[0]) = (mod, mod.codehash);
+        vm.prank(registrar);
+        f.publishClassEnv(4, 0, 2, e);
+        vm.prank(registrar);
+        address r = f.deployRelease(_id(4, 0, 1), 2, sel, iface, code, abi.encode(uint8(18)));
+        assertEq(BadKind(r).modules()[0], mod, "the pinned module");
+        assertEq(NoteKind(_note(2)).modules().length, 0, "an empty modules() deploys");
+    }
+
     /// The creation's checks: the selector, the post-init `factoryInfo()` and `chain_uid`, a reverting initializer, salts.
     function test_generic_creationChecks() public {
         _publish(4, 0, 1);

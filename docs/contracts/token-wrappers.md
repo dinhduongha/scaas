@@ -951,8 +951,19 @@ own code limit above 65,536 B.
   `pqzSet()` (the set's self-test hash) on 4, 5, 12, 13 (`ModuleMismatch(i)`); `modules()` lists them. The release's env pins
   each module's code hash beside the libraries (`LibraryCodeHashMismatch`), and `OpenFactory` refuses a release whose
   `modules()` names an address outside its env (`ModuleNotPinned`; `ModulesUnreadable` when the view fails) on
-  `deployImplementation`, `deployDexImplementation` and `createTokenUnregistered`. A module holds no chain value: it is
-  deployed by CREATE2 through the deterministic deployer with `DEPLOY_SALT`, at the same address on every chain.
+  `deployImplementation`, `deployDexImplementation`, `createTokenUnregistered` and `deployRelease`. A module holds no chain
+  value: it is deployed by CREATE2 through the deterministic deployer with `DEPLOY_SALT`, at the same address on every chain.
+- **Every class's release is module-checked** (owner 2026-11-10). The token kinds, the DEX and every generic class
+  (`deployRelease`: `PqChat`, class 3) are checked by the same `_checkModules`. Every release of every class answers
+  `modules()`; an empty list is allowed (a class with no body module answers `[]`). The answer is fixed by the release's
+  code (immutables or constants, never storage): the factory reads it once, at the release (on `createTokenUnregistered` at
+  each creation), so an answer that could change after the check is not allowed. In the repository every `modules()` reads
+  immutables only: the twelve token kinds, the DEX (its D) and `PqChat` (`PqChatTopics`). Only the factory makes a
+  release: `deployImplementation`, `deployDexImplementation` and `deployRelease` are registrar-only and `CREATE2` the given
+  init code inside the factory; no path registers an implementation by address (`createTokenUnregistered` clones a
+  caller-named implementation of kind 0 or 1 without registering it, version 0, and checks it, its modules included, at
+  each creation). The factory already deployed on the SCaaS testnet is immutable and keeps the old behaviour (no module
+  check on `deployRelease`); the check applies to the releases registered on a factory built from this code.
 - **Rule 4, one cold account where there was one.** Module P compiles `MtxPipelineLib`'s code in (the library's entries are
   thin wrappers of internal twins; P overrides the 15 pipeline hooks), T compiles `TradeLib`'s core and the trade
   authorisation in, A the two payment views. W, Z, Q, `GovernanceRouter` and the wallets keep the library call.
