@@ -323,11 +323,13 @@ struct UAEnvelope { bytes32 from; /* the same seven fields */ }
 - **Names.** Entry = `mtx` / `ua` + struct name. Where the operation function already carries that name (`mtxShield`, `mtxConfidentialTransfer*`, `mtxUnshield*`, `mtxRollOver`,
   `mtxPrepareAcc`, `mtxWrapShield`), the signed entry is an overload whose first parameter is `Envelope` (distinct selector; owner: open question 2 default). The wrap-by-signature entries
   are `mtxWrapOrder` / `uaWrapOrder`, so `mtxWrap(Envelope, uint256 amount, bytes sig)` is the named entry of `wrap(uint256)` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)).
-- **Signatures.** `bytes sig` on the address path. The `ua*` twins take `UASig` (`{keyData, signature, members}`, [CTR-UA-36](accounts.md#CTR-UA-36)) and the UA transfer entries,
-  `uaTrade`, `uaInvalidateNonces`, `uaCancelNonce` and `uaPayReceiverFee` moved to it in C6; `uaExecute`, `uaBatch` and `uaShield` keep `bytes auth` (controller call 2026-11-01, the
-  generic path as the plan's TS-D14 keeps it). `SmartKeyAccount`'s own entries take `AccountSig` ([CTR-ACC-10](accounts.md#CTR-ACC-10)). Fee classes follow [CTR-MTX-20](#CTR-MTX-20).
-- **Kept as they are** (owner 2026-10-31 / 2026-11-01): `mtxExecute`, `mtxBatch`, `uaExecute`, `uaBatch`, their structs, typehashes, `mtxDigest` / `uaDigest`, `mtxSelectors()`,
-  `_mtxRule`, `_uaAllowed`, `executeMetaTransaction`, the direct (non-meta) functions and the four flat wallet builders. Gone to `smartcontracts/evm/legacy/typed-signing/`:
+- **Signatures.** Since the `ua*` / `mtx*` merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)) every signed entry on tokens, the router and the mandate wallets takes `UASig`
+  (`{keyData, signature, members}`, [CTR-UA-36](accounts.md#CTR-UA-36)), the generic `mtxExecute(UAMetaTransaction, UASig)`, `mtxBatch(UAMetaTransaction[], UASig[])` and
+  `mtxShield(…, UASig)` included (the merge reverses the `bytes auth` these kept as `uaExecute` / `uaBatch` / `uaShield`); a native id's `UASig` has empty `keyData` and
+  `members`, else `MetaTxBadSignature` (a controller call of the merge spec). The wrap entries without a twin stay on `Envelope` + `bytes sig`; `executeMetaTransaction` keeps `bytes signature`. `SmartKeyAccount`'s own entries take `AccountSig` ([CTR-ACC-10](accounts.md#CTR-ACC-10)). Fee classes follow [CTR-MTX-20](#CTR-MTX-20).
+- **Kept as they are** (owner 2026-10-31 / 2026-11-01): the generic `mtxExecute` and `mtxBatch` (since the merge in today's `ua*` form, [CTR-MTX-30](../decisions.md#CTR-MTX-30)), their structs and
+  typehashes, `mtxSelectors()`, `_mtxRule`, `_uaAllowed`, `executeMetaTransaction` and the direct (non-meta) functions; the four flat wallet builders went to
+  `smartcontracts/evm/legacy/ua-mtx-merge/` (MD-11 (a), [mandates.md](mandates.md#mandatewallet)). Gone to `smartcontracts/evm/legacy/typed-signing/`:
   `mtxExecuteWithFee` and the flat `uaUnwrap(bytes32 from, …)`. No typed mixed batch ([CTR-MTX-11](#CTR-MTX-11)).
 - **Relay.** The relay-fee router and its executor run a named entry with fee 0 (`test_relayFeeRouterRunsNamedEntry`); every state-changing named entry is relayable (owner 2026-10-20), its fee
   may be 0. Clients and the node build the named entry by default and use the generic path only for a mixed batch or an operation with no named entry.
@@ -342,8 +344,9 @@ ciphertext, key or proof never exists only as a hash plus calldata or events ([C
 ([CTR-ZTH-37](zether.md#CTR-ZTH-37), [CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21), Appendix X.3 of the plan), the registry
 ([CTR-UA-36](accounts.md#CTR-UA-36)), `UASig`, `DexLeg`, the order and cancel structs; in the node's job API (explicit named JSON per operation, hex refused, [NODE-JOB-20](../node/job-api.md#NODE-JOB-20));
 in every family's UA spec ([NET-ALL-84](../networks/README.md#NET-ALL-84)). Exceptions, each by ruling: the packed `register(kind, bytes keyData, …)` stays open for `webauthn-p256` and the MuSig2 / FROST kinds
-(owner 2026-10-31); `uaExecute` / `uaBatch` / `uaShield` keep `bytes auth` (controller call); a kind-specific signature stays one `bytes signature` (open question 3 default); `Execute.data`
-of a wallet is the call it makes; ERC-1271 `isValidSignature(bytes32, bytes)` and the Uniswap callbacks keep the standards' ABI.
+(owner 2026-10-31); a kind-specific signature stays one `bytes signature` (open question 3 default); `Execute.data`
+of a wallet is the call it makes; ERC-1271 `isValidSignature(bytes32, bytes)` and the Uniswap callbacks keep the standards' ABI. The former exception
+"`uaExecute` / `uaBatch` / `uaShield` keep `bytes auth`" is reversed by the merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)).
 
 <a id="CTR-MTX-18"></a>**CTR-MTX-18** — **The signer travels in a transient slot, and one ticket admits exactly one
 self-call.** Transient slots `keccak256("scaas.mtx.guard")`, `"scaas.mtx.sender"`, `"scaas.mtx.ticket"`,
@@ -397,7 +400,7 @@ publishes it through `mtxSelectors() returns (bytes4[] selectors, uint8[] feeCla
 it. Nothing else is reachable through `mtxExecute`. The named entries ([CTR-MTX-28](#CTR-MTX-28)) are not in the list: each is its own external function. The allowlist and `mtxSelectors()` stay for the generic path; since typed-signing N1 the node no longer reads them, its own table of entries decides what it relays ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)). The confidential rows below list the direct ops' explicit signatures ([CTR-MTX-29](#CTR-MTX-29)), not the packed `payload` ones.
 
 **General rule (owner 2026-10-20): every state-changing `mtx*` function is relayable, even with no fee.** It is either itself
-a meta-tx entry point (`mtxExecute`, `mtxBatch`, `mtxTransfer`, the named builders that carry their own signature, `mtxPay` / `mtxPayMeta` and their `ua*` twins included: none of these is in `mtxSelectors()`) or an
+a meta-tx entry point (`mtxExecute`, `mtxBatch`, `mtxTransfer`, the named builders that carry their own signature, `mtxPay` included: none of these is in `mtxSelectors()`) or an
 allowlisted self-call whose outer fee may be 0 (`NONE` or `FIXED` 0). So the confidential tokens list their roll-overs
 (Zether: `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode`; PQZ: `mtxRollOver`, `mtxPrepareAcc`), whatever
 the function's own authority is (none, or an owner signature checked inside). BUILT for the confidential tokens, commit `b5e61c96`.
@@ -730,31 +733,32 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 
 | Contract | Entry points |
 |---|---|
-| every contract on `MetaTxBase` | `mtxExecute` (+ alias `executeMetaTransaction`), `mtxBatch`, `mtxCancelNonce(Envelope, lane, sig)` ([CTR-MTX-28](#CTR-MTX-28)); `cancelNonce(uint256 batch)` (direct, or signed through `mtxExecute`); views `mtxNonce`, `mtxDigest`, `mtxSelectors`, `chainUid`, `supportedModes` |
-| tokens | + `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayMeta` ([CTR-MTX-26](#CTR-MTX-26)), `mtxPayReceiverFee`, `mtxRelayFee` ([CTR-MTX-27](#CTR-MTX-27)), `mtxBurn`; on `UAMetaTxBase` / `ERC20MetaTx` the `ua*` twins; (`mtxExecuteWithFee` went to `legacy/typed-signing/`); views `mtxTransferDigest`, `payLane`, `metaPayId` |
+| every contract on `MetaTxBase` | `executeMetaTransaction(MetaTransaction, bytes)` (the EIP-1776 alias: on tokens over the address pipeline, [CTR-MTX-17](#CTR-MTX-17); the mandate wallets refuse it); `cancelNonce(uint256 batch)` (direct, or signed); views `mtxSelectors`, `chainUid`, `supportedModes` |
+| tokens and the mandate wallets (`UAMetaTxBase`), the router | + one form per operation since the merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)): `mtxExecute(UAMetaTransaction, UASig)`, `mtxBatch(UAMetaTransaction[], UASig[])`, `mtxCancelNonce(UAEnvelope, lane, UASig)` (Q2, nonce-ordered) |
+| tokens | + `mtxExecuteTransfer(UAMetaTransfer, UASig)`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay(UAMetaTransfer, UASig, PayMeta)` ([CTR-MTX-26](#CTR-MTX-26); no `mtxPayMeta` / `uaPayMeta` on the EVM), `mtxPayReceiverFee`, `mtxRelayFee` ([CTR-MTX-27](#CTR-MTX-27)), `mtxBurn(UAEnvelope, amount, UASig)`, all with `bytes32` ids and `UASig`; (`mtxExecuteWithFee` went to `legacy/typed-signing/`); views `mtxTransferDigest(UAMetaTransfer)`, `payLane`, `metaPayId(PayMeta)` |
 | tokens (trade) | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-15)); `restorePulled` is called only by the order's `dex`, on no allowlist ([CTR-DEX-27](dex.md#CTR-DEX-27)) |
-| wrappers, `WRAPPED_ZETHER`, `WRAPPED_PQZ` | `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `mtxAddReserve`, `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA` and `ua*` twins, `mtxWrapOrder` / `uaWrapOrder` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
+| wrappers, `WRAPPED_ZETHER`, `WRAPPED_PQZ` | `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `mtxAddReserve` (no twin: `Envelope` + `bytes sig`); `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA` (`UAEnvelope` + `UASig`); `mtxWrapOrder(address, UAWrapOrder, UASig)` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
 | `NORMAL_ZETHER` / `WRAPPED_ZETHER` (built, P3) | `mtxRollOverSigned`, `mtxSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
-| `MandateWallet` | + the named entries `mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxPayUnderMandate(Envelope, …)`, `mtxDelegateRevoke`, `mtxExecute(Envelope, target, value, data, sig)`; and the four flat builders of a `MetaTransaction` that stay (owner 2026-11-01): `mtxPayUnderMandate(token, …)`, `mtxRevoke`, `mtxExecuteAsOwner`, `mtxExecuteAsOwnerRaw` ([mandates.md](mandates.md#mandatewallet)) |
-| `SmartKeyAccount` | + the named entries `mtxAddKey`, `mtxRemoveKey`, `mtxRotateKey`, `mtxSetGuardian`, `mtxCancelRecovery`, `mtxExecute(Envelope, …)` (`AccountSig`), and the flat `mtxExecuteAsOwner` ([CTR-ACC-10](accounts.md#CTR-ACC-10)) |
+| `MandateWallet`, `HederaMandateWallet` | + the named entries `mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxPayUnderMandate(UAEnvelope, …)`, `mtxDelegateRevoke`, `mtxExecute(UAEnvelope, target, value, data, UASig)` ([mandates.md](mandates.md#mandatewallet)); the flat builders are in legacy (MD-11 (a)) |
+| `SmartKeyAccount` | + the address generic forms of `MetaTxAddressBase` (`mtxExecute(MetaTransaction, bytes)`, `mtxBatch`, `mtxCancelNonce(Envelope, lane, sig)`, views `mtxNonce`, `mtxDigest`); the named entries `mtxAddKey`, `mtxRemoveKey`, `mtxRotateKey`, `mtxSetGuardian`, `mtxCancelRecovery`, `mtxExecute(Envelope, …)` (`AccountSig`), and the flat `mtxExecuteAsOwner` ([CTR-ACC-10](accounts.md#CTR-ACC-10)) |
 | `SCaaSDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-16)) |
 
 <a id="CTR-MTX-09"></a>**CTR-MTX-09** — The named functions `mtxTransfer`, `mtxTransferWithFee`,
-`mtxPay` and the batches `mtxBatch`/`mtxBatchTransfer` live in `MetaTokenBase` (so every kind has them; pay only with `PAYABLE`), keep their
-signatures (owner: kept separate, nothing merged) and **only build the struct of their kind** — `MetaTransfer` for
-transfers and payments, `MetaTransaction` for calls — **and run that struct's pipeline**. Each enforces a mode shape
+`mtxPay` and the batches `mtxBatch`/`mtxBatchTransfer` live in `MetaTokenBase` (so every kind has them; pay only with `PAYABLE`), take the
+merged form since the `ua*` / `mtx*` merge (owner 2026-11-03 / 2026-11-04, [CTR-MTX-30](../decisions.md#CTR-MTX-30); the 2026-10-08 "kept separate,
+nothing merged" is reversed): `bytes32` ids and `UASig`, and they **only build the struct of their kind** — `UAMetaTransfer`
+for transfers and payments, `UAMetaTransaction` for calls — **and run that struct's pipeline**. Each enforces a mode shape
 (`MtxModeShape`), nothing else. The digest of a named call equals the digest of `mtxExecuteTransfer` or `mtxExecute`
 with the same struct, so one signature works on both paths and one lane is consumed once. They are ABI sugar; nothing breaks without them. All are `nonReentrant`; mode bits are the
 `MetaTxLib` constants:
 
 | Function | Struct it builds | Mode shape required (else `MtxModeShape(mode)`) | Adds |
 |---|---|---|---|
-| `mtxTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, sig)` | `MetaTransfer{entryRef: 0, fee: 0, feeRecipient: 0}` | `mode & ~MODE_RESTRICT_RELAYER == 0` (fee `NONE`) | flat ABI |
-| `mtxTransferWithFee(from, to, amount, batch, nonce, validUntil, mode, relayer, fee, feeRecipient, sig)` (short: `mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)`) | `MetaTransfer{entryRef: 0}` | fee nibble `PERCENT` or `FIXED`, `MODE_RESTRICT_FEE_RECIPIENT` set, `feeRecipient ≠ 0` (the sender names who is paid) | flat ABI; the payee check applies |
-| `mtxPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, sig)` | `MetaTransfer{entryRef: payId, batch: payLane(payId), nonce: 0}` | any valid mode (fee optional) | on-chain lane derivation; `PaymentSettled(…, entryRef = payId)` |
-| `mtxPayMeta(from, to, amount, salt, meta, validUntil, mode, relayer, fee, feeRecipient, sig)` ([CTR-MTX-26](#CTR-MTX-26)) | as `mtxPay` with `payId = metaPayId(salt, meta)` | as `mtxPay` | `PaymentMeta(payId, meta)` before `PaymentSettled` |
-| `mtxBatch(MetaTransaction[] ms, bytes[] sigs)` | each `ms[i]` as given | as `mtxExecute` per item | atomic; one outer tx for many items |
-| `mtxBatchTransfer(MetaTransfer[] ts, bytes[] sigs)` | each `ts[i]` as given | as `mtxExecuteTransfer` per item | atomic ([CTR-MTX-24](#CTR-MTX-24)) |
+| `mtxTransfer(bytes32 from, bytes32 to, amount, batch, nonce, validUntil, mode, relayer, UASig auth)` | `UAMetaTransfer{entryRef: 0, fee: 0, feeRecipient: 0}` | `mode & ~MODE_RESTRICT_RELAYER == 0` (fee `NONE`) | flat ABI |
+| `mtxTransferWithFee(bytes32 from, bytes32 to, amount, batch, nonce, validUntil, mode, relayer, fee, feeRecipient, UASig auth)` (short: `mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, auth)`) | `UAMetaTransfer{entryRef: 0}` | fee nibble `PERCENT` or `FIXED`, `MODE_RESTRICT_FEE_RECIPIENT` set, `feeRecipient ≠ 0` (the sender names who is paid) | flat ABI; the payee check applies |
+| `mtxPay(UAMetaTransfer t, UASig auth, PayMeta meta)` ([CTR-MTX-26](#CTR-MTX-26)) | `t` as given, `t.entryRef == metaPayId(meta)` (else `PayMetaMismatch`), any lane | any valid mode (fee optional) | `PaymentMeta` before `UAPaymentSettled(…, entryRef)`; the separate `mtxPayMeta` is gone on the EVM |
+| `mtxBatch(UAMetaTransaction[] ms, UASig[] auths)` | each `ms[i]` as given | as `mtxExecute` per item | atomic; one outer tx for many items |
+| `mtxBatchTransfer(UAMetaTransfer[] ts, UASig[] auths)` | each `ts[i]` as given | as `mtxExecuteTransfer` per item | atomic ([CTR-MTX-24](#CTR-MTX-24)) |
 | `payLane(bytes32 payId) view returns (uint256)` | — | — | the lane clients must use for `payId` on this token |
 
 Exact equivalences (each is a test):
@@ -762,12 +766,13 @@ Exact equivalences (each is a test):
 ```text
 mtxTransfer(f,t,a,b,n,v,mode,r,s)              ≡ mtxExecuteTransfer({f,t,a,0,b,n,v,mode,r,0,0}, s)
 mtxTransferWithFee(f,t,a,b,n,v,mode,r,x,R,s)   ≡ mtxExecuteTransfer({f,t,a,0,b,n,v,mode,r,x,R}, s)
-mtxPay(f,t,a,p,v,mode,r,x,R,s)                 ≡ mtxExecuteTransfer({f,t,a,p,payLane(p),0,v,mode,r,x,R}, s)
-mtxPayMeta(f,t,a,salt,meta,v,mode,r,x,R,s)     ≡ mtxPay(f,t,a,metaPayId(salt,meta),v,mode,r,x,R,s)   (plus PaymentMeta)
-executeMetaTransaction(m,s)                    ≡ mtxExecute(m,s)                         (returns true)
+mtxPay(t,s,meta)                               ≡ mtxExecuteTransfer(t, s)   (t.entryRef == metaPayId(meta); plus PaymentMeta)
 ```
 
-So: same digest, same events (`MetaTransactionExecuted`; `PaymentSettled` for `mtxPay`), same nonce space (a
+`executeMetaTransaction(m, s)` (returns `true`) runs the address `MetaTransaction` beside these on tokens
+([CTR-MTX-17](#CTR-MTX-17)); it shares no digest with the merged `mtxExecute`. (The `ua*` / `mtx*` merge, [CTR-MTX-30](../decisions.md#CTR-MTX-30).)
+
+So: same digest, same events (the `UA…` events on a merged path; `UAPaymentSettled` for `mtxPay`), same nonce space (a
 signature consumed through one path fails `MetaTxBadNonce` on the other), same KAT. A named function never accepts an
 intent that the generic path would refuse, and refuses some the generic path accepts (wrong shape), never the other
 way round. Gas (P1c): named `mtxTransfer` costs +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672; logged, not
@@ -926,9 +931,9 @@ interface IERC20MetaTx is IERC20, IMetaTx {  // ERC20MetaTx: every token
     error SpenderNotContract(address spender);   // allowance rule
     error CallerNotContract(address caller);     // allowance rule
 
-    function mtxTransferDigest(MetaTxLib.MetaTransfer calldata t) external view returns (bytes32);
-    function mtxExecuteTransfer(MetaTxLib.MetaTransfer calldata t, bytes calldata signature) external returns (bool);
-    function mtxBatchTransfer(MetaTxLib.MetaTransfer[] calldata ts, bytes[] calldata signatures) external returns (bool);
+    function mtxTransferDigest(MetaTxLib.UAMetaTransfer calldata t) external view returns (bytes32);
+    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth) external returns (bool);
+    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths) external returns (bool);
 }
 
 interface IERC20Payment is IERC20MetaTx {
@@ -938,25 +943,19 @@ interface IERC20Payment is IERC20MetaTx {
                         bytes32 entryRef) external returns (bool);   // msg.sender pays; fee on top of amount
 }
 
-// MetaTokenBase (all kinds)
+// MetaTokenBase (all kinds); since the ua* / mtx* merge (CTR-MTX-30) bytes32 ids and UASig
 error MtxModeShape(uint32 mode);
-function mtxTransfer(address from, address to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
-                     uint32 mode, address relayer, bytes calldata signature) external returns (bool);
-function mtxTransferWithFee(address from, address to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
-                            uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature)
-    external returns (bool);
-function mtxPay(address from, address to, uint256 amount, bytes32 payId, uint256 validUntil, uint32 mode,
-                address relayer, uint256 fee, address feeRecipient, bytes calldata signature) external returns (bool);
-function payLane(bytes32 payId) external view returns (uint256);
-// CTR-MTX-26 (EVM: metatx split T7; `meta` is `bytes memory` in the implementation, the same ABI type)
-event PaymentMeta(bytes32 indexed payId, bytes meta);
-function mtxPayMeta(address from, address to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
-                    uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature)
-    external returns (bool);
-function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
-                   uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth)
-    external returns (bool);
-function metaPayId(bytes32 salt, bytes calldata meta) external pure returns (bytes32);
+function mtxTransfer(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
+                     uint32 mode, address relayer, IUARegistry.UASig calldata auth) external returns (bool);
+function mtxTransferWithFee(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce,
+                            uint256 validUntil, uint32 mode, address relayer, uint256 fee, address feeRecipient,
+                            IUARegistry.UASig calldata auth) external returns (bool);
+function mtxPay(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth,
+                MetaTxLib.PayMeta calldata meta) external returns (bool);   // entryRef == metaPayId(meta)
+function payLane(bytes32 payId) external pure returns (uint256);
+// CTR-MTX-26 (v3, plan T83); no mtxPayMeta / uaPayMeta on the EVM
+event PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body);
+function metaPayId(MetaTxLib.PayMeta calldata meta) external pure returns (bytes32);
 ```
 
 `RelayFeeRouter` (CTR-MTX-27, `src/metatx/RelayFeeRouter.sol`; stateless, no owner, `DeployBase` CREATE2) and its executor:
