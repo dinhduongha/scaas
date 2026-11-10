@@ -2663,3 +2663,147 @@ async fn pqz_revoked_verifier_on_anvil() {
     assert_eq!((rv["alert"].as_bool(), rv["pqz_verifier_revoked"].as_bool(), rv["previous"].as_str()),
         (Some(true), Some(true), Some(format!("{:#x}", st.verifier.address().into_word()).as_str())), "{rv}");
 }
+
+// ------------------------------------------------------------------ mtxLiquidity's pre-checks on a chain (ua-mtx-liquidity L6c)
+
+mod liq {
+    alloy::sol! {
+        function mint(address to) external returns (uint256 liquidity);
+    }
+}
+
+/// `test/liquidity/LiquidityMocks.sol`'s contract `name`: its init code, or its runtime code (`runtime`), built here as
+/// [`deploy_outside_token`] builds its mock.
+fn liquidity_mock(name: &str, runtime: bool) -> Vec<u8> {
+    let built = Command::new("forge").current_dir(sc()).args(["build", "test/liquidity/LiquidityMocks.sol"])
+        .env("FOUNDRY_PROFILE", "scaas-testnet").status();
+    assert!(built.expect("forge in PATH").success(), "forge build test/liquidity/LiquidityMocks.sol failed");
+    let raw = std::fs::read_to_string(format!("{}/out/LiquidityMocks.sol/{name}.json", sc())).expect("forge build output");
+    let v: Value = serde_json::from_str(&raw).unwrap();
+    alloy::hex::decode(v[if runtime { "deployedBytecode" } else { "bytecode" }]["object"].as_str().unwrap()).unwrap()
+}
+
+/// A `mtxLiquidity` job on `dex` of `(chain_id, chain_uid, dex)` (spec 2026-11-10-dex-liquidity.md §11's shape): `who`'s native
+/// order of `inputs` (each pulled whole) for at least `min_lp` of `lp` to `to` (`out`), fee 0, bound to the lane, lane 7 at nonce
+/// `id`; signed by `who` over the node's `h` in `dex`'s domain.
+fn liquidity_job(id: i64, (chain_id, uid, dex): (u64, B256, Address), who: &PrivateKeySigner, inputs: &[(Address, u64)],
+    (lp, min_lp, to): (Address, u64, Address), interactions: Value) -> Value {
+    let toks = |v: &[(Address, u64)]| v.iter().map(|(t, a)| json!({"token": format!("{t:#x}"), "amount": a.to_string()})).collect::<Vec<_>>();
+    let until = (now() + 600).to_string();
+    let mut j = json!({"id": id, "kind": "call", "op": {"entry": "mtxLiquidity", "contract": "dex", "token": format!("{dex:#x}"),
+        "validUntil": until,
+        "args": {"p": {"ref": format!("{:#x}", B256::left_padding_from(&(id as u64).to_be_bytes())), "order": {
+                "from": format!("{:#x}", who.address().into_word()), "inputs": toks(inputs), "outputs": toks(&[(lp, min_lp)]),
+                "positionManager": format!("{:#x}", Address::ZERO), "positionReader": format!("{:#x}", Address::ZERO), "positionIn": "0",
+                "positionPool": format!("{:#x}", B256::ZERO), "tickLower": 0, "tickUpper": 0, "minLiquidity": "0",
+                "recipient": format!("{:#x}", to.into_word()), "fee": "0", "relayer": format!("{:#x}", key(RELAYER).address()), "flags": 0,
+                "batch": "7", "nonce": id.to_string(), "validUntil": until},
+            "auth": {"keyData": "0x", "signature": "0x", "members": []},
+            "pull": inputs.iter().map(|(_, a)| a.to_string()).collect::<Vec<_>>(), "positionId": "0", "extraTokens": []},
+            "interactions": interactions}}});
+    let (w, _) = scaas_node::submit::work_of_op(Some(id), &j["op"], None).unwrap();
+    let o = scaas_node::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&w.data).unwrap().p.order;
+    let h = scaas_node::dex::liquidity_order_hash(&domain("SCaaS Dex", chain_id, dex, uid), &o);
+    j["op"]["args"]["p"]["auth"]["signature"] = json!(sign_hash(who, h));
+    j
+}
+
+/// A submitter on the `RELAYER` lane for a chain whose profile lists `dex` as its DEX.
+async fn liquidity_lane(chain_id: u64, rpc: &str, odoo: &Odoo, dex: Address, name: &str) -> Submitter {
+    let cfg = chain_cfg(chain_id, rpc, Some(dex));
+    Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg, name.into(), Default::default()).await.unwrap()
+}
+
+/// Spec 2026-11-10-dex-liquidity.md §11 through the RPC (review P1-2 (b), P2-6, re-check P3): the deployed liquidity DEX takes a
+/// v2 add of two SCaaS inputs (mined: the positive control); a DEX bound to the chain whose `modules()` lacks group 11 is
+/// `DEX_NOT_LIQUIDITY`; a listed SCaaS input whose code answers no `ILiquidityPullToken` (a token of an earlier release, its
+/// code set by `anvil_setCode` after the listing) is `LIQUIDITY_TOKEN_UNSUPPORTED`; a marked DEX whose simulation answers
+/// `NotLiquidityDex(dex)` (T7 starved) is requeued, never `dead`; the same one-input order under a 1 M block gas limit is
+/// `LIQUIDITY_TOO_LARGE`. Every refusal sends nothing.
+#[tokio::test]
+#[ignore]
+async fn liquidity_pre_checks_on_a_chain() {
+    let chain_id = 31917;
+    let (_anvil, rpc) = start_anvil(chain_id, 31917).await;
+    let alice = small_key(0xA11CE);
+    let carol = Address::repeat_byte(0xca);
+    let dep = deploy(&rpc, chain_id, alice.address());
+    let at = |k: &str| -> Address { dep[k].as_str().unwrap().parse().unwrap() };
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let (a, b, factory) = (at("demo_token"), at("demo_token_2"), at("token_factory"));
+    let deployer = key(DEPLOYER);
+    let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
+        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(),
+        salt: B256::repeat_byte(0x11) }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: a, quote: b, listed: true }.abi_encode()).await;
+    let ms = view(&rpc, dex, scaas_node::abi::ISCaaSDex::modulesCall {}).await;
+    assert_eq!(ms.len(), 2, "the governance and the liquidity module");
+    let mut pair_code = liquidity_mock("MockV2LiquidityPair", false);
+    pair_code.extend((a, b).abi_encode_params());
+    let pair = deploy_code(&rpc, &deployer, pair_code).await;
+    let node_dex = |ms: Vec<Address>| {
+        let mut c = liquidity_mock("MockNodeDex", false);
+        c.extend((uid, ms).abi_encode_params());
+        c
+    };
+    let old_dex = deploy_code(&rpc, &deployer, node_dex(vec![ms[0]])).await;
+    let starved_dex = deploy_code(&rpc, &deployer, node_dex(ms.clone())).await;
+
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{a:#x}"), format!("{b:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let pr = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let sends = || async { pr.get_transaction_count(key(RELAYER).address()).await.unwrap() };
+    let reports = |id: i64| state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).cloned().collect::<Vec<_>>();
+    let ix = |t: Address, d: Vec<u8>| json!({"target": format!("{t:#x}"), "data": format!("0x{}", alloy::hex::encode(d))});
+    let add = json!([ix(a, IToken::transferCall { to: pair, value: U256::from(100_000u64) }.abi_encode()),
+        ix(b, IToken::transferCall { to: pair, value: U256::from(100_000u64) }.abi_encode()),
+        ix(pair, liq::mintCall { to: dex }.abi_encode())]);
+
+    // the positive control: the deployed DEX, two SCaaS inputs, mined; the node's `h` is the DEX's
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-dex").await;
+    let j1 = liquidity_job(1, (chain_id, uid, dex), &alice, &[(a, 100_000), (b, 100_000)], (pair, 98_000, carol), add.clone());
+    let (w1, _) = scaas_node::submit::work_of_op(Some(1), &j1["op"], None).unwrap();
+    let o1 = scaas_node::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&w1.data).unwrap().p.order;
+    assert_eq!(view(&rpc, dex, scaas_node::abi::ISCaaSDex::liquidityOrderDigestCall { o: o1.clone() }).await,
+        scaas_node::dex::liquidity_order_hash(&domain("SCaaS Dex", chain_id, dex, uid), &o1), "the node's h is the DEX's");
+    state.lock().unwrap().jobs.push(j1);
+    run_outbox(&mut s).await;
+    assert_eq!(report(&state, 1)["chain_state"], "mined", "{}", report(&state, 1));
+    assert!(balance(&rpc, pair, carol).await >= U256::from(98_000u64), "the LP to the recipient");
+    let n0 = sends().await;
+
+    // a DEX of the release before the liquidity module: bound, on the profile, no group 11
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, old_dex, "e2e-liq-old").await;
+    state.lock().unwrap().jobs.push(liquidity_job(2, (chain_id, uid, old_dex), &alice, &[(a, 1_000)], (pair, 1, carol), add.clone()));
+    run_outbox(&mut s).await;
+    let r2 = report(&state, 2);
+    assert!(r2["chain_state"] == "dead" && r2["error"].as_str().unwrap_or_default().starts_with("DEX_NOT_LIQUIDITY"), "{r2}");
+
+    // a token of an earlier release as a SCaaS input: the DEX still lists it SCaaS, its code answers no ILiquidityPullToken
+    let earlier = format!("0x{}", alloy::hex::encode(liquidity_mock("MockEarlierToken", true)));
+    let _: Value = pr.raw_request("anvil_setCode".into(), (b, earlier)).await.unwrap();
+    assert_eq!(view(&rpc, dex, scaas_node::abi::ISCaaSDex::tokenKindCall { token: b }).await, 1, "still a SCaaS input to the DEX");
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-earlier").await;
+    state.lock().unwrap().jobs.push(liquidity_job(3, (chain_id, uid, dex), &alice, &[(a, 1_000), (b, 1_000)], (pair, 1, carol), add.clone()));
+    run_outbox(&mut s).await;
+    let r3 = report(&state, 3);
+    assert!(r3["chain_state"] == "dead" && r3["error"].as_str().unwrap_or_default().starts_with("LIQUIDITY_TOKEN_UNSUPPORTED"), "{r3}");
+
+    // T7 starved on a marked DEX: requeued, never dead
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, starved_dex, "e2e-liq-starved").await;
+    state.lock().unwrap().jobs.push(liquidity_job(4, (chain_id, uid, starved_dex), &alice, &[(a, 1_000)], (pair, 1, carol), add.clone()));
+    run_outbox(&mut s).await;
+    let r4 = reports(4);
+    assert!(!r4.is_empty() && r4.iter().all(|r| r["chain_state"] == "queued"), "requeued, never dead: {r4:?}");
+    assert!(r4.iter().all(|r| r["error"].as_str().unwrap_or_default().contains("NotLiquidityDex(")), "{r4:?}");
+
+    // the verify budget against this chain's block: a native signer's one input needs 1.05 M, the block holds 1 M
+    let _: Value = pr.raw_request("evm_setBlockGasLimit".into(), (U256::from(1_000_000u64),)).await.unwrap();
+    let _: Value = pr.raw_request("evm_mine".into(), ()).await.unwrap();
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-large").await;
+    state.lock().unwrap().jobs.push(liquidity_job(5, (chain_id, uid, dex), &alice, &[(a, 1_000)], (pair, 1, carol), add));
+    run_outbox(&mut s).await;
+    let r5 = report(&state, 5);
+    assert!(r5["chain_state"] == "dead" && r5["error"].as_str().unwrap_or_default().starts_with("LIQUIDITY_TOO_LARGE"), "{r5}");
+    assert_eq!(sends().await, n0, "no refusal sends");
+}

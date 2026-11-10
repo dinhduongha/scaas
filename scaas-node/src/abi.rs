@@ -191,6 +191,9 @@ sol! {
         error ConservationBroken(address token);
         error NotSelf();
         error InteractionFailed(uint256 index, address target, bytes reason);
+        /// A token's T7 (`ITradeToken.NotLiquidityDex`), bubbled by `mtxLiquidity`: named, so a starved one is requeued
+        /// (`guard::liquidity_starved`), never `dead` as raw hex.
+        error NotLiquidityDex(address caller);
     }
 
     /// Every SCaaS contract on `MetaTxBase` (`IMetaTx`) plus the address surface: `SmartKeyAccount`'s (`IMetaTxAddress`: `mtxNonce`,

@@ -226,7 +226,8 @@ token as an input with a tiny pull (the refund of step 7 carries no fee); the fe
 stolen, but a relayer that lives on the DEX fee looks at the shape before relaying. A revert `NotLiquidityDex(dex)` from a
 DEX that carries the liquidity mark is gas starvation of the token's capability check: a retry with more gas, never a
 wrong DEX. No `RelayFeeRouter` wrap of `mtxLiquidity` is built (C10). Status: the row, the pre-checks, the liquidity
-mark (read by the guard) and the retry BUILT (`guard.rs` `check_liquidity`, `liquidity_pre_checks`); completion by
+mark (read by the guard) and the retry BUILT (`guard.rs` `check_liquidity`, `liquidity_pre_checks`; through the RPC on
+anvil, `tests/e2e.rs` `liquidity_pre_checks_on_a_chain`, which also found the starved revert unnamed, fixed in `abi.rs`); completion by
 `LiquiditySettled` and the indexer rows SPECIFIED.
 
 ## <a id="intake"></a>5. Intake

@@ -2222,6 +2222,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         assert!(liquidity_starved(&[sel[0], sel[1], sel[2], sel[3], 0], "NotLiquidityDex(0x00000000000000000000000000000000000000d1)"));
         assert!(!liquidity_starved(&[sel[0], sel[1], sel[2], sel[3]], "OrderClosed(0x01)"));
         assert!(!liquidity_starved(&[0, 0, 0, 0], "NotLiquidityDex(0x01)"), "another entry: not ours");
+        // the chain's bytes as the simulation decodes them (L6c: unnamed, they read `revert 0x0e46ff74…` and went dead)
+        let t7 = crate::abi::decode_revert(&ISCaaSDex::NotLiquidityDex { caller: Address::repeat_byte(0xd1) }.abi_encode());
+        assert!(liquidity_starved(&[sel[0], sel[1], sel[2], sel[3], 0], &t7), "{t7}");
         assert_eq!(LIQUIDITY_PULL_ID, <crate::abi::ILiquidityPull::mtxLiquidityPullCall as SolCall>::SELECTOR);
     }
 

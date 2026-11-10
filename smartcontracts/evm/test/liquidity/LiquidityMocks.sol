@@ -314,3 +314,38 @@ contract MockDigestProbe {
         require(ok && r.length == 32 && abi.decode(r, (bytes32)) == expected, "probe");
     }
 }
+
+/// The node's RPC-level pre-check test (`scaas-node/tests/e2e.rs`, `liquidity_pre_checks_on_a_chain`): a DEX bound to the
+/// chain whose `modules()` lists `ms`. With the governance module only, a DEX release before the liquidity module; with both,
+/// a marked DEX whose `mtxLiquidity` answers what a token's T7 answers when starved, `NotLiquidityDex(dex)`. No token is a
+/// SCaaS token to it.
+contract MockNodeDex {
+    error NotLiquidityDex(address caller);
+
+    bytes32 public immutable chainUid;
+    address[] internal _ms;
+
+    constructor(bytes32 uid, address[] memory ms) {
+        (chainUid, _ms) = (uid, ms);
+    }
+
+    function modules() external view returns (address[] memory) {
+        return _ms;
+    }
+
+    function tokenKind(address) external pure returns (uint8) {
+        return 0;
+    }
+
+    fallback() external {
+        revert NotLiquidityDex(address(this));
+    }
+}
+
+/// A SCaaS token of an earlier release as the node's pre-check reads it (its runtime set at a listed token's address by the
+/// same test): ERC-165 without `ILiquidityPullToken`, no `mtxLiquidityPull`.
+contract MockEarlierToken {
+    function supportsInterface(bytes4 id) external pure returns (bool) {
+        return id == 0x01ffc9a7;
+    }
+}
