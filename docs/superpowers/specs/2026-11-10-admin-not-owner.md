@@ -348,20 +348,31 @@ no other path; split, the signed part is small and the large transaction verifie
      implArgsHash, bytes32 chainUid, address factory, uint32 adminGeneration, uint64 until)` (what `deployImplementation` binds).
 
    Each is `onlyAdmin configured`; `chainUid`, `factory` and `adminGeneration` must be the factory's own
-   (`ApprovalFieldMismatch(field)`), `until` in the future. It stores `approvals[key] = {LIVE, adminGeneration, until}` with
-   `key = keccak256(abi.encode(tag, chainUid, factory, <the release fields>, envVersion, initcodeHash, implArgsHash))`, one tag
-   per domain (`"scaas.factory.release.token"`, `.dex`, `.class`), and emits `ReleaseApproved(key, …)`; a live approval for the
-   same key is refused (`ApprovalLive(key)`); `approvalOf(key)` answers it. Through the router these are `UAApproveTokenRelease`,
+   (`ApprovalFieldMismatch(field)`); `until` must be in the future and at most **30 days** ahead (`ApprovalTooLong(until)`, the
+   factory's `MAX_NOTICE_PERIOD`, `OpenFactory.sol:49`; Fable re-check P3). It stores `approvals[key] = {LIVE, adminGeneration,
+   until}` and emits `ReleaseApproved(key, …)`; `approvalOf(key)` answers it. **The key binds every caller-supplied field the
+   deploy stores** (Fable re-check N1), one tag per domain, fixed-width `abi.encode`:
+
+   | Deploy | Key fields after `tag, chainUid, factory` | What the deploy stores from the caller |
+   |---|---|---|
+   | `deployTokenImplementation` (`"scaas.factory.release.token"`) | `kind, version, envVersion, initcodeHash, implArgsHash` | the release `[kind][version]`: its implementation (from `initcode`, `implArgs`), `envVersion` (and the env hash it names), the latest version (`OpenFactory.sol:157-177`) |
+   | `deployDexImplementation` (`.dex`) | `version, envVersion, initcodeHash, implArgsHash` | the DEX release `[version]` likewise (`:284-302`) |
+   | `deployImplementation` (`.class`) | `contractClass, kind, version, envVersion, initSelector, interfaceId, initcodeHash, implArgsHash` | the class release: implementation, `envVersion`, **`initSelector`** and **`interfaceId`** (`:362-371`, `:391-403`), the class and kind lists; `createInstance` admits only `initCall`s of that selector (`:456-458`) |
+
+   **Live** means: state `LIVE`, the current `adminGeneration`, and `block.timestamp ≤ until` (Fable re-check N2). `approve*` refuses
+   a live entry for the same key (`ApprovalLive(key)`) and overwrites one that is not live (expired, of an earlier admin term, or
+   revoked), so a release can always be approved again. Through the router these are `UAApproveTokenRelease`,
    `UAApproveDexRelease`, `UAApproveRelease` (§5.4): relayable, anyone sends them, fee 0 too, and small, so an `msig` of several
    PQ signatures fits (its check is bounded by the registry's per-call budget, `UA_VERIFY_BUDGET` 12 M,
    `script/DeployBase.sol:128-130`, far under NET-EVM-11's 60 M). The approval's expiry is named `until`, not `validUntil`,
    because the router's envelope already has `validUntil`, the signature's deadline (the precedent of `UAAttest`).
-2. **Revoke.** `revokeApproval(bytes32 key)`, `onlyAdmin configured`, deletes a live approval (`ApprovalNotLive(key)` for an
-   unknown or consumed one) and emits `ReleaseApprovalRevoked(key)`; through the router `UARevokeApproval`.
+2. **Revoke.** `revokeApproval(bytes32 key)`, `onlyAdmin configured`, deletes any stored entry not consumed, live or not
+   (`ApprovalNotRevocable(key)` for an unknown or consumed one), and emits `ReleaseApprovalRevoked(key)`; through the router
+   `UARevokeApproval`.
 3. **Deploy.** `deployTokenImplementation`, `deployDexImplementation`, `deployImplementation` keep their names and ABI, carry no
-   signature and go **straight to the factory, open to anyone**. The factory accepts one only if a live, unexpired approval of
-   the current `adminGeneration` matches its id, `envVersion` and the `keccak256` of its `initcode` and `implArgs` (it rebuilds
-   `key` from the call; else `ReleaseNotApproved(key)`, checked before the version); it marks the approval consumed (each is used
+   signature and go **straight to the factory, open to anyone**. The factory rebuilds `key` from the call (the table above: every
+   stored caller field, the hashes of `initcode` and `implArgs` computed from the bytes) and accepts the deploy only against a
+   live approval of it (else `ReleaseNotApproved(key)`, checked before the version); it marks the approval consumed (each is used
    once), then runs today's body. `configured` stays: a deploy before `configureChain` is refused. **The shortcut, in the owner's
    words** (2026-11-10):
 
@@ -371,8 +382,19 @@ no other path; split, the signed part is small and the large transaction verifie
    | a native EOA | another account | **needed**: the EOA signs the approval (its direct `approve*` call or its signed router op), and anyone deploys |
    | a derived UA (`msig`, ML-DSA, passkey, …) | anyone | **always**: it cannot send a transaction itself |
 
-   The shortcut checks only `msg.sender` (`pad(msg.sender) == admin`, with `requireNotDelegated`, D2), never a signature, and reads
-   no router subject. Once the admin moves to an `msig` or a PQ UA, the original deployer EOA has no shortcut.
+   The shortcut checks only `msg.sender` (`pad(msg.sender) == admin`), never a signature, and reads no router subject. Once the
+   admin moves to an `msig` or a PQ UA, the original deployer EOA has no shortcut. Two edges (Fable re-check P3): a native
+   admin's own deploy **also consumes a live approval of the same key**, so none is left dangling; and an admin EOA that is an
+   EIP-7702 designator never takes the shortcut (D2): its deploy falls to the approval path, which works for any sender, and is
+   refused only if no live approval matches.
+   **A deploy's result does not depend on the sender's gas** (Fable re-check N3): every probe in the deploy path fails closed or
+   is absent. At `74262fa0` the factory's checks revert on a failed call (`_word`, `_factoryInfo`, `_validateEnv`,
+   `_checkModules`) but one: `_checkRelease`'s "not `0xffffffff`" leg (`OpenFactory.sol:707`) runs `_supports` at 30,000 gas
+   (`:720-724`) and counts a failed call as a pass, so a sender short of gas could pass it. Fix: `_supports` requires `gasleft()`
+   above `30,000 × 64 / 63` plus a margin before each probe (`ProbeGasLow`), so each probe gets its full EIP-165 stipend and its
+   answer is the release's, not the sender's. The release constructors (the 12 kinds, the DEX, PqChat) check their modules by
+   ordinary calls, which revert on failure (`src/dex/SCaaSDex.sol:111-125`, `src/pqchat/PqChat.sol:45-51`), and store no probe;
+   T5 reviews every one of them again.
 4. **No node involvement** (owner): the four approval ops and the three deploys are not node rows; all seven are in `NOT_ROWS`
    with the reason "release management is not a node job (owner 2026-11-10)".
 
@@ -383,8 +405,9 @@ asked [measured, `smartcontracts/evm/runs/2026-11-10-scaas-testnet-reset2/summar
 (about 98 k state gas) plus the admin's check.
 
 **Threats.**
-- **Front-running the open deploy** is harmless: the same bytes land at the same `CREATE2` address with the same result, and the
-  slower sender reverts.
+- **Front-running the open deploy** is harmless: the same bytes land at the same `CREATE2` address with the same result (the
+  result does not depend on the sender's gas, item 3), and the slower sender reverts; the deploy plan takes "already deployed
+  with the approved code hash" as done (T10).
 - **An approval for a wrong hash:** the admin revokes it; it wins only if it lands before a deploy (anyone holding the bytes may
   send them once the approval is public); after a deploy the remedy is `deprecate*`, and the release is not creatable before
   `noticePeriod`.
@@ -485,16 +508,21 @@ pending (a renounced factory never comes back through it); a 7702-delegated nati
 key only (a delegate whose ERC-1271 says yes changes nothing); a nested router op refused; the gas rows of §5.6.
 
 **The deploy ruling** (§5.6). Passing: the shortcut's three rows, one test each: (1) the native admin sends `deploy*` itself,
-one transaction, no approval, at today's gas; (2) a native EOA admin approves (directly, and in a second test through the router)
-and another account deploys; (3) a derived admin (`mldsa65`, an `msig` of three ML-DSA-65 at 2-of-3, `webauthn-p256`) approves
-through the router, sent by a stranger, and another account deploys. Refused (`ReleaseNotApproved` unless named): a deploy
-without approval by a non-admin sender; one whose `initcode`, `implArgs`, `envVersion` or id differs from the approval's by one
-byte or one field; an approval used twice; a revoked approval; an expired one (`until`); one of a previous admin term (after a
+one transaction, no approval, at today's gas; (2) a native EOA admin approves (directly, and in a second test through the
+router) and another account deploys; (3) a derived admin (`mldsa65`, an `msig` of three ML-DSA-65 at 2-of-3, `webauthn-p256`)
+approves through the router, sent by a stranger, and another account deploys. Refused (`ReleaseNotApproved` unless named): a
+deploy without approval by a non-admin sender; one whose `initcode`, `implArgs`, `envVersion` or id differs from the approval's
+by one byte or one field (among them the two class fields: a deploy with another `initSelector`, one with another
+`interfaceId`); an approval used twice; a revoked approval; an expired one (`until`); one of a previous admin term (after a
 transfer, after a renounce); after the admin moves to an `msig`, the original deployer EOA's own deploy without approval; an
 approval naming another `chainUid` or factory (`ApprovalFieldMismatch`), or one made on another chain or factory, opening
-nothing here; a deploy before `configureChain` (`ChainNotConfigured`); revoking a consumed approval (`ApprovalNotLive`). The
-approval structs' field binding is the per-word matrix above (B12–B15) with its mutants; their digests are reproduced in
-`clientkeys` and `ua-rs`.
+nothing here; a deploy before `configureChain` (`ChainNotConfigured`); revoking a consumed approval (`ApprovalNotRevocable`); an
+`until` more than 30 days ahead (`ApprovalTooLong`). Re-approval passes after expiry, after a transfer of the admin and after a
+revoke (Fable re-check N2). A native admin's own deploy with a live approval of the same key consumes it. An admin EOA that is a
+7702 designator deploys only through an approval. A deploy at the lowest gas that succeeds gives the same code hash and the same
+release record as one at ample gas, and `_supports` below its floor refuses (`ProbeGasLow`) (Fable re-check N3). The approval
+structs' field binding is the per-word matrix above (B12–B15) with its mutants; their digests are reproduced in `clientkeys` and
+`ua-rs`.
 
 Mutants (each must turn a named test red; the round's mutant log records it):
 
@@ -524,11 +552,13 @@ Mutants (each must turn a named test red; the round's mutant log records it):
 | M22 | `transferAdmin` / `renounceAdmin` without `configured` | the unconfigured tests |
 | M23 | the shortcut accepts a sender that is not the admin (or reads the router's `subject()`) | the non-admin-sender and through-the-router tests |
 | M24 | the deploy skips the approval lookup, or takes the hashes from somewhere but the call's bytes | the no-approval and one-byte tests |
-| M25 | the key leaves out `chainUid`, the factory, `envVersion` or the tag | the cross-chain, cross-factory, `envVersion` and cross-domain tests |
+| M25 | the key leaves out `chainUid`, the factory, `envVersion`, `initSelector`, `interfaceId` or the tag | the cross-chain, cross-factory, `envVersion`, `initSelector`, `interfaceId` and cross-domain tests |
 | M26 | `adminGeneration` or `until` not checked at the deploy | the stale-generation and expired tests |
 | M27 | the deploy does not mark the approval consumed | the used-twice test (the approval check runs before the version check) |
 | M28 | `revokeApproval` without `onlyAdmin`, or on a consumed key | the revoke tests |
 | M29 | an approval that ignores its `chainUid`, `factory` or `adminGeneration` field | the `ApprovalFieldMismatch` tests |
+| M30 | `approve*` refuses an entry that is no longer live (expired, older term, revoked) | the three re-approval tests |
+| M31 | `_supports` counts a failed probe as a pass without the gas floor | the low-gas deploy test |
 | B1–B15 | one per new signed struct: a word dropped from its hash | that struct's binding matrix |
 
 Gates: every `forge` directory and the node e2e (the change is shared), `script/pqz/at-set.sh <set> test` at the four sets,
@@ -599,15 +629,15 @@ The component docs (`token-wrappers.md`, `asset-suite.md`, `pqchat.md`, `network
 | T2 | R3 in the governed contracts: `IAdmin`, `IGovernance`, `GovernanceLib`, `GovernanceBase`, `SCaaSDexAdmin`, `SCaaSDex`, `WrappedLib`, `PqzStateLib`, `ZetherLib`, the config fields, `entries.json` + `gen_faces.py`, `face_abi.json` map, layout labels, `GovBitsVector` sentences | 1 d |
 | T3 | R3 on the topic: `IPqChat`, `PqChatTypes`, `PqChatCore`, `PqChatTopics`, `PqChat`; `topics.json`; node `typed.rs:121`; clientkeys `pqchat.js` | 0.5 d |
 | T4 | R1: record, views, events, `FactoryInfo`, reads; `ZetherStateVectors` + `state.json`; node `abi.rs`, guard mock | 1 d |
-| T5 | `UAAdmin`; `OpenFactory` admin (constructor, `onlyAdmin`, transfer and renounce under `configured`), the approvals, the revoke, the open deploys and the native admin's shortcut (§5.6); `FactoryAdmin.t.sol` green | 2 d |
+| T5 | `UAAdmin`; `OpenFactory` admin (constructor, `onlyAdmin`, transfer and renounce under `configured`), the approvals (the key per deploy kind, live, the 30-day cap), the revoke, the open deploys and the native admin's shortcut, the gas-independence review of every release constructor and `_supports`'s floor (§5.6); `FactoryAdmin.t.sol` green | 2 d |
 | T6 | `ComplianceRegistry` admin, router, constructor refusals, transfer without renounce, attesters by UA (§5.3.1), the row bound; `RegulatedLib`'s registry-router check; `RegistryAdmin.t.sol`; `regulated_kat.json`; `Gov.s.sol`'s `setAttester` | 2 d |
 | T7 | Router: the 3 renamed and the 15 new ops, the binding matrix per signed struct and its mutants (B1–B15), `Env` and array hashing, the view `smartKeyCloneHash()`, pins, `GovRouter.t.sol` | 2 d |
 | T8 | Clients and vectors: clientkeys rows + `typed_ops.json`, ua-rs router-op table + test, zether-prover list | 1 d |
 | T9 | Node: rows, `NOT_ROWS`, counts, class `ADMIN`; `cargo test`, `clippy` | 0.5 d |
-| T10 | Deploy: `DeployBase` order (§6, §13.10), the relay pair under the constant salt, `FACTORY_ADMIN_NEXT`, `COMPLIANCE_ADMIN` as UA, release rows, the gate; every release on a 60 M anvil (§5.6, NET-EVM-11) | 1 d |
+| T10 | Deploy: `DeployBase` order (§6, §13.10), the relay pair under the constant salt, `FACTORY_ADMIN_NEXT`, `COMPLIANCE_ADMIN` as UA, release rows, the gate; `DeploySend.s.sol` takes a release already deployed with the approved code hash as done, so a front-runner cannot fail the plan step by step (Fable re-check P3); every release on a 60 M anvil (§5.6, NET-EVM-11) | 1 d |
 | T11 | Matrix: scripts renamed, the router steps for the factory and the registry, coverage, local run | 1 d |
 | T12 | Gates and pins: every forge dir, the four PQZ sets, size, layout, ABI, gas old → new | 0.5 d |
-| T13 | Mutants M1–M29, B1–B15, D1–D14, log | 1 d |
+| T13 | Mutants M1–M31, B1–B15, D1–D14, log | 1 d |
 | T14 | Docs: component docs (`decisions.md` done, §11), `docs_check` | 0.5 d |
 | T15 | The directory (§13): the relay pair under the constant salt and its reuse, every entry write-once, `setChainEntries`, `configureChain`'s checks, the registry and `SmartKeyAccount` bindings, `directory()`; `FactoryDirectory.t.sol`, mutants D1–D14; `DeployBase` and `e2e.py` order | 1.5 d |
 |  | **Total** | **≈ 16 d** |
