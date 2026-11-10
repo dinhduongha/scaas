@@ -187,7 +187,7 @@ token's own `MINTABLE` holders only, never a balance power; a hybrid's minted un
 
 <a id="audit-labels"></a>Audit labels and rounds: [ARCH-POS-14](../decisions.md#ARCH-POS-14) (an AI audit, `AI-AUDITED` or `UNAUDITED`).
 Every value-holding contract family needs its AI audit round before it holds real funds; the factory registrar moves to a
-multisig before mainnet; real deployments are recorded in `deployments/<chain>.json`. The confidential-token families carry stronger gates, enforced in code:
+multisig before mainnet; real deployments are recorded in `deployments/<key>.json` ([NET-EVM-13](../networks/evm.md#NET-EVM-13)). The confidential-token families carry stronger gates, enforced in code:
 
 | Gate | Rule | Status |
 |---|---|---|
@@ -228,7 +228,7 @@ implementations (each taking the factory address and `chain_uid`) registered as 
 the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**); with `DEPLOY_ZETHER=1` (any chain but Hedera), also the Zether stack (built, P3; [flags](../networks/evm.md#deployments)).
 
 It writes
-`deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract
+`deployments/<key>.json` ([NET-EVM-13](../networks/evm.md#NET-EVM-13)) to seed the node's chain configuration and client chain data. Production: every contract
 owner/admin is a Safe from the first block, and deployer keys come from a hardware wallet or KMS. **Transitional
 (BUILT, P1e):** every contract is deployed by `new X{salt: DEPLOY_SALT}` through forge's deterministic deployer (default
 salt `keccak256("scaas.deploy.v1")`; a re-run on the same chain collides, so a new version needs a new salt), the script

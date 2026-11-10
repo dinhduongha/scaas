@@ -1204,3 +1204,5 @@ UNAUDITED — dev chains only	obsolete	label replaced by "UNAUDITED" (owner 2026
 mtxTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-30
 mtxBatch(MetaTransaction[] ms, bytes[] sigs)	obsolete	the address generic batch, on SmartKeyAccount only since the ua* / mtx* merge (MetaTxAddressBase): contracts/metatx.md#CTR-MTX-30
 mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-30
+smartcontracts/evm/deployments/<chainid>.json	renamed	the books are named by chain key, deployments/<key>.json: networks/evm.md#NET-EVM-13
+deployments/<chain>.json	renamed	deployments/<key>.json, the key from chain-uids.json: networks/evm.md#NET-EVM-13
