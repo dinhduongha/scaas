@@ -65,17 +65,6 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, IGovernance {
     uint8 internal constant ESCROW = 2;
 
-    bytes32 internal constant DEX_ORDER_TYPEHASH = keccak256(
-        "DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,"
-        "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,"
-        "uint256 batch,uint256 nonce,uint256 validUntil)"
-    );
-
-    bytes32 internal constant CANCEL_DEX_ORDER_TYPEHASH = keccak256(
-        "CancelDexOrder(DexOrder order)DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,"
-        "address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,"
-        "address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
-    );
 
 
     /// @notice The factory, at the same address on every chain (chain-neutral spec §2.1): a chain-neutral immutable.
@@ -279,39 +268,22 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         return _hashTypedDataV4(_dexOrderHash(sellToken, o));
     }
 
-    function _dexOrderHash(address sellToken, ITradeToken.TradeOrder memory o) private pure returns (bytes32) {
-        return keccak256(abi.encode(DEX_ORDER_TYPEHASH, sellToken, TradeLib.hashStruct(o)));
+    /// @notice Forwarded to the liquidity module (spec 2026-11-10-dex-liquidity.md §9.3 lever (b), owner 2026-11-10): the
+    ///         DEX-domain cancels and their digest views share its signature check. The cancel nests the `DexOrder` the
+    ///         order was signed as (TS-D19); `pulled` stays keyed by the order digest.
+    function cancelDexOrderDigest(address, ITradeToken.TradeOrder calldata) external view returns (bytes32 r) {
+        _forwardView(_ML);
     }
 
-    /// @notice The cancel nests the `DexOrder` the order was signed as (TS-D19); `pulled` stays keyed by the order digest.
-    function cancelDexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(CANCEL_DEX_ORDER_TYPEHASH, _dexOrderHash(sellToken, o))));
-    }
-
-    function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
-    }
+    function invalidateNoncesDigest(address, uint256, uint256) external view returns (bytes32 r) { _forwardView(_ML); }
 
     // ------------------------------------------------------------------ outside-token cancels (CTR-DEX-18, -02)
 
     /// @notice Never expire; a closed order or a bad signature skips that item (the batch does not revert); a starved
-    ///         ERC-1271 check reverts the call (CTR-DEX-08).
-    function mtxCancelOrders(DexOrder[] calldata orders, bytes[] calldata sigs) external nonReentrant {
-        if (orders.length != sigs.length) revert LengthMismatch();
-        for (uint256 i; i < orders.length; ++i) {
-            ITradeToken.TradeOrder calldata o = orders[i].order;
-            if (SigCheck.isValid(o.from, cancelDexOrderDigest(orders[i].sellToken, o), sigs[i], _cap(o.from))) {
-                TradeLib.cancel(_dexOrderDigest(orders[i].sellToken, o), o.amount, TradeLib.pad(o.from), false);
-            }
-        }
-    }
+    ///         ERC-1271 check reverts the call (CTR-DEX-08). The body in the liquidity module, under this guard (S1 variant).
+    function mtxCancelOrders(DexOrder[] calldata, bytes[] calldata) external nonReentrant { _forwardML(); }
 
-    function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant {
-        bytes32 d = invalidateNoncesDigest(from, batch, newMin);
-        if (!SigCheck.isValid(from, d, sig, _cap(from))) revert BadSignature(d);
-        TradeLib.invalidate(TradeLib.pad(from), batch, newMin, false);
-    }
-
+    function mtxInvalidateNonces(address, uint256, uint256, bytes calldata) external nonReentrant { _forwardML(); }
 
     // ------------------------------------------------------------------ settle (CTR-DEX-16, CTR-DEX-26)
 
@@ -813,7 +785,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     /// @notice CTR-DEX-30: the plan runs in `SCaaSDexLiquidityModule` under this entry's guard. An S1 variant (spec
     ///         2026-11-10-dex-liquidity.md §9.2): the modifier around a DELEGATECALL with a normal return (nothing to
     ///         return), the module's revert data verbatim.
-    function mtxLiquidity(LiquidityPlan calldata, Interaction[] calldata) external nonReentrant {
+    function mtxLiquidity(LiquidityPlan calldata, Interaction[] calldata) external nonReentrant { _forwardML(); }
+
+    /// @dev The S1 variant's body: DELEGATECALL of this call's calldata to the liquidity module, its revert data verbatim,
+    ///      a normal return (the entries it serves return nothing); the caller's `nonReentrant` holds the guard.
+    function _forwardML() private {
         (bool ok, bytes memory ret) = _ML.delegatecall(msg.data);
         if (!ok) {
             assembly ("memory-safe") {

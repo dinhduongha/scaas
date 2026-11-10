@@ -48,6 +48,19 @@ abstract contract SCaaSDexCore {
     ///      `SigCheck.ERC1271_GAS` (50 000).
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
 
+    bytes32 internal constant DEX_ORDER_TYPEHASH = keccak256(
+        "DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,"
+        "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,"
+        "uint256 batch,uint256 nonce,uint256 validUntil)"
+    );
+
+
+    bytes32 internal constant CANCEL_DEX_ORDER_TYPEHASH = keccak256(
+        "CancelDexOrder(DexOrder order)DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,"
+        "address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,"
+        "address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+    );
+
     /// @custom:storage-location erc7201:scaas.dex
     struct DexStorage {
         bool initialized;
@@ -73,6 +86,11 @@ abstract contract SCaaSDexCore {
         address ska = ChainEnvCode.smartKeyAccountImpl();
         return ska != address(0) && signer.codehash == keccak256(abi.encodePacked(hex"363d3d373d3d3d363d73", ska,
             hex"5af43d82803e903d91602b57fd5bf3")) ? SMART_KEY_1271_GAS : SigCheck.ERC1271_GAS;
+    }
+
+    /// @dev An outside-token order's `DexOrder` struct hash (CTR-DEX-18).
+    function _dexOrderHash(address sellToken, ITradeToken.TradeOrder memory o) internal pure returns (bytes32) {
+        return keccak256(abi.encode(DEX_ORDER_TYPEHASH, sellToken, TradeLib.hashStruct(o)));
     }
 
     /// @dev A SCaaS token (factory-made, recorded at `setMarket`) whose UA ledger is on.

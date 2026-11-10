@@ -48,6 +48,9 @@ contract DexKatTest is Test {
         vm.warp(1_800_000_000);
         OpenFactory f = EnvKit.factory(address(this), UID_, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
+        // the DEX's two modules (governance, liquidity) are CREATEd by this contract: skip the nonce whose address is the
+        // vectors' outside token below (the liquidity module would land there and be overwritten by the token's code)
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 2);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 6, 1e9, alice, address(0))), "a"));
         dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 500_000, TREASURY, false, 0, address(0))), "dex"));

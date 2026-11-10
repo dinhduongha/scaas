@@ -23,7 +23,9 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///        snapshot, (3) pull, (4) the interactions (CTR-DEX-23, and no `approve` aimed at the position manager), (5) the
 ///        received position against its signed, listed reader, a given one not received back spent whole, (6) every output
 ///        at its minimum at the DEX after the fee and again at the recipient, (7) every leftover to the signer (a refund may
-///        exceed its pull), (8) conservation, (9) the event. Outcomes only: no AMM-specific execution code. UNAUDITED.
+///        exceed its pull), (8) conservation, (9) the event. Outcomes only: no AMM-specific execution code. Since the owner's
+///        size ruling of 2026-11-10 (lever (b)) it also holds the DEX-domain cancels `mtxCancelOrders` and
+///        `mtxInvalidateNonces` and their digest views, which share its signature check. UNAUDITED.
 contract SCaaSDexLiquidityModule is SCaaSDexCore {
     /// @notice A module-face entry called other than by DELEGATECALL from its DEX (M2).
     error NotDelegated();
@@ -70,6 +72,49 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
     /// @notice `h` in the DEX's domain (§4.3): under DELEGATECALL `address(this)` is the clone and `chain_uid` its env.
     function liquidityOrderDigest(ITradeToken.LiquidityOrder calldata o) external view onlyDelegated returns (bytes32) {
         return LiquidityLib.digest(o, address(this), ChainEnvCode.chainUid());
+    }
+
+    // ------------------------------------------------------------------ the DEX-domain cancels (CTR-DEX-18, -02; lever (b))
+
+    /// @notice `CancelDexOrder(DexOrder order)` in the DEX's domain (the clone, its `chain_uid`).
+    function cancelDexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) external view onlyDelegated
+        returns (bytes32)
+    {
+        return _cancelDigest(sellToken, o);
+    }
+
+    function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view onlyDelegated returns (bytes32) {
+        return _invalidateDigest(from, batch, newMin);
+    }
+
+    /// @notice As before the move: a closed order or a bad signature skips that item; a starved ERC-1271 check reverts.
+    function mtxCancelOrders(ISCaaSDex.DexOrder[] calldata orders, bytes[] calldata sigs) external onlyDelegated {
+        if (orders.length != sigs.length) revert ISCaaSDex.LengthMismatch();
+        for (uint256 i; i < orders.length; ++i) {
+            ITradeToken.TradeOrder calldata o = orders[i].order;
+            if (SigCheck.isValid(o.from, _cancelDigest(orders[i].sellToken, o), sigs[i], _cap(o.from))) {
+                TradeLib._cancel(_dexDigest(_dexOrderHash(orders[i].sellToken, o)), o.amount, TradeLib.pad(o.from), false);
+            }
+        }
+    }
+
+    function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external onlyDelegated {
+        bytes32 d = _invalidateDigest(from, batch, newMin);
+        if (!SigCheck.isValid(from, d, sig, _cap(from))) revert ISCaaSDex.BadSignature(d);
+        TradeLib._invalidate(TradeLib.pad(from), batch, newMin, false);
+    }
+
+    function _cancelDigest(address sellToken, ITradeToken.TradeOrder calldata o) private view returns (bytes32) {
+        return _dexDigest(keccak256(abi.encode(CANCEL_DEX_ORDER_TYPEHASH, _dexOrderHash(sellToken, o))));
+    }
+
+    function _invalidateDigest(address from, uint256 batch, uint256 newMin) private view returns (bytes32) {
+        return _dexDigest(keccak256(abi.encode(TradeLib.INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
+    }
+
+    /// @dev `SaltedEIP712._hashTypedDataV4` of the DEX: its separator from `LiquidityLib`'s constant hashes (the KATs pin it).
+    function _dexDigest(bytes32 structHash) private view returns (bytes32) {
+        return keccak256(abi.encodePacked(hex"1901", LiquidityLib.separator(address(this), ChainEnvCode.chainUid()), structHash));
     }
 
     /// @notice CTR-DEX-30: `msg.sender` is the DEX's caller, the submitter.
