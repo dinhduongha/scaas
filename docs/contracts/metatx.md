@@ -474,8 +474,9 @@ node side (simulation, no batching, the narrowed grief exemption) is
 
 ## 5. `mtxExecuteTransfer`: transfers and payments (tokens)
 
-<a id="CTR-MTX-23"></a>**CTR-MTX-23** — **The typed path: `mtxExecuteTransfer(MetaTransfer t, bytes sig)`** (owner). A
-token's transfer and payment are signed as a `MetaTransfer` ([CTR-MTX-15](#CTR-MTX-15)) so outside wallets show
+<a id="CTR-MTX-23"></a>**CTR-MTX-23** — **The typed path: `mtxExecuteTransfer(UAMetaTransfer t, UASig auth)`** (owner; since the merge, [CTR-MTX-30](../decisions.md#CTR-MTX-30),
+one form for a native id signing with its own key and a derived UA through the registry; the address `MetaTransfer` forms are in
+`legacy/ua-mtx-merge/`). A token's transfer and payment are signed as a `UAMetaTransfer` ([CTR-MTX-15](#CTR-MTX-15)) so outside wallets show
 "send `value` to `to`" field by field, and they run through their own pipeline in `ERC20MetaTx`; the named functions
 build the same struct ([CTR-MTX-09](#CTR-MTX-09)). `mtxExecuteTransfer` takes the struct as given — any lane, either
 shape — and returns `bool`. Steps, all or nothing and cheap first as [CTR-MTX-17](#CTR-MTX-17):
@@ -483,11 +484,11 @@ shape — and returns `bool`. Steps, all or nothing and cheap first as [CTR-MTX-
 | Step | Check / action | Error |
 |---|---|---|
 | 1 | as [CTR-MTX-17](#CTR-MTX-17) step 1 on `t` (`from ≠ address(this)` always) | as there |
-| 2 | signature over the `MetaTransfer` digest, as step 2 there | `MetaTxBadSignature` |
+| 2 | `auth` over the `UAMetaTransfer` digest (`mtxTransferDigest`), as step 2 there | `MetaTxBadSignature` |
 | 3 | `to ≠ 0`, `to` and a non-zero fee's recipient ∉ {`UA_POOL`, `SHIELD_POOL`} (before the nonce, as the UA twin; review C5-3); fee on `value` (`FeePolicy.compute`, `validateRecipient`, the payee check of [CTR-MTX-08](#CTR-MTX-08) with payee = `t.to`; `to`, fee recipient ≠ the token); balance ≥ value + fee | `PayToZero`, `TransferToSelf`, `UAPoolNotPayable`, `ShieldPoolNotPayable`, `FeeExceedsCap`, `FeeRecipientRequired`, `FeeRecipientIsPayee`, `MetaTxInsufficientForFee` |
 | 4 | write `mtxNonce = expected + 1` | — |
-| 5 | transfer the fee, then the value (cannot fail after step 3); `entryRef ≠ 0` ⇒ `PaymentSettled(from, to, value, feeAmount, feeRecipient, entryRef)` | — |
-| 6 | `MetaTransactionExecuted(from, relayer, batch, nonce, digest, feeRecipient, fee)` | — |
+| 5 | transfer the fee, then the value (cannot fail after step 3); `entryRef ≠ 0` ⇒ `UAPaymentSettled(from, to, value, feeAmount, feeRecipient, entryRef)` | — |
+| 6 | `UAMetaTransactionExecuted(from, relayer, batch, nonce, digest, feeRecipient, fee)` | — |
 
 These are the transfer and `pay` shapes of the earlier single struct, moved out of `data` into typed fields.
 
@@ -544,9 +545,9 @@ One pinned struct per intent means one type that wallets display. It emits `Paym
 feeRecipient, entryRef)` with the real fee. Tender's deposit ([CTR-TND-01](tender.md#CTR-TND-01)) and every service pull
 ([CTR-MTX-32](#CTR-MTX-32), group 3i) are this shape: there `entryRef` is the operation's digest in the service's domain.
 
-<a id="CTR-MTX-24"></a>**CTR-MTX-24** — **`mtxBatchTransfer(MetaTransfer[] ts, bytes[] sigs)`** is the batch of the
-typed path, beside `mtxBatch` for `MetaTransaction`s, with the rules of [CTR-MTX-11](#CTR-MTX-11): atomic, items in
-order, `msg.sender` the relayer of every item, `ts.length == sigs.length` (`MtxBatchLengthMismatch`), `≥ 1`
+<a id="CTR-MTX-24"></a>**CTR-MTX-24** — **`mtxBatchTransfer(UAMetaTransfer[] ts, UASig[] auths)`** is the batch of the
+typed path, beside `mtxBatch` for `UAMetaTransaction`s, with the rules of [CTR-MTX-11](#CTR-MTX-11): atomic, items in
+order, `msg.sender` the relayer of every item, `ts.length == auths.length` (`MtxBatchLengthMismatch`), `≥ 1`
 (`MtxBatchEmpty`), no explicit cap, items of one token. A batch never mixes the two structs; the node batches
 payments through it ([NODE-LANE-11](../node/submit-lanes.md#NODE-LANE-11)).
 
