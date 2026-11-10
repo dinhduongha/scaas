@@ -36,3 +36,11 @@ M30-expired | test_reapproval | 1
 M30-older | test_reapproval | 1
 M30-revoked | test_approve_otherChainOpensNothing, test_approve_otherFactoryOpensNothing, test_approve_tooLong, test_deploy_expiredRefused, test_deploy_oneByteOrFieldRefused, test_deploy_previousTermRefused, test_deploy_revokedRefused, test_deploy_usedTwiceRefused, test_derivedAdmin_everyOpThroughRouter, test_designatorAdmin_deploysOnlyThroughApproval, test_directAdmin_everyOp, test_gas_approvalAndDeploy, test_keys_areTheSpecFormula, test_reapproval, test_revoke_rules, test_shortcut_consumesLiveApproval, test_shortcut_derivedApprovesThroughRouter, test_shortcut_eoaApprovesDirectly, test_shortcut_eoaApprovesThroughRouter | 1
 M31 | test_supportsBelowFloorProbeGasLow | 1
+M11 | test_kycProvider_derivedThroughRouter, test_routerAnsweringZero_refused | 1
+M13 | test_kycProvider_derivedThroughRouter | 1
+M14 | test_noRenounce, test_router_anotherSignerNotAdmin | 1
+M16 | test_routerMismatch_noRouter, test_routerMismatch_ownRouter | 1
+M20-zero | test_derivedAdmin_k1, test_derivedAdmin_mldsa, test_derivedAdmin_msig, test_kycProvider_derivedThroughRouter, test_routerAnsweringZero_refused, test_router_anotherSignerNotAdmin, test_router_replayRefused | 1
+M20-other | test_derivedAdmin_k1, test_derivedAdmin_mldsa, test_derivedAdmin_msig, test_kycProvider_derivedThroughRouter, test_routerAnsweringZero_refused, test_router_anotherSignerNotAdmin, test_router_replayRefused | 1
+M21-router0 | test_constructor_refusals | 1
+M21-nocode | test_constructor_refusals | 1

@@ -26,6 +26,8 @@ FORGE = os.path.expanduser("~/.foundry/bin/forge")
 # Rows are added by the task that builds the code they mutate (T2 ... T15); T13 runs the rest and checks the count.
 UA = "smartcontracts/evm/src/governance/UAAdmin.sol"
 OF = "smartcontracts/evm/src/factory/OpenFactory.sol"
+CR = "smartcontracts/evm/src/regulated/ComplianceRegistry.sol"
+RL = "smartcontracts/evm/src/regulated/RegulatedLib.sol"
 MUTANTS = {
     # T2 (§4.1): a token face keeps an ownership alias beside the admin entries: `owner()` answering the admin (a view, caught
     # by AdminNames) and a `transferOwnership(bytes32)` stub (a write, caught by SelectorAudit as unclassified). The face is
@@ -133,6 +135,28 @@ MUTANTS = {
          "        if (_live(a) || a.state == ApprovalState.NONE) revert ApprovalLive(key);"),
         # M31: `_supports` without the gas floor (the low-gas deploy test)
         ("M31", OF, "        if (left < _PROBE_GAS * 64 / 63 + _PROBE_GAS_MARGIN) revert ProbeGasLow(left);\n", ""),
+    ]},
+    # T6 (§5.3, §5.3.1, §8): the registry's admin and KYC providers, the regulated token's registry-router check; every row
+    # is killed by test/as/RegistryAdmin.t.sol (its two suites)
+    **{mid: (path, old, new, "forge", "test/as", "RegistryAdmin.t.sol") for mid, path, old, new in [
+        # M11: `setCompliance` from the router takes a non-admin subject as the admin (id 0)
+        ("M11", CR, "        if (c != _adminStorage().admin) {", "        if (c != _adminStorage().admin && msg.sender != govRouter) {"),
+        # M13: `setCompliance` looks the KYC provider up by `msg.sender`, not the subject (the derived-provider test)
+        ("M13", CR, "            id = kycProviderId[c];", "            id = kycProviderId[bytes32(uint256(uint160(msg.sender)))];"),
+        # M14: the registry keeps a `renounceAdmin` (the no-renounce test)
+        ("M14", CR, "    function _adminRouter() internal view override returns (address) {",
+         "    function renounceAdmin() external {\n        _renounceAdmin();\n    }\n\n"
+         "    function _adminRouter() internal view override returns (address) {"),
+        # M16: `RegulatedLib.init` drops the registry-router check (the `ComplianceRegistryRouterMismatch` tests)
+        ("M16", RL, "            if (got != address(0) && got != govRouter) revert IRegulatedToken.ComplianceRegistryRouterMismatch(reg, got);\n",
+         ""),
+        # M20: the registry's `_adminRouter()` answers 0, or another address (the derived registry-admin tests)
+        ("M20-zero", CR, "        return govRouter;", "        return address(0);"),
+        ("M20-other", CR, "        return govRouter;", "        return address(uint160(govRouter) + 1);"),
+        # M21: the constructor takes a derived admin with router 0, or a router without code (the constructor test)
+        ("M21-router0", CR, "            if (uint256(admin_) >> 160 != 0) revert AdminUnreachable(admin_);\n", ""),
+        ("M21-nocode", CR, "        } else if (govRouter_.code.length == 0) {\n            revert RouterNotContract(govRouter_);\n        }",
+         "        }"),
     ]},
 }
 

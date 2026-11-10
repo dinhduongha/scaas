@@ -108,3 +108,24 @@ size | caa10bff | 0 | 0 errors, 166 contracts (OpenFactory 28,583 -> 31,345: its
 scripts | caa10bff | 0 | Deploy, DeploySend and the eight on-chain scripts compile
 gen | caa10bff | 0 | gen_faces.py --check, gen_set.py --all --check, test_vcheck ok
 t5-gas (FactoryAdmin test_gas_approvalAndDeploy; each call its own transaction, regular / state) | caa10bff | 0 | approve: token 43,035 / 97,920, DEX 42,624 / 97,920, class 43,941 / 97,920; a deploy through the approval vs the admin's own: token 137,740 vs 127,548 (+10,192 regular, state 1,185,750 both), DEX 135,069 vs 124,877 (+10,192, 1,185,750 both), class 301,976 / 6,448,950 for both paths (forge's split of that row reads the same for the two); the lowest gas limit of the class deploy (BurnKind, the shortcut) 4,786,781, ProbeGasLow reached about 870 k below it (the EIP-8037 state gas after the probes)
+t6-registryadmin.red (RegistryAdmin.t.sol, its own ABI declaration, against the registry before T6) | 2bac78c0+test | 1 | 1 passed, 23 failed: the old constructor refuses an EOA admin (AdminNotContract) and reads (address), so every registry row fails "registry not created" or the constructor's asserts; no ComplianceRegistryRouterMismatch (both router-check tests: the token is created); positive controls test_selectorsAreTheSpecs and the router-check controls (a token on a router-0 registry) passed
+t6-iter (test/as/Registry*.t.sol) | 47645f2a- | 1 | 42 passed, 1 failed: the code-hash pin (Registry.t.sol 0x8e2d42b6... -> 0xbeaea85c..., the registry's new source); RegistryAdmin 22/22, the router check 2/2
+t6-kat-write (RegulatedKat.t.sol WRITE_REGULATED_KAT=true) | 47645f2a | 0 | regulated_kat.json: the 44 receiver rows' key attesterEnabled -> kycProviderEnabled, the reason-3 row name and note; every value equal
+forge-as | 47645f2a | 0 | 487 passed, 0 failed (78 suites; RegistryAdmin 22 + the router check 2 new)
+forge-governance (red, before the pin) | 47645f2a- | 1 | 450 passed, 1 failed: GovDeploy test_routerAndRelayFeeRouterNewAddresses (the router's CREATE2 address: IRegulatedToken.sol in its metadata)
+forge-governance | 47645f2a | 0 | 451 passed, 0 failed (50 suites)
+forge-metatx | 47645f2a | 0 | 544 passed, 0 failed, 1 skipped (44 suites)
+forge-modules | 47645f2a | 0 | 35 passed, 0 failed (12 suites; the differential reads REGISTRY_CODEHASH() and the three registry errors under the new names)
+forge-v2 | 47645f2a | 0 | 695 passed, 0 failed (55 suites)
+forge-wrap | 47645f2a | 0 | 278 passed, 0 failed (29 suites)
+forge-research | 47645f2a | 1 | 358 passed, 1 failed, 7 skipped: the known red, unchanged (PqzProofStoreGas test_debitMinGas_isTheCheapestLogDebit 7,513,388 pinned / 7,513,432 measured, +44; the owner's set parameter)
+forge-confidential | 47645f2a | 0 | 5 passed, 0 failed
+forge-top | 47645f2a | 0 | 29 passed, 0 failed (5 suites)
+size (red, before the rows) | 47645f2a- | 1 | 3 errors: NormalPqzRegulatedTokenA 28,179 > 28,162, NormalRegulatedTokenA 25,750 > 25,733, NormalZetherRegulatedTokenA 25,238 > 25,221
+size | 47645f2a | 0 | 0 errors, 166 contracts (the three A modules +17 B each: _initRaw passes the clone's govRouter; ComplianceRegistry 3,319 B, RegulatedLib 10,669 B, no rows)
+scripts | 47645f2a | 0 | Deploy, DeploySend and the eight on-chain scripts compile (Gov.s.sol's registry calls)
+gen | 47645f2a | 0 | gen_faces.py --check, gen_set.py --all --check, test_vcheck ok
+node-test | 47645f2a | 0 | 705 passed, 0 failed
+node-clippy | 47645f2a | 0 | cargo clippy --all-targets -- -D warnings clean
+clientkeys | 47645f2a | 0 | 322 tests, 320 passed, 0 failed, 2 skipped
+ua-rs | 47645f2a | 0 | 282 passed, 0 failed (the four feature runs; regulated_kat_receiver_table reads kycProviderEnabled), clippy clean
