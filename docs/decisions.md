@@ -4701,6 +4701,14 @@ Change (2026-11-10, controller, plan 3c T94; status: BUILT on branch `ua-mtx-mer
 **Cost if wrong.** An unpaid unsigned write may find no relayer; its author submits it from its own account.
 **Source.** owner 2026-10-25 (answer 4), 2026-11-05 (D17); UA-7 spec P7, P17; topics spec P44, P45; plan 3c T93 (node rows `b810e50b`). Status: BUILT on branch `ua-mtx-merge` (EVM and the node), UNAUDITED.
 
+### CTR-CHAT-20 — A `PqChat` admin removes members of an epoch with a signed `remove`; the epoch's child then completes only without them
+- old: — · status: current · owner: yes · date: 2026-11-10 · normative: contracts/pqchat.md#CTR-CHAT-20 · superseded-by: —
+
+**Rule.** Owner 2026-11-10 (build Fable's P1-2 fix (b) now, beside fix (a)): an admin of a complete epoch signs `PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)` naming 1 to 16 of its members (strictly sorted) and the next epoch's number; `remove` accepts it while the epoch has no complete child at home, its nonce in the admin's epoch scope; from then on a child of that epoch completes only if neither its members nor its admins hold a removed UA (`PqChatRemovedKept`), a removed member authors no rekey of it (`PqChatNotMember`), and dropping a removed member counts as a plain rekey. `leave` is unchanged (the member's own flag). The record stays in state, readable by `removedIn`, `removalCount` and `removalAt`. A 2-person chat is unchanged.
+**Why.** Without it a member about to be removed can keep itself in by answering each new tip with its own plain rekey (Fable review P1-2); fix (a) alone stops only a member that left.
+**Cost if wrong.** One more typed record, entry and node row; an admin can remove a member at once, and the remaining members land the next epoch without it.
+**Source.** owner 2026-11-10 (relayed by the controller); Fable review of PqChat 2026-11-10 (P1-2); UA-7 spec P48; plan 3c. Status: SPECIFIED.
+
 ### CTR-PQZ-01 — Separate PQZ class gated by the precompile self-test
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 

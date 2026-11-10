@@ -313,8 +313,25 @@ the parent** (owner D4 of 2026-11-04, O2 and O4; the exact test 3C-D7 is a contr
   that has not left it (`PqChatNotMember(author)`; Fable review 2026-11-10, P1-2 fix (a)).
 - **The limit** (UA-7 spec P9): the first complete child wins, so a member about to be removed can keep answering each
   new tip with its own plain rekey that keeps it; the admin rekeys again from that child. Liveness only (the member never
-  reads an epoch it is not wrapped into); `leave` ends it for a member who leaves; an admin-signed removal record that
-  would end it for one who does not is not built (the owner's call).
+  reads an epoch it is not wrapped into); `leave` ends it for a member who leaves, `remove` (CTR-CHAT-20) for one who
+  does not.
+
+<a id="CTR-CHAT-20"></a>**CTR-CHAT-20** — **An admin of an epoch removes members of it with a signed `remove`; a child of
+that epoch then completes only without them, and a removed member authors no rekey of it** (owner 2026-11-10, on the Fable
+review's P1-2 fix (b); **SPECIFIED**, plan 3c; UA-7 spec P48).
+
+- `remove(PqChatRemove r, UASig sig)`, `PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,
+  bytes32 admin,uint64 nonce)`: `epochId` stored for `sessionId` and complete (`PqChatUnknown`, `PqChatIncomplete`), at
+  home with no complete child (`PqChatEpochTaken`); `nextEpoch == epoch(epochId) + 1` (`PqChatEpochNumber`); 1 to
+  `REMOVE_MAX` = 16 members, strictly sorted (`PqChatShape`), each a member of `epochId` (`PqChatNotMember`); `admin` an
+  admin of `epochId` (`PqChatNotAdmin`) who signs it; the nonce in the epoch scope `(sessionId, admin)` (`PqChatNonceUsed`).
+  Anyone submits it, relayable with a fee of 0. The record and its `sigHash` are kept in state.
+- After it: a child of `epochId` completes (in `rekey` or the last `addWraps`) only if its members and admins hold no
+  removed UA (`PqChatRemovedKept(epochId, ua)`), whoever authors it; a removed member's rekey of `epochId` is refused
+  `PqChatNotMember`; dropping a removed member is a plain rekey, as dropping a leaver is.
+- `leave` stays the member's own flag (a child may keep a leaver); both may hold for one UA.
+- Recovery: `removedIn(epochId, ua)`, `removalCount(epochId)`, `removalAt(epochId, i)`; `PqChatRemoved(sessionId, epochId,
+  admin, members)` notifies. A 2-person chat is unchanged.
 - **Membership change**: any member or admin added, or one dropped without having left. Its author must be an admin of
   the parent (`PqChatNotAdmin(author)`). An `msig` admin signs by its quorum ([CTR-CHAT-03](#CTR-CHAT-03)).
 - **O2**: a plain rekey may take a parent's slot before an admin's change; the admin rekeys again from the new epoch, with

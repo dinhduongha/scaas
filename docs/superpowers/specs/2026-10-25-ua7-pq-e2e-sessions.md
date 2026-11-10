@@ -349,7 +349,7 @@ the member may repeat. This is liveness, not secrecy (the member never reads an 
 for the others may be garbage, which locks them out until one of them rekeys), it costs the member about 2.7 M gas per
 member per round, and a 2-person chat is not affected. Built: a member who **left** the parent authors no plain rekey of
 it (`PqChatNotMember`), so `leave` stops that member from extending the epoch. Not built (a new rule, the owner's call):
-an admin-signed record that marks another member as left (`PqChatRemove`), which would stop a member who does not leave.
+an admin-signed record that marks another member as left (`PqChatRemove`), which would stop a member who does not leave. Change (owner 2026-11-10): build it, **P48** below.
 
 **P10 — Roles** (D4). Each epoch record carries the admin set. **A membership change** (any member added or removed, any
 admin added or removed) needs an author who is an admin of the parent epoch (`PqChatNotAdmin`). **A plain rekey** — the
@@ -381,6 +381,47 @@ Messages and leaves are always signed by a leaf UA, never by the `msig`; an "on 
 plaintext.
 
 ## 6. Key schedule
+
+**P48 — Removal by an admin** (owner 2026-11-10, on Fable's review P1-2 fix (b); SPECIFIED, plan 3c). An admin of an
+epoch removes members of it with one signed record, so a member about to be removed can no longer keep itself in by
+racing plain rekeys (P9's limit). The record, a typed EIP-712 struct in `DS_C` under `PURPOSE_PQCHAT` (P7), every field
+an explicit parameter:
+
+| Struct | Type string |
+|---|---|
+| `PqChatRemove` | `PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)` |
+
+- `sessionId`, `epochId`: the session and the epoch the removal applies to (the parent of the next epoch); `nextEpoch`:
+  that next epoch's number, `epoch(epochId) + 1` (`PqChatEpochNumber` otherwise), so the record names the step it binds.
+- `members`: the removed UAs, 1 to `REMOVE_MAX` = 16, strictly sorted (`PqChatShape` otherwise), each a member of
+  `epochId` (`PqChatNotMember`).
+- `admin`: an admin of `epochId` (`PqChatNotAdmin`; an `msig` admin signs by its quorum, P10), who signs the record.
+- `nonce`: in the epoch scope `(sessionId, admin)` of §4.3, shared with that admin's epochs and leaves (a replay is
+  `PqChatNonceUsed`). No deadline, as no `PqChat` record has one (P7): the record is accepted only while `epochId` is
+  stored and complete in this instance (`PqChatUnknown`, `PqChatIncomplete`) and, at home, has no complete child yet
+  (`PqChatEpochTaken`); once a child holds the slot the removal is moot.
+
+`remove(PqChatRemove r, UASig sig)`: anyone submits it, relayable with a fee of 0 (P17, the rules of the ten signed
+writes); the contract checks the shape, the admin's rights and signature, then the nonce, marks each listed member
+removed from `epochId` (a member already removed stays so) and keeps the record and its `sigHash` in state.
+
+**Precedence.** Once `epochId` has a removal, a child of it completes in this instance only if neither its members nor its
+admins hold a removed UA (`PqChatRemovedKept(epochId, ua)`), whoever authors it; a removed member authors no rekey of
+`epochId` (`PqChatNotMember`, as a member that left, Fable P1-2 fix (a)); dropping a removed member counts as a plain
+rekey (P10), as dropping one that left does, so any remaining member may land the child. A child stored incomplete before
+the removal cannot complete while it keeps a removed UA. The check runs when a child completes, in `rekey` or in the last
+`addWraps`.
+
+**With `leave`.** `leave` stays the member's own flag (P12): a child may keep a member that left, and a member that left
+authors no plain rekey. `remove` is the admin's: the child must drop the member. Both may hold for one UA.
+
+**Recovery from state** (P47). `removedIn(epochId, ua)`, `removalCount(epochId)` and `removalAt(epochId, i)` (the record
+and its `sigHash`) read the removals of an epoch; a new device that finds an epoch with no complete child reads them
+before it builds the next epoch, and the child's member list shows the removal once it completes. `PqChatRemoved(sessionId,
+epochId, admin, members)` notifies.
+
+**A 2-person chat is unchanged**: no removal is needed there, and a rekey or a message reads one more packed field, in a
+slot it reads already.
 
 **P14 — KEM key check before encapsulation** (FIPS 203 §7.2). Scheme 1 only (`kemPk[0] == 0x01`, 1,601 B,
 CTR-UA-32); anything else is refused. Before every `Encaps` the client runs the **type check** (`ek` is 1,568 B) and the
