@@ -132,8 +132,9 @@ contract LinkClosureTest is Test {
     }
 
     function _dexMods() internal pure returns (string[] memory m) {
-        m = new string[](1);
-        m[0] = "SCaaSDexAdmin.sol:SCaaSDexD";
+        m = new string[](2);
+        m[0] = "SCaaSDexAdmin.sol:SCaaSDexGovernanceModule";
+        m[1] = "SCaaSDexLiquidityModule.sol:SCaaSDexLiquidityModule";
     }
 
     function _mods(IOpenFactory.TokenKind k) internal pure returns (string[] memory) {
@@ -280,7 +281,8 @@ contract LinkClosureTest is Test {
         (address[] memory d,) = deployDexModules(address(0xFAC));
         address[] memory dl = new address[](2);
         (dl[0], dl[1]) = (address(GovernanceLib), address(TradeLib));
-        seen += _scanModule("SCaaSDexD", d[0].code, dl, pins);
+        seen += _scanModule("SCaaSDexGovernanceModule", d[0].code, dl, pins);
+        seen += _scanModule("SCaaSDexLiquidityModule", d[1].code, dl, pins);
         assertEq(seen, vm.parseJsonKeys(pins, ".").length - 1, "every pinned module scanned");
     }
 

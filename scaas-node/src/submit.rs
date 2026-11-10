@@ -557,6 +557,13 @@ impl Submitter {
     pub async fn submit(&mut self, w: Work) {
         match self.guard.check(&self.chain, &w).await {
             Ok(()) => {}
+            // spec §11: a liquidity order the DEX already pulled landed (here or by another relayer): consumed, never dead (G6)
+            Err(Refusal::Policy(reason)) if reason.starts_with(guard::LIQUIDITY_ORDER_CLOSED) => {
+                if let Some(id) = w.job_id {
+                    self.report(id, "consumed", None, None, Some(reason)).await;
+                }
+                return;
+            }
             Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
             Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
         }
@@ -604,6 +611,10 @@ impl Submitter {
             Ok(g) => g,
             Err(SimError::Revert(reason)) if guard::over_cap(&reason) && crate::pqz::is_debit(&w) => {
                 return self.over_cap(&w, reason).await;
+            }
+            // re-check P3 (spec §11): a starved T7 on a DEX the guard found marked is gas, not a wrong DEX
+            Err(SimError::Revert(reason)) if guard::liquidity_starved(&w.data, &reason) => {
+                return self.requeue(&w, format!("simulate: {reason}: the tokens' capability check starved, retry")).await;
             }
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,

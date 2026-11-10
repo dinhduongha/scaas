@@ -17,6 +17,7 @@ view; a token kind's body module). Each group is one script with its own book (a
 | tokens | `Tokens.s.sol` | kinds 0-3, 8-11: ERC-20, pay, relay fee, wrapped, tax, owner governance, an ML-DSA-65 signer |
 | gov | `Gov.s.sol` | GovernanceRouter by UA signature, regulated powers, SmartKeyAccount, ComplianceRegistry |
 | dex | `Dex.s.sol` | SCaaSDex and its module D, the token trade entries |
+| liquidity | `Liquidity.s.sol` | `mtxLiquidity` (CTR-DEX-30): a v2-style pair created in the plan, adds, a withdraw, a v4-style position minted through its reader, a partial and a whole withdraw; the views and negatives of spec 2026-11-10-dex-liquidity.md §15 |
 | misc | `Misc.s.sol` | registry (every vector UA kind), own factory's release paths, MandateWallet, RefServiceEscrow |
 | zether | `zether.sh` | `script/ZetherE2E.s.sol`, `ZetherMore.s.sol` and their regulated twins (kinds 2, 3, 10, 11) |
 | pq | `pq.py` | `script/pqz/e2e.py` (its own deploy) + kinds 12, 13 + the public entries signed by ML-DSA-65 (PRECOMPILE mode) |

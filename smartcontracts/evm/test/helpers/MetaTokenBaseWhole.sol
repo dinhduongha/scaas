@@ -145,6 +145,10 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         _mtxInvalidateNoncesBody(from, batch, newMin, auth);
     }
 
+    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata o, IUARegistry.UASig calldata auth, uint256 amount, address submitter) external nonReentrant {
+        _mtxLiquidityPullBody(o, auth, amount, submitter);
+    }
+
     function mtxNonce(bytes32 from, uint256 batch) external view returns (uint256 _p0) {
         return _mtxNonceBody(from, batch);
     }

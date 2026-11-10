@@ -99,6 +99,19 @@ sol! {
     #[derive(Debug, PartialEq, Eq)]
     struct HybridPlan { bytes32 ref; DexLeg taker; DexLeg[] makers; uint256 outsideSell; uint256 outsideFloor; address[] extraTokens; }
 
+    /// `ITradeToken.LiquidityToken` / `LiquidityOrder` and `ISCaaSDex.LiquidityPlan` (CTR-DEX-30): one signed order in the DEX's
+    /// domain, every field named; `int24` ticks sign-extended.
+    #[derive(Debug, PartialEq, Eq)]
+    struct LiquidityToken { address token; uint256 amount; }
+    #[derive(Debug, PartialEq, Eq)]
+    struct LiquidityOrder {
+        bytes32 from; LiquidityToken[] inputs; LiquidityToken[] outputs; address positionManager; address positionReader;
+        uint256 positionIn; bytes32 positionPool; int24 tickLower; int24 tickUpper; uint128 minLiquidity; bytes32 recipient;
+        uint256 fee; address relayer; uint8 flags; uint256 batch; uint256 nonce; uint256 validUntil;
+    }
+    #[derive(Debug, PartialEq, Eq)]
+    struct LiquidityPlan { bytes32 ref; LiquidityOrder order; UASig auth; uint256[] pull; uint256 positionId; address[] extraTokens; }
+
     /// An outside-token order (CTR-DEX-18): the `TradeOrder` signed in the DEX's domain with its sell token.
     #[derive(Debug, PartialEq, Eq)]
     struct DexOrder { address sellToken; TradeOrder order; }
@@ -115,6 +128,12 @@ sol! {
     struct CancelDexOrder { DexOrder order; }
     struct InvalidateNonces { address from; uint256 batch; uint256 minNonce; }
 
+    /// A token's DEX-only liquidity pull (CTR-DEX-30): never a job; its selector is the ERC-165 id the pre-check asks.
+    #[derive(Debug)]
+    interface ILiquidityPull {
+        function mtxLiquidityPull(LiquidityOrder o, UASig auth, uint256 amount, address submitter) external;
+    }
+
     /// `SCaaSDex` (a clone per DEX, `createDex`): what the venue sends and reads.
     #[derive(Debug)]
     interface ISCaaSDex {
@@ -125,6 +144,11 @@ sol! {
         function exchangeOne(ExchangePlan p, Interaction[] interactions, address submitter) external;
         function mtxHybrid(HybridPlan p, Interaction[] interactions) external;
         function mtxHybridVia(HybridPlan p, address executor, bytes data) external;
+        function mtxLiquidity(LiquidityPlan p, Interaction[] interactions) external;
+        function modules() external view returns (address[] m);
+        function liquidityOrderDigest(LiquidityOrder o) external view returns (bytes32);
+        event LiquiditySettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 recipient,
+            uint256[] pulled, uint256[] refunded, uint256[] received, uint256[] dexFees, uint256 positionId, uint128 liquidity);
         event ExchangeFailed(bytes32 indexed ref, bytes reason);
         function settleOne(Settlement s, address submitter) external;
         function mtxCancelOrders(DexOrder[] orders, bytes[] sigs) external;
@@ -167,6 +191,9 @@ sol! {
         error ConservationBroken(address token);
         error NotSelf();
         error InteractionFailed(uint256 index, address target, bytes reason);
+        /// A token's T7 (`ITradeToken.NotLiquidityDex`), bubbled by `mtxLiquidity`: named, so a starved one is requeued
+        /// (`guard::liquidity_starved`), never `dead` as raw hex.
+        error NotLiquidityDex(address caller);
     }
 
     /// Every SCaaS contract on `MetaTxBase` (`IMetaTx`) plus the address surface: `SmartKeyAccount`'s (`IMetaTxAddress`: `mtxNonce`,
@@ -517,6 +544,18 @@ sol! {
         function isFrozen(bytes32 account) external view returns (bool);
         function canReceive(bytes32 account) external view returns (bool ok, uint8 reason);
         function order(bytes32 recordId) external view returns (OrderRecord);
+    }
+
+    /// A body module's group (T66b §4.5): the liquidity mark of a DEX is a module of group 11 (CTR-DEX-30, spec §11).
+    #[derive(Debug)]
+    interface IModuleGroup {
+        function moduleGroup() external view returns (uint8);
+    }
+
+    /// The registry's kind of a derived id (the verify budget of a liquidity plan).
+    #[derive(Debug)]
+    interface IUAKindOf {
+        function kindOf(bytes32 ua) external view returns (uint16);
     }
 
     /// ERC-165 (`MetaTokenBase.supportsInterface`): a regulated kind answers [`regulated_interface_id`], kinds 0-5 do not (M-10).

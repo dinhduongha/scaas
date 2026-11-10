@@ -1,5 +1,5 @@
 {
- "_comment": "T66b \u00a74.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures.",
+ "_comment": "T66b \u00a74.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures. Liquidity spec 2026-11-10 (re-check P3): module T of every kind also makes one STATICCALL to its caller (T7, `liquidityOrderDigest`, capped, one word read), which M5 allows; the DEX liquidity module SCaaSDexLiquidityModule makes no DELEGATECALL.",
  "NormalTokenP": [
   2,
   0
@@ -220,8 +220,12 @@
   8,
   0
  ],
- "SCaaSDexD": [
+ "SCaaSDexGovernanceModule": [
   6,
+  0
+ ],
+ "SCaaSDexLiquidityModule": [
+  0,
   0
  ]
 }

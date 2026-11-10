@@ -77,6 +77,36 @@ interface ITradeToken {
         address submitter;
     }
 
+    /// @notice One ERC-20 of a liquidity order (CTR-DEX-30): an input's maximum, or an output's minimum.
+    struct LiquidityToken {
+        address token;
+        uint256 amount;
+    }
+
+    /// @notice A liquidity order (CTR-DEX-30, spec 2026-11-10-dex-liquidity.md §4.1): signed once in the DEX's EIP-712
+    ///         domain (`"SCaaS Dex"`, `"1"`, the DEX clone, its `chain_uid`), the UA form only (a native signer is its
+    ///         address zero-padded). Executes once, whole; every SCaaS input token recomputes the digest with
+    ///         `verifyingContract = msg.sender` and verifies it itself (`mtxLiquidityPull`).
+    struct LiquidityOrder {
+        bytes32 from;              // the signer
+        LiquidityToken[] inputs;   // ERC-20s the signer gives: each pulled at most `amount` (> 0); 0..8, distinct
+        LiquidityToken[] outputs;  // ERC-20s the signer receives: each at least `amount` at the DEX after the fee; 0..8
+        address positionManager;   // the ERC-721 position contract; 0 = no position in this order
+        address positionReader;    // the listed reader of `positionManager`; set iff a position is received
+        uint256 positionIn;        // a position the signer gives; 0 = none
+        bytes32 positionPool;      // the pool of the position received, in the reader's terms; 0 = none received
+        int24 tickLower;           // its range; both 0 when none is received
+        int24 tickUpper;
+        uint128 minLiquidity;      // its liquidity after the plan, at least this; > 0 when a position is received
+        bytes32 recipient;         // receives every output and the received position; 0 = from
+        uint256 fee;               // DEX fee rate in ppm on every ERC-20 output; <= 10 000 (1 %)
+        address relayer;           // the only submitter allowed (0 = anyone)
+        uint8 flags;               // LISTED_POOLS (4) only
+        uint256 batch;             // order lane: the DEX's and each SCaaS input token's `minNonce[from][batch]`
+        uint256 nonce;             // valid while >= every lane floor it is checked against; < 2^128
+        uint256 validUntil;
+    }
+
     /// @notice Raised by `TradeLib` on the DEX's outside legs only (no SCaaS token emits them after T6, R18).
     event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
         uint256 dexFee);
@@ -90,6 +120,9 @@ interface ITradeToken {
     /// @notice `o.dex` gave back `amount` of what it pulled for `h` in this transaction (DX7: a hybrid's unsold
     ///         remainder, refunded to the signer); `pulled[h]` is lower by `amount`.
     event PullRestored(bytes32 indexed orderHash, uint256 amount);
+
+    /// @notice `mtxLiquidityPull` pulled `amount` of this token from `from` into `dex` for the liquidity order `orderHash`.
+    event LiquidityPulled(bytes32 indexed orderHash, bytes32 indexed from, address indexed dex, uint256 amount);
 
     error NotDex(address caller);
     error DexNotContract(address dex);
@@ -114,6 +147,11 @@ interface ITradeToken {
     /// @notice `mtxInvalidateNonces`: strictly increasing, at most `2^128`.
     error MinNonceNotIncreasing(uint256 current, uint256 requested);
     error MinNonceAboveCap(uint256 requested);
+    /// @notice `mtxLiquidityPull`'s capability check (T7): the caller did not answer `liquidityOrderDigest(o)` with the
+    ///         token's own digest (a DEX release without the liquidity module, or a call starved of gas).
+    error NotLiquidityDex(address caller);
+    /// @notice A liquidity order's shape (CTR-DEX-30 step 1 codes 1-5 on the DEX; 6 on a token: not exactly one input).
+    error LiquidityShape(uint8 code);
 
     /// @notice CTR-DEX-15, CTR-DEX-25 (R38): verify `o` and move the fill from `o.from` to `o.dex`; only `o.dex` may
     ///         call. Step 4 through the UA rule under `trade` (a native id by its own key, no registry; a derived one by
@@ -137,4 +175,19 @@ interface ITradeToken {
     function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) external view returns (bytes32);
     function pulled(bytes32 orderHash) external view returns (uint256);
     function minNonce(bytes32 from, uint256 batch) external view returns (uint256);
+}
+
+/// @title The token's liquidity pull (CTR-DEX-30, CTR-DEX-15 Change): a DEX-only entry in module T of every kind; its ERC-165
+///        id is the selector of its one function, answered by module A's `supportsInterface`.
+interface ILiquidityPullToken {
+    /// @notice Only a liquidity-capable DEX calls (a direct read of the caller, T1, T7); moves exactly `amount` of this token
+    ///         from `o.from` to the caller, once per order (`pulled[h]`), after the UA rule under purpose `trade` over the
+    ///         digest this token computes itself with `verifyingContract = msg.sender`.
+    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata o, IUARegistry.UASig calldata auth, uint256 amount,
+        address submitter) external;
+}
+
+/// @title The DEX's digest view of a liquidity order, read by a token's capability check (T7). It takes no guard.
+interface ILiquidityDex {
+    function liquidityOrderDigest(ITradeToken.LiquidityOrder calldata o) external view returns (bytes32);
 }

@@ -123,6 +123,9 @@ contract UniswapForkTest is Test {
         (keep[0], keep[1], keep[2], keep[3], keep[4], keep[5]) =
             (address(f), tokImpl, dexImpl, address(tok), address(dex), dex.puller());
         vm.makePersistent(keep);
+        // the body modules of the DEX and of the token kind (T66b; the liquidity spec §9.1) live at their own addresses
+        vm.makePersistent(dex.modules());
+        vm.makePersistent(ITokenModulesLike(tokImpl).modules());
         vm.createSelectFork(url, FORK_BLOCK);
         // The fork takes the block's own rules (Prague) over foundry.toml; the stack is built for Amsterdam
         // (Glamsterdam, NET-EVM-06: a public chain gets it only after its fork), so the fork runs there.
@@ -489,4 +492,82 @@ contract UniswapForkTest is Test {
         assertEq(dex.pulled(dex.dexOrderDigest(WETH, o)), 0);
         _clean();
     }
+
+    // ------------------------------------------------------------------ liquidity on real v2 bytecode (spec §15, opt-in)
+
+    /// `mtxLiquidity` through the real `UniswapV2Router02`: dave adds WETH and USDC (outside inputs, the puller; the DEX
+    /// verifies his signature) with `approve(router)` interactions reset after; the LP reaches erin net of the fee; then erin
+    /// gives the LP back for both tokens through `removeLiquidity`.
+    function test_fork_v2RouterAddRemove() public {
+        address pair = IV2FactoryLike(V2_FACTORY).getPair(WETH, USDC);
+        vm.startPrank(dave);
+        IERC20(WETH).approve(dex.puller(), type(uint256).max);
+        vm.stopPrank();
+        _fund(USDC, dave, 10_000e6);
+        vm.prank(dave);
+        IERC20(USDC).approve(dex.puller(), type(uint256).max);
+        ITradeToken.LiquidityOrder memory o;
+        (o.from, o.recipient, o.fee, o.relayer, o.batch, o.validUntil) =
+            (nid(dave), nid(erin), 3_000, relayer, 21, block.timestamp + 300);
+        o.inputs = new ITradeToken.LiquidityToken[](2);
+        (o.inputs[0], o.inputs[1]) = (ITradeToken.LiquidityToken(WETH, 1 ether), ITradeToken.LiquidityToken(USDC, 10_000e6));
+        o.outputs = new ITradeToken.LiquidityToken[](1);
+        o.outputs[0] = ITradeToken.LiquidityToken(pair, 1);
+        ISCaaSDex.LiquidityPlan memory p;
+        p.order = o;
+        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(DAVE_PK, dex.liquidityOrderDigest(o));
+        p.auth.signature = abi.encodePacked(r, ss, v);
+        p.pull = new uint256[](2);
+        (p.pull[0], p.pull[1]) = (1 ether, 10_000e6);
+        ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](3);
+        xs[0] = ISCaaSDex.Interaction(WETH, abi.encodeCall(IERC20.approve, (V2_ROUTER, 1 ether)));
+        xs[1] = ISCaaSDex.Interaction(USDC, abi.encodeCall(IERC20.approve, (V2_ROUTER, 10_000e6)));
+        xs[2] = ISCaaSDex.Interaction(V2_ROUTER, abi.encodeCall(IV2RouterLike.addLiquidity,
+            (WETH, USDC, 1 ether, 10_000e6, 0, 0, address(dex), block.timestamp + 300)));
+        vm.prank(relayer);
+        dex.mtxLiquidity(p, xs);
+        uint256 lp = IERC20(pair).balanceOf(erin);
+        assertGt(lp, 0);
+        assertEq(IERC20(WETH).allowance(address(dex), V2_ROUTER), 0);
+        assertEq(IERC20(pair).balanceOf(address(dex)), 0);
+        // erin withdraws
+        vm.prank(erin);
+        IERC20(pair).approve(dex.puller(), lp);
+        ITradeToken.LiquidityOrder memory w;
+        (w.from, w.fee, w.relayer, w.batch, w.validUntil) = (nid(erin), 0, relayer, 21, block.timestamp + 300);
+        w.inputs = new ITradeToken.LiquidityToken[](1);
+        w.inputs[0] = ITradeToken.LiquidityToken(pair, lp);
+        w.outputs = new ITradeToken.LiquidityToken[](2);
+        (w.outputs[0], w.outputs[1]) = (ITradeToken.LiquidityToken(WETH, 1), ITradeToken.LiquidityToken(USDC, 1));
+        ISCaaSDex.LiquidityPlan memory q;
+        q.order = w;
+        (v, r, ss) = vm.sign(ERIN_PK, dex.liquidityOrderDigest(w));
+        q.auth.signature = abi.encodePacked(r, ss, v);
+        q.pull = new uint256[](1);
+        q.pull[0] = lp;
+        xs = new ISCaaSDex.Interaction[](2);
+        xs[0] = ISCaaSDex.Interaction(pair, abi.encodeCall(IERC20.approve, (V2_ROUTER, lp)));
+        xs[1] = ISCaaSDex.Interaction(V2_ROUTER, abi.encodeCall(IV2RouterLike.removeLiquidity,
+            (WETH, USDC, lp, 0, 0, address(dex), block.timestamp + 300)));
+        uint256 w0 = IERC20(WETH).balanceOf(erin);
+        vm.prank(relayer);
+        dex.mtxLiquidity(q, xs);
+        assertGt(IERC20(WETH).balanceOf(erin), w0);
+        assertEq(IERC20(pair).balanceOf(erin), 0);
+    }
+}
+
+interface ITokenModulesLike {
+    function modules() external view returns (address[] memory);
+}
+
+interface IV2FactoryLike {
+    function getPair(address a, address b) external view returns (address);
+}
+
+interface IV2RouterLike {
+    function addLiquidity(address a, address b, uint256 amountADesired, uint256 amountBDesired, uint256 amountAMin,
+        uint256 amountBMin, address to, uint256 deadline) external returns (uint256, uint256, uint256);
+    function removeLiquidity(address a, address b, uint256 liquidity, uint256 amountAMin, uint256 amountBMin, address to,
+        uint256 deadline) external returns (uint256, uint256);
 }

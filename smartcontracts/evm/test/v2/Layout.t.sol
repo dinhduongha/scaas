@@ -143,6 +143,7 @@ contract LayoutTest is V2Fixture {
         _pin("NormalPqzToken", "NormalPqzToken"); // the PQZ layer lives in `scaas.pqz`
         _pin("WrappedPqzToken", "WrappedPqzToken");
         _pin("SCaaSDex", "SCaaSDex"); // its state lives in `scaas.dex`
+        _pin("SCaaSDexLiquidityModule", "SCaaSDexLiquidityModule"); // the DEX's layout (M6): none of its own
         _pin("GovernanceRouter", "GovernanceRouter"); // no state of its own: nonces in `scaas.metatx`, the pair transient
     }
 

@@ -1004,6 +1004,34 @@
     "group": "T"
    },
    {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
     "sel": "776cae70",
     "sig": "mtxNonce(bytes32,uint256)",
     "name": "mtxNonce",
@@ -3142,6 +3170,34 @@
     "returns": "",
     "ifaces": [
      "ITradeToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
     ],
     "vis": "external",
     "domain": "trade",
@@ -6011,6 +6067,34 @@
     "returns": "",
     "ifaces": [
      "ITradeToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
     ],
     "vis": "external",
     "domain": "trade",
@@ -8974,6 +9058,34 @@
     "returns": "",
     "ifaces": [
      "ITradeToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
     ],
     "vis": "external",
     "domain": "trade",
@@ -12493,6 +12605,34 @@
     "group": "T"
    },
    {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
     "sel": "776cae70",
     "sig": "mtxNonce(bytes32,uint256)",
     "name": "mtxNonce",
@@ -15782,6 +15922,34 @@
     "returns": "",
     "ifaces": [
      "ITradeToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
     ],
     "vis": "external",
     "domain": "trade",
@@ -19322,6 +19490,34 @@
     "group": "T"
    },
    {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
     "sel": "776cae70",
     "sig": "mtxNonce(bytes32,uint256)",
     "name": "mtxNonce",
@@ -21909,6 +22105,34 @@
     "returns": "",
     "ifaces": [
      "ITradeToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
     ],
     "vis": "external",
     "domain": "trade",
@@ -25227,6 +25451,34 @@
     "returns": "",
     "ifaces": [
      "ITradeToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
     ],
     "vis": "external",
     "domain": "trade",
@@ -28639,6 +28891,34 @@
     "returns": "",
     "ifaces": [
      "ITradeToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
     ],
     "vis": "external",
     "domain": "trade",
@@ -32607,6 +32887,34 @@
     "group": "T"
    },
    {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
     "sel": "776cae70",
     "sig": "mtxNonce(bytes32,uint256)",
     "name": "mtxNonce",
@@ -36345,6 +36653,34 @@
     "returns": "",
     "ifaces": [
      "ITradeToken"
+    ],
+    "vis": "external",
+    "domain": "trade",
+    "group": "T"
+   },
+   {
+    "sel": "85fdfd38",
+    "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+    "name": "mtxLiquidityPull",
+    "decl": "ERC20MetaTx",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "ITradeToken.LiquidityOrder calldata o",
+     "IUARegistry.UASig calldata auth",
+     "uint256 amount",
+     "address submitter"
+    ],
+    "names": [
+     "o",
+     "auth",
+     "amount",
+     "submitter"
+    ],
+    "returns": "",
+    "ifaces": [
+     "ILiquidityPullToken"
     ],
     "vis": "external",
     "domain": "trade",
@@ -39259,6 +39595,7 @@
   "IConfidentialWrappedToken": "src/confidential/IConfidentialToken.sol",
   "IFactoryToken": "src/factory/IFactoryToken.sol",
   "IGovernance": "src/governance/IGovernance.sol",
+  "ILiquidityPullToken": "src/trade/ITradeToken.sol",
   "IPqzToken": "src/pqz/IPqzToken.sol",
   "IRegulatedToken": "src/regulated/IRegulatedToken.sol",
   "ITradeToken": "src/trade/ITradeToken.sol",

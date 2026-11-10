@@ -1,0 +1,17 @@
+ua-mtx-liquidity L0 (spec 2026-11-10-dex-liquidity.md R7, task L0): SCaaSDexD -> SCaaSDexGovernanceModule, GROUP_D -> GROUP_GOVERNANCE (id 10).
+No logic change; the metadata hash moves, so the code hashes move. Hashes over the forge artifacts (solc 0.8.37, the repo profile),
+link references and immutables zeroed (link- and deploy-independent). base c15af56f -> L0.
+
+contract | runtime B old -> new | initcode keccak old -> new | runtime keccak old -> new
+SCaaSDexD -> SCaaSDexGovernanceModule | 6459 -> 6459 | 0xb1295d321fb50a7685f909f668ecbaa1071348d4926ad3948bd83888d38ab59c -> 0x43359a9014f40eb2e6ce93e6b3dfd03dc5b87b9025841f44b852522543656404 | 0x352ac95a4cdb7439d8a781f0b4c0b7f1703256daf96cd151e531d3a32dad1c82 -> 0x0862e2c92eb4ed9c36619ee584084b8a83ca786ea74024a8add2cd83d24f53e4
+SCaaSDex -> SCaaSDex | 32991 -> 32991 | 0x32d64105b8567684d2d906bcb3936006aa3971f19568b57421356f5cf49f33a1 -> 0xc283716b5e2b268e959f164132ea7be0fc4d9a3537c176e2979301e4c7d666bf | 0xd4830dca129aea12c1e9f5c673deb2bd15c0f8ccd1ebdaa4195293751cb8ba6a -> 0xdaf4dc176c0164aadbe4e77858a7b5ffef3110eaa692ed89e35e07949f23bffa
+
+CREATE2 address of the module: keccak(init ‖ abi.encode(factory, "")) with GovernanceLib linked moves with its init code; the SCaaS
+testnet Step 5 deploy keeps its old module (deployments/7622-t66b-releases.json key SCaaSDexD) until its next deploy (test-only,
+no migration); a new deploy writes the release row SCaaSDexGovernanceModule (Dex.s.sol books that key).
+Size: SCaaSDex 32991 B before and after (size-baseline.json unchanged), the module 6459 B before and after.
+
+step | commit | rc | counts
+test/v2 Dex*, LinkClosure, Layout | L0 | 0 | 11 suites, 205 passed, 0 failed
+test/ua UADex*, UAModulePins | L0 | 0 | 4 suites, 19 passed, 0 failed
+docs_check | L0 | 0 | 0 errors

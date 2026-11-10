@@ -26,7 +26,7 @@ use alloy::primitives::{Address, Bytes, B256};
 use alloy::sol_types::{SolCall, SolValue};
 use tracing::warn;
 
-use crate::abi::{IMtxIds, IOpenFactory, IPqzToken, IRelayFeeRouter, ISCaaSDex, IToken, IUALedger, IUARegistry};
+use crate::abi::{IMtxIds, IModuleGroup, IOpenFactory, IPqzToken, IRelayFeeRouter, ISCaaSDex, IToken, IUAKindOf, IUALedger, IUARegistry, IERC165};
 use crate::chain::{BlockGas, Chain, SimError};
 use crate::config::ChainCfg;
 use crate::metatx::{Mtx, UaMtx};
@@ -443,6 +443,157 @@ pub fn reason_is_out_of_gas(data: &[u8]) -> bool {
     data.is_empty() || <InteractionFailed as alloy::sol_types::SolError>::abi_decode(data).is_ok_and(|e| e.reason.is_empty())
 }
 
+/// `ILiquidityPullToken`'s ERC-165 id: the selector of `mtxLiquidityPull` (CTR-DEX-30).
+pub const LIQUIDITY_PULL_ID: [u8; 4] = [0x85, 0xfd, 0xfd, 0x38];
+/// The liquidity module's group (`SCaaSDexCore.GROUP_LIQUIDITY`).
+pub const GROUP_LIQUIDITY: u8 = 11;
+/// A liquidity plan's work beside its verifies (spec §13: the plan's base): what the budget check adds to the caps.
+pub const LIQUIDITY_BASE_GAS: u64 = 1_000_000;
+
+/// The liquidity mark (spec §11, review P1-2 (b)): a module of group 11 among a DEX's `modules()`.
+pub fn liquidity_marked(groups: &[u8]) -> bool {
+    groups.contains(&GROUP_LIQUIDITY)
+}
+
+/// A kind's verify cap (CTR-DEX-26's table); `None` for a kind the table does not name (the simulation decides).
+pub fn verify_cap(kind: u16) -> Option<u64> {
+    Some(match kind {
+        0x0131 => 5_950_000, // mldsa65 (cached key)
+        0x0130 => 4_250_000, // mldsa44 (cached key)
+        0x0132 => 2_500_000, // fndsa512
+        0x0133 => 1_400_000, // slhdsa128s
+        0x0102 => 210_000,   // ed25519
+        // the classical row (CTR-DEX-26, <= 50,000): p256, webauthn-p256, bip340, secp256k1 (L6d; the deploy's cap), a native id
+        0x0101 | 0x0100 | 0x0103 | 0x0108 | 0 => 50_000,
+        _ => return None,
+    })
+}
+
+/// `LIQUIDITY_TOO_LARGE` (spec §11, §13): every SCaaS input verifies the same signature once, so the plan needs the signer's
+/// cap times the SCaaS inputs plus its base within `budget` (min of the lane's `max_gas_per_tx` and the chain's block limit).
+pub fn liquidity_too_large(scaas_inputs: u64, kind: u16, budget: u64) -> Option<String> {
+    let need = verify_cap(kind)?.saturating_mul(scaas_inputs).saturating_add(LIQUIDITY_BASE_GAS);
+    (need > budget).then(|| format!("LIQUIDITY_TOO_LARGE: {scaas_inputs} SCaaS inputs of kind 0x{kind:04x} need about {need} gas, \
+        above {budget}: split the order"))
+}
+
+/// A simulation of `mtxLiquidity` that reverts `NotLiquidityDex(dex)` on a DEX the guard found marked is a token's capability
+/// check starved of gas (re-check P3), not a wrong DEX: the job is requeued, never dead.
+pub fn liquidity_starved(data: &[u8], reason: &str) -> bool {
+    data.get(..4) == Some(&ISCaaSDex::mtxLiquidityCall::SELECTOR[..]) && reason.starts_with("NotLiquidityDex(")
+}
+
+/// The refusal of a liquidity order the DEX already pulled (`pulled(h) != 0`): it landed, here or by another relayer, so the
+/// submitter reports it `consumed`, never `dead` (G6; spec §11 "completion and state").
+pub const LIQUIDITY_ORDER_CLOSED: &str = "LIQUIDITY_ORDER_CLOSED";
+
+/// The pre-checks of a `mtxLiquidity` job before simulation (spec 2026-11-10-dex-liquidity.md §11): the DEX's liquidity mark
+/// (`DEX_NOT_LIQUIDITY`); `relayer` 0 or this lane (`LIQUIDITY_WRONG_RELAYER`); the node's `h` equal to the DEX's
+/// `liquidityOrderDigest` (`LIQUIDITY_DIGEST_MISMATCH`); a native signer's signature over `h` (`BAD_SIGNATURE`, CTR-UA-24: an
+/// account without code signs with its own key, a contract's ERC-1271 is the simulation's, as [`Guard::check_signature`]);
+/// `pulled(h) == 0` ([`LIQUIDITY_ORDER_CLOSED`]); each SCaaS input's `ILiquidityPullToken` (`LIQUIDITY_TOKEN_UNSUPPORTED`: a
+/// token of an earlier release); the verify budget within min(`max_gas_per_tx`, the block gas limit) (`LIQUIDITY_TOO_LARGE`).
+/// The signed `validUntil` narrows the job's deadline (`typed.rs`), which the lane checks before simulation. A transport
+/// error is a retry; a token's read that reverts is the answer "no".
+// ponytail: reads per job, no cache; cache the mark per DEX if the reads show up in the lane's latency
+async fn check_liquidity(chain: &Chain, w: &Work, max_gas_per_tx: u64) -> Result<(), Refusal> {
+    let policy = |m: String| Refusal::Policy(m);
+    let call = <ISCaaSDex::mtxLiquidityCall as SolCall>::abi_decode(&w.data)
+        .map_err(|e| policy(format!("BAD_PAYLOAD: mtxLiquidity: {e}")))?;
+    let read = |e: SimError| match e {
+        SimError::Transport(m) => Err(Refusal::Transport(m)),
+        SimError::Revert(_) => Ok(()),
+    };
+    let mut groups = vec![];
+    match chain.call_view(w.to, ISCaaSDex::modulesCall {}).await {
+        Ok(ms) => {
+            for m in ms {
+                match chain.call_view(m, IModuleGroup::moduleGroupCall {}).await {
+                    Ok(g) => groups.push(g),
+                    Err(e) => read(e)?,
+                }
+            }
+        }
+        Err(e) => read(e)?,
+    }
+    if !liquidity_marked(&groups) {
+        return Err(policy(format!("DEX_NOT_LIQUIDITY: {:#x} has no liquidity module (group 11 among its modules())", w.to)));
+    }
+    let o = &call.p.order;
+    if o.relayer != Address::ZERO && o.relayer != chain.address() {
+        return Err(policy(format!("LIQUIDITY_WRONG_RELAYER: the order is bound to {:#x}, not this lane {:#x}", o.relayer,
+            chain.address())));
+    }
+    let uid = chain.uid().await.map_err(|e| Refusal::Transport(format!("chain_uid: {e:#}")))?;
+    let h = crate::dex::liquidity_order_hash(&crate::dex::domain("SCaaS Dex", chain.number, w.to, uid), o);
+    match chain.call_view(w.to, ISCaaSDex::liquidityOrderDigestCall { o: o.clone() }).await {
+        Ok(d) if d == h => {}
+        Ok(d) => return Err(policy(format!("LIQUIDITY_DIGEST_MISMATCH: the DEX's liquidityOrderDigest {d:#x} is not the node's h {h:#x}"))),
+        Err(SimError::Revert(m)) => return Err(policy(format!("LIQUIDITY_DIGEST_MISMATCH: liquidityOrderDigest reverts ({m})"))),
+        Err(SimError::Transport(m)) => return Err(Refusal::Transport(m)),
+    }
+    let a = &call.p.auth;
+    if let Some(who) = crate::metatx::native(&o.from).filter(|_| a.keyData.is_empty() && a.members.is_empty() && a.signature.len() == 65) {
+        if !typed::recovers(h, &a.signature, who) {
+            match chain.is_contract_at(who).await {
+                Ok(true) => {}
+                Ok(false) => return Err(policy(format!("BAD_SIGNATURE: not {who:#x}'s over the liquidity order {h:#x}"))),
+                Err(e) => return Err(Refusal::Transport(format!("eth_getCode: {e:#}"))),
+            }
+        }
+    }
+    match chain.call_view(w.to, ISCaaSDex::pulledCall { orderHash: h }).await {
+        Ok(n) if n.is_zero() => {}
+        Ok(_) => return Err(policy(format!("{LIQUIDITY_ORDER_CLOSED}: the DEX pulled the order {h:#x} already (consumed)"))),
+        Err(SimError::Revert(m)) => return Err(policy(m)),
+        Err(SimError::Transport(m)) => return Err(Refusal::Transport(m)),
+    }
+    let mut scaas = vec![];
+    for t in &o.inputs {
+        if chain.call_view(w.to, ISCaaSDex::tokenKindCall { token: t.token }).await.map_err(|e| match e {
+            SimError::Transport(m) => Refusal::Transport(m),
+            SimError::Revert(m) => policy(m),
+        })? != 1 {
+            continue;
+        }
+        let ok = match chain.call_view(t.token, IERC165::supportsInterfaceCall { id: LIQUIDITY_PULL_ID.into() }).await {
+            Ok(b) => b,
+            Err(e) => {
+                read(e)?;
+                false
+            }
+        };
+        if !ok {
+            return Err(policy(format!("LIQUIDITY_TOKEN_UNSUPPORTED: {:#x} answers no ILiquidityPullToken (a token of an \
+                earlier release cannot be a liquidity input)", t.token)));
+        }
+        scaas.push(t.token);
+    }
+    let Some(first) = scaas.first() else { return Ok(()) };
+    let kind = if crate::metatx::native(&o.from).is_some() {
+        0
+    } else {
+        let reg = chain.call_view(*first, IUALedger::registryCall {}).await.map_err(|e| match e {
+            SimError::Transport(m) => Refusal::Transport(m),
+            SimError::Revert(m) => policy(m),
+        })?;
+        match chain.call_view(reg, IUAKindOf::kindOfCall { ua: o.from }).await {
+            Ok(k) => k,
+            Err(e) => {
+                read(e)?;
+                return Ok(()); // the simulation names it
+            }
+        }
+    };
+    let block = chain.block_gas().await.map_err(|e| Refusal::Transport(format!("block gas limit: {e:#}")))?;
+    // the lane's per-transaction cap and the chain's block, never a fixed 2^24 (EIP-7825 is not on every chain); the config
+    // always carries `max_gas_per_tx` (its serde default, config.rs), so no block-only fallback is needed
+    match liquidity_too_large(scaas.len() as u64, kind, max_gas_per_tx.min(block.limit)) {
+        Some(m) => Err(policy(m)),
+        None => Ok(()),
+    }
+}
+
 /// The next gas to try for `mtxSettle`: ×1.5, capped at `max`; `None` once at the cap.
 pub fn next_gas(g: u64, max: u64) -> Option<u64> {
     (g < max).then(|| g.saturating_add(g / 2).min(max))
@@ -475,6 +626,8 @@ impl From<Refusal> for SimError {
 /// (a contract that is not bound yet is asked again).
 pub struct Guard {
     pub tokens: Arc<RwLock<Vec<Address>>>,
+    /// The lane's `max_gas_per_tx` (a liquidity plan's verify budget, spec §11).
+    max_gas_per_tx: u64,
     relay_fee: Option<RelayFee>,
     max_pay_meta_bytes: usize,
     token_factory: Option<Address>,
@@ -503,6 +656,7 @@ impl Guard {
     pub fn new(cfg: &ChainCfg, tokens: Arc<RwLock<Vec<Address>>>) -> anyhow::Result<Self> {
         Ok(Self {
             relay_fee: RelayFee::from_cfg(cfg)?,
+            max_gas_per_tx: cfg.max_gas_per_tx,
             max_pay_meta_bytes: cfg.relay_params()?.max_pay_meta_bytes,
             tokens,
             token_factory: cfg.token_factory,
@@ -725,11 +879,13 @@ impl Guard {
             // group 3f (spec §11.1): `refuse_shield_when_unserved`, for every consumer
             return self.pqz.check_shield(chain, w).await;
         }
-        if allowed(rule, &self.facts(chain, w.to, rule).await?) {
-            Ok(())
-        } else {
-            Err(refused(format!("{} on {:#x}", row.entry, w.to)))
+        if !allowed(rule, &self.facts(chain, w.to, rule).await?) {
+            return Err(refused(format!("{} on {:#x}", row.entry, w.to)));
         }
+        if sel == ISCaaSDex::mtxLiquidityCall::SELECTOR {
+            return check_liquidity(chain, w, self.max_gas_per_tx).await;
+        }
+        Ok(())
     }
 
     /// The gateway pre-check, on every path: the local typed digest against a native signature. Recovered to the signer ⇒
@@ -1173,8 +1329,9 @@ mod tests {
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
-        // T93: 104 -> 116, `PqChat`'s twelve plain rows; UA-7 P48: -> 117, `remove`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 117, "table rows: 86 typed with an entry, 31 plain");
+        // T93: 104 -> 116, `PqChat`'s twelve plain rows; UA-7 P48: -> 117, `remove`; ua-mtx-liquidity L6 (79c3501e, moved at L6d):
+        // -> 118, `mtxLiquidity`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 118, "table rows: 86 typed with an entry, 32 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1496,6 +1653,7 @@ mod tests {
         ("mtxTransferWithFee", "(bytes32,bytes32,", "the flat transfer with a fee: as mtxTransfer"),
         ("mtxTrade", "((bytes32,address,", "the DEX's pull (NotDex for any other caller)"),
         ("restorePulled", "((bytes32,address,", "the DEX's (NotDex)"),
+        ("mtxLiquidityPull", "((bytes32,(address,uint256)[],", "the DEX's liquidity pull (NotLiquidityDex, and no valid digest for any other caller): reached only through the relayed mtxLiquidity (spec 2026-11-10-dex-liquidity.md §11)"),
         ("exchangeOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
         ("settleOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
         ("mtxCreateToken", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
@@ -1832,9 +1990,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // twelve proof entries of 5 and 13 (ten of 4 and 12) moved selector in place (rowed or exempt as before)
     // group 3h T61: (257, 181, 241) -> (258, 181, 245): the router's `mtxSetProofStore` rowed; `setProofStore` governed (bit 24) on
     // each of the four PQZ kinds
-    const ROWED: usize = 258;
+    // ua-mtx-liquidity L6: ROWED 258 -> 259 (the DEX's `mtxLiquidity`), EXEMPT 181 -> 193 (`mtxLiquidityPull` on the twelve
+    // kinds, NOT_ROWS)
+    const ROWED: usize = 259;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
-    const EXEMPT: usize = 181;
+    const EXEMPT: usize = 193;
     const GOVERNED: usize = 245;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
@@ -2088,6 +2248,30 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         assert!(!settled_all(&ok(vec![true, false])), "an empty MatchFailed is out of gas: more gas, never invalid");
         assert!(!settled_all(&ok(vec![])));
         assert!(!settled_all(&[1, 2, 3]));
+    }
+
+    /// Spec 2026-11-10-dex-liquidity.md §11: the liquidity mark, the verify budget (three mldsa65-signed SCaaS inputs do not fit
+    /// 2^24, two do; a classical signer's eight do), and a starved capability check read as a retry, never a wrong DEX.
+    #[test]
+    fn liquidity_pre_checks() {
+        assert!(liquidity_marked(&[10, 11]));
+        assert!(!liquidity_marked(&[10]));
+        assert!(!liquidity_marked(&[]));
+        assert!(liquidity_too_large(3, 0x0131, MAX_TX_GAS).is_some_and(|m| m.starts_with("LIQUIDITY_TOO_LARGE")));
+        assert!(liquidity_too_large(2, 0x0131, MAX_TX_GAS).is_none());
+        assert!(liquidity_too_large(8, 0, MAX_TX_GAS).is_none());
+        assert!(liquidity_too_large(2, 0x0131, 12_000_000).is_some(), "a block below 2 caps and the base");
+        assert!(liquidity_too_large(9, 0x0999, 1).is_none(), "a kind the table does not name: the simulation's");
+        // CTR-DEX-26's classical row (<= 50,000) holds secp256k1 too (the deploy's cap, DeployBase.sol)
+        assert_eq!(verify_cap(0x0108), Some(50_000), "secp256k1");
+        let sel = ISCaaSDex::mtxLiquidityCall::SELECTOR;
+        assert!(liquidity_starved(&[sel[0], sel[1], sel[2], sel[3], 0], "NotLiquidityDex(0x00000000000000000000000000000000000000d1)"));
+        assert!(!liquidity_starved(&[sel[0], sel[1], sel[2], sel[3]], "OrderClosed(0x01)"));
+        assert!(!liquidity_starved(&[0, 0, 0, 0], "NotLiquidityDex(0x01)"), "another entry: not ours");
+        // the chain's bytes as the simulation decodes them (L6c: unnamed, they read `revert 0x0e46ff74…` and went dead)
+        let t7 = crate::abi::decode_revert(&ISCaaSDex::NotLiquidityDex { caller: Address::repeat_byte(0xd1) }.abi_encode());
+        assert!(liquidity_starved(&[sel[0], sel[1], sel[2], sel[3], 0], &t7), "{t7}");
+        assert_eq!(LIQUIDITY_PULL_ID, <crate::abi::ILiquidityPull::mtxLiquidityPullCall as SolCall>::SELECTOR);
     }
 
     #[test]

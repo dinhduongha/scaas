@@ -217,6 +217,21 @@ exception.
 `relayer = 0` another submitter may exchange the order; the signed limit still holds and only output it routes outside
 the DEX depends on its honesty — clients therefore keep `relayer` = the venue node.
 
+<a id="NODE-DEX-19"></a>**NODE-DEX-19** — **Liquidity plans are built by the submitter; the node relays them as named fields**
+(spec 2026-11-10-dex-liquidity.md §11). In this round a client or a namespace with `allow_call` builds the `LiquidityPlan`
+and its interactions; the node checks and relays it (`mtxLiquidity`, [CTR-DEX-30](../contracts/dex.md#CTR-DEX-30)); the
+`OrderRouter`'s liquidity planner (quotes, routes, the default `relayer` binding) is PLANNED. The node keeps no surplus
+([NODE-DEX-18](#NODE-DEX-18)). A note for relayers: a signer can take proceeds as a fee-free refund by listing the proceeds
+token as an input with a tiny pull (the refund of step 7 carries no fee); the fee is the signer's own rate, so nothing is
+stolen, but a relayer that lives on the DEX fee looks at the shape before relaying. A revert `NotLiquidityDex(dex)` from a
+DEX that carries the liquidity mark is gas starvation of the token's capability check: a retry with more gas, never a
+wrong DEX. An order the DEX already pulled is `consumed`, never `dead` (`LIQUIDITY_ORDER_CLOSED`, G6). No `RelayFeeRouter`
+wrap of `mtxLiquidity` is built (C10). Status: the row, the pre-checks of spec §11 (the codes in
+[job-api.md](job-api.md)), the liquidity
+mark (read by the guard) and the retry BUILT (`guard.rs` `check_liquidity`, `liquidity_pre_checks`; through the RPC on
+anvil, `tests/e2e.rs` `liquidity_pre_checks_on_a_chain`, which also found the starved revert unnamed, fixed in `abi.rs`); completion by
+`LiquiditySettled` and the indexer rows SPECIFIED.
+
 ## <a id="intake"></a>5. Intake
 
 Spam controls at the door: body ≤ 64 KiB; amounts `0 < amount < 2^128`; `nonce < 2^128` (the chain refuses a larger one, `NonceAboveCap`, review C6-5); `validUntil ∈ (now + 5 s, now + 30 days]`; a

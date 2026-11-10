@@ -53,7 +53,7 @@ fi
 tgt=${2:?target}
 OUTD=runs/2026-11-10-ua-mtx-merge-t66b-step5b
 LOG=$OUTD/matrix-$tgt.log
-GROUPS=${MATRIX_GROUPS:-tokens gov dex misc zether pq pqoff verifiers views}
+GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers views}
 T=$(mktemp -d)
 A= CP= P= STAGE=setup
 CS=$(cd ../../pqz-core/nethermind/chain && pwd)
@@ -258,7 +258,7 @@ for g in $GROUPS; do
   r=0 res=ok SECS=0
   say "/$g" "start"
   case $g in
-  tokens|gov|dex|misc)
+  tokens|gov|dex|liquidity|misc)
     G=$(echo "$g" | sed 's/^./\U&/')
     # forge's limit = its simulated gasUsed x m / 100 (README); tokens: x 2.00 (anvil undershot a CREATE by 19 % and a
     # kind-2 relay at x 1.30); misc: its SCaaSDex release and refund-heavy calls carry their own gas

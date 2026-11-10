@@ -1195,6 +1195,15 @@ Change (2026-11-03, owner; status: documented, the planner itself still SPECIFIE
 **Cost if wrong.** A node that keeps part of the route output turns its quote into a hidden fee on top of the signed one.
 **Source.** `history/specs/2026-10-08-dex-exchange-design.md` §2 S4, S6, §3 DS-7.
 
+### NODE-DEX-19 — Liquidity plans built by the submitter, relayed as named fields
+- old: — · status: current · owner: no · date: 2026-11-10 · normative: node/dex-venue.md#NODE-DEX-19 · superseded-by: —
+
+**Why.** The liquidity spec §11 (proposed NODE-DEX-19): in this round the submitter builds the `LiquidityPlan`, the node
+relays it; the planner is PLANNED. Fable's re-check (P3): the fee-free-refund note for relayers and `NotLiquidityDex` from a
+DEX with the liquidity mark read as a retry with more gas.
+**Cost if wrong.** A planner later moves who builds plans; the contract's checks are unchanged.
+**Source.** `docs/superpowers/specs/2026-11-10-dex-liquidity.md` §11, §19.1.
+
 ### NODE-DEX-80 — DEX book persisted in ERP
 - old: RS5-2 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-DEX-14
 
@@ -3037,6 +3046,41 @@ Change (2026-10-30): final review fix, controller (owner may override) — **the
 Change (2026-10-30): **built** (task T7 the executor and its 12 unit tests, task T10 the fork test and its run log `smartcontracts/evm/runs/2026-10-30-dex-round-fork.txt`).
 Change (2026-10-30): controller ruling, owner may override — **the executor returns unspent `tokensOut` (the taker's unsold sell token among them) to its DEX** instead of requiring them at zero. What: at the end of `exchangeCallback` the executor sends its whole balance of each `tokensIn` and any unspent balance of each `tokensOut` to the DEX, and raises `Leftover(token)` only for intermediate hop tokens, so it ends at 0 in every token; the DEX spec's section 9 sentence "every `tokensOut` balance must be zero (`Leftover`)" is amended accordingly in T16. Why: the owner's hybrid rule of 2026-10-30 (the taker's unsold remainder is refunded) post-dates that sentence, and `test_hybrid_refund_viaExecutor` requires the unsold sell token to come back; the DEX's conservation check stays the guard. Cost if wrong: a two-line revert in the executor. Task T7; the review accepted it.
 Change (2026-10-30): owner 2026-10-30 — **the fork RPC is the public archive endpoint dRPC** (no key, archive state confirmed at block 21,800,000; its URL is not written here), passed only as `SCAAS_FORK_RPC_URL` in the controller's run command and never written to a repo file, commit or log; the run log records the block and the outcome only. Cost if wrong: a re-run needs another archive endpoint (any that serves the pinned block works). Run: 9 passed, 0 failed, rc 0, log committed in T10 run log.
+
+### CTR-DEX-30 — Liquidity: one signed LiquidityOrder through the DEX, outcomes only
+- old: — · status: current · owner: yes · date: 2026-11-10 · normative: contracts/dex.md#CTR-DEX-30 · superseded-by: —
+
+**Why.** A SCaaS token refuses `approve` from an EOA or a UA (CTR-TOK-01, CTR-UA-27), so no AMM router can pull a deposit.
+Owner rulings 2026-11-10 (the liquidity spec §2): reuse the DEX's machinery, no adapter per AMM (R1); a signed typed
+`LiquidityOrder` in the DEX's domain, the UA form (R2); SCaaS inputs pulled by the token's new DEX-only `mtxLiquidityPull`
+in module T of every kind, a new token release (R3, R9, Q2 = yes), outside inputs and positions by the `DexPuller`; outcome
+checks only (R4); withdraw as an order that gives the LP or the position (R5); the body in a new DEX module (R6); module
+names by domain, `SCaaSDexLiquidityModule` and `SCaaSDexD` renamed `SCaaSDexGovernanceModule` (R7); no `mtxLiquidityVia`
+yet (R10, Q3 = not now). Controller choices the owner may override: C1 the DEX's domain, every verifier recomputes `h`; C2
+the UA purpose `trade`; C3 the minimum net of the fee, measured at the DEX and again at the recipient; C4 the fee on ERC-20
+outputs only; C5 cancel by lane and expiry only; C6 kinds from the DEX's record; C7 the puller pulls a position by its
+unchanged `pull`; C8 the rule ids; C9 at most eight inputs, outputs and extra tokens; C10 no `RelayFeeRouter` wrap in this
+round (relayed directly at its signed relayer / fee, fee 0 included). Fable's review (approve with fixes) and re-check
+(approve) are applied (spec §19, §19.1). Build choice (ua-mtx-liquidity): a token without code at the snapshot holds 0
+(the plan's own interaction creates a v2 pair).
+**Cost if wrong.** A new token release and DEX release; nothing deployed is upgraded, all chains test-only.
+**Source.** `docs/superpowers/specs/2026-11-10-dex-liquidity.md`.
+Change (2026-11-10): **built** on branch `ua-mtx-liquidity` (UNAUDITED): `SCaaSDexLiquidityModule`, `SCaaSDexCore`,
+`LiquidityLib`, `mtxLiquidityPull` on the twelve kinds, `test/liquidity/`, `liquidity_kat.json`, `clientkeys`, the node row.
+Change (2026-11-10, owner): the size stop of spec §9.3 (`SCaaSDex` 33,628 B, over its 33,594 B margin by 34 B) is resolved by
+lever (a) (the liquidity views already in the module: 0 B) then lever (b): `mtxCancelOrders`, `mtxInvalidateNonces` and their
+digest views move into the liquidity module behind typed stubs. Measured: `SCaaSDex` 32,809 B, the module 19,055 B, module T
+17,418-20,219 B per kind, module A +27 B, the faces +154-181 B; `size-baseline.json` moved in its own commit. Status: done.
+
+### CTR-DEX-31 — A received position is bound by a signed, listed reader
+- old: — · status: current · owner: yes · date: 2026-11-10 · normative: contracts/dex.md#CTR-DEX-31 · superseded-by: —
+
+**Why.** Ownership of an ERC-721 position proves who holds it, not what it holds: a hostile submitter can mint the deposit
+into its own position and hand over dust. Owner 2026-11-10, Q1 = A (R8): a signed and listed read-only reader per
+position-manager family binds the signed pool, range and minimum liquidity; `exchangeTarget` carries the reader role beside
+the target and executor roles (Fable P3: safe, no separate map now).
+**Cost if wrong.** A reader per family (≈ 40 lines of views); a wrong reader fails closed (`PositionMismatch`).
+**Source.** `docs/superpowers/specs/2026-11-10-dex-liquidity.md` §7.
 
 ### CTR-DEX-80 — Fill-or-kill two-leg MetaTxDex settlement
 - old: R3 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-DEX-01, NODE-DEX-01, INT-ERP-12

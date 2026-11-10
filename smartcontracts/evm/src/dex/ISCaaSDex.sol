@@ -94,6 +94,20 @@ interface ISCaaSDex {
         address[] extraTokens;
     }
 
+    /// @notice A signed liquidity order and how this call executes it (CTR-DEX-30, spec 2026-11-10-dex-liquidity.md §4.1).
+    ///         `auth`: a derived signer's registry auth, a native signer's signature in `auth.signature`; `pull[i]` the
+    ///         amount of input `i` pulled (`0 < pull[i] <= order.inputs[i].amount`); `positionId` the received position's
+    ///         id, 0 iff none is received; `extraTokens` intermediate hop tokens (<= 8, distinct, disjoint from the order's
+    ///         tokens and its manager; each must end at its snapshot).
+    struct LiquidityPlan {
+        bytes32 ref;
+        ITradeToken.LiquidityOrder order;
+        IUARegistry.UASig auth;
+        uint256[] pull;
+        uint256 positionId;
+        address[] extraTokens;
+    }
+
     event MarketSet(address indexed base, address indexed quote, bool listed);
     event FeeSplitSet(uint32 relayerSharePpm, address treasury);
     /// @notice `received` is net of the DEX fee: the party gets `receiveFill - dexFee`, so `received + dexFee` is the gross
@@ -191,6 +205,22 @@ interface ISCaaSDex {
     error ForbiddenSelector(address target, bytes4 selector);
     error TargetNotListed(address target);
     error InsufficientOutput(address token);
+    /// @notice Liquidity (CTR-DEX-30, -31): `code` 1 no input or no output, 2 more than eight, 3 a zero, repeated or shared
+    ///         token or a zero maximum, 4 the position fields disagree, 5 a recipient that is the DEX, its puller, a plan
+    ///         token or the manager; 6 is a token's (not exactly one input).
+    error LiquidityShape(uint8 code);
+    error PositionNotReceived(uint256 id);
+    error PositionReaderNotListed(address reader);
+    error PositionMismatch(uint256 id);
+    error PositionBelowMin(uint256 id, uint128 liquidity);
+    error PositionNotDelivered(uint256 id);
+    error PositionUnreadable(address reader);
+
+    /// @notice A liquidity order executed (CTR-DEX-30 step 9): per input what was pulled and refunded (a refund may exceed
+    ///         its pull: fees a position collected), per output what reached the DEX net of the fee and the fee; the
+    ///         received position and its liquidity (0, 0 when none).
+    event LiquiditySettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 recipient,
+        uint256[] pulled, uint256[] refunded, uint256[] received, uint256[] dexFees, uint256 positionId, uint128 liquidity);
 
     /// @notice Factory only, in the clone's creating call, on a clone carrying its env (`IFactoryToken.EnvMissing`);
     ///         `creatorId` the creator's UA id (S3); `initArgs = abi.encode(DexConfig)` (plan 5g-Z2).
@@ -222,6 +252,13 @@ interface ISCaaSDex {
     /// @notice Hybrid path (b): `outsideSell` of A goes to `executor`, which must pay at least `outsideFloor` of B to
     ///         the DEX in `exchangeCallback(ref, [A], [outsideSell], [B], [outsideFloor], data)`.
     function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata data) external;
+    /// @notice Liquidity (CTR-DEX-30): one signed `LiquidityOrder`, atomic: check, snapshot, pull (SCaaS inputs through each
+    ///         token's `mtxLiquidityPull`, outside inputs and a given position through the puller), the interactions
+    ///         (CTR-DEX-23), the received position against its listed reader, the outputs at their minima at the DEX after
+    ///         the fee and at the recipient, the refunds, conservation. Forwarded to the liquidity module under the guard.
+    function mtxLiquidity(LiquidityPlan calldata p, Interaction[] calldata interactions) external;
+    /// @notice `h` of a liquidity order in this DEX's domain; no guard (a token's capability check reads it mid-plan).
+    function liquidityOrderDigest(ITradeToken.LiquidityOrder calldata o) external view returns (bytes32);
     function setExchangeTarget(address target, bool listed) external;
     function setListedOnly(bool on) external;
 

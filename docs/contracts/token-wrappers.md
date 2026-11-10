@@ -572,7 +572,8 @@ as above until the regulated implementations are built. `WRAPPED*` uses the same
 contract, and only a contract may call `transferFrom`. An EOA never holds or grants an allowance on a SCaaS token** —
 directly, through `mtxExecute` (`approve` is in no allowlist, [CTR-MTX-19](metatx.md#CTR-MTX-19)), or by any permit.
 Nor does a Universal Account, on any `ua*` path ([CTR-UA-27](accounts.md#CTR-UA-27): no `uaApprove`; its pulls are
-signed `UATradeOrder`s).
+signed `UATradeOrder`s). A user provides AMM liquidity by a signed `LiquidityOrder` ([CTR-DEX-30](dex.md#CTR-DEX-30)),
+never an allowance.
 Enforced in the token code of every family (owner). The caller is `_msgSender()`, equal to `msg.sender` because
 `approve` is never a self-call. Allowance-like grants obey the same rule: a `TradeOrder` names its executor `dex`,
 which must be a contract (`mtxTrade` checks `msg.sender == o.dex` and `_isContract(o.dex)`), so signing `dex` = an EOA
@@ -976,13 +977,14 @@ own code limit above 65,536 B.
 | Group | id | Bodies | Links |
 |---|---|---|---|
 | **P** | 1 | the signed pipeline, named transfers, pay and the relay fee; the tax entries on 8–13 | `HederaLib`; `RegulatedLib` on 8–13 |
-| **T** | 2 | trade | — |
-| **A** | 3 | governance, `initialize`, `validateEnv`, the tables and token meta; `mint`, `mintToUA`, `burn` on the normal kinds | `GovernanceLib`; the kind's init / env libraries |
+| **T** | 2 | trade; `mtxLiquidityPull` (the DEX's liquidity pull, [CTR-DEX-30](dex.md#CTR-DEX-30)) | — |
+| **A** | 3 | governance, `initialize`, `validateEnv`, the tables and token meta (`supportsInterface` answers `ILiquidityPullToken`); `mint`, `mintToUA`, `burn` on the normal kinds | `GovernanceLib`; the kind's init / env libraries |
 | **W** | 4 | wrapped (1, 3, 5, 9, 11, 13) and the regulated powers (8–13) | `WrappedLib`, `RegulatedLib` |
 | **Z** | 5 | Zether (2, 3, 10, 11) | `ZetherLib`, `ZetherWrappedLib` |
 | **Q** | 6 | PQZ (4, 5, 12, 13): the ops and their verdict entries | `PqzTransferLib`, `PqzBurnLib`, `PqzStateLib`, `PqzViewLib`, `PqzWrappedLib` |
 | **Q2** | 8 | on 5 and 13: the PQZ state, setters and views (Q split by the rule below) | the PQZ libraries |
-| **D** | 10 | the DEX's 22 governance entries (`SCaaSDexD`) | `GovernanceLib` |
+| **D** | 10 | the DEX's 22 governance entries (`SCaaSDexGovernanceModule`) | `GovernanceLib` |
+| **L** | 11 | the DEX's liquidity entries `mtxLiquidity` and `liquidityOrderDigest` (`SCaaSDexLiquidityModule`, [CTR-DEX-30](dex.md#CTR-DEX-30)); `mtxLiquidity`'s stub is an S1 variant (the DEX's `nonReentrant` around a DELEGATECALL with a normal return) | — |
 
 Ids 7 (P2, pay) and 9 (G, governance) are reserved for the splits below. **Modules per kind and runtime (B)**, release
 first (`forge build src --sizes`, T66b 4.4):
@@ -1002,7 +1004,9 @@ first (`forge build src --sizes`, T66b 4.4):
 | 12 `NormalPqzRegulatedToken` | 22,556 | 30,177 | 15,576 | 28,131 | 11,827 | | 32,423 | |
 | 13 `WrappedPqzRegulatedToken` | 27,713 | 30,783 | 17,045 | 18,594 | 29,202 | | 29,465 | 19,038 |
 
-55 token modules and the DEX's D (6,459 B; `SCaaSDex` 32,991 B). **Which entry runs where** (`script/t66b/entries.json`, the
+55 token modules and the DEX's D (6,459 B; `SCaaSDex` 32,991 B). Liquidity (ua-mtx-liquidity, measured,
+[CTR-DEX-30](dex.md#CTR-DEX-30)): T 17,418-20,219 B per kind (+3.1-3.2 KB: `mtxLiquidityPull`), A +27 B, the faces +154-181 B,
+`SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B. **Which entry runs where** (`script/t66b/entries.json`, the
 generator's input; a kind has the subset it declares):
 
 | Group | Entries |

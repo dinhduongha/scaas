@@ -11,8 +11,9 @@ import {IMetaTx} from "./IMetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SigCheck} from "../common/SigCheck.sol";
-import {ITradeToken} from "../trade/ITradeToken.sol";
+import {ITradeToken, ILiquidityDex} from "../trade/ITradeToken.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
+import {LiquidityLib} from "../trade/LiquidityLib.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {IUALedgerViews} from "./IUALedgerViews.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -114,6 +115,55 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
         TradeLib._precheck(c, f, h, msg.sender, address(this));
         if (TradeLib.$().pulled[h] == 0) _pipeAuthorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, h, auth);
         _uaMove(o.from, TradeLib.pad(o.dex), TradeLib._record(c, f, h, true));
+    }
+
+    /// @notice CTR-DEX-30, CTR-DEX-15 Change (spec 2026-11-10-dex-liquidity.md §5): a liquidity-capable DEX pulls exactly
+    ///         `amount` of this token from `o.from` for the liquidity order `o`, once. Checks T1-T10 in order: the caller is
+    ///         a contract and not this token, `o.from` not this token; `relayer`; expiry; this token's order lane; this
+    ///         token is exactly one input, `0 < amount <= its maximum`; the caller answers `liquidityOrderDigest(o)` with the
+    ///         digest this token computed under `verifyingContract = msg.sender` (T7, capped at `TOKEN_GAS`, its revert data
+    ///         dropped, one word read); the UA rule under `trade` over that digest; one-shot (`pulled[h]`); the move.
+    ///         A direct read of the caller, never allowlisted; no transient pull counter (`restorePulled` cannot name it).
+    function _mtxLiquidityPullBody(ITradeToken.LiquidityOrder calldata o, IUARegistry.UASig calldata auth, uint256 amount,
+        address submitter) internal
+    {
+        address dex = msg.sender;
+        bytes32 h = LiquidityLib.digest(o, dex, _chainUid());
+        if (dex == address(this) || !SigCheck.isContract(dex)) revert ITradeToken.DexNotContract(dex); // T1
+        if (o.from == TradeLib.pad(address(this))) revert ITradeToken.SelfOrder(h);
+        if (o.relayer != address(0) && o.relayer != submitter) revert ITradeToken.WrongRelayer(h, submitter); // T2
+        if (block.timestamp > o.validUntil) revert ITradeToken.OrderExpired(h); // T3
+        if (o.nonce >= TradeLib.MAX_MIN_NONCE) revert ITradeToken.NonceAboveCap(h); // T4
+        if (o.nonce < TradeLib.$().minNonce[o.from][o.batch]) revert ITradeToken.NonceInvalidated(h);
+        uint256 max; // T5: this token is exactly one input
+        uint256 seen;
+        for (uint256 i; i < o.inputs.length; ++i) {
+            if (o.inputs[i].token == address(this)) (max, seen) = (o.inputs[i].amount, seen + 1);
+        }
+        if (seen != 1) revert ITradeToken.LiquidityShape(6);
+        if (amount == 0) revert ITradeToken.ZeroFill(h); // T6
+        if (amount > max) revert ITradeToken.Overfill(h);
+        if (!_liquidityDex(dex, abi.encodeCall(ILiquidityDex.liquidityOrderDigest, (o)), h)) {
+            revert ITradeToken.NotLiquidityDex(dex); // T7
+        }
+        _pipeAuthorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, h, auth); // T8: always (the order is one-shot)
+        TradeLib.TradeStorage storage t = TradeLib.$();
+        if (t.pulled[h] != 0) revert ITradeToken.OrderClosed(h); // T9
+        t.pulled[h] = amount;
+        _uaMove(o.from, TradeLib.pad(dex), amount); // T10
+        emit ITradeToken.LiquidityPulled(h, o.from, dex, amount);
+    }
+
+    /// @dev T7: a `staticcall` of `dex` capped at `TokenCall.TOKEN_GAS`, its revert data dropped, exactly one word read,
+    ///      equal to `h`. A DEX release without the liquidity module has no such view; a starved call fails the same way
+    ///      (the node retries a `NotLiquidityDex` from a DEX that carries the liquidity mark with more gas).
+    function _liquidityDex(address dex, bytes memory data, bytes32 h) private view returns (bool good) {
+        assembly ("memory-safe") {
+            let g := gas()
+            if gt(g, 500000) { g := 500000 } // C6-1: TokenCall.TOKEN_GAS
+            let s := staticcall(g, dex, add(data, 0x20), mload(data), 0, 0x20)
+            good := and(and(s, eq(returndatasize(), 0x20)), eq(mload(0), h))
+        }
     }
 
     /// @notice DX7: only `o.dex`, at most what it pulled for the order in this transaction (`TradeLib.restore`); a

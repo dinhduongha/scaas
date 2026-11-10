@@ -1493,3 +1493,100 @@ export const GOVERNANCE_BITS = Object.freeze([
   ['ARBITRATE', 'reserved'], ['CORRECT', 'reserved'], ['RESCUABLE', 'capability'], ['PUBLISH', 'power'], ['DEPRECATE', 'power'],
   ['ENABLE_KIND', 'power'], ['MODERATE', 'power'], ['OPERATOR_TRANSFER', 'power'], ['TAX', 'power'], ['PQZ_PROOF', 'power'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));
+
+// ------------------------------------------------------------------ liquidity orders (CTR-DEX-30, -31; CLI-SGN-49 proposed)
+
+const LIQUIDITY_TOKEN = fields('address token,uint256 amount');
+const LIQUIDITY_ORDER = fields('bytes32 from,LiquidityToken[] inputs,LiquidityToken[] outputs,address positionManager,'
+  + 'address positionReader,uint256 positionIn,bytes32 positionPool,int24 tickLower,int24 tickUpper,uint128 minLiquidity,'
+  + 'bytes32 recipient,uint256 fee,address relayer,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil');
+const LIQUIDITY_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, LiquidityOrder: LIQUIDITY_ORDER, LiquidityToken: LIQUIDITY_TOKEN };
+const isNativeId = (id) => /^0x0{24}[0-9a-fA-F]{40}$/.test(hex(bytes32(id)));
+
+/** A `LiquidityOrder` in its DEX's salted domain (`"SCaaS Dex"`, the DEX clone, `chain_uid`): ids 32 bytes (a native address
+ *  zero-padded, `padId`); every field signed (no unbound field to zero); unset fields 0. */
+export function liquidityOrderTypedData({ dex, chainId, chainUid, order }) {
+  const o = { inputs: [], outputs: [], positionManager: ZERO_ADDRESS, positionReader: ZERO_ADDRESS, positionIn: '0',
+    positionPool: ZERO_ID, tickLower: 0, tickUpper: 0, minLiquidity: '0', recipient: ZERO_ID, fee: '0', relayer: ZERO_ADDRESS,
+    flags: 0, batch: '0', nonce: '0', ...order };
+  const tok = (t) => ({ token: t.token, amount: String(t.amount) });
+  const message = Object.fromEntries(LIQUIDITY_ORDER.map((f) => [f.name,
+    f.type === 'LiquidityToken[]' ? o[f.name].map(tok) : f.type === 'bytes32' ? hex(bytes32(o[f.name]))
+      : f.type === 'address' || f.type === 'uint8' || f.type === 'int24' ? o[f.name] : String(o[f.name])]));
+  return { types: LIQUIDITY_TYPES, primaryType: 'LiquidityOrder', domain: salted({ name: 'SCaaS Dex', contract: dex, chainId, chainUid }),
+    message };
+}
+
+/** The order a client builds from the user's input, with a short deadline by default (no per-order cancel, spec §4.4). */
+export function buildLiquidityOrder({ dex, chainId, chainUid, order, now = Math.floor(Date.now() / 1000), window = 300 }) {
+  return liquidityOrderTypedData({ dex, chainId, chainUid, order: { validUntil: String(now + window), ...order } });
+}
+
+/** A liquidity order that is exactly the one the client built (spec 2026-11-10-dex-liquidity.md §12; CLI-SGN-49 proposed):
+ *  the DEX on the profile's DEX list and liquidity-capable (`liquidityDexes`), the reader on the profile's list for its manager
+ *  (`readers`: `{manager: [reader, ...]}`), nonce < 2^128, at most eight inputs, outputs and extra tokens, no repeated or
+ *  shared token, no outside input or position under a derived `from` (`scaasTokens`: the profile's SCaaS tokens with the ledger
+ *  on), no outside output or position for a derived recipient, a recipient that is no plan token and not the manager, fee at
+ *  most 1 %, `tickLower < tickUpper`, the position fields consistent, no partial withdraw or fee collect without the received
+ *  position (`partial`), no `RelayFeeRouter` wrap (C10). Returns {digest, warnings, display}; `display.givesWholePosition`
+ *  when a position is given and none received back. */
+export function checkLiquidityOrder(td, { account, chainId, chainUid, order, dexes = [], liquidityDexes = [], readers = {},
+  scaasTokens = [], extraTokens = [], partial = false, routerWrap = false, now = Math.floor(Date.now() / 1000),
+  maxWindow = 3600 }) {
+  if (routerWrap) refuse('a RelayFeeRouter wrap of mtxLiquidity is not offered (C10): relay it directly');
+  if (!td || td.primaryType !== 'LiquidityOrder') refuse('this is not the liquidity order you asked for');
+  const dex = (td.domain || {}).verifyingContract;
+  if (!dexes.some((x) => same(x, dex))) refuse('the order names a DEX that is not on your chain profile');
+  if (!liquidityDexes.some((x) => same(x, dex))) refuse('this DEX is not liquidity-capable on your chain profile');
+  const got = td.message || {};
+  const o = { inputs: [], outputs: [], positionManager: ZERO_ADDRESS, positionReader: ZERO_ADDRESS, positionIn: '0',
+    positionPool: ZERO_ID, tickLower: 0, tickUpper: 0, minLiquidity: '0', recipient: ZERO_ID, fee: '0', relayer: ZERO_ADDRESS,
+    flags: 0, batch: '0', ...order, from: account, nonce: uint(got.nonce, 'the nonce'),
+    validUntil: (order || {}).validUntil ?? got.validUntil };
+  if (o.nonce >= 2n ** 128n) refuse('the order nonce is at or above 2^128; the chain refuses it');
+  if (uint(o.fee, 'the fee') > 10000n) refuse('the fee is above 1 %');
+  if (uint(o.flags, 'the flags') & ~4n) refuse('unknown order flags');
+  if (o.inputs.length > 8 || o.outputs.length > 8 || extraTokens.length > 8) refuse('more than eight tokens in a list');
+  const all = [...o.inputs.map((t) => t.token), ...o.outputs.map((t) => t.token), ...extraTokens];
+  if (new Set(all.map((x) => String(x).toLowerCase())).size !== all.length) refuse('a token is repeated or shared between lists');
+  if (o.inputs.some((t) => uint(t.amount, 'an input maximum') === 0n)) refuse('an input maximum is zero');
+  const pm = o.positionManager;
+  const received = hex(bytes32(o.positionPool)) !== ZERO_ID;
+  const given = uint(o.positionIn, 'the position given') !== 0n;
+  if (all.some((x) => same(x, ZERO_ADDRESS) || same(x, pm))) refuse('a zero token, or the position manager as a token');
+  if (same(pm, ZERO_ADDRESS) && (given || received)) refuse('a position without its manager');
+  if (received) {
+    if (BigInt(o.tickLower) >= BigInt(o.tickUpper)) refuse('tickLower is not below tickUpper');
+    if (uint(o.minLiquidity, 'the minimum liquidity') === 0n) refuse('a received position needs a minimum liquidity');
+    if (!(readers[String(pm).toLowerCase()] || []).some((r) => same(r, o.positionReader))) {
+      refuse('the position reader is not on your chain profile for its manager');
+    }
+  } else if (!same(o.positionReader, ZERO_ADDRESS) || BigInt(o.tickLower) !== 0n || BigInt(o.tickUpper) !== 0n
+    || uint(o.minLiquidity, 'the minimum liquidity') !== 0n) refuse('position fields without a received position');
+  if (partial && given && !received) refuse('a partial withdraw or a fee collect must receive the position back');
+  const recipient = hex(bytes32(o.recipient)) === ZERO_ID ? hex(bytes32(account)) : hex(bytes32(o.recipient));
+  if ([...all, pm, dex].some((x) => recipient === padId(x))) refuse('the recipient is a plan token, the manager or the DEX');
+  const ledger = (t) => scaasTokens.some((x) => same(x, t));
+  if (!isNativeId(account) && (given || o.inputs.some((t) => !ledger(t.token)))) {
+    refuse('a derived UA gives only SCaaS tokens with the UA ledger on, and no position');
+  }
+  if (!isNativeId(recipient) && (received || o.outputs.some((t) => !ledger(t.token)))) {
+    refuse('a derived recipient receives only SCaaS tokens with the UA ledger on, and no position');
+  }
+  deadline(o.validUntil, now, maxWindow);
+  const digest = digestOf(liquidityOrderTypedData({ dex, chainId, chainUid, order: o }));
+  if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the liquidity order you asked for');
+  const warnings = [];
+  if (recipient !== hex(bytes32(account))) warnings.push('someone else receives the outputs');
+  if (same(o.relayer, ZERO_ADDRESS)) warnings.push('any submitter may execute this order and take the slack above your bounds');
+  if (!isNativeId(account)) warnings.push('a derived signer cancels on a token lane only (mtxInvalidateNonces of an input token)');
+  return { digest, warnings, display: { givesWholePosition: given && !received } };
+}
+
+/** `LiquiditySettled` against the signed order, without trusting the submitter: each pull at most its maximum, each output
+ *  at least its minimum; a refund may exceed its pull (fees a position collected, spec §6 step 7), so none is bounded. */
+export function checkLiquiditySettled(order, ev) {
+  order.inputs.forEach((t, i) => { if (BigInt(ev.pulled[i]) > BigInt(t.amount)) refuse('a pull above its maximum'); });
+  order.outputs.forEach((t, i) => { if (BigInt(ev.received[i]) < BigInt(t.amount)) refuse('an output below its minimum'); });
+  return true;
+}

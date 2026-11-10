@@ -632,6 +632,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -898,6 +909,17 @@
       }
      ],
      "name": "NotFrozen",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -2181,6 +2203,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -3869,6 +3922,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -4124,6 +4188,17 @@
       }
      ],
      "name": "NotDex",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -5131,6 +5206,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -6446,6 +6552,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -6707,6 +6824,17 @@
       }
      ],
      "name": "NotFrozen",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -7563,6 +7691,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -8739,6 +8898,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -8989,6 +9159,17 @@
       }
      ],
      "name": "NotDex",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -9569,6 +9750,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -10748,6 +10960,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -11009,6 +11232,17 @@
       }
      ],
      "name": "NotFrozen",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -12103,6 +12337,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -13554,6 +13819,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -13804,6 +14080,17 @@
       }
      ],
      "name": "NotDex",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -14622,6 +14909,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -16111,6 +16429,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -16429,6 +16758,17 @@
     {
      "inputs": [],
      "name": "NotGuardian",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -17962,6 +18302,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -20020,6 +20391,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -20327,6 +20709,17 @@
     {
      "inputs": [],
      "name": "NotGuardian",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -21584,6 +21977,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -23269,6 +23693,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -23582,6 +24017,17 @@
     {
      "inputs": [],
      "name": "NotGuardian",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -24688,6 +25134,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -26234,6 +26711,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -26536,6 +27024,17 @@
     {
      "inputs": [],
      "name": "NotGuardian",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -27366,6 +27865,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -28915,6 +29445,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -29228,6 +29769,17 @@
     {
      "inputs": [],
      "name": "NotGuardian",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -30572,6 +31124,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
@@ -32393,6 +32976,17 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "code",
+       "type": "uint8"
+      }
+     ],
+     "name": "LiquidityShape",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "LockedNotSubset",
      "type": "error"
@@ -32695,6 +33289,17 @@
     {
      "inputs": [],
      "name": "NotGuardian",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "address",
+       "name": "caller",
+       "type": "address"
+      }
+     ],
+     "name": "NotLiquidityDex",
      "type": "error"
     },
     {
@@ -33763,6 +34368,37 @@
       }
      ],
      "name": "GrantUsed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "internalType": "bytes32",
+       "name": "from",
+       "type": "bytes32",
+       "indexed": true
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "dex",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "amount",
+       "type": "uint256"
+      }
+     ],
+     "name": "LiquidityPulled",
      "type": "event"
     },
     {
