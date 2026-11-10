@@ -11,6 +11,7 @@ import "../factory/IFactoryToken.sol";
 import "../factory/IOpenFactory.sol";
 import "../governance/IGovernance.sol";
 import "./ITokenModule.sol";
+import "./IWrappedToken.sol";
 import "./MtxPipelineLib.sol";
 import "./WrappedTokenCore.sol";
 import "../pqz/IPqzToken.sol";
@@ -540,6 +541,14 @@ contract WrappedTokenW is WrappedTokenCore {
         _rescueBody(asset);
     }
 
+    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList) external onlyDelegated {
+        _setWrapLimitsBody(legs, netUnwrap, wrapList, unwrapList);
+    }
+
+    function setWrapMember(bytes32 account, bool canWrap, bool canUnwrap) external onlyDelegated {
+        _setWrapMemberBody(account, canWrap, canUnwrap);
+    }
+
     function underlying() external view onlyDelegated returns (address _p0) {
         return _underlyingBody();
     }
@@ -570,6 +579,18 @@ contract WrappedTokenW is WrappedTokenCore {
 
     function wrap(uint256 amount) external payable onlyDelegated returns (uint256 _p0) {
         return _wrapBody(amount);
+    }
+
+    function wrapLimits() external view onlyDelegated returns (IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay) {
+        return _wrapLimitsBody();
+    }
+
+    function wrapQuotaOf(bytes32 account, address u) external view onlyDelegated returns (IWrappedToken.WrapQuota memory _p0) {
+        return _wrapQuotaOfBody(account, u);
+    }
+
+    function wrapQuotaTotal(address u) external view onlyDelegated returns (IWrappedToken.WrapQuotaTotal memory _p0) {
+        return _wrapQuotaTotalBody(u);
     }
 
     function wrapToUA(address u, uint256 amount, bytes32 to) external payable onlyDelegated returns (uint256 _p0) {

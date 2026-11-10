@@ -57,6 +57,8 @@ TOKEN_KIND = {'NormalToken': 'NORMAL', 'WrappedToken': 'WRAPPED', 'NormalZetherT
               'NormalZetherRegulatedToken': 'NORMAL_ZETHER_REGULATED', 'WrappedZetherRegulatedToken': 'WRAPPED_ZETHER_REGULATED',
               'NormalPqzRegulatedToken': 'NORMAL_PQZ_REGULATED', 'WrappedPqzRegulatedToken': 'WRAPPED_PQZ_REGULATED'}
 REG = lambda k: 'Regulated' in k  # noqa: E731
+# group 3l: the wrapped kinds' entries name `IWrappedToken`'s structs, which not every core imports
+WRAPPED_IMPORT = lambda k: ('src/metatx/IWrappedToken.sol',) if k.startswith('Wrapped') else ()  # noqa: E731
 PQZ = lambda k: 'Pqz' in k  # noqa: E731
 HDR = '''// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
@@ -148,7 +150,7 @@ def face(k):
         stubs.append(f'    function {e["name"]}({p}) external{mut(e)}{ret(e)} {{\n        {body}\n    }}')
     n = len(gs)
     chain = '\n'.join(f'        if (g == {GROUP_ID[g]}) return _M{g};' for g in gs[:-1]) + f'\n        return _M{gs[-1]};'
-    return path, HDR + '\n' + imports(k, path, ('src/governance/IGovernance.sol', 'src/zether/ZetherTypes.sol')) + abi_iface(k) + f'''
+    return path, HDR + '\n' + imports(k, path, ('src/governance/IGovernance.sol', 'src/zether/ZetherTypes.sol') + WRAPPED_IMPORT(k)) + abi_iface(k) + f'''
 /// @title {k}: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
 ///        ledger and the identity views (`{k}Core`); every other entry forwards its calldata to the module of its group by
 ///        DELEGATECALL ({', '.join(f'{g} {GROUP_DOC[g]}' for g in gs)}). UNAUDITED.
@@ -201,7 +203,7 @@ contract {k} is {k}Core, I{k}Abi {{
 
 def modules(k):
     path = f'{KFILE[k]}/{k}Modules.sol'
-    out = [HDR + '\n' + imports(k, path, ('src/metatx/MtxPipelineLib.sol',))]
+    out = [HDR + '\n' + imports(k, path, ('src/metatx/MtxPipelineLib.sol',) + WRAPPED_IMPORT(k))]
     for g in groups(k):
         ents = []
         for e in E['kinds'][k]:

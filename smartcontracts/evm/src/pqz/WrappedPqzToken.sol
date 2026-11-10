@@ -11,6 +11,7 @@ import "../factory/IFactoryToken.sol";
 import "../factory/IOpenFactory.sol";
 import "../governance/IGovernance.sol";
 import "../metatx/ITokenModule.sol";
+import "../metatx/IWrappedToken.sol";
 import "./IPqzToken.sol";
 import "./PqzSet.sol";
 import "./WrappedPqzTokenCore.sol";
@@ -806,6 +807,14 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forward(_MQ2);
     }
 
+    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata, bool, bool, bool) external {
+        _forward(_MW);
+    }
+
+    function setWrapMember(bytes32, bool, bool) external {
+        _forward(_MW);
+    }
+
     function shieldScale() external view returns (uint256 _p0) {
         _forwardView(_MQ2);
     }
@@ -908,6 +917,18 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
 
     function wrap(uint256) external payable returns (uint256 _p0) {
         _forward(_MW);
+    }
+
+    function wrapLimits() external view returns (IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay) {
+        _forwardView(_MW);
+    }
+
+    function wrapQuotaOf(bytes32, address) external view returns (IWrappedToken.WrapQuota memory _p0) {
+        _forwardView(_MW);
+    }
+
+    function wrapQuotaTotal(address) external view returns (IWrappedToken.WrapQuotaTotal memory _p0) {
+        _forwardView(_MW);
     }
 
     function wrapToUA(address, uint256, bytes32) external payable returns (uint256 _p0) {

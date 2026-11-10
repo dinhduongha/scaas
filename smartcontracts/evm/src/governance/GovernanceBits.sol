@@ -33,6 +33,15 @@ library GovernanceBits {
     ///      13 only; any holder (an EOA, a single-key UA, an `msig`, a contract), never contract-only; granted with the
     ///      issuer seat; never delay-relaxed. Disabling it freezes the current mode.
     uint8 internal constant PQZ_PROOF = 24;
+    /// @dev Group 3l (wrap limits spec 2026-11-10-wrap-limits.md §2, R12): on the hybrids (`maxSupply != 0`) of the
+    ///      wrapped kinds 1, 3, 5, 9, 11, 13 only (`WrapControlNeedsHybrid` on a pure-wrap token). 25 a capability: the owner
+    ///      sets the four limits per leg, their token-wide caps, the net rule and the decay; 26 a power: the owner turns the
+    ///      wrapper and unwrapper lists on and off, a holder writes members; 27 a power: a holder unwraps beyond its
+    ///      entitlement. 26 and 27: any holder, never contract-only, never delay-relaxed.
+    uint8 internal constant WRAP_LIMIT = 25;
+    uint8 internal constant WRAP_LIST = 26;
+    uint8 internal constant REDEEMER = 27;
+    uint256 internal constant WRAP_CONTROLS = (1 << WRAP_LIMIT) | (1 << WRAP_LIST) | (1 << REDEEMER);
 
     /// @dev Flags 5–9 (CTR-AS-17, CTR-GOV-18): the controls of the regulated kinds 8–13; no plain kind's valid mask holds
     ///      them, so a plain kind refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3).
@@ -53,13 +62,14 @@ library GovernanceBits {
     /// @dev `RESCUABLE` on every token kind (spec §6.2, CTR-GOV-06): set at creation iff `rescueTo != 0`, always locked.
     uint256 internal constant NORMAL_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE);
     /// @dev `MINTABLE` makes a hybrid (spec §5.2, CTR-GOV-12): set at creation iff `maxSupply != 0`.
-    uint256 internal constant WRAPPED_BITS =
-        (1 << PAYABLE) | (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE) | (1 << RESCUABLE);
+    uint256 internal constant WRAPPED_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE)
+        | (1 << RESCUABLE) | WRAP_CONTROLS;
     /// @dev The masks of each kind (spec §1.2): the bits with a holder, those whose holder must have code, those whose power
     ///      passes the number it acts on (B-09), those whose power reads `use`'s scope (B-10). Every token kind: scalar bit 1,
     ///      no scope.
     uint256 internal constant NORMAL_ROLES = 1 << MINTABLE;
-    uint256 internal constant WRAPPED_ROLES = (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
+    uint256 internal constant WRAPPED_ROLES =
+        (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE) | (1 << WRAP_LIST) | (1 << REDEEMER);
     uint256 internal constant WRAPPED_CONTRACT_ONLY = 1 << RATE_ADJUSTABLE;
     uint256 internal constant TOKEN_SCALAR = 1 << MINTABLE;
 

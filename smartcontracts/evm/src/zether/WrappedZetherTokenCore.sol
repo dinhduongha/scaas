@@ -66,6 +66,11 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
         return GovernanceBits.WRAPPED_CONTRACT_ONLY;
     }
 
+    /// @dev `WrappedToken`'s scalars (bit 27, group 3l R27), restated for the second base.
+    function _scalarBits() internal pure virtual override(MetaTokenBase, WrappedTokenCore) returns (uint256) {
+        return WrappedTokenCore._scalarBits();
+    }
+
     /// @dev Never reached: `_initRaw` is the kind's init.
     function _init(IFactoryToken.TokenConfig memory) internal override(MetaTokenBase, WrappedTokenCore) {}
 
@@ -82,7 +87,7 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     function _mtxWrapShieldBody(address underlying, uint256 amountIn, bytes32 toUA) internal {
         _regPayer();
         address m = _msgSender();
-        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
+        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply(), toUA);
         uint256 scale = ZetherLib.$().shieldScale;
         if (minted % scale != 0) revert IZetherToken.AmountNotScaled(minted, scale);
         ZetherLib.shield(ZetherTypes.UA.wrap(toUA), minted / scale, _registry(), m);
@@ -109,14 +114,16 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
         // a derived recipient: the leg's `transferToUA` checks it
         if (UAKinds.inNativeSpace(x.recipient)) _requirePayee(address(uint160(uint256(x.recipient))));
         uint256 wrapped = x.amount * ZetherLib.$().shieldScale;
-        // the leg's quote before the proof: on a hybrid an empty reserve is ordinary (spec §5.4)
-        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut);
+        // group 3l (R14): the proof's sender is the unwrap's subject, never the envelope's `from`
+        bytes32 holder = ZetherTypes.UA.unwrap(ZetherLib.uaOf(b.yFrom));
+        // the leg's quote before the proof: on a hybrid an empty reserve is ordinary (spec §5.4), a wrap limit likewise
+        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut, holder);
         // the binding and the proof: `ZetherWrappedLib`, from this call's own arguments (CTR-ZTH-94)
         uint256 fee = abi.decode(
             _lib(address(ZetherWrappedLib), ZetherWrappedLib.unshieldUnwrap.selector, abi.encode(_env())), (uint256));
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped); // D19: burn from the pool
         _fromPool(ZetherTypes.UA.wrap(b.beneficiaryUA), fee);
-        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
+        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut, holder);
     }
 
     /// @notice The signed form over `UAZetherUnshieldUnwrap` (R35: native and derived ids), the `Unwrap` leg a nested
@@ -138,6 +145,7 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
 
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
     function _disableFeatureBody(uint8 bit) internal virtual override(GovernanceBaseCore, WrappedTokenCore) {
+        _wrapControlsOff(bit); // group 3l
         bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
         if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
