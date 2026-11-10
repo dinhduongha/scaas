@@ -216,7 +216,7 @@ CREATE TABLE job (
   payload_hash    BLOB,                                           -- JCS SHA-256; NULL only for tombstone
   -- CHECK ((digest IS NULL) = (kind IN ('call', 'pqz_call', 'tombstone'))): job_live_digest skips NULL, so a
   -- digest-bearing kind without its digest would bypass durable G2. CHECK ((payload_hash IS NULL) = (kind = 'tombstone')).
-  -- ua_metatx is digest-bearing: digest = uaDigest. pqz_call is a direct call like call: digest NULL, call_hash set.
+  -- ua_metatx is digest-bearing: digest = the UA digest (mtxDigest / mtxTransferDigest). pqz_call is a direct call like call: digest NULL, call_hash set.
   valid_until     BIGINT NOT NULL,
   lane_hint       TEXT,                                           -- NODE-JOB-08
   bus_scope       TEXT NOT NULL DEFAULT 'restricted' CHECK (bus_scope IN ('restricted', 'open', 'public')),

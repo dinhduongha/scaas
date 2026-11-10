@@ -223,7 +223,8 @@ Ingest outcome codes (local; metrics label `code`; also returned by the gateway 
 
 <a id="envelope"></a><a id="NODE-MESH-09"></a>**NODE-MESH-09** — **Envelope spec `scaas-intent/1.2`.** JSON on the
 wire: `spec`, `intent_id`, `chain_key`, `family`, `contract`, `visibility`, the family body (`evm` with domain,
-11-field `meta_tx`, signature, `sig_kind` `eoa|erc1271`; or `op` with the exact signed `payload`),
+`struct` and either the UA body `ua_meta_tx` + `auth` of a token or a mandate wallet ([NODE-MESH-18](#NODE-MESH-18)) or the
+address body `meta_tx` + `signature` of a `SmartKeyAccount`, `sig_kind` `eoa|erc1271`; or `op` with the exact signed `payload`),
 `hub{id, pubkey, published_at, sig}`, `exclusive{relayer_id, until}?`, `hop_count`. `hub.sig` covers a fixed binary message ([hub.sig](#hubsig)) that includes `body_hash` = SHA-256 of the canonical
 JSON of the family body. Drafts 1.0/1.1 were never implemented by any node and are void: receivers reject `1.0`/`1.1`
 and any other major with `UNSUPPORTED_SPEC` (1.1's `hub_sig_payload` used `address(relayer_id)` and a lottery `beacon`;
@@ -231,18 +232,24 @@ changing both is a breaking change). `body_hash` stops forwarders swapping the s
 params.
 
 <a id="NODE-MESH-18"></a>**NODE-MESH-18** — **UA intents use `scaas-intent/1.3`** (only for this body; everything else
-stays 1.2): EVM body `evm.ua_meta_tx = {token, m: UAMetaTransaction (hex fields), auth}`; `from` decoded from `m.from`
-(32-byte hex, canonicalised per [CTR-UA-03](../contracts/accounts.md#CTR-UA-03)). `intent_id` = `uaDigest(m)`.
-`sig_kind` values: `eoa`, `erc1271`, `ua`. No `from_kind`: the kind comes from `recordOf` (an unsigned JSON field would
-be a second source of truth). 1.2 nodes refuse/ignore 1.3 envelopes (no penalty, no forwarding).
+stays 1.2): EVM body `evm.ua_meta_tx = m` (the wire `UAMetaTransfer`, or `UAMetaTransaction` with `struct = call`; ids as
+32-byte hex) with `evm.auth` (its `UASig`); `from` decoded from `m.from` (canonicalised per
+[CTR-UA-03](../contracts/accounts.md#CTR-UA-03)). `intent_id` = the UA digest (`mtxTransferDigest` / `mtxDigest` of `m`).
+Since the `ua*` / `mtx*` merge this is the body of every token and mandate-wallet intent ([CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30));
+an address body naming a token, or an address `MetaTransfer`, is refused `OP_KIND_MISMATCH`, and a `ua_meta_tx` under 1.2
+`BAD_ENVELOPE` (case 15d). **BUILT** (`src/mesh/digest.rs`, `tests/mesh_vectors.rs`) for a native `from` only: `sig_kind`
+`eoa` or `erc1271`, `auth` the native signature alone (a `keyData` or member set is `BAD_SIGNATURE`, case 06c); a derived
+`from` is refused `DERIVED_FROM_UNSUPPORTED` (MD-10, case 06b). **SPECIFIED:** the `ua` sig kind of a derived `from`
+and the record read below. No `from_kind`: the kind comes from `recordOf` (an unsigned JSON field would be a second source
+of truth). 1.2 nodes refuse/ignore 1.3 envelopes (no penalty, no forwarding).
 
-<a id="ua-intents"></a>UA intents: topic is the existing `/scaas/intent/1.2/<chain_key>`; pre-gossip, a `ua` intent
+<a id="ua-intents"></a>UA intents of a derived `from` (SPECIFIED): topic is the existing `/scaas/intent/1.2/<chain_key>`; pre-gossip, a `ua` intent
 makes the node read `recordOf(from)` once per chain (immutable; cache with no expiry; negative results cached 60 s),
 recompute the id from `auth.keyData` (or read `keyPtr` for stored kinds), and verify every single-key kind and every
 structure natively ([NODE-GSP-15](gossip.md#NODE-GSP-15)); only ERC-1271 goes to simulation. A failed UA check is
 `Ignore` for gossip acceptance (the kind and stored keys come from our store): the intent is dropped and never
 simulated, without penalising the forwarder. Rate limits and freshness reads key on the **canonical** `from` (an EOA is
-the same 20-byte key whether it arrives via 1.2 or padded via 1.3); `uaNonce(from, batch)` is the freshness source.
+the same 20-byte key whether it arrives via 1.2 or padded via 1.3); `mtxNonce(bytes32 from, batch)` is the freshness source.
 
 ### 3.1 Family qualification
 
@@ -253,7 +260,7 @@ consumption check. Non-EVM op kind limited to `pay` in v1. Soroban partners rela
 
 | Family | Digest (contract) | Per-subject nonce (contract) | Readable by a peer | Qualifies |
 |---|---|---|---|---|
-| EVM | `ERC20MetaTx.mtxExecute` (as built `ERC20MetaTx.executeMetaTransaction`, kept as an alias): `_hashTypedDataV4(m.hashStruct())` over the salted domain, emitted in `MetaTransactionExecuted.digest` | `_metaNonce[from][batch]`, must equal `m.nonce`, `+1` after execution | `mtxNonce(from, batch)` view (deployed tokens: `metaNonce`) | **yes** |
+| EVM | the token's merged entries (`mtxExecuteTransfer`, `mtxExecute` on ids; [CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30)): `_hashTypedDataV4` of the `UAMetaTransfer` / `UAMetaTransaction` over the salted domain, emitted in `UAMetaTransactionExecuted.digest` | one nonce per `(bytes32 from, batch)`, must equal `m.nonce`, `+1` after execution | `mtxNonce(bytes32 from, batch)` view | **yes** |
 | Hedera | the Hedera token tiers, on the same `ERC20MetaTx` base | same | same, via the JSON-RPC relay | **yes** (envelope family `hedera`, EVM body) |
 | Cosmos | `sha256(payload)`, emitted as `digest` attribute | `NONCES: Map<(&Addr, lane), u64>`, `op.nonce == next` | `QueryMsg::Nonce { owner, lane }` | **yes** |
 | Sui | `personal_digest(bcs(MetaOp))` | `Account<T>.lanes: Table<lane, u64>`, `next == nonce` | `lane_nonce<T>(account, lane)` | **yes** |
@@ -321,7 +328,7 @@ l.203–206.
 | `chain_key`, `family` | yes | `family` must equal the prefix of `chain_key`; `soroban` ⇒ `FAMILY_NOT_SUPPORTED` |
 | `contract` | yes | EVM: the token = EIP-712 `verifyingContract` (no forwarder). Others: the contract that verifies the op |
 | `visibility` | yes | `open` \| `private`, as set by the origin; receivers apply the stricter of this and their own policy |
-| `evm` | iff `family ∈ {evm, hedera}` | `struct` = `call` \| `transfer` and `meta_tx` = `WireMetaTx` (`scaas-node/src/metatx.rs`, camelCase; the 9 fields of `MetaTxLib.MetaTransaction` or the 11 of `MetaTxLib.MetaTransfer`, [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)); `intent_id` is that struct's digest; `domain` = EIP-712 `name`/`version` of the token (implementation name/version on clones, [CTR-MTX-02](../contracts/metatx.md#CTR-MTX-02)); `sig_kind` `eoa` (65 bytes, low-s) or `erc1271` (contract wallet, no local recover); `hedera_ed25519` (64-byte HIP-632 signature, [NODE-MESH-16](#NODE-MESH-16)). The origin writes **zeros** in unbound `relayer`/`feeRecipient` ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) |
+| `evm` | iff `family ∈ {evm, hedera}` | `struct` = `call` \| `transfer` and either `ua_meta_tx` + `auth` (a token or a mandate wallet: the wire `UAMetaTransaction` / `UAMetaTransfer` of `scaas-node/src/metatx.rs`, camelCase, ids as `bytes32`, and its `UASig`; scaas-intent/1.3, [NODE-MESH-18](#NODE-MESH-18)) or `meta_tx` + `signature` (a `SmartKeyAccount`: the 9 fields of the address `MetaTransaction`; a token or an address `MetaTransfer` ⇒ `OP_KIND_MISMATCH`), [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15); `intent_id` is that struct's digest; `domain` = EIP-712 `name`/`version` of the token (implementation name/version on clones, [CTR-MTX-02](../contracts/metatx.md#CTR-MTX-02)); `sig_kind` `eoa` (65 bytes, low-s) or `erc1271` (contract wallet, no local recover); `hedera_ed25519` (64-byte HIP-632 signature, [NODE-MESH-16](#NODE-MESH-16)). The origin writes **zeros** in unbound `relayer`/`feeRecipient` ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) |
 | `op` | iff other families | the `op` object of a `signed_op` job: `op_kind` (`pay` in v1), `payload` (hex of the exact signed bytes), `signature`, `public_key`, `auth_kind`, `extra` (native params for building the tx). `from`, `valid_until`, lane, nonce and relayer are **not** taken from the clear JSON: receivers decode them from `payload`. `contract` is lifted to the top level |
 | `hub.id` | yes | origin `peer_id` = SHA-256(SPKI DER) |
 | `hub.pubkey` | yes | raw 32-byte Ed25519 key; receivers check `sha256(SPKI_ED25519_PREFIX ‖ pubkey) == hub.id`, with `SPKI_ED25519_PREFIX = 302a300506032b6570032100` |
@@ -337,13 +344,13 @@ hints would leak shape on public chains).
 ### 3.4 `intent_id` and decoded fields per family
 
 <a id="intent-id"></a><a id="NODE-MESH-08"></a>**NODE-MESH-08** — **`intent_id` is the digest the contract emits** in
-`MetaTransactionExecuted.digest`: EIP-712 `_hashTypedDataV4(hashStruct(m))` on EVM, the family digest otherwise. It
+`UAMetaTransactionExecuted.digest` (a `SmartKeyAccount`'s `MetaTransactionExecuted.digest`): EIP-712 `_hashTypedDataV4(hashStruct(m))` on EVM, the family digest otherwise. It
 equals the digest a client stores for its own meta-tx or signed op. Dedup is by `intent_id` (an earlier note said "dedup by digest, not intent_id", assuming a
 sender-chosen id; with id = digest the two are one value).
 
 | Family | `intent_id` = | Routing fields decoded from | Implementations that must agree |
 |---|---|---|---|
-| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract, salt) ‖ hashStruct(canonical(m)))`; `chainId` = number in `chain_key`; `salt` = the receiver's own `chain.chain_uid`, never a value from the envelope ([NODE-GW-07](gateway.md#NODE-GW-07); a chain known only from the policy table has none ⇒ `UNKNOWN_CHAIN`); a self-call `data` must be canonical before hashing ([NODE-JOB-20](job-api.md#NODE-JOB-20)) | `meta_tx` (all signed) | `MetaTxLib.hashStruct` (`smartcontracts/src/common/MetaTxLib.sol`), `metatx.rs` `digest()`, client libraries |
+| `evm`, `hedera` | `keccak256(0x1901 ‖ domainSeparator(name, version, chainId, contract, salt) ‖ hashStruct(canonical(m)))`; `chainId` = number in `chain_key`; `salt` = the receiver's own `chain.chain_uid`, never a value from the envelope ([NODE-GW-07](gateway.md#NODE-GW-07); a chain known only from the policy table has none ⇒ `UNKNOWN_CHAIN`); a self-call `data` must be canonical before hashing ([NODE-JOB-20](job-api.md#NODE-JOB-20)) | `ua_meta_tx` or `meta_tx` (all signed) | the UA struct hashes of `MtxPipelineLib` / `MetaTxLib` (`smartcontracts/evm/src/`), `metatx.rs` `UaMtx::digest()` (`Mtx::digest()` for the address body), client libraries |
 | `cosmos` | `sha256(payload)` | payload JSON (`MetaOp`) | contract `metaop` (`metaop/src/lib.rs` = `chains/cosmos/metaop/src/lib.rs`), client libraries |
 | `sui` | `blake2b256([3,0,0] ‖ bcs(vector<u8>(payload)))` | `adapters/sui.rs` `MetaOp::decode` (l.136) | `meta.move` `op_digest`, `adapters/sui.rs` `personal_digest`, client libraries |
 | `aptos` | `sha3_256(payload)` | `adapters/aptos.rs` `MetaOp::decode` (l.149) | `meta.move`, client libraries |
@@ -415,13 +422,14 @@ failed-row deletion bound that ([threat-model.md#mesh](threat-model.md#mesh) MT6
 
 ### 3.6 Conformance vectors
 
-`scaas-node/tests/vectors/mesh-envelope-v1.2.json`, published with the node so any second implementation (including
+`scaas-node/tests/vectors/mesh-envelope-v1.3.json` (was `mesh-envelope-v1.2.json` before the UA body; the file's `spec` is
+`scaas-intent/1.3`, its other bodies 1.2), published with the node so any second implementation (including
 client libraries that compute the same digests) checks against it; clients keep byte-identical copies (CI `cmp`).
 Generated by `cargo test --test mesh_vectors -- --ignored regenerate`; checked by the non-ignored test. A client's copy
 also checks that the client's own digest functions (`build_terms`/`digest` per family) produce the same `intent_id`.
 
 ```json
-{"spec": "scaas-intent/1.2",
+{"spec": "scaas-intent/1.3",
  "hub_key_seed": "01…32 bytes hex",          // Ed25519 seed of the test origin; peer_id derived
  "now": 1800000000, "fee_recipient": "0x…",  // our cold wallet for normalization cases
  "tokens": {"evm:100": ["0x…"], "sui:localnet": ["0x…registry"], …},   // registered tokens per chain
@@ -434,12 +442,16 @@ also checks that the client's own digest functions (`build_terms`/`digest` per f
 `submit_meta_tx` is the struct the submitter would encode after normalization. Required cases (accept unless a code is
 given):
 
-1. EVM open FIXED fee, a payment `MetaTransfer` (`entryRef ≠ 0`); case 3a is the `metatransfer_kat.json` vector verbatim.
+1. EVM open FIXED fee, a payment `UAMetaTransfer` (`entryRef ≠ 0`); case 3a is the `metatransfer_kat.json` vector verbatim
+   (the token's `UAMetaTransfer` KAT, forge `TokenKat.t.sol`).
 2. EVM open mode with garbage in `relayer` and `feeRecipient` ⇒ **same** `intent_id` as case 1;
    `submit_meta_tx.feeRecipient` = `fee_recipient`, `relayer` = 0.
 3. EVM `MODE_RESTRICT_RELAYER` with a lane address (accepted; `may_submit` only for that lane's node).
 4. EVM `MODE_RESTRICT_RELAYER`, `relayer = 0` ⇒ `RELAYER_BOUND_ZERO`.
-5. EVM `MetaTransfer` ⇒ selector `"transfer"` (`entryRef = 0`) or `"pay"`; a `MetaTransaction` ⇒ its 4-byte selector.
+5. EVM `UAMetaTransfer` ⇒ selector `"transfer"` (`entryRef = 0`) or `"pay"`; a `UAMetaTransaction` ⇒ its 4-byte selector
+   (05b); a `SmartKeyAccount`'s address call accepted (05c); a token's address `MetaTransfer` (the legacy KAT row) or address
+   call ⇒ `OP_KIND_MISMATCH` (05d, 05e); a mandate wallet's UA call accepted (05f).
+6b. A derived `from` ⇒ `DERIVED_FROM_UNSUPPORTED`; 6c. a native `auth` with `keyData` ⇒ `BAD_SIGNATURE`.
 6. EVM `sig_kind = erc1271` (no local recover, accepted).
 7. EVM high-s signature ⇒ `BAD_SIGNATURE`.
 8. Hedera `hedera:296` (chain id 296 in the domain); an EVM chain whose `chain_uid` the receiver lacks ⇒ `UNKNOWN_CHAIN`.
@@ -450,7 +462,7 @@ given):
    `may_submit = true` **computed** from the file's `tokens` map and a full/submit policy on `token_of`. Each of 10–13
    has a twin whose `contract` is another payer's account ⇒ `may_submit = false`.
 14. Soroban op ⇒ `FAMILY_NOT_SUPPORTED`.
-15. `spec = "scaas-intent/1.1"` and `"scaas-intent/2.0"` ⇒ `UNSUPPORTED_SPEC`.
+15. `spec = "scaas-intent/1.1"` and `"scaas-intent/2.0"` ⇒ `UNSUPPORTED_SPEC`; 15d. a `ua_meta_tx` body under 1.2 ⇒ `BAD_ENVELOPE`.
 16. Unknown extra top-level field ⇒ accepted, ignored.
 17. `hop_count = 4` arriving ⇒ `HOP_LIMIT` (stored would be 5 > `MAX_HOPS`).
 18. `validUntil = now + 3601` ⇒ `VALID_TOO_LONG`; `validUntil = now + 10` (inside skew) ⇒ `EXPIRED`.
@@ -465,7 +477,7 @@ given):
 27. Non-EVM `extra` changed after signing ⇒ `BAD_HUB_SIG`.
 28. `published_at = now − 3000`, `validUntil = now + 300` ⇒ accepted (catch-up); `published_at = now + 60` ⇒
     `BAD_ENVELOPE`.
-29. NONE-mode intent with `fee = 10^30`, or a PERCENT `MetaTransaction`, policy `min_fee = 1` ⇒ accepted, `fee_effective = "0"`, `may_submit = false`.
+29. NONE-mode intent with `fee = 10^30`, or a PERCENT `UAMetaTransaction`, policy `min_fee = 1` ⇒ accepted, `fee_effective = "0"`, `may_submit = false`.
 30. Unregistered contract with a `full`/`submit` policy ⇒ accepted, `may_submit = false`.
 31. Body string with a non-ASCII character ⇒ `BAD_ENVELOPE`.
 32. Body whose object keys are deliberately **unsorted** on the wire ⇒ the expected `body_hash` is that of the sorted
@@ -485,7 +497,7 @@ table with static columns**, in the node store (`mesh_policy`, managed through t
 |---|---|---|
 | `chain_key` | text | |
 | `contract` | text | `token_of` (the token itself; never a per-payer account) as canonical address, or `*` |
-| `selector` | text | EVM: first 4 bytes of `meta_tx.data` of a `MetaTransaction` as `0x` + 8 hex, `transfer`/`pay` for a `MetaTransfer`, or `*`; other families: `pay` or `*` |
+| `selector` | text | EVM: first 4 bytes of the `data` of a `UAMetaTransaction` (or a `SmartKeyAccount`'s `MetaTransaction`) as `0x` + 8 hex, `transfer`/`pay` for a `UAMetaTransfer`, or `*`; other families: `pay` or `*` |
 | `support` | enum | `none` ⇒ reject `UNSUPPORTED`; `forward_only` ⇒ hold and serve, never submit; `full` |
 | `submit` | bool | this node submits for this row (requires `support = full`, a concrete registered contract, a lane for the chain) |
 | `pool_visibility` | enum | `open` \| `private` \| `none` (hold, never serve); defaults from the chain profile |
