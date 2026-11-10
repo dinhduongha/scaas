@@ -572,7 +572,7 @@ the size gate's row `PqChat` in `smartcontracts/evm/size-baseline.json`).
 
 **Size and deployment.** Every deployed piece fits one transaction of 60 M asked (`(regular + state) × 1.05`, regular ×
 1.05 < 2^24; [CTR-TOK-30](token-wrappers.md#CTR-TOK-30)): `PqChat` 27,825 B runtime (under 3C-D2's 33,594 B line), its `deployImplementation` 1,908,760
-regular + 43,147,530 state = 47.3 M asked; `PqChatTopics` 16,396 B, its CREATE2 1,099,442 + 25,269,480 = 27.7 M asked;
+regular + 43,147,530 state = 47.3 M asked; `PqChatTopics` 16,398 B (16,396 before the 512 B name bound), its CREATE2 1,099,442 + 25,272,540 = 27.7 M asked;
 `createInstance` 227,583 + 1,523,880. Before the split the release was 34,223 B and asked 58.0 M.
 
 **Per transaction** (regular / state gas; the stand-in verifier, so a real signer adds its verifier's regular gas: about
