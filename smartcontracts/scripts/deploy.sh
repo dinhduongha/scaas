@@ -28,7 +28,10 @@
 #                            the fork, capped at the RPC's block gas limit; one that needs more than that limit refuses
 #                            the plan by name (TxGasOverBlockLimit) before anything is sent. No forge estimate, no
 #                            multiplier. The PQZ kinds 4, 5, 12, 13 are deployed by script/pqz/e2e.py, not here.
-#                            DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether stack. --slow always (one tx per
+#                            DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether stack. DEPLOY_PQCHAT=1 adds PqChat
+#                            (plan 3c T92: its body module PqChatTopics by CREATE2, class env (3, 0) with the module in libs,
+#                            release 1, the switch on; one instance when NOTICE_PERIOD=0; JSON pqchat_topics,
+#                            pqchat_implementation, pqchat_instance), replayed by DeploySend.s.sol like every other transaction. --slow always (one tx per
 #                            block: anvil automine can strand a large tx).
 #                            T66b: each token release and the DEX come with their body modules (P, T, A, W, Z, Q; the
 #                            DEX's D), each its own CREATE2 transaction through the deterministic deployer with DEPLOY_SALT

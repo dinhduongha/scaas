@@ -48,6 +48,12 @@ contract DeployHarness is DeployBase {
     /// `DEPLOY_REGULATED` for the next `deploy`.
     function setRegulated(bool r) external { deployRegulated = r; }
 
+    /// `DEPLOY_PQCHAT` for the next `deploy` (plan 3c T92).
+    function setPqChat(bool on) external { deployPqChat = on; }
+
+    /// `NOTICE_PERIOD` for the next `deploy` (0: a release is usable at once).
+    function setNotice(uint64 n) external { noticePeriod = n; }
+
     /// `COMPLIANCE_ADMIN` for the next `deploy` (plan T33).
     function setComplianceAdmin(address a) external { complianceAdmin = a; }
 

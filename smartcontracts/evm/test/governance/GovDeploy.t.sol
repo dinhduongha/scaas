@@ -26,6 +26,8 @@ import {NormalPqzRegulatedToken} from "../../src/regulated/NormalPqzRegulatedTok
 import {NormalZetherRegulatedToken} from "../../src/regulated/NormalZetherRegulatedToken.sol";
 import {WrappedZetherRegulatedToken} from "../../src/regulated/WrappedZetherRegulatedToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {PqChat} from "../../src/pqchat/PqChat.sol";
+import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
@@ -112,6 +114,52 @@ contract GovDeployTest is Test {
         assertEq(g.implementationOf(ks[0], 1), address(0), "the default deploys no regulated release");
         assertEq(g.implementationOf(ks[1], 1), address(0), "the default deploys no regulated release");
         assertFalse(g.kindEnabled(ks[0]));
+    }
+
+    /// Plan 3c T92 (UA-7 D22, topics spec §11): `DEPLOY_PQCHAT` registers `PqChat` on the factory's generic path: the class
+    /// env 1 of `(3, 0)` (the UA registry, `params[0]` the declared code limit), release 1 from the chain-neutral init code,
+    /// the `(3, 0)` switch on, and with a notice period of 0 one instance owned by no UA (JSON `pqchat_implementation`,
+    /// `pqchat_instance`), listed by `contractsPage(3, …)`; with a notice period the release waits and no instance is made;
+    /// without the flag nothing of class 3.
+    function test_deployPqChatPath() public {
+        DeployHarness h = new DeployHarness();
+        h.setPqChat(true);
+        h.setNotice(0);
+        (OpenFactory f, string memory json) = h.deploy(ZUID, false, ska);
+        IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
+        IOpenFactory.ClassRelease memory r = f.classReleaseOf(id);
+        assertEq(vm.parseJsonAddress(json, ".pqchat_implementation"), r.implementation);
+        assertTrue(r.implementation.code.length != 0, "the release");
+        assertEq(PqChat(r.implementation).owner(), bytes32(0), "an implementation: no owner");
+        assertEq(r.initSelector, IPqChat.initialize.selector);
+        assertEq(r.interfaceId, type(IPqChat).interfaceId);
+        assertTrue(f.classKindEnabled(3, 0), "(3, 0) on");
+        IFactoryToken.Env memory e = f.classEnvOf(3, 0, r.envVersion);
+        assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
+        assertEq(uint256(e.params[0]), h.chainCodeLimit(), "params[0]: the declared code limit");
+        address topics = vm.parseJsonAddress(json, ".pqchat_topics");
+        assertEq(e.libs.length, 1);
+        assertEq(e.libs[0], topics, "the body module pinned in libs (CTR-TOK-30, 3C-D2)");
+        assertEq(e.libCodeHashes[0], topics.codehash);
+        assertEq(PqChat(r.implementation).modules()[0], topics, "named in implArgs");
+        address inst = vm.parseJsonAddress(json, ".pqchat_instance");
+        assertEq(IPqChat(inst).owner(), bytes32(0), "owned by no UA");
+        (IOpenFactory.Created[] memory page, uint256 total) = f.contractsPage(3, 0, 8);
+        assertEq(total, 1);
+        assertEq(page[0].addr, inst);
+
+        DeployHarness late = new DeployHarness();
+        late.setPqChat(true);
+        late.setNotice(1 days);
+        (OpenFactory g,) = late.deploy(ZUID, false, ska); // (the JSON object "deploy" is one per process: not read here)
+        assertTrue(g.classReleaseOf(id).implementation != address(0), "the release, waiting for its notice period");
+        (, total) = g.contractsPage(3, 0, 8);
+        assertEq(total, 0, "no instance before the notice period");
+
+        DeployHarness plain = new DeployHarness();
+        (OpenFactory p,) = plain.deploy(ZUID, false, ska);
+        assertEq(p.classReleaseOf(id).implementation, address(0), "the default registers no PqChat");
+        assertFalse(p.classKindEnabled(3, 0));
     }
 
     /// Plan T30 (regulated-kinds spec §6.1): `DEPLOY_ZETHER` also deploys the regulated Zether releases 10 and 11 (version 1,

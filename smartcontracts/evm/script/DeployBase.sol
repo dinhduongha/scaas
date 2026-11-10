@@ -27,6 +27,8 @@ import {WrappedZetherRegulatedToken} from "../src/regulated/WrappedZetherRegulat
 import {RegulatedLib} from "../src/regulated/RegulatedLib.sol";
 import {ComplianceRegistry} from "../src/regulated/ComplianceRegistry.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
+import {PqChat} from "../src/pqchat/PqChat.sol";
+import {IPqChat} from "../src/pqchat/IPqChat.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
 import {UARegistryCoreLib} from "../src/ua/UARegistryCoreLib.sol";
@@ -97,6 +99,9 @@ abstract contract DeployBase is Script {
     /// @notice `DEPLOY_REGULATED` env (default false): also deploy the regulated releases (`_deployRegulated`, regulated-kinds
     ///         spec §6.1): kinds 8 and 9, enabled (plan T28), and the canonical `ComplianceRegistry` (plan T33).
     bool internal deployRegulated;
+    /// @notice `DEPLOY_PQCHAT` env (default false): also register `PqChat` (UA-7, D22: class 3, kind 0 on the generic path) and,
+    ///         when the chain's notice period is 0, create one instance (`_deployPqChat`, plan 3c T92).
+    bool internal deployPqChat;
     /// @notice `COMPLIANCE_ADMIN` env (read with `DEPLOY_REGULATED`): the canonical `ComplianceRegistry`'s admin, a contract
     ///         the operator names (CTR-AS-07, regulated-kinds spec §6.1, F-21); the registry's constructor refuses any other.
     address internal complianceAdmin;
@@ -283,6 +288,7 @@ abstract contract DeployBase is Script {
         deployZether = vm.envOr("DEPLOY_ZETHER", false);
         deployWrapped = vm.envOr("DEPLOY_WRAPPED", false);
         deployRegulated = vm.envOr("DEPLOY_REGULATED", false);
+        deployPqChat = vm.envOr("DEPLOY_PQCHAT", false);
         complianceAdmin = vm.envOr("COMPLIANCE_ADMIN", address(0));
         noticePeriod = _checkedNotice(block.chainid, vm.envOr("NOTICE_PERIOD", _defaultNotice(block.chainid)));
         uid = _chainUid();
@@ -390,8 +396,53 @@ abstract contract DeployBase is Script {
         }
         if (deployWrapped && register && !configureOnly) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployRegulated && register && !configureOnly) _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
+        if (deployPqChat && register && !configureOnly) _deployPqChat(f, address(reg));
         if (deployZether && !configureOnly) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
+    /// @notice Plan 3c T92 (UA-7 D22, topics spec §11): `PqChat` on the factory's generic path, with no factory code: its
+    ///         body module `PqChatTopics` (CTR-TOK-30, 3C-D2) by CREATE2 with `DEPLOY_SALT` (`_module`, its own gate), the
+    ///         class env 1 of `(3, 0)` (the registry; `params[0]` the chain's declared code-size limit, `CHAIN_CODE_LIMIT`;
+    ///         the module pinned in `libs`), release 1 from the chain-neutral init code with `implArgs` naming the module,
+    ///         the `(3, 0)` switch on, and one instance owned by no UA when the notice period lets it be created now (JSON
+    ///         `pqchat_instance`; else created after the notice period by anyone, `createInstance`). JSON
+    ///         `pqchat_implementation`, `pqchat_topics`. **UNAUDITED.**
+    function _deployPqChat(OpenFactory f, address reg) internal {
+        address topics = _module("PqChatTopics.sol:PqChatTopics", abi.encode(address(f)), 3, 0);
+        f.publishClassEnv(3, 0, 1, _pqchatEnv(reg, topics));
+        address impl = _pqchatRelease(f, abi.encode(topics));
+        f.setClassKindEnabled(3, 0, true);
+        vm.serializeAddress("deploy", "pqchat_topics", topics);
+        vm.serializeAddress("deploy", "pqchat_implementation", impl);
+        IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
+        if (f.classReleaseOf(id).usableFrom <= block.timestamp) {
+            address inst =
+                f.createInstance(id, keccak256("scaas.pqchat.instance.1"), abi.encodeCall(IPqChat.initialize, (bytes32(0))));
+            vm.serializeAddress("deploy", "pqchat_instance", inst);
+        }
+    }
+
+    /// @notice The class env 1 of `(3, 0)`: the registry, `params[0]` the declared code-size limit, the module in `libs`.
+    function _pqchatEnv(address reg, address topics) internal view returns (IFactoryToken.Env memory e) {
+        e.registry = reg;
+        e.params = new bytes32[](1);
+        e.params[0] = bytes32(_chainCodeLimit());
+        e.libs = new address[](1);
+        e.libs[0] = topics;
+        e.libCodeHashes = new bytes32[](1);
+        e.libCodeHashes[0] = topics.codehash;
+    }
+
+    /// @notice Release 1 of `(3, 0)` after its gate, `implArgs` naming the module; its row in the release list.
+    function _pqchatRelease(OpenFactory f, bytes memory args) internal returns (address impl) {
+        IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
+        bytes memory code = type(PqChat).creationCode;
+        _requireReleaseGas("PqChat", address(f), abi.encodeCall(f.deployRelease,
+            (id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args)));
+        impl = f.deployRelease(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args);
+        _releaseRow("PqChat", 3, 0, 1, impl, keccak256(abi.encodePacked(code, abi.encode(id, address(f), args))),
+            keccak256(args));
     }
 
     /// @notice GD-12 (CTR-GOV-19: every kind runs on the SCaaS testnet), in the form of `_deployZether`: env version 1 of
@@ -502,6 +553,11 @@ abstract contract DeployBase is Script {
     ///         gate (`_requireReleaseGas`, a release of its own); code already there is reused. Its row in the release list:
     ///         class 0 (no factory class), `kind` the token kind (0 for the DEX's D), version 1.
     function _module(string memory artifact, bytes memory args, uint8 kind) internal returns (address at) {
+        return _module(artifact, args, 0, kind);
+    }
+
+    /// @notice `_module` of a generic class's body module (`PqChatTopics`: class 3, kind 0): its row names the class.
+    function _module(string memory artifact, bytes memory args, uint16 cls, uint16 kind) internal returns (address at) {
         bytes memory init = bytes.concat(vm.getCode(artifact), args);
         string memory name = vm.split(artifact, ":")[1];
         at = vm.computeCreate2Address(salt, keccak256(init), CREATE2_FACTORY);
@@ -510,7 +566,7 @@ abstract contract DeployBase is Script {
             (bool ok,) = CREATE2_FACTORY.call(bytes.concat(salt, init));
             require(ok && at.code.length != 0, string.concat(name, ": the CREATE2 of the module failed"));
         }
-        _releaseRow(name, 0, kind, 1, at, keccak256(init), keccak256(args));
+        _releaseRow(name, cls, kind, 1, at, keccak256(init), keccak256(args));
     }
 
     /// @notice `e` with `ms` pinned after its libraries (`OpenFactory` refuses a release whose `modules()` it lacks).
