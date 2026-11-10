@@ -1205,3 +1205,6 @@ mtxTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, sig)	obso
 mtxBatch(MetaTransaction[] ms, bytes[] sigs)	obsolete	the address generic batch, on SmartKeyAccount only since the ua* / mtx* merge (MetaTxAddressBase): contracts/metatx.md#CTR-MTX-30
 mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-30
 mtxPayReceiverFee(m, payerSig, fee, feeRecipient, rfValidUntil, payeeSig)	obsolete	the address form over MetaTransfer, merged into the UAMetaTransfer / UASig / PayMeta form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-05
+token.pay…	obsolete	the ED25519 owner's by-hand pay inside the flat owner call; since the ua* / mtx* merge through the wallet's signed mtxExecute(UAEnvelope, …): networks/hedera.md#NET-HED-03
+trade(address,uint256,address)	obsolete	the v1 MetaOp op encoding of a trade; a Hedera trade is a UATradeOrder checked by the token: networks/hedera.md#payload, contracts/dex.md#CTR-DEX-25
+batch = keccak(entryRef)	obsolete	the v1 pay lane derived on chain; lanes are free since pay-meta-tax O3, payLane(entryRef) a client convention: contracts/metatx.md#CTR-MTX-10
