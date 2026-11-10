@@ -5,7 +5,8 @@
 (`tests/service_pull.rs`). The plan's (the payer check, the chain check, the 16-field cap, an array field, a nested struct,
 `entryRef` over the struct hash, a dynamic field hashed in the calldata, the relayer not the service, the fee at the pull's own
 nonce) and the round's (`int` accepted, a missing field accepted, the first field unchecked, a zero amount, the router as target,
-the op tuple's parentheses lost in the selector). One mutant per run on a clean tree, its command, every file restored byte for
+the op tuple's parentheses lost in the selector);
+T20e5 adds the plan's `feeRecipient` copied into `t` (M16), left out of the first run. One mutant per run on a clean tree, its command, every file restored byte for
 byte after it (the caller also runs `git diff --exit-code`). A failing command kills; a build that does not compile is
 NOT-LOADED (a finding); a mutant whose command passes SURVIVED (a finding, exit 1).
   python3 -I smartcontracts/evm/runs/2026-11-10-ua-rs-sign-t20e2-mutants.py [first last]   (from the worktree root, foreground)
@@ -47,6 +48,12 @@ M = [
     ("the router as the target accepted", [(SP, "if self.service == router || self.service == executor || value == [0; 32] {",
                                             "if self.service == executor || value == [0; 32] {")], T),
     ("the op tuple's parentheses lost", [(SP, 'format!("{entry}(({types}),{UMT},{UASIG})")', 'format!("{entry}({types},{UMT},{UASIG})")')], T),
+    # T20e5: the plan's "`feeRecipient` copied into `t`", left out of the first run. As a literal in the builder's `t` (a
+    # non-zero fee recipient) it survived as an equivalent mutant: scaas_typed_data puts `t` in the canonical form (an unbound
+    # feeRecipient zeroed, MetaTxLib.canon) before the digest, the calldata and the job read it. So it mutates where the rule
+    # lives: the canonical form keeps an unbound fee recipient.
+    ("an unbound fee recipient kept by the canonical form", [(EIP, '                if mode & 2 == 0 {\n                    m.insert("feeRecipient".into(), ZERO_ADDRESS.into());',
+                                                              '                if mode & 2 == 0 && false {\n                    m.insert("feeRecipient".into(), ZERO_ADDRESS.into());')], T),
 ]
 
 if sys.argv[1:] == ["count"]:

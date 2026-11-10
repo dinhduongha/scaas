@@ -15,3 +15,10 @@ killed     | M13 a zero amount accepted | clients/ua-rs/src/wallet/service_pull.
 killed     | M14 the router as the target accepted | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: relay_fee_wrap | deposit_native: the router is the target | at 703903f1
 killed     | M15 the op tuple's parentheses lost | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 2 failed: every_row_entry_ref_digest_selector_calldata_job, relay_fee_wrap | assertion `left == right` failed: deposit_native | at 703903f1
 mutants M1-M15 of 15: 15 killed, 0 survived, 0 not loaded
+# T20e5 (2026-11-10): the plan's mutant "feeRecipient copied into t" was left out of the run above; added as M16, run at 5e41cdbe.
+# As a literal in the builder's t (a non-zero fee recipient; the tree held the plan's status edit, docs only):
+SURVIVED   | M16 a fee recipient in t | clients/ua-rs/src/wallet/service_pull.rs | rc=0 | 0 failed: | at 5e41cdbe
+# equivalent, not a gap: scaas_typed_data puts t in the canonical form (an unbound feeRecipient zeroed, MetaTxLib.canon) before
+# the digest, the calldata and the job read it, so the literal reaches no output. M16 now mutates where the rule lives, on a clean tree:
+killed     | M16 an unbound fee recipient kept by the canonical form | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 1 failed: unbound_fee_recipient_is_canonical | assertion `left == right` failed | at 5e41cdbe
+# T20e5 re-run: 1 killed, 0 survived, 0 not loaded (git diff --exit-code 0; M1-M15 above stand, every string checked at HEAD)
