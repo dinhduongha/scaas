@@ -27,7 +27,7 @@ import {deployKindModules, deployDexModules, kindModuleNames, kindImplArgs} from
 import {ImplArgs} from "../../src/metatx/ITokenModule.sol";
 
 /// @notice A regulated release's `implArgs` (regulated-kinds spec §5, F-11; plan T29): the canonical `ComplianceRegistry`
-///         runtime's code hash, `REGISTRY_CODEHASH`.
+///         runtime's code hash, `COMPLIANCE_REGISTRY_CODEHASH`.
 function regArgs() pure returns (bytes memory) {
     return abi.encode(keccak256(type(ComplianceRegistry).runtimeCode));
 }

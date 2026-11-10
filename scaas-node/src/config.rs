@@ -336,7 +336,7 @@ pub struct ChainCfg {
     /// `compliance_registry_codehash`, or neither.
     #[serde(default)]
     pub compliance_registry: Option<Address>,
-    /// The registry's runtime code hash (the deployments JSON's `compliance_registry_codehash`, the releases' `REGISTRY_CODEHASH`):
+    /// The registry's runtime code hash (the deployments JSON's `compliance_registry_codehash`, the releases' `COMPLIANCE_REGISTRY_CODEHASH`):
     /// checked against the chain's `eth_getCode` when the venue loads; another code or none stops it (fail closed).
     #[serde(default)]
     pub compliance_registry_codehash: Option<B256>,

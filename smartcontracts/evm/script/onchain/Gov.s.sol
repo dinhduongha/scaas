@@ -209,23 +209,25 @@ contract Gov is OnchainBase {
 
     // ------------------------------------------------------------------ the own ComplianceRegistry (admin `iss`)
 
+    /// The own registry: its admin the native id of the SmartKeyAccount `iss`, its router the chain's (round 3r, spec §5.3;
+    /// T11 adds the router steps), one KYC provider `a2` (its native id).
     function _compliance() internal {
         vm.broadcast(k1);
-        cr = new ComplianceRegistry(iss);
+        cr = new ComplianceRegistry(_pad(iss), address(gr));
         _book(address(cr), "ComplianceRegistry");
         require(address(cr).codehash == _dep("compliance_registry").codehash, "compliance code");
-        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setAttester, (a2, true)));
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a2), true)));
         bytes32[] memory who = new bytes32[](2);
         uint64[] memory fl = new uint64[](2);
         uint64[] memory until = new uint64[](2);
         (who[0], who[1], fl[0], fl[1], until[0], until[1]) = (_pad(a1), _pad(a3), 1, 1, type(uint64).max, type(uint64).max);
-        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.attest, (who, fl, until)));
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setCompliance, (who, fl, until)));
         bytes32[] memory w2 = new bytes32[](1);
         uint64[] memory f2 = new uint64[](1);
         uint64[] memory u2_ = new uint64[](1);
         (w2[0], f2[0], u2_[0]) = (_pad(a2), 1, uint64(vu + 30 days));
         vm.broadcast(k2);
-        cr.attest(w2, f2, u2_); // an attester's row
+        cr.setCompliance(w2, f2, u2_); // a KYC provider's row
         IFactoryToken.TokenConfig memory c = _cfg("oGC8", 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.ALLOWLIST);
         (c.initialSupply, c.initialHolder) = (1_000_000, a1);
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.termsHash) = (address(cr), 1, keccak256("onchain terms"));
@@ -233,7 +235,7 @@ contract Gov is OnchainBase {
         vm.broadcast(k1);
         IERC20(tc).transfer(a3, 10); // to an attested holder
         vm.broadcast(k1);
-        IERC20(tc).transfer(a2, 10); // to the attester's own row
+        IERC20(tc).transfer(a2, 10); // to the KYC provider's own row
     }
 
     // ------------------------------------------------------------------ kind 0 through the router
@@ -789,9 +791,9 @@ contract Gov is OnchainBase {
             "completeRecovery before RECOVERY_DELAY");
         _neg(a2, acct, abi.encodeCall(SmartKeyAccount.initialize, (kr, address(0))), SmartKeyAccount.NotFactory.selector,
             "initialize by another caller than the factory");
-        // compliance: a non-admin, non-attester
-        _neg(a3, address(cr), abi.encodeCall(ComplianceRegistry.setAttester, (a3, true)), bytes4(keccak256("NotAdmin()")),
-            "setAttester by a non-admin");
+        // compliance: a non-admin, non-provider
+        _neg(a3, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a3), true)), IAdmin.NotAdmin.selector,
+            "setKycProvider by a non-admin");
     }
 }
 

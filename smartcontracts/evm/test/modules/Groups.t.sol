@@ -65,7 +65,7 @@ contract GroupsTest is Test {
 
     function _kept(bytes32 s) internal pure returns (bool) {
         return s == keccak256("kind()") || s == keccak256("moduleGroup()") || s == keccak256("factory()")
-            || s == keccak256("FACTORY()") || s == keccak256("REGISTRY_CODEHASH()") || s == keccak256("pqzSet()")
+            || s == keccak256("FACTORY()") || s == keccak256("COMPLIANCE_REGISTRY_CODEHASH()") || s == keccak256("pqzSet()")
             || s == keccak256("name()") || s == keccak256("symbol()") || s == keccak256("decimals()")
             || s == keccak256("totalSupply()") || s == keccak256("balanceOf(address)")
             || s == keccak256("allowance(address,address)") || s == keccak256("transfer(address,uint256)")

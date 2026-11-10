@@ -29,8 +29,8 @@ contract Holder {}
 /// for the controls), a UA registry stand-in (every derived id a SIGNING UA), and one token of each regulated kind with
 /// `FREEZE`, `FORCE`, `PAUSE`, `RECORD`: the issuer and the compliance holders are two contracts (`FORCE` and `RECORD` never
 /// one id), the owner an EOA, `grantDelay` one day; `alice` holds 1,000,000 units of each. Plan T29: one canonical
-/// `ComplianceRegistry` (`creg`, its admin the contract `cadmin`, one enabled attester `attester`), and `_listed` for a token
-/// of kind 8 or 9 with `ALLOWLIST` / `DENYLIST` on it.
+/// `ComplianceRegistry` (`creg`, its admin the native id of the contract `cadmin`, no router, one enabled KYC provider: the
+/// native id of `attester`), and `_listed` for a token of kind 8 or 9 with `ALLOWLIST` / `DENYLIST` on it.
 abstract contract RegFixture is Test {
     uint256 internal constant ALICE_PK = 0xA11CE;
     uint256 internal constant BOB_PK = 0xB0B;
@@ -83,9 +83,9 @@ abstract contract RegFixture is Test {
         t9 = f.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(_cfg9()), "t9");
         _wrapFor(t9, alice, SUPPLY);
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(cadmin);
+        creg = new ComplianceRegistry(nid(cadmin), address(0));
         vm.prank(cadmin);
-        creg.setAttester(attester, true);
+        creg.setKycProvider(nid(attester), true);
     }
 
     /// A token of kind 8 (`i == 0`, `SUPPLY` minted to `alice`, who is attested `KYC` first) or 9 (`alice` wraps `SUPPLY`)
@@ -101,7 +101,7 @@ abstract contract RegFixture is Test {
         if (i == 1) _wrapFor(t, alice, SUPPLY);
     }
 
-    /// `attester` attests `a` with `flags` until `until`.
+    /// `attester` (the KYC provider) writes `a`'s compliance row: `flags` until `until`.
     function _attest(bytes32 a, uint64 flags, uint64 until) internal {
         _attestAs(attester, a, flags, until);
     }
@@ -130,7 +130,7 @@ abstract contract RegFixture is Test {
         uint64[] memory vu = new uint64[](1);
         (as_[0], fl[0], vu[0]) = (a, flags, until);
         vm.prank(who);
-        creg.attest(as_, fl, vu);
+        creg.setCompliance(as_, fl, vu);
     }
 
     /// Kind 8: `PAYABLE | MINTABLE | BURNABLE` and the four controls; this test the minter; `SUPPLY` minted to `alice`.

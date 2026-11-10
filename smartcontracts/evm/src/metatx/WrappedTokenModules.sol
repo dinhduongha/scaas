@@ -27,7 +27,7 @@ import "../zether/ZetherTypes.sol";
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedTokenP is WrappedTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -221,7 +221,7 @@ contract WrappedTokenP is WrappedTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedTokenT is WrappedTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -285,7 +285,7 @@ contract WrappedTokenT is WrappedTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedTokenA is WrappedTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -438,7 +438,7 @@ contract WrappedTokenA is WrappedTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedTokenW is WrappedTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {

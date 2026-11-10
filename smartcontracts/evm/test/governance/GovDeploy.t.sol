@@ -100,7 +100,7 @@ contract GovDeployTest is Test {
             assertEq(vm.parseJsonAddress(json, keys[i]), w);
             assertEq(WrappedRegulatedToken(payable(w)).chainUid(), bytes32(0), "a release carries no env");
             assertTrue(f.kindEnabled(k), "enabled (T28)");
-            assertEq(WrappedRegulatedToken(payable(w)).REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
+            assertEq(WrappedRegulatedToken(payable(w)).COMPLIANCE_REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
                 "the registry code pin in implArgs (T29)");
             IFactoryToken.Env memory e = envClosure(f.envOf(k, 1), w); // T66b: the body modules after the closure
             assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(k))), "link closure");
@@ -180,7 +180,7 @@ contract GovDeployTest is Test {
             assertEq(vm.parseJsonAddress(json, keys[i]), w);
             assertEq(NormalZetherRegulatedToken(w).chainUid(), bytes32(0), "a release carries no env");
             assertTrue(f.kindEnabled(k), "enabled");
-            assertEq(NormalZetherRegulatedToken(w).REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
+            assertEq(NormalZetherRegulatedToken(w).COMPLIANCE_REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
                 "the registry code pin in implArgs");
             IFactoryToken.Env memory e = envClosure(f.envOf(k, 1), w); // T66b: each env's body modules after its closure
             IFactoryToken.Env memory b = envClosure(f.envOf(IOpenFactory.TokenKind(2 + i), 1),
@@ -211,7 +211,7 @@ contract GovDeployTest is Test {
     /// env with `RegulatedLib`, `implArgs` the registry pin; a forge EVM has no PQZ precompile, so a contract stands in for
     /// the verifier as in `_release`). Each: version 1 on env 1, its kind, gated, enabled, `RegulatedLib` in `Env.libs`
     /// with its code hash in `libCodeHashes`, the UA registry and the router of this deploy (T32's move), and a
-    /// `REGISTRY_CODEHASH` equal to the code of the registry this deploy put up (`compliance_registry`).
+    /// `COMPLIANCE_REGISTRY_CODEHASH` equal to the code of the registry this deploy put up (`compliance_registry`).
     function test_regulatedReleasesPublished_8() public { _published(IOpenFactory.TokenKind.NORMAL_REGULATED); }
 
     function test_regulatedReleasesPublished_9() public { _published(IOpenFactory.TokenKind.WRAPPED_REGULATED); }
@@ -254,7 +254,7 @@ contract GovDeployTest is Test {
         assertEq(NormalRegulatedToken(w).chainUid(), bytes32(0), "a release carries no env");
         assertTrue(f.kindEnabled(k), "enabled");
         address creg = vm.parseJsonAddress(json, ".compliance_registry");
-        assertEq(NormalRegulatedToken(w).REGISTRY_CODEHASH(), creg.codehash, "the pin = the deployed registry's code");
+        assertEq(NormalRegulatedToken(w).COMPLIANCE_REGISTRY_CODEHASH(), creg.codehash, "the pin = the deployed registry's code");
         IFactoryToken.Env memory env = envClosure(f.envOf(k, 1), w); // T66b: the body modules after the closure
         address[] memory want = closureLibs(k);
         assertEq(env.libs.length, want.length, "link closure");
@@ -273,8 +273,9 @@ contract GovDeployTest is Test {
     }
 
     /// Plan T33 (regulated-kinds spec §6.1, F-21; CTR-AS-07, CTR-AS-16): `DEPLOY_REGULATED` puts up one canonical
-    /// `ComplianceRegistry` by CREATE2, its admin `COMPLIANCE_ADMIN` (a contract; none or an EOA refused by the registry's
-    /// constructor), its code the regulated releases' pin; JSON `compliance_registry`, `compliance_registry_codehash`. The
+    /// `ComplianceRegistry` by CREATE2, its admin the native id of `COMPLIANCE_ADMIN` (any account, round 3r; none refused by
+    /// the registry's constructor, `AdminZero`) and its router this deploy's (spec §5.3), its code the regulated releases' pin
+    /// whatever the admin and router; JSON `compliance_registry`, `compliance_registry_codehash`. The
     /// admin's `ELIGIBLE_CONTRACT` rows for a DEX venue (`createDex`) and its `DexPuller` let an `ALLOWLIST` token reach the
     /// venue, which it refuses before them.
     function test_registryDeployedAndDexAttested() public {
@@ -286,9 +287,11 @@ contract GovDeployTest is Test {
         bytes32 pin = keccak256(type(ComplianceRegistry).runtimeCode);
         assertEq(address(r).codehash, pin, "the canonical code");
         assertEq(vm.parseJsonBytes32(json, ".compliance_registry_codehash"), pin, "JSON codehash");
-        assertEq(r.admin(), address(this), "COMPLIANCE_ADMIN");
-        assertEq(address(r), vm.computeCreate2Address(keccak256("scaas.deploy.v1"),
-            keccak256(abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(address(this)))), address(h)), "CREATE2");
+        address router = vm.parseJsonAddress(json, ".governance_router");
+        assertEq(r.admin(), nid(address(this)), "COMPLIANCE_ADMIN");
+        assertEq(r.govRouter(), router, "the chain's router");
+        assertEq(address(r), vm.computeCreate2Address(keccak256("scaas.deploy.v1"), keccak256(abi.encodePacked(
+            type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router))), address(h)), "CREATE2");
 
         address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0))), "venue");
         address puller = SCaaSDex(dex).puller();
@@ -308,9 +311,9 @@ contract GovDeployTest is Test {
         uint64[] memory fl = new uint64[](2);
         uint64[] memory vu = new uint64[](2);
         (a[0], a[1], fl[0], fl[1], vu[0], vu[1]) = (nid(dex), nid(puller), 8, 8, type(uint64).max, type(uint64).max);
-        r.attest(a, fl, vu); // the admin's call (this test is COMPLIANCE_ADMIN)
+        r.setCompliance(a, fl, vu); // the admin's call (this test is COMPLIANCE_ADMIN)
         for (uint256 i; i < 2; ++i) {
-            (uint64 flags, uint64 until, uint32 id) = r.attestationOf(a[i]);
+            (uint64 flags, uint64 until, uint32 id) = r.complianceOf(a[i]);
             assertEq(flags, 8, "ELIGIBLE_CONTRACT");
             assertEq(until, type(uint64).max);
             assertEq(id, 0, "an admin row");
@@ -322,11 +325,11 @@ contract GovDeployTest is Test {
 
         DeployHarness none = new DeployHarness();
         none.setRegulated(true);
-        vm.expectRevert(abi.encodeWithSelector(IComplianceRegistry.AdminNotContract.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IComplianceRegistry.AdminZero.selector));
         none.deploy(ZUID, false, ska);
-        none.setComplianceAdmin(address(0xE0A));
-        vm.expectRevert(abi.encodeWithSelector(IComplianceRegistry.AdminNotContract.selector, address(0xE0A)));
-        none.deploy(ZUID, false, ska);
+        none.setComplianceAdmin(address(0xE0A)); // an EOA: any account is an admin since round 3r
+        (, json) = none.deploy(ZUID, false, ska);
+        assertEq(ComplianceRegistry(vm.parseJsonAddress(json, ".compliance_registry")).admin(), nid(address(0xE0A)));
     }
 
     function _attest(ComplianceRegistry r, bytes32 account, uint64 flags, uint64 until) internal {
@@ -334,7 +337,7 @@ contract GovDeployTest is Test {
         uint64[] memory fl = new uint64[](1);
         uint64[] memory vu = new uint64[](1);
         (a[0], fl[0], vu[0]) = (account, flags, until);
-        r.attest(a, fl, vu);
+        r.setCompliance(a, fl, vu);
     }
 
     /// The `WRAPPED` release is gated as every release (NET-EVM-06, GD-4): one gas below its own need, by name, and nothing of
@@ -430,7 +433,7 @@ contract GovDeployTest is Test {
             _release(type(WrappedRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_REGULATED, router),
             _release(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, router),
             _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router),
-            abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(router)), // T29: a plain deploy, admin a contract
+            abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router)), // a plain deploy
             _release(type(NormalZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, router), // T30
             _release(type(WrappedZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, router),
             _release(type(NormalPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, router) // T31
@@ -589,8 +592,10 @@ contract GovDeployTest is Test {
         // and its admin names, the three ops `mtxTransferAdmin`, `mtxAcceptAdmin`, `mtxRenounceAdmin` and their typehashes): ->
         // 0x62505351CB1f44c078fcC44C8ec9531B145C93E3; round 3r T4 (R1; the metadata hash: `IOpenFactory` without the owner in
         // `Created`, the events and `FactoryInfo`, no `contractsOfOwner`): -> 0x349b10f51bCA434cd4C3609EA8C327c755b4fA97;
-        // round 3r T5 (the metadata hash: `IOpenFactory is IAdmin`, its approvals, no `registrar`): -> this
-        assertEq(router, 0x53EE55a076bDeb38b3924471aFFEEb74AD32d47E, "GovernanceRouter");
+        // round 3r T5 (the metadata hash: `IOpenFactory is IAdmin`, its approvals, no `registrar`): ->
+        // 0x53EE55a076bDeb38b3924471aFFEEb74AD32d47E; round 3r T6 (the metadata hash: `IRegulatedToken`'s compliance
+        // registry errors renamed and `ComplianceRegistryRouterMismatch`, its code unchanged): -> this
+        assertEq(router, 0xcA8b1b01BB32b807Fc7848CE3a28EfA727A28BBf, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

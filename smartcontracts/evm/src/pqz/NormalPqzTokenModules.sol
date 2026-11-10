@@ -27,7 +27,7 @@ import "../zether/ZetherTypes.sol";
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract NormalPqzTokenP is NormalPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) NormalPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -221,7 +221,7 @@ contract NormalPqzTokenP is NormalPqzTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract NormalPqzTokenT is NormalPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) NormalPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -281,7 +281,7 @@ contract NormalPqzTokenT is NormalPqzTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract NormalPqzTokenA is NormalPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) NormalPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -462,7 +462,7 @@ contract NormalPqzTokenA is NormalPqzTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract NormalPqzTokenQ is NormalPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) NormalPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {

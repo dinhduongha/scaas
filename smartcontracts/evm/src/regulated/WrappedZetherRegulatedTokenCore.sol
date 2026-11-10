@@ -27,7 +27,7 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         and `mtxUnshieldUnwrap` (the Zether sender and the beneficiary at the top, before the reserve quote and the
 ///         proof; `x.recipient` gets another asset, unchecked). No confidential selector is pause-open (RK-7).
 abstract contract WrappedZetherRegulatedTokenCore is WrappedZetherTokenCore, RegulatedBase {
-    /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
+    /// @dev `implArgs = abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` (plan T29).
     constructor(address factory_, bytes memory implArgs)
         WrappedZetherTokenCore(factory_, implArgs)
         RegulatedBase(implArgs)

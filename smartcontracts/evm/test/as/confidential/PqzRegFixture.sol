@@ -100,9 +100,9 @@ abstract contract PqzRegFixture is PqzNamedBase {
         issuer = address(new Holder());
         compliance = address(new Holder());
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(cadmin);
+        creg = new ComplianceRegistry(nid(cadmin), address(0));
         vm.prank(cadmin);
-        creg.setAttester(attester, true);
+        creg.setKycProvider(nid(attester), true);
         usd = new MockERC20("USD", "USD", 6);
         gasProbe = new GasProbe();
         tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(_regCfg()), "pr"));
@@ -176,7 +176,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
         uint64[] memory vu = new uint64[](1);
         (as_[0], fl[0], vu[0]) = (x, SANCTIONED, type(uint64).max);
         vm.prank(attester);
-        creg.attest(as_, fl, vu);
+        creg.setCompliance(as_, fl, vu);
     }
 
     /// Every proof op answers `word` (1 valid, 0 rejected).

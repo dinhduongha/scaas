@@ -90,7 +90,7 @@ contract RegulatedInitTest is RegFixture {
         }
     }
 
-    /// A list on with its flags and a registry that is not the canonical code: refused `RegistryCodeMismatch` (plan T29;
+    /// A list on with its flags and a registry that is not the canonical code: refused `ComplianceRegistryCodeMismatch` (plan T29;
     /// T28 refused it `RegulatedNotBuilt`). The canonical registry: `Registry.t.sol`.
     function test_registryOfOtherCodeRefused() public {
         for (uint256 i; i < 2; ++i) {
@@ -98,7 +98,7 @@ contract RegulatedInitTest is RegFixture {
             c.features |= 1 << 9;
             (c.reg.deniedFlags, c.reg.complianceRegistry) = (4, address(0xC0FFEE));
             _refused(i == 0 ? K8 : K9, c,
-                abi.encodeWithSelector(IRegulatedToken.RegistryCodeMismatch.selector, address(0xC0FFEE), bytes32(0)));
+                abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryCodeMismatch.selector, address(0xC0FFEE), bytes32(0)));
         }
     }
 

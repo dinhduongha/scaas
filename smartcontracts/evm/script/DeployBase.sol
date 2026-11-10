@@ -104,8 +104,9 @@ abstract contract DeployBase is DeployBook {
     /// @notice `DEPLOY_PQCHAT` env (default false): also register `PqChat` (UA-7, D22: class 3, kind 0 on the generic path) and,
     ///         when the chain's notice period is 0, create one instance (`_deployPqChat`, plan 3c T92).
     bool internal deployPqChat;
-    /// @notice `COMPLIANCE_ADMIN` env (read with `DEPLOY_REGULATED`): the canonical `ComplianceRegistry`'s admin, a contract
-    ///         the operator names (CTR-AS-07, regulated-kinds spec §6.1, F-21); the registry's constructor refuses any other.
+    /// @notice `COMPLIANCE_ADMIN` env (read with `DEPLOY_REGULATED`): the canonical `ComplianceRegistry`'s first admin, the
+    ///         native id of the address the operator names (CTR-AS-07, regulated-kinds spec §6.1, F-21); the registry's
+    ///         constructor refuses 0 (`AdminZero`). Round 3r keeps the address here; a UA id is T10 (spec §6).
     address internal complianceAdmin;
     /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
     ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
@@ -455,14 +456,14 @@ abstract contract DeployBase is DeployBook {
     ///         `GovernanceLib`, already in it), the releases, version 1, each refused first by `_requireReleaseGas`, then both
     ///         kinds enabled (plan T28). JSON `implementation_normal_regulated`, `implementation_wrapped_regulated`. Hedera
     ///         takes both (`IS_HEDERA` from the env). The confidential regulated kinds deploy with their stacks (10, 11 under
-    ///         `DEPLOY_ZETHER`, `_deployZetherRegulated`; 12, 13 by `script/pqz/e2e.py`). Each release's `implArgs` is `abi.encode(REGISTRY_CODEHASH)`,
+    ///         `DEPLOY_ZETHER`, `_deployZetherRegulated`; 12, 13 by `script/pqz/e2e.py`). Each release's `implArgs` is `abi.encode(COMPLIANCE_REGISTRY_CODEHASH)`,
     ///         the canonical `ComplianceRegistry` runtime's code hash (spec §5, F-11; plan T29): a token naming a registry of
     ///         other code is refused at init. The registry itself: `_deployComplianceRegistry` (plan T33).
     function _deployRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
         address[] memory libs = new address[](4);
         (libs[0], libs[1], libs[2], libs[3]) =
             (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(RegulatedLib));
-        bytes memory coreArgs = abi.encode(_registryCodehash());
+        bytes memory coreArgs = abi.encode(_complianceRegistryCodehash());
         address n = _kindRelease(f, IOpenFactory.TokenKind.NORMAL_REGULATED, "NormalRegulatedToken",
             type(NormalRegulatedToken).creationCode, coreArgs, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         vm.serializeAddress("deploy", "implementation_normal_regulated", n);
@@ -477,20 +478,23 @@ abstract contract DeployBase is DeployBook {
     }
 
     /// @notice Regulated-kinds spec §6.1 (F-21, plan T33), under `DEPLOY_REGULATED`: the canonical `ComplianceRegistry` by
-    ///         CREATE2, its admin `COMPLIANCE_ADMIN` (CTR-AS-07: a contract; none or an EOA is refused by the registry's own
-    ///         constructor, `AdminNotContract`), its runtime the code every regulated release pins (`REGISTRY_CODEHASH`,
-    ///         F-11). JSON `compliance_registry`, `compliance_registry_codehash`. Not a release: no factory, no `chainUid()`;
-    ///         the code pin is its gate. The `ELIGIBLE_CONTRACT` rows of a DEX venue (`createDex`, after this deploy) and of
-    ///         its `puller()` are the admin's own `attest` call: this script holds no key of the admin.
+    ///         CREATE2, after the chain's router (round 3r, spec §5.3: its router is a constructor argument, written once),
+    ///         its admin the native id of `COMPLIANCE_ADMIN` (none refused by the registry's own constructor, `AdminZero`;
+    ///         any account, round 3r) and its router `govRouter`; its runtime the code every regulated release pins
+    ///         (`COMPLIANCE_REGISTRY_CODEHASH`, F-11), equal for every admin and router. JSON `compliance_registry`,
+    ///         `compliance_registry_codehash`. Not a release: no factory, no `chainUid()`; the code pin is its gate. The
+    ///         `ELIGIBLE_CONTRACT` rows of a DEX venue (`createDex`, after this deploy) and of its `puller()` are the admin's
+    ///         own `setCompliance` call: this script holds no key of the admin.
     function _deployComplianceRegistry() internal {
-        ComplianceRegistry r = new ComplianceRegistry{salt: salt}(complianceAdmin);
-        require(address(r).codehash == _registryCodehash(), "ComplianceRegistry: code differs from REGISTRY_CODEHASH (F-11)");
+        ComplianceRegistry r = new ComplianceRegistry{salt: salt}(MetaTxLib.pad(complianceAdmin), govRouter);
+        require(address(r).codehash == _complianceRegistryCodehash(),
+            "ComplianceRegistry: code differs from COMPLIANCE_REGISTRY_CODEHASH (F-11)");
         vm.serializeAddress("deploy", "compliance_registry", address(r));
         vm.serializeBytes32("deploy", "compliance_registry_codehash", address(r).codehash);
     }
 
     /// @notice The canonical `ComplianceRegistry` runtime's code hash, every regulated release's `implArgs` (spec §5, F-11).
-    function _registryCodehash() internal pure returns (bytes32) {
+    function _complianceRegistryCodehash() internal pure returns (bytes32) {
         return keccak256(type(ComplianceRegistry).runtimeCode);
     }
 
@@ -528,7 +532,7 @@ abstract contract DeployBase is DeployBook {
     }
 
     /// @notice T66b §4.5: `kind`'s body modules (`_modules`, with the kind's own constructor arguments `coreArgs`: "" on 0-5,
-    ///         `abi.encode(REGISTRY_CODEHASH)` on 8-13), env version 1 of `kind` = `e` with the modules pinned beside its
+    ///         `abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` on 8-13), env version 1 of `kind` = `e` with the modules pinned beside its
     ///         libraries, then the release, version 1, its `implArgs` naming the modules (`kindImplArgs`).
     function _kindRelease(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
         bytes memory coreArgs, IFactoryToken.Env memory e) internal returns (address)
@@ -877,7 +881,7 @@ abstract contract DeployBase is DeployBook {
     ///         `ComplianceRegistry` runtime's code hash (F-11), then both kinds enabled. JSON
     ///         `implementation_{normal,wrapped}_zether_regulated_bls12381`. Never on Hedera (`ZetherLayer`).
     function _deployZetherRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, address[] memory deps) internal {
-        bytes memory coreArgs = abi.encode(_registryCodehash());
+        bytes memory coreArgs = abi.encode(_complianceRegistryCodehash());
         address n = _kindRelease(f, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, "NormalZetherRegulatedToken",
             type(NormalZetherRegulatedToken).creationCode, coreArgs,
             _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(false))));

@@ -18711,6 +18711,21 @@
   ],
   "NormalRegulatedToken": [
    {
+    "sel": "d10351b4",
+    "sig": "COMPLIANCE_REGISTRY_CODEHASH()",
+    "name": "COMPLIANCE_REGISTRY_CODEHASH",
+    "decl": "RegulatedBase",
+    "kept": true,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "",
+    "ifaces": [],
+    "domain": "erc20-core",
+    "group": "K"
+   },
+   {
     "sel": "2dd31000",
     "sig": "FACTORY()",
     "name": "FACTORY",
@@ -18755,21 +18770,6 @@
     "ifaces": [],
     "vis": "external",
     "domain": "pipeline",
-    "group": "K"
-   },
-   {
-    "sel": "beb598de",
-    "sig": "REGISTRY_CODEHASH()",
-    "name": "REGISTRY_CODEHASH",
-    "decl": "RegulatedBase",
-    "kept": true,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "",
-    "ifaces": [],
-    "domain": "erc20-core",
     "group": "K"
    },
    {
@@ -21173,6 +21173,21 @@
   ],
   "WrappedRegulatedToken": [
    {
+    "sel": "d10351b4",
+    "sig": "COMPLIANCE_REGISTRY_CODEHASH()",
+    "name": "COMPLIANCE_REGISTRY_CODEHASH",
+    "decl": "RegulatedBase",
+    "kept": true,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "",
+    "ifaces": [],
+    "domain": "erc20-core",
+    "group": "K"
+   },
+   {
     "sel": "2dd31000",
     "sig": "FACTORY()",
     "name": "FACTORY",
@@ -21224,21 +21239,6 @@
     "sig": "RATE_WINDOW()",
     "name": "RATE_WINDOW",
     "decl": "WrappedToken",
-    "kept": true,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "",
-    "ifaces": [],
-    "domain": "erc20-core",
-    "group": "K"
-   },
-   {
-    "sel": "beb598de",
-    "sig": "REGISTRY_CODEHASH()",
-    "name": "REGISTRY_CODEHASH",
-    "decl": "RegulatedBase",
     "kept": true,
     "mut": "view",
     "guard": "",
@@ -24440,6 +24440,21 @@
   ],
   "NormalZetherRegulatedToken": [
    {
+    "sel": "d10351b4",
+    "sig": "COMPLIANCE_REGISTRY_CODEHASH()",
+    "name": "COMPLIANCE_REGISTRY_CODEHASH",
+    "decl": "RegulatedBase",
+    "kept": true,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "",
+    "ifaces": [],
+    "domain": "erc20-core",
+    "group": "K"
+   },
+   {
     "sel": "2dd31000",
     "sig": "FACTORY()",
     "name": "FACTORY",
@@ -24484,21 +24499,6 @@
     "ifaces": [],
     "vis": "external",
     "domain": "pipeline",
-    "group": "K"
-   },
-   {
-    "sel": "beb598de",
-    "sig": "REGISTRY_CODEHASH()",
-    "name": "REGISTRY_CODEHASH",
-    "decl": "RegulatedBase",
-    "kept": true,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "",
-    "ifaces": [],
-    "domain": "erc20-core",
     "group": "K"
    },
    {
@@ -27721,6 +27721,21 @@
   ],
   "WrappedZetherRegulatedToken": [
    {
+    "sel": "d10351b4",
+    "sig": "COMPLIANCE_REGISTRY_CODEHASH()",
+    "name": "COMPLIANCE_REGISTRY_CODEHASH",
+    "decl": "RegulatedBase",
+    "kept": true,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "",
+    "ifaces": [],
+    "domain": "erc20-core",
+    "group": "K"
+   },
+   {
     "sel": "2dd31000",
     "sig": "FACTORY()",
     "name": "FACTORY",
@@ -27772,21 +27787,6 @@
     "sig": "RATE_WINDOW()",
     "name": "RATE_WINDOW",
     "decl": "WrappedToken",
-    "kept": true,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "",
-    "ifaces": [],
-    "domain": "erc20-core",
-    "group": "K"
-   },
-   {
-    "sel": "beb598de",
-    "sig": "REGISTRY_CODEHASH()",
-    "name": "REGISTRY_CODEHASH",
-    "decl": "RegulatedBase",
     "kept": true,
     "mut": "view",
     "guard": "",
@@ -31916,6 +31916,21 @@
   ],
   "NormalPqzRegulatedToken": [
    {
+    "sel": "d10351b4",
+    "sig": "COMPLIANCE_REGISTRY_CODEHASH()",
+    "name": "COMPLIANCE_REGISTRY_CODEHASH",
+    "decl": "RegulatedBase",
+    "kept": true,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "",
+    "ifaces": [],
+    "domain": "erc20-core",
+    "group": "K"
+   },
+   {
     "sel": "2dd31000",
     "sig": "FACTORY()",
     "name": "FACTORY",
@@ -31960,21 +31975,6 @@
     "ifaces": [],
     "vis": "external",
     "domain": "pipeline",
-    "group": "K"
-   },
-   {
-    "sel": "beb598de",
-    "sig": "REGISTRY_CODEHASH()",
-    "name": "REGISTRY_CODEHASH",
-    "decl": "RegulatedBase",
-    "kept": true,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "",
-    "ifaces": [],
-    "domain": "erc20-core",
     "group": "K"
    },
    {
@@ -35529,6 +35529,21 @@
   ],
   "WrappedPqzRegulatedToken": [
    {
+    "sel": "d10351b4",
+    "sig": "COMPLIANCE_REGISTRY_CODEHASH()",
+    "name": "COMPLIANCE_REGISTRY_CODEHASH",
+    "decl": "RegulatedBase",
+    "kept": true,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "",
+    "ifaces": [],
+    "domain": "erc20-core",
+    "group": "K"
+   },
+   {
     "sel": "2dd31000",
     "sig": "FACTORY()",
     "name": "FACTORY",
@@ -35580,21 +35595,6 @@
     "sig": "RATE_WINDOW()",
     "name": "RATE_WINDOW",
     "decl": "WrappedToken",
-    "kept": true,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "",
-    "ifaces": [],
-    "domain": "erc20-core",
-    "group": "K"
-   },
-   {
-    "sel": "beb598de",
-    "sig": "REGISTRY_CODEHASH()",
-    "name": "REGISTRY_CODEHASH",
-    "decl": "RegulatedBase",
     "kept": true,
     "mut": "view",
     "guard": "",

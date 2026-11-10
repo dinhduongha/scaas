@@ -13,6 +13,7 @@ import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
+import {IComplianceRegistry} from "./IComplianceRegistry.sol";
 
 /// @title The bodies of the regulated controls (CTR-AS-02's shape, regulated-kinds spec §3.1, §3.3, §3.4), reached by
 ///        `DELEGATECALL` from the thin stubs of `RegulatedBase`: storage is the token's `scaas.regulated` namespace,
@@ -89,9 +90,16 @@ library RegulatedLib {
     /// @notice The checks of spec §2.4 on the factory's raw `initArgs`, before the kind's own init and any mint, and the
     ///         namespace written from them. `valid` is the kind's `_validBits()`: a bit outside it is refused first, as
     ///         `GovernanceLib.init` would (bit 8 on 10-13). The roles' holder rules, `RoleConflict` and the owner-0 rule are
-    ///         `GovernanceLib.init`'s; the initial-supply recipient's `R` is the mint's own `_regMove`. A registry must
-    ///         carry `registryCodehash`, the release's `REGISTRY_CODEHASH` (F-11), and is written in slot +0.
-    function init(bytes calldata initArgs, uint256 valid, bytes32 registryCodehash, address uaRegistry) public {
+    ///         `GovernanceLib.init`'s; the initial-supply recipient's `R` is the mint's own `_regMove`. A compliance
+    ///         registry must carry `complianceRegistryCodehash`, the release's `COMPLIANCE_REGISTRY_CODEHASH` (F-11), and its
+    ///         `govRouter()` must be 0 or `govRouter`, the token's own `ChainEnv.govRouter` (round 3r, spec
+    ///         2026-11-10-admin-not-owner.md §5.3, Fable P1-1: the code hash pins the code, not the router, so another
+    ///         router could answer `subject() = admin`); it is written in slot +0. The `govRouter()` read is a plain call
+    ///         made only after the code-hash check: on the canonical runtime it is a storage read, and any failure reverts
+    ///         the creation (fail closed).
+    function init(bytes calldata initArgs, uint256 valid, bytes32 complianceRegistryCodehash, address uaRegistry,
+        address govRouter) public
+    {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         uint256 f = cfg.features;
         if (f & ~valid != 0) {
@@ -112,8 +120,12 @@ library RegulatedLib {
             revert IRegulatedToken.RegulatedConfigInvalid();
         }
         address reg = p.complianceRegistry;
-        if (reg != address(0) && reg.codehash != registryCodehash) {
-            revert IRegulatedToken.RegistryCodeMismatch(reg, reg.codehash);
+        if (reg != address(0)) {
+            if (reg.codehash != complianceRegistryCodehash) {
+                revert IRegulatedToken.ComplianceRegistryCodeMismatch(reg, reg.codehash);
+            }
+            address got = IComplianceRegistry(reg).govRouter();
+            if (got != address(0) && got != govRouter) revert IRegulatedToken.ComplianceRegistryRouterMismatch(reg, got);
         }
         RegulatedStorage storage s = $();
         (s.complianceRegistry, s.controls) = (reg, uint8(f >> GovernanceBits.FREEZE) & 0x3F);

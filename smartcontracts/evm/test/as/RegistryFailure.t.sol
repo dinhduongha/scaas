@@ -30,11 +30,11 @@ contract GasCaller {
 
 /// Plan T29 (regulated-kinds spec §5 the bounded call, §9; Codex 4, F-11): a failure never means eligible. Each stub over the
 /// canonical address (reverting, gas-burning, short, 2-returning, long): transfer, mint (wrap on 9), a fee leg and
-/// `canReceive` fail `RegistryUnavailable(registry)`; burn and unwrap pass (no receiver). A starved call reverts
-/// `RegistryGasStarved(REGISTRY_GAS, left)`; at the starvation line the callee gets its whole cap; the cap bounds a
-/// gas-burning registry; `REGISTRY_GAS` is pinned at 50,000, at least twice the canonical `hasFlags` measured cold.
+/// `canReceive` fail `ComplianceRegistryUnavailable(registry)`; burn and unwrap pass (no receiver). A starved call reverts
+/// `ComplianceRegistryGasStarved(COMPLIANCE_REGISTRY_GAS, left)`; at the starvation line the callee gets its whole cap; the cap bounds a
+/// gas-burning registry; `COMPLIANCE_REGISTRY_GAS` is pinned at 50,000, at least twice the canonical `hasFlags` measured cold.
 contract RegistryFailureTest is RegFixture {
-    uint256 internal constant REGISTRY_GAS = 50_000; // the pin (spec §5): moves only old -> new in the commit
+    uint256 internal constant COMPLIANCE_REGISTRY_GAS = 50_000; // the pin (spec §5): moves only old -> new in the commit
     uint64 internal constant MAX = type(uint64).max;
     address internal feeTo = address(0xFEE);
     GasCaller internal gc;
@@ -59,7 +59,7 @@ contract RegistryFailureTest is RegFixture {
     function _unavailable(address who, address t, bytes memory cd, string memory what) internal {
         (bool ok, bytes memory ret) = _as(who, t, cd);
         assertFalse(ok, what);
-        assertEq(ret, abi.encodeWithSelector(IRegulatedToken.RegistryUnavailable.selector, address(creg)), what);
+        assertEq(ret, abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryUnavailable.selector, address(creg)), what);
     }
 
     function test_registryFailureNeverEligible() public {
@@ -89,14 +89,14 @@ contract RegistryFailureTest is RegFixture {
                     vm.prank(alice);
                     WrappedToken(payable(t)).unwrap(1, alice);
                 }
-                vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.RegistryUnavailable.selector, address(creg)));
+                vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryUnavailable.selector, address(creg)));
                 IRegulatedToken(t).canReceive(nid(bob));
                 vm.etch(address(creg), canonical);
             }
         }
     }
 
-    /// The cap bounds a registry that spends all it is given: the refused transfer costs about `REGISTRY_GAS`, not the 3 M
+    /// The cap bounds a registry that spends all it is given: the refused transfer costs about `COMPLIANCE_REGISTRY_GAS`, not the 3 M
     /// the transaction carried.
     function test_registryGasCapBounds() public {
         bytes memory canonical = address(creg).code;
@@ -107,19 +107,19 @@ contract RegistryFailureTest is RegFixture {
             (bool ok, bytes memory ret) = t.call{gas: 3_000_000}(abi.encodeCall(IERC20.transfer, (bob, 1)));
             Vm.Gas memory g = vm.lastCallGas();
             assertFalse(ok);
-            assertEq(bytes4(ret), IRegulatedToken.RegistryUnavailable.selector);
+            assertEq(bytes4(ret), IRegulatedToken.ComplianceRegistryUnavailable.selector);
             assertLt(g.gasTotalUsed, 200_000, "bounded by the cap");
-            assertGt(g.gasTotalUsed, REGISTRY_GAS, "the registry got its cap");
+            assertGt(g.gasTotalUsed, COMPLIANCE_REGISTRY_GAS, "the registry got its cap");
             vm.etch(address(creg), canonical);
         }
     }
 
     function _starvedAt(address t, uint256 g) internal returns (bool starved, bool ok, bytes memory ret) {
         (ok, ret) = gc.go(t, abi.encodeCall(IERC20.transfer, (bob, 1)), g);
-        starved = !ok && ret.length >= 4 && bytes4(ret) == IRegulatedToken.RegistryGasStarved.selector;
+        starved = !ok && ret.length >= 4 && bytes4(ret) == IRegulatedToken.ComplianceRegistryGasStarved.selector;
     }
 
-    /// Spec §5: with less than `REGISTRY_GAS x 64/63 + margin` left, the call is not made: `RegistryGasStarved(cap, left)`,
+    /// Spec §5: with less than `COMPLIANCE_REGISTRY_GAS x 64/63 + margin` left, the call is not made: `ComplianceRegistryGasStarved(cap, left)`,
     /// never a failure read from a starved registry. The control: the same transfer with ample gas.
     function test_registryStarvedReverts() public {
         for (uint256 i; i < 2; ++i) {
@@ -131,9 +131,9 @@ contract RegistryFailureTest is RegFixture {
             (bool starved, bool ok, bytes memory ret) = _starvedAt(t, 45_000);
             assertTrue(starved, "starved");
             (bytes4 sel, uint256 cap, uint256 left) = _decodeStarved(ret);
-            assertEq(sel, IRegulatedToken.RegistryGasStarved.selector);
-            assertEq(cap, REGISTRY_GAS, "the cap");
-            assertLt(left, REGISTRY_GAS * 64 / 63 + 10_000, "left");
+            assertEq(sel, IRegulatedToken.ComplianceRegistryGasStarved.selector);
+            assertEq(cap, COMPLIANCE_REGISTRY_GAS, "the cap");
+            assertLt(left, COMPLIANCE_REGISTRY_GAS * 64 / 63 + 10_000, "left");
             (starved, ok,) = _starvedAt(t, 1_000_000);
             assertTrue(ok && !starved, "control");
         }
@@ -148,7 +148,7 @@ contract RegistryFailureTest is RegFixture {
     }
 
     /// At the first gas limit the starvation check lets through, the registry was given its whole cap: a probe that
-    /// refuses with less than `REGISTRY_GAS - 1,000` never reports `RegistryUnavailable` there (so the margin covers the
+    /// refuses with less than `COMPLIANCE_REGISTRY_GAS - 1,000` never reports `ComplianceRegistryUnavailable` there (so the margin covers the
     /// call's own cost); one gas below, the call is still starved.
     function test_registryStarvedBoundary() public {
         address t = _listed(0, 1, 0, "b");
@@ -171,18 +171,18 @@ contract RegistryFailureTest is RegFixture {
         }
         (, bool ok, bytes memory ret) = _starvedAt(t, hi);
         emit log_named_uint("first gas limit not starved", hi);
-        assertTrue(ok || ret.length < 4 || bytes4(ret) != IRegulatedToken.RegistryUnavailable.selector,
+        assertTrue(ok || ret.length < 4 || bytes4(ret) != IRegulatedToken.ComplianceRegistryUnavailable.selector,
             "the registry got its whole cap at the line");
     }
 
-    /// `REGISTRY_GAS` = 50,000 (the starved error's `cap`), at least twice the canonical `hasFlags` measured cold on its
+    /// `COMPLIANCE_REGISTRY_GAS` = 50,000 (the starved error's `cap`), at least twice the canonical `hasFlags` measured cold on its
     /// costliest path (an attester's attestation: the record and the attester's enabled bit, both cold).
     function test_registryGasPinned() public {
         bytes32 a = nid(bob);
         _attest(a, 1 | (1 << 16), MAX);
         bytes memory cd = abi.encodeCall(IComplianceRegistry.hasFlags, (a, 1, 1 << 16));
         uint256 lo = 0;
-        uint256 hi = REGISTRY_GAS;
+        uint256 hi = COMPLIANCE_REGISTRY_GAS;
         assertTrue(gc.need(address(creg), cd, hi), "the cap is enough");
         while (hi - lo > 1) {
             uint256 mid = (lo + hi) / 2;
@@ -190,7 +190,7 @@ contract RegistryFailureTest is RegFixture {
             else lo = mid;
         }
         emit log_named_uint("canonical hasFlags, cold, gas needed", hi);
-        assertGe(REGISTRY_GAS, 2 * hi, "REGISTRY_GAS >= 2 x the cold need");
+        assertGe(COMPLIANCE_REGISTRY_GAS, 2 * hi, "COMPLIANCE_REGISTRY_GAS >= 2 x the cold need");
 
         address t = _listed(0, 1, 0, "p");
         _attest(nid(address(gc)), 1, MAX);
@@ -198,6 +198,6 @@ contract RegistryFailureTest is RegFixture {
         IERC20(t).transfer(address(gc), 10);
         (, , bytes memory ret) = _starvedAt(t, 45_000);
         (, uint256 cap,) = _decodeStarved(ret);
-        assertEq(cap, REGISTRY_GAS, "the token's cap");
+        assertEq(cap, COMPLIANCE_REGISTRY_GAS, "the token's cap");
     }
 }

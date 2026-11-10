@@ -8,7 +8,7 @@ struct ImplArgs {
 
 /// @notice A regulated kind's `implArgs` (8–13): the `ComplianceRegistry` runtime's code hash and its body modules.
 struct RegulatedImplArgs {
-    bytes32 registryCodehash;
+    bytes32 complianceRegistryCodehash;
     address[] modules;
 }
 
@@ -18,7 +18,7 @@ interface ITokenModule {
     function kind() external pure returns (uint8);
     function moduleGroup() external pure returns (uint8);
     function factory() external view returns (address);
-    function REGISTRY_CODEHASH() external view returns (bytes32);
+    function COMPLIANCE_REGISTRY_CODEHASH() external view returns (bytes32);
     function pqzSet() external pure returns (bytes32);
 }
 

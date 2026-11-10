@@ -24,7 +24,7 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         hooks through `PqzLayer` and `WrappedPqzToken`; the refresh and the roll-over take none (U1, U2). `ALLOWLIST` (8)
 ///         is outside the kind's mask (CTR-GOV-17).
 abstract contract WrappedPqzRegulatedTokenCore is WrappedPqzTokenCore, RegulatedBase {
-    /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
+    /// @dev `implArgs = abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` (plan T29).
     constructor(address factory_, bytes memory implArgs)
         WrappedPqzTokenCore(factory_, implArgs)
         RegulatedBase(implArgs)
