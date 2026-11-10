@@ -39,6 +39,11 @@ MUTANTS = {
            "\"UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,",
            "\"UATransferAdmin(bytes32 from,address target,bytes32 newOwner,",
            "forge", "test/governance", "GovRouterTypehash.t.sol"),
+    # T3 (§4.3): TOPIC_TYPEHASH keeps `owner` (the typehash pins and the topics.json digests)
+    "M8": ("smartcontracts/evm/src/pqchat/PqChatTypes.sol",
+           "\"PqTopic(bytes32 admin,uint64 nonce,",
+           "\"PqTopic(bytes32 owner,uint64 nonce,",
+           "forge", "test/pqchat", "PqChatTypes.t.sol"),
 }
 
 

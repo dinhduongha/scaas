@@ -1,2 +1,3 @@
 M5 | test_everySelectorIsClassified, test_kind0_NormalToken | 1
 M7 | test_uaTransferAdminTypehashIsPinned | 1
+M8 | test_pqtopicAdminTypehashIsPinned, test_pqtopicTypehashIsPinned, test_topicVectors | 1
