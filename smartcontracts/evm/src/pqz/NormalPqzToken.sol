@@ -35,6 +35,7 @@ interface INormalPqzTokenAbi {
     event GrantProposed(uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole, IGovernance.GrantTerms terms);
     event GrantSet(uint8 indexed bit, bytes32 indexed holder, bytes32 indexed grantor);
     event GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar);
+    event LiquidityPulled(bytes32 indexed orderHash, bytes32 indexed from, address indexed dex, uint256 amount);
     event MetaNonceCancelled(address indexed from, uint256 indexed batch, uint256 newNonce);
     event MetaTransactionExecuted(address indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
@@ -115,6 +116,7 @@ interface INormalPqzTokenAbi {
     error InvalidShortString();
     error KeyReused(bytes32 ua);
     error KeyVersionUnknown(bytes32 ua, uint64 keyVersion);
+    error LiquidityShape(uint8 code);
     error LockedNotSubset();
     error MetaTxBadNonce(uint256 expected, uint256 got);
     error MetaTxBadSignature();
@@ -138,6 +140,7 @@ interface INormalPqzTokenAbi {
     error NonceAboveCap(bytes32 orderHash);
     error NonceInvalidated(bytes32 orderHash);
     error NotDex(address caller);
+    error NotLiquidityDex(address caller);
     error NotOwner(bytes32 caller);
     error NotPendingOwner(bytes32 caller);
     error NotProposer(uint8 bit, bytes32 account, bytes32 proposer);
@@ -463,6 +466,10 @@ contract NormalPqzToken is NormalPqzTokenCore, INormalPqzTokenAbi {
     }
 
     function mtxInvalidateNonces(bytes32, uint256, uint256, IUARegistry.UASig calldata) external {
+        _forward(_MT);
+    }
+
+    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata, IUARegistry.UASig calldata, uint256, address) external {
         _forward(_MT);
     }
 

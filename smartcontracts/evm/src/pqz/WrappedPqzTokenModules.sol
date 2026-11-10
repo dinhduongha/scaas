@@ -256,6 +256,10 @@ contract WrappedPqzTokenT is WrappedPqzTokenCore {
         _mtxInvalidateNoncesBody(from, batch, newMin, auth);
     }
 
+    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata o, IUARegistry.UASig calldata auth, uint256 amount, address submitter) external onlyDelegated {
+        _mtxLiquidityPullBody(o, auth, amount, submitter);
+    }
+
     function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth, ITradeToken.TradeFill calldata f) external onlyDelegated {
         _mtxTradeBody(o, auth, f);
     }

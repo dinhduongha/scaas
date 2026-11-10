@@ -33,6 +33,7 @@ interface IWrappedRegulatedTokenAbi {
     event GrantProposed(uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole, IGovernance.GrantTerms terms);
     event GrantSet(uint8 indexed bit, bytes32 indexed holder, bytes32 indexed grantor);
     event GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar);
+    event LiquidityPulled(bytes32 indexed orderHash, bytes32 indexed from, address indexed dex, uint256 amount);
     event MetaNonceCancelled(address indexed from, uint256 indexed batch, uint256 newNonce);
     event MetaTransactionExecuted(address indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
@@ -113,6 +114,7 @@ interface IWrappedRegulatedTokenAbi {
     error InsufficientBalance(uint256 balance, uint256 needed);
     error InsufficientReserve(address u, uint256 out, uint256 reserve);
     error InvalidShortString();
+    error LiquidityShape(uint8 code);
     error LockedNotSubset();
     error MaxSupplyExceeded(uint256 supply, uint256 maxSupply);
     error MaxSupplyInvalid();
@@ -142,6 +144,7 @@ interface IWrappedRegulatedTokenAbi {
     error NotDex(address caller);
     error NotFrozen(bytes32 account);
     error NotGuardian();
+    error NotLiquidityDex(address caller);
     error NotOwner(bytes32 caller);
     error NotPaused();
     error NotPendingOwner(bytes32 caller);
@@ -461,6 +464,10 @@ contract WrappedRegulatedToken is WrappedRegulatedTokenCore, IWrappedRegulatedTo
     }
 
     function mtxInvalidateNonces(bytes32, uint256, uint256, IUARegistry.UASig calldata) external {
+        _forward(_MT);
+    }
+
+    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata, IUARegistry.UASig calldata, uint256, address) external {
         _forward(_MT);
     }
 

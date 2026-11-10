@@ -97,6 +97,11 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
@@ -295,6 +300,11 @@
   },
   {
    "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
    "class": "SIGNED",
    "error": ""
   },
@@ -591,6 +601,11 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
@@ -879,6 +894,11 @@
   },
   {
    "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
    "class": "SIGNED",
    "error": ""
   },
@@ -1265,6 +1285,11 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
@@ -1563,6 +1588,11 @@
   },
   {
    "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
    "class": "SIGNED",
    "error": ""
   },
@@ -1919,6 +1949,11 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
@@ -2177,6 +2212,11 @@
   },
   {
    "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
    "class": "SIGNED",
    "error": ""
   },
@@ -2533,6 +2573,11 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
@@ -2881,6 +2926,11 @@
   },
   {
    "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
    "class": "SIGNED",
    "error": ""
   },
@@ -3327,6 +3377,11 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
@@ -3689,6 +3744,11 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
@@ -4047,6 +4107,11 @@
   },
   {
    "sig": "mtxInvalidateNonces(address,uint256,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxLiquidity((bytes32,(bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256[],uint256,address[]),(address,bytes)[])",
    "class": "SIGNED",
    "error": ""
   },

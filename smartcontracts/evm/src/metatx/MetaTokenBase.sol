@@ -17,6 +17,7 @@ import {IERC20Payment} from "./IERC20Payment.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 import {IMetaTokenV2} from "./IMetaTokenV2.sol";
 import {IUALedger} from "./IUALedger.sol";
+import {ILiquidityPullToken} from "../trade/ITradeToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
@@ -257,10 +258,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     function _scopeBits() internal pure override returns (uint256) { return 0; }
     function _uaRegistry() internal view override returns (address) { return _registry(); }
 
-    /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is.
+    /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is;
+    ///         `ILiquidityPullToken` on every kind (CTR-DEX-30: the node's pre-check of a liquidity input).
     function _supportsInterfaceBody(bytes4 id) internal view virtual returns (bool) {
         return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
             || id == type(IERC20MetaTx).interfaceId || id == type(IGovernance).interfaceId
+            || id == type(ILiquidityPullToken).interfaceId
             || (id == type(IERC20Payment).interfaceId && GovernanceLib.hasFeature(GovernanceBits.PAYABLE))
             || (id == type(IRescuable).interfaceId && GovernanceLib.hasFeature(GovernanceBits.RESCUABLE))
             || (id == type(IUALedger).interfaceId && _registry() != address(0));
