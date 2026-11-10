@@ -55,3 +55,13 @@ D-L8 views (in the script): modules() lists two, supportsInterface(ILiquidityPul
 D-L3 (a derived p256 UA) | not in the script | needs a registered p256 key on the target
 records: records-local-liquidity.jsonl beside this file (addresses and hashes only). SCaaS testnet: not run (local only).
 
+deploy gas, measured (NET-EVM-11 flow: DeployBase._requireReleaseGas, asked = (regular + state) x 1.05 <= 60 M; the local matrix's
+deploy.sh evm on a fresh anvil, chain 31337, block gas limit 200 M; log deploy-local.log, git-ignored):
+SCaaSDex release | regular 2291573 | state 50870970 | asked 55820670 | within 60 M
+SCaaSDexLiquidityModule | regular 1288769 | state 29337750 | asked 32157844 | within 60 M
+SCaaSDexGovernanceModule | regular 477370 | state 10065870 | asked 11070402 | within 60 M
+
+fork case (test/fork/UniswapFork.t.sol test_fork_v2RouterAddRemove): NOT RUN. It needs a mainnet RPC in SCAAS_FORK_RPC_URL, and there
+is none on this machine; the file compiles and skips (FOUNDRY_TEST=test/fork: 1 suite, skipped). The readers' Uniswap layouts stay
+[inference] until it runs.
+
