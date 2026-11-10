@@ -44,6 +44,10 @@ governance spec [2026-11-02-governance.md](2026-11-02-governance.md) §1.6, the 
 | R24 | (Q15) **The decay's clock: the weighted-average start**, against dust wraps. |
 | R25 | (Q16) The round trip's rejuvenation is accepted and disclosed (under "everything else as recommended"). |
 
+**Confirmed by the owner 2026-11-10, at the build's start:** R25 as written (an unwrap, then a wrap again, refreshes the weighted
+start; accepted and disclosed), and bit 27 under R12 (`REDEEMER` is refused on a pure-wrap token at `initToken` with
+`WrapControlNeedsHybrid`, like bits 25 and 26).
+
 **Contents**
 
 1. [Scope: kinds and paths](#1-scope-kinds-and-paths--specified)
