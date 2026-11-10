@@ -6,3 +6,5 @@ git-ignored <step>.log beside this file (a red first run kept as <step>.red.log)
 PQZ set n2304-kmax4096; every heavy run through scripts/capped (4 GB; the node 6 GB), one at a time. UNAUDITED.
 
 step | commit | rc | counts
+t1-governance.red (AdminNames, GovRouterTypehash) | 304afd16+T1 | 1 | 43 passed, 16 failed: AdminNames 13 (each kind and the DEX "an ownership selector answers"), the 3 new router typehash pins (old constant != new value); positive control (the fixture with the old selectors and errors) 13/13 passed
+t1-pqchat.red (PqChatTypes) | 304afd16+T1 | 1 | 7 passed, 1 failed: test_pqtopicAdminTypehashIsPinned (0x75bed97b != 0x66954727; T3 makes it green)

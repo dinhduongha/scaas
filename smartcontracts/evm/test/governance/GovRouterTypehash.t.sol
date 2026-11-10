@@ -65,6 +65,39 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_RENOUNCE_OWNERSHIP, 0x0397c70ed0d09c398e5f2d00425b822788d86a35a074bf84e9438818da053445);
     }
 
+    /// Round 3r R3 (spec 2026-11-10-admin-not-owner.md §4.3, CTR-GOV-23): the three admin ops, `newAdmin` the transfer's word.
+    function test_uaTransferAdminTypehashIsPinned() public pure {
+        bytes32 h = keccak256(
+            "UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        assertEq(h, 0x36dbad09794ba40c4846013eebf3fab8fb57877cc3f2287d6f5b504b992cd4da);
+        assertEq(T.UA_TRANSFER_OWNERSHIP, h);
+    }
+
+    function test_uaAcceptAdminTypehashIsPinned() public pure {
+        bytes32 h = keccak256(
+            "UAAcceptAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        assertEq(h, 0x996ac68d825579b63a05d8de5e842540e3941eb831a15f6c822bfdff810048e8);
+        assertEq(T.UA_ACCEPT_OWNERSHIP, h);
+    }
+
+    function test_uaRenounceAdminTypehashIsPinned() public pure {
+        bytes32 h = keccak256(
+            "UARenounceAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        assertEq(h, 0x4be88ff950da1b2063111810c97fc341fb457a71d9719475cf513a9f09dde5ba);
+        assertEq(T.UA_RENOUNCE_OWNERSHIP, h);
+    }
+
+    /// Round 3r R3 (§4.3): the three ownership ops the admin ops replaced, legacy pins of a retired form: a client or node
+    /// row signing one of them signs for no entry.
+    function test_ownershipTypehashesAreLegacyPins() public pure {
+        assertEq(keccak256(
+            "UATransferOwnership(bytes32 from,address target,bytes32 newOwner,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), 0xa468e58d6110336b12945530c88e879bc757390554493d6c405eb996e9f34b19);
+        assertEq(keccak256(
+            "UAAcceptOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), 0x2ce67927cc2f2144e5b45b15e37e55814a22d43808f8ee507784924ed777243d);
+        assertEq(keccak256(
+            "UARenounceOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), 0x0397c70ed0d09c398e5f2d00425b822788d86a35a074bf84e9438818da053445);
+    }
+
     function test_uaRenounceRoleTypehashIsPinned() public pure {
         assertEq(T.UA_RENOUNCE_ROLE, keccak256(
                 "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));

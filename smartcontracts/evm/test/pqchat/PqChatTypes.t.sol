@@ -51,6 +51,18 @@ contract PqChatTypesTest is Test {
         assertEq(PqChatTypes.SCOPE_MESSAGE, vm.parseJsonBytes32(rec, ".tags['scaas/pqchat/v1/scope/message']"));
     }
 
+    /// Round 3r R3 (spec 2026-11-10-admin-not-owner.md §4.3, CTR-GOV-23): the topic's first word is `admin`; the type of
+    /// before (`bytes32 owner`) stays as a legacy pin.
+    function test_pqtopicAdminTypehashIsPinned() public pure {
+        bytes32 h = keccak256(
+            "PqTopic(bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)");
+        assertEq(h, 0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e);
+        assertEq(PqChatTypes.TOPIC_TYPEHASH, h);
+        assertEq(keccak256(
+            "PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)"),
+            0x75bed97bd08d9acabb9129fcd4953224878dd1dcfd40b822cb4dc8df462e1623, "the legacy pin");
+    }
+
     function test_pqtopicTypehashIsPinned() public view {
         assertEq(PqChatTypes.TOPIC_TYPEHASH, 0x75bed97bd08d9acabb9129fcd4953224878dd1dcfd40b822cb4dc8df462e1623);
         assertEq(PqChatTypes.TOPIC_UPDATE_TYPEHASH, 0x91027af710f50981ddd96a8956a4741037e30cdb39510c7ccc497d9d7e95fd43);
