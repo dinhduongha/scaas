@@ -194,7 +194,7 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     }
 
     /// @notice `WrappedToken`'s UA allowlist, the Zether ops and `mtxUnshieldUnwrap` (CTR-ZTH-51, UA-5c, as
-    ///         `NormalZetherToken`); not `mtxWrapShield` (a UA wrap-shields in two signed steps, `uaWrap` then
+    ///         `NormalZetherToken`); not `mtxWrapShield` (a UA wrap-shields in two signed steps, `mtxWrapOrder` then
     ///         `mtxShield`).
     function _uaAllowed(bytes4 sel) internal view virtual override(UAMetaTxBaseCore, WrappedTokenCore) returns (bool) {
         return _isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector || WrappedTokenCore._uaAllowed(sel);
