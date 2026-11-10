@@ -12,6 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
@@ -241,10 +242,10 @@ contract GovAttackV2Test is Test {
         assertEq(t.grantOf(MINT, nid(OFFICER)).grantor, bytes32(0));
 
         vm.prank(OFFICER2); // a stranger is refused
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, OFFICER2));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, OFFICER2));
         t.revokeRole(MINT, nid(OFFICER));
         vm.prank(MANAGER); // a holder of nothing, and the officer is no longer its leaf
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, MANAGER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, MANAGER));
         t.revokeRole(MINT, nid(OFFICER));
         assertTrue(t.hasRole(MINT, nid(OFFICER)));
 
@@ -254,7 +255,7 @@ contract GovAttackV2Test is Test {
         vm.prank(OWNER);
         t.revokeRole(MINT, nid(MANAGER));
         vm.prank(MANAGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, MANAGER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, MANAGER));
         t.revokeRole(MINT, nid(OFFICER2));
         _manager(100); // positive control: a grantor that holds revokes its leaf
         vm.prank(MANAGER);
@@ -331,7 +332,7 @@ contract GovAttackV2Test is Test {
         assertEq(t.admin(), bytes32(0));
         assertEq(t.holderCount(MINT), 2);
         vm.prank(MANAGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, MANAGER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, MANAGER));
         t.setGrant(MINT, nid(OFFICER), _leafTerms(50));
         assertEq(t.holderCount(MINT), 2);
         _mint(MANAGER, 50); // the locked power itself survives
@@ -643,7 +644,7 @@ contract GovAttackV2Test is Test {
         IGovernance.GrantTerms memory g = _open();
         g.total = 50;
         vm.prank(MANAGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, MANAGER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, MANAGER));
         t.setGrant(MINT, nid(MANAGER), g); // inside its terms and still not its own leaf
         g.total = 101;
         vm.prank(MANAGER);

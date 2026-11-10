@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {IGovernance} from "./IGovernance.sol";
+import {IAdmin} from "./IAdmin.sol";
 import {GovernanceBits} from "./GovernanceBits.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IRescuable} from "./IRescuable.sol";
@@ -128,7 +129,7 @@ library GovernanceLib {
         if (admin != 0) {
             _notPool(admin);
             s.admin = admin;
-            emit IGovernance.AdminTransferred(0, admin);
+            emit IAdmin.AdminTransferred(0, admin);
         } else {
             _noLiveHolder(s, roleBits); // B-06: no token is born in the state a renounce refuses (spec §1.7)
         }
@@ -159,7 +160,7 @@ library GovernanceLib {
     function cancelGrant(uint8 bit, bytes32 account, bytes32 caller) public {
         GovernanceStorage storage s = $();
         PendingGrant storage p = s.pending[bit][account];
-        if (caller == 0 || (caller != s.admin && caller != p.proposer)) revert IGovernance.NotAdmin(caller);
+        if (caller == 0 || (caller != s.admin && caller != p.proposer)) revert IAdmin.NotAdmin(caller);
         if (p.eta == 0) return;
         delete s.pending[bit][account];
         emit IGovernance.GrantCancelled(bit, account, caller);
@@ -175,7 +176,7 @@ library GovernanceLib {
         if (!admin && (caller == 0 || caller != s.grants[bit][account].grantor || s.roles[bit][account] != LIMITED
             || s.roles[bit][caller] == 0))
         {
-            revert IGovernance.NotAdmin(caller);
+            revert IAdmin.NotAdmin(caller);
         }
         if (_delayed(s, bit, delayedRelax)) {
             IGovernance.GrantTerms memory none;
@@ -311,10 +312,10 @@ library GovernanceLib {
         leaf = caller != s.admin || caller == 0;
         if (leaf) {
             IGovernance.Grant storage p = s.grants[bit][caller];
-            if (s.admin == 0 || s.roles[bit][caller] != LIMITED || !p.delegable) revert IGovernance.NotAdmin(caller);
+            if (s.admin == 0 || s.roles[bit][caller] != LIMITED || !p.delegable) revert IAdmin.NotAdmin(caller);
             if (p.validUntil != 0 && block.timestamp > p.validUntil) revert IGovernance.GrantExpired(bit, caller);
             IGovernance.Grant storage h = s.grants[bit][holder];
-            if (s.roles[bit][holder] != 0 && h.grantor != caller) revert IGovernance.NotAdmin(caller);
+            if (s.roles[bit][holder] != 0 && h.grantor != caller) revert IAdmin.NotAdmin(caller);
             if (h.barred) revert IGovernance.GrantBarred(bit, holder);
             _narrows(t, p);
             parentScope = p.scope;
@@ -383,17 +384,17 @@ library GovernanceLib {
         GovernanceStorage storage s = _onlyAdmin(caller);
         _notPool(newAdmin);
         s.pendingAdmin = newAdmin;
-        emit IGovernance.AdminTransferStarted(caller, newAdmin);
+        emit IAdmin.AdminTransferStarted(caller, newAdmin);
     }
 
     function acceptAdmin(bytes32 caller) public {
         GovernanceStorage storage s = $();
-        if (caller != s.pendingAdmin || caller == 0) revert IGovernance.NotPendingAdmin(caller);
+        if (caller != s.pendingAdmin || caller == 0) revert IAdmin.NotPendingAdmin(caller);
         bytes32 previous = s.admin;
         s.admin = caller;
         s.pendingAdmin = 0;
         ++s.adminGeneration; // every pending of the previous term dies (Codex 2)
-        emit IGovernance.AdminTransferred(previous, caller);
+        emit IAdmin.AdminTransferred(previous, caller);
     }
 
     /// @notice The admin becomes 0 forever. Refused while a set bit that is not locked has holders (CTR-GOV-02): revoke
@@ -404,7 +405,7 @@ library GovernanceLib {
         s.admin = 0;
         s.pendingAdmin = 0;
         ++s.adminGeneration;
-        emit IGovernance.AdminTransferred(caller, 0);
+        emit IAdmin.AdminTransferred(caller, 0);
     }
 
     // ------------------------------------------------------------------ checks used inline by the token
@@ -594,7 +595,7 @@ library GovernanceLib {
 
     function _onlyAdmin(bytes32 caller) private view returns (GovernanceStorage storage s) {
         s = $();
-        if (caller != s.admin || caller == 0) revert IGovernance.NotAdmin(caller);
+        if (caller != s.admin || caller == 0) revert IAdmin.NotAdmin(caller);
     }
 
     function _bit(uint8 bit) private pure returns (uint256) {

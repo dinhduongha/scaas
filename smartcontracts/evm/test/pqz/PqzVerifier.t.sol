@@ -10,6 +10,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -266,7 +267,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     function test_transfer_notProposer() public {
         NormalPqzToken t = _tok(fN, vA, false);
         vm.prank(address(0xBEEF));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(address(0xBEEF))));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(address(0xBEEF))));
         t.pqzSetVerifier(vB);
         t.pqzSetVerifier(vB);
         vm.warp(block.timestamp + NOTICE);
@@ -274,10 +275,10 @@ contract PqzVerifierTest is PqzOffchainBase {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotProposer.selector, uint8(0), vB, me));
         t.pqzSetVerifier(vB);
         vm.prank(address(0xBEEF));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(address(0xBEEF))));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(address(0xBEEF))));
         t.pqzCancelVerifier();
         vm.prank(address(0xBEEF));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(address(0xBEEF))));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(address(0xBEEF))));
         t.pqzRevokeVerifier();
     }
 

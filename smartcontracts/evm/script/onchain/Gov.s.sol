@@ -18,6 +18,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IRescuable} from "../../src/governance/IRescuable.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -748,7 +749,7 @@ contract Gov is OnchainBase {
         _neg(a1, tc, abi.encodeCall(IERC20.transfer, (address(0xdEaD), 1)), IRegulatedToken.NotEligible.selector,
             "transfer to an account the ComplianceRegistry does not attest (kind 8, ALLOWLIST)");
         // the guard: a governed entry by a non-owner
-        _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3))), IGovernance.NotAdmin.selector,
+        _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3))), IAdmin.NotAdmin.selector,
             "grantRole by a non-owner (kind 8)");
         // a router op signed by another key than its `from`
         MetaTxLib.UAEnvelope memory e = _env(a1, 0, gr.mtxNonce(_pad(a1), 0));

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IAdmin} from "./IAdmin.sol";
+
 /// @title The governance surface of every SCaaS contract (CTR-GOV-01, CTR-TOK-22); events and errors raised by
-///        `GovernanceLib`. Every name of the former `ITokenAdmin` is kept.
-interface IGovernance {
+///        `GovernanceLib`. The admin's views, entries, events and errors are `IAdmin`'s (CTR-GOV-23); this adds `renounceAdmin`.
+interface IGovernance is IAdmin {
     /// @notice A capability has no holder and binds or serves everyone; a power has holders. The type is `_roleBits()`.
     enum BitType { CAPABILITY, POWER }
 
@@ -50,8 +52,6 @@ interface IGovernance {
     event FeatureDisabled(uint8 indexed bit, bytes32 indexed by);
     event GrantSet(uint8 indexed bit, bytes32 indexed holder, bytes32 indexed grantor);
     event GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar);
-    event AdminTransferStarted(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
-    event AdminTransferred(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
     /// @notice The first of the admin's two calls (spec §1.6): `terms` for a wallet to compare with the pending's
     ///         `commit`; `whole` is a `grantRole`, its terms empty.
     event GrantProposed(uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole,
@@ -71,8 +71,6 @@ interface IGovernance {
     error NoSuchRole(uint8 bit);
     error FeatureLocked(uint8 bit);
     error FeatureNotSet(uint8 bit);
-    error NotAdmin(bytes32 caller);
-    error NotPendingAdmin(bytes32 caller);
     error MissingRole(uint8 bit, bytes32 account);
     /// @notice No band is refused since CTR-GOV-10's Change (owner 2026-11-04): bits 0-127 are SCaaS's, 128-255 each
     ///         application's, and a `uint8` bit and the `uint256` word hold no other. No path raises it; the declaration stays.
@@ -114,8 +112,6 @@ interface IGovernance {
 
     function features() external view returns (uint256);
     function lockedFeatures() external view returns (uint256);
-    function admin() external view returns (bytes32);
-    function pendingAdmin() external view returns (bytes32);
     function hasRole(uint8 bit, bytes32 account) external view returns (bool);
     function validBits() external view returns (uint256);
     function holderCount(uint8 bit) external view returns (uint256);
@@ -137,7 +133,5 @@ interface IGovernance {
     function revokeRole(uint8 bit, bytes32 account) external;
     function renounceRole(uint8 bit) external;
     function disableFeature(uint8 bit) external;
-    function transferAdmin(bytes32 newAdmin) external;
-    function acceptAdmin() external;
     function renounceAdmin() external;
 }

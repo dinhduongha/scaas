@@ -7,6 +7,7 @@ import {IUALedger} from "../metatx/IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IGovernance} from "./IGovernance.sol";
+import {IAdmin} from "./IAdmin.sol";
 import {IGovernanceRouter} from "./IGovernanceRouter.sol";
 
 /// @title The typed structs of `GovernanceRouter` (spec `2026-11-04-governance-ua-identity.md` §3; governance spec §3.2): one
@@ -190,12 +191,12 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     function mtxTransferAdmin(MetaTxLib.UAEnvelope calldata e, address target, bytes32 newAdmin,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_TRANSFER_ADMIN, e, target, IGovernance.transferAdmin.selector,
+        _ua(GovernanceRouterTypes.UA_TRANSFER_ADMIN, e, target, IAdmin.transferAdmin.selector,
             abi.encode(newAdmin), auth);
     }
 
     function mtxAcceptAdmin(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
-        _ua(GovernanceRouterTypes.UA_ACCEPT_ADMIN, e, target, IGovernance.acceptAdmin.selector, "", auth);
+        _ua(GovernanceRouterTypes.UA_ACCEPT_ADMIN, e, target, IAdmin.acceptAdmin.selector, "", auth);
     }
 
     function mtxRenounceAdmin(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth)

@@ -6,6 +6,7 @@ import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceLibHarness} from "./helpers/GovernanceLibHarness.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
 import {nid} from "../helpers/Ids.sol";
@@ -120,7 +121,7 @@ contract GovernanceLibTest is Test {
         vm.expectEmit(address(h));
         emit IGovernance.RoleGranted(1, nid(minter), bytes32(0));
         vm.expectEmit(address(h));
-        emit IGovernance.AdminTransferred(bytes32(0), nid(ownerA));
+        emit IAdmin.AdminTransferred(bytes32(0), nid(ownerA));
         h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, nid(ownerA), _roles(minter));
         assertEq(h.admin(), nid(ownerA));
         assertTrue(h.hasRole(1, nid(minter)));
@@ -131,7 +132,7 @@ contract GovernanceLibTest is Test {
     function test_grantRevokeRenounce() public {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, nid(ownerA), none);
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, minter));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, minter));
         h.grantRole(1, nid(minter));
         vm.prank(ownerA);
         vm.expectEmit(address(h));
@@ -207,15 +208,15 @@ contract GovernanceLibTest is Test {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, MINTABLE, nid(ownerA), _roles(minter));
         vm.prank(ownerA);
         vm.expectEmit(address(h));
-        emit IGovernance.AdminTransferStarted(nid(ownerA), nid(ownerB));
+        emit IAdmin.AdminTransferStarted(nid(ownerA), nid(ownerB));
         h.transferAdmin(nid(ownerB));
         assertEq(h.admin(), nid(ownerA));
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingAdmin.selector, minter));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, minter));
         h.acceptAdmin();
         vm.prank(ownerB);
         vm.expectEmit(address(h));
-        emit IGovernance.AdminTransferred(nid(ownerA), nid(ownerB));
+        emit IAdmin.AdminTransferred(nid(ownerA), nid(ownerB));
         h.acceptAdmin();
         assertEq(h.admin(), nid(ownerB));
         assertEq(h.pendingAdmin(), bytes32(0));
@@ -224,16 +225,16 @@ contract GovernanceLibTest is Test {
         assertEq(h.admin(), bytes32(0));
         assertTrue(h.hasRole(1, nid(minter)));
         vm.prank(ownerB);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, ownerB));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, ownerB));
         h.grantRole(1, nid(ownerB));
     }
 
     function test_noOwnerMeansNoAdministration() public {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, MINTABLE, bytes32(0), _roles(minter)); // locked: B-06
         vm.prank(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, address(0)));
         h.disableFeature(1);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingAdmin.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, address(0)));
         vm.prank(address(0));
         h.acceptAdmin();
     }
@@ -255,13 +256,13 @@ contract GovernanceLibTest is Test {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, nid(ownerA), _roles(minter));
         address eve = address(0xE5);
         vm.startPrank(eve);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, eve));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eve));
         h.transferAdmin(nid(eve));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, eve));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eve));
         h.revokeRole(1, nid(minter));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, eve));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eve));
         h.renounceAdmin();
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, eve));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eve));
         h.disableFeature(1);
         vm.stopPrank();
     }
@@ -273,7 +274,7 @@ contract GovernanceLibTest is Test {
         h.renounceAdmin();
         vm.stopPrank();
         vm.prank(ownerB);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingAdmin.selector, ownerB));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, ownerB));
         h.acceptAdmin();
     }
 
@@ -284,7 +285,7 @@ contract GovernanceLibTest is Test {
         vm.prank(ownerB);
         h.acceptAdmin();
         vm.prank(ownerA);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, ownerA));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, ownerA));
         h.grantRole(1, nid(minter));
     }
 
@@ -293,7 +294,7 @@ contract GovernanceLibTest is Test {
         vm.prank(ownerA);
         h.transferAdmin(bytes32(0));
         vm.prank(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingAdmin.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, address(0)));
         h.acceptAdmin();
     }
 
