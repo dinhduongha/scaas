@@ -583,8 +583,10 @@ contract GovDeployTest is Test {
         // code unchanged): -> 0x9084894b49299A2b1DFdB271e2C5Fd8D4f9bA904; group 3l (`mtxSetWrapLimits`, `mtxSetWrapMember`,
         // their typehashes; 0x7F3b13D20e51EA69BBEeF32394a76db36013FEE3 on its branch), merged (merge3k): ->
         // 0x1b8ae68e34f2710b8ba48b33fD53942F3b1a47A0; group 3p (owner 2026-11-10, CTR-UA-41; the metadata hash: the comment of
-        // `IFactoryToken` naming `PqzKeyVerifier`, was `UAPqzVerifier`): -> this
-        assertEq(router, 0xe3E535A28d5aBCa856dE18bdc46AaD334ab71f42, "GovernanceRouter");
+        // `IFactoryToken` naming `PqzKeyVerifier`, was `UAPqzVerifier`): -> 0xe3E535A28d5aBCa856dE18bdc46AaD334ab71f42; the
+        // directories renamed (owner 2026-11-10; the metadata hash: `UAMetaTxBase`'s comment names script/modules/gen_faces.py,
+        // was script/t66b/): -> this
+        assertEq(router, 0xb0E39bCa5EA2C70840e28Ba356606f607F54a1D3, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
