@@ -79,7 +79,7 @@ step() {
   while kill -0 "$P" 2> /dev/null; do
     sleep 1
     i=$((i + 1))
-    [ $((i % 30)) != 0 ] || say "$l" "… $(($(txs "$sr" "$sa") - n0)) txs, $(($(date +%s) - t0))s"
+    [ $((i % 30)) != 0 ] || say "$l" "… ${sa:+$(($(txs "$sr" "$sa") - n0)) txs, }$(($(date +%s) - t0))s"
   done
   e=0
   wait "$P" || e=$?
@@ -187,6 +187,7 @@ if [ "$tgt" != local ]; then
   export ONCHAIN_REMOTE=1
 fi
 for k in "$PRIVATE_KEY" "$ONCHAIN_K1" "$ONCHAIN_K2" "$ONCHAIN_K3"; do ADDRS="$ADDRS $(cast wallet address --private-key "$k")"; done
+ADDRS=$(printf '%s\n' $ADDRS | sort -u | tr '\n' ' ')  # the deployer may be a signer (the SCaaS testnet: key 1)
 for k in 1 2 3; do PQ_ADDRS="$PQ_ADDRS $(cast wallet address --private-key "$(printf '0x%064x' "$k")")"; done
 say "" "start (chain $CHAIN, PQZ $PQZ${PQ_RPC:+ on chain $(cast chain-id --rpc-url "$PQ_RPC" 2> /dev/null || echo '?')})"
 say "" "deployer and signers:$ADDRS"
@@ -196,8 +197,10 @@ if [ "${MATRIX_DEPLOY:-0}" = 1 ] && { [ "$tgt" = local ] || [ ! -f "$DEPLOY_JSON
   STAGE=deploy
   if [ -n "$SCOPE" ]; then
     say "" "deploy: compile (scripts/capped) …"
-    ../../scripts/capped env FOUNDRY_OUT=out/onchain-deploy FOUNDRY_CACHE_PATH=cache/onchain-deploy forge build \
-      script/Deploy.s.sol script/DeploySend.s.sol >> "$LOG" 2>&1 || fail "forge build of the deploy scripts"
+    sc=$SCOPE SCOPE=
+    step "" "" "" ../../scripts/capped env FOUNDRY_OUT=out/onchain-deploy FOUNDRY_CACHE_PATH=cache/onchain-deploy forge build \
+      script/Deploy.s.sol script/DeploySend.s.sol || fail "forge build of the deploy scripts"
+    SCOPE=$sc
   fi
   say "" "deploy …"
   rm -f "$RELEASES_JSON"
@@ -213,18 +216,22 @@ if [ -n "$SCOPE" ]; then
   STAGE=compile
   say "" "compile (scripts/capped) …"
   python3 -I script/onchain/zether_reg.py gen >> "$LOG" 2>&1
+  sc=$SCOPE SCOPE=  # the compile steps run under capped, not under the scope
   for g in $GROUPS; do
     case $g in
     tokens|gov|dex|misc)
       G=$(echo "$g" | sed 's/^./\U&/')
-      ../../scripts/capped forge build "script/onchain/$G.s.sol" --out "out/onchain-$g" --cache-path "cache/onchain-$g" \
-        >> "$LOG" 2>&1 || fail "forge build $G.s.sol" ;;
+      step "/$g" "" "" ../../scripts/capped forge build "script/onchain/$G.s.sol" --out "out/onchain-$g" \
+        --cache-path "cache/onchain-$g" || fail "forge build $G.s.sol"
+      say "/$g" "compiled (${SECS}s)" ;;
     zether)
-      ../../scripts/capped env FOUNDRY_OUT=out/onchain-zether FOUNDRY_CACHE_PATH=cache/onchain-zether forge build \
-        script/ZetherE2E.s.sol script/onchain/ZetherMore.s.sol script/onchain/build/ZetherRegE2E.s.sol \
-        script/onchain/build/ZetherRegMore.s.sol >> "$LOG" 2>&1 || fail "forge build of the Zether scripts" ;;
+      step "/$g" "" "" ../../scripts/capped env FOUNDRY_OUT=out/onchain-zether FOUNDRY_CACHE_PATH=cache/onchain-zether \
+        forge build script/ZetherE2E.s.sol script/onchain/ZetherMore.s.sol script/onchain/build/ZetherRegE2E.s.sol \
+        script/onchain/build/ZetherRegMore.s.sol || fail "forge build of the Zether scripts"
+      say "/$g" "compiled (${SECS}s)" ;;
     esac
   done
+  SCOPE=$sc
   say "" "compile ok"
 fi
 python3 -I script/onchain/basebook.py "$tgt" >> "$LOG"
