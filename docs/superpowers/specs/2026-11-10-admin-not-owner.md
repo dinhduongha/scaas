@@ -1,9 +1,11 @@
 # Admin, not owner: the factory's record, UA admins, one name on every contract (round 3r) — design
 
-**Status:** SPECIFIED, nothing built, **UNAUDITED**. Written 2026-11-10 for three owner rulings of the same day (§1). Branch
+**Status:** SPECIFIED, nothing built, **UNAUDITED**. Written 2026-11-10 for three owner rulings of the same day (§1); **the
+owner answered Q1–Q6 and ruled the directory the same day (§10, §13)**, recorded in `decisions.md` as CTR-GOV-23 and its
+Changes (§11). A Fable review of the whole spec comes before any code. Branch
 `ua-mtx-3r`, off `ua-mtx-merge` `74262fa0`; every `file:line` below is at that commit (contracts under
 `smartcontracts/evm/`). No figure here was measured for the new code: [measured] a figure already in the repo, [estimate]
-arithmetic over one, [inference] from the EVM's rules, checked at the build. Owner questions: §10. Decisions draft: §11.
+arithmetic over one, [inference] from the EVM's rules, checked at the build. Owner rulings: §10. Decisions: §11.
 
 ## 1. The rulings (owner, 2026-11-10, in chat)
 
@@ -64,7 +66,7 @@ equal everywhere.
 - **Events.** `TokenCreated(token, creatorId, kind, version, implementation, features, lockedFeatures, underlyings)`,
   `DexCreated(dex, creatorId, version, implementation)`, `InstanceCreated(instance, creatorId, contractClass, kind, version,
   implementation)`; topic0 of each moves (§4.3).
-- **`FactoryInfo`** loses `ownerUA` (Q4): six words, 192 B; `_factoryInfo` checks 192 (`:715`); `_checkRelease` drops "owner 0"
+- **`FactoryInfo`** loses `ownerUA` (owner, Q4): six words, 192 B; `_factoryInfo` checks 192 (`:715`); `_checkRelease` drops "owner 0"
   (`:704`); `PqChat.factoryInfo()` (`src/pqchat/PqChat.sol:67-70`) answers six fields; PqChat's own `owner()` stays.
 - **The admin's history** is the contract's own: `GovernanceLib.init` already emits the creation-time transfer from 0
   (`GovernanceLib.sol:128-132`), renamed `AdminTransferred(0, admin)` (§4), in the creating transaction.
@@ -192,8 +194,10 @@ is one-way. No pool check (the factory and the registry hold no pool) and no gen
 - **`configureChain` is direct only, by construction:** before it `govRouter` is 0, so the router path does not exist; the factory
   cannot trust a router it has not been told of (a contract that names itself the router could answer any `subject()`). Hence a
   native first admin, and the transfer after `configureChain` (§6).
-- `transferAdmin`, `acceptAdmin`, `renounceAdmin` (Q1); `admin()`, `pendingAdmin()` replace `registrar()`.
-- Renounce ends every admin op for good: no env, no release, no deprecation, no kind switch on that chain's factory.
+- `transferAdmin`, `acceptAdmin`, `renounceAdmin` (owner, Q1); `admin()`, `pendingAdmin()` replace `registrar()`.
+- **Renounce ends every admin op for good, deprecation included:** no env, no release, no deprecation, no kind switch on that
+  chain's factory; a release found bad after a renounce can no longer be stopped there (owner, Q1: stated consequence).
+- The chain's directory (owner, §13): the router's code hash at `configureChain`, the write-once `setChainEntries`.
 
 ### 5.3 `ComplianceRegistry`
 
@@ -201,17 +205,39 @@ is one-way. No pool check (the factory and the registry hold no pool) and no gen
   regulated releases' `REGISTRY_CODEHASH` changes once, with the new runtime). `admin_ ≠ 0` (`AdminZero`); `AdminNotContract`
   goes: any UA, an EOA, a contract, an `msig` or a PQ UA (CTR-AS-07 Change, §11). `govRouter_` 0 = no router path. The
   registry's address now differs per chain (the router is per chain); every book names it per chain already.
-- `setAttester`: `onlyAdmin`. `attest`: `c = _adminSubject()`; `c == admin` ⇒ id 0, else the attester path by `msg.sender`
-  (unchanged; from the router it finds no attester and refuses `NotAttester`). D2 now applies to an attester's direct call too
-  (the registry is authority there; it had no check because its admin was a contract).
-- `transferAdmin`, `acceptAdmin`; renounce per Q2 (recommended: none).
-- Attesters stay addresses, direct calls (Q5).
+- `setAttester(bytes32 attester, bool enabled)`: `onlyAdmin`. `attest`: `c = _adminSubject()`; `c == admin` ⇒ id 0, else
+  `id = attesterId[c]`, enabled, else `NotAttester` (§5.3.1). D2 applies to every direct caller, an attester's too (the registry
+  is authority there; it had no check because its admin had to be a contract).
+- `transferAdmin`, `acceptAdmin`; **no renounce** (owner, Q2): only the admin disables a compromised attester or writes an
+  `ELIGIBLE_CONTRACT` row, so the registry always has one.
+
+#### 5.3.1 The attester is a UA too (owner, Q5)
+
+The attester writes the registry's own state: it is the subject of its call, like a governance holder, so it takes the
+`governed` / `UAAdmin` pattern, not a signer's. (A signer, like 3f's verifier UA, signs a record that rides inside someone
+else's transaction and never sends one: `PqzVerdict` is the last parameter of the user's proof-carrying entry, CTR-PQZ-29. An
+attester sends its own `attest`.) Hence:
+
+- `attesterId` is keyed by the attester's UA id: `mapping(bytes32 attester => uint32)`; `setAttester(bytes32, bool)`,
+  `attesterId(bytes32)`, `AttesterSet(bytes32 indexed attester, uint32 indexed attesterId, bool enabled)`. The id rules stay:
+  assigned at the first enabling, never reused, 0 is the admin, an unknown id is not enabled.
+- `attest` takes the subject from `_adminSubject()`: a native attester calls directly (`pad(addr)`, D2), a derived one (`msig`,
+  PQ) through the router's `mtxAttest`, the same op the admin uses; the router's domain, `target` and nonce give replay
+  protection, so the registry needs no domain, nonce or record of its own.
+- Every row rule stays: `{flags, validUntil, attesterId}` in one slot; `ELIGIBLE_CONTRACT` only by the admin with
+  `validUntil = type(uint64).max` (CTR-AS-16); an admin row (`attesterId 0`, `flags ≠ 0`) is the admin's alone
+  (`AdminWrittenSlot`, owner 2026-11-06); disabling an attester voids its rows at once; `hasFlags`, `attestationOf`,
+  `attesterEnabled` keep their selectors, so `RegulatedBase`'s bounded calls do not move.
+- **3f is untouched.** The PQZ verifier UA stays a signer: `pqzVerifyMode`, `pqzVerifierUA`, its admitted kinds and frozen shape,
+  fixed or transferable with the factory's notice, immediate revocation, the epoch in every verdict, `PqzVerdict` under
+  `PURPOSE_PQZ_VERDICT`, the OFFCHAIN key rule (CTR-PQZ-27 to CTR-PQZ-30). Only the word changes where they say "the owner"
+  (`PqzStateLib.sol:185`: the admin proposes). The registry's attestation rows and 3f's attested verification stay two things.
 
 ### 5.4 Router ops
 
 In `GovernanceRouterBase` (every `IAdmin` contract): the three renamed ops, which reach the factory and the registry too, as
 their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creations (`src/governance/GovernanceRouter.sol:215-241`),
-thirteen new ops, each `mtx<Op>(UAEnvelope e, address target, <params>, UASig auth)` over `UA<Op>(bytes32 from,address
+fourteen new ops (the last from §13), each `mtx<Op>(UAEnvelope e, address target, <params>, UASig auth)` over `UA<Op>(bytes32 from,address
 target,<words>,E)`, fee mode `NONE`, relayable at fee 0:
 
 | Op | Signed words after `target` | Calls |
@@ -227,8 +253,9 @@ target,<words>,E)`, fee mode `NONE`, relayable at fee 0:
 | `UADeprecateRelease` | `uint16 contractClass,uint16 kind,uint64 version,string reason` | `deprecateRelease` |
 | `UASetKindEnabled` | `uint8 kind,bool on` | `setKindEnabled` |
 | `UASetClassKindEnabled` | `uint16 contractClass,uint16 kind,bool on` | `setClassKindEnabled` |
-| `UASetAttester` | `address attester,bool enabled` | `ComplianceRegistry.setAttester` |
-| `UAAttest` | `bytes32[] accounts,uint64[] flags,uint64[] until` | `ComplianceRegistry.attest` |
+| `UASetAttester` | `bytes32 attester,bool enabled` | `ComplianceRegistry.setAttester` |
+| `UAAttest` | `bytes32[] accounts,uint64[] flags,uint64[] until` | `ComplianceRegistry.attest` (the admin or an attester, §5.3.1) |
+| `UASetChainEntries` | `address complianceRegistry,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash` | `OpenFactory.setChainEntries` (§13) |
 
 - `Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[]
   libCodeHashes)` is appended to the three publish types and hashed as EIP-712 does (each array `keccak256` of its 32-byte
@@ -236,7 +263,10 @@ target,<words>,E)`, fee mode `NONE`, relayable at fee 0:
 - `initcode` and `implArgs` go to the factory unchanged; their hashes are the signed fields, as `UACreateToken` signs `initHash`
   (S3). The ids flat, as `UACreateInstance` (`:234-241`). `UAAttest` names its third array `until` because `validUntil` is an
   envelope word (the precedent: `UAOperatorTransfer`'s `account`, `GovernanceRouter.sol:105`).
-- No `mtxConfigureChain` (§5.2). The router's entries go from 38 to 51.
+- No `mtxConfigureChain` (§5.2). The router's entries go from 38 to 52.
+- **The three release deploys are not node jobs** (owner, Q3, option (i)): their init code is over the gateway's 64 KiB body
+  (`scaas-node/src/gateway.rs:142`), which is not raised; any sender submits them to the router directly, fee 0 too. They are
+  `NOT_ROWS` with that reason.
 
 ### 5.5 Threat notes
 
@@ -293,18 +323,19 @@ sequenceDiagram
   and must fit 60 M with regular × 1.05 < 2^24; the router adds a calldata-to-memory copy and a `keccak256` of the init code
   (about 0.1–0.2 M regular for a 100–130 KB init code [estimate]). The largest face of kind 13 asks 50.51 M direct [measured,
   `networks/evm.md:362-365`].
+- With the directory (§13.10): the chain-neutral relay pair comes before `configureChain`, and `setChainEntries` follows it.
 
 ## 7. ABI consumers
 
 | Consumer | Change |
 |---|---|
 | Contracts | §3–§5; `entries.json` → `gen_faces.py`; `face_abi.json` through the rename map |
-| `scaas-node/src/typed.rs` | `:121` `PqTopic(bytes32 admin,…)`; `:207-209` the three renamed rows; ten new `GR` rows (§5.4 but the three deploys) |
-| `scaas-node/src/guard.rs` | `NOT_ROWS` (`:1649-1663`) + the three deploy ops (their init code exceeds the gateway's 64 KiB body, `gateway.rs:142`; Q3); the three deploys join the creations' exclusion, so the router count goes `36` → `46` (`:1726`); class `ADMIN` (`:1718`); the `infoOf` mock (`:2465-2466`) |
+| `scaas-node/src/typed.rs` | `:121` `PqTopic(bytes32 admin,…)`; `:207-209` the three renamed rows; eleven new `GR` rows (§5.4 but the three deploys) |
+| `scaas-node/src/guard.rs` | `NOT_ROWS` (`:1649-1663`) + the three deploy ops, reason "init code over the gateway's 64 KiB body (`gateway.rs:142`): any sender submits to the router directly" (owner, Q3); the three join the creations' exclusion, so the router count goes `36` → `47` (`:1726`); class `ADMIN` (`:1718`); the `infoOf` mock (`:2465-2466`) |
 | `scaas-node/src/abi.rs` | `Created` without `ownerUA` (`:597-605`) |
 | `test/vectors/selector_audit.json` | class `ADMIN`; the router's 13 new `SIGNED` rows; the old names gone (both directions, `SelectorAudit.t.sol`) |
-| `clients/clientkeys` | `src/evm.js:360-362` renamed + 13 rows (the `Env` type, the arrays); `src/pqchat.js:49`; the governance-bits sentence table; `scripts/typed-ops-vectors.mjs`, `scripts/pqchat-vectors.mjs` |
-| `clients/ua-rs` | a router-op table for the 16 ops (the pattern of `src/regulated.rs`, `src/wraplimit.rs`), so a PQ or `msig` admin signs them (ua-rs signs every kind); tested against `typed_ops.json` |
+| `clients/clientkeys` | `src/evm.js:360-362` renamed + 14 rows (the `Env` type, the arrays); `src/pqchat.js:49`; the governance-bits sentence table; `scripts/typed-ops-vectors.mjs`, `scripts/pqchat-vectors.mjs` |
+| `clients/ua-rs` | a router-op table for the 17 ops (the pattern of `src/regulated.rs`, `src/wraplimit.rs`), so a PQ or `msig` admin signs them (ua-rs signs every kind); tested against `typed_ops.json` |
 | `clients/zether-prover/tests/typed_ops.rs` | `:22-23` the names |
 | Other `ua-*` | no router or topic row; they read `governance_bits.json` (text only) |
 | Vectors (generators only) | `typed/typed_ops.json`, `pqchat/topics.json` (topic ids unchanged, digests move), `governance/governance_bits.json` (`GovBitsVector.t.sol`), `governance/regulated_kat.json` (`RegulatedKat.t.sol`, the registry's code hash), `zether/state.json` (`ZetherStateVectors.t.sol`, `record` two words) |
@@ -326,7 +357,12 @@ router at fee 0 by a stranger relayer; another signer through the router `NotAdm
 `subject() = admin` that is not the router refused; the same signature on a second factory or registry (same admin) refused,
 and on a second chain (another `chain_uid`, router) refused; `acceptAdmin` by a non-pending `NotPendingAdmin`; renounce: admin 0,
 pending 0, every op refused, including through a mock router answering 0. The registry's runtime code hash is equal across two
-deployments with different admins and routers (F-11 positive control).
+deployments with different admins and routers (F-11 positive control); the registry has no `renounceAdmin` (its selector
+reverts with no data). Attesters (§5.3.1): a native attester directly and a derived attester (`msig`, ML-DSA) through the
+router each write rows under their own id; a derived attester's id called directly (`pad(msg.sender)` is not it) refused
+`NotAttester`; a disabled attester's rows read inactive at once; an attester over an admin row `AdminWrittenSlot`; an attester's
+`ELIGIBLE_CONTRACT` `EligibleContractAdminOnly`; an EIP-7702 designator attester `CallerDelegated`; the `RegulatedKat` rows
+regenerated and equal.
 
 Mutants (each must turn a named test red; the round's mutant log records it):
 
@@ -344,6 +380,9 @@ Mutants (each must turn a named test red; the round's mutant log records it):
 | M10 | the factory constructor takes a derived id | the constructor test |
 | M11 | `attest` from the router takes a non-admin subject as the admin | `RegistryAdmin.t.sol` |
 | M12 | a node row keeps `mtxTransferOwnership` | `allow_lists_equal_the_selector_audit_both_directions` |
+| M13 | `attest` looks the attester up by `msg.sender`, not the subject | the derived-attester test |
+| M14 | the registry keeps a `renounceAdmin` | the no-renounce test, `SelectorAudit.t.sol` |
+| M15 | a node row for a release deploy | the guard test (`NOT_ROWS`) |
 
 Gates: every `forge` directory and the node e2e (the change is shared), `script/pqz/at-set.sh <set> test` at the four sets,
 the size gate, layout, ABI and gas pins, `cargo test` + `clippy -D warnings`, clientkeys and ua-rs tests, the local matrix run.
@@ -361,71 +400,39 @@ the size gate, layout, ABI and gas pins, `cargo test` + `clippy -D warnings`, cl
   +1 KB [estimate]); `GovernanceRouter` (not in the baseline) gains 13 entries with the `Env` and array hashing (several KB
   [estimate]); the registry about +1 KB. Measured in T12; a baseline row moves only with its reason.
 
-## 10. Owner questions
+## 10. Owner rulings on the questions (2026-11-10)
 
-- **Q1. The factory admin: transfer and renounce?** Recommended: **two-step transfer and renounce, as `GovernanceBase`**
-  (CTR-GOV-07's semantics; renounce = no env, release, deprecation or kind switch on that factory ever again), the first admin a
-  native id (the constructor refuses a derived one) and `configureChain` direct only. Why: "immutable but UA-typed" cannot work
-  for a derived admin. Its only path is the router, which the factory may trust only after `configureChain` names it, and
-  `configureChain` is the admin's own first op; taking the router as a constructor argument would give the factory a different
-  address on every chain. An immutable native admin would keep today's registrar and drop R2's reason.
-- **Q2. The registry admin: transfer, renounce?** Recommended: **two-step transfer, no renounce.** A derived UA's keys never
-  change (new keys are a new UA, `accounts.md:70-72`), so without a transfer an `msig` or PQ admin could never rotate, where
-  today's contract admin (a `SmartKeyAccount`) can. No renounce: only the admin disables a compromised attester or writes an
-  `ELIGIBLE_CONTRACT` row; a registry with no admin could never void a bad attester's rows.
-- **Q3. Node rows for the three release deploys?** Recommended: **`NOT_ROWS`** with the reason "init code over the gateway's 64
-  KiB body"; the router entries stay relayable by any submitter at fee 0. Raising the gateway's bound for every route widens its
-  denial-of-service surface for a rare admin step.
-- **Q4. `FactoryInfo.ownerUA`?** Recommended: **drop it** (six words, 192 B): R1's "any owner read the factory makes";
-  PqChat's `owner()` stays the instance's view.
-- **Q5. Attesters as UAs?** Recommended: **not in 3r.** R2 names the admin; attesters stay addresses that call directly.
-- **Q6. The names.** Recommended as in §4.1: `admin()`, `pendingAdmin()`, `transferAdmin(bytes32)`, `acceptAdmin()`,
+Each answer is the owner's, in chat, relayed by the controller; status: decided, SPECIFIED, nothing built.
+
+- **Q1. The factory admin: a two-step transfer and a renounce, as in `GovernanceBase`.** The first admin is a native id (the
+  constructor refuses a derived one) and `configureChain` is its direct call. **Consequence: a renounce also ends deprecation**,
+  with every other admin op (env, release, kind switch): a release found bad after it can no longer be deprecated on that
+  factory. Why (spec): "immutable but UA-typed" cannot serve a derived admin, whose only path is the router, which the factory
+  may trust only after `configureChain` names it; a router in the constructor would give the factory another address per chain.
+- **Q2. The `ComplianceRegistry` admin: a two-step transfer, no renounce.** Why: a derived UA's keys never change
+  (`accounts.md:70-72`), so the transfer is how an `msig` or PQ admin rotates; with no admin nobody could void a bad attester's
+  rows or write an `ELIGIBLE_CONTRACT` row.
+- **Q3. Option (i): the three release deploys are sent directly to the router by any sender, fee 0 too, and are not node
+  jobs.** They carry init code over the gateway's 64 KiB body; they are `NOT_ROWS` with that reason; the gateway's limit is not
+  raised (§5.4, §7).
+- **Q4. `FactoryInfo.ownerUA` is dropped** (six words, 192 B). The PqChat instance keeps `owner()` (`bytes32`).
+- **Q5. Yes: the attester becomes a UA too, inside 3r**, in the `governed` / `UAAdmin` pattern (§5.3.1): an attester is the
+  subject of its own call, not a signer riding in another's; every 3f rule (CTR-PQZ-27 to CTR-PQZ-30) and every attestation-row
+  rule stays.
+- **Q6. The names as proposed** (§4.1): `admin()`, `pendingAdmin()`, `transferAdmin(bytes32)`, `acceptAdmin()`,
   `renounceAdmin()`, `AdminTransferStarted` / `AdminTransferred(previousAdmin, newAdmin)`, `NotAdmin(bytes32)`,
   `NotPendingAdmin(bytes32)`, `AdminAccountPool`, `AdminHasHolders`, `adminGeneration`, config field `admin`, selector-audit
-  class `ADMIN`, `UATransferAdmin(…,bytes32 newAdmin,…)`, `topicsByAdmin`, `PqTopicNotAdmin`, the factory's `AdminNotNative`, the
-  registry's `AdminZero`.
+  class `ADMIN`, `UATransferAdmin(…,bytes32 newAdmin,…)`, `UAAcceptAdmin`, `UARenounceAdmin`, `topicsByAdmin`,
+  `PqTopicNotAdmin`, the factory's `AdminNotNative`, the registry's `AdminZero`.
+- **Directory: option (a)**, write-once, one address per name, no versions, constants where chain-neutral (§13).
 
-## 11. `decisions.md` draft (SPECIFIED; written into `decisions.md` with the build, after the owner's answers)
+## 11. `decisions.md`
 
-```text
-### CTR-GOV-23 — One admin per contract, a UA, named admin on every contract
-- old: — · status: current · owner: yes · date: 2026-11-10 · normative: decisions.md#CTR-GOV-23 · superseded-by: —
-
-**Rule.** Every SCaaS contract with an administrator has exactly one, a UA id (bytes32), named `admin`: the 12 token
-kinds and SCaaSDex (GovernanceBase / GovernanceLib: admin(), pendingAdmin(), transferAdmin(bytes32), acceptAdmin(),
-renounceAdmin(), AdminTransferStarted / AdminTransferred, NotAdmin, NotPendingAdmin, AdminAccountPool,
-AdminHasHolders, config field `admin`; every rule, bit and delay unchanged), OpenFactory (the former registrar) and
-ComplianceRegistry. The PqChat topic's creator is its `admin` (PqTopic.admin, topicsByAdmin; ids unchanged). An admin
-acts directly as its native id (an EIP-7702 designator refused) or through the chain's GovernanceRouter, which names it
-by subject(); every admin op has a typed mtx<Op>, fee mode NONE, relayable at fee 0. OpenFactory's first admin is a
-native id (its constructor argument, the same on every chain); configureChain is its direct call; a two-step transfer
-and a renounce follow (Q1). ComplianceRegistry: admin and router written by the constructor, two-step transfer, no
-renounce (Q2). Not renamed: the PqChat instance's owner, MandateWallet and SmartKeyAccount owner.
-**Status.** SPECIFIED (spec superpowers/specs/2026-11-10-admin-not-owner.md); nothing built.
-**Why.** Owner 2026-11-10: an admin can be any UA, an msig or a PQ-signing UA included, more secure and more
-flexible; one word for the same power on every contract and every chain (CTR-GOV-07 already says admin).
-**Cost if wrong.** Every governance selector, event, error and four typehashes move (test-only chains: no alias); a
-derived admin depends on the router; a renounced factory can never deprecate a release.
-**Source.** Owner 2026-11-10 (chat, three rulings); this spec §4, §5, §10.
-
-CTR-TOK-27 Change (owner 2026-11-10, R1): the record is Created {addr, creatorId, contractClass, kind, version,
-createdBlock, createdAt}, two slots; no owner list, no contractsOfOwner; TokenCreated, DexCreated, InstanceCreated
-carry no owner; FactoryInfo has six words (Q4); the factory reads no owner or admin of what it creates. The current
-admin is the contract's admin(), its history the contract's AdminTransferred events. Why: an owner moves, a record does
-not. Status: SPECIFIED.
-
-CTR-TOK-29 Change (owner 2026-11-10, R2): OpenFactory(bytes32 admin) with a native first admin; the release list's
-registrar row becomes admin. Status: SPECIFIED.
-
-CTR-AS-07 Change (owner 2026-11-10, R2): ComplianceRegistry(bytes32 admin, address govRouter); the admin is any UA ≠ 0
-(AdminNotContract goes), through the router or directly; the runtime stays one code hash. Status: SPECIFIED.
-
-CTR-GOV-01 Change (owner 2026-11-10, R3): owner → admin in every name (the 2026-11-02 DEX rename admin → owner is
-reversed for every contract); slots unchanged. Status: SPECIFIED.
-
-NET-EVM-05 Change (owner 2026-11-10): the deploy order registry → router → factory(pad(deployer)) → configureChain →
-releases → transferAdmin to the msig or PQ UA, accepted through the router. Status: SPECIFIED.
-```
+Recorded on this branch: [CTR-GOV-23](../../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)
+(owner: yes; status SPECIFIED) with the rulings R1–R3, Q1–Q6 and the directory, and Change lines on CTR-TOK-27 (R1, Q4),
+CTR-TOK-29 (the constructor, Q1, the directory), CTR-AS-07 (Q2, Q5), CTR-GOV-01 (the names) and NET-EVM-05 (the deploy order).
+The component docs (`token-wrappers.md`, `asset-suite.md`, `pqchat.md`, `networks/evm.md`, the node's) move with the build
+(T14), when the code exists.
 
 ## 12. Tasks
 
@@ -436,13 +443,174 @@ releases → transferAdmin to the msig or PQ UA, accepted through the router. St
 | T3 | R3 on the topic: `IPqChat`, `PqChatTypes`, `PqChatCore`, `PqChatTopics`, `PqChat`; `topics.json`; node `typed.rs:121`; clientkeys `pqchat.js` | 0.5 d |
 | T4 | R1: record, views, events, `FactoryInfo`, reads; `ZetherStateVectors` + `state.json`; node `abi.rs`, guard mock | 1 d |
 | T5 | `UAAdmin`; `OpenFactory` admin (constructor, `onlyAdmin`, transfer, renounce); `FactoryAdmin.t.sol` green | 1.5 d |
-| T6 | `ComplianceRegistry` admin and router; `RegistryAdmin.t.sol`; `regulated_kat.json` | 1 d |
-| T7 | Router: the 3 renamed and 13 new ops, `Env` and array hashing, pins, `GovRouter.t.sol` | 1.5 d |
+| T6 | `ComplianceRegistry` admin, router, transfer without renounce, attesters by UA (§5.3.1); `RegistryAdmin.t.sol`; `regulated_kat.json`; `Gov.s.sol`'s `setAttester` | 1.5 d |
+| T7 | Router: the 3 renamed and 14 new ops, `Env` and array hashing, pins, `GovRouter.t.sol` | 1.5 d |
 | T8 | Clients and vectors: clientkeys rows + `typed_ops.json`, ua-rs router-op table + test, zether-prover list | 1 d |
 | T9 | Node: rows, `NOT_ROWS`, counts, class `ADMIN`; `cargo test`, `clippy` | 0.5 d |
 | T10 | Deploy: `DeployBase` order, `FACTORY_ADMIN_NEXT`, `COMPLIANCE_ADMIN` as UA, release rows, the gate; every release through the router on a 60 M anvil (NET-EVM-11) | 1 d |
 | T11 | Matrix: scripts renamed, the router steps for the factory and the registry, coverage, local run | 1 d |
 | T12 | Gates and pins: every forge dir, the four PQZ sets, size, layout, ABI, gas old → new | 0.5 d |
 | T13 | Mutants M1–M12, log | 0.5 d |
-| T14 | Docs: component docs, `decisions.md` (§11), `docs_check` | 0.5 d |
-|  | **Total** | **≈ 12 d** |
+| T14 | Docs: component docs (`decisions.md` done, §11), `docs_check` | 0.5 d |
+| T15 | The directory (§13): constants and their generator test, `setChainEntries`, `configureChain`'s checks, the registry agreement, `directory()`; `FactoryDirectory.t.sol`, mutants D1–D8; `DeployBase` and `e2e.py` order | 1 d |
+|  | **Total** | **≈ 13.5 d** |
+
+## 13. `OpenFactory` as the chain's directory (owner ruling 2026-11-10, option (a))
+
+**Ruling (owner).** From the factory anyone finds the chain's fixed shared contracts: `UARegistry`, `GovernanceRouter`,
+`RelayFeeRouter`, `RelayFeeExecutor`, `ComplianceRegistry`, `SmartKeyAccountFactory`, and the shared Zether contracts that stand
+apart. Option (a): write-once, one address per name, no versions; constants can be used. Excluded: libraries and body modules
+(they are in the env and the releases), and per-DEX children (`DexPuller` through `dex.puller()`, `mtxLiquidityPull` a token
+entry, the position readers listed by the DEX). Status: decided, SPECIFIED, nothing built.
+
+### 13.1 The entries, from the deploy scripts at `74262fa0`
+
+| Name | Chain-neutral? | Constant or write-once | Source of the address |
+|---|---|---|---|
+| `UARegistry` | no: constructor `chain_uid` (`script/DeployBase.sol:777`) | neither: not stored | the router's `registry()`; every env bound to it (§13.4) |
+| `GovernanceRouter` | no: `(chain_uid, registry, smartKeyAccountImpl, hedera)` (`:522`) | write-once, `configureChain` (today's `govRouter`) | `configureChain`'s `govRouter_`, code hash the admin's argument |
+| `RelayFeeRouter` | yes: no argument (`:511`) | constant | CREATE2(`0x4e59b44847b379578588920cA78FbF26c0B4956C`, salt, init-code hash) |
+| `RelayFeeExecutor` | yes: `CREATE` by the relay router's constructor, nonce 1 (`src/metatx/RelayFeeRouter.sol:59`) | constant | the `CREATE` address of (`RelayFeeRouter`, 1) |
+| `ComplianceRegistry` (the canonical one) | no in 3r: `(bytes32 admin, address govRouter)` (§5.3); today `(admin)` (`:496`) | write-once, `setChainEntries` | the admin's write; code hash a constant (one runtime, F-11) |
+| `SmartKeyAccountFactory` | no: `(chain_uid)` (`script/Deploy.s.sol:38`) | write-once, `setChainEntries` | the admin's write; code hash the admin's argument |
+| `ZetherStatements` | yes: no argument (`:852`); optional (no Zether on Hedera or without EIP-2537) | constant | CREATE2, as above |
+
+Not entries, each found where it lives: the libraries and body modules (`envOf(…).libs`, `modules()`), the releases (the
+catalogue), Zether's `ZetherDisclosure` and the transfer, burn and inner-product verifiers and the PQZ verifiers (an env's `deps`,
+`:861-862`), the `SmartKeyAccount` implementation (`smartKeyAccountFactory().IMPLEMENTATION()` and `Env.smartKeyAccountImpl`),
+`DexPuller` (`dex.puller()`), the position readers (the DEX), PqChat instances (the index). The Zether registry is the UA
+registry (`:869`), so it stands apart from nothing.
+
+### 13.2 Constants
+
+- `DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C` and `SALT = keccak256("scaas.deploy.v1")` (the deploy's default,
+  `script/DeployBase.sol:287`); `RELAY_FEE_ROUTER_INITCODE_HASH` and `ZETHER_STATEMENTS_INITCODE_HASH` literals; each address
+  computed in a `pure` view from them (`keccak256(0xff ‖ DEPLOYER ‖ SALT ‖ hash)`; the executor `keccak256(0xd6 0x94 ‖ router ‖
+  0x01)`). Literals, not `keccak256(type(C).creationCode)`: that would embed each init code in the factory [inference]; a test
+  recomputes them from the build.
+- Runtime code-hash literals: `RELAY_FEE_ROUTER_CODEHASH`, `RELAY_FEE_EXECUTOR_CODEHASH`, `ZETHER_STATEMENTS_CODEHASH`,
+  `COMPLIANCE_REGISTRY_CODEHASH` (the registry's runtime is the same on every chain, F-11).
+- A CREATE2 address binds its init code: nobody can put other code there. The only failure is "not deployed yet", which anyone
+  repairs with the same bytes. `configureChain` refuses while the relay router or its executor lacks its pinned runtime
+  (`SingletonMissing(at, expected, got)`); `ZetherStatements` is optional: its view answers the constant and a client checks the
+  code. A `DEPLOY_SALT` other than the default puts the pair elsewhere and `configureChain` refuses: fail closed.
+- Cost: the factory's init code, so its address, now depends on those four hashes; a change to `RelayFeeRouter`,
+  `ZetherStatements` or `ComplianceRegistry` is a new factory, and the release list pins them all.
+
+### 13.3 Write-once entries
+
+- **The router:** `configureChain(chainUid_, noticePeriod_, govRouter_, govRouterCodeHash, refBlock, refHash)`:
+  `govRouter_.codehash` must equal `govRouterCodeHash` (not 0, not `keccak256("")`), beside today's `chainUid()` check; `govRouter_`
+  0 with hash 0 is no router. The router's runtime carries `chain_uid` and the registry as immutables, so its hash is per chain
+  and comes from the deploy's build.
+- **`setChainEntries(address complianceRegistry, address smartKeyAccountFactory, bytes32 smartKeyAccountFactoryCodeHash)`**,
+  `onlyAdmin`, after `configureChain`: each non-zero address is written once, into its zero slot, else
+  `EntryAlreadySet(bytes4 view)`; 0 leaves the entry open for a later call (a chain may add the regulated kinds later). The
+  registry's code hash must be the constant and its `govRouter` the factory's; the account factory's code hash must be the
+  argument and its `chainUid()` the factory's. Event `ChainEntrySet(bytes4 indexed view, address at, bytes32 codeHash)`.
+  Relayable: `mtxSetChainEntries` (§5.4), a node row.
+- Storage: two slots appended after `_classes` (slot 8 untouched).
+
+### 13.4 The registry, one source
+
+`uaRegistry()` stores nothing. Its value is the router's `registry()` (`src/metatx/UAMetaTxBase.sol:365`), an immutable of the
+router's runtime, so the router's code-hash check at `configureChain` pins it too; and every `publishEnv`, `publishDexEnv`,
+`publishClassEnv` refuses an `env.registry` other than 0 or that value (`EnvRegistryMismatch(expected, got)`). So the env each
+clone carries, the router that authenticates its governance and the directory name one registry, and none can disagree.
+Without a router `uaRegistry()` is 0 and the envs are free, as today. A stack with its own registry has its own router and its
+own factory (`script/pqz/e2e.py:1295-1315`), so one registry per factory holds. The same rule binds `Env.smartKeyAccountImpl`,
+once the account factory is set: 0 or its `IMPLEMENTATION()` (`EnvSmartKeyAccountMismatch`) (controller choice for "one rule,
+one source"; the owner may override).
+
+### 13.5 Cycles
+
+- None among the seven at `74262fa0`: no constructor takes the factory (`UARegistry` `src/ua/UARegistry.sol:164-172`; the
+  router `(chain_uid, registry, smartKeyAccountImpl, hedera)`; `RelayFeeRouter` none, its executor none, `ROUTER = msg.sender`;
+  `SmartKeyAccountFactory` `(chain_uid)`; `ComplianceRegistry` `(admin)`, in 3r `(admin, govRouter)`; `ZetherStatements` none).
+  The constants are acyclic: the factory's init code depends on four codes, none of which depends on the factory.
+- **The one that would cycle:** a `ComplianceRegistry` that found its router through the factory (`IOpenFactory(F).govRouter()`)
+  would carry `F` in its init code, so `F` could not hold its code hash as a constant (`F`'s own address depends on it).
+  Resolution (§5.3): the router is the registry's constructor argument; the registry is a chain-specific, write-once entry; its
+  runtime code hash stays a constant.
+- For a later entry: one whose init code needs the factory is write-once (or takes the factory as a call argument), never a
+  constant. What needs the factory today (releases, their modules, `DexPuller`, PqChat instances) is outside the directory.
+
+### 13.6 ABI
+
+```solidity
+struct Directory {
+    address uaRegistry;
+    address govRouter;
+    address relayFeeRouter;
+    address relayFeeExecutor;
+    address complianceRegistry;
+    address smartKeyAccountFactory;
+    address zetherStatements;
+}
+function directory() external view returns (Directory memory);
+function uaRegistry() external view returns (address);
+function govRouter() external view returns (address);              // exists (CTR-TOK-29): one name, no second one
+function relayFeeRouter() external pure returns (address);
+function relayFeeExecutor() external pure returns (address);
+function complianceRegistry() external view returns (address);    // 0 until written
+function smartKeyAccountFactory() external view returns (address); // 0 until written
+function zetherStatements() external pure returns (address);
+```
+
+No generic key map: a new entry comes with a new factory release, under (a).
+
+### 13.7 Threats
+
+- **A wrong address written once** is refused at the write unless its code is the expected code (no code and empty code fail).
+  Once written, nothing but a new factory fixes it, and a new factory is a new address on every chain. So the deploy flow checks
+  before writing: `DeployBase` takes every expected hash from its own build and the chain's book, dry-runs the call (as
+  `configureChain`'s dry run, NET-EVM-05) and writes after the gate; the gate then compares `directory()` with the book.
+- **What the code hash does not prove.** It pins code, not state: a canonical-code registry whose admin is a thief passes it
+  (hence the extra `govRouter` check, and no admin check is possible: any UA may be one), and an admin-supplied hash proves only
+  that the admin wrote what it claimed (a typo is caught, a malicious admin is not). The directory is discovery: no contract reads
+  it for authority (a regulated token names its registry in its own config), and clients verify every entry's code hash against
+  the pinned list (`releases.json` for the chain-neutral ones, the chain's `deployments/<key>.json` for the chain-specific ones)
+  before use.
+- **Constants** cannot point at other code; a test pins them against the build.
+- **A stolen admin key** fills an open entry once with code of the right hash; it changes no entry already written.
+
+### 13.8 Size and gas [estimate]
+
+- Views: a constant one `keccak256` of 85 B (or 23 B), about 100–200 gas; a write-once entry one cold `SLOAD` (2,100
+  [inference]); `uaRegistry()` one `STATICCALL` to the router; `directory()` all of them, about 10 k gas, an `eth_call`.
+- Writes, once per chain: `setChainEntries` two new slots, an `EXTCODEHASH` each and two view calls; `configureChain` three
+  `EXTCODEHASH` more; every env publish one `STATICCALL` more (two once the account factory is set).
+- `OpenFactory` about +0.8 to +1.5 KB (eight views, the struct, the setter, the checks, six literals); the router one op more.
+
+### 13.9 Tests and mutants
+
+`test/v2/FactoryDirectory.t.sol`, red first: each address constant equals the CREATE2 address of `type(X).creationCode` under
+the default salt and `0x4e59…956C` (the executor its `CREATE` address); each code-hash constant equals the deployed contract's
+`codehash`, and the registry's equals the regulated releases' `REGISTRY_CODEHASH`; `configureChain` refuses without the relay
+pair and passes once it is deployed (positive control), refuses a router of another code hash; `setChainEntries` refuses a wrong
+code hash, no code, a registry naming another router, an account factory of another `chainUid`, a second write
+(`EntryAlreadySet`), a stranger (`NotAdmin`); 0 leaves an entry open and a later call fills it; a derived admin writes through
+`mtxSetChainEntries`; `directory()` equals the named views; an env naming another registry `EnvRegistryMismatch`, 0 and the
+router's pass; two chains (`ChainNeutralFactory.t.sol`): one factory address with the constants, each chain its own entries;
+another `DEPLOY_SALT`: `configureChain` refuses.
+
+| # | Mutant | Caught by |
+|---|---|---|
+| D1 | an init-code hash constant one byte off | the CREATE2 test; the deploy harness's `configureChain` |
+| D2 | `setChainEntries` overwrites a written entry | the second-write test |
+| D3 | no code-hash compare at the write | the wrong-hash test |
+| D4 | 0 or `keccak256("")` taken as a code hash | the no-code test |
+| D5 | an env publish without the registry agreement | the `EnvRegistryMismatch` test |
+| D6 | `directory()` reads another source than the views | the equality test |
+| D7 | `configureChain` skips the router's code hash | its test |
+| D8 | `configureChain` skips the relay pair's presence | the absent-pair test |
+
+### 13.10 Deploy order with the directory
+
+The CREATE2 deployer → `RelayFeeRouter` (its executor in the same transaction) → `ZetherStatements` with `DEPLOY_ZETHER` → the UA
+registry → the router → `SmartKeyAccountFactory` → `ComplianceRegistry(admin, router)` with `DEPLOY_REGULATED` →
+`OpenFactory(pad(deployer))` → `configureChain(…, router, routerCodeHash, …)` → `setChainEntries(registry, accountFactory,
+accountFactoryCodeHash)` → envs and releases → `transferAdmin`. Today `DeployBase` deploys the relay pair after the factory
+(`script/DeployBase.sol:364-367`), the account factory first (`script/Deploy.s.sol:38`), `ZetherStatements` inside
+`_deployZether` after `configureChain` (`:852`; optional, so its place does not matter). `script/pqz/e2e.py` deploys its factory
+after its registry and router (`:1295-1315`) and needs the shared relay pair on its chain before its `configureChain`.
