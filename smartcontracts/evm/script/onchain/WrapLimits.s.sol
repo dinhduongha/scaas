@@ -355,7 +355,7 @@ contract WrapLimitsSetup is WrapLimitsKit {
         bytes memory init = abi.encodePacked(vm.getCode("OpenFactory.sol:OpenFactory"), abi.encode(_pad(a1)));
         fw = OpenFactory(_create2(init, "fw", "factory: this group's OpenFactory"));
         _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.configureChain, (vm.parseJsonBytes32(dj, ".chain_uid"), NOTICE,
-            address(gr), 0, bytes32(0))), false, "factory | configureChain, noticePeriod 3600 s");
+            address(gr), address(gr).codehash, 0, bytes32(0))), false, "factory | configureChain, noticePeriod 3600 s");
         init = abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain WL USD", "oWLUSD", uint8(6)));
         usd = MockERC20(_create2(init, "usd", "leg | MockERC20, 6 decimals"));
         IFactoryToken.Env memory e5 = f5.envOf(IOpenFactory.TokenKind.WRAPPED, 1);

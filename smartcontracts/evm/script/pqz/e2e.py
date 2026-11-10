@@ -1314,7 +1314,9 @@ def run(kd, kr, ke):
     fac = D.deploy("OpenFactory", encs(["w"], [sd.addr]))
     ref = int(rpc("eth_blockNumber", []), 16) - 1
     ref_hash = bytes.fromhex(rpc("eth_getBlockByNumber", [hex(ref), False])["hash"][2:])
-    sd.send(fac, cd("configureChain(bytes32,uint64,address,uint256,bytes32)", ["w"] * 5, uid, 0, router, ref, ref_hash),
+    router_h = keccak256(bytes.fromhex(rpc("eth_getCode", [router, "latest"])[2:]))  # spec §13.3: the router's code hash
+    sd.send(fac, cd("configureChain(bytes32,uint64,address,bytes32,uint256,bytes32)", ["w"] * 6, uid, 0, router, router_h, ref,
+                    ref_hash),
             "configureChain")
     # ua-mtx-merge T31 (regulated-kinds spec §6.1): the regulated PQZ kinds 12, 13 too, each on its base kind's env with
     # `RegulatedLib` in the link closure (D.linked finds it), `implArgs` = abi.encode(COMPLIANCE_REGISTRY_CODEHASH), the canonical

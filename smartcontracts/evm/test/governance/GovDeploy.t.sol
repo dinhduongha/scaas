@@ -594,8 +594,10 @@ contract GovDeployTest is Test {
         // `Created`, the events and `FactoryInfo`, no `contractsOfOwner`): -> 0x349b10f51bCA434cd4C3609EA8C327c755b4fA97;
         // round 3r T5 (the metadata hash: `IOpenFactory is IAdmin`, its approvals, no `registrar`): ->
         // 0x53EE55a076bDeb38b3924471aFFEEb74AD32d47E; round 3r T6 (the metadata hash: `IRegulatedToken`'s compliance
-        // registry errors renamed and `ComplianceRegistryRouterMismatch`, its code unchanged): -> this
-        assertEq(router, 0xcA8b1b01BB32b807Fc7848CE3a28EfA727A28BBf, "GovernanceRouter");
+        // registry errors renamed and `ComplianceRegistryRouterMismatch`, its code unchanged): ->
+        // 0xcA8b1b01BB32b807Fc7848CE3a28EfA727A28BBf; round 3r T15 (the router's view `smartKeyCloneHash()`, +52 B; the
+        // metadata hash: `IOpenFactory`'s directory, spec §13): -> this
+        assertEq(router, 0x27D74283541a0bEfd3281ADa6609dfC3221d1836, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

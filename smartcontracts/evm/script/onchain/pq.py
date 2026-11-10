@@ -456,7 +456,9 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     fac2 = D.deploy("OpenFactory", E.encs(["w"], [sd.addr]), label="OpenFactory#notice")
     ref_b = int(_rpc0("eth_blockNumber", []), 16) - 1
     ref_h = E.hb(_rpc0("eth_getBlockByNumber", [hex(ref_b), False])["hash"])
-    sd.send(fac2, E.cd("configureChain(bytes32,uint64,address,uint256,bytes32)", ["w"] * 5, E.CTX[1], N, router, ref_b, ref_h),
+    router_h = E.keccak256(E.hb(_rpc0("eth_getCode", [router, "latest"])))  # spec §13.3: the router's code hash
+    sd.send(fac2, E.cd("configureChain(bytes32,uint64,address,bytes32,uint256,bytes32)", ["w"] * 6, E.CTX[1], N, router, router_h,
+                       ref_b, ref_h),
             "factory 2 configureChain (notice 30 s)")
     code, libs = D.linked("NormalPqzToken")
     ms = []

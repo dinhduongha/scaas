@@ -20,9 +20,12 @@ import {NoteKind, BadKind, INoteKind} from "../v2/mocks/GenericKinds.sol";
 /// A stand-in for a chain's router: it answers `chainUid()` and a `subject()` it is told, and calls the factory.
 contract SubjectRouter {
     bytes32 public chainUid;
+    address public registry; // `configureChain` reads it and its `smartKeyCloneHash()` (spec 2026-11-10-admin-not-owner.md §13.3)
     bytes32 internal _subject;
 
-    constructor(bytes32 uid) { chainUid = uid; }
+    constructor(bytes32 uid, address registry_) { (chainUid, registry) = (uid, registry_); }
+
+    function smartKeyCloneHash() external view returns (bytes32) { return IUARegistry(registry).smartKeyCloneHash(); }
 
     function subject() external view returns (bytes32) { return _subject; }
 
@@ -161,7 +164,7 @@ contract GovRouterCreateTest is GovRouterFixture {
     }
 
     function test_create_subjectZeroRefused_nonRouterSubjectIgnored() public {
-        SubjectRouter r = new SubjectRouter(chainUidA);
+        SubjectRouter r = new SubjectRouter(chainUidA, PREG);
         OpenFactory g = EnvKit.factory(REGISTRAR, chainUidA, 0, address(r));
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(g), ""); // T66b
         vm.startPrank(REGISTRAR);
@@ -173,7 +176,7 @@ contract GovRouterCreateTest is GovRouterFixture {
         address t = r.create(g, pq, _tokenArgs()); // positive control: the router's subject is the creator
         assertEq(g.infoOf(t).creatorId, pq);
         // a contract that is not this factory's router claims a subject: its own address is the creator
-        SubjectRouter other = new SubjectRouter(chainUidA);
+        SubjectRouter other = new SubjectRouter(chainUidA, PREG);
         address u = other.create(g, pq, _tokenArgs());
         assertEq(g.infoOf(u).creatorId, nid(address(other)));
     }

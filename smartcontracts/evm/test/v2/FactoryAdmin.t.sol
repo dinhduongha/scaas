@@ -54,17 +54,22 @@ interface IFactoryAdmin {
     function approvalOf(bytes32 key) external view returns (uint8 state, uint32 adminGeneration, uint64 until);
 }
 
-/// A stand-in for the chain's router (T5; T7 adds the real router's release ops and their tests): it names `chainUid()` for
-/// `configureChain` and answers `subject()` with the UA it is told to act for, to its live target only, as
-/// `GovernanceRouter.subject()` does. It checks no signature. Not configured as a factory's router, it is the fake router
-/// of §8 (a contract answering `subject() = admin`).
+/// A stand-in for the chain's router (T5; T7 adds the real router's release ops and their tests): it names `chainUid()`,
+/// `registry()` and its registry's `smartKeyCloneHash()` for `configureChain` (spec §13.3, §13.4) and answers `subject()`
+/// with the UA it is told to act for, to its live target only, as `GovernanceRouter.subject()` does. It checks no
+/// signature. Not configured as a factory's router, it is the fake router of §8 (a contract answering `subject() = admin`).
 contract TestRouter {
     bytes32 public immutable chainUid;
+    address public immutable registry;
     bytes32 private _subject;
     address private _target;
 
-    constructor(bytes32 uid) {
-        chainUid = uid;
+    constructor(bytes32 uid, address registry_) {
+        (chainUid, registry) = (uid, registry_);
+    }
+
+    function smartKeyCloneHash() external view returns (bytes32) {
+        return IUARegistry(registry).smartKeyCloneHash();
     }
 
     function subject() external view returns (bytes32) {
@@ -167,7 +172,7 @@ contract FactoryAdminTest is UARegistryBase {
         c[1] = UARegistry.KindConfig(ML44, address(mock), CAP);
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, c);
         router = new GovernanceRouter(chainUidA, PREG, address(0), false);
-        trouter = new TestRouter(chainUidA);
+        trouter = new TestRouter(chainUidA, PREG);
         Vm.Wallet memory w = vm.createWallet("k1 signer");
         k1Key = abi.encodePacked(w.publicKeyX, w.publicKeyY);
         k1 = _register(preg, K1, k1Key);
@@ -238,7 +243,7 @@ contract FactoryAdminTest is UARegistryBase {
     function _configure(OpenFactory f, address router_) internal {
         EnvKit.genesis(chainUidA);
         vm.prank(deployer);
-        f.configureChain(chainUidA, 0, router_, 0, bytes32(0));
+        f.configureChain(chainUidA, 0, router_, EnvKit.codeHashOf(router_), 0, bytes32(0));
     }
 
     function _a(OpenFactory f) internal pure returns (IFactoryAdmin) {
@@ -509,7 +514,7 @@ contract FactoryAdminTest is UARegistryBase {
     function test_stranger_notAdmin() public {
         OpenFactory u = _new(nid(deployer));
         EnvKit.genesis(chainUidA);
-        _refused(STRANGER, address(u), abi.encodeCall(OpenFactory.configureChain, (chainUidA, 0, address(0), 0, bytes32(0))),
+        _refused(STRANGER, address(u), abi.encodeCall(OpenFactory.configureChain, (chainUidA, 0, address(0), bytes32(0), 0, bytes32(0))),
             _notAdmin(nid(STRANGER)));
         OpenFactory f = _ready(address(trouter));
         bytes[] memory c = _adminOps(f);
@@ -530,7 +535,7 @@ contract FactoryAdminTest is UARegistryBase {
         vm.etch(deployer, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         bytes memory d = abi.encodeWithSelector(SigCheck.CallerDelegated.selector, deployer);
         EnvKit.genesis(chainUidA);
-        _refused(deployer, address(u), abi.encodeCall(OpenFactory.configureChain, (chainUidA, 0, address(0), 0, bytes32(0))), d);
+        _refused(deployer, address(u), abi.encodeCall(OpenFactory.configureChain, (chainUidA, 0, address(0), bytes32(0), 0, bytes32(0))), d);
         for (uint256 i; i < c.length; ++i) _refused(deployer, address(f), c[i], d);
         _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next))), d);
         _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, ()), d);
@@ -542,7 +547,8 @@ contract FactoryAdminTest is UARegistryBase {
     function test_configureChain_directOnly() public {
         OpenFactory u = _new(nid(deployer));
         EnvKit.genesis(chainUidA);
-        bytes memory cd = abi.encodeCall(OpenFactory.configureChain, (chainUidA, 0, address(trouter), 0, bytes32(0)));
+        bytes memory cd = abi.encodeCall(OpenFactory.configureChain, (chainUidA, 0, address(trouter), address(trouter).codehash, 0,
+            bytes32(0)));
         _viaRefused(trouter, nid(deployer), u, cd, _notAdmin(nid(address(trouter))));
         assertEq(u.chainUid(), bytes32(0));
         _call(deployer, address(u), cd);
@@ -625,7 +631,7 @@ contract FactoryAdminTest is UARegistryBase {
     /// M1: a contract answering `subject() = admin` that is not the factory's router is its own native id.
     function test_fakeRouter_refused() public {
         OpenFactory f = _ready(address(router));
-        TestRouter fake = new TestRouter(chainUidA);
+        TestRouter fake = new TestRouter(chainUidA, PREG);
         bytes[] memory c = _adminOps(f);
         bytes memory e = _notAdmin(nid(address(fake)));
         for (uint256 i; i < c.length; ++i) _viaRefused(fake, nid(deployer), f, c[i], e);
@@ -986,10 +992,10 @@ contract FactoryAdminTest is UARegistryBase {
         OpenFactory fb = _new(nid(deployer));
         assertEq(address(fb), address(f), "one address on both chains");
         EnvKit.genesis(uidB);
-        TestRouter rb = new TestRouter(uidB);
+        TestRouter rb = new TestRouter(uidB, PREG);
         IFactoryToken.Env memory e;
         vm.startPrank(deployer);
-        fb.configureChain(uidB, 0, address(rb), 0, bytes32(0));
+        fb.configureChain(uidB, 0, address(rb), address(rb).codehash, 0, bytes32(0));
         fb.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, e);
         fb.publishDexEnv(1, e);
         fb.publishClassEnv(CLS, 0, 1, e);

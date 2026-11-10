@@ -136,7 +136,7 @@ interface IOpenFactory is IAdmin {
     error EnvUnknown(uint32 domain, uint16 envVersion);
     error EnvAlreadyPublished(uint32 domain, uint16 envVersion);
     /// @notice `libs` and `libCodeHashes` of different lengths, a library code hash that pins nothing (`0` or
-    ///         `keccak256("")`), more than 4 `deps` or 2 `params`.
+    ///         `keccak256("")`), more than 4 `deps`, 2 `params` or 32 `libs` (`MAX_LIBS`, the node's decode bound).
     error EnvInvalid();
     /// @notice A linked library of the env does not have its published code hash (checked at each release deployment).
     error LibraryCodeHashMismatch(address library_, bytes32 expected, bytes32 got);
@@ -216,11 +216,14 @@ interface IOpenFactory is IAdmin {
     function approvalOf(bytes32 key) external view returns (Approval memory);
 
     /// @notice Admin only, direct only (before it the factory has no router), once (chain-neutral spec §3.1): this chain's `chain_uid` (≠ 0; its genesis hash whenever the
-    ///         EVM can prove it: `ChainUidNotGenesis`), the notice period (≤ `MAX_NOTICE_PERIOD`), the router (0 = none;
-    ///         its `chainUid()` must be `chainUid_`) and a reference block (`refBlock ≠ 0`: its hash on this chain must be
-    ///         `refHash`, `RefBlockMismatch`; 0 on a chain whose `BLOCKHASH` is not its own block hash).
-    function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, uint256 refBlock, bytes32 refHash)
-        external;
+    ///         EVM can prove it: `ChainUidNotGenesis`), the notice period (≤ `MAX_NOTICE_PERIOD`), the router (0 with
+    ///         `govRouterCodeHash` 0 = none; else its code hash must be `govRouterCodeHash`, `CodeHashMismatch`; its
+    ///         `chainUid()` must be `chainUid_`; its `registry()` an account with code, `RouterRegistryInvalid`; its
+    ///         `smartKeyCloneHash()` its registry's, `SmartKeyCloneHashMismatch`: spec §13.3, §13.4) and a reference block
+    ///         (`refBlock ≠ 0`: its hash on this chain must be `refHash`, `RefBlockMismatch`; 0 on a chain whose
+    ///         `BLOCKHASH` is not its own block hash).
+    function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, bytes32 govRouterCodeHash,
+        uint256 refBlock, bytes32 refHash) external;
     /// @notice 0 until `configureChain`.
     function chainUid() external view returns (bytes32);
     /// @notice Seconds between a release's deployment and its first use (chain-configured: minutes on 7622, days on
@@ -231,8 +234,67 @@ interface IOpenFactory is IAdmin {
     /// @notice The env domain of the DEX (`type(uint8).max`).
     function DEX_DOMAIN() external view returns (uint8);
 
+    // ------------------------------------------------------------------ the chain's directory (spec §13, owner 2026-11-10)
+
+    /// @notice The chain's fixed shared contracts, as the named views answer them (spec §13.6).
+    struct Directory {
+        address uaRegistry;
+        address govRouter;
+        address relayFeeRouter;
+        address relayFeeExecutor;
+        address complianceRegistry;
+        address smartKeyAccountFactory;
+        address zetherStatements;
+    }
+
+    /// @notice A write-once entry written (`view_` the selector of its view), with the code hash the admin gave.
+    event ChainEntrySet(bytes4 indexed view_, address at_, bytes32 codeHash);
+
+    /// @notice A write-once entry written already (`view_` the selector of its view).
+    error EntryAlreadySet(bytes4 view_);
+    /// @notice `at_`'s code hash is not `expected`, or `expected` pins nothing (0, `keccak256("")`).
+    error CodeHashMismatch(address at_, bytes32 expected, bytes32 got);
+    /// @notice An entry's own view (the executor's `ROUTER()`, the compliance registry's `govRouter()`, …) answers another
+    ///         value than the factory's, or no word (`view_` the selector of the entry's view).
+    error EntryMismatch(bytes4 view_);
+    /// @notice `configureChain`: the router's `registry()` is no account with code (0 included), or no answer.
+    error RouterRegistryInvalid(address registry);
+    /// @notice A `SmartKeyAccount` clone code hash that is not the router's (`expected`): its registry's at
+    ///         `configureChain`, the account factory's `IMPLEMENTATION()` clone at `setChainEntries`.
+    error SmartKeyCloneHashMismatch(bytes32 expected, bytes32 got);
+    /// @notice An env's `registry` is neither 0 nor the router's (`uaRegistry()`, spec §13.4).
+    error EnvRegistryMismatch(address expected, address got);
+    /// @notice An env's `smartKeyAccountImpl` is neither 0 nor an implementation of the router's clone code hash.
+    error EnvSmartKeyAccountMismatch(bytes32 cloneHash, address got);
+
+    /// @notice Admin only, after `configureChain` (spec §13.3): each non-zero address written once into its zero slot
+    ///         (`EntryAlreadySet`), 0 leaves the entry open for a later call; each code hash its argument (`CodeHashMismatch`,
+    ///         0 and `keccak256("")` pin nothing). The relay router's `EXECUTOR()` has `relayFeeExecutorCodeHash` and answers
+    ///         `ROUTER()` with the relay router; the compliance registry's `govRouter()` is the factory's; the account
+    ///         factory's `chainUid()` is the factory's and, with a router, its `IMPLEMENTATION()`'s clone code hash the
+    ///         router's. Every view call fails closed. `ChainEntrySet` per entry written.
+    function setChainEntries(address relayFeeRouter_, bytes32 relayFeeRouterCodeHash, bytes32 relayFeeExecutorCodeHash,
+        address complianceRegistry_, bytes32 complianceRegistryCodeHash, address smartKeyAccountFactory_,
+        bytes32 smartKeyAccountFactoryCodeHash, address zetherStatements_, bytes32 zetherStatementsCodeHash) external;
+    /// @notice Every entry by its view (spec §13.6).
+    function directory() external view returns (Directory memory);
+    /// @notice The router's `registry()`, stored nowhere; 0 without a router.
+    function uaRegistry() external view returns (address);
+    /// @notice 0 until written.
+    function relayFeeRouter() external view returns (address);
+    /// @notice The written relay router's `EXECUTOR()`; 0 until written.
+    function relayFeeExecutor() external view returns (address);
+    /// @notice The SCaaS deploy's own `ComplianceRegistry` (discovery only, spec §13.1); 0 until written.
+    function complianceRegistry() external view returns (address);
+    /// @notice 0 until written.
+    function smartKeyAccountFactory() external view returns (address);
+    /// @notice 0 until written.
+    function zetherStatements() external view returns (address);
+
     /// @notice Admin only: publishes env `envVersion` (from 1, append-only, never changed) of a kind's releases. A
-    ///         `registry ≠ 0` must name this factory's `chainUid` (`ChainUidMismatch`).
+    ///         `registry ≠ 0` must name this factory's `chainUid` (`ChainUidMismatch`); with a router, a `registry ≠ 0`
+    ///         must be `uaRegistry()` (`EnvRegistryMismatch`) and a `smartKeyAccountImpl ≠ 0` an implementation of the
+    ///         router's `smartKeyCloneHash()` (`EnvSmartKeyAccountMismatch`, spec §13.4). At most `MAX_LIBS` (32) libraries.
     function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
     function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external;
     function envOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);

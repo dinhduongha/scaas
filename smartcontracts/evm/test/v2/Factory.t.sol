@@ -133,7 +133,7 @@ contract FactoryTest is Test {
         assertEq(g.chainUid(), bytes32(0));
         vm.prank(registrar);
         vm.expectRevert(IOpenFactory.ChainUidZero.selector);
-        g.configureChain(bytes32(0), 0, address(0), 0, bytes32(0));
+        g.configureChain(bytes32(0), 0, address(0), bytes32(0), 0, bytes32(0));
         assertEq(f.chainUid(), UID_);
         assertEq(address(uint160(uint256(f.admin()))), registrar);
     }
@@ -293,7 +293,7 @@ contract FactoryTest is Test {
         EnvKit.genesis(UID_);
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NoticePeriodTooLong.selector, 30 days + 1));
-        g0.configureChain(UID_, 30 days + 1, address(0), 0, bytes32(0));
+        g0.configureChain(UID_, 30 days + 1, address(0), bytes32(0), 0, bytes32(0));
         assertEq(EnvKit.factory(registrar, UID_, 30 days).noticePeriod(), f.MAX_NOTICE_PERIOD());
         OpenFactory g = EnvKit.factory(registrar, UID_, 10 minutes);
         assertEq(g.noticePeriod(), 10 minutes);

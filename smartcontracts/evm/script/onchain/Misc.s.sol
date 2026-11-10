@@ -273,7 +273,7 @@ contract Misc is OnchainBase {
     function _factory() internal {
         vm.startBroadcast(k1);
         f2 = new OpenFactory(_pad(a1));
-        f2.configureChain(uid, 0, f5.govRouter(), 0, bytes32(0));
+        f2.configureChain(uid, 0, f5.govRouter(), f5.govRouter().codehash, 0, bytes32(0));
         ms.push(address(new NormalTokenP(address(f2), "")));
         ms.push(address(new NormalTokenT(address(f2), "")));
         ms.push(address(new NormalTokenA(address(f2), "")));
@@ -317,7 +317,7 @@ contract Misc is OnchainBase {
             _salt("n3"))), IOpenFactory.VersionUnknown.selector, "factory: a kind outside the catalogue");
         _neg(a2, address(f2), abi.encodeCall(OpenFactory.publishEnv, (IOpenFactory.TokenKind.NORMAL, 4, e)),
             IAdmin.NotAdmin.selector, "factory: publishEnv by another than the admin");
-        _neg(a1, address(f2), abi.encodeCall(OpenFactory.configureChain, (uid, 0, address(0), 0, bytes32(0))),
+        _neg(a1, address(f2), abi.encodeCall(OpenFactory.configureChain, (uid, 0, address(0), bytes32(0), 0, bytes32(0))),
             IOpenFactory.ChainAlreadyConfigured.selector, "factory: configureChain twice");
     }
 

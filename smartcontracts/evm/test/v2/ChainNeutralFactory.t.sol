@@ -13,6 +13,9 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
+import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
+import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
+import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
 import {Catalogue, plainEnv} from "../helpers/Catalogue.sol";
@@ -53,7 +56,9 @@ contract ChainNeutralFactoryTest is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         ureg = new StubUARegistry(UID_);
-        router = new GovernanceRouter(UID_, address(ureg), address(0), false);
+        // the router and its registry name one SmartKeyAccount implementation, 0xBEEF, the DEX env's (spec §13.4)
+        ureg.setSmartKeyCloneHash(EnvKit.cloneHash(address(0xBEEF)));
+        router = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false);
         f = EnvKit.factory(registrar, UID_, 0, address(router));
         normalImpl = NormalToken(Catalogue.plain(f, NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0xBEEF),
             false));
@@ -65,7 +70,7 @@ contract ChainNeutralFactoryTest is Test {
 
     function _configure(OpenFactory g, bytes32 uid, uint256 refBlock, bytes32 refHash) internal {
         vm.prank(registrar);
-        g.configureChain(uid, 0, address(0), refBlock, refHash);
+        g.configureChain(uid, 0, address(0), bytes32(0), refBlock, refHash);
     }
 
     // ------------------------------------------------------------------ configureChain
@@ -77,22 +82,22 @@ contract ChainNeutralFactoryTest is Test {
         EnvKit.genesis(UID_);
         vm.prank(alice);
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        g.configureChain(UID_, 0, address(0), 0, bytes32(0));
+        g.configureChain(UID_, 0, address(0), bytes32(0), 0, bytes32(0));
         vm.etch(registrar, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, registrar));
-        g.configureChain(UID_, 0, address(0), 0, bytes32(0));
+        g.configureChain(UID_, 0, address(0), bytes32(0), 0, bytes32(0));
         vm.etch(registrar, "");
         vm.expectEmit(true, false, false, true, address(g));
         emit IOpenFactory.ChainConfigured(UID_, 10 minutes, address(router));
         vm.prank(registrar);
-        g.configureChain(UID_, 10 minutes, address(router), 0, bytes32(0));
+        g.configureChain(UID_, 10 minutes, address(router), address(router).codehash, 0, bytes32(0));
         assertEq(g.chainUid(), UID_);
         assertEq(g.noticePeriod(), 10 minutes);
         assertEq(g.govRouter(), address(router));
         vm.prank(registrar);
         vm.expectRevert(IOpenFactory.ChainAlreadyConfigured.selector);
-        g.configureChain(UID_, 0, address(0), 0, bytes32(0));
+        g.configureChain(UID_, 0, address(0), bytes32(0), 0, bytes32(0));
     }
 
     function test_configureChain_zeroAndLongNoticeRefused() public {
@@ -100,10 +105,10 @@ contract ChainNeutralFactoryTest is Test {
         EnvKit.genesis(UID_);
         vm.startPrank(registrar);
         vm.expectRevert(IOpenFactory.ChainUidZero.selector);
-        g.configureChain(bytes32(0), 0, address(0), 0, bytes32(0));
+        g.configureChain(bytes32(0), 0, address(0), bytes32(0), 0, bytes32(0));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NoticePeriodTooLong.selector, 30 days + 1));
-        g.configureChain(UID_, 30 days + 1, address(0), 0, bytes32(0));
-        g.configureChain(UID_, 30 days, address(0), 0, bytes32(0)); // positive control
+        g.configureChain(UID_, 30 days + 1, address(0), bytes32(0), 0, bytes32(0));
+        g.configureChain(UID_, 30 days, address(0), bytes32(0), 0, bytes32(0)); // positive control
         vm.stopPrank();
     }
 
@@ -114,7 +119,7 @@ contract ChainNeutralFactoryTest is Test {
         vm.setBlockhash(0, UID_);
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidNotGenesis.selector, keccak256("other"), UID_));
-        g.configureChain(keccak256("other"), 0, address(0), 0, bytes32(0));
+        g.configureChain(keccak256("other"), 0, address(0), bytes32(0), 0, bytes32(0));
         _configure(g, UID_, 0, bytes32(0));
         assertEq(g.chainUid(), UID_);
     }
@@ -129,7 +134,7 @@ contract ChainNeutralFactoryTest is Test {
         OpenFactory g = new OpenFactory(nid(registrar));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidNotGenesis.selector, keccak256("other"), UID_));
-        g.configureChain(keccak256("other"), 0, address(0), 0, bytes32(0));
+        g.configureChain(keccak256("other"), 0, address(0), bytes32(0), 0, bytes32(0));
         for (uint8 m = 1; m <= 2; ++m) {
             HistoryStub(HISTORY).set(UID_, m);
             OpenFactory gm = new OpenFactory(nid(registrar));
@@ -153,10 +158,10 @@ contract ChainNeutralFactoryTest is Test {
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.RefBlockMismatch.selector, 290, keccak256("a sibling"),
             keccak256("block 290")));
-        g.configureChain(UID_, 0, address(0), 290, keccak256("a sibling"));
+        g.configureChain(UID_, 0, address(0), bytes32(0), 290, keccak256("a sibling"));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.RefBlockMismatch.selector, 400, bytes32(0), bytes32(0)));
-        g.configureChain(UID_, 0, address(0), 400, bytes32(0)); // a future block: no answer, even for refHash 0
+        g.configureChain(UID_, 0, address(0), bytes32(0), 400, bytes32(0)); // a future block: no answer, even for refHash 0
         _configure(g, UID_, 290, keccak256("block 290"));
         assertEq(g.chainUid(), UID_);
     }
@@ -167,9 +172,9 @@ contract ChainNeutralFactoryTest is Test {
         GovernanceRouter other = new GovernanceRouter(keccak256("other"), address(0), address(0), false);
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("other")));
-        g.configureChain(UID_, 0, address(other), 0, bytes32(0));
+        g.configureChain(UID_, 0, address(other), address(other).codehash, 0, bytes32(0));
         vm.prank(registrar);
-        g.configureChain(UID_, 0, address(router), 0, bytes32(0));
+        g.configureChain(UID_, 0, address(router), address(router).codehash, 0, bytes32(0));
         assertEq(g.govRouter(), address(router));
     }
 
@@ -233,8 +238,8 @@ contract ChainNeutralFactoryTest is Test {
     /// unregistered implementation, on another env, meets the same address (`SaltAlreadyUsed`), also across
     /// `createToken` and `createTokenUnregistered`.
     function test_create3_versionImplementationEnvNotInTheAddress() public {
-        address stub2 = address(new StubUARegistry(UID_));
-        Catalogue.plain(f, NORMAL, 2, type(NormalToken).creationCode, stub2, address(0), false); // env 2, release 2
+        // env 2 differs by its registry: none (the router binds a named registry to its own, spec §13.4), release 2
+        Catalogue.plain(f, NORMAL, 2, type(NormalToken).creationCode, address(0), address(0), false);
         vm.prank(alice);
         address t = f.createToken(NORMAL, 1, _cfg(alice), "same");
         vm.prank(alice);
@@ -246,7 +251,7 @@ contract ChainNeutralFactoryTest is Test {
         f.createTokenUnregistered(NORMAL, address(mine), _cfg(alice), "same");
         vm.prank(alice);
         address t2 = f.createToken(NORMAL, 2, _cfg(alice), "other"); // positive control: another salt
-        assertEq(NormalToken(t2).registry(), stub2, "release 2 on env 2");
+        assertEq(NormalToken(t2).registry(), address(0), "release 2 on env 2");
         assertEq(NormalToken(t).registry(), address(ureg), "release 1 on env 1");
     }
 
@@ -342,5 +347,47 @@ contract ChainNeutralFactoryTest is Test {
         assertEq(f.getWrapperAt(nid(alice), address(usd), 0), w);
         assertEq(f.getWrapper(nid(bob), address(usd)), address(0));
         assertEq(f.getWrapper.selector, bytes4(keccak256("getWrapper(bytes32,address)")));
+    }
+
+    // ------------------------------------------------------------------ the directory on two chains (spec §13.9)
+
+    /// One factory address on two chains, each with its own directory: its router, UA registry, account factory and
+    /// compliance registry (each takes the chain's `chain_uid`); the relay pair, with no argument, has one address on both.
+    function test_directory_twoChainsOneAddressOwnEntries() public {
+        bytes32 uidB = keccak256("chain B");
+        uint256 snap = vm.snapshotState();
+        (OpenFactory ga, IOpenFactory.Directory memory a) = _chainWithEntries(UID_);
+        vm.revertToState(snap);
+        (OpenFactory gb, IOpenFactory.Directory memory b) = _chainWithEntries(uidB);
+        assertEq(address(ga), address(gb), "one factory address");
+        assertEq(a.relayFeeRouter, b.relayFeeRouter, "the relay pair: one address");
+        assertEq(a.relayFeeExecutor, b.relayFeeExecutor);
+        assertTrue(a.govRouter != b.govRouter && a.uaRegistry != b.uaRegistry, "each chain its router and registry");
+        assertTrue(a.smartKeyAccountFactory != b.smartKeyAccountFactory && a.complianceRegistry != b.complianceRegistry,
+            "each chain its account factory and compliance registry");
+        assertEq(gb.chainUid(), uidB);
+        assertEq(SmartKeyAccountFactory(b.smartKeyAccountFactory).chainUid(), uidB);
+        assertEq(ComplianceRegistry(b.complianceRegistry).govRouter(), b.govRouter);
+    }
+
+    /// Chain `uid`'s shared contracts by CREATE2 (salt 0, so an argument moves the address), the factory, `configureChain`
+    /// with the router and `setChainEntries`.
+    function _chainWithEntries(bytes32 uid) internal returns (OpenFactory g, IOpenFactory.Directory memory d) {
+        EnvKit.genesis(uid);
+        SmartKeyAccountFactory skaf = new SmartKeyAccountFactory{salt: 0}(uid);
+        StubUARegistry reg = new StubUARegistry{salt: 0}(uid);
+        reg.setSmartKeyCloneHash(EnvKit.cloneHash(skaf.IMPLEMENTATION()));
+        GovernanceRouter r = new GovernanceRouter{salt: 0}(uid, address(reg), skaf.IMPLEMENTATION(), false);
+        RelayFeeRouter relay = new RelayFeeRouter{salt: 0}();
+        ComplianceRegistry c = new ComplianceRegistry{salt: 0}(nid(registrar), address(r));
+        g = new OpenFactory{salt: 0}(nid(registrar));
+        vm.startPrank(registrar);
+        g.configureChain(uid, 0, address(r), address(r).codehash, 0, bytes32(0));
+        g.setChainEntries(address(relay), address(relay).codehash, relay.EXECUTOR().codehash, address(c), address(c).codehash,
+            address(skaf), address(skaf).codehash, address(0), bytes32(0));
+        vm.stopPrank();
+        d = g.directory();
+        assertEq(d.uaRegistry, address(reg));
+        assertEq(d.govRouter, address(r));
     }
 }

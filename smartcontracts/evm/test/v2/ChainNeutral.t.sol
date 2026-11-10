@@ -157,8 +157,8 @@ contract ChainNeutralTest is Test {
         vm.setBlockhash(999, keccak256("A 999"));
         vm.store(HISTORY, bytes32(0), UID_A);
         OpenFactory f = new OpenFactory{salt: salt_}(nid(registrar));
-        bytes memory withRef = abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), 999, keccak256("A 999")));
-        bytes memory noRef = abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), 0, bytes32(0)));
+        bytes memory withRef = abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), bytes32(0), 999, keccak256("A 999")));
+        bytes memory noRef = abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), bytes32(0), 0, bytes32(0)));
         vm.prank(registrar);
         (bool ok,) = address(f).call(withRef);
         assertTrue(ok, "A configured");
@@ -173,7 +173,7 @@ contract ChainNeutralTest is Test {
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.RefBlockMismatch.selector, 999, keccak256("A 999"),
             keccak256("C 999")));
-        f.configureChain(UID_A, 0, address(0), 999, keccak256("A 999"));
+        f.configureChain(UID_A, 0, address(0), bytes32(0), 999, keccak256("A 999"));
         // without the reference the replay binds C to A's chain_uid, and A's signature runs on C's twin
         vm.prank(registrar);
         (ok,) = address(f).call(noRef);
@@ -188,10 +188,10 @@ contract ChainNeutralTest is Test {
         vm.etch(HISTORY, "");
         f = new OpenFactory{salt: salt_}(nid(registrar));
         vm.prank(registrar);
-        f.configureChain(UID_C, 0, address(0), 0, bytes32(0));
+        f.configureChain(UID_C, 0, address(0), bytes32(0), 0, bytes32(0));
         vm.prank(registrar);
         vm.expectRevert(IOpenFactory.ChainAlreadyConfigured.selector);
-        f.configureChain(UID_A, 0, address(0), 0, bytes32(0));
+        f.configureChain(UID_A, 0, address(0), bytes32(0), 0, bytes32(0));
         tokC = _plainToken(f, registrar);
         assertFalse(_relay(tokC, onA), "C on its own chain_uid refuses A's signature");
     }

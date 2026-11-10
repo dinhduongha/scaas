@@ -61,6 +61,15 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     ///      work between the floor check and the `STATICCALL` (SigCheck's rule, CTR-DEX-08).
     uint256 private constant _PROBE_GAS = 30_000;
     uint256 private constant _PROBE_GAS_MARGIN = 5_000;
+    /// @dev The most `libs` an env takes (spec §5.4, the node's decode bound; the largest env at T15, kind 13's, has 17).
+    uint256 internal constant MAX_LIBS = 32;
+    /// @dev The selectors the directory's checks read (raw: no other contract's source in this one's, spec §13.2).
+    bytes4 private constant _REGISTRY = bytes4(keccak256("registry()"));
+    bytes4 private constant _CLONE_HASH = bytes4(keccak256("smartKeyCloneHash()"));
+    bytes4 private constant _EXECUTOR = bytes4(keccak256("EXECUTOR()"));
+    bytes4 private constant _ROUTER = bytes4(keccak256("ROUTER()"));
+    bytes4 private constant _GOV_ROUTER = bytes4(keccak256("govRouter()"));
+    bytes4 private constant _IMPLEMENTATION = bytes4(keccak256("IMPLEMENTATION()"));
 
     /// @dev Keyed by domain: a `TokenKind`, `DEX_DOMAIN`, or a generic `class << 16 | kind` (T70; `>= 3 << 16`, so never
     ///      a token kind or the DEX). A `uint32` key hashes as the `uint8` one did: the slots did not move.
@@ -91,7 +100,12 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     mapping(uint32 => bool) private _kindListed;
     mapping(uint16 => uint16[]) private _kinds;
     uint16[] private _classes;
-    /// @dev The release approvals (spec §5.6), last of the sequential state (T15's directory slots go before it).
+    /// @notice The chain's directory (spec §13.3): write-once entries, 0 until `setChainEntries` writes them; one slot each.
+    address public relayFeeRouter;
+    address public complianceRegistry;
+    address public smartKeyAccountFactory;
+    address public zetherStatements;
+    /// @dev The release approvals (spec §5.6), last of the sequential state.
     mapping(bytes32 => Approval) private _approvals;
     /// @dev EIP-1153: the creator of the generic creation in progress (`creating()`).
     bytes32 private constant _CREATING = 0xfb6648c4edba346670e48ab59d9f85fccdaa57cff45f53cfe24389cb1a67d992; // keccak256("scaas.factory.creating")
@@ -121,10 +135,11 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     /// @notice Admin only (direct: before it there is no router), once. `chainUid_` must equal the genesis hash whenever the EVM can prove it
     ///         (`BLOCKHASH(0)` within 256 blocks, else EIP-2935; no answer is nothing to compare); a reference block
     ///         `refBlock ≠ 0` must have the hash `refHash` on this chain (no answer is a mismatch), which ties the
-    ///         transaction to this chain against a sibling with the same chain id (Fable P1-1); a router names the same
-    ///         `chainUid()`.
-    function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, uint256 refBlock, bytes32 refHash)
-        external onlyAdmin
+    ///         transaction to this chain against a sibling with the same chain id (Fable P1-1); a router has the code
+    ///         hash `govRouterCodeHash`, names the same `chainUid()`, a `registry()` with code and that registry's
+    ///         `smartKeyCloneHash()` (spec §13.3, §13.4); router 0 with hash 0 is none.
+    function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, bytes32 govRouterCodeHash,
+        uint256 refBlock, bytes32 refHash) external onlyAdmin
     {
         if (chainUid != bytes32(0)) revert ChainAlreadyConfigured();
         if (chainUid_ == bytes32(0)) revert ChainUidZero();
@@ -136,9 +151,112 @@ contract OpenFactory is IOpenFactory, UAAdmin {
             if (a == bytes32(0)) a = _history(refBlock);
             if (a == bytes32(0) || a != refHash) revert RefBlockMismatch(refBlock, refHash, a);
         }
-        if (govRouter_ != address(0)) _requireChainUid(govRouter_, chainUid_);
+        if (govRouter_ != address(0)) _checkRouter(govRouter_, govRouterCodeHash, chainUid_);
+        else if (govRouterCodeHash != bytes32(0)) revert CodeHashMismatch(address(0), govRouterCodeHash, bytes32(0));
         (chainUid, noticePeriod, govRouter) = (chainUid_, noticePeriod_, govRouter_);
         emit ChainConfigured(chainUid_, noticePeriod_, govRouter_);
+    }
+
+    /// @dev The router's code is the admin's hash, its `chainUid()` this chain's, its `registry()` an account with code
+    ///      (0 included in "no code"), its `smartKeyCloneHash()` its registry's; a call that answers no word fails closed.
+    function _checkRouter(address r, bytes32 codeHash, bytes32 chainUid_) private view {
+        _requireCode(r, codeHash);
+        _requireChainUid(r, chainUid_);
+        (bool ok, uint256 w) = _word(r, _REGISTRY);
+        address reg = address(uint160(w));
+        if (!ok || w >> 160 != 0 || reg.code.length == 0) revert RouterRegistryInvalid(reg);
+        (bool okR, uint256 a) = _word(r, _CLONE_HASH);
+        (bool okG, uint256 b) = _word(reg, _CLONE_HASH);
+        if (!okR || !okG || a != b) revert SmartKeyCloneHashMismatch(bytes32(a), bytes32(b));
+    }
+
+    // ------------------------------------------------------------------ the directory (spec §13)
+
+    /// @notice Admin only, after `configureChain`: the write-once entries (spec §13.3; `IOpenFactory.setChainEntries`).
+    function setChainEntries(address relayFeeRouter_, bytes32 relayFeeRouterCodeHash, bytes32 relayFeeExecutorCodeHash,
+        address complianceRegistry_, bytes32 complianceRegistryCodeHash, address smartKeyAccountFactory_,
+        bytes32 smartKeyAccountFactoryCodeHash, address zetherStatements_, bytes32 zetherStatementsCodeHash)
+        external onlyAdmin configured
+    {
+        if (relayFeeRouter_ != address(0)) {
+            _entry(relayFeeRouter, relayFeeRouter_, relayFeeRouterCodeHash, IOpenFactory.relayFeeRouter.selector);
+            bytes4 v = IOpenFactory.relayFeeExecutor.selector;
+            address x = _addr(relayFeeRouter_, _EXECUTOR, v);
+            _requireCode(x, relayFeeExecutorCodeHash);
+            if (_addr(x, _ROUTER, v) != relayFeeRouter_) revert EntryMismatch(v);
+            relayFeeRouter = relayFeeRouter_;
+        }
+        if (complianceRegistry_ != address(0)) {
+            bytes4 v = IOpenFactory.complianceRegistry.selector;
+            _entry(complianceRegistry, complianceRegistry_, complianceRegistryCodeHash, v);
+            if (_addr(complianceRegistry_, _GOV_ROUTER, v) != govRouter) revert EntryMismatch(v);
+            complianceRegistry = complianceRegistry_;
+        }
+        if (smartKeyAccountFactory_ != address(0)) {
+            bytes4 v = IOpenFactory.smartKeyAccountFactory.selector;
+            _entry(smartKeyAccountFactory, smartKeyAccountFactory_, smartKeyAccountFactoryCodeHash, v);
+            _requireChainUid(smartKeyAccountFactory_, chainUid);
+            if (govRouter != address(0)) {
+                bytes32 want = _routerCloneHash();
+                bytes32 got = _cloneHash(_addr(smartKeyAccountFactory_, _IMPLEMENTATION, v));
+                if (got != want) revert SmartKeyCloneHashMismatch(want, got);
+            }
+            smartKeyAccountFactory = smartKeyAccountFactory_;
+        }
+        if (zetherStatements_ != address(0)) {
+            _entry(zetherStatements, zetherStatements_, zetherStatementsCodeHash, IOpenFactory.zetherStatements.selector);
+            zetherStatements = zetherStatements_;
+        }
+    }
+
+    function directory() external view returns (Directory memory) {
+        return Directory(uaRegistry(), govRouter, relayFeeRouter, relayFeeExecutor(), complianceRegistry,
+            smartKeyAccountFactory, zetherStatements);
+    }
+
+    /// @notice The router's `registry()` (an immutable of its pinned code: one source, spec §13.4); 0 without a router.
+    function uaRegistry() public view returns (address) {
+        address r = govRouter;
+        return r == address(0) ? address(0) : _addr(r, _REGISTRY, IOpenFactory.uaRegistry.selector);
+    }
+
+    /// @notice The written relay router's `EXECUTOR()`; 0 until written.
+    function relayFeeExecutor() public view returns (address) {
+        address r = relayFeeRouter;
+        return r == address(0) ? address(0) : _addr(r, _EXECUTOR, IOpenFactory.relayFeeExecutor.selector);
+    }
+
+    /// @dev A write-once entry: its slot still 0 (`EntryAlreadySet`), `target`'s code the admin's hash; then its event.
+    function _entry(address current, address target, bytes32 codeHash, bytes4 v) private {
+        if (current != address(0)) revert EntryAlreadySet(v);
+        _requireCode(target, codeHash);
+        emit ChainEntrySet(v, target, codeHash);
+    }
+
+    /// @dev `target`'s code hash is `codeHash`, which pins code (not 0, not `keccak256("")`).
+    function _requireCode(address target, bytes32 codeHash) private view {
+        if (codeHash == bytes32(0) || codeHash == keccak256("") || target.codehash != codeHash) {
+            revert CodeHashMismatch(target, codeHash, target.codehash);
+        }
+    }
+
+    /// @dev `target.sel()` as one address word, else `EntryMismatch(v)` (fail closed).
+    function _addr(address target, bytes4 sel, bytes4 v) private view returns (address) {
+        (bool ok, uint256 w) = _word(target, sel);
+        if (!ok || w >> 160 != 0) revert EntryMismatch(v);
+        return address(uint160(w));
+    }
+
+    /// @dev The router's `smartKeyCloneHash()` (checked against its registry's at `configureChain`).
+    function _routerCloneHash() private view returns (bytes32) {
+        (bool ok, uint256 w) = _word(govRouter, _CLONE_HASH);
+        if (!ok) revert EntryMismatch(IOpenFactory.govRouter.selector);
+        return bytes32(w);
+    }
+
+    /// @dev The EIP-1167 clone code hash of `impl`, as the router and the UA registry hold it (`UAMetaTxBase.sol:48`).
+    function _cloneHash(address impl) private pure returns (bytes32) {
+        return keccak256(abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
     }
 
     // ------------------------------------------------------------------ the admin (spec §5.2)
@@ -630,14 +748,24 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     function _publish(uint32 domain, uint16 envVersion, IFactoryToken.Env calldata env) private returns (bytes32 envHash) {
         if (envVersion == 0) revert EnvUnknown(domain, 0);
         if (_envHash[domain][envVersion] != bytes32(0)) revert EnvAlreadyPublished(domain, envVersion);
-        if (env.libs.length != env.libCodeHashes.length || env.deps.length > ChainEnvCode.MAX_DEPS
-            || env.params.length > ChainEnvCode.MAX_PARAMS) revert EnvInvalid();
+        if (env.libs.length != env.libCodeHashes.length || env.libs.length > MAX_LIBS
+            || env.deps.length > ChainEnvCode.MAX_DEPS || env.params.length > ChainEnvCode.MAX_PARAMS) revert EnvInvalid();
         // An empty pin (0: no account; keccak256(""): no code) checks nothing (review 5g-Z2 P2-1).
         for (uint256 i; i < env.libCodeHashes.length; ++i) {
             bytes32 h = env.libCodeHashes[i];
             if (h == bytes32(0) || h == keccak256("")) revert EnvInvalid();
         }
-        // the registry names this chain (once per env; it was `initialize`'s check per creation, Fable P3-1)
+        // the registry names this chain (once per env; it was `initialize`'s check per creation, Fable P3-1); with a router,
+        // the env names its registry and its `SmartKeyAccount` implementation, or none (spec §13.4)
+        if (govRouter != address(0)) {
+            address reg = uaRegistry();
+            if (env.registry != address(0) && env.registry != reg) revert EnvRegistryMismatch(reg, env.registry);
+            address ska = env.smartKeyAccountImpl;
+            if (ska != address(0)) {
+                bytes32 want = _routerCloneHash();
+                if (_cloneHash(ska) != want) revert EnvSmartKeyAccountMismatch(want, ska);
+            }
+        }
         if (env.registry != address(0)) _requireChainUid(env.registry, chainUid);
         _envs[domain][envVersion] = env;
         envHash = keccak256(abi.encode(env));

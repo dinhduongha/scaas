@@ -63,11 +63,16 @@ interface IRegistryAdmin {
 /// of §8 (a contract answering `subject() = admin`).
 contract RegistryTestRouter {
     bytes32 public immutable chainUid;
+    address public immutable registry; // a factory's `configureChain` reads it and its `smartKeyCloneHash()` (spec §13.3)
     bytes32 private _subject;
     address private _target;
 
-    constructor(bytes32 uid) {
-        chainUid = uid;
+    constructor(bytes32 uid, address registry_) {
+        (chainUid, registry) = (uid, registry_);
+    }
+
+    function smartKeyCloneHash() external view returns (bytes32) {
+        return IUARegistry(registry).smartKeyCloneHash();
     }
 
     function subject() external view returns (bytes32) {
@@ -155,7 +160,7 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         vm.warp(1_800_000_000);
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, _kinds());
         router = new GovernanceRouter(chainUidA, PREG, address(0), false);
-        trouter = new RegistryTestRouter(chainUidA);
+        trouter = new RegistryTestRouter(chainUidA, PREG);
         k1Key = _k1Key();
         k1 = _register(preg, K1, k1Key);
         mlKey = _ml(1);
@@ -521,7 +526,7 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
     /// M1: a contract answering `subject() = admin` that is not the registry's router is its own native id.
     function test_fakeRouter_refused() public {
         IRegistryAdmin c = _reg(nid(admin), address(router));
-        RegistryTestRouter fake = new RegistryTestRouter(chainUidA);
+        RegistryTestRouter fake = new RegistryTestRouter(chainUidA, PREG);
         bytes memory e = _notAdmin(nid(address(fake)));
         _viaRefused(fake, nid(admin), c, _enable(nid(prov), true), e);
         _viaRefused(fake, nid(admin), c, _xfer(ml), e);
@@ -708,7 +713,7 @@ contract RegistryRouterCheckTest is RegFixture, RegistryCalls {
     }
 
     function test_routerMismatch_noRouter() public {
-        RegistryTestRouter other = new RegistryTestRouter(UID);
+        RegistryTestRouter other = new RegistryTestRouter(UID, address(ureg));
         address r0 = address(_reg(nid(cadmin), address(0)));
         address rx = address(_reg(nid(cadmin), address(other)));
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(_denyCfg(r0)), "r0"); // control
@@ -718,8 +723,8 @@ contract RegistryRouterCheckTest is RegFixture, RegistryCalls {
     }
 
     function test_routerMismatch_ownRouter() public {
-        RegistryTestRouter own = new RegistryTestRouter(UID);
-        RegistryTestRouter other = new RegistryTestRouter(UID);
+        RegistryTestRouter own = new RegistryTestRouter(UID, address(ureg));
+        RegistryTestRouter other = new RegistryTestRouter(UID, address(ureg));
         OpenFactory g = EnvKit.factory(address(this), UID, 0, address(own));
         Catalogue.release(g, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(g), address(0), UID, address(ureg),
             false), type(NormalRegulatedToken).creationCode, regArgs());

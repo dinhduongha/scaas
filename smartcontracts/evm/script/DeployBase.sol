@@ -587,7 +587,9 @@ abstract contract DeployBase is DeployBook {
     ///         registrar's code hash the release list's.
     function _configureChain(OpenFactory f, address registrar) internal {
         uint256 ref = vm.envOr("NO_REF_BLOCK", false) || block.number < 2 ? 0 : block.number - 1;
-        f.configureChain(uid, noticePeriod, govRouter, ref, ref == 0 ? bytes32(0) : blockhash(ref));
+        // the router's code hash as it stands (T10 takes it from the build and the chain's book, spec §13.7)
+        f.configureChain(uid, noticePeriod, govRouter, govRouter == address(0) ? bytes32(0) : govRouter.codehash, ref,
+            ref == 0 ? bytes32(0) : blockhash(ref));
         _gate(address(f));
         _releaseRow("OpenFactory", 0, 0, 0, address(f), keccak256(abi.encodePacked(type(OpenFactory).creationCode,
             abi.encode(MetaTxLib.pad(registrar)))), keccak256(abi.encode(MetaTxLib.pad(registrar))));

@@ -155,6 +155,12 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         if (msg.sender == t) assembly ("memory-safe") { s := tload(_SUBJECT) }
     }
 
+    /// @notice The EIP-1167 clone code hash of the chain's `SmartKeyAccount` implementation (0 = none), as the UA registry's
+    ///         `smartKeyCloneHash()`: `OpenFactory.configureChain` requires the two equal (spec 2026-11-10-admin-not-owner.md §13.4).
+    function smartKeyCloneHash() external view returns (bytes32) {
+        return _mtxCtx().skaCloneCodehash;
+    }
+
     // ------------------------------------------------------------------ the admin and a holder (IGovernance)
 
     function mtxGrantRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
