@@ -360,9 +360,10 @@ contract GovDeployTest is Test {
         // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`); 3f T44: 44,456 -> 44,610 B (the
         // three PQZ verifier fields refused by `_requireUnused`); 3h T60: 44,610 -> 44,635 B (`proofStore` refused there too);
         // T83: 44,635 -> 45,522 B (the pay records' views and `_payRecord`, the v3 `PayMeta` tuple); T66b (the body
-        // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name
-        h.limitCode(17_807);
-        vm.expectRevert(bytes("WrappedToken runtime 17808 B > chain code limit 17807 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name;
+        // group 3l: 17,808 -> 19,366 B (the five wrap-limit stubs)
+        h.limitCode(19_365);
+        vm.expectRevert(bytes("WrappedToken runtime 19366 B > chain code limit 19365 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 
@@ -578,7 +579,8 @@ contract GovDeployTest is Test {
         // 0x13CBB3D5DCb0736f87F136ad13276568A80d1aa9; T66b 4.1 (the `<X>Core` + flat-face split of `GovernanceRouterBase`,
         // 15,305 -> 15,572 B runtime): -> 0x639e34f93Ac69d6Ba31D773AC915894542180723; the factory's release entries renamed
         // (owner 2026-11-10; the metadata hash: `IOpenFactory`'s `deployTokenImplementation` / `deployImplementation`, its
-        // code unchanged): -> this
+        // code unchanged): -> 0x9084894b49299A2b1DFdB271e2C5Fd8D4f9bA904; group 3l (`mtxSetWrapLimits`, `mtxSetWrapMember`,
+        // their typehashes; 0x7F3b13D20e51EA69BBEeF32394a76db36013FEE3 on its branch), merged: -> this
         assertEq(router, 0x9084894b49299A2b1DFdB271e2C5Fd8D4f9bA904, "GovernanceRouter");
     }
 

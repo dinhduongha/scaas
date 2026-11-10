@@ -106,6 +106,9 @@ const NESTED: &[(&str, &str)] = &[
     ("LiquidityPlan", "bytes32 ref,LiquidityOrder order,UASig auth,uint256[] pull,uint256 positionId,address[] extraTokens"),
     // `IGovernance.GrantTerms`: flat, so a decode is one level deep; its `hashStruct` is the signed word, the struct the argument
     ("GrantTerms", "uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope"),
+    // group 3l (wrap limits spec 2026-11-10 §6, §9): a leg's limits, the router's `UASetWrapLimits` takes an array of them
+    ("WrapLimit", "uint24 perUser,uint64 tokenWide,uint32 period"),
+    ("WrapLegLimits", "address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong"),
     // `IPqChat`'s records (UA-7 spec §4.1, topics spec §2), by the contract's field names; `Wrap` here is a member's key wrap, not
     // the op of that name
     ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
@@ -235,6 +238,9 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,E", ""),
     // group 3h (PQZ proof path spec §5): bit 24 `PQZ_PROOF`, a holder's `NONE` / `LOG` from the next debit
     ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,E", ""),
+    // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds and bit 26's membership
+    ("UASetWrapLimits", "mtxSetWrapLimits", GR, "bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,E", ""),
+    ("UASetWrapMember", "mtxSetWrapMember", GR, "bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
     ("UAInvalidateNonces", "mtxInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -1620,13 +1626,15 @@ mod tests {
         // -> (79, 114, 113), UAPayWithTax (three domains) and the router's two tax ops
         // group 3g T54 / T55: -> (80, 114, 113), the rollover's two domains on two rows (`UARollOver` Zether, `UAPqzRollOver` PQZ)
         // group 3f T46 / T47: -> (83, 117, 116), the router's three verifier ops (`UAPqz{Set,Cancel,Revoke}Verifier`)
-        // group 3h T61: -> (84, 118, 117), the router's `UASetProofStore` (bit 24)
-        assert_eq!((structs, domains, calldata), (84, 118, 117), "every row was walked (the three creations left out by vectors())");
+        // group 3h T61: -> (84, 118, 117), the router's `UASetProofStore` (bit 24); group 3l: -> (86, 120, 119), the router's
+        // `UASetWrapLimits`, `UASetWrapMember`
+        assert_eq!((structs, domains, calldata), (86, 120, 119), "every row was walked (the three creations left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
-        // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 87, "84 vector rows, mtxPay, the two invalidations (DEX, token)");
+        // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`; group 3l: -> 89, the
+        // router's `UASetWrapLimits`, `UASetWrapMember`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 89, "86 vector rows, mtxPay, the two invalidations (DEX, token)");
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 32, "the wallet's three flat builders are gone (MD-11 (a))");

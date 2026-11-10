@@ -419,6 +419,16 @@
    "error": "NotOwner(bytes32)"
   },
   {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool)",
+   "class": "BIT(26)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
    "sig": "transfer(address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
@@ -1091,6 +1101,16 @@
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
    "class": "OWNER",
    "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool)",
+   "class": "BIT(26)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -1787,6 +1807,16 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool)",
+   "class": "BIT(26)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
    "sig": "transfer(address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
@@ -2368,6 +2398,16 @@
   {
    "sig": "setTaxRecipient(bytes32)",
    "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool)",
+   "class": "BIT(26)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
@@ -3162,6 +3202,16 @@
   {
    "sig": "setTaxRecipient(bytes32)",
    "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool)",
+   "class": "BIT(26)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
@@ -3979,6 +4029,16 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool)",
+   "class": "BIT(26)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
    "sig": "transfer(address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
@@ -4371,6 +4431,16 @@
   },
   {
    "sig": "mtxSetTaxRecipient((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetWrapLimits((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetWrapMember((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },

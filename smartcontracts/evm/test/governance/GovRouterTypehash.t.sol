@@ -285,6 +285,28 @@ contract GovRouterTypehashTest is Test {
             "SetFeeSplit(address from,address target,uint32 relayerSharePpm,address treasury,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), 0xf084d8f72f5ab8472e967cf0f499a1f0885d6c4ef8598e122bc9c5789f5cec6b);
     }
 
+    /// Group 3l (wrap limits spec 2026-11-10 §9): the two ops over the hybrids, the leg array's referenced struct types in
+    /// EIP-712 order (`WrapLegLimits` before `WrapLimit`).
+    function test_uaSetWrapLimitsTypehashIsPinned() public pure {
+        assertEq(T.WRAP_LIMIT, keccak256("WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)"));
+        assertEq(T.WRAP_LIMIT, 0x88e353aa16497f3ec3b6798928cbaae4294124785a960bbb1f375a58f4375cd0);
+        assertEq(T.WRAP_LEG_LIMITS, keccak256(
+                "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)"
+                "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)"));
+        assertEq(T.WRAP_LEG_LIMITS, 0x6ed041f8db544256208e9c373a1bba92e15793b4c38bc2839e4bce69a3aac1fe);
+        assertEq(T.UA_SET_WRAP_LIMITS, keccak256(
+                "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)"
+                "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)"));
+        assertEq(T.UA_SET_WRAP_LIMITS, 0xf14b3d3a4d329bfab6d7ab83d5a66e814aeec17aa1d0d74f55c7387dcfc20a5d);
+    }
+
+    function test_uaSetWrapMemberTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_WRAP_MEMBER, keccak256(
+                "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_WRAP_MEMBER, 0x53c3dd8795828323114f4a8181924254206647ac65db33075e95796d9d71ecbd);
+    }
+
     /// The router's ordered cancel (Q2, R19) signs `MetaTxLib`'s `UACancelNonce`, like a token.
     function test_uaCancelNonceTypehashIsPinned() public pure {
         assertEq(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, keccak256(

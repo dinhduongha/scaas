@@ -11,6 +11,7 @@ import "../factory/IFactoryToken.sol";
 import "../factory/IOpenFactory.sol";
 import "../governance/IGovernance.sol";
 import "../metatx/ITokenModule.sol";
+import "../metatx/IWrappedToken.sol";
 import "../pqz/IPqzToken.sol";
 import "../pqz/PqzSet.sol";
 import "./IRegulatedToken.sol";
@@ -87,6 +88,9 @@ interface IWrappedPqzRegulatedTokenAbi {
     event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned, uint256 out);
     event WrapDisabled(address indexed underlying, bytes32 indexed guardian, bytes32 reason);
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
+    event WrapLimitsSet(bytes32 indexed by, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
+    event WrapLimitsProposed(bytes32 indexed by, uint64 eta, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
+    event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
     error AccNotPrepared(bytes32 ua);
     error AccountNotRegistered(bytes32 ua);
     error AlreadyRecordFrozen(bytes32 account);
@@ -285,6 +289,17 @@ interface IWrappedPqzRegulatedTokenAbi {
     error ZeroFill(bytes32 orderHash);
     error ZeroRecipient();
     error ZeroU();
+    error WrapLimitExceeded(address underlying, uint8 limit, bytes32 account, uint256 amount, uint256 remaining);
+    error WrapCapExceeded(address underlying, uint8 limit, uint256 amount, uint256 remaining);
+    error UnwrapAboveNetWrapped(address underlying, bytes32 account, uint256 amount, uint256 entitlement);
+    error WrapperNotListed(bytes32 account);
+    error UnwrapperNotListed(bytes32 account);
+    error WrapLimitInvalid(address underlying, uint8 limit);
+    error WrapLegMismatch(uint256 index, address underlying);
+    error WrapUnitInvalid(address underlying, uint8 unitExp);
+    error WrapControlNeedsHybrid(uint8 bit);
+    error WrapControlActive(uint8 bit);
+    error WrapSubjectZero();
 }
 
 /// @title WrappedPqzRegulatedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -911,6 +926,14 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
         _forward(_MP);
     }
 
+    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata, bool, bool, bool) external {
+        _forward(_MW);
+    }
+
+    function setWrapMember(bytes32, bool, bool) external {
+        _forward(_MW);
+    }
+
     function shieldScale() external view returns (uint256 _p0) {
         _forwardView(_MQ2);
     }
@@ -1025,6 +1048,18 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
 
     function wrap(uint256) external payable returns (uint256 _p0) {
         _forward(_MW);
+    }
+
+    function wrapLimits() external view returns (IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay) {
+        _forwardView(_MW);
+    }
+
+    function wrapQuotaOf(bytes32, address) external view returns (IWrappedToken.WrapQuota memory _p0) {
+        _forwardView(_MW);
+    }
+
+    function wrapQuotaTotal(address) external view returns (IWrappedToken.WrapQuotaTotal memory _p0) {
+        _forwardView(_MW);
     }
 
     function wrapToUA(address, uint256, bytes32) external payable returns (uint256 _p0) {

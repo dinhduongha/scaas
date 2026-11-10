@@ -68,6 +68,11 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
         return GovernanceBits.WRAPPED_CONTRACT_ONLY;
     }
 
+    /// @dev `WrappedToken`'s scalars (bit 27, group 3l R27), restated for the second base.
+    function _scalarBits() internal pure virtual override(MetaTokenBase, WrappedTokenCore) returns (uint256) {
+        return WrappedTokenCore._scalarBits();
+    }
+
     /// @dev Never reached: `_initRaw` is the kind's init.
     function _init(IFactoryToken.TokenConfig memory) internal override(MetaTokenBase, WrappedTokenCore) {}
 
@@ -84,7 +89,7 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
     function _mtxWrapShieldBody(address underlying, uint256 amountIn, bytes32 toUA) internal {
         _regPayer();
         address m = _msgSender();
-        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
+        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply(), toUA);
         uint256 scale = PqzCore.$().shieldScale;
         if (minted % scale != 0) revert IPqzToken.AmountNotScaled(minted, scale);
         PqzStateLib.shield(toUA, minted / scale, m, _registry());
@@ -106,10 +111,10 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal {
         uint256 i = WrappedLib.indexOf(x.underlying);
         uint256 wrapped = x.amount * PqzCore.$().shieldScale;
-        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut); // before the proof (spec §5.4)
+        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut, b.fromUA); // before the proof (spec §5.4); 3l: the proof's sender
         _burn(_envUnwrap(x, _ticketBinding()), b, proof, pqzAuth, accHint, pqzVerdict);
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped);
-        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
+        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut, b.fromUA);
     }
 
     /// @notice The signed form over `UAPqzUnshieldUnwrap` (R36: native and derived ids), the `Unwrap` leg a nested struct.
@@ -155,6 +160,7 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
 
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
     function _disableFeatureBody(uint8 bit) internal virtual override(GovernanceBaseCore, WrappedTokenCore) {
+        _wrapControlsOff(bit); // group 3l
         bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
         if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }

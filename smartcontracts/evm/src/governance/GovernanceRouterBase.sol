@@ -106,6 +106,19 @@ library GovernanceRouterTypes {
         "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_OPERATOR_TRANSFER = keccak256(
         "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- group 3l (wrap limits spec 2026-11-10 §9): the owner's limits (bit 25, the lists' switches of bit 26) and bit
+    //      26's membership on the hybrids of the wrapped kinds; fee mode `NONE`. The leg array hashes as EIP-712 does: the
+    //      concatenated struct hashes of `WrapLegLimits`, each over its four `WrapLimit` struct hashes.
+    bytes32 internal constant WRAP_LIMIT = keccak256("WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
+    bytes32 internal constant WRAP_LEG_LIMITS = keccak256(
+        "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)"
+        "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
+    bytes32 internal constant UA_SET_WRAP_LIMITS = keccak256(
+        "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)"
+        "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
+    bytes32 internal constant UA_SET_WRAP_MEMBER = keccak256(
+        "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 }
 
 /// @title What every governance router of a chain shares (CTR-GOV-15 Change, owner 2026-11-04): the flow and the owner's and

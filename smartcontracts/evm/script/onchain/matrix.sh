@@ -53,7 +53,7 @@ fi
 tgt=${2:?target}
 OUTD=runs/2026-11-10-ua-mtx-merge-t66b-step5b
 LOG=$OUTD/matrix-$tgt.log
-GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers views}
+GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers views wraplimits}
 T=$(mktemp -d)
 A= CP= P= STAGE=setup
 CS=$(cd ../../pqz-core/nethermind/chain && pwd)
@@ -236,7 +236,7 @@ if [ -n "$SCOPE" ]; then
   sc=$SCOPE SCOPE=  # the compile steps run under capped, not under the scope
   for g in $GROUPS; do
     case $g in
-    tokens|gov|dex|misc)
+    tokens|gov|dex|liquidity|misc)
       G=$(echo "$g" | sed 's/^./\U&/')
       step "/$g" "" "" ../../scripts/capped forge build "script/onchain/$G.s.sol" --out "out/onchain-$g" \
         --cache-path "cache/onchain-$g" || fail "forge build $G.s.sol"
@@ -255,7 +255,7 @@ python3 -I script/onchain/basebook.py "$tgt" >> "$LOG"
 rc=0
 STAGE=groups
 for g in $GROUPS; do
-  r=0 res=ok SECS=0
+  r=0 res=ok SECS=0 why=
   say "/$g" "start"
   case $g in
   tokens|gov|dex|liquidity|misc)
@@ -279,10 +279,17 @@ for g in $GROUPS; do
   verify) verify verify; continue ;;
   verifiers) step "/$g" "$RPC" "" python3 -I script/onchain/verifiers.py "$tgt" "$RPC" || r=1 ;;
   views) step "/$g" "$RPC" "" python3 -I script/onchain/coverage.py views "$tgt" "$RPC" || r=1 ;;
+  # last: it moves the chain's clock by two days (local only; its own outputs, wraplimits.sh)
+  wraplimits)
+    if [ "$tgt" != local ]; then
+      res="not run" why="local only: the run moves the chain's clock"
+    else
+      step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" sh script/onchain/wraplimits.sh || r=1
+    fi ;;
   *) r=1; echo "unknown group $g" >> "$LOG" ;;
   esac
   if [ "$res" = "not run" ]; then
-    say "/$g" "not run (ONCHAIN_PQZ=$PQZ$([ -n "$PQ_RPC" ] || echo ', no PQZ node for this target'))"
+    say "/$g" "not run (${why:-ONCHAIN_PQZ=$PQZ$([ -n "$PQ_RPC" ] || echo ', no PQZ node for this target')})"
   elif [ $r = 0 ]; then
     say "/$g" "ok $(result "$g") (${SECS}s)"
   else

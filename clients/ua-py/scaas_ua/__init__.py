@@ -93,7 +93,9 @@ GOVERNANCE_BITS = (
     ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'capability'),
     ('DENYLIST', 'capability'), ('RECORD', 'power'), ('LISTING', 'power'), ('FEE_ROUTING', 'power'), ('', 'unused'), ('', 'unused'),
     ('ARBITRATE', 'reserved'), ('CORRECT', 'reserved'), ('RESCUABLE', 'capability'), ('PUBLISH', 'power'), ('DEPRECATE', 'power'),
-    ('ENABLE_KIND', 'power'), ('MODERATE', 'power'), ('OPERATOR_TRANSFER', 'power'), ('TAX', 'power'),
+    ('ENABLE_KIND', 'power'), ('MODERATE', 'power'), ('OPERATOR_TRANSFER', 'power'), ('TAX', 'power'), ('PQZ_PROOF', 'power'),
+    # group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
+    ('WRAP_LIMIT', 'capability'), ('WRAP_LIST', 'power'), ('REDEEMER', 'power'),
 )
 
 

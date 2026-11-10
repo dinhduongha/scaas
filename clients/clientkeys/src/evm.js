@@ -198,6 +198,9 @@ const STRUCTS = Object.fromEntries(Object.entries({
   PayMeta: 'bytes32 salt,bytes32 payNo,bool save,uint16 schema,bytes body',
   // a holder's terms, nested in the router's `SetGrant` / `UASetGrant` (governance spec §3.2: `hashStruct` signed, the struct the argument)
   GrantTerms: 'uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope',
+  // group 3l (wrap limits spec 2026-11-10 §6, §9): a leg's limits, nested in the router's `UASetWrapLimits` as an array
+  WrapLimit: 'uint24 perUser,uint64 tokenWide,uint32 period',
+  WrapLegLimits: 'address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong',
   // group 3f (PQZ verifier mode spec §5.1, §5.3): what a PQZ verifier UA signs in the token's domain (purpose `pqz-verdict`), and
   // the pair every proof-carrying PQZ entry takes last, outside every `UA*` struct (unbound, like `relayer`)
   PqzVerdict: 'address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil',
@@ -398,6 +401,10 @@ const OPS = {
   UAPqzRevokeVerifier: { fields: 'address target', on: ROUTER },
   // bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): `NONE` or `LOG` from the next debit
   UASetProofStore: { fields: 'address target,uint8 next', on: ROUTER },
+  // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds (two calls when it relaxes the wrap side
+  // or tightens the unwrap side) and bit 26's membership
+  UASetWrapLimits: { fields: 'address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList', on: ROUTER },
+  UASetWrapMember: { fields: 'address target,bytes32 account,bool canWrap,bool canUnwrap', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
@@ -462,6 +469,62 @@ const PQZ_DEBITS = Object.freeze({ UAPqzTransferSingle: 'single', UAPqzTransferS
 // ------------------------------------------------------------------ the PQZ verdict (group 3f, spec §5)
 
 const VERDICT_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, PqzVerdict: STRUCTS.PqzVerdict };
+/// Group 3l (wrap limits spec §7, §9): the wrapped hybrids' wrap-limit errors, by selector. `liftable`: a later block may lift it
+/// (a window ends, a member is added, a redeemer is granted, a later wrap raises the entitlement): the node keeps the job `queued`
+/// with `WRAP_LIMIT_REFUSED`; the creation refusal and the subject check are not. Every argument is one static word.
+export const WRAP_LIMIT_ERRORS = Object.freeze(Object.fromEntries([
+  ['WrapLimitExceeded(address,uint8,bytes32,uint256,uint256)', ['underlying', 'limit', 'account', 'amount', 'remaining'], true],
+  ['WrapCapExceeded(address,uint8,uint256,uint256)', ['underlying', 'limit', 'amount', 'remaining'], true],
+  ['UnwrapAboveNetWrapped(address,bytes32,uint256,uint256)', ['underlying', 'account', 'amount', 'entitlement'], true],
+  ['WrapperNotListed(bytes32)', ['account'], true],
+  ['UnwrapperNotListed(bytes32)', ['account'], true],
+  ['WrapControlNeedsHybrid(uint8)', ['bit'], false],
+  ['WrapSubjectZero()', [], false],
+].map(([sig, names, liftable]) => ['0x' + hex(keccak_256(utf8ToBytes(sig))).replace(/^0x/, '').slice(0, 8),
+  Object.freeze({ name: sig.slice(0, sig.indexOf('(')), sig, names, liftable })])));
+
+/// `revertData` (hex) decoded as one of `WRAP_LIMIT_ERRORS`, or null: `{ name, liftable, args }`, `args` by name (an address
+/// lower-case hex, a `bytes32` hex, a number a decimal string).
+export function wrapLimitError(revertData) {
+  const d = String(revertData).toLowerCase().replace(/^0x/, '');
+  const e = WRAP_LIMIT_ERRORS['0x' + d.slice(0, 8)];
+  if (!e || d.length !== 8 + 64 * e.names.length) return null;
+  const types = e.sig.slice(e.sig.indexOf('(') + 1, -1).split(',').filter(Boolean);
+  const args = Object.fromEntries(e.names.map((n, i) => {
+    const w = d.slice(8 + 64 * i, 8 + 64 * (i + 1));
+    const v = types[i] === 'address' ? '0x' + w.slice(24) : types[i] === 'bytes32' ? '0x' + w : BigInt('0x' + w).toString();
+    return [n, v];
+  }));
+  return { name: e.name, liftable: e.liftable, args };
+}
+
+/// Group 3l (wrap limits spec §2.1, R23, R24, R26): an id's net-wrapped line on one leg, `{ base, startMin }` (quanta, an
+/// absolute minute; BigInt), as the contract computes it: the entitlement at `nowMin`, a wrap's credit of `a = ⌊received/unit⌋`
+/// quanta, an unwrap's debit of `q = ⌈out/unit⌉`. `decayDays` 0: no decay. A wallet's preview; the contract decides.
+const MAX32 = (1n << 32n) - 1n;
+function lineEnt({ base, startMin }, decayDays, nowMin) {
+  let g = nowMin > startMin ? nowMin - startMin : 0n;
+  const h = BigInt(decayDays) * 1440n;
+  if (h === 0n) return [base, g, h];
+  if (g > h) g = h;
+  return [base * (h - g) / h, g, h];
+}
+export const wrapEntitlement = (line, decayDays, nowMin) => lineEnt(line, decayDays, BigInt(nowMin))[0];
+export function wrapCredit(line, a, decayDays, nowMin) {
+  a = BigInt(a); nowMin = BigInt(nowMin);
+  if (a === 0n) return { ...line };
+  const [e, g, h] = lineEnt(line, decayDays, nowMin);
+  const g2 = (e * g + e + a - 1n) / (e + a);
+  let b2 = line.base + a;
+  if (h !== 0n) { const r = (e + a) * h / (h - g2); if (r < b2) b2 = r; }
+  return { base: b2 < MAX32 ? b2 : MAX32, startMin: nowMin - g2 };
+}
+export function wrapDebit(line, q, decayDays, nowMin) {
+  q = BigInt(q);
+  const [e] = lineEnt(line, decayDays, BigInt(nowMin));
+  return { base: q >= e ? 0n : line.base * (e - q) / e, startMin: line.startMin };
+}
+
 export const PQZ_VERDICT_TYPEHASH = hex(keccak_256(utf8ToBytes(encodeType(VERDICT_TYPES, 'PqzVerdict'))));
 /** The verdict of a `PRECOMPILE` token: every field 0 and an empty `UASig` (spec §5.1). */
 export const EMPTY_PQZ_VERDICT = Object.freeze({
@@ -1492,6 +1555,8 @@ export const GOVERNANCE_BITS = Object.freeze([
   ['DENYLIST', 'capability'], ['RECORD', 'power'], ['LISTING', 'power'], ['FEE_ROUTING', 'power'], ['', 'unused'], ['', 'unused'],
   ['ARBITRATE', 'reserved'], ['CORRECT', 'reserved'], ['RESCUABLE', 'capability'], ['PUBLISH', 'power'], ['DEPRECATE', 'power'],
   ['ENABLE_KIND', 'power'], ['MODERATE', 'power'], ['OPERATOR_TRANSFER', 'power'], ['TAX', 'power'], ['PQZ_PROOF', 'power'],
+  // group 3l (wrap limits spec §2): the hybrids' wrap controls
+  ['WRAP_LIMIT', 'capability'], ['WRAP_LIST', 'power'], ['REDEEMER', 'power'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));
 
 // ------------------------------------------------------------------ liquidity orders (CTR-DEX-30, -31; CLI-SGN-49 proposed)

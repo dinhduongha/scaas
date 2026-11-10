@@ -461,7 +461,11 @@ intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per 
 check, a simulation revert that a later block may lift on a regulated token (`Frozen`, `TokenPaused`, `NotEligible`,
 `FeeRecipientFrozen`, `RegistryUnavailable`, `RegistryGasStarved`) is a named refusal: `queued` with `REGULATED_REFUSED:
 <error>`, never `dead` while the payload may still land; expiry or the attempt cap ([NODE-LANE-14](#NODE-LANE-14)) ends it
-(BUILT, ua-mtx-merge T35; regulated-kinds spec §7). Such a refusal is no billed failure, so it never counts in the grief
+(BUILT, ua-mtx-merge T35; regulated-kinds spec §7). A wrapped hybrid's wrap-limit refusal (`WrapLimitExceeded`,
+`WrapCapExceeded`, `UnwrapAboveNetWrapped`, `WrapperNotListed`, `UnwrapperNotListed`: a window ends, a member is added, a
+redeemer is granted, a later wrap raises the entitlement) is the same class: `queued` with `WRAP_LIMIT_REFUSED: <error>`,
+never `dead` (BUILT, branch `ua-mtx-wraplimit`, group 3l; wrap limits spec 2026-11-10 §9; [CTR-TOK-31](../contracts/token-wrappers.md#CTR-TOK-31));
+`WrapControlNeedsHybrid`, a creation refusal, is not in it. Such a refusal is no billed failure, so it never counts in the grief
 score ([NODE-LANE-15](#NODE-LANE-15), not built).
 
 **Classification after consumption:**

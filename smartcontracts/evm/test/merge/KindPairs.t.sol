@@ -396,7 +396,9 @@ contract KindPairsTest is UALedgerBase {
     /// ITradeToken 0x0b4d9a5c (unchanged). ua-mtx-merge T6 (R12, R38): ITradeToken 0x0b4d9a5c -> 0xe393854e, its 9
     /// selectors (the address `TradeOrder` entries and views out, the `ua*` ones under the `mtx` / plain names).
     function test_kindPairInterfaceIdsArePinned() public pure {
-        assertEq(type(IWrappedToken).interfaceId, bytes4(0xa84f2937), "IWrappedToken");
+        // group 3l (wrap limits spec §7): + setWrapLimits, setWrapMember, wrapLimits, wrapQuotaOf, wrapQuotaTotal:
+        // 0xa84f2937 -> 0x24c296a1 (the XOR of the five selectors)
+        assertEq(type(IWrappedToken).interfaceId, bytes4(0x24c296a1), "IWrappedToken");
         assertEq(type(ITradeToken).interfaceId, bytes4(0xe393854e), "ITradeToken");
     }
 }

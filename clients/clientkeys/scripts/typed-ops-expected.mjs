@@ -34,6 +34,10 @@ const CONF = {
   // the router's `setGrant`: the nested terms are the call's tuple (governance spec §3.2)
   SetGrant: (m) => [m.target, m.bit, m.holder, ['min', 'max', 'total', 'perWindow', 'window', 'validUntil', 'maxUses', 'delegable',
     'scope'].map((k) => m.terms[k])],
+  // group 3l (wrap limits spec §9): the leg array is the call's array of tuples, each limit a nested tuple
+  SetWrapLimits: (m) => [m.target, m.legs.map((l) => [l.underlying, l.unitExp, l.decayDays,
+    ...['wrapShort', 'wrapLong', 'unwrapShort', 'unwrapLong'].map((k) => [l[k].perUser, l[k].tokenWide, l[k].period])]),
+  m.netUnwrap, m.wrapList, m.unwrapList],
   // the factory's creations (ua-mtx-merge T76): the struct signs `initHash`, the call takes the bytes (`extra`)
   CreateToken: (m, x) => [m.target, m.kind, m.version, x.initArgs, m.salt],
   CreateDex: (m, x) => [m.target, m.version, x.initArgs, m.salt],

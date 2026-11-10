@@ -101,6 +101,13 @@ const ROW = {
   UAPqzSetVerifier: { next: padId('0x5ca00000000000000000000000000000000000f1') },
   // group 3h (T61): LOG
   UASetProofStore: { next: 1 },
+  // group 3l (wrap limits spec §6, §9): one leg at a hundredth of a 6-decimal unit, a daily wrap window, the net rule with a
+  // two-year decay; values a hybrid at `target` with bits 25 and 26 takes (TypedOps.t.sol's router rows); a member both ways
+  UASetWrapLimits: { legs: [{ underlying: '0x5ca00000000000000000000000000000000000c3', unitExp: 4, decayDays: 730,
+    wrapShort: { perUser: 100000, tokenWide: 0, period: 86400 }, wrapLong: { perUser: 0, tokenWide: 5000000, period: 2592000 },
+    unwrapShort: { perUser: 0, tokenWide: 0, period: 0 }, unwrapLong: { perUser: 0, tokenWide: 0, period: 0 } }],
+    netUnwrap: true, wrapList: false, unwrapList: false },
+  UASetWrapMember: { account: padId('0x00000000000000000000000000000000000007a1'), canWrap: true, canUnwrap: true },
 };
 ROW.UAWrapOrder = wrapOrder(hex(nativeUa), NO_ID);
 ROW.CancelUAOrder = { order: order(hex(nativeUa), NO_ID) };
@@ -154,7 +161,7 @@ function sample(name, op) {
   const row = ROW[name] ?? {};
   const merged = { ...base, ...row };
   for (const k of Object.keys(row)) {
-    if (row[k] && typeof row[k] === 'object') merged[k] = { ...base[k], ...row[k] };
+    if (row[k] && typeof row[k] === 'object' && !Array.isArray(row[k])) merged[k] = { ...base[k], ...row[k] }; // an array is the row's
   }
   return merged;
 }

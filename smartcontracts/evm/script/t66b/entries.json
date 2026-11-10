@@ -4245,6 +4245,60 @@
     "group": "A"
    },
    {
+    "sel": "8c274876",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "e7239da4",
+    "sig": "setWrapMember(bytes32,bool,bool)",
+    "name": "setWrapMember",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 account",
+     "bool canWrap",
+     "bool canUnwrap"
+    ],
+    "names": [
+     "account",
+     "canWrap",
+     "canUnwrap"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "521b8438",
     "sig": "supportedModes()",
     "name": "supportedModes",
@@ -4679,6 +4733,70 @@
      "amount"
     ],
     "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "777e58ab",
+    "sig": "wrapLimits()",
+    "name": "wrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "50318e96",
+    "sig": "wrapQuotaOf(bytes32,address)",
+    "name": "wrapQuotaOf",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account",
+     "address u"
+    ],
+    "names": [
+     "account",
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuota memory _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "c0c6bc79",
+    "sig": "wrapQuotaTotal(address)",
+    "name": "wrapQuotaTotal",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "address u"
+    ],
+    "names": [
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuotaTotal memory _p0",
     "ifaces": [
      "IWrappedToken"
     ],
@@ -10607,6 +10725,60 @@
     "group": "A"
    },
    {
+    "sel": "8c274876",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "e7239da4",
+    "sig": "setWrapMember(bytes32,bool,bool)",
+    "name": "setWrapMember",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 account",
+     "bool canWrap",
+     "bool canUnwrap"
+    ],
+    "names": [
+     "account",
+     "canWrap",
+     "canUnwrap"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "5f64c53c",
     "sig": "shieldScale()",
     "name": "shieldScale",
@@ -11139,6 +11311,70 @@
      "amount"
     ],
     "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "777e58ab",
+    "sig": "wrapLimits()",
+    "name": "wrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "50318e96",
+    "sig": "wrapQuotaOf(bytes32,address)",
+    "name": "wrapQuotaOf",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account",
+     "address u"
+    ],
+    "names": [
+     "account",
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuota memory _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "c0c6bc79",
+    "sig": "wrapQuotaTotal(address)",
+    "name": "wrapQuotaTotal",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "address u"
+    ],
+    "names": [
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuotaTotal memory _p0",
     "ifaces": [
      "IWrappedToken"
     ],
@@ -17639,6 +17875,60 @@
     "group": "Q"
    },
    {
+    "sel": "8c274876",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "e7239da4",
+    "sig": "setWrapMember(bytes32,bool,bool)",
+    "name": "setWrapMember",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 account",
+     "bool canWrap",
+     "bool canUnwrap"
+    ],
+    "names": [
+     "account",
+     "canWrap",
+     "canUnwrap"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "5f64c53c",
     "sig": "shieldScale()",
     "name": "shieldScale",
@@ -18321,6 +18611,70 @@
      "amount"
     ],
     "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "777e58ab",
+    "sig": "wrapLimits()",
+    "name": "wrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "50318e96",
+    "sig": "wrapQuotaOf(bytes32,address)",
+    "name": "wrapQuotaOf",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account",
+     "address u"
+    ],
+    "names": [
+     "account",
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuota memory _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "c0c6bc79",
+    "sig": "wrapQuotaTotal(address)",
+    "name": "wrapQuotaTotal",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "address u"
+    ],
+    "names": [
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuotaTotal memory _p0",
     "ifaces": [
      "IWrappedToken"
     ],
@@ -23434,6 +23788,60 @@
     "group": "P"
    },
    {
+    "sel": "8c274876",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "e7239da4",
+    "sig": "setWrapMember(bytes32,bool,bool)",
+    "name": "setWrapMember",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 account",
+     "bool canWrap",
+     "bool canUnwrap"
+    ],
+    "names": [
+     "account",
+     "canWrap",
+     "canUnwrap"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "521b8438",
     "sig": "supportedModes()",
     "name": "supportedModes",
@@ -23932,6 +24340,70 @@
      "amount"
     ],
     "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "777e58ab",
+    "sig": "wrapLimits()",
+    "name": "wrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "50318e96",
+    "sig": "wrapQuotaOf(bytes32,address)",
+    "name": "wrapQuotaOf",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account",
+     "address u"
+    ],
+    "names": [
+     "account",
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuota memory _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "c0c6bc79",
+    "sig": "wrapQuotaTotal(address)",
+    "name": "wrapQuotaTotal",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "address u"
+    ],
+    "names": [
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuotaTotal memory _p0",
     "ifaces": [
      "IWrappedToken"
     ],
@@ -30694,6 +31166,60 @@
     "group": "P"
    },
    {
+    "sel": "8c274876",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "e7239da4",
+    "sig": "setWrapMember(bytes32,bool,bool)",
+    "name": "setWrapMember",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 account",
+     "bool canWrap",
+     "bool canUnwrap"
+    ],
+    "names": [
+     "account",
+     "canWrap",
+     "canUnwrap"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "5f64c53c",
     "sig": "shieldScale()",
     "name": "shieldScale",
@@ -31290,6 +31816,70 @@
      "amount"
     ],
     "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "777e58ab",
+    "sig": "wrapLimits()",
+    "name": "wrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "50318e96",
+    "sig": "wrapQuotaOf(bytes32,address)",
+    "name": "wrapQuotaOf",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account",
+     "address u"
+    ],
+    "names": [
+     "account",
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuota memory _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "c0c6bc79",
+    "sig": "wrapQuotaTotal(address)",
+    "name": "wrapQuotaTotal",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "address u"
+    ],
+    "names": [
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuotaTotal memory _p0",
     "ifaces": [
      "IWrappedToken"
     ],
@@ -38624,6 +39214,60 @@
     "group": "P"
    },
    {
+    "sel": "8c274876",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "e7239da4",
+    "sig": "setWrapMember(bytes32,bool,bool)",
+    "name": "setWrapMember",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 account",
+     "bool canWrap",
+     "bool canUnwrap"
+    ],
+    "names": [
+     "account",
+     "canWrap",
+     "canUnwrap"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "5f64c53c",
     "sig": "shieldScale()",
     "name": "shieldScale",
@@ -39370,6 +40014,70 @@
      "amount"
     ],
     "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "777e58ab",
+    "sig": "wrapLimits()",
+    "name": "wrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "50318e96",
+    "sig": "wrapQuotaOf(bytes32,address)",
+    "name": "wrapQuotaOf",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account",
+     "address u"
+    ],
+    "names": [
+     "account",
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuota memory _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "c0c6bc79",
+    "sig": "wrapQuotaTotal(address)",
+    "name": "wrapQuotaTotal",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "address u"
+    ],
+    "names": [
+     "u"
+    ],
+    "returns": "IWrappedToken.WrapQuotaTotal memory _p0",
     "ifaces": [
      "IWrappedToken"
     ],

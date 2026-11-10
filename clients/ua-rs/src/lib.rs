@@ -203,7 +203,7 @@ pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
 /// (`GovBitsVector.t.sol`), one row per line.
 pub const GOVERNANCE_BITS_JSON: &str = include_str!("../../../smartcontracts/vectors/governance/governance_bits.json");
 
-/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-23; `None` past them (bits 24-127
+/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-27; `None` past them (bits 28-127
 /// are free, bits 128-255 the application contract's own, labelled by its `bitLabel(bit)`).
 pub fn governance_bit(bit: u8) -> Option<&'static str> {
     let head = format!("{{\"bit\": {bit}, ");
@@ -497,3 +497,4 @@ pub fn encode_msig(threshold: u16, members: &[(u16, [u8; 32], u16)]) -> Vec<u8> 
 /// ua-mtx-merge T34: the regulated kinds' router ops, `recordId`, the relaxation `commit`, `R` (regulated-kinds spec §3, §5).
 pub mod regulated;
 pub mod pay;
+pub mod wraplimit;

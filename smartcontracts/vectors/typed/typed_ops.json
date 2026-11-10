@@ -11260,6 +11260,307 @@
       },
       "structHash": "0xfb42a305f5635cb23dbf5563d6b94211672a3f5d5bda55b29d3d40dc1af48b18"
     },
+    "UASetWrapLimits": {
+      "typeString": "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)",
+      "typehash": "0xf14b3d3a4d329bfab6d7ab83d5a66e814aeec17aa1d0d74f55c7387dcfc20a5d",
+      "on": [
+        "GovernanceRouter"
+      ],
+      "types": {
+        "EIP712Domain": [
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "type": "string"
+          },
+          {
+            "name": "chainId",
+            "type": "uint256"
+          },
+          {
+            "name": "verifyingContract",
+            "type": "address"
+          },
+          {
+            "name": "salt",
+            "type": "bytes32"
+          }
+        ],
+        "UASetWrapLimits": [
+          {
+            "name": "from",
+            "type": "bytes32"
+          },
+          {
+            "name": "target",
+            "type": "address"
+          },
+          {
+            "name": "legs",
+            "type": "WrapLegLimits[]"
+          },
+          {
+            "name": "netUnwrap",
+            "type": "bool"
+          },
+          {
+            "name": "wrapList",
+            "type": "bool"
+          },
+          {
+            "name": "unwrapList",
+            "type": "bool"
+          },
+          {
+            "name": "batch",
+            "type": "uint256"
+          },
+          {
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "name": "validUntil",
+            "type": "uint256"
+          },
+          {
+            "name": "mode",
+            "type": "uint32"
+          },
+          {
+            "name": "relayer",
+            "type": "address"
+          },
+          {
+            "name": "fee",
+            "type": "uint256"
+          },
+          {
+            "name": "feeRecipient",
+            "type": "address"
+          }
+        ],
+        "WrapLegLimits": [
+          {
+            "name": "underlying",
+            "type": "address"
+          },
+          {
+            "name": "unitExp",
+            "type": "uint8"
+          },
+          {
+            "name": "decayDays",
+            "type": "uint16"
+          },
+          {
+            "name": "wrapShort",
+            "type": "WrapLimit"
+          },
+          {
+            "name": "wrapLong",
+            "type": "WrapLimit"
+          },
+          {
+            "name": "unwrapShort",
+            "type": "WrapLimit"
+          },
+          {
+            "name": "unwrapLong",
+            "type": "WrapLimit"
+          }
+        ],
+        "WrapLimit": [
+          {
+            "name": "perUser",
+            "type": "uint24"
+          },
+          {
+            "name": "tokenWide",
+            "type": "uint64"
+          },
+          {
+            "name": "period",
+            "type": "uint32"
+          }
+        ]
+      },
+      "domains": {
+        "gov_router": {
+          "domain": {
+            "name": "SCaaS GovernanceRouter",
+            "version": "1",
+            "chainId": "31337",
+            "verifyingContract": "0x5ca00000000000000000000000000000000000a7",
+            "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+          },
+          "domainSeparator": "0x1180e86bbe4e0d524335f0b21dcc1c2cdcc6de5f45c9b148c495e441398f3285",
+          "digest": "0x74f42941dcf16d3796b7a7148d0ea000bfded56cf96d302d069028483f2ad07b",
+          "signature": "0x634511bfb6a67e3e68f5e1c95aba2cc34978ee34c8b0ac428e90083aeda5275f2ddde5660925954fcf10efcf68e8ca14b71dae972b3d27ee29a26dbff553f61f1b",
+          "abi": "mtxSetWrapLimits((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+          "selector": "0x6178483c",
+          "calldata": "0x6178483c000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f900000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006b49d32c0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000beef000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008e20677a37c9b191f6a429eb1d468e4f2e07224000000000000000000000000000000000000000000000000000000000000001c000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003c000000000000000000000000000000000000000000000000000000000000000010000000000000000000000005ca00000000000000000000000000000000000c3000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000002da00000000000000000000000000000000000000000000000000000000000186a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000015180000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004c4b400000000000000000000000000000000000000000000000000000000000278d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041634511bfb6a67e3e68f5e1c95aba2cc34978ee34c8b0ac428e90083aeda5275f2ddde5660925954fcf10efcf68e8ca14b71dae972b3d27ee29a26dbff553f61f1b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "message": {
+        "from": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+        "target": "0x8e20677a37c9b191f6a429eb1d468e4f2e072240",
+        "legs": [
+          {
+            "underlying": "0x5ca00000000000000000000000000000000000c3",
+            "unitExp": 4,
+            "decayDays": 730,
+            "wrapShort": {
+              "perUser": 100000,
+              "tokenWide": "0",
+              "period": 86400
+            },
+            "wrapLong": {
+              "perUser": 0,
+              "tokenWide": "5000000",
+              "period": 2592000
+            },
+            "unwrapShort": {
+              "perUser": 0,
+              "tokenWide": "0",
+              "period": 0
+            },
+            "unwrapLong": {
+              "perUser": 0,
+              "tokenWide": "0",
+              "period": 0
+            }
+          }
+        ],
+        "netUnwrap": true,
+        "wrapList": false,
+        "unwrapList": false,
+        "batch": "7",
+        "nonce": "0",
+        "validUntil": "1800000300",
+        "mode": 1,
+        "relayer": "0x000000000000000000000000000000000000beef",
+        "fee": "0",
+        "feeRecipient": "0x0000000000000000000000000000000000000000"
+      },
+      "structHash": "0xf3e5e89c160ec5b494ab17124e1bf3c3073041ca7669941496cc1109499227e9"
+    },
+    "UASetWrapMember": {
+      "typeString": "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+      "typehash": "0x53c3dd8795828323114f4a8181924254206647ac65db33075e95796d9d71ecbd",
+      "on": [
+        "GovernanceRouter"
+      ],
+      "types": {
+        "EIP712Domain": [
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "type": "string"
+          },
+          {
+            "name": "chainId",
+            "type": "uint256"
+          },
+          {
+            "name": "verifyingContract",
+            "type": "address"
+          },
+          {
+            "name": "salt",
+            "type": "bytes32"
+          }
+        ],
+        "UASetWrapMember": [
+          {
+            "name": "from",
+            "type": "bytes32"
+          },
+          {
+            "name": "target",
+            "type": "address"
+          },
+          {
+            "name": "account",
+            "type": "bytes32"
+          },
+          {
+            "name": "canWrap",
+            "type": "bool"
+          },
+          {
+            "name": "canUnwrap",
+            "type": "bool"
+          },
+          {
+            "name": "batch",
+            "type": "uint256"
+          },
+          {
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "name": "validUntil",
+            "type": "uint256"
+          },
+          {
+            "name": "mode",
+            "type": "uint32"
+          },
+          {
+            "name": "relayer",
+            "type": "address"
+          },
+          {
+            "name": "fee",
+            "type": "uint256"
+          },
+          {
+            "name": "feeRecipient",
+            "type": "address"
+          }
+        ]
+      },
+      "domains": {
+        "gov_router": {
+          "domain": {
+            "name": "SCaaS GovernanceRouter",
+            "version": "1",
+            "chainId": "31337",
+            "verifyingContract": "0x5ca00000000000000000000000000000000000a7",
+            "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+          },
+          "domainSeparator": "0x1180e86bbe4e0d524335f0b21dcc1c2cdcc6de5f45c9b148c495e441398f3285",
+          "digest": "0xbbb5e7250e7bd955bf6d9192e6006a4d89adbb13108ed9b4ed2b509c6b2e0d04",
+          "signature": "0x6c3101c31e1180db1426ca9fe78b46f4c73086f1a89a40b04c60d57a9841b51c7fca98c26803f1b72662bcf203a3c4124406400821c12dfb49e942ab1354ada81b",
+          "abi": "mtxSetWrapMember((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+          "selector": "0x3c0ed776",
+          "calldata": "0x3c0ed776000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f900000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006b49d32c0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000beef00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000cbfce70142396d53b1cbb33b9ea2ff6c878641c700000000000000000000000000000000000000000000000000000000000007a10000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000001a0000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000416c3101c31e1180db1426ca9fe78b46f4c73086f1a89a40b04c60d57a9841b51c7fca98c26803f1b72662bcf203a3c4124406400821c12dfb49e942ab1354ada81b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "message": {
+        "from": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+        "target": "0xcbfce70142396d53b1cbb33b9ea2ff6c878641c7",
+        "account": "0x00000000000000000000000000000000000000000000000000000000000007a1",
+        "canWrap": true,
+        "canUnwrap": true,
+        "batch": "7",
+        "nonce": "0",
+        "validUntil": "1800000300",
+        "mode": 1,
+        "relayer": "0x000000000000000000000000000000000000beef",
+        "fee": "0",
+        "feeRecipient": "0x0000000000000000000000000000000000000000"
+      },
+      "structHash": "0x698bf015c339c29eed39dc729d4554f4e31945cbd9b9effeea1ca5c4ad414e14"
+    },
     "PqzAuth": {
       "typeString": "PqzAuth(uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash)",
       "typehash": "0x380b0de633c2ea09a49e310934f44bd07cd4068117b4bc523553757742644e6f",

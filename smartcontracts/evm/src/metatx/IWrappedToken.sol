@@ -9,6 +9,59 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 /// @notice Events and errors raised by `WrappedLib` (an external library) are declared here so that they are in the
 ///         token ABI. The creation config is `IFactoryToken.TokenConfig` (`legs`, `rate`).
 interface IWrappedToken {
+    /// @notice One wrap or unwrap limit of a leg (group 3l, spec 2026-11-10-wrap-limits.md §2, §6): `perUser` quanta per id
+    ///         and window, `tokenWide` quanta for all ids together, each off at 0; `period` the fixed window in seconds, a
+    ///         whole number of minutes, `60 ≤ period ≤ (2^23 − 1)·60` when a part is on, 0 when both are off.
+    struct WrapLimit {
+        uint24 perUser;
+        uint64 tokenWide;
+        uint32 period;
+    }
+
+    /// @notice A leg's limits, in quanta of `10^unitExp` raw units of `underlying` (fixed by the first configuration);
+    ///         `decayDays` the horizon `H` of the net-wrapped entitlement's linear decay, 0 = off (§2.1).
+    struct WrapLegLimits {
+        address underlying;
+        uint8 unitExp;
+        uint16 decayDays;
+        WrapLimit wrapShort;
+        WrapLimit wrapLong;
+        WrapLimit unwrapShort;
+        WrapLimit unwrapLong;
+    }
+
+    /// @notice A window's state (§7): `left` in raw units, `type(uint256).max` when the part is off; `resetAt` the end of
+    ///         the active window, 0 when none is active.
+    struct WindowView {
+        uint256 left;
+        uint64 resetAt;
+    }
+
+    /// @notice An id's quota on one leg (§7): the four per-user windows, `netWrapped` (`b`, undecayed, raw units), the
+    ///         `entitlement` now (raw units; `type(uint256).max` when no rule applies or for a redeemer), the time the
+    ///         decayed entitlement reaches 0 (0 without the decay; the start is an absolute minute, R26), the lists and the
+    ///         redeemer role.
+    struct WrapQuota {
+        WindowView wrapShort;
+        WindowView wrapLong;
+        WindowView unwrapShort;
+        WindowView unwrapLong;
+        uint256 netWrapped;
+        uint256 entitlement;
+        uint64 entitlementZeroAt;
+        bool canWrap;
+        bool canUnwrap;
+        bool redeemer;
+    }
+
+    /// @notice A leg's token-wide windows (§7), by name.
+    struct WrapQuotaTotal {
+        WindowView wrapShort;
+        WindowView wrapLong;
+        WindowView unwrapShort;
+        WindowView unwrapLong;
+    }
+
     /// @notice `account` is credited `minted`: the caller of a direct wrap.
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned,
@@ -26,6 +79,11 @@ interface IWrappedToken {
     event RateChangeCancelled(address indexed underlying);
     event RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen);
     event WrapDisabled(address indexed underlying, bytes32 indexed guardian, bytes32 reason);
+    /// @notice Group 3l (§7): a configuration applied; one that waits the factory's `noticePeriod()`; a list membership.
+    event WrapLimitsSet(bytes32 indexed by, WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
+    event WrapLimitsProposed(bytes32 indexed by, uint64 eta, WrapLegLimits[] legs, bool netUnwrap, bool wrapList,
+        bool unwrapList);
+    event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
 
     error UnderlyingInvalid(address u);
     error DecimalsUnreadable(address u);
@@ -71,6 +129,22 @@ interface IWrappedToken {
     /// @notice Raised by `HederaLib` at init on Hedera (same selectors), listed here for the ABI.
     error HtsQueryFailed(address u, int64 responseCode);
     error AssociateFailed(int64 responseCode);
+    /// @notice Group 3l (§7), amounts in the leg's raw units; `limit` 0 `wrapShort`, 1 `wrapLong`, 2 `unwrapShort`, 3
+    ///         `unwrapLong`.
+    error WrapLimitExceeded(address underlying, uint8 limit, bytes32 account, uint256 amount, uint256 remaining);
+    error WrapCapExceeded(address underlying, uint8 limit, uint256 amount, uint256 remaining);
+    error UnwrapAboveNetWrapped(address underlying, bytes32 account, uint256 amount, uint256 entitlement);
+    error WrapperNotListed(bytes32 account);
+    error UnwrapperNotListed(bytes32 account);
+    error WrapLimitInvalid(address underlying, uint8 limit);
+    error WrapLegMismatch(uint256 index, address underlying);
+    error WrapUnitInvalid(address underlying, uint8 unitExp);
+    /// @notice Bits 25, 26, 27 at the creation of a pure-wrap token (`maxSupply == 0`, R12).
+    error WrapControlNeedsHybrid(uint8 bit);
+    /// @notice `disableFeature` of bit 25, 26 or 27 while a control under it is on (27: while it has holders).
+    error WrapControlActive(uint8 bit);
+    /// @notice An unwrap check with no subject (`holder == 0`) on a token with a wrap control on.
+    error WrapSubjectZero();
 
     function wrap(uint256 amount) external payable returns (uint256 minted);
     function wrap(address underlying, uint256 amount) external payable returns (uint256 minted);
@@ -112,6 +186,12 @@ interface IWrappedToken {
     function proposeRate(address underlying, uint96 num, uint96 den) external;
     function cancelRate() external;
     function executeRate() external;
+    /// @notice Group 3l (§6): the owner's limits of every leg (in leg order), the net rule and the two lists; a wrap-side
+    ///         relaxation or an unwrap-side tightening waits the factory's `noticePeriod()` (two calls), the rest applies
+    ///         at once. Reached through `GovernanceRouter`.
+    function setWrapLimits(WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList) external;
+    /// @notice Bit 26's holder: `account`'s membership of the wrapper and unwrapper lists, at once.
+    function setWrapMember(bytes32 account, bool canWrap, bool canUnwrap) external;
 
     function underlying() external view returns (address);
     function underlyings() external view returns (address[] memory);
@@ -126,4 +206,10 @@ interface IWrappedToken {
     function rateDelay() external view returns (uint32);
     function maxRateStepBps() external view returns (uint16);
     function pendingRate() external view returns (address u, uint96 num, uint96 den, uint64 eta);
+    /// @notice Group 3l (§7): the configuration in force and the pending one.
+    ///         `delay`: the factory's `noticePeriod()` in force (0: every change applies at once).
+    function wrapLimits() external view returns (WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList,
+        bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay);
+    function wrapQuotaOf(bytes32 account, address underlying) external view returns (WrapQuota memory);
+    function wrapQuotaTotal(address underlying) external view returns (WrapQuotaTotal memory);
 }

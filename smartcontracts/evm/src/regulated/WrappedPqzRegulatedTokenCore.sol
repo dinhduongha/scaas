@@ -57,6 +57,7 @@ abstract contract WrappedPqzRegulatedTokenCore is WrappedPqzTokenCore, Regulated
 
     /// @notice As kind 9: the pending-rate drop and the mirror sync, each only once the disable applied.
     function _disableFeatureBody(uint8 bit) internal override(RegulatedBase, WrappedPqzTokenCore) {
+        _wrapControlsOff(bit); // group 3l
         if (!GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) return;
         if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
         _regDisabled(bit);
@@ -71,8 +72,9 @@ abstract contract WrappedPqzRegulatedTokenCore is WrappedPqzTokenCore, Regulated
     // ------------------------------------------------------------------ restated for the two bases (solc: a function both
     // paths mention): the regulated layer's, then the base kind's
 
-    function _scalarBits() internal pure override(MetaTokenBase, RegulatedBase) returns (uint256) {
-        return super._scalarBits();
+    /// @dev The regulated scalars and bit 27 (group 3l, R27).
+    function _scalarBits() internal pure override(WrappedPqzTokenCore, RegulatedBase) returns (uint256) {
+        return super._scalarBits() | (uint256(1) << GovernanceBits.REDEEMER);
     }
 
     function _delayedRelaxBits() internal pure override(GovernanceBaseCore, RegulatedBase) returns (uint256) {
