@@ -528,8 +528,9 @@ contract GovDeployTest is Test {
         // T83 (the metadata hash: `IMetaTokenV2`'s pay-record views, `PaymentMeta` v3): -> 0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03
         // T66b 3.1b (the metadata hash: `UAKinds` / `UAStore` comments naming `UARegistryCoreLib`): ->
         // 0x13CBB3D5DCb0736f87F136ad13276568A80d1aa9; T66b 4.1 (the `<X>Core` + flat-face split of `GovernanceRouterBase`,
-        // 15,305 -> 15,572 B runtime): -> this
-        assertEq(router, 0x639e34f93Ac69d6Ba31D773AC915894542180723, "GovernanceRouter");
+        // 15,305 -> 15,572 B runtime): -> 0x639e34f93Ac69d6Ba31D773AC915894542180723; group 3l (`mtxSetWrapLimits`,
+        // `mtxSetWrapMember`, their typehashes): -> this
+        assertEq(router, 0x7F3b13D20e51EA69BBEeF32394a76db36013FEE3, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

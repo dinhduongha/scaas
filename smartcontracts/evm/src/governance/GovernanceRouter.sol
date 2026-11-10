@@ -149,6 +149,42 @@ contract GovernanceRouter is GovernanceRouterBase {
         _ua(T.UA_SET_PROOF_STORE, e, target, IPqzToken.setProofStore.selector, abi.encode(next), auth);
     }
 
+    // ------------------------------------------------------------------ wrap limits on the hybrids (group 3l, spec 2026-11-10 §9)
+
+    /// @notice The owner's limits of every leg, the net rule and the two lists (`setWrapLimits`): a wrap-side relaxation or an
+    ///         unwrap-side tightening is proposed by the first call and applied by the same call after the factory's
+    ///         `noticePeriod()`; fee mode `NONE`, relayable at fee 0. The struct words: `target`, the leg array's hash, the
+    ///         three flags.
+    function mtxSetWrapLimits(MetaTxLib.UAEnvelope calldata e, address target, IWrappedToken.WrapLegLimits[] calldata legs,
+        bool netUnwrap, bool wrapList, bool unwrapList, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_SET_WRAP_LIMITS, e, target, abi.encode(_legsHash(legs), netUnwrap, wrapList, unwrapList),
+            abi.encodeCall(IWrappedToken.setWrapLimits, (legs, netUnwrap, wrapList, unwrapList)), auth);
+    }
+
+    /// @notice Bit 26's holder: `account`'s membership of the wrapper and unwrapper lists, at once.
+    function mtxSetWrapMember(MetaTxLib.UAEnvelope calldata e, address target, bytes32 account, bool canWrap, bool canUnwrap,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_SET_WRAP_MEMBER, e, target, IWrappedToken.setWrapMember.selector, abi.encode(account, canWrap, canUnwrap),
+            auth);
+    }
+
+    /// @dev EIP-712 `WrapLegLimits[]`: `keccak256` of the concatenated struct hashes.
+    function _legsHash(IWrappedToken.WrapLegLimits[] calldata legs) private pure returns (bytes32) {
+        bytes32[] memory h = new bytes32[](legs.length);
+        for (uint256 i; i < legs.length; ++i) {
+            IWrappedToken.WrapLegLimits calldata l = legs[i];
+            h[i] = keccak256(abi.encode(T.WRAP_LEG_LIMITS, l.underlying, l.unitExp, l.decayDays, _limitHash(l.wrapShort),
+                _limitHash(l.wrapLong), _limitHash(l.unwrapShort), _limitHash(l.unwrapLong)));
+        }
+        return keccak256(abi.encodePacked(h));
+    }
+
+    function _limitHash(IWrappedToken.WrapLimit calldata x) private pure returns (bytes32) {
+        return keccak256(abi.encode(T.WRAP_LIMIT, x.perUser, x.tokenWide, x.period));
+    }
+
     // ------------------------------------------------------------------ the powers on the DEX
 
     function mtxSetMarket(MetaTxLib.UAEnvelope calldata e, address target, address base, address quote, bool listed,

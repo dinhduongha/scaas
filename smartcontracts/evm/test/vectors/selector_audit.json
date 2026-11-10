@@ -4370,6 +4370,16 @@
    "error": ""
   },
   {
+   "sig": "mtxSetWrapLimits((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetWrapMember((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxTransferOwnership((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
