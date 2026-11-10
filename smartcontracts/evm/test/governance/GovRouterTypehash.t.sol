@@ -49,24 +49,21 @@ contract GovRouterTypehashTest is Test {
 
     /// Round 3r R3 (spec 2026-11-10-admin-not-owner.md §4.3, CTR-GOV-23): the three admin ops, `newAdmin` the transfer's word.
     function test_uaTransferAdminTypehashIsPinned() public pure {
-        bytes32 h = keccak256(
-            "UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-        assertEq(h, 0x36dbad09794ba40c4846013eebf3fab8fb57877cc3f2287d6f5b504b992cd4da);
-        assertEq(T.UA_TRANSFER_ADMIN, h);
+        assertEq(T.UA_TRANSFER_ADMIN, keccak256(
+                "UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_TRANSFER_ADMIN, 0x36dbad09794ba40c4846013eebf3fab8fb57877cc3f2287d6f5b504b992cd4da);
     }
 
     function test_uaAcceptAdminTypehashIsPinned() public pure {
-        bytes32 h = keccak256(
-            "UAAcceptAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-        assertEq(h, 0x996ac68d825579b63a05d8de5e842540e3941eb831a15f6c822bfdff810048e8);
-        assertEq(T.UA_ACCEPT_ADMIN, h);
+        assertEq(T.UA_ACCEPT_ADMIN, keccak256(
+                "UAAcceptAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_ACCEPT_ADMIN, 0x996ac68d825579b63a05d8de5e842540e3941eb831a15f6c822bfdff810048e8);
     }
 
     function test_uaRenounceAdminTypehashIsPinned() public pure {
-        bytes32 h = keccak256(
-            "UARenounceAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-        assertEq(h, 0x4be88ff950da1b2063111810c97fc341fb457a71d9719475cf513a9f09dde5ba);
-        assertEq(T.UA_RENOUNCE_ADMIN, h);
+        assertEq(T.UA_RENOUNCE_ADMIN, keccak256(
+                "UARenounceAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_RENOUNCE_ADMIN, 0x4be88ff950da1b2063111810c97fc341fb457a71d9719475cf513a9f09dde5ba);
     }
 
     /// Round 3r R3 (§4.3): the three ownership ops the admin ops replaced, legacy pins of a retired form: a client or node
