@@ -391,6 +391,17 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   `VERIFY_TIMEOUT`, and a forge run that compiles aborts the step. The explorer's own answer decides, never forge's exit
   code: forge 1.8.5 exits 0 on Blockscout's `Fail - Unable to verify`, so such a contract is submitted once more. The SCaaS testnet's explorer and its first full run:
   [NET-EVM-09](#NET-EVM-09).
+- <a id="NET-EVM-13"></a>**NET-EVM-13 — An EVM chain is named `<chain>-mainnet` / `<chain>-testnet`, and its deployment book
+  by that name** (owner rulings 2026-11-10). **Keys (BUILT, branch `ua-mtx-3q`):** every row of
+  [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json) has the key `<chain>-mainnet` or `<chain>-testnet`
+  (`ethereum-mainnet`, `ethereum-testnet` = Sepolia, `polygon-testnet` = Amoy, `avalanche-testnet` = Fuji, …); a second testnet
+  keeps its own name (`ethereum-hoodi`); the full name stays in `name` ("Polygon Amoy"); every row carries
+  `"network": "mainnet" | "testnet"`; `scaas-testnet` stays and 22776 will be `scaas-mainnet`. `src/chains/<key>/` uses the
+  same keys. **Books (SPECIFIED):** `deployments/<key>.json` replaces `deployments/<chainid>.json` (`scaas-testnet.json`,
+  `scaas-testnet-zether-e2e.json`, `hedera-<key>.json`), the key resolved from `chain-uids.json` by (chainId, chain_uid)
+  ([NET-ALL-22](README.md#NET-ALL-22)); a chain not in the table needs `DEPLOY_NAME`, else a named fail, never a chain-id
+  fallback. Every book carries `key`, `name`, `chainId`, `chainUid` and `network` at its top, and a reader checks `network`
+  against the key's suffix (a mismatch is a named fail). forge's own `broadcast/<Script>/<chainid>/` stays.
 - **The relayer's gas share.** A relayed op crosses more call frames (a PQZ op: clone, implementation, P, the self-call,
   clone, implementation, Q, its library, the precompile: 7 frames against 5), and each frame keeps 1/64 of the gas it passes
   on, about 10.4 % of the gas sent against 7.6 % before. A relayer that sets its limit from `eth_estimateGas` changes nothing;

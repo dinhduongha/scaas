@@ -7,7 +7,8 @@
       "key": "scaas-testnet",
       "name": "SCaaS testnet",
       "chainId": 7622,
-      "testnet": false,
+      "network": "testnet",
+      "testnet": true,
       "chainUid": "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164",
       "genesisTimestamp": null,
       "sources": [
@@ -16,9 +17,10 @@
       "note": "SCaaS testnet reset 2026-10-31 (plan fs3 Task 13: image 2.2.0-pqz6, calibrated rows, the CREATE2 deployer 0x4e59b448… in the genesis alloc, EIP-7702 off; pqz-core/nethermind/runs/2026-10-31-pqz6-live.txt); before it 0xa17faef4…2ac2 (2026-10-22 reset, genesis gasLimit 200 M). Client test vectors keep the earlier 0x24e43dcb…c464 as a fixed constant (owner 2026-10-22)"
     },
     {
-      "key": "ethereum",
+      "key": "ethereum-mainnet",
       "name": "Ethereum",
       "chainId": 1,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
       "genesisTimestamp": 0,
@@ -29,9 +31,10 @@
       "note": "same genesis as ETC (61): chainId separates them"
     },
     {
-      "key": "sepolia",
+      "key": "ethereum-testnet",
       "name": "Ethereum Sepolia",
       "chainId": 11155111,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9",
       "genesisTimestamp": 1633267481,
@@ -41,9 +44,10 @@
       ]
     },
     {
-      "key": "hoodi",
+      "key": "ethereum-hoodi",
       "name": "Ethereum Hoodi",
       "chainId": 560048,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0xbbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b",
       "genesisTimestamp": 1742212800,
@@ -53,9 +57,10 @@
       ]
     },
     {
-      "key": "etc",
+      "key": "etc-mainnet",
       "name": "Ethereum Classic",
       "chainId": 61,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3",
       "genesisTimestamp": 0,
@@ -66,9 +71,10 @@
       "note": "same genesis as Ethereum (1): chainId separates them"
     },
     {
-      "key": "mordor",
+      "key": "etc-testnet",
       "name": "Ethereum Classic Mordor",
       "chainId": 63,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0xa68ebde7932eccb177d38d55dcc6461a019dd795a681e59b5a3e4f3a7259a3f1",
       "genesisTimestamp": 1570141915,
@@ -78,9 +84,10 @@
       ]
     },
     {
-      "key": "bsc",
+      "key": "bsc-mainnet",
       "name": "BNB Smart Chain",
       "chainId": 56,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0x0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b",
       "genesisTimestamp": 1587390414,
@@ -93,6 +100,7 @@
       "key": "bsc-testnet",
       "name": "BNB Smart Chain testnet",
       "chainId": 97,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0x6d3c66c5357ec91d5c43af47e234a939b22557cbb552dc45bebbceeed90fbe34",
       "genesisTimestamp": 1587390414,
@@ -102,9 +110,10 @@
       ]
     },
     {
-      "key": "gnosis",
+      "key": "gnosis-mainnet",
       "name": "Gnosis",
       "chainId": 100,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0x4f1dd23188aab3a76b463e4af801b52b1248ef073c648cbdc4c9333d3da79756",
       "genesisTimestamp": 0,
@@ -114,9 +123,10 @@
       ]
     },
     {
-      "key": "chiado",
+      "key": "gnosis-testnet",
       "name": "Gnosis Chiado",
       "chainId": 10200,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0xada44fd8d2ecab8b08f256af07ad3e777f17fb434f8f8e678b312f576212ba9a",
       "genesisTimestamp": 0,
@@ -126,9 +136,10 @@
       ]
     },
     {
-      "key": "polygon",
+      "key": "polygon-mainnet",
       "name": "Polygon PoS",
       "chainId": 137,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b",
       "genesisTimestamp": 1590824836,
@@ -138,9 +149,10 @@
       ]
     },
     {
-      "key": "amoy",
+      "key": "polygon-testnet",
       "name": "Polygon Amoy",
       "chainId": 80002,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0x7202b2b53c5a0836e773e319d18922cc756dd67432f9a1f65352b61f4406c697",
       "genesisTimestamp": 1700225065,
@@ -150,9 +162,10 @@
       ]
     },
     {
-      "key": "base",
+      "key": "base-mainnet",
       "name": "Base",
       "chainId": 8453,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0xf712aa9241cc24369b143cf6dce85f0902a9731e70d66818a3a5845b296c73dd",
       "genesisTimestamp": 1686789347,
@@ -162,9 +175,10 @@
       ]
     },
     {
-      "key": "base-sepolia",
+      "key": "base-testnet",
       "name": "Base Sepolia",
       "chainId": 84532,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0x0dcc9e089e30b90ddfc55be9a37dd15bc551aeee999d2e2b51414c54eaf934e4",
       "genesisTimestamp": 1695768288,
@@ -175,9 +189,10 @@
       "note": "sepolia.base.org, publicnode and drpc prune block 0 (EIP-4444): 'pruned history unavailable'"
     },
     {
-      "key": "celo",
+      "key": "celo-mainnet",
       "name": "Celo",
       "chainId": 42220,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0x19ea3339d3c8cda97235bc8293240d5b9dadcdfbb5d4b0b90ee731cac1bd11c3",
       "genesisTimestamp": 1587571200,
@@ -189,9 +204,10 @@
       "note": "genesis of the original L1, kept by the L2 migration"
     },
     {
-      "key": "celo-sepolia",
+      "key": "celo-testnet",
       "name": "Celo Sepolia",
       "chainId": 11142220,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0xabcc77fb92a7ea1e7d330042d81200585d251355b33408ed1c27fb54175b1fe2",
       "genesisTimestamp": 1753283988,
@@ -202,9 +218,10 @@
       "note": "forno.celo-sepolia refuses blocks older than ~10k behind head; replaces Alfajores"
     },
     {
-      "key": "optimism",
+      "key": "op-mainnet",
       "name": "OP Mainnet",
       "chainId": 10,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b",
       "genesisTimestamp": 0,
@@ -214,9 +231,10 @@
       ]
     },
     {
-      "key": "op-sepolia",
+      "key": "op-testnet",
       "name": "OP Sepolia",
       "chainId": 11155420,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0x102de6ffb001480cc9b8b548fd05c34cd4f46ae4aa91759393db90ea0409887d",
       "genesisTimestamp": 1691802540,
@@ -226,9 +244,10 @@
       ]
     },
     {
-      "key": "arbitrum",
+      "key": "arbitrum-mainnet",
       "name": "Arbitrum One",
       "chainId": 42161,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442",
       "genesisTimestamp": 0,
@@ -238,9 +257,10 @@
       ]
     },
     {
-      "key": "arbitrum-sepolia",
+      "key": "arbitrum-testnet",
       "name": "Arbitrum Sepolia",
       "chainId": 421614,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0x77194da4010e549a7028a9c3c51c3e277823be6ac7d138d0bb8a70197b5c004c",
       "genesisTimestamp": 0,
@@ -250,9 +270,10 @@
       ]
     },
     {
-      "key": "avalanche",
+      "key": "avalanche-mainnet",
       "name": "Avalanche C-Chain",
       "chainId": 43114,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b",
       "genesisTimestamp": 0,
@@ -263,9 +284,10 @@
       "note": "same genesis as Fuji (43113): chainId separates them"
     },
     {
-      "key": "fuji",
+      "key": "avalanche-testnet",
       "name": "Avalanche Fuji",
       "chainId": 43113,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b",
       "genesisTimestamp": 0,
@@ -276,9 +298,10 @@
       "note": "same genesis as Avalanche C-Chain (43114): chainId separates them"
     },
     {
-      "key": "linea",
+      "key": "linea-mainnet",
       "name": "Linea",
       "chainId": 59144,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0xb6762a65689107b2326364aefc18f94cda413209fab35c00d4af51eaa20ffbc6",
       "genesisTimestamp": 1670496243,
@@ -288,9 +311,10 @@
       ]
     },
     {
-      "key": "linea-sepolia",
+      "key": "linea-testnet",
       "name": "Linea Sepolia",
       "chainId": 59141,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0x65a64c825d7c13ce1bf077801d0b6b2a89853e19e4a89a5433d7d85d2102a20b",
       "genesisTimestamp": 1670496243,
@@ -300,28 +324,30 @@
       ]
     },
     {
-      "key": "hedera",
+      "key": "hedera-mainnet",
       "name": "Hedera mainnet",
       "chainId": 295,
+      "network": "mainnet",
       "testnet": false,
       "chainUid": "0x420fffe68fcd2a1eadcce589fdf9565bcf5a269d02232fe07cdc565b3b6f76ce",
       "genesisTimestamp": null,
       "sources": [
         "https://mainnet-public.mirrornode.hedera.com/api/v1/blocks/0"
       ],
-      "note": "DERIVED: first 32 bytes of the 48-byte mirror-node block-0 hash (relay convention); hashio relay errored on block 0 \u2014 confirm against the relay before use"
+      "note": "DERIVED: first 32 bytes of the 48-byte mirror-node block-0 hash (relay convention); hashio relay errored on block 0 — confirm against the relay before use"
     },
     {
       "key": "hedera-testnet",
       "name": "Hedera testnet",
       "chainId": 296,
+      "network": "testnet",
       "testnet": true,
       "chainUid": "0x5699954170cc8177692691d15368cad54f1e7a90c9e16b782f989de1b8d19358",
       "genesisTimestamp": null,
       "sources": [
         "https://testnet.mirrornode.hedera.com/api/v1/blocks/0"
       ],
-      "note": "DERIVED as mainnet; Hedera testnet is reset periodically (this genesis: 2024-02-01) \u2014 a reset is a new chain_uid"
+      "note": "DERIVED as mainnet; Hedera testnet is reset periodically (this genesis: 2024-02-01) — a reset is a new chain_uid"
     }
   ],
   "unreachable": [
