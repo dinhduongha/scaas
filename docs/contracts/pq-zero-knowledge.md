@@ -1134,8 +1134,8 @@ leg from storage alone.
 *Auditor* (CTR-PQZ-24): FULL = a copy `v_{a,j}` for every leg (the auditor reads every leg, decoys included);
 OPTIONAL = the whole transfer in or out (`auditorOn` 0 / 1; per-leg mixes are unrepresentable); NONE = no copies.
 
-*Disclosure by leg* (CTR-PQZ-14): `verifyTransferAmount(entryRef, j, amount, kind, proof)` and
-`disclosureStatement(entryRef, j, amount, kind)` (both read `R` from the op blob; a leg past `M`, or `AUDITOR` without the copies: false); `SENDER_S` re-derives
+*Disclosure by leg* (CTR-PQZ-14): `verifyTransferAmount(entryRef, j, amount, kind, keyVersion, proof)` and
+`disclosureStatement(entryRef, j, amount, kind, keyVersion)` (both read `R` from the op blob; a leg past `M`, or `AUDITOR` without the copies: false); `SENDER_S` re-derives
 `r_{g(j)}, e1_{g(j)}, e2_j` from the seeds, `RECEIVER_X` and `AUDITOR` open leg `j`, with `R_DS` / `R_DR` and the
 §7.9 statement (`(pk_j, v_j)` identifies the leg; for `AUDITOR` the kind word carries the copy's window,
 `OpeningKind + 256·(j mod s_aud)`, and `R_DR` decrypts at coefficients `16·w + i`, R0-1). A disclosure reveals that leg's recipient and amount,
@@ -1340,7 +1340,7 @@ the opening is the proof alone (D11 / D13). The bundle bytes are read from state
 `transferCiphertextHash(entryRef)` is the stored `R`'s hash. Shared randomness and decryption noise must not leak
 ([CTR-PQZ-04](#CTR-PQZ-04)).
 
-`verifyTransferAmount(entryRef, leg, amount, kind, proof)` (leg 0 for a single entry; leg `j` of an op 7 entry,
+`verifyTransferAmount(entryRef, leg, amount, kind, keyVersion, proof)` (`keyVersion` since 3g, [CTR-PQZ-31](#CTR-PQZ-31); leg 0 for a single entry; leg `j` of an op 7 entry,
 [CTR-PQZ-26](#CTR-PQZ-26)) reads `R` ([CTR-PQZ-23](#CTR-PQZ-23)) from the entry's op blob and expands it into the
 statement, `amount < 2^64`; statement
 (33,184 B, every scalar a 32-byte word as [encodings](#encodings), so `pk` starts word-aligned; owner 2026-10-13):
