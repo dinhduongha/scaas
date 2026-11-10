@@ -1,0 +1,44 @@
+## Coverage per contract (state-changing called = a transaction of this net called the entry and succeeded;
+## reached = it also ran inside another call, by the trace (local only); views reached = answered an eth_call)
+group | contract | entries | state-changing | scaas-testnet: state-changing called / reached / views reached
+pqchat | PqChat | 59 | 14 | 12 / 12 / 0
+pqchat | PqChatTopics | 21 | 6 | 0 / 0 / 0 | via PqChat
+
+## scaas-testnet: per record file (txs, status 1, the heaviest gasUsed; eth_calls answered; negatives refused as expected)
+records | txs | status 1 | max gasUsed | calls ok | negatives
+pqchat | 39 | 39 | 44,336,657 | 0 / 0 | 10 / 10
+
+## scaas-testnet: state-changing entries not called by a transaction, with the reason
+pqchat | PqChat | addWraps(bytes32,uint32,(bytes32,uint64,bytes,bytes32,bytes)[]) | NO REASON RECORDED
+pqchat | PqChat | initialize(bytes32) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+pqchat | PqChatTopics | createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+(1 without a reason)
+
+## scaas-testnet: negatives (10; refused as expected = status 2)
+ok  | PqChat | negative: pqchat: createSession with a used (creator, nonce) | expected 0xf89eeec1 got 0xf89eeec1
+ok  | PqChat | negative: pqchat: a second child at home (the P9 removal attack) | expected 0x683ad3f6 got 0x683ad3f6
+ok  | PqChat | negative: pqchat: postMessage with a used (epoch, sender, device) counter | expected 0xf89eeec1 got 0xf89eeec1
+ok  | PqChat | negative: pqchat: postMessage by a non-member | expected 0x4af7706d got 0x4af7706d
+ok  | PqChat | negative: pqchat: postMessage under a superseded epoch (Fable P1-1) | expected 0x683ad3f6 got 0x683ad3f6
+ok  | PqChat | negative: pqchat: remove replayed | expected 0xf89eeec1 got 0xf89eeec1
+ok  | PqChat | negative: pqchat: the removed member's rekey (the race of the Fable review P1-2) | expected 0x4af7706d got 0x4af7706d
+ok  | PqChat | negative: pqchat: a child keeping a removed member | expected 0xad08b15c got 0xad08b15c
+ok  | PqChat | negative: pqchat: storeMessage of a version other than 1 | expected 0x0c92e8bd got 0x0c92e8bd
+ok  | PqChat | negative: pqchat: a vote value of 2 | expected 0xfdbde166 got 0xfdbde166
+
+## scaas-testnet: transactions 39, status 1: 39; the heaviest ten
+44,336,657 | 0x1053f79e7bb85588b4840aeca71e7a5f630a7dbca8558f85b9dd4e0d2efe8c38 | OpenFactory | deployRelease((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes)
+42,363,415 | 0x521dabcec7f3edf69b43fe5804306a13fbc87e8ceee8e09c61a2e5f3f1a32ed4 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+42,363,330 | 0x572d7edddca5bc7853a32cd8078fa6a813c630a25e4970f5a66deffa17ab7f48 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+42,362,871 | 0x77ce04eda3d9e58f48c32f73448ea1bd58487d005ce45f328ef4a1300966d0dd | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+30,274,741 | 0x3e5fce43635e8fdd905940df109d8f23ea03de8a61e4ca7c6b13ab28390a13c4 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+30,274,137 | 0x12ef19b7d0a979dd5c4da7a034fa5a3a36885a5ada8c7128502ab70126996e75 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+30,273,956 | 0xc38ba82f05d743463c6ab87d735955c90014ea5f105698c7bc04758d5bdfc145 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+25,575,548 | 0xc228eba7d23e24de5a2621fa1e315436ff0564b281ae9bff294197e66e35a284 | PqChatTopics | PqChatTopics
+18,133,928 | 0xe5ffc37469b4926ad52f781a2265afb58a7eaf6bb7275d719929e2841ef9eec6 | UARegistry | register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)
+18,129,747 | 0x6a9aa02a1c581bfeda82ee3abdfd3d57b9008e5099a9a78b18ba7ee8d0df0ae3 | UARegistry | register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)

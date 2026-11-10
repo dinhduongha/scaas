@@ -1,5 +1,5 @@
 {
-  "_comment": "T66b Step 5b: the deployed contracts by group (coverage.py). A contract: label, artifact (out/<file>/<name>.json, read for its methodIdentifiers) or t66b (a token kind: its entries from script/t66b/entries.json), optional needs (an environment this run does not have) and via (a library: its entries run inside these callers). A group is added by name; pqchat is the slot for the PqChat matrix (plan UA-7), empty until src/pqchat is built.",
+  "_comment": "T66b Step 5b: the deployed contracts by group (coverage.py). A contract: label, artifact (out/<file>/<name>.json, read for its methodIdentifiers) or t66b (a token kind: its entries from script/t66b/entries.json), optional needs (an environment this run does not have) and via (a library: its entries run inside these callers). A group is added by name; pqchat: PqChat and its body module PqChatTopics (plan 3c T95, script/onchain/PqChat.s.sol).",
   "groups": {
     "tokens": [
       {"label": "NormalToken", "kind": 0, "t66b": "NormalToken"},
@@ -90,6 +90,9 @@
       {"label": "PqzBurnLib", "artifact": "PqzBurnLib.sol/PqzBurnLib", "via": ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"]},
       {"label": "PqzTransferLib", "artifact": "PqzTransferLib.sol/PqzTransferLib", "via": ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"]}
     ],
-    "pqchat": []
+    "pqchat": [
+      {"label": "PqChat", "artifact": "PqChat.sol/PqChat"},
+      {"label": "PqChatTopics", "artifact": "PqChatTopics.sol/PqChatTopics", "via": ["PqChat"]}
+    ]
   }
 }

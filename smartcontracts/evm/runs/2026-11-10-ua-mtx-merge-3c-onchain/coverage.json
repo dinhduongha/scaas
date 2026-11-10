@@ -1,0 +1,716 @@
+{
+ "_comment": "T66b Step 5b coverage list (script/onchain/coverage.py gen; runs added by `table`). mut: the ABI state mutability; module: a token kind's body module (K = kept in the core). UNAUDITED.",
+ "groups": {
+  "pqchat": {
+   "PqChat": {
+    "artifact": "PqChat.sol/PqChat",
+    "entries": [
+     {
+      "sig": "EPOCHS_RANGE_MAX()",
+      "sel": "90bbe660",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "FACTORY()",
+      "sel": "2dd31000",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "REMOVE_MAX()",
+      "sel": "21ebeaba",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "SESSIONS_RANGE_MAX()",
+      "sel": "c90bf6e5",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "STORED_RANGE_MAX()",
+      "sel": "e3749565",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "addWraps(bytes32,uint32,(bytes32,uint64,bytes,bytes32,bytes)[])",
+      "sel": "2b9ab93a",
+      "mut": "nonpayable",
+      "runs": {}
+     },
+     {
+      "sig": "byAuthor(bytes32,uint256,uint256)",
+      "sel": "cf4fb40b",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "chainEnv()",
+      "sel": "de98b628",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "childOf(bytes32)",
+      "sel": "a470912f",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "21829f04",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 4,
+        "reached": 4,
+        "failed": 0,
+        "tx": [
+         [
+          "0x33fe2779da027b44fa501f289bdb0a50251f6d19d57ce44da1cfebe988fcb907",
+          13898116,
+          1,
+          "createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ],
+         [
+          "0xf5f3f56fdfb7c4f8efd61f1a47a4b54c7bd2130677ad09bf20f3432410429b25",
+          10876657,
+          1,
+          "createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ],
+         [
+          "0x2ac94bcf7d3e8fd539b341a66a0f4103e8807dda19446307af8d1a548eab98d1",
+          13901492,
+          1,
+          "createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "47bee6d5",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 1,
+        "reached": 1,
+        "failed": 0,
+        "tx": [
+         [
+          "0xab77e7a1c10f735a457bd430062ef4def14a3cdcc5b56a2f2de2dd5aea3ea550",
+          7553035,
+          1,
+          "createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "f3ee47ee",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 1,
+        "reached": 1,
+        "failed": 0,
+        "tx": [
+         [
+          "0x26cb482db336df77ef9bb908abfb0b8663ac46b642629b7115880dad5a0714f2",
+          7000427,
+          1,
+          "editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "entryNonceUsed(bytes32,bytes32,uint64)",
+      "sel": "05afb16d",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "entryOf(bytes32)",
+      "sel": "82fb8643",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "epochComplete(bytes32)",
+      "sel": "3b794aee",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "epochCount(bytes32)",
+      "sel": "2eb7cbce",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "epochOf(bytes32)",
+      "sel": "d3b8fe9b",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "epochsOf(bytes32,uint256,uint256)",
+      "sel": "de9de566",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "factoryInfo()",
+      "sel": "601b87fd",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "initialize(bytes32)",
+      "sel": "9498bd71",
+      "mut": "nonpayable",
+      "runs": {}
+     },
+     {
+      "sig": "latestEpoch(bytes32)",
+      "sel": "c9ecaf6d",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "leave((bytes32,bytes32,bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "3c289881",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 1,
+        "reached": 1,
+        "failed": 0,
+        "tx": [
+         [
+          "0x32273b2ec5ae428079b6f873b47ca5b2ec00ab8a198e654c128229b8db097f9c",
+          6167920,
+          1,
+          "leave((bytes32,bytes32,bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "leftIn(bytes32,bytes32)",
+      "sel": "795b665e",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "messageAt(bytes32,uint256)",
+      "sel": "e0ad6796",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "messageCount(bytes32)",
+      "sel": "71d84344",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "modules()",
+      "sel": "f7e80e98",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "nonceUsed(bytes32,uint64)",
+      "sel": "8ee2b984",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "owner()",
+      "sel": "8da5cb5b",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "1fd5aeac",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 2,
+        "reached": 2,
+        "failed": 0,
+        "tx": [
+         [
+          "0x4164210f667d0b9e165c314f540f5afcf80dde1a32d7e71a2106b23db164971f",
+          7631359,
+          1,
+          "postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ],
+         [
+          "0x8a1f97a43d3c2cd5128878eef0f675889525d868ea324c29d97b65cbba6113b5",
+          7635653,
+          1,
+          "postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "postMessage((bytes32,bytes32,bytes32,bytes16,uint64,bytes32[],bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "6035115c",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 2,
+        "reached": 2,
+        "failed": 0,
+        "tx": [
+         [
+          "0x8e62a0601ac46e82c8f76c02ebdc7001a19298a5d47a90445c5c89257b2d7e03",
+          7210759,
+          1,
+          "postMessage((bytes32,bytes32,bytes32,bytes16,uint64,bytes32[],bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ],
+         [
+          "0xef6d4cfe2604b46399008711066ffb57706372a815f0d0bdf2e41f79fe2e9c86",
+          7206944,
+          1,
+          "postMessage((bytes32,bytes32,bytes32,bytes16,uint64,bytes32[],bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "posts(bytes32,uint256,uint256)",
+      "sel": "60de55fd",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "1222a945",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 3,
+        "reached": 3,
+        "failed": 0,
+        "tx": [
+         [
+          "0xdd4fe7f2cfd36832c7426a775fc8703a214c6b597525e86cf8ac77d85fb2d767",
+          13926675,
+          1,
+          "rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ],
+         [
+          "0x95e2541426f173f11700aefd6d5c4c9864788b947142150fcf169d81678090f5",
+          16988100,
+          1,
+          "rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ],
+         [
+          "0x7303a25e6460011e4dc056481d988b6ac163245352aa1cdee3cd9e72421bbcb6",
+          10801556,
+          1,
+          "rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "removalAt(bytes32,uint256)",
+      "sel": "973e319b",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "removalCount(bytes32)",
+      "sel": "b11fa682",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "remove((bytes32,bytes32,uint64,bytes32[],bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "a52f4d6d",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 2,
+        "reached": 2,
+        "failed": 0,
+        "tx": [
+         [
+          "0x1e8d618de7ce694be4fb3f921b32b9d4f6f1bc380918a17895084bcd9c70bd05",
+          7007454,
+          1,
+          "remove((bytes32,bytes32,uint64,bytes32[],bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ],
+         [
+          "0xdddd8d280770e93b25c89a34d6f215cb7fb6fc5bc55ed00f8e7d0d09018469f3",
+          7101785,
+          1,
+          "remove((bytes32,bytes32,uint64,bytes32[],bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "removedIn(bytes32,bytes32)",
+      "sel": "a3c9e999",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "replies(bytes32,uint256,uint256)",
+      "sel": "5ff564c7",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "scoreOf(bytes32)",
+      "sel": "52db3b28",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "sessionCount(bytes32)",
+      "sel": "5cf28b09",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "sessionOf(bytes32)",
+      "sel": "87c9c460",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "sessionsOf(bytes32,uint256,uint256)",
+      "sel": "34401b5c",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "04857ea8",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 1,
+        "reached": 1,
+        "failed": 0,
+        "tx": [
+         [
+          "0xcc424d9b75c210e79d276c3d419c83bc15bdc0a7b38ef487d5bd95f7c585ec00",
+          6272369,
+          1,
+          "setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "storeMessage(uint8,bytes8,bytes)",
+      "sel": "95660a78",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 1,
+        "reached": 1,
+        "failed": 0,
+        "tx": [
+         [
+          "0xcab2783afaa1090e3442024d43f8da9c9478f9a26f5b024507eee985ce53c0df",
+          738184,
+          1,
+          "storeMessage(uint8,bytes8,bytes)"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "storedAt(bytes8,uint256)",
+      "sel": "905a8035",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "storedCount(bytes8)",
+      "sel": "58a78f34",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "storedRange(bytes8,uint256,uint256)",
+      "sel": "aea1d4f9",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "supportsInterface(bytes4)",
+      "sel": "01ffc9a7",
+      "mut": "pure",
+      "runs": {}
+     },
+     {
+      "sig": "topicNonceUsed(bytes32,uint64)",
+      "sel": "b1297c5b",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "topicOf(bytes32)",
+      "sel": "6f7d82e2",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "topics(uint256,uint256)",
+      "sel": "ed2e39a7",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "topicsByOwner(bytes32,uint256,uint256)",
+      "sel": "944640bd",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "c8de3d2d",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 1,
+        "reached": 1,
+        "failed": 0,
+        "tx": [
+         [
+          "0x194d97a9b0d6db00b4e474cd56e7e16904f382cb2a9501330acba651227e8874",
+          6806579,
+          1,
+          "updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "validateEnv((bytes32,address,address,address,bool,address[],bytes32[]))",
+      "sel": "daccac27",
+      "mut": "pure",
+      "runs": {}
+     },
+     {
+      "sig": "versionAt(bytes32,uint32)",
+      "sel": "6598c202",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "5aee92d5",
+      "mut": "nonpayable",
+      "runs": {
+       "scaas-testnet": {
+        "called": 2,
+        "reached": 2,
+        "failed": 0,
+        "tx": [
+         [
+          "0x854a1a6971c49cf9d65e5e063ff09216a5510d960ccf07c5411043f4ac603592",
+          6163302,
+          1,
+          "voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ],
+         [
+          "0x798ca4528ed84b1e893efa6a0b05a3ec9366381d34e2289f3db52c90372a683b",
+          5972102,
+          1,
+          "voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+         ]
+        ]
+       }
+      }
+     },
+     {
+      "sig": "voteOf(bytes32,bytes32)",
+      "sel": "2d06eb52",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "wrapAt(bytes32,uint256)",
+      "sel": "825696f6",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "writerOf(bytes32,bytes32)",
+      "sel": "99c41e4c",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "writersOf(bytes32,uint256,uint256)",
+      "sel": "9186e095",
+      "mut": "view",
+      "runs": {}
+     }
+    ]
+   },
+   "PqChatTopics": {
+    "artifact": "PqChatTopics.sol/PqChatTopics",
+    "via": [
+     "PqChat"
+    ],
+    "entries": [
+     {
+      "sig": "FACTORY()",
+      "sel": "2dd31000",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "byAuthor(bytes32,uint256,uint256)",
+      "sel": "cf4fb40b",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "47bee6d5",
+      "mut": "nonpayable",
+      "runs": {}
+     },
+     {
+      "sig": "editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "f3ee47ee",
+      "mut": "nonpayable",
+      "runs": {}
+     },
+     {
+      "sig": "entryNonceUsed(bytes32,bytes32,uint64)",
+      "sel": "05afb16d",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "entryOf(bytes32)",
+      "sel": "82fb8643",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "1fd5aeac",
+      "mut": "nonpayable",
+      "runs": {}
+     },
+     {
+      "sig": "posts(bytes32,uint256,uint256)",
+      "sel": "60de55fd",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "replies(bytes32,uint256,uint256)",
+      "sel": "5ff564c7",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "scoreOf(bytes32)",
+      "sel": "52db3b28",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "04857ea8",
+      "mut": "nonpayable",
+      "runs": {}
+     },
+     {
+      "sig": "topicNonceUsed(bytes32,uint64)",
+      "sel": "b1297c5b",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "topicOf(bytes32)",
+      "sel": "6f7d82e2",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "topics(uint256,uint256)",
+      "sel": "ed2e39a7",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "topicsByOwner(bytes32,uint256,uint256)",
+      "sel": "944640bd",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "c8de3d2d",
+      "mut": "nonpayable",
+      "runs": {}
+     },
+     {
+      "sig": "versionAt(bytes32,uint32)",
+      "sel": "6598c202",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "5aee92d5",
+      "mut": "nonpayable",
+      "runs": {}
+     },
+     {
+      "sig": "voteOf(bytes32,bytes32)",
+      "sel": "2d06eb52",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "writerOf(bytes32,bytes32)",
+      "sel": "99c41e4c",
+      "mut": "view",
+      "runs": {}
+     },
+     {
+      "sig": "writersOf(bytes32,uint256,uint256)",
+      "sel": "9186e095",
+      "mut": "view",
+      "runs": {}
+     }
+    ]
+   }
+  }
+ }
+}
