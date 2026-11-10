@@ -42,7 +42,7 @@ contract KindFactory {
         return (IOpenFactory.TokenKind.NORMAL, 1);
     }
 
-    function isDeprecated(IOpenFactory.TokenKind, uint64) external pure returns (bool) {
+    function isTokenDeprecated(IOpenFactory.TokenKind, uint64) external pure returns (bool) {
         return false;
     }
 }

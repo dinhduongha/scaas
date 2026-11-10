@@ -367,7 +367,7 @@ abstract contract DeployBase is DeployBook {
             _libRows(libs);
             address none = _kindRelease(f, IOpenFactory.TokenKind.NORMAL, "NormalToken", type(NormalToken).creationCode, "",
                 _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
-            _gateInstance(f, none, f.envOf(IOpenFactory.TokenKind.NORMAL, 1)); // one instance's chainUid (§6.2)
+            _gateInstance(f, none, f.tokenEnvOf(IOpenFactory.TokenKind.NORMAL, 1)); // one instance's chainUid (§6.2)
             vm.serializeAddress("deploy", "implementation_normal", none);
             // The DEX release (CTR-DEX-24): clones come from `createDex`; DEX version 1.
             address[] memory dexLibs = new address[](2);
@@ -473,8 +473,8 @@ abstract contract DeployBase is DeployBook {
         address w = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, "WrappedRegulatedToken",
             type(WrappedRegulatedToken).creationCode, coreArgs, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         vm.serializeAddress("deploy", "implementation_wrapped_regulated", w);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
     }
 
     /// @notice Regulated-kinds spec §6.1 (F-21, plan T33), under `DEPLOY_REGULATED`: the canonical `ComplianceRegistry` by
@@ -540,7 +540,7 @@ abstract contract DeployBase is DeployBook {
         string[] memory n = kindModuleNames(uint8(kind));
         address[] memory ms = new address[](n.length);
         for (uint256 i; i < n.length; ++i) ms[i] = _module(n[i], abi.encode(address(f), coreArgs), uint8(kind));
-        f.publishEnv(kind, 1, _withModules(e, ms));
+        f.publishTokenEnv(kind, 1, _withModules(e, ms));
         return _release(f, kind, name, code, kindImplArgs(uint8(kind), ms, coreArgs));
     }
 
@@ -858,8 +858,8 @@ abstract contract DeployBase is DeployBook {
             address[] memory deps = new address[](4);
             (deps[0], deps[1], deps[2], deps[3]) = (tv, bv, address(ip), dis);
             _zetherReleases(f, reg, smartKeyAccountImpl, deps);
-            f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
-            f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
+            f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
+            f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
             _deployZetherRegulated(f, reg, smartKeyAccountImpl, deps);
         }
         vm.serializeAddress("deploy", "zether_disclosure", dis);
@@ -892,8 +892,8 @@ abstract contract DeployBase is DeployBook {
             _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(true))));
         vm.serializeAddress("deploy", "implementation_normal_zether_regulated_bls12381", n);
         vm.serializeAddress("deploy", "implementation_wrapped_zether_regulated_bls12381", w);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
     }
 
     /// @notice `libs` and `RegulatedLib` last: a regulated kind's closure (it links only `GovernanceLib`, already in `libs`).

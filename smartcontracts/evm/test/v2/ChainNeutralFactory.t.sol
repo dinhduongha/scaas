@@ -185,7 +185,7 @@ contract ChainNeutralFactoryTest is Test {
         bytes memory code = type(NormalToken).creationCode;
         vm.startPrank(registrar);
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
-        g.publishEnv(NORMAL, 1, e);
+        g.publishTokenEnv(NORMAL, 1, e);
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
         g.publishDexEnv(1, e);
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
@@ -199,10 +199,10 @@ contract ChainNeutralFactoryTest is Test {
         g.createTokenUnregistered(NORMAL, address(normalImpl), _cfg(alice), "s");
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
         g.createDex(1, "", "s");
-        assertEq(g.latestEnvVersion(NORMAL), 0, "views answer");
+        assertEq(g.latestTokenEnvVersion(NORMAL), 0, "views answer");
         EnvKit.configure(g, UID_, 0, address(0)); // positive control
         vm.prank(registrar);
-        g.publishEnv(NORMAL, 1, e);
+        g.publishTokenEnv(NORMAL, 1, e);
     }
 
     // ------------------------------------------------------------------ CREATE3 (spec §4)
@@ -245,7 +245,7 @@ contract ChainNeutralFactoryTest is Test {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, t));
         f.createToken(NORMAL, 2, _cfg(alice), "same");
-        NormalToken mine = new NormalToken(address(f), Catalogue.argsOn(f, NORMAL, f.latestEnvVersion(NORMAL), "")); // pinned
+        NormalToken mine = new NormalToken(address(f), Catalogue.argsOn(f, NORMAL, f.latestTokenEnvVersion(NORMAL), "")); // pinned
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, t));
         f.createTokenUnregistered(NORMAL, address(mine), _cfg(alice), "same");

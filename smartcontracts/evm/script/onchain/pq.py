@@ -468,11 +468,11 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         ms.append(D.deploy2(mn, E.encs(["w", "b"], [fac2, E.core_args(4)]), f"module {mn} (factory 2)", src=src))
     libs += ms
     hashes = [E.keccak256(E.hb(_rpc0("eth_getCode", [x, "latest"]))) for x in libs]
-    sd.send(fac2, E.cd(f"publishEnv(uint8,uint16,{E.ENV_S})", ["w", "w", E.ENV], 4, 1, [reg, 0, 0, [0], [], libs, hashes]),
-            "factory 2 publishEnv(kind 4, 1), deps [0x0]")
+    sd.send(fac2, E.cd(f"publishTokenEnv(uint8,uint16,{E.ENV_S})", ["w", "w", E.ENV], 4, 1, [reg, 0, 0, [0], [], libs, hashes]),
+            "factory 2 publishTokenEnv(kind 4, 1), deps [0x0]")
     sd.send(fac2, E.cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"], 4, 1, 1, code,
                        E.impl_args(4, ms)), "factory 2 deployTokenImplementation(kind 4, 1)")
-    sd.send(fac2, E.cd("setKindEnabled(uint8,bool)", ["w", "w"], 4, 1), "factory 2 setKindEnabled(4, true)")
+    sd.send(fac2, E.cd("setTokenKindEnabled(uint8,bool)", ["w", "w"], 4, 1), "factory 2 setTokenKindEnabled(4, true)")
     # a release on a factory with a notice period is usable only after it (VersionNotYetUsable)
     t0 = int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16)
     while int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16) <= t0 + N + 1:

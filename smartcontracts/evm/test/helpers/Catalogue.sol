@@ -133,11 +133,11 @@ library Catalogue {
     /// @dev `e` as the kind's latest env: reused when equal to the latest, else published as the next version.
     function env(OpenFactory f, IOpenFactory.TokenKind kind, IFactoryToken.Env memory e) internal returns (uint16 v) {
         if (e.libs.length == 0) e = pinned(e, kind); // an env with no pins gets the kind's link closure
-        v = f.latestEnvVersion(kind);
-        if (v != 0 && keccak256(abi.encode(f.envOf(kind, v))) == keccak256(abi.encode(e))) return v;
+        v = f.latestTokenEnvVersion(kind);
+        if (v != 0 && keccak256(abi.encode(f.tokenEnvOf(kind, v))) == keccak256(abi.encode(e))) return v;
         v += 1;
         vm.prank(address(uint160(uint256(f.admin()))));
-        f.publishEnv(kind, v, e);
+        f.publishTokenEnv(kind, v, e);
     }
 
     /// @dev Release `version` of `kind` from `code` (init code without arguments) on env `e`.
@@ -217,7 +217,7 @@ library Catalogue {
 
     /// @dev T66b: the body modules env `v` of `kind` pins (its last libs, as `release` appends them).
     function modulesOn(OpenFactory f, IOpenFactory.TokenKind kind, uint16 v) internal view returns (address[] memory ms) {
-        address[] memory l = f.envOf(kind, v).libs;
+        address[] memory l = f.tokenEnvOf(kind, v).libs;
         ms = new address[](kindModuleNames(uint8(kind)).length);
         for (uint256 i; i < ms.length; ++i) ms[i] = l[l.length - ms.length + i];
     }

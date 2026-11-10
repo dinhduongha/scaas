@@ -563,7 +563,7 @@ contract DexTest is Test {
 
     function test_classification_deprecatedAndUnregisteredAreOutside() public {
         address impl = address(new NormalToken(address(f), Catalogue.argsOn(f, IOpenFactory.TokenKind.NORMAL,
-            f.latestEnvVersion(IOpenFactory.TokenKind.NORMAL), ""))); // the env's pinned modules
+            f.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL), ""))); // the env's pinned modules
         address u = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(normalInit("C", "C", 0, 1e6, alice, address(0))), "c");
         vm.startPrank(admin);
         dex.setMarket(address(a), u, true);
@@ -571,7 +571,7 @@ contract DexTest is Test {
         assertEq(dex.tokenKind(address(a)), 1);
         vm.stopPrank();
         vm.prank(registrar);
-        f.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "x");
+        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, "x");
         assertEq(dex.tokenKind(address(a)), 1); // a snapshot: unchanged until the market is listed again
         vm.prank(admin);
         dex.setMarket(address(a), address(b), true);
@@ -656,7 +656,7 @@ contract DexTest is Test {
     /// through the puller (EOAs cannot approve a SCaaS token, CTR-TOK-01, so it fails on the allowance).
     function test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller() public {
         vm.prank(registrar);
-        f.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "x");
+        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, "x");
         vm.prank(admin);
         dex.setMarket(address(a), address(b), true);
         DexLegs.Settlement memory s = _book();

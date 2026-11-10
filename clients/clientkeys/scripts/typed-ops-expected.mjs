@@ -10,6 +10,7 @@ const zSingle = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.be
 const zMulti = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.beneficiaryUA, t.decoyFee, G(t.yFrom), G(t.dOut), G(t.cDeb),
   t.legs.map((l) => [G(l.yTo), G(l.cOut), G(l.cAud), G(l.dAud)]), t.sealedMemo];
 const zBurn = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.beneficiaryUA, G(t.yFrom)];
+const envTuple = (e) => [e.registry, e.smartKeyAccountImpl, e.hedera, e.deps, e.params, e.libs, e.libCodeHashes];
 const uw = (u) => [u.underlying, u.recipient, u.amount, u.minOut];
 const uaTuple = (s) => [s.keyData, s.signature, s.members.map((x) => [x.index, x.members.map((y) => [y.index, y.sig]), x.sig])];
 // group 3f (PQZ verifier mode spec §5.3): `PqzSignedVerdict {PqzVerdict pqzVerdict; UASig sig}`, after the signature of the six
@@ -39,6 +40,12 @@ const CONF = {
     ...['wrapShort', 'wrapLong', 'unwrapShort', 'unwrapLong'].map((k) => [l[k].perUser, l[k].tokenWide, l[k].period])]),
   m.netUnwrap, m.wrapList, m.unwrapList],
   // the factory's creations (ua-mtx-merge T76): the struct signs `initHash`, the call takes the bytes (`extra`)
+  // round 3r: the three publishes take the `Env` tuple; the class approval its words as one static struct (`ReleaseApproval`)
+  PublishTokenEnv: (m) => [m.target, m.kind, m.envVersion, envTuple(m.env)],
+  PublishDexEnv: (m) => [m.target, m.envVersion, envTuple(m.env)],
+  PublishClassEnv: (m) => [m.target, m.contractClass, m.kind, m.envVersion, envTuple(m.env)],
+  ApproveRelease: (m) => [m.target, ['contractClass', 'kind', 'version', 'envVersion', 'initSelector', 'interfaceId', 'initcodeHash',
+    'implArgsHash', 'chainUid', 'factory', 'adminGeneration', 'until'].map((k) => m[k])],
   CreateToken: (m, x) => [m.target, m.kind, m.version, x.initArgs, m.salt],
   CreateDex: (m, x) => [m.target, m.version, x.initArgs, m.salt],
   CreateInstance: (m, x) => [m.target, m.contractClass, m.kind, m.version, x.initCall, m.salt],

@@ -639,10 +639,10 @@ empty output — with no symptom until someone has deposited funds.
   every token is a 45-byte EIP-1167 clone (`363d3d373d3d3d363d73<impl>5af43d82803e903d91602b57fd5bf3`) that
   `DELEGATECALL`s it with its own storage. A clone costs ~45 000 gas instead of ~2.5 M.
 - **Versions live in the factory, which deploys them** (owner 2026-10-20, plan 5g-Z2): the registrar publishes
-  versioned environments (`publishEnv(kind, envVersion, Env)`, never changed) and releases code with
+  versioned environments (`publishTokenEnv(kind, envVersion, Env)`, never changed) and releases code with
   `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)` (registrar only, append-only, version 0
   forbidden; the factory's own `CREATE2` with the named env appended, [CTR-TOK-03](#CTR-TOK-03)); a release is usable
-  `noticePeriod` seconds after its deployment; `deprecate` is immediate and refuses new tokens of that version (owner 2026-10-20; tokens already
+  `noticePeriod` seconds after its deployment; `deprecateToken` is immediate and refuses new tokens of that version (owner 2026-10-20; tokens already
   made are untouched), `createTokenUnregistered` deploys an off-catalogue implementation with `version() == 0` (visibly),
   plain kinds only (owner 2026-10-19). A bug in a version is permanent for that version's tokens; the remedy is
   voluntary migration (unwrap the old token, wrap the new one).
@@ -650,14 +650,14 @@ empty output — with no symptom until someone has deposited funds.
   creator's address; [CTR-TOK-29](#CTR-TOK-29); the CREATE2 salt `keccak256(abi.encode(msg.sender, salt))` before T72);
   `initialize` runs in the same call and requires `msg.sender == FACTORY`;
   implementations lock themselves in the constructor.
-- **Kind gate**: `setKindEnabled(kind, on)` (registrar); the plain kinds start on, the confidential kinds off (owner
+- **Kind gate**: `setTokenKindEnabled(kind, on)` (registrar); the plain kinds start on, the confidential kinds off (owner
   2026-10-20, plan 5g-Z2; it replaces `setZetherEnabled` / `setPqzEnabled`). The chain gates are the implementations':
   a Zether `initialize` reverts when the release's transfer verifier does not run on the chain (no chain-id
   allowlist, [CTR-ZTH-52](zether.md#CTR-ZTH-52)); a PQZ `initialize` runs `PqzSafety` (the
   precompile self-test; no chain allowlist). `OpenFactoryV1` (with its own gate) is in `legacy/p5/` (P5).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
-  `configureChain` (once), `publishEnv`, `publishDexEnv`, `deployTokenImplementation`, `deployDexImplementation`,
-  `deprecate`, `deprecateDex`, `setKindEnabled` and the generic catalogue's `publishClassEnv`, `deployImplementation`,
+  `configureChain` (once), `publishTokenEnv`, `publishDexEnv`, `deployTokenImplementation`, `deployDexImplementation`,
+  `deprecateToken`, `deprecateDex`, `setTokenKindEnabled` and the generic catalogue's `publishClassEnv`, `deployImplementation`,
   `deprecateRelease`, `setClassKindEnabled` ([CTR-TOK-28](#CTR-TOK-28)).
 - **Same rule on every family**: a fix to an Aptos package, Sui package, Solana program, Cosmos contract, GRAM or
   Soroban contract is a new deployment at a new address plus voluntary migration by the owners of the balances;
@@ -679,7 +679,7 @@ does **not** answer "is this the token I should use" — that has no on-chain an
 `isRegisteredToken(token)` says the token was made from a registered version (`version ≠ 0`); a version-0 token
 (`createTokenUnregistered`, plain kinds only) is unvetted code and clients and the gateway treat it so. For confidential
 tokens the factory is the published source of the verifiers: the release's env (`releaseOf(kind, version)` gives
-`envVersion` and `envHash`, `envOf(kind, envVersion).deps` the addresses, [CTR-ZTH-20](zether.md#CTR-ZTH-20)). Provenance metadata published for
+`envVersion` and `envHash`, `tokenEnvOf(kind, envVersion).deps` the addresses, [CTR-ZTH-20](zether.md#CTR-ZTH-20)). Provenance metadata published for
 every asset: `creator`, `underlying`, `version`, `implementation`, creation block (issuance timestamp), and for
 wrappers the live reserve `underlying.balanceOf(token)` — readable by anyone for free.
 
@@ -707,11 +707,11 @@ implementation itself, so what a release depends on is fixed in its code by cons
   `libCodeHashes`. Each instance carries its own configuration in `initArgs` (rates, features, roles, the confidential
   settings…), decoded by the implementation's generic `initialize(creator, version, initArgs)`; the factory never reads it
   (owner 2026-10-20).
-- **Envs** are published per kind (and one domain for the DEX) by `publishEnv(kind, envVersion, Env)` /
+- **Envs** are published per kind (and one domain for the DEX) by `publishTokenEnv(kind, envVersion, Env)` /
   `publishDexEnv(envVersion, Env)`: versions from 1, append-only, never changed (`EnvAlreadyPublished`), no factory, `chainUid`
   or router in it (the factory adds its own), and no library code hash `0` or `keccak256("")`, a pin that checks nothing
   (`EnvInvalid`); `EnvPublished(domain, envVersion, envHash)` with
-  `envHash = keccak256(abi.encode(env))`; views `envOf`, `dexEnvOf`, `latestEnvVersion`, `latestDexEnvVersion`.
+  `envHash = keccak256(abi.encode(env))`; views `tokenEnvOf`, `dexEnvOf`, `latestTokenEnvVersion`, `latestDexEnvVersion`.
 - **Deployment.** `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)` /
   `deployDexImplementation(version, envVersion, initcode, implArgs)` name the env explicitly: it must be published for
   that kind or the DEX (`EnvUnknown(domain, envVersion)`). Interim rule, controller proposal 2026-10-20 (owner may
@@ -852,8 +852,8 @@ node and clientkeys moved (P5), not deleted.
 Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
 
 - `constructor(address registrar)`, then `configureChain` once ([CTR-TOK-29](#CTR-TOK-29); `chainUid` non-zero,
-  `ChainUidZero`). `publishEnv`, `publishDexEnv`, `deployTokenImplementation`, `deployDexImplementation`, `deprecate`, `deprecateDex` and
-  `setKindEnabled` are registrar-only (`NotRegistrar`; a registrar that is an EIP-7702 designator gets
+  `ChainUidZero`). `publishTokenEnv`, `publishDexEnv`, `deployTokenImplementation`, `deployDexImplementation`, `deprecateToken`, `deprecateDex` and
+  `setTokenKindEnabled` are registrar-only (`NotRegistrar`; a registrar that is an EIP-7702 designator gets
   `CallerDelegated`, owner ruling D2, 2026-10-30); envs and the catalogue are append-only (`EnvAlreadyPublished`,
   `VersionAlreadyRegistered`, `DexVersionAlreadyRegistered`); env version 0 and release version 0 are refused.
 - **Deployment** ([CTR-TOK-03](#CTR-TOK-03)): `EnvUnknown`, `LibraryCodeHashMismatch`, the constructor's own error or
@@ -878,8 +878,8 @@ backdoor, since clones `DELEGATECALL` through it),
   `ConfigFieldForOtherKind(field)`: 1 `initialSupply`/`initialHolder` (not `NORMAL*`), 2 `legs`, 3 `rate` (not
   `WRAPPED*`), 4 `conf` (not a confidential kind).
 - `latestVersion` / `latestDexVersion` may name a deprecated version: clients pick the newest non-deprecated one
-  (`isDeprecated`, `isDexDeprecated`).
-- **Views:** `registrar`, `chainUid`, `implementationOf`, `isDeprecated`, `latestVersion`, `predictAddress`, `isToken`,
+  (`isTokenDeprecated`, `isDexDeprecated`).
+- **Views:** `registrar`, `chainUid`, `implementationOf`, `isTokenDeprecated`, `latestVersion`, `predictAddress`, `isToken`,
   `creatorOf`, `versionOf`, `getWrapper(creator, underlying)` (the first; it may be a multi-leg token: read
   `underlyings()`), `getWrapperCount/At`, `deployCountFor/deployedFor`. Every leg is indexed, `address(0)` for the
   native coin.
@@ -1239,7 +1239,7 @@ Unit (forge, `test/v2/`):
 | `WRAPPED`, one leg | rate 1:1 equals the removed v1 wrapper's behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; two-argument `unwrap` = `minOut 0`; fee-on-transfer inbound measured; sender-pays fee-on-transfer reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
 | Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; only the admin executes (`NotRateAdmin` for anyone else); delay and window bounds; an expired change counts as none for `proposeRate`, `pendingRate()` and the pause; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; execute refused with `ReserveShortfall` when any leg's balance is below its reserve (shock, then decrease); `collateralValue` saturates and `executeRate` exits early on a huge leg; revoking or renouncing the rate role leaves the rate, `disableFeature(RATE_ADJUSTABLE)` cancels a pending change; EOA admin refused at init; wrap paused on **every** leg while anything is pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
 | `WRAPPED`, several legs | 2–8 legs, duplicates, zero; per-leg reserves; unwrap bounded by `reserve_i`; guardian disable one-way and idempotence error; unwrap open on a disabled leg; `addReserve` refused on it; `RateDecreaseWithDisabledLeg`; the cross-leg scenario (pending decrease on leg `i`, flash-wrap of leg `j`) reverts `WrapPausedForRateChange` and a third-party `executeRate` reverts `NotRateAdmin`; single-asset ABI reverts `UnderlyingRequired` with more than one leg |
-| Factory (`Factory.t.sol`) | zero `chain_uid` refused; envs (registrar, versioned, never changed, the factory's own; a release names a published one, an older env stays usable); library code hashes; deployment checks `kind()`, `factory()` and `chainUid()`, bubbles a constructor's revert, refuses reserved kinds, emits the release hashes; notice period; kind gate; `deprecate` refuses new tokens of that version; one `TokenCreated` with provenance; every leg indexed, native included; leg count by kind (`NORMAL` 0, `WRAPPED` 1–8); unknown version; salt scoped by creator and not reusable; `createTokenUnregistered` checked and recorded as version 0; the factory only forwards, the token validates flags and fields (`ConfigFieldForOtherKind`); only the factory initialises, once; `kind()` constant; sizes |
+| Factory (`Factory.t.sol`) | zero `chain_uid` refused; envs (registrar, versioned, never changed, the factory's own; a release names a published one, an older env stays usable); library code hashes; deployment checks `kind()`, `factory()` and `chainUid()`, bubbles a constructor's revert, refuses reserved kinds, emits the release hashes; notice period; kind gate; `deprecateToken` refuses new tokens of that version; one `TokenCreated` with provenance; every leg indexed, native included; leg count by kind (`NORMAL` 0, `WRAPPED` 1–8); unknown version; salt scoped by creator and not reusable; `createTokenUnregistered` checked and recorded as version 0; the factory only forwards, the token validates flags and fields (`ConfigFieldForOtherKind`); only the factory initialises, once; `kind()` constant; sizes |
 | Features | every invalid combination of [CTR-TOK-22](#CTR-TOK-22) reverts with its error (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleWithoutFeature`); owner grant/revoke (two calls under `grantDelay`, `termsHash`, `cancelGrant`), `setGrant` and its refusals, leaves and their parent, holder `renounceRole`, `renounceOwnership` (refused while an unlocked bit has a live root; locked holders keep roles), `disableFeature` on a locked, a disableable and an already-clear bit; `PAYABLE` off ⇒ `supportsInterface(IERC20Payment)` false and pay reverts; rate fixed vs adjustable; guardian; the hybrid's cap on every path; rescue; flags 5–9 refused (`FeatureNotBuilt` on `NORMAL`, `WRAPPED`, `FeatureInvalidForKind` on the confidential kinds); a plain `transfer` and `mtxTransfer` add no storage read on every kind (CTR-GOV-11, `test/vectors/plus_zero_slots.json`); every non-view selector classified (`test/vectors/selector_audit.json`). Suites: `test/governance/` (BUILT on branch `governance`) |
 | Layout | `test_storageLayoutIsPinned` per implementation; library storage isolation (a write through one library never changes another namespace); the size gate ([CTR-TOK-24](#CTR-TOK-24)) |
 | Hedera | HIP-632 path under `IS_HEDERA` (mocked precompile, as in `test/hedera/`); association at init; fail-closed custom-fee check: `isToken` rc ≠ SUCCESS, `getTokenCustomFees` rc ≠ SUCCESS, and a non-empty fee list each refuse the underlying |

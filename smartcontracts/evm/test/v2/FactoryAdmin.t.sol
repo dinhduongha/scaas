@@ -122,7 +122,8 @@ contract BurnKind is GenericKindBase {
 /// deployed by anyone, each approval used once, dead at `until` or at an admin change; the native admin's own deploy is its
 /// own approval. The router of the accept and transfer rows is the real `GovernanceRouter` over the registry with derived
 /// secp256k1, mldsa44 and an `msig` of three mldsa44 at 2-of-3 (the stand-in verifier of `UARegistryBase`); every other op
-/// through a router uses `TestRouter` (T7 builds those router ops). **UNAUDITED.**
+/// through a router here uses `TestRouter`; the real router's ops for them, with every derived kind of §8, are
+/// `test/governance/GovRouterAdmin.t.sol` (T7). **UNAUDITED.**
 contract FactoryAdminTest is UARegistryBase {
     uint16 constant ML44 = 0x0130;
     uint16 constant K1 = 0x0108;
@@ -228,9 +229,9 @@ contract FactoryAdminTest is UARegistryBase {
         _configure(f, router_);
         IFactoryToken.Env memory e;
         vm.startPrank(deployer);
-        f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, e);
-        f.publishEnv(IOpenFactory.TokenKind.NORMAL, 2, e);
-        f.publishEnv(IOpenFactory.TokenKind.WRAPPED, 1, e);
+        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, e);
+        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 2, e);
+        f.publishTokenEnv(IOpenFactory.TokenKind.WRAPPED, 1, e);
         f.publishDexEnv(1, e);
         f.publishDexEnv(2, e);
         f.publishClassEnv(CLS, 0, 1, e);
@@ -364,15 +365,15 @@ contract FactoryAdminTest is UARegistryBase {
         IFactoryToken.Env memory e;
         Rel memory t = _tok();
         c = new bytes[](11);
-        c[0] = abi.encodeCall(OpenFactory.publishEnv, (IOpenFactory.TokenKind.NORMAL, 9, e));
+        c[0] = abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, 9, e));
         c[1] = abi.encodeCall(OpenFactory.publishDexEnv, (9, e));
         c[2] = abi.encodeCall(OpenFactory.publishClassEnv, (CLS, 0, 9, e));
-        c[3] = abi.encodeCall(OpenFactory.setKindEnabled, (IOpenFactory.TokenKind.WRAPPED, true));
+        c[3] = abi.encodeCall(OpenFactory.setTokenKindEnabled, (IOpenFactory.TokenKind.WRAPPED, true));
         c[4] = abi.encodeCall(OpenFactory.setClassKindEnabled, (CLS, 0, true));
         c[5] = _approveCd(f, t, _until());
         c[6] = _approveCd(f, _dex(), _until());
         c[7] = _approveCd(f, _cls(), _until());
-        c[8] = abi.encodeCall(OpenFactory.deprecate, (IOpenFactory.TokenKind.NORMAL, 1, "x"));
+        c[8] = abi.encodeCall(OpenFactory.deprecateToken, (IOpenFactory.TokenKind.NORMAL, 1, "x"));
         c[9] = abi.encodeCall(OpenFactory.deprecateDex, (1, "x"));
         c[10] = abi.encodeCall(OpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(CLS, 0, 1), "x"));
     }
@@ -488,12 +489,12 @@ contract FactoryAdminTest is UARegistryBase {
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) _call(deployer, address(f), _deployCd(rs[i]));
         for (uint256 i; i < c.length; ++i) _call(deployer, address(f), c[i]);
-        assertEq(f.latestEnvVersion(IOpenFactory.TokenKind.NORMAL), 9);
+        assertEq(f.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL), 9);
         assertEq(f.latestDexEnvVersion(), 9);
         assertEq(f.latestClassEnvVersion(CLS, 0), 9);
-        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED));
+        assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.WRAPPED));
         assertTrue(f.classKindEnabled(CLS, 0));
-        assertTrue(f.isDeprecated(IOpenFactory.TokenKind.NORMAL, 1));
+        assertTrue(f.isTokenDeprecated(IOpenFactory.TokenKind.NORMAL, 1));
         assertTrue(f.isDexDeprecated(1));
         assertTrue(f.classReleaseOf(IOpenFactory.ReleaseId(CLS, 0, 1)).deprecated);
         for (uint256 i; i < 3; ++i) assertEq(_state(f, _key(f, rs[i])), LIVE, "approved after its deploy: live, unused");
@@ -621,7 +622,7 @@ contract FactoryAdminTest is UARegistryBase {
             _via(trouter, ml, f, c[i]);
             _refused(deployer, address(f), c[i], _notAdmin(nid(deployer)));
         }
-        assertTrue(f.isDeprecated(IOpenFactory.TokenKind.NORMAL, 1));
+        assertTrue(f.isTokenDeprecated(IOpenFactory.TokenKind.NORMAL, 1));
         _via(trouter, ml, f, abi.encodeCall(IFactoryAdmin.transferAdmin, (k1)));
         assertEq(_a(f).pendingAdmin(), k1);
         _via(trouter, ml, f, abi.encodeCall(IFactoryAdmin.renounceAdmin, ()));
@@ -996,7 +997,7 @@ contract FactoryAdminTest is UARegistryBase {
         IFactoryToken.Env memory e;
         vm.startPrank(deployer);
         fb.configureChain(uidB, 0, address(rb), address(rb).codehash, 0, bytes32(0));
-        fb.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, e);
+        fb.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, e);
         fb.publishDexEnv(1, e);
         fb.publishClassEnv(CLS, 0, 1, e);
         vm.stopPrank();

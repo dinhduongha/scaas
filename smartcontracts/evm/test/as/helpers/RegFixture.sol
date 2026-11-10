@@ -74,8 +74,8 @@ abstract contract RegFixture is Test {
             type(NormalRegulatedToken).creationCode, regArgs());
         Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, plainEnv(address(f), address(0), UID, address(ureg), h),
             type(WrappedRegulatedToken).creationCode, regArgs());
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
         issuer = address(new Holder());
         compliance = address(new Holder());
         usd = new MockERC20("USD", "USD", 0);

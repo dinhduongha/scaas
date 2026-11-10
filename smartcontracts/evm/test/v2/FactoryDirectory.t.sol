@@ -408,29 +408,9 @@ contract FactoryDirectoryTest is Test {
 
     // ------------------------------------------------------------------ a derived admin (§13.3: relayable)
 
-    /// A derived admin writes through the router (the test router stands for `mtxSetChainEntries`, T7); the deployer is no
-    /// longer the admin.
-    function test_derivedAdmin_writesThroughRouter() public {
-        bytes32 ml = UAKinds.uaOf(UAKinds.MLDSA65, abi.encode("mldsa65"));
-        OpenFactory f = _factory(address(trouter));
-        _call(deployer, address(f), abi.encodeCall(IAdmin.transferAdmin, (ml)));
-        _call(STRANGER, address(trouter), abi.encodeCall(TestRouter.exec, (ml, address(f), abi.encodeCall(IAdmin.acceptAdmin, ()))));
-        assertEq(f.admin(), ml);
-        ComplianceRegistry ct = new ComplianceRegistry(nid(deployer), address(trouter));
-        E memory e = _all();
-        (e.creg, e.cregHash) = (address(ct), _h(address(ct)));
-        E memory last = _only(3);
-        (e.zs, e.zsHash) = (address(0), bytes32(0));
-        _refused(deployer, address(f), _cd(e), abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(deployer)));
-        _call(STRANGER, address(trouter), abi.encodeCall(TestRouter.exec, (ml, address(f), _cd(e))));
-        _refused(deployer, address(f), _cd(last), abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(deployer)));
-        _call(STRANGER, address(trouter), abi.encodeCall(TestRouter.exec, (ml, address(f), _cd(last))));
-        IFactoryDirectory.Directory memory d = _d(f).directory();
-        assertEq(d.govRouter, address(trouter));
-        assertEq(d.complianceRegistry, address(ct));
-        assertEq(d.zetherStatements, address(zs));
-        assertEq(d.relayFeeExecutor, relay.EXECUTOR());
-    }
+    /// A derived admin writes through the real router's `mtxSetChainEntries`: round 3r T7 moved the test, with a real UA
+    /// registry that verifies the derived signature, to `test/governance/GovRouterAdmin.t.sol`
+    /// (`test_directory_derivedAdminWritesThroughRouter`).
 
     // ------------------------------------------------------------------ the views (§13.6)
 
@@ -467,9 +447,9 @@ contract FactoryDirectoryTest is Test {
         (e.registry, e.smartKeyAccountImpl) = (reg, ska);
     }
 
-    /// `p` 0 `publishEnv`, 1 `publishDexEnv`, 2 `publishClassEnv`, of env version `v`.
+    /// `p` 0 `publishTokenEnv`, 1 `publishDexEnv`, 2 `publishClassEnv`, of env version `v`.
     function _pub(uint256 p, uint16 v, IFactoryToken.Env memory e) internal pure returns (bytes memory) {
-        if (p == 0) return abi.encodeCall(OpenFactory.publishEnv, (IOpenFactory.TokenKind.NORMAL, v, e));
+        if (p == 0) return abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, v, e));
         if (p == 1) return abi.encodeCall(OpenFactory.publishDexEnv, (v, e));
         return abi.encodeCall(OpenFactory.publishClassEnv, (CLS, 0, v, e));
     }

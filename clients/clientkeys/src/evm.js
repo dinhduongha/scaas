@@ -201,6 +201,12 @@ const STRUCTS = Object.fromEntries(Object.entries({
   // group 3l (wrap limits spec 2026-11-10 §6, §9): a leg's limits, nested in the router's `UASetWrapLimits` as an array
   WrapLimit: 'uint24 perUser,uint64 tokenWide,uint32 period',
   WrapLegLimits: 'address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong',
+  // round 3r (spec 2026-11-10-admin-not-owner.md §5.4): a release env, nested in the router's three publishes (EIP-712: each
+  // array the keccak256 of its 32-byte words); `ReleaseApproval` the class approval entry's one static struct (calldata only:
+  // the struct `UAApproveRelease` signs its words flat)
+  Env: 'address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes',
+  ReleaseApproval: 'uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,'
+    + 'bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until',
   // group 3f (PQZ verifier mode spec §5.1, §5.3): what a PQZ verifier UA signs in the token's domain (purpose `pqz-verdict`), and
   // the pair every proof-carrying PQZ entry takes last, outside every `UA*` struct (unbound, like `relayer`)
   PqzVerdict: 'address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil',
@@ -405,6 +411,31 @@ const OPS = {
   // or tightens the unwrap side) and bit 26's membership
   UASetWrapLimits: { fields: 'address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList', on: ROUTER },
   UASetWrapMember: { fields: 'address target,bytes32 account,bool canWrap,bool canUnwrap', on: ROUTER },
+  // round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its
+  // envs, the release approvals of §5.6, the revoke, the deprecations, the kind switches, the directory of §13.3) and of a
+  // `ComplianceRegistry` (its KYC providers; the rows by the admin or a provider); `target` the factory or the registry, the
+  // ids flat; the class approval's entry takes its words as one static struct (`ReleaseApproval`, the same calldata).
+  UAPublishTokenEnv: { fields: 'address target,uint8 kind,uint16 envVersion,Env env', on: ROUTER },
+  UAPublishDexEnv: { fields: 'address target,uint16 envVersion,Env env', on: ROUTER },
+  UAPublishClassEnv: { fields: 'address target,uint16 contractClass,uint16 kind,uint16 envVersion,Env env', on: ROUTER },
+  UAApproveTokenRelease: { fields: 'address target,uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,'
+    + 'bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until', on: ROUTER },
+  UAApproveDexRelease: { fields: 'address target,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,'
+    + 'bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until', on: ROUTER },
+  UAApproveRelease: { fields: 'address target,uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,'
+    + 'bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until',
+    on: ROUTER, args: (m) => [['address', m.target], ['ReleaseApproval', m]] },
+  UARevokeApproval: { fields: 'address target,bytes32 key', on: ROUTER },
+  UADeprecateToken: { fields: 'address target,uint8 kind,uint64 version,string reason', on: ROUTER },
+  UADeprecateDex: { fields: 'address target,uint64 version,string reason', on: ROUTER },
+  UADeprecateRelease: { fields: 'address target,uint16 contractClass,uint16 kind,uint64 version,string reason', on: ROUTER },
+  UASetTokenKindEnabled: { fields: 'address target,uint8 kind,bool on', on: ROUTER },
+  UASetClassKindEnabled: { fields: 'address target,uint16 contractClass,uint16 kind,bool on', on: ROUTER },
+  UASetKycProvider: { fields: 'address target,bytes32 provider,bool enabled', on: ROUTER },
+  UASetCompliance: { fields: 'address target,bytes32[] accounts,uint64[] flags,uint64[] until', on: ROUTER },
+  UASetChainEntries: { fields: 'address target,address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,'
+    + 'address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,'
+    + 'address zetherStatements,bytes32 zetherStatementsCodeHash', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
@@ -580,6 +611,11 @@ function canonical(type, v, types) {
     return v ?? false;
   }
   if (type === 'bytes') return hex(asBytes(v ?? '0x'));
+  // round 3r: a `string` (a deprecation's `reason`) is text, signed as keccak256 of its UTF-8 bytes
+  if (type === 'string') {
+    if (v !== undefined && typeof v !== 'string') refuse(`${v} is not a string`);
+    return v ?? '';
+  }
   const fixed = /^bytes(\d+)$/.exec(type);
   if (fixed) {
     const b = v === undefined ? new Uint8Array(Number(fixed[1])) : asBytes(v);

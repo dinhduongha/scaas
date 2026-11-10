@@ -56,7 +56,7 @@ STATES = ("verified", "verified (partial, harness)", "linked clone", "linked (cl
 SEL = {  # cast sig
     "puller": "2b1826ea", "EXECUTOR": "630dc7cb", "modules": "f7e80e98", "latestDexVersion": "aca84f05",
     "latestVersion": "7f4782bd", "implementationOf": "c45d1620", "dexImplementationOf": "c4c41b19",
-    "latestEnvVersion": "feb1775e", "latestDexEnvVersion": "8ace72a2", "envOf": "bb072443", "dexEnvOf": "e3eef243",
+    "latestTokenEnvVersion": "caf571af", "latestDexEnvVersion": "8ace72a2", "tokenEnvOf": "4ae0f85a", "dexEnvOf": "e3eef243",
     "contractsPage": "0ca57b48",
 }
 PLACEHOLDER = re.compile(r"__\$[0-9a-fA-F]{34}\$__")
@@ -444,14 +444,14 @@ def discover(chain, books, net, head, st):
             u = lambda v: f"{v:064x}"
             ks = list(range(14))
             lv = batch([call(fa, SEL["latestVersion"], u(k)) for k in ks] + [call(fa, SEL["latestDexVersion"])])
-            le = batch([call(fa, SEL["latestEnvVersion"], u(k)) for k in ks] + [call(fa, SEL["latestDexEnvVersion"])])
+            le = batch([call(fa, SEL["latestTokenEnvVersion"], u(k)) for k in ks] + [call(fa, SEL["latestDexEnvVersion"])])
             n = lambda r: int(r, 16) if r and r != "0x" else 0
             q = [call(fa, SEL["implementationOf"], u(k) + u(v)) for k in ks for v in range(1, n(lv[k]) + 1)]
             q += [call(fa, SEL["dexImplementationOf"], u(v)) for v in range(1, n(lv[14]) + 1)]
             for r in batch(q):
                 if word_addr(r):
                     new.setdefault(word_addr(r), fa)
-            q = [call(fa, SEL["envOf"], u(k) + u(v)) for k in ks for v in range(1, n(le[k]) + 1)]
+            q = [call(fa, SEL["tokenEnvOf"], u(k) + u(v)) for k in ks for v in range(1, n(le[k]) + 1)]
             q += [call(fa, SEL["dexEnvOf"], u(v)) for v in range(1, n(le[14]) + 1)]
             for r in batch(q):
                 for m in env_addrs(r):

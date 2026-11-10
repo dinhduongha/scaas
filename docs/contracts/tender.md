@@ -321,7 +321,7 @@ uint256 nextTenderId;                   // starts at 1
 ```
 
 No bidder list: clients enumerate bids from `BidCommitted` events. `createTender` checks (`BadConfig`): deposit token
-acceptance (`isToken`, `versionOf`, `implementationOf ≠ 0`, `!isDeprecated`, kind `NORMAL` or `WRAPPED`); `minDeposit > 0`; `now < commitDeadline ≤ now + 365 d`; reveal window in `[1 h, 30 d]`; `maxPrice == 0 ∨
+acceptance (`isToken`, `versionOf`, `implementationOf ≠ 0`, `!isTokenDeprecated`, kind `NORMAL` or `WRAPPED`); `minDeposit > 0`; `now < commitDeadline ≤ now + 365 d`; reveal window in `[1 h, 30 d]`; `maxPrice == 0 ∨
 minPrice ≤ maxPrice`; `minBidders ≥ 1`; HOLD ⇒ `revealDeadline < bondReleaseTime ≤ revealDeadline + 730 d`, RETURN ⇒
 `bondReleaseTime == 0`; `slashSink ∉ {0, this}`; `dqWindow ≤ 7 d`, `maxDisqualifications ≤ 2`, `dqWindow == 0 ⇒
 maxDisqualifications == 0 ∧ forfeitClasses == 0`.

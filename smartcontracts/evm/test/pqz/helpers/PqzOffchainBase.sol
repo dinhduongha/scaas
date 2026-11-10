@@ -131,7 +131,7 @@ abstract contract PqzOffchainBase is PqzFixture {
         Catalogue.release(f2, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f2), PQZ_UID, address(r2), address(0)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        f2.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        f2.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, v, false);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.conf.auditorKey = "";

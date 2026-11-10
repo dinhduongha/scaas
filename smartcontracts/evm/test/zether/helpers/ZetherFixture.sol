@@ -107,8 +107,8 @@ abstract contract ZetherFixture is Test {
         normalImpl = NormalZetherToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 1, _zenv(),
             type(NormalZetherToken).creationCode));
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
         vm.stopPrank();
     }
 

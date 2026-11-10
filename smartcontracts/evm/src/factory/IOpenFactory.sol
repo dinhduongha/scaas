@@ -72,8 +72,8 @@ interface IOpenFactory is IAdmin {
     event ImplementationDeployed(
         TokenKind indexed kind, uint64 indexed version, address indexed implementation, uint16 envVersion, bytes32 envHash,
         bytes32 initcodeHash, bytes32 codeHash, uint64 usableFrom);
-    event ImplementationDeprecated(TokenKind indexed kind, uint64 indexed version, string reason);
-    event KindEnabled(TokenKind indexed kind, bool enabled);
+    event TokenImplementationDeprecated(TokenKind indexed kind, uint64 indexed version, string reason);
+    event TokenKindEnabled(TokenKind indexed kind, bool enabled);
     /// @notice The one event of a creation; `features`, `lockedFeatures`, `underlyings` read from the token after
     ///         `initialize` (no owner, 3r R1).
     ///         `creatorId` the creator's UA id (S3; a native creator's topic is its padded address).
@@ -295,11 +295,11 @@ interface IOpenFactory is IAdmin {
     ///         `registry ≠ 0` must name this factory's `chainUid` (`ChainUidMismatch`); with a router, a `registry ≠ 0`
     ///         must be `uaRegistry()` (`EnvRegistryMismatch`) and a `smartKeyAccountImpl ≠ 0` an implementation of the
     ///         router's `smartKeyCloneHash()` (`EnvSmartKeyAccountMismatch`, spec §13.4). At most `MAX_LIBS` (32) libraries.
-    function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
+    function publishTokenEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
     function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external;
-    function envOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
+    function tokenEnvOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
     function dexEnvOf(uint16 envVersion) external view returns (IFactoryToken.Env memory);
-    function latestEnvVersion(TokenKind kind) external view returns (uint16);
+    function latestTokenEnvVersion(TokenKind kind) external view returns (uint16);
     function latestDexEnvVersion() external view returns (uint16);
 
     /// @notice Open to anyone against a live approval of its key (`approveTokenRelease`; consumed here; the native admin's
@@ -318,13 +318,13 @@ interface IOpenFactory is IAdmin {
         bytes calldata initcode,
         bytes calldata implArgs
     ) external returns (address implementation);
-    function deprecate(TokenKind kind, uint64 version, string calldata reason) external;
+    function deprecateToken(TokenKind kind, uint64 version, string calldata reason) external;
     /// @notice Admin only; a confidential kind starts off.
-    function setKindEnabled(TokenKind kind, bool on) external;
-    function kindEnabled(TokenKind kind) external view returns (bool);
+    function setTokenKindEnabled(TokenKind kind, bool on) external;
+    function tokenKindEnabled(TokenKind kind) external view returns (bool);
     function releaseOf(TokenKind kind, uint64 version) external view returns (Release memory);
     function implementationOf(TokenKind kind, uint64 version) external view returns (address);
-    function isDeprecated(TokenKind kind, uint64 version) external view returns (bool);
+    function isTokenDeprecated(TokenKind kind, uint64 version) external view returns (bool);
     /// @notice May name a deprecated or not yet usable release: clients pick the newest usable one.
     function latestVersion(TokenKind kind) external view returns (uint64);
 
@@ -448,7 +448,7 @@ interface IOpenFactory is IAdmin {
     error InstanceInfoMismatch(address instance);
 
     /// @notice Admin only: env `envVersion` of a generic `(contractClass, kind)` (`ClassReserved` for 0-2), as
-    ///         `publishEnv`.
+    ///         `publishTokenEnv`.
     function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
     /// @notice As `deployTokenImplementation` (approved by `approveRelease`, which also binds `initSelector` and
     ///         `interfaceId`): the release `id` from chain-neutral init code, `initcode ‖ abi.encode(id, factory, implArgs)`

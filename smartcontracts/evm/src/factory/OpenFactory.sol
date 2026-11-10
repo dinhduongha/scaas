@@ -16,7 +16,7 @@ import {IAdmin} from "../governance/IAdmin.sol";
 ///        address on every chain.
 /// @notice Anyone creates tokens and DEXes; the admin (a UA, `UAAdmin`: round 3r, CTR-GOV-23) configures the chain once
 ///         (`configureChain`: `chain_uid`, the notice period, the router), publishes deployment environments
-///         (`publishEnv`, versioned per kind, never changed), approves releases by hash (`approve*`), from which anyone
+///         (`publishTokenEnv`, versioned per kind, never changed), approves releases by hash (`approve*`), from which anyone
 ///         deploys them from init code (`deployTokenImplementation`, `deployDexImplementation`: the factory's own
 ///         `CREATE2` of chain-neutral code, `abi.encode(factory, implArgs)` appended, so a release has the same address on
 ///         every chain; each linked library checked by code hash; the env checked by the release's `validateEnv`; the
@@ -360,7 +360,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     // ------------------------------------------------------------------ environments
 
-    function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env)
+    function publishTokenEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env)
         external onlyAdmin configured
     {
         emit EnvPublished(uint8(kind), envVersion, _publish(uint8(kind), envVersion, env));
@@ -370,7 +370,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         emit EnvPublished(DEX_DOMAIN, envVersion, _publish(DEX_DOMAIN, envVersion, env));
     }
 
-    function envOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory) {
+    function tokenEnvOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory) {
         return _envs[uint8(kind)][envVersion];
     }
 
@@ -378,7 +378,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         return _envs[DEX_DOMAIN][envVersion];
     }
 
-    function latestEnvVersion(TokenKind kind) external view returns (uint16) { return _latestEnv[uint8(kind)]; }
+    function latestTokenEnvVersion(TokenKind kind) external view returns (uint16) { return _latestEnv[uint8(kind)]; }
 
     function latestDexEnvVersion() external view returns (uint16) { return _latestEnv[DEX_DOMAIN]; }
 
@@ -407,19 +407,19 @@ contract OpenFactory is IOpenFactory, UAAdmin {
             implementation.codehash, r.usableFrom);
     }
 
-    function deprecate(TokenKind kind, uint64 version, string calldata reason) external onlyAdmin {
+    function deprecateToken(TokenKind kind, uint64 version, string calldata reason) external onlyAdmin {
         if (_releases[kind][version].implementation == address(0)) revert VersionUnknown(kind, version);
         _releases[kind][version].deprecated = true;
-        emit ImplementationDeprecated(kind, version, reason);
+        emit TokenImplementationDeprecated(kind, version, reason);
     }
 
-    function setKindEnabled(TokenKind kind, bool on) external onlyAdmin {
+    function setTokenKindEnabled(TokenKind kind, bool on) external onlyAdmin {
         uint256 bit = 1 << uint8(kind);
         _enabled = on ? _enabled | bit : _enabled & ~bit;
-        emit KindEnabled(kind, on);
+        emit TokenKindEnabled(kind, on);
     }
 
-    function kindEnabled(TokenKind kind) public view returns (bool) { return _enabled & (1 << uint8(kind)) != 0; }
+    function tokenKindEnabled(TokenKind kind) public view returns (bool) { return _enabled & (1 << uint8(kind)) != 0; }
 
     function releaseOf(TokenKind kind, uint64 version) external view returns (Release memory) {
         return _releases[kind][version];
@@ -429,7 +429,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         return _releases[kind][version].implementation;
     }
 
-    function isDeprecated(TokenKind kind, uint64 version) external view returns (bool) {
+    function isTokenDeprecated(TokenKind kind, uint64 version) external view returns (bool) {
         return _releases[kind][version].deprecated;
     }
 
@@ -984,7 +984,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     function _create(TokenKind kind, uint64 version, address impl, uint16 envVersion, bytes calldata initArgs, bytes32 salt)
         private returns (address token)
     {
-        if (!kindEnabled(kind)) revert KindDisabled(kind);
+        if (!tokenKindEnabled(kind)) revert KindDisabled(kind);
         bytes32 creatorId = _creatorId();
         token = _instance(creatorId, CLASS_TOKEN, uint16(kind), salt, impl, _chainEnv(uint8(kind), envVersion));
         IFactoryToken(token).initialize(creatorId, version, initArgs);

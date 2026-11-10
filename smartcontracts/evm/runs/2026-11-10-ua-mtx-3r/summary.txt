@@ -161,3 +161,12 @@ forge-research | 15e43b32 | 1 | 358 passed, 1 failed, 7 skipped: the known red, 
 docs | 15e43b32 | 0 | docs_check.py check 0 errors; paths 0 machine paths; test_docs_check ok
 t15-gas (FactoryDirectory test_gas_configureChainAndEntries; each call its own transaction, regular / state) | 15e43b32 | 0 | configureChain without a router 36,128 / 97,920; with a router (code hash, chainUid, registry, the two clone hashes) 59,979 / 195,840; setChainEntries of the four entries 116,135 / 391,680 (four new slots)
 mutants D1-D14 (23 rows) | 15e43b32 | 0 | 23 of 23 killed by FactoryDirectory.t.sol (mutants.txt)
+t7-routerops.red (GovRouterAdmin.t.sol, its own ABI declaration, against the router before the 15 ops) | 199c2a99+test | 1 | 1 passed, 27 failed: every new mtx entry absent (empty revert), the router 41 mtx entries (38 + 3 views) not 53; the rows test without typed_ops rows
+forge-governance (red, before the pins) | WIP | 1 | 590 passed, 4 failed: GovDeploy router CREATE2 address, PlusZero mtxCancelNonce_router 72,603 -> 72,648 and mtxMint_router 103,531 -> 103,620 (the router's dispatcher, 15 entries more), the rows test (one nonce per lane: snapshot per row)
+forge-governance | WIP | 0 | 594 passed, 0 failed (60 suites; GovRouterAdmin 28 + rows 1; the binding matrix 136 variants over the 15 structs)
+forge-v2 (red, before the row) | WIP | 1 | 715 passed, 1 failed: Factory test_sizes OpenFactory 34,106 > 34,103 (the owner naming's selectors reorder the dispatcher, +3 B)
+forge-v2 | WIP | 0 | 716 passed, 0 failed
+size | WIP | 0 | 0 errors, 166 contracts (OpenFactory 34,103 -> 34,106, notice above the plain T-2 line; GovernanceRouter 17,292 -> 23,759 B, under EIP-170: no row)
+forge-as | WIP | 0 | 487 passed, 0 failed
+clientkeys | WIP | 0 | 322 tests, 320 passed, 0 failed, 2 skipped (typed_ops.json 89 -> 104 rows)
+t7-gas (GovRouterAdmin test_gas_*; regular / state) | WIP | 0 | router deploy 1,608,600 / 36,534,870, asked (x1.05 + 32,000) 40,082,643 < 60 M; per op through the router native ECDSA / msig 2-of-3 mldsa65 (stand-in verifier): publish token env 296,434 / 352,612, approve token release 92,241 / 151,308, setCompliance 105,912 / 164,965, setChainEntries 162,253 / 221,308 (the full table in STATE.md)

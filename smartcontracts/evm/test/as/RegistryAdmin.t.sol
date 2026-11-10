@@ -124,8 +124,8 @@ abstract contract RegistryCalls {
 /// renounce; the KYC provider a UA id, `setCompliance` by the admin (id 0) or an enabled provider (its id), at most 256 rows;
 /// every row rule kept; one runtime for every admin and router (F-11). The accept and transfer rows run through the real
 /// `GovernanceRouter` over the registry with derived secp256k1, mldsa44 and an `msig` of three mldsa44 at 2-of-3 (the
-/// stand-in verifier of `UARegistryBase`); `setKycProvider` / `setCompliance` through a router use `RegistryTestRouter` (T7
-/// builds those router ops). **UNAUDITED.**
+/// stand-in verifier of `UARegistryBase`); `setKycProvider` / `setCompliance` through a router here use `RegistryTestRouter`; the real router's
+/// `mtxSetKycProvider` / `mtxSetCompliance` are `test/governance/GovRouterAdmin.t.sol` (T7). **UNAUDITED.**
 contract RegistryAdminTest is UARegistryBase, RegistryCalls {
     uint16 constant ML44 = 0x0130;
     uint16 constant K1 = 0x0108;
@@ -728,7 +728,7 @@ contract RegistryRouterCheckTest is RegFixture, RegistryCalls {
         OpenFactory g = EnvKit.factory(address(this), UID, 0, address(own));
         Catalogue.release(g, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(g), address(0), UID, address(ureg),
             false), type(NormalRegulatedToken).creationCode, regArgs());
-        g.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
+        g.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
         address r0 = address(_reg(nid(cadmin), address(0)));
         address ro = address(_reg(nid(cadmin), address(own)));
         address rx = address(_reg(nid(cadmin), address(other)));

@@ -285,13 +285,13 @@ contract Misc is OnchainBase {
         bytes memory implArgs = abi.encode(ImplArgs(ms));
         cfg0 = abi.encode(_cfg0("Onchain f2", "oF2"));
         vm.startBroadcast(k1);
-        f2.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withMs);
+        f2.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, withMs);
         address impl = f2.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, implArgs);
         address tok = f2.createToken(IOpenFactory.TokenKind.NORMAL, 1, cfg0, _salt("f2-t1"));
         impl2 = address(new NormalToken(address(f2), implArgs));
         address tokU = f2.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl2, cfg0, _salt("f2-tu"));
-        f2.publishEnv(IOpenFactory.TokenKind.NORMAL, 2, e); // env 2: no module pinned (the ModuleNotPinned negative)
-        f2.publishEnv(IOpenFactory.TokenKind.NORMAL, 3, withMs); // env 3, the latest: the modules again (KindDisabled's)
+        f2.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 2, e); // env 2: no module pinned (the ModuleNotPinned negative)
+        f2.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 3, withMs); // env 3, the latest: the modules again (KindDisabled's)
         vm.stopBroadcast();
         _book(impl, "NormalToken");
         _book(tok, "NormalToken");
@@ -300,11 +300,11 @@ contract Misc is OnchainBase {
         _dex();
         _classKind();
         vm.startBroadcast(k1);
-        f2.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "onchain matrix: deprecated after its use");
+        f2.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, "onchain matrix: deprecated after its use");
         // already on (the default 0 and 1): an idempotent write. Both carry REFUND_GAS: the simulated 21,147 x 1.10 ran out
         // of gas on a fresh anvil (the fork's receipt: 19,904), and the NORMAL write frees a slot
-        f2.setKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.WRAPPED, true);
-        f2.setKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.NORMAL, false);
+        f2.setTokenKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.WRAPPED, true);
+        f2.setTokenKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.NORMAL, false);
         vm.stopBroadcast();
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.deployTokenImplementation, (IOpenFactory.TokenKind.NORMAL, 2, 2,
             type(NormalToken).creationCode, implArgs)), IOpenFactory.ModuleNotPinned.selector,
@@ -315,15 +315,15 @@ contract Misc is OnchainBase {
             _salt("n2"))), IOpenFactory.KindDisabled.selector, "factory: a disabled kind");
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind.NORMAL_REGULATED, 1, cfg0,
             _salt("n3"))), IOpenFactory.VersionUnknown.selector, "factory: a kind outside the catalogue");
-        _neg(a2, address(f2), abi.encodeCall(OpenFactory.publishEnv, (IOpenFactory.TokenKind.NORMAL, 4, e)),
-            IAdmin.NotAdmin.selector, "factory: publishEnv by another than the admin");
+        _neg(a2, address(f2), abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, 4, e)),
+            IAdmin.NotAdmin.selector, "factory: publishTokenEnv by another than the admin");
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.configureChain, (uid, 0, address(0), bytes32(0), 0, bytes32(0))),
             IOpenFactory.ChainAlreadyConfigured.selector, "factory: configureChain twice");
     }
 
     /// @dev The Step 5 env of kind 0 without its modules: registry, SmartKeyAccount implementation, libraries.
     function _plainEnv() internal returns (IFactoryToken.Env memory e) {
-        e = f5.envOf(IOpenFactory.TokenKind.NORMAL, 1);
+        e = f5.tokenEnvOf(IOpenFactory.TokenKind.NORMAL, 1);
         address[] memory m5 = ITokenModules(f5.implementationOf(IOpenFactory.TokenKind.NORMAL, 1)).modules();
         uint256 n;
         for (uint256 i; i < e.libs.length; ++i) if (!_in(e.libs[i], m5)) ++n;

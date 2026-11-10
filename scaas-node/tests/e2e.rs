@@ -1568,8 +1568,8 @@ alloy::sol! {
     // class's chain values
     struct FactoryEnv { address registry; address smartKeyAccountImpl; bool hedera; address[] deps; bytes32[] params;
         address[] libs; bytes32[] libCodeHashes; }
-    function envOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
-    function publishEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
+    function tokenEnvOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
+    function publishTokenEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
     function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs) external returns (address);
     function createToken(uint8 kind, uint64 version, bytes initArgs, bytes32 salt) external returns (address);
     function registry() external view returns (address);
@@ -2234,8 +2234,8 @@ mod pqz3f {
             bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
         function transferSingleStatement(PqzTransferArgs t, bytes32 binding) external view returns (bytes);
         function pqzRevokeVerifier() external;
-        function setKindEnabled(uint8 kind, bool on) external;
-        function latestEnvVersion(uint8 kind) external view returns (uint16);
+        function setTokenKindEnabled(uint8 kind, bool on) external;
+        function latestTokenEnvVersion(uint8 kind) external view returns (uint16);
         function latestVersion(uint8 kind) external view returns (uint64);
         function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
         function mtxShield(bytes32 toUA, uint256 amount) external;

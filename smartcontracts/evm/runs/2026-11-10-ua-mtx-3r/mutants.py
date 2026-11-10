@@ -207,6 +207,57 @@ MUTANTS = {
         ("D14", "        return r == address(0) ? address(0) : _addr(r, _EXECUTOR, IOpenFactory.relayFeeExecutor.selector);",
          "        return r;"),
     ]},
+    # T7 (spec §8, Fable P1-3): B1-B15, one per new signed struct of the router, a word dropped from its hash (for an op
+    # whose words are the call's arguments, the last word out of the signed words, the call keeps it); each killed by
+    # that struct's binding matrix in test/governance/GovRouterAdmin.t.sol (`test_binding_<Op>`)
+    **{mid: ("smartcontracts/evm/src/governance/GovernanceRouter.sol", old, new, "forge", "test/governance",
+             "GovRouterAdmin.t.sol") for mid, old, new in [
+        # B1: UAPublishTokenEnv
+        ('B1', 'abi.encode(kind, envVersion, _envHash(env))',
+         'abi.encode(kind, _envHash(env))'),
+        # B2: UAPublishDexEnv
+        ('B2', 'abi.encode(envVersion, _envHash(env))',
+         'abi.encode(_envHash(env))'),
+        # B3: UAPublishClassEnv
+        ('B3', 'abi.encode(contractClass, kind, envVersion, _envHash(env))',
+         'abi.encode(contractClass, envVersion, _envHash(env))'),
+        # B4: UAApproveTokenRelease
+        ('B4', '        _ua(T.UA_APPROVE_TOKEN_RELEASE, e, target, IOpenFactory.approveTokenRelease.selector, abi.encode(kind, version,\n            envVersion, initcodeHash, implArgsHash, chainUid, factory, adminGeneration, until), auth);\n',
+         '        bytes memory w = abi.encode(kind, version,\n            envVersion, initcodeHash, implArgsHash, chainUid, factory, adminGeneration, until);\n        bytes memory d = bytes.concat(IOpenFactory.approveTokenRelease.selector, w);\n        assembly ("memory-safe") { mstore(w, sub(mload(w), 32)) } // the last word out of the hash, the call keeps it\n        _uaCall(T.UA_APPROVE_TOKEN_RELEASE, e, target, w, d, auth);\n'),
+        # B5: UAApproveDexRelease
+        ('B5', '        _ua(T.UA_APPROVE_DEX_RELEASE, e, target, IOpenFactory.approveDexRelease.selector, abi.encode(version, envVersion,\n            initcodeHash, implArgsHash, chainUid, factory, adminGeneration, until), auth);\n',
+         '        bytes memory w = abi.encode(version, envVersion,\n            initcodeHash, implArgsHash, chainUid, factory, adminGeneration, until);\n        bytes memory d = bytes.concat(IOpenFactory.approveDexRelease.selector, w);\n        assembly ("memory-safe") { mstore(w, sub(mload(w), 32)) } // the last word out of the hash, the call keeps it\n        _uaCall(T.UA_APPROVE_DEX_RELEASE, e, target, w, d, auth);\n'),
+        # B6: UAApproveRelease
+        ('B6', '        _ua(T.UA_APPROVE_RELEASE, e, target, IOpenFactory.approveRelease.selector, abi.encode(approval), auth);\n',
+         '        bytes memory w = abi.encode(approval);\n        bytes memory d = bytes.concat(IOpenFactory.approveRelease.selector, w);\n        assembly ("memory-safe") { mstore(w, sub(mload(w), 32)) } // the last word out of the hash, the call keeps it\n        _uaCall(T.UA_APPROVE_RELEASE, e, target, w, d, auth);\n'),
+        # B7: UARevokeApproval
+        ('B7', '        _ua(T.UA_REVOKE_APPROVAL, e, target, IOpenFactory.revokeApproval.selector, abi.encode(key), auth);\n',
+         '        bytes memory w = abi.encode(key);\n        bytes memory d = bytes.concat(IOpenFactory.revokeApproval.selector, w);\n        assembly ("memory-safe") { mstore(w, sub(mload(w), 32)) } // the last word out of the hash, the call keeps it\n        _uaCall(T.UA_REVOKE_APPROVAL, e, target, w, d, auth);\n'),
+        # B8: UADeprecateToken
+        ('B8', 'abi.encode(kind, version, keccak256(bytes(reason)))',
+         'abi.encode(kind, keccak256(bytes(reason)))'),
+        # B9: UADeprecateDex
+        ('B9', 'abi.encode(version, keccak256(bytes(reason)))',
+         'abi.encode(keccak256(bytes(reason)))'),
+        # B10: UADeprecateRelease
+        ('B10', 'abi.encode(contractClass, kind, version, keccak256(bytes(reason)))',
+         'abi.encode(contractClass, kind, keccak256(bytes(reason)))'),
+        # B11: UASetTokenKindEnabled
+        ('B11', '        _ua(T.UA_SET_TOKEN_KIND_ENABLED, e, target, IOpenFactory.setTokenKindEnabled.selector, abi.encode(kind, on), auth);\n',
+         '        bytes memory w = abi.encode(kind, on);\n        bytes memory d = bytes.concat(IOpenFactory.setTokenKindEnabled.selector, w);\n        assembly ("memory-safe") { mstore(w, sub(mload(w), 32)) } // the last word out of the hash, the call keeps it\n        _uaCall(T.UA_SET_TOKEN_KIND_ENABLED, e, target, w, d, auth);\n'),
+        # B12: UASetClassKindEnabled
+        ('B12', '        _ua(T.UA_SET_CLASS_KIND_ENABLED, e, target, IOpenFactory.setClassKindEnabled.selector,\n            abi.encode(contractClass, kind, on), auth);\n',
+         '        bytes memory w = abi.encode(contractClass, kind, on);\n        bytes memory d = bytes.concat(IOpenFactory.setClassKindEnabled.selector, w);\n        assembly ("memory-safe") { mstore(w, sub(mload(w), 32)) } // the last word out of the hash, the call keeps it\n        _uaCall(T.UA_SET_CLASS_KIND_ENABLED, e, target, w, d, auth);\n'),
+        # B13: UASetKycProvider
+        ('B13', '        _ua(T.UA_SET_KYC_PROVIDER, e, target, IComplianceRegistry.setKycProvider.selector, abi.encode(provider, enabled), auth);\n',
+         '        bytes memory w = abi.encode(provider, enabled);\n        bytes memory d = bytes.concat(IComplianceRegistry.setKycProvider.selector, w);\n        assembly ("memory-safe") { mstore(w, sub(mload(w), 32)) } // the last word out of the hash, the call keeps it\n        _uaCall(T.UA_SET_KYC_PROVIDER, e, target, w, d, auth);\n'),
+        # B14: UASetCompliance
+        ('B14', 'keccak256(abi.encodePacked(flags)), keccak256(abi.encodePacked(until))),',
+         'keccak256(abi.encodePacked(until))),'),
+        # B15: UASetChainEntries
+        ('B15', '        _ua(T.UA_SET_CHAIN_ENTRIES, e, target, IOpenFactory.setChainEntries.selector, abi.encode(relayFeeRouter,\n            relayFeeRouterCodeHash, relayFeeExecutorCodeHash, complianceRegistry, complianceRegistryCodeHash,\n            smartKeyAccountFactory, smartKeyAccountFactoryCodeHash, zetherStatements, zetherStatementsCodeHash), auth);\n',
+         '        bytes memory w = abi.encode(relayFeeRouter,\n            relayFeeRouterCodeHash, relayFeeExecutorCodeHash, complianceRegistry, complianceRegistryCodeHash,\n            smartKeyAccountFactory, smartKeyAccountFactoryCodeHash, zetherStatements, zetherStatementsCodeHash);\n        bytes memory d = bytes.concat(IOpenFactory.setChainEntries.selector, w);\n        assembly ("memory-safe") { mstore(w, sub(mload(w), 32)) } // the last word out of the hash, the call keeps it\n        _uaCall(T.UA_SET_CHAIN_ENTRIES, e, target, w, d, auth);\n'),
+    ]},
 }
 
 

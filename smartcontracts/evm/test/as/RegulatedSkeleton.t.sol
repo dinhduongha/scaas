@@ -70,9 +70,9 @@ contract RegulatedSkeletonTest is PqzFixture {
         w5 = WrappedPqzToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, pqz,
             type(WrappedPqzToken).creationCode)));
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
         vm.stopPrank();
     }
 

@@ -59,7 +59,7 @@ contract GovRouterCreateTest is GovRouterFixture {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
         (address[] memory dm, bytes memory dargs) = deployDexModules(address(f));
         vm.startPrank(REGISTRAR);
-        f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(f), address(0), chainUidA, PREG, false), ms));
+        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(f), address(0), chainUidA, PREG, false), ms));
         f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
         f.publishDexEnv(1, withModules(plainEnv(address(f), address(0), chainUidA, address(0), false), dm));
         f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, dargs);
@@ -168,7 +168,7 @@ contract GovRouterCreateTest is GovRouterFixture {
         OpenFactory g = EnvKit.factory(REGISTRAR, chainUidA, 0, address(r));
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(g), ""); // T66b
         vm.startPrank(REGISTRAR);
-        g.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(g), address(0), chainUidA, PREG, false), ms));
+        g.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(g), address(0), chainUidA, PREG, false), ms));
         g.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
         vm.stopPrank();
         vm.expectRevert(IOpenFactory.RouterSubjectZero.selector);

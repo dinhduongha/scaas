@@ -1,5 +1,5 @@
 {
- "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. ADMIN: the admin (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending admin role. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, ADMIN, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5). Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1): class OWNER renamed ADMIN, the three admin entries acceptAdmin(), renounceAdmin(), transferAdmin(bytes32) and their errors NotAdmin(bytes32), NotPendingAdmin(bytes32) in place of the ownership names, and the router's mtxTransferAdmin, mtxAcceptAdmin, mtxRenounceAdmin (SIGNED), every class unchanged.",
+ "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. ADMIN: the admin (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending admin role. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, ADMIN, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5). Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1): class OWNER renamed ADMIN, the three admin entries acceptAdmin(), renounceAdmin(), transferAdmin(bytes32) and their errors NotAdmin(bytes32), NotPendingAdmin(bytes32) in place of the ownership names, and the router's mtxTransferAdmin, mtxAcceptAdmin, mtxRenounceAdmin (SIGNED), every class unchanged. Round 3r T7 (spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §7; owner naming 2026-11-11): the router's fifteen admin ops of OpenFactory and ComplianceRegistry (SIGNED); OpenFactory added: its admin entries ADMIN (configureChain direct only, the rest direct or through its router), acceptAdmin HOLDER_OWN, the three release deploys APPROVED(release) (open to anyone against a live approval of their key, the native admin's own call its own approval; a stranger's zero-argument call ReleaseNotApproved), the four creations PERMISSIONLESS. APPROVED(reason): anyone, against an approval the admin gave, for the reason given.",
  "NormalToken": [
   {
    "sig": "acceptAdmin()",
@@ -4260,6 +4260,21 @@
    "error": ""
   },
   {
+   "sig": "mtxApproveDexRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxApproveRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(uint16,uint16,uint64,uint16,bytes4,bytes4,bytes32,bytes32,bytes32,address,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxApproveTokenRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
    "class": "PERMISSIONLESS(refuses every call)",
    "error": "MtxSelectorNotAllowed(bytes4)"
@@ -4291,6 +4306,21 @@
   },
   {
    "sig": "mtxCreateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxDeprecateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxDeprecateRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxDeprecateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4370,6 +4400,21 @@
    "error": ""
   },
   {
+   "sig": "mtxPublishClassEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPublishDexEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPublishTokenEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxRecordOrder((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,bytes32,bytes32,uint256,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
@@ -4385,12 +4430,32 @@
    "error": ""
   },
   {
+   "sig": "mtxRevokeApproval((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxRevokeOrder((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
    "sig": "mtxRevokeRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetChainEntries((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetClassKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetCompliance((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32[],uint64[],uint64[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4406,6 +4471,11 @@
   },
   {
    "sig": "mtxSetGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetKycProvider((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4435,6 +4505,11 @@
    "error": ""
   },
   {
+   "sig": "mtxSetTokenKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxSetWrapLimits((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
@@ -4458,6 +4533,128 @@
    "sig": "mtxUnpause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
+  }
+ ],
+ "OpenFactory": [
+  {
+   "sig": "acceptAdmin()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingAdmin(bytes32)"
+  },
+  {
+   "sig": "approveDexRelease(uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "approveRelease((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes32,bytes32,bytes32,address,uint32,uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "approveTokenRelease(uint8,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "configureChain(bytes32,uint64,address,bytes32,uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "createDex(uint64,bytes,bytes32)",
+   "class": "PERMISSIONLESS(anyone creates from a usable release of an enabled kind; the creator is the caller, or the subject the chain's router signed for)",
+   "error": ""
+  },
+  {
+   "sig": "createInstance((uint16,uint16,uint64),bytes32,bytes)",
+   "class": "PERMISSIONLESS(anyone creates from a usable release of an enabled kind; the creator is the caller, or the subject the chain's router signed for)",
+   "error": ""
+  },
+  {
+   "sig": "createToken(uint8,uint64,bytes,bytes32)",
+   "class": "PERMISSIONLESS(anyone creates from a usable release of an enabled kind; the creator is the caller, or the subject the chain's router signed for)",
+   "error": ""
+  },
+  {
+   "sig": "createTokenUnregistered(uint8,address,bytes,bytes32)",
+   "class": "PERMISSIONLESS(anyone creates from a usable release of an enabled kind; the creator is the caller, or the subject the chain's router signed for)",
+   "error": ""
+  },
+  {
+   "sig": "deployDexImplementation(uint64,uint16,bytes,bytes)",
+   "class": "APPROVED(release)",
+   "error": "ReleaseNotApproved(bytes32)"
+  },
+  {
+   "sig": "deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes)",
+   "class": "APPROVED(release)",
+   "error": "ReleaseNotApproved(bytes32)"
+  },
+  {
+   "sig": "deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)",
+   "class": "APPROVED(release)",
+   "error": "ReleaseNotApproved(bytes32)"
+  },
+  {
+   "sig": "deprecateDex(uint64,string)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "deprecateRelease((uint16,uint16,uint64),string)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "deprecateToken(uint8,uint64,string)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "publishClassEnv(uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "publishDexEnv(uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "publishTokenEnv(uint8,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "revokeApproval(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setChainEntries(address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setClassKindEnabled(uint16,uint16,bool)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setTokenKindEnabled(uint8,bool)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   }
  ]
 }

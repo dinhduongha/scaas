@@ -35,7 +35,7 @@ contract PqzVerifierTest is PqzOffchainBase {
         Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        fN.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
         vm.warp(block.timestamp + NOTICE); // the release usable
     }
 
