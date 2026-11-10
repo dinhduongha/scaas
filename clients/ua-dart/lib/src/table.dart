@@ -69,7 +69,7 @@ const purposes = <String>[
   'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership',
 ];
 
-/// The governance bits 0-23 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the app
+/// The governance bits 0-27 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the app
 /// from smartcontracts/vectors/governance/governance_bits.json; bits 24-127 are free, 128-255 the application's bitLabel(bit).
 const governanceBits = <(String, String)>[
   ('PAYABLE', 'capability'), ('MINTABLE', 'power'), ('BURNABLE', 'capability'), ('RATE_ADJUSTABLE', 'power'),

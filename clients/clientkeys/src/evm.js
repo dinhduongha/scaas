@@ -1546,9 +1546,9 @@ export function bidMinBase(minFill, amount, receiveAmount) {
   return (uint(minFill, 'minFill') * uint(receiveAmount, 'the price') + a - 1n) / a;
 }
 
-// The governance bits 0-24 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5): name and type. The disclosure sentences are the file's,
+// The governance bits 0-27 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5; bits 25-27 wrap limits §2): name and type. The disclosure sentences are the file's,
 // smartcontracts/vectors/governance/governance_bits.json, which the app reads; test/governance-bits.test.js holds this table to it.
-// Bits 25-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
+// Bits 28-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
 export const GOVERNANCE_BITS = Object.freeze([
   ['PAYABLE', 'capability'], ['MINTABLE', 'power'], ['BURNABLE', 'capability'], ['RATE_ADJUSTABLE', 'power'],
   ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'capability'],

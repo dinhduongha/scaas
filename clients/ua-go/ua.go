@@ -101,7 +101,7 @@ func Keccak256(parts ...[]byte) (out [32]byte) {
 
 var MsgTag = Keccak256([]byte("scaas.ua.msg.v1"))
 
-// GovernanceBit is a row of the governance bits 0-23 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
+// GovernanceBit is a row of the governance bits 0-27 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
 // smartcontracts/vectors/governance/governance_bits.json; bits 24-127 are free, 128-255 the application's bitLabel(bit).
 type GovernanceBit struct{ Name, Type string }
 

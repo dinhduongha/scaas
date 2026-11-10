@@ -18,7 +18,7 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "kindInfo"] fn kind_info(self: Pin<&mut Self>, kind: i32) -> QString;
         #[qinvokable] fn tag(self: Pin<&mut Self>, kind: i32) -> QString;
         #[qinvokable] #[cxx_name = "kindTagString"] fn kind_tag_string(self: Pin<&mut Self>, kind: i32) -> QString;
-        /// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (bits 0-23; else "" and `UAArgument`).
+        /// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (bits 0-27; else "" and `UAArgument`).
         #[qinvokable] #[cxx_name = "governanceBit"] fn governance_bit(self: Pin<&mut Self>, bit: i32) -> QString;
         #[qinvokable] #[cxx_name = "groupTag"] fn group_tag(self: Pin<&mut Self>, group: &QString) -> QString;
         #[qinvokable] #[cxx_name = "groupTagString"] fn group_tag_string(self: Pin<&mut Self>, group: &QString) -> QString;

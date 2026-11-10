@@ -805,15 +805,15 @@ void main() {
     }
   });
 
-  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 23 UAArgument
+  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 27 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
   test('governance bits rows', () {
     final v = jsonDecode(File('$vectors/../governance/governance_bits.json').readAsStringSync()) as Map;
     final rows = v['bits'] as List;
-    expect(rows.length, 24);
+    expect(rows.length, 28);
     for (final r in rows) {
       expect(jsonDecode(governanceBit(bit: r['bit'] as int)), r, reason: 'bit ${r['bit']}');
     }
-    for (final bit in [24, 127, 128, 255, 256, -1]) {
+    for (final bit in [28, 127, 128, 255, 256, -1]) {
       expect(errCode(() => governanceBit(bit: bit)), 'UAArgument', reason: '$bit');
     }
   });

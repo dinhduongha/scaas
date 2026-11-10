@@ -815,14 +815,14 @@ static void set_key_args() {
         CHECK(code_of([&] { setPqzKeyArgs(bad.first); }) == bad.second, bad.first);
 }
 
-// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 23 UAArgument
+// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 27 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
 static void governance_bits_rows() {
     std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../governance/governance_bits.json");
     if (!f) { std::fprintf(stderr, "cannot open governance_bits.json\n"); std::exit(2); }
     json v = json::parse(f);
-    CHECK(v["bits"].size() == 24, "rows 0-23");
+    CHECK(v["bits"].size() == 28, "rows 0-27");
     for (auto& r : v["bits"]) CHECK(json::parse(governanceBit(r["bit"].get<uint8_t>())) == r, std::to_string(r["bit"].get<int>()));
-    for (int bit : {24, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
+    for (int bit : {28, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
 }
 
 // pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row
