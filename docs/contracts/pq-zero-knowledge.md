@@ -1451,8 +1451,8 @@ confidential balances move only on the PQ `authSig` over the statement plus the 
 from its own public balance, its nonce, and for `mtxShield` the public amount it shields from that balance.
 
 **PQ-complete
-path:** the same selectors through `uaExecute` with a `UAMetaTransaction` ([CTR-UA-26](accounts.md#CTR-UA-26)) on
-`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxUnshieldUnwrap` on `WRAPPED_PQZ`; `mtxWrapShield` is not on it, the pool holds no leg: a UA source wraps with `uaWrap`, then relays `uaExecute(mtxShield)`, [accounts.md](accounts.md#CTR-UA-18)), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
+path:** the same selectors through the merged `mtxExecute(UAMetaTransaction, UASig)` ([CTR-MTX-30](../decisions.md#CTR-MTX-30)) ([CTR-UA-26](accounts.md#CTR-UA-26)) on
+`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxUnshieldUnwrap` on `WRAPPED_PQZ`; `mtxWrapShield` is not on it, the pool holds no leg: a UA source wraps with `uaWrap`, then relays `mtxShield` through `mtxExecute` or its signed entry, [accounts.md](accounts.md#CTR-UA-18)), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
 classical key signs anything on the op path. Envelopes are not carried on the mesh, exactly as classical Zether
 ([NODE-MESH-01](../node/mesh.md#NODE-MESH-01)). Relayers, the node, the indexer and client systems handle PQZ with the
 existing meta-tx path. An address-path envelope signer is ECDSA/1271, hence the UA path. A broken envelope key can
@@ -2390,12 +2390,14 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the `shieldIn` term and `subTrivial` / `addMem` / `subMem` / `loadBlob` / `isZero` for the queue, `reduce`, the `< q` check; the [stored form](#stored-form) (`packCd` / `packMem`, `expandAt`, `addBlob`, the rollover accumulators `addBlobEO` / `combineEO`) | BUILT (P6g; P46 and `PqzSet` in plan 5h Task 8d part 2): pure Solidity, no precompile; checked on the set's vectors (round trip, all `q − 1`, the bit layout) |
 | `Sstore2` | existing pattern (classical generator blob) | reused |
 
-Selectors (normative ABI; the proof-taking ones share the signature `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint[, …])`
-with Zether, [CTR-ZTH-45](zether.md#CTR-ZTH-45); as built in `src/confidential/IConfidentialToken.sol`, selectors pinned in
-`ConfidentialSelectors.t.sol`): `mtxShield(bytes32,uint256)`, `mtxWrapShield(address,uint256,bytes32)`,
-`mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)` (op 7, [CTR-PQZ-26](#CTR-PQZ-26)) and `…Compact`, `…Single`, `…SingleCompact`
-(op 1) with the same arguments, `mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)`, `mtxUnshieldUnwrap` (the same five, then
-the leg arguments), `mtxRollOver(bytes32,uint64,uint256)`, `mtxPrepareAcc(bytes32,uint64,uint256)` (the key version since 3g,
+Selectors (normative ABI, explicit parameters since typed-signing and the `ua*` / `mtx*` merge,
+[CTR-MTX-30](../decisions.md#CTR-MTX-30); as built in `src/pqz/IPqzToken.sol` and `src/confidential/IConfidentialToken.sol`, selectors pinned in
+`ConfidentialSelectors.t.sol`): the direct `mtxShield(bytes32 toUA, uint256 amount)` and `mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA)`,
+their signed entries `mtxShield(UAEnvelope, bytes32, uint256, UASig)` and `mtxWrapShield(Envelope, address, uint256, bytes32, bytes sig)` (no twin, so
+`Envelope`); the proof-taking ones end in `(bytes proof, UASig pqzAuth, bytes accHint, PqzSignedVerdict pqzVerdict)`:
+`mtxConfidentialTransfer(PqzMultiArgs, …)` (op 7, [CTR-PQZ-26](#CTR-PQZ-26)) and `…Compact`, `mtxConfidentialTransferSingle(PqzTransferArgs, …)` and
+`…SingleCompact` (op 1), `mtxUnshield(PqzBurnArgs, uint256 amount, bytes32 recipient, …)`, `mtxUnshieldUnwrap(PqzBurnArgs, Unwrap, …)`;
+`mtxRollOver(bytes32,uint64,uint256)`, `mtxPrepareAcc(bytes32,uint64,uint256)` (the key version since 3g,
 [CTR-PQZ-31](#CTR-PQZ-31)); views `pqzAccount(bytes32)` →
 `AccountState{pendingCount, rolled, floor, cleared, accBlob, accUnits, flags, sendCounter, accHash}`, `pqzAcc(bytes32)`,
 `pqzPending(bytes32,uint64)` (the raw slot word), `pqzPendingCt(bytes32,uint64)`, `pqzEntryBlob(bytes32)`,
