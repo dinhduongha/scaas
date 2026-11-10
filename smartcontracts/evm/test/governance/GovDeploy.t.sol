@@ -586,8 +586,10 @@ contract GovDeployTest is Test {
         // `IFactoryToken` naming `PqzKeyVerifier`, was `UAPqzVerifier`): -> 0xe3E535A28d5aBCa856dE18bdc46AaD334ab71f42; the
         // directories renamed (owner 2026-11-10; the metadata hash: `UAMetaTxBase`'s comment names script/modules/gen_faces.py,
         // was script/t66b/): -> 0xb0E39bCa5EA2C70840e28Ba356606f607F54a1D3; round 3r T2 / T7a (CTR-GOV-23: `IGovernance is IAdmin`
-        // and its admin names, the three ops `mtxTransferAdmin`, `mtxAcceptAdmin`, `mtxRenounceAdmin` and their typehashes): -> this
-        assertEq(router, 0x62505351CB1f44c078fcC44C8ec9531B145C93E3, "GovernanceRouter");
+        // and its admin names, the three ops `mtxTransferAdmin`, `mtxAcceptAdmin`, `mtxRenounceAdmin` and their typehashes): ->
+        // 0x62505351CB1f44c078fcC44C8ec9531B145C93E3; round 3r T4 (R1; the metadata hash: `IOpenFactory` without the owner in
+        // `Created`, the events and `FactoryInfo`, no `contractsOfOwner`): -> this
+        assertEq(router, 0x349b10f51bCA434cd4C3609EA8C327c755b4fA97, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

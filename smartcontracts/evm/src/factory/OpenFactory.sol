@@ -25,13 +25,13 @@ import {SigCheck} from "../common/SigCheck.sol";
 ///         then `chainUid()` must be this factory's. `initArgs` and every kind-specific check (flags, legs, the Zether /
 ///         PQZ verifier and chain gates) are the implementation's. The registrar's key is the trust root for code (a
 ///         multisig / UA msig before mainnet). **Zether and PQZ are UNAUDITED.**
-///         The index (CTR-TOK-27, factory index spec §2): one record per created contract and three append-only lists per
-///         class (all, by owner UA at creation, by creator), written in the creating call, read by paged views.
+///         The index (CTR-TOK-27, factory index spec §2): one record per created contract and two append-only lists per
+///         class (all, by creator), written in the creating call, read by paged views; no owner information (round 3r
+///         R1, CTR-GOV-23): the factory reads no admin of anything it creates.
 contract OpenFactory is IOpenFactory {
-    /// @dev `Created` without `addr` (the key), three slots: creator, owner, class ‖ kind ‖ version ‖ block ‖ time.
+    /// @dev `Created` without `addr` (the key), two slots: creator, class ‖ kind ‖ version ‖ block ‖ time.
     struct Rec {
         bytes32 creatorId;
-        bytes32 ownerUA;
         uint16 contractClass;
         uint16 kind;
         uint64 version;
@@ -68,7 +68,6 @@ contract OpenFactory is IOpenFactory {
     mapping(bytes32 => mapping(address => address[])) private _wrappers;
     mapping(address => address[]) private _byUnderlying;
     mapping(uint16 => address[]) private _all;
-    mapping(bytes32 => mapping(uint16 => address[])) private _byOwner; // never for ownerUA 0
     mapping(bytes32 => mapping(uint16 => address[])) private _byCreator;
     /// @notice This chain's values, written once by `configureChain` (chain-neutral spec §3.1); 0 until then. After the
     ///         maps, so the record stays at slot 8.
@@ -327,9 +326,8 @@ contract OpenFactory is IOpenFactory {
         dex = _instance(creatorId, CLASS_DEX, 0, salt, impl, _chainEnv(DEX_DOMAIN, r.envVersion));
         ISCaaSDex(dex).initialize(creatorId, version, initArgs);
         _requireChainUid(dex, chainUid);
-        bytes32 owner = IGovernance(dex).admin();
-        _index(dex, creatorId, owner, CLASS_DEX, 0, version);
-        emit DexCreated(dex, creatorId, version, impl, owner);
+        _index(dex, creatorId, CLASS_DEX, 0, version);
+        emit DexCreated(dex, creatorId, version, impl);
     }
 
     function isDex(address dex) external view returns (bool) { return _rec[dex].contractClass == CLASS_DEX; }
@@ -479,14 +477,14 @@ contract OpenFactory is IOpenFactory {
     }
 
     /// @dev Steps 5-6: the clone's `factoryInfo()` names this factory, this chain, the release and `initialized`; then the
-    ///      record with its owner and `InstanceCreated`.
+    ///      record and `InstanceCreated`.
     function _recordInstance(address instance, bytes32 creatorId, ReleaseId calldata id, address impl) private {
         (bool got, FactoryInfo memory fi) = _factoryInfo(instance);
         if (!got || !fi.initialized || fi.factory != address(this) || fi.contractClass != id.contractClass
             || fi.kind != id.kind || fi.version != id.version) revert InstanceInfoMismatch(instance);
         if (fi.chainUid != chainUid) revert ChainUidMismatch(chainUid, fi.chainUid);
-        _index(instance, creatorId, fi.ownerUA, id.contractClass, id.kind, id.version);
-        emit InstanceCreated(instance, creatorId, id.contractClass, id.kind, id.version, impl, fi.ownerUA);
+        _index(instance, creatorId, id.contractClass, id.kind, id.version);
+        emit InstanceCreated(instance, creatorId, id.contractClass, id.kind, id.version, impl);
     }
 
     function creating() external view returns (bytes32 c) {
@@ -503,12 +501,6 @@ contract OpenFactory is IOpenFactory {
         external view returns (Created[] memory, uint256)
     {
         return _page(_all[_known(contractClass)], from, n);
-    }
-
-    function contractsOfOwner(bytes32 ownerUA, uint16 contractClass, uint256 from, uint256 n)
-        external view returns (Created[] memory, uint256)
-    {
-        return _page(_byOwner[ownerUA][_known(contractClass)], from, n);
     }
 
     function contractsOfCreator(bytes32 creatorId, uint16 contractClass, uint256 from, uint256 n)
@@ -655,21 +647,17 @@ contract OpenFactory is IOpenFactory {
         if (c == address(0)) revert InstanceNotCreated();
     }
 
-    /// @dev The record of a creation (after `initialize`, so `ownerUA` is the contract's own answer) and the three pushes;
-    ///      `ownerUA` 0 goes to no owner list.
-    function _index(address c, bytes32 creatorId, bytes32 ownerUA, uint16 contractClass, uint16 kind, uint64 version)
-        private
-    {
-        _rec[c] = Rec(creatorId, ownerUA, contractClass, kind, version, uint64(block.number), uint64(block.timestamp));
+    /// @dev The record of a creation and the two pushes.
+    function _index(address c, bytes32 creatorId, uint16 contractClass, uint16 kind, uint64 version) private {
+        _rec[c] = Rec(creatorId, contractClass, kind, version, uint64(block.number), uint64(block.timestamp));
         _all[contractClass].push(c);
-        if (ownerUA != 0) _byOwner[ownerUA][contractClass].push(c);
         _byCreator[creatorId][contractClass].push(c);
     }
 
     function _created(address c) private view returns (Created memory x) {
         Rec storage r = _rec[c];
         if (r.contractClass == 0) return x;
-        return Created(c, r.creatorId, r.ownerUA, r.contractClass, r.kind, r.version, r.createdBlock, r.createdAt);
+        return Created(c, r.creatorId, r.contractClass, r.kind, r.version, r.createdBlock, r.createdAt);
     }
 
     /// @dev `contractClass` if this factory makes it (the token and DEX classes; a generic class once it has a release),
@@ -693,7 +681,7 @@ contract OpenFactory is IOpenFactory {
     }
 
     /// @dev A generic release's checks (index spec §8.2; chain-neutral: no `chain_uid` on a release): code;
-    ///      `factoryInfo()` 224 B naming this factory, its own id, owner 0, initialized; ERC-165 for `0x01ffc9a7` and
+    ///      `factoryInfo()` 192 B naming this factory, its own id, initialized; ERC-165 for `0x01ffc9a7` and
     ///      `interfaceId`, not `0xffffffff`; `validateEnv`.
     function _checkRelease(ReleaseId calldata id, address impl, bytes4 interfaceId, IFactoryToken.ChainEnv memory env)
         private view
@@ -701,18 +689,18 @@ contract OpenFactory is IOpenFactory {
         if (!SigCheck.isContract(impl)) revert ImplementationNotAContract(impl);
         (bool ok, FactoryInfo memory fi) = _factoryInfo(impl);
         if (!ok || fi.factory != address(this) || fi.contractClass != id.contractClass || fi.kind != id.kind
-            || fi.version != id.version || fi.ownerUA != bytes32(0) || !fi.initialized) revert ReleaseInfoMismatch(impl);
+            || fi.version != id.version || !fi.initialized) revert ReleaseInfoMismatch(impl);
         if (!_supports(impl, 0x01ffc9a7)) revert InterfaceNotSupported(impl, 0x01ffc9a7);
         if (!_supports(impl, interfaceId)) revert InterfaceNotSupported(impl, interfaceId);
         if (_supports(impl, 0xffffffff)) revert InterfaceNotSupported(impl, 0xffffffff);
         _validateEnv(impl, env);
     }
 
-    /// @dev `factoryInfo()` by staticcall: exactly seven words, else `ok` false.
+    /// @dev `factoryInfo()` by staticcall: exactly six words, else `ok` false.
     function _factoryInfo(address target) private view returns (bool ok, FactoryInfo memory fi) {
         bytes memory ret;
         (ok, ret) = target.staticcall(abi.encodeWithSelector(bytes4(keccak256("factoryInfo()"))));
-        ok = ok && ret.length == 224;
+        ok = ok && ret.length == 192;
         if (ok) fi = abi.decode(ret, (FactoryInfo));
     }
 
@@ -744,7 +732,7 @@ contract OpenFactory is IOpenFactory {
     /// @dev The generic gate (the kind enabled), the CREATE3 clone with its env, `initialize` with the creator's
     ///      `initArgs`, the `chainUid()` post-check (an unregistered implementation's code is unvetted: what it reports as
     ///      its domain salt must be this factory's), then the record and its lists, the leg index and the event from the
-    ///      token's own views (`admin()` read once, after `initialize`).
+    ///      token's own views (no `admin()` read: 3r R1).
     function _create(TokenKind kind, uint64 version, address impl, uint16 envVersion, bytes calldata initArgs, bytes32 salt)
         private returns (address token)
     {
@@ -754,14 +742,13 @@ contract OpenFactory is IOpenFactory {
         IFactoryToken(token).initialize(creatorId, version, initArgs);
         _requireChainUid(token, chainUid);
         IGovernance t = IGovernance(token);
-        bytes32 owner = t.admin();
-        _index(token, creatorId, owner, CLASS_TOKEN, uint16(kind), version);
+        _index(token, creatorId, CLASS_TOKEN, uint16(kind), version);
         address[] memory us = IFactoryToken(token).underlyings();
         if (us.length > MAX_LEGS) revert UnderlyingCountInvalid(us.length);
         for (uint256 i; i < us.length; ++i) {
             _wrappers[creatorId][us[i]].push(token);
             _byUnderlying[us[i]].push(token);
         }
-        emit TokenCreated(token, creatorId, kind, version, impl, t.features(), t.lockedFeatures(), owner, us);
+        emit TokenCreated(token, creatorId, kind, version, impl, t.features(), t.lockedFeatures(), us);
     }
 }

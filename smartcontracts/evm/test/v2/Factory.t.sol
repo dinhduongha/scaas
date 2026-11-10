@@ -447,10 +447,10 @@ contract FactoryTest is Test {
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), t);
                 assertEq(address(uint160(uint256(logs[i].topics[2]))), alice);
                 assertEq(uint256(logs[i].topics[3]), uint256(NORMAL));
-                (uint64 v, address impl, uint256 feat, uint256 locked, address owner, address[] memory us) =
-                    abi.decode(logs[i].data, (uint64, address, uint256, uint256, address, address[]));
-                assertEq(abi.encode(v, impl, feat, locked, owner, us.length),
-                    abi.encode(uint64(1), address(normalImpl), uint256(7), uint256(5), address(0), uint256(0)));
+                (uint64 v, address impl, uint256 feat, uint256 locked, address[] memory us) =
+                    abi.decode(logs[i].data, (uint64, address, uint256, uint256, address[])); // no owner (3r R1)
+                assertEq(abi.encode(v, impl, feat, locked, us.length),
+                    abi.encode(uint64(1), address(normalImpl), uint256(7), uint256(5), uint256(0)));
                 // not `cfg.lockedFeatures` (0): the token stores `locked | (features & ALWAYS_LOCKED)`
                 assertEq(locked, NormalToken(t).lockedFeatures());
             }

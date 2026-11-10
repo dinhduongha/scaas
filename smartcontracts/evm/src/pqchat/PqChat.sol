@@ -66,7 +66,7 @@ contract PqChat is IPqChat, PqChatCore {
 
     function factoryInfo() external view returns (IOpenFactory.FactoryInfo memory) {
         S storage s = _s();
-        return IOpenFactory.FactoryInfo(FACTORY, ChainEnvCode.chainUid(), CLASS, KIND, VERSION, s.ownerUA, s.initialized);
+        return IOpenFactory.FactoryInfo(FACTORY, ChainEnvCode.chainUid(), CLASS, KIND, VERSION, s.initialized);
     }
 
     function supportsInterface(bytes4 id) external pure returns (bool) {

@@ -2463,7 +2463,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                         let c = IOpenFactory::infoOfCall::abi_decode(&input).unwrap().c;
                         let (class, version) = listed(c);
                         Some(IOpenFactory::infoOfCall::abi_encode_returns(&IOpenFactory::Created { addr: if class == 0 { Address::ZERO } else { c },
-                            creatorId: B256::ZERO, ownerUA: B256::ZERO, contractClass: class, kind: 0, version, createdBlock: 1, createdAt: 1 }))
+                            creatorId: B256::ZERO, contractClass: class, kind: 0, version, createdBlock: 1, createdAt: 1 }))
                     }
                     "eth_call" if listed(to).0 != 0 => Some(vec![]),
                     "eth_call" => Some(uid.to_vec()),

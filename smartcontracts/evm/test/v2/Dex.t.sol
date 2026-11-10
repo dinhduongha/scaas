@@ -787,7 +787,7 @@ contract DexTest is Test {
     function test_createDex_emitsDexCreated() public {
         address creator = address(0xA1);
         vm.expectEmit(false, true, false, true, address(f)); // the clone address is derived, not asserted
-        emit IOpenFactory.DexCreated(address(0), nid(creator), 1, address(dexImpl), nid(address(0xADD)));
+        emit IOpenFactory.DexCreated(address(0), nid(creator), 1, address(dexImpl)); // no owner (3r R1)
         vm.prank(creator);
         address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(0xADD)), 0, treasury, false, 0, address(0))), "ev");
         assertEq(SCaaSDex(d).admin(), nid(address(0xADD)));

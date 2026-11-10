@@ -304,6 +304,7 @@ contract ChainNeutralFactoryTest is Test {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         Vm.Log memory l = logs[logs.length - 1];
         assertEq(l.topics[0], IOpenFactory.DexCreated.selector);
+        assertEq(l.topics[0], 0x7333afd911188665cfba5b0921a9d82a15bf753c9c60a1fdf384df1f502670bf, "DexCreated: no owner (3r R1)");
         assertEq(l.topics[2], nid(alice), "DexCreated: bytes32 creatorId");
     }
 
@@ -316,7 +317,8 @@ contract ChainNeutralFactoryTest is Test {
         Vm.Log memory l = logs[logs.length - 1];
         assertEq(l.topics[0], IOpenFactory.TokenCreated.selector);
         assertEq(l.topics[0], keccak256(
-            "TokenCreated(address,bytes32,uint8,uint64,address,uint256,uint256,bytes32,address[])"), "the new ABI");
+            "TokenCreated(address,bytes32,uint8,uint64,address,uint256,uint256,address[])"), "the new ABI (3r R1: no owner)");
+        assertEq(l.topics[0], 0x0ed419464185dced9c79d21177ebc4059e7d04c325b97fd771d3f3e290c95dae);
         assertEq(address(uint160(uint256(l.topics[1]))), t);
         assertEq(l.topics[2], nid(bob));
         assertEq(f.creatorOf(t), bob);

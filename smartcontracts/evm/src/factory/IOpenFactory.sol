@@ -45,16 +45,15 @@ interface IOpenFactory {
     }
 
     /// @notice Factory index spec §2.1 (CTR-TOK-27, owner 2026-11-07): one record per contract this factory created, in
-    ///         its own state, never changed or deleted. `creatorId` the creator's UA id (a direct call: `pad(msg.sender)`);
-    ///         `ownerUA` the contract's `admin()` right after `initialize` (a claim, 0 = no administration ever);
-    ///         (a signed creation through the router: the signing UA, S3);
+    ///         its own state, never changed or deleted. `creatorId` the creator's UA id (a direct call: `pad(msg.sender)`;
+    ///         a signed creation through the router: the signing UA, S3); no owner (round 3r R1, CTR-GOV-23: an admin
+    ///         moves, so the current one is the contract's own `admin()`, its history the contract's own events);
     ///         `contractClass` `CLASS_TOKEN` (`kind` a `TokenKind`) or `CLASS_DEX` (`kind` 0), 0 = not made here; `version`
     ///         the release (0 = `createTokenUnregistered`); `createdBlock` / `createdAt` the chain's `block.number` /
     ///         `block.timestamp`.
     struct Created {
         address addr;
         bytes32 creatorId;
-        bytes32 ownerUA;
         uint16 contractClass;
         uint16 kind;
         uint64 version;
@@ -71,17 +70,17 @@ interface IOpenFactory {
         bytes32 initcodeHash, bytes32 codeHash, uint64 usableFrom);
     event ImplementationDeprecated(TokenKind indexed kind, uint64 indexed version, string reason);
     event KindEnabled(TokenKind indexed kind, bool enabled);
-    /// @notice The one event of a creation; `features`, `lockedFeatures`, `owner`, `underlyings` read from the token after
-    ///         `initialize`.
+    /// @notice The one event of a creation; `features`, `lockedFeatures`, `underlyings` read from the token after
+    ///         `initialize` (no owner, 3r R1).
     ///         `creatorId` the creator's UA id (S3; a native creator's topic is its padded address).
     event TokenCreated(
         address indexed token, bytes32 indexed creatorId, TokenKind indexed kind, uint64 version, address implementation,
-        uint256 features, uint256 lockedFeatures, bytes32 owner, address[] underlyings);
+        uint256 features, uint256 lockedFeatures, address[] underlyings);
     event DexImplementationDeployed(
         uint64 indexed version, address indexed implementation, uint16 envVersion, bytes32 envHash, bytes32 initcodeHash,
         bytes32 codeHash, uint64 usableFrom);
     event DexImplementationDeprecated(uint64 indexed version, string reason);
-    event DexCreated(address indexed dex, bytes32 indexed creatorId, uint64 version, address implementation, bytes32 owner);
+    event DexCreated(address indexed dex, bytes32 indexed creatorId, uint64 version, address implementation);
     /// @notice The chain's one-time values (chain-neutral spec §3.1).
     event ChainConfigured(bytes32 indexed chainUid, uint64 noticePeriod, address govRouter);
 
@@ -256,9 +255,6 @@ interface IOpenFactory {
     ///         `from`, and the list's length. `from ≥ total` is an empty page; `n = 0` answers only `total`.
     function contractsPage(uint16 contractClass, uint256 from, uint256 n)
         external view returns (Created[] memory page, uint256 total);
-    /// @notice The contracts that named `ownerUA` as owner at their creation (a claim; never for `ownerUA` 0).
-    function contractsOfOwner(bytes32 ownerUA, uint16 contractClass, uint256 from, uint256 n)
-        external view returns (Created[] memory page, uint256 total);
     /// @notice The contracts `creatorId` created (authenticated: the direct caller).
     function contractsOfCreator(bytes32 creatorId, uint16 contractClass, uint256 from, uint256 n)
         external view returns (Created[] memory page, uint256 total);
@@ -284,17 +280,15 @@ interface IOpenFactory {
         bytes4 interfaceId;
     }
 
-    /// @notice What every generic release and each of its clones answers (`factoryInfo()`), seven static words (224 B):
+    /// @notice What every generic release and each of its clones answers (`factoryInfo()`), six static words (192 B):
     ///         the factory, the instance's `chain_uid` (0 on the implementation: chain-neutral releases), its release id,
-    ///         its owner UA after `initialize` (0 on the implementation), and whether it is initialized (true on the
-    ///         implementation, locked by its constructor).
+    ///         and whether it is initialized (true on the implementation, locked by its constructor); no owner (3r R1, Q4).
     struct FactoryInfo {
         address factory;
         bytes32 chainUid;
         uint16 contractClass;
         uint16 kind;
         uint64 version;
-        bytes32 ownerUA;
         bool initialized;
     }
 
@@ -305,7 +299,7 @@ interface IOpenFactory {
     event ReleaseDeprecated(uint16 indexed contractClass, uint16 indexed kind, uint64 indexed version, string reason);
     event ClassKindEnabled(uint16 indexed contractClass, uint16 indexed kind, bool enabled);
     event InstanceCreated(address indexed instance, bytes32 indexed creatorId, uint16 indexed contractClass, uint16 kind,
-        uint64 version, address implementation, bytes32 owner);
+        uint64 version, address implementation);
 
     /// @notice A generic entry for class 0 (not made here), 1 (`TOKEN`) or 2 (`DEX`): those keep their typed paths.
     error ClassReserved(uint16 contractClass);
@@ -318,10 +312,10 @@ interface IOpenFactory {
     error ClassKindDisabled(uint16 contractClass, uint16 kind);
     error InitSelectorZero();
     error InitSelectorMismatch(bytes4 expected, bytes4 got);
-    /// @notice The release's `factoryInfo()` is not 224 B naming this factory, its own id, owner 0, initialized.
+    /// @notice The release's `factoryInfo()` is not 192 B naming this factory, its own id, initialized.
     error ReleaseInfoMismatch(address implementation);
     error InterfaceNotSupported(address implementation, bytes4 interfaceId);
-    /// @notice After `initCall`, the clone's `factoryInfo()` is not 224 B naming this factory, the release's id,
+    /// @notice After `initCall`, the clone's `factoryInfo()` is not 192 B naming this factory, the release's id,
     ///         initialized.
     error InstanceInfoMismatch(address instance);
 

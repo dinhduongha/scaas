@@ -595,11 +595,11 @@ sol! {
     }
 
     /// `IOpenFactory.infoOf` (factory index spec §8.6): the record of a contract the chain's factory made, read for the generic
-    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45).
+    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45); no owner since round 3r R1.
     #[derive(Debug)]
     interface IOpenFactory {
         struct Created {
-            address addr; bytes32 creatorId; bytes32 ownerUA; uint16 contractClass; uint16 kind; uint64 version;
+            address addr; bytes32 creatorId; uint16 contractClass; uint16 kind; uint64 version;
             uint64 createdBlock; uint64 createdAt;
         }
         function infoOf(address c) external view returns (Created memory);

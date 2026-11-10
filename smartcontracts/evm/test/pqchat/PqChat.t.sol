@@ -25,8 +25,9 @@ contract PqChatTest is PqChatBase {
         assertEq(i.contractClass, 3);
         assertEq(i.kind, 0);
         assertEq(i.version, 1);
-        assertEq(i.ownerUA, OWNER_UA);
         assertTrue(i.initialized);
+        (, bytes memory ret) = address(chat).staticcall(abi.encodeCall(PqChat.factoryInfo, ()));
+        assertEq(ret.length, 192, "six words, no owner (3r R1, Q4)");
         assertEq(chat.owner(), OWNER_UA);
         assertEq(chatB.owner(), bytes32(0), "owner 0 allowed");
         assertTrue(chat.supportsInterface(0x01ffc9a7));
@@ -35,7 +36,6 @@ contract PqChatTest is PqChatBase {
         // the implementation: locked, chain-neutral
         IOpenFactory.FactoryInfo memory r = PqChat(impl).factoryInfo();
         assertEq(r.chainUid, bytes32(0));
-        assertEq(r.ownerUA, bytes32(0));
         assertTrue(r.initialized);
         // the env read from the clone's code
         IFactoryToken.ChainEnv memory e = chat.chainEnv();
