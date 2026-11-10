@@ -338,6 +338,18 @@ Unwrap jobs ([unwrap jobs](#unwrap-jobs)) simulate the full outer transaction an
 signing. A subject that crossed the grief threshold gets a re-simulation right before signing too
 ([NODE-LANE-15](#NODE-LANE-15)).
 
+**PQZ verdicts** (group 3f, BUILT, T47; [NODE-JOB-22](job-api.md#NODE-JOB-22)): the verdict fill runs after the guard and before the
+digest and any simulation on every path (the lane, the gateway's `POST /v1/op`, the generic lane runner); a verdict the gateway
+fetched is reused by the lane. A tracked PQZ debit after a restart gets its verdict again before any replacement; without one its
+nonce is gap-filled only.
+
+<a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
+P2; **BUILT**, T63 `39fa296c`, `a6040f9a`, node mutants N1–N3 killed). A PQZ debit whose simulation is over the lane's cap (`gas …
+above max_gas_per_tx …`, `… above the chain's block gas limit …`, `… above the 2^24 gas limit of a transaction`) on a token whose
+`proofStore()` answers LOG ([CTR-PQZ-35](../contracts/pq-zero-knowledge.md#CTR-PQZ-35)) is requeued with
+`PROOF_STORE_OVER_LANE_CAP: <reason>` and reported `dead` only at its `validUntil`; under NONE, or on a release without
+`proofStore()` (before 3h), it is the plain refusal as before; a transport error on the probe requeues.
+
 ## 7. Breakers
 
 <a id="breaker"></a><a id="NODE-LANE-05"></a>**NODE-LANE-05** — **Circuit breakers never block indexing.** Per lane

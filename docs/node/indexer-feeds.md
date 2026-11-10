@@ -156,7 +156,9 @@ slot.
 | Soroban | ledger | `0x`+64 | same two | `G…`/`C…` strkeys (case-sensitive) |
 
 Common keys: `event`, `contract`, `block_number`, `block_hash`, `tx_hash`, `log_index`, `from`, `to`, `amount`, `fee`,
-`fee_recipient` (families with relayer fees), `entry_ref` (`PaymentSettled`), `digest` (`MetaTransactionExecuted`).
+`fee_recipient` (families with relayer fees), `entry_ref` (`PaymentSettled`), `digest` (`MetaTransactionExecuted`); on EVM a
+`PaymentSettled` with its `PaymentMeta` also carries `pay_no` (0x-hex `bytes32`, all zero = none; was text) and `meta_save` (BUILT, plan
+T83 `ba280ade`, [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)).
 Clients validate addresses in their own decoder.
 
 Further events, same object, same filters (decoders for a new kind ship before the first such token is created,
@@ -181,6 +183,23 @@ Further events, same object, same filters (decoders for a new kind ship before t
   `/v1/events` per canonical id; native ids keep today's form;
 - post-quantum Zether: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ
   token normalized like any meta token's, beside the `Pqz*` events ([contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md));
+- <a id="pqz-verifier-rows"></a>PQZ op rows and the verifier mode (group 3f; **BUILT** on the legacy pull path, T47 `75ddccc4`…`062133b6`,
+  `indexer::tests::indexer_joins_proof_offchain_with_position`; [NODE-JOB-22](job-api.md#NODE-JOB-22)): `ConfidentialTransfer`
+  (`entry_ref`, `from_ua`, `to_ua`, `beneficiary`, `fee`, `send_counter`, `blob`), `ConfidentialTransferMulti` (the same plus
+  `recipients`, `mode`), `Unshielded` (`ua`, `amount`, `recipient`, `blob`), each with `tx_index`; ids as `bytes32` hex, never in
+  `from` / `to`. A `PqzVerified` is joined to the first later op event of the same token in the same transaction as `pqz_verified:
+  {statement_hash, proof_hash, verifier, pqz_verifier_epoch}`, with the op row's position, for the audit replay at the exact
+  transaction position; it is never a row of its own. `PqzVerifierProposed` (`current`, `next`, `eta`) and `PqzVerifierRevoked`
+  (`previous`, `pqz_verifier_epoch`) are rows with `alert: true`; `PqzVerifierSet` (`previous`, `next`, `pqz_verifier_epoch`) and
+  `PqzVerifierCancelled` (`next`) rows without. **Health signal:** per `OFFCHAIN` token the indexer keeps, across ranges,
+  `pqz_last_verdict_at` (the block of the last joined `PqzVerified`), `pqz_verifier_epoch` and `pqz_verifier_revoked`, stamped on the
+  token's verified op rows and verifier rows. **The token view** (SPECIFIED, not built): the job API's `GET /v1/tokens/{chain}`
+  per-token row gains `pqz_verifier: {mode, verifier, epoch, revoked, pending, eta, last_verdict_at, endpoints_reachable}`;
+- PQZ proof storage (group 3h; **BUILT**, T63 `39fa296c`): a `ProofStoreSet(previous, next)` row with `alert: true` (a token switched
+  its storage mode); no rows for `PqzDebitProof` (the log is read on demand by the holder, not indexed);
+- <a id="pqz-key-version-rows"></a>PQZ key versions (group 3g; **BUILT**, T55; [NODE-JOB-23](job-api.md#NODE-JOB-23)): `UAPqzKeyAdded`
+  (feed `pqz_pending`), `UAPqzPopStored`, `UAPqzKeyCurrent` (feed `pqz_current`); `Credited`, `Debited` and `PqzRolledOver` carry
+  `key_version`;
 - regulated kinds 8–13 (BUILT on EVM, ua-mtx-merge T35, `indexer.rs`; regulated-kinds spec §7, M-08): `AccountFrozen`,
   `AccountUnfrozen`, `ForcedTransfer`, `Paused`, `Unpaused`, `OrderRecorded`, `OrderRevoked`, `OperatorTransfer` and the
   governance events `RelaxProposed`, `FeatureDisabled`, `RoleRevoked`, ids as `bytes32` hex but `from` / `to` in the address
@@ -201,7 +220,13 @@ History expiry drops those logs, so the node indexes every `UAMemberSig` of the 
 ([NODE-IDX-02](#NODE-IDX-02)), keeps the `sig` bytes with `(chain, registry, ua, index, purpose, member)` for as long as the record lives,
 and serves them by `(ua)` and `(ua, index)`, together with the `msig`'s `pop` rebuilt from its `pop` slots in `index` order. It checks
 each slot against `memberSigHashOf` and the rebuilt `pop` against `popOf` before serving them, and serves none that fails. A reader
-checks again: the node is not trusted for these bytes, only for keeping them.
+checks again: the node is not trusted for these bytes, only for keeping them. Since T66a the registry also tells the `pop` slot set from
+state: `popSlotsOf(ua)` returns the set indices with each `memberSigHashOf` ([CTR-UA-33](../contracts/accounts.md#CTR-UA-33)), so the
+keeper may read the set from it when it is built.
+
+**The factory index is the authority** (PLANNED; [CTR-TOK-27](../contracts/token-wrappers.md#CTR-TOK-27)): a mirror built from
+`TokenCreated` / `DexCreated` / `InstanceCreated` (backfilled by the paged views after history expiry) is a cache, never the source.
+Creators are 32-byte UA ids; the node decodes no `TokenCreated` / `DexCreated` today.
 
 ## <a id="feeds"></a>3. Feeds
 

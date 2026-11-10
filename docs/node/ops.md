@@ -22,6 +22,7 @@ own. Status: the metrics marked BUILT exist; everything else **SPECIFIED**. Inci
 11. [FinOps](#finops)
 12. [Capacity](#capacity)
 13. [Post-quantum Zether chains](#13-post-quantum-zether-chains)
+14. [Operator notes, branch `ua-mtx-merge`](#operator-notes)
 
 ## 1. Scope
 
@@ -747,7 +748,11 @@ Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE
 ([contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md)):
 
 - Chain profile flag `pqz = { genesis_hash = "0x…", registry = "0x…", tokens = ["0x…"] }`; a start-up probe
-  `has_pqz_precompile` (genesis hash first) — a chain that fails it refuses PQZ jobs. The node checks RPC genesis hash
+  `has_pqz_precompile` (genesis hash first; SPECIFIED, not built: the node has no such probe today) — on a chain that fails it
+  the node refuses the jobs of its `PRECOMPILE` PQZ tokens only. An `OFFCHAIN` token
+  ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)) never calls the precompile and its jobs are never refused for a
+  missing one (owner O1, 2026-11-06); BUILT: the node never reads the precompile for an `OFFCHAIN` job
+  (`offchain_job_not_refused_without_precompile`). The node checks RPC genesis hash
   `==` profile `genesis_hash` `==` `registry.chainUid()` `==` each token's `chainUid` and refuses a mismatch (the node
   chain binding, [gateway.md#chain-binding](gateway.md#chain-binding)): the chain id 7622 (formerly 9000) alone does not identify our
   chain.
@@ -812,8 +817,79 @@ Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE
   restarts the node after exit 120; a fault caused by a pooled transaction can loop (the RPC node gossips it again), so
   `watch.sh` prints `restarts=` and warns when it is not 0, and the operator stops the sealer and drops the transaction. Clients price transactions at least `baseFee + 1` ([evm.md](../networks/evm.md#private-chain)).
 - The node never holds a PQZ secret or an ML-DSA key of a user (as for classical Zether: "the node never needs the
-  confidential key"); it holds no envelope key either — envelopes arrive signed.
+  confidential key"); it holds no envelope key either — envelopes arrive signed — nor a PQZ verifier key: it carries or fetches
+  verdicts and never signs one ([NODE-JOB-22](job-api.md#NODE-JOB-22)).
 - Indexer: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ token are
   normalized like any meta token's, beside the `Pqz*` events.
 - Not on the mesh, exactly as classical Zether: the bus never exports a `metatx` or `ua_metatx` intent naming a PQZ
   token, and the SCaaS testnet is private anyway.
+
+- <a id="pqz-verifier"></a>**The PQZ verifier (off-chain) is a separately operated trust role, never this node** (group 3f;
+  node side **BUILT**, T47 `75ddccc4`…`062133b6`; the reference service `scaas-pqz-verifier` **BUILT**, T48 `06e11d23`,
+  `5d4a2780`; [CTR-PQZ-27…30](../contracts/pq-zero-knowledge.md#pqz-verifier-mode)). A token in `OFFCHAIN` mode names a verifier UA
+  whose signature makes its proofs valid; whoever holds that key can approve a false proof up to the token's maximum loss. It is
+  its own process, operator, key custody and resource limits (`scaas-pqz-verifier` is its own crate and binary, never linked into
+  `scaas-node`; anyone may run another that keeps this contract). It **decrypts nothing**: it verifies public statements and proofs
+  and reads chain state, holds no PQZ secret and no ciphertext of anyone ([ARCH-POS-13](../decisions.md#ARCH-POS-13)); its keystore
+  is named in its own config, never a lane key; a k-of-n `msig` of derived keys held by separate parties is recommended (who
+  collects the member signatures of one verdict is not specified yet). **UNAUDITED.**
+
+```toml
+[pqz_verifier]
+endpoints = ["https://pqz-verifier.example.org"]   # asked in order; URLs only, no secret
+refuse_shield_when_unserved = false                # opt-in
+# timeout_ms = 5000            # one endpoint's whole request
+# max_response_bytes = 262144  # read in chunks, a longer answer is no answer
+# valid_margin_secs = 30       # a verdict expiring sooner is re-fetched
+```
+
+  - **Request** `POST <endpoint>/v1/pqz-verdict`, JSON, named fields only: `{token, chainId (a number), op: {entry, args, binding,
+    amount?, recipient?, unwrap?}, statement, proof, pqzVerifierEpoch}`; `op.args` the entry's argument struct (uints up to 64 bits
+    as numbers, wider ones decimal strings, bytes hex), `amount` / `recipient` for `mtxUnshield`, `unwrap` for
+    `mtxUnshieldUnwrap`, `binding` the envelope binding the token gave; `statement` and `proof` hex as the node rebuilt them.
+    `op.args` repeats the ciphertext parts the statement carries, so the body is up to about twice the statement plus the proof.
+  - **Answer**: a 2xx JSON `{pqzVerdict: {…}, pqzVerdictSig: {keyData, signature, members}}`; the node reads only
+    `pqzVerdict.pqzVerifierEpoch`, `pqzVerdict.validUntil` and the signature, and rebuilds the rest. A non-2xx (a named refusal), a
+    body above `max_response_bytes`, a timeout, a decode failure or a `UASig` past the bound is no answer.
+  - **The verifier's own duties** (T48): release address → set; the statement's length one of the set's `STMT_*`, its word 32 the
+    set's PQZL id; `pqz-ffi`'s `pqz_precompile`; the statement rebuilt from the token's state and compared; every key named passes
+    [CTR-PQZ-30](../contracts/pq-zero-knowledge.md#CTR-PQZ-30)'s checks; signs only a valid proof, `validUntil` short (minutes),
+    the token's current epoch, every signature logged with `token`, `statementHash`, `proofHash`; a refusal is a named JSON error,
+    never a signature; a bounded queue, concurrency and per-client rate limits. Open (owner): the request body limit (built
+    1,244,672 B against the spec formula's 722,688 B), how JSON depth is counted, whether the key-ownership record persists across
+    restarts.
+  - **Served**, for the shield switch: some endpoint answers 2xx to the probe `POST <endpoint>/v1/pqz-verdict/probe {token,
+    chainId}` (a fixed probe statement, also the check before a verifier transfer is proposed); one probe per shield job. With
+    `refuse_shield_when_unserved = true`, shield and wrap-shield jobs (`UAShield`, `WrapShield` on a PQZ token) into an `OFFCHAIN`
+    token whose verifier is revoked (`pqzVerifyConfig().verifier == 0`) or that no endpoint serves (none configured counts as
+    unreachable) are refused `PQZ_VERIFIER_UNREACHABLE`, for every consumer.
+- **`OFFCHAIN` token health** (BUILT, T47; the token view SPECIFIED): per `OFFCHAIN` token the indexer keeps
+  `pqz_last_verdict_at`, the epoch and the revoked state ([indexer-feeds.md](indexer-feeds.md#pqz-verifier-rows)). Alerts:
+  `PqzVerifierProposed` (with `eta`) and `PqzVerifierRevoked` are feed rows with `alert: true`; no metric yet.
+
+## <a id="operator-notes"></a>14. Operator notes, branch `ua-mtx-merge`
+
+Status: each row names its own status. One note per job-shape or config change of the round (AGENTS.md: a consumer on an old shape
+must be told, never left to go `dead` silently); an old shape is refused by name. Nothing is live with value: every chain is test
+only. **UNAUDITED.**
+
+| Change | Who acts | What to do |
+|---|---|---|
+| Every PQZ proof-carrying entry ends with `PqzSignedVerdict pqzVerdict` (BUILT, T45): new selectors on kinds 4, 5, 12, 13, direct and signed | clients building PQZ calldata, node operators | update `clientkeys` / `ua-rs` and the node together; the token refuses the old selectors |
+| PQZ jobs gain `args.pqz_verdict: {pqzVerifierEpoch, validUntil, auth}` (BUILT, [NODE-JOB-22](job-api.md#NODE-JOB-22)) | PQZ job producers | `OFFCHAIN` token: send it, or let the node fetch it; `PRECOMPILE` token: leave it out (`PQZ_VERDICT_NOT_EXPECTED`) |
+| `ConfidentialConfig` gained `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` (group 3f) and `proofStore` (group 3h); the `TokenConfig` encoding moved for every kind (BUILT) | token creators, the wizard | every kind sends the fields; non-PQZ kinds leave them 0 / false (`ConfigFieldForOtherKind(4)`); a PQZ creation states the mode and, for `OFFCHAIN`, the verifier and fixed or transferable, after showing the maximum loss |
+| `[pqz_verifier] endpoints`, `refuse_shield_when_unserved` (BUILT, [above](#pqz-verifier)) | node operators | configure endpoints for the `OFFCHAIN` tokens served; the node signs nothing and holds no verifier key |
+| The PQZ verifier (off-chain) is a separate trust role (BUILT, T48) | whoever a token names as verifier | run `scaas-pqz-verifier` (or another implementation of its contract) apart from the node, its key in its own keystore |
+| Alerts `PqzVerifierProposed`, `PqzVerifierRevoked`; per-token `pqz_last_verdict_at` (BUILT) | operators, wallets | watch a proposal before its `eta`; a revocation freezes the token's confidential balances until a new verifier is set |
+| The verdict-less `verifyTransferAmount` reverts `PqzVerdictRequired()` on an `OFFCHAIN` token (BUILT, T45) | ERP reconciliation | use the verdict form, or `pqz-ffi` on `disclosureStatement` |
+| `GovernanceRouter` gained `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` (3f) and `mtxSetProofStore` (3h) (BUILT); its CREATE2 address moved | deployers, node call tables | redeploy the router; the new address in the deployments JSON |
+| PQZ gas pins moved: every `PRECOMPILE` debit carries the empty verdict (480 B, at most +30,720 gas at the EIP-7976 floor); at `n2048-kmax1024` a PQZH op 7 commit-reveal M = 4 without the auditor paid by an `mldsa65` UA no longer fits (M ≤ 3) | relayers quoting PQZ jobs | re-read the figures; the node reads gas from the chain |
+| PQZ debit jobs name `ownTag` (`bytes32` hex) in `args` (BUILT, T63 `39fa296c`); the old shape is `BAD_PAYLOAD: args.args.ownTag: missing` | PQZ job producers | send `ownTag` ([job-api.md](job-api.md#pqz-owntag)); probe a token's release with `proofStore()` (answers from 3h) |
+| A LOG token can hold a large debit under `PROOF_STORE_OVER_LANE_CAP` (BUILT, [NODE-JOB-24](submit-lanes.md#NODE-JOB-24)) until the issuer sets NONE or the job's `validUntil` passes | PQZ job producers, issuers | read the status; it is queued, never `dead` early |
+| PQZ debits, rollovers and prepares name `keyVersion`; the registry's `setPqzKey` / `storePqzPop` take a version (BUILT, T55, [NODE-JOB-23](job-api.md#NODE-JOB-23)) | PQZ job producers, wallets | rotate a key on an operator change or a share holder leaving; in-flight credits to a rotating UA are refused by name (`PQZ_KEY_ROTATION_PENDING`, `PQZ_KEY_ROTATED`) and re-proved; a 60 M chain at `n2816-kmax65536` cannot rotate (spec KV-2) |
+| A new contract kind `service` (BUILT, T79, [NODE-JOB-25](job-api.md#NODE-JOB-25)): `[[chains.services]] address, entries = [{entry, op_type}]` after every key of its `[[chains]]` table (`node.example.toml`); the lane stops on `SERVICE_ENTRIES_MISMATCH`; new `params.max_service_op_bytes` (default 2,048) | node operators, service payers | jobs `{kind: "ua_metatx", op: {entry, contract: "service", token: <service>, args: {op, pullToken, t, auth}}}`; in `t`, `mode` may be a JSON number, every other `uint` a decimal string; new refusals `SERVICE_ENTRIES_MISMATCH`, `SERVICE_PULL_SHAPE` (code 1–4 or `fee nonce`), `SERVICE_TOKEN_MISMATCH`; the gateway takes no service job |
+| `meta.payNo` is a `0x` + 64-hex `bytes32` (absent = 0, none), no longer text (BUILT, plan T83 `ba280ade`): a text `payNo` is `BAD_PAYLOAD: meta.payNo: not 0x-hex`, a short one `not bytes32`; `PAY_NO_TOO_LONG` is gone. New `meta.save` (JSON bool, absent = false; with `payNo` 0 `PAY_META_SHAPE`; inside the commitment, so a differing `save` is `PAY_META_MISMATCH`); `max_pay_meta_bytes` (default 2,048) counts `body` only | pay job producers, ERPs | send `payNo` as `bytes32` (recommended a right-aligned UUIDv7, `clientkeys` `payNoFromUuid`); read the records with `paymentCount(payNo)` / `paymentsOf(payNo, offset, limit)` by `eth_call` (no node API) |
+| `PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body)` (topic 0 changed); the indexer's `PaymentSettled` row carries `pay_no` as 0x-hex 32 bytes (was text; all zero = none) and a new `meta_save` (BUILT) | feed consumers | change a text `pay_no` column or decode the hex |
+| Pay selectors changed with the `PayMeta` tuple: `mtxPay`, `mtxPayReceiverFee`, `payWithFee`, `payWithFeeToUA`, `mtxPayWithTax`, `payWithTax`, `MandateWallet.payUnderMandate`, `mtxPayUnderMandate` (BUILT) | anyone hand-building calldata | build from named fields; the old tuple reaches no function |
+| An `msig` registered with a KEM key is refused `UAKemHolder` (BUILT, T66a, [CTR-UA-32](../contracts/accounts.md#CTR-UA-32)) | clients on the old builders | register the `msig` without a KEM key; senders seal to each accepted member's own key |
+| A factory creator is a 32-byte UA id (canonical; a native id still in its 20-byte form) in a feed, job field or export (PLANNED: the node decodes no `TokenCreated` / `DexCreated` today, so no node shape moves) | feed consumers | read creators as `bytes32` ids ([CTR-TOK-27](../contracts/token-wrappers.md#CTR-TOK-27)) |

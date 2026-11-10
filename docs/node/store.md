@@ -195,9 +195,11 @@ CREATE TABLE lane (chain_key TEXT NOT NULL, label TEXT NOT NULL, account_index I
   journal_max BIGINT,                                             -- monotonic: max(journal_max, n) in the SAME
   PRIMARY KEY (chain_key, label));                                -- transaction as leased→signed (and legacy signed)
 CREATE TABLE chain_contract (chain_key TEXT NOT NULL, address TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('tender', 'sponsorship_pool', 'account_factory', 'dex', 'role_holder')),
+  kind TEXT NOT NULL CHECK (kind IN ('tender', 'sponsorship_pool', 'account_factory', 'dex', 'role_holder', 'service')),
   PRIMARY KEY (chain_key, address));                              -- registered non-token contracts (call table, job-api.md);
-                                                                  -- kind 'dex' rows = the chain profile's DEX list (NET-ALL-24)
+                                                                  -- kind 'dex' rows = the chain profile's DEX list (NET-ALL-24);
+                                                                  -- kind 'service' rows = its service list (NET-ALL-24,
+                                                                  -- NODE-JOB-25); SPECIFIED: the node reads [[chains.services]]
 
 -- jobs (NODE-JOB-02, NODE-JOB-04)
 CREATE TABLE job (
