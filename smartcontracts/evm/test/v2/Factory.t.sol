@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -128,19 +129,19 @@ contract FactoryTest is Test {
     /// Chain-neutral spec §3.1 (plan T71): the registrar is the only constructor argument; `chain_uid` 0 is refused by
     /// `configureChain` (the constructor's check before).
     function test_constructor_refusesZeroChainUid() public {
-        OpenFactory g = new OpenFactory(registrar);
+        OpenFactory g = new OpenFactory(nid(registrar));
         assertEq(g.chainUid(), bytes32(0));
         vm.prank(registrar);
         vm.expectRevert(IOpenFactory.ChainUidZero.selector);
         g.configureChain(bytes32(0), 0, address(0), 0, bytes32(0));
         assertEq(f.chainUid(), UID_);
-        assertEq(f.registrar(), registrar);
+        assertEq(address(uint160(uint256(f.admin()))), registrar);
     }
 
     /// Plan 5g-Z2: envs are published per kind, versioned, never changed; the factory's own and well-formed.
     function test_publishEnv() public {
         IFactoryToken.Env memory e = plainEnv(address(f), address(0), UID_, address(0), false);
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.publishEnv(NORMAL, 2, e);
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvAlreadyPublished.selector, 0, 1));
@@ -252,7 +253,7 @@ contract FactoryTest is Test {
         f.deployTokenImplementation(NORMAL, 1, 1, code, "");
         vm.stopPrank();
         vm.prank(alice);
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
         f.deployTokenImplementation(NORMAL, 3, 1, code, "");
         assertEq(f.latestVersion(NORMAL), 1);
         assertEq(f.implementationOf(WRAPPED, 1), address(wrappedImpl));
@@ -288,7 +289,7 @@ contract FactoryTest is Test {
     function test_noticePeriod() public {
         // the period is written once (configureChain), capped at 30 days (review 5g-Z2 P2-4: near 2^64 `usableFrom`
         // would overflow)
-        OpenFactory g0 = new OpenFactory(registrar);
+        OpenFactory g0 = new OpenFactory(nid(registrar));
         EnvKit.genesis(UID_);
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NoticePeriodTooLong.selector, 30 days + 1));
@@ -330,7 +331,7 @@ contract FactoryTest is Test {
         assertTrue(f.kindEnabled(NORMAL));
         assertTrue(f.kindEnabled(WRAPPED));
         for (uint8 k = 2; k <= 13; ++k) assertFalse(f.kindEnabled(IOpenFactory.TokenKind(k)));
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.setKindEnabled(NORMAL, false);
         vm.prank(registrar);
         vm.expectEmit(true, false, false, true, address(f));
@@ -411,7 +412,7 @@ contract FactoryTest is Test {
     /// working and the other versions stay creatable.
     function test_deprecate_refusesNewTokensOfThatVersion() public {
         vm.prank(alice);
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.deprecate(NORMAL, 1, "x");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NORMAL, 9));

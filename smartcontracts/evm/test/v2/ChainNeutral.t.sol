@@ -156,7 +156,7 @@ contract ChainNeutralTest is Test {
         vm.chainId(A_ID);
         vm.setBlockhash(999, keccak256("A 999"));
         vm.store(HISTORY, bytes32(0), UID_A);
-        OpenFactory f = new OpenFactory{salt: salt_}(registrar);
+        OpenFactory f = new OpenFactory{salt: salt_}(nid(registrar));
         bytes memory withRef = abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), 999, keccak256("A 999")));
         bytes memory noRef = abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), 0, bytes32(0)));
         vm.prank(registrar);
@@ -169,7 +169,7 @@ contract ChainNeutralTest is Test {
         vm.chainId(A_ID);
         vm.setBlockhash(999, keccak256("C 999"));
         vm.etch(HISTORY, "");
-        f = new OpenFactory{salt: salt_}(registrar);
+        f = new OpenFactory{salt: salt_}(nid(registrar));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.RefBlockMismatch.selector, 999, keccak256("A 999"),
             keccak256("C 999")));
@@ -186,7 +186,7 @@ contract ChainNeutralTest is Test {
         vm.revertToState(snap);
         vm.chainId(A_ID);
         vm.etch(HISTORY, "");
-        f = new OpenFactory{salt: salt_}(registrar);
+        f = new OpenFactory{salt: salt_}(nid(registrar));
         vm.prank(registrar);
         f.configureChain(UID_C, 0, address(0), 0, bytes32(0));
         vm.prank(registrar);

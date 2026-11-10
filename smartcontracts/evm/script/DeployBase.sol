@@ -8,6 +8,7 @@ import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../src/factory/ChainEnvCode.sol";
+import {MetaTxLib} from "../src/common/MetaTxLib.sol";
 import {GovernanceLib} from "../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../src/governance/GovernanceBits.sol";
 import {GovernanceRouter} from "../src/governance/GovernanceRouter.sol";
@@ -346,10 +347,11 @@ abstract contract DeployBase is DeployBook {
             (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
             require(bls, "DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
         }
-        // chain-neutral releases (plan T71, T72): the registrar is the factory's only constructor argument; this chain's
-        // values are its one-time `configureChain`, after the router it names (T73: the deterministic deployer, the
-        // reference block and the dry run)
-        f = new OpenFactory{salt: salt}(registrar);
+        // chain-neutral releases (plan T71, T72): the registrar's native id is the factory's only constructor argument, its
+        // first admin (round 3r, spec §5.2; the order and FACTORY_ADMIN_NEXT are T10); this chain's values are its one-time
+        // `configureChain`, after the router it names (T73: the deterministic deployer, the reference block and the dry
+        // run). The admin deploys the releases itself: its own deploy is its own approval (spec §5.6).
+        f = new OpenFactory{salt: salt}(MetaTxLib.pad(registrar));
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera); // before every release: its address is in the env
         _deployRelayFeeRouter();
@@ -584,7 +586,7 @@ abstract contract DeployBase is DeployBook {
         f.configureChain(uid, noticePeriod, govRouter, ref, ref == 0 ? bytes32(0) : blockhash(ref));
         _gate(address(f));
         _releaseRow("OpenFactory", 0, 0, 0, address(f), keccak256(abi.encodePacked(type(OpenFactory).creationCode,
-            abi.encode(registrar))), keccak256(abi.encode(registrar)));
+            abi.encode(MetaTxLib.pad(registrar)))), keccak256(abi.encode(MetaTxLib.pad(registrar))));
         _releaseRow("registrar", 0, 0, 0, registrar, bytes32(0), bytes32(0));
         if (chainSiblings > 1 && !vm.envOr("SIBLINGS_CONFIGURED", false)) {
             configureOnly = true;

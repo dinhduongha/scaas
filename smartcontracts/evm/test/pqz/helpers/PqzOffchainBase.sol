@@ -126,7 +126,7 @@ abstract contract PqzOffchainBase is PqzFixture {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
         r2 = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
-        OpenFactory f2 = new OpenFactory(registrar);
+        OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
         Catalogue.release(f2, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f2), PQZ_UID, address(r2), address(0)),
             type(NormalPqzToken).creationCode);

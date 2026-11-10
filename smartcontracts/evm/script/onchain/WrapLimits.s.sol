@@ -352,7 +352,7 @@ contract WrapLimitsSetup is WrapLimitsKit {
     function setup() external {
         _start("setup", false);
         OpenFactory f5 = OpenFactory(_dep("token_factory"));
-        bytes memory init = abi.encodePacked(vm.getCode("OpenFactory.sol:OpenFactory"), abi.encode(a1));
+        bytes memory init = abi.encodePacked(vm.getCode("OpenFactory.sol:OpenFactory"), abi.encode(_pad(a1)));
         fw = OpenFactory(_create2(init, "fw", "factory: this group's OpenFactory"));
         _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.configureChain, (vm.parseJsonBytes32(dj, ".chain_uid"), NOTICE,
             address(gr), 0, bytes32(0))), false, "factory | configureChain, noticePeriod 3600 s");

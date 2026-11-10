@@ -5,6 +5,7 @@ pragma solidity ^0.8.24;
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../../src/factory/ChainEnvCode.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -69,13 +70,13 @@ contract ChainNeutralFactoryTest is Test {
 
     // ------------------------------------------------------------------ configureChain
 
-    function test_configureChain_onceAndRegistrarOnly() public {
-        OpenFactory g = new OpenFactory(registrar);
-        assertEq(g.registrar(), registrar);
+    function test_configureChain_onceAndAdminOnly() public {
+        OpenFactory g = new OpenFactory(nid(registrar));
+        assertEq(g.admin(), nid(registrar));
         assertEq(g.chainUid(), bytes32(0));
         EnvKit.genesis(UID_);
         vm.prank(alice);
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         g.configureChain(UID_, 0, address(0), 0, bytes32(0));
         vm.etch(registrar, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(registrar);
@@ -95,7 +96,7 @@ contract ChainNeutralFactoryTest is Test {
     }
 
     function test_configureChain_zeroAndLongNoticeRefused() public {
-        OpenFactory g = new OpenFactory(registrar);
+        OpenFactory g = new OpenFactory(nid(registrar));
         EnvKit.genesis(UID_);
         vm.startPrank(registrar);
         vm.expectRevert(IOpenFactory.ChainUidZero.selector);
@@ -108,7 +109,7 @@ contract ChainNeutralFactoryTest is Test {
 
     /// Within 256 blocks of genesis `BLOCKHASH(0)` proves it: another value is refused.
     function test_configureChain_genesisProvableByBlockhash() public {
-        OpenFactory g = new OpenFactory(registrar);
+        OpenFactory g = new OpenFactory(nid(registrar));
         vm.roll(200);
         vm.setBlockhash(0, UID_);
         vm.prank(registrar);
@@ -125,18 +126,18 @@ contract ChainNeutralFactoryTest is Test {
         HistoryStub hs = new HistoryStub();
         vm.etch(HISTORY, address(hs).code);
         HistoryStub(HISTORY).set(UID_, 0);
-        OpenFactory g = new OpenFactory(registrar);
+        OpenFactory g = new OpenFactory(nid(registrar));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidNotGenesis.selector, keccak256("other"), UID_));
         g.configureChain(keccak256("other"), 0, address(0), 0, bytes32(0));
         for (uint8 m = 1; m <= 2; ++m) {
             HistoryStub(HISTORY).set(UID_, m);
-            OpenFactory gm = new OpenFactory(registrar);
+            OpenFactory gm = new OpenFactory(nid(registrar));
             _configure(gm, keccak256("other"), 0, bytes32(0)); // nothing to compare: accepted
             assertEq(gm.chainUid(), keccak256("other"));
         }
         vm.etch(HISTORY, "");
-        OpenFactory g3 = new OpenFactory(registrar);
+        OpenFactory g3 = new OpenFactory(nid(registrar));
         _configure(g3, keccak256("other"), 0, bytes32(0)); // no history contract: nothing to compare
         vm.etch(HISTORY, address(hs).code);
         HistoryStub(HISTORY).set(UID_, 0);
@@ -148,7 +149,7 @@ contract ChainNeutralFactoryTest is Test {
         vm.roll(300); // past BLOCKHASH(0): EIP-2935 proves the genesis here
         EnvKit.genesis(UID_);
         vm.setBlockhash(290, keccak256("block 290"));
-        OpenFactory g = new OpenFactory(registrar);
+        OpenFactory g = new OpenFactory(nid(registrar));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.RefBlockMismatch.selector, 290, keccak256("a sibling"),
             keccak256("block 290")));
@@ -161,7 +162,7 @@ contract ChainNeutralFactoryTest is Test {
     }
 
     function test_configureChain_routerOfAnotherChainRefused() public {
-        OpenFactory g = new OpenFactory(registrar);
+        OpenFactory g = new OpenFactory(nid(registrar));
         EnvKit.genesis(UID_);
         GovernanceRouter other = new GovernanceRouter(keccak256("other"), address(0), address(0), false);
         vm.prank(registrar);
@@ -174,7 +175,7 @@ contract ChainNeutralFactoryTest is Test {
 
     /// Nothing is published, deployed or created before `configureChain`; reads answer.
     function test_notConfigured_everyEntryRefused() public {
-        OpenFactory g = new OpenFactory(registrar);
+        OpenFactory g = new OpenFactory(nid(registrar));
         IFactoryToken.Env memory e = plainEnv(address(g), address(0), UID_, address(0), false);
         bytes memory code = type(NormalToken).creationCode;
         vm.startPrank(registrar);

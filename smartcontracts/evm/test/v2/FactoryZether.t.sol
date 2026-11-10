@@ -6,6 +6,7 @@ import {SaltedEIP712Core} from "../../src/common/SaltedEIP712.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
@@ -140,7 +141,7 @@ contract FactoryZetherTest is Test {
         f.createToken(NZ, 1, abi.encode(_conf()), "a");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, UZ));
         f.createToken(UZ, 1, abi.encode(_wrapped()), "a");
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.setKindEnabled(NZ, true);
         vm.recordLogs();
         _enable();

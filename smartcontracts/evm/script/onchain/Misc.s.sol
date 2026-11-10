@@ -9,6 +9,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {ImplArgs, ITokenModules} from "../../src/metatx/ITokenModule.sol";
@@ -271,7 +272,7 @@ contract Misc is OnchainBase {
 
     function _factory() internal {
         vm.startBroadcast(k1);
-        f2 = new OpenFactory(a1);
+        f2 = new OpenFactory(_pad(a1));
         f2.configureChain(uid, 0, f5.govRouter(), 0, bytes32(0));
         ms.push(address(new NormalTokenP(address(f2), "")));
         ms.push(address(new NormalTokenT(address(f2), "")));
@@ -315,7 +316,7 @@ contract Misc is OnchainBase {
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind.NORMAL_REGULATED, 1, cfg0,
             _salt("n3"))), IOpenFactory.VersionUnknown.selector, "factory: a kind outside the catalogue");
         _neg(a2, address(f2), abi.encodeCall(OpenFactory.publishEnv, (IOpenFactory.TokenKind.NORMAL, 4, e)),
-            IOpenFactory.NotRegistrar.selector, "factory: publishEnv by another than the registrar");
+            IAdmin.NotAdmin.selector, "factory: publishEnv by another than the admin");
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.configureChain, (uid, 0, address(0), 0, bytes32(0))),
             IOpenFactory.ChainAlreadyConfigured.selector, "factory: configureChain twice");
     }

@@ -136,7 +136,7 @@ library Catalogue {
         v = f.latestEnvVersion(kind);
         if (v != 0 && keccak256(abi.encode(f.envOf(kind, v))) == keccak256(abi.encode(e))) return v;
         v += 1;
-        vm.prank(f.registrar());
+        vm.prank(address(uint160(uint256(f.admin()))));
         f.publishEnv(kind, v, e);
     }
 
@@ -155,7 +155,7 @@ library Catalogue {
     {
         (address[] memory ms, bytes memory implArgs) = deployKindModules(uint8(kind), address(f), coreArgs);
         uint16 v = env(f, kind, withModules(e.libs.length == 0 ? pinned(e, kind) : e, ms));
-        vm.prank(f.registrar());
+        vm.prank(address(uint160(uint256(f.admin()))));
         return f.deployTokenImplementation(kind, version, v, code, implArgs);
     }
 
@@ -178,10 +178,10 @@ library Catalogue {
         e = withModules(e, ms);
         uint16 v = f.latestDexEnvVersion();
         if (v == 0 || keccak256(abi.encode(f.dexEnvOf(v))) != keccak256(abi.encode(e))) {
-            vm.prank(f.registrar());
+            vm.prank(address(uint160(uint256(f.admin()))));
             f.publishDexEnv(++v, e);
         }
-        vm.prank(f.registrar());
+        vm.prank(address(uint160(uint256(f.admin()))));
         return f.deployDexImplementation(version, v, code, implArgs);
     }
 

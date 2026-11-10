@@ -30,7 +30,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     function setUp() public {
         _offStack();
         me = nid(address(this));
-        fN = new OpenFactory(registrar);
+        fN = new OpenFactory(nid(registrar));
         EnvKit.configure(fN, PQZ_UID, NOTICE, address(0));
         Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
             type(NormalPqzToken).creationCode);

@@ -213,7 +213,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         // T66b: the stand-in's bodies run in kind 0's modules (the face checks them against kind 0), its hook there too
         (address[] memory ms, bytes memory implArgs) = probeModules("GovRegulatedBits.t.sol:MockNormalRegulated", 0, address(f), "");
         uint16 ev = Catalogue.env(f, k8, withModules(pinned(plainEnv(address(f), address(0), UID, address(0), false), k8), ms));
-        vm.prank(f.registrar());
+        vm.prank(address(uint160(uint256(f.admin()))));
         f.deployTokenImplementation(k8, 1, ev, type(MockNormalRegulated).creationCode, implArgs);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, k8));
         f.createToken(k8, 1, args, "r");

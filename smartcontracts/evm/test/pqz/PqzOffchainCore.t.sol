@@ -21,6 +21,7 @@ import {SSTORE2} from "../../src/common/SSTORE2.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
 
 /// Group 3f, T44 (PQZ verifier mode spec §3, §5, §6; CTR-PQZ-27, -29, -30 drafts): the `OFFCHAIN` core. Positive control
@@ -249,7 +250,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
 
     /// A release with `deps = [0]` on a second factory (the release passes `validateEnv`).
     function _zeroDepFactory() internal returns (OpenFactory f) {
-        f = new OpenFactory(registrar);
+        f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(0));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(0)),
             type(NormalPqzToken).creationCode);

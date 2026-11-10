@@ -92,7 +92,7 @@ contract GovProofBitTest is PqzOffchainBase {
         nId = nid(vm.addr(NKEY));
         owner_ = nid(address(this));
         router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
-        f = new OpenFactory(registrar);
+        f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
         IFactoryToken.Env memory e = pqzEnv(address(f), PQZ_UID, address(reg), address(pqv));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, e, type(NormalPqzToken).creationCode);

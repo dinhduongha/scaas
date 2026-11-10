@@ -45,7 +45,7 @@ function _probeRelease(OpenFactory f, IOpenFactory.TokenKind kind, uint64 versio
 {
     Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     uint16 v = Catalogue.env(f, kind, e);
-    vm.prank(f.registrar());
+    vm.prank(address(uint160(uint256(f.admin()))));
     return f.deployTokenImplementation(kind, version, v, code, implArgs);
 }
 

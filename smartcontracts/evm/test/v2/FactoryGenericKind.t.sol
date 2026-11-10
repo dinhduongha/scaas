@@ -5,6 +5,7 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
@@ -314,14 +315,14 @@ contract FactoryGenericKindTest is Test {
         assertEq(f.creating(), bytes32(0));
     }
 
-    function test_generic_registrarOnly() public {
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+    function test_generic_adminOnly() public {
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.publishClassEnv(4, 0, 1, _env());
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
         f.deployImplementation(_id(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, "", "");
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.deprecateRelease(_id(4, 0, 1), "x");
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.setClassKindEnabled(4, 0, true);
         vm.etch(registrar, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(registrar);
