@@ -11,6 +11,10 @@ everything cryptographic is **UNAUDITED**. Nothing was measured: the numbers are
 repository already records ([`pqz-leg-proof-option/`](pqz-leg-proof-option/), script and output). No gas or timing run
 was made (that needs the owner's word).
 
+**Status (2026-11-09):** the contract side is specified in the proof-path spec and BUILT on branch `ua-mtx-merge` (T58–T65;
+normative text [pq-zero-knowledge.md §7.12](../contracts/pq-zero-knowledge.md#pqz-proof-path)); SSTORE2 for proofs was dropped by
+the owner (2026-11-07); the client side lives in the no-oracle spec.
+
 **The idea (owner, 2026-11-06).** An immutable per-token option chosen at creation, `legProof ∈ {NONE, CALLDATA}` (no
 STATE variant: a proof verifies itself, so any untrusted source can serve it). Under `CALLDATA` every credit (recipient
 leg, auditor copy, op 7 legs) comes with a proof that the contract verified, so every credit in state has one. A

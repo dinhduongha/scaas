@@ -1215,9 +1215,10 @@ confidential transfers are `mtxConfidentialTransfer…` (wallets may label them 
 | `mtxConfidentialTransferSingleCompact` | PQZ only | op 1 in commit-reveal form |
 | `mtxUnshield(…, uint256 amount, bytes32 recipient)` | both | the unshield proof; `amount·shieldScale` from `SHIELD_POOL` to `recipient`; PQZ `amount = 0, recipient = 0` is a refresh; one function for native and UA recipients ([CTR-ZTH-51](#CTR-ZTH-51)) |
 | `mtxUnshieldUnwrap(…)` | `UNDERLYING_*` | the same proof; `amount·shieldScale` burnt **from the pool**, then the leg pays `u` that value rounded down, bounded by `minOut`, nothing minted; the holder loses less than one raw underlying unit to the rounding (a public `unwrap` burns only `⌈out·q⌉`), so a client picks `amount` with `previewUnwrap(u, amount·shieldScale).burned == amount·shieldScale` |
-| `mtxRollOver(bytes32 ua, uint256 n)` | both | PQZ: roll `n` queue entries ([§7.6](pq-zero-knowledge.md#76-rollover)); Zether: one aggregated `pending`, any `n ≥ 1` rolls it |
+| `mtxRollOver(bytes32 ua, uint256 n)` | Zether only (since PQZ's 3g; `IZetherToken`) | one aggregated `pending`, any `n ≥ 1` rolls it |
+| `mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n)` | PQZ only (3g, [CTR-PQZ-31](pq-zero-knowledge.md#CTR-PQZ-31)) | roll `n` queue entries of that key version ([§7.6](pq-zero-knowledge.md#76-rollover)); event `PqzRolledOver` |
 | `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode` | Zether only | the roll-over functions of [ElGamal state and lifecycle](#rollover) |
-| `mtxPrepareAcc(bytes32 ua, uint256 half)` | PQZ only | [pq-zero-knowledge.md §7.6](pq-zero-knowledge.md#76-rollover) |
+| `mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half)` | PQZ only | [pq-zero-knowledge.md §7.6](pq-zero-knowledge.md#76-rollover), per key version since 3g |
 
 **Shared proof-taking signature** (controller ruling, plan 5h): `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary,
 bytes accHint[, layer-neutral trailing arguments])`. PQZ: `auth` = the signing UA's signature over `authDigest` (formerly
