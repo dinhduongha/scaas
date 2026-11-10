@@ -1054,6 +1054,33 @@ the rate admin sets `rateAdjustable = false`, `rateAdmin = 0` and drops the pend
 copy stays set (wrap then reads an empty `_pending`, one extra SLOAD), so fixed-at-creation tokens keep the cheap path.
 The controls of flags 5–9 live in the `scaas.regulated` namespace ([asset-suite.md](asset-suite.md#storage), [CTR-TOK-24](#CTR-TOK-24)).
 
+<a id="CTR-TOK-31"></a>**CTR-TOK-31** — **Wrap and unwrap limits on the hybrids of the wrapped kinds** (owner 2026-11-10, the rulings of
+[`superpowers/specs/2026-11-10-wrap-limits.md`](../superpowers/specs/2026-11-10-wrap-limits.md); [decisions.md](../decisions.md#ctr-tok-31--wrap-and-unwrap-limits-on-the-hybrids-of-the-wrapped-kinds);
+**BUILT** on branch `ua-mtx-wraplimit`, group 3l; UNAUDITED). Three SCaaS bits, valid only on a **hybrid** (`maxSupply ≠ 0`) of
+kinds 1, 3, 5, 9, 11, 13: 25 `WRAP_LIMIT` (a capability), 26 `WRAP_LIST` (a power), 27 `REDEEMER` (a scalar power); a pure-wrap
+token's creation with any of them is refused (`WrapControlNeedsHybrid`), the normal kinds refuse them (`FeatureInvalidForKind`).
+
+- **Limits.** Per leg, per direction, a short and a long fixed window `(perUser, tokenWide, period)`, each part off at 0, counted
+  in the underlying moved (a wrap's measured `received`, an unwrap's `out`) in quanta of `10^unitExp` raw units (`unitExp`
+  fixed by the first configuration); `perUser ≤ 2^19 − 1`, `period` whole minutes up to `2^20 − 1`. The subject is the payer
+  of a wrap (the caller, the signer, the order's `o.from`) and the holder of an unwrap (the signer's id, never `UA_POOL`; the
+  proof's sender of an unshield-unwrap); the net credit goes to the id credited (`to`, `toUA`, the order's destination).
+- **The net rule and the decay.** Once bit 25 holds and the first configuration is written, every wrap credits and every
+  unwrap debits the id's base `b` (quanta, rounded against the id) and its weighted-average start (an absolute minute,
+  `uint64`); with `netUnwrap` on or `decayDays ≠ 0` an unwrap needs `q ≤ E`, `E` the base decayed linearly to 0 over
+  `decayDays` from the start. A holder of bit 27 unwraps past `E`; the excess (raw units) is a use of its grant.
+- **Lists.** A wrapper list and an unwrapper list; bit 26's holder writes members at once.
+- **Governance.** `setWrapLimits` (the owner, through `GovernanceRouter`): a wrap-side relaxation or an unwrap-side
+  tightening waits the factory's `noticePeriod()` (two calls, the same commitment, the same owner generation, in
+  `[eta, eta + delay]`); the rest applies at once. `disableFeature` of 25, 26, 27 is refused while a control under it is on.
+- **Storage.** `scaas.wraplimit` (pinned in `test/v2/layout/namespaces.json`): two config words and two token-wide window words
+  per leg, one quota word per id and leg, a member byte per id, the pending; `Leg.ctl` at byte 24 of leg slot a, so a token
+  without the bits, or never configured, reads nothing new on a wrap or an unwrap.
+- **Disclosed** (`governance_bits.json` bits 25–27): the fixed-window burst, Sybil splitting, a first-come token-wide cap, the
+  notice that may be 0, pre-configuration ids with `b = 0`, minted units never count, a rate rise not redeemable under the rule,
+  entitlement for hire, the round trip that makes the start younger, the shielded id apart from the public id (open question
+  Q17), the redeemer's reach and the instant stops that remain (a member removed, a redeemer revoked).
+
 ## 9. Gas
 
 - Hot path (transfer, `pay`, fees, named functions) touches no kind-specific storage: the same SLOAD/SSTORE set as the measured
