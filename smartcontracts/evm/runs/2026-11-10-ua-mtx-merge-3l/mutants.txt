@@ -1,0 +1,49 @@
+mutant | red tests | rc
+list-reads-receiver | test_r1_wrapperListReadsThePayerBeforeThePull | 1
+list-after-pull | test_r1_wrapperListReadsThePayerBeforeThePull | 1
+holder-msgsender | test_r10_derivedUnwrapCountsTheUA, test_r2_unwrapperListReadsTheHolder, test_r8_plainNetRule | 1
+cap-gt-to-ge | test_r10_derivedUnwrapCountsTheUA, test_r10_namedWrapCountsTheSigner, test_r11_wrapOrderCountsTheSigner, test_r13_mintNotCounted, test_r20_perLeg, test_r23_viewsMatchWhatPasses, test_r3_perUserWrapShortAndLong, test_r3_quantaRoundUp, test_r4_unwrapCountsTheUnderlyingOut, test_r5_tokenWideCap, test_r6_fixedWindowInMinutes, test_r6_startNotResetByAUse, test_r7_aliasedStaleWindowOnlyRefuses, test_r7_circleWraps2029, test_r7_circleWraps2033 | 1
+quanta-floor | test_r3_quantaRoundUp | 1
+one-window-for-both | test_quotaWordOffsetsArePinned, test_r3_perUserWrapShortAndLong | 1
+unwrap-counts-burned | test_r4_unwrapCountsTheUnderlyingOut | 1
+total-not-written | test_r23_viewsMatchWhatPasses, test_r5_tokenWideCap | 1
+window-le-to-lt | test_r23_viewsMatchWhatPasses, test_r6_fixedWindowInMinutes, test_r7_circleWraps2029, test_r7_circleWraps2033 | 1
+start-reset-every-use | test_r6_startNotResetByAUse | 1
+checked-subtraction | test_r7_circleWraps2029, test_r7_circleWraps2033 | 1
+credit-the-payer | test_r11_r38_orderCreditsTheDestination, test_r8_plainNetRule | 1
+debit-floor | test_r8_debitRoundsUp | 1
+track-only-under-net | test_quotaWordOffsetsArePinned, test_r10_batchItemCounted, test_r10_namedWrapCountsTheSigner, test_r26b_decayWithoutTheNetRule, test_r3_perUserWrapShortAndLong, test_r3_quantaRoundUp, test_r5_tokenWideCap, test_r6_fixedWindowInMinutes, test_r7_aliasedStaleWindowOnlyRefuses, test_r7_circleWraps2029, test_r7_circleWraps2033, test_r9_decayCountsTheRealAge, test_r9_trackedWhileOff | 1
+clock-not-kept-off | test_r9_decayCountsTheRealAge | 1
+order-counts-submitter | test_r11_r38_orderCreditsTheDestination, test_r11_wrapOrderCountsTheSigner | 1
+unshield-envelope-from | test_r12_r36_unshieldUnwrapRefusedBeforeTheProof | 1
+eff0-tightest | test_r14_wrapSideTighterAtOnce, test_r15_mixedCallWaits, test_r15_ownerChangeKillsThePending, test_r15_wrapSideLooserWaits, test_r16_unwrapSideTighterWaitsLooserAtOnce | 1
+pending-window-unchecked | test_r15_wrapSideLooserWaits | 1
+pending-generation-unchecked | test_r15_ownerChangeKillsThePending | 1
+period-direction-inverted | test_r14_wrapSideTighterAtOnce, test_r15_wrapSideLooserWaits | 1
+unwrap-side-as-wrap-side | test_r16_unwrapSideTighterWaitsLooserAtOnce | 1
+decay-as-wrap-side | test_r16_unwrapSideTighterWaitsLooserAtOnce | 1
+unit-copy-not-written | test_r21_copiesOnEveryLeg, test_r27_r28_weightedStart, test_r8_debitRoundsUp | 1
+disable-26-unchecked | test_r18_disableRefusedWhileOn | 1
+disable-27-unchecked | test_r18_disableRefusedWhileOn | 1
+bit25-in-normal-mask | test_r19_normalKindRefusesTheBits | 1
+one-quota-across-legs | test_r20_perLeg | 1
+one-leg-ctl | test_r21_copiesOnEveryLeg | 1
+view-wrong-window | test_r10_batchItemCounted, test_r10_namedWrapCountsTheSigner, test_r11_r38_orderCreditsTheDestination, test_r11_wrapOrderCountsTheSigner, test_r13_mintNotCounted, test_r23_viewsMatchWhatPasses | 1
+entitlement-round-up | test_r27_r28_weightedStart, test_r33_roundTripRejuvenates, test_r9_decayCountsTheRealAge | 1
+age-unclamped | test_r26_decayAtZeroHalfAndFull, test_r26b_decayWithoutTheNetRule, test_r27_r28_weightedStart, test_r29_unwrapUnderTheDecay, test_r31_decayOnOffOn, test_r33_roundTripRejuvenates | 1
+start-now-every-wrap | test_r27_r28_weightedStart, test_r33_roundTripRejuvenates, test_r9_decayCountsTheRealAge | 1
+age-rounded-down | test_r27_r28_weightedStart | 1
+base-not-rescaled | test_r27_r28_weightedStart, test_r33_roundTripRejuvenates | 1
+debit-b-minus-q | test_r29_unwrapUnderTheDecay, test_r33_roundTripRejuvenates | 1
+base-clamp-missing | test_r28_clampBindsOnALargeTopUp | 1
+debit-guard-removed | test_r10_derivedUnwrapCountsTheUA, test_r2_unwrapperListReadsTheHolder, test_r30_expiredGrantRefused, test_r30_leafOfARevokedGrantorRefused, test_r30_redeemerBudgetIsTheExcess, test_r30_redeemerPastTheEntitlement, test_r35_tokenWideCapIsFirstCome, test_r4_unwrapCountsTheUnderlyingOut, test_r9_trackedWhileOff | 1
+redeemer-no-use | test_r30_expiredGrantRefused, test_r30_leafOfARevokedGrantorRefused, test_r30_redeemerBudgetIsTheExcess | 1
+redeemer-use-zero | test_r30_redeemerBudgetIsTheExcess | 1
+redeemer-skips-windows | test_r30_redeemerPastTheEntitlement | 1
+base-unsaturated | test_r32_baseSaturates | 1
+hybrid-check-misses-27 | test_r34_pureWrapRefusesTheBits | 1
+hybrid-check-reads-storage | test_r34_pureWrapRefusesTheBits | 1
+decay-gated-on-net | test_r26b_decayWithoutTheNetRule, test_r9_decayCountsTheRealAge | 1
+subject-zero-unchecked | test_r37_subjectZeroRefused | 1
+stale-load-one-slot | test_quotaWordOffsetsArePinned, test_r10_batchItemCounted, test_r10_namedWrapCountsTheSigner, test_r11_r38_orderCreditsTheDestination, test_r11_wrapOrderCountsTheSigner, test_r20_perLeg, test_r23_viewsMatchWhatPasses, test_r3_perUserWrapShortAndLong, test_r3_quantaRoundUp, test_r5_tokenWideCap, test_r6_fixedWindowInMinutes, test_r7_aliasedStaleWindowOnlyRefuses, test_r7_circleWraps2029, test_r7_circleWraps2033 | 1
+router-limit-type-left-out | test_aMissingStructTypeFails, test_setWrapLimitsThroughTheRouter, test_theSubjectIsTheSigner | 1

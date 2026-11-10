@@ -834,6 +834,18 @@ contract WrapLimitsTest is WrapLimitsBase {
         assertLe(_q(w, alice).entitlement / 100, 863 + 863, "rescaled: never above E + a");
     }
 
+    /// Row 28: the `b + a` clamp binds when a large top-up meets a young line (the age's round-up by one minute would put the
+    /// rescaled base 133 quanta above `b + a`); found by T99's mutant `base-clamp-missing`, which survived the rows above.
+    function test_r28_clampBindsOnALargeTopUp() public {
+        WrappedToken w = _hyb();
+        _set(w, _cfg1(0, 730, OFF(), OFF(), OFF(), OFF()), true, false, false);
+        _wrap(w, alice, 7_260_627);
+        vm.warp(T0 + 4416 * 60);
+        _wrap(w, alice, 818_492_002);
+        assertEq(_base(w, alice), 7_260_627 + 818_492_002, "b' = b + a, not the rescaled 825,752,762");
+        assertEq(_age(w, alice), 39, "g' = ceil(7230125 * 4416 / 825722127)");
+    }
+
     function test_r29_unwrapUnderTheDecay() public {
         WrappedToken w = _hyb();
         _set(w, _cfg1(2, 730, OFF(), OFF(), OFF(), OFF()), true, false, false);
