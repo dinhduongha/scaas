@@ -6,7 +6,8 @@ and Matrix optional the same day, D15; libp2p for call signalling the same day, 
 policy for unsigned writes and an optional Matrix id on the contact card the same day, D17; `PqChat` a factory kind with
 many instances, owner 2026-11-07, D22, §2.1; public topics in each instance the same day, D18–D21, in the sibling spec
 [`2026-11-07-pqchat-public-topics.md`](2026-11-07-pqchat-public-topics.md)). Version 1 (controller, 2026-10-25, with the
-owner's answers of that day) is in this file's git history. Nothing is built. Version 2 applies the owner's thirteen
+owner's answers of that day) is in this file's git history. Status: the EVM contract is **BUILT on branch `ua-mtx-merge`**
+(plan 3c; normative text [`contracts/pqchat.md`](../../contracts/pqchat.md)); clients **PLANNED**. Version 2 applies the owner's thirteen
 decisions of 2026-11-04 (D1–D13) and of 2026-11-05 (D14–D17) (§15, register entry
 [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)) and the corrections of the architecture study
 (`docs/research/pqchat-architecture.md` §9; the two-page summary is `docs/research/pqchat-overview.md`). The build plan
@@ -128,7 +129,11 @@ is shared between instances. The factory is a release immutable; the chain value
 `chain_uid`, the code-size limit of P11) are the instance's `ChainEnv`, written by the factory into each clone at creation
 (spec `2026-11-07-chain-neutral-releases.md`). The owner UA has **no power** over sessions, topics or entries: it names the
 instance in the factory index and in `owner()`, nothing more. The factory index lists instances by class 3
-(the mapping to the generic path is in the sibling spec's §11).
+(the mapping to the generic path is in the sibling spec's §11). Change (Fable review 2026-11-10, P2-2, P3-11; text only):
+**a replica's record counts only when it equals the home record** (the same record and `sigHash` under the same id):
+ids hash the signer and a nonce, nonce bitmaps are per instance, so a signer can land two different records under one id
+in two instances; membership is therefore always read from the home instance, and a reader checks the factory listing
+(class 3, version ≠ 0) of the home instance as of every other instance it reads.
 
 **Where an instance replaces "the chain".** A record is still portable (domain `DS_C`: no chain id, no address, P7), so
 the same record may land in any instance on any chain, as a replica. Wherever this spec says **home chain**, read **home
@@ -194,7 +199,7 @@ sends the UA's secrets and the current epoch keys over a store of the session (P
 keccak256(0x1901 ‖ DS_C ‖ hashStruct(s))`. The author signs `uaMessage(kind, PURPOSE_PQCHAT, typed(s))` with
 `PURPOSE_PQCHAT = keccak256("scaas.ua.purpose.pqchat.v1")`, as a `UASig` (single key: `signature`; `msig`: `members`,
 minimal form, CTR-UA-07). The contract verifies it through the registry's portable check (§14 O1). No record carries a fee
-(owner answer 4); a payer pays a relayer through `MtxRelayFee` (CTR-MTX-27) if it wants to.
+(owner answer 4); a payer pays a relayer through `RelayFeeRouter` (CTR-MTX-27) if it wants to.
 
 ### 4.1 Structs
 
@@ -273,7 +278,17 @@ member added again gets another entry). `epochCount(sessionId)` and `epochsOf(se
 completes only by taking its parent's slot (P9), so the list is the winning chain 0..n; in a replica it is every complete
 epoch in completion order, competing children included (a replica orders nothing, P18: clients follow the home's list).
 `latestEpoch(sessionId)` is the list's last entry, with no slot of its own. Every list is paged as `storedRange` (P29): an
-offset past the end is empty, the limit clamped (`SESSIONS_RANGE_MAX` = `EPOCHS_RANGE_MAX` = 128 ids). **Spam is the
+offset past the end is empty, the limit clamped (`SESSIONS_RANGE_MAX` = `EPOCHS_RANGE_MAX` = 128 ids); these views
+answer the page only (the count is `sessionCount` / `epochCount`), while the topic lists answer `(ids, total)` (topics
+P42). Change (Fable review 2026-11-10, P2-1, P3-2; text only): **which instances a new device reads.** `sessionsOf` is
+per instance and anyone may create an instance (P32), so a client recovers a UA's sessions by paging the chain factory's
+index for class 3 (`contractsPage(3, …)`, version ≠ 0) on each chain it serves and calling `sessionCount(ua)` on each
+listed instance; an instance the factory does not list is not read (P43). A `rekey` that never completes or loses the
+slot still leaves its added members' entries, and a retry adds them again: entries **may repeat**, so clients
+de-duplicate and check `epochCount` and the latest epoch's members. Fable P2-3 (owner ruling kept: the entry is written
+at `createSession`): a record listing N UAs with no wrap indexes all N at once for about 0.3 M state gas per UA (128 B of
+record and one slot each) and can never be used (`epochCount` 0); clients skip a session whose `epochCount` is 0 before
+showing it. **Spam is the
 client's decision, off chain** (owner 2026-11-10): no on-chain consent or acceptance step (D5 unchanged). **The main case
 is a 2-person chat** (owner 2026-11-10): layout and gas are optimised for a 2-member session and its figures come first in
 the gas rows (create, index, rekey, post, store); groups stay correct and tested, and no 1:1 gas is traded for a group
@@ -319,17 +334,27 @@ sequenceDiagram
   participant Y as PqChat, other chain
   AD->>H: rekey(parent e5, epoch 6, members without M), complete
   M->>H: rekey(parent e5, epoch 6, members with M)
-  H-->>M: refused: PqChatEpochTaken (or PqChatNotAdmin)
+  H-->>M: refused: PqChatEpochTaken (when the admin's child completes first; see the limit below)
   M->>H: rekey(parent e5, epoch 1000)
   H-->>M: refused: PqChatEpochNumber
   AD->>Y: copy of the admin's epoch 6
   Note over H,Y: clients follow childOf(e5) on the home chain
 ```
 
+Change (Fable review 2026-11-10, P1-2; controller: fix (a) BUILT on `ua-mtx-merge`, fix (b) waits for the owner):
+**the limit of the slot rule.** The first complete child wins, so a member about to be removed can answer each new tip
+with its own plain rekey that keeps it and take the slot before the admin's removal completes (with chunked wraps it
+sees the admin's record before it completes and needs no mempool access); the admin must then rekey from that child, and
+the member may repeat. This is liveness, not secrecy (the member never reads an epoch it is not wrapped into; its wraps
+for the others may be garbage, which locks them out until one of them rekeys), it costs the member about 2.7 M gas per
+member per round, and a 2-person chat is not affected. Built: a member who **left** the parent authors no plain rekey of
+it (`PqChatNotMember`), so `leave` stops that member from extending the epoch. Not built (a new rule, the owner's call):
+an admin-signed record that marks another member as left (`PqChatRemove`), which would stop a member who does not leave.
+
 **P10 — Roles** (D4). Each epoch record carries the admin set. **A membership change** (any member added or removed, any
 admin added or removed) needs an author who is an admin of the parent epoch (`PqChatNotAdmin`). **A plain rekey** — the
 same members and admins, minus those who left the parent epoch (P12), with any `keyId` changes — may be authored by any
-member of the parent. An admin that is an `msig` signs its epoch records by its quorum (`UASig.members`). An admin needs a
+member of the parent who has not left it (Fable P1-2 (a), BUILT; the race it leaves is stated under P9). An admin that is an `msig` signs its epoch records by its quorum (`UASig.members`). An admin needs a
 KEM key only if it is also a member.
 
 **P11 — Chunks** (no block-limit assumption). The contract assumes no block or code-size limit: wraps are stored in SSTORE2
@@ -341,7 +366,12 @@ by ≈ 2.6 M gas per member per epoch (§11).
 
 **P12 — Leaving and consent** (D5). A member leaves by `leave`; the next epoch drops it (a plain rekey may). Consent is
 client-side now: a client shows a session from an unknown creator only after its user accepts; a member that never accepts
-can leave. The on-chain link between a creator and the UAs it lists stays public until the unlinkable mode (§13).
+can leave. Change (Fable review 2026-11-10, P2-4; ARCH-POS-13): **before its user accepts a session, a client makes no
+network call and no write derived from the session's wraps or `sealedInfo`** (no store joined or read, no Matrix, HCS or
+Waku subscription), **and sends nothing that depends on whether a wrap or a message opened** (no receipt, no leave, no
+rekey); the P8 flow above ("join or read each store") runs only after acceptance. Anyone may wrap a chosen ciphertext to a
+UA's KEM key and name its own store in `sealedInfo`; an automatic join would tell the creator that the UA's device is
+online and opened it. The on-chain link between a creator and the UAs it lists stays public until the unlinkable mode (§13).
 
 **P13 — `msig` members: expansion** (D8). An `msig` is a **seat**, never a KEM recipient: the author's client expands it,
 at every epoch, into its accepted members (`memberAccepted`, CTR-UA-37), two levels (CTR-UA-38), keeps the leaves that hold
@@ -355,7 +385,8 @@ plaintext.
 **P14 — KEM key check before encapsulation** (FIPS 203 §7.2). Scheme 1 only (`kemPk[0] == 0x01`, 1,601 B,
 CTR-UA-32); anything else is refused. Before every `Encaps` the client runs the **type check** (`ek` is 1,568 B) and the
 **modulus check** (`ByteEncode12(ByteDecode12(ek[0:1536])) == ek[0:1536]`), and refuses an all-zero X25519 shared secret.
-A receiver runs the FIPS 203 §7.3 decapsulation-key check on its own key once, at generation.
+A receiver runs the FIPS 203 §7.3 decapsulation-key check on its own key once, at generation, and refuses an all-zero
+X25519 shared secret at decapsulation too (Fable P2-4).
 
 ### 6.1 The hybrid KEM (scheme 1)
 
@@ -388,7 +419,9 @@ counter   = i, from 0 in each epoch, per (sender, device)
 A sender deletes `ck_i` and `mk_i` once used; a receiver deletes `mk_i` after decryption and keeps skipped message keys
 for at most 2,000 messages per chain (O6). `K` stays recoverable from the chain while the KEM secret exists; the
 bound on forward secrecy is the lifetime of the KEM version, the UA owner's choice (P5). A sender stops using an epoch once the home chain shows a complete
-child of it.
+child of it; the home instance enforces it for `postMessage` (Fable P1-1, BUILT: `PqChatEpochTaken`), so a member the
+child dropped cannot post under the old epoch later; an in-flight honest message is refused and sent again under the new
+epoch. A replica orders nothing and still takes it (clients read membership from the home, P32).
 
 ### 6.4 Message encryption
 
@@ -486,7 +519,7 @@ sequenceDiagram
   participant C as PqChat (any chain)
   participant B as member client
   A->>N: postMessage(PqChatMessage, UASig), named fields
-  N->>C: transaction (lane gas; payment via MtxRelayFee if any)
+  N->>C: transaction (lane gas; payment via RelayFeeRouter if any)
   C->>C: verify sig (portable), member of complete epoch, mark (epochId, sender, device) counter
   C-->>B: PqChatMessagePosted(sessionId, messageId, sender, index, sig)
   B->>C: messageAt(sessionId, index)
@@ -503,7 +536,11 @@ Anyone may call it; spam pays its own gas and clients drop it. Clients check exa
 the portable signature, epoch membership as the home chain orders it, the nonce scope and counter, `messageId` dedupe. No
 epoch replica is needed on that chain, so replicating to many chains costs one blob per chain. The signature's full bytes
 stay inside the envelope, so in state (no hash split as in P16). The client applies §6.5's 1,024-B rule as for
-`postMessage`. Nothing stored can be removed, and the UI says so.
+`postMessage`. Nothing stored can be removed, and the UI says so. Change (Fable review 2026-11-10, P1-1, P3-6; the
+limit, not built): `storeMessage` is content-blind, so the home's refusal of a message under a superseded epoch (§6.3)
+cannot apply here: a stored envelope under an epoch that has a complete child, from a UA absent in that child, has no
+provable time, and clients mark or drop it. An empty `env` is accepted (it is the cheapest filler of a known hint's list,
+about 0.48 M state gas); clients page past it.
 
 Change (owner 2026-11-10; BUILT on `ua-mtx-merge`, plan 3c T87): a paged view `storedRange(hint, offset, limit) returns
 (bytes[])` beside `storedCount` and `storedAt`: the payloads `[offset, min(offset + limit, count))`, the limit clamped to
@@ -563,7 +600,7 @@ client says so plainly when the user picks HCS: public, kept by mirror nodes onl
 (NODE-JOB-20 style), no fee form (owner answer 4); the call target must be a `PqChat` instance the chain's factory lists
 (class `PQCHAT`, version ≠ 0; P32), as a DEX target is checked by `isDex`. The rule and the rows go in the node's own spec (`docs/node/job-api.md`
 call table), for every consumer. **Unsigned writes** (owner 2026-11-05): `storeMessage` and `addWraps` carry no signature, so the node
-relays them only when paid through `MtxRelayFee` or under the operator's lane policy, and by default never pays gas for
+relays them only when paid through `RelayFeeRouter` or under the operator's lane policy, and by default never pays gas for
 unsigned spam; this is the rule's intent, and the job rule itself goes in `docs/node/job-api.md` (PLANNED). The node
 stores no chat traffic, runs no chat gossip, sends no push and is no TURN or SFU
 (D12); it runs no libp2p bootstrap, DHT or relay node either (D16, P30), and no Waku node (D17, P31). The Hedera job for HCS messages is P26 (PLANNED).
@@ -879,7 +916,7 @@ history, Light Push and Filter for mobile, RLN where the network uses it; client
 operators' (often days to weeks), not durable, so durable history goes to a chain store or HCS mirrors; the content topic
 links an epoch's messages; relay peers see IPs unless the client uses relays or Light Push; an RLN membership, where
 required, is the user's. **Rulings of the same day, with it:** the node relays the unsigned writes `storeMessage` and
-`addWraps` only when paid through `MtxRelayFee` or under the operator's lane policy, never paying gas for unsigned spam by
+`addWraps` only when paid through `RelayFeeRouter` or under the operator's lane policy, never paying gas for unsigned spam by
 default (P17; the job rule in the node's spec, PLANNED); the O7 contact card's Matrix user id is optional (§14 O7); any
 Matrix homeserver works, public or self-hosted, SCaaS runs none, with the costs of a public one stated in P15.
 

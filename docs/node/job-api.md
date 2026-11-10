@@ -685,7 +685,7 @@ factory's listing is its binding, and no other kind's rule takes it (each needs 
 on the direct path and on the inner target of `RelayFeeRouter.relay`. A `pqchat` job carries no native value and no fee form: a payer
 pays the lane through `RelayFeeRouter` (an `mtxRelayFee` job with `call`).
 
-**Unsigned writes** (P17, owner 2026-11-05, [CTR-CHAT-01](../decisions.md#CTR-CHAT-01)). `storeMessage` and `addWraps` carry no
+**Unsigned writes** (P17, owner 2026-11-05, [CTR-CHAT-01](../contracts/pqchat.md#CTR-CHAT-01)). `storeMessage` and `addWraps` carry no
 signature, so anyone could make a lane pay for them. A lane relays one only as a relay fee's inner call (paid through
 `RelayFeeRouter`, under the relay-fee rules) or when the chain's `params.relay_unsigned_pqchat = true` (the operator's lane policy,
 default `false`); otherwise the job is refused `UNSIGNED_WRITE_NOT_PAID` (on the legacy pull path `dead`, nothing read or sent). The ten

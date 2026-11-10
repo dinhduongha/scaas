@@ -4509,9 +4509,8 @@ Change (2026-11-03, controller, owner may override; built on `msig-nested`): the
 
 **Source.** owner 2026-11-04, relayed by the coordinator; spec `superpowers/specs/2026-11-04-fndsa1024.md` (ACCEPTED, §14 the answers), plan `superpowers/plans/2026-11-04-fndsa1024.md`. Status: accepted; built on branch `mldsa87`: EVM kind and registry `a57da111`, vectors, clientkeys, verifier and deploy profile `5bc256bb` (the refusal tests and mutants `0747cc78`), `ua-rs` and its wrappers `846dddf3`, the other clients and `zether-prover` `a9842a67`, the Soroban / NEAR refusals and the node's gate test `5bf3284e`, the docs in the commit after them. Other families in their rounds. Provisional until T-GAS: the cap 5,250,000.
 
-<a id="CTR-CHAT-01"></a>
 ### CTR-CHAT-01 — PqChat (UA-7): Matrix carries messages, the chain holds keys and the control plane; ordered epochs, admins, signed messages, KEM rotation, `msig` expansion, devices, metadata hygiene, calls
-- old: — · status: current · owner: yes · date: 2026-11-04 · normative: decisions.md#CTR-CHAT-01 · superseded-by: —
+- old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-01 · superseded-by: —
 
 **Rule.** Owner 2026-11-04: the thirteen decisions of the PqChat study, each as recommended, recorded in full. They bind the UA-7 spec (version 2), which states the design; no component doc defines PqChat yet, so this entry is its normative text until the build's `docs/contracts/` section takes it over.
 - **D1 — Transports.** Matrix is the primary transport for messages, attachments and call signalling; the chain holds identity, the KEM key directory and the control plane; the fallback is the same signed message record posted on chain. Peer to peer serves 1:1 calls only. `scaas-node` only relays `PqChat` writes (`call` jobs with call-table rows equal to the contract's entries); it stores, gossips or pushes no chat traffic.
@@ -4553,6 +4552,154 @@ Change (owner 2026-11-07, every question as recommended; status: SPECIFIED, noth
 Change (owner 2026-11-10; status: BUILT on branch `ua-mtx-merge`, plan 3c T87 and T96; UNAUDITED): **recovery from state alone, the stored range, spam off chain, 1:1 first.** (1) `storedRange(hint, offset, limit)` beside `storedCount` / `storedAt` (P29): a page of stored payloads, the limit clamped to `STORED_RANGE_MAX` = 16, an offset past the end empty. (2) A client keeps no session list and reads no event (P47): `sessionCount(ua)` / `sessionsOf(ua, offset, limit)`, one entry per member at `createSession` and per member a `rekey` adds, append-only; `epochCount(sessionId)` / `epochsOf(sessionId, offset, limit)`, epoch 0 first, then each epoch as it completes (at home the winning chain 0..n, since a child completes there only by taking its parent's slot; on a replica every complete epoch in completion order, the controller's choice under P18); `latestEpoch(sessionId)` the list's last entry, no slot of its own; pages clamped at 128 ids. (3) Spam is the client's decision, off chain: no on-chain consent or acceptance step (D5 unchanged). (4) The main case is a 2-person chat: layout and gas optimised for a 2-member session, its figures first in the gas rows; groups stay correct and tested, no 1:1 gas traded for a group feature. Old: no per-UA or per-session index (a client kept its own list or read events), no paged stored view. Why: a new or reinstalled device must recover from contract state alone, and contracts are never upgraded, so the views go in before the freeze. Cost: two new slots per member at `createSession` (its entry and, the first time, its list's length), one per added member at a `rekey`, one per completed epoch.
 
 Change (owner 2026-11-10; status: BUILT on branch `ua-mtx-merge`, plan 3c; UNAUDITED): **the device id: a 16-byte UUID (`bytes16`), v7 or v4 at the client's choice; nothing checks its version or variant bits**, replacing `uint32`, in `PqChatMessage`, its typehash, the nonce scope `(epochId, sender, device)`, the sender chain of §6.3, the AAD of §6.4, `messageId` and the call keys of P22. The device makes it when it is linked or restored; a restored device always makes a new one, with no collision check on restore (122 random bits); the contract never parses it. Old: a random `uint32` assigned by an existing device at linking. Cost: on `postMessage` a v7 id makes the device's creation time (milliseconds) public, while a v4 id hides it; on `storeMessage` it stays inside the envelope either way.
+
+Change (controller 2026-11-10, on the Fable review of PqChat at `15af56f`, no P0; status: BUILT on branch `ua-mtx-merge`, UNAUDITED): **two contract fixes and the spec text the review asked for.** P1-1: at the home instance `postMessage` refuses an epoch that already has a complete child (`PqChatEpochTaken`), as UA-7 spec §6.3 said; `storeMessage` stays content-blind and P29 states the limit. P1-2: a member who left the parent authors no plain rekey of it (`PqChatNotMember`); the race of a member out-running its own removal stays and is stated under P9 / P10; an admin-signed removal record is a new rule for the owner. P2-1, P2-2, P2-4 and every P3 are text (which instances a new device reads, a replica counts only when equal to the home record, no network call or write from a session's wraps or `sealedInfo` before the user accepts it); P2-3 unchanged by the owner's ruling (the entry at `createSession`), its spam cost (about 0.3 M state gas per listed UA) stated in P47. Old: the contract checked neither.
+
+Change (2026-11-10, controller, plan 3c T94; status: BUILT on branch `ua-mtx-merge` (EVM), UNAUDITED; clients PLANNED): **the normative text moves to [contracts/pqchat.md](contracts/pqchat.md#CTR-CHAT-01).** Old: this entry was the normative text of `PqChat` (no component doc existed) and held the anchor `CTR-CHAT-01`. New: `contracts/pqchat.md` holds the anchor and defines CTR-CHAT-01 as the umbrella rule; the decisions above stay unchanged and recorded here in full; what the contract does is split into eighteen rules, each with its own entry below: CTR-CHAT-02 (the release on the factory: class 3, kind 0, `ChainEnv`, `initialize`, an owner UA without power), CTR-CHAT-03 (typed records in `DS_C`, `PURPOSE_PQCHAT`, `requirePortable`), CTR-CHAT-04 (ids, nonce scopes, `seq`), CTR-CHAT-05 (records in full in state, blobs, events), CTR-CHAT-06 (session shapes, the 2-member main case), CTR-CHAT-07 (wraps in chunks, `addWraps`, completion), CTR-CHAT-08 (epoch numbers and the home-instance slot), CTR-CHAT-09 (plain rekey and membership change), CTR-CHAT-10 (leave), CTR-CHAT-11 (`postMessage`), CTR-CHAT-12 (the device id), CTR-CHAT-13 (`storeMessage` and its views), CTR-CHAT-14 (recovery from state alone), CTR-CHAT-15 (topics, owners, writers), CTR-CHAT-16 (entries, edits, references), CTR-CHAT-17 (votes), CTR-CHAT-18 (topic lists), CTR-CHAT-19 (relaying). No rule changes. Why: the build takes over the normative text, as the Rule above said it would. Cost: none; a link to this entry's old anchor now goes to the component doc.
+
+### CTR-CHAT-02 — `PqChat` is class 3, kind 0 on the factory's generic path; chain values from the clone's `ChainEnv`; `initialize` once by the factory; an owner UA without power
+- old: — · status: current · owner: yes · date: 2026-11-07 · normative: contracts/pqchat.md#CTR-CHAT-02 · superseded-by: —
+
+**Rule.** Owner 2026-11-07 (D22 as amended, Q2): `PqChat` releases are class 3, kind 0 on `OpenFactory`'s generic path (`publishClassEnv`, `deployRelease`, `setClassKindEnabled`, `createInstance`), with no factory code of their own. Each EIP-1167 instance reads the registry, `chain_uid` and the code-size limit `params[0]` from its own `ChainEnv`; `initialize(bytes32 ownerUA)` runs once, by the factory only; the owner UA (0 allowed, fixed, no transfer) names the instance in `owner()` and `factoryInfo()` and has no power. `validateEnv` refuses `chainUid` 0, registry 0, no `params[0]`, and `params[0] < 24,576` (3C-D1, controller call, owner may override).
+**Why.** Anyone runs a chat or community service on the same reviewed code, as with tokens and DEXes; one bytecode at one address on every chain.
+**Cost if wrong.** An owner with powers could censor sessions and topics; a code-size limit under EIP-170's would leave no room for a wrap blob (1,689 B).
+**Source.** owner 2026-11-07; UA-7 spec §2.1 P32, topics spec §11, factory index spec §8; plan `superpowers/plans/2026-11-04-ua-mtx-merge.md` group 3c (3C-D1), T85. Status: BUILT on branch `ua-mtx-merge` (EVM, `e5cb6d2c`; the deploy script's registration `879502df`, T92), UNAUDITED.
+
+### CTR-CHAT-03 — `PqChat` records are typed EIP-712 structs in the portable domain `DS_C`, signed under `PURPOSE_PQCHAT` and checked by `requirePortable`
+- old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-03 · superseded-by: —
+
+**Rule.** Every `PqChat` record is a typed struct with named fields in `DS_C` ("SCaaS PqChat", "1", no chain id, no address); its author signs `uaMessage(kind, PURPOSE_PQCHAT, typed(record))` as a `UASig` (a single key, or an `msig` by quorum); the contract verifies it through the registry's `requirePortable`. The type strings are those of `PqChatTypes.sol`, pinned against `smartcontracts/vectors/pqchat/`.
+**Why.** A record is the same bytes in every instance on every chain (owner answer 4 of 2026-10-25); `requireAuthorized` checks only chain-bound digests, so the registry gained the portable view (O1).
+**Cost if wrong.** A type-string change is a new release and new vectors in every client; a record cannot be bound to one instance.
+**Source.** owner 2026-10-25 (answer 4), 2026-11-04 (O1); UA-7 spec P7, §4.1; topics spec P35; plan 3c T84, T85. Status: BUILT on branch `ua-mtx-merge` (EVM, vectors `16490e2a`, contract `e5cb6d2c`, the device field `bytes16` `40c7a3c7`), UNAUDITED.
+
+### CTR-CHAT-04 — `PqChat` ids hash the signer and a nonce; nonces are per-scope bitmaps checked after the signature; replacing records carry `seq == stored + 1`
+- old: — · status: current · owner: yes · date: 2026-10-25 · normative: contracts/pqchat.md#CTR-CHAT-04 · superseded-by: —
+
+**Rule.** Owner answer 7 of 2026-10-25: scoped nonces as bitmaps, any order, never locked, checked after the signature and then marked used. The scopes (3C-D5, controller call, owner may override): a session `(creator)`, an epoch or a leave `(sessionId, author)`, a message `(epochId, sender, device)` over `counter`, a topic `(owner)`, an entry or an edit `(topicId, author)`, each under its own `scaas/pqchat/v1/scope/…` tag. Topic updates, writer records and votes carry `seq`, accepted only at the stored `seq + 1` (topics spec P36).
+**Why.** A forged record burns no nonce, a gap never blocks a later record, and a `seq` far ahead cannot lock a value.
+**Cost if wrong.** A client that reuses a nonce in a scope loses that record (`PqChatNonceUsed`) and signs it again with another.
+**Source.** owner 2026-10-25 (answer 7); UA-7 spec §4.3; topics spec P36; plan 3c (3C-D5), T84, T85, T88. Status: BUILT on branch `ua-mtx-merge` (EVM), UNAUDITED.
+
+### CTR-CHAT-05 — Every accepted `PqChat` record is kept in full in state, in SSTORE2 blobs within the chain's code-size limit; events only notify, three carry the signature's bytes
+- old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-05 · superseded-by: —
+
+**Rule.** Owner D11 of 2026-11-04 and the topics ruling of 2026-11-07 (content in state, not in logs): a signed record is stored as `abi.encode(record, sigHash)`, `sigHash = keccak256(abi.encode(UASig))`, chained over several blobs when it exceeds one (3C-D3); a stored message keeps its raw payload; wraps are packed 1,688 B each with one slot per wrap. Only `PqChatMessagePosted`, `PqTopicEntryPosted` and `PqTopicEntryEdited` carry the signature (3C-D4). 3C-D3 and 3C-D4 are controller calls, owner may override.
+**Why.** Never lose ciphertext; logs and history expire, state does not.
+**Cost if wrong.** State gas for every byte; a mirror needs a record's signature bytes from its event, its author or an indexer.
+**Source.** owner 2026-11-04 (D11), 2026-11-07 (topics); UA-7 spec P16, P29; topics spec P39; plan 3c (3C-D3, 3C-D4), T85, T87, T88. Status: BUILT on branch `ua-mtx-merge` (EVM), UNAUDITED.
+
+### CTR-CHAT-06 — A `PqChat` session: the creator a member and an admin, KEM-holding members strictly sorted (at least 2), registered admins strictly sorted, the home instance named; the 2-member session is the main case
+- old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-06 · superseded-by: —
+
+**Rule.** UA-7 spec P8 (owner-accepted 2026-11-04) with the shapes of 3C-D6 (controller call, owner may override): members strictly sorted, at least 2, one wrap hash each, each holding its `keyId` in this chain's registry; admins strictly sorted and registered; the creator in both lists; `homeChain` and `homeContract` non-zero; `parents`, `sealedInfo` and padding not checked. Owner 2026-11-10: the main case is a 2-person chat; layout and gas are optimised for a 2-member session, its figures first in the gas rows; groups stay correct and tested, and no 1:1 gas is traded for a group feature.
+**Why.** Only KEM holders can be wrapped to; sorted lists make the rekey test one pass; most chats are between two people.
+**Cost if wrong.** A group feature that costs 1:1 gas is refused by this rule.
+**Source.** owner 2026-11-04 (spec accepted), 2026-11-10 (1:1 first); UA-7 spec P3, P8, P47; plan 3c (3C-D6), T85. Status: BUILT on branch `ua-mtx-merge` (EVM, `e5cb6d2c`; the gas rows `81734769`, T90), UNAUDITED.
+
+### CTR-CHAT-07 — `PqChat` wraps arrive in chunks: unsigned `addWraps` by anyone against the signed `wrapHashes`; an epoch is complete when its last wrap lands
+- old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-07 · superseded-by: —
+
+**Rule.** UA-7 spec P11 (owner-accepted 2026-11-04): `createSession` and `rekey` take any prefix of the wraps, `addWraps(epochId, first, wraps)` the rest, from anyone and unsigned; each wrap hashes to its signed `wrapHashes[i]`, names `members[i]`'s `ua` and `keyId`, has `mlkemCt` 1,568 B and `sealedKey` 48 B, and lands once; the epoch completes at its last wrap.
+**Why.** No block-limit or code-size assumption: a large group fits over several transactions (EIP-8037).
+**Cost if wrong.** A session or epoch is unusable until its last wrap lands; anyone may finish it, the signed hashes fix the bytes.
+**Source.** owner 2026-11-04 (spec accepted); UA-7 spec P11, §4.4; plan 3c T85. Status: BUILT on branch `ua-mtx-merge` (EVM, `e5cb6d2c`), UNAUDITED.
+
+### CTR-CHAT-08 — `PqChat` epochs: `parent + 1` from a complete parent in the same instance; at home the first child to complete takes the parent's slot; replicas store every complete child
+- old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-08 · superseded-by: —
+
+**Rule.** Owner D3 of 2026-11-04 with the home instance of D22: `rekey` needs the parent stored and complete in this instance and `epoch == parent.epoch + 1`; in the home instance (`homeChain == chain_uid`, `homeContract == address(this)`) the first child of a parent to complete takes `childOf(parent)`, after which any other child of that parent is refused or cannot complete there (`PqChatEpochTaken`); an incomplete child never takes the slot; every other instance stores every complete child and `childOf` reads zero.
+**Why.** The version 1 order (highest number, then smallest id) let a removed member undo its removal.
+**Cost if wrong.** A home chain that stops freezes the session's membership; its members start a new session elsewhere (O3).
+**Source.** owner 2026-11-04 (D3, O3), 2026-11-07 (D22); UA-7 spec P9, P32; plan 3c T86. Status: BUILT on branch `ua-mtx-merge` (EVM, `43dd45f1`), UNAUDITED.
+
+### CTR-CHAT-09 — A `PqChat` plain rekey keeps the parent's members and admins minus those who left, authored by any member who has not left; any other change needs an admin of the parent
+- old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-09 · superseded-by: —
+
+**Rule.** Owner D4, O2 and O4 of 2026-11-04: a plain rekey (the same members and admins by `ua`, minus entries that left the parent epoch; `keyId` and `via` may change; 3C-D7, controller call, owner may override) may be authored by any member of the parent who has not left it (controller 2026-11-10, Fable review P1-2 fix (a); an admin-signed removal record, fix (b), waits for the owner); adding or dropping anyone else is a membership change, authored by an admin of the parent (`PqChatNotAdmin`). A plain rekey may take the slot before an admin's change, with no precedence rule (O2); with no admin left, membership is frozen and plain rekeys continue (O4).
+**Why.** Any member can refresh the keys; only admins change who reads.
+**Cost if wrong.** A member can take the slot first and make the admin rekey again (accepted, O2).
+**Source.** owner 2026-11-04 (D4, O2, O4); UA-7 spec P10; plan 3c (3C-D7), T86. Status: BUILT on branch `ua-mtx-merge` (EVM, `43dd45f1`), UNAUDITED.
+
+### CTR-CHAT-10 — A `PqChat` leave is a signed flag on the epoch, its nonce in the epoch scope; the next epoch may drop the member as a plain rekey
+- old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-10 · superseded-by: —
+
+**Rule.** Owner D4 of 2026-11-04 (any member may leave): `leave(PqChatLeave, UASig)` by a member of the epoch sets `leftIn(epochId, member)`, its nonce in the scope `(sessionId, member)`; a repeated leave is accepted and changes nothing more (3C-D8, controller call, owner may override). The flag is read only by the plain-rekey test of CTR-CHAT-09.
+**Why.** Leaving needs no admin; consent stays in clients (D5).
+**Cost if wrong.** Until the next epoch the leaver still holds that epoch's key and may still post in it.
+**Source.** owner 2026-11-04 (D4, D5); UA-7 spec P12; plan 3c (3C-D8), T86. Status: BUILT on branch `ua-mtx-merge` (EVM, `43dd45f1`), UNAUDITED.
+
+### CTR-CHAT-11 — `postMessage`: a member of a complete epoch, the nonce scope `(epochId, sender, device)` over `counter`, one blob, the signature's hash in state and its bytes in the event
+- old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-11 · superseded-by: —
+
+**Rule.** Owner D2 and D11 of 2026-11-04: `postMessage(PqChatMessage, UASig)` stores a message whose sender is a member of the complete epoch it names in this instance, refused at home once that epoch has a complete child (`PqChatEpochTaken`; UA-7 spec §6.3, controller 2026-11-10 on Fable review P1-1), as one blob of the record and its `sigHash` appended to the session's list; `PqChatMessagePosted` carries the signature and `messageId = typed(PqChatMessage)`; a message goes on chain only by its user's choice.
+**Why.** Where the contract itself must enforce membership; the same record and id as on every other store.
+**Cost if wrong.** Gas, and public forever: on-chain readers see the session, sender, device, counter, size and time.
+**Source.** owner 2026-11-04 (D2, D11); UA-7 spec P16; plan 3c T87. Status: BUILT on branch `ua-mtx-merge` (EVM, `d14a78b5`), UNAUDITED.
+
+### CTR-CHAT-12 — The `PqChat` device id is a 16-byte UUID (`bytes16`), v7 or v4 at the client's choice, never parsed
+- old: — · status: current · owner: yes · date: 2026-11-10 · normative: contracts/pqchat.md#CTR-CHAT-12 · superseded-by: —
+
+**Rule.** Owner 2026-11-10 (in full in a Change on CTR-CHAT-01): the device id is a 16-byte UUID, v7 or v4 at the client's choice; nothing checks its version or variant bits; it is a field of `PqChatMessage`, its typehash and `messageId`, and a dimension of the nonce scope `(epochId, sender, device)`; the device makes it when it is linked or restored, a restored device always a new one, with no collision check on restore.
+**Why.** 122 random bits need no allocation by an existing device.
+**Cost if wrong.** On `postMessage` a v7 id makes the device's creation time (milliseconds) public, while a v4 id hides it; on `storeMessage` it stays inside the envelope either way.
+**Source.** owner 2026-11-10; UA-7 spec P6, §4.1, §6.4; plan 3c. Status: BUILT on branch `ua-mtx-merge` (EVM; vectors `0083259c`, the contract half `40c7a3c7`), UNAUDITED.
+
+### CTR-CHAT-13 — `storeMessage`: an unsigned opaque payload per 8-byte hint, in state; `storedCount`, `storedAt`, `storedRange` at most 16 per page
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: contracts/pqchat.md#CTR-CHAT-13 · superseded-by: —
+
+**Rule.** Owner D15 of 2026-11-05: `storeMessage(uint8 v, bytes8 hint, bytes env)` by anyone appends `abi.encode(v, hint, env)` as one blob to the list of `hint`, checking only `v == 1` and the blob's size, with no signature, membership or nonce; it stays in `PqChat` (3C-D2, controller call, owner may override). Owner 2026-11-10: `storedRange(hint, offset, limit)`, the limit clamped to `STORED_RANGE_MAX` = 16, an offset past the end empty.
+**Why.** The chain as one of the session's stores, replicated at one blob per chain, with no epoch replica needed there.
+**Cost if wrong.** Spam pays its own gas and clients drop it; on-chain readers see the hint, which links an epoch's stored messages across every chain they are copied to.
+**Source.** owner 2026-11-05 (D15), 2026-11-10 (stored range); UA-7 spec P29; plan 3c (3C-D2), T87. Status: BUILT on branch `ua-mtx-merge` (EVM, `d14a78b5`), UNAUDITED.
+
+### CTR-CHAT-14 — `PqChat` recovery from state alone: `sessionsOf`, `epochsOf`, `latestEpoch` and paged views; no event and no client list; spam is the client's call
+- old: — · status: current · owner: yes · date: 2026-11-10 · normative: contracts/pqchat.md#CTR-CHAT-14 · superseded-by: —
+
+**Rule.** Owner 2026-11-10 (in full in a Change on CTR-CHAT-01): `sessionCount` / `sessionsOf(ua, offset, limit)`, one entry per member at `createSession` and per member a `rekey` adds, append-only; `epochCount` / `epochsOf(sessionId, offset, limit)`, epoch 0 first, then each epoch as it completes in this instance (at home the winning chain); `latestEpoch` the list's last entry; pages clamped at 128 ids; no on-chain consent step.
+**Why.** A new or reinstalled device must recover from contract state alone, and contracts are never upgraded.
+**Cost if wrong.** Two new slots per member at `createSession`, one per added member at a `rekey`, one per completed epoch.
+**Source.** owner 2026-11-10; UA-7 spec P47; plan 3c T96. Status: BUILT on branch `ua-mtx-merge` (EVM, `b528c880`), UNAUDITED.
+
+### CTR-CHAT-15 — `PqChat` topics: any registered UA creates one; only its owner updates it and grants writers; nothing hidden, no moderation
+- old: — · status: current · owner: yes · date: 2026-11-07 · normative: contracts/pqchat.md#CTR-CHAT-15 · superseded-by: —
+
+**Rule.** Owner D18, D19 and Q2 of 2026-11-07: a topic's owner (fixed) updates its name, about and `openReplies` and grants or revokes writers, each at `seq == stored + 1`; no hide flag, no moderator role, no ban list; the instance's owner UA has no right over topics.
+**Why.** Public content stays public; a client may filter locally.
+**Cost if wrong.** What an open topic accepts cannot be removed.
+**Source.** owner 2026-11-07 (D18, D19, Q2); topics spec P37, P41; plan 3c T88. Status: BUILT on branch `ua-mtx-merge` (EVM, `84a1a363`), UNAUDITED.
+
+### CTR-CHAT-16 — `PqChat` entries: posts and replies one record; bodies in full in state; edits as versions by the author; a reference to another instance stored as given, never checked
+- old: — · status: current · owner: yes · date: 2026-11-07 · normative: contracts/pqchat.md#CTR-CHAT-16 · superseded-by: —
+
+**Rule.** Owner D19, D20 and Q1 of 2026-11-07: a post by the owner or a writer, a reply by anyone while `openReplies` (else the owner or a writer) to an entry of the same topic in this instance, depth unbounded; `mediaType` 1–64 B, a non-empty body always in state; `ref` all zero or with `chainUid`, `pqchat` and `entryId` set, never verified; an edit is version `count + 1` by the original's author and keeps the original's place, reference and votes; a longer text goes as replies by the same author.
+**Why.** Content must not depend on logs or off-chain bodies; edits keep history.
+**Cost if wrong.** About 1.57 M state gas per KiB of body (owner accepted, D20); a reference may point at nothing.
+**Source.** owner 2026-11-07 (D19, D20, Q1); topics spec P33, P35, P38; plan 3c T88. Status: BUILT on branch `ua-mtx-merge` (EVM, `84a1a363`), UNAUDITED.
+
+### CTR-CHAT-17 — `PqChat` votes: one per UA per entry, changeable; `up` and `down` counts in state
+- old: — · status: current · owner: yes · date: 2026-11-07 · normative: contracts/pqchat.md#CTR-CHAT-17 · superseded-by: —
+
+**Rule.** Owner D21 of 2026-11-07: `voteEntry` with `value` −1, 0 or +1 and `seq == stored + 1` per `(entry, voter)`; one slot per `(entry, voter)`, a new value moves the counts (old − 1, new + 1); `scoreOf` returns `(up, down)`, never a combined score.
+**Why.** Minimal public counts; one UA counts at most once per entry.
+**Cost if wrong.** Votes count UAs, not people.
+**Source.** owner 2026-11-07 (D21); topics spec P40; plan 3c T89. Status: BUILT on branch `ua-mtx-merge` (EVM, `39c3c6f1`), UNAUDITED.
+
+### CTR-CHAT-18 — `PqChat` topic lists live in state, append-only, paged as `(ids, total)`
+- old: — · status: current · owner: yes · date: 2026-11-07 · normative: contracts/pqchat.md#CTR-CHAT-18 · superseded-by: —
+
+**Rule.** Owner 2026-11-07 (posts, replies and every index in state, listed by paged views): `topics`, `topicsByOwner`, `writersOf`, `posts`, `replies` and `byAuthor` answer `(start, count)` with at most `count` ids and the list's length; `count = 0` is the count view (3C-D8, controller call, owner may override, as the factory's index answers).
+**Why.** No reader needs a log.
+**Cost if wrong.** One slot per list entry.
+**Source.** owner 2026-11-07; topics spec P42; plan 3c (3C-D8), T88. Status: BUILT on branch `ua-mtx-merge` (EVM, `84a1a363`), UNAUDITED.
+
+### CTR-CHAT-19 — Every `PqChat` write is relayable by anyone, with a fee of 0 too; no record carries a fee, a deadline or a submitter
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: contracts/pqchat.md#CTR-CHAT-19 · superseded-by: —
+
+**Rule.** Owner answer 4 of 2026-10-25 (anyone submits, no fee in a record) and D17 (2) of 2026-11-05: the ten signed writes do the same whoever submits them, and no write reads `msg.sender` except `initialize`; a payer pays a relayer beside the record through `RelayFeeRouter` (CTR-MTX-27); the unsigned `storeMessage` and `addWraps` are relayed by the node only when paid or under the operator's lane policy (its rule in `node/job-api.md`).
+**Why.** A relayer can refuse or delay, never forge or alter; an unsigned write could otherwise make a node pay for spam.
+**Cost if wrong.** An unpaid unsigned write may find no relayer; its author submits it from its own account.
+**Source.** owner 2026-10-25 (answer 4), 2026-11-05 (D17); UA-7 spec P7, P17; topics spec P44, P45; plan 3c T93 (node rows `b810e50b`). Status: BUILT on branch `ua-mtx-merge` (EVM and the node), UNAUDITED.
 
 ### CTR-PQZ-01 — Separate PQZ class gated by the precompile self-test
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —

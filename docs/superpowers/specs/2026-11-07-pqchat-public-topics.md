@@ -6,7 +6,10 @@ the same day. **Factory (owner-approved 2026-11-07):** `PqChat` is class 3 on th
 §8, `2026-11-07-factory-contract-index.md` on branch `ua-mtx-merge`); the `PqChat`-specific factory code this spec first
 proposed (`createPqChat`, `deployPqChatImplementation`, `PQCHAT_DOMAIN`, `isPqChat`, task PF1) is replaced by that path,
 mapped in §11; `ChainEnv` (spec `2026-11-07-chain-neutral-releases.md`, same branch) applies to `PqChat` instances.
-Nothing is built. Builds into `PqChat` in group 3c on branch `ua-mtx-merge` (TODO item 3c); the tasks are §10. UNAUDITED.
+Status: **BUILT on branch `ua-mtx-merge`** (group 3c: PT1–PT6 as T84, T88–T93; the topics and votes in the body module
+`PqChatTopics`, CTR-TOK-30, 3C-D2); clients (PT7) **PLANNED**; the normative text is
+[`contracts/pqchat.md`](../../contracts/pqchat.md); Fable review 2026-11-10: approved with the corrections marked "Fable"
+here. UNAUDITED.
 
 **Parent spec:** [`2026-10-25-ua7-pq-e2e-sessions.md`](2026-10-25-ua7-pq-e2e-sessions.md) version 2 (P1–P32, D1–D17,
 D22). This file continues its numbering (P33–P46) and reuses its domain, purpose tag, signature check, nonce bitmaps,
@@ -55,7 +58,7 @@ offers a separate UA for public use.
 PqChat", "1", no chain id, no address), the author signs `uaMessage(kind, PURPOSE_PQCHAT, typed(s))` as a `UASig`
 (single key or `msig` by quorum), the contract verifies through the registry's `requirePortable` (parent §14 O1). The type
 strings below differ from every session struct, so a session signature is never a topic record. No record carries a fee;
-a payer pays a relayer through `MtxRelayFee` (CTR-MTX-27). Every write is relayable by anyone, fee 0 too.
+a payer pays a relayer through `RelayFeeRouter` (CTR-MTX-27). Every write is relayable by anyone, fee 0 too.
 
 | Struct | Type string | Signed by |
 |---|---|---|
@@ -82,8 +85,10 @@ a payer pays a relayer through `MtxRelayFee` (CTR-MTX-27). Every write is relaya
   `contentHash` either zero (not pinned) or `typed(...)` of the exact referenced version (its `PqTopicEntry` or
   `PqTopicEdit` record under `DS_C`). **The contract stores the reference as given and never checks it**: no bridge, no
   message across chains, no proof; the target may not exist. A reader resolves it by reading that chain's state (an RPC
-  there), checks that its factory lists `pqchat` as a `PqChat` instance, and compares `contentHash` when set; until then
-  the client shows the link as unverified. Edits keep the original's reference.
+  there), checks that its factory lists `pqchat` as a `PqChat` instance and that the referenced entry's topic names that
+  instance as its home (`homeChain`, `homeContract`; Fable P3-4: else a writer revoked at home could post in a replica
+  holding only its grant, and the link would check), and compares `contentHash` when set; until then the client shows the
+  link as unverified. Edits keep the original's reference.
 - `value` — `+1` up, `-1` down, `0` withdrawn (`PqTopicVoteValue` otherwise).
 
 **P36 — Ids and nonces.** As the parent's §4.3:
@@ -129,6 +134,8 @@ id. Two edits racing for the same version: the first to land wins, the other is 
 code-size limit (parent P11; a chain value, `ChainEnv.params[0]`, §11), split across as many blobs as needed. As the parent's D11, the
 signature's hash is in the blob and its bytes in the event: the contract checked the signature on the way in; a mirror
 copying the record elsewhere needs the bytes from the author, the event or an indexer. Content never depends on a log.
+A topic keeps only its latest update's pointer: earlier names and `about` texts stay in their blobs with no pointer in
+state, so topic history is not kept, unlike entry versions (P38; Fable P3-5).
 **The only bound on a body is the transaction** (EIP-8037: regular + state gas within the chain's block limit, about
 38 KB at a 60 M block and 1,530 gas per byte); the contract assumes no block limit. A longer text is posted as an entry
 and follow-up replies by the same author (Q1).
@@ -166,7 +173,7 @@ own. Counts are public `up` and `down`, never a combined score in state.
 | `voteEntry(PqTopicVote v, UASig sig)` | sig; entry exists; `value` in −1..1; `seq == stored + 1` |
 
 **P42 — Views, paged; events as notifications.** `(start, count)` returns at most `count` ids from `start`, fewer at
-the end, empty past it; every list has a count view. `topicOf(topicId)`, `entryOf(entryId)` (topicId, author, parentId,
+the end, empty past it, with the list's length: `count = 0` is the count view (3C-D8; Fable P3-3). `topicOf(topicId)`, `entryOf(entryId)` (topicId, author, parentId,
 depth, ref, mediaType, body, sigHash, versionCount, of the latest version), `versionAt(entryId, i)`, `writerOf(topicId,
 ua)`, `scoreOf(entryId)` (up, down), `voteOf(entryId, ua)` (value, seq); lists `topics`, `topicsByOwner`, `writersOf`,
 `posts`, `replies`, `byAuthor`; `topicNonceUsed`, `entryNonceUsed`. Events: `PqTopicCreated(topicId, owner)`,
@@ -185,7 +192,9 @@ instance; others are mirrors. A cross-chain **reference** (P35 `ref`) is differe
 
 **P44 — What limits writes.** Posts only by the owner and writers; replies and votes by any registered UA (D19, D21),
 each signed, each nonce or `seq` used once (a replay guard, not a rate limit); gas paid by the submitter; the node relays
-a write only when paid through `MtxRelayFee` or under the operator's lane policy (parent P17). No on-chain rate limit: one
+a write under the operator's lane policy (parent P17): a signed write is relayed on the lane, unpaid by default; the two
+unsigned writes only when paid through `RelayFeeRouter` or when the lane policy allows them (Fable P3-10: the node's
+default as built, `docs/node/job-api.md`). No on-chain rate limit: one
 keyed on time adds a slot write per entry and does not stop many UAs. With no hide (D18), whatever a topic accepts stays
 in state; an owner who wants a quiet topic sets `openReplies` false, and a client may filter locally.
 
@@ -208,10 +217,15 @@ verification is regular gas: FN-DSA-512 2.3 M, ML-DSA-65 on the cached key 5.8 M
 layer 2 pricing state at 0.005 gwei and less on a chain with a lower gas price; the signature costs more than a short
 reply's text. On Ethereum today the same KiB is about $1.10 (at 5 gwei, $18). On the SCaaS testnet it costs the test
 token. To be measured in PT4; a transaction fits only if regular + state gas fits the block limit (EIP-8037).
+Measured (plan 3c T90, stand-in verifier, state gas; Fable P3-1): post 1 KiB 3.08 M, reply 256 B 1.90 M, edit 1 KiB
+2.49 M, first vote 0.20 M, changed vote 0, create topic 1.85 M, grant 0.29 M; the table above is the paper estimate
+(`contracts/pqchat.md` §12 has the pins).
 
 **Contract size.** Six entries, ≈ 18 views, the typehashes and checks: an estimate of +8–12 KB runtime on the `PqChat`
-release. Measured in PT4 against the size gate; if the release then passes 64 KiB, the owner decides between the
-`_above64KiB` pin and moving topics into a second release kind, with the figures.
+release. Built (plan 3c T90; Fable P3-1): the release reached 34,223 B, past 3C-D2's 33,594 B line, so the topics and
+votes moved into the body module `PqChatTopics` (CTR-TOK-30: a `DELEGATECALL` module pinned in the class env, not a second
+kind): `PqChat` 24,771 B at the split (24,883 B with the Fable fixes), `PqChatTopics` 16,396 B; the `_above64KiB` pin
+no longer exists.
 
 ## 7. Node and indexer
 
@@ -349,7 +363,10 @@ function owner() external view returns (bytes32);                    // names th
 The creator is not an argument: it is in the factory index (`infoOf(this).creatorId`, the signing UA on a signed creation)
 and, during `initialize`, `IOpenFactory(FACTORY).creating()`.
 
-**`ChainEnv` applies** (chain-neutral spec, owner-approved 2026-11-07, pending its Fable review): the factory writes each
+**`ChainEnv` applies** (chain-neutral spec, owner-approved 2026-11-07, pending its Fable review). As built (Fable P3-1):
+the factory appends each instance's chain values to its clone's runtime code (`ChainEnvCode`, the chain-neutral spec's
+option I), with no `initEnv` and no storage, and `validateEnv` refuses `PqChatEnv`; the paragraph and the code block
+above keep the design text: the factory writes each
 instance's chain values into its own storage at creation (`initEnv`, before `initialize`): `chainUid`, the registry and
 the code-size limit as `ChainEnv.params[0]` (131,072 on the SCaaS testnet, 65,536 under EIP-7954); they are not immutables
 of the release, so one `PqChat` bytecode deploys at the same address on every chain, and an instance's address depends on
