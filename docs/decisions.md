@@ -8395,7 +8395,7 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 
 ## 39. Clients — UA libraries
 
-Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-60). Everything here is UNAUDITED.
+Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-61). Everything here is UNAUDITED.
 
 ### CLI-UAL-01 — `ua-rs` is the only signer; a secret leaves it only through a named export
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-01 · superseded-by: —
@@ -8948,6 +8948,36 @@ and bindings T20d9 (`7f7ae8ba`, `dc7e3efd`); the oracle harness through path (B)
 mutant records: `smartcontracts/evm/runs/2026-11-09-ua-rs-sign-t20d*`. Not reviewed as built (plan T21). UNAUDITED.
 **Source.** owner 2026-11-09 (chat, through the controller); [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20d;
 [proof-path spec](superpowers/specs/2026-11-06-pqz-proof-path.md) §9, §13.3.
+
+<a id="CLI-UAL-61"></a>
+### CLI-UAL-61 — Decisions of the fifth sync with `ua-mtx-merge` (T20b milestone 5, T20e, 2026-11-10)
+- old: — · status: current · owner: no · date: 2026-11-10 · normative: decisions.md#CLI-UAL-61 · superseded-by: —
+
+**Rule.** The owner may override any. At the merge of `ua-mtx-merge` `cd48e32b` (T83, 3i T77–T79, T62a, T66b) into `ua-rs-sign`
+(`2abd107f`, no conflicts):
+- **`PayMeta` v3 (T83) in `ua-rs`:** the sign screen's view of a `payNo` is the output of `meta_pay_id_json` (`{payId, payNo,
+  payNoUuid, save}`: the UUID text of a right-aligned UUIDv7, else `null` and the hex), so every binding over it shows the same;
+  ua-qt's invokable is renamed `metaPayIdV3`. The v2 code is in `clients/ua-rs/legacy/ua-rs-sign/pay_meta_v2.rs`. The pay
+  records are read by `eth_call` (`payment_count_call`, `payments_of_call`, `decode_pay_records`, canonical only). The wallet's
+  never-called selectors equal clientkeys' `NEVER_CALLED`, held by a test that reads `evm.js`. BUILT.
+- **Not built, nothing here reads it:** a `PaymentMeta` log decoder and a `PayRecordAmount` revert decoder (no `ua-*` code reads
+  a pay log or revert data; the node's indexer does); `namespaces.json` `payRecords` (`ua-rs` reads the `pqz` namespace only).
+- **Service pull (T80, [CLI-SGN-48](clients/signers-clientkeys.md#CLI-SGN-48)):** a JSON call per step (build; with `auth` the
+  calldata and the job; with `relayFee` and `feeAuth` the relay calldata), the relay-fee wrap in open mode only (payee
+  `pad(router)`, as every row; a bound payee waits for a user), refused on the pull's own lane and nonce in the pulled token.
+  `ua-qt` has no call (its `scaas-ua` is built with `json` only, no EIP-712 encoder); `ua-py`, `ua-go`, `ua-cs`, `ua-dart` carry no
+  pay surface; the warning for a service off the chain profile's list waits for that list (§10). BUILT.
+- **T62a:** path (B)'s NONE shapes matched every `noneHeaders` row unchanged; `pqz-read`'s envelope binding and header `fee`
+  are two named functions (`envelope_binding`, `call_fee`, the same arithmetic) so the rows test them. BUILT.
+- **T66b:** nothing in `ua-rs` or a binding names `modules()`, `pqzSet()`, an interface id or a fixture address T66b moved (the
+  readers take `psid` from storage; the KAT files T66b regenerated, `regulated_kat.json`, pass through their readers).
+- **clientkeys `test/typed-ops.test.js`** (`ua-mtx-merge`'s file): T66b moved three kinds' `mtxSelectors` tables into their
+  `<X>Core` files and the test's source paths did not follow (red on `ua-mtx-merge` `cd48e32b` too); repointed here
+  (`f721be0e`), the same change is due on `ua-mtx-merge`.
+**Status.** BUILT (2026-11-10, branch `ua-rs-sign`, plan T20e): the merge `2abd107f`; T20e1 (`fb232151`, mutants
+`77b745c5`, 11 of 11 killed); T20e2 (`703903f1`, `ea6c7a58`, 15 of 15); T20e3 (`d0ec7d9c`, `955e11ef`, `9b50a44a`, 10 of 10);
+T20e4 nothing moved; T20e5 the runner (`cec7abba`) and the clientkeys test (`f721be0e`). Not reviewed as built (plan T21). UNAUDITED.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20e; `smartcontracts/evm/runs/2026-11-10-ua-rs-sign-t20e-summary.txt`.
 
 ## 40. Integration — ERP
 
