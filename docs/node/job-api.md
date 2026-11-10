@@ -698,7 +698,7 @@ is `422 HEX_ARGS_REFUSED`.
 
 ```json
 {"entry": "postMessage", "contract": "pqchat", "token": "0x…", "validUntil": "1790000300",
- "args": {"m": {"sessionId": "0x…", "epochId": "0x…", "sender": "0x…", "device": 1, "counter": "7", "parents": ["0x…"],
+ "args": {"m": {"sessionId": "0x…", "epochId": "0x…", "sender": "0x…", "device": "0x…", "counter": "7", "parents": ["0x…"],
                 "ciphertext": "0x…"},
           "sig": {"keyData": "0x…", "signature": "0x…", "members": []}}}
 ```

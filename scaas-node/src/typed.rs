@@ -109,7 +109,7 @@ const NESTED: &[(&str, &str)] = &[
     ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
     ("PqChatEpoch", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
     ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
-    ("PqChatMessage", "bytes32 sessionId,bytes32 epochId,bytes32 sender,uint32 device,uint64 counter,bytes32[] parents,bytes ciphertext"),
+    ("PqChatMessage", "bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext"),
     ("PqTopic", "bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies"),
     ("PqTopicUpdate", "bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies"),
     ("PqTopicWriter", "bytes32 topicId,bytes32 writer,bool granted,uint64 seq"),

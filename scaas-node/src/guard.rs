@@ -2197,7 +2197,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let theirs: HashSet<[u8; 4]> = writes.iter().map(|s| sel(s)).collect();
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| r.contracts.contains(&"pqchat")).map(|r| r.sent).collect();
         assert_eq!(ours, theirs, "the PqChat allow-list, both directions");
-        let forge: HashSet<[u8; 4]> = ["21829f04", "1222a945", "2b9ab93a", "3c289881", "ad79eb6a", "95660a78", "47bee6d5", "c8de3d2d",
+        let forge: HashSet<[u8; 4]> = ["21829f04", "1222a945", "2b9ab93a", "3c289881", "6035115c", "95660a78", "47bee6d5", "c8de3d2d",
             "04857ea8", "1fd5aeac", "f3ee47ee", "5aee92d5"].iter().map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap()).collect();
         assert_eq!(ours, forge, "forge's IPqChat methodIdentifiers");
         let kinds = ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"];
