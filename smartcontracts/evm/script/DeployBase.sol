@@ -383,7 +383,7 @@ abstract contract DeployBase is Script {
             (dexLibs[0], dexLibs[1]) = (address(GovernanceLib), address(TradeLib));
             // T66b §4.2: the DEX's admin module D first, pinned in the DEX env beside the libraries, named in `implArgs`
             address[] memory dexModules = new address[](1);
-            dexModules[0] = _module("SCaaSDexAdmin.sol:SCaaSDexD", abi.encode(address(f), bytes("")), 0);
+            dexModules[0] = _module("SCaaSDexAdmin.sol:SCaaSDexGovernanceModule", abi.encode(address(f), bytes("")), 0);
             bytes memory dexArgs = abi.encode(ImplArgs(dexModules));
             f.publishDexEnv(1, _withModules(_env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs),
                 dexModules));

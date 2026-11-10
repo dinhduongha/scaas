@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {deployDexModules} from "../../script/KindModules.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
-import {SCaaSDexD} from "../../src/dex/SCaaSDexAdmin.sol";
+import {SCaaSDexGovernanceModule} from "../../src/dex/SCaaSDexAdmin.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {ImplArgs, ITokenModule} from "../../src/metatx/ITokenModule.sol";
@@ -40,14 +40,14 @@ contract UADexAdminTest is UADexBase {
 
     /// M2: D's entries answer only under DELEGATECALL; `validBits` is `pure` and reads nothing.
     function test_d_directCallRefused() public {
-        SCaaSDexD d = SCaaSDexD(dex.modules()[0]);
-        vm.expectRevert(SCaaSDexD.NotDelegated.selector);
+        SCaaSDexGovernanceModule d = SCaaSDexGovernanceModule(dex.modules()[0]);
+        vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.owner();
-        vm.expectRevert(SCaaSDexD.NotDelegated.selector);
+        vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.features();
-        vm.expectRevert(SCaaSDexD.NotDelegated.selector);
+        vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.transferOwnership(nid(dave));
-        vm.expectRevert(SCaaSDexD.NotDelegated.selector);
+        vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.grantRole(GovernanceBits.LISTING, nid(dave));
         assertEq(d.validBits(), GovernanceBits.DEX_BITS);
     }

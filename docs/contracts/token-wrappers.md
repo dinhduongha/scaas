@@ -967,7 +967,7 @@ own code limit above 65,536 B.
 | **Z** | 5 | Zether (2, 3, 10, 11) | `ZetherLib`, `ZetherWrappedLib` |
 | **Q** | 6 | PQZ (4, 5, 12, 13): the ops and their verdict entries | `PqzTransferLib`, `PqzBurnLib`, `PqzStateLib`, `PqzViewLib`, `PqzWrappedLib` |
 | **Q2** | 8 | on 5 and 13: the PQZ state, setters and views (Q split by the rule below) | the PQZ libraries |
-| **D** | 10 | the DEX's 22 governance entries (`SCaaSDexD`) | `GovernanceLib` |
+| **D** | 10 | the DEX's 22 governance entries (`SCaaSDexGovernanceModule`) | `GovernanceLib` |
 
 Ids 7 (P2, pay) and 9 (G, governance) are reserved for the splits below. **Modules per kind and runtime (B)**, release
 first (`forge build src --sizes`, T66b 4.4):

@@ -9,12 +9,12 @@ import {IGovernance} from "../governance/IGovernance.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 
 /// @title The DEX's governance hooks (T66b, spec 2026-11-09-t66b-library-organisation.md §4.2, owner 2026-11-09 ruling (a)):
-///        one definition, inherited by `SCaaSDex` and by its admin module `SCaaSDexD`, so a governance body runs under the
-///        same rules in both. No state of its own: the DEX's state is in its ERC-7201 namespaces (`scaas.dex`, the
-///        governance and trade ones) and its guard is transient. UNAUDITED.
+///        one definition, inherited by `SCaaSDex` and by its governance module `SCaaSDexGovernanceModule`, so a governance
+///        body runs under the same rules in both. No state of its own: the DEX's state is in its ERC-7201 namespaces
+///        (`scaas.dex`, the governance and trade ones) and its guard is transient. UNAUDITED.
 abstract contract SCaaSDexGovernance is ReentrancyGuardTransient, GovernanceBaseCore {
-    /// @notice D's `moduleGroup()` (`script/t66b/gen_faces.py` `GROUP_ID`).
-    uint8 internal constant GROUP_D = 10;
+    /// @notice The governance module's `moduleGroup()` (`script/t66b/gen_faces.py` `GROUP_ID`).
+    uint8 internal constant GROUP_GOVERNANCE = 10;
 
     constructor() GovernanceBaseCore(address(0)) {}
 
@@ -41,10 +41,11 @@ abstract contract SCaaSDexGovernance is ReentrancyGuardTransient, GovernanceBase
     function _govRouter() internal view override returns (address) { return ChainEnvCode.govRouter(); }
 }
 
-/// @title SCaaSDexD: the DEX's admin module D (T66b, spec §4.2, owner 2026-11-09 ruling (a)): its 22 governance entries,
-///        reached only by DELEGATECALL from the DEX's stubs (M2; `validBits` is `pure` and reads nothing), no guard of its
-///        own (the stub's `_forward` holds it, M3), no state of its own (M6). UNAUDITED.
-contract SCaaSDexD is SCaaSDexGovernance {
+/// @title SCaaSDexGovernanceModule: the DEX's governance module (named D until owner ruling R7, 2026-11-10; T66b, spec §4.2,
+///        owner 2026-11-09 ruling (a)): its 22 governance entries, reached only by DELEGATECALL from the DEX's stubs (M2;
+///        `validBits` is `pure` and reads nothing), no guard of its own (the stub's `_forward` holds it, M3), no state of its
+///        own (M6). UNAUDITED.
+contract SCaaSDexGovernanceModule is SCaaSDexGovernance {
     /// @notice A module-face entry called other than by DELEGATECALL from its DEX (M2).
     error NotDelegated();
 
@@ -61,7 +62,7 @@ contract SCaaSDexD is SCaaSDexGovernance {
         _FACTORY = factory_;
     }
 
-    function moduleGroup() external pure returns (uint8) { return GROUP_D; }
+    function moduleGroup() external pure returns (uint8) { return GROUP_GOVERNANCE; }
 
     /// @notice The factory of the DEX releases this module serves (checked by `SCaaSDex`'s constructor).
     function factory() external view returns (address) { return _FACTORY; }

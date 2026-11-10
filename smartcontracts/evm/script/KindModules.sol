@@ -142,7 +142,7 @@ function kindArgs(uint8 kind, address factory, bytes memory coreArgs) returns (b
 function deployDexModules(address factory) returns (address[] memory modules, bytes memory implArgs) {
     Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     modules = new address[](1);
-    modules[0] = vm.deployCode("SCaaSDexAdmin.sol:SCaaSDexD", abi.encode(factory, bytes("")));
+    modules[0] = vm.deployCode("SCaaSDexAdmin.sol:SCaaSDexGovernanceModule", abi.encode(factory, bytes("")));
     implArgs = abi.encode(ImplArgs(modules));
 }
 

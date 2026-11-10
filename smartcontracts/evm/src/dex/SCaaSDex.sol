@@ -57,7 +57,7 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 ///         `mtxHybridVia`, spec §4): one listed-market taker against 0..n makers at their own price and the rest of
 ///         its sell routed outside, in one atomic plan; the taker alone gets the output above `outsideFloor`.
 ///         T66b (spec 2026-11-09-t66b-library-organisation.md §4.2, owner 2026-11-09 ruling (a)): the 22 governance entries
-///         forward by DELEGATECALL to the admin module D (`SCaaSDexD`, `modules()`); the governance hooks are
+///         forward by DELEGATECALL to the admin module D (`SCaaSDexGovernanceModule`, `modules()`); the governance hooks are
 ///         `SCaaSDexGovernance`'s, shared with D.
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, IGovernance {
     uint256 internal constant PPM = 1_000_000;
@@ -122,7 +122,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, IGovernance {
     error ModuleMissing(uint256 i);
     error ModuleMismatch(uint256 i);
 
-    /// @dev The admin module D (`SCaaSDexD`), from `implArgs`.
+    /// @dev The admin module D (`SCaaSDexGovernanceModule`), from `implArgs`.
     address private immutable _MD;
 
     /// @dev Per leg, computed before any transfer.
@@ -161,7 +161,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, IGovernance {
         if (ms.length != 1) revert ModuleMissing(ms.length);
         address d = ms[0];
         if (d.code.length == 0) revert ModuleMissing(0);
-        if (ITokenModule(d).moduleGroup() != GROUP_D || ITokenModule(d).factory() != factory_) revert ModuleMismatch(0);
+        if (ITokenModule(d).moduleGroup() != GROUP_GOVERNANCE || ITokenModule(d).factory() != factory_) revert ModuleMismatch(0);
         _MD = d;
     }
 

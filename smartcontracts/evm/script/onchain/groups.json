@@ -17,7 +17,7 @@
     ],
     "dex": [
       {"label": "SCaaSDex", "artifact": "SCaaSDex.sol/SCaaSDex"},
-      {"label": "SCaaSDexD", "artifact": "SCaaSDexAdmin.sol/SCaaSDexD", "via": ["SCaaSDex"]}
+      {"label": "SCaaSDexGovernanceModule", "artifact": "SCaaSDexAdmin.sol/SCaaSDexGovernanceModule", "via": ["SCaaSDex"]}
     ],
     "relay": [
       {"label": "RelayFeeRouter", "artifact": "RelayFeeRouter.sol/RelayFeeRouter"},

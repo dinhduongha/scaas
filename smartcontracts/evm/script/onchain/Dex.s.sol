@@ -76,7 +76,7 @@ contract Dex is OnchainBase {
         _init("dex");
         f = OpenFactory(_dep("token_factory"));
         _book(address(f), "OpenFactory");
-        _book(vm.parseJsonAddress(vm.readFile(vm.envOr("RELEASES_JSON", string("deployments/7622-t66b-releases.json"))), ".SCaaSDexD.address"), "SCaaSDexD");
+        _book(vm.parseJsonAddress(vm.readFile(vm.envOr("RELEASES_JSON", string("deployments/7622-t66b-releases.json"))), ".SCaaSDexGovernanceModule.address"), "SCaaSDexGovernanceModule");
         _setup();
         _admin();
         _settle();

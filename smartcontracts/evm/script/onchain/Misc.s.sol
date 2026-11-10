@@ -16,7 +16,7 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {NormalTokenP, NormalTokenT, NormalTokenA} from "../../src/metatx/NormalTokenModules.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
-import {SCaaSDexD} from "../../src/dex/SCaaSDexAdmin.sol";
+import {SCaaSDexGovernanceModule} from "../../src/dex/SCaaSDexAdmin.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {RefServiceEscrow} from "../../test/metatx/helpers/RefServiceEscrow.sol";
@@ -365,11 +365,11 @@ contract Misc is OnchainBase {
     function _dex() internal {
         IFactoryToken.Env memory e = f5.dexEnvOf(1); // GovernanceLib, TradeLib, the Step 5 factory's D
         _book(e.libs[1], "TradeLib");
-        _book(e.libs[2], "SCaaSDexD");
+        _book(e.libs[2], "SCaaSDexGovernanceModule");
         address[] memory d = new address[](1);
         vm.broadcast(k1);
-        d[0] = address(new SCaaSDexD(address(f2), "")); // D names its factory (M1): this factory's own D
-        _book(d[0], "SCaaSDexD");
+        d[0] = address(new SCaaSDexGovernanceModule(address(f2), "")); // D names its factory (M1): this factory's own D
+        _book(d[0], "SCaaSDexGovernanceModule");
         (e.libs[2], e.libCodeHashes[2]) = (d[0], d[0].codehash);
         ISCaaSDex.DexConfig memory c = ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, a1);
         vm.startBroadcast(k1);
