@@ -56,6 +56,12 @@ abstract contract OnchainBase is Script {
             vm.toString(abi.encodePacked(expected)), " ", what));
     }
 
+    /// @dev `_neg` with the whole revert data expected (the error and its arguments), where the arguments are fixed.
+    function _negData(address from, address to, bytes memory data, bytes memory expected, string memory what) internal {
+        vm.writeLine(_negFile(), string.concat(vm.toString(from), " ", vm.toString(to), " ", vm.toString(data), " ",
+            vm.toString(expected), " ", what));
+    }
+
     function _negFile() internal view returns (string memory) {
         return string.concat("deployments/onchain-", net, "-", group, "-neg.txt");
     }

@@ -159,7 +159,9 @@ def neg(a):
                 err = e.args[0] if isinstance(e.args[0], dict) else {}
                 d = err.get("data") or ""
                 d = d.get("data", "") if isinstance(d, dict) else d
-                got = d[:10] if isinstance(d, str) and d.startswith("0x") else str(err.get("message", ""))[:80]
+                # the selector, or the whole revert data when the script listed it whole (`_negData`)
+                got = (d if len(want) > 10 else d[:10]) if isinstance(d, str) and d.startswith("0x") \
+                    else str(err.get("message", ""))[:80]
             ok = got.lower() == want.lower()
             n, bad = n + 1, bad + (not ok)
             f.write(json.dumps({"net": a.net, "to": to.lower(), "label": book.get(to.lower(), ""), "sel": data[2:10],

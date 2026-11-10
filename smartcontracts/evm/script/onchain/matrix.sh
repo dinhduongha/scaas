@@ -17,7 +17,7 @@ set -eu
 command -v anvil > /dev/null || PATH=$HOME/.foundry/bin:$PATH
 tgt=${1:?target: local | scaas-testnet | <name>}
 OUTD=runs/2026-11-10-ua-mtx-merge-t66b-step5b
-GROUPS=${MATRIX_GROUPS:-tokens gov dex misc zether pq pqoff verifiers views}
+GROUPS=${MATRIX_GROUPS:-tokens gov dex misc zether pq pqoff verifiers views wraplimits}
 T=$(mktemp -d)
 A= CP=
 CS=$(cd ../../pqz-core/nethermind/chain && pwd)
@@ -117,6 +117,8 @@ for g in $GROUPS; do
     fi ;;
   verifiers) python3 -I script/onchain/verifiers.py "$tgt" "$RPC" || rc=1 ;;
   views) python3 -I script/onchain/coverage.py views "$tgt" "$RPC" || rc=1 ;;
+  # last: it moves the chain's clock by two days (local only; its own outputs, wraplimits.sh)
+  wraplimits) NET=$tgt RPC=$RPC sh script/onchain/wraplimits.sh || rc=1 ;;
   esac
 done
 python3 -I script/onchain/coverage.py table --net "$tgt" > "$OUTD/table-$tgt.txt"
