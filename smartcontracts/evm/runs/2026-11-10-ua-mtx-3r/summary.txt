@@ -44,3 +44,34 @@ zether-prover --test typed_ops (red, expected: T8) | 43b5eeea | 101 | 5 passed, 
 forge-pqchat | f6a571ee | 0 | 98 passed, 0 failed (9 suites; T1's red test_pqtopicAdminTypehashIsPinned green; new test_topicAdminFieldsArePinned; PqChatGas pins unchanged)
 t3-layout-control (topicsByAdmin swapped with writersOf in PqChatCore.S, restored) | f6a571ee | 1 | 3 passed, 1 failed: test_topicAdminFieldsArePinned ("topicsByAdmin[admin]: one topic: 0 != 1"), the positive control of the label-only rename
 clientkeys | f6a571ee | 0 | 322 tests, 320 passed, 0 failed, 2 skipped (pqchat.test.js reproduces the regenerated topics.json)
+t4-govgas-before (GovGas -vv, the creation rows) | f6a571ee | 0 | createToken 2,191,547, createDex 4,387,287, createInstance (NoteKind) 1,826,911
+t4-factoryindex.red (FactoryIndex.t.sol of T4 against the old factory) | f6a571ee+test | 1 | 15 passed, 19 failed: `Created` 256 != 224 B (every kind 0-5, 8-13, the DEX, unregistered, recordNamesNoAdmin), noContractsOfOwner ("contractsOfOwner answers"), adminRevertStillCreates ("admin reverts"), slotCount_first 8 != 5, slotCount_steady 6 != 4
+forge-v2 (red, the first green run) | f6a571ee+T4 | 1 | 653 passed, 2 failed: FactoryIndex test_index_recordNamesNoAdmin (the test's own order, "all: last"), FactoryGenericKind test_generic_slotCount (6 != 4, the generic creation's slot count moves with R1)
+forge-v2 | 262fff1c | 0 | 655 passed, 0 failed (54 suites)
+forge-pqchat (red, before the pins) | f6a571ee+T4 | 1 | 96 passed, 2 failed: PqChatGas test_gas_createInstance (regular 188,761 vs 227,583), test_gas_deployImplementation (runtime 27,801 != 27,825)
+forge-pqchat | 262fff1c | 0 | 98 passed, 0 failed
+forge-zether | 262fff1c | 0 | 441 passed, 0 failed, 4 skipped (37 suites; ZetherStateVectors: the record's two words)
+forge-governance (red, before the pin) | f6a571ee+T4 | 1 | 450 passed, 1 failed: GovDeploy test_routerAndRelayFeeRouterNewAddresses (the router's CREATE2 address: IOpenFactory.sol in its metadata)
+forge-governance | 262fff1c | 0 | 451 passed, 0 failed (50 suites)
+t4-govgas-after | 262fff1c | 0 | createToken 2,183,975, createDex 4,148,399, createInstance (NoteKind) 1,592,228
+forge-metatx | 262fff1c | 0 | 544 passed, 0 failed, 1 skipped (44 suites)
+forge-merge | 262fff1c | 0 | 341 passed, 0 failed (29 suites)
+forge-as | 262fff1c | 0 | 463 passed, 0 failed (76 suites)
+forge-ua | 262fff1c | 0 | 732 passed, 0 failed (54 suites)
+forge-pqz | 262fff1c | 0 | 598 passed, 0 failed, 4 skipped (51 suites)
+forge-wrap | 262fff1c | 0 | 278 passed, 0 failed (29 suites)
+forge-liquidity | 262fff1c | 0 | 90 passed, 0 failed, 1 skipped (9 suites)
+forge-account | 262fff1c | 0 | 98 passed, 0 failed (5 suites)
+forge-confidential | 262fff1c | 0 | 5 passed, 0 failed
+forge-hedera | 262fff1c | 0 | 20 passed, 0 failed
+forge-p6f | 262fff1c | 0 | 4 passed, 0 failed
+forge-pqzh | 262fff1c | 0 | 42 passed, 0 failed (3 suites)
+forge-wallet | 262fff1c | 0 | 181 passed, 0 failed (12 suites)
+forge-fork | 262fff1c | 0 | 0 passed, 1 skipped (no SCAAS_FORK_RPC_URL)
+forge-top | 262fff1c | 0 | 29 passed, 0 failed (5 suites)
+forge-research | 262fff1c | 1 | 358 passed, 1 failed, 7 skipped: the known red, PqzProofStoreGas test_debitMinGas_isTheCheapestLogDebit 7,513,388 pinned / 7,513,432 measured (+44, unchanged since T2; a set parameter, the owner's)
+forge-modules | 262fff1c | 0 | 35 passed, 0 failed (12 suites)
+size | 262fff1c | 0 | 0 errors, 166 contracts (OpenFactory 28,583, PqChat 27,801: their rows moved)
+scripts | 262fff1c | 0 | Deploy, DeploySend and the eight on-chain scripts compile
+gen | 262fff1c | 0 | gen_faces.py --check, gen_set.py --all --check, test_vcheck ok
+t4-zether-state (ZetherStateVectors STATE_VECTORS=1 CONTRACT_COMMIT=262fff1c, twice) | 262fff1c | 0 | state.json: `record` two words, `contractCommit`; every other word equal; the two runs byte-equal (sha256 7f12cd62)

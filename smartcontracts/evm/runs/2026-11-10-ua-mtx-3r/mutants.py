@@ -44,6 +44,16 @@ MUTANTS = {
            "\"PqTopic(bytes32 admin,uint64 nonce,",
            "\"PqTopic(bytes32 owner,uint64 nonce,",
            "forge", "test/pqchat", "PqChatTypes.t.sol"),
+    # T4 (§3): `_create` still reads the token's `admin()` (the reverting-`admin()` creation)
+    "M6": ("smartcontracts/evm/src/factory/OpenFactory.sol",
+           "        IGovernance t = IGovernance(token);\n        _index(token, creatorId, CLASS_TOKEN, uint16(kind), version);\n",
+           "        IGovernance t = IGovernance(token);\n        t.admin();\n        _index(token, creatorId, CLASS_TOKEN, uint16(kind), version);\n",
+           "forge", "test/v2", "FactoryIndex.t.sol"),
+    # T9a (§7): a node row keeps the old entry `mtxTransferOwnership` (the allow-list against selector_audit.json)
+    "M12": ("scaas-node/src/typed.rs",
+            "(\"UATransferAdmin\", \"mtxTransferAdmin\", GR,",
+            "(\"UATransferAdmin\", \"mtxTransferOwnership\", GR,",
+            "cargo", "scaas-node", "allow_lists_equal_the_selector_audit_both_directions"),
 }
 
 
