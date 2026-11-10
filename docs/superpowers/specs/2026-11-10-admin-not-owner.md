@@ -5,7 +5,9 @@ owner answered Q1–Q6 and ruled the directory the same day (§10, §13)**, reco
 Changes (§11). **Fable review 2026-11-10: approve with fixes, no P0**; every finding is applied below, each checked against the
 code first, and tagged (Fable P1-1 …). **The owner's final ruling on P1-2 the same day: the admin
 approves one release by hash, and anyone deploys it straight to the factory; a native admin's own deploy is its own approval
-(§5.6).** The owner also ruled P2-5 (no usage restriction) and made the relay pair a write-once entry (§13).
+(§5.6).** The owner also ruled P2-5 (no usage restriction) and made the relay pair a write-once entry (§13). **Owner ruling, the same day,
+added to the rename map: in `ComplianceRegistry` the "attester" becomes the "KYC provider"** (§4.1, §5.3.1), the party the
+registry admin enables to write compliance rows; it is a UA `bytes32` as Q5 says.
 
 ## 1. The rulings (owner, 2026-11-10, in chat)
 
@@ -21,7 +23,8 @@ approves one release by hash, and anyone deploys it straight to the factory; a n
   two-step transfer, the renounce, the role bits, the delays and every rule stay; only names and the ABI move. **Not renamed
   (owner):** the PqChat instance's `owner` (`bytes32`), `MandateWallet` and `SmartKeyAccount` `owner` (the holder of the assets).
 
-**Also not renamed** (another meaning of the word): the UA registry's `keyOwner`; the owner of a PQZ leg
+**Also not renamed** (another meaning of the word): the registry's own single `admin` (it stays `admin`), and its
+`AdminWrittenSlot` (the registry admin's row, `providerId == 0`); the UA registry's `keyOwner`; the owner of a PQZ leg
 (`src/pqz/PqzCore.sol:725-781`); Zether's account owner (purpose `zether-owner`, `ownerSig`, the owner statements of TS-D19);
 ERC-20 `allowance(owner, spender)`; `"owner 2026-…"` in comments (the person).
 
@@ -94,6 +97,10 @@ equal everywhere.
 | Router | `UATransferOwnership(…,bytes32 newOwner,…)`, `UAAcceptOwnership`, `UARenounceOwnership`; `mtx…Ownership` | `UATransferAdmin(…,bytes32 newAdmin,…)`, `UAAcceptAdmin`, `UARenounceAdmin`; `mtxTransferAdmin`, `mtxAcceptAdmin`, `mtxRenounceAdmin` |
 | Topic | `PqTopic.owner`; `PqTopicCreated(topicId, owner)`; `PqTopicNotOwner(bytes32 owner)`; `topicsByOwner(owner_, start, count)`; storage `Topic.owner`, `S.topicsByOwner`; `_ownerAuth` | `admin`; `PqTopicCreated(topicId, admin)`; `PqTopicNotAdmin(bytes32 admin)`; `topicsByAdmin(admin_, …)`; `Topic.admin`, `S.topicsByAdmin` (same slots); `_adminAuth` |
 | Disclosure | `governance_bits.json` sentences "The owner may …" (bits 25, 26), from `test/governance/GovBitsVector.t.sol:327`, `:339` | "The admin may …", regenerated (`WRITE_BITS=true`) |
+| Registry: the party (owner 2026-11-10) | `setAttester(address attester, bool)`; `attesterId(address)` (mapping); `attesterEnabled(uint32)`; `AttesterSet(address indexed attester, uint32 indexed attesterId, bool)`; `NotAttester()`; the draft's `AttesterZero` | `setKycProvider(bytes32 provider, bool enabled)`; `kycProviderId(bytes32)`; `kycProviderEnabled(uint32)`; `KycProviderSet(bytes32 indexed provider, uint32 indexed providerId, bool enabled)`; `NotKycProvider()`; `KycProviderZero()` |
+| Registry: the row (named after what it writes) | `attest(bytes32[] accounts, uint64[] flags, uint64[] validUntil)`; `Attested(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed attesterId)`; `attestationOf(bytes32) returns (flags, validUntil, attesterId)`; struct `Attestation {flags, validUntil, attesterId}` | `setCompliance(bytes32[] accounts, uint64[] flags, uint64[] until)`; `ComplianceSet(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed providerId)`; `complianceOf(bytes32) returns (flags, validUntil, providerId)`; struct `ComplianceRow {flags, validUntil, providerId}` (one slot, same packing) |
+| Registry: router ops | the draft's `UASetAttester(…,bytes32 attester,bool enabled,…)` / `mtxSetAttester` and `UAAttest(…,bytes32[] accounts,uint64[] flags,uint64[] until,…)` / `mtxAttest` (never built) | `UASetKycProvider(…,bytes32 provider,bool enabled,…)` / `mtxSetKycProvider`; `UASetCompliance(…,bytes32[] accounts,uint64[] flags,uint64[] until,…)` / `mtxSetCompliance` |
+| Registry: readers | `RegulatedBase` (`attestationOf`, `attesterEnabled`, `canReceive` reason 3 "attester disabled"), `IRegulatedToken`, `IComplianceRegistry`, the node's `abi.rs` / `dex/venue.rs`, clientkeys `regulated.js` (`attesterEnabled`), `regulated_kat.json` | `complianceOf`, `kycProviderEnabled`, reason 3 "KYC provider disabled", the same names everywhere; `hasFlags`, `LengthMismatch`, `EligibleContractAdminOnly`, `AdminWrittenSlot`, `admin` unchanged |
 
 One shared interface, `IAdmin` (`src/governance/IAdmin.sol`): `admin()`, `pendingAdmin()`, `transferAdmin(bytes32)`,
 `acceptAdmin()`, the two events, `NotAdmin(bytes32)`, `NotPendingAdmin(bytes32)`. `IGovernance is IAdmin` and adds
@@ -123,6 +130,15 @@ nonce scope likewise; only the field name and `TOPIC_TYPEHASH` change.
 | `mtxTransferOwnership` | `0xc3efbc3a` | `mtxTransferAdmin` | `0xa682ea50` |
 | `mtxAcceptOwnership` | `0x9c682cce` | `mtxAcceptAdmin` | `0x321b86a3` |
 | `mtxRenounceOwnership` | `0x71364d1a` | `mtxRenounceAdmin` | `0xfeedac3d` |
+| `setAttester(address,bool)` | `0x5c0204d9` | `setKycProvider(bytes32,bool)` | `0x105b99c7` |
+| `attesterId(address)` | `0xf146f55a` | `kycProviderId(bytes32)` | `0x2d4138d7` |
+| `attesterEnabled(uint32)` | `0xf358d481` | `kycProviderEnabled(uint32)` | `0xbbc8fe54` |
+| `attest(bytes32[],uint64[],uint64[])` | `0xfff67e1b` | `setCompliance(bytes32[],uint64[],uint64[])` | `0x7fa569a5` |
+| `attestationOf(bytes32)` | `0xb174a9c4` | `complianceOf(bytes32)` | `0x996ee3f2` |
+| `NotAttester()` | `0xcab98054` | `NotKycProvider()` | `0x3f153a68` |
+| `AttesterZero()` (draft, never built) | | `KycProviderZero()` | `0x42a1ea7f` |
+| `mtxSetAttester` (draft, never built) | `0xa0224cf5` | `mtxSetKycProvider` | `0xd4733492` |
+| `mtxAttest` (draft, never built) | `0x3957a8be` | `mtxSetCompliance` | `0x37a68821` |
 
 The `mtx*` selectors are over `(UAEnvelope, address target[, bytes32], UASig)` as `typed_ops.json:8016` pins the old one.
 
@@ -136,19 +152,25 @@ The `mtx*` selectors are over `(UAEnvelope, address target[, bytes32], UASig)` a
 | `DexCreated(address,bytes32,uint64,address,bytes32)` | `0xe7ef47f6…` | `DexCreated(address,bytes32,uint64,address)` | `0x7333afd9…` |
 | `InstanceCreated(…,uint64,address,bytes32)` | `0x45e2860e…` | `InstanceCreated(…,uint64,address)` | `0xdb1952a9…` |
 | `PqTopicCreated(bytes32,bytes32)` | `0x5b2fb9b3…` | unchanged (a parameter name only) | |
+| `AttesterSet(address,uint32,bool)` | `0x52573ee7…` | `KycProviderSet(bytes32,uint32,bool)` | `0xa2ead380…` |
+| `Attested(bytes32,uint64,uint64,uint32)` | `0x7a80112d…` | `ComplianceSet(bytes32,uint64,uint64,uint32)` | `0xe6da38c5…` |
 | `UATransferOwnership` | `0xa468e58d…` (pinned, `GovRouterTypehash.t.sol:50-53`) | `UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,E)` | `0x36dbad09…` |
 | `UAAcceptOwnership` | `0x2ce67927…` | `UAAcceptAdmin(bytes32 from,address target,E)` | `0x996ac68d…` |
 | `UARenounceOwnership` | `0x0397c70e…` | `UARenounceAdmin(bytes32 from,address target,E)` | `0x4be88ff9…` |
 | `PqTopic(bytes32 owner,…)` | `0x75bed97b…` | `PqTopic(bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)` | `0x66954727…` |
+| `UASetAttester` (draft, never built) | `0xbd91b79a…` | `UASetKycProvider(bytes32 from,address target,bytes32 provider,bool enabled,E)` | `0x297e6c85…` |
+| `UAAttest` (draft, never built) | `0x1e48485c…` | `UASetCompliance(bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,E)` | `0x0c697df1…` |
 
 `E` is the seven envelope words (`uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address
-feeRecipient`). No other typehash names `owner` (`src/` scan); the old four stay pinned as legacy pins. Every chain test-only: no
+feeRecipient`). The registry rows of §4.2 and §4.3 were recomputed with `cast sig` / `cast keccak` on 2026-11-10 (the KYC
+provider ruling); the draft rows were never built. No other typehash names `owner` (`src/` scan); the old four stay pinned as legacy pins. Every chain test-only: no
 alias, no old selector kept.
 
 ### 4.4 Layout pins
 
 The slots do not move; the labels do: `test/v2/layout/namespaces.json` (`owner`, `pendingOwner`, `ownerGeneration`),
-`test/v2/Layout.t.sol:48-51`, `:201-204`; PqChat's `Topic.admin` and `S.topicsByAdmin` (the namespace pin
+`test/v2/Layout.t.sol:48-51`, `:201-204`; PqChat's `Topic.admin` and `S.topicsByAdmin`; `ComplianceRegistry` has no layout pin (its sequential slots, `kycProviderId`,
+`_enabled`, the rows, are its own and move with §5.3's `UAAdmin` namespace) (the namespace pin
 `test/pqchat/PqChatLayout.t.sol:37` names the instance's `ownerUA`, unchanged). The test still asserts the same offsets: a label
 edit that moved a slot fails it.
 
@@ -225,35 +247,40 @@ no expiry, as in `GovernanceLib`: a forgotten pending can accept years later; th
   (`src/regulated/RegulatedLib.sol:114-116`) while `Evil` answers `subject() = admin`: `admin()` shows one UA and another party
   writes. Hence `RegulatedLib.init` also requires `registry.govRouter()` to be 0 or the token's own `ChainEnv.govRouter`
   (`RegistryRouterMismatch(registry, got)`), and a client checks the same before it trusts `admin()`.
-- `setAttester(bytes32 attester, bool enabled)`: `onlyAdmin`; attester 0 refused (`AttesterZero`: 0 is what a router read outside
-  a live call answers, Fable P3). `attest`: `c = _adminSubject()`; `c == admin` ⇒ id 0, else
-  `id = attesterId[c]`, enabled, else `NotAttester` (§5.3.1). D2 applies to every direct caller, an attester's too (the registry
-  is authority there; it had no check because its admin had to be a contract).
-- `transferAdmin`, `acceptAdmin`; **no renounce** (owner, Q2): only the admin disables a compromised attester or writes an
+- `setKycProvider(bytes32 provider, bool enabled)`: `onlyAdmin`; provider 0 refused (`KycProviderZero`: 0 is what a router read
+  outside a live call answers, Fable P3). `setCompliance`: `c = _adminSubject()`; `c == admin` ⇒ id 0, else
+  `id = kycProviderId[c]`, enabled, else `NotKycProvider` (§5.3.1). D2 applies to every direct caller, a KYC provider's too (the
+  registry is authority there; it had no check because its admin had to be a contract).
+- `transferAdmin`, `acceptAdmin`; **no renounce** (owner, Q2): only the admin disables a compromised KYC provider or writes an
   `ELIGIBLE_CONTRACT` row, so the registry always has one.
 
-#### 5.3.1 The attester is a UA too (owner, Q5)
+#### 5.3.1 The KYC provider is a UA too (owner, Q5; the name, owner 2026-11-10)
 
-The attester writes the registry's own state: it is the subject of its call, like a governance holder, so it takes the
+**Name (owner ruling 2026-11-10):** the party the registry admin enables to write compliance rows is the **KYC provider**, not
+the "attester"; the row it writes is a **compliance row**, and the op is named after it (`setCompliance`). The rename rows are in
+§4.1-§4.3. The registry's own `admin` stays `admin`; `AdminWrittenSlot` keeps its name (the admin's row, `providerId == 0`);
+nothing in PQZ changes (3f's verifier is `pqzVerifierUA`, the last item of this section).
+
+The KYC provider writes the registry's own state: it is the subject of its call, like a governance holder, so it takes the
 `governed` / `UAAdmin` pattern, not a signer's. (A signer, like 3f's verifier UA, signs a record that rides inside someone
-else's transaction and never sends one: `PqzVerdict` is the last parameter of the user's proof-carrying entry, CTR-PQZ-29. An
-attester sends its own `attest`.) Hence:
+else's transaction and never sends one: `PqzVerdict` is the last parameter of the user's proof-carrying entry, CTR-PQZ-29. A
+KYC provider sends its own `setCompliance`.) Hence:
 
-- `attesterId` is keyed by the attester's UA id: `mapping(bytes32 attester => uint32)`; `setAttester(bytes32, bool)`,
-  `attesterId(bytes32)`, `AttesterSet(bytes32 indexed attester, uint32 indexed attesterId, bool enabled)`. The id rules stay:
-  assigned at the first enabling, never reused, 0 is the admin, an unknown id is not enabled.
-- `attest` takes the subject from `_adminSubject()`: a native attester calls directly (`pad(addr)`, D2), a derived one (`msig`,
-  PQ) through the router's `mtxAttest`, the same op the admin uses; the router's domain, `target` and nonce give replay
-  protection, so the registry needs no domain, nonce or record of its own.
-- `attest` takes at most 256 rows per call (`TooManyRows(n)`), the node's decode bound (§5.4, Fable P3).
-- Every row rule stays: `{flags, validUntil, attesterId}` in one slot; `ELIGIBLE_CONTRACT` only by the admin with
-  `validUntil = type(uint64).max` (CTR-AS-16); an admin row (`attesterId 0`, `flags ≠ 0`) is the admin's alone
-  (`AdminWrittenSlot`, owner 2026-11-06); disabling an attester voids its rows at once; `hasFlags`, `attestationOf`,
-  `attesterEnabled` keep their selectors, so `RegulatedBase`'s bounded calls do not move.
+- `kycProviderId` is keyed by the provider's UA id: `mapping(bytes32 provider => uint32)`; `setKycProvider(bytes32, bool)`,
+  `kycProviderId(bytes32)`, `KycProviderSet(bytes32 indexed provider, uint32 indexed providerId, bool enabled)`. The id rules
+  stay: assigned at the first enabling, never reused, 0 is the admin, an unknown id is not enabled (`kycProviderEnabled(uint32)`).
+- `setCompliance` takes the subject from `_adminSubject()`: a native provider calls directly (`pad(addr)`, D2), a derived one
+  (`msig`, PQ) through the router's `mtxSetCompliance`, the same op the admin uses; the router's domain, `target` and nonce give
+  replay protection, so the registry needs no domain, nonce or record of its own.
+- `setCompliance` takes at most 256 rows per call (`TooManyRows(n)`), the node's decode bound (§5.4, Fable P3).
+- Every row rule stays: `ComplianceRow {flags, validUntil, providerId}` in one slot; `ELIGIBLE_CONTRACT` only by the admin with
+  `validUntil = type(uint64).max` (CTR-AS-16); an admin row (`providerId 0`, `flags ≠ 0`) is the admin's alone
+  (`AdminWrittenSlot`, owner 2026-11-06); disabling a KYC provider voids its rows at once; `hasFlags` keeps its selector;
+  `RegulatedBase`'s two bounded reads move to `complianceOf` and `kycProviderEnabled` (the same words, the same bounds).
 - **3f is untouched.** The PQZ verifier UA stays a signer: `pqzVerifyMode`, `pqzVerifierUA`, its admitted kinds and frozen shape,
   fixed or transferable with the factory's notice, immediate revocation, the epoch in every verdict, `PqzVerdict` under
   `PURPOSE_PQZ_VERDICT`, the OFFCHAIN key rule (CTR-PQZ-27 to CTR-PQZ-30). Only the word changes where they say "the owner"
-  (`PqzStateLib.sol:185`: the admin proposes). The registry's attestation rows and 3f's attested verification stay two things.
+  (`PqzStateLib.sol:185`: the admin proposes). The registry's compliance rows and 3f's attested verification stay two things.
 
 ### 5.4 Router ops
 
@@ -277,8 +304,8 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
 | `UADeprecateRelease` | `uint16 contractClass,uint16 kind,uint64 version,string reason` | `deprecateRelease` |
 | `UASetKindEnabled` | `uint8 kind,bool on` | `setKindEnabled` |
 | `UASetClassKindEnabled` | `uint16 contractClass,uint16 kind,bool on` | `setClassKindEnabled` |
-| `UASetAttester` | `bytes32 attester,bool enabled` | `ComplianceRegistry.setAttester` |
-| `UAAttest` | `bytes32[] accounts,uint64[] flags,uint64[] until` | `ComplianceRegistry.attest` (the admin or an attester, §5.3.1) |
+| `UASetKycProvider` | `bytes32 provider,bool enabled` | `ComplianceRegistry.setKycProvider` |
+| `UASetCompliance` | `bytes32[] accounts,uint64[] flags,uint64[] until` | `ComplianceRegistry.setCompliance` (the admin or a KYC provider, §5.3.1) |
 | `UASetChainEntries` | `address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash` | `OpenFactory.setChainEntries` (§13.3) |
 
 - `Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[]
@@ -286,7 +313,7 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
   words), so every field of the env is signed by name.
 - No release deploy is a router op (§5.6); the approvals sign the release's hashes as `UACreateToken` signs `initHash` (S3). A
   `string reason` is signed as `keccak256(bytes(reason))`, as EIP-712 hashes a string (Fable P1-3). The ids flat, as
-  `UACreateInstance` (`:234-241`). `UAAttest` names its third array `until` because `validUntil` is an envelope word (the
+  `UACreateInstance` (`:234-241`). `UASetCompliance` names its third array `until` because `validUntil` is an envelope word (the
   precedent: `UAOperatorTransfer`'s `account`, `GovernanceRouter.sol:105`).
 - No `mtxConfigureChain` (§5.2) and no deploy op. The router's entries go from 38 to 53.
 - **Release management is not a node job** (owner 2026-11-10; Q3 as updated, §5.6): neither the four approval ops nor the three
@@ -294,15 +321,15 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
   (§7). The gateway's limit is irrelevant. Every other admin op is a router op and a node row.
 - **Node decode bounds** (Fable P3): `Env.deps` ≤ 4 and `Env.params` ≤ 2 (the factory's `ChainEnvCode.MAX_DEPS`, `MAX_PARAMS`);
   `libs` and `libCodeHashes` of one length ≤ 32, with a new factory bound `MAX_LIBS` (`EnvInvalid`) so the node and the contract
-  refuse the same (today's largest env measured in T7); `UAAttest`'s three arrays of one length ≤ 256 (§5.3.1); every array
+  refuse the same (today's largest env measured in T7); `UASetCompliance`'s three arrays of one length ≤ 256 (§5.3.1); every array
   flat, depth 1.
 
 ### 5.5 Threat notes
 
 - **A stolen admin key.** Factory: the thief publishes envs, deploys releases (usable after `noticePeriod`, at least 3 days on a
   mainnet; existing contracts are clones of old code and do not move), deprecates or disables (a denial of creation), and can
-  move the admin to itself. Registry: the thief enables attesters and writes rows (a receiver check passes for its accounts) or
-  disables honest attesters (their rows void at once). Today's immutable registrar is the same exposure with no way to rotate
+  move the admin to itself. Registry: the thief enables KYC providers and writes rows (a receiver check passes for its accounts) or
+  disables honest KYC providers (their rows void at once). Today's immutable registrar is the same exposure with no way to rotate
   first; a k-of-n `msig` or a PQ UA admin needs more than one key, and a transfer lets an honest admin rotate before a loss.
   The release list (`releases.json`) and `isRegisteredToken` stay what clients trust; a thief's release is not in the list.
 - **The router down.** It has no owner, no pause and no state: it cannot be stopped, only refused by relayers, and then the
@@ -365,7 +392,7 @@ no other path; split, the signed part is small and the large transaction verifie
    `UAApproveDexRelease`, `UAApproveRelease` (§5.4): relayable, anyone sends them, fee 0 too, and small, so an `msig` of several
    PQ signatures fits (its check is bounded by the registry's per-call budget, `UA_VERIFY_BUDGET` 12 M,
    `script/DeployBase.sol:128-130`, far under NET-EVM-11's 60 M). The approval's expiry is named `until`, not `validUntil`,
-   because the router's envelope already has `validUntil`, the signature's deadline (the precedent of `UAAttest`).
+   because the router's envelope already has `validUntil`, the signature's deadline (the precedent of `UASetCompliance`).
 2. **Revoke.** `revokeApproval(bytes32 key)`, `onlyAdmin configured`, deletes any stored entry not consumed, live or not
    (`ApprovalNotRevocable(key)` for an unknown or consumed one), and emits `ReleaseApprovalRevoked(key)`; through the router
    `UARevokeApproval`.
@@ -463,6 +490,7 @@ sequenceDiagram
 | `clients/ua-rs` | a router-op table for the 18 ops and the approval keys (the pattern of `src/regulated.rs`, `src/wraplimit.rs`), so a PQ or `msig` admin signs them (ua-rs signs every kind); tested against `typed_ops.json` |
 | `clients/zether-prover/tests/typed_ops.rs` | `:22-23` the names |
 | `src/regulated/RegulatedLib.sol` | `init` takes the token's `ChainEnv.govRouter` and checks the registry's (§5.3, Fable P1-1); every regulated kind's call site |
+| `RegulatedBase`, `IRegulatedToken`, `IComplianceRegistry`; node `abi.rs`, `dex/venue.rs`; clientkeys `regulated.js` | the KYC provider names of §4.1 (`complianceOf`, `kycProviderEnabled`, `providerId`, reason 3) |
 | Verification (NET-EVM-12) | `script/onchain/verify.sh`, `vcheck.py`: the new constructor arguments (`bytes32`; `(bytes32, address)`) and the directory's entries in the completeness check (Fable P3) |
 | Other `ua-*` | no router or topic row; they read `governance_bits.json` (text only) |
 | Vectors (generators only) | `typed/typed_ops.json`, `pqchat/topics.json` (topic ids unchanged, digests move), `governance/governance_bits.json` (`GovBitsVector.t.sol`), `governance/regulated_kat.json` (`RegulatedKat.t.sol`, the registry's code hash), `zether/state.json` (`ZetherStateVectors.t.sol`, `record` two words) |
@@ -485,14 +513,15 @@ router at fee 0 by a stranger relayer; another signer through the router `NotAdm
 and on a second chain (another `chain_uid`, router) refused; `acceptAdmin` by a non-pending `NotPendingAdmin`; renounce: admin 0,
 pending 0, every op refused, including through a mock router answering 0. The registry's runtime code hash is equal across two
 deployments with different admins and routers (F-11 positive control); the registry has no `renounceAdmin` (its selector
-reverts with no data). Attesters (§5.3.1): a native attester directly and a derived attester (`msig`, ML-DSA) through the
-router each write rows under their own id; a derived attester's id called directly (`pad(msg.sender)` is not it) refused
-`NotAttester`; a disabled attester's rows read inactive at once; an attester over an admin row `AdminWrittenSlot`; an attester's
-`ELIGIBLE_CONTRACT` `EligibleContractAdminOnly`; an EIP-7702 designator attester `CallerDelegated`; attester 0 `AttesterZero`;
-257 rows `TooManyRows`; the `RegulatedKat` rows regenerated and equal.
+reverts with no data). KYC providers (§5.3.1): a native provider directly and a derived provider (`msig`, ML-DSA) through the
+router each write rows under their own id; a derived provider's id called directly (`pad(msg.sender)` is not it) refused
+`NotKycProvider`; a disabled provider's rows read inactive at once; a provider over an admin row `AdminWrittenSlot`; a provider's
+`ELIGIBLE_CONTRACT` `EligibleContractAdminOnly`; an EIP-7702 designator provider `CallerDelegated`; provider 0
+`KycProviderZero`; 257 rows `TooManyRows`; the old selectors (`setAttester`, `attest`, `attestationOf`, `attesterEnabled`,
+`attesterId`) revert with no data; the `RegulatedKat` rows regenerated and equal.
 
 **Field binding of every new signed op** (Fable P1-3): for each op (`UAPublishEnv`, `UAPublishDexEnv`, `UAPublishClassEnv`,
-`UADeprecate`, `UADeprecateDex`, `UADeprecateRelease`, `UASetKindEnabled`, `UASetClassKindEnabled`, `UASetAttester`, `UAAttest`,
+`UADeprecate`, `UADeprecateDex`, `UADeprecateRelease`, `UASetKindEnabled`, `UASetClassKindEnabled`, `UASetKycProvider`, `UASetCompliance`,
 `UASetChainEntries`, `UAApproveTokenRelease`, `UAApproveDexRelease`, `UAApproveRelease`, `UARevokeApproval`), a
 matrix test that changes one signed word at a time against the signature (each scalar; for each array one element, the length
 and the order; the bytes of `reason`) and expects the router's refusal, with a positive control (the untouched call passes); one
@@ -538,9 +567,9 @@ Mutants (each must turn a named test red; the round's mutant log records it):
 | M8 | `TOPIC_TYPEHASH` keeps `owner` | `PqChatTypes.t.sol`, `topics.json` |
 | M9 | `acceptAdmin` leaves the pending | a second accept |
 | M10 | the factory constructor takes a derived id | the constructor test |
-| M11 | `attest` from the router takes a non-admin subject as the admin | `RegistryAdmin.t.sol` |
+| M11 | `setCompliance` from the router takes a non-admin subject as the admin | `RegistryAdmin.t.sol` |
 | M12 | a node row keeps `mtxTransferOwnership` | `allow_lists_equal_the_selector_audit_both_directions` |
-| M13 | `attest` looks the attester up by `msg.sender`, not the subject | the derived-attester test |
+| M13 | `setCompliance` looks the KYC provider up by `msg.sender`, not the subject | the derived-provider test |
 | M14 | the registry keeps a `renounceAdmin` | the no-renounce test, `SelectorAudit.t.sol` |
 | M15 | a node row for a release deploy | the guard test (`NOT_ROWS`, `APPROVED`) |
 | M16 | `RegulatedLib.init` drops the registry-router check | the `RegistryRouterMismatch` test |
@@ -589,15 +618,16 @@ Each answer is the owner's, in chat, relayed by the controller; status: decided,
   factory. Why (spec): "immutable but UA-typed" cannot serve a derived admin, whose only path is the router, which the factory
   may trust only after `configureChain` names it; a router in the constructor would give the factory another address per chain.
 - **Q2. The `ComplianceRegistry` admin: a two-step transfer, no renounce.** Why: a derived UA's keys never change
-  (`accounts.md:70-72`), so the transfer is how an `msig` or PQ admin rotates; with no admin nobody could void a bad attester's
+  (`accounts.md:70-72`), so the transfer is how an `msig` or PQ admin rotates; with no admin nobody could void a bad KYC provider's
   rows or write an `ELIGIBLE_CONTRACT` row.
 - **Q3. Option (i), updated by the final P1-2 ruling the same day: release management is not a node job.** Neither the approval
   ops nor the deploys are node rows; all are in `NOT_ROWS` with the reason "release management is not a node job (owner
   2026-11-10)"; the gateway's limit is irrelevant; every other admin op is a node row (§5.4, §5.6, §7).
 - **Q4. `FactoryInfo.ownerUA` is dropped** (six words, 192 B). The PqChat instance keeps `owner()` (`bytes32`).
 - **Q5. Yes: the attester becomes a UA too, inside 3r**, in the `governed` / `UAAdmin` pattern (§5.3.1): an attester is the
-  subject of its own call, not a signer riding in another's; every 3f rule (CTR-PQZ-27 to CTR-PQZ-30) and every attestation-row
-  rule stays.
+  subject of its own call, not a signer riding in another's; every 3f rule (CTR-PQZ-27 to CTR-PQZ-30) and every row rule stays.
+  **Then (owner, same day) its name: the KYC provider** (`setKycProvider`, `kycProviderId`, `providerId`, `NotKycProvider`,
+  `KycProviderSet`, `UASetKycProvider`), and the row op `setCompliance` / `UASetCompliance` (§4.1, §5.3.1).
 - **Q6. The names as proposed** (§4.1): `admin()`, `pendingAdmin()`, `transferAdmin(bytes32)`, `acceptAdmin()`,
   `renounceAdmin()`, `AdminTransferStarted` / `AdminTransferred(previousAdmin, newAdmin)`, `NotAdmin(bytes32)`,
   `NotPendingAdmin(bytes32)`, `AdminAccountPool`, `AdminHasHolders`, `adminGeneration`, config field `admin`, selector-audit
@@ -630,7 +660,7 @@ The component docs (`token-wrappers.md`, `asset-suite.md`, `pqchat.md`, `network
 | T3 | R3 on the topic: `IPqChat`, `PqChatTypes`, `PqChatCore`, `PqChatTopics`, `PqChat`; `topics.json`; node `typed.rs:121`; clientkeys `pqchat.js` | 0.5 d |
 | T4 | R1: record, views, events, `FactoryInfo`, reads; `ZetherStateVectors` + `state.json`; node `abi.rs`, guard mock | 1 d |
 | T5 | `UAAdmin`; `OpenFactory` admin (constructor, `onlyAdmin`, transfer and renounce under `configured`), the approvals (the key per deploy kind, live, the 30-day cap), the revoke, the open deploys and the native admin's shortcut, the gas-independence review of every release constructor and `_supports`'s floor (§5.6); `FactoryAdmin.t.sol` green | 2 d |
-| T6 | `ComplianceRegistry` admin, router, constructor refusals, transfer without renounce, attesters by UA (§5.3.1), the row bound; `RegulatedLib`'s registry-router check; `RegistryAdmin.t.sol`; `regulated_kat.json`; `Gov.s.sol`'s `setAttester` | 2 d |
+| T6 | `ComplianceRegistry` admin, router, constructor refusals, transfer without renounce, KYC providers by UA (§5.3.1), the row bound; `RegulatedLib`'s registry-router check; `RegistryAdmin.t.sol`; `regulated_kat.json`; `Gov.s.sol`'s `setAttester` | 2 d |
 | T7 | Router: the 3 renamed and the 15 new ops, the binding matrix per signed struct and its mutants (B1–B15), `Env` and array hashing, the view `smartKeyCloneHash()`, pins, `GovRouter.t.sol` | 2 d |
 | T8 | Clients and vectors: clientkeys rows + `typed_ops.json`, ua-rs router-op table + test, zether-prover list | 1 d |
 | T9 | Node: rows, `NOT_ROWS`, counts, class `ADMIN`; `cargo test`, `clippy` | 0.5 d |
