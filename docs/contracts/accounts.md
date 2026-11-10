@@ -2550,8 +2550,8 @@ different address on each chain and the node and app predict it per chain ([CTR-
 ERC-1271 digests are not account-wrapped (the ERC-7739 class). SCaaS digests bind `from`/`verifyingContract`, so none
 of ours replay across accounts; a third-party protocol that trusts the same key on two accounts is exposed. Wrapping
 is rejected for now: it would change every 1271 digest, every KAT and every client builder. The same limitation holds for
-`MandateWallet.isValidSignature` (and `HederaMandateWallet`): the owner's ECDSA over any digest is accepted, not bound
-to the wallet (on-chain review W-K; owner 2026-10-19: documented, no wrapping; the delegate cannot use ERC-1271, so the
+`MandateWallet.isValidSignature` (and `HederaMandateWallet`): a native owner's ECDSA over any digest is accepted, not bound
+to the wallet (a derived owner gets no ERC-1271 answer, [CTR-ACC-12](mandates.md#CTR-ACC-12)) (on-chain review W-K; owner 2026-10-19: documented, no wrapping; the delegate cannot use ERC-1271, so the
 mandate caps hold).
 
 | Function | Rule |
