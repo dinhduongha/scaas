@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""NET-EVM-13 (owner 2026-11-10): a chain's deployment books are named by its key, deployments/<key>.json (its release
-list <key>-releases.json, the e2e books <key>-<what>.json, Hedera's hedera-<key>.json). The key comes from
+"""NET-EVM-13 (owner 2026-11-10): a chain's deployment books are named by its key: deployments/<key>.json its book (a
+Hedera chain's from DeployHedera.s.sol, its only deploy), <key>-<what>.json a companion (-releases, -t66b-releases,
+-zether-e2e, -pqz, …). The key comes from
 chain-uids.json by (chainId, chain_uid); a chain not in the table needs DEPLOY_NAME (<name>-mainnet | <name>-testnet),
 else DEPLOY_NAME_REQUIRED, never a chain-id fallback. Every book starts with key, name, chainId, chainUid, network; a
 reader checks network against the key's suffix (a key without one, e.g. ethereum-hoodi: its table row's network), else
-BOOK_NETWORK_MISMATCH. An old book by chain id with none by the key: BOOK_OLD_NAME (rename it). script/DeployBook.sol is
-the same rule for the forge scripts.
+BOOK_NETWORK_MISMATCH. An old book by chain id with none by the key: BOOK_OLD_NAME (rename it). A book is written in
+the form of json.dumps(…, indent=2), the header first. script/DeployBook.sol is the same rule for the forge scripts.
   python3 -I script/deploybook.py key <chainId> <chainUid>               the key
   python3 -I script/deploybook.py path <chainId> <chainUid> [<suffix>]   deployments/<key><suffix> (default .json)"""
 import json
@@ -76,11 +77,11 @@ def load(path):
     return check(json.load(open(os.path.join(EVM, path))), path)
 
 
-def find(chain_id, chain_uid, suffix=".json", prefix="", env=os.environ):
-    """deployments/<prefix><key><suffix> of the chain; BOOK_OLD_NAME when only deployments/<prefix><chainId><suffix> is
-    there (no silent fallback: the operator renames it)."""
+def find(chain_id, chain_uid, suffix=".json", env=os.environ):
+    """deployments/<key><suffix> of the chain; BOOK_OLD_NAME when only deployments/<chainId><suffix> is there (no
+    silent fallback: the operator renames it)."""
     key = resolve(chain_id, chain_uid, env)[0]
-    new, old = f"deployments/{prefix}{key}{suffix}", f"deployments/{prefix}{int(chain_id)}{suffix}"
+    new, old = f"deployments/{key}{suffix}", f"deployments/{int(chain_id)}{suffix}"
     if not os.path.exists(os.path.join(EVM, new)) and os.path.exists(os.path.join(EVM, old)):
         raise BookError(f"BOOK_OLD_NAME: {old} is named by chain id; rename it to {new} and give it its header "
                         "(NET-EVM-13)")

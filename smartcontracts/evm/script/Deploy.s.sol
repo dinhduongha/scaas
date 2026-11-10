@@ -34,8 +34,10 @@ contract Deploy is DeployBase {
         uint256 demoSupply = vm.envOr("DEMO_SUPPLY", uint256(0));
         address demoHolder = vm.envOr("DEMO_HOLDER", deployer);
 
+        // a Hedera chain's deploy is script/hedera/DeployHedera.s.sol (NET-HED-04): its book is the chain's <key>.json
+        require(block.chainid < 295 || block.chainid > 298, "Hedera (295-298): script/hedera/DeployHedera.s.sol (NET-HED-04)");
         _setup();
-        string memory book = _bookPath(uid, "", ".json"); // the key now: DEPLOY_NAME_REQUIRED before anything is sent
+        string memory book = _bookPath(uid, ".json"); // the key now: DEPLOY_NAME_REQUIRED before anything is sent
         vm.startBroadcast(pk);
         SmartKeyAccountFactory accounts = new SmartKeyAccountFactory{salt: salt}(uid);
         _gate(address(accounts));
@@ -47,7 +49,7 @@ contract Deploy is DeployBase {
         vm.serializeAddress(k, "smart_key_account_factory", address(accounts));
         string memory out = vm.serializeAddress(k, "smart_key_account_implementation", accounts.IMPLEMENTATION());
         vm.createDir("./deployments", true);
-        vm.writeFile(book, _bookHeader(uid, out));
+        _writeBook(uid, book, out);
         _writeReleases();
         console.log(out);
     }

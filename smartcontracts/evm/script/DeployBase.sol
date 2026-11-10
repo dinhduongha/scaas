@@ -657,7 +657,7 @@ abstract contract DeployBase is DeployBook {
     /// @notice Writes the release list (`RELEASES_WRITE`), after every row, behind this chain's book header (NET-EVM-13);
     ///         call last in `run()`.
     function _writeReleases() internal {
-        if (releasesWrite && releaseRows != 0) vm.writeFile(releasesPath, _bookHeader(uid, releasesJson));
+        if (releasesWrite && releaseRows != 0) _writeBook(uid, releasesPath, releasesJson);
     }
 
     /// @notice A release environment of this chain's factory (plan 5g-Z2): the registry, the `SmartKeyAccount`

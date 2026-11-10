@@ -92,7 +92,7 @@ fn deploy(rpc: &str) -> Value {
         .status()
         .expect("forge in PATH");
     assert!(status.success(), "forge script failed");
-    let raw = std::fs::read_to_string(format!("{}/deployments/hedera-local-{CHAIN_ID}-testnet.json", sc())).unwrap();
+    let raw = std::fs::read_to_string(format!("{}/deployments/local-{CHAIN_ID}-testnet.json", sc())).unwrap();
     serde_json::from_str(&raw).unwrap()
 }
 

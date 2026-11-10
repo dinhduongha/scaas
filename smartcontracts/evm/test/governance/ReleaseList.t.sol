@@ -44,7 +44,7 @@ contract ReleaseListTest is Test {
         assertEq(vm.parseJsonUint(file, ".SCaaSDex.class"), 2);
         assertEq(vm.parseJsonAddress(file, ".registrar.address"), address(h));
         // NET-EVM-13: the book header first (the harness's chain: DEPLOY_NAME local-testnet)
-        assertEq(vm.indexOf(file, '{"key":"local-testnet","name":"local-testnet","chainId":31337,"chainUid":"'), 0);
+        assertEq(vm.indexOf(file, '{\n  "key": "local-testnet",\n  "name": "local-testnet",\n  "chainId": 31337,\n  "chainUid": "'), 0);
         assertEq(vm.parseJsonString(file, ".network"), "testnet");
         assertEq(vm.parseJsonBytes32(file, ".chainUid"), UID_A);
         assertEq(a.chainUid(), UID_A);
@@ -86,7 +86,7 @@ contract ReleaseListTest is Test {
         vm.writeJson('"local"', PATH2, ".key");
         vm.expectRevert(bytes("BOOK_KEY_INVALID: local ends in neither -mainnet nor -testnet and is not in chain-uids.json"));
         h.deploy(UID_B, false, address(0));
-        vm.writeFile(PATH2, string.concat("{", vm.replace(good, '{"key":"local-testnet",', "")));
+        vm.writeFile(PATH2, vm.replace(good, '"key": "local-testnet"', '"keyX": "local-testnet"'));
         vm.expectRevert(bytes("BOOK_HEADER_MISSING: ./deployments/releases-test-b.json has no key, name, chainId, chainUid, network (a book from before NET-EVM-13)"));
         h.deploy(UID_B, false, address(0));
         // positive control: the list as written

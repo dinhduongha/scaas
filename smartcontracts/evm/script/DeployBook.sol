@@ -3,8 +3,9 @@ pragma solidity ^0.8.20;
 
 import {Script} from "forge-std/Script.sol";
 
-/// @notice NET-EVM-13 (owner 2026-11-10): a chain's deployment books are named by its key, `deployments/<key>.json` (its
-///         release list `<key>-releases.json`, the e2e books `<key>-<what>.json`, Hedera's `hedera-<key>.json`). The key
+/// @notice NET-EVM-13 (owner 2026-11-10): a chain's deployment books are named by its key: `deployments/<key>.json` its
+///         book (a Hedera chain's from `DeployHedera.s.sol`, its only deploy), `<key>-<what>.json` a companion (the
+///         release list `-releases`, `-t66b-releases`, the e2e books `-zether-e2e`, `-pqz`, …). The key
 ///         comes from `chain-uids.json` by (chainId, chain_uid); a chain not in the table needs `DEPLOY_NAME`
 ///         (`<name>-mainnet` | `<name>-testnet`), else `DEPLOY_NAME_REQUIRED`, never a chain-id fallback. Every book
 ///         starts with `key`, `name`, `chainId`, `chainUid`, `network`; a reader checks `network` against the key's suffix
@@ -57,31 +58,37 @@ abstract contract DeployBook is Script {
         return (dn, dn, network);
     }
 
-    /// @notice `./deployments/<prefix><key><suffix>` of this chain.
-    function _bookPath(bytes32 uid, string memory prefix, string memory suffix) internal view returns (string memory) {
+    /// @notice `./deployments/<key><suffix>` of this chain: `.json` its book, `-<what>.json` a companion.
+    function _bookPath(bytes32 uid, string memory suffix) internal view returns (string memory) {
         (string memory k,,) = _bookKey(uid);
-        return string.concat("./deployments/", prefix, k, suffix);
+        return string.concat("./deployments/", k, suffix);
     }
 
-    /// @notice A book's text: this chain's header, then `body`'s fields (a JSON object). forge's serializer sorts the
-    ///         keys, so the header goes first by hand; write it with `vm.writeFile`.
-    function _bookHeader(bytes32 uid, string memory body) internal view returns (string memory) {
+    /// @notice Writes `body` (a JSON object) to `path` behind this chain's header: forge's pretty form (2-space indent,
+    ///         the body's key order, which `vm.serialize*` sorts), then the header put first by hand, so the book reads
+    ///         `key`, `name`, `chainId`, `chainUid`, `network`, then the rest as forge wrote it (the form of
+    ///         `json.dumps(…, indent=2)`).
+    function _writeBook(bytes32 uid, string memory path, string memory body) internal {
         (string memory k, string memory n, string memory net) = _bookKey(uid);
-        string memory h = string.concat('{"key":"', k, '","name":"', n, '","chainId":', vm.toString(block.chainid),
-            ',"chainUid":"', vm.toString(uid), '","network":"', net, '"');
-        bytes memory b = bytes(body);
+        vm.writeJson(body, path);
+        bytes memory b = bytes(vm.readFile(path));
         require(b.length >= 2 && b[0] == "{", "a book's body is a JSON object");
-        if (b.length == 2) return string.concat(h, "}");
-        bytes memory rest = new bytes(b.length - 1);
-        for (uint256 i; i < rest.length; ++i) rest[i] = b[i + 1];
-        return string.concat(h, ",", string(rest));
+        string memory h = string.concat('{\n  "key": "', k, '",\n  "name": "', n, '",\n  "chainId": ',
+            vm.toString(block.chainid), ',\n  "chainUid": "', vm.toString(uid), '",\n  "network": "', net, '"');
+        if (b[1] != "\n") { // an empty body: `{}`
+            vm.writeFile(path, string.concat(h, "\n}"));
+            return;
+        }
+        bytes memory rest = new bytes(b.length - 2);
+        for (uint256 i; i < rest.length; ++i) rest[i] = b[i + 2];
+        vm.writeFile(path, string.concat(h, ",\n", string(rest)));
     }
 
-    /// @notice This chain's book `<prefix><key><suffix>`, read and checked; `BOOK_OLD_NAME` when only the old book by
-    ///         chain id is there.
-    function _readBook(bytes32 uid, string memory prefix, string memory suffix) internal view returns (string memory) {
-        string memory p = _bookPath(uid, prefix, suffix);
-        string memory old = string.concat("./deployments/", prefix, vm.toString(block.chainid), suffix);
+    /// @notice This chain's book `<key><suffix>`, read and checked; `BOOK_OLD_NAME` when only the old book by chain id
+    ///         is there.
+    function _readBook(bytes32 uid, string memory suffix) internal view returns (string memory) {
+        string memory p = _bookPath(uid, suffix);
+        string memory old = string.concat("./deployments/", vm.toString(block.chainid), suffix);
         require(vm.exists(p) || !vm.exists(old), string.concat("BOOK_OLD_NAME: ", old,
             " is named by chain id; rename it to ", p, " and give it its header (NET-EVM-13)"));
         return _checkBook(vm.readFile(p), p);
@@ -90,7 +97,7 @@ abstract contract DeployBook is Script {
     /// @notice The book the env var `name` names (a path), else this chain's `<key><suffix>`; read and checked.
     function _envBook(string memory name, bytes32 uid, string memory suffix) internal view returns (string memory) {
         string memory p = vm.envOr(name, string(""));
-        return bytes(p).length != 0 ? _checkBook(vm.readFile(p), p) : _readBook(uid, "", suffix);
+        return bytes(p).length != 0 ? _checkBook(vm.readFile(p), p) : _readBook(uid, suffix);
     }
 
     /// @notice A book as read: its header there, its `network` the key's.

@@ -71,7 +71,7 @@ contract ZetherMore is ZetherE2E {
         vm.serializeAddress(k, "normal_zether_token", tn);
         vm.serializeAddress(k, "wrapped_zether_token", wt);
         string memory j = vm.serializeAddress(k, "underlying_erc20", und);
-        vm.writeFile(_bookPath(bookUid, "", "-zether-more.json"), _bookHeader(bookUid, j));
+        _writeBook(bookUid, _bookPath(bookUid, "-zether-more.json"), j);
     }
 
     // ------------------------------------------------------------------ the sequence on `t`

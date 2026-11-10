@@ -397,14 +397,16 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   (`ethereum-mainnet`, `ethereum-testnet` = Sepolia, `polygon-testnet` = Amoy, `avalanche-testnet` = Fuji, …); a second testnet
   keeps its own name (`ethereum-hoodi`); the full name stays in `name` ("Polygon Amoy"); every row carries
   `"network": "mainnet" | "testnet"`; `scaas-testnet` stays and 22776 will be `scaas-mainnet`. `src/chains/<key>/` uses the
-  same keys. **Books (BUILT, branch `ua-mtx-3q`):** `deployments/<key>.json` replaces `deployments/<chainid>.json` (`scaas-testnet.json`,
-  `scaas-testnet-t66b-releases.json`, `scaas-testnet-zether-e2e.json`, `scaas-testnet-pqz.json`, `hedera-<key>.json`), the
-  key resolved from `chain-uids.json` by (chainId, chain_uid) ([NET-ALL-22](README.md#NET-ALL-22)); a chain not in the table
+  same keys. **Books (BUILT, branch `ua-mtx-3q`):** `deployments/<key>.json` replaces `deployments/<chainid>.json`: `<key>.json` is the chain's
+  book and a companion is `<key>-<what>.json` (`scaas-testnet.json`, `scaas-testnet-t66b-releases.json`,
+  `scaas-testnet-zether-e2e.json`, `scaas-testnet-pqz.json`); a Hedera chain's book is its `<key>.json` too
+  (`hedera-testnet.json`), written by `DeployHedera.s.sol`, its only deploy ([NET-HED-04](hedera.md#NET-HED-04);
+  `Deploy.s.sol` refuses chain ids 295–298). The key resolved from `chain-uids.json` by (chainId, chain_uid) ([NET-ALL-22](README.md#NET-ALL-22)); a chain not in the table
   (a listed chain id with another genesis too) needs `DEPLOY_NAME` = `<name>-mainnet` | `<name>-testnet` (`[a-z0-9-]`),
   else `DEPLOY_NAME_REQUIRED`, never a chain-id fallback; `DEPLOY_NAME_INVALID`, `DEPLOY_NAME_TAKEN` (another chain's key)
   and `DEPLOY_NAME_MISMATCH` (a listed chain under another name) are named fails too. A deploy resolves the key before it
-  sends anything. Every book starts with `key`, `name`, `chainId`, `chainUid` and `network` (written first by hand: forge's
-  serializer sorts keys), and a reader checks `network` against the key's suffix (a key without one, `ethereum-hoodi`: its
+  sends anything. Every book starts with `key`, `name`, `chainId`, `chainUid` and `network`, then the rest as forge writes it
+  (`vm.serialize*` sorts the keys), in the form of `json.dumps(…, indent=2)` (the header put first by hand after forge's pretty write), and a reader checks `network` against the key's suffix (a key without one, `ethereum-hoodi`: its
   table row's) and fails `BOOK_NETWORK_MISMATCH`, `BOOK_HEADER_MISSING` or `BOOK_KEY_INVALID`; a book still named by chain
   id with none by the key stops the reader with `BOOK_OLD_NAME` (rename it; no fallback). One rule in two places:
   [`script/DeployBook.sol`](../../smartcontracts/evm/script/DeployBook.sol) for the forge scripts (`Deploy`, `DeployHedera`,

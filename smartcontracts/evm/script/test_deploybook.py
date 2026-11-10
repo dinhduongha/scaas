@@ -62,8 +62,9 @@ with tempfile.TemporaryDirectory() as t:
     book = dict(head, token_factory=a(1), ua_registry=a(2), chain_uid=OTHER)
     rel = dict(head, NormalToken={"address": a(3)}, NormalTokenP={"address": a(4)}, Unlisted={"address": a(5)})
     plan = {"transactions": [{"contractName": "GovernanceRouter", "contractAddress": a(6)}]}
-    for n, v in (("book.json", book), ("rel.json", rel), ("plan.json", plan)):
-        json.dump(v, open(os.path.join(t, "deployments", n), "w"))
+    for n, v in (("book.json", book), ("rel.json", rel), ("plan.json", plan)):  # a book's form: the header first, indent 2
+        json.dump(v, open(os.path.join(t, "deployments", n), "w"), indent=2)
+    assert open(os.path.join(t, "deployments/book.json")).read().startswith('{\n  "key": "fixture-testnet",\n  "name": ')
     os.environ.update(DEPLOY_JSON=os.path.join(t, "deployments/book.json"), RELEASES_JSON=os.path.join(t, "deployments/rel.json"),
                       PLAN=os.path.join(t, "deployments/plan.json"))
     os.environ.pop("NOTE", None)
@@ -73,9 +74,9 @@ with tempfile.TemporaryDirectory() as t:
     got = json.load(open(os.path.join(t, "deployments/onchain-fixture-base.json")))
     assert got == {a(6): "GovernanceRouter", a(3): "NormalToken", a(4): "NormalToken", a(1): "OpenFactory",
                    a(2): "UARegistry"}, got
-    json.dump({k: v for k, v in book.items() if k != "network"}, open(os.path.join(t, "deployments/book.json"), "w"))
+    json.dump({k: v for k, v in book.items() if k != "network"}, open(os.path.join(t, "deployments/book.json"), "w"), indent=2)
     fails("BOOK_HEADER_MISSING", basebook.main)
-    json.dump(dict(book, network="mainnet"), open(os.path.join(t, "deployments/book.json"), "w"))
+    json.dump(dict(book, network="mainnet"), open(os.path.join(t, "deployments/book.json"), "w"), indent=2)
     fails("BOOK_NETWORK_MISMATCH", basebook.main)
 
     # find(): the new name, or BOOK_OLD_NAME when only the old book by chain id is there

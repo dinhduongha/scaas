@@ -77,7 +77,7 @@ contract ZetherE2E is DeployBook {
 
     function _load() internal {
         bookUid = _chainUid();
-        dep = _readBook(bookUid, "", ".json");
+        dep = _readBook(bookUid, ".json");
         reg = IUARegistry(dep.readAddress(".zether_registry"));
         fac = OpenFactory(dep.readAddress(".token_factory"));
         dis = ITransferDisclosure(dep.readAddress(".zether_disclosure"));
@@ -248,7 +248,7 @@ contract ZetherE2E is DeployBook {
         vm.serializeBytes32(k, "entry_compact_m4", refCompact);
         vm.serializeBytes32(k, "entry_bundle_m2", refBundle);
         string memory j = vm.serializeBytes32(k, "s_single", sSingle);
-        vm.writeFile(_bookPath(bookUid, "", "-zether-e2e.json"), _bookHeader(bookUid, j));
+        _writeBook(bookUid, _bookPath(bookUid, "-zether-e2e.json"), j);
         console.log(j);
     }
 
@@ -483,7 +483,7 @@ contract ZetherE2E is DeployBook {
     function check() external {
         _load();
         for (uint256 i; i < N; ++i) (ys[i], uas[i],) = _pop(xs[i]);
-        string memory e = _readBook(bookUid, "", "-zether-e2e.json");
+        string memory e = _readBook(bookUid, "-zether-e2e.json");
         (t, wt) = (e.readAddress(".normal_zether_token"), e.readAddress(".wrapped_zether_token"));
         _expect(t, 0, SHIELDED - SINGLE - MULTI4 - MULTI2 - UNSHIELD - RELAYED_SINGLE - RELAYED_MULTI - RELAYED_UNSHIELD - NAMED_SINGLE
             - NAMED_MULTI - NAMED_UNSHIELD, 0, "chain: alice");

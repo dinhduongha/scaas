@@ -45,7 +45,7 @@
 #                            run once in the simulation on the RPC's fork, (regular + state) x 1.05 within the block gas
 #                            limit and regular x 1.05 < 2^24, refused by name before anything is sent; the figures are the
 #                            script's "release gas |" log lines). Any other value refuses.
-#   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<key>.json)
+#   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/<key>.json: a Hedera chain's only deploy)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas; Move.toml upgrade_policy = "immutable"
 #                            (NET-APT-20, owner ruling 2026-10-28): check the package registry reports policy 2
 #   sui     <client-env>     sui client --client.env <env> publish, then in the same run

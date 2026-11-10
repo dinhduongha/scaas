@@ -13,13 +13,14 @@ contract BookHarness is DeployBook {
 
     function key(bytes32 uid) external view returns (string memory, string memory, string memory) { return _bookKey(uid); }
 
-    function header(bytes32 uid, string calldata body) external view returns (string memory) { return _bookHeader(uid, body); }
+    function write(bytes32 uid, string calldata path, string calldata body) external { _writeBook(uid, path, body); }
 
     function check(string calldata j) external view returns (string memory) { return _checkBook(j, "book"); }
 }
 
 /// NET-EVM-13: a book's key from `chain-uids.json` by (chainId, chain_uid), else `DEPLOY_NAME`, else a named fail; the
-/// header first; a reader checks `network` against the key's suffix. `script/test_deploybook.py` is the Python twin.
+/// header first, then the rest in forge's pretty form; a reader checks `network` against the key's suffix.
+/// `script/test_deploybook.py` is the Python twin.
 contract DeployBookTest is Test {
     bytes32 constant SCAAS_UID = 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164;
     bytes32 constant HOODI_UID = 0xbbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b;
@@ -77,12 +78,23 @@ contract DeployBookTest is Test {
 
     function test_headerFirstAndChecked() public {
         vm.chainId(7622);
-        string memory b = h.header(SCAAS_UID, '{"token_factory":"0x0000000000000000000000000000000000000001"}');
-        assertEq(b, string.concat('{"key":"scaas-testnet","name":"SCaaS testnet","chainId":7622,"chainUid":"',
-            vm.toString(SCAAS_UID), '","network":"testnet","token_factory":"0x0000000000000000000000000000000000000001"}'));
+        string memory p = "./deployments/deploybook-test.json";
+        vm.createDir("./deployments", true);
+        // the body's keys in its own order (forge's writeJson keeps it), after the header; 2-space indent, as
+        // json.dumps(…, indent=2)
+        h.write(SCAAS_UID, p, '{"z_last":"0x0000000000000000000000000000000000000002","token_factory":"0x0000000000000000000000000000000000000001","row":{"class":1}}');
+        string memory head = string.concat('{\n  "key": "scaas-testnet",\n  "name": "SCaaS testnet",\n  "chainId": 7622,\n',
+            '  "chainUid": "', vm.toString(SCAAS_UID), '",\n  "network": "testnet"');
+        string memory b = vm.readFile(p);
+        assertEq(b, string.concat(head, ',\n  "z_last": "0x0000000000000000000000000000000000000002",\n',
+            '  "token_factory": "0x0000000000000000000000000000000000000001",\n  "row": {\n    "class": 1\n  }\n}'));
         h.check(b);
         assertEq(vm.parseJsonAddress(b, ".token_factory"), address(1));
-        h.check(h.header(SCAAS_UID, "{}"));
+        assertEq(vm.parseJsonUint(b, ".row.class"), 1);
+        h.write(SCAAS_UID, p, "{}");
+        assertEq(vm.readFile(p), string.concat(head, "\n}"));
+        h.check(vm.readFile(p));
+        vm.removeFile(p);
         // one change at a time: the network, then the key
         string memory u = '"chainUid":"0x01",';
         h.check(string.concat('{"key":"ethereum-hoodi","name":"x","chainId":1,', u, '"network":"testnet"}'));
