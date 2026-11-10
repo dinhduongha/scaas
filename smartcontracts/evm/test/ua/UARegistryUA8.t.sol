@@ -14,9 +14,9 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SSTORE2} from "../../src/common/SSTORE2.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
-import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
-import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
-import {UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
+import {SlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
 import {WebAuthnP256Verifier} from "../../src/ua/verifiers/WebAuthnP256Verifier.sol";
 import {Bip340Verifier} from "../../src/ua/verifiers/Bip340Verifier.sol";
@@ -335,19 +335,19 @@ contract UARegistryUA8Test is UARegistryBase {
         for (uint256 i; i < 8; ++i) vcfg.push(UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i])));
         vcfg.push(UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000));
         vcfg.push(UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000));
-        vcfg.push(UARegistry.KindConfig(0x0130, address(new UAMldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44));
-        UAMldsaVerifier m65 = new UAMldsaVerifier(0x0131, ML65, valid, new bytes(ML65_LEN));
+        vcfg.push(UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44));
+        MldsaVerifier m65 = new MldsaVerifier(0x0131, ML65, valid, new bytes(ML65_LEN));
         assertEq(m65.PRECOMPILE(), ML65);
         vcfg.push(UARegistry.KindConfig(0x0131, address(m65), 100_000));
-        vcfg.push(UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier(0x0132)), CAP_FNDSA));
-        vcfg.push(UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), CAP_SLHDSA));
+        vcfg.push(UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), CAP_FNDSA));
+        vcfg.push(UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), CAP_SLHDSA));
         string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
         bytes memory probe = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
         ml87 = new Eip8355Allowed();
         ml87.allow(keccak256(probe));
-        vcfg.push(UARegistry.KindConfig(0x0134, address(new UAMldsaVerifier(
+        vcfg.push(UARegistry.KindConfig(0x0134, address(new MldsaVerifier(
             0x0134, address(ml87), probe, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid"))), CAP_MLDSA87));
-        vcfg.push(UARegistry.KindConfig(0x0135, address(new UAFndsaVerifier(0x0135)), CAP_FNDSA1024));
+        vcfg.push(UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), CAP_FNDSA1024));
         rreg = makeAddr("rreg");
         vm.etch(rreg, hex"00"); // STOP: any input the test did not allow returns nothing (refused)
     }
@@ -1986,7 +1986,7 @@ contract UARegistryUA8Test is UARegistryBase {
         c1[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, rreg, 1_000_000);
         UARegistry g1 = _deploy(address(0x5ceb8), chainUidA, address(0), false, BUDGET, address(0), true, c1);
         UARegistry.KindConfig[] memory c2 = new UARegistry.KindConfig[](1);
-        c2[0] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier(0x0132)), CAP_FNDSA);
+        c2[0] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(0x0132)), CAP_FNDSA);
         UARegistry g2 = _deploy(address(0x5ceb9), chainUidA, address(g1), false, BUDGET, address(0), true, c2);
         _reg(g2, rows[FNDSA_ROW]);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.PQZ_MLWE));

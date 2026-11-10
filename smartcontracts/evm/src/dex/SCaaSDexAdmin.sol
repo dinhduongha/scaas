@@ -13,7 +13,7 @@ import {GovernanceBits} from "../governance/GovernanceBits.sol";
 ///        body runs under the same rules in both. No state of its own: the DEX's state is in its ERC-7201 namespaces
 ///        (`scaas.dex`, the governance and trade ones) and its guard is transient. UNAUDITED.
 abstract contract SCaaSDexGovernance is ReentrancyGuardTransient, GovernanceBaseCore {
-    /// @notice The governance module's `moduleGroup()` (`script/t66b/gen_faces.py` `GROUP_ID`).
+    /// @notice The governance module's `moduleGroup()` (`script/modules/gen_faces.py` `GROUP_ID`).
     uint8 internal constant GROUP_GOVERNANCE = 10;
 
     constructor() GovernanceBaseCore(address(0)) {}

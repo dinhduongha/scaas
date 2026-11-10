@@ -591,7 +591,7 @@ def label(k):
     k = k.split("#")[0]
     m = re.fullmatch(r"(?:library|module) (\w+).*", k) or re.fullmatch(r".* \((\w+)\)", k)
     k = m[1] if m else {"governance_router": "GovernanceRouter"}.get(k, k.split(" ")[0])
-    return next((x for x in KINDS if re.fullmatch(re.escape(x) + r"(P|T|A|W|Z|Q|Q2)", k)), k)
+    return next((x for x in KINDS if re.fullmatch(re.escape(x) + r"(P|T|A|W|R|Z|Q|S)", k)), k)
 
 
 def write(recs, deps):

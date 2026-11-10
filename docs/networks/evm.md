@@ -335,6 +335,12 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   regular × 1.05 < 2^24): the largest are `UARegistryCoreLib` 56.64 M, `SCaaSDex` 55.70 M and the module `NormalPqzRegulatedTokenQ`
   54.76 M; a token release asks 23.53–47.02 M plus the factory frame of 0.31 M (93 contracts in all, the table in
   `smartcontracts/evm/runs/2026-11-09-ua-mtx-merge-t66b-build/summary.txt`).
+- **Modules by function (owner 2026-11-10, group 3p, [CTR-TOK-30](../contracts/token-wrappers.md#CTR-TOK-30)).** A release of
+  kind 9, 11 or 13 deploys one more module (W and R, each its own CREATE2 transaction and gate); 8, 10, 12 deploy R where W
+  was, 5 and 13 S where Q2 was; `releases.json` names the rows so (`WrappedPqzRegulatedTokenR`, …). Measured asked gas
+  (`(regular + state) × 1.05`, `smartcontracts/evm/runs/2026-11-10-ua-mtx-3p/summary.txt`): R 20.17–20.62 M, W of 9, 11, 13
+  46.07 / 47.73 / 48.05 M, S 30.95 / 32.34 M, the faces of 9, 11, 13 39.52 / 45.80 / 50.51 M plus the factory frame; every
+  module of every kind within 60 M, regular × 1.05 < 2^24.
 - <a id="NET-EVM-11"></a>**NET-EVM-11 — Every deploy transaction carries an explicit gas limit within the block.** `deploy.sh evm`
   simulates `Deploy.s.sol` (nothing sent), then `script/DeploySend.s.sol` sends its plan in order, each transaction's limit
   `(regular + state) × 1.05` measured on the RPC's fork and capped at the RPC's block gas limit; one that needs more refuses

@@ -98,7 +98,7 @@ library FrostSecp256k1 {
 ///         `C_ik` for k ≥ 1 enter no equation on chain (Feldman share checks are each participant's duty, §1.6.1
 ///         attestation-only): their encoding is checked by `UAKinds.validateKeyData` at registration, not here.
 ///         Malformed input returns false, never reverts.
-contract UAFrostSecp256k1Verifier is IUAPopVerifier {
+contract FrostSecp256k1Verifier is IUAPopVerifier {
     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
         return FrostSecp256k1.verify(keyData, abi.encodePacked(message), sig);
     }

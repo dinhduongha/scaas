@@ -695,7 +695,7 @@ implementation itself, so what a release depends on is fixed in its code by cons
 - **Split.** The implementation carries what never changes for it: the release's `Env` as constructor immutables —
   `factory`, `chainUid`, the UA `registry`, the `SmartKeyAccount` implementation, `hedera`, the kind's dependencies
   `deps` by position (`*_ZETHER`: transfer, burn and inner-product verifier and `ZetherDisclosure` of one curve;
-  `*_PQZ`: the `UAPqzVerifier`; plain kinds and the DEX: none) and the linked libraries `libs` with their
+  `*_PQZ`: the `PqzKeyVerifier`; plain kinds and the DEX: none) and the linked libraries `libs` with their
   `libCodeHashes`. Each instance carries its own configuration in `initArgs` (rates, features, roles, the confidential
   settings…), decoded by the implementation's generic `initialize(creator, version, initArgs)`; the factory never reads it
   (owner 2026-10-20).
@@ -969,9 +969,17 @@ own code limit above 65,536 B.
   caller-named implementation of kind 0 or 1 without registering it, version 0, and checks it, its modules included, at
   each creation). The factory already deployed on the SCaaS testnet is immutable and keeps the old behaviour (no module
   check on `deployImplementation`); the check applies to the releases registered on a factory built from this code.
+- **Modules by function (owner 2026-11-10; BUILT on branch `ua-mtx-3p`, group 3p; UNAUDITED).** On every kind a module
+  holds one function: A admin, P pipeline / pay, T trade, **W wrap only**, **R regulated only**, Z Zether, Q PQZ, **S** the PQZ
+  state (was Q2). Kinds 8, 10, 12 rename their W to R; kinds 9, 11, 13 split their W into W (wrap) and R (the regulated layer's
+  entries: the same 14 on every regulated kind), one more module per release; kinds 5 and 13 rename Q2 to S. The compliance
+  hooks that wrap and unwrap call are internal and stay compiled into W; only the regulated entries move. The token ABI, the
+  storage (a module has its core's layout), the call count (one hop) and every rule are unchanged; the group ids keep their
+  values (W 4, S 8 as Q2's) and R takes 12. `script/modules/gen_faces.py` assigns the entries (`R_ENTRIES`, `S_SETTERS`), and
+  `test/modules/Groups.t.sol` pins which module holds which entry and that every stub reaches its module.
 - **Rule 4, one cold account where there was one.** Module P compiles `MtxPipelineLib`'s code in (the library's entries are
   thin wrappers of internal twins; P overrides the 15 pipeline hooks), T compiles `TradeLib`'s core and the trade
-  authorisation in, A the two payment views. W, Z, Q, `GovernanceRouter` and the wallets keep the library call.
+  authorisation in, A the two payment views. W, R, Z, Q, S, `GovernanceRouter` and the wallets keep the library call.
   `MtxPipelineLib` and `TradeLib` stay libraries: the router, the wallets and the DEX call them.
 
 | Group | id | Bodies | Links |
@@ -979,34 +987,36 @@ own code limit above 65,536 B.
 | **P** | 1 | the signed pipeline, named transfers, pay and the relay fee; the tax entries on 8–13 | `HederaLib`; `RegulatedLib` on 8–13 |
 | **T** | 2 | trade; `mtxLiquidityPull` (the DEX's liquidity pull, [CTR-DEX-30](dex.md#CTR-DEX-30)) | — |
 | **A** | 3 | governance, `initialize`, `validateEnv`, the tables and token meta (`supportsInterface` answers `ILiquidityPullToken`); `mint`, `mintToUA`, `burn` on the normal kinds | `GovernanceLib`; the kind's init / env libraries |
-| **W** | 4 | wrapped (1, 3, 5, 9, 11, 13) and the regulated powers (8–13) | `WrappedLib`, `RegulatedLib` |
+| **W** | 4 | wrap only (1, 3, 5, 9, 11, 13): wrap, unwrap, rates, reserve, legs, the wrap limits, `mint` / `mintToUA` of the wrapped kinds, the wrapped layer's `rescue` and `underlyings`; the compliance hooks wrap and unwrap call stay compiled in from the kind's core | `WrappedLib` (`ZetherWrappedLib` / `PqzWrappedLib` where the kind has them) |
+| **R** | 12 | regulated only (8–13): the regulated layer's 14 entries (freeze, pause, force and operator transfers, orders, `canReceive`, `regulatedConfig`, the kind's `disableFeature`) | `RegulatedLib`, `GovernanceLib`; `WrappedLib` on 9, 11, 13 |
 | **Z** | 5 | Zether (2, 3, 10, 11) | `ZetherLib`, `ZetherWrappedLib` |
 | **Q** | 6 | PQZ (4, 5, 12, 13): the ops and their verdict entries | `PqzTransferLib`, `PqzBurnLib`, `PqzStateLib`, `PqzViewLib`, `PqzWrappedLib` |
-| **Q2** | 8 | on 5 and 13: the PQZ state, setters and views (Q split by the rule below) | the PQZ libraries |
+| **S** | 8 | on 5 and 13: the PQZ state, setters and views (Q split by the rule below; named Q2 until 2026-11-10) | the PQZ libraries |
 | **D** | 10 | the DEX's 22 governance entries (`SCaaSDexGovernanceModule`) | `GovernanceLib` |
 | **L** | 11 | the DEX's liquidity entries `mtxLiquidity` and `liquidityOrderDigest` (`SCaaSDexLiquidityModule`, [CTR-DEX-30](dex.md#CTR-DEX-30)); `mtxLiquidity`'s stub is an S1 variant (the DEX's `nonReentrant` around a DELEGATECALL with a normal return) | — |
 
 Ids 7 (P2, pay) and 9 (G, governance) are reserved for the splits below. **Modules per kind and runtime (B)**, release
-first (`forge build src --sizes`, T66b 4.4):
+first (`forge build src --sizes` on branch `ua-mtx-3p`, the modules by function of 2026-11-10; the T66b 4.4 figures before it
+are in [decisions.md](../decisions.md#ctr-tok-30--body-modules-every-body-but-the-erc-20-core-runs-in-a-delegatecall-module-of-its-kind)):
 
-| Kind | Release | P | T | A | W | Z | Q | Q2 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 0 `NormalToken` | 13,734 | 24,300 | 14,259 | 23,994 | | | | |
-| 1 `WrappedToken` | 17,808 | 24,728 | 15,635 | 19,629 | 21,873 | | | |
-| 2 `NormalZetherToken` | 17,088 | 25,288 | 14,253 | 23,463 | | 21,948 | | |
-| 3 `WrappedZetherToken` | 21,520 | 25,835 | 15,635 | 16,746 | 21,697 | 27,996 | | |
-| 4 `NormalPqzToken` | 19,045 | 25,495 | 14,309 | 26,411 | | | 30,641 | |
-| 5 `WrappedPqzToken` | 24,314 | 26,086 | 15,684 | 16,875 | 21,903 | | 28,283 | 18,216 |
-| 8 `NormalRegulatedToken` | 17,484 | 28,943 | 15,527 | 25,702 | 11,778 | | | |
-| 9 `WrappedRegulatedToken` | 21,249 | 29,378 | 16,996 | 21,348 | 28,021 | | | |
-| 10 `NormalZetherRegulatedToken` | 20,619 | 29,960 | 15,527 | 25,190 | 11,778 | 23,880 | | |
-| 11 `WrappedZetherRegulatedToken` | 24,995 | 30,507 | 16,996 | 18,481 | 29,011 | 28,865 | | |
-| 12 `NormalPqzRegulatedToken` | 22,556 | 30,177 | 15,576 | 28,131 | 11,827 | | 32,423 | |
-| 13 `WrappedPqzRegulatedToken` | 27,713 | 30,783 | 17,045 | 18,594 | 29,202 | | 29,465 | 19,038 |
+| Kind | Release | P | T | A | W | R | Z | Q | S |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 `NormalToken` | 13,888 | 24,300 | 17,424 | 24,021 | | | | | |
+| 1 `WrappedToken` | 19,532 | 24,728 | 18,799 | 19,673 | 26,138 | | | | |
+| 2 `NormalZetherToken` | 17,242 | 25,288 | 17,418 | 23,490 | | | 21,948 | | |
+| 3 `WrappedZetherToken` | 23,238 | 25,835 | 18,799 | 16,804 | 25,961 | | 28,287 | | |
+| 4 `NormalPqzToken` | 19,199 | 25,495 | 17,474 | 26,438 | | | | 30,641 | |
+| 5 `WrappedPqzToken` | 26,026 | 26,086 | 18,848 | 16,919 | 26,152 | | | 28,405 | 18,216 |
+| 8 `NormalRegulatedToken` | 17,653 | 28,943 | 18,701 | 25,729 | | 11,778 | | | |
+| 9 `WrappedRegulatedToken` | 23,250 | 29,378 | 20,170 | 21,369 | 27,239 | 11,999 | | | |
+| 10 `NormalZetherRegulatedToken` | 20,773 | 29,960 | 18,701 | 25,217 | | 11,778 | 23,880 | | |
+| 11 `WrappedZetherRegulatedToken` | 26,992 | 30,507 | 20,170 | 18,502 | 28,229 | 11,999 | 28,912 | | |
+| 12 `NormalPqzRegulatedToken` | 22,710 | 30,177 | 18,750 | 28,158 | | 11,820 | | 32,423 | |
+| 13 `WrappedPqzRegulatedToken` | 29,795 | 30,783 | 20,219 | 18,608 | 28,420 | 12,048 | | 29,490 | 19,038 |
 
-55 token modules and the DEX's D (6,459 B; `SCaaSDex` 32,991 B). Liquidity (ua-mtx-liquidity, measured,
+58 token modules (55 before 2026-11-10: 9, 11, 13 split W into W and R) and the DEX's D (6,459 B; `SCaaSDex` 32,991 B at T66b 4.4). Liquidity (ua-mtx-liquidity, measured,
 [CTR-DEX-30](dex.md#CTR-DEX-30)): T 17,418-20,219 B per kind (+3.1-3.2 KB: `mtxLiquidityPull`), A +27 B, the faces +154-181 B,
-`SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B. **Which entry runs where** (`script/t66b/entries.json`, the
+`SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B. **Which entry runs where** (`script/modules/entries.json`, the
 generator's input; a kind has the subset it declares):
 
 | Group | Entries |
@@ -1015,20 +1025,21 @@ generator's input; a kind has the subset it declares):
 | P | `cancelNonce`, `executeMetaTransaction`, `metaPayId`, `mtxBatch`, `mtxBatchTransfer`, `mtxCancelNonce`, `mtxDigest`, `mtxExecute`, `mtxExecuteTransfer`, `mtxNonce`, `mtxPay`, `mtxPayReceiverFee`, `mtxPayWithTax`, `mtxRelayFee`, `mtxTransfer`, `mtxTransferDigest`, `mtxTransferWithFee`, `payLane`, `payWithFee`, `payWithFeeToUA`, `payWithTax`, `receiverFeeDigest`, `setTaxRate`, `setTaxRecipient`, `supportedModes`, `taxConfig` |
 | T | `cancelOrderDigest`, `invalidateNoncesDigest`, `minNonce`, `mtxCancelOrder`, `mtxInvalidateNonces`, `mtxTrade`, `mtxWrapOrder`, `pulled`, `restorePulled`, `tradeOrderDigest` |
 | A | `acceptOwnership`, `bitLabel`, `burn`, `cancelGrant`, `chainEnv`, `creator`, `disableFeature`, `eip712Domain`, `features`, `GOV_ROUTER`, `grantDelay`, `grantOf`, `grantRole`, `hasRole`, `holderCount`, `initialize`, `lastProposedAt`, `lockedFeatures`, `mint`, `mintToUA`, `mtxBurn`, `mtxSelectors`, `owner`, `paymentCount`, `paymentsOf`, `pendingGrant`, `pendingOwner`, `renounceOwnership`, `renounceRole`, `rescue`, `rescueTo`, `revokeRole`, `setGrant`, `supportsInterface`, `transferOwnership`, `underlyings`, `validateEnv`, `validBits`, `version` |
-| W | `addReserve`, `cancelRate`, `canReceive`, `collateralValue`, `disableFeature`, `disableWrap`, `executeRate`, `forceTransfer`, `freeze`, `freezeOf`, `isFrozen`, `legOf`, `maxRateStepBps`, `maxSupply`, `mint`, `mintToUA`, `mtxAddReserve`, `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA`, `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `operatorTransfer`, `order`, `pause`, `pendingRate`, `previewUnwrap`, `previewWrap`, `proposeRate`, `rateAdjustable`, `rateDelay`, `recordOrder`, `regulatedConfig`, `rescue`, `revokeOrder`, `underlying`, `underlyings`, `unfreeze`, `unpause`, `unwrap`, `unwrapToUA`, `wrap`, `wrapToUA` |
+| W | `addReserve`, `cancelRate`, `collateralValue`, `disableFeature`, `disableWrap`, `executeRate`, `legOf`, `maxRateStepBps`, `maxSupply`, `mint`, `mintToUA`, `mtxAddReserve`, `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA`, `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `pendingRate`, `previewUnwrap`, `previewWrap`, `proposeRate`, `rateAdjustable`, `rateDelay`, `rescue`, `setWrapLimits`, `setWrapMember`, `underlying`, `underlyings`, `unwrap`, `unwrapToUA`, `wrap`, `wrapLimits`, `wrapQuotaOf`, `wrapQuotaTotal`, `wrapToUA` |
+| R (8–13) | `canReceive`, `disableFeature`, `forceTransfer`, `freeze`, `freezeOf`, `isFrozen`, `operatorTransfer`, `order`, `pause`, `recordOrder`, `regulatedConfig`, `revokeOrder`, `unfreeze`, `unpause` |
 | Z | `accountState`, `auditorKey`, `auditorMode`, `burnVerifier`, `confidentialFee`, `curve`, `disableFeature`, `disclosure`, `disclosureMode`, `envelopeBinding`, `executeRate`, `maxDecryptableShielded`, `minDecoyFee`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferSingle`, `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode`, `mtxShield`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxWrapShield`, `registered`, `rescue`, `sendCounter`, `shieldScale`, `totalShielded`, `transferEntry`, `transferMemo`, `underlyings`, `verifier` |
 | Q | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disableFeature`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `executeRate`, `maxShielded`, `minDecoyFee`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferSingle`, `mtxConfidentialTransferSingleCompact`, `mtxPrepareAcc`, `mtxRollOver`, `mtxShield`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxWrapShield`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `rescue`, `setProofStore`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `verifier`, `verifyTransferAmount` |
-| Q2 (5, 13) | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `maxShielded`, `minDecoyFee`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `setProofStore`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `underlyings`, `unshieldUnwrapStatement`, `unwrapBinding`, `verifier` |
+| S (5, 13) | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `maxShielded`, `minDecoyFee`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `setProofStore`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `underlyings`, `unshieldUnwrapStatement`, `unwrapBinding`, `verifier` |
 
-An entry in two rows runs in the module of the kind's own override: `disableFeature` in A on 0, 2, 4, in W on 1 and 8–13, in
-Z on 3, in Q on 5; `mint`, `mintToUA` in A on the normal kinds, in W on the wrapped ones; `rescue`, `underlyings` in A on
+An entry in two rows runs in the module of the kind's own override: `disableFeature` in A on 0, 2, 4, in W on 1, in R on
+8–13, in Z on 3, in Q on 5; `mint`, `mintToUA` in A on the normal kinds, in W on the wrapped ones; `rescue`, `underlyings` in A on
 0, 2, 4, 8, 10, 12, in W on 1, 9, 11, 13, in Z on 3, in Q on 5; `executeRate` in W on 1, 9, in Z on 3, 11, in Q on 5, 13; the
 confidential entries in Z on the Zether kinds and in Q on the PQZ kinds. On 5 and 13 every PQZ `view` / `pure` entry but
-`verifyTransferAmount`, and the four setters, run in Q2.
+`verifyTransferAmount`, and the four setters, run in S (5's `underlyings` too; 13's runs in W).
 
 - **Splitting rule and growth (owner 2026-11-09, T66b spec §11 (b), (e), (g)).** A module that passes 33,780 B of runtime
   (≈ 57 M asked; hard line 35,570 B ≈ 60 M) splits along its domains and never forwards to its sibling: Q into the ops and
-  their verdicts (Q) and the state, setters and views (Q2), built on 5 and 13; P into the pipeline and named transfers (P)
+  their verdicts (Q) and the state, setters and views (S, Q2 until 2026-11-10), built on 5 and 13; P into the pipeline and named transfers (P)
   and pay with the relay fee (P2), on no kind today (the largest P 30,783 B); A into A and G, the governance entries, when
   A passes the line; the DEX's D the same. A later governance version grows `GovernanceLib` first (14,513 B; lines 33,903 B
   and 35,694 B). The byte lines are fitted estimates; the asked gas decides.

@@ -74,7 +74,7 @@ a payer pays a relayer through `RelayFeeRouter` (CTR-MTX-27). Every write is rel
 - `homeChain`, `homeChatContract` — the instance whose state readers treat as the topic's reference (as a session's home,
   parent P32); no contract rule reads them beyond "not zero". The same records may land in other instances as mirrors
   (P43).
-- `name` — UTF-8, 1–128 B; not unique (ids are hashes; no global name to squat). `about` — the topic's description,
+- `name` — UTF-8, 1–512 B (owner 2026-11-10; was 1–128 B); not unique (ids are hashes; no global name to squat). `about` — the topic's description,
   Markdown bytes.
 - `openReplies` — who may reply (P37); clients create topics with `true` (D19).
 - `mediaType` — 1–64 B. Clients write `text/markdown` (RFC 7763, CommonMark); the contract checks only the length, so a

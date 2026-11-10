@@ -6,7 +6,7 @@ import os
 import re
 import sys
 
-E = json.load(open('script/t66b/entries.json'))
+E = json.load(open('script/modules/entries.json'))
 ENTRY = {e['name'] for es in E['kinds'].values() for e in es}
 FILES = {'SaltedEIP712': 'src/common/SaltedEIP712.sol', 'MetaTxBase': 'src/metatx/MetaTxBase.sol',
          'UAMetaTxBase': 'src/metatx/UAMetaTxBase.sol', 'GovernanceBase': 'src/governance/GovernanceBase.sol'}

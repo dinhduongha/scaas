@@ -82,7 +82,7 @@ key from the block it becomes current; the balance under v moves to v+1 by one p
 stops it **reading** what comes after (its shares of v stay valid for v), it does not remove it from the m-of-n.
 
 **Non-goals.** No change to `pqz-core` (`pqzl`, `pqzh`, `stmt`, `ffi`), to any relation, statement layout, transcript, binding tag or
-`proofSystemId`; no change to `UAPqzVerifier` (it proves any 32-byte message); no Zether change (Zether ≠ PQZ: the Zether key is
+`proofSystemId`; no change to `PqzKeyVerifier` (it proves any 32-byte message); no Zether change (Zether ≠ PQZ: the Zether key is
 the UA, CTR-UA-16). No change to the signing key, the members or the threshold of a UA (still CTR-UA-13: those are in the id). No
 threshold decryption or proving (research C/D). No migration of deployed state: every chain is test-only; reset 2 loads the new
 release.
@@ -374,7 +374,7 @@ key → balance = Σ over versions.
 
 **KV-13.** The relations (`R_TX`, `R_TX0`, `R_TXM`, burn, refresh, `R_DR`, `R_REG`), the statement layout of
 [§7.7](../../contracts/pq-zero-knowledge.md#77-statement-layout) (the 640-byte header, then `pk_f ‖ [pk_t] ‖ [pk_a] ‖ T ‖ out`),
-the PQZL and PQZH transcripts (`hash0` over `op` and the whole statement), `PqzAuth` (R1), `UAPqzVerifier`, the precompile and the
+the PQZL and PQZH transcripts (`hash0` over `op` and the whole statement), `PqzAuth` (R1), `PqzKeyVerifier`, the precompile and the
 four sets' parameters are untouched. The version decides only **which** key bytes and which `T` the contract writes into the
 existing slots and which account it updates. So: the **same `proofSystemId`**; **no new pqz-core vectors**: the
 `smartcontracts/vectors/pqz/<set>/` statement bytes, proofs and `auth_digest` fields stay byte-equal (a UA that never rotates

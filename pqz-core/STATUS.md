@@ -1291,7 +1291,7 @@ transcript change. Commits `de249614` (tests, RED), `4adea55c` (fix, GREEN, rege
   `+ 3 + Z`, V3 `+ 3 + Z + 256`, in all four.
 - **`R_REG` / UA-6** (controller ruling 2026-10-21): the message stays opaque (relation, statement, verifier,
   vectors unchanged, UA-6 §9 / U13); `pqz-stmt`'s `Register` documents its pre-image
-  `uaMessage(0x0142, POP, popDigest(ua, keyHash(0x0142, pk)))`; `UAPqzVerifier.PROBE_PQZL` re-pinned
+  `uaMessage(0x0142, POP, popDigest(ua, keyHash(0x0142, pk)))`; `PqzKeyVerifier.PROBE_PQZL` re-pinned
   (`0x6c4573ab…5b04` → `0x517488fa…23f3`, the probe's message unchanged); `PqzSafety.SELFTEST` unchanged (it hashes
   verdicts).
 - **Tests:** review A's cheating prover as `rust/tests/cheat_b1.rs` (the `set_cheat` test hook in `tbox::prove`,

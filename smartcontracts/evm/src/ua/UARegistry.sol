@@ -10,7 +10,7 @@ import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
 import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "./UARegistryAuxLib.sol";
-import {UAMldsaVerifier} from "./MlDsa.sol";
+import {MldsaVerifier} from "./MlDsa.sol";
 
 /// @title UA registry, UA-2a/2c/3, P6c and UA-6 scope (accounts.md §1.8): the single-key kinds 0x0100–0x0108, the
 ///        group kinds 0x0110–0x0113 (MuSig2/FROST, stored), the structure `msig`, the Zether kind 0x0141
@@ -45,14 +45,14 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         PQ kinds (P6c; CTR-UA-17, CTR-UA-23): `pk` stored with SSTORE2 like a group key, `auth.keyData` empty. ML-DSA
 ///         without a precompile verifies on the EIP-8051 expanded key the registry derives itself — never one from a
 ///         caller — with `cacheExpandedKey(kind, pk, part)`: one part per transaction (ML-DSA-44 one, ML-DSA-65 two),
-///         each `UAMldsaVerifier.expandedKeyPart(pk, part)` stored once with SSTORE2 under its id (`uaOf(kind, pk)`,
+///         each `MldsaVerifier.expandedKeyPart(pk, part)` stored once with SSTORE2 under its id (`uaOf(kind, pk)`,
 ///         before or after `register`); once every part is there, PoP and verify go through `verifyCached` with the part
 ///         pointers. Refused where the verifier uses a precompile (a cached Solidity path would exceed its cap).
 ///         KEM key (CTR-UA-32): the single PQ kinds only; an `msig` holds none (plan T66a), `UAKemHolder` at `register` and `setKemKey`.
 ///         PQZ key (UA-6, CTR-UA-30, CTR-PQZ-12/13): an attribute of a holder — `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, or an
 ///         `msig` whose members of kinds outside 0x0130–0x0135 weigh less than its threshold (PQ-eligible) — given in
 ///         its `register` (`attrs.pqzKey`, `attrs.pqzPopHash`) with the optional `R_REG` proof over the portable digest
-///         (UA-8 P1, P8), checked by `UAPqzVerifier` in slot 0x0142; stored with SSTORE2 (`recordOf`, `pqzKeyOf`),
+///         (UA-8 P1, P8), checked by `PqzKeyVerifier` in slot 0x0142; stored with SSTORE2 (`recordOf`, `pqzKeyOf`),
 ///         immutable. Only a proven key (proof checked by that verifier) is one UA per key (`keyOwner(h)`) and appended
 ///         to the `0x0142` list (UA8-D8); a key without its proof, or where the slot is empty, is stored unproven; anyone
 ///         may add the proof later (`storePqzPop`), and PQZ tokens take proven keys only (`pqzKeyOf`, UA8-D9). A record
@@ -695,7 +695,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                     bytes memory ek = UAStore.expanded(id, kind);
                     if (ek.length != 0) {
                         bytes32 m = UAKinds.uaMessage(kind, purposeTag, digest);
-                        return _verifierCall(cfg, UAMldsaVerifier.verifyCached.selector, ek, m, sig);
+                        return _verifierCall(cfg, MldsaVerifier.verifyCached.selector, ek, m, sig);
                     }
                     keyData = SSTORE2.read(r.keyPtr);
                 }

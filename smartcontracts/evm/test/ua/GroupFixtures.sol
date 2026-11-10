@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {Test, Vm} from "forge-std/Test.sol";
 import {G1Bn254} from "../../src/zether/ZetherCurves.sol";
 import {ZetherTranscript} from "../../src/zether/ZetherTranscript.sol";
-import {FrostSecp256k1} from "../../src/ua/verifiers/UAFrostSecp256k1Verifier.sol";
+import {FrostSecp256k1} from "../../src/ua/verifiers/FrostSecp256k1Verifier.sol";
 
 /// Runs a call in its own small frame and returns the gas it used: a gasleft() delta in the test itself would include
 /// the expansion of the test's large memory (parsed JSON) while encoding the call.

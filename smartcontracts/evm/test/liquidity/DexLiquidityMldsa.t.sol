@@ -7,7 +7,7 @@ import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
-import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -23,7 +23,7 @@ import {UARegistryBase} from "../ua/UARegistryBase.sol";
 import {MockV2Factory, MockV2LiquidityPair} from "./LiquidityMocks.sol";
 
 /// An `mldsa65` UA gives two SCaaS inputs (spec 2026-11-10-dex-liquidity.md §14's positive controls, §13 "the PQ fit"): each
-/// input token verifies the same ML-DSA-65 signature over `h` through the registry (the real `UAMldsaVerifier`, cached key,
+/// input token verifies the same ML-DSA-65 signature over `h` through the registry (the real `MldsaVerifier`, cached key,
 /// 5.95 M cap), both pull, and the plan fits one transaction of 2^24 gas. The key, its PoP and the signature over the `h` of
 /// this run come from script/pqz/mldsa.mjs (noble post-quantum, FIPS 204) through `vm.ffi`: skipped without
 /// `MLDSA_CLIENTKEYS` (the dir whose node_modules holds the noble post-quantum package), run as
@@ -50,7 +50,7 @@ contract DexLiquidityMldsaTest is UARegistryBase {
         vm.skip(bytes(clientkeys).length == 0);
         super.setUp();
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(ML65, address(new UAMldsaVerifier(ML65, address(0), "", "")), 5_950_000);
+        c[0] = UARegistry.KindConfig(ML65, address(new MldsaVerifier(ML65, address(0), "", "")), 5_950_000);
         mreg = _deploy(REG_M, chainUidA, address(0), false, BUDGET, address(0), true, c);
         bytes memory pk = _ml(string.concat("keygen 65 ", _bare(SEED)));
         assertEq(pk.length, 1952, "an ML-DSA-65 key");

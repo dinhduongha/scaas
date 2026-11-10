@@ -79,13 +79,13 @@ abstract contract PqzLayer is MetaTokenBase {
         "UAPqzUnshield(bytes32 from,PqzBurnArgs args,uint256 amount,bytes32 recipient,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom)"
     );
 
-    /// @dev The `UAPqzVerifier` of this release and chain: the env's `deps[ENV_PQZ_VERIFIER]`, from the clone's code
+    /// @dev The `PqzKeyVerifier` of this release and chain: the env's `deps[ENV_PQZ_VERIFIER]`, from the clone's code
     ///      (chain-neutral spec §2.2); `init` takes the precompile and the proof system from it.
     function _pqzVerifier() internal view returns (address) {
         return ChainEnvCode.dep(ENV_PQZ_VERIFIER);
     }
 
-    /// @dev `env.deps = [UAPqzVerifier]`, never on Hedera, a registry: `PqzStateLib.validateEnv`.
+    /// @dev `env.deps = [PqzKeyVerifier]`, never on Hedera, a registry: `PqzStateLib.validateEnv`.
     function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view virtual override {
         PqzStateLib.validateEnv(env.deps, env.hedera, env.registry);
     }

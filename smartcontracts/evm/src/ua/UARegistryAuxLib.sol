@@ -5,7 +5,7 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 import {IUARegistry} from "./IUARegistry.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
-import {UAMldsaVerifier} from "./MlDsa.sol";
+import {MldsaVerifier} from "./MlDsa.sol";
 import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
 
 /// @title `UARegistry`'s auxiliary library (T66b 3.1b, owner 2026-11-09, spec 2026-11-09-t66b-library-organisation.md §11 (f)):
@@ -100,11 +100,11 @@ library UARegistryAuxLib {
         address v = address(uint160(UARegistryCoreLib._cfgKind()));
         if (
             (kind != UAKinds.MLDSA44 && kind != UAKinds.MLDSA65) || v == address(0) || part >= _ekParts(kind)
-                || UAMldsaVerifier(v).PRECOMPILE() != address(0)
+                || MldsaVerifier(v).PRECOMPILE() != address(0)
         ) revert IUARegistry.UAKeyCache(kind);
         ua = abi.decode(_core(abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector, kind, pk)), (bytes32));
         if (s.ekPtr[ua][part] != address(0)) return ua;
-        address ptr = SSTORE2.write(UAMldsaVerifier(v).expandedKeyPart(pk, part));
+        address ptr = SSTORE2.write(MldsaVerifier(v).expandedKeyPart(pk, part));
         s.ekPtr[ua][part] = ptr;
         emit IUARegistry.UAKeyCached(ua, kind, part, ptr);
     }

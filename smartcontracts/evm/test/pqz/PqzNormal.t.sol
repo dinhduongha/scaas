@@ -14,7 +14,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
-import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "../../src/pqz/PqzKeyVerifier.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {Catalogue, pqzEnv, pinned, withModules} from "../helpers/Catalogue.sol";
@@ -424,12 +424,12 @@ contract PqzNormalTest is PqzFixture {
         assertEq(tok.precompile(), PQZ);
     }
 
-    /// Plan 5h Task 8d part 2 (D23 [Z2]): a new `UAPqzVerifier` (a new set or id) reaches tokens only through the next
+    /// Plan 5h Task 8d part 2 (D23 [Z2]): a new `PqzKeyVerifier` (a new set or id) reaches tokens only through the next
     /// `Env` version of the kind and a new release on it; tokens of the old release keep their verifier, the old release
     /// keeps its env, and the new release's tokens run on the new instance.
     function test_newVerifierNewEnvNewRelease() public {
-        UAPqzVerifier old = pqv;
-        UAPqzVerifier fresh = _newPqzVerifier(PQZL_ID);
+        PqzKeyVerifier old = pqv;
+        PqzKeyVerifier fresh = _newPqzVerifier(PQZL_ID);
         assertTrue(address(fresh) != address(old));
         uint16 v1 = factory.latestEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ);
         address impl2 = Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 2,
@@ -447,7 +447,7 @@ contract PqzNormalTest is PqzFixture {
         assertEq(t2.pqzAccount(bob, 0).pendingCount, 1, "the new release works");
     }
 
-    /// Review 5g-Z2 P2-3: the release env (`deps = [UAPqzVerifier]` with code, never Hedera) is checked by the
+    /// Review 5g-Z2 P2-3: the release env (`deps = [PqzKeyVerifier]` with code, never Hedera) is checked by the
     /// release's `validateEnv` (chain-neutral releases, plan T72: the constructor's checks moved there), which
     /// `deployTokenImplementation` calls and bubbles.
     function test_constructorChecksTheEnv() public {

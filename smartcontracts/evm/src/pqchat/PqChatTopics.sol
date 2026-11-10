@@ -16,17 +16,21 @@ contract PqChatTopics is PqChatCore {
     /// @notice The factory whose `PqChat` releases name this module (checked by the release's constructor).
     address public immutable FACTORY;
 
+    /// @notice The largest topic `name`, in bytes, of `createTopic` and `updateTopic` (owner 2026-11-10: 128 -> 512).
+    uint256 internal constant NAME_MAX = 512;
+
     constructor(address factory_) {
         FACTORY = factory_;
     }
 
     // ------------------------------------------------------------------ public topics
 
-    /// @notice P41: any UA the registry verifies; `homeChain`, `homeChatContract` not zero; `name` 1-128 B.
+    /// @notice P41: any UA the registry verifies; `homeChain`, `homeChatContract` not zero; `name` 1-512 B (owner 2026-11-10;
+    ///         was 1-128 B).
     function createTopic(IPqChat.PqTopic calldata t, IUARegistry.UASig calldata sig) external returns (bytes32 tid) {
         (IUARegistry reg, uint256 limit,) = _env();
         uint256 nl = bytes(t.name).length;
-        if (nl == 0 || nl > 128 || t.homeChain == 0 || t.homeChatContract == address(0)) revert IPqChat.PqTopicShape();
+        if (nl == 0 || nl > NAME_MAX || t.homeChain == 0 || t.homeChatContract == address(0)) revert IPqChat.PqTopicShape();
         _auth(reg, t.owner, PqChatTypes.hashTopic(t), sig);
         _useNonce(PqChatTypes.scopeTopic(t.owner), t.nonce);
         tid = PqChatTypes.topicId(t.owner, t.nonce);
@@ -39,13 +43,13 @@ contract PqChatTopics is PqChatCore {
         emit IPqChat.PqTopicCreated(tid, t.owner);
     }
 
-    /// @notice P41: by the topic's owner, `seq == stored + 1` (P36).
+    /// @notice P41: by the topic's owner, `seq == stored + 1` (P36); `name` 1-512 B.
     function updateTopic(IPqChat.PqTopicUpdate calldata u, IUARegistry.UASig calldata sig) external {
         (IUARegistry reg, uint256 limit,) = _env();
         Topic storage tp = _topic(u.topicId);
         if (u.seq != tp.seq + 1) revert IPqChat.PqTopicSeq(tp.seq + 1, u.seq);
         uint256 nl = bytes(u.name).length;
-        if (nl == 0 || nl > 128) revert IPqChat.PqTopicShape();
+        if (nl == 0 || nl > NAME_MAX) revert IPqChat.PqTopicShape();
         _ownerAuth(reg, tp.owner, PqChatTypes.hashTopicUpdate(u), sig);
         (tp.seq, tp.openReplies) = (u.seq, u.openReplies);
         tp.latest = _put(abi.encode(u, keccak256(abi.encode(sig))), limit);

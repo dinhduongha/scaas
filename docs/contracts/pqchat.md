@@ -455,13 +455,14 @@ signature check, the nonce bitmaps and the blobs with sessions, and no cryptogra
 revokes writers; nothing on chain is hidden and nobody moderates** (owner D18, D19 and Q2 of 2026-11-07; topics spec P37,
 P41).
 
-- `createTopic(PqTopic t, UASig sig) returns (bytes32 topicId)`: `name` 1–128 B, `homeChain ≠ 0`, `homeChatContract ≠ 0`
-  (`PqTopicShape`; no other rule reads the home), signed by `owner`, `(owner, nonce)` unused in the topic scope. `about`
+- `createTopic(PqTopic t, UASig sig) returns (bytes32 topicId)`: `name` 1–512 B (owner 2026-11-10; was 1–128 B),
+  `homeChain ≠ 0`, `homeChatContract ≠ 0` (`PqTopicShape`; no other rule reads the home), signed by `owner`, `(owner, nonce)` unused in the topic scope. `about`
   is Markdown bytes; `openReplies` is the reply flag (clients create topics with `true`, D19). The owner is fixed for the
   topic's life; an `msig` owner gives shared ownership.
 - `updateTopic(PqTopicUpdate u, UASig sig)`: the topic exists (`PqTopicUnknown`), `seq == stored + 1` (`PqTopicSeq`),
-  `name` 1–128 B (`PqTopicShape`), signed by the topic's owner. It replaces `name`, `about` and `openReplies`;
-  `topicOf(topicId)` returns the create record with the latest values and `seq`.
+  `name` 1–512 B (`PqTopicShape`), signed by the topic's owner. It replaces `name`, `about` and `openReplies`;
+  `topicOf(topicId)` returns the create record with the latest values and `seq`. A topic record is stored as every record
+  (`_put`): one SSTORE2 blob while it fits the chain's limit, else a chain of blobs; `about` has no bound of its own.
 - `setTopicWriter(PqTopicWriter w, UASig sig)`: the topic exists, `writer` is neither 0 nor the owner (`PqTopicShape`),
   `seq == stored + 1` per `(topicId, writer)`, signed by the topic's owner. `writerOf(topicId, ua)` returns `(granted,
   seq)`; `writersOf` lists the writer from its first record.
@@ -571,7 +572,7 @@ the size gate's row `PqChat` in `smartcontracts/evm/size-baseline.json`).
 
 **Size and deployment.** Every deployed piece fits one transaction of 60 M asked (`(regular + state) × 1.05`, regular ×
 1.05 < 2^24; [CTR-TOK-30](token-wrappers.md#CTR-TOK-30)): `PqChat` 27,825 B runtime (under 3C-D2's 33,594 B line), its `deployImplementation` 1,908,760
-regular + 43,147,530 state = 47.3 M asked; `PqChatTopics` 16,396 B, its CREATE2 1,099,442 + 25,269,480 = 27.7 M asked;
+regular + 43,147,530 state = 47.3 M asked; `PqChatTopics` 16,398 B (16,396 before the 512 B name bound), its CREATE2 1,099,442 + 25,272,540 = 27.7 M asked;
 `createInstance` 227,583 + 1,523,880. Before the split the release was 34,223 B and asked 58.0 M.
 
 **Per transaction** (regular / state gas; the stand-in verifier, so a real signer adds its verifier's regular gas: about

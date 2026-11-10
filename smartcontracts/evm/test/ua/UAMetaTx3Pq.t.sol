@@ -7,9 +7,9 @@ import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
-import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
-import {UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
+import {SlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -39,12 +39,12 @@ contract UAMetaTx3PqTest is UARegistryBase {
         super.setUp();
         string memory pj = _pj();
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](6);
-        c[0] = UARegistry.KindConfig(0x0130, address(new UAMldsaVerifier(0x0130, address(0), "", "")), 4_250_000);
-        c[1] = UARegistry.KindConfig(0x0131, address(new UAMldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
-        c[2] = UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier(0x0132)), 2_500_000);
-        c[3] = UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), 1_400_000);
+        c[0] = UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), 4_250_000);
+        c[1] = UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
+        c[2] = UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), 2_500_000);
+        c[3] = UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), 1_400_000);
         c[4] = UARegistry.KindConfig(0x0134, _ml87(pj), 250_000); // CTR-UA-39: precompile only, the cap a provisional estimate
-        c[5] = UARegistry.KindConfig(0x0135, address(new UAFndsaVerifier(0x0135)), 5_250_000); // CTR-UA-40, provisional cap
+        c[5] = UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), 5_250_000); // CTR-UA-40, provisional cap
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
         for (uint256 i; i < 6; ++i) {
             string memory k = string.concat(".kinds[", vm.toString(i), "].");
@@ -86,7 +86,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
                 ml87.allow(_in87(vm.parseJsonBytes(pj, ".kinds[4].keyData"), sig, m));
             }
         }
-        return address(new UAMldsaVerifier(0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")));
+        return address(new MldsaVerifier(0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")));
     }
 
     function _in87(bytes memory pk, bytes memory sig, bytes32 uaMsg) internal pure returns (bytes32) {

@@ -14,7 +14,7 @@ source, and `entries.json` the record the faces are generated from (`gen_faces.p
 - The shared bases (`SaltedEIP712`, `MetaTxBase`, `UAMetaTxBase`, `GovernanceBase`) become `<X>Core` (bodies) and `<X>` (their
   external entries calling the bodies, constructor forwarded) for their non-token users: ABI, modifiers, behaviour unchanged.
 
-usage (from smartcontracts/evm): python3 script/t66b/transform.py <build-info.json> [--dry]   UNAUDITED tooling."""
+usage (from smartcontracts/evm): python3 script/modules/transform.py <build-info.json> [--dry]   UNAUDITED tooling."""
 import json
 import os
 import re
@@ -408,8 +408,8 @@ ifaces = {}
 for k in KINDS:
     lin = byname[k]['linearizedBaseContracts']
     ifaces[k] = [cname[b] for b in reversed(lin) if b in REMOVED]
-os.makedirs('script/t66b', exist_ok=True)
-json.dump({'kinds': out, 'interfaces': ifaces, 'imports': dict(sorted(IMPORTS.items()))}, open('script/t66b/entries.json', 'w'), indent=1)
+os.makedirs('script/modules', exist_ok=True)
+json.dump({'kinds': out, 'interfaces': ifaces, 'imports': dict(sorted(IMPORTS.items()))}, open('script/modules/entries.json', 'w'), indent=1)
 
 # apply (byte offsets, back to front); the kind files move to <Kind>Core.sol
 bad = 0

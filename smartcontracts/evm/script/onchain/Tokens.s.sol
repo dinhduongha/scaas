@@ -162,7 +162,7 @@ contract Tokens is OnchainBase {
     }
 
     /// @dev The ML-DSA signature of `uaMsg` (the registry's `uaMessage`): over `pq_msg = keccak256(TAG ‖ uaMsg)`, as
-    ///      UAMldsaVerifier checks it (PqUA.pqMessage).
+    ///      MldsaVerifier checks it (PqUA.pqMessage).
     function _mlSign(bytes32 uaMsg) internal returns (bytes memory) {
         return _ml(string.concat("sign 65 ", _bare(mlSeed), " ", _bare(PqUA.pqMessage(PqUA.tag(ML65), uaMsg))));
     }

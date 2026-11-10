@@ -31,9 +31,11 @@ contract PqChatGasTest is PqTopicsBase {
     uint256 internal constant RUNTIME = 27_825;
     uint256 internal constant RELEASE_REGULAR = 1_908_760;
     uint256 internal constant RELEASE_STATE = 43_147_530;
-    uint256 internal constant MODULE_RUNTIME = 16_396;
+    // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
+    // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
+    uint256 internal constant MODULE_RUNTIME = 16_398;
     uint256 internal constant MODULE_REGULAR = 1_099_442;
-    uint256 internal constant MODULE_STATE = 25_269_480;
+    uint256 internal constant MODULE_STATE = 25_272_540;
 
     function _row(string memory what, uint256 regular, uint256 state) internal {
         Vm.Gas memory g = vm.lastCallGas();

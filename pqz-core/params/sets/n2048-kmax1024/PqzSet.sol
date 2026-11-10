@@ -64,7 +64,7 @@ library PqzSet {
     /// the precompile's OP_SELFTEST answer at this set (smartcontracts/vectors/pqz/selftest.json hash; 0: no vectors yet)
     bytes32 internal constant SELFTEST = 0x37c45f201c3f7a8f4dd3c84df85176f85f574d31a0209435761b1056519bfa9d;
     /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,
-    /// proof_<sys>.json row 4): UAPqzVerifier's pinned probe per proof system (0: no vectors / no PQZH)
+    /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)
     bytes32 internal constant PROBE_PQZL = 0xbc19b2cb54c0372463e8ca50a68aa775c76d79da3f5379889c3c720433b9ddfd;
     bytes32 internal constant PROBE_PQZH = 0x91138cd46cb48c00708dcac6488b73794ed4437225307a526dedeb074dd864f9;
 

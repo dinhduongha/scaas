@@ -11,7 +11,7 @@ corpus, default n2304-kmax4096), the SCaaS testnet's image 2.2.0-pqz5 since 2026
                                             gas = formula for every row (valid = invalid), misses, ML-DSA both levels
   e2e.py stock   --engine E                 the stock image after T: the probe must FAIL (G2 demonstration)
   e2e.py e2e     --engine E --key K [--no-ua]  transactions: probe contract, check() per row, direct > 128 KiB
-                                            inputs, UAMldsaVerifier at both levels (not with --no-ua: live 7622)
+                                            inputs, MldsaVerifier at both levels (not with --no-ua: live 7622)
   e2e.py burst   [--clients 4 --calls 50]   step 5: eth_call spam at PQZ (the largest honest input a transaction can
                                             carry); counts 200 / 429; block interval
   e2e.py fill    --engine E --key K [--n 8] the largest honest inputs a transaction can carry (PQZH transfers before
@@ -437,10 +437,10 @@ def cmd_e2e(a):
         check(rc["status"] == "0x1" and got == max(std, floor),
               f"direct tx to PQZ, {row['name']} ({len(b):,} B > 131,072): gasUsed {got:,} = max(standard {std:,}, {'EIP-7976' if AMS else 'EIP-7623'} floor {floor:,}), block {int(rc['blockNumber'], 16)}")
     if a.no_ua:
-        log("UAMldsaVerifier skipped (--no-ua: on 7622 it is deployed with the registry in P6g, plan R5)")
+        log("MldsaVerifier skipped (--no-ua: on 7622 it is deployed with the registry in P6g, plan R5)")
         return
-    # UAMldsaVerifier(kind, MLDSAxx, valid, flipped) on the copy (R5): the probe must pick the precompile
-    vcode, _ = artifact("MlDsa.sol", "UAMldsaVerifier")
+    # MldsaVerifier(kind, MLDSAxx, valid, flipped) on the copy (R5): the probe must pick the precompile
+    vcode, _ = artifact("MlDsa.sol", "MldsaVerifier")
     ua = ua_rows()
     d = json.load(open(os.path.join(ROOT, "smartcontracts/vectors/ua/pq_signatures.json")))
     for kind, addr, lvl, pk, sig in ((0x0130, ML44, 44, PK44, SIG44), (0x0131, ML65, 65, PK65, SIG65)):
@@ -451,7 +451,7 @@ def cmd_e2e(a):
         rc = receipt(s.send(None, "0x" + vcode + args, 16_000_000))
         v = rc["contractAddress"]
         got = rpc("eth_call", [{"to": v, "data": "0x" + selector("PRECOMPILE()")}, "latest"])
-        check(rc["status"] == "0x1" and int(got, 16) == int(addr, 16), f"UAMldsaVerifier({kind:#06x}) at {v}: PRECOMPILE() = {addr} (deploy gas {int(rc['gasUsed'], 16):,})")
+        check(rc["status"] == "0x1" and int(got, 16) == int(addr, 16), f"MldsaVerifier({kind:#06x}) at {v}: PRECOMPILE() = {addr} (deploy gas {int(rc['gasUsed'], 16):,})")
         k = next(k for k in d["kinds"] if k["name"] == f"mldsa{lvl}")
         for sg in k["sigs"]:
             for flip in (False, True):
@@ -462,7 +462,7 @@ def cmd_e2e(a):
                 cd = "0x" + selector("verify(bytes,bytes32,bytes)") + w(96) + sg["message"][2:] + w(96 + 32 + len(kd) + (-len(kd) % 32)) + abi_bytes(kd) + abi_bytes(bytes(sb))
                 res = rpc("eth_call", [{"to": v, "data": cd, "gas": hex(10_000_000)}, "latest"])
                 gas = int(rpc("eth_estimateGas", [{"to": v, "data": cd}, "latest"]), 16)
-                check(int(res, 16) == (0 if flip else 1), f"UAMldsaVerifier mldsa{lvl}.verify({sg['purpose']}{', sig flipped' if flip else ''}) = {not flip} (estimateGas {gas:,})")
+                check(int(res, 16) == (0 if flip else 1), f"MldsaVerifier mldsa{lvl}.verify({sg['purpose']}{', sig flipped' if flip else ''}) = {not flip} (estimateGas {gas:,})")
 
 
 def cmd_burst(a):

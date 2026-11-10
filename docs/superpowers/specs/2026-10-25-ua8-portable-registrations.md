@@ -62,7 +62,7 @@ verify adds ≈ 2.4 M, so `n2816-kmax65536` is ≈ 59.9 M, a fs3 Task 13 watch i
 
 **P3 — What must match.** The same kind must be enabled in the target registry's generation (a PQ kind needs its
 verifier there; otherwise the copy reverts like any registration of a disabled kind). **A PQZ key does not need the PQZ
-verifier on the target:** where `UAPqzVerifier` and the PQZ precompile of the same parameter set are absent, the key is stored
+verifier on the target:** where `PqzKeyVerifier` and the PQZ precompile of the same parameter set are absent, the key is stored
 unproven (`proven = false`) and nothing is refused — the first draft of this paragraph said the copy reverts, which P8 supersedes
 (corrected 2026-10-30). `msig` UAs: the structure is key data, so the id and the members'
 PoP are portable the same way: **every member signs `uaMessage(MSIG, POP_V2, registrationDigest)`** wrapped by `memberDigest`
@@ -230,7 +230,7 @@ before the plan, these move fast):
 
 | Family | What exists for PQ signatures (contract-callable) | Fit with our kinds | UA-8 rule |
 |---|---|---|---|
-| EVM, Hedera | our verifiers (`UAMldsaVerifier`, `UAFndsaVerifier`, `UASlhdsaVerifier`); EIP-8051 / -8052 / -8355 still drafts | all PQ kinds | **(a)** on chain, P1–P9 |
+| EVM, Hedera | our verifiers (`MldsaVerifier`, `FndsaVerifier`, `SlhdsaVerifier`); EIP-8051 / -8052 / -8355 still drafts | all PQ kinds | **(a)** on chain, P1–P9 |
 | NEAR | **host function `ml_dsa_verify`** (nearcore 2.14.0, protocol 88): ML-DSA-65, empty context, message as-is, ≈ 0.54 Tgas | `mldsa65` exactly; others pure Wasm only | **(b) (owner 2026-10-29)**: `mldsa65` on chain through the host function in the NEAR `ua-registry`; other PQ kinds relayer-checked (or a pure-Wasm spike) |
 | Soroban | **CAP-0087** `verify_sig_ml_dsa_{44,65,87}` (Implemented, Protocol 30, not on mainnet yet); pure-Rust ML-DSA measured at 51 M / 77.5 M instructions (third party, testnet) | `mldsa44`, `mldsa65` exactly; `fndsa512` / `slhdsa128s` pure only | **(b)**: the host functions once Protocol 30 is live, pure Rust until then (spike against the network's budget) |
 | Cosmos | none (SDK 0.55 `ml_dsa_65` is for account / consensus keys only) | all four as pure Rust → Wasm (unmeasured) | **(b)**: our Wasm verifier in `ua-registry`, gated by a spike |
@@ -299,5 +299,5 @@ keep their `checked` value (re-checking on chain is a later, optional call).
    or Sui's own verifier when published): each a pass / fail gate like the NEAR P-256 spike; a family that fails its
    spike stays relayer-checked. NEAR: `mldsa65` through `ml_dsa_verify` in the `ua-registry` (sandbox protocol 88 already
    has it). Algorand: `fndsa512` in the `account` app once AVM v14 is on mainnet — first a test vector showing that a
-   deterministic Falcon-512 signature (fixed salt) verifies under our standard `UAFndsaVerifier` and the off-chain
+   deterministic Falcon-512 signature (fixed salt) verifies under our standard `FndsaVerifier` and the off-chain
    verifiers, and the client signing deterministically for this kind.

@@ -1,0 +1,11 @@
+M-T1 | test_topics_bodiesAndRefs, test_topics_updateNameBound | 1
+M-T2 | test_topics_bodiesAndRefs, test_topics_longAboutAndNameChain | 1
+M-T3 | test_topics_updateNameBound | 1
+M-R0 | test_g_regulatedEntriesRunInR, test_g_stateEntriesRunInS, test_m_layoutEqualsTheKind | 1
+M-R1 | test_g_everyStubForwardsToItsModule | 1
+M-R2 | test_g_regulatedEntriesRunInR, test_m_layoutEqualsTheKind | 1
+M-R3 | test_g_everyStubForwardsToItsModule, test_m_constructorChecksEveryModule | 1
+M-R4 | test_g_everyStubForwardsToItsModule | 1
+M-W1 | test_g_regulatedEntriesRunInR | 1
+M-S1 | test_g_everyStubForwardsToItsModule | 1
+M-S2 | test_g_stateEntriesRunInS | 1

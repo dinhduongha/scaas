@@ -979,8 +979,8 @@ def abi_methods():
     """The methods and events of the contracts this file calls, from the ABI in out/ (`forge build` first)."""
     methods, events = {}, set()
     for src, name in (("UARegistry", "UARegistry"), ("OpenFactory", "OpenFactory"), ("NormalPqzToken", "NormalPqzToken"),
-                      ("WrappedPqzToken", "WrappedPqzToken"), ("Mocks", "MockERC20"), ("MlDsa", "UAMldsaVerifier"),
-                      ("UAPqzVerifier", "UAPqzVerifier")):
+                      ("WrappedPqzToken", "WrappedPqzToken"), ("Mocks", "MockERC20"), ("MlDsa", "MldsaVerifier"),
+                      ("PqzKeyVerifier", "PqzKeyVerifier")):
         j = json.load(open(os.path.join(EVM, OUT_DIR, src + ".sol", name + ".json")))
         methods.update(j["methodIdentifiers"])
         events |= {f"{x['name']}({','.join(i['type'] for i in x['inputs'])})" for x in j["abi"] if x["type"] == "event"}
@@ -1269,23 +1269,23 @@ def run(kd, kr, ke):
         valid = pk + sg + kc(TAG[kind], bytes.fromhex(k["pop"]["message"][2:]))
         bad = bytearray(valid)
         bad[pkl + 7] ^= 1
-        v = D.deploy("UAMldsaVerifier", encs(["w", "w", "b", "b"], [kind, at, valid, bytes(bad)]), src="MlDsa",
-                     label=f"UAMldsaVerifier {lvl}")
+        v = D.deploy("MldsaVerifier", encs(["w", "w", "b", "b"], [kind, at, valid, bytes(bad)]), src="MlDsa",
+                     label=f"MldsaVerifier {lvl}")
         got = words(call(v, cd("PRECOMPILE()", [])))[0][12:]
-        check("0x" + got.hex() == at.lower(), f"UAMldsaVerifier({kind:#06x}).PRECOMPILE() = 0x{got.hex()} (probe passed)")
+        check("0x" + got.hex() == at.lower(), f"MldsaVerifier({kind:#06x}).PRECOMPILE() = 0x{got.hex()} (probe passed)")
         mlv[kind] = v
-    # the set's self-test R_REG vector (UAPqzVerifier's pinned probe, PqzSet.PROBE_PQZL; review 8d1 N1: per set).
-    # --zero-dep KEEPS UAPqzVerifier and the registry's 0x0142 slot: only the releases' env drops it (deps = [0x0]). The
+    # the set's self-test R_REG vector (PqzKeyVerifier's pinned probe, PqzSet.PROBE_PQZL; review 8d1 N1: per set).
+    # --zero-dep KEEPS PqzKeyVerifier and the registry's 0x0142 slot: only the releases' env drops it (deps = [0x0]). The
     # registry side of this run is unchanged (every holder registers with its R_REG proof, storePqzPop, the 0x0142 list
     # checks, `pqz_key`'s proven key), and that needs the verifier, so the run still needs the PQZ precompile chain; what
     # --zero-dep runs is the token side of a chain without one (an OFFCHAIN token never calls the precompile). On a chain
-    # without the precompile UAPqzVerifier cannot pass its self-test: there the registry has no 0x0142 kind and the holders'
+    # without the precompile PqzKeyVerifier cannot pass its self-test: there the registry has no 0x0142 kind and the holders'
     # keys stay unproven (an OFFCHAIN token takes them, spec §6), a registration form this script does not build.
     reg_stmt = bytes.fromhex(json.load(open(os.path.join(K.VEC_DIR, "statement_register.json")))["rows"][0]["stmt"])
     reg_proof = bytes.fromhex(json.load(open(os.path.join(K.VEC_DIR, "proof_pqzl.json")))["rows"][4]["proof"])
-    pqv = D.deploy("UAPqzVerifier", encs(["w", "w", "b", "w", "b"], [PQZ, PQZL_ID, reg_stmt[96:], reg_stmt[64:96], reg_proof]),
-                   label="UAPqzVerifier PQZL")
-    check(words(call(pqv, cd("isSupportedOnThisChain()", [])))[0][-1] == 1, "UAPqzVerifier.isSupportedOnThisChain()")
+    pqv = D.deploy("PqzKeyVerifier", encs(["w", "w", "b", "w", "b"], [PQZ, PQZL_ID, reg_stmt[96:], reg_stmt[64:96], reg_proof]),
+                   label="PqzKeyVerifier PQZL")
+    check(words(call(pqv, cd("isSupportedOnThisChain()", [])))[0][-1] == 1, "PqzKeyVerifier.isSupportedOnThisChain()")
     secv = D.deploy("Secp256k1Verifier", b"", label="Secp256k1Verifier")
     kinds = [(MLDSA44, mlv[MLDSA44], CAP_ML), (MLDSA65, mlv[MLDSA65], CAP_ML), (PQZ_MLWE, pqv, CAP_PQZ),
              (SECP256K1, secv, 50_000)]
@@ -1303,7 +1303,7 @@ def run(kd, kr, ke):
     # plan 5g-Z2: the factory (notice period 0 here) deploys every release itself: env version 1 of each kind
     # (factory, chain_uid, registry, SmartKeyAccount implementation 0, Hedera false, deps, the linked libraries with
     # their code hashes, the GovernanceRouter above (the PQZ kinds link the four PqzStateLib / PqzTransferLib / PqzBurnLib / PqzViewLib, plan 5h D14,
-    # each deployed once by D.lib; the PQZ kinds' one dependency is this run's UAPqzVerifier, CTR-ZTH-20), then the release
+    # each deployed once by D.lib; the PQZ kinds' one dependency is this run's PqzKeyVerifier, CTR-ZTH-20), then the release
     # from the init code without arguments on env 1, named explicitly (owner 2026-10-20; the factory appends
     # envVersion, env, implArgs)
     # chain-neutral releases (plan T71): the registrar the only constructor argument, then this chain's values once

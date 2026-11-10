@@ -47,7 +47,7 @@ library PqzSafety {
         if (!selfTest(pqz)) revert SelfTestFailed(pqz);
     }
 
-    /// @notice What a token or a `UAPqzVerifier` may be bound to (review W-B): exactly `PQZ`, one of the set's proof
+    /// @notice What a token or a `PqzKeyVerifier` may be bound to (review W-B): exactly `PQZ`, one of the set's proof
     ///         systems, and its self-test now. A creator-chosen precompile could answer every proof with 1.
     function requirePqz(address pqz, bytes32 psid) internal view {
         if (pqz != PQZ || !isPsid(psid)) revert NotPqz(pqz, psid);

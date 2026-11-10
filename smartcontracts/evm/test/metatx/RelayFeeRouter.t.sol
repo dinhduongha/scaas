@@ -18,7 +18,7 @@ import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {MtxRegistryMock} from "../helpers/MtxRegistryMock.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
@@ -84,7 +84,7 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         (bytes memory valid, bytes memory invalid) = _mockMlDsa();
-        mlv = new UAMldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
+        mlv = new MldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);

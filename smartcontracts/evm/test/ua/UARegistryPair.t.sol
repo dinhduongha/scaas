@@ -7,7 +7,7 @@ import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
-import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 
 /// The seven `pure` views as they were in the registry (T66b spec §5, R-1): the same ABI, `UAKinds` compiled in.
 contract KindsDirect {
@@ -324,7 +324,7 @@ contract UARegistryPairTest is UARegistryBase {
     function test_c_cacheRunsTheCoreKeyCheck() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
         c[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);
-        c[1] = UARegistry.KindConfig(UAKinds.MLDSA44, address(new UAMldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000);
+        c[1] = UARegistry.KindConfig(UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000);
         UARegistry r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
         vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector), 1);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MLDSA44));

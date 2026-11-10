@@ -586,7 +586,7 @@ docker-compose.yml}` back, replace `data/nethermind_data` with the backup's copy
 **Status: executed 2026-11-04** with [reset 1](#code-size-128-kib-on-the-scaas-testnet-reset-1-executed-2026-11-04): image
 `2.2.0-pqz7`, schedule 1 at `0x6aeb2cad` = schedule 0 + `mldsa87Gas` 102,000 (**PROVISIONAL**, not calibrated; the
 calibration waits for the owner's word, TODO pre-freeze item 5). On the live chain the probe answers 1 / 0 at 102,006 gas
-(`../runs/2026-11-04-mldsa87-probe.py`); `UAMldsaVerifier(0x0134, 0x…5caa0014)` `0x0e8D3A7A07252A4Eb62871F3318bc846FEeB6438`
+(`../runs/2026-11-04-mldsa87-probe.py`); `MldsaVerifier(0x0134, 0x…5caa0014)` `0x0e8D3A7A07252A4Eb62871F3318bc846FEeB6438`
 by `forge create` (`DeployBase` probes inside forge's EVM, which has no `MLDSA87`, so the gen-1 registry of `deploy.sh` has no
 `0x0134`); registry gen 2 `0xFA09Cb12c2bdc0d596Adf25c2D3160F5Ab1083DC` (predecessor the gen-1 `ua_registry`, kinds
 `[(0x0134, verifier, 250,000)]`, the PROVISIONAL cap until T-GAS); `mldsa87` registration on gen 2 status 1, 15,561,167 gas
@@ -600,7 +600,7 @@ ML-DSA-65 ratio (68,000 at EIP-8355's 9,000), never a calibrated figure; the `Ca
 word. Steps, none run yet: build the image (`build-image.sh`, locally, never pushed); roll it out as image `2.2.0-pqz6` was; add a
 schedule with `add-schedule.py <chainspec> <calib-engine-pqz.json> <timestamp> <out> --mldsa87` (a copy of the last schedule plus
 `mldsa87Gas` = `PROVISIONAL_MLDSA87_GAS`; it prints "PROVISIONAL, not calibrated"); after the timestamp, deploy a
-`UAMldsaVerifier(0x0134, 0x…5caa0014, probe valid, probe invalid)` outside `forge script` (P6g D15) and a registry generation that
+`MldsaVerifier(0x0134, 0x…5caa0014, probe valid, probe invalid)` outside `forge script` (P6g D15) and a registry generation that
 enables `0x0134` with the T-GAS cap measured then. Replace the value when the calibration runs.
 
 ## Zether on the SCaaS testnet (executed 2026-10-31)
@@ -702,7 +702,7 @@ in the same reset. 22776 is the owner's and is never touched (`--testnet-reset` 
 3. Throwaway first: the exact file on a mining-off pqz7 node → genesis **`0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164`,
    unchanged** (the inference held: params and `engine.Pqz` are not in the header; `chainUid` and `chain-uids.json` stay);
    on a throwaway-signer copy of the same params and rows: `codesize` 65,537 B and 119,800 B deploy at 199.9 M gas, probe
-   435 / 0, node e2e 84 / 0, `MLDSA87` inactive before the schedule and 1 / 0 after it, `UAMldsaVerifier`'s constructor
+   435 / 0, node e2e 84 / 0, `MLDSA87` inactive before the schedule and 1 / 0 after it, `MldsaVerifier`'s constructor
    reverting `UAMldsaNoPrecompile` before it (negative control).
 4. Live: `.bak-pre-reset1-20261104` copies of `genesis.json` (sha256 `4fd51bbd…b584`), `docker-compose.yml`, `config.json`,
    `config.rpc.json`; no chain-data backup (owner 2026-10-31): `data/{nethermind_data,nethermind_rpc_data,explorer_db_data,
