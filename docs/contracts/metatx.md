@@ -412,14 +412,22 @@ consumes the ticket, a re-entry from an underlying's hook during the self-call r
 or the ticket is spent), and no allowlisted function runs with a live ticket; `mtxBatch` sets a fresh ticket per item.
 
 Authority and balance owners are read through `_msgSender()` everywhere; the reads that **stay** `msg.sender` are
-exactly: the relayer binding, the default fee recipient and the event `relayer` of the pipeline; the factory check in
-`initialize`; `mtxTrade`'s and `uaTrade`'s `msg.sender == o.dex` ([CTR-DEX-15](dex.md#CTR-DEX-15),
-[CTR-DEX-25](dex.md#CTR-DEX-25)); and `mtxWrap`'s and `uaWrap`'s relayer binding and fee payee
-([CTR-TOK-20](token-wrappers.md#CTR-TOK-20); the `ua*` reads BUILT, UA-5b). A lint test greps the sources and pins that set
-(`MsgSenderLint`, as of UA-5b: `msg.sender` appears 8 times in `ERC20MetaTx` — the event relayer ×3, the default fee
-recipient ×3, the `mtxTrade` and `uaTrade` callers —, 4 times in `WrappedToken` for the `mtxWrap` and `uaWrap`
-submitter, never in `TradeLib`, whose caller is a parameter; with no7702, `MetaTxBase` 8 (the designator guard in
-`_msgSender()`) and `MtxPipelineLib` 5 (the relayer binding's designator guard)). Defence in
+exactly: the reentrancy guard, `_msgSender()` and `_ticketSubject()` themselves (with the designator refusal); the relayer
+binding (with its designator refusal), the default fee recipient and the event `relayer` of every pipeline; the factory
+check in `initialize`; the callers that must be the order's DEX: `mtxTrade`'s, `restorePulled`'s and `mtxLiquidityPull`'s
+([CTR-DEX-15](dex.md#CTR-DEX-15), [CTR-DEX-25](dex.md#CTR-DEX-25), [CTR-DEX-27](dex.md#CTR-DEX-27),
+[CTR-DEX-30](dex.md#CTR-DEX-30)); the relayer of `mtxRelayFee`, which is the router ([CTR-MTX-27](#CTR-MTX-27));
+`mtxWrapOrder`'s submitter ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)); and the governance subject and the router's target
+compare ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). A lint test reads the sources
+and pins that set per file (`test/metatx/MsgSenderLint.t.sol` `test_msgSenderReadsArePinned`): `msg.sender` appears 8 times
+in `MetaTxBase` (the guard, the event, `_msgSender()` ×3 with the designator refusal, the fee default, the ticket binding,
+`_ticketSubject`), 5 in `MtxPipelineLib` (the relayer binding ×3 with its designator refusal, the fee default ×2), 5 in
+`ERC20MetaTx` (the event relayer ×2, the `mtxTrade`, `restorePulled` and `mtxLiquidityPull` callers), 2 in `UAMetaTxBase`
+(the event relayer of `_uaSettle` and `mtxCancelNonce`), 3 in `MetaTokenBase` (the factory check, `mtxRelayFee`'s relayer
+×2), 3 in `WrappedTokenCore` (`mtxWrapOrder`'s submitter: the pull, the fee mint, the fee leg's hook), 1 in `WrappedLib`
+(the factory in `_addLeg`'s leg check), 4 in `RelayFeeRouter`, 12 in `SCaaSDex` and 2 in `SCaaSDexAdmin`, 2 each in
+`GovernanceBase` and `GovernanceRouterBase`; never in `TradeLib` (its caller is a parameter), `MetaTxAddressBase`, the PQZ
+and Zether token cores and libraries, the mandate wallets (they read `_subject()`) or the regulated layer and kinds. Defence in
 depth: `from ≠ address(this)` (step 1), and `_update` refuses transfers and mints **to** `address(this)`
 (`TransferToSelf()`), because tokens parked at the token's own address are what a spoofed self-call would spend.
 
