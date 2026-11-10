@@ -758,4 +758,37 @@ contract DexLiquidityTest is LiquidityBase {
         assertEq(a.balanceOf(address(w)), 0);
         assertGt(pair.balanceOf(carol), 98_000);
     }
+
+    /// Carol's LP-only withdraw order (an outside input: no token checks it, the DEX alone does), after a v2 add.
+    function _lpOnly() internal returns (ITradeToken.LiquidityOrder memory o, uint256 lp) {
+        _run(_addPlan(98_000), _addXs(ADD, ADD, address(dex)));
+        lp = pair.balanceOf(carol);
+        vm.prank(carol);
+        pair.approve(puller, type(uint256).max);
+        o = _base();
+        (o.from, o.recipient, o.nonce) = (nid(carol), 0, 1);
+        o.inputs = _one(_t(address(pair), lp));
+        o.outputs = _two(_t(address(a), 1), _t(address(b), 1));
+    }
+
+    /// L7, L8, L13 on the DEX alone (the tokens repeat them with the same errors on a SCaaS input).
+    function test_L7_L8_L13_dexAlone() public {
+        (ITradeToken.LiquidityOrder memory o, uint256 lp) = _lpOnly();
+        ISCaaSDex.Interaction[] memory xs = _xs2(_ix(address(pair), abi.encodeCall(IERC20.transfer, (address(pair), lp))),
+            _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.burn, (address(dex)))));
+        ISCaaSDex.LiquidityPlan memory p = _plan(o, CAROL_PK, _u(lp));
+        p.pull = _u(lp + 1);
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.Overfill.selector, dex.liquidityOrderDigest(o)));
+        _run(p, xs);
+        o.nonce = 2 ** 128;
+        p = _plan(o, CAROL_PK, _u(lp));
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.NonceAboveCap.selector, dex.liquidityOrderDigest(o)));
+        _run(p, xs);
+        o.nonce = 1;
+        p = _plan(o, CAROL_PK, _u(lp));
+        bytes32 h = dex.liquidityOrderDigest(o);
+        vm.warp(o.validUntil + 1);
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.OrderExpired.selector, h));
+        _run(p, xs);
+    }
 }
