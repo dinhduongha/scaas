@@ -418,8 +418,10 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     mm = sel_hex("PqzVerdictMismatch(uint8)")
     neg(sd.addr, tf, calldata_with(lambda t, st, p: E.NO_VERDICT, CF, "missing verdict"), mm, "pqOF op 1 without a verdict")
 
+    v0 = E.verdict  # e2e's own: `calldata_with` swaps E.verdict for the fake below
+
     def wrong(t, st, p):
-        v = E.verdict(t, st, p)
+        v = v0(t, st, p)
         v[0][3] = E.kc("another statement")
         return v
     neg(sd.addr, tf, calldata_with(wrong, CF, "wrong verdict"), mm, "pqOF op 1 with a verdict over another statement")
@@ -468,18 +470,20 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     sd.send(fac2, E.cd("deployImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"], 4, 1, 1, code,
                        E.impl_args(4, ms)), "factory 2 deployImplementation(kind 4, 1)")
     sd.send(fac2, E.cd("setKindEnabled(uint8,bool)", ["w", "w"], 4, 1), "factory 2 setKindEnabled(4, true)")
+    # a release on a factory with a notice period is usable only after it (VersionNotYetUsable)
+    t0 = int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16)
+    while int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16) <= t0 + N + 1:
+        E.wait_block(int(_rpc0("eth_blockNumber", []), 16) + 1)
     tt = create_cfg(sd, fac2, 4, "PQZ offchain transferable", "pqOT", [], 1 | 2 | 4, b"t66b-5b-ot", conf(0))
     D.addr["pqOT"] = tt
     CT = E.Client(tt, "pqOT")
     life(tt, "pqOT", CT, transfers=False)
     E.transfer(pq, sd, CT, alice, bob, E.ZERO32, 10, True, "pqOT op 1 alice→bob 10, verdict by the deployer")
     nxt = E.pad(s3.addr)
-    t0 = int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16)
-    router_op("mtxPqzSetVerifier", T_SET, [tt, nxt], ["address", "bytes32"], "pqOT mtxPqzSetVerifier(key 3): the proposal")
+    r = router_op("mtxPqzSetVerifier", T_SET, [tt, nxt], ["address", "bytes32"], "pqOT mtxPqzSetVerifier(key 3): the proposal")
     neg(sr.addr, router, router_op("mtxPqzSetVerifier", T_SET, [tt, nxt], ["address", "bytes32"], "", send=False),
         sel_hex("PqzVerifierNotReady(uint64)"), "pqOT the confirm before the notice ends")
-    while int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16) <= t0 + N + 1:
-        E.wait_block(int(_rpc0("eth_blockNumber", []), 16) + 1)
+    wait_eta(r, N)
     router_op("mtxPqzSetVerifier", T_SET, [tt, nxt], ["address", "bytes32"], "pqOT mtxPqzSetVerifier(key 3): the confirm after 30 s")
     E.check(E.words(E.call(tt, E.cd("pqzVerifyConfig()", [])), 4)[1] == nxt, "pqOT verifier = key 3, epoch + 1")
     E.VERIFIER[0] = s3
@@ -493,14 +497,20 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     router_op("mtxPqzRevokeVerifier", T_REVOKE, [tt], ["address"], "pqOT mtxPqzRevokeVerifier: frozen")
     neg(sd.addr, tt, calldata_with(lambda t, st, p: E.NO_VERDICT, CT, "revoked"), sel_hex("PqzVerifierRevoked()"),
         "pqOT op 1 after the revocation (every OFFCHAIN proof refused)")
-    t0 = int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16)
-    router_op("mtxPqzSetVerifier", T_SET, [tt, E.pad(sd.addr)], ["address", "bytes32"], "pqOT re-assign the deployer: proposal")
-    while int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16) <= t0 + N + 1:
-        E.wait_block(int(_rpc0("eth_blockNumber", []), 16) + 1)
+    r = router_op("mtxPqzSetVerifier", T_SET, [tt, E.pad(sd.addr)], ["address", "bytes32"], "pqOT re-assign the deployer: proposal")
+    wait_eta(r, N)
     router_op("mtxPqzSetVerifier", T_SET, [tt, E.pad(sd.addr)], ["address", "bytes32"], "pqOT re-assign the deployer: confirm")
     E.VERIFIER[0] = sd
     E.transfer(pq, sd, CT, alice, bob, E.ZERO32, 3, True, "pqOT op 1 alice→bob 3 after the re-assignment")
     E.restore(CT, "pqOT")
+
+
+def wait_eta(r, n):
+    """Until the head is past the proposal's eta (its block's timestamp + the notice `n`): a confirm's estimate runs on
+    the head's state, whose timestamp must reach eta (PqzVerifierNotReady before)."""
+    eta = int(_rpc0("eth_getBlockByNumber", [r["blockNumber"], False])["timestamp"], 16) + n
+    while int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16) <= eta:
+        E.wait_block(int(_rpc0("eth_blockNumber", []), 16) + 1)
 
 
 def standalone(a):

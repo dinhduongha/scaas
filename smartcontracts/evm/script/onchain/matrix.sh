@@ -107,6 +107,23 @@ if bad or os.environ.get("MATRIX_FAILED"):
 print(s)
 PY
 }
+# verify <after>: the verification step (verify.sh: every contract of the chain on its explorer, the completeness check)
+# after a group of the SCaaS testnet, or as the group `verify`; one line per contract
+verify() {
+  if [ "$tgt" = local ]; then say "/verify" "local, not verified (no explorer)"; row "verify-$1" "local, not verified"; return 0; fi
+  if [ "${VERIFY:-}" = none ]; then  # only an explicit VERIFY=none with its reason passes a remote target unverified
+    say "/verify" "not verified: VERIFY=none (${VERIFY_REASON:?VERIFY=none needs VERIFY_REASON})"
+    row "verify-$1" "not verified: VERIFY=none ($VERIFY_REASON)"
+    return 0
+  fi
+  sc=$SCOPE SCOPE= n0=$(wc -l < "$LOG") ve=0
+  step "/verify" "" "" env RPC_7622="$RPC" sh script/onchain/verify.sh "$tgt" || ve=1
+  SCOPE=$sc
+  tail -n +$((n0 + 1)) "$LOG" | grep -E "^\[$tgt/verify\] " || true
+  say "/verify" "after $1: $([ $ve = 0 ] && echo ok || echo FAIL) (${SECS}s)"
+  row "verify-$1" "$([ $ve = 0 ] && echo ok || echo fail)"
+  [ $ve = 0 ] || rc=1
+}
 # anvil's well-known dev keys (local only): 0 deploys, 1-3 sign
 D0=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 D1=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
@@ -259,6 +276,7 @@ for g in $GROUPS; do
       step "/$g" "$PQ_RPC" "$PQ_ADDRS" env EVM_OUT="${EVM_OUT:-out/t66b-e2e}" \
         python3 -I script/onchain/pq.py --net "$tgt" --rpc "$PQ_RPC" $o || r=1
     fi ;;
+  verify) verify verify; continue ;;
   verifiers) step "/$g" "$RPC" "" python3 -I script/onchain/verifiers.py "$tgt" "$RPC" || r=1 ;;
   views) step "/$g" "$RPC" "" python3 -I script/onchain/coverage.py views "$tgt" "$RPC" || r=1 ;;
   *) r=1; echo "unknown group $g" >> "$LOG" ;;
@@ -272,6 +290,7 @@ for g in $GROUPS; do
     say "/$g" "FAIL $(MATRIX_FAILED=1 result "$g") (${SECS}s)"
   fi
   row "$g" "$res"
+  [ "$res" = "not run" ] || [ "$tgt" = local ] || [ "$g" = verify ] || verify "$g"
 done
 STAGE=done
 python3 -I script/onchain/coverage.py table --net "$tgt" > "$OUTD/table-$tgt.txt"
