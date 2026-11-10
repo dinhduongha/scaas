@@ -236,6 +236,26 @@ client `LANE_HORIZON_S`); a node chain on a pruning family must have `max_valid_
 get no pay-once guarantee. Both conditions hold in the code today (SPECIFIED: the constant-equality tests and the
 node refusal).
 
+<a id="service-pull-families"></a><a id="NET-ALL-85"></a>**NET-ALL-85** — **A service pull on every family: one rule, each
+family's native form.** Status: **BUILT** on the EVM and Hedera for the token side, the reference service (test only) and the
+node kind (group 3i, T77–T79); **SPECIFIED** or **PLANNED** elsewhere as the table says. The contract rule is
+[CTR-MTX-32](../contracts/metatx.md#CTR-MTX-32). On every chain: the payer signs once; the authorization is bound to the
+service as executor and to one operation, runs once, and expires; the service takes exactly the signed amount; and the payer
+never pays for an operation that did not happen (on the asynchronous families an explicit refund).
+
+| Family | Native form (the executor binding) | Today | Status |
+|---|---|---|---|
+| EVM | `mtxExecuteTransfer`, `relayer == msg.sender` | possible, atomic | token BUILT; rule BUILT as the reference service (test only) and the node kind |
+| Hedera | the same bytecode | possible, atomic | as EVM (the 64-byte HIP-632 payer tested, T77) |
+| Soroban | a native holder's auth tree rooted at `S.op(args)` with `token.pay(…, pay_ref = op digest, …)` as a sub-invocation; a UA holder `ua_pay(…, relayer = Some(S), auth)` | possible, atomic | SPECIFIED; built in a Soroban round |
+| NEAR | `mtx_execute_transfer(op, auth)` with `op.relayer = S`; the transfer a separate receipt, S refunds in its callback | possible, asynchronous | SPECIFIED; PLANNED with `ua-near` |
+| Algorand | an inner app call `mtx_execute_transfer` (never `mtx_pay`) with `relayer == Txn.sender`, S's app address | possible, atomic | SPECIFIED; PLANNED with `ua-algorand` |
+| Solana | a CPI to `relay_pay` with S's PDA as the `lane` signer; not through the relay-fee router (inference) | possible by direct CPI | PLANNED |
+| TON | a `SignedOp` to the payer's jetton wallet with `relayer == sender`, S; the digest in `pay_ref` | possible, asynchronous; node paths blocked ([NET-TON-14](ton.md#NET-TON-14)) | PLANNED |
+| Cosmos | `ExecuteMsg::Relay{payload, auth}` op `pay`, `relayer == info.sender`, by submessage | possible, atomic | PLANNED |
+| Sui | not possible with today's package (`relayer == ctx.sender()`) | no | PLANNED; needs a token change in its round |
+| Aptos | not possible with today's package (`relay_pay` is a `package entry fun`) | no | PLANNED; needs a token change in its round |
+
 ## 4. Signing domains
 
 <a id="signing-domains"></a>
@@ -260,13 +280,21 @@ nonce, so a signature from a test network or another chain is worthless elsewher
 
 <a id="chain-identity"></a><a id="NET-ALL-22"></a>**NET-ALL-22** — **A chain is identified by `(chain_key,
 chain_uid)`, never by its chain id alone (the chain key resolves to the chain id, so `(chain_key, chain_uid)` and `(chainId, chain_uid)` name the same pair), and `chain_uid` is the `salt` of every SCaaS signing domain.** `chain_uid`
-(`bytes32`, `≠ 0`) is the chain's genesis block hash as its RPC reports it (EVM, Hedera). On EVM and Hedera it is a
-**constructor immutable**, exposed as `chainUid()`, of every SCaaS contract that checks a signature or binds a
-digest to a chain — token implementations (a clone runs its implementation's code, so it uses the implementation's
-value and cannot declare another), the factory (which registers only implementations with its own value), the subject
-account factory, mandate wallets, the DEX and the Universal Account registry — and it is the `salt` of every SCaaS
-EIP-712 domain: `(name, version, chainId, verifyingContract, salt = chain_uid)`, ERC-5267 `eip712Domain()` fields
-`0x1f`.
+(`bytes32`, `≠ 0`) is the chain's genesis block hash as its RPC reports it (EVM, Hedera). On EVM and Hedera every SCaaS
+contract that checks a signature or binds a digest to a chain exposes it as `chainUid()`, from one of two sources, the same on
+every chain (Change 2026-11-07, owner; chain-neutral releases, [CTR-TOK-29](../contracts/token-wrappers.md#CTR-TOK-29)):
+
+- **Factory-made contracts and the factory** are chain-neutral bytecode at the same address on every chain. The factory's
+  `chain_uid` is written once by its registrar after the deterministic deploy (`configureChain`) and must equal the genesis
+  hash whenever the EVM can still prove it (`BLOCKHASH(0)`, EIP-2935), in a transaction tied to this chain by a reference
+  block hash whenever the chain can answer for it; every token, DEX and generic instance carries the factory's value in its
+  own code, appended by the factory when it is created, and the factory refuses an instance that reports another. An
+  implementation carries none (`chainUid()` = 0) and cannot sign.
+- **Every other SCaaS contract** (the Universal Account registry, the governance router, the subject account factory and its
+  accounts, mandate wallets) takes it as a constructor immutable, and so has a different address on each chain.
+
+It is the `salt` of every SCaaS EIP-712 domain: `(name, version, chainId, verifyingContract, salt = chain_uid)`, ERC-5267
+`eip712Domain()` fields `0x1f`.
 
 It is also bound into the `metatx-cancel` digest (the registry's proof of possession is portable since UA-8 and carries no
 chain, [CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) and into the confidential token's statement, envelope, rollover,
@@ -280,10 +308,15 @@ fail; it is unsafe only if it equals another chain's `chain_uid`, which that com
 honest contracts on two chains sharing a chain id (7622 or any other) never accept each other's signatures, whichever
 wallet produced them. A replica deployed elsewhere from a copy of our profile is trusted by nothing of ours: tokens
 bind the registry address at `initialize`, and the node binds every contract's `chainUid()` and the RPC's genesis hash
-per chain profile and refuses a mismatch. Because contracts are deployed through a CREATE2 deployer with a fixed salt
-([NET-EVM-05](evm.md#NET-EVM-05)), a contract whose constructor takes `chain_uid` — and every clone made from it — has
-a **different address on each chain**, so a user's subject account does too; a contract with no chain-specific
-constructor argument has the same address everywhere.
+per chain profile and refuses a mismatch. On a chain id shared by several live chains the factory is configured on each
+of them before any other registrar transaction there, so a replayed configuration cannot bind one to the other's
+`chain_uid`; on the factory a wrong value is permanent for the canonical address on that chain, so the gate dry-runs it
+first. **Addresses.** Contracts are deployed through a CREATE2 deployer with a fixed salt ([NET-EVM-05](evm.md#NET-EVM-05)):
+a contract whose constructor takes `chain_uid` has a **different address on each chain**, so a user's subject account does
+too; the factory, its libraries and the releases have the same address everywhere. An instance's address depends only on the
+factory, the creator's UA id, the class, the kind and the salt (CREATE3), so a creator has the same token, DEX or instance
+address on every chain; the address says nothing about the version, the code or the configuration on a given chain, which
+are read per chain.
 
 Safety does not rest on the address: the salt is in every
 digest. Limit: a genesis hash does not separate the two branches of a fork, which share genesis
@@ -292,10 +325,8 @@ exposes it (Soroban network id, Solana genesis hash), else a chain-profile const
 ([NET-ALL-26](#NET-ALL-26)). Hedera:
 the relay's block-0 hash, fixed only once it is confirmed stable across mirror-node and relay restarts
 ([hedera.md#payload](hedera.md#payload)). Why: chain ids are a registry convention, not unique — 9000 is also Evmos
-Testnet, which is why the private chain moved to the SCaaS testnet ([NET-EVM-02](evm.md#NET-EVM-02)). Transitional (BUILT): only
-the Universal Account registry and the UA meta-transaction domain carry `chain_uid`; deployed tokens, the factory,
-subject accounts, mandate wallets and the DEX sign with `(name, version, chainId, verifyingContract)` and are
-deployed with CREATE, until the salted contracts replace them (nothing is deployed outside test chains).
+Testnet, which is why the private chain moved to the SCaaS testnet ([NET-EVM-02](evm.md#NET-EVM-02)). Status: the two sources BUILT on branch `ua-mtx-merge` (T71–T74; the factory's
+`configureChain`, the env appended to each clone's code, CREATE3 on every creation path).
 
 <a id="chain-profile"></a><a id="NET-ALL-24"></a>**NET-ALL-24** — **A chain profile carries the chain's `chain_uid`
 and its list of SCaaS DEX contracts.** Status: **SPECIFIED**. Every EVM and Hedera chain profile — the node's chain row
@@ -313,6 +344,9 @@ client takes both values from its own pinned profile (built in, or pinned by the
 `/v1/gateway` answer only to detect a disagreement, never as the source. Why: the token requires only that a trade
 order's `dex` is a contract (owner, 2026-10-08), so the list of genuine DEXes has to live where the signer and the
 relayer can check it. Cost: a new DEX reaches users only with a profile update.
+Change (2026-11-09, group 3i): a chain profile also lists its services, the `chain_contract` rows of kind `service` (the
+node's `[[chains.services]]` today, [NODE-JOB-25](../node/job-api.md#NODE-JOB-25)), advisory as the DEX list is: a client
+warns for a service off the list.
 
 <a id="chain-forks"></a><a id="NET-ALL-25"></a>**NET-ALL-25** — **A chain we run that forks becomes a new chain, and
 no two chain profiles share a genesis hash.** Owner ruling 2026-10-08. Two branches of a fork share their genesis

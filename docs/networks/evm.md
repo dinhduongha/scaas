@@ -101,7 +101,7 @@ Parameters:
 | Block gas limit | 200,000,000 from genesis (`0xbebc200`, reset 2026-10-22, owner; `TargetBlockGasLimit` 200 M); 16,777,216 before. Per tx: regular gas ≤ 2^24 (EIP-7825), node `max_gas_per_tx` 64 M (owner 2026-10-22) |
 | Finality | depth 1, quorum 1 (single-provider trust, reported as such) |
 | Classical Zether | open (EIP-2537 live, [CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-52), owner ruling 2026-10-31); **deployed 2026-10-31** with `DEPLOY_ZETHER=1` as part of the salt-v2 set (`DEPLOY_SALT` = `keccak256("scaas.deploy.v2")`: UA registry with `zether-bls12381`, OpenFactory with `NORMAL_ZETHER` / `WRAPPED_ZETHER` enabled), e2e passed; addresses and re-run steps in the [RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md#zether-on-the-scaas-testnet-executed-2026-10-31). The phase C set of the same day (salt v1, registry without `zether-bls12381`) is superseded, kept on chain |
-| Post-quantum Zether | the only PQZ chain: `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012`, `MLDSA65` `…0013` from the plugin in image `scaas/nethermind-pqz:1.39.0-pqz1` (local, never pushed), chainspec `engine.Pqz` ([chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)) |
+| PQZ | `PRECOMPILE` tokens: the only chain with the `PQZ`, `MLDSA44` and `MLDSA65` precompiles, from the plugin `Nethermind.Pqz`, chainspec `engine.Pqz` (addresses and image: [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10), [chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)). `OFFCHAIN` tokens ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)) need no precompile and run here as on any EVM chain |
 
 Operator trap, measured on the earlier chain: **a Nethermind chainspec silently ignores Geth-style keys.** With
 `pragueBlock: 0` (and `londonBlock`, `cancunBlock`) in Geth form, the chain ran pre-London without a warning: the
@@ -197,6 +197,28 @@ version needs a new salt or new code). On the SCaaS testnet the deployer is in t
 `0x4e59b44847b379578588920cA78FbF26c0B4956C` from its 2026-10-31 reset (its keyless pre-EIP-155 deploy transaction, a
 fixed 100,000 gas, cannot pay Amsterdam's code-deposit state gas). The same alloc is proposed for mainnet 22776; the
 owner decides at the 22776 launch.
+
+**Change (2026-11-07, owner; chain-neutral releases, [CTR-TOK-29](../contracts/token-wrappers.md#CTR-TOK-29),
+[NET-ALL-22](README.md#NET-ALL-22)):** the deterministic deployer is a requirement of every chain (the SCaaS mainnet's genesis
+alloc included). The factory (constructor `(registrar)` only; `configureChain` writes its `chain_uid` once), its libraries,
+the body modules and the releases are chain-neutral and land at the same address on every chain; only contracts with a
+`chain_uid` constructor (the UA registry, the governance router, `SmartKeyAccountFactory`, mandate wallets) differ per chain.
+The release list `releases.json` (`RELEASES_JSON`; `RELEASES_WRITE=true` writes it from the first chain) pins every factory,
+library, module, release and the registrar by address and code hash: a later chain's deploy refuses any row that differs,
+and on a chain id that `chain-uids.json` lists more than once the registrar's run stops after `configureChain` until the
+siblings are configured. Status: **BUILT** on branch `ua-mtx-merge` (T71–T74, `test/v2/ChainNeutral.t.sol`,
+`ChainNeutralFactory.t.sol`; `DeployBase` writes and checks the list).
+
+<a id="pqz-offchain-releases"></a>**PQZ releases for `OFFCHAIN` tokens** (group 3f; contracts and the deploy form BUILT, T44 +
+T45 `2cce490d`). On a chain where `PqzKeyVerifier` cannot be deployed (no `PQZ` precompile, so its constructor self-test
+fails) a PQZ release takes `env.deps = [0]`: only `OFFCHAIN` tokens initialize on it, a `PRECOMPILE` one refuses
+`SelfTestFailed(address(0))` ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)). The PQZ releases are deployed by
+`script/pqz/e2e.py`, whose zero-dep form is `--zero-dep` (the registry's `PqzKeyVerifier` is still deployed for the
+registration proofs). The chain must still take the code and the deploy gas of the PQZ kinds and their body modules
+([NET-EVM-06](#NET-EVM-06), the [module releases](#body-module-releases)), so a public chain runs them only after its own
+Glamsterdam fork. Hedera is refused in both modes. A PQZ key rotation ([CTR-UA-42](../contracts/accounts.md#CTR-UA-42)) stores
+the new version's proof by `storePqzPop`, which at `n2816-kmax65536` sits at the 60 M ceiling: a chain at that set with a 60 M
+block cannot rotate (a 60 M chain is in practice an `n2304-kmax4096` chain).
 
 <a id="NET-EVM-06"></a>**NET-EVM-06** — **Every Foundry profile compiles for the `amsterdam` EVM: every chain that runs these contracts
 requires Glamsterdam, and a public chain is deployed only after its own fork.** Owner ruling 2026-10-21; status **BUILT**.
@@ -482,6 +504,8 @@ state a pruned node lacks. Topology, enodes, start / stop order and recovery: [R
 - Public profiles stay `draft` until their finality gate is measured and an RPC quorum ≥ 2 is configured.
 - The SCaaS testnet has one signer and one RPC provider (the node's quorum is 1); its threat profile is in
   [NET-EVM-04](#NET-EVM-04).
+- PQZ `PRECOMPILE` tokens run only on the SCaaS testnet; `OFFCHAIN` tokens run wherever the code and deploy gas fit, under the
+  trust model of [CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27).
 
 ## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
 

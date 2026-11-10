@@ -335,7 +335,9 @@ Classical Zether never runs on Hedera: HSCS has the bn254 precompiles (`0x06`–
 and classical Zether is BLS12-381 only ([CTR-ZTH-32](../contracts/zether.md#CTR-ZTH-32); the bn254 line is legacy,
 `smartcontracts/evm/legacy/ua6/`). `ZetherLayer` refuses a Hedera env, `DEPLOY_ZETHER` a Hedera deploy, and the Hedera
 registry gets no `zether-bls12381` ([CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-52)). PQZ never runs on Hedera either
-(`PqzLayer` refuses a Hedera env; HSCS has no `PQZ` precompile).
+(`PqzLayer` refuses a Hedera env; HSCS has no `PQZ` precompile), in both verifier modes: the refusal is the release flag
+`env.hedera`, independent of `pqzVerifyMode`, a retained exception to the one-rule wording of the verifier mode until a later
+Hedera item ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)).
 
 ## <a id="conformance"></a>9. Conformance
 
