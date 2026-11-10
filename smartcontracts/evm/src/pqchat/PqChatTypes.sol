@@ -23,7 +23,7 @@ library PqChatTypes {
     bytes32 internal constant LEAVE_TYPEHASH =
         keccak256("PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)");
     bytes32 internal constant MESSAGE_TYPEHASH = keccak256(
-        "PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,uint32 device,uint64 counter,bytes32[] parents,"
+        "PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,"
         "bytes ciphertext)");
     bytes32 internal constant TOPIC_TYPEHASH = keccak256(
         "PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies)");
@@ -148,7 +148,7 @@ library PqChatTypes {
         return keccak256(abi.encode(SCOPE_EPOCH, sessionId_, author));
     }
 
-    function scopeMessage(bytes32 epochId_, bytes32 sender, uint32 device) internal pure returns (bytes32) {
+    function scopeMessage(bytes32 epochId_, bytes32 sender, bytes16 device) internal pure returns (bytes32) {
         return keccak256(abi.encode(SCOPE_MESSAGE, epochId_, sender, device));
     }
 

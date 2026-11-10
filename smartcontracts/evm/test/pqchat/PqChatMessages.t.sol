@@ -20,10 +20,15 @@ contract PqChatMessagesTest is PqChatBase {
         msgs = vm.readFile("../vectors/pqchat/messages.json");
     }
 
-    function _msg(bytes32 sender, uint32 device, uint64 counter, uint256 size)
+    /// A fixed device id from `n` (owner 2026-11-10: a 16-byte UUID the device makes, v7 or v4; nothing checks its bits).
+    function _dev(uint8 n) internal pure returns (bytes16) {
+        return bytes16(keccak256(abi.encode("device", n)));
+    }
+
+    function _msg(bytes32 sender, uint8 dn, uint64 counter, uint256 size)
         internal view returns (IPqChat.PqChatMessage memory m)
     {
-        (m.sessionId, m.epochId, m.sender, m.device, m.counter) = (sid, sid, sender, device, counter);
+        (m.sessionId, m.epochId, m.sender, m.device, m.counter) = (sid, sid, sender, _dev(dn), counter);
         m.parents = _list(keccak256("head a"), keccak256("head b"));
         m.ciphertext = new bytes(size);
         for (uint256 i; i < size; i += 32) m.ciphertext[i] = bytes1(uint8(i >> 5));
@@ -54,7 +59,7 @@ contract PqChatMessagesTest is PqChatBase {
         assertEq(keccak256(abi.encode(stored)), keccak256(abi.encode(m)), "header and ciphertext in state");
         assertEq(eventSigHash, sigHash, "the event's bytes hash to the stored hash");
         assertEq(sigHash, keccak256(abi.encode(sig)));
-        assertTrue(chat.nonceUsed(PqChatTypes.scopeMessage(sid, m.sender, 7), 0));
+        assertTrue(chat.nonceUsed(PqChatTypes.scopeMessage(sid, m.sender, _dev(7)), 0));
     }
 
     /// The last `PqChatMessagePosted`'s topics checked; the hash of its signature's bytes.
@@ -98,10 +103,24 @@ contract PqChatMessagesTest is PqChatBase {
         _post(chat, _msg(ids[1], 1, 0, 32));
         _post(chat, _msg(ids[1], 2, 0, 32)); // another device, the same counter
         _refusedPost(_msg(ids[1], 1, 0, 33), abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector,
-            PqChatTypes.scopeMessage(sid, ids[1], 1), uint64(0)));
+            PqChatTypes.scopeMessage(sid, ids[1], _dev(1)), uint64(0)));
         _post(chat, _msg(ids[1], 1, 5, 32));
         _post(chat, _msg(ids[1], 1, 4, 32)); // 5 before 4
         assertEq(chat.messageCount(sid), 4);
+    }
+
+    /// Owner 2026-11-10 (P6): the device id is 16 opaque bytes; no version or variant bit is checked, so a v7, a v4, the
+    /// zero id and an id of no UUID shape all post, and two ids that differ only in the version nibble are two scopes.
+    function test_postMessage_deviceIdNeverParsed() public {
+        bytes16[5] memory d = [bytes16(0x0190f5c0a1e07000800000000000d0c5), bytes16(0x3b2f6c1e9d4a4c7e8f1a2b3c4d5e6f70),
+            bytes16(0), bytes16(type(uint128).max), bytes16(0x0190f5c0a1e04000800000000000d0c5)];
+        for (uint256 i; i < d.length; ++i) {
+            IPqChat.PqChatMessage memory m = _msg(ids[1], 1, 0, 32);
+            m.device = d[i];
+            _post(chat, m);
+            assertTrue(chat.nonceUsed(PqChatTypes.scopeMessage(sid, ids[1], d[i]), 0));
+        }
+        assertEq(chat.messageCount(sid), 5, "counter 0 on each of the five ids");
     }
 
     function test_postMessage_forgedBurnsNoNonce() public {
@@ -109,7 +128,7 @@ contract PqChatMessagesTest is PqChatBase {
         IUARegistry.UASig memory forged = _sig(ids[2], h.message(m));
         vm.expectRevert(_unauthorized(ids[1]));
         chat.postMessage(m, forged);
-        assertFalse(chat.nonceUsed(PqChatTypes.scopeMessage(sid, ids[1], 1), 9));
+        assertFalse(chat.nonceUsed(PqChatTypes.scopeMessage(sid, ids[1], _dev(1)), 9));
         _post(chat, m);
     }
 

@@ -175,10 +175,15 @@ An MLS group or an off-chain ratchet for 1:1 is the later step (D6),
 not in this version.
 
 **P6 — Devices** (D9). One KEM key and one signing key per UA, shared by its devices; every device has a **device id**
-(`uint32`, random, unique within the UA, assigned by an existing device at linking) that enters every sender derivation,
-counter and nonce scope (§6.3, §4.3). **Linking** is off chain: the new device shows a fresh ephemeral ML-KEM-1024 + X25519
-key and a short code (QR); the existing device checks the code, encapsulates to that key and sends the UA's secrets, the
-device id and the current epoch keys over a store of the session (P27) or a local channel. Per-device KEM keys (`keyId` per device, CTR-UA-32
+that enters every sender derivation, counter and nonce scope (§6.3, §4.3). Change (owner 2026-11-10; BUILT on
+`ua-mtx-merge`, plan 3c): device id: a 16-byte UUID (`bytes16`), v7 or v4 at the client's choice; nothing checks its
+version or variant bits (was a `uint32` assigned by an existing device). The device makes it when it is linked or
+restored; a restored device always makes a new one, with no collision check on restore (122 random bits). The contract
+never parses it; it is an input of the nonce scope, the ratchet and `messageId`. Its cost, plainly: on `postMessage` the id
+is public, so a v7 id makes the device's creation time (in milliseconds) public, while a v4 id hides it; on `storeMessage`
+(and every other store) it stays inside the envelope either way. **Linking** is off chain: the new device shows a fresh
+ephemeral ML-KEM-1024 + X25519 key and a short code (QR); the existing device checks the code, encapsulates to that key and
+sends the UA's secrets and the current epoch keys over a store of the session (P27) or a local channel. Per-device KEM keys (`keyId` per device, CTR-UA-32
 "later") come later and change no layout.
 
 ## 4. Records
@@ -200,7 +205,7 @@ minimal form, CTR-UA-07). The contract verifies it through the registry's portab
 | `PqChatSession` | `PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
 | `PqChatEpoch` | `PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
 | `PqChatLeave` | `PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)` |
-| `PqChatMessage` | `PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,uint32 device,uint64 counter,bytes32[] parents,bytes ciphertext)` |
+| `PqChatMessage` | `PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext)` |
 
 ### 4.2 Fields
 
@@ -390,7 +395,7 @@ child of it.
 ```text
 pt         = pad(canonical JSON content, §6.5)        content: {"type": "text" | "edit" | "redact" | "react" | "receipt" |
                                                                 "typing" | "file" | "callKey" | ..., fields per type}
-aad        = abi.encode(sessionId, epochId, sender, device, counter, keccak256(abi.encode(parents)))
+aad        = abi.encode(sessionId, epochId, sender, device, counter, keccak256(abi.encode(parents)))   device: bytes16 (P6)
 ciphertext = AES-256-GCM-SIV(mk_i, n_i, pt, aad)
 ```
 

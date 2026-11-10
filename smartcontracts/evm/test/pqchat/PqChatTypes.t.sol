@@ -32,7 +32,7 @@ contract PqChatTypesTest is Test {
         assertEq(PqChatTypes.SESSION_TYPEHASH, 0xf7feab992d33b04a998655786b28fde03f83b25d51d155746127927fa43d71dd);
         assertEq(PqChatTypes.EPOCH_TYPEHASH, 0x00b07f15a60f8d4960c9262ffd3a307a3f2f2e790bcbc65911b4630ad0d2888c);
         assertEq(PqChatTypes.LEAVE_TYPEHASH, 0xe68d65ceec0d13ce4006e86e03cca815b44ff94ced5a2aa4b7244abf7502eea1);
-        assertEq(PqChatTypes.MESSAGE_TYPEHASH, 0x89b7ecd529b23df420ab952a119254e1e7d312d3dbb94ddeb4a71351ea78a0cc);
+        assertEq(PqChatTypes.MESSAGE_TYPEHASH, 0x349de860a0acd15c1b2ae96700e016e101442568a7913e01678d4b64dbcdc27c);
         assertEq(PqChatTypes.MEMBER_KEY_TYPEHASH, _th(rec, "MemberKey"));
         assertEq(PqChatTypes.WRAP_TYPEHASH, _th(rec, "Wrap"));
         assertEq(PqChatTypes.SESSION_TYPEHASH, _th(rec, "PqChatSession"));
@@ -148,7 +148,7 @@ contract PqChatTypesTest is Test {
         m.sessionId = _b32(rec, string.concat(p, ".sessionId"));
         m.epochId = _b32(rec, string.concat(p, ".epochId"));
         m.sender = _b32(rec, string.concat(p, ".sender"));
-        m.device = uint32(vm.parseJsonUint(rec, string.concat(p, ".device")));
+        m.device = bytes16(vm.parseJsonBytes(rec, string.concat(p, ".device")));
         m.counter = _u64(rec, string.concat(p, ".counter"));
         m.parents = vm.parseJsonBytes32Array(rec, string.concat(p, ".parents"));
         m.ciphertext = vm.parseJsonBytes(rec, string.concat(p, ".ciphertext"));

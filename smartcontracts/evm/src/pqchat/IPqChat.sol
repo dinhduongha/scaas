@@ -61,7 +61,7 @@ interface IPqChat {
         bytes32 sessionId;
         bytes32 epochId;
         bytes32 sender;
-        uint32 device;
+        bytes16 device; // a 16-byte UUID, v7 or v4 at the client's choice, never parsed (owner 2026-11-10, P6)
         uint64 counter;
         bytes32[] parents;
         bytes ciphertext;
