@@ -1,0 +1,8 @@
+ua-mtx-3r (round 3r, owner rulings 2026-11-10, CTR-GOV-23): admin, not owner. OpenFactory keeps no owner information (R1), UA
+admins for OpenFactory, ComplianceRegistry and its attesters (R2, Q5), `owner` becomes `admin` on the 12 token kinds, the DEX and
+PqTopic (R3), release approvals and open deploys (§5.6), OpenFactory as the chain's directory (§13). Spec
+docs/superpowers/specs/2026-11-10-admin-not-owner.md. Base ua-mtx-merge at 349c90b5. Steps by gates.sh here; full output in the
+git-ignored <step>.log beside this file (a red first run kept as <step>.red.log). Foundry 1.8.5, solc 0.8.37, Amsterdam, default
+PQZ set n2304-kmax4096; every heavy run through scripts/capped (4 GB; the node 6 GB), one at a time. UNAUDITED.
+
+step | commit | rc | counts
