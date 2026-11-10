@@ -303,8 +303,8 @@ breaker per `(from, selector)` covers repeat offenders ([node/submit-lanes.md](.
 <a id="named-entries"></a>
 <a id="CTR-MTX-28"></a>**CTR-MTX-28** — **A named entry per operation: the signed struct is `from` + the operation's own explicit parameters + the envelope** (owner option B,
 2026-10-31: "a named entry point per operation, everything explicit"; shapes controller call, owner may override). Status: **BUILT** (typed-signing C2 base and public
-tokens, C3 Zether, C4 PQZ, C5 wallets, C6 trade / DEX / fees; the node builds them since N1). Every operation that was allowlisted for `mtxExecute` gets
-`mtx<Op>(MetaTxLib.Envelope e, <explicit op parameters>, bytes sig)` and, where it was UA-allowed, `ua<Op>(MetaTxLib.UAEnvelope e, <parameters>, UASig auth)`:
+tokens, C3 Zether, C4 PQZ, C5 wallets, C6 trade / DEX / fees; the node builds them since N1). Every operation that was allowlisted for `mtxExecute` gets one entry `mtx<Op>`: since the merge
+([CTR-MTX-30](../decisions.md#CTR-MTX-30)) `mtx<Op>(MetaTxLib.UAEnvelope e, <explicit op parameters>, UASig auth)`, or, for an entry with no id form (the wraps), `mtx<Op>(MetaTxLib.Envelope e, <parameters>, bytes sig)`:
 
 ```solidity
 struct Envelope   { address from; uint256 batch; uint256 nonce; uint256 validUntil; uint32 mode; address relayer; uint256 fee; address feeRecipient; }
@@ -320,9 +320,9 @@ struct UAEnvelope { bytes32 from; /* the same seven fields */ }
 - **Mechanism.** `MtxPipelineLib.preNamed` (`preNamedUA` for a `UASig`) hashes the struct, runs steps 1-4 of [CTR-MTX-17](#CTR-MTX-17), and the entry builds the operation's call and runs
   the existing ticket self-call (`_selfCall`), fee after the call, then the event: the operation bodies and `_msgSender()` semantics are unchanged, and the nonce lane is the generic
   path's (`(from, batch)`, one lane, so one signature runs once through either entry).
-- **Names.** Entry = `mtx` / `ua` + struct name. Where the operation function already carries that name (`mtxShield`, `mtxConfidentialTransfer*`, `mtxUnshield*`, `mtxRollOver`,
-  `mtxPrepareAcc`, `mtxWrapShield`), the signed entry is an overload whose first parameter is `Envelope` (distinct selector; owner: open question 2 default). The wrap-by-signature entries
-  are `mtxWrapOrder` / `uaWrapOrder`, so `mtxWrap(Envelope, uint256 amount, bytes sig)` is the named entry of `wrap(uint256)` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)).
+- **Names.** Entry = `mtx` + the operation's name, one per operation; the struct is `<Op>` for an `Envelope` entry and `UA<Op>` for a `UAEnvelope` entry (`UAUnwrap` signs `mtxUnwrap`). Where the operation function already carries that name (`mtxShield`, `mtxConfidentialTransfer*`, `mtxUnshield*`, `mtxRollOver`,
+  `mtxPrepareAcc`, `mtxWrapShield`), the signed entry is an overload whose first parameter is the envelope, `UAEnvelope` since the merge (distinct selector; owner: open question 2 default). The wrap-by-signature entries
+  are `mtxWrapOrder` (one entry, `UAWrapOrder` + `UASig`), so `mtxWrap(Envelope, uint256 amount, bytes sig)` is the named entry of `wrap(uint256)` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)).
 - **Signatures.** Since the `ua*` / `mtx*` merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)) every signed entry on tokens, the router and the mandate wallets takes `UASig`
   (`{keyData, signature, members}`, [CTR-UA-36](accounts.md#CTR-UA-36)), the generic `mtxExecute(UAMetaTransaction, UASig)`, `mtxBatch(UAMetaTransaction[], UASig[])` and
   `mtxShield(…, UASig)` included (the merge reverses the `bytes auth` these kept as `uaExecute` / `uaBatch` / `uaShield`); a native id's `UASig` has empty `keyData` and
