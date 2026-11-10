@@ -178,21 +178,21 @@ interface INormalRegulatedTokenAbi {
 
 /// @title NormalRegulatedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
 ///        ledger and the identity views (`NormalRegulatedTokenCore`); every other entry forwards its calldata to the module of its group by
-///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, W wrapped and regulated). UNAUDITED.
+///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, R regulated). UNAUDITED.
 contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedTokenAbi {
     address private immutable _MP;
     address private immutable _MT;
     address private immutable _MA;
-    address private immutable _MW;
+    address private immutable _MR;
 
-    /// @param implArgs `abi.encode(RegulatedImplArgs(...))`: the modules in the order P, T, A, W (`modules()`).
+    /// @param implArgs `abi.encode(RegulatedImplArgs(...))`: the modules in the order P, T, A, R (`modules()`).
     constructor(address factory_, bytes memory implArgs) NormalRegulatedTokenCore(factory_, _coreArgs(implArgs)) {
         RegulatedImplArgs memory a = abi.decode(implArgs, (RegulatedImplArgs));
         if (a.modules.length != 4) revert ModuleMissing(a.modules.length);
         _MP = _module(a.modules, 0, 1);
         _MT = _module(a.modules, 1, 2);
         _MA = _module(a.modules, 2, 3);
-        _MW = _module(a.modules, 3, 4);
+        _MR = _module(a.modules, 3, 12);
     }
 
     function _coreArgs(bytes memory implArgs) private pure returns (bytes memory) {
@@ -216,7 +216,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
         if (g == 1) return _MP;
         if (g == 2) return _MT;
         if (g == 3) return _MA;
-        return _MW;
+        return _MR;
     }
 
     function _modulePure(uint8 g) private pure returns (address m) {
@@ -230,7 +230,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
 
     function modules() external view returns (address[] memory m) {
         m = new address[](4);
-        (m[0], m[1], m[2], m[3]) = (_MP, _MT, _MA, _MW);
+        (m[0], m[1], m[2], m[3]) = (_MP, _MT, _MA, _MR);
     }
 
     function GOV_ROUTER() external view returns (address _p0) {
@@ -250,7 +250,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
     }
 
     function canReceive(bytes32) external view returns (bool ok, uint8 reason) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function cancelGrant(uint8, bytes32) external {
@@ -274,7 +274,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
     }
 
     function disableFeature(uint8) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function eip712Domain() external view returns (bytes1 _p0, string memory _p1, string memory _p2, uint256 _p3, address _p4, bytes32 _p5, uint256[] memory _p6) {
@@ -290,15 +290,15 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
     }
 
     function forceTransfer(bytes32, uint256) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function freeze(bytes32, bytes32, bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function freezeOf(bytes32) external view returns (IRegulatedToken.FreezeState memory _p0) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function grantDelay() external view returns (uint64 _p0) {
@@ -330,7 +330,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
     }
 
     function isFrozen(bytes32) external view returns (bool _p0) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function lastProposedAt() external view returns (uint64 _p0) {
@@ -438,11 +438,11 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
     }
 
     function operatorTransfer(bytes32, bytes32, uint256, bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function order(bytes32) external view returns (IRegulatedToken.OrderRecord memory _p0) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function owner() external view returns (bytes32 _p0) {
@@ -450,7 +450,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
     }
 
     function pause(bytes32, uint64) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function payLane(bytes32) external pure returns (uint256 _p0) {
@@ -494,11 +494,11 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
     }
 
     function recordOrder(bytes32, bytes32, bytes32, bytes32, uint256, uint64) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function regulatedConfig() external view returns (IRegulatedToken.RegulatedConfig memory _p0) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function renounceOwnership() external {
@@ -522,7 +522,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
     }
 
     function revokeOrder(bytes32, bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function revokeRole(uint8, bytes32) external {
@@ -566,11 +566,11 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
     }
 
     function unfreeze(bytes32, bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function unpause(bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function validBits() external pure returns (uint256 _p0) {

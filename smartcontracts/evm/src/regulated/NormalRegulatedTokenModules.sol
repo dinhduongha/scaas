@@ -473,15 +473,15 @@ contract NormalRegulatedTokenA is NormalRegulatedTokenCore {
     }
 }
 
-/// @title NormalRegulatedTokenW: the body module W of NormalRegulatedToken (wrapped and regulated; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
+/// @title NormalRegulatedTokenR: the body module R of NormalRegulatedToken (regulated; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
-contract NormalRegulatedTokenW is NormalRegulatedTokenCore {
+contract NormalRegulatedTokenR is NormalRegulatedTokenCore {
     /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) NormalRegulatedTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
-        return 4;
+        return 12;
     }
 
     function canReceive(bytes32 account) external view onlyDelegated returns (bool ok, uint8 reason) {

@@ -1,5 +1,5 @@
 {
- "_comment": "T66b \u00a74.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures. Liquidity spec 2026-11-10 (re-check P3): module T of every kind also makes one STATICCALL to its caller (T7, `liquidityOrderDigest`, capped, one word read), which M5 allows; the DEX liquidity module SCaaSDexLiquidityModule makes no DELEGATECALL.",
+ "_comment": "T66b \u00a74.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures. Liquidity spec 2026-11-10 (re-check P3): module T of every kind also makes one STATICCALL to its caller (T7, `liquidityOrderDigest`, capped, one word read), which M5 allows; the DEX liquidity module SCaaSDexLiquidityModule makes no DELEGATECALL. Owner 2026-11-10 (CTR-TOK-30's Change, group 3p): the W of 8, 10, 12 renamed R and the Q2 of 5, 13 renamed S, their figures unchanged; 9, 11, 13 split W into W and R: W [26, 0] -> [21, 0] on 9, [26, 0] -> [21, 0] on 11, [26, 0] -> [21, 0] on 13, R [8, 0] on each (measured by runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol).",
  "NormalTokenP": [
   2,
   0
@@ -100,7 +100,7 @@
   21,
   0
  ],
- "WrappedPqzTokenQ2": [
+ "WrappedPqzTokenS": [
   8,
   0
  ],
@@ -116,7 +116,7 @@
   9,
   0
  ],
- "NormalRegulatedTokenW": [
+ "NormalRegulatedTokenR": [
   7,
   0
  ],
@@ -133,7 +133,11 @@
   0
  ],
  "WrappedRegulatedTokenW": [
-  26,
+  21,
+  0
+ ],
+ "WrappedRegulatedTokenR": [
+  8,
   0
  ],
  "NormalZetherRegulatedTokenP": [
@@ -148,7 +152,7 @@
   12,
   0
  ],
- "NormalZetherRegulatedTokenW": [
+ "NormalZetherRegulatedTokenR": [
   7,
   0
  ],
@@ -169,7 +173,11 @@
   0
  ],
  "WrappedZetherRegulatedTokenW": [
-  26,
+  21,
+  0
+ ],
+ "WrappedZetherRegulatedTokenR": [
+  8,
   0
  ],
  "WrappedZetherRegulatedTokenZ": [
@@ -188,7 +196,7 @@
   10,
   0
  ],
- "NormalPqzRegulatedTokenW": [
+ "NormalPqzRegulatedTokenR": [
   7,
   0
  ],
@@ -209,14 +217,18 @@
   0
  ],
  "WrappedPqzRegulatedTokenW": [
-  26,
+  21,
+  0
+ ],
+ "WrappedPqzRegulatedTokenR": [
+  8,
   0
  ],
  "WrappedPqzRegulatedTokenQ": [
   18,
   0
  ],
- "WrappedPqzRegulatedTokenQ2": [
+ "WrappedPqzRegulatedTokenS": [
   8,
   0
  ],

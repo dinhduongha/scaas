@@ -46,7 +46,7 @@ import {WrappedTokenP, WrappedTokenT, WrappedTokenA, WrappedTokenW} from "../../
 import {NormalZetherTokenP, NormalZetherTokenT, NormalZetherTokenA, NormalZetherTokenZ} from "../../src/zether/NormalZetherTokenModules.sol";
 import {WrappedZetherTokenP, WrappedZetherTokenT, WrappedZetherTokenA, WrappedZetherTokenW, WrappedZetherTokenZ} from "../../src/zether/WrappedZetherTokenModules.sol";
 import {NormalPqzTokenP, NormalPqzTokenT, NormalPqzTokenA, NormalPqzTokenQ} from "../../src/pqz/NormalPqzTokenModules.sol";
-import {WrappedPqzTokenP, WrappedPqzTokenT, WrappedPqzTokenA, WrappedPqzTokenW, WrappedPqzTokenQ, WrappedPqzTokenQ2} from "../../src/pqz/WrappedPqzTokenModules.sol";
+import {WrappedPqzTokenP, WrappedPqzTokenT, WrappedPqzTokenA, WrappedPqzTokenW, WrappedPqzTokenQ, WrappedPqzTokenS} from "../../src/pqz/WrappedPqzTokenModules.sol";
 import {probeArgs, probeRelease} from "../helpers/ProbeModules.sol";
 
 /// @notice "+0" (CTR-GOV-11, spec §10.2, B-33): on every kind, `transfer`, `mtxTransfer`, `transferToUA`
@@ -931,9 +931,9 @@ contract WrappedPqzProbeQ is WrappedPqzTokenQ {
     function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
 }
 
-/// `WrappedPqzProbe`'s overrides in its kind's module Q2 (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
-contract WrappedPqzProbeQ2 is WrappedPqzTokenQ2 {
-    constructor(address f_, bytes memory a) WrappedPqzTokenQ2(f_, a) {}
+/// `WrappedPqzProbe`'s overrides in its kind's module S (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
+contract WrappedPqzProbeS is WrappedPqzTokenS {
+    constructor(address f_, bytes memory a) WrappedPqzTokenS(f_, a) {}
 
     function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
 

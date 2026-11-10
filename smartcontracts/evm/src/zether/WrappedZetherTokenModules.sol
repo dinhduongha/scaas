@@ -434,7 +434,7 @@ contract WrappedZetherTokenA is WrappedZetherTokenCore {
     }
 }
 
-/// @title WrappedZetherTokenW: the body module W of WrappedZetherToken (wrapped and regulated; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
+/// @title WrappedZetherTokenW: the body module W of WrappedZetherToken (wrap; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedZetherTokenW is WrappedZetherTokenCore {

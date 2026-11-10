@@ -212,23 +212,23 @@ interface INormalZetherRegulatedTokenAbi {
 
 /// @title NormalZetherRegulatedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
 ///        ledger and the identity views (`NormalZetherRegulatedTokenCore`); every other entry forwards its calldata to the module of its group by
-///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, W wrapped and regulated, Z Zether). UNAUDITED.
+///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, Z Zether, R regulated). UNAUDITED.
 contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZetherRegulatedTokenAbi {
     address private immutable _MP;
     address private immutable _MT;
     address private immutable _MA;
-    address private immutable _MW;
     address private immutable _MZ;
+    address private immutable _MR;
 
-    /// @param implArgs `abi.encode(RegulatedImplArgs(...))`: the modules in the order P, T, A, W, Z (`modules()`).
+    /// @param implArgs `abi.encode(RegulatedImplArgs(...))`: the modules in the order P, T, A, Z, R (`modules()`).
     constructor(address factory_, bytes memory implArgs) NormalZetherRegulatedTokenCore(factory_, _coreArgs(implArgs)) {
         RegulatedImplArgs memory a = abi.decode(implArgs, (RegulatedImplArgs));
         if (a.modules.length != 5) revert ModuleMissing(a.modules.length);
         _MP = _module(a.modules, 0, 1);
         _MT = _module(a.modules, 1, 2);
         _MA = _module(a.modules, 2, 3);
-        _MW = _module(a.modules, 3, 4);
-        _MZ = _module(a.modules, 4, 5);
+        _MZ = _module(a.modules, 3, 5);
+        _MR = _module(a.modules, 4, 12);
     }
 
     function _coreArgs(bytes memory implArgs) private pure returns (bytes memory) {
@@ -252,8 +252,8 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         if (g == 1) return _MP;
         if (g == 2) return _MT;
         if (g == 3) return _MA;
-        if (g == 4) return _MW;
-        return _MZ;
+        if (g == 5) return _MZ;
+        return _MR;
     }
 
     function _modulePure(uint8 g) private pure returns (address m) {
@@ -267,7 +267,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
 
     function modules() external view returns (address[] memory m) {
         m = new address[](5);
-        (m[0], m[1], m[2], m[3], m[4]) = (_MP, _MT, _MA, _MW, _MZ);
+        (m[0], m[1], m[2], m[3], m[4]) = (_MP, _MT, _MA, _MZ, _MR);
     }
 
     function GOV_ROUTER() external view returns (address _p0) {
@@ -303,7 +303,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function canReceive(bytes32) external view returns (bool ok, uint8 reason) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function cancelGrant(uint8, bytes32) external {
@@ -335,7 +335,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function disableFeature(uint8) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function disclosure() external view returns (ITransferDisclosure _p0) {
@@ -363,15 +363,15 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function forceTransfer(bytes32, uint256) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function freeze(bytes32, bytes32, bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function freezeOf(bytes32) external view returns (IRegulatedToken.FreezeState memory _p0) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function grantDelay() external view returns (uint64 _p0) {
@@ -403,7 +403,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function isFrozen(bytes32) external view returns (bool _p0) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function lastProposedAt() external view returns (uint64 _p0) {
@@ -591,11 +591,11 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function operatorTransfer(bytes32, bytes32, uint256, bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function order(bytes32) external view returns (IRegulatedToken.OrderRecord memory _p0) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function owner() external view returns (bytes32 _p0) {
@@ -603,7 +603,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function pause(bytes32, uint64) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function payLane(bytes32) external pure returns (uint256 _p0) {
@@ -647,7 +647,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function recordOrder(bytes32, bytes32, bytes32, bytes32, uint256, uint64) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function registered(ZetherTypes.UA) external view returns (bool _p0) {
@@ -655,7 +655,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function regulatedConfig() external view returns (IRegulatedToken.RegulatedConfig memory _p0) {
-        _forwardView(_MW);
+        _forwardView(_MR);
     }
 
     function renounceOwnership() external {
@@ -679,7 +679,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function revokeOrder(bytes32, bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function revokeRole(uint8, bytes32) external {
@@ -743,11 +743,11 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     }
 
     function unfreeze(bytes32, bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function unpause(bytes32) external {
-        _forward(_MW);
+        _forward(_MR);
     }
 
     function validBits() external pure returns (uint256 _p0) {

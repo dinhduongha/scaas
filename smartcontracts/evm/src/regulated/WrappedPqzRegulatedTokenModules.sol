@@ -455,7 +455,7 @@ contract WrappedPqzRegulatedTokenA is WrappedPqzRegulatedTokenCore {
     }
 }
 
-/// @title WrappedPqzRegulatedTokenW: the body module W of WrappedPqzRegulatedToken (wrapped and regulated; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
+/// @title WrappedPqzRegulatedTokenW: the body module W of WrappedPqzRegulatedToken (wrap; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedPqzRegulatedTokenW is WrappedPqzRegulatedTokenCore {
@@ -470,10 +470,6 @@ contract WrappedPqzRegulatedTokenW is WrappedPqzRegulatedTokenCore {
         _addReserveBody(u, amount);
     }
 
-    function canReceive(bytes32 account) external view onlyDelegated returns (bool ok, uint8 reason) {
-        return _canReceiveBody(account);
-    }
-
     function cancelRate() external onlyDelegated {
         _cancelRateBody();
     }
@@ -482,28 +478,8 @@ contract WrappedPqzRegulatedTokenW is WrappedPqzRegulatedTokenCore {
         return _collateralValueBody();
     }
 
-    function disableFeature(uint8 bit) external onlyDelegated {
-        _disableFeatureBody(bit);
-    }
-
     function disableWrap(address u, bytes32 reason) external onlyDelegated {
         _disableWrapBody(u, reason);
-    }
-
-    function forceTransfer(bytes32 recordId, uint256 amount) external onlyDelegated {
-        _forceTransferBody(recordId, amount);
-    }
-
-    function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external onlyDelegated {
-        _freezeBody(account, ref, recordId);
-    }
-
-    function freezeOf(bytes32 account) external view onlyDelegated returns (IRegulatedToken.FreezeState memory _p0) {
-        return _freezeOfBody(account);
-    }
-
-    function isFrozen(bytes32 account) external view onlyDelegated returns (bool _p0) {
-        return _isFrozenBody(account);
     }
 
     function legOf(address u) external view onlyDelegated returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled) {
@@ -554,18 +530,6 @@ contract WrappedPqzRegulatedTokenW is WrappedPqzRegulatedTokenCore {
         return _mtxWrapToUABody(e, u, amount, to, sig);
     }
 
-    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external onlyDelegated {
-        _operatorTransferBody(from, to, amount, ref);
-    }
-
-    function order(bytes32 recordId) external view onlyDelegated returns (IRegulatedToken.OrderRecord memory _p0) {
-        return _orderBody(recordId);
-    }
-
-    function pause(bytes32 ref, uint64 until) external onlyDelegated {
-        _pauseBody(ref, until);
-    }
-
     function pendingRate() external view onlyDelegated returns (address u, uint96 num, uint96 den, uint64 eta) {
         return _pendingRateBody();
     }
@@ -590,20 +554,8 @@ contract WrappedPqzRegulatedTokenW is WrappedPqzRegulatedTokenCore {
         return _rateDelayBody();
     }
 
-    function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil) external onlyDelegated {
-        _recordOrderBody(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil);
-    }
-
-    function regulatedConfig() external view onlyDelegated returns (IRegulatedToken.RegulatedConfig memory _p0) {
-        return _regulatedConfigBody();
-    }
-
     function rescue(address asset) external onlyDelegated {
         _rescueBody(asset);
-    }
-
-    function revokeOrder(bytes32 recordId, bytes32 reasonRef) external onlyDelegated {
-        _revokeOrderBody(recordId, reasonRef);
     }
 
     function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList) external onlyDelegated {
@@ -620,14 +572,6 @@ contract WrappedPqzRegulatedTokenW is WrappedPqzRegulatedTokenCore {
 
     function underlyings() external view onlyDelegated returns (address[] memory _p0) {
         return _underlyingsBody();
-    }
-
-    function unfreeze(bytes32 account, bytes32 ref) external onlyDelegated {
-        _unfreezeBody(account, ref);
-    }
-
-    function unpause(bytes32 ref) external onlyDelegated {
-        _unpauseBody(ref);
     }
 
     function unwrap(address u, uint256 wrapped, address recipient, uint256 minOut) external onlyDelegated returns (uint256 out, uint256 burned) {
@@ -775,10 +719,10 @@ contract WrappedPqzRegulatedTokenQ is WrappedPqzRegulatedTokenCore {
     }
 }
 
-/// @title WrappedPqzRegulatedTokenQ2: the body module Q2 of WrappedPqzRegulatedToken (the PQZ state, setters and views; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
+/// @title WrappedPqzRegulatedTokenS: the body module S of WrappedPqzRegulatedToken (the PQZ state, setters and views; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
-contract WrappedPqzRegulatedTokenQ2 is WrappedPqzRegulatedTokenCore {
+contract WrappedPqzRegulatedTokenS is WrappedPqzRegulatedTokenCore {
     /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedPqzRegulatedTokenCore(factory_, args) {}
 
@@ -912,5 +856,73 @@ contract WrappedPqzRegulatedTokenQ2 is WrappedPqzRegulatedTokenCore {
 
     function verifier() external view onlyDelegated returns (address _p0) {
         return _verifierBody();
+    }
+}
+
+/// @title WrappedPqzRegulatedTokenR: the body module R of WrappedPqzRegulatedToken (regulated; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
+///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
+///        storage only its core's (M6). UNAUDITED.
+contract WrappedPqzRegulatedTokenR is WrappedPqzRegulatedTokenCore {
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    constructor(address factory_, bytes memory args) WrappedPqzRegulatedTokenCore(factory_, args) {}
+
+    function moduleGroup() external pure returns (uint8) {
+        return 12;
+    }
+
+    function canReceive(bytes32 account) external view onlyDelegated returns (bool ok, uint8 reason) {
+        return _canReceiveBody(account);
+    }
+
+    function disableFeature(uint8 bit) external onlyDelegated {
+        _disableFeatureBody(bit);
+    }
+
+    function forceTransfer(bytes32 recordId, uint256 amount) external onlyDelegated {
+        _forceTransferBody(recordId, amount);
+    }
+
+    function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external onlyDelegated {
+        _freezeBody(account, ref, recordId);
+    }
+
+    function freezeOf(bytes32 account) external view onlyDelegated returns (IRegulatedToken.FreezeState memory _p0) {
+        return _freezeOfBody(account);
+    }
+
+    function isFrozen(bytes32 account) external view onlyDelegated returns (bool _p0) {
+        return _isFrozenBody(account);
+    }
+
+    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external onlyDelegated {
+        _operatorTransferBody(from, to, amount, ref);
+    }
+
+    function order(bytes32 recordId) external view onlyDelegated returns (IRegulatedToken.OrderRecord memory _p0) {
+        return _orderBody(recordId);
+    }
+
+    function pause(bytes32 ref, uint64 until) external onlyDelegated {
+        _pauseBody(ref, until);
+    }
+
+    function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil) external onlyDelegated {
+        _recordOrderBody(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil);
+    }
+
+    function regulatedConfig() external view onlyDelegated returns (IRegulatedToken.RegulatedConfig memory _p0) {
+        return _regulatedConfigBody();
+    }
+
+    function revokeOrder(bytes32 recordId, bytes32 reasonRef) external onlyDelegated {
+        _revokeOrderBody(recordId, reasonRef);
+    }
+
+    function unfreeze(bytes32 account, bytes32 ref) external onlyDelegated {
+        _unfreezeBody(account, ref);
+    }
+
+    function unpause(bytes32 ref) external onlyDelegated {
+        _unpauseBody(ref);
     }
 }

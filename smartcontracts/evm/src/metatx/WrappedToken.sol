@@ -202,7 +202,7 @@ interface IWrappedTokenAbi {
 
 /// @title WrappedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
 ///        ledger and the identity views (`WrappedTokenCore`); every other entry forwards its calldata to the module of its group by
-///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, W wrapped and regulated). UNAUDITED.
+///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, W wrap). UNAUDITED.
 contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
     address private immutable _MP;
     address private immutable _MT;

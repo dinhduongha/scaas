@@ -20,10 +20,20 @@ from post3 import HOOKS, hook  # the pipeline hooks of rule 4
 
 E = json.load(open('script/t66b/entries.json'))
 # §4.2's splitting rule, applied where the build measured a module above 33,780 B (≈ 57 M asked; summary.txt): Q splits into
-# the PQZ ops and their verdict entries (Q) and the PQZ state, setters and views (Q2).
-Q2_SETTERS = {'pqzSetVerifier', 'pqzCancelVerifier', 'pqzRevokeVerifier', 'setProofStore'}
-Q2_VERDICTS = {'verifyTransferAmount'}
+# the PQZ ops and their verdict entries (Q) and the PQZ state, setters and views (S; Q2 until owner 2026-11-10).
+S_SETTERS = {'pqzSetVerifier', 'pqzCancelVerifier', 'pqzRevokeVerifier', 'setProofStore'}
+S_VERDICTS = {'verifyTransferAmount'}
 SPLITS = {'WrappedPqzToken': {'Q'}, 'WrappedPqzRegulatedToken': {'Q'}}
+# Owner 2026-11-10 (CTR-TOK-30's Change, the body modules by function): W holds the wrap entries only and R the regulated
+# layer's entries only, on every kind. R's entries are the regulated layer's (`RegulatedBase` and the kind's `disableFeature`):
+# the entries.json `W` group of kind 8, whose W held nothing else. On 8, 10, 12 every W entry moves to R (W renamed R); on 9,
+# 11, 13 those entries leave W for R, and the wrap bodies the regulated kind restates (`rescue`, `underlyings`) stay in W.
+# The compliance hooks wrap and unwrap call are internal: compiled into W from the kind's core as before.
+R_ENTRIES = {_e['name'] for _e in E['kinds']['NormalRegulatedToken'] if _e['group'] == 'W'}
+for _k, _es in E['kinds'].items():
+    for _e in _es:
+        if 'Regulated' in _k and _e['group'] == 'W' and _e['name'] in R_ENTRIES:
+            _e['group'] = 'R'
 # §11 (g), owner 2026-11-09: pay stays in P; a kind whose P passes 33,780 B splits P into the pipeline and named transfers (P)
 # and pay with the relay fee (P2, the `pay` domain of entries.json, one clean cut). No kind's P passes it at 4.1 (30,783 B
 # at most). T66B_SPLIT_PAY=1 splits every kind, for 4.4's per-kind pay-module comparison only (never committed output).
@@ -34,23 +44,24 @@ for _k, _gs in SPLITS.items():
     for _e in E['kinds'][_k]:
         if 'P' in _gs and _e['group'] == 'P' and _e['domain'] == 'pay':
             _e['group'] = 'P2'
-        if 'Q' in _gs and _e['group'] == 'Q' and (_e['name'] in Q2_SETTERS or (_e['mut'] in ('view', 'pure')
-                                                                                 and _e['name'] not in Q2_VERDICTS)):
-            _e['group'] = 'Q2'
+        if 'Q' in _gs and _e['group'] == 'Q' and (_e['name'] in S_SETTERS or (_e['mut'] in ('view', 'pure')
+                                                                                and _e['name'] not in S_VERDICTS)):
+            _e['group'] = 'S'
 CHECK = '--check' in sys.argv
 # §4.1 rule 4: the modules that compile `MtxPipelineLib`'s code in, each overriding these hooks with the library's internal
-# twins: P (and P2) the pipeline, named transfers and pay; T the trade authorisation; A the payment views. W, Z and Q keep
-# the library call (their relayed named entries reach `_namedUA`: compiling the pipeline in would grow each by 3-7 KB).
+# twins: P (and P2) the pipeline, named transfers and pay; T the trade authorisation; A the payment views. W, R, Z, Q and S
+# keep the library call (their relayed named entries reach `_namedUA`: compiling the pipeline in would grow each by 3-7 KB).
 PIPE = {'P': list(HOOKS), 'P2': list(HOOKS), 'T': ['Authorize'], 'A': ['PaymentCount', 'PaymentsOf']}
 KFILE = {'NormalToken': 'src/metatx', 'WrappedToken': 'src/metatx', 'NormalZetherToken': 'src/zether',
          'WrappedZetherToken': 'src/zether', 'NormalPqzToken': 'src/pqz', 'WrappedPqzToken': 'src/pqz',
          'NormalRegulatedToken': 'src/regulated', 'WrappedRegulatedToken': 'src/regulated',
          'NormalZetherRegulatedToken': 'src/regulated', 'WrappedZetherRegulatedToken': 'src/regulated',
          'NormalPqzRegulatedToken': 'src/regulated', 'WrappedPqzRegulatedToken': 'src/regulated'}
-GROUP_ID = {'P': 1, 'T': 2, 'A': 3, 'W': 4, 'Z': 5, 'Q': 6, 'P2': 7, 'Q2': 8, 'G': 9, 'D': 10, 'L': 11}  # D, L: the DEX's (src/dex/SCaaSDexAdmin.sol, SCaaSDexLiquidityModule.sol)
+# D, L: the DEX's (src/dex/SCaaSDexAdmin.sol, SCaaSDexLiquidityModule.sol); S was Q2 (id 8 kept), R new (owner 2026-11-10)
+GROUP_ID = {'P': 1, 'T': 2, 'A': 3, 'W': 4, 'Z': 5, 'Q': 6, 'P2': 7, 'S': 8, 'G': 9, 'D': 10, 'L': 11, 'R': 12}
 GROUP_DOC = {'P': 'the signed pipeline, named transfers and pay', 'T': 'trade', 'A': 'admin: governance, init, tables, token meta',
-             'W': 'wrapped and regulated', 'Z': 'Zether', 'Q': 'PQZ', 'P2': 'pay and the relay fee',
-             'Q2': 'the PQZ state, setters and views', 'G': 'governance', 'D': 'the DEX\'s governance', 'L': 'the DEX\'s liquidity'}
+             'W': 'wrap', 'R': 'regulated', 'Z': 'Zether', 'Q': 'PQZ', 'P2': 'pay and the relay fee',
+             'S': 'the PQZ state, setters and views', 'G': 'governance', 'D': 'the DEX\'s governance', 'L': 'the DEX\'s liquidity'}
 TOKEN_KIND = {'NormalToken': 'NORMAL', 'WrappedToken': 'WRAPPED', 'NormalZetherToken': 'NORMAL_ZETHER',
               'WrappedZetherToken': 'WRAPPED_ZETHER', 'NormalPqzToken': 'NORMAL_PQZ', 'WrappedPqzToken': 'WRAPPED_PQZ',
               'NormalRegulatedToken': 'NORMAL_REGULATED', 'WrappedRegulatedToken': 'WRAPPED_REGULATED',

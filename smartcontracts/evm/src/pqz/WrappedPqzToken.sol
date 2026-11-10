@@ -267,16 +267,16 @@ interface IWrappedPqzTokenAbi {
 
 /// @title WrappedPqzToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
 ///        ledger and the identity views (`WrappedPqzTokenCore`); every other entry forwards its calldata to the module of its group by
-///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, W wrapped and regulated, Q PQZ, Q2 the PQZ state, setters and views). UNAUDITED.
+///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, W wrap, Q PQZ, S the PQZ state, setters and views). UNAUDITED.
 contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     address private immutable _MP;
     address private immutable _MT;
     address private immutable _MA;
     address private immutable _MW;
     address private immutable _MQ;
-    address private immutable _MQ2;
+    address private immutable _MS;
 
-    /// @param implArgs `abi.encode(ImplArgs(...))`: the modules in the order P, T, A, W, Q, Q2 (`modules()`).
+    /// @param implArgs `abi.encode(ImplArgs(...))`: the modules in the order P, T, A, W, Q, S (`modules()`).
     constructor(address factory_, bytes memory implArgs) WrappedPqzTokenCore(factory_, _coreArgs(implArgs)) {
         ImplArgs memory a = abi.decode(implArgs, (ImplArgs));
         if (a.modules.length != 6) revert ModuleMissing(a.modules.length);
@@ -285,7 +285,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _MA = _module(a.modules, 2, 3);
         _MW = _module(a.modules, 3, 4);
         _MQ = _module(a.modules, 4, 6);
-        _MQ2 = _module(a.modules, 5, 8);
+        _MS = _module(a.modules, 5, 8);
     }
 
     function _coreArgs(bytes memory implArgs) private pure returns (bytes memory) {
@@ -311,7 +311,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         if (g == 3) return _MA;
         if (g == 4) return _MW;
         if (g == 6) return _MQ;
-        return _MQ2;
+        return _MS;
     }
 
     function _modulePure(uint8 g) private pure returns (address m) {
@@ -325,7 +325,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
 
     function modules() external view returns (address[] memory m) {
         m = new address[](6);
-        (m[0], m[1], m[2], m[3], m[4], m[5]) = (_MP, _MT, _MA, _MW, _MQ, _MQ2);
+        (m[0], m[1], m[2], m[3], m[4], m[5]) = (_MP, _MT, _MA, _MW, _MQ, _MS);
     }
 
     function GOV_ROUTER() external view returns (address _p0) {
@@ -341,11 +341,11 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function auditorMode() external view returns (ZetherTypes.AuditorMode _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function auditorUA() external view returns (bytes32 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function bitLabel(uint8) external view returns (IGovernance.BitType _p0, bytes4 _p1, string memory _p2) {
@@ -353,7 +353,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function burnStatement(IPqzToken.PqzBurnArgs calldata, uint256, bytes32, bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function cancelGrant(uint8, bytes32) external {
@@ -381,7 +381,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function confidentialFee() external view returns (uint256 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function creator() external view returns (address _p0) {
@@ -397,11 +397,11 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function disclosureStatement(bytes32, uint256, uint256, uint8, uint64) external view returns (bytes memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function eip712Domain() external view returns (bytes1 _p0, string memory _p1, string memory _p2, uint256 _p3, address _p4, bytes32 _p5, uint256[] memory _p6) {
@@ -409,7 +409,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function envelopeBinding(MetaTxLib.UAMetaTransaction calldata) external view returns (bytes32 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata, bytes calldata) external returns (bool _p0) {
@@ -469,7 +469,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function maxShielded() external view returns (uint256 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function maxSupply() external view returns (uint256 _p0) {
@@ -481,7 +481,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function minDecoyFee() external view returns (uint256 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function minNonce(bytes32, uint256) external view returns (uint256 _p0) {
@@ -717,47 +717,47 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function pqzAcc(bytes32, uint64) external view returns (bytes memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function pqzAccount(bytes32, uint64) external view returns (IPqzToken.AccountState memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function pqzCancelVerifier() external {
-        _forward(_MQ2);
+        _forward(_MS);
     }
 
     function pqzDebitRecord(bytes32, uint64) external view returns (IPqzToken.DebitRecordView memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function pqzEntryBlob(bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function pqzPending(bytes32, uint64, uint64) external view returns (uint256 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function pqzPendingCt(bytes32, uint64, uint64) external view returns (bytes memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function pqzRevokeVerifier() external {
-        _forward(_MQ2);
+        _forward(_MS);
     }
 
     function pqzSetVerifier(bytes32) external {
-        _forward(_MQ2);
+        _forward(_MS);
     }
 
     function pqzVerifyConfig() external view returns (IPqzToken.PqzVerifyConfig memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function precompile() external view returns (address _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function previewUnwrap(address, uint256) external view returns (uint256 out, uint256 burned) {
@@ -769,11 +769,11 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function proofStore() external view returns (uint8 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function proofSystemId() external view returns (bytes32 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function proposeRate(address, uint96, uint96) external {
@@ -825,7 +825,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function setProofStore(uint8) external {
-        _forward(_MQ2);
+        _forward(_MS);
     }
 
     function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata, bool, bool, bool) external {
@@ -837,7 +837,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function shieldScale() external view returns (uint256 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function supportedModes() external pure returns (uint32 _p0) {
@@ -849,7 +849,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function totalShielded() external view returns (uint256 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function tradeOrderDigest(ITradeToken.UATradeOrder calldata) external view returns (bytes32 _p0) {
@@ -857,11 +857,11 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function transferCiphertextHash(bytes32) external view returns (bytes32 _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function transferEntry(bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function transferOwnership(bytes32) external {
@@ -869,11 +869,11 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function transferSingleStatement(IPqzToken.PqzTransferArgs calldata, bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function transferStatement(IPqzToken.PqzMultiArgs calldata, bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function underlying() external view returns (address _p0) {
@@ -881,11 +881,11 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function underlyings() external view returns (address[] memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function unshieldUnwrapStatement(IPqzToken.PqzBurnArgs calldata, IConfidentialWrappedToken.Unwrap calldata, bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function unwrap(address, uint256, address, uint256) external returns (uint256 out, uint256 burned) {
@@ -917,7 +917,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function verifier() external view returns (address _p0) {
-        _forwardView(_MQ2);
+        _forwardView(_MS);
     }
 
     function verifyTransferAmount(bytes32, uint256, uint256, uint8, uint64, bytes calldata) external view returns (bool _p0) {

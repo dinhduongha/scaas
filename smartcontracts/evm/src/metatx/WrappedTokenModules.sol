@@ -434,7 +434,7 @@ contract WrappedTokenA is WrappedTokenCore {
     }
 }
 
-/// @title WrappedTokenW: the body module W of WrappedToken (wrapped and regulated; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
+/// @title WrappedTokenW: the body module W of WrappedToken (wrap; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedTokenW is WrappedTokenCore {

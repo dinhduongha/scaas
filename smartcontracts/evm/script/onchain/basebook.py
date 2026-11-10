@@ -25,8 +25,8 @@ def main():
     def label(name):
         if name in labels:
             return name
-        for k in kinds:  # a body module: the kind's label + its letter (P, T, A, W, Z, Q, Q2)
-            if re.fullmatch(re.escape(k) + r"(P|T|A|W|Z|Q|Q2)", name):
+        for k in kinds:  # a body module: the kind's label + its letter (P, T, A, W, R, Z, Q, S)
+            if re.fullmatch(re.escape(k) + r"(P|T|A|W|R|Z|Q|S)", name):
                 return k
         return None
 

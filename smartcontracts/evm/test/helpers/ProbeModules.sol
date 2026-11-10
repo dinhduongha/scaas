@@ -49,7 +49,7 @@ function _probeRelease(OpenFactory f, IOpenFactory.TokenKind kind, uint64 versio
     return f.deployTokenImplementation(kind, version, v, code, implArgs);
 }
 
-/// @dev The group suffix of a module artifact name ("…:WrappedPqzTokenQ2" -> "Q2", "…:NormalTokenP" -> "P").
+/// @dev The group suffix of a module artifact name ("…:WrappedPqzTokenS" -> "S", "…:NormalTokenP" -> "P"; a two-character group such as P2 ends in a digit).
 function _group(string memory name) pure returns (string memory g) {
     bytes memory b = bytes(name);
     uint256 k = b[b.length - 1] >= "0" && b[b.length - 1] <= "9" ? 2 : 1;
