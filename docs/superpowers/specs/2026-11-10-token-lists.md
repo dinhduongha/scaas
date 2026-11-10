@@ -4,7 +4,10 @@
 `ua-mtx-3s` at `35843c6a` (round 3r mid-build). It uses 3r's names throughout (`admin`, `kycProvider`, `providerId`,
 `COMPLIANCE_REGISTRY_CODEHASH`, `ComplianceRegistryRouterMismatch`; spec `2026-11-10-admin-not-owner.md` §4.1); the build comes
 after 3r merges. Recorded in `decisions.md` as [CTR-GOV-24](../../decisions.md#ctr-gov-24--kyc-bit-28-allowlist-and-denylist-lists-held-in-the-token-enabled-at-once)
-(owner: yes) with Change lines on the rules it moves (§11). The component docs move with the build (T11).
+(owner: yes) with Change lines on the rules it moves (§11). The component docs move with the build (T11). **Fable review
+2026-11-11: approve with changes, no P0, 2 P1, 5 P2, 8 P3.** The owner let the controller decide the review's calls (2026-11-10:
+"tự động làm, không cần hỏi nữa", do it automatically, no need to ask again); every call is applied below, tagged (Fable P1-1 …,
+controller call), and listed in §17.
 
 ## 1. The rulings (owner, 2026-11-10, in chat)
 
@@ -12,17 +15,20 @@ after 3r merges. Recorded in `decisions.md` as [CTR-GOV-24](../../decisions.md#c
   bit KYC, sử dụng ComplianceRegistry. Còn ALLOWLIST / DENYLIST tương đương WHITELIST/BLACKLIST." (OK: add a KYC bit that uses
   the `ComplianceRegistry`; `ALLOWLIST` / `DENYLIST` mean a whitelist / blacklist.) The owner's reason: a compliance registry
   per token is an extra deploy step, while a list held in the token is fast and easy to check.
-- **R2. The lists.** `ALLOWLIST`: both parties of a transfer must be `ALLOWED`. `DENYLIST`: neither party may be `DENIED`. One
+R2–R4 and R6 below are the controller's brief of 2026-11-10, which the owner approved as a design, with no words of his own;
+they are recorded as **controller calls** (Fable P2-5). R2's two-sidedness is that brief's reading of R1's "WHITELIST/BLACKLIST".
+
+- **R2 (controller call). The lists.** `ALLOWLIST`: both parties of a transfer must be `ALLOWED`. `DENYLIST`: neither party may be `DENIED`. One
   `uint8` of flags per account in the regulated namespace. Contracts are listed like anyone else. The three bits are
   independent; any combination works.
-- **R3. The ops.** `setAllowed` / `setDenied` over a bounded batch, effective at once (operational, like a freeze), relayable at
+- **R3 (controller call). The ops.** `setAllowed` / `setDenied` over a bounded batch, effective at once (operational, like a freeze), relayable at
   fee 0, typed, one entry point per op; one event per account; a view `listFlagsOf`.
-- **R4. Who.** The role-per-bit pattern: a holder of bit 8 edits the allow list, a holder of bit 9 the deny list; the admin
+- **R4 (controller call). Who.** The role-per-bit pattern: a holder of bit 8 edits the allow list, a holder of bit 9 the deny list; the admin
   grants under `grantRole` / `grantDelay`, and `revokeRole` acts at once.
 - **R5. Governance of the three bits** (the final ruling, §5): `enableFeature` for the three, at once; `ALLOWLIST` and `DENYLIST`
   never off once on; `KYC` off as today (`disableFeature`, delayed) and on again; `lockedFeatures` locks the creation state, on
   or off. The sequence of the day's messages is §5.1.
-- **R6. Scope.** The regulated kinds 8–13 only; the plain kinds keep "+0" (CTR-GOV-03, CTR-GOV-11).
+- **R6 (controller call). Scope.** The regulated kinds 8–13 only; the plain kinds keep "+0" (CTR-GOV-03, CTR-GOV-11).
 
 **Rules applied, not reopened:** CTR-AS-02 (disclosure mandatory), CTR-AS-05 (freeze semantics), CTR-AS-08 (the hook seats),
 CTR-AS-16, CTR-AS-25 (every fee leg checked before effects), CTR-AS-27 (`_regPre` before `pre*`), CTR-AS-28 (the bounded
@@ -75,7 +81,8 @@ capability (no holder), valid on kinds 8–13 (`REG_BITS |= 1 << 28`, so `REG_BI
 | `complianceRegistry ≠ 0 ⇔ (requiredFlags \| deniedFlags) ≠ 0` (a registry with no mask checks nothing; masks with no registry mean nothing) | `RegulatedConfigInvalid()` |
 | on 10–13: `requiredFlags == 0` | `RegulatedConfigInvalid()` |
 | `complianceRegistry ≠ 0`: its code hash is `COMPLIANCE_REGISTRY_CODEHASH`, its `govRouter()` 0 or the token's (3r §5.3) | `ComplianceRegistryCodeMismatch`, `ComplianceRegistryRouterMismatch` |
-| `termsHash ≠ 0 ⇔ (features & TERMS_BITS ≠ 0 ∨ ENABLEABLE & valid & ~locked ≠ 0)` (§5.4) | `RegulatedConfigInvalid()` |
+| `termsHash ≠ 0 ⇔ (features & TERMS_BITS ≠ 0 ∨ enableable ≠ 0)`, the one predicate of §5.5 (Fable P2-2) | `RegulatedConfigInvalid()` |
+| `ALLOWLIST` set and `initialSupply ≠ 0` (kind 8; kind 9 has no initial supply): `listFlags[pad(initialHolder)] = ALLOWED` and `AllowedSet(pad(initialHolder), 0, true)`, before the mint (Fable P1-2, controller call: the variant that changes no byte of `TokenConfig`) | — |
 
 **Mirror.** `C_KYC = 1 << 6` in `controls` (byte bit 6, unused today): `controls = uint8(f >> 5) & 0x3F | (f >> 28 & 1) << 6`.
 `_regDisabled(28)` clears it; `_regEnabled(bit)` (§5) sets `C_ALLOW`, `C_DENY` or `C_KYC`. **I12** becomes `controls ==
@@ -88,7 +95,8 @@ capability (no holder), valid on kinds 8–13 (`REG_BITS |= 1 << 28`, so `REG_BI
 `scaas.regulated` +7 (appended; slots +0…+6 unchanged): `mapping(bytes32 account => uint8) listFlags`, `ALLOWED = 1`, `DENIED
 = 2`, one slot per account, both flags in it. Layout pin (`test/v2/layout/namespaces.json`, `regulated`): label `listFlags[A]`,
 slot 7, inner 0, byte 0. The mapping is independent of the bits: it is written while a bit is off (§6.3) and keeps its rows
-whatever the bits do; turning a bit on starts with the rows already there.
+whatever the bits do; turning a bit on starts with the rows already there. Its writers are `setAllowed`, `setDenied` and init's
+one row for the initial holder (§3).
 
 ### 4.2 The check `L(a)`
 
@@ -158,11 +166,11 @@ debit is for; `SHIELD_POOL` moves only on the unhooked `_poolMove` (`ERC20MetaTx
 
 | # | Invariant (changed or new) | Test |
 |---|---|---|
-| I5 | every receiver of a public balance increase passed `R` at that block **while `KYC` is on**, except a confidential leg's `decoyFee` | invariant suite |
+| I5 | every receiver of a public balance increase passed `R` when the move ran **while `KYC` is on**, except a confidential leg's `decoyFee` (Fable P3-5) | invariant suite |
 | I6 | no regulated call changes `reserve_i`, `num_i/den_i`, `wrapEnabled_i`, `minter`; `controls` gains `C_ALLOW`, `C_DENY`, `C_KYC` only by `enableFeature`, loses `C_KYC` only by a confirmed disable, never loses `C_ALLOW` or `C_DENY`; every other bit only loses | invariant suite |
 | I12 | `controls == ((features >> 5) & 0x3F) \| (((features >> 28) & 1) << 6)` after every call | invariant suite, `Mirror.t.sol` |
-| I14 | while `ALLOWLIST` is on, every account a public balance change names (sender, receiver, payer, fee recipient, beneficiary) is `ALLOWED` at that block; while `DENYLIST` is on, none is `DENIED`; except a forced transfer's subject, the unwrap recipient, and the shielded credits and `decoyFee` of I9 | invariant suite (`RegulatedHandler` gains list edits) |
-| I15 | `listFlags` changes only by `setAllowed` / `setDenied`; bits 8, 9 never leave `features` once set; bit 28 leaves only by a confirmed `disableFeature`; a locked bit never changes | invariant suite |
+| I14 | while `ALLOWLIST` is on, every account a public balance change names (sender, receiver, payer, fee recipient, beneficiary) was `ALLOWED` when the move ran; while `DENYLIST` is on, none was `DENIED`; except a forced transfer's subject, the unwrap recipient, and the shielded credits and `decoyFee` of I9 | invariant suite: `RegulatedHandler` gains list edits and enables, and takes each call's parties from its `Transfer` / `UATransfer` logs, not from what it meant to call, so the check can fail (Fable P3-5) |
+| I15 | `listFlags` changes only by init's initial-holder row, `setAllowed` and `setDenied`; bits 8, 9 never leave `features` once set; bit 28 leaves only by a confirmed `disableFeature`; a locked bit never changes | invariant suite |
 
 ## 5. Governance of the three bits (owner ruling 2026-11-10, final)
 
@@ -183,8 +191,8 @@ on keeping `KYC`'s escape from a dead or compromised registry: "OK, KYC sẽ nh�
 
 | Bit | Set at creation | `enableFeature` | `disableFeature` | Locked at creation |
 |---|---|---|---|---|
-| 8 `ALLOWLIST` (kinds 8, 9) | on or off | at once | **refused**: `FeatureNotDisableable(8)` (once on, never off) | on or off, fixed for good: both entries `FeatureLocked(8)` |
-| 9 `DENYLIST` (8–13) | on or off | at once | **refused**: `FeatureNotDisableable(9)` | on or off, fixed |
+| 8 `ALLOWLIST` (kinds 8, 9) | on or off | at once; no holder root of bit 8: `ListHolderMissing(8)` (Fable P1-1) | **refused**: `FeatureNotDisableable(8)` (once on, never off) | on or off, fixed for good: both entries `FeatureLocked(8)` |
+| 9 `DENYLIST` (8–13) | on or off | at once; no holder root of bit 9: `ListHolderMissing(9)` | **refused**: `FeatureNotDisableable(9)` | on or off, fixed |
 | 28 `KYC` (8–13) | on or off (the registry and its masks may be set while off) | at once; no registry: `ComplianceRegistryNotSet()` | as today: in the regulated delayed set (two calls keyed `(28, 0)` with `grantDelay`, at once when it is 0); enabled again later | on or off, fixed |
 | every other bit | unchanged | `FeatureNotEnableable(bit)` | unchanged (one-way) | on only (`LockedNotSubset`), as today |
 
@@ -222,8 +230,10 @@ A locked bit stays in its creation state on both diagrams.
   on a kind where the bit is valid); `lockedFeatures` keeps the value.
 - `IRegulatedToken.enableFeature(uint8 bit)` on kinds 8–13 only (module R; no entry on the plain kinds or the DEX):
   `RegulatedBase._enableFeatureBody(bit)` calls `GovernanceLib.enableFeature(bit, _govSubject(), _validBits())`, then refuses
-  `bit == 28` with `complianceRegistry == 0` (`ComplianceRegistryNotSet()`; the whole call reverts, event included), then
-  `_regEnabled(bit)` sets the mirror. `governed`, `nonReentrant` as `disableFeature`.
+  `bit == 28` with `complianceRegistry == 0` (`ComplianceRegistryNotSet()`) and `bit` 8 or 9 while `counts[bit].roots == 0`
+  (`ListHolderMissing(bit)`, the root count `F` and `P` read: an enabled list nobody can write would stop every unlisted party
+  for at least `grantDelay`; Fable P1-1, controller call), the whole call reverting, event included; then `_regEnabled(bit)` sets
+  the mirror. "At once" is unchanged: both are preconditions, not delays. `governed`, `nonReentrant` as `disableFeature`.
 - `RegulatedBase._delayedRelaxBits()` = **5, 6, 7, 28**: `ISSUER_BITS & ~(TAX | PQZ_PROOF | ALLOWLIST | DENYLIST) | (1 << KYC)`
   (`ISSUER_BITS` gains 8, 9 for the issuer seat, §6.3; 8 and 9 are subtracted, so a list holder's revoke is at once, R4, and
   their disable is refused anyway; `KYC` has no holder, so only its disable is delayed). RK-3 / CTR-AS-22 unchanged: a proposed
@@ -235,18 +245,27 @@ A locked bit stays in its creation state on both diagrams.
 
 | Place | Assumption | 3s |
 |---|---|---|
-| `renounceAdmin` (`GovernanceLib._noLiveHolder`, `:509`) | holders of a set, unlocked role bit block a renounce | unchanged and still right: an on 8 / 9 with holders blocks it (revoke first). An off 8 / 9 with holders (granted while off, §6.3) does not, and after the renounce nothing can turn it on: its holders edit a dormant list. With admin 0 (renounced, or none at creation) no bit is ever enabled and `KYC` is never disabled: a dead registry then refuses receivers for good, unless `KYC` was off. Stated in the disclosure |
+| `renounceAdmin` (`GovernanceLib._noLiveHolder`, `:509`) | holders of a set, unlocked role bit block a renounce; for every other bit, revoking them relaxes | the code is unchanged: an on 8 / 9 with holders blocks it (revoke first). **For a list that is the reverse of a relaxation** (Fable P2-3, controller call: a documented consequence, no code change): once the listers are revoked and the admin renounces, the list is final for good: a denied account stays denied, no account is ever added, and with `FORCE`'s holders revoked too no forced transfer reaches a denied balance; `FREEZE` and `PAUSE` lapse without a live root, a list row does not. An off 8 / 9 with holders (granted while off, §6.3) does not block a renounce, and after it nothing can turn the bit on: its holders edit a dormant list. With admin 0 (renounced, or none at creation) no bit is ever enabled and `KYC` is never disabled: a dead registry then refuses receivers for good, unless `KYC` was off. Stated in the disclosure and A20. Fable's further init refusal of "admin 0, `ALLOWLIST` on, not locked, no issuer seat" is not taken (no code change) |
 | `disableFeature` callers | a set bit can go | 8, 9 refused by name (`FeatureNotDisableable`) |
 | `LockedNotSubset` (`GovernanceLib.sol:106`) | locked ⊆ features | relaxed for 8, 9, 28 only; `lockedFeatures()` may now hold a bit `features()` lacks: "locked off" |
 | `controls` mirror, I6, I12 | only loses bits | §3, §4.5 |
-| `termsHash` rule (`RegulatedLib.sol:109`) | the creation bits are all the regulated powers a token will have | a regulated token can come to hold 8, 9, 28, so CTR-AS-02's mandatory disclosure covers each enableable bit that is not locked off: `termsHash ≠ 0` iff a bit of `TERMS_BITS` is set **or** one of 8, 9, 28 is valid and not locked (§3 row) |
+| `termsHash` rule (`RegulatedLib.sol:109`) | the creation bits are all the regulated powers a token will have | a regulated token can come to hold 8, 9, 28, so CTR-AS-02's mandatory disclosure covers each bit that can still be enabled: `termsHash ≠ 0` iff a bit of `TERMS_BITS` is set **or** the predicate of §5.5 holds for one of 8, 9, 28 (§3 row) |
 | CTR-AS-02, CTR-AS-07, CTR-AS-17, CTR-TOK-22, CTR-GOV-18 ("never added later", "a token created with a bit off never gets it") | one-way | Change lines (§11): 8, 9, 28 may be added later unless locked off; 8, 9 never leave |
-| Wrapped kinds' legs (`_addLeg`, CTR-GOV-05) | a leg's features read once | `FORCE` / `MODERATE` are not enableable: the refusal at `_addLeg` holds. The disclosure of a leg with 5, 7, 8, 9 (now 28 too) reads the leg's `features()` and `lockedFeatures()` live: any regulated-kind leg can come to hold 8, 9, 28 unless locked off (`governance_bits.json` `legWhen`) |
+| Wrapped kinds' legs (`_addLeg`, CTR-GOV-05) | a leg's features read once | `FORCE` / `MODERATE` are not enableable: the refusal at `_addLeg` holds. The disclosure of a leg with 5, 7, 8, 9 (now 28 too) reads the leg's `features()` and `lockedFeatures()` live: any regulated-kind leg for which §5.5's predicate holds can come to hold 8, 9, 28 (`governance_bits.json` `legWhen`) |
 | Node indexer (`scaas-node/src/indexer.rs:314-323`, `:374-381`) | `FeatureDisabled` is the only feature event | `REGULATED_TOPICS` gains `FeatureEnabled`, `AllowedSet`, `DeniedSet` (11 → 14); `derived`: `FeatureEnabled(8)` `allow_list_on`, `(9)` `deny_list_on`, `(28)` `kyc_on`, `FeatureDisabled(28)` `kyc_off`; `ALERTS` gains `FeatureEnabled` and the restricting edits (`DeniedSet` with `on`, `AllowedSet` without) |
 | Gateway | — | no `FeatureDisabled` handling (checked: `scaas-node/src` names it only in `abi.rs` and `indexer.rs`); nothing to change |
 | `features()` caching (node, DEX, matrix) | — | the node never calls `features()` (no `featuresCall` in `scaas-node/src`); the venue reads `regulatedConfig()` live on every pre-check (`dex/venue.rs:385`) and caches only `pausedUntil`; its `load_regulated` eligibility alert (`:309-333`) runs at load only, so it also runs on a leg's `FeatureEnabled` (§9); `SCaaSDex` reads no token features; the matrix scripts set features at creation and read none back (`script/onchain/*.s.sol`), new steps in T8 |
 | `TokenCreated(…, features, lockedFeatures, …)` (3r §3) | the creation features bound later ones | the event stays a creation record; a reader takes live `features()` / `lockedFeatures()` for the current state; the node decodes no `TokenCreated` (3r §3) |
 | Client bit rows (§10) | 8, 9 capabilities; rows end at 27 | 8, 9 powers, 28 `KYC` capability, rows 0–28; sentences cover "can be switched on" |
+
+### 5.5 One predicate: "enableable" (Fable P2-2, controller call)
+
+`enableable(bit)` holds when `bit` is one of 8, 9, 28, valid for the kind, not set, not locked (off), the admin is not 0, and,
+for 28, `complianceRegistry ≠ 0` (the registry cannot be set after creation, so `enableFeature(28)` would revert for good). One
+predicate drives the `termsHash` rule at init (§3), the `legWhen` and *enableable* sentences (§10), every client's warning and the
+`regulated_kat.json` rows (one row per term, each failing alone). A renounce makes it false for every bit at once; the stored
+`termsHash` stays. Without it a token with no registry would owe a `termsHash` for a `KYC` that can never exist, and a wallet
+would print a false warning.
 
 ## 6. The ops and who holds them
 
@@ -263,7 +282,9 @@ Body (`RegulatedLib.setList(uint8 bit, uint8 flag, bytes32[] calldata accounts, 
 the role first (§6.3), then `1 ≤ accounts.length ≤ MAX_LIST_BATCH = 256` (`ListBatchInvalid(length)`), then per account `≠ 0`
 (`ListAccountZero()`), `listFlags[a] = on ? f | flag : f & ~flag`, one event, `by` = the subject. Effective at once, both ways;
 duplicates are idempotent; the other flag is never touched. 256 is 3r's row bound (`setCompliance`, 3r §5.3.1) and the node's
-decode bound (§9); 256 new rows ≈ 25 M state gas + ≈ 6 M regular, inside NET-EVM-11's 60 M (§14).
+decode bound (§9). 256 new rows cost ≈ 31 M plus the router's verification (§14): a chain with a lower block limit takes smaller
+batches; the contract's bound is the caller's to use, and the node refuses a batch whose estimate (regular + state) exceeds the
+chain's own limit, by name (Fable P3-4). NET-EVM-11's 60 M is a deploy rule, not a block limit of ours.
 
 ### 6.2 Router ops
 
@@ -275,8 +296,10 @@ never on the generic allow-list), so no token row moves.
 
 ### 6.3 Who
 
-- **The role-per-bit pattern**, as `FREEZE` / `PAUSE`: bits 8 and 9 join `ISSUER_BITS`, so `roles.issuer` holds each one set at
-  creation; the admin grants others with `grantRole` / `setGrant` (two calls within `[eta, eta + grantDelay]`, CTR-GOV-04) and
+- **The role-per-bit pattern**, as `FREEZE` / `PAUSE`: bits 8 and 9 join `ISSUER_BITS`, and `roles.issuer` holds **each list bit
+  that is valid and not locked off at creation, set or not**, so a later `enableFeature` has a writer at once (Fable P1-1(b),
+  controller call; `GovernanceLib.init`'s issuer loop runs over `(features | (ENABLEABLE & valid & ~locked)) & ISSUER_BITS`, and
+  `_check`'s exemption admits the off bits); the admin grants others with `grantRole` / `setGrant` (two calls within `[eta, eta + grantDelay]`, CTR-GOV-04) and
   revokes with `revokeRole`, **at once** (8, 9 outside `_delayedRelaxBits()`, §5.3). `_roleBits()` gains 8, 9 on kinds 8, 9 and 9
   on 10–13 (the valid masks).
 - **Any holder** (an EOA, a single-key UA, an `msig`, a contract), never contract-only, as `TAX` and `WRAP_LIST`: with a single
@@ -288,9 +311,10 @@ never on the generic allow-list), so no token row moves.
   role as `GovernanceUse.use` does, without its feature test: `WHOLE` passes, `LIMITED` runs `useLimited(bit, subject, 0)`, none is
   `MissingRole`). So the usual flow, in the owner's words "usually off, switched on during operation", is: grant a lister, write
   the list, then `enableFeature`, with no window where every transfer stops.
-- **A token created with `ALLOWLIST` on starts with an empty list**: its initial-supply mint to `creator` refuses
-  `NotAllowed(creator)`. Such a token is created with supply 0 (the issuer seat lists, then mints), or with `ALLOWLIST` off and
-  enabled once listed.
+- **A token created with `ALLOWLIST` on and an initial supply** (kind 8, fixed supply included, the bit locked on included):
+  init lists `initialHolder` (`ALLOWED`, `AllowedSet(pad(initialHolder), 0, true)`) before the mint to it (`NormalTokenCore.sol:45`
+  mints `cfg.initialSupply` to `cfg.initialHolder`; Fable P1-2, controller call); every other account is listed by a holder.
+  Without this, a fixed-supply kind 8 with the list locked on could not exist.
 
 ## 7. ABI (selectors with `cast sig`, topics and typehashes with `cast keccak`, Foundry 1.8.5, 2026-11-10)
 
@@ -330,6 +354,11 @@ Unchanged selectors whose behaviour moves: `disableFeature(uint8)` `0x45e5ac68` 
 `0xbffff6d2` (reasons 5, 6), `regulatedConfig()` `0x46825269` (`controls` bit 6 = `KYC`; the struct is unchanged). Each new
 typehash gets a `*TypehashIsPinned` row in `GovRouterTypehash.t.sol`.
 
+**`type(IRegulatedToken).interfaceId` moves** (Fable P3-1): `0x01a22b62` (pinned at `scaas-node/src/abi.rs:763`, `35843c6a`) →
+`0x789ed7c4` (that value XOR the four new selectors; recomputed after 3r merges). A 3s node reads a pre-3s regulated token as plain
+(`supportsInterface` false) and skips its paused and frozen pre-checks; all chains are test-only, so no alias: the pin and
+`RegulatedInit.t.sol`'s ERC-165 row move old → new.
+
 ## 8. Layout pins
 
 `test/v2/layout/namespaces.json` `regulated`: `listFlags[A]` appended (slot 7, inner 0, byte 0); every other label, slot and
@@ -343,10 +372,12 @@ a value).
 |---|---|
 | `scaas-node/src/typed.rs` | three `GR` rows after `UASetWrapMember` (`:243`): `("UASetAllowed", "mtxSetAllowed", GR, "bytes32 from,address target,bytes32[] accounts,bool on,E", "")`, `UASetDenied` likewise, `("UAEnableFeature", "mtxEnableFeature", GR, "bytes32 from,address target,uint8 bit,E", "")`; no `PLAIN` row and no token row (§6.2); the row counts move old → new in the commit |
 | `scaas-node/src/guard.rs` | the router's `CALL_TABLE` gains the three (type string, ABI signature, selector of §7); the router count (`:1726`) +3 on top of 3r's; the decode bound of `accounts`: flat, depth 1, `1 ≤ len ≤ 256`, refused by name before any simulation, as the contract refuses (`ListBatchInvalid`); `bit` a `uint8` word |
-| `smartcontracts/evm/test/vectors/selector_audit.json` (by hand, never regenerated) | each regulated kind: `setAllowed(bytes32[],bool)` `BIT(8)`, `setDenied(bytes32[],bool)` `BIT(9)`, error `MissingRole(uint8,bytes32)`; `enableFeature(uint8)` `ADMIN`, error `NotAdmin(bytes32)`; the router: the three `SIGNED`; `SelectorAudit.t.sol` and the node's `allow_lists_equal_the_selector_audit_both_directions` both ways |
-| `scaas-node/src/abi.rs` | `IRegulatedToken` the four entries, the five errors, the two events; `IGovernance` `FeatureEnabled` and the three errors; `LIFTABLE` (`:641`) gains `NotAllowed`, `Denied` (a list edit lifts them: `REGULATED_REFUSED`, never `dead`, NODE-LANE-09) |
+| `smartcontracts/evm/test/vectors/selector_audit.json` (by hand, never regenerated) | each regulated kind: `setAllowed(bytes32[],bool)` `BIT(8)`, `setDenied(bytes32[],bool)` `BIT(9)`, error `MissingRole(uint8,bytes32)`; `enableFeature(uint8)` `ADMIN`, error `NotAdmin(bytes32)`; the router: the three `SIGNED`; the note says why `setAllowed` exists on 10–13, where it always reverts `MissingRole` (one `IRegulatedToken` for the six kinds; Fable P3-8); `SelectorAudit.t.sol` and the node's `allow_lists_equal_the_selector_audit_both_directions` both ways |
+| `scaas-node/src/abi.rs` | `IRegulatedToken` the four entries, the five errors, the two events; `IGovernance` `FeatureEnabled` and the three errors; `LIFTABLE` (`:641`) gains `NotAllowed`, `Denied` (a list edit lifts them: `REGULATED_REFUSED`, never `dead`, NODE-LANE-09); the interface-id pin (`:763`) `0x01a22b62` → `0x789ed7c4` (§7) |
 | `scaas-node/src/indexer.rs` | §5.4's row |
-| `scaas-node/src/dex/venue.rs` | `leg_receivable` (`:353-374`) gates the registry by `C_KYC` (`1 << 6`), both masks; a list read (`listFlagsOf`) under `C_LISTS` for the seller, the DEX, its puller and the receiver, refused `NOT_ALLOWED: {who} on {token}` / `DENIED: …`; the venue's own alert re-runs on a leg's `FeatureEnabled` |
+| `scaas-node/src/dex/venue.rs` | `leg_receivable` (`:353-374`) gates the registry by `C_KYC` (`1 << 6`), both masks; a list read (`listFlagsOf`) under `C_LISTS` for the seller, the DEX, its puller and the receiver, refused `NOT_ALLOWED: {who} on {token}` / `DENIED: …`; the venue's own alert re-runs on a leg's `FeatureEnabled`. **Resting orders** (Fable P2-1, controller call): `REGULATED_TOPICS` (`:1389-1390`) gains `DeniedSet`, `AllowedSet`, `FeatureEnabled`; `apply_events` (`:960`) drops, as it drops an `AccountFrozen` account's orders today, every order of that token on both sides of the book (`L` is two-sided, unlike `F`) for an account `DeniedSet(on)` or `AllowedSet(off)` names, and on `FeatureEnabled(8 \| 9)` of a leg every resting order of a maker the list no longer admits; the dropped orders go to the client store as today; NODE-DEX-11 and its test |
+| Intake (`guard.rs`, the job pre-check) | a job whose own subject is `DENIED`, or not `ALLOWED` under `ALLOWLIST`, on the token it moves is refused at intake by name, zero sends, instead of waiting as a liftable refusal with no grief score (Fable P3-8); another party's list refusal stays liftable |
+| Batch estimate | a `mtxSetAllowed` / `mtxSetDenied` whose estimate (regular + state) exceeds the chain's limit is refused by name before sending (Fable P3-4) |
 | Docs | `docs/node/job-api.md:893`, `submit-lanes.md:473` (the liftable names), `ops.md:907`, `:917` (the runbook row: a hostile registry is `disableFeature(28)`, delayed; a hostile list holder is revoked at once), `indexer-feeds.md:205-211`, `dex-venue.md` NODE-DEX-11 |
 
 ## 10. Clients and vectors (generators only)
@@ -361,20 +392,28 @@ a value).
 | Every `ua-*` with bit rows | `ua-c` (`src/lib.rs:366`, `include/scaas_ua.h:286`, `tests/test_vectors.py:904`), `ua-cxx` (`src/lib.rs:206`, `tests/vectors_test.cpp:818-823`), `ua-qt` (`src/ua_kinds.rs:21`), `ua-cs` (`Scaas.Ua/Ua.cs:91-97`), `ua-py` (`scaas_ua/__init__.py:89-94`), `ua-go` (`ua.go:104-112`), `ua-dart` (`lib/src/table.dart`), `ua-dart-frb` (`rust/src/api/ua.rs:72`, `lib/src/rust/api/ua.dart:13`, `test/vectors_test.dart:808`): rows 0–28, 8 and 9 `power`, 28 `KYC`; the "past bit 27" bounds become 28 |
 | `clients/zether-prover/tests/typed_ops.rs` | `NOT_ZETHER` gains `UASetAllowed`, `UASetDenied`, `UAEnableFeature` |
 
-Sentences (content; the generator writes the final text): bit 8 *on* "Only listed accounts may send or receive this token's
-public balance, contracts such as the DEX included; a holder of this power lists or unlists an account at once. Once on, this
-check is never switched off." *enableable* "The admin can switch on an allow list at any time, at once, with no notice but the
-event; it is never switched off." Bit 9 likewise for "an account on the deny list can neither send, receive, burn nor unwrap",
-and on 10–13 "a denied account still receives shielded credits and each leg's decoyFee". A wallet prints *enableable* for a
-valid bit that is off and not locked, *locked off* ("never") for one locked off.
+Sentences (content; the generator writes the final text; Fable P3-7): bit 8 *on* "Only listed accounts may hold and move this
+token's public balance: an unlisted account can neither send, receive, burn nor unwrap, contracts such as the DEX included; a
+holder of this power lists or unlists an account at once. Once on, this check is never switched off." *enableable* "The admin can
+switch on an allow list at any time, at once, with no notice but the event; it is never switched off." Bit 9 likewise for "an
+account on the deny list can neither send, receive, burn nor unwrap", adding what it is next to `FREEZE`: "no end date, no record
+behind it, and a single key may hold this power"; on 10–13 "a denied account still receives shielded credits and each leg's
+decoyFee". A wallet prints *enableable* where §5.5's predicate holds and *locked off* ("never") for a bit locked off.
 
 ## 11. Docs to change
 
 - **`decisions.md`** (this commit): [CTR-GOV-24](../../decisions.md#ctr-gov-24--kyc-bit-28-allowlist-and-denylist-lists-held-in-the-token-enabled-at-once),
   owner: yes, status SPECIFIED, with every owner quote of §1 and §5.1; Change lines on CTR-GOV-18 (bits 8 and 9 change meaning,
-  the registry check is bit 28), CTR-GOV-10 (bit 28 allocated), CTR-TOK-22 (8, 9, 28 may be added later; locks off), CTR-AS-02
-  (added later unless locked off), CTR-AS-07 (the registry check under `KYC`; the lists check senders too), CTR-AS-21 (the
-  delayed set 5, 6, 7, 28).
+  the registry check is bit 28), CTR-GOV-10 (bit 28 allocated), CTR-TOK-22 (8, 9, 28 may be added later; locks off; and, apart,
+  the relaxed "a role only on a set bit"), CTR-AS-02 (added later unless locked off), CTR-AS-07 (the registry check under `KYC`;
+  the lists check senders too), CTR-AS-21 (the delayed set 5, 6, 7, 28); after the review (Fable P2-5) also CTR-AS-17 (the
+  controls are no longer all creation-time), CTR-GOV-17 (bit 9 on 10–13 is the token's list, checking the sender, payer and
+  beneficiary sites; the registry deny mask is under 28), CTR-AS-16 (`ELIGIBLE_CONTRACT` is `KYC`'s; the lists have no such
+  flag), CTR-GOV-05 ("features only lose bits" no longer holds as written; the leg check still holds for 6 and 21, which never
+  come back).
+- **Which rule is normative** (Fable P3-8): CTR-AS-31 (`asset-suite.md`, written in T11) holds the list mechanics (storage, `L`,
+  the paths, the ops, the roles) and links CTR-GOV-24; CTR-GOV-24 (`decisions.md`) holds the bit allocation and the governance of
+  the three bits, and links CTR-AS-31 once it exists. Until T11 this spec holds the mechanics.
 - **`contracts/asset-suite.md`** (T11): a new rule **CTR-AS-31** (the lists: storage, `L`, the per-path rows of §4.3, contracts
   listed, the ops, the roles, the governance of §5.2), CTR-AS-07 rewritten for `KYC`, §2.2's init rows and storage, §2.3's
   interface, §2.4's table gains the `L` column, §2.6 unchanged but for `KYC`, §2.8's disclosure statements, §2.9's invariants
@@ -382,7 +421,9 @@ valid bit that is off and not locked, *locked off* ("never") for one locked off.
   lines against 750 (warned above 975) today; 3s replaces the bit-8 / bit-9 sentences rather than adding beside them and keeps
   the file at or below 1,076 lines (the rename lists live in `decisions.md`).
 - `contracts/token-wrappers.md` CTR-TOK-22 (one line), `contracts/README.md:303` ("features only lose bits": except 8, 9, 28),
-  the node docs of §9.
+  the node docs of §9; `docs/node/ops.md` gains the operator note of A21 and a "before `enableFeature(8)`" list: a lister granted
+  (and the issuer seat checked), the holders, the DEX and its puller, `RelayFeeRouter`, the tax recipient and every fee recipient,
+  wrappers holding the token, the clones and escrows, each `ALLOWED` (Fable P3-6).
 
 ## 12. Threat notes
 
@@ -391,9 +432,12 @@ valid bit that is off and not locked, *locked off* ("never") for one locked off.
 | A7 | Compliance registry admin compromised | marks anyone, clears a denial, or voids KYC providers (receives fail); no fund movement; the admin `disableFeature(KYC)` unless locked: two calls with `grantDelay` (at once when it is 0), and `enableFeature(KYC)` again, at once, once the registry is trusted. The lists are untouched by it |
 | A15 | Dead registry | `disableFeature(KYC)` by the admin (delayed as above); migration offers work again; a locked `KYC` has no recovery, as disclosed. The registry cannot be replaced after creation |
 | A16 | Compromised list holder | denies any account, or unlists any account under `ALLOWLIST`, at once and with no end date, up to stopping every transfer; it cannot move funds. The admin revokes it at once; another holder relists (a new grant waits `grantDelay`; a second holder granted ahead avoids the wait). The bits cannot be switched off, so relief is the list edits. Alerts on `DeniedSet` / `AllowedSet` |
-| A17 | Compromised or careless admin enables `ALLOWLIST` (or `DENYLIST`) | at once, with no notice beyond `FeatureEnabled`; under an empty allow list every public transfer, mint, burn and fee stops, and the bit never goes off: relief is a holder's listing. An issuer that never wants a list locks the bit off at creation. Disclosed |
+| A17 | Compromised or careless admin enables `ALLOWLIST` (or `DENYLIST`) | at once, with no notice beyond `FeatureEnabled`; refused while the bit has no holder root (`ListHolderMissing`, Fable P1-1), so a writer exists; under an allow list missing parties every public transfer, mint, burn and fee of theirs stops, and the bit never goes off: relief is a holder's listing. An unlisted tax recipient or fee recipient makes every taxed payment or fee-bearing op revert until a holder lists it; denying the tax recipient does the same. An issuer that never wants a list locks the bit off at creation. Disclosed; the operator list of §11 (Fable P3-6) |
+| A17k | Careless `enableFeature(KYC)` against a stale or dead registry | receives stop at once; the way back, `disableFeature(KYC)`, takes `grantDelay` (Fable P3-6) |
 | A18 | A contract party not listed (DEX, puller, wrapper, clone, `RelayFeeRouter`) | its legs refuse `NotAllowed`; the venue refuses intake by name (§9); a settlement leg fails only its settlement (`MatchFailed`) |
-| A19 | A denied holder tries to exit | burn and unwrap refuse `Denied` (`L(from)`), as a frozen holder's do; a forced transfer reaches it (the subject is never checked); on 10–13 its shielded balance still receives credits (I9) |
+| A19 | A denied holder tries to exit | burn and unwrap refuse `Denied` (`L(from)`), as a frozen holder's do; a forced transfer reaches it (the subject is never checked); on 10–13 its shielded balance still receives credits (I9). Enabling the allow list on a wrapped kind locks the collateral of every unlisted holder with no end date; the pause-open set does not apply |
+| A20 | The admin renounces with a list bit on | the list is final for good: a denied account stays denied, no account is ever added (§5.4, Fable P2-3, controller call: documented, no code change) |
+| A21 | A denied or unlisted party's units held by another contract | a refund, a vesting release, a distribution share, an exchange-offer return, a liquidity withdrawal or a tender-escrow release to it reverts until a holder edits the list; a forced transfer cannot reach it, since its subject would be the contract, which holds others' units too (Fable P2-4, controller call: documented here and in the operator note, no code change) |
 
 ## 13. Tests (red first) and mutants
 
@@ -409,12 +453,19 @@ sites under `DENYLIST`, a transfer with a denied decoy succeeds (I9), the PQZ re
 locked first `FeatureLocked`; `disableFeature(28)` two calls with `grantDelay`, one at 0, then enabled again; a stranger
 `NotAdmin`; through the router at fee 0 by a stranger relayer); (4) `RegulatedInit.t.sol` / `RegConfig.t.sol`: §3's init rows,
 the lock-off rule (8, 9, 28 accepted off-locked, 5 refused `LockedNotSubset`), the `termsHash` rule, `ALLOWLIST` on with an
-initial supply `NotAllowed(creator)`; (5) the ops: 256 accounts pass and 257 / 0 refuse `ListBatchInvalid`, account 0
+initial supply listing `initialHolder` first (test (10)); (5) the ops: 256 accounts pass and 257 / 0 refuse `ListBatchInvalid`, account 0
 `ListAccountZero`, one event per account, the other flag untouched, a holder edits while the bit is off and the list holds after
 `enableFeature`, a role granted while off and refused when locked off, a revoke at once (no `RelaxProposed`); (6) the router's
 binding matrix for `UASetAllowed`, `UASetDenied`, `UAEnableFeature` (one element, the length and the order of `accounts`; `on`;
 `bit`), the three typehash pins, digests reproduced by clientkeys and ua-rs; (7) `RegulatedGas.t.sol` (new): the pins of §14;
-(8) `PlusZero.t.sol` unchanged (the plain kinds' "+0"). Invariants I5, I6, I12, I14, I15 in `RegulatedInvariants.t.sol` with list
+(8) `PlusZero.t.sol` unchanged (the plain kinds' "+0"); after the review: (9) `enableFeature(8)` / `(9)` with no holder root
+refuses `ListHolderMissing`, and passes once one is granted; the issuer seat holds an off, unlocked list bit from init and not a
+locked-off one (Fable P1-1); (10) a fixed-supply kind 8 with `ALLOWLIST` set and locked mints its initial supply to the listed
+`initialHolder`, and no row is written with supply 0 or the bit off (Fable P1-2); (11) the predicate's rows, each term failing
+alone (Fable P2-2); (12) a renounce with the list on leaves the list final (Fable P2-3); a vesting release to a denied recipient
+reverts `Denied` and the same release to a listed one passes (Fable P2-4); (13) the node: the venue drops the orders on
+`DeniedSet(on)`, `AllowedSet(off)` and `FeatureEnabled(8)`, intake refuses a denied subject's job, the batch estimate refusal
+(Fable P2-1, P3-4, P3-8); T9 pins one relayed 256-new-row batch. Invariants I5, I6, I12, I14, I15 in `RegulatedInvariants.t.sol` with list
 edits and enables in `RegulatedHandler`.
 
 | # | Mutant | Caught by |
@@ -447,6 +498,11 @@ edits and enables in `RegulatedHandler`.
 | M26 | the `termsHash` rule ignores the enableable bits | the init test |
 | M27 | `L` on the unwrap recipient | the unwrap-to-unlisted test |
 | M28 | a confidential site reads a leg or `yTo` | I9's denied-decoy test |
+| M29 | `_enableFeatureBody` skips the holder-root check | test (9) |
+| M30 | init's issuer seat leaves out an off, unlocked list bit (or takes a locked-off one) | test (9) |
+| M31 | init does not list `initialHolder`, or lists it with supply 0 or the bit off | test (10) |
+| M32 | the venue keeps a denied maker's orders | test (13) |
+| M33 | the predicate counts 28 without a registry, or any bit with admin 0 | test (11) |
 | B1–B3 | a word dropped from `UASetAllowed`, `UASetDenied`, `UAEnableFeature` | each struct's binding matrix |
 
 Gates: every `forge` directory and the node e2e (shared modules: `GovernanceLib`, `GovernanceBits`), `script/pqz/at-set.sh <set>
@@ -470,14 +526,17 @@ builds `RegulatedGas.t.sol` and pins the measured new ones. `L` costs one `SLOAD
 | `setAllowed` / `setDenied`, per existing account | — | ≈ 5 k (a slot change, cold) + the event | |
 | `enableFeature` | — | ≈ 15–20 k (two slot changes, the event, the admin read) + the router's verification when relayed | |
 
-256 new accounts ≈ 25 M state + ≈ 6 M regular ≈ 31 M per call, inside NET-EVM-11's 60 M and the EIP-8037 inclusion rule.
+256 new accounts ≈ 25 M state + ≈ 6 M regular ≈ 31 M per call, plus the router's verification (more for a PQ or `msig` signer):
+it does not fit a 30 M chain; the node refuses by estimate against the chain's limit (regular + state, EIP-8037's inclusion
+rule), and T9 pins one relayed 256-new-row batch (Fable P3-4).
 
 **Size.** The entries go in body module R and their bodies in `RegulatedLib`; the checks `L` inline where the hooks already are
-(every module that moves a balance), not in R alone. Module R is ≈ 11–12 KB today [estimate from the SCaaS testnet reset 2
-deploy, `runs/2026-11-10-scaas-testnet-reset2/summary.txt`: `NormalRegulatedTokenR` 18.57 M used, 20.16 M asked;
-`WrappedZetherRegulatedTokenR` 18.91 M, 20.53 M] against the module margin line 33,780 B (57 M) and the stop line 35,570 B (60 M):
-+0.5–0.9 KB (three entries, the view) leaves ≈ 21 KB. `L` adds ≈ 0.2–0.4 KB per hooked module; the tightest,
-`NormalPqzRegulatedTokenQ` 32,423 B [measured, `size-baseline.json`], reaches ≈ 32.8 KB, under 33,780 B by ≈ 0.9 KB;
+(every module that moves a balance), not in R alone. Module R measures 11,778 B (kinds 8, 10), 11,820 B (12), 11,999 B (9, 11), 12,048 B (13)
+[measured, `contracts/token-wrappers.md` CTR-TOK-24's module table; Fable P3-3] against the module notice line 33,780 B (57 M)
+and the stop line 35,570 B (60 M): +0.5–0.9 KB (three entries, the view) leaves ≈ 21 KB [estimate]. `L` adds ≈ 0.2–0.4 KB per
+hooked module [estimate]; the tightest, `NormalPqzRegulatedTokenQ` 32,423 B [measured, `size-baseline.json`, one PQZ set, before
+3r's code], has 1,357 B to the notice line, so ≈ 32.8 KB leaves ≈ 0.9 KB, and the refusal is 35,570 B; re-measured after 3r
+merges, at the four sets, before the figure is fixed;
 `WrappedPqzRegulatedTokenP` 30,783 → ≈ 31.2 KB; the releases (largest `WrappedPqzRegulatedToken` 29,795 B) stay under 33,594 B.
 `RegulatedLib` +0.6–0.9 KB, `GovernanceLib` 14,513 B +0.5–0.8 KB (`enableFeature`, the two masks, the lock rule) against
 33,903 B; `GovernanceRouter` +1.0–1.5 KB (three entries, the array hash). A baseline row moves only with its reason.
@@ -488,23 +547,50 @@ deploy, `runs/2026-11-10-scaas-testnet-reset2/summary.txt`: `NormalRegulatedToke
 |---|---|---|
 | T0 | The round's gate script (per-step logs, resume), mutant harness, summary header | 0.25 d |
 | T1 | Red tests of §13 (1)–(6), the typehash pins, `RegulatedGas.t.sol` skeleton | 0.75 d |
-| T2 | `GovernanceBits` (28, `ENABLEABLE`, `NOT_DISABLEABLE`, `ISSUER_BITS`, `REGULATED`), `GovernanceLib` (`enableFeature`, the ratchet, the lock rule, `_check`'s exemption), `IGovernance` (event, errors) | 1 d |
-| T3 | `RegulatedLib` / `RegulatedBase`: `KYC` gate and init rows, `termsHash`, mirror bit 6, `_listed` at every hook, `setList`, `listFlagsOf`, `canReceive` 5 / 6, `_enableFeatureBody`, `_regEnabled` / `_regDisabled(28)`, `_delayedRelaxBits`, `_roleBits` per kind; the six cores, module R's entries, `IRegulatedToken`; Hedera (`RegulatedHedera.t.sol`) | 1.5 d |
+| T2 | `GovernanceBits` (28, `ENABLEABLE`, `NOT_DISABLEABLE`, `ISSUER_BITS`, `REGULATED`), `GovernanceLib` (`enableFeature`, the ratchet, the lock rule, `_check`'s exemption, the issuer seat over unlocked list bits), `IGovernance` (event, errors) | 1 d |
+| T3 | `RegulatedLib` / `RegulatedBase`: `KYC` gate and init rows (the initial holder's row), `termsHash` with §5.5's predicate, mirror bit 6, `_listed` at every hook, `setList`, `listFlagsOf`, `canReceive` 5 / 6, `_enableFeatureBody` (`ListHolderMissing`), `_regEnabled` / `_regDisabled(28)`, `_delayedRelaxBits`, `_roleBits` per kind; the six cores, module R's entries, `IRegulatedToken`; Hedera (`RegulatedHedera.t.sol`) | 1.75 d |
 | T4 | Router: `mtxSetAllowed`, `mtxSetDenied` (array hash), `mtxEnableFeature`, pins, binding matrix, B1–B3 | 0.75 d |
-| T5 | §13 green: the list matrix on 8–13, confidential sites, governance, init, invariants I5, I6, I12, I14, I15 | 1.5 d |
-| T6 | Vectors and clients: `governance_bits.json`, `regulated_kat.json`, `typed_ops.json`, `selector_audit.json` by hand; clientkeys, ua-rs, the eight other `ua-*` bit rows, zether-prover | 1 d |
-| T7 | Node: `typed.rs`, `guard.rs` (table, count, bound), `abi.rs` (`LIFTABLE`), `indexer.rs`, `venue.rs`; `cargo test`, `clippy` | 1 d |
+| T5 | §13 green: the list matrix on 8–13, confidential sites, governance, init, the review's rows (9)–(12), invariants I5, I6, I12, I14, I15 | 1.75 d |
+| T6 | Vectors and clients: `governance_bits.json`, `regulated_kat.json` (the predicate's rows), `typed_ops.json`, `selector_audit.json` by hand; clientkeys, ua-rs, the eight other `ua-*` bit rows, zether-prover. Generated and pinned files (Fable P3-2): `script/modules/entries.json` and `gen_faces.py`'s `R_ENTRIES` (R from 14 to 18 entries), `face_abi.json`'s error lists, `test/v2/module-opcodes.json` (R's DELEGATECALL count), `test/modules/Groups.t.sol`, `Modules.t.sol`; every release's link-closure pin moves (`GovernanceLib` is linked by the twelve kinds and the DEX) | 1.25 d |
+| T7 | Node: `typed.rs`, `guard.rs` (table, count, bound, the batch estimate, the intake refusal), `abi.rs` (`LIFTABLE`, the interface id), `indexer.rs`, `venue.rs` (the list reads, the resting-order drops); NODE-DEX-11; `cargo test`, `clippy` | 1.5 d |
 | T8 | Matrix: `Tokens.s.sol`, `Gov.s.sol`, `Misc.s.sol`, `pq.py`, `zether_reg.py` move to `KYC`; list and enable steps (a DEX leg with the DEX listed, a deny list switched on at once, `KYC` off and on); `coverage.py gen`; local run | 1 d |
 | T9 | Gates and pins: every forge dir, the four PQZ sets, size, layout, ABI, gas old → new, node e2e | 0.75 d |
-| T10 | Mutants M1–M28, B1–B3, log | 0.75 d |
-| T11 | Docs: `asset-suite.md` within its line count, CTR-AS-31, the node docs, CTR-TOK-22's line, `contracts/README.md`; `docs_check` | 0.5 d |
-|  | **Total** | **≈ 10.75 d** |
+| T10 | Mutants M1–M33, B1–B3, log | 0.75 d |
+| T11 | Docs: `asset-suite.md` within its line count, CTR-AS-31, the node docs (the operator list and note of §11), CTR-TOK-22's line, `contracts/README.md`; `docs_check` | 0.5 d |
+|  | **Total** | **≈ 12 d** |
 
-## 16. Open questions (defaults applied; none blocks the build)
+## 16. Open questions (defaults kept by the controller with the review's reasons; none blocks the build)
 
-1. **A denied or unlisted holder cannot burn or unwrap** (`L(from)` on the holder's exit, as `F`; A19). Today's registry check
-   lets a denied account exit; the two-sided lists of R2 do not. Default as written; the owner may open the exit.
-2. **`termsHash` is required on a regulated token whose 8, 9 or 28 can still be enabled** (CTR-AS-02 applied to bits that can be
-   added later, §5.4). Default as written; locking all three off at creation keeps today's rule.
-3. **List holders are any holder, granted while the bit is off, revoked at once** (§6.3: the `TAX` / `WRAP_LIST` precedent and R4).
-   A contract-only holder would follow `FREEZE` more closely but needs the delayed revoke that R4 rules out.
+1. **A denied or unlisted holder cannot burn or unwrap** (`L(from)` on the holder's exit, as `F`; A19). Kept: for `DENYLIST` it
+   is required, not a preference, because the unwrap recipient is not checked, so an open exit would let a denied holder of a
+   wrapped kind pay the underlying to any address; `ALLOWLIST` keeps the same rule (one rule, matching `F`). The cost, stated:
+   enabling the allow list on a wrapped kind locks the collateral of every unlisted holder with no end date, and the pause-open
+   set does not apply.
+2. **`termsHash` is required while 8, 9 or 28 can still be enabled** (CTR-AS-02 applied to bits that can be added later). Kept,
+   with §5.5's predicate, so it is not demanded for a bit that can never be enabled.
+3. **List holders are any holder, granted while the bit is off, revoked at once** (§6.3: R4 and the `TAX` / `WRAP_LIST`
+   precedent). Kept; it is safe with P1-1's holder check and the disclosure of P3-7 (a single key can stop any account at once).
+
+## 17. Fable review 2026-11-11 and the controller's calls
+
+Reviewer Fable, at `28c6b5d8`, read-only (one AI reviewer, not an audit round). The controller decided every call (owner
+2026-11-10, quoted in the status); each is applied where named.
+
+| Finding | Call | Applied in |
+|---|---|---|
+| P1-1 `enableFeature(8)` with no lister halts the token for `grantDelay` | accept: `ListHolderMissing(bit)` on 8, 9 with no holder root; the issuer seat holds every list bit not locked off | §5.2, §5.3, §6.3, A17, tests (9), M29, M30 |
+| P1-2 `ALLOWLIST` on at creation cannot have an initial supply | accept, the variant that changes no bytes: init lists `initialHolder` before the mint; `creator` → `initialHolder` | §3, §4.1, §6.3, I15, test (10), M31 |
+| P2-1 the venue keeps resting orders of a denied or unlisted maker | accept: drop them on `DeniedSet(on)`, `AllowedSet(off)`, `FeatureEnabled(8 \| 9)`, as `AccountFrozen` | §9, test (13), M32, T7 |
+| P2-2 "enableable" true for bits that can never be enabled | accept: one predicate (not locked off, admin ≠ 0, a registry for 28) for `termsHash` and every warning | §3, §5.4, §5.5, §10, test (11), M33 |
+| P2-3 a renounce with a list on freezes the list for good | accept as a documented consequence, no code change | §5.4, A20, test (12) |
+| P2-4 a denied party's units held by another contract cannot come back | accept as a documented consequence, no code change | A21, §11 operator note, test (12) |
+| P2-5 missing Change lines; rulings without owner words | accept: Change lines on CTR-AS-17, CTR-GOV-17, CTR-AS-16, CTR-GOV-05 and the grant rule; R2–R4, R6 headed as controller calls | §1, §11, `decisions.md` |
+| P3-1 `IRegulatedToken`'s interface id changes | accept: old → new and the consequence | §7, §9 |
+| P3-2 generated and pinned files missing from the tasks | accept | T6 |
+| P3-3 size figures | accept: R measured, the notice line stated, re-measure after 3r | §14 |
+| P3-4 the 60 M wording; a 256-row batch on a smaller chain | accept: the node's estimate refusal, a T9 pin | §6.1, §9, §14 |
+| P3-5 "at that block"; I14's parties | accept: "when the move ran", parties from the logs | §4.5 |
+| P3-6 threat gaps (`KYC` enable, tax and fee recipients), the operator list | accept | A17, A17k, §11 |
+| P3-7 sentences | accept | §10 |
+| P3-8 `setAllowed` on 10–13; the normative split; a denied subject's jobs | accept | §9, §11 |
+| The three open questions | keep the defaults with the review's reasons | §16 |
