@@ -14,14 +14,14 @@ vectors gen_liquidity.py --check; gen_faces.py --check | L5, L2 | 0 | in sync
 docs_check | L10 | 0 | 0 errors
 
 sizes (forge build src --sizes, runtime B) | baseline -> built
-SCaaSDex | 32991 -> 33628 (+637): over the 33594 release margin (57 M) by 34, under 35386 (60 M): SIZE STOP (spec §9.3)
-SCaaSDexLiquidityModule | new 16024 (init 16357); module margin 33780
+SCaaSDex | 32991 -> 33628 at L3 (over its 33594 margin by 34: the stop of spec §9.3) -> 32809 after the owner's lever (b) (L3b)
+SCaaSDexLiquidityModule | new: 16024 at L3, 19055 after lever (b) (it also holds the DEX-domain cancels); module margin 33780
 SCaaSDexGovernanceModule | 6459 -> 6459
 V3PositionReader / V4PositionReader | new 1088 / 1006
 module T per kind | 14253-17045 -> 17418-20219 (+3.1-3.2 KB; not in the baseline)
 module A (baseline rows) | NormalPqzRegulatedTokenA 28131 -> 28158, NormalPqzTokenA 26411 -> 26438, NormalRegulatedTokenA 25702 -> 25729, NormalZetherRegulatedTokenA 25190 -> 25217
 faces (baseline rows) | NormalToken 13734 -> 13888, WrappedToken 17808 -> 17974, NormalZetherToken 17088 -> 17242, WrappedZetherToken 21520 -> 21686, NormalPqzToken 19045 -> 19199, WrappedPqzToken 24314 -> 24480, NormalRegulatedToken 17484 -> 17653, WrappedRegulatedToken 21249 -> 21415, NormalZetherRegulatedToken 20619 -> 20773, WrappedZetherRegulatedToken 24995 -> 25161, NormalPqzRegulatedToken 22556 -> 22710, WrappedPqzRegulatedToken 27713 -> 27894
-size-baseline.json: NOT moved (the owner decides the SCaaSDex stop first); size_gate.py: 17 ratchet errors, 1 note (SCaaSDex T-2)
+size-baseline.json: moved in its own commit after the size fix (17 rows, old -> new in the commit); size_gate.py: 0 errors
 
 gas (regular, vm.lastCallGas, isolate) | figure | bound (1.5 x the spec's estimate)
 mtxLiquidity v2 add, two SCaaS inputs, fee 0.3 % | 452105 | 802500
@@ -29,5 +29,29 @@ mtxLiquidity v2 add, SCaaS + outside input | 409950 | 825000
 mtxLiquidity v4 mock mint, reader check, forward | 508907 | 1222500
 (state gas logged apart: 1.08-1.18 M, first-touch slots)
 
-not run (the size stop): mutants (runs/2026-11-10-ua-mtx-liquidity/mutants.py, 44 listed), the four-set at-set.sh gate, the
-on-chain matrix group `liquidity` (script/onchain/Liquidity.s.sol), the opt-in fork cases.
+after the size fix (L3b): test/liquidity 88 passed; test/v2 Dex*, LinkClosure, Layout 205 passed; test/ua UADex*, UAModulePins 19
+passed; test/fork compiles, skipped without SCAAS_FORK_RPC_URL; node liquidity_* / T14 / typed_ops_kat 4 passed, clippy clean.
+mutants: 44 of 44 killed (mutants.txt beside this file: mutant | tests that went red | rc). M-L7 and M-L8 survived the first
+run (a SCaaS input's token repeats the expiry and the nonce cap with the same error over the same h); test_L7_L8_L13_dexAlone
+(an outside-only order) kills both; each mutant ran alone, its file restored and checked byte-equal (sha256).
+
+four-set gate (script/pqz/at-set.sh <set> test, FOUNDRY_TEST=test/liquidity, the invariant left out; PqzSet.sol restored after each):
+n2048-kmax1024 | 0 | 7 suites, 89 passed
+n2304-kmax4096 | 0 | 7 suites, 89 passed
+n2560-kmax16384 | 0 | 7 suites, 89 passed
+n2816-kmax65536 | 0 | 7 suites, 89 passed
+
+on-chain matrix, group `liquidity`, target local (matrix.sh local: a fresh anvil, chain 31337, deploy.sh evm, MATRIX_GROUPS=liquidity):
+DEX 0x3f1a0da1eD00b94c52883CEc1251Ebff8D17B5D7, tokens 0x7471792253E087456Dc9f6246234dA31126fEF3D 0x56eD6A3ABcDfD66F8549BE38D1B195Cc59F1F6f5
+row | result | mtxLiquidity tx
+D-L1 create a v2 pair as the first interaction, two SCaaS inputs, LP to a2 | ok | 0x4911a880f18a5189281c58d8bed7c4834f28a0cb673f5c57ee318f6901f53c04
+D-L2 SCaaS + outside input, fee 0.3 % | ok | 0xc85bf4b0debd80075e7cdac8ff724aff6c0cf22f2a94f0cc9d1c970efdfb2bcf
+D-L4 withdraw the LP | ok | 0xb100c86bf89c81d9ba084c6391ed8b9c0279fcfb2035ebf47fba4c25ebf0ed48
+D-L5 v4 mock mint through the reader | ok | 0xe35862472060a90969aed305f247b5ee19fceca96e5574c9bf3863c959e02080
+D-L6 partial withdraw as the received position | ok | 0xb893d8ca2380d38af4317df317b9b45baf2c4ba43481dd60137617a5f8c7d056
+D-L6 whole withdraw that burns | ok | 0x1f68d83032f4fb030fa8ab91e2f2e2ea30ca53bb60998ebafa8083fbca5844e2
+D-L7 / D-L8 / D-L9 negatives (coverage.py neg, eth_call on the final state) | 6 of 6 refused as expected | replay OrderClosed, unlisted reader PositionReaderNotListed, the module direct NotDelegated, a token's pull by an EOA DexNotContract, MockOldDex NotLiquidityDex, mtxLiquidityPull inside an interaction ForbiddenSelector
+D-L8 views (in the script): modules() lists two, supportsInterface(ILiquidityPullToken) on the token | ok |
+D-L3 (a derived p256 UA) | not in the script | needs a registered p256 key on the target
+records: records-local-liquidity.jsonl beside this file (addresses and hashes only). SCaaS testnet: not run (local only).
+

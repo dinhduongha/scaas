@@ -97,7 +97,8 @@ contract Liquidity is OnchainBase {
         bytes32 s = _salt(what);
         a = vm.computeCreate2Address(s, keccak256(init), CREATE2_FACTORY);
         vm.broadcast(k1);
-        (bool ok,) = CREATE2_FACTORY.call{gas: 3 * G + 2_000_000}(abi.encodePacked(s, init));
+        // 30 M: the ERC-721 position manager's code deposit under Amsterdam ran out of 11 M (the first local run); within 60 M
+        (bool ok,) = CREATE2_FACTORY.call{gas: 30_000_000}(abi.encodePacked(s, init));
         require(ok && a.code.length != 0, what);
     }
 
@@ -124,7 +125,7 @@ contract Liquidity is OnchainBase {
 
     function _send(ISCaaSDex.LiquidityPlan memory p, ISCaaSDex.Interaction[] memory xs, string memory row) internal {
         vm.broadcast(k3);
-        dex.mtxLiquidity{gas: 8_000_000}(p, xs);
+        dex.mtxLiquidity{gas: 30_000_000}(p, xs); // D-L1 CREATEs a pair inside: its Amsterdam code deposit
         console2.log(string.concat("ok ", row, " h=", vm.toString(dex.liquidityOrderDigest(p.order))));
     }
 
@@ -153,7 +154,7 @@ contract Liquidity is OnchainBase {
     /// D-L2: one SCaaS and one outside input (the puller; the DEX verifies), fee 0.3 % split.
     function _addOutside() internal {
         vm.broadcast(k1);
-        address p2 = v2f.createPair{gas: G}(A, address(usdc));
+        address p2 = v2f.createPair{gas: 30_000_000}(A, address(usdc));
         _book(p2, "MockV2LiquidityPair");
         ITradeToken.LiquidityOrder memory o = _order(a1, a2);
         o.inputs = new ITradeToken.LiquidityToken[](2);
