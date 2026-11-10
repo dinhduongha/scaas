@@ -24,6 +24,8 @@ CAPPED = os.path.join(ROOT, "scripts", "capped")
 FORGE = os.path.expanduser("~/.foundry/bin/forge")
 
 # Rows are added by the task that builds the code they mutate (T2 ... T15); T13 runs the rest and checks the count.
+UA = "smartcontracts/evm/src/governance/UAAdmin.sol"
+OF = "smartcontracts/evm/src/factory/OpenFactory.sol"
 MUTANTS = {
     # T2 (§4.1): a token face keeps an ownership alias beside the admin entries: `owner()` answering the admin (a view, caught
     # by AdminNames) and a `transferOwnership(bytes32)` stub (a write, caught by SelectorAudit as unclassified). The face is
@@ -54,6 +56,84 @@ MUTANTS = {
             "(\"UATransferAdmin\", \"mtxTransferAdmin\", GR,",
             "(\"UATransferAdmin\", \"mtxTransferOwnership\", GR,",
             "cargo", "scaas-node", "allow_lists_equal_the_selector_audit_both_directions"),
+    # T5 (§5.1, §5.2, §5.6, §8): UAAdmin and the factory's admin, approvals and open deploys; every row is killed by
+    # test/v2/FactoryAdmin.t.sol (FA = the file)
+    **{mid: (path, old, new, "forge", "test/v2", "FactoryAdmin.t.sol") for mid, path, old, new in [
+        # M1: `_adminSubject` asks any caller with code for `subject()` (the fake-router test)
+        ("M1", UA, "        if (r != address(0) && msg.sender == r) return IGovernanceRouter(r).subject();",
+         "        if (msg.sender.code.length != 0) return IGovernanceRouter(msg.sender).subject();"),
+        # M2: the router branch returns `pad(msg.sender)` (the derived-admin tests)
+        ("M2", UA, "        if (r != address(0) && msg.sender == r) return IGovernanceRouter(r).subject();",
+         "        if (r != address(0) && msg.sender == r) return bytes32(uint256(uint160(msg.sender)));"),
+        # M3: `onlyAdmin` drops `c != 0` (renounce + a router answering 0)
+        ("M3", UA, "        if (c == 0 || c != _adminStorage().admin) revert NotAdmin(c);",
+         "        if (c != _adminStorage().admin) revert NotAdmin(c);"),
+        # M4: the direct path drops `requireNotDelegated` (the designator test)
+        ("M4", UA, "        SigCheck.requireNotDelegated(msg.sender);\n", ""),
+        # M9: `acceptAdmin` leaves the pending (a second accept)
+        ("M9", UA, "        (s.admin, s.pendingAdmin) = (c, bytes32(0));", "        s.admin = c;"),
+        # M10: the constructor takes a derived id (the constructor test)
+        ("M10", OF, "        if (admin_ == bytes32(0) || uint256(admin_) >> 160 != 0) revert AdminNotNative(admin_);",
+         "        if (admin_ == bytes32(0)) revert AdminNotNative(admin_);"),
+        # M17: `_renounceAdmin` leaves the pending (the renounce-clears-pending test)
+        ("M17", UA, "        (s.admin, s.pendingAdmin) = (bytes32(0), bytes32(0));", "        s.admin = bytes32(0);"),
+        # M18: `transferAdmin` writes the admin in one step (the two-step tests)
+        ("M18", UA, "        s.pendingAdmin = newAdmin;", "        s.admin = newAdmin;"),
+        # M19: `acceptAdmin` drops `c != 0` (a router answering 0 with no pending)
+        ("M19", UA, "        if (c == 0 || c != s.pendingAdmin) revert NotPendingAdmin(c);",
+         "        if (c != s.pendingAdmin) revert NotPendingAdmin(c);"),
+        # M22: `transferAdmin` / `renounceAdmin` without `configured` (the unconfigured test)
+        ("M22-transfer", OF, "    function transferAdmin(bytes32 newAdmin) public override(IAdmin, UAAdmin) configured {",
+         "    function transferAdmin(bytes32 newAdmin) public override(IAdmin, UAAdmin) {"),
+        ("M22-renounce", OF, "    function renounceAdmin() external configured {", "    function renounceAdmin() external {"),
+        # M23: the shortcut accepts a sender that is not the admin, or reads the router's `subject()`
+        ("M23-sender", OF, "        else if (bytes32(uint256(uint160(msg.sender))) != _adminStorage().admin || SigCheck.isDesignator(msg.sender)) {",
+         "        else if (SigCheck.isDesignator(msg.sender)) {"),
+        ("M23-subject", OF, "        else if (bytes32(uint256(uint160(msg.sender))) != _adminStorage().admin || SigCheck.isDesignator(msg.sender)) {",
+         "        else if (_adminSubject() != _adminStorage().admin || SigCheck.isDesignator(msg.sender)) {"),
+        # M24: the deploy skips the approval lookup, or takes a hash from another source than the call's bytes
+        ("M24-skip", OF, "        _useApproval(_tokenKey(kind, version, envVersion, keccak256(initcode), keccak256(implArgs)));\n", ""),
+        ("M24-hash", OF, "        _useApproval(_tokenKey(kind, version, envVersion, keccak256(initcode), keccak256(implArgs)));",
+         "        _useApproval(_tokenKey(kind, version, envVersion, keccak256(implArgs), keccak256(implArgs)));"),
+        # M25: the key leaves out one field (one row each)
+        ("M25-chainUid", OF, "        return keccak256(abi.encode(_TAG_TOKEN, chainUid, address(this), kind,",
+         "        return keccak256(abi.encode(_TAG_TOKEN, address(this), kind,"),
+        ("M25-factory", OF, "        return keccak256(abi.encode(_TAG_TOKEN, chainUid, address(this), kind,",
+         "        return keccak256(abi.encode(_TAG_TOKEN, chainUid, kind,"),
+        ("M25-envVersion", OF, "        return keccak256(abi.encode(_TAG_TOKEN, chainUid, address(this), kind, version, envVersion, initcodeHash,",
+         "        return keccak256(abi.encode(_TAG_TOKEN, chainUid, address(this), kind, version, initcodeHash,"),
+        ("M25-initSelector", OF, "id, envVersion, initSelector, interfaceId,\n", "id, envVersion, interfaceId,\n"),
+        ("M25-interfaceId", OF, "id, envVersion, initSelector, interfaceId,\n", "id, envVersion, initSelector,\n"),
+        ("M25-tag", OF, "        return keccak256(abi.encode(_TAG_TOKEN, chainUid, address(this), kind,",
+         "        return keccak256(abi.encode(chainUid, address(this), kind,"),
+        # M26: the deploy does not check the approval's term, or its `until`
+        ("M26-generation", OF, "        if (_live(a)) a.state = ApprovalState.CONSUMED;",
+         "        if (a.state == ApprovalState.LIVE && block.timestamp <= a.until) a.state = ApprovalState.CONSUMED;"),
+        ("M26-until", OF, "        if (_live(a)) a.state = ApprovalState.CONSUMED;",
+         "        if (a.state == ApprovalState.LIVE && a.adminGeneration == _adminStorage().adminGeneration) a.state = ApprovalState.CONSUMED;"),
+        # M27: the deploy does not mark the approval consumed (the used-twice test)
+        ("M27", OF, "        if (_live(a)) a.state = ApprovalState.CONSUMED;", "        if (_live(a)) {}"),
+        # M28: `revokeApproval` without `onlyAdmin`, or on a consumed key
+        ("M28-onlyAdmin", OF, "    function revokeApproval(bytes32 key) external onlyAdmin configured {",
+         "    function revokeApproval(bytes32 key) external configured {"),
+        ("M28-consumed", OF, "        if (_approvals[key].state != ApprovalState.LIVE) revert ApprovalNotRevocable(key);",
+         "        if (_approvals[key].state == ApprovalState.NONE) revert ApprovalNotRevocable(key);"),
+        # M29: an approval that ignores its `chainUid`, `factory` or `adminGeneration` field
+        ("M29-chainUid", OF, "        if (chainUid_ != chainUid) revert ApprovalFieldMismatch(ApprovalField.CHAIN_UID);\n", ""),
+        ("M29-factory", OF, "        if (factory_ != address(this)) revert ApprovalFieldMismatch(ApprovalField.FACTORY);\n", ""),
+        ("M29-generation", OF,
+         "        if (generation != _adminStorage().adminGeneration) revert ApprovalFieldMismatch(ApprovalField.ADMIN_GENERATION);\n", ""),
+        # M30: `approve*` refuses an entry that is no longer live: expired, of an older term, revoked (a revoked entry is
+        # deleted, spec §5.6 item 2, so refusing it is refusing an empty entry)
+        ("M30-expired", OF, "        if (_live(a)) revert ApprovalLive(key);",
+         "        if (a.state == ApprovalState.LIVE && a.adminGeneration == _adminStorage().adminGeneration) revert ApprovalLive(key);"),
+        ("M30-older", OF, "        if (_live(a)) revert ApprovalLive(key);",
+         "        if (a.state == ApprovalState.LIVE && block.timestamp <= a.until) revert ApprovalLive(key);"),
+        ("M30-revoked", OF, "        if (_live(a)) revert ApprovalLive(key);",
+         "        if (_live(a) || a.state == ApprovalState.NONE) revert ApprovalLive(key);"),
+        # M31: `_supports` without the gas floor (the low-gas deploy test)
+        ("M31", OF, "        if (left < _PROBE_GAS * 64 / 63 + _PROBE_GAS_MARGIN) revert ProbeGasLow(left);\n", ""),
+    ]},
 }
 
 
