@@ -282,3 +282,35 @@ contract MockReenter {
     }
 }
 
+
+/// Answers a fixed position for any id (L25: a reader that matches while its manager keeps the NFT).
+contract MockFixedReader {
+    address public immutable manager;
+    bytes32 internal immutable _pool;
+    int24 internal immutable _lo;
+    int24 internal immutable _hi;
+    uint128 internal immutable _liq;
+
+    constructor(address m, bytes32 pool, int24 lo, int24 hi, uint128 liq) {
+        (manager, _pool, _lo, _hi, _liq) = (m, pool, lo, hi, liq);
+    }
+
+    function position(uint256) external view returns (bytes32, int24, int24, uint128, bool) {
+        return (_pool, _lo, _hi, _liq, false);
+    }
+}
+
+/// A swap venue paid first by a transfer: pays `amountOut` of `tOut` to `to` from its own inventory (the zap's hop).
+contract MockSwap {
+    function swap(address tOut, uint256 amountOut, address to) external {
+        IERC20(tOut).transfer(to, amountOut);
+    }
+}
+
+/// Reads the DEX's `liquidityOrderDigest` by STATICCALL, as a token's T7 does (owner 2026-11-10: the view behind its stub).
+contract MockDigestProbe {
+    function probe(address dex, ITradeToken.LiquidityOrder calldata o, bytes32 expected) external view {
+        (bool ok, bytes memory r) = dex.staticcall(abi.encodeWithSelector(0x436033f5, o));
+        require(ok && r.length == 32 && abi.decode(r, (bytes32)) == expected, "probe");
+    }
+}

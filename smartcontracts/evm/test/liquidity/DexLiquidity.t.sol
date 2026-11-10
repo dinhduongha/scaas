@@ -13,7 +13,8 @@ import {FeeOnTransferERC20, MockERC20} from "../helpers/Mocks.sol";
 import {nid} from "../helpers/Ids.sol";
 import {LiquidityBase} from "./LiquidityBase.sol";
 import {MockV2LiquidityPair, MockPositionManagerV4, MockDistributor, MockShortReader, MockStickyPositions,
-    MockReenter} from "./LiquidityMocks.sol";
+    MockReenter, MockFixedReader, MockSwap, MockDigestProbe} from "./LiquidityMocks.sol";
+import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 
 /// `mtxLiquidity` (CTR-DEX-30, -31; spec 2026-11-10-dex-liquidity.md §6, §7, §14): the positive controls of §7.2 and the
 /// negatives L1-L37, each one change from a positive control.
@@ -675,5 +676,86 @@ contract DexLiquidityTest is LiquidityBase {
     function test_L35_interface() public view {
         assertTrue(a.supportsInterface(type(ILiquidityPullToken).interfaceId));
         assertEq(type(ILiquidityPullToken).interfaceId, ILiquidityPullToken.mtxLiquidityPull.selector);
+    }
+
+    // ------------------------------------------------------------------ owner 2026-11-10: the remaining cases
+
+    /// T7's read through the stub: the DEX's `liquidityOrderDigest` answers a STATICCALL, also while a plan holds the guard.
+    function test_T7_digestUnderStaticcall() public {
+        ISCaaSDex.LiquidityPlan memory p = _addPlan(98_000);
+        bytes32 h = dex.liquidityOrderDigest(p.order);
+        MockDigestProbe probe = new MockDigestProbe();
+        probe.probe(address(dex), p.order, h);
+        ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](4);
+        xs[0] = _ix(address(probe), abi.encodeCall(MockDigestProbe.probe, (address(dex), p.order, h)));
+        (xs[1], xs[2], xs[3]) = (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1],
+            _addXs(ADD, ADD, address(dex))[2]);
+        _run(p, xs);
+        assertEq(dex.pulled(h), 1);
+    }
+
+    /// L25: a manager whose `transferFrom` keeps the received position.
+    function test_L25_delivered() public {
+        MockStickyPositions sticky = new MockStickyPositions();
+        MockFixedReader fr = new MockFixedReader(address(sticky), keccak256("pool"), LO, HI, 5);
+        vm.prank(admin);
+        dex.setExchangeTarget(address(fr), true);
+        ITradeToken.LiquidityOrder memory o = _base();
+        o.inputs = _one(_t(address(a), 1_000));
+        (o.positionManager, o.positionReader, o.positionPool) = (address(sticky), address(fr), keccak256("pool"));
+        (o.tickLower, o.tickUpper, o.minLiquidity) = (LO, HI, 5);
+        ISCaaSDex.LiquidityPlan memory p = _plan(o, ALICE_PK, _u(1_000));
+        p.positionId = 7;
+        ISCaaSDex.Interaction[] memory xs = _xs(_ix(address(sticky), abi.encodeCall(MockStickyPositions.mint, (address(dex), 7))));
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.PositionNotDelivered.selector, 7));
+        _run(p, xs);
+    }
+
+    /// L35: a token of an earlier release (no `mtxLiquidityPull`; simulated by an empty revert of that selector) as a SCaaS
+    /// input: the plan reverts with empty data and nothing moves.
+    function test_L35_earlierRelease() public {
+        ISCaaSDex.LiquidityPlan memory p = _addPlan(98_000);
+        vm.mockCallRevert(address(b), abi.encodeWithSelector(ILiquidityPullToken.mtxLiquidityPull.selector), "");
+        uint256 a0 = a.balanceOf(alice);
+        vm.expectRevert(bytes(""));
+        _run(p, _addXs(ADD, ADD, address(dex)));
+        assertEq(a.balanceOf(alice), a0);
+        assertEq(dex.pulled(dex.liquidityOrderDigest(p.order)), 0);
+    }
+
+    /// A zap: one token in, half swapped for the other inside the plan (`extraTokens` for the hop), LP out.
+    function test_zap() public {
+        MockSwap sw = new MockSwap();
+        vm.prank(carol);
+        b.transfer(address(sw), ADD);
+        ITradeToken.LiquidityOrder memory o = _base();
+        o.inputs = _one(_t(address(a), 2 * ADD));
+        o.outputs = _one(_t(address(pair), 98_000));
+        ISCaaSDex.LiquidityPlan memory p = _plan(o, ALICE_PK, _u(2 * ADD));
+        p.extraTokens = new address[](1);
+        p.extraTokens[0] = address(b);
+        ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](5);
+        xs[0] = _ix(address(a), abi.encodeCall(IERC20.transfer, (address(sw), ADD)));
+        xs[1] = _ix(address(sw), abi.encodeCall(MockSwap.swap, (address(b), ADD, address(dex))));
+        (xs[2], xs[3], xs[4]) = (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1],
+            _addXs(ADD, ADD, address(dex))[2]);
+        _run(p, xs);
+        assertGt(pair.balanceOf(carol), 98_000);
+        assertEq(b.balanceOf(address(dex)), 0);
+    }
+
+    /// An ERC-1271 signer: each SCaaS input token verifies the wallet's signature over `h` (CTR-DEX-08's cap).
+    function test_erc1271Signer() public {
+        Mock1271Wallet w = new Mock1271Wallet(alice);
+        vm.startPrank(alice);
+        a.transfer(address(w), ADD);
+        b.transfer(address(w), ADD);
+        vm.stopPrank();
+        ITradeToken.LiquidityOrder memory o = _addOrder(98_000);
+        o.from = nid(address(w));
+        ISCaaSDex.LiquidityPlan memory p = _plan(o, ALICE_PK, _u2(ADD, ADD));
+        _run(p, _addXs(ADD, ADD, address(dex)));
+        assertEq(a.balanceOf(address(w)), 0);
+        assertGt(pair.balanceOf(carol), 98_000);
     }
 }
