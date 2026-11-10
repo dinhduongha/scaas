@@ -952,9 +952,9 @@ token generation.
 <a id="ua-parity"></a>
 <a id="CTR-UA-27"></a>**CTR-UA-27** — **Parity: every operation open to a native id is open to a registered SIGNING UA**
 (owner 2026-10-13), PQ kinds included. A UA never sends a transaction, so parity has two axes: the **subject** — every
-function a native calls or signs has a signed UA form (the `ua*` functions and the UA allowlist,
+function a native calls or signs has a signed UA form (one `mtx*` entry per operation on `bytes32` ids since the merge, [CTR-MTX-30](../decisions.md#CTR-MTX-30), and the UA allowlist,
 [CTR-UA-26](#CTR-UA-26); `UATradeOrder` on tokens and in `SCaaSDex`, [CTR-DEX-25](dex.md#CTR-DEX-25),
-[CTR-DEX-26](dex.md#CTR-DEX-26); the generic UA pipeline of `MetaTxBase`, [CTR-MTX-22](metatx.md#CTR-MTX-22), with
+[CTR-DEX-26](dex.md#CTR-DEX-26); the generic UA pipeline of `UAMetaTxBase`, [CTR-MTX-22](metatx.md#CTR-MTX-22), with
 `bytes32` ids in `MandateWallet`, [CTR-ACC-12](mandates.md#CTR-ACC-12); the Zether public side,
 [CTR-ZTH-51](zether.md#CTR-ZTH-51)) — and the **receiver** — every `address` receiver has a `bytes32` form credited in
 the UA ledger ([CTR-UA-28](#CTR-UA-28)). Rules for every UA form:
@@ -1163,9 +1163,10 @@ structs whose `from` cannot be an `address`. Clients build the UA struct shapes 
 below). `UATradeOrder` and `UAInvalidateNonces` ([CTR-DEX-25](dex.md#CTR-DEX-25)) follow the same rule: own struct, own
 typehash, the sell token's domain.
 
-The `ua*` functions live in the one base, so every kind (built kinds `NORMAL`, `WRAPPED`) has them. Storage adds `_uaBalance[bytes32]`, the used `metatx-cancel` digests (ERC-7201 `scaas.ua.ledger`) and
+The UA entries live in the one base, so every kind (built kinds `NORMAL`, `WRAPPED`) has them; since the merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)) they are the one
+`mtx*` entry per operation on `bytes32` ids (`ua*` before). Storage adds `_uaBalance[bytes32]`, the used `metatx-cancel` digests (ERC-7201 `scaas.ua.ledger`) and
 `_uaNonce[bytes32][batch]` (BUILT: `MetaTxBase`'s one map, keyed by `bytes32`; the registry is an implementation
-immutable, 0 = the ledger is off: every `ua*` reverts `UALedgerOff` and `supportsInterface(IUALedger)` is false; the v3 nonce map is keyed by `bytes32` for
+immutable, 0 = the ledger is off: since the merge a native id still runs every entry, a derived side reverts `UALedgerOff` by name (`MtxPipelineLib`), and `supportsInterface(IUALedger)` is false; the v3 nonce map is keyed by `bytes32` for
 both paths; native ids are zero-padded).
 
 <a id="CTR-UA-26"></a>**CTR-UA-26** — **The UA path splits like the address path** (owner): a generic
@@ -1174,10 +1175,10 @@ both paths; native ids are zero-padded).
 confidential ops under the UA envelope binding on
 the Zether kinds (UA-5c, [CTR-ZTH-51](zether.md#CTR-ZTH-51)); `PqzToken`'s four PQZ selectors,
 [CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) and a typed `UAMetaTransfer` (transfer with `entryRef = 0`, or
-payment). Both share the one nonce map `_uaNonce[bytes32][batch]` with the address path (native ids zero-padded). The
-`ua*` functions keep their signatures and build the struct of their kind; `uaExecuteTransfer` and `uaBatchTransfer`
-mirror `mtxExecuteTransfer` and `mtxBatchTransfer` ([CTR-MTX-23](metatx.md#CTR-MTX-23),
-[CTR-MTX-24](metatx.md#CTR-MTX-24)).
+payment). Both share the one nonce map `_uaNonce[bytes32][batch]` with the address path (native ids zero-padded). Since the
+merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)) these are the token's only signed structs: `mtxExecute(UAMetaTransaction, UASig)` and
+`mtxBatch` run the generic one, `mtxExecuteTransfer(UAMetaTransfer, UASig)` and `mtxBatchTransfer` the typed one
+([CTR-MTX-23](metatx.md#CTR-MTX-23), [CTR-MTX-24](metatx.md#CTR-MTX-24)); the `ua*` signed entries are retired.
 
 ```solidity
 struct UAMetaTransaction {
