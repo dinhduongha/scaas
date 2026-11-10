@@ -1568,8 +1568,10 @@ mod tests {
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
     }
     /// Regulated-kinds spec §7 (plan T35), one kind 8-13 against its base kind, both directions:
-    /// - the contract: its `mtxSelectors()`, `_mtxRule` and `_uaAllowed` are `return super.<f>(…)` over the base kind, and
-    ///   `RegulatedBase` defines none of them, so the meta-tx allow-lists are the base kind's;
+    /// - the contract (split tree, T66b): `<Kind>Core is <Base>Core, RegulatedBase`; its `_mtxSelectorsBody`, `_mtxRule` and
+    ///   `_uaAllowed` are `return super.<f>(…)` over `<Base>Core`; the module's `mtxSelectors()` returns `_mtxSelectorsBody()`;
+    ///   and neither `RegulatedBase`, `RegulatedLib`, the face nor the modules define any of them, so the meta-tx allow-lists
+    ///   are the base kind's;
     /// - `selector_audit.json`: its `SIGNED` entries are the base kind's, each way; every other entry it adds is one of the eight
     ///   `BIT` controls (5, 6, 7, 10, 22), none a row of any node kind (relayed through the router only);
     /// - the node: the rows of the base's node kind on its `SIGNED` entries are the same set on the regulated kind, and the guard
@@ -1577,20 +1579,30 @@ mod tests {
     fn regulated_kind_rows_equal_contract(kind: &str, base: &str, node_kind: &str, base_dir: &str) {
         let root = format!("{}/../smartcontracts/evm", env!("CARGO_MANIFEST_DIR"));
         let read = |p: &str| std::fs::read_to_string(format!("{root}/{p}")).unwrap_or_else(|e| panic!("{p}: {e}"));
-        let src = read(&format!("src/regulated/{kind}.sol"));
-        assert!(src.contains(&format!("contract {kind} is {base}, RegulatedBase {{")), "{kind} is {base}, RegulatedBase");
-        assert!(read(&format!("src/{base_dir}/{base}.sol")).contains(&format!("contract {base} ")), "{base} in src/{base_dir}");
-        for (f, args) in [("mtxSelectors", "()"), ("_mtxRule", "(sel)"), ("_uaAllowed", "(sel)")] {
+        // ua-mtx-merge T66b: the kind's logic is `<Kind>Core`; the face (`<Kind>.sol`) and `<Kind>Modules.sol` forward to it.
+        let src = read(&format!("src/regulated/{kind}Core.sol"));
+        assert!(src.contains(&format!("abstract contract {kind}Core is {base}Core, RegulatedBase {{")), "{kind}Core is {base}Core, RegulatedBase");
+        assert!(read(&format!("src/{base_dir}/{base}Core.sol")).contains(&format!("abstract contract {base}Core ")), "{base}Core in src/{base_dir}");
+        let body_of = |src: &str, f: &str| -> String {
             let i = src.find(&format!("function {f}(")).unwrap_or_else(|| panic!("{kind}: no {f}"));
-            let body = &src[i..i + src[i..].find("\n    }\n").unwrap()];
-            assert!(body.contains(&format!("override({base}, ")), "{kind}.{f} overrides {base}'s");
-            let stmts: Vec<&str> = body[body.find('{').unwrap() + 1..].split(';').map(str::trim).filter(|s| !s.is_empty()).collect();
-            assert_eq!(stmts, [format!("return super.{f}{args}")], "{kind}.{f}: the base kind's, unchanged");
+            src[i..i + src[i..].find("\n    }\n").unwrap()].to_string()
+        };
+        let stmts = |body: &str| -> Vec<String> {
+            body[body.find('{').unwrap() + 1..].split(';').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect()
+        };
+        for (f, args) in [("_mtxSelectorsBody", "()"), ("_mtxRule", "(sel)"), ("_uaAllowed", "(sel)")] {
+            let body = body_of(&src, f);
+            let o = body.find("override(").unwrap_or_else(|| panic!("{kind}Core.{f}: no override")) + "override(".len();
+            let over: Vec<&str> = body[o..o + body[o..].find(')').unwrap()].split(',').map(str::trim).collect();
+            assert!(over.contains(&format!("{base}Core").as_str()), "{kind}Core.{f} overrides {base}Core's: {over:?}");
+            assert_eq!(stmts(&body), [format!("return super.{f}{args}")], "{kind}Core.{f}: the base kind's, unchanged");
         }
-        for lib in ["RegulatedBase", "RegulatedLib"] {
-            let s = read(&format!("src/regulated/{lib}.sol"));
-            for f in ["function mtxSelectors(", "function _mtxRule(", "function _uaAllowed("] {
-                assert!(!s.contains(f), "{lib} defines {f}: {kind}'s super would reach it first");
+        let modules = read(&format!("src/regulated/{kind}Modules.sol"));
+        assert_eq!(stmts(&body_of(&modules, "mtxSelectors")), ["return _mtxSelectorsBody()"], "{kind}Modules.mtxSelectors");
+        for file in ["RegulatedBase".to_string(), "RegulatedLib".to_string(), kind.to_string(), format!("{kind}Modules")] {
+            let s = read(&format!("src/regulated/{file}.sol"));
+            for f in ["function _mtxSelectorsBody(", "function _mtxRule(", "function _uaAllowed("] {
+                assert!(!s.contains(f), "{file} defines {f}: {kind}'s allow-list would not be {base}Core's");
             }
         }
         let p = format!("{root}/test/vectors/selector_audit.json");
