@@ -361,7 +361,7 @@ contract GovRelaxTest is Test {
         assertTrue(a.barred(FREEZE, nid(other)));
     }
 
-    function test_acceptOwnershipKillsPendingRelax() public {
+    function test_acceptAdminKillsPendingRelax() public {
         vm.prank(OWNER);
         a.revokeRole(FREEZE, nid(issuer));
         vm.prank(issuer);

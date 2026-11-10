@@ -18,7 +18,7 @@ library GovernanceRouterTypes {
     bytes32 internal constant GRANT_TERMS = keccak256(
         "GrantTerms(uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope)");
 
-    // ---- the owner and the holder of a bit: every `GovernanceBase` contract
+    // ---- the admin and the holder of a bit: every `GovernanceBase` contract
     bytes32 internal constant UA_GRANT_ROLE = keccak256(
         "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_REVOKE_ROLE = keccak256(
@@ -30,12 +30,12 @@ library GovernanceRouterTypes {
         "UACancelGrant(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_DISABLE_FEATURE = keccak256(
         "UADisableFeature(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant UA_TRANSFER_OWNERSHIP = keccak256(
-        "UATransferOwnership(bytes32 from,address target,bytes32 newOwner,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant UA_ACCEPT_OWNERSHIP = keccak256(
-        "UAAcceptOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant UA_RENOUNCE_OWNERSHIP = keccak256(
-        "UARenounceOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_TRANSFER_ADMIN = keccak256(
+        "UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_ACCEPT_ADMIN = keccak256(
+        "UAAcceptAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_RENOUNCE_ADMIN = keccak256(
+        "UARenounceAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_RENOUNCE_ROLE = keccak256(
         "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 
@@ -93,7 +93,7 @@ library GovernanceRouterTypes {
         "UASetTaxRate(bytes32 from,address target,uint32 ratePpm,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_TAX_RECIPIENT = keccak256(
         "UASetTaxRecipient(bytes32 from,address target,bytes32 taxRecipient,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    // ---- the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the owner's,
+    // ---- the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the admin's,
     //      no bit; fee mode `NONE`
     bytes32 internal constant UA_PQZ_SET_VERIFIER = keccak256(
         "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
@@ -106,7 +106,7 @@ library GovernanceRouterTypes {
         "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_OPERATOR_TRANSFER = keccak256(
         "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    // ---- group 3l (wrap limits spec 2026-11-10 §9): the owner's limits (bit 25, the lists' switches of bit 26) and bit
+    // ---- group 3l (wrap limits spec 2026-11-10 §9): the admin's limits (bit 25, the lists' switches of bit 26) and bit
     //      26's membership on the hybrids of the wrapped kinds; fee mode `NONE`. The leg array hashes as EIP-712 does: the
     //      concatenated struct hashes of `WrapLegLimits`, each over its four `WrapLimit` struct hashes.
     bytes32 internal constant WRAP_LIMIT = keccak256("WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
@@ -126,7 +126,7 @@ library GovernanceRouterTypes {
 ///        SCaaS's kinds (the regulated kinds' controls among them, plan T32, regulated-kinds spec Q8) and the DEX; a router
 ///        for other powers (an application's bits 128-255) is another child of this base, named by the governed contract's
 ///        `GOV_ROUTER` (`Env.govRouter` for a release).
-/// @notice No owner, no state of its own, no `receive`: it holds nothing. Fee mode `NONE` (`supportedModes() == 0x03`), every
+/// @notice No admin, no state of its own, no `receive`: it holds nothing. Fee mode `NONE` (`supportedModes() == 0x03`), every
 ///         entry relayable at fee 0. Each op is one signed entry `mtx<Op>(UAEnvelope, target, <op params>, UASig)` over `UA<Op>`
 ///         (ua-mtx-merge T7, R14: the `ua<Op>` body under the `mtx<Op>` name; the address `Envelope` + `bytes` forms are in
 ///         legacy): a native id signs with its own key and no registry call, a derived id (a PQ key, an `msig`, …) through
@@ -154,7 +154,7 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         if (msg.sender == t) assembly ("memory-safe") { s := tload(_SUBJECT) }
     }
 
-    // ------------------------------------------------------------------ the owner and a holder (IGovernance)
+    // ------------------------------------------------------------------ the admin and a holder (IGovernance)
 
     function mtxGrantRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
         IUARegistry.UASig calldata auth) external
@@ -187,21 +187,21 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         _ua(GovernanceRouterTypes.UA_DISABLE_FEATURE, e, target, IGovernance.disableFeature.selector, abi.encode(bit), auth);
     }
 
-    function mtxTransferOwnership(MetaTxLib.UAEnvelope calldata e, address target, bytes32 newOwner,
+    function mtxTransferAdmin(MetaTxLib.UAEnvelope calldata e, address target, bytes32 newAdmin,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_TRANSFER_OWNERSHIP, e, target, IGovernance.transferAdmin.selector,
-            abi.encode(newOwner), auth);
+        _ua(GovernanceRouterTypes.UA_TRANSFER_ADMIN, e, target, IGovernance.transferAdmin.selector,
+            abi.encode(newAdmin), auth);
     }
 
-    function mtxAcceptOwnership(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
-        _ua(GovernanceRouterTypes.UA_ACCEPT_OWNERSHIP, e, target, IGovernance.acceptAdmin.selector, "", auth);
+    function mtxAcceptAdmin(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
+        _ua(GovernanceRouterTypes.UA_ACCEPT_ADMIN, e, target, IGovernance.acceptAdmin.selector, "", auth);
     }
 
-    function mtxRenounceOwnership(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth)
+    function mtxRenounceAdmin(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth)
         external
     {
-        _ua(GovernanceRouterTypes.UA_RENOUNCE_OWNERSHIP, e, target, IGovernance.renounceAdmin.selector, "", auth);
+        _ua(GovernanceRouterTypes.UA_RENOUNCE_ADMIN, e, target, IGovernance.renounceAdmin.selector, "", auth);
     }
 
     function mtxRenounceRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)

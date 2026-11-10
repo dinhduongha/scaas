@@ -128,19 +128,19 @@ contract RouterPairsTest is GovRouterFixture {
             NormalToken t = _normal(s, 0, 0);
             _m(op, s, address(t), abi.encode(MINT));
             assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
-        } else if (op == TRANSFER_OWNERSHIP) {
+        } else if (op == TRANSFER_ADMIN) {
             NormalToken t = _normal(s, 0, 0);
             _m(op, s, address(t), abi.encode(y));
-            assertEq(t.pendingAdmin(), y, "TransferOwnership");
-        } else if (op == ACCEPT_OWNERSHIP) {
+            assertEq(t.pendingAdmin(), y, "TransferAdmin");
+        } else if (op == ACCEPT_ADMIN) {
             NormalToken t = _normal(_pad(address(this)), 0, 0);
             t.transferAdmin(s);
             _m(op, s, address(t), "");
-            assertEq(t.admin(), s, "AcceptOwnership");
-        } else if (op == RENOUNCE_OWNERSHIP) {
+            assertEq(t.admin(), s, "AcceptAdmin");
+        } else if (op == RENOUNCE_ADMIN) {
             NormalToken t = _normal(s, 0, 0);
             _m(op, s, address(t), "");
-            assertEq(t.admin(), bytes32(0), "RenounceOwnership");
+            assertEq(t.admin(), bytes32(0), "RenounceAdmin");
         } else if (op == RENOUNCE_ROLE) {
             NormalToken t = _normal(s, s, 0);
             _m(op, s, address(t), abi.encode(MINT));
@@ -217,9 +217,9 @@ contract RouterPairsTest is GovRouterFixture {
     function test_routerRow_SetGrant() public { _both(SET_GRANT); }
     function test_routerRow_CancelGrant() public { _both(CANCEL_GRANT); }
     function test_routerRow_DisableFeature() public { _both(DISABLE_FEATURE); }
-    function test_routerRow_TransferOwnership() public { _both(TRANSFER_OWNERSHIP); }
-    function test_routerRow_AcceptOwnership() public { _both(ACCEPT_OWNERSHIP); }
-    function test_routerRow_RenounceOwnership() public { _both(RENOUNCE_OWNERSHIP); }
+    function test_routerRow_TransferAdmin() public { _both(TRANSFER_ADMIN); }
+    function test_routerRow_AcceptAdmin() public { _both(ACCEPT_ADMIN); }
+    function test_routerRow_RenounceAdmin() public { _both(RENOUNCE_ADMIN); }
     function test_routerRow_RenounceRole() public { _both(RENOUNCE_ROLE); }
     function test_routerRow_Mint() public { _both(OP_MINT); }
     function test_routerRow_MintToUA() public { _both(MINT_TO_UA); }
@@ -375,7 +375,7 @@ contract RouterPairsTest is GovRouterFixture {
         if (bytes(ty).length == 0) return "";
         if (op == GRANT_ROLE || op == REVOKE_ROLE || op == CANCEL_GRANT) return abi.encode(MINT, next);
         if (op == DISABLE_FEATURE || op == RENOUNCE_ROLE) return abi.encode(MINT);
-        if (op == TRANSFER_OWNERSHIP) return abi.encode(next);
+        if (op == TRANSFER_ADMIN) return abi.encode(next);
         if (op == OP_MINT) return abi.encode(BOB, uint256(1));
         if (op == MINT_TO_UA) return abi.encode(pq, uint256(1));
         if (op == DISABLE_WRAP) return abi.encode(address(usd), bytes32("r"));

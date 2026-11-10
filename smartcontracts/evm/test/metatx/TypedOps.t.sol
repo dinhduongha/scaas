@@ -1581,19 +1581,19 @@ contract TypedOpsRouterTest is UALedgerBase {
         }
     }
 
-    function test_routerRow_TransferOwnership() public {
-        string[1] memory f = _forms("TransferOwnership");
+    function test_routerRow_TransferAdmin() public {
+        string[1] memory f = _forms("TransferAdmin");
         uint256 s = vm.snapshotState();
         for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
-            assertEq(t.pendingAdmin(), _b32(f[i], "newOwner"), f[i]);
+            assertEq(t.pendingAdmin(), _b32(f[i], "newAdmin"), f[i]);
         }
     }
 
-    function test_routerRow_AcceptOwnership() public {
-        string[1] memory f = _forms("AcceptOwnership");
+    function test_routerRow_AcceptAdmin() public {
+        string[1] memory f = _forms("AcceptAdmin");
         uint256 s = vm.snapshotState();
         for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
@@ -1604,8 +1604,8 @@ contract TypedOpsRouterTest is UALedgerBase {
         }
     }
 
-    function test_routerRow_RenounceOwnership() public {
-        string[1] memory f = _forms("RenounceOwnership");
+    function test_routerRow_RenounceAdmin() public {
+        string[1] memory f = _forms("RenounceAdmin");
         uint256 s = vm.snapshotState();
         for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);

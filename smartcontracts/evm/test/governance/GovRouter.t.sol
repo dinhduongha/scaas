@@ -102,9 +102,9 @@ abstract contract GovRouterFixture is UARegistryBase {
     uint256 constant SET_GRANT = 2;
     uint256 constant CANCEL_GRANT = 3;
     uint256 constant DISABLE_FEATURE = 4;
-    uint256 constant TRANSFER_OWNERSHIP = 5;
-    uint256 constant ACCEPT_OWNERSHIP = 6;
-    uint256 constant RENOUNCE_OWNERSHIP = 7;
+    uint256 constant TRANSFER_ADMIN = 5;
+    uint256 constant ACCEPT_ADMIN = 6;
+    uint256 constant RENOUNCE_ADMIN = 7;
     uint256 constant RENOUNCE_ROLE = 8;
     uint256 constant OP_MINT = 9;
     uint256 constant MINT_TO_UA = 10;
@@ -199,10 +199,10 @@ abstract contract GovRouterFixture is UARegistryBase {
         rows[SET_GRANT] = Row("SetGrant", ",uint8 bit,bytes32 holder,GrantTerms terms", router.mtxSetGrant.selector);
         rows[CANCEL_GRANT] = Row("CancelGrant", ",uint8 bit,bytes32 account", router.mtxCancelGrant.selector);
         rows[DISABLE_FEATURE] = Row("DisableFeature", ",uint8 bit", router.mtxDisableFeature.selector);
-        rows[TRANSFER_OWNERSHIP] =
-            Row("TransferOwnership", ",bytes32 newOwner", router.mtxTransferOwnership.selector);
-        rows[ACCEPT_OWNERSHIP] = Row("AcceptOwnership", "", router.mtxAcceptOwnership.selector);
-        rows[RENOUNCE_OWNERSHIP] = Row("RenounceOwnership", "", router.mtxRenounceOwnership.selector);
+        rows[TRANSFER_ADMIN] =
+            Row("TransferAdmin", ",bytes32 newAdmin", router.mtxTransferAdmin.selector);
+        rows[ACCEPT_ADMIN] = Row("AcceptAdmin", "", router.mtxAcceptAdmin.selector);
+        rows[RENOUNCE_ADMIN] = Row("RenounceAdmin", "", router.mtxRenounceAdmin.selector);
         rows[RENOUNCE_ROLE] = Row("RenounceRole", ",uint8 bit", router.mtxRenounceRole.selector);
         rows[OP_MINT] = Row("Mint", ",address to,uint256 amount", router.mtxMint.selector);
         rows[MINT_TO_UA] = Row("MintToUA", ",bytes32 to,uint256 amount", router.mtxMintToUA.selector);
@@ -413,12 +413,12 @@ contract GovRouterTest is GovRouterFixture {
         assertFalse(t.hasRole(MINT, s), "RenounceRole");
         _do(DISABLE_FEATURE, s, address(t), abi.encode(MINT));
         assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
-        _do(TRANSFER_OWNERSHIP, s, address(t), abi.encode(y));
-        assertEq(t.pendingAdmin(), y, "TransferOwnership");
-        _do(ACCEPT_OWNERSHIP, y, address(t), "");
-        assertEq(t.admin(), y, "AcceptOwnership");
-        _do(RENOUNCE_OWNERSHIP, y, address(t), "");
-        assertEq(t.admin(), bytes32(0), "RenounceOwnership");
+        _do(TRANSFER_ADMIN, s, address(t), abi.encode(y));
+        assertEq(t.pendingAdmin(), y, "TransferAdmin");
+        _do(ACCEPT_ADMIN, y, address(t), "");
+        assertEq(t.admin(), y, "AcceptAdmin");
+        _do(RENOUNCE_ADMIN, y, address(t), "");
+        assertEq(t.admin(), bytes32(0), "RenounceAdmin");
     }
 
     function _wrappedOps(bytes32 s, bytes32 w, WrappedToken wt) internal {
@@ -470,18 +470,18 @@ contract GovRouterTest is GovRouterFixture {
         SCaaSDex d = _dex(msig);
         vm.prank(creator);
         t.transferAdmin(msig);
-        _do(ACCEPT_OWNERSHIP, msig, address(t), "");
+        _do(ACCEPT_ADMIN, msig, address(t), "");
         assertEq(t.admin(), msig, "the msig became owner through the router");
         _do(GRANT_ROLE, msig, address(t), abi.encode(MINT, pq));
         _do(OP_MINT, pq, address(t), abi.encode(BOB, uint256(9)));
         assertEq(t.balanceOf(BOB), 9);
-        _do(TRANSFER_OWNERSHIP, msig, address(t), abi.encode(pq));
-        _do(ACCEPT_OWNERSHIP, pq, address(t), "");
+        _do(TRANSFER_ADMIN, msig, address(t), abi.encode(pq));
+        _do(ACCEPT_ADMIN, pq, address(t), "");
         assertEq(t.admin(), pq);
 
         _do(SET_MARKET, msig, address(d), abi.encode(address(usd), address(t), true));
-        _do(TRANSFER_OWNERSHIP, msig, address(d), abi.encode(pq));
-        _do(ACCEPT_OWNERSHIP, pq, address(d), "");
+        _do(TRANSFER_ADMIN, msig, address(d), abi.encode(pq));
+        _do(ACCEPT_ADMIN, pq, address(d), "");
         assertEq(d.admin(), pq);
         _do(GRANT_ROLE, pq, address(d), abi.encode(LISTING, pq));
         _do(REVOKE_ROLE, pq, address(d), abi.encode(LISTING, msig));
@@ -616,8 +616,8 @@ contract GovRouterTest is GovRouterFixture {
         NormalToken t = _normal(eoa, 0, 0);
         bytes memory late = _signed(router, GRANT_ROLE, eoa, 1, address(t), abi.encode(MINT, stranger),
             abi.encode(MINT, stranger));
-        _do(TRANSFER_OWNERSHIP, eoa, address(t), abi.encode(next));
-        _do(ACCEPT_OWNERSHIP, next, address(t), "");
+        _do(TRANSFER_ADMIN, eoa, address(t), abi.encode(next));
+        _do(ACCEPT_ADMIN, next, address(t), "");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, eoa));
         _run(late);
         assertEq(router.mtxNonce(eoa, 1), 0, "the nonce stays unspent: the target's refusal reverts the call");

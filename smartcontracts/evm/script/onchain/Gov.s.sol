@@ -286,16 +286,16 @@ contract Gov is OnchainBase {
         vm.broadcast(k2);
         gr.mtxCancelGrant(e, t0d, GovernanceBits.MINTABLE, _pad(a3), s);
         // ownership: transfer, accept by the new owner, renounce
-        (e, s) = _auth(o, _ty("UATransferOwnership", "bytes32 newOwner"), t0r, abi.encode(uaD));
+        (e, s) = _auth(o, _ty("UATransferAdmin", "bytes32 newAdmin"), t0r, abi.encode(uaD));
         vm.broadcast(k2);
-        gr.mtxTransferOwnership(e, t0r, uaD, s);
+        gr.mtxTransferAdmin(e, t0r, uaD, s);
         Sg memory du = Sg(uaD, kD, 2); // the registered UA signs through the registry
-        (e, s) = _auth(du, _ty("UAAcceptOwnership", ""), t0r, "");
+        (e, s) = _auth(du, _ty("UAAcceptAdmin", ""), t0r, "");
         vm.broadcast(k2);
-        gr.mtxAcceptOwnership(e, t0r, s);
-        (e, s) = _auth(du, _ty("UARenounceOwnership", ""), t0r, "");
+        gr.mtxAcceptAdmin(e, t0r, s);
+        (e, s) = _auth(du, _ty("UARenounceAdmin", ""), t0r, "");
         vm.broadcast(k2);
-        gr.mtxRenounceOwnership(e, t0r, s);
+        gr.mtxRenounceAdmin(e, t0r, s);
         require(IGovernance(t0r).admin() == 0, "renounced");
         // the router's own lanes: a direct cancel and a signed one
         vm.broadcast(k2);

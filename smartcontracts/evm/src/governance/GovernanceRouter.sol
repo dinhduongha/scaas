@@ -12,7 +12,7 @@ import {IPqzToken} from "../pqz/IPqzToken.sol";
 
 /// @title One per chain, CREATE2 at a predictable address (CTR-GOV-15 Change, owner 2026-11-04; spec
 ///        `2026-11-04-governance-ua-identity.md` §3): the closed table of governance spec §3.2 over every governed contract
-///        of SCaaS whose `GOV_ROUTER` it is. The owner's and a holder's ops come from `GovernanceRouterBase`; here the powers
+///        of SCaaS whose `GOV_ROUTER` it is. The admin's and a holder's ops come from `GovernanceRouterBase`; here the powers
 ///        of the token kinds (`mint`, `mintToUA`, `disableWrap`, the rate entries; the eight controls of the regulated kinds
 ///        8-13, plan T32; the PQZ verifier UA of the PQZ kinds, group 3f) and of `SCaaSDex` (the market setters, `setFeeSplit`), each one `mtx<Op>(UAEnvelope, …, UASig)`
 ///        (ua-mtx-merge T7). Domain
@@ -125,7 +125,7 @@ contract GovernanceRouter is GovernanceRouterBase {
 
     // ------------------------------------------------------------------ the PQZ verifier UA (group 3f, spec §4.2, §4.3)
 
-    /// @notice The owner proposes, then confirms after the notice period, `next` as a transferable `OFFCHAIN` token's
+    /// @notice The admin proposes, then confirms after the notice period, `next` as a transferable `OFFCHAIN` token's
     ///         verifier; fee mode `NONE`, relayable at fee 0.
     function mtxPqzSetVerifier(MetaTxLib.UAEnvelope calldata e, address target, bytes32 next, IUARegistry.UASig calldata auth)
         external
@@ -151,7 +151,7 @@ contract GovernanceRouter is GovernanceRouterBase {
 
     // ------------------------------------------------------------------ wrap limits on the hybrids (group 3l, spec 2026-11-10 §9)
 
-    /// @notice The owner's limits of every leg, the net rule and the two lists (`setWrapLimits`): a wrap-side relaxation or an
+    /// @notice The admin's limits of every leg, the net rule and the two lists (`setWrapLimits`): a wrap-side relaxation or an
     ///         unwrap-side tightening is proposed by the first call and applied by the same call after the factory's
     ///         `noticePeriod()`; fee mode `NONE`, relayable at fee 0. The struct words: `target`, the leg array's hash, the
     ///         three flags.
