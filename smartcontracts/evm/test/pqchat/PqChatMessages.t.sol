@@ -123,6 +123,24 @@ contract PqChatMessagesTest is PqChatBase {
         assertEq(chat.messageCount(sid), 5, "counter 0 on each of the five ids");
     }
 
+    /// Fable P1-1 (spec §6.3): at home, once an epoch has a complete child, a message under it is refused
+    /// (`PqChatEpochTaken`); before the child, the same post is accepted (the control); the new epoch takes it; a replica,
+    /// which orders nothing, still takes a message under the old epoch.
+    function test_postMessage_supersededEpochRefusedAtHome() public {
+        _post(chat, _msg(ids[1], 1, 0, 32));
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[0], 1, 1, sid, _list(ids[0]), _members(3));
+        bytes32 e1 = _rekey(chat, e, w);
+        _refusedPost(_msg(ids[1], 1, 1, 32), abi.encodeWithSelector(IPqChat.PqChatEpochTaken.selector, sid, e1));
+        IPqChat.PqChatMessage memory m = _msg(ids[1], 1, 1, 32);
+        m.epochId = e1;
+        _post(chat, m);
+        (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory sw) = _session(3, 1, address(chat));
+        _create(chatB, s, sw);
+        _rekey(chatB, e, w);
+        _post(chatB, _msg(ids[1], 1, 1, 32));
+        assertEq(chatB.messageCount(sid), 1);
+    }
+
     function test_postMessage_forgedBurnsNoNonce() public {
         IPqChat.PqChatMessage memory m = _msg(ids[1], 1, 9, 32);
         IUARegistry.UASig memory forged = _sig(ids[2], h.message(m));

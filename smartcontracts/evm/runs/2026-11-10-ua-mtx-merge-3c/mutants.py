@@ -75,6 +75,10 @@ MUTANTS = {
     # T92: the release surface
     "t92-initialize-any-caller": (C, "        if (msg.sender != FACTORY) revert PqChatNotFactory();\n", "", "PqChat.t.sol"),
     "t90-module-check": (C, "        if (topics_.code.length == 0 || PqChatTopics(topics_).FACTORY() != factory_) revert PqChatEnv();\n", "", "PqChat.t.sol"),
+    # Fable review 2026-11-10
+    "fable-p1-1-superseded-epoch": (C, "        if (child != 0) revert PqChatEpochTaken(m.epochId, child);\n", "", "PqChatMessages.t.sol"),
+    "fable-p1-2-leaver-authors-plain": (C, "type(uint256).max || pe.left[e.author]) revert PqChatNotMember(e.author);",
+                                        "type(uint256).max) revert PqChatNotMember(e.author);", "PqChatEpochs.t.sol"),
     "t92-factory-info-class": (C, "return IOpenFactory.FactoryInfo(FACTORY, ChainEnvCode.chainUid(), CLASS, KIND,",
                                "return IOpenFactory.FactoryInfo(FACTORY, ChainEnvCode.chainUid(), CLASS + 1, KIND,", "PqChat.t.sol"),
 }

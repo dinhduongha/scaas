@@ -113,6 +113,25 @@ contract PqChatTest is PqChatBase {
         new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(0), _args());
     }
 
+    /// The factory checks the code hash of every library the class env pins (the module among them) when it deploys a
+    /// release (`LibraryCodeHashMismatch`); the same env with the right hash is the control.
+    function test_deployRelease_moduleCodeHashChecked() public {
+        IFactoryToken.Env memory e = _classEnv(address(p), LIMIT);
+        e.libCodeHashes[0] = keccak256("another code");
+        vm.prank(REGISTRAR);
+        f.publishClassEnv(3, 0, 2, e);
+        vm.prank(REGISTRAR);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.LibraryCodeHashMismatch.selector, address(topics),
+            keccak256("another code"), address(topics).codehash));
+        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+            type(PqChat).creationCode, _args());
+        vm.prank(REGISTRAR);
+        f.publishClassEnv(3, 0, 3, _classEnv(address(p), LIMIT));
+        vm.prank(REGISTRAR);
+        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+            type(PqChat).creationCode, _args());
+    }
+
     /// CTR-TOK-30, 3C-D2: `implArgs` names the body module of this factory; no code there, or another factory's module,
     /// refused. The module called directly has no env; through an instance it runs in the instance's state.
     function test_constructor_refusesAnotherModule() public {

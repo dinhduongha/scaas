@@ -75,6 +75,20 @@ contract PqChatEpochsTest is PqChatBase {
         assertEq(chat.childOf(sid), eid);
     }
 
+    /// Fable P1-2 (a): a member who left the parent authors no plain rekey of it; another member's plain rekey of the same
+    /// parent (keeping the leaver) is the control.
+    function test_rekey_leaverAuthorsNoPlainRekey() public {
+        _leave(chat, sid, ids[2], 1);
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[2], 2, 1, sid, _admins(), _members(3));
+        IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNotMember.selector, ids[2]));
+        chat.rekey(e, w, sig);
+        (e, w) = _epoch(sid, ids[1], 1, 1, sid, _admins(), _members(3));
+        assertEq(chat.childOf(sid), bytes32(0));
+        _rekey(chat, e, w);
+        assertTrue(chat.childOf(sid) != 0);
+    }
+
     function test_rekey_membershipChangeNeedsAdmin() public {
         // ids[1] (no admin) removes ids[2], adds ids[3], or adds itself as admin: each refused
         for (uint256 k; k < 3; ++k) {

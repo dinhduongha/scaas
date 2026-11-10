@@ -28,9 +28,9 @@ contract Create2Once {
 /// exact; a move needs old -> new figures in its commit.
 contract PqChatGasTest is PqTopicsBase {
     uint256 internal constant SLACK = 500;
-    uint256 internal constant RUNTIME = 24_771;
-    uint256 internal constant RELEASE_REGULAR = 1_711_112;
-    uint256 internal constant RELEASE_STATE = 38_474_910;
+    uint256 internal constant RUNTIME = 24_883;
+    uint256 internal constant RELEASE_REGULAR = 1_717_353;
+    uint256 internal constant RELEASE_STATE = 38_646_270;
     uint256 internal constant MODULE_RUNTIME = 16_396;
     uint256 internal constant MODULE_REGULAR = 1_099_442;
     uint256 internal constant MODULE_STATE = 25_269_480;
@@ -41,7 +41,7 @@ contract PqChatGasTest is PqTopicsBase {
         emit log_named_uint(string.concat("GAS ", what, " regular"), g.gasTotalUsed);
         emit log_named_uint(string.concat("GAS ", what, " state"), s);
         emit log_named_uint(string.concat("GAS ", what, " total"), g.gasTotalUsed + s);
-        if (regular != 0) {
+        if (regular != 0 && !vm.envOr("GAS_MEASURE", false)) { // GAS_MEASURE=true: the figures, no pin
             assertApproxEqAbs(g.gasTotalUsed, regular, SLACK, string.concat(what, " regular"));
             assertEq(s, state, string.concat(what, " state"));
         }
@@ -69,25 +69,25 @@ contract PqChatGasTest is PqTopicsBase {
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         bytes32 e1 = chat.rekey(e, ew, sig);
-        _row("rekey 2 members, plain, first epoch list entry", 364_096, 7_740_270);
+        _row("rekey 2 members, plain, first epoch list entry", 366_316, 7_740_270);
 
         (e, ew) = _epoch(sid, ids[0], 1, 2, e1, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         bytes32 e2 = chat.rekey(e, ew, sig);
-        _row("rekey 2 members, plain, next epoch list entry", 363_977, 7_642_350);
+        _row("rekey 2 members, plain, next epoch list entry", 366_197, 7_642_350);
 
         IPqChat.PqChatMessage memory m = _msg(sid, e2, ids[1], 0, 1040); // a 1,024-B bucket + the GCM-SIV tag
         sig = _sig(m.sender, h.message(m));
         vm.prank(STRANGER);
         chat.postMessage(m, sig);
-        _row("postMessage 2 members, 1,040 B ciphertext", 151_490, 2_732_580);
+        _row("postMessage 2 members, 1,040 B ciphertext", 153_744, 2_732_580);
 
         m = _msg(sid, e2, ids[1], 1, 1040);
         sig = _sig(m.sender, h.message(m));
         vm.prank(STRANGER);
         chat.postMessage(m, sig);
-        _row("postMessage 2 members, 1,040 B ciphertext, warm list", 151_502, 2_536_740);
+        _row("postMessage 2 members, 1,040 B ciphertext, warm list", 153_756, 2_536_740);
 
         IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(sid, e2, ids[1], 9);
         sig = _sig(ids[1], h.leave(l));
@@ -144,8 +144,11 @@ contract PqChatGasTest is PqTopicsBase {
         vm.prank(STRANGER);
         chat.rekey(e, ew, sig);
         _row("rekey 20 members, plain", 2_648_984, 59_515_470);
-        // all 20 wraps in one call ask more than 60 M ((regular + state) x 1.05): a 20-member record goes in chunks
-        assertGt(uint256(2_646_936 + 61_914_510) * 105 / 100, 60_000_000, "20 wraps in one call: over 60 M");
+        // all 20 wraps in one call ask more than 60 M ((regular + state) x 1.05), a create (67.8 M) and a rekey (65.3 M)
+        // alike: a 20-member record goes in chunks. The 20-member rows are warm (the 10-member session above wrote 11 of
+        // the slots and a wrap blob in this test): a cold call is about 1.26 M higher (Fable P3-7).
+        assertGt(uint256(2_646_936 + 61_914_510) * 105 / 100, 60_000_000, "20 wraps in one create: over 60 M");
+        assertGt(uint256(2_648_984 + 59_515_470) * 105 / 100, 60_000_000, "20 wraps in one rekey: over 60 M");
         (s, w) = _session(20, 3, address(chat));
         sig = _sig(s.creator, h.session(s));
         vm.prank(STRANGER);
@@ -221,7 +224,7 @@ contract PqChatGasTest is PqTopicsBase {
         emit log_named_uint("GAS deployRelease PqChat asked x 1.05", asked);
         assertLt(regular * 105 / 100, 1 << 24, "regular gas x 1.05 under 2^24 (EIP-7825)");
         assertLe(asked, 60_000_000, "the release transaction asks at most 60 M");
-        if (RUNTIME != 0) {
+        if (!vm.envOr("GAS_MEASURE", false)) {
             assertEq(r.code.length, RUNTIME, "the PqChat runtime (size-baseline.json row)");
             assertApproxEqAbs(regular, RELEASE_REGULAR, SLACK, "deployRelease regular");
             assertEq(state, RELEASE_STATE, "deployRelease state");
@@ -243,7 +246,7 @@ contract PqChatGasTest is PqTopicsBase {
         emit log_named_uint("GAS deploy PqChatTopics asked x 1.05", asked);
         assertLt(regular * 105 / 100, 1 << 24, "regular gas x 1.05 under 2^24 (EIP-7825)");
         assertLe(asked, 60_000_000, "the module transaction asks at most 60 M");
-        if (MODULE_RUNTIME != 0) {
+        if (!vm.envOr("GAS_MEASURE", false)) {
             assertEq(m.code.length, MODULE_RUNTIME, "the PqChatTopics runtime (size-baseline.json row)");
             assertApproxEqAbs(regular, MODULE_REGULAR, SLACK, "deploy PqChatTopics regular");
             assertEq(state, MODULE_STATE, "deploy PqChatTopics state");

@@ -147,7 +147,8 @@ contract PqChat is IPqChat, PqChatCore {
         (bytes32[] memory pa, MemberKey[] memory pm,) = _lists(pe);
         pu = _uas(pm);
         if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {
-            if (_memberAt(pm, e.author) == type(uint256).max) revert PqChatNotMember(e.author);
+            // Fable P1-2 (a): a member who left the parent authors no plain rekey of it (it would keep itself in)
+            if (_memberAt(pm, e.author) == type(uint256).max || pe.left[e.author]) revert PqChatNotMember(e.author);
         } else if (!_has(pa, e.author)) {
             revert PqChatNotAdmin(e.author);
         }
@@ -208,6 +209,10 @@ contract PqChat is IPqChat, PqChatCore {
         Epoch storage ep = _known(m.epochId);
         if (ep.sessionId != m.sessionId) revert PqChatUnknown(m.epochId);
         if (ep.landed != ep.wraps) revert PqChatIncomplete(m.epochId);
+        // spec §6.3 (Fable P1-1): at home an epoch with a complete child takes no message, so a member the child dropped
+        // cannot post under it later; `childOf` is written at home only, so a replica orders nothing here
+        bytes32 child = _s().childOf[m.epochId];
+        if (child != 0) revert PqChatEpochTaken(m.epochId, child);
         (, MemberKey[] memory mk,) = _lists(ep);
         if (_memberAt(mk, m.sender) == type(uint256).max) revert PqChatNotMember(m.sender);
         bytes32 hm = PqChatTypes.hashMessage(m);
