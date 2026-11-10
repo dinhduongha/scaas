@@ -198,7 +198,8 @@ abstract contract LegacyDiff is Test {
 
     /// @dev Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1-§4.3): d142b57c's ownership names are the admin
     ///      names now, same arguments, storage and rules. A row of an old entry runs on the new side under its new selector;
-    ///      the old side's revert selector and event topic0 are read under the new names. Nothing else is mapped.
+    ///      the old side's revert selector, event topic0 and the selector of each call it records (the call under test is the
+    ///      first) are read under the new names. Nothing else is mapped.
     function _r3Sel(bytes4 s) internal pure returns (bytes4) {
         if (s == bytes4(keccak256("owner()"))) return bytes4(keccak256("admin()"));
         if (s == bytes4(keccak256("pendingOwner()"))) return bytes4(keccak256("pendingAdmin()"));
@@ -221,6 +222,11 @@ abstract contract LegacyDiff is Test {
 
     function _r3Old(Run memory o) internal pure {
         if (!o.ok) o.ret = _r3Call(o.ret);
+        for (uint256 i; i < o.calls.length; ++i) {
+            (VmSafe.AccountAccessKind k, address a, uint256 v, bytes memory d, bool r) =
+                abi.decode(o.calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
+            o.calls[i] = abi.encode(k, a, v, _r3Call(d), r);
+        }
         for (uint256 i; i < o.logs.length; ++i) {
             if (o.logs[i].topics.length == 0) continue;
             bytes32 t = o.logs[i].topics[0];
