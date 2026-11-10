@@ -83,7 +83,12 @@ case "$FAMILY" in
            if forge script script/Deploy.s.sol --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" &&
               forge script script/DeploySend.s.sol --sig 'run(string)' "broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" \
                 --rpc-url "$NET" --broadcast --slow "${Z[@]}" --sender "$S" "$@"; then rm -f "$J.prev"
-           else [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; fi ;;
+           else [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; fi
+           # NET-EVM-12: a remote deploy is source-verified on the chain's explorer, VERIFY_TARGET naming its config
+           # (scaas-testnet, or VERIFY_EXPLORER / VERIFY_URL / VERIFY_API_KEY_ENV); chain 31337 or VERIFY_TARGET=local
+           # is local; VERIFY=none needs VERIFY_REASON; an unconfigured target fails VERIFY_NOT_CONFIGURED (exit 1)
+           if [ "$C" = 31337 ] || [ "${VERIFY_TARGET:-}" = local ]; then echo "[local/verify] local, not verified (no explorer)"
+           else VERIFY_RPC="$NET" sh script/onchain/verify.sh "${VERIFY_TARGET:-chain-$C}"; fi ;;
   hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
              --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
   aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;

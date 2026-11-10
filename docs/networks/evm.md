@@ -341,6 +341,28 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   the plan by name (`TxGasOverBlockLimit`) before anything is sent. Forge's estimate × 1.05 had sent `UARegistryCoreLib` with
   61,800,392 (52,317,793 used on 7622), over a 60 M block; now 56,629,029, and the full deploy (104 transactions) runs on a
   60 M anvil (`smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-gas.txt`).
+- <a id="NET-EVM-12"></a>**NET-EVM-12 — Every contract a remote deploy leaves on a chain is source-verified on that chain's
+  explorer** (owner ruling 2026-11-10; BUILT on branch `ua-mtx-merge`: `smartcontracts/evm/script/onchain/verify.sh` and
+  `vcheck.py`, offline tests in `test_vcheck.py`; the Etherscan and Sourcify request shapes are tested offline only, no public
+  explorer has been called). `deploy.sh evm` runs the step after a remote deploy (`VERIFY_TARGET` names the target; chain
+  31337 or `VERIFY_TARGET=local` is local, not verified) and `matrix.sh` after each group of a remote target. The explorer
+  comes from the environment, never from a chain id: `VERIFY_EXPLORER` `blockscout`, `etherscan` (the v2 API, the chain by
+  `chainid`) or `sourcify`, `VERIFY_URL` its API, `VERIFY_RPC` the chain's RPC and `VERIFY_API_KEY_ENV`, the **name** of the
+  env var that holds the API key (required for Etherscan; the key reaches forge in its environment only, never in a file or
+  an argument). A remote target without an explorer fails by name, `VERIFY_NOT_CONFIGURED`; only `VERIFY=none` with a
+  `VERIFY_REASON` skips the step, and the run prints the reason. Discovery: the deployment books, every broadcast of the
+  chain and the getters that name a child (an EIP-1167 clone's implementation, `puller()`, `EXECUTOR()`, `modules()`, a
+  factory's releases, envs and `contractsPage`); on a chain of ours (`VERIFY_SCAN=1`) also a block scan of the whole
+  chain (every creation, every transaction's `to`, every log's emitter and address words). Each address with code ends
+  **verified** (a full match), a **linked clone** (on Blockscout its proxy link to the verified implementation; Etherscan
+  and Sourcify have no link this check can read, so there the clone's own code is the link), SSTORE2 **data** or the
+  8-byte **CREATE3 proxy** of `Create3.sol`; anything else is a fail row and the step exits 1. A contract's name comes from
+  the metadata hash at the end of its runtime code, matched against the artifacts of source snapshots (`git archive` of a
+  commit plus the pinned `lib/`, compiled once under `scripts/capped` with the deploy's profile), never from a broadcast
+  label; each `forge verify-contract` runs in its snapshot outside `capped` in a 1 GiB scope, one at a time, bounded by
+  `VERIFY_TIMEOUT`, and a forge run that compiles aborts the step. The explorer's own answer decides, never forge's exit
+  code: forge 1.8.5 exits 0 on Blockscout's `Fail - Unable to verify`, so such a contract is submitted once more. The SCaaS testnet's explorer and its first full run:
+  [NET-EVM-09](#NET-EVM-09).
 - **The relayer's gas share.** A relayed op crosses more call frames (a PQZ op: clone, implementation, P, the self-call,
   clone, implementation, Q, its library, the precompile: 7 frames against 5), and each frame keeps 1/64 of the gas it passes
   on, about 10.4 % of the gas sent against 7.6 % before. A relayer that sets its limit from `eth_estimateGas` changes nothing;
@@ -398,10 +420,21 @@ by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET
 node, and neither the code backfill nor the coin-balance cleanup is needed. Contract verification (owner ruling 2026-10-31): a local
 `smart-contract-verifier` (v1.11.1, 768 MiB since 2026-10-31: the patched 31-contract run hit 512 MiB; 1 CPU, `mba-net` only, Solidity only, solc from
 binaries.soliditylang.org, never Blockscout's hosted service) backs the backend, and
-`smartcontracts/evm/script/verify-blockscout.sh` verifies every `Deploy.s.sol` contract after each reset or deploy;
+every contract on the chain is verified by the step of [NET-EVM-12](#NET-EVM-12), `sh script/onchain/verify.sh
+scaas-testnet` (this Blockscout's API `http://127.0.0.1:4000/api` and the RPC `http://127.0.0.1:8545`, both on the host's
+loopback: the earlier LAN address is gone; the whole-chain scan on; the older per-broadcast `verify-blockscout.sh` stays);
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
 image (built outside the repo, `~dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
 Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts and the PQZ e2e contracts verified, full match; the e2e tokens are EIP-1167 clones Blockscout links to their verified implementations (RUNBOOK § Contract verification).
+First whole-chain run, 2026-11-10 (BUILT, after the T66b Step 5 deploy had only its 7 linked libraries verified): of 345
+contracts with code, 255 verified (full match), 8 linked clones, 35 CREATE3 proxies, 1 genesis predeploy, plus 90 SSTORE2 data
+contracts; sources from four snapshots (`6df89135`: Step 5, PqChat, the tokens harness; `11349728`: the dex harness;
+`bf6f3d04`: the 2026-11-04 reset's PQZ e2e `GovernanceRouter`); **46 open, for the owner**: 43 EIP-1167 clones carrying 95–175
+bytes of appended data (the chain values `IFactoryToken.ChainEnv` the factory appends; PqChat instances), which Blockscout 9.0.2 does not link
+(`proxy_type` `unknown`) although each implementation is verified, and the 3 tokens-group `OnchainFwd` harness contracts, which
+`sc-verifier` refuses (`Fail - Unable to verify`) while their init and runtime code match the snapshot byte for byte (bar the
+immutable); their standard JSON is 1.72 MB, above every verified one (largest 1.26 MB), so a request-size limit is the likely
+cause (not confirmed). Rows: `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-step5b/verify-scaas-testnet.txt`.
 
 <a id="NET-EVM-10"></a>**NET-EVM-10** — **The SCaaS testnet runs two nodes: a `sealer` and a public `rpc`** (owner
 ruling 2026-10-31): in the stack's one `docker-compose.yml`, both on the PQZ image. `sealer` holds the Clique key

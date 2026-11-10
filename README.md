@@ -917,7 +917,8 @@ SCaaS groups chains into **eight families** (the owner's taxonomy, [docs/network
 | [Algorand](docs/networks/algorand.md) | Algorand | AVM (Algorand Python) | `MetaOp` v1 in ARC-4, ARC-200 in boxes, one shared `account` app |
 
 Other EVM chains can be added as profiles. Finality, signing domains, passkeys and the availability of each feature
-per family: [docs/networks/README.md](docs/networks/README.md).
+per family: [docs/networks/README.md](docs/networks/README.md). Every contract an EVM deploy leaves on a remote chain is
+source-verified on that chain's explorer (Blockscout, Etherscan v2 or Sourcify; [NET-EVM-12](docs/networks/evm.md#NET-EVM-12)).
 
 **Deployment shapes:** public chains (your relayer, partners' and open relayers serve the same contracts); a private
 or permissioned chain (your nodes and admitted peers only); a consortium (each member runs a node)
