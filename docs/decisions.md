@@ -4735,6 +4735,8 @@ Change (owner 2026-11-10; status: SPECIFIED, nothing built): **the encrypted con
 **Cost if wrong.** What an open topic accepts cannot be removed.
 **Source.** owner 2026-11-07 (D18, D19, Q2); topics spec P37, P41; plan 3c T88. Status: BUILT on branch `ua-mtx-merge` (EVM, `84a1a363`), UNAUDITED.
 
+Change (owner 2026-11-10, before the SCaaS testnet reset 2; status: BUILT on branch `ua-mtx-3p`, group 3p; UNAUDITED): **a topic `name` is 1–512 B.** Old: `createTopic` and `updateTopic` refused a `name` above 128 B (`PqTopicShape`). New: the bound is 512 B in both (`PqChatTopics.NAME_MAX`), an empty name still refused. The record's typehash, fields and storage are unchanged; only the `PqChatTopics` module's code moves (a new `PqChat` release pins it). A topic record goes through `_put` as every `PqChat` record does: one SSTORE2 blob while it fits the chain's limit, else a chain of blobs, as an entry body over one blob; `about` has no bound of its own, so a long `about` chains with any name, and a 512 B name beside a 70,000 B `about` reads back whole (`test_topics_longAboutAndNameChain`). Tests at the boundary: 512 B lands, 513 B and "" are refused, on create and update; the mutants of the bound are killed (`smartcontracts/evm/runs/2026-11-10-ua-mtx-3p/summary.txt`).
+
 ### CTR-CHAT-16 — `PqChat` entries: posts and replies one record; bodies in full in state; edits as versions by the author; a reference to another instance stored as given, never checked
 - old: — · status: current · owner: yes · date: 2026-11-07 · normative: contracts/pqchat.md#CTR-CHAT-16 · superseded-by: —
 

@@ -455,13 +455,14 @@ signature check, the nonce bitmaps and the blobs with sessions, and no cryptogra
 revokes writers; nothing on chain is hidden and nobody moderates** (owner D18, D19 and Q2 of 2026-11-07; topics spec P37,
 P41).
 
-- `createTopic(PqTopic t, UASig sig) returns (bytes32 topicId)`: `name` 1–128 B, `homeChain ≠ 0`, `homeChatContract ≠ 0`
-  (`PqTopicShape`; no other rule reads the home), signed by `owner`, `(owner, nonce)` unused in the topic scope. `about`
+- `createTopic(PqTopic t, UASig sig) returns (bytes32 topicId)`: `name` 1–512 B (owner 2026-11-10; was 1–128 B),
+  `homeChain ≠ 0`, `homeChatContract ≠ 0` (`PqTopicShape`; no other rule reads the home), signed by `owner`, `(owner, nonce)` unused in the topic scope. `about`
   is Markdown bytes; `openReplies` is the reply flag (clients create topics with `true`, D19). The owner is fixed for the
   topic's life; an `msig` owner gives shared ownership.
 - `updateTopic(PqTopicUpdate u, UASig sig)`: the topic exists (`PqTopicUnknown`), `seq == stored + 1` (`PqTopicSeq`),
-  `name` 1–128 B (`PqTopicShape`), signed by the topic's owner. It replaces `name`, `about` and `openReplies`;
-  `topicOf(topicId)` returns the create record with the latest values and `seq`.
+  `name` 1–512 B (`PqTopicShape`), signed by the topic's owner. It replaces `name`, `about` and `openReplies`;
+  `topicOf(topicId)` returns the create record with the latest values and `seq`. A topic record is stored as every record
+  (`_put`): one SSTORE2 blob while it fits the chain's limit, else a chain of blobs; `about` has no bound of its own.
 - `setTopicWriter(PqTopicWriter w, UASig sig)`: the topic exists, `writer` is neither 0 nor the owner (`PqTopicShape`),
   `seq == stored + 1` per `(topicId, writer)`, signed by the topic's owner. `writerOf(topicId, ua)` returns `(granted,
   seq)`; `writersOf` lists the writer from its first record.

@@ -166,7 +166,7 @@ contract PqTopicsTest is PqTopicsBase {
         IPqChat.EntryRef memory got = chat.entryOf(q).ref;
         assertEq(keccak256(abi.encode(got)), keccak256(abi.encode(e.ref)), "returned as given");
         IPqChat.PqTopic memory tr = _topicRec(ids[0], 9, true);
-        tr.name = string(new bytes(129));
+        tr.name = string(new bytes(513)); // owner 2026-11-10: `name` 1-512 B (was 1-128)
         IUARegistry.UASig memory sig = _sig(ids[0], h.topic(tr));
         vm.expectRevert(IPqChat.PqTopicShape.selector);
         chat.createTopic(tr, sig);
@@ -174,8 +174,46 @@ contract PqTopicsTest is PqTopicsBase {
         sig = _sig(ids[0], h.topic(tr));
         vm.expectRevert(IPqChat.PqTopicShape.selector);
         chat.createTopic(tr, sig);
-        tr.name = string(new bytes(128));
+        tr.name = string(new bytes(512));
         _createTopic(chat, tr); // the control
+    }
+
+    /// Owner 2026-11-10: `updateTopic`'s `name` is 1-512 B as `createTopic`'s: 513 B and "" refused (`PqTopicShape`), 512 B
+    /// lands and reads back.
+    function test_topics_updateNameBound() public {
+        bytes32 t = _newTopic(true);
+        IPqChat.PqTopicUpdate memory u = IPqChat.PqTopicUpdate(t, 1, string(new bytes(513)), "", true);
+        IUARegistry.UASig memory sig = _sig(ids[0], h.topicUpdate(u));
+        vm.expectRevert(IPqChat.PqTopicShape.selector);
+        chat.updateTopic(u, sig);
+        u.name = "";
+        sig = _sig(ids[0], h.topicUpdate(u));
+        vm.expectRevert(IPqChat.PqTopicShape.selector);
+        chat.updateTopic(u, sig);
+        u.name = string(new bytes(512));
+        chat.updateTopic(u, _sig(ids[0], h.topicUpdate(u))); // the control
+        (IPqChat.PqTopic memory got, uint64 seq) = chat.topicOf(t);
+        assertEq(bytes(got.name).length, 512);
+        assertEq(seq, 1);
+    }
+
+    /// Owner 2026-11-10: a 512 B `name` beside an `about` longer than one blob (`LIMIT` 131,072: a blob holds 65,534 B): the
+    /// record is stored by `_put` as every record is, a chain of blobs (as an entry body over one blob), and reads back whole;
+    /// the same for the update. `about` has no bound of its own, so a long one chains with any name.
+    function test_topics_longAboutAndNameChain() public {
+        IPqChat.PqTopic memory tr = _topicRec(ids[0], 9, true);
+        tr.name = string(new bytes(512));
+        tr.about = new bytes(70_000);
+        tr.about[69_999] = 0x7e;
+        bytes32 t = _createTopic(chat, tr);
+        (IPqChat.PqTopic memory got,) = chat.topicOf(t);
+        assertEq(keccak256(abi.encode(got)), keccak256(abi.encode(tr)), "the topic as signed");
+        IPqChat.PqTopicUpdate memory u = IPqChat.PqTopicUpdate(t, 1, string(new bytes(512)), new bytes(66_000), false);
+        chat.updateTopic(u, _sig(ids[0], h.topicUpdate(u)));
+        (got,) = chat.topicOf(t);
+        assertEq(bytes(got.name).length, 512);
+        assertEq(keccak256(got.about), keccak256(u.about));
+        assertFalse(got.openReplies);
     }
 
     // 7. nonces
