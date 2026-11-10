@@ -332,6 +332,19 @@ contract PqChatTest is PqChatBase {
     }
 
     /// The signature is checked before the nonce: a forged record cannot burn it.
+    /// CTR-CHAT-04 (spec §4.3): the signature is checked before the nonce, so a used `(creator, nonce)` under a forged
+    /// signature is the signature's refusal (`UAUnauthorized`), never `PqChatNonceUsed` (T91: the order is observable only
+    /// there; the revert undoes a nonce either way).
+    function test_createSession_signatureBeforeNonce() public {
+        (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(2, 4, address(chat));
+        _create(chat, s, w);
+        IUARegistry.UASig memory forged = _sig(ids[1], h.session(s));
+        vm.expectRevert(_unauthorized(s.creator));
+        chat.createSession(s, w, forged);
+        _refusedCreate(s, w, abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeSession(s.creator),
+            uint64(4))); // the control: its own signature meets the used nonce
+    }
+
     function test_createSession_forgedRecordBurnsNoNonce() public {
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(2, 3, address(chat));
         IUARegistry.UASig memory forged = _sig(ids[1], h.session(s)); // signed by another member's key
