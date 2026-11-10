@@ -17,7 +17,7 @@ set -eu
 command -v anvil > /dev/null || PATH=$HOME/.foundry/bin:$PATH
 tgt=${1:?target: local | scaas-testnet | <name>}
 OUTD=runs/2026-11-10-ua-mtx-merge-t66b-step5b
-GROUPS=${MATRIX_GROUPS:-tokens gov dex misc zether pq pqoff verifiers views}
+GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers views}
 T=$(mktemp -d)
 A= CP=
 CS=$(cd ../../pqz-core/nethermind/chain && pwd)
@@ -99,7 +99,7 @@ rc=0
 for g in $GROUPS; do
   echo "## $g on $tgt"
   case $g in
-  tokens|gov|dex|misc)
+  tokens|gov|dex|liquidity|misc)
     G=$(echo "$g" | sed 's/^./\U&/')
     # forge's limit = its simulated gasUsed x m / 100 (README); tokens: x 2.00 (anvil undershot a CREATE by 19 % and a
     # kind-2 relay at x 1.30); misc: its SCaaSDex release and refund-heavy calls carry their own gas
