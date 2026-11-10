@@ -14,7 +14,7 @@ import {SigCheck} from "../common/SigCheck.sol";
 ///        address on every chain.
 /// @notice Anyone creates tokens and DEXes; the registrar configures the chain once (`configureChain`: `chain_uid`, the
 ///         notice period, the router), publishes deployment environments (`publishEnv`, versioned per kind, never
-///         changed), deploys releases from init code (`deployImplementation`, `deployDexImplementation`: the factory's own
+///         changed), deploys releases from init code (`deployTokenImplementation`, `deployDexImplementation`: the factory's own
 ///         `CREATE2` of chain-neutral code, `abi.encode(factory, implArgs)` appended, so a release has the same address on
 ///         every chain; each linked library checked by code hash; the env checked by the release's `validateEnv`), enables
 ///         kinds and deprecates releases: it has no power over any token or DEX.
@@ -44,7 +44,7 @@ contract OpenFactory is IOpenFactory {
     uint256 public constant MAX_PAGE = 100;
     uint256 internal constant MAX_LEGS = 8;
     uint8 public constant DEX_DOMAIN = type(uint8).max;
-    /// @dev The longest notice period (review 5g-Z2 P2-4): near `2^64` every `deployImplementation` would overflow
+    /// @dev The longest notice period (review 5g-Z2 P2-4): near `2^64` every `deployTokenImplementation` would overflow
     ///      `usableFrom` and brick the catalogue.
     uint64 public constant MAX_NOTICE_PERIOD = 30 days;
     /// @dev EIP-2935's history contract, queried with a raw 32-byte block number (chain-neutral spec §3.1, Fable P3-2).
@@ -154,7 +154,7 @@ contract OpenFactory is IOpenFactory {
 
     // ------------------------------------------------------------------ releases
 
-    function deployImplementation(
+    function deployTokenImplementation(
         TokenKind kind,
         uint64 version,
         uint16 envVersion,
@@ -359,7 +359,7 @@ contract OpenFactory is IOpenFactory {
         return _latestEnv[_domainOf(contractClass, kind)];
     }
 
-    function deployRelease(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
+    function deployImplementation(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
         bytes calldata initcode, bytes calldata implArgs) external onlyRegistrar configured returns (address implementation)
     {
         uint32 d = _domain(id.contractClass, id.kind);

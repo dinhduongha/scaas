@@ -24,7 +24,7 @@ expire); every contract the factory creates, not only tokens, with a class a cal
 |---|---|---|
 | `createToken` / `createTokenUnregistered` → `_create` | EIP-1167 clone of a `TokenKind` release (0–5, 8–13; version 0 for unregistered) | `_info[token] = {creator, kind, version, exists}`; per leg `_wrappers[creator][underlying]`, `_byUnderlying[underlying]` |
 | `createDex` | EIP-1167 clone of a DEX release | `_dexVersion[dex]` |
-| `deployImplementation` / `deployDexImplementation` → `_deploy` | the releases, by the registrar | the catalogue `_releases[kind][version]`, `_dexReleases[version]` (already state, enumerable by version) |
+| `deployTokenImplementation` / `deployDexImplementation` → `_deploy` | the releases, by the registrar | the catalogue `_releases[kind][version]`, `_dexReleases[version]` (already state, enumerable by version) |
 
 Nothing lists the tokens or DEXes of an owner or a creator: `TokenCreated` / `DexCreated` carry `owner` (`bytes32` UA id) and
 `creator`, and a log is all there is.
@@ -167,7 +167,7 @@ owner lists; (5) lists per class only; (6) unregistered contracts are indexed, f
    only if spam proves real.
 2. **Current owner on-chain** (a hook on every ownership change). **Recommend:** not now; owner at creation plus `owner()` per
    entry.
-3. **Releases in the index** (the implementations `deployImplementation` creates). **Recommend:** no; the catalogue already
+3. **Releases in the index** (the implementations `deployTokenImplementation` creates). **Recommend:** no; the catalogue already
    holds them in state, enumerable by kind and version `1..latestVersion`.
 4. **`ownerUA = 0`** (no administration ever): **Recommend:** recorded, not pushed to an owner list (it would be everyone's).
 5. **Lists per class only**, no unfiltered owner or creator list: **Recommend:** yes; saves two slots (≈195,840 state gas) per
@@ -243,7 +243,7 @@ struct FactoryInfo {
 }
 
 function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
-function deployRelease(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
+function deployImplementation(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
     bytes calldata initcode, bytes calldata implArgs) external returns (address implementation);
 function deprecateRelease(ReleaseId calldata id, string calldata reason) external;
 function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on) external;
@@ -268,7 +268,7 @@ event ClassKindEnabled(uint16 indexed contractClass, uint16 indexed kind, bool e
   `chainUid` this factory's, library pins non-empty). Internally the env and release maps are keyed by a `uint32` domain
   `class << 16 | kind` (≥ `3 << 16`, so never equal to a token kind 0–13 or `DEX_DOMAIN` 255); the token and DEX maps,
   entries, views and events stay as they are.
-- **`deployRelease`.** Refuses class 0–2 (`ClassReserved`), version 0 and a taken version (`ReleaseUnknown`,
+- **`deployImplementation`.** Refuses class 0–2 (`ClassReserved`), version 0 and a taken version (`ReleaseUnknown`,
   `ReleaseAlreadyRegistered`), `initSelector == 0` (`InitSelectorZero`), an unknown env (`EnvUnknown`). The shared `_deploy`
   checks the library code hashes and `CREATE2`s (salt `keccak256(abi.encode("release", id))`)
   `initcode ‖ abi.encode(id, envVersion, env, implArgs)`: the constructor receives its own `ReleaseId`, so class, kind and
@@ -346,7 +346,7 @@ built and pinned. Moving them buys nothing now and would change formats on every
 |---|---|
 | The kind's own rules and what its init arguments mean | the class's spec; the implementation validates its arguments |
 | A second `initialize` refused, and any caller but the factory | the implementation's rule (`msg.sender == FACTORY`, a stored lock), its tests |
-| No `SELFDESTRUCT` (EIP-6780: a clone could delete itself in its creating transaction), no `DELEGATECALL` or `CALLCODE` to an address a caller supplies | release review; the registrar's deploy script disassembles the runtime and refuses those opcodes before `deployRelease` (an on-chain scan cannot tell code from `PUSH` data cheaply) |
+| No `SELFDESTRUCT` (EIP-6780: a clone could delete itself in its creating transaction), no `DELEGATECALL` or `CALLCODE` to an address a caller supplies | release review; the registrar's deploy script disassembles the runtime and refuses those opcodes before `deployImplementation` (an on-chain scan cannot tell code from `PUSH` data cheaply) |
 | Storage layout, gas, code size | the kind's layout pin (`test/v2/layout/`), gas pins and `size-baseline.json` row in its own task; a runtime over the chain's ceiling (CTR-GOV-19) fails `CREATE2` (`DeployFailed`) |
 | Whether the owner UA exists or consents | as §2.3: a claim; wallets filter |
 
@@ -377,7 +377,7 @@ call could corrupt (`creating()` is restored, step 4).
   +5 / +7 slots (§3, ≈ 0.49–0.69 M state gas); added regular gas: the `factoryInfo()` `staticcall` (warm clone and
   implementation, ≈ 3–5 k), four transient accesses (≈ 0.4 k), the selector compare; minus `owner()`. No loop. The kind's own
   `initialize` is the creator's. Measured by a `GovGas` `createInstance` row with the test kind of §8.9.
-- **`deployRelease`:** `deployImplementation` plus four `staticcall`s and, the first time, one or two list pushes;
+- **`deployImplementation`:** `deployTokenImplementation` plus four `staticcall`s and, the first time, one or two list pushes;
   registrar-only, once per release.
 - **Size:** the generic block (four registrar entries, seven views, two structs, the checks) ≈ +3–5 KB runtime on top of the
   index's +2.5–4 KB: `OpenFactory` ≈ 22–25 KB against 15,821 B today, far below 64 KiB. T70 records old → new in
@@ -410,7 +410,7 @@ function owner() external view returns (bytes32);                      // P32: n
 
 ```solidity
 factory.publishClassEnv(3, 0, 1, env);   // env.registry, env.params[0] = the code-size limit; the factory adds chain_uid
-factory.deployRelease(ReleaseId(3, 0, 1), 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, initcode, implArgs);
+factory.deployImplementation(ReleaseId(3, 0, 1), 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, initcode, implArgs);
 factory.setClassKindEnabled(3, 0, true);  // after the notice period
 factory.createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)));
 ```
@@ -421,7 +421,7 @@ factory.createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initiali
 |---|---|
 | §11.1 `uint8 CLASS_PQCHAT = 3`, `ClassUnknown` for 0 and 4–255 | class id 3 assigned in the CTR-TOK-28 table, no factory constant; ids `uint16`; `ClassUnknown` for 0 and any generic class with no release; `ownerUA` from `factoryInfo()` |
 | §11.2 `PQCHAT_DOMAIN = 254`, `publishPqChatEnv`, `pqChatEnvOf`, `latestPqChatEnvVersion` | `publishClassEnv(3, 0, …)`, `classEnvOf`, `latestClassEnvVersion` |
-| §11.3 `deployPqChatImplementation`, `pqChatReleaseOf`, `pqChatImplementationOf`, `deprecatePqChat`, `isPqChatDeprecated`, `latestPqChatVersion`, `PqChat*` events and errors | `deployRelease(ReleaseId(3, 0, v), …)`, `classReleaseOf`, `deprecateRelease`, `latestClassVersion`, `ReleaseDeployed` / `ReleaseDeprecated`, the generic errors; checks by `factoryInfo()` instead of `factory()` / `chainUid()` |
+| §11.3 `deployPqChatImplementation`, `pqChatReleaseOf`, `pqChatImplementationOf`, `deprecatePqChat`, `isPqChatDeprecated`, `latestPqChatVersion`, `PqChat*` events and errors | `deployImplementation(ReleaseId(3, 0, v), …)`, `classReleaseOf`, `deprecateRelease`, `latestClassVersion`, `ReleaseDeployed` / `ReleaseDeprecated`, the generic errors; checks by `factoryInfo()` instead of `factory()` / `chainUid()` |
 | §11.4 `createPqChat(uint64 version, bytes32 ownerUA, bytes32 salt)`, `initialize(msg.sender, version, ownerUA)`, `PqChatCreated`, `isPqChat` | `createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)))`; `initialize(bytes32 ownerUA)`; `InstanceCreated`; `infoOf(a).contractClass == 3 && version != 0` (node: `factory_class(3)`) |
 | §11.5 gas, a `GovGas` `createPqChat` row | a `createInstance` row with the `PqChat` release (`PqChatGas`, PT4); the factory side measured once in T70 with the test kind |
 | §11.6 size +2–3 KB on `OpenFactory` | none for `PqChat`: the generic block is T70's |
@@ -437,7 +437,7 @@ factory.createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initiali
 `OpenFactory`'s runtime code hash asserted unchanged before and after, two test-only implementations under `test/v2/mocks/`
 (no `src/` file): `NoteKind` (class 4, kind 0, `initialize(bytes32 ownerUA, string note)`) and `RosterKind` (class 5, kind 1,
 `initialize(bytes32 ownerUA, uint64 start, address[] members)`, a dynamic argument). For each: `publishClassEnv` →
-`deployRelease` → before the notice period `ReleaseNotYetUsable` → after it, off: `ClassKindDisabled` → enable →
+`deployImplementation` → before the notice period `ReleaseNotYetUsable` → after it, off: `ClassKindDisabled` → enable →
 `createInstance` by an EOA and by a relayer naming another owner UA → `infoOf` every field, `contractsPage`,
 `contractsOfOwner`, `contractsOfCreator` under the class, `classes() == [4, 5]`, `kindsOf(5) == [1]`, `creating()` seen inside
 `initialize` and 0 after → version 2 deployed, version 1 deprecated: the old instance still answers, creation of v1 refused,

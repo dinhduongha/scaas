@@ -647,7 +647,7 @@ owner before 22776's gen-1 registry and for the audit).
    `0x06d03D56…9776`, OpenFactory `0xC037D039a21646060E5b4ae441c1138e87000BDE`, NormalToken `0xCDb98d83…a551`, SCaaSDex
    `0xe77d3D68…D3D9`, the relay-fee router (formerly `MtxRelayFee`) `0x7FB42079…fa48`, SmartKeyAccountFactory `0x3fAF952D…619D`) stays on chain and verified on
    Blockscout; nothing new is built on it (2026-10-31; reason above).
-3. The releases are usable `noticePeriod` (600 s) after `deployImplementation`; the e2e started after that.
+3. The releases are usable `noticePeriod` (600 s) after `deployTokenImplementation`; the e2e started after that.
 4. E2E: `RPC=http://192.168.1.72:8545 PRIVATE_KEY=<key 4> FOUNDRY_PROFILE=scaas-testnet scripts/capped scripts/e2e-zether.sh`
    (needs `cargo build --release --bin zether-cli` in `clients/zether-prover`, and `clients/clientkeys/node_modules`):
    six `zether-bls12381` UAs with clientkeys PoPs; `NORMAL_ZETHER` token `0x1161E91cAD5a3a3511Ea1E490f51a63cDaF348d3`

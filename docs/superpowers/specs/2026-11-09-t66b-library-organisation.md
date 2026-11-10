@@ -27,7 +27,7 @@ fee router is `RelayFeeRouter`, its executor `RelayFeeExecutor`.
 ## 1. Step 1: where the tip stands — SPECIFIED (measured inputs)
 
 Every deployed contract, each its own CREATE2 transaction (the T33 / T51 probe; under `isolate` the probe call is a transaction,
-so intrinsic gas and calldata are in it); a release adds the factory frame of `deployImplementation`, measured at **0.31 M**
+so intrinsic gas and calldata are in it); a release adds the factory frame of `deployTokenImplementation`, measured at **0.31 M**
 asked (T10 had 0.37 M) [measured]. Old = the plan block's `d2552671` figures.
 
 | Contract | runtime B old → new | asked | 60 M | over by |
@@ -56,14 +56,14 @@ calldata included) gives 2 to 2.5 % less than forge's regular + state for the sa
 Since `d2552671` the PQZ kinds grew 3.9–8.5 KB (3f, 3h, chain-neutral), the others 0.9–1.2 KB, `OpenFactory` 12.6 KB; kind 13 is
 5.0 KB above the research note's projection.
 
-**The 60 M line in runtime bytes** (fitted on these rows): a release through `deployImplementation` **35,386 B** (1,675.1 gas/B +
+**The 60 M line in runtime bytes** (fitted on these rows): a release through `deployTokenImplementation` **35,386 B** (1,675.1 gas/B +
 0.42 M + 0.31 M frame); a body module (a contract on the token's bases, no frame) **35,570 B**; a library **35,694 B** (1,674.8
 gas/B + 0.22 M); `UARegistry` with its constructor ≈ **35,286 B** (1,694.7 gas/B + 0.2 M). At **57 M** (the margin line, §2):
 33,594 / 33,780 / 33,903 / 33,516 B [estimate].
 
 **Kind 13's `DeployFailed()` in T65:** gas, not size, not init. The release needs 117.97 M (regular + state, frame included);
 `e2e.py` estimates every transaction with `eth_estimateGas`, the copy's Nethermind configs set no `JsonRpc.GasCap`, so the
-estimate ran under the default 100 M cap: the CREATE2 inside `deployImplementation` ran out of gas, returned 0 with no data, and
+estimate ran under the default 100 M cap: the CREATE2 inside `deployTokenImplementation` ran out of gas, returned 0 with no data, and
 `_deploy` reverted `DeployFailed()` (the only place that raises it). The copy allows the size (its genesis: `maxCodeSize`
 0x20000, EIP-7954 off) and the init code runs (forge deploys it). This organisation removes the cause (every transaction ≤ 60
 M); the e2e rerun of kind 13 is a task (§12).
@@ -291,7 +291,7 @@ hash only, as today (the same class as re-check P2-A; out of T66b).
   A `validateEnv` and `initialize`), else `ModuleMismatch(i)`. Three to five staticcalls at construction, no byte on the hot path;
   a swapped, foreign or other-set module fails at the release, not at the first user call. The identity views read no storage,
   so they answer a direct call (M2).
-- **Pins:** each kind's `Env.libs` / `libCodeHashes` lists its modules beside its libraries; `deployImplementation` checks every
+- **Pins:** each kind's `Env.libs` / `libCodeHashes` lists its modules beside its libraries; `deployTokenImplementation` checks every
   code hash before the release exists (`LibraryCodeHashMismatch`, as today), and `_checkImplementation` requires each address of
   the token's `modules()` in the env's `libs` (`ModuleNotPinned`). The trust is a library's today: the registrar publishes the
   env and deploys the release.
@@ -305,7 +305,7 @@ hash only, as today (the same class as re-check P2-A; out of T66b).
   code itself, CN-1; `FACTORY` is the same on every chain); it is deployed by the deterministic deployer with `DEPLOY_SALT`, at
   the same address on every chain. `releases.json` gains a row per module.
 - **Deploy order:** libraries, then modules (each its own transaction and its own public gate), then the implementation through
-  `deployImplementation`. `DeployBase`, `deploy.sh`, `e2e.py` follow.
+  `deployTokenImplementation`. `DeployBase`, `deploy.sh`, `e2e.py` follow.
 
 ### 4.6 Module and stub rules
 

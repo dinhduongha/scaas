@@ -311,9 +311,9 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 
 **Files:** `src/factory/{IOpenFactory,OpenFactory}.sol`, `test/v2/Factory.t.sol`, `test/governance/GovRegulatedBits.t.sol`, `test/governance/GovAttackV2.t.sol`, `clients/clientkeys/test/typed-ops.test.js` (the one client file naming the enum)
 
-**Changes:** members 0-13 of §4.1, `RETIRED_6`, `RETIRED_7`, `NORMAL_ZETHER_REGULATED`, `WRAPPED_ZETHER_REGULATED`, `NORMAL_PQZ_REGULATED`, `WRAPPED_PQZ_REGULATED`. `deployImplementation` refuses 6 and 7 (`KindRetired(kind)`). `_enabled` stays 3. `createTokenUnregistered`'s `uint8(kind) >= NORMAL_ZETHER` stays. No node change: nothing there decodes `TokenKind`.
+**Changes:** members 0-13 of §4.1, `RETIRED_6`, `RETIRED_7`, `NORMAL_ZETHER_REGULATED`, `WRAPPED_ZETHER_REGULATED`, `NORMAL_PQZ_REGULATED`, `WRAPPED_PQZ_REGULATED`. `deployTokenImplementation` refuses 6 and 7 (`KindRetired(kind)`). `_enabled` stays 3. `createTokenUnregistered`'s `uint8(kind) >= NORMAL_ZETHER` stays. No node change: nothing there decodes `TokenKind`.
 
-- [ ] **Step 1: Failing tests:** `test_everyKindIdDecodes` (0-13), `test_retiredKindsRefusedAtDeployImplementation`, `test_regulatedKindsOffUntilPublished` (`VersionUnknown`, `KindDisabled`), `test_unregisteredRefusesEveryKindFromTwo`, `test_regulatedKindPublishesOnTheSameFactory` (§"What lands"). `test_attack_aReservedKindDoesNotDecode` → `test_fixed_aReservedKindDecodes`; `test_attack_aSecondFactorysTokenIsOutsideToTheFirst` → `test_stated_…`: a second factory stays outside.
+- [ ] **Step 1: Failing tests:** `test_everyKindIdDecodes` (0-13), `test_retiredKindsRefusedAtDeployTokenImplementation`, `test_regulatedKindsOffUntilPublished` (`VersionUnknown`, `KindDisabled`), `test_unregisteredRefusesEveryKindFromTwo`, `test_regulatedKindPublishesOnTheSameFactory` (§"What lands"). `test_attack_aReservedKindDoesNotDecode` → `test_fixed_aReservedKindDecodes`; `test_attack_aSecondFactorysTokenIsOutsideToTheFirst` → `test_stated_…`: a second factory stays outside.
 - [ ] **Step 2:** `../../scripts/capped forge test --match-path 'test/{v2/Factory,governance/*}.t.sol'`: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** PASS, whole `forge test`.

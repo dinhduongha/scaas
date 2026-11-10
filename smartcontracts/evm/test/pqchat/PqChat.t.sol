@@ -87,17 +87,17 @@ contract PqChatTest is PqChatBase {
     }
 
     /// The factory runs `validateEnv` at the release's deployment: a class env with a limit under 24,576 B refuses it.
-    function test_deployRelease_smallLimitRefused() public {
+    function test_deployImplementation_smallLimitRefused() public {
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 2, _classEnv(address(p), 24_575));
         vm.prank(REGISTRAR);
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
             type(PqChat).creationCode, _args());
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, _classEnv(address(p), 24_576));
         vm.prank(REGISTRAR);
-        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
             type(PqChat).creationCode, _args());
     }
 
@@ -115,7 +115,7 @@ contract PqChatTest is PqChatBase {
 
     /// The factory checks the code hash of every library the class env pins (the module among them) when it deploys a
     /// release (`LibraryCodeHashMismatch`); the same env with the right hash is the control.
-    function test_deployRelease_moduleCodeHashChecked() public {
+    function test_deployImplementation_moduleCodeHashChecked() public {
         IFactoryToken.Env memory e = _classEnv(address(p), LIMIT);
         e.libCodeHashes[0] = keccak256("another code");
         vm.prank(REGISTRAR);
@@ -123,30 +123,30 @@ contract PqChatTest is PqChatBase {
         vm.prank(REGISTRAR);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.LibraryCodeHashMismatch.selector, address(topics),
             keccak256("another code"), address(topics).codehash));
-        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
             type(PqChat).creationCode, _args());
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
-        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
             type(PqChat).creationCode, _args());
     }
 
     /// CTR-TOK-30 (owner 2026-11-10): the factory refuses a release whose `modules()` names a module its env does not pin
     /// (`ModuleNotPinned`), on the generic path as on the token path; the env that pins it is the control.
-    function test_deployRelease_moduleNotPinnedRefused() public {
+    function test_deployImplementation_moduleNotPinnedRefused() public {
         IFactoryToken.Env memory e = _classEnv(address(p), LIMIT);
         (e.libs, e.libCodeHashes) = (new address[](0), new bytes32[](0));
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 2, e);
         vm.prank(REGISTRAR);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, address(topics)));
-        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
             type(PqChat).creationCode, _args());
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
-        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
             type(PqChat).creationCode, _args());
     }
 
@@ -243,7 +243,7 @@ contract PqChatTest is PqChatBase {
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 2, _classEnv(address(p), 24_576));
         vm.prank(REGISTRAR);
-        f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
             type(PqChat).creationCode, _args());
         PqChat small = PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 2), "s", abi.encodeCall(IPqChat.initialize, (0))));
         for (uint8 i = 6; i <= 16; ++i) _member(i); // 16 members

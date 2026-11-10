@@ -46,7 +46,7 @@ function _probeRelease(OpenFactory f, IOpenFactory.TokenKind kind, uint64 versio
     Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     uint16 v = Catalogue.env(f, kind, e);
     vm.prank(f.registrar());
-    return f.deployImplementation(kind, version, v, code, implArgs);
+    return f.deployTokenImplementation(kind, version, v, code, implArgs);
 }
 
 /// @dev The group suffix of a module artifact name ("…:WrappedPqzTokenQ2" -> "Q2", "…:NormalTokenP" -> "P").

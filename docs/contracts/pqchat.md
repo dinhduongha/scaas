@@ -73,7 +73,7 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
 
 - **Registration** (registrar): the body module `PqChatTopics(factory)` first (below), then
   `publishClassEnv(3, 0, envVersion, env)` with the module pinned in `env.libs` (its code hash in `env.libCodeHashes`,
-  checked by the factory at `deployRelease`), `deployRelease(ReleaseId(3, 0, v), envVersion, IPqChat.initialize.selector,
+  checked by the factory at `deployImplementation`), `deployImplementation(ReleaseId(3, 0, v), envVersion, IPqChat.initialize.selector,
   type(IPqChat).interfaceId, initcode, abi.encode(topics))`, `setClassKindEnabled(3, 0, true)` after the notice period. **Creation** (anyone): `createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize,
   (ownerUA)))`, an EIP-1167 clone ([token-wrappers.md §6](token-wrappers.md#factory); the generic path is the factory
   index spec [`2026-11-07-factory-contract-index.md`](../superpowers/specs/2026-11-07-factory-contract-index.md) §8).
@@ -516,8 +516,8 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 
 | Entry | Who signs / calls | What it checks | Named errors |
 |---|---|---|---|
-| `constructor(ReleaseId, factory_, implArgs)` | the factory, at `deployRelease` | class 3, kind 0, version ≥ 1, factory ≠ 0 | `PqChatEnv` |
-| `validateEnv(ChainEnv)` | the factory, at `deployRelease` (view) | `chainUid`, registry, `params[0] ≥ 24,576` | `PqChatEnv` |
+| `constructor(ReleaseId, factory_, implArgs)` | the factory, at `deployImplementation` | class 3, kind 0, version ≥ 1, factory ≠ 0 | `PqChatEnv` |
+| `validateEnv(ChainEnv)` | the factory, at `deployImplementation` (view) | `chainUid`, registry, `params[0] ≥ 24,576` | `PqChatEnv` |
 | `initialize(bytes32 ownerUA)` | `FACTORY` only, at `createInstance` | the caller, once, a well-formed env | `PqChatNotFactory`, `PqChatInitialized`, `EnvMissing` |
 | `createSession(s, wraps, sig)` | anyone submits; `s.creator` signs | shapes, KEM keys, creator in both lists, home named, signature, nonce, wraps | `PqChatShape`, `PqChatKemKey`, registry, `PqChatNonceUsed`, `PqChatWrapHash` |
 | `rekey(e, wraps, sig)` | anyone submits; `e.author` signs | parent, number, home slot, shapes, rights, signature, nonce, wraps | `PqChatUnknown`, `PqChatIncomplete`, `PqChatEpochNumber`, `PqChatEpochTaken`, `PqChatShape`, `PqChatKemKey`, `PqChatNotMember`, `PqChatNotAdmin`, registry, `PqChatNonceUsed`, `PqChatWrapHash` |
@@ -570,7 +570,7 @@ Status: **BUILT** (plan T90, `test/pqchat/PqChatGas.t.sol` with `isolate = true`
 the size gate's row `PqChat` in `smartcontracts/evm/size-baseline.json`).
 
 **Size and deployment.** Every deployed piece fits one transaction of 60 M asked (`(regular + state) × 1.05`, regular ×
-1.05 < 2^24; [CTR-TOK-30](token-wrappers.md#CTR-TOK-30)): `PqChat` 27,825 B runtime (under 3C-D2's 33,594 B line), its `deployRelease` 1,908,760
+1.05 < 2^24; [CTR-TOK-30](token-wrappers.md#CTR-TOK-30)): `PqChat` 27,825 B runtime (under 3C-D2's 33,594 B line), its `deployImplementation` 1,908,760
 regular + 43,147,530 state = 47.3 M asked; `PqChatTopics` 16,396 B, its CREATE2 1,099,442 + 25,269,480 = 27.7 M asked;
 `createInstance` 227,583 + 1,523,880. Before the split the release was 34,223 B and asked 58.0 M.
 

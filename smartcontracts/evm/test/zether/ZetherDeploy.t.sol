@@ -135,7 +135,7 @@ contract ZetherDeployTest is Test {
     }
 
     /// Q4 (CTR-MTX-30, R40), ua-mtx-merge T10: on a chain that declares the public gate the two Zether releases are each
-    /// measured as their own transaction through `deployImplementation` and asked below their testnet formula.
+    /// measured as their own transaction through `deployTokenImplementation` and asked below their testnet formula.
     function test_publicGateMeasuresBothZetherReleases() public {
         DeployHarness h = new DeployHarness();
         h.setGate(2);
@@ -209,7 +209,7 @@ contract ZetherDeployTest is Test {
     }
 
     /// Each Zether-stack deploy fits one Osaka transaction as `deploy.sh` sends it (the verifiers through the CREATE2
-    /// deployer, the releases through `OpenFactory.deployImplementation`, a few k more; gas limit = forge's estimate ×
+    /// deployer, the releases through `OpenFactory.deployTokenImplementation`, a few k more; gas limit = forge's estimate ×
     /// `--gas-estimate-multiplier 105`) and the anvil's 64 KiB code limit. Tx gas ≈ 21,000 +
     /// calldata + the CREATE2 measured here + the 1/64 the deployer's call holds back; forge's estimate was 1.047× this
     /// figure on anvil (BLS verifier: 14,963,261 vs 14,296,783; 14,083,070 used), hence the first ×1.05.

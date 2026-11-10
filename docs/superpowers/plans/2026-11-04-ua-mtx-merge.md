@@ -270,7 +270,7 @@ local branch, never merged (spec Q13).
       `MtxPipelineLib`, `WrappedLib`, `ZetherLib`, `ZetherWrappedLib`, `PqzWrappedLib`, the L library, the wallets, for base, M,
       M + L (L alone first), M + D, M + L + D, and each stand-in. Wallet bytecode hashes equal to base.
 - [ ] **Step 7: Deploy gas** by `GovDeploy.t.sol` `test_releaseGasPerKind`'s method ((regular × 64/63 + state) × 1.05) per
-      implementation and library, each its own transaction, plus `deployImplementation`'s frame measured once on the factory path;
+      implementation and library, each its own transaction, plus `deployTokenImplementation`'s frame measured once on the factory path;
       reported as gas asked against 60 M and 70 M (EIP-8037: regular + state ≤ the limit, never `gas_used`), and regular × 1.05
       against 2^24.
 - [ ] **Step 8: Gas** (forge, deterministic): `GovGas` rows on `NormalToken` and `WrappedToken` at `registry() == 0` and `≠ 0`;
@@ -734,7 +734,7 @@ names, the UA binding for an EOA, `--self-test`), `script/pqz/test_e2e_linked.py
 (`test_registryDeployGate`), `test/governance/GovDeploy.t.sol`, `test/zether/ZetherDeploy.t.sol`, `smartcontracts/evm/runs/<date>-ua-mtx-merge-deploy-gas.txt`.
 
 **Interfaces:** `DeployBase`: a public-chain gate that takes the release transaction's measured regular + state gas (fork or local
-simulation through `deployImplementation`) × 1.05 against the chain's limit, and regular × 1.05 < 2^24; selected by a declared
+simulation through `deployTokenImplementation`) × 1.05 against the chain's limit, and regular × 1.05 < 2^24; selected by a declared
 input, not a chain id list (one rule on every chain); the testnet formula unchanged.
 
 - [ ] **Step 1: Failing tests:** `test_publicGateUsesMeasuredReleaseGas`, `test_publicGateRefusesRegularOver2pow24`,
@@ -2309,7 +2309,7 @@ rule, in the component doc):
 | T89 | Votes (PT3: test 5) | same | §8 test 5 | forge `test/pqchat` | old-count decrement, value range | 0.5 |
 | T90 | Size, deploy gas, gas rows (UA-7 T9, PT4) | `test/pqchat/PqChatGas.t.sol` (`--isolate`), `size-baseline.json` (new row) | rows asserted against new pins: wraps, 2 / 10 / 20-member epochs, a 1 KiB message and a 1,024-B `storeMessage` per signer cost (stand-in verifier with each kind's measured cap), the topic writes of §6; runtime and deploy gas against 60 M asked (margin line 33,594 B); CTR-TOK-30 split if it misses | forge `--isolate`; size gate | — | 1 |
 | T91 | Mutants (UA-7 T5–T7, PT5) | `runs/2026-11-10-ua-mtx-merge-3c/mutants.txt` (summary committed, logs ignored) | each mutant alone on a clean tree, `mutant \| red tests \| rc`, file restored byte-equal | forge `test/pqchat` | every row above | 1 |
-| T92 | The release on the factory and one instance (UA-7 T8, PC0) — **after the controller's word** | `script/DeployBase.s.sol` (`publishClassEnv(3, 0, …)`, `deployRelease(ReleaseId(3, 0, 1), …)`, `setClassKindEnabled(3, 0, true)`, one `createInstance`), deploy JSON key, `test/pqchat/PqChatDeploy.t.sol` | release checks through the real factory; two instances independent; `contractsPage(3, …)` after a creation | forge `test/pqchat`, the deploy script's forge test | `initialize` without the factory check, `factoryInfo()` with a wrong class | 0.5 |
+| T92 | The release on the factory and one instance (UA-7 T8, PC0) — **after the controller's word** | `script/DeployBase.s.sol` (`publishClassEnv(3, 0, …)`, `deployImplementation(ReleaseId(3, 0, 1), …)`, `setClassKindEnabled(3, 0, true)`, one `createInstance`), deploy JSON key, `test/pqchat/PqChatDeploy.t.sol` | release checks through the real factory; two instances independent; `contractsPage(3, …)` after a creation | forge `test/pqchat`, the deploy script's forge test | `initialize` without the factory check, `factoryInfo()` with a wrong class | 0.5 |
 | T93 | Node rows (UA-7 T10, PT6) | `scaas-node/src/{typed,guard,abi}.rs`, `docs/node/job-api.md` call table | the twelve rows equal the release's entries both directions; a target not listed by the factory as class 3 (or version 0) refused `CALL_TARGET_REFUSED`; an unknown `PqChat` selector refused; a hex bundle refused (`HEX_ARGS_REFUSED`); job shapes with named fields; the unsigned `storeMessage` and `addWraps` relayed only through `RelayFeeRouter` or the lane policy (P17) | node call-table and job tests (capped), clippy `-D warnings` | a row missing on one side, the class check | 1.5 |
 | T94 | Docs (UA-7 T15 contract half, PT8) | `docs/contracts/pqchat.md` (new; CTR-CHAT-01's anchor moves there with a Change), `docs/contracts/` factory row for class 3; the rest drafted in `scratchpad/2026-11-10-ua-mtx-merge-3c-docs-draft.md` for T19 | — | `docs_check.py check` | — | 1 |
 | T96 | Recovery from state alone (owner 2026-11-10; spec P47) | `PqChat.sol`, `IPqChat.sol`, `test/pqchat/PqChatRecovery.t.sol` | `sessionsOf` / `sessionCount`: every member at create, added members only on rekey, a removed member's entry kept, paging, the end, the clamp; `epochsOf` / `epochCount`: the home list equals the `childOf` chain, no incomplete or losing child, the replica's completion order, paging and the clamp; `latestEpoch` the last entry | forge `test/pqchat` | an entry for a kept member on rekey; an incomplete or a losing child appended; a page past the end not empty | 0.5 |
@@ -2402,7 +2402,7 @@ RosterKind}.sol` and the negative mocks (test-only, no `src/` kind); `test/gover
 `size-baseline.json`.
 
 **Interfaces (spec §8.2, §8.4):** `ReleaseId {contractClass, kind, version}`, `ClassRelease`, `FactoryInfo` (seven static
-words); `publishClassEnv`, `deployRelease`, `deprecateRelease`, `setClassKindEnabled`; `classEnvOf`, `latestClassEnvVersion`,
+words); `publishClassEnv`, `deployImplementation`, `deprecateRelease`, `setClassKindEnabled`; `classEnvOf`, `latestClassEnvVersion`,
 `classReleaseOf`, `latestClassVersion`, `classKindEnabled`, `classes`, `kindsOf`; `createInstance(ReleaseId, salt, initCall)`,
 `creating()`; events `ClassEnvPublished`, `ReleaseDeployed`, `ReleaseDeprecated`, `ClassKindEnabled`, `InstanceCreated`;
 errors `ClassReserved`, `ReleaseUnknown`, `ReleaseAlreadyRegistered`, `ReleaseDeprecated`, `ReleaseNotYetUsable`,

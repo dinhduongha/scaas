@@ -20,7 +20,7 @@ assert s.count(old) == 1, "the call is not there once"
 open(p, "w").write(s.replace(old, ""))
 P
 forge test --match-path '{test/v2/FactoryGenericKind.t.sol,test/pqchat/PqChat.t.sol}' \
-  --match-test 'test_generic_modulesChecked|test_deployRelease_moduleNotPinnedRefused'
+  --match-test 'test_generic_modulesChecked|test_deployImplementation_moduleNotPinnedRefused'
 rc=$?
 echo "mutant: forge rc=$rc (1 = the negative tests failed: killed)"
 [ "$rc" -eq 1 ]

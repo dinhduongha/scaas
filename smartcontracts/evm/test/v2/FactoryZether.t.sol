@@ -110,7 +110,7 @@ contract FactoryZetherTest is Test {
     function _release(IOpenFactory.TokenKind k, bytes memory code, address[] memory ms) internal returns (address) {
         uint16 v = Catalogue.env(f, k, withModules(pinned(plainEnv(address(f), address(0), UID_, address(0), false), k), ms));
         vm.prank(registrar);
-        return f.deployImplementation(k, 1, v, code, abi.encode(ImplArgs(ms)));
+        return f.deployTokenImplementation(k, 1, v, code, abi.encode(ImplArgs(ms)));
     }
 
     function _conf() internal pure returns (IFactoryToken.TokenConfig memory c) {

@@ -398,7 +398,7 @@ transaction. Under EIP-8037 a transaction is included only if the gas it asks fi
 (`--gas-estimate-multiplier 105`, `deploy.sh`), and governance's NET-EVM-06 fits a kind when regular × 1.05 < 2^24 and
 total × 1.05 ≤ the limit. On the governance figures that is about 1,685 gas asked per runtime byte (`WRAPPED`: 52,297 B,
 83.92 M total, 88.1 M asked), so a 60 M block holds about **35.6 KB** of runtime and a 70 M block about **41.5 KB**, before
-the frame `deployImplementation` adds. Tokens are clones: only the implementation and its libraries must fit, each its own
+the frame `deployTokenImplementation` adds. Tokens are clones: only the implementation and its libraries must fit, each its own
 transaction. If the owner rules that a public deploy drops the multiplier (R40, Q4), that is a `deploy.sh` change and the
 thresholds become about 37.3 / 43.5 KB.
 
@@ -499,7 +499,7 @@ Rows marked **Controller** are decided here with their reason; the owner may ove
 | R37 | [CTR-DEX-13](../../contracts/dex.md#CTR-DEX-13): "One struct, `TradeOrder`, for every leg" (owner) | "`TradeOrder` for every outside leg; a SCaaS token leg is a `UATradeOrder` (CTR-DEX-26 shape 1)" | follows R12 | — |
 | R38 | [CTR-DEX-15](../../contracts/dex.md#CTR-DEX-15): the token-side `mtxTrade(TradeOrder, bytes sig, …)`, its address-keyed `minNonce`, `tradeOrderDigest` | Rewritten: `mtxTrade(UATradeOrder, UASig, …)` (today's `uaTrade`), `minNonce(bytes32, …)`, `tradeOrderDigest` over `UATradeOrder` | follows R12 | trade KAT and node builders |
 | R39 | [CTR-TOK-20](../../contracts/token-wrappers.md#CTR-TOK-20): `mtxWrapOrder(address underlying, WrapOrder, bytes sig)` / `uaWrapOrder(…, UAWrapOrder, …)` | `mtxWrapOrder` takes `UAWrapOrder` + `UASig` (today's `uaWrapOrder`); `WrapOrder`, `CancelWrapOrder` and their vectors move to legacy | a pair, merged | — |
-| R40 | NET-EVM-06 (PR #9): the gate `runtime × 1,530 + 2^24` ("the owner's and stays") and the fit test "regular × 1.05 < 2^24 and total × 1.05 ≤ the limit" | Owner (Q4). Proposal: the testnet gate keeps the owner's formula; before a public deploy the gate takes the measured regular + state gas of the release transaction (a fork or local simulation, through `deployImplementation`), × 1.05, against that chain's limit | the formula refuses every token kind at 60 M; the fit test is the rule §4 uses | `DeployBase._releaseGasNeed` / `_requireReleaseGas`, `e2e.py require_release_gas`, `test_registryDeployGate` |
+| R40 | NET-EVM-06 (PR #9): the gate `runtime × 1,530 + 2^24` ("the owner's and stays") and the fit test "regular × 1.05 < 2^24 and total × 1.05 ≤ the limit" | Owner (Q4). Proposal: the testnet gate keeps the owner's formula; before a public deploy the gate takes the measured regular + state gas of the release transaction (a fork or local simulation, through `deployTokenImplementation`), × 1.05, against that chain's limit | the formula refuses every token kind at 60 M; the fit test is the rule §4 uses | `DeployBase._releaseGasNeed` / `_requireReleaseGas`, `e2e.py require_release_gas`, `test_registryDeployGate` |
 | R41 | PQZ set parameters `roll_max` and `debit_min_gas`, measured on the `uaExecute` relay path (`n2560-kmax16384`: "TIGHT: uaExecute 6,032 under … re-run the rollscan after a contract change") | Re-measured at all four sets on the merged `mtxExecute` (§9 step 5) with old → new. **Controller:** the 2026-10-27 rule (`ROLL_MAX` 48 if the margin is gone) applies as stated; any other value change is the owner's (a set parameter) and goes to the owner with old → new when §9 shows it | the merge adds R17's check, B's allow-list branch and C's guard to that path | if `debit_min_gas` moves: `set.toml`, `gen_set.py`'s `PqzSet` comment, `UARegistryLib` |
 | R42 | [hedera.md §2 Payload](../../networks/hedera.md#payload): "the `MetaOp` v1 **is** the token's EIP-712 `MetaTransfer`"; "a SCaaS leg's `TradeOrder`" | "`MetaOp` v1 is the token's `UAMetaTransfer`, `from` the account's EVM address zero-padded (long-zero for an ED25519 account, its alias for an ECDSA account)"; "a SCaaS leg's `UATradeOrder`" | follows R1, R12 | `hedera_kat.json`, `adapters/hedera.rs`, `HederaKat.t.sol` |
 | R43 | [job-api.md](../../node/job-api.md) error table: `OP_KIND_MISMATCH` = "a `ua*` entry on a job that is not `ua_metatx`" | "an entry that the per-kind call table ([NODE-JOB-20](../../node/job-api.md#NODE-JOB-20)) does not list for the job's kind" | names no longer carry the form | — |
@@ -661,7 +661,7 @@ Nothing ran before PR #9 merged (owner 2026-11-04); it is merged into this branc
    M; M + L (first: L alone decides whether §4's D-before-L order matters); M + D; M + L + D; and the regulated stand-in on
    `NormalToken` and `WrappedToken`: a scratch copy with the six regulated entries and the hook, measured, not committed.
 3. **Deploy gas** per implementation and library, each its own transaction, by the method of governance's
-   `GovDeploy.t.sol` `test_releaseGasPerKind` (regular × 64/63 + state, × 1.05), plus the frame `deployImplementation` adds,
+   `GovDeploy.t.sol` `test_releaseGasPerKind` (regular × 64/63 + state, × 1.05), plus the frame `deployTokenImplementation` adds,
    measured once on the factory path; reported as the gas asked against 60 M and 70 M, and regular × 1.05 against 2^24.
 4. **Gas** (forge, deterministic; no timing, no calibration): `GovGas` rows on `NormalToken` and `WrappedToken` at
    `registry() == 0` and `≠ 0` (C moved a check off the hot path, and CTR-GOV-11's "+0" is per kind, not per registry
@@ -783,7 +783,7 @@ here is an audit: everything cryptographic stays `UNAUDITED`.
 ### 12.1 Claude workflow (security, rules, blast radius, wallet display)
 
 32 findings confirmed, all resolved; 8 not confirmed (security-1, security-2, rules-1, rules-2, rules-4, rules-5, wallet-3,
-wallet-7) and not acted on; within confirmed findings, the tag-name part of rules-10 and the `deployImplementation` detail of
+wallet-7) and not acted on; within confirmed findings, the tag-name part of rules-10 and the `deployTokenImplementation` detail of
 blast-2 were refuted. Question numbers in this table are the first draft's; §10 renumbered them after §12.2 and §12.3.
 
 | Id | Severity | Resolution |

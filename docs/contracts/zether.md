@@ -1368,7 +1368,7 @@ could carry a fake verifier (`true` for every proof ⇒ `mtxUnshield` drains the
   constructor-fixed `Canonical` sets, `zetherVerifiers` / `pqzVerifier` and `NotCanonicalVerifiers`). The registrar
   publishes per kind a versioned, never-changed `Env` whose `deps` are, for `*_ZETHER`, the transfer, burn and
   inner-product verifier and `ZetherDisclosure` of one curve (positions `ENV_ZETHER_*` 0–3), for `*_PQZ` the
-  `UAPqzVerifier` (`ENV_PQZ_VERIFIER` 0); `deployImplementation(kind, version, envVersion, initcode, implArgs)`
+  `UAPqzVerifier` (`ENV_PQZ_VERIFIER` 0); `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)`
   `CREATE2`s the init code with that env appended, so the verifiers are immutables of the release by construction
   ([CTR-TOK-03](token-wrappers.md#release-env)). The Zether constructor refuses missing code, two verifiers of different
   proof systems, verifiers not fixed to `deps[2]`, a swapped or duplicated transfer / burn pair (the transfer verifier

@@ -403,7 +403,7 @@ contract PqzNormalTest is PqzFixture {
     function test_factoryGate() public {
         bytes memory code = type(NormalPqzToken).creationCode;
         vm.prank(registrar);
-        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployImplementation.selector, uint8(6), 1, 1, code, ""));
+        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployTokenImplementation.selector, uint8(6), 1, 1, code, ""));
         assertFalse(ok, "kind 6 (dropped, D21) fails ABI decoding");
         // an unregistered PQZ implementation cannot be cloned at all (owner 2026-10-19)
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
@@ -449,7 +449,7 @@ contract PqzNormalTest is PqzFixture {
 
     /// Review 5g-Z2 P2-3: the release env (`deps = [UAPqzVerifier]` with code, never Hedera) is checked by the
     /// release's `validateEnv` (chain-neutral releases, plan T72: the constructor's checks moved there), which
-    /// `deployImplementation` calls and bubbles.
+    /// `deployTokenImplementation` calls and bubbles.
     function test_constructorChecksTheEnv() public {
         bytes memory code = type(NormalPqzToken).creationCode;
         IFactoryToken.Env[6] memory bad;
@@ -473,7 +473,7 @@ contract PqzNormalTest is PqzFixture {
                 withModules(pinned(bad[i], IOpenFactory.TokenKind.NORMAL_PQZ), ms));
             vm.prank(registrar);
             vm.expectRevert(IPqzToken.BadInit.selector);
-            factory.deployImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args);
+            factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args);
         }
     }
 

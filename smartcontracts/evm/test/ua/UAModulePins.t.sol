@@ -55,7 +55,7 @@ contract UAModulePinsTest is Test {
         e = withModules(e, ms);
     }
 
-    /// `deployImplementation`: env 1 pins two of NormalToken's three modules, env 2 all three (the control).
+    /// `deployTokenImplementation`: env 1 pins two of NormalToken's three modules, env 2 all three (the control).
     function test_m_releaseModuleNotPinned() public {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
         assertEq(ms.length, 3);
@@ -63,8 +63,8 @@ contract UAModulePinsTest is Test {
         f.publishEnv(NORMAL, 2, _env(ms));
         bytes memory code = type(NormalToken).creationCode;
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, ms[2]));
-        f.deployImplementation(NORMAL, 1, 1, code, args);
-        address impl = f.deployImplementation(NORMAL, 1, 2, code, args); // control
+        f.deployTokenImplementation(NORMAL, 1, 1, code, args);
+        address impl = f.deployTokenImplementation(NORMAL, 1, 2, code, args); // control
         assertEq(NormalToken(impl).modules(), ms);
     }
 
@@ -72,7 +72,7 @@ contract UAModulePinsTest is Test {
     function test_m_unregisteredModuleNotPinned() public {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
         f.publishEnv(NORMAL, 1, _env(ms));
-        address impl = f.deployImplementation(NORMAL, 1, 1, type(NormalToken).creationCode, args);
+        address impl = f.deployTokenImplementation(NORMAL, 1, 1, type(NormalToken).creationCode, args);
         f.publishEnv(NORMAL, 2, _env(_first(ms, 2)));
         bytes memory init = abi.encode(normalInit("U", "U", 0, 1, address(this), address(0)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, ms[2]));
@@ -100,6 +100,6 @@ contract UAModulePinsTest is Test {
         address at = vm.computeCreate2Address(keccak256(abi.encode(NORMAL, uint64(1))),
             keccak256(bytes.concat(code, abi.encode(address(f), bytes("")))), address(f));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModulesUnreadable.selector, at));
-        f.deployImplementation(NORMAL, 1, 1, code, "");
+        f.deployTokenImplementation(NORMAL, 1, 1, code, "");
     }
 }

@@ -57,15 +57,15 @@ contract GovRouterCreateTest is GovRouterFixture {
         (address[] memory dm, bytes memory dargs) = deployDexModules(address(f));
         vm.startPrank(REGISTRAR);
         f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(f), address(0), chainUidA, PREG, false), ms));
-        f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
+        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
         f.publishDexEnv(1, withModules(plainEnv(address(f), address(0), chainUidA, address(0), false), dm));
         f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, dargs);
         f.publishClassEnv(4, 0, 1, plainEnv(address(f), address(0), chainUidA, address(0), false));
-        f.deployRelease(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
             type(NoteKind).creationCode, "");
         f.setClassKindEnabled(4, 0, true);
         f.publishClassEnv(4, 1, 1, plainEnv(address(f), address(0), chainUidA, address(0), false));
-        f.deployRelease(IOpenFactory.ReleaseId(4, 1, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(4, 1, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
             type(BadKind).creationCode, abi.encode(uint8(16))); // NESTED: its initialize creates a (4, 0, 1) instance
         f.setClassKindEnabled(4, 1, true);
         vm.stopPrank();
@@ -166,7 +166,7 @@ contract GovRouterCreateTest is GovRouterFixture {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(g), ""); // T66b
         vm.startPrank(REGISTRAR);
         g.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(g), address(0), chainUidA, PREG, false), ms));
-        g.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
+        g.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
         vm.stopPrank();
         vm.expectRevert(IOpenFactory.RouterSubjectZero.selector);
         r.create(g, bytes32(0), _tokenArgs());

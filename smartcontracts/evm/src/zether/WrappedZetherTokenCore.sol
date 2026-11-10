@@ -40,7 +40,7 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     );
     // The typehashes of the unshield-unwrap entries are `ZetherWrappedLib`'s (CTR-ZTH-94).
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
+    /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; no
     ///      `implArgs`. The env (Hedera off) is checked by `validateEnv` (`ZetherLib`).
     constructor(address factory_, bytes memory implArgs) WrappedTokenCore(factory_, implArgs) {}
 

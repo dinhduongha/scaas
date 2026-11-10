@@ -100,7 +100,7 @@ contract PqChatOnchain is OnchainBase {
     /// @dev A UA registration (ML-DSA-65 PoP through the cached key) and each part of `cacheExpandedKey`: a fixed 56 M (under
     ///      60 M), as Tokens.s.sol: the estimate undershoots regular + state gas (EIP-8037).
     uint256 internal constant REGISTER_GAS = 56_000_000;
-    /// @dev The release transaction (`deployRelease`), when this run makes it: at most 60 M asked (NET-EVM-11).
+    /// @dev The release transaction (`deployImplementation`), when this run makes it: at most 60 M asked (NET-EVM-11).
     uint256 internal constant RELEASE_GAS = 59_000_000;
 
     IUARegistry reg;
@@ -166,7 +166,7 @@ contract PqChatOnchain is OnchainBase {
                 (e.libs, e.libCodeHashes) = (new address[](1), new bytes32[](1));
                 (e.libs[0], e.libCodeHashes[0]) = (topics, topics.codehash);
                 f.publishClassEnv(3, 0, 1, e);
-                impl = f.deployRelease{gas: RELEASE_GAS}(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId,
+                impl = f.deployImplementation{gas: RELEASE_GAS}(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId,
                     vm.getCode("PqChat.sol:PqChat"), abi.encode(topics));
                 f.setClassKindEnabled(3, 0, true);
                 vm.stopBroadcast();
@@ -314,7 +314,7 @@ contract PqChatOnchain is OnchainBase {
     function _session(uint256 creator, uint64 nonce, uint256[] memory idx)
         internal view returns (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w)
     {
-        (s.creator, s.nonce, s.homeChain, s.homeContract) = (uas[creator], nonce, uid, address(chat));
+        (s.creator, s.nonce, s.homeChain, s.homeChatContract) = (uas[creator], nonce, uid, address(chat));
         s.admins = _uas(_ids(creator));
         s.members = _mk(idx);
         (w, s.wrapHashes) = _wraps(s.members, keccak256(abi.encode(runSalt, "session", nonce)));
@@ -527,7 +527,7 @@ contract PqChatOnchain is OnchainBase {
 
     function _topic() internal {
         IPqChat.PqTopic memory t;
-        (t.owner, t.nonce, t.homeChain, t.homeContract, t.name, t.about, t.openReplies) =
+        (t.owner, t.nonce, t.homeChain, t.homeChatContract, t.name, t.about, t.openReplies) =
             (uas[0], uint64(uint256(_salt("topic")) >> 200), uid, address(chat), "onchain", bytes("matrix"), true);
         IUARegistry.UASig memory sg = _sigOf(0, h.topic(t));
         vm.broadcast(k2);

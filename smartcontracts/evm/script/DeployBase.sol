@@ -438,9 +438,9 @@ abstract contract DeployBase is Script {
     function _pqchatRelease(OpenFactory f, bytes memory args) internal returns (address impl) {
         IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
         bytes memory code = type(PqChat).creationCode;
-        _requireReleaseGas("PqChat", address(f), abi.encodeCall(f.deployRelease,
+        _requireReleaseGas("PqChat", address(f), abi.encodeCall(f.deployImplementation,
             (id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args)));
-        impl = f.deployRelease(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args);
+        impl = f.deployImplementation(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args);
         _releaseRow("PqChat", 3, 0, 1, impl, keccak256(abi.encodePacked(code, abi.encode(id, address(f), args))),
             keccak256(args));
     }
@@ -528,8 +528,8 @@ abstract contract DeployBase is Script {
     function _release(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
         bytes memory implArgs) internal returns (address)
     {
-        _requireReleaseGas(name, address(f), abi.encodeCall(f.deployImplementation, (kind, 1, 1, code, implArgs)));
-        address at = f.deployImplementation(kind, 1, 1, code, implArgs);
+        _requireReleaseGas(name, address(f), abi.encodeCall(f.deployTokenImplementation, (kind, 1, 1, code, implArgs)));
+        address at = f.deployTokenImplementation(kind, 1, 1, code, implArgs);
         _releaseRow(name, 1, uint8(kind), 1, at, keccak256(abi.encodePacked(code, abi.encode(address(f), implArgs))),
             keccak256(implArgs));
         return at;

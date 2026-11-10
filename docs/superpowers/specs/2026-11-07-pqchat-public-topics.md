@@ -337,7 +337,7 @@ approved instead a generic catalogue (factory index spec `2026-11-07-factory-con
 |---|---|
 | `uint8 CLASS_PQCHAT = 3`, `ClassUnknown` for 0 and 4–255 | class id 3 in the CTR-TOK-28 table, no factory constant; ids `uint16`; `ClassUnknown` for 0 and any generic class with no release; `ownerUA` from `factoryInfo()` |
 | `PQCHAT_DOMAIN = 254`, `publishPqChatEnv`, `pqChatEnvOf`, `latestPqChatEnvVersion` | `publishClassEnv(3, 0, …)`, `classEnvOf`, `latestClassEnvVersion` |
-| `deployPqChatImplementation`, `pqChatReleaseOf`, `pqChatImplementationOf`, `deprecatePqChat`, `isPqChatDeprecated`, `latestPqChatVersion`, `PqChat*` events and errors | `deployRelease(ReleaseId(3, 0, v), …)`, `classReleaseOf`, `deprecateRelease`, `latestClassVersion`, `ReleaseDeployed` / `ReleaseDeprecated`, the generic errors; checks by `factoryInfo()` instead of `factory()` / `chainUid()` |
+| `deployPqChatImplementation`, `pqChatReleaseOf`, `pqChatImplementationOf`, `deprecatePqChat`, `isPqChatDeprecated`, `latestPqChatVersion`, `PqChat*` events and errors | `deployImplementation(ReleaseId(3, 0, v), …)`, `classReleaseOf`, `deprecateRelease`, `latestClassVersion`, `ReleaseDeployed` / `ReleaseDeprecated`, the generic errors; checks by `factoryInfo()` instead of `factory()` / `chainUid()` |
 | `createPqChat(uint64 version, bytes32 ownerUA, bytes32 salt)`, `initialize(msg.sender, version, ownerUA)`, `PqChatCreated`, `isPqChat` | `createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)))`; `initialize(bytes32 ownerUA)`; `InstanceCreated`; `infoOf(a).contractClass == 3 && version != 0` (node: `factory_class(3)`) |
 | gas: a `GovGas` `createPqChat` row | a `createInstance` row with the `PqChat` release (`PqChatGas`, PT4); the factory side measured once in T70 with the test kind |
 | size: +2–3 KB on `OpenFactory` | none for `PqChat`: the generic block is T70's |
@@ -376,7 +376,7 @@ the factory, its creator, class, kind and salt (CREATE3), not on the release.
 
 ```solidity
 factory.publishClassEnv(3, 0, 1, env);
-factory.deployRelease(ReleaseId(3, 0, 1), 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, initcode, implArgs);
+factory.deployImplementation(ReleaseId(3, 0, 1), 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, initcode, implArgs);
 factory.setClassKindEnabled(3, 0, true);  // after the notice period
 factory.createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)));
 ```

@@ -11,7 +11,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///        34,223 B): the public topics and votes (topics spec, D18-D22), each entry with `IPqChat`'s signature. `PqChat`
 ///        forwards these entries' calldata to it by `DELEGATECALL`, so it runs in the clone's state and env; called directly
 ///        it has no env (`PqChatEnv`) and an empty state. One module per release, pinned in the class env's `libs` (its
-///        code hash checked by the factory at `deployRelease`) and named in the release's `implArgs`. **UNAUDITED.**
+///        code hash checked by the factory at `deployImplementation`) and named in the release's `implArgs`. **UNAUDITED.**
 contract PqChatTopics is PqChatCore {
     /// @notice The factory whose `PqChat` releases name this module (checked by the release's constructor).
     address public immutable FACTORY;

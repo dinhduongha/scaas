@@ -156,7 +156,7 @@ library Catalogue {
         (address[] memory ms, bytes memory implArgs) = deployKindModules(uint8(kind), address(f), coreArgs);
         uint16 v = env(f, kind, withModules(e.libs.length == 0 ? pinned(e, kind) : e, ms));
         vm.prank(f.registrar());
-        return f.deployImplementation(kind, version, v, code, implArgs);
+        return f.deployTokenImplementation(kind, version, v, code, implArgs);
     }
 
     /// @dev A plain release on `plainEnv(f, ska, f.chainUid(), registry, hedera)`.
@@ -199,7 +199,7 @@ library Catalogue {
         return deployDexModules(address(f));
     }
 
-    /// @dev Where `deployImplementation(kind, version, any env, code, "")` puts the release: chain-neutral, the env is not
+    /// @dev Where `deployTokenImplementation(kind, version, any env, code, "")` puts the release: chain-neutral, the env is not
     ///      in its init code (chain-neutral spec §6.1).
     function predict(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, bytes memory code)
         internal pure returns (address)

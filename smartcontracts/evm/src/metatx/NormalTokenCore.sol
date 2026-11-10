@@ -24,7 +24,7 @@ abstract contract NormalTokenCore is MetaTokenBase {
         "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; this kind
+    /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; this kind
     ///      takes no `implArgs`.
     constructor(address factory_, bytes memory) MetaTokenBase(factory_) {}
 

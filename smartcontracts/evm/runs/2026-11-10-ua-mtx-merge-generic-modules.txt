@@ -14,3 +14,14 @@ size-gate | fix | 0 | forge build src --sizes --json; scripts/size_gate.py: 0 er
 govdeploy | fix | 0 | FOUNDRY_TEST=test/governance GovDeploy.t.sol: 19 passed (test_deployPqChatPath: the real PqChat release through DeployBase)
 gas-old | 565305c7 | 0 | OpenFactory runtime 29,225 B; regular 1,937,887, state 44,995,770, asked 49,280,339
 gas-new | fix | 0 | OpenFactory runtime 29,238 B; regular 1,937,887, state 45,015,660, asked 49,301,224 (NET-EVM-11: under 60 M)
+# The rename (owner 2026-11-10): deployImplementation (token kinds) -> deployTokenImplementation (0x276344e9 -> 0x7d847eae),
+# deployRelease (generic classes) -> deployImplementation (0x72fb13f7 -> 0x8968d1ae); deployDexImplementation unchanged.
+rename-v2 | rename | 0 | the ten test/v2 files above: 12 suites, 108 passed
+rename-pqchat | rename | 0 | FOUNDRY_TEST=test/pqchat: 9 suites, 94 passed; test_gas_deployImplementation: PqChat release regular 1,908,760, state 43,147,530, asked 47,309,104 (the pins unchanged)
+rename-gov | rename | 1 -> 0 | GovDeploy, GovRouterCreate, GovGas, GovLeg, GovRegulatedBits, SelectorAudit: 69 passed, 1 failed (test_routerAndRelayFeeRouterNewAddresses: GovernanceRouter 0x639e34f93Ac69d6Ba31D773AC915894542180723 -> 0x9084894b49299A2b1DFdB271e2C5Fd8D4f9bA904, the metadata hash of IOpenFactory's renamed entries; the router calls neither); the pin moved, GovDeploy 19 passed
+rename-pqz | rename | 0 | PqzNormal, PqzWrapped: 25 passed
+rename-zether | rename | 0 | ZetherDeploy, ZetherRevertPaths: 26 passed
+rename-ua | rename | 0 | UAModulePins: 4 passed
+rename-gas | rename | 0 | OpenFactory runtime 29,238 B; regular 1,937,887, state 45,015,660, asked 49,301,224 (unchanged by the rename)
+rename-size | rename | 0 | size gate: 0 errors, 159 contracts
+rename-node | rename | 0 | scaas-node: cargo test --test e2e --no-run (deployTokenImplementationCall) builds; cargo test --lib guard:: 35 passed (the selector_audit.json rows: no factory entry)

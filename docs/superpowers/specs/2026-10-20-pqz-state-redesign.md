@@ -43,7 +43,7 @@ controller's request of 2026-10-20 (library split, §8). Normative text today:
 - **[id]** CTR-PQZ-09 Change (review B-1, owner): one `proofSystemId` bump carries the 16k parameters, the B-1 fix (V3 /
   V4 from the post-`tg` hash), A-2's renumbering and UA-6's `R_REG` message (§6.4).
 - **[Z2]** 5g-Z2 merged (`c173de37`): the PQZ tokens are released through `OpenFactory`'s `Env` /
-  `deployImplementation` (§7, §8).
+  `deployTokenImplementation` (§7, §8).
 
 **Evidence (all committed).**
 - Gas: the measurement prototype `smartcontracts/evm/test/research/PqzStateGas.t.sol` (forge, Osaka; not production
@@ -633,7 +633,7 @@ the owner folded into the same bump (CTR-PQZ-09 Change, review B-1; CTR-UA-30 Co
 - **`pqz-stmt`**: lengths per form, `MAX_PROOF`, `MAX_INPUT` (512 KiB, O8), the ids; Nethermind plugin limits;
 - **Solidity**: `PqzCt` (`Q`, `DELTA`, `PK`, `CT`, `ZERO_HASH`), `PqzSafety` ids, probe proofs, self-test hash;
   `ROLL_MAX` re-pinned (lanes hold 2^14 terms); a new `UAPqzVerifier` instance → a new `Env` version
-  (`OpenFactory.publishEnv`) and new PQZ releases (`deployImplementation`) [Z2];
+  (`OpenFactory.publishEnv`) and new PQZ releases (`deployTokenImplementation`) [Z2];
 - **vectors and KATs** (`smartcontracts/vectors/pqz/`, `pqz_kat.py`, fuzz seeds, the package), every digest;
 - **ids** (controller proposal): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4")` — the label's d/k/q/l
   change and the version continues from v3 so "v3 → v4" stays unambiguous in the B-1 records; PQZH
@@ -672,7 +672,7 @@ This changes the owner's stated q, so it is **owner question Q1**.
 ## 7. Dependencies: 5g-Z, UA-6, the Zether side, the kinds and the curve
 
 - **5g-Z1 and 5g-Z2 are merged** (`77f7478`, `c173de37`) [Z2]: the PQZ tokens take their `UAPqzVerifier` from
-  `Env.deps[ENV_PQZ_VERIFIER]` and are released by `OpenFactory.deployImplementation` with the linked libraries listed
+  `Env.deps[ENV_PQZ_VERIFIER]` and are released by `OpenFactory.deployTokenImplementation` with the linked libraries listed
   in `Env.libs` and checked by `libCodeHashes`. 5h builds on that: D14's four libraries are four `Env.libs` entries
   (deploy scripts publish a new `Env` version for `NORMAL_PQZ` / `WRAPPED_PQZ`); the 16k step adds a new
   `UAPqzVerifier` (new id, new probe) and so another `Env` version and release. No factory logic changes for PQZ

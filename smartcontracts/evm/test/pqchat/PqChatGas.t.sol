@@ -224,28 +224,28 @@ contract PqChatGasTest is PqTopicsBase {
         _row("voteEntry changed", 102_292, 0);
     }
 
-    /// The release transaction (`deployRelease` through the factory: a CREATE2 of the whole implementation), as the deploy
+    /// The release transaction (`deployImplementation` through the factory: a CREATE2 of the whole implementation), as the deploy
     /// sends it: regular x 64/63 (the gas a CREATE2 frame keeps back, `GovDeploy.t.sol`'s method) + EIP-8037 state, x 1.05
     /// (`DeploySend.s.sol`'s limit, NET-EVM-11) within the 60 M every transaction asks (Step 5b), regular x 1.05 < 2^24.
-    function test_gas_deployRelease() public {
+    function test_gas_deployImplementation() public {
         bytes memory code = type(PqChat).creationCode;
         vm.prank(REGISTRAR);
-        address r = f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 1, IPqChat.initialize.selector,
+        address r = f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 1, IPqChat.initialize.selector,
             type(IPqChat).interfaceId, code, _args());
         Vm.Gas memory g = vm.lastCallGas();
         (uint256 regular, uint256 state) = (uint256(g.gasTotalUsed) * 64 / 63, uint256(int256(g.gasStateUsed)));
         uint256 asked = (regular + state) * 105 / 100;
         emit log_named_uint("SIZE PqChat runtime", r.code.length);
         emit log_named_uint("SIZE PqChat init", code.length);
-        emit log_named_uint("GAS deployRelease PqChat regular x 64/63", regular);
-        emit log_named_uint("GAS deployRelease PqChat state", state);
-        emit log_named_uint("GAS deployRelease PqChat asked x 1.05", asked);
+        emit log_named_uint("GAS deployImplementation PqChat regular x 64/63", regular);
+        emit log_named_uint("GAS deployImplementation PqChat state", state);
+        emit log_named_uint("GAS deployImplementation PqChat asked x 1.05", asked);
         assertLt(regular * 105 / 100, 1 << 24, "regular gas x 1.05 under 2^24 (EIP-7825)");
         assertLe(asked, 60_000_000, "the release transaction asks at most 60 M");
         if (!vm.envOr("GAS_MEASURE", false)) {
             assertEq(r.code.length, RUNTIME, "the PqChat runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, RELEASE_REGULAR, SLACK, "deployRelease regular");
-            assertEq(state, RELEASE_STATE, "deployRelease state");
+            assertApproxEqAbs(regular, RELEASE_REGULAR, SLACK, "deployImplementation regular");
+            assertEq(state, RELEASE_STATE, "deployImplementation state");
         }
     }
 

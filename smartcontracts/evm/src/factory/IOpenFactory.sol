@@ -14,7 +14,7 @@ interface IOpenFactory {
     ///         `NORMAL_PQZ` / `WRAPPED_PQZ` are built (P6g); ids 6 and 7 (the dropped
     ///         `*_ZETHER_PQZ` kinds) are never reused: an out-of-range kind fails ABI decoding.
     /// @notice CTR-GOV-16, spec §4.1: every id is a real member before the factory freezes. 6 and 7 are the dropped
-    ///         `*_ZETHER_PQZ` ids, never reused: `deployImplementation` refuses them (`KindRetired`). 8-13, the regulated
+    ///         `*_ZETHER_PQZ` ids, never reused: `deployTokenImplementation` refuses them (`KindRetired`). 8-13, the regulated
     ///         kinds, are off until a release is published and the kind enabled.
     enum TokenKind {
         NORMAL,                   // 0
@@ -180,10 +180,11 @@ interface IOpenFactory {
     ///         interim rule, controller proposal 2026-10-20, until the governance-matrix spec), checks each
     ///         `env.libs[i].codehash`, `CREATE2`s (salt `keccak256(abi.encode(kind, version))`) the chain-neutral
     ///         `initcode ‖ abi.encode(address(this), implArgs)` (the same address on every chain), checks `kind()`,
-    ///         `factory()` and the release's `validateEnv` of the instance env, records the release with its env version
+    ///         `factory()`, the release's `validateEnv` of the instance env and its body modules (`modules()`, each in the
+    ///         env's `libs`: `ModuleNotPinned`, CTR-TOK-30), records the release with its env version
     ///         and hash (usable after `noticePeriod`). Append-only, version 0 refused; the same init code may be deployed
     ///         again as a later version on another env.
-    function deployImplementation(
+    function deployTokenImplementation(
         TokenKind kind,
         uint64 version,
         uint16 envVersion,
@@ -227,7 +228,7 @@ interface IOpenFactory {
     function deployCountFor(address underlying) external view returns (uint256);
     function deployedFor(address underlying, uint256 index) external view returns (address);
 
-    /// @notice Registrar only: as `deployImplementation` for the DEX (salt `keccak256(abi.encode("dex", version))`, DEX
+    /// @notice Registrar only: as `deployTokenImplementation` for the DEX (salt `keccak256(abi.encode("dex", version))`, DEX
     ///         env `envVersion`); the release must answer `factory()` and accept the env (`validateEnv`).
     function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs)
         external returns (address implementation);
@@ -329,9 +330,10 @@ interface IOpenFactory {
     function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
     /// @notice Registrar only: the release `id` from chain-neutral init code, `initcode ‖ abi.encode(id, factory, implArgs)`
     ///         `CREATE2`d (salt `keccak256(abi.encode("release", id))`) on env `envVersion`; checked: code, `factoryInfo()`,
-    ///         ERC-165 (`0x01ffc9a7`, `interfaceId`, not `0xffffffff`), `validateEnv`. The first release of a class lists it in
+    ///         ERC-165 (`0x01ffc9a7`, `interfaceId`, not `0xffffffff`), `validateEnv`, its body modules (`modules()`, each
+    ///         in the env's `libs`: `ModuleNotPinned`, CTR-TOK-30; owner 2026-11-10). The first release of a class lists it in
     ///         `classes()`, the first of a kind in `kindsOf`. Usable after `noticePeriod`; a new `(class, kind)` starts off.
-    function deployRelease(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
+    function deployImplementation(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
         bytes calldata initcode, bytes calldata implArgs) external returns (address implementation);
     /// @notice Registrar only: immediate, never undone; existing instances untouched.
     function deprecateRelease(ReleaseId calldata id, string calldata reason) external;

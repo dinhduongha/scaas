@@ -78,7 +78,7 @@ contract LyingChainImpl {
     function initialize(bytes32, uint64, bytes calldata) external {}
 }
 
-/// A constructor that reverts with a known error (bubbled by `deployImplementation`).
+/// A constructor that reverts with a known error (bubbled by `deployTokenImplementation`).
 contract BadConstructor {
     constructor() { revert IOpenFactory.EnvInvalid(); }
 }
@@ -187,13 +187,13 @@ contract FactoryTest is Test {
         // a release names a published env of its kind (owner 2026-10-20: explicit, never implied by the latest)
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 4, 1));
-        f.deployImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 1, 1, type(NormalToken).creationCode, "");
+        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 1, 1, type(NormalToken).creationCode, "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 0, 3)); // a gap
-        f.deployImplementation(NORMAL, 2, 3, type(NormalToken).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 3, type(NormalToken).creationCode, "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 0, 0));
-        f.deployImplementation(NORMAL, 2, 0, type(NormalToken).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 0, type(NormalToken).creationCode, "");
         // an older env stays usable for a new release: the registrar's choice, recorded in the release
-        address v2 = f.deployImplementation(NORMAL, 2, 1, type(NormalToken).creationCode, Catalogue.argsOn(f, NORMAL, 1, ""));
+        address v2 = f.deployTokenImplementation(NORMAL, 2, 1, type(NormalToken).creationCode, Catalogue.argsOn(f, NORMAL, 1, ""));
         vm.stopPrank();
         assertEq(f.releaseOf(NORMAL, 2).envVersion, 1);
         assertEq(f.releaseOf(NORMAL, 2).envHash, keccak256(abi.encode(f.envOf(NORMAL, 1))));
@@ -203,7 +203,7 @@ contract FactoryTest is Test {
     }
 
     /// The linked libraries of the env are checked by code hash at every release deployment (plan 5g-Z2).
-    function test_deployImplementation_checksLibraryCodeHashes() public {
+    function test_deployTokenImplementation_checksLibraryCodeHashes() public {
         IFactoryToken.Env memory e = plainEnv(address(f), address(0), UID_, address(0), false);
         e.libs = new address[](2);
         e.libCodeHashes = new bytes32[](2);
@@ -213,7 +213,7 @@ contract FactoryTest is Test {
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.LibraryCodeHashMismatch.selector, address(usdc),
             keccak256("not the code"), address(usdc).codehash));
-        f.deployImplementation(NORMAL, 2, ev, type(NormalToken).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, ev, type(NormalToken).creationCode, "");
         e.libCodeHashes[1] = address(usdc).codehash;
         address v2 = Catalogue.release(f, NORMAL, 2, e, type(NormalToken).creationCode);
         assertEq(f.releaseOf(NORMAL, 2).envVersion, 3);
@@ -225,35 +225,35 @@ contract FactoryTest is Test {
     /// releases: no `chainUid()` on a release); a constructor's
     /// revert is bubbled, an empty failure is `DeployFailed`; the release hashes in the event; the same init code again as
     /// a later version on a newer env.
-    function test_deployImplementation_checksKindFactoryAndChainUid() public {
+    function test_deployTokenImplementation_checksKindFactoryAndChainUid() public {
         bytes memory code = type(NormalToken).creationCode;
         bytes memory args = Catalogue.argsOn(f, NORMAL, 1, ""); // env 1's modules (T66b): NORMAL's release constructs
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, WRAPPED, 0));
-        f.deployImplementation(WRAPPED, 2, 1, code, args);
+        f.deployTokenImplementation(WRAPPED, 2, 1, code, args);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, NORMAL, type(uint256).max));
-        f.deployImplementation(NORMAL, 2, 1, type(Muted).creationCode, ""); // no kind()
+        f.deployTokenImplementation(NORMAL, 2, 1, type(Muted).creationCode, ""); // no kind()
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector,
             Catalogue.predict(f, NORMAL, 2, type(KindOnly).creationCode)));
-        f.deployImplementation(NORMAL, 2, 1, type(KindOnly).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 1, type(KindOnly).creationCode, "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvRefused.selector,
             Catalogue.predict(f, NORMAL, 2, type(OtherChainImpl).creationCode)));
-        f.deployImplementation(NORMAL, 2, 1, type(OtherChainImpl).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 1, type(OtherChainImpl).creationCode, "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector,
             Catalogue.predict(f, NORMAL, 2, "")));
-        f.deployImplementation(NORMAL, 2, 1, "", ""); // an empty init code makes an account without code
+        f.deployTokenImplementation(NORMAL, 2, 1, "", ""); // an empty init code makes an account without code
         vm.expectRevert(IOpenFactory.DeployFailed.selector);
-        f.deployImplementation(NORMAL, 2, 1, hex"fe", ""); // INVALID: no revert data
+        f.deployTokenImplementation(NORMAL, 2, 1, hex"fe", ""); // INVALID: no revert data
         vm.expectRevert(IOpenFactory.EnvInvalid.selector); // a constructor's error is bubbled
-        f.deployImplementation(NORMAL, 2, 1, type(BadConstructor).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 1, type(BadConstructor).creationCode, "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NORMAL, 0));
-        f.deployImplementation(NORMAL, 0, 1, code, "");
+        f.deployTokenImplementation(NORMAL, 0, 1, code, "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionAlreadyRegistered.selector, NORMAL, 1, address(normalImpl)));
-        f.deployImplementation(NORMAL, 1, 1, code, "");
+        f.deployTokenImplementation(NORMAL, 1, 1, code, "");
         vm.stopPrank();
         vm.prank(alice);
         vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.deployImplementation(NORMAL, 3, 1, code, "");
+        f.deployTokenImplementation(NORMAL, 3, 1, code, "");
         assertEq(f.latestVersion(NORMAL), 1);
         assertEq(f.implementationOf(WRAPPED, 1), address(wrappedImpl));
         // the same init code on a newer env as version 2 (no recompile): a new address, the hashes in the event
@@ -264,7 +264,7 @@ contract FactoryTest is Test {
         address predicted = Catalogue.predict(f, NORMAL, 2, code, args); // env 1's modules, pinned in env 2 too
         vm.recordLogs();
         vm.prank(registrar);
-        address v2 = f.deployImplementation(NORMAL, 2, ev, code, args);
+        address v2 = f.deployTokenImplementation(NORMAL, 2, ev, code, args);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         Vm.Log memory l = logs[logs.length - 1];
         assertEq(l.topics[0], IOpenFactory.ImplementationDeployed.selector);
@@ -370,7 +370,7 @@ contract FactoryTest is Test {
     }
 
     /// 6 and 7, the dropped `*_ZETHER_PQZ` ids, are never reused: no release can exist, so `createToken` is `VersionUnknown`.
-    function test_retiredKindsRefusedAtDeployImplementation() public {
+    function test_retiredKindsRefusedAtDeployTokenImplementation() public {
         bytes memory code = type(NormalToken).creationCode;
         for (uint8 k = 6; k <= 7; ++k) {
             IOpenFactory.TokenKind kind = IOpenFactory.TokenKind(k);
@@ -378,7 +378,7 @@ contract FactoryTest is Test {
             f.publishEnv(kind, 1, plainEnv(address(f), address(0), UID_, address(0), false)); // an env alone is no release
             vm.prank(registrar);
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindRetired.selector, kind));
-            f.deployImplementation(kind, 1, 1, code, "");
+            f.deployTokenImplementation(kind, 1, 1, code, "");
             vm.prank(registrar);
             f.setKindEnabled(kind, true);
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, kind, 1));

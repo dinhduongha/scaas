@@ -214,7 +214,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         (address[] memory ms, bytes memory implArgs) = probeModules("GovRegulatedBits.t.sol:MockNormalRegulated", 0, address(f), "");
         uint16 ev = Catalogue.env(f, k8, withModules(pinned(plainEnv(address(f), address(0), UID, address(0), false), k8), ms));
         vm.prank(f.registrar());
-        f.deployImplementation(k8, 1, ev, type(MockNormalRegulated).creationCode, implArgs);
+        f.deployTokenImplementation(k8, 1, ev, type(MockNormalRegulated).creationCode, implArgs);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, k8));
         f.createToken(k8, 1, args, "r");
         f.setKindEnabled(k8, true);

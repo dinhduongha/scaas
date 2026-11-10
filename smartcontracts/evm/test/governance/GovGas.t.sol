@@ -162,7 +162,7 @@ contract GovGasInstance is GovRows {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0);
         f.publishClassEnv(4, 0, 1, plainEnv(address(f), address(0), UID, address(0), false));
-        f.deployRelease(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
+        f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
             type(NoteKind).creationCode, "");
         f.setClassKindEnabled(4, 0, true);
         f.createInstance(IOpenFactory.ReleaseId(4, 0, 1), "i0", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")));

@@ -519,7 +519,7 @@ and pins it (`SigCheck._erc1271` and `SCaaSDex._bal` are the pattern). The cap i
 ### 6.1 Releases and kind enabling
 
 No factory change (governance spec §4.2): per kind `publishEnv(kind, envVersion, env)` with `RegulatedLib` in `Env.libs` and
-`libCodeHashes`, `deployImplementation(kind, version, envVersion, initcode, implArgs)` (`implArgs` carries `REGISTRY_CODEHASH`),
+`libCodeHashes`, `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)` (`implArgs` carries `REGISTRY_CODEHASH`),
 `noticePeriod`, then `setKindEnabled(kind, true)`. `_checkImplementation` compares `kind()`. A regulated token is
 `isRegisteredToken`, `KIND_SCAAS` to the DEX, and a wrapped kind's leg check refuses it as a leg when bit 6 or 21 is set
 (CTR-GOV-05, built). `createTokenUnregistered` keeps refusing ids ≥ 2. Since every release is new at reset 2, **one**

@@ -25,7 +25,7 @@ import {IZetherToken} from "./IZetherToken.sol";
 ///         (the regulated flags are refused, CTR-ZTH-47). Built by `OpenFactory.createToken` with `conf` set and `legs`,
 ///         `rate` empty. Never on Hedera (`ZetherLayer` refuses a Hedera env).
 abstract contract NormalZetherTokenCore is NormalTokenCore, ZetherLayer {
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
+    /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; no
     ///      `implArgs`. The env (Hedera off) is checked by `validateEnv` (`ZetherLib`).
     constructor(address factory_, bytes memory implArgs) NormalTokenCore(factory_, implArgs) {}
 

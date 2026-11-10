@@ -284,7 +284,7 @@ contract Misc is OnchainBase {
         cfg0 = abi.encode(_cfg0("Onchain f2", "oF2"));
         vm.startBroadcast(k1);
         f2.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withMs);
-        address impl = f2.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, implArgs);
+        address impl = f2.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, implArgs);
         address tok = f2.createToken(IOpenFactory.TokenKind.NORMAL, 1, cfg0, _salt("f2-t1"));
         impl2 = address(new NormalToken(address(f2), implArgs));
         address tokU = f2.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl2, cfg0, _salt("f2-tu"));
@@ -304,7 +304,7 @@ contract Misc is OnchainBase {
         f2.setKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.WRAPPED, true);
         f2.setKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.NORMAL, false);
         vm.stopBroadcast();
-        _neg(a1, address(f2), abi.encodeCall(OpenFactory.deployImplementation, (IOpenFactory.TokenKind.NORMAL, 2, 2,
+        _neg(a1, address(f2), abi.encodeCall(OpenFactory.deployTokenImplementation, (IOpenFactory.TokenKind.NORMAL, 2, 2,
             type(NormalToken).creationCode, implArgs)), IOpenFactory.ModuleNotPinned.selector,
             "factory: a release whose modules its env does not pin");
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind.NORMAL, 1, cfg0, _salt("n1"))),
@@ -395,7 +395,7 @@ contract Misc is OnchainBase {
         bytes memory init = abi.encodeCall(INoteKind.initialize, (_pad(a1), "onchain"));
         vm.startBroadcast(k1);
         f2.publishClassEnv(NOTE_CLASS, 0, 1, e);
-        f2.deployRelease(id, 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, type(NoteKind).creationCode, "");
+        f2.deployImplementation(id, 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, type(NoteKind).creationCode, "");
         f2.setClassKindEnabled(NOTE_CLASS, 0, true);
         f2.createInstance(id, _salt("note-1"), init);
         f2.deprecateRelease(id, "onchain matrix: deprecated after its use");

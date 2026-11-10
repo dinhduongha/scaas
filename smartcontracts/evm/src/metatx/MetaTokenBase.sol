@@ -67,7 +67,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
 
     /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. Chain-neutral (chain-neutral spec
     ///      §2.1, plan T72): the factory's address and `implArgs` (values the same on every chain; plain kinds take none)
-    ///      are the only arguments `OpenFactory.deployImplementation` appends.
+    ///      are the only arguments `OpenFactory.deployTokenImplementation` appends.
     constructor(address factory_) ERC20MetaTx(bytes32(0), address(0), address(0), false) GovernanceBaseCore(address(0)) {
         FACTORY = factory_;
         _SELF = address(this);

@@ -202,7 +202,7 @@ contract ChainNeutralTest is Test {
         vm.startPrank(registrar);
         f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1,
             withModules(plainEnv(address(f), address(0), bytes32(0), address(0), false), ms));
-        f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
+        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
         vm.stopPrank();
         vm.prank(alice);
         t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("T", "T", 6, 1e12, alice, address(0))),

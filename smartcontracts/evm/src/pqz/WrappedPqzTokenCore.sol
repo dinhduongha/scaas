@@ -41,7 +41,7 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
         "UAPqzUnshieldUnwrap(bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
     );
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
+    /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; no
     ///      `implArgs`. The env (`deps[ENV_PQZ_VERIFIER]` the release's `UAPqzVerifier`, CTR-ZTH-20 / CTR-PQZ-10; a
     ///      registry) is checked by `validateEnv` (`PqzStateLib`).
     constructor(address factory_, bytes memory implArgs) WrappedTokenCore(factory_, implArgs) {}

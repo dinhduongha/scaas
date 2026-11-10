@@ -58,7 +58,7 @@ abstract contract WrappedTokenCore is MetaTokenBase {
         "UAUnwrapToUA(bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; this kind
+    /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; this kind
     ///      takes no `implArgs`.
     constructor(address factory_, bytes memory) MetaTokenBase(factory_) {}
 

@@ -183,7 +183,7 @@ contract ChainNeutralFactoryTest is Test {
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
         g.publishDexEnv(1, e);
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
-        g.deployImplementation(NORMAL, 1, 1, code, "");
+        g.deployTokenImplementation(NORMAL, 1, 1, code, "");
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
         g.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, "");
         vm.stopPrank();

@@ -237,7 +237,7 @@ contract GovDeployTest is Test {
                 ".implementation_normal_zether_regulated_bls12381", ".implementation_wrapped_zether_regulated_bls12381"];
             w = f.implementationOf(k, 1);
             assertEq(vm.parseJsonAddress(json, keys[b]), w, "the JSON key");
-        } else { // e2e.py's steps: publishEnv(k, 1, base env + RegulatedLib), deployImplementation(k, 1, 1, code, pin), enable
+        } else { // e2e.py's steps: publishEnv(k, 1, base env + RegulatedLib), deployTokenImplementation(k, 1, 1, code, pin), enable
             IFactoryToken.Env memory e = pinned(plainEnv(address(f), address(0), ZUID, vm.parseJsonAddress(json, ".ua_registry"),
                 false), k);
             e.deps = new address[](1);
@@ -246,7 +246,7 @@ contract GovDeployTest is Test {
             (address[] memory ms, bytes memory args) = deployKindModules(uint8(k), address(f), regArgs()); // T66b
             vm.startPrank(address(h));
             f.publishEnv(k, 1, withModules(e, ms));
-            w = f.deployImplementation(k, 1, 1, code, args);
+            w = f.deployTokenImplementation(k, 1, 1, code, args);
             f.setKindEnabled(k, true);
             vm.stopPrank();
         }
@@ -576,8 +576,10 @@ contract GovDeployTest is Test {
         // T83 (the metadata hash: `IMetaTokenV2`'s pay-record views, `PaymentMeta` v3): -> 0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03
         // T66b 3.1b (the metadata hash: `UAKinds` / `UAStore` comments naming `UARegistryCoreLib`): ->
         // 0x13CBB3D5DCb0736f87F136ad13276568A80d1aa9; T66b 4.1 (the `<X>Core` + flat-face split of `GovernanceRouterBase`,
-        // 15,305 -> 15,572 B runtime): -> this
-        assertEq(router, 0x639e34f93Ac69d6Ba31D773AC915894542180723, "GovernanceRouter");
+        // 15,305 -> 15,572 B runtime): -> 0x639e34f93Ac69d6Ba31D773AC915894542180723; the factory's release entries renamed
+        // (owner 2026-11-10; the metadata hash: `IOpenFactory`'s `deployTokenImplementation` / `deployImplementation`, its
+        // code unchanged): -> this
+        assertEq(router, 0x9084894b49299A2b1DFdB271e2C5Fd8D4f9bA904, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
