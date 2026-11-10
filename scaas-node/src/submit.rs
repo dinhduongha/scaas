@@ -605,6 +605,10 @@ impl Submitter {
             Err(SimError::Revert(reason)) if guard::over_cap(&reason) && crate::pqz::is_debit(&w) => {
                 return self.over_cap(&w, reason).await;
             }
+            // re-check P3 (spec §11): a starved T7 on a DEX the guard found marked is gas, not a wrong DEX
+            Err(SimError::Revert(reason)) if guard::liquidity_starved(&w.data, &reason) => {
+                return self.requeue(&w, format!("simulate: {reason}: the tokens' capability check starved, retry")).await;
+            }
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
