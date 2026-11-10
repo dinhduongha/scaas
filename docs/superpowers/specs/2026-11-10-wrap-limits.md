@@ -1,11 +1,11 @@
 # Wrap and unwrap limits on the wrapped kinds — design
 
 **Status:** SPECIFIED, nothing built, **UNAUDITED**. Written 2026-11-10 from the owner's rulings of 2026-11-10 (below), on
-branch `ua-mtx-merge`, read against the code at `39c3c6f1`. **Revised the same day** (owner rulings R9–R11: Q2 a separate
-`redeemer` role, Q5 accepted as is, and the decay of the net-wrapped entitlement, §2.1). The controller's ten review points of
-2026-11-10 are owner questions (§12, Q1–Q10): Q2 and Q5 are ruled, the others open, each with a recommendation; Q11–Q16 come from
-this design. Where the body depends on an open question it says which one, and it follows the recommendation, except Q1, where
-the body keeps the ruling and §6 shows both readings. No gas or size figure here was measured: **[estimate]** is arithmetic over
+branch `ua-mtx-merge`, read against the code at `39c3c6f1`. Revised the same day twice: R9–R11 (a separate `redeemer` role,
+Sybil accepted, the decay of the net-wrapped entitlement, §2.1), then **approved by the owner 2026-11-10 with every question
+ruled** (R12–R25; §12 maps each question to its ruling): the limits apply to **hybrid tokens only** (R12), everything else as
+recommended. Plan: group 3l of [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md); the build runs later in its
+own worktree. No gas or size figure here was measured: **[estimate]** is arithmetic over
 measured inputs, **[measured]** is quoted from a run already committed. Rules read: [token-wrappers.md](../../contracts/token-wrappers.md)
 (CTR-TOK-04, -05, -07, -20, -22, -24, -26), [decisions.md](../../decisions.md) (CTR-GOV-09 to -12, -17 to -19, CTR-TOK-30), the
 governance spec [2026-11-02-governance.md](2026-11-02-governance.md) §1.6, the T66b spec
@@ -29,6 +29,20 @@ governance spec [2026-11-02-governance.md](2026-11-02-governance.md) §1.6, the 
 | R9 | (Q2) A separate **`redeemer` role** is exempt from the net-wrapped rule: merchants who receive payments. |
 | R10 | (Q5) Sybil: accepted as is. Per-user caps stay; no anti-Sybil measure. |
 | R11 | **The net-wrapped entitlement decays over time**, configurable and turned on and off separately from the net rule. Purpose: foreigners wrap a foreign stablecoin (for example USDC) to get the domestic token and spend it; if they do business they can unwrap their own money back; if they leave it unused, the foreign currency stays in the economy as liquidity for others to unwrap. The owner's example: after a year without unwrapping, half of what was wrapped is unwrappable; after two years, nothing. |
+| R12 | (Q12) **Hybrid tokens only.** A hybrid token both mints and wraps: the issuer mints a supply (`maxSupply ≠ 0`), and users wrap and unwrap the underlying. The owner's example: the state issues a kVND CBDC on a public chain, 100 billion minted; citizens may wrap and unwrap to create kVND. The limits apply to hybrid tokens of the wrapped kinds 1, 3, 5, 9, 11, 13. A pure-wrap token (`maxSupply = 0`) does not get them: creating one with bit 25 or 26 is refused with a named error (bit 27 likewise, §2). Issuer mints never count and never add to anyone's net. |
+| R13 | (Q1) **Holder protection on unwrap.** Tightening the unwrap side waits the notice period, so holders can exit first; relaxing it applies at once. The wrap side stays as R6 rules: tightening at once, relaxing waits. The decay follows the unwrap rule (on or a shorter `H` waits, off or a longer `H` at once). Membership changes and a redeemer's revoke stay at once. |
+| R14 | (Q3) **Whose quota: the subject**, never `msg.sender` of a relay: the direct caller, the signer of a relayed op, the signer of a DEX wrap order (`o.from`), the proof's sender of an unshield-unwrap. The net credit goes to the id that receives the units (`to`, `toUA`, the order's destination). Service pulls move no reserve; a future liquidity module wraps through `mtxWrapOrder`. A contract that wraps for itself is its own subject, under the per-user parts like any id, with no exemption list; it may hold the redeemer role. |
+| R15 | (Q4) **Per leg**, in that leg's own units and decimals: each leg its own four limits, token-wide caps, `unit`, decay and net; one slot per id and leg. |
+| R16 | (Q6) **The fixed-window burst is accepted**: up to 2× a cap within one `period` across a window boundary; documented. |
+| R17 | (Q7) **Amounts are the underlying moved**: a wrap's measured `received` (for a fee-on-transfer leg what arrived), an unwrap's `out`. |
+| R18 | (Q8) **No new stop.** 0 means no limit; the stops are the existing powers (`disableWrap`, `PAUSE`, `FREEZE`); an unwrap near-stop is an unwrap tightening and waits the notice (R13). |
+| R19 | (Q9) **Views, events, pre-checks as specified**: the remaining quota per user and token-wide with the next window's start, the entitlement and the day it reaches 0, events on every setting and membership change, the node's named refusal before any submission. |
+| R20 | (Q10) **Defaults**: every limit, list, the net rule and the decay off until set; the bits chosen at creation, off by default; nothing ever on tokens of earlier releases. |
+| R21 | (Q11) **The delay is the factory's `noticePeriod()`**, with the two-call shape of `_delayedRelaxBits`. |
+| R22 | (Q13) **Quanta, one slot** per id and leg, the unit fixed by the first configuration, windows in minutes. |
+| R23 | (Q14) **The decay's shape: (a), linear to zero over one horizon `H`.** |
+| R24 | (Q15) **The decay's clock: the weighted-average start**, against dust wraps. |
+| R25 | (Q16) The round trip's rejuvenation is accepted and disclosed (under "everything else as recommended"). |
 
 **Contents**
 
@@ -48,12 +62,13 @@ governance spec [2026-11-02-governance.md](2026-11-02-governance.md) §1.6, the 
 
 ## 1. Scope: kinds and paths — SPECIFIED
 
-**Kinds.** The six kinds that hold a reserve: `WRAPPED` (1), `WRAPPED_ZETHER` (3), `WRAPPED_PQZ` (5), `WRAPPED_REGULATED` (9),
-`WRAPPED_ZETHER_REGULATED` (11), `WRAPPED_PQZ_REGULATED` (13). Every token of them is covered, whatever its legs: one leg or up to
-eight (CTR-TOK-07), the native-coin leg included (CTR-TOK-26), a hybrid (`maxSupply ≠ 0` with `MINTABLE`, CTR-GOV-12) or a fully
-backed wrapper. In this repository "hybrid" names the wrapped token its issuer may also mint under `maxSupply`; it is the owner's
-motivating case (a CBDC whose foreign depositors bring USDC), but the limits do not read `maxSupply`, so they hold on every
-wrapped token (Q12). The normal kinds 0, 2, 4, 8, 10, 12 have no reserve and are untouched; kind 8's W module holds only the
+**Kinds and tokens (R12).** **Hybrid tokens** of the six kinds that hold a reserve: `WRAPPED` (1), `WRAPPED_ZETHER` (3),
+`WRAPPED_PQZ` (5), `WRAPPED_REGULATED` (9), `WRAPPED_ZETHER_REGULATED` (11), `WRAPPED_PQZ_REGULATED` (13). A hybrid both mints and
+wraps: its issuer mints a supply under `maxSupply ≠ 0` (with `MINTABLE`, CTR-GOV-12) and users wrap and unwrap the underlying (the
+owner's example: a kVND CBDC on a public chain, 100 billion minted, citizens wrapping and unwrapping). A pure-wrap token
+(`maxSupply = 0`) never gets the limits: its creation with bit 25, 26 or 27 is refused (`WrapControlNeedsHybrid`, §2), so it reads
+nothing new. Within a hybrid every leg count is covered, one leg or up to eight (CTR-TOK-07), the native-coin leg included
+(CTR-TOK-26). The normal kinds 0, 2, 4, 8, 10, 12 have no reserve and are untouched; kind 8's W module holds only the
 regulated powers and does not change.
 
 **Paths.** Every entry that moves underlying into or out of the reserve against wrapped units counts, direct or relayed. A
@@ -63,7 +78,7 @@ inside the body covers the direct entry, its named `mtx*` form, `mtxExecute` wit
 | Path | Entries (kinds) | Module | Counts as | Quota and lists of | Net credited to / debited from |
 |---|---|---|---|---|---|
 | wrap | `wrap(uint256)`, `wrap(address,uint256)`; `mtxWrap`, `mtxWrapLeg`; `mtxExecute` / `mtxBatch` items (1, 3, 5, 9, 11, 13) | W (`mtx*` forms in W, `mtxExecute` / `mtxBatch` in P; both self-call into W) | wrap, the received underlying | the subject: the direct caller, or the signer | the same id |
-| wrap into a UA | `wrapToUA`, `mtxWrapToUA` (all six) | W | wrap | the payer (the subject) | `to`, the UA credited (Q3) |
+| wrap into a UA | `wrapToUA`, `mtxWrapToUA` (all six) | W | wrap | the payer (the subject) | `to`, the UA credited (R14) |
 | wrap-shield | `mtxWrapShield`, direct and relayed (3, 5, 11, 13) | Z (3, 11), Q (5, 13) | wrap | the payer (the subject) | `toUA`, the shielded receiver |
 | the DEX's wrap order | `mtxWrapOrder(address, UAWrapOrder, UASig)` (CTR-TOK-20; all six) | T | wrap, `o.amount` (= received) | `o.from`, the order's signer; never `msg.sender`, the submitter | `o.destination`, or `o.from` when 0 |
 | unwrap | `unwrap(uint256,address)`, `unwrap(uint256,address,uint256)`, `unwrap(address,uint256,address,uint256)`; `mtxUnwrap`, `mtxUnwrapLeg`; `mtxExecute` / `mtxBatch` items, a derived UA's included | W | unwrap, the underlying paid out (`out`) | the subject: the caller, or the signer's id (a derived UA, never `UA_POOL`) | the same id |
@@ -74,7 +89,7 @@ inside the body covers the direct entry, its named `mtx*` form, `mtxExecute` wit
 nothing else (§3). The relayed forms must count: otherwise a signature would bypass a limit the direct call obeys, against
 "every state-changing `mtx*` is relayable" holding the same rule. `wrapToUA` and the wrap-shield count on the payer, who brings the
 underlying in; their net credit goes to the id that receives the units, so a holder who wraps into its own UA or its own shielded
-balance can unwrap it later (Q3). The wrap order counts on `o.from` because the order's signer is the depositor; the submitter
+balance can unwrap it later (R14). The wrap order counts on `o.from` because the order's signer is the depositor; the submitter
 only relays and takes `fee` in units minted to it, with no net credit. The unshield-unwrap counts on the proof's sender, as
 FREEZE already reads it on the regulated confidential kinds (CTR-GOV-17); both ids are public on that path today (a Zether burn
 names its account, a PQZ burn its `fromUA`), so the limits leak nothing new. The DEX's `mtxExchange` (CTR-DEX-20) and every trade of
@@ -82,7 +97,7 @@ wrapped units against the underlying on a market move no reserve and are not unw
 
 ## 2. The model — SPECIFIED
 
-**Per leg, in the leg's own units (Q4, Q7).** A token of `n` legs has, per leg `i`, four limits — `wrapShort`, `wrapLong`,
+**Per leg, in the leg's own units (R15, R17).** A token of `n` legs has, per leg `i`, four limits — `wrapShort`, `wrapLong`,
 `unwrapShort`, `unwrapLong` — each a `WrapLimit { uint24 perUser; uint64 tokenWide; uint32 period; }`, and a decay horizon
 `decayDays` (§2.1). Amounts are in **quanta** of the leg's `unit = 10^unitExp` raw units of that underlying (§5 gives why: R7's
 one slot). The amount that counts is the underlying that moved: on a wrap the measured `received` (a fee-on-transfer leg counts
@@ -142,16 +157,18 @@ the holders of bit 26 at once both ways; the lists' on and off are the owner's (
 too: the payer of a wrap-shield and the sender of an unshield-unwrap are public, unlike the decoy receivers that rule
 `ALLOWLIST` out on those kinds (CTR-GOV-17).
 
-**Feature bits (Q10).** Three new SCaaS bits (band 0–127, CTR-GOV-10), the next free numbers at this commit; the build takes the
+**Feature bits (R20).** Three new SCaaS bits (band 0–127, CTR-GOV-10), the next free numbers at this commit; the build takes the
 next free ones if another spec takes these first:
 
 | Bit | Name | Type | Kinds | Holder | Meaning |
 |---|---|---|---|---|---|
-| 25 | `WRAP_LIMIT` | capability | 1, 3, 5, 9, 11, 13 | none (the owner sets) | the owner may set the four limits per leg, their token-wide caps, the net rule and the decay |
-| 26 | `WRAP_LIST` | power | 1, 3, 5, 9, 11, 13 | any holder (EOA, `msig`, contract), never contract-only, not delay-relaxed | the owner may turn the two lists on and off; a holder writes members (`canWrap`, `canUnwrap`) |
-| 27 | `REDEEMER` | power | 1, 3, 5, 9, 11, 13 | any holder (EOA, UA, `msig`, contract), never contract-only, not delay-relaxed | a holder may unwrap beyond its entitlement (R9) |
+| 25 | `WRAP_LIMIT` | capability | hybrids of 1, 3, 5, 9, 11, 13 | none (the owner sets) | the owner may set the four limits per leg, their token-wide caps, the net rule and the decay |
+| 26 | `WRAP_LIST` | power | hybrids of 1, 3, 5, 9, 11, 13 | any holder (EOA, `msig`, contract), never contract-only, not delay-relaxed | the owner may turn the two lists on and off; a holder writes members (`canWrap`, `canUnwrap`) |
+| 27 | `REDEEMER` | power | hybrids of 1, 3, 5, 9, 11, 13 | any holder (EOA, UA, `msig`, contract), never contract-only, not delay-relaxed | a holder may unwrap beyond its entitlement (R9) |
 
-All three join `WRAPPED_BITS`; 26 and 27 join `WRAPPED_ROLES`; the normal kinds refuse them (`FeatureInvalidForKind`). Features
+All three join `WRAPPED_BITS`; 26 and 27 join `WRAPPED_ROLES`; the normal kinds refuse them (`FeatureInvalidForKind`). **Only a
+hybrid takes them (R12):** `WrappedLib.initToken`, beside today's `MaxSupplyInvalid` check, refuses any of the three when
+`maxSupply == 0` with `WrapControlNeedsHybrid(uint8 bit)`; bit 27 goes with them because it exempts from a rule only bit 25 sets. Features
 only lose bits after creation, so a token created without 25 and 26 can never limit anyone, which a holder reads at a glance (the
 reasoning of CTR-GOV-18). Bits 26 and 27 stay out of `_delayedRelaxBits`: a compromised lister is revoked at once (the reason bit
 23 is not delayed, pay-meta-tax Q5), and a revoked redeemer loses its exemption at once. Disabling 25, 26 or 27 is refused while
@@ -160,12 +177,12 @@ a control under it is on or, for 27, while it has holders (`WrapControlActive`),
 
 **Sybil (R10).** Per-user caps can be split across many UAs; accepted, no anti-Sybil measure (owner 2026-11-10).
 
-**Fixed-window burst (Q6).** Using a whole window at its end and the next at its start moves up to `2 × perUser` (and
+**Fixed-window burst (R16).** Using a whole window at its end and the next at its start moves up to `2 × perUser` (and
 `2 × tokenWide`) within one `period` across the boundary. Accepted (R2); a long limit bounds the repetition; disclosed.
 
 ### 2.1 The decay of the entitlement (R11)
 
-**Shape (Q14): linear to zero over a horizon `H`** = `decayDays`, one parameter per leg, 0 = off, `1 ≤ H ≤ 65,535` days. With
+**Shape (R23): linear to zero over a horizon `H`** = `decayDays`, one parameter per leg, 0 = off, `1 ≤ H ≤ 65,535` days. With
 the age `g = today − s` in whole UTC days (`today = ⌊block.timestamp / 86,400⌋`):
 
 ```
@@ -175,7 +192,7 @@ E(now) = ⌊ b · (H − min(g, H)) / H ⌋
 The owner's example is `H = 730`: a wrap of `a` gives `E = a` on its day, `a/2` after 365 days, 0 after 730. The entitlement
 steps once a day.
 
-**The start: a weighted average (Q15).** "Counted from the last wrap", read literally, is gameable: a 1-wei wrap would reset the
+**The start: a weighted average (R24).** "Counted from the last wrap", read literally, is gameable: a 1-wei wrap would reset the
 clock for the whole balance. A wrap instead moves the start by the weight of what it adds against what is there, and rescales the
 base so the value at that moment is exact. A wrap of `received`, `a = ⌊received / unit⌋` quanta, at age `g` (clamped `g_c = min(g, H)`):
 
@@ -216,20 +233,19 @@ would sum to `b`, the undecayed amount (a mutant, §11).
 - **Products.** `b · H ≤ 2^32 · 2^16`, `(E + a) · H ≤ 2^33 · 2^16`, `b · g` with the decay off `≤ 2^64`: all in `uint256` with
   room; `s` is an absolute day in `uint32`, which cannot overflow before the year 11,000,000, and `today − g' ≥ 0` since
   `g' ≤ g`.
-- **A round trip rejuvenates (Q16).** Wrapping fresh money and unwrapping the same amount leaves `E` but a younger start: the
+- **A round trip rejuvenates (R25).** Wrapping fresh money and unwrapping the same amount leaves `E` but a younger start: the
   rejuvenation is proportional to the money cycled (halving the age cycles as much as `E`). One start cannot tell which money
   left first. It is bounded by the per-user wrap and unwrap windows and the token-wide caps, and it is disclosed.
 
 **Governance (§6).** Turning the decay on or shortening `H` is a tightening of the unwrap side; turning it off or lengthening `H`
-relaxes it. It therefore follows the unwrap-protection rule of Q1: as ruled (R6) a tightening applies at once; under Q1's
-recommendation it waits the notice period, so holders can exit first, and a relaxation applies at once.
+relaxes it. It follows the unwrap-protection rule (R13): a tightening waits the notice period, so holders can exit first; a
+relaxation applies at once.
 
 ## 3. Mint, burn and the other paths that do not count — SPECIFIED
 
 - **The hybrid's issuer mint** (`mint`, `mintToUA`, bit 1, CTR-GOV-12): **does not count and credits no `net`.** No underlying
   enters; the mint is bounded by `maxSupply` and by the minter's grant (`GovernanceUse.use(MINTABLE, …, amount)`: budget and
-  window). A minted unit is exactly what R4 keeps from redeeming against the depositors' reserve (the owner's e-VND example).
-  Recommendation, the controller may override.
+  window). A minted unit is exactly what R4 keeps from redeeming against the depositors' reserve. Ruled (R12).
 - **Burn by roles:** none exists on the wrapped kinds (`BURNABLE` is not in `WRAPPED_BITS`). `FORCE` and `OPERATOR_TRANSFER`
   (9, 11, 13) move public units and never the reserve: not counted, `net` unmoved.
 - **`addReserve` / `mtxAddReserve`:** underlying in, no units out: not a wrap, not counted.
@@ -237,7 +253,7 @@ recommendation it waits the notice period, so holders can exit first, and a rela
 - **Transfers, pay, `mtxRelayFee`, service pulls** (the service-pull spec: "the underlying is never touched"), **trades**,
   **shield / unshield** between public and shielded balances, **roll-over**: no reserve moves, not counted.
 - **A future liquidity module** (none exists today): a module that wraps for a signer goes through `mtxWrapOrder`, so the signer
-  counts; a module that wraps for itself is its own subject (Q3).
+  counts; a module that wraps for itself is its own subject (R14).
 
 ## 4. Order of checks — SPECIFIED
 
@@ -330,9 +346,9 @@ struct TokenWindows { // slot 0: wrap (176 bits); slot 1: unwrap (176 bits); sta
   and `decayDaysCopy` are written with their originals by the one setter, so a wrap reads only the wrap side and an unwrap only the
   unwrap side.
 
-**Why quanta (Q13).** Four windows, `base` and `startDay` in raw units and seconds need about 5 × 80 bits beside the starts; R7's
+**Why quanta (R22).** Four windows, `base` and `startDay` in raw units and seconds need about 5 × 80 bits beside the starts; R7's
 one slot leaves 128 bits. Quanta give 24 and 32 bits each, and the unit is chosen per leg. The other reading, two slots per id and
-leg (raw amounts, windows in seconds), costs a second new slot (≈ 98 k state gas) on an id's first unwrap; Q13 asks.
+leg (raw amounts, windows in seconds), would cost a second new slot (≈ 98 k state gas) on an id's first unwrap; not taken.
 
 ## 6. Setting the limits — SPECIFIED
 
@@ -367,13 +383,13 @@ both ways. The redeemer role has no entry of its own: it is bit 27's `grantRole`
 
 **When a call applies.**
 
-| Change | As ruled (R6, the body) | Q1's recommendation |
-|---|---|---|
-| wrap side tighter | at once | at once |
-| wrap side looser | waits the delay | waits the delay |
-| unwrap side tighter (an unwrap part, `unwrapList` on, `netUnwrap` on, the decay on or shorter) | at once | **waits the delay** |
-| unwrap side looser | waits the delay | **at once** |
-| membership (`setWrapMember`), a redeemer's revoke | at once | at once |
+| Change | Applies (R6 for the wrap side, R13 for the unwrap side) |
+|---|---|
+| wrap side tighter | at once |
+| wrap side looser | waits the delay |
+| unwrap side tighter (an unwrap part, `unwrapList` on, `netUnwrap` on, the decay on or a shorter `H`) | **waits the delay** |
+| unwrap side looser | **at once** |
+| membership (`setWrapMember`), a redeemer's grant (`grantDelay`, as every grant) or revoke | at once |
 
 A call applies at once only when every field it changes applies at once; otherwise it takes **two calls**, the pattern of
 `_delayedRelaxBits` (`GovernanceLib._due`, governance spec §1.6): the first call stores `pendingCommit = keccak256(abi.encode(legs,
@@ -382,24 +398,24 @@ nothing; the same call again, by the owner, in `[eta, eta + delay]` and under th
 pending. Before `eta` it reverts `GrantNotReady(25, 0, eta)` (the pattern's error). One pending at a time: a new call that needs
 the delay replaces it (new commit, new eta: holders see the new proposal); a call that applies at once also clears it, so the
 owner cancels by re-sending the configuration in force. With `delay = 0` (a test chain) every call applies at once. **The delay
-is the factory's `noticePeriod()`** (the owner's word "notice period", which pay-meta-tax Q9 defined for the tax rate; Q11 asks
-whether `grantDelay` is meant instead); the token reads it from `FACTORY` as `setTaxRate` does.
+is the factory's `noticePeriod()`** (the owner's word "notice period", which pay-meta-tax Q9 defined for the tax rate; R21); the token reads it from `FACTORY` as `setTaxRate` does.
 
-**Holder protection on unwrap (Q1).** As ruled, an owner can stop redemptions at once: a token-wide unwrap cap of one quantum, the
-unwrapper list on with no members, the net rule on, or a one-day decay. That is a pause of unwrap, which the repository refuses
-elsewhere: unwrap from a disabled leg stays open (CTR-TOK-07), and on the regulated kinds "unwrap is never paused" (CTR-GOV-17).
-Q1 recommends the asymmetry above: tightening the unwrap side waits the notice, so holders can exit first; relaxing it applies at
-once; the wrap side stays as ruled, since a wrap stop traps nobody.
+**Holder protection on unwrap (R13).** Applied at once, an unwrap tightening would let the owner stop redemptions instantly (a
+token-wide unwrap cap of one quantum, the unwrapper list on with no members, the net rule on, a one-day decay): a pause of unwrap,
+which the repository refuses elsewhere (unwrap from a disabled leg stays open, CTR-TOK-07; on the regulated kinds "unwrap is never
+paused", CTR-GOV-17). Hence the asymmetry: tightening the unwrap side waits the notice, so holders can exit first; relaxing it
+applies at once; the wrap side stays as R6 rules, since a wrap stop traps nobody. The disclosure states it. A call that both
+tightens the unwrap side and relaxes the wrap side waits once, for both.
 
-**Defaults (Q10).** Bits 25, 26 and 27 off unless chosen at creation (the wizard proposes them off; the hybrid wizard offers them);
+**Defaults (R20).** Bits 25, 26 and 27 off unless chosen at the creation of a hybrid (the wizard proposes them off; the hybrid wizard offers them);
 with the bits on, every limit off, both lists off, the net rule and the decay off, nothing tracked until the first configuration.
 Tokens of earlier releases never get limits: nothing deployed is upgraded, and every chain is test-only (no migration).
 
-**Hard stop vs limit (Q8).** An amount of 0 means no limit, so a stop is the existing powers': wrap — `disableWrap(u)` (bit 4, the
+**Hard stop vs limit (R18).** An amount of 0 means no limit, so a stop is the existing powers': wrap — `disableWrap(u)` (bit 4, the
 guardian, one-way per leg, CTR-TOK-07) and, on 9, 11, 13, `PAUSE` (bit 7: the mint's P stops every wrap and wrap-shield); unwrap —
 no stop on the public kinds by design, `FREEZE` (bit 5) stops one account's burn and so its unwrap, `PAUSE` stops the
 unshield-unwrap on 11 and 13 (CTR-GOV-17). The nearest thing to an unwrap stop the limits give is one quantum or a one-day decay,
-which is Q1's case. No new stop is added.
+an unwrap tightening that waits the notice (R13). No new stop is added.
 
 ## 7. Errors, events, views — SPECIFIED
 
@@ -412,6 +428,7 @@ which is Q1's case. No new stop is added.
 | `UnwrapAboveNetWrapped(address underlying, bytes32 account, uint256 amount, uint256 entitlement)` | the entitlement rule, plain or decayed |
 | `WrapperNotListed(bytes32 account)`, `UnwrapperNotListed(bytes32 account)` | the lists |
 | `WrapLimitInvalid(address underlying, uint8 limit)`, `WrapLegMismatch(uint256 index, address underlying)`, `WrapUnitInvalid(address underlying, uint8 unitExp)` | `setWrapLimits` |
+| `WrapControlNeedsHybrid(uint8 bit)` | the creation of a pure-wrap token (`maxSupply = 0`) with bit 25, 26 or 27 (R12) |
 | `WrapControlActive(uint8 bit)` | `disableFeature` of bit 25, 26 or 27 while a control under it is on (27: while it has holders) |
 | reused: `FeatureNotSet(bit)`, `NotOwner(caller)`, `MissingRole(26, caller)`, `GrantNotReady(25, 0, eta)` | |
 
@@ -421,7 +438,7 @@ bool unwrapList)` when one waits; `WrapMemberSet(bytes32 indexed account, bytes3
 redeemer's grant and revoke are governance's own `RoleGranted` / `RoleRevoked`. No event per use: `Wrapped`, `UAWrapped`,
 `Unwrapped`, `UnwrappedToUA` already carry the amounts, and the state is in the views.
 
-**Views (Q9).**
+**Views (R19).**
 
 ```solidity
 struct WindowView { uint256 left; uint64 resetAt; }   // left: raw units; type(uint256).max when the part is off
@@ -511,7 +528,7 @@ All **[estimate]**, from Amsterdam's prices as measured in this repository (a ne
 
 | Case | Extra per wrap or unwrap |
 |---|---|
-| token without bits 25 / 26, or never configured | no new read (`ctl` is in slot a, already read); the extra argument words, ≈ +30 to +150 gas |
+| a pure-wrap token, or a hybrid without bits 25 / 26 or never configured | no new read (`ctl` is in slot a, already read); the extra argument words, ≈ +30 to +150 gas |
 | lists only (bit 26) | the member byte: ≈ 2.1 k |
 | tracked (bit 25), the user's slot exists | the leg's config side 2.1 k + the user's slot 2.1 k read + 2.9 k write ≈ **7 k**; the decay's arithmetic ≈ +0.2–0.4 k; an unwrap the same |
 | tracked, the id's first use on that leg | one new slot: ≈ **98 k state gas** + ≈ 5 k regular |
@@ -544,9 +561,9 @@ passes) and changes one thing at a time; each mutant must turn the test red.
 | 11 | wrap order | `o.from` counted, the submitter not | `msg.sender` counted |
 | 12 | wrap-shield / unshield-unwrap (3, 5, 11, 13) | payer counted, `toUA` credited; the proof's sender counted; the refusal before the proof (gas below the verifier's) | the envelope's `from` counted; the count in the pre-proof `quoteTo` too (counted twice) |
 | 13 | mint not counted | a hybrid mint leaves windows and `b` | the mint credits `b` |
-| 14 | tighter at once | each tighter field applies in one call | `eff(0)` read as the tightest |
-| 15 | looser waits | `GrantNotReady` before `eta`, applies in `[eta, eta + delay]`, dead after, dead after an owner change; a mixed call waits; a new proposal replaces the old | the window unchecked; the generation unchecked; the period's direction inverted |
-| 16 | Q1 reading (if adopted) | an unwrap tightening (the decay on, a shorter `H` included) waits, an unwrap relaxing applies at once | the unwrap side classified as the wrap side; `decayDays` classified on the wrap side |
+| 14 | wrap side tighter at once | each tighter wrap field applies in one call | `eff(0)` read as the tightest |
+| 15 | wrap side looser waits | `GrantNotReady` before `eta`, applies in `[eta, eta + delay]`, dead after, dead after an owner change; a mixed call waits; a new proposal replaces the old | the window unchecked; the generation unchecked; the period's direction inverted |
+| 16 | unwrap side (R13) | an unwrap tightening (a part, the list, the net rule, the decay on, a shorter `H`) waits; an unwrap relaxing applies at once; a call tightening the unwrap side and relaxing the wrap side waits once | the unwrap side classified as the wrap side; `decayDays` classified on the wrap side |
 | 17 | unit write-once | a changed `unitExp` after the first configuration: `WrapUnitInvalid` | `unitExpCopy` not written |
 | 18 | disable refused while on | `disableFeature(25)` with a limit on, `(27)` with a holder: `WrapControlActive` | the check missing for bit 26 or 27 |
 | 19 | bits and kinds | 25, 26, 27 refused on 0, 2, 4, 8, 10, 12; the setter without the bit: `FeatureNotSet` | 25 in a normal kind's mask |
@@ -563,7 +580,8 @@ passes) and changes one thing at a time; each mutant must turn the test red.
 | 30 | redeemer | a redeemer unwraps past `E`, net and decay; still bound by the lists and windows; revoked, refused at once | the role skips the windows too; the role read on every unwrap (gas pin) |
 | 31 | decay on and off | on (tighter), off (`E` back to `b`, never above the plain net), on again (the kept clock) | off restores a value above the plain net |
 | 32 | overflow and saturation | `b` at `2^32 − 1` saturates and refuses more; `H = 65,535`; the largest products; a fuzz invariant `E ≤ b ≤ plain net` over random wraps, unwraps and days | `unchecked` narrowing of `b'` |
-| 33 | round trip (Q16) | the rejuvenation of a wrap-then-unwrap equals §2.1's bound, pinned, so a change is seen | — (documents the accepted limit) |
+| 33 | round trip (R25) | the rejuvenation of a wrap-then-unwrap equals §2.1's bound, pinned, so a change is seen | — (documents the accepted limit) |
+| 34 | hybrid only (R12) | creating a pure-wrap token of each of 1, 3, 5, 9, 11, 13 with bit 25, 26 or 27: `WrapControlNeedsHybrid(bit)`; the same hybrid passes | the check missing for one bit; the check reading `features` after `init` cleared nothing (order) |
 
 Run at the four PQZ sets for kinds 5 and 13 (`script/pqz/at-set.sh <set> test`, one run per work tree, `PqzSet.sol` restored).
 
@@ -580,42 +598,43 @@ target, which advances its own clock (`evm_increaseTime`); on the SCaaS testnet 
 | Group | Rows |
 |---|---|
 | gov | `mtxSetWrapLimits` tightening (applies); relaxing (proposed, then confirmed after the notice); `mtxSetWrapMember`; bit 27 granted and revoked through the router's grant ops; `disableFeature(25)` refused while on |
-| tokens (1, 9) | a wrap within the limits; a wrap over: expected revert `WrapLimitExceeded`; a token-wide `WrapCapExceeded`; an unwrap of transferred units under the net rule: `UnwrapAboveNetWrapped`; a redeemer passes; the decay at day 0, H/2, H (local); `wrapToUA` credits `to`; a relayed `mtxUnwrap` of a derived UA counted on the UA; `mtxWrapOrder` counted on `o.from`; the three views |
-| zether (3, 11), pq (5, 13) | `mtxWrapShield` within and over; `mtxUnshieldUnwrap` refused before the proof; the views |
-| views | `wrapLimits`, `wrapQuotaOf`, `wrapQuotaTotal` on every wrapped kind |
+| tokens (hybrids of 1, 9) | `createToken` of a pure-wrap token with bit 25: expected revert `WrapControlNeedsHybrid`; a wrap within the limits; a wrap over: expected revert `WrapLimitExceeded`; a token-wide `WrapCapExceeded`; an unwrap of transferred units under the net rule: `UnwrapAboveNetWrapped`; a redeemer passes; the decay at day 0, H/2, H (local); `wrapToUA` credits `to`; a relayed `mtxUnwrap` of a derived UA counted on the UA; `mtxWrapOrder` counted on `o.from`; the three views |
+| zether (hybrids of 3, 11), pq (hybrids of 5, 13) | `mtxWrapShield` within and over; `mtxUnshieldUnwrap` refused before the proof; the views |
+| views | `wrapLimits`, `wrapQuotaOf`, `wrapQuotaTotal` on a hybrid of every wrapped kind |
 
-## 12. Owner questions
+## 12. Owner questions — ruled 2026-11-10
 
-Q1–Q10 are the controller's review points of 2026-11-10: Q2 and Q5 ruled the same day, the others open; Q11–Q16 come from this
-design. Each open one has a recommendation.
+Every question is ruled; the ruling's full text is in the table at the top. Q1–Q10 were the controller's review points, Q11–Q16
+came from this design.
 
-| # | Question | Recommendation / ruling |
+| # | Question | Ruling |
 |---|---|---|
-| Q1 | **Holder protection on unwrap.** As ruled, tightening the unwrap side at once lets the owner stop redemptions instantly (§6), against CTR-TOK-07 and CTR-GOV-17's "unwrap is never paused". | **Unwrap: tightening waits the notice period, so holders can exit first; relaxing applies at once. Wrap: as ruled (tighter at once, looser waits).** It covers the decay (on, or a shorter `H`). The asymmetry is stated in the disclosure; §6's table has both columns; test 16. Membership changes and a redeemer's revoke stay at once (one id at a time, visible, as FREEZE on 9, 11, 13). |
-| Q2 | **The net rule and received units.** | **Ruled (owner 2026-11-10): a separate `redeemer` role**, bit 27, exempt from the entitlement check, plain and decayed (§2). |
-| Q3 | **Whose quota.** | **The subject**, never `msg.sender` of a relay: the direct caller, the signer of a relayed op, the signer of a DEX wrap order (`o.from`), the proof's sender of an unshield-unwrap; service pulls move no reserve; a future liquidity module wraps through `mtxWrapOrder` (its signer counts). **`b` is credited to the id that receives the units** (`to`, `toUA`, the order's destination). A contract that wraps for itself (a pool, an escrow) is its own subject, under the per-user parts like any id, with no exemption list; the issuer sizes the parts or relies on the token-wide caps, and may grant it the redeemer role for the entitlement rule. |
-| Q4 | **Multi-leg tokens.** | **Per leg, in that leg's own units and decimals**: each leg its own four limits, token-wide caps, `unit`, decay and `b` (§2, §5); one slot per id and leg, one per id on a one-leg token. A per-leg token-wide unwrap cap also slows the drain of the good legs in a depeg (CTR-TOK-07). |
-| Q5 | **Sybil.** | **Ruled (owner 2026-11-10): accepted as is**; one line in §2, no anti-Sybil measure. |
-| Q6 | **Fixed-window burst.** | **Accept and document**: up to 2× a cap within one `period` across a window boundary (R2's trade-off); the long limit bounds repeats. |
-| Q7 | **Amount units.** | **The underlying moved**: a wrap's measured `received` (for a fee-on-transfer leg what arrived), an unwrap's `out` (the reserve's exact drop). |
-| Q8 | **Hard stop vs limit.** | **No new stop.** 0 means no limit; the stops are `disableWrap` (bit 4) and, on 9, 11, 13, `PAUSE` for wraps; for unwrap none on the public kinds by design, `FREEZE` per account, `PAUSE` on the unshield-unwrap of 11, 13. A one-quantum unwrap limit or a one-day decay is a near-stop and falls under Q1. |
-| Q9 | **Views, events, pre-checks.** | **As §7 and §9**: the remaining quota per user and token-wide with `resetAt` (the next window's earliest start), the entitlement with the day it reaches 0, events on every applied and proposed setting and membership change, and the node's named refusal `WRAP_LIMIT_REFUSED` before any submission. |
-| Q10 | **Defaults.** | **Every limit, the net rule and the decay off on new tokens until set; nothing ever on tokens of earlier releases.** Bits 25–27 are chosen at creation and off by default (features only lose bits, so a holder sees whether a token can ever limit). |
-| Q11 | **Which delay is "the notice period".** The `_delayedRelaxBits` pattern waits the token's `grantDelay`; the tax rate waits the factory's `noticePeriod()` (pay-meta-tax Q9). | **The factory's `noticePeriod()`**, with the two-call shape of `_delayedRelaxBits`: the owner's word, the tax precedent, and an issuer cannot set it to 0 on a chain that has a notice (`grantDelay` may be 0 per token). No bypass through `disableFeature` (§2: refused while on). |
-| Q12 | **"Hybrid" kinds.** The ruling says "the wrapped (hybrid) kinds". | **Every token of the six wrapped kinds**, hybrid or not: the check sits in `WrappedLib`, which all share; limiting only `maxSupply ≠ 0` would add a branch and protect nothing. |
-| Q13 | **Quanta vs raw.** R7's one slot holds four windows, `b` and `startDay` only in quanta of a per-leg `unit` and with windows in minutes. | **Quanta, one slot per id and leg** (§5), the unit fixed by the first configuration; windows longer than `period` by under a minute. The other reading, two slots per id and leg (raw amounts, windows in seconds), costs ≈ 98 k state gas more on an id's first unwrap. |
-| Q14 | **The decay's shape.** (a) Linear to zero over one horizon `H`; (b) a schedule, for example `(t₁, f₁)` then 0 at `t₂`. | **(a)**, unless the owner wants arbitrary points: one parameter gives the owner's example (`H = 730` days: 1/2 after a year, 0 after two) and fits the unwrap side of the leg's config slot. (b) needs about 48 more bits per leg, a third config slot (+2.1 k gas per wrap and unwrap), and the same weighted start with `f(g)` in place of `(H − g)/H`. |
-| Q15 | **The decay's clock.** "Counted from the last wrap", literally, lets a 1-wei wrap reset the whole balance. | **A weighted-average start** (§2.1): `s' = today − ⌈E·g/(E + a)⌉` and the base rescaled so the value is exact; dust below one unit moves nothing, a wrap as large as `E` halves the age. It fits the one slot (§5). |
-| Q16 | **The round trip.** Wrapping fresh money and unwrapping the same amount leaves `E` with a younger start; one start cannot tell which money left first. | **Accept and disclose**: the rejuvenation is proportional to the money cycled (halving the age cycles as much as `E`) and bounded by the per-user wrap and unwrap windows and the token-wide caps. Closing it needs a second slot per id and leg (the age of the last wrap kept apart), ≈ 98 k state gas more on an id's first use. |
+| Q1 | Holder protection on unwrap | R13: unwrap tightening waits the notice, relaxing at once; wrap as R6 |
+| Q2 | The net rule and received units | R9: a separate `redeemer` role, bit 27 |
+| Q3 | Whose quota | R14: the subject; the net credit to the id credited; no exemption list |
+| Q4 | Multi-leg tokens | R15: per leg, in the leg's own units |
+| Q5 | Sybil | R10: accepted as is, no measure |
+| Q6 | Fixed-window burst | R16: accepted, documented |
+| Q7 | Amount units | R17: the underlying moved |
+| Q8 | Hard stop vs limit | R18: no new stop |
+| Q9 | Views, events, pre-checks | R19: as §7 and §9 |
+| Q10 | Defaults | R20: all off; bits at creation, off by default |
+| Q11 | Which notice period | R21: the factory's `noticePeriod()` |
+| Q12 | "Hybrid" kinds | R12: hybrid tokens (`maxSupply ≠ 0`) of 1, 3, 5, 9, 11, 13 only; a pure-wrap token refused the bits |
+| Q13 | Quanta vs raw | R22: quanta, one slot |
+| Q14 | The decay's shape | R23: linear to zero over `H` |
+| Q15 | The decay's clock | R24: the weighted-average start |
+| Q16 | The round trip | R25: accepted and disclosed |
 
 ## 13. Tasks and estimates — SPECIFIED
 
-Placed by the controller in the pre-freeze work order of branch `ua-mtx-merge` (contracts are immutable: before the EVM freeze),
-after the owner answers §12. Estimates assume the recommendations.
+Group 3l of the plan [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md), tasks T97–T104 (the plan block cuts
+WL1–WL8 into tasks with their red tests, gates and mutants; the total is the same), in the pre-freeze work order of branch
+`ua-mtx-merge` (contracts are immutable: before the EVM freeze); built later in its own worktree.
 
 | # | Task | Agent-days |
 |---|---|---:|
-| WL1 | Contracts: `scaas.wraplimit` and `ctl` in `WrappedLib` (counter in minutes, checks, the decay and its weighted start, setter with the tighter / looser table and the pending, member setter, views); bits 25–27 in `GovernanceBits` and the kind masks; the receiver / holder words through W, Z, Q, T; `entries.json` and the regenerated faces; the `disableFeature` refusal; `IWrappedToken` errors, events, views; legacy copy of the touched bodies first | 3–3.5 |
+| WL1 | Contracts: `scaas.wraplimit` and `ctl` in `WrappedLib` (counter in minutes, checks, the decay and its weighted start, setter with the tighter / looser table and the pending, member setter, views); bits 25–27 in `GovernanceBits` and the kind masks, `WrapControlNeedsHybrid` in `initToken`; the receiver / holder words through W, Z, Q, T; `entries.json` and the regenerated faces; the `disableFeature` refusal; `IWrappedToken` errors, events, views; legacy copy of the touched bodies first | 3–3.5 |
 | WL2 | `GovernanceRouter`: the two typed ops, typehashes and pins, its selector table | 0.5 |
 | WL3 | Tests and mutants of §11 (33 rows, the decay fuzz included), at the four PQZ sets for 5 and 13 | 2.5–3 |
 | WL4 | Gates: forge, size gate rows old → new, gas pins old → new (`--isolate`), layout and typehash pins, deploy gas of W against 60 M | 1 |
