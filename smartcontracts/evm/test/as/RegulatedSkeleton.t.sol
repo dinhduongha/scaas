@@ -93,7 +93,9 @@ contract RegulatedSkeletonTest is PqzFixture {
         assertEq(v, GovernanceBits.WRAPPED_BITS | reg, "9 valid");
         assertEq(r, GovernanceBits.WRAPPED_ROLES | REG_ROLES, "9 roles");
         assertEq(c, GovernanceBits.WRAPPED_CONTRACT_ONLY | REG_CONTRACT_ONLY, "9 contract-only");
-        assertEq(s, (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22), "9 scalar");
+        // group 3l (CTR-TOK-31, wrap-limits spec R27, 7ba002dc; this suite not run on its branch): + bit 27 `REDEEMER`, scalar on
+        // the six wrapped kinds (a redeemer's excess is a use of its grant)
+        assertEq(s, (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22) | (1 << 27), "9 scalar");
         assertEq(d, (1 << 5) | (1 << 6) | (1 << 7), "9 delayed relax");
         assertEq(r9.validBits(), v, "9 validBits()");
 
@@ -102,7 +104,7 @@ contract RegulatedSkeletonTest is PqzFixture {
         assertEq(v, GovernanceBits.WRAPPED_BITS | (reg & ~uint256(1 << 8)) | (1 << 24), "13 valid: no ALLOWLIST, bit 24");
         assertEq(r, GovernanceBits.WRAPPED_ROLES | REG_ROLES | (1 << 24), "13 roles");
         assertEq(c, GovernanceBits.WRAPPED_CONTRACT_ONLY | REG_CONTRACT_ONLY, "13 contract-only");
-        assertEq(s, (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22), "13 scalar");
+        assertEq(s, (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22) | (1 << 27), "13 scalar: bit 27 as on 9");
         assertEq(d, (1 << 5) | (1 << 6) | (1 << 7), "13 delayed relax");
         assertEq(r13.validBits(), v, "13 validBits()");
     }

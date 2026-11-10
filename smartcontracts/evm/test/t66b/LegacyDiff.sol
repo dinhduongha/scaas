@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {ITokenModules} from "../../src/metatx/ITokenModule.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 
 interface ILive {
     function kind() external view returns (uint8);
@@ -156,6 +157,7 @@ abstract contract LegacyDiff is Test {
         vm.etch(token, _withImpl(code, oldImpl));
         Run memory o = _run(token, caller, data);
         vm.revertToStateAndDelete(snap);
+        o.ret = _intended(token, data, o);
         assertEq(n.ok, o.ok, string.concat(what, ": outcome"));
         assertEq(n.ret, o.ret, string.concat(what, ": return / revert data"));
         assertEq(n.logs.length, o.logs.length, string.concat(what, ": log count"));
@@ -179,6 +181,18 @@ abstract contract LegacyDiff is Test {
         for (uint256 i; i < n.calls.length; ++i) assertEq(n.calls[i], o.calls[i], string.concat(what, ": call out"));
         ++diffed;
         if (n.ok) ++bothOk;
+    }
+
+    /// @dev The expected side: the pre-split answer (d142b57c) with the behaviour added on purpose after it, each named with
+    ///      its rule; every other byte is compared as before. Group 3l (CTR-TOK-31, docs/superpowers/specs/2026-11-10-wrap-
+    ///      limits.md §2, commit 7ba002dc): `validBits()` of the six wrapped kinds 1, 3, 5, 9, 11, 13 adds bits 25
+    ///      `WRAP_LIMIT`, 26 `WRAP_LIST`, 27 `REDEEMER` (`GovernanceBits.WRAP_CONTROLS`) to the old answer. Bit 24 `PQZ_PROOF`
+    ///      of the PQZ kinds predates d142b57c (3h T61) and is in both answers.
+    function _intended(address token, bytes memory data, Run memory o) internal view returns (bytes memory) {
+        if (!o.ok || o.ret.length != 32 || bytes4(data) != bytes4(keccak256("validBits()"))) return o.ret;
+        uint8 k = _kindOf(token);
+        if (k != 1 && k != 3 && k != 5 && k != 9 && k != 11 && k != 13) return o.ret;
+        return abi.encode(abi.decode(o.ret, (uint256)) | GovernanceBits.WRAP_CONTROLS);
     }
 
     /// @dev `_diff` as its own call, so a positive control can expect its assertion to fail.
