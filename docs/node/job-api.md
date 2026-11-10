@@ -306,7 +306,7 @@ Values: `uint` as canonical decimal strings (`uint8`, `uint16`, `uint32` may be 
 | `dex`, plain | `mtxSettle`, `mtxExchange`, `mtxExchangeVia`, `mtxExchangeBatch`, `mtxHybrid`, `mtxHybridVia`, `mtxCancelOrders`: legs as `{sellToken, shape, order, uaOrder, sig, auth, fill}` |
 | `registry`, plain | `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`, `storePqzPop`, `setPqzKey`, `acceptMembership` (`args`: `ua`, `memberSig` `{index, keyData: "0x", sig}`, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37): the member signs, the relayer submits, so a member needs no gas) |
 | `factory`, plain | `deploy` |
-| `pqchat`, plain | the twelve `PqChat` writes ([call table](#pqchat-calls)) |
+| `pqchat`, plain | the thirteen `PqChat` writes ([call table](#pqchat-calls)) |
 
 **Mandate lanes.** The named `mtxPayUnderMandate` runs with `batch = mandatePayLane(entryRef)`, `mtxDelegateRevoke` with
 `batch = mandateRevokeLane(token, epoch)`, both at nonce 0 (a revoke is the kill switch, it must not queue behind a pending nonce on
@@ -675,8 +675,8 @@ Operators: set `governance_routers` to the deploy JSON's `governance_router`, pl
 [P17](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#74-the-node) and
 [P32](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#21-instances-pqchat-is-a-factory-kind-d22), topics spec
 [P45](../superpowers/specs/2026-11-07-pqchat-public-topics.md#7-node-and-indexer)). `PqChat` is a factory kind (class 3, kind 0 on
-`OpenFactory`'s generic path) and the contract kind `pqchat` of the table: its twelve writes are plain rows, `createSession`, `rekey`,
-`addWraps`, `leave`, `postMessage`, `storeMessage`, `createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry` and
+`OpenFactory`'s generic path) and the contract kind `pqchat` of the table: its thirteen writes are plain rows, `createSession`, `rekey`,
+`addWraps`, `leave`, `remove` (UA-7 P48, owner 2026-11-10), `postMessage`, `storeMessage`, `createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry` and
 `voteEntry`, equal to `IPqChat`'s both directions (`initialize` is the factory's alone and no row). The rule of kind `pqchat`
 (`guard.rs` `Rule::FactoryClass(3)`, the generic factory-class rule of factory index §8.6): the target is a contract the chain's
 `token_factory` lists with `infoOf(target).contractClass == 3` and `version ≠ 0`, read at lease and cached (a record never changes);
@@ -688,7 +688,7 @@ pays the lane through `RelayFeeRouter` (an `mtxRelayFee` job with `call`).
 **Unsigned writes** (P17, owner 2026-11-05, [CTR-CHAT-01](../contracts/pqchat.md#CTR-CHAT-01)). `storeMessage` and `addWraps` carry no
 signature, so anyone could make a lane pay for them. A lane relays one only as a relay fee's inner call (paid through
 `RelayFeeRouter`, under the relay-fee rules) or when the chain's `params.relay_unsigned_pqchat = true` (the operator's lane policy,
-default `false`); otherwise the job is refused `UNSIGNED_WRITE_NOT_PAID` (on the legacy pull path `dead`, nothing read or sent). The ten
+default `false`); otherwise the job is refused `UNSIGNED_WRITE_NOT_PAID` (on the legacy pull path `dead`, nothing read or sent). The eleven
 signed writes need neither. An unpaid one may find no relayer; its author can send it from its own account.
 
 Job: `{kind: "call", op: {entry, contract: "pqchat", token: <instance>, args, validUntil}}`, `args` the entry's arguments by the

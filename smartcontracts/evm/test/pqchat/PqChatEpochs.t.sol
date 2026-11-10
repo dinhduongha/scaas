@@ -28,6 +28,128 @@ contract PqChatEpochsTest is PqChatBase {
         c.leave(l, _sig(member, h.leave(l)));
     }
 
+    // ----- removal by an admin (P48, owner 2026-11-10) -----
+
+    function _rm(bytes32 epochId, uint64 next, bytes32[] memory members, bytes32 admin, uint64 nonce)
+        internal view returns (IPqChat.PqChatRemove memory r)
+    {
+        r = IPqChat.PqChatRemove(sid, epochId, next, members, admin, nonce);
+    }
+
+    function _remove(PqChat c, IPqChat.PqChatRemove memory r) internal {
+        c.remove(r, _sig(r.admin, h.remove(r)));
+    }
+
+    function _refusedRemove(IPqChat.PqChatRemove memory r, bytes32 signer, bytes memory err) internal {
+        IUARegistry.UASig memory sig = _sig(signer, h.remove(r));
+        vm.expectRevert(err);
+        chat.remove(r, sig);
+    }
+
+    /// Fable P1-2: the race. After the admin removes `ids[2]` from epoch 0, `ids[2]`'s plain rekey keeping itself is
+    /// refused (`PqChatNotMember`), another member's rekey keeping it too (`PqChatRemovedKept`), and the admin's removal
+    /// rekey lands; the record is in state.
+    function test_remove_raceIsClosed() public {
+        IPqChat.PqChatRemove memory r = _rm(sid, 1, _list(ids[2]), ids[0], 7);
+        vm.expectEmit(address(chat));
+        emit IPqChat.PqChatRemoved(sid, sid, ids[0], _list(ids[2]));
+        vm.prank(STRANGER);
+        _remove(chat, r);
+        assertTrue(chat.removedIn(sid, ids[2]));
+        assertFalse(chat.removedIn(sid, ids[1]));
+        assertEq(chat.removalCount(sid), 1);
+        (IPqChat.PqChatRemove memory got, bytes32 sigHash) = chat.removalAt(sid, 0);
+        assertEq(keccak256(abi.encode(got)), keccak256(abi.encode(r)));
+        assertEq(sigHash, keccak256(abi.encode(_sig(r.admin, h.remove(r)))));
+        assertTrue(chat.nonceUsed(PqChatTypes.scopeEpoch(sid, ids[0]), 7));
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[2], 1, 1, sid, _admins(), _members(3));
+        IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNotMember.selector, ids[2]));
+        chat.rekey(e, w, sig); // the removed member, plain
+        (e, w) = _epoch(sid, ids[1], 1, 1, sid, _admins(), _members(3));
+        sig = _sig(e.author, h.epoch(e));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatRemovedKept.selector, sid, ids[2]));
+        chat.rekey(e, w, sig); // another member keeping it
+        (e, w) = _epoch(sid, ids[0], 1, 1, sid, _admins(), _without(_members(3), ids[2]));
+        bytes32 eid = _rekey(chat, e, w); // the admin's removal rekey
+        assertEq(chat.childOf(sid), eid);
+    }
+
+    /// P48: dropping a removed member is plain, so a remaining member lands the child too (no admin needed).
+    function test_remove_dropIsPlain() public {
+        _remove(chat, _rm(sid, 1, _list(ids[2]), ids[0], 7));
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(sid, ids[1], 1, 1, sid, _admins(), _without(_members(3), ids[2]));
+        assertEq(chat.childOf(sid), bytes32(0));
+        _rekey(chat, e, w);
+        assertTrue(chat.childOf(sid) != 0);
+    }
+
+    /// P48: a child stored incomplete before the removal (in chunks, keeping the member) cannot complete after it; the
+    /// admin's child completes and takes the slot.
+    function test_remove_incompleteChildCannotComplete() public {
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[2], 1, 1, sid, _admins(), _members(3));
+        IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e));
+        bytes32 kept = chat.rekey(e, _slice(w, 0, 1), sig);
+        _remove(chat, _rm(sid, 1, _list(ids[2]), ids[0], 7));
+        IPqChat.Wrap[] memory rest = _slice(w, 1, 3);
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatRemovedKept.selector, sid, ids[2]));
+        chat.addWraps(kept, 1, rest);
+        (e, w) = _epoch(sid, ids[0], 1, 1, sid, _admins(), _without(_members(3), ids[2]));
+        bytes32 eid = _rekey(chat, e, w);
+        assertEq(chat.childOf(sid), eid);
+    }
+
+    /// P48: the child may not keep a removed UA among its admins either.
+    function test_remove_childAdminsExcludeRemoved() public {
+        IPqChat.MemberKey[] memory m = _members(3);
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[0], 1, 1, sid, _list(ids[0], ids[1]), m);
+        bytes32 e1 = _rekey(chat, e, w); // ids[1] made an admin
+        IPqChat.PqChatRemove memory r = _rm(e1, 2, _list(ids[1]), ids[0], 8);
+        _remove(chat, r);
+        (e, w) = _epoch(sid, ids[0], 9, 2, e1, _list(ids[0], ids[1]), _without(m, ids[1]));
+        IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatRemovedKept.selector, e1, ids[1]));
+        chat.rekey(e, w, sig);
+        (e, w) = _epoch(sid, ids[0], 9, 2, e1, _admins(), _without(m, ids[1]));
+        _rekey(chat, e, w);
+    }
+
+    /// P48 refusals, each beside the control that lands last.
+    function test_remove_refusals() public {
+        IPqChat.PqChatRemove memory r = _rm(sid, 1, _list(ids[2]), ids[0], 7);
+        _refusedRemove(r, ids[1], _unauthorized(ids[0])); // forged: another key signs for the admin
+        r.admin = ids[1];
+        _refusedRemove(r, ids[1], abi.encodeWithSelector(IPqChat.PqChatNotAdmin.selector, ids[1])); // not an admin
+        r.admin = ids[0];
+        r.nextEpoch = 2;
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatEpochNumber.selector, uint64(1), uint64(2)));
+        r.nextEpoch = 1;
+        r.members = new bytes32[](0);
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatShape.selector));
+        r.members = new bytes32[](17); // over REMOVE_MAX = 16
+        for (uint256 i; i < 17; ++i) r.members[i] = bytes32(i + 1);
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatShape.selector));
+        r.members = _list(ids[2], ids[1]); // not sorted
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatShape.selector));
+        r.members = _list(keccak256("stranger"));
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatNotMember.selector, keccak256("stranger")));
+        bytes32 x = keccak256("unknown epoch");
+        r.members = _list(ids[2]);
+        r.epochId = x;
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatUnknown.selector, x));
+        r.epochId = sid;
+        assertEq(chat.REMOVE_MAX(), 16);
+        _remove(chat, r); // the control
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector,
+            PqChatTypes.scopeEpoch(sid, ids[0]), uint64(7))); // replayed
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(sid, ids[0], 1, 1, sid, _admins(), _without(_members(3), ids[2]));
+        bytes32 eid = _rekey(chat, e, w);
+        r.nonce = 8;
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatEpochTaken.selector, sid, eid)); // the slot is taken
+    }
+
     // ----- plain rekeys and membership changes (P10, 3C-D7) -----
 
     function test_rekey_plainByMember() public {

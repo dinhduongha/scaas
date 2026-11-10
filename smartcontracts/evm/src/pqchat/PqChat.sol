@@ -32,6 +32,8 @@ contract PqChat is IPqChat, PqChatCore {
     uint256 public constant SESSIONS_RANGE_MAX = 128;
     /// @inheritdoc IPqChat
     uint256 public constant EPOCHS_RANGE_MAX = 128;
+    /// @inheritdoc IPqChat
+    uint256 public constant REMOVE_MAX = 16;
 
     address public immutable FACTORY;
     uint64 internal immutable VERSION;
@@ -146,6 +148,7 @@ contract PqChat is IPqChat, PqChatCore {
         _checkLists(reg, admins, members, e.wrapHashes.length, 1);
         (bytes32[] memory pa, MemberKey[] memory pm,) = _lists(pe);
         pu = _uas(pm);
+        if (pe.removed != 0 && pe.removedOf[e.author]) revert PqChatNotMember(e.author); // P48
         if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {
             // Fable P1-2 (a): a member who left the parent authors no plain rekey of it (it would keep itself in)
             if (_memberAt(pm, e.author) == type(uint256).max || pe.left[e.author]) revert PqChatNotMember(e.author);
@@ -171,7 +174,7 @@ contract PqChat is IPqChat, PqChatCore {
         for (uint256 i; i < parent.length; ++i) {
             if (j < child.length && child[j] == parent[i]) ++j;
             else if (j < child.length && child[j] < parent[i]) return false; // added
-            else if (!pe.left[parent[i]]) return false; // dropped without leaving
+            else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false; // dropped without leaving or removal
         }
         return j == child.length;
     }
@@ -200,6 +203,43 @@ contract PqChat is IPqChat, PqChatCore {
         _useNonce(PqChatTypes.scopeEpoch(l.sessionId, l.member), l.nonce);
         ep.left[l.member] = true;
         emit PqChatLeft(l.sessionId, l.epochId, l.member);
+    }
+
+    /// @notice P48 (owner 2026-11-10): an admin of the complete epoch `r.epochId` removes 1..REMOVE_MAX of its members,
+    ///         strictly sorted; at home only while it has no complete child. The record and its `sigHash` in state.
+    function remove(PqChatRemove calldata r, IUARegistry.UASig calldata sig) external {
+        (IUARegistry reg, uint256 limit,) = _env();
+        Epoch storage ep = _known(r.epochId);
+        if (ep.sessionId != r.sessionId) revert PqChatUnknown(r.epochId);
+        if (ep.landed != ep.wraps) revert PqChatIncomplete(r.epochId);
+        bytes32 child = _s().childOf[r.epochId];
+        if (child != 0) revert PqChatEpochTaken(r.epochId, child);
+        if (r.nextEpoch != ep.epoch + 1) revert PqChatEpochNumber(ep.epoch + 1, r.nextEpoch);
+        uint256 n = r.members.length;
+        if (n == 0 || n > REMOVE_MAX) revert PqChatShape();
+        (bytes32[] memory admins, MemberKey[] memory m,) = _lists(ep);
+        if (!_has(admins, r.admin)) revert PqChatNotAdmin(r.admin);
+        for (uint256 i; i < n; ++i) {
+            if (i > 0 && r.members[i] <= r.members[i - 1]) revert PqChatShape();
+            if (_memberAt(m, r.members[i]) == type(uint256).max) revert PqChatNotMember(r.members[i]);
+        }
+        _auth(reg, r.admin, PqChatTypes.hashRemove(r), sig);
+        _useNonce(PqChatTypes.scopeEpoch(r.sessionId, r.admin), r.nonce);
+        uint256 added;
+        for (uint256 i; i < n; ++i) {
+            if (!ep.removedOf[r.members[i]]) (ep.removedOf[r.members[i]], added) = (true, added + 1);
+        }
+        ep.removed += uint16(added);
+        _s().removals[r.epochId].push(_put(abi.encode(r, keccak256(abi.encode(sig))), limit));
+        emit PqChatRemoved(r.sessionId, r.epochId, r.admin, r.members);
+    }
+
+    /// @dev P48: the completing child `ep` holds no UA a `remove` took out of its parent, in its members or its admins.
+    function _noneRemoved(Epoch storage ep) internal view {
+        Epoch storage pe = _s().epochs[ep.parent];
+        (bytes32[] memory admins, MemberKey[] memory m,) = _lists(ep);
+        for (uint256 i; i < m.length; ++i) if (pe.removedOf[m[i].ua]) revert PqChatRemovedKept(ep.parent, m[i].ua);
+        for (uint256 i; i < admins.length; ++i) if (pe.removedOf[admins[i]]) revert PqChatRemovedKept(ep.parent, admins[i]);
     }
 
     /// @notice P16, D11: a member of the complete epoch `epochId` posts; the record and `keccak256(abi.encode(sig))` in one
@@ -281,6 +321,18 @@ contract PqChat is IPqChat, PqChatCore {
 
     function leftIn(bytes32 epochId, bytes32 member) external view returns (bool) {
         return _s().epochs[epochId].left[member];
+    }
+
+    function removedIn(bytes32 epochId, bytes32 member) external view returns (bool) {
+        return _s().epochs[epochId].removedOf[member];
+    }
+
+    function removalCount(bytes32 epochId) external view returns (uint256) {
+        return _s().removals[epochId].length;
+    }
+
+    function removalAt(bytes32 epochId, uint256 index) external view returns (PqChatRemove memory r, bytes32 sigHash) {
+        (r, sigHash) = abi.decode(_get(_s().removals[epochId][index]), (PqChatRemove, bytes32));
     }
 
     function nonceUsed(bytes32 scope, uint64 nonce) external view returns (bool) {
@@ -516,6 +568,7 @@ contract PqChat is IPqChat, PqChatCore {
         emit PqChatWraps(epochId, uint32(first), uint32(n));
         if (landed == ep.wraps && n != 0) {
             if (ep.epoch != 0) {
+                if (_s().epochs[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it
                 if (_s().epochs[ep.sessionId].home) _s().childOf[ep.parent] = epochId; // P9: the slot, home only
                 _s().chain[ep.sessionId].push(epochId); // owner 2026-11-10: `epochsOf`
             }

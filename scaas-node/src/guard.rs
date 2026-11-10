@@ -1173,8 +1173,8 @@ mod tests {
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
-        // T93: 104 -> 116, `PqChat`'s twelve plain rows
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 116, "table rows: 86 typed with an entry, 30 plain");
+        // T93: 104 -> 116, `PqChat`'s twelve plain rows; UA-7 P48: -> 117, `remove`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 117, "table rows: 86 typed with an entry, 31 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -2193,11 +2193,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let sel = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         let all = pqchat_writes();
         let writes: Vec<&String> = all.iter().filter(|s| !s.starts_with("initialize(")).collect();
-        assert_eq!((all.len(), writes.len()), (13, 12), "{all:?}");
+        assert_eq!((all.len(), writes.len()), (14, 13), "{all:?}");
         let theirs: HashSet<[u8; 4]> = writes.iter().map(|s| sel(s)).collect();
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| r.contracts.contains(&"pqchat")).map(|r| r.sent).collect();
         assert_eq!(ours, theirs, "the PqChat allow-list, both directions");
-        let forge: HashSet<[u8; 4]> = ["21829f04", "1222a945", "2b9ab93a", "3c289881", "6035115c", "95660a78", "47bee6d5", "c8de3d2d",
+        let forge: HashSet<[u8; 4]> = ["21829f04", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78", "47bee6d5", "c8de3d2d",
             "04857ea8", "1fd5aeac", "f3ee47ee", "5aee92d5"].iter().map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap()).collect();
         assert_eq!(ours, forge, "forge's IPqChat methodIdentifiers");
         let kinds = ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"];
@@ -2276,7 +2276,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         for e in &entries {
             g.check(&chain, &work(e, chat)).await.unwrap_or_else(|x| panic!("{e}: {x:?}"));
         }
-        assert_eq!((entries.len(), *reads.lock().unwrap()), (12, 1), "infoOf read once, then cached");
+        assert_eq!((entries.len(), *reads.lock().unwrap()), (13, 1), "infoOf read once, then cached"); // P48: + remove
         for (to, c, what) in [(v0, cfg.clone(), "version 0"), (c4, cfg.clone(), "class 4"), (other, cfg.clone(), "not made by the factory"),
             (chat, ChainCfg { token_factory: Some(Address::repeat_byte(0xfb)), ..cfg.clone() }, "another factory"),
             (chat, ChainCfg { token_factory: None, ..cfg.clone() }, "no token_factory")] {

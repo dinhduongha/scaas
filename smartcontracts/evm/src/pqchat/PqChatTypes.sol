@@ -20,6 +20,8 @@ library PqChatTypes {
     bytes32 internal constant EPOCH_TYPEHASH = keccak256(
         "PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,"
         "MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)");
+    bytes32 internal constant REMOVE_TYPEHASH = keccak256(
+        "PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)");
     bytes32 internal constant LEAVE_TYPEHASH =
         keccak256("PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)");
     bytes32 internal constant MESSAGE_TYPEHASH = keccak256(
@@ -81,6 +83,11 @@ library PqChatTypes {
         return keccak256(abi.encode(EPOCH_TYPEHASH, e.sessionId, e.author, e.nonce, e.epoch, e.parentEpochId,
             keccak256(abi.encodePacked(e.admins)), hashMembers(e.members), keccak256(abi.encodePacked(e.wrapHashes)),
             keccak256(e.sealedInfo)));
+    }
+
+    function hashRemove(IPqChat.PqChatRemove calldata r) internal pure returns (bytes32) {
+        return keccak256(abi.encode(REMOVE_TYPEHASH, r.sessionId, r.epochId, r.nextEpoch,
+            keccak256(abi.encodePacked(r.members)), r.admin, r.nonce));
     }
 
     function hashLeave(IPqChat.PqChatLeave calldata l) internal pure returns (bytes32) {

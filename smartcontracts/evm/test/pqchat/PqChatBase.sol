@@ -24,6 +24,10 @@ contract PqChatHasher {
         return PqChatTypes.typed(PqChatTypes.hashEpoch(e));
     }
 
+    function remove(IPqChat.PqChatRemove calldata r) external pure returns (bytes32) {
+        return PqChatTypes.typed(PqChatTypes.hashRemove(r));
+    }
+
     function leave(IPqChat.PqChatLeave calldata l) external pure returns (bytes32) {
         return PqChatTypes.typed(PqChatTypes.hashLeave(l));
     }

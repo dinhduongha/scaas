@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-// PqChat (UA-7 spec v2 §4, §6, §7, §10; public topics spec §2; plan group 3c, 3C-D3 / 3C-D5 / 3C-D9): the typed records, ids,
+// PqChat (UA-7 spec v2 §4, §6, §7, §10, P48; public topics spec §2; plan group 3c, 3C-D3 / 3C-D5 / 3C-D9): the typed records, ids,
 // nonce scopes, signed-record blobs, the hybrid KEM wrap, the sender chains, padding, the message, envelope and payload bytes,
 // sealedInfo and the call keys. The byte formats of smartcontracts/vectors/pqchat/. UNAUDITED.
 import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
@@ -43,6 +43,7 @@ export const TYPE_STRINGS = Object.freeze({
   PqChatEpoch: 'PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,'
     + 'MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)',
   PqChatLeave: 'PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)',
+  PqChatRemove: 'PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)',
   PqChatMessage: 'PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,'
     + 'bytes ciphertext)',
   PqTopic: 'PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies)',
@@ -54,7 +55,7 @@ export const TYPE_STRINGS = Object.freeze({
   PqTopicEdit: 'PqTopicEdit(bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body)',
   PqTopicVote: 'PqTopicVote(bytes32 entryId,bytes32 voter,int8 value,uint64 seq)',
 });
-export const SESSION_STRUCTS = ['MemberKey', 'Wrap', 'PqChatSession', 'PqChatEpoch', 'PqChatLeave', 'PqChatMessage'];
+export const SESSION_STRUCTS = ['MemberKey', 'Wrap', 'PqChatSession', 'PqChatEpoch', 'PqChatLeave', 'PqChatRemove', 'PqChatMessage'];
 export const TOPIC_STRUCTS = ['PqTopic', 'PqTopicUpdate', 'PqTopicWriter', 'PqTopicEntry', 'EntryRef', 'PqTopicEdit', 'PqTopicVote'];
 
 export const TYPES = Object.freeze(Object.fromEntries(Object.entries(TYPE_STRINGS).map(([name, s]) => {
@@ -93,7 +94,7 @@ export const messageId = (m) => typed('PqChatMessage', m);
 export const topicId = (owner, nonce) => idOf('topic', ['bytes32', 'uint64'], [owner, nonce]);
 export const entryId = (topic, author, nonce) => idOf('entry', ['bytes32', 'bytes32', 'uint64'], [topic, author, nonce]);
 export const scopeSession = (creator) => idOf('scope/session', ['bytes32'], [creator]);
-/** Epochs and leaves. */
+/** Epochs, leaves and an admin's removals (P48). */
 export const scopeEpoch = (session, author) => idOf('scope/epoch', ['bytes32', 'bytes32'], [session, author]);
 /** Messages; the nonce is `counter`. */
 export const scopeMessage = (epoch, sender, device) => idOf('scope/message', ['bytes32', 'bytes32', 'bytes16'], [epoch, sender, device]);

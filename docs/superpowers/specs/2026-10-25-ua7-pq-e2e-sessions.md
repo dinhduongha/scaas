@@ -382,7 +382,7 @@ plaintext.
 
 ## 6. Key schedule
 
-**P48 — Removal by an admin** (owner 2026-11-10, on Fable's review P1-2 fix (b); SPECIFIED, plan 3c). An admin of an
+**P48 — Removal by an admin** (owner 2026-11-10, on Fable's review P1-2 fix (b); BUILT on `ua-mtx-merge`, plan 3c). An admin of an
 epoch removes members of it with one signed record, so a member about to be removed can no longer keep itself in by
 racing plain rekeys (P9's limit). The record, a typed EIP-712 struct in `DS_C` under `PURPOSE_PQCHAT` (P7), every field
 an explicit parameter:
@@ -401,7 +401,7 @@ an explicit parameter:
   stored and complete in this instance (`PqChatUnknown`, `PqChatIncomplete`) and, at home, has no complete child yet
   (`PqChatEpochTaken`); once a child holds the slot the removal is moot.
 
-`remove(PqChatRemove r, UASig sig)`: anyone submits it, relayable with a fee of 0 (P17, the rules of the ten signed
+`remove(PqChatRemove r, UASig sig)`: anyone submits it, relayable with a fee of 0 (P17, the rules of the other signed
 writes); the contract checks the shape, the admin's rights and signature, then the nonce, marks each listed member
 removed from `epochId` (a member already removed stays so) and keeps the record and its `sigHash` in state.
 

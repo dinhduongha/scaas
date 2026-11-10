@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-// Generates smartcontracts/vectors/pqchat/{records,keys,messages,topics}.json (UA-7 T4, public topics PT1; plan group 3c T84) by
+// Generates smartcontracts/vectors/pqchat/{records,keys,messages,topics}.json (UA-7 T4, P48; public topics PT1; plan group 3c T84) by
 // src/pqchat.js: typehashes, DS_C, ids, nonce scopes, typed and uaMessage digests, signed-record blobs, P14 refusals, wraps,
 // sender chains, padding, the message, envelope, payload, sealedInfo and call keys. Every random input is fixed:
 // rnd(name, n) = the first n bytes of keccak256("scaas/pqchat/vectors/<name>/0") ‖ keccak256(".../<name>/1") ‖ …
@@ -100,6 +100,9 @@ const epoch = { sessionId: sid, author: alice.ua, nonce: 8, epoch: 1, parentEpoc
     topic: 'Epoch 1: carol removed, no Matrix store' }) };
 
 const leave = { sessionId: sid, epochId: eid, member: bob.ua, nonce: 9 };
+// P48: alice, epoch 1's only admin, removes its two members; her nonce scope is the epoch scope, after epoch 1's nonce 8.
+const remove = { sessionId: sid, epochId: eid, nextEpoch: epoch.epoch + 1, members: sorted(members1.map((m) => m.ua)), admin: alice.ua,
+  nonce: 10 };
 
 // ------------------------------------------------------------------ the message, in epoch 1
 // Device ids: a 16-byte UUID, v7 or v4 at the client's choice, as bytes16 (owner 2026-11-10); nothing checks its version or
@@ -139,12 +142,15 @@ write('records.json', {
     + '"epoch-1/*" and "epoch-1". Signers: ML-DSA-65 keys by pq.js pqKeygen(seed, "mldsa65", account, index), signatures by '
     + 'pq.js signUA (deterministic, extraEntropy false), UASig keyData and members empty. The message row: sigHash = '
     + 'keccak256(abi.encode(UASig)), UASig = (bytes keyData, bytes signature, (uint16, (uint16, bytes)[], bytes)[] members); '
-    + 'blob = abi.encode(record as its ABI tuple, sigHash) (3C-D3).',
+    + 'blob = abi.encode(record as its ABI tuple, sigHash) (3C-D3). The remove row (P48): alice, the admin of epoch 1, removes '
+    + 'its members (strictly sorted), nextEpoch = epoch 1\'s number + 1; members is a bytes32[], keccak256 of the packed words as '
+    + 'admins; scope = the epoch scope (sessionId, admin), shared with alice\'s epoch; no id, no signature.',
   version: 1, domain, purpose, typehashes: typehashes(pc.SESSION_STRUCTS), tags: tags(['session', 'epoch', 'message']),
   signers: people.map((p) => ({ name: p.name, kind: KIND, seed: SEED, account: 0, index: p.index, publicKey: p.publicKey, ua: p.ua })),
   session: recordRow('PqChatSession', session, alice, { id: sid, scope: pc.scopeSession(alice.ua) }),
   epoch: recordRow('PqChatEpoch', epoch, alice, { id: eid, scope: pc.scopeEpoch(sid, alice.ua) }),
   leave: recordRow('PqChatLeave', leave, bob, { id: pc.leaveId(leave), scope: pc.scopeEpoch(sid, bob.ua) }),
+  remove: recordRow('PqChatRemove', remove, alice, { scope: pc.scopeEpoch(sid, alice.ua) }),
   message: recordRow('PqChatMessage', message, alice, { id: pc.messageId(message), scope: pc.scopeMessage(eid, alice.ua, DEVICE),
     sig: messageSig }),
 });

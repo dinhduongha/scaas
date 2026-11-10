@@ -32,12 +32,14 @@ contract PqChatTypesTest is Test {
         assertEq(PqChatTypes.SESSION_TYPEHASH, 0xf7feab992d33b04a998655786b28fde03f83b25d51d155746127927fa43d71dd);
         assertEq(PqChatTypes.EPOCH_TYPEHASH, 0x00b07f15a60f8d4960c9262ffd3a307a3f2f2e790bcbc65911b4630ad0d2888c);
         assertEq(PqChatTypes.LEAVE_TYPEHASH, 0xe68d65ceec0d13ce4006e86e03cca815b44ff94ced5a2aa4b7244abf7502eea1);
+        assertEq(PqChatTypes.REMOVE_TYPEHASH, 0x8f4939ececad5be22f7917c0c8087d80d372be36af3b0afb30046be9db0b6c56); // P48
         assertEq(PqChatTypes.MESSAGE_TYPEHASH, 0x349de860a0acd15c1b2ae96700e016e101442568a7913e01678d4b64dbcdc27c);
         assertEq(PqChatTypes.MEMBER_KEY_TYPEHASH, _th(rec, "MemberKey"));
         assertEq(PqChatTypes.WRAP_TYPEHASH, _th(rec, "Wrap"));
         assertEq(PqChatTypes.SESSION_TYPEHASH, _th(rec, "PqChatSession"));
         assertEq(PqChatTypes.EPOCH_TYPEHASH, _th(rec, "PqChatEpoch"));
         assertEq(PqChatTypes.LEAVE_TYPEHASH, _th(rec, "PqChatLeave"));
+        assertEq(PqChatTypes.REMOVE_TYPEHASH, _th(rec, "PqChatRemove"));
         assertEq(PqChatTypes.MESSAGE_TYPEHASH, _th(rec, "PqChatMessage"));
         assertEq(PqChatTypes.DS_C, 0x9f21cbeb7458f98acbc569cab1c2d39d4b3eb68203d1f91dd1084197554d8e08);
         assertEq(PqChatTypes.DS_C, vm.parseJsonBytes32(rec, ".domain.separator"));
@@ -136,6 +138,13 @@ contract PqChatTypesTest is Test {
         assertEq(h.leave(l), _b32(rec, ".leave.typed"));
         assertEq(h.leave(l), _b32(rec, ".leave.id"));
         assertEq(PqChatTypes.scopeEpoch(l.sessionId, l.member), _b32(rec, ".leave.scope"));
+        p = ".remove.record"; // UA-7 P48
+        IPqChat.PqChatRemove memory rm = IPqChat.PqChatRemove(_b32(rec, string.concat(p, ".sessionId")),
+            _b32(rec, string.concat(p, ".epochId")), _u64(rec, string.concat(p, ".nextEpoch")),
+            vm.parseJsonBytes32Array(rec, string.concat(p, ".members")), _b32(rec, string.concat(p, ".admin")),
+            _u64(rec, string.concat(p, ".nonce")));
+        assertEq(h.remove(rm), _b32(rec, ".remove.typed"));
+        assertEq(PqChatTypes.scopeEpoch(rm.sessionId, rm.admin), _b32(rec, ".remove.scope"));
     }
 
     function _uaSig(string memory j, string memory p) internal pure returns (IUARegistry.UASig memory s) {

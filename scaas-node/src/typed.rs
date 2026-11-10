@@ -36,7 +36,7 @@ const A: &[&str] = &["account"];
 const D: &[&str] = &["dex"];
 const REG: &[&str] = &["registry"];
 const FACT: &[&str] = &["factory"];
-/// `PqChat` (UA-7 P17 / P32, topics spec P45): a factory kind's twelve writes, plain rows (each record is signed in the portable
+/// `PqChat` (UA-7 P17 / P32, topics spec P45): a factory kind's thirteen writes, plain rows (each record is signed in the portable
 /// domain and checked by the contract); the target is an instance of the factory's class 3 (`guard::Rule::FactoryClass`).
 const PC: &[&str] = &["pqchat"];
 
@@ -109,6 +109,7 @@ const NESTED: &[(&str, &str)] = &[
     ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
     ("PqChatEpoch", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
     ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
+    ("PqChatRemove", "bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
     ("PqChatMessage", "bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext"),
     ("PqTopic", "bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies"),
     ("PqTopicUpdate", "bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies"),
@@ -265,12 +266,13 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("mtxHybrid", D, "HybridPlan p,Interaction[] interactions"),
     ("mtxHybridVia", D, "HybridPlan p,address executor,bytes data"),
     ("mtxCancelOrders", D, "DexOrder[] orders,bytes[] sigs"),
-    // `PqChat` (T93): the ten signed writes take their record and its `UASig`; `addWraps` and `storeMessage` carry none (the
+    // `PqChat` (T93; `remove`, UA-7 P48, owner 2026-11-10): the eleven signed writes take their record and its `UASig`; `addWraps` and `storeMessage` carry none (the
     // guard's unsigned-write rule, P17)
     ("createSession", PC, "PqChatSession s,Wrap[] wraps,UASig sig"),
     ("rekey", PC, "PqChatEpoch e,Wrap[] wraps,UASig sig"),
     ("addWraps", PC, "bytes32 epochId,uint32 first,Wrap[] wraps"),
     ("leave", PC, "PqChatLeave l,UASig sig"),
+    ("remove", PC, "PqChatRemove r,UASig sig"),
     ("postMessage", PC, "PqChatMessage m,UASig sig"),
     ("storeMessage", PC, "uint8 v,bytes8 hint,bytes env"),
     ("createTopic", PC, "PqTopic t,UASig sig"),
@@ -1588,8 +1590,8 @@ mod tests {
         // group 3g T55: -> 83, `UAPqzRollOver`
         // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`
         assert_eq!(rows().iter().filter(|r| r.typed).count(), 87, "84 vector rows, mtxPay, the two invalidations (DEX, token)");
-        // T93: 18 -> 30, `PqChat`'s twelve writes
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 30, "the wallet's three flat builders are gone (MD-11 (a))");
+        // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 31, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 
     /// Group 3g (KV-10): the rollover is one row per kind (Zether's form kept; the PQZ one with `keyVersion`, its EIP-712 struct
@@ -2379,7 +2381,7 @@ mod tests {
         use alloy::sol_types::SolValue;
         let at = Address::repeat_byte(0xc3);
         let ours: Vec<&Row> = rows().iter().filter(|r| r.contracts.contains(&"pqchat")).collect();
-        assert_eq!(ours.len(), 12);
+        assert_eq!(ours.len(), 13);
         for r in &ours {
             assert_eq!((r.typed, r.enveloped, r.sig, r.contracts, r.sent), (false, false, None, &["pqchat"][..], r.selector), "{}", r.entry);
             let op = pqchat_op(r.entry, at);

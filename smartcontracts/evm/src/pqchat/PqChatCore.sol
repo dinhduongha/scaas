@@ -24,9 +24,11 @@ abstract contract PqChatCore {
         uint32 wraps;
         uint32 landed;
         bool home; // epoch 0 only: this instance is the session's home (P32)
+        uint16 removed; // P48: how many members a `remove` took out of this epoch (0 on the 1:1 path)
         bytes32 parent;
         mapping(uint256 => uint256) wrapAt; // pointer | offset << 160
         mapping(bytes32 => bool) left;
+        mapping(bytes32 => bool) removedOf; // P48
     }
 
     struct Topic {
@@ -80,6 +82,7 @@ abstract contract PqChatCore {
         mapping(bytes32 => bytes32[]) byAuthor;
         mapping(bytes32 => bytes32[]) sessions; // per UA (owner 2026-11-10)
         mapping(bytes32 => bytes32[]) chain; // per session: its epochs >= 1 in completion order (epoch 0 implied)
+        mapping(bytes32 => address[]) removals; // P48: per epoch, its `remove` records
     }
 
     /// @dev `keccak256(abi.encode(uint256(keccak256("scaas.pqchat")) - 1)) & ~bytes32(uint256(0xff))`.

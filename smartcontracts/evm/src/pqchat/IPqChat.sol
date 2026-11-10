@@ -50,6 +50,17 @@ interface IPqChat {
         bytes sealedInfo;
     }
 
+    /// @notice UA-7 spec P48 (owner 2026-11-10): an admin of `epochId` removes `members` from it; the next epoch
+    ///         (`nextEpoch`) must drop them.
+    struct PqChatRemove {
+        bytes32 sessionId;
+        bytes32 epochId;
+        uint64 nextEpoch;
+        bytes32[] members;
+        bytes32 admin;
+        uint64 nonce;
+    }
+
     struct PqChatLeave {
         bytes32 sessionId;
         bytes32 epochId;
@@ -148,6 +159,7 @@ interface IPqChat {
     event PqChatWraps(bytes32 indexed epochId, uint32 first, uint32 count);
     event PqChatEpochComplete(bytes32 indexed epochId);
     event PqChatLeft(bytes32 indexed sessionId, bytes32 indexed epochId, bytes32 indexed member);
+    event PqChatRemoved(bytes32 indexed sessionId, bytes32 indexed epochId, bytes32 indexed admin, bytes32[] members);
     /// @notice D11: the signature's bytes here, its hash in the stored blob.
     event PqChatMessagePosted(
         bytes32 indexed sessionId, bytes32 indexed messageId, bytes32 indexed sender, uint256 index, IUARegistry.UASig sig);
@@ -177,6 +189,8 @@ interface IPqChat {
     error PqChatEpochTaken(bytes32 parentEpochId, bytes32 child);
     error PqChatNotAdmin(bytes32 author);
     error PqChatNotMember(bytes32 ua);
+    /// @notice P48: a child of `epochId` keeps `ua`, whom a `remove` took out of it.
+    error PqChatRemovedKept(bytes32 epochId, bytes32 ua);
     error PqChatNotFactory();
     error PqChatInitialized();
     /// @notice `validateEnv`: `chainUid` 0, registry 0, no code-size limit or one under EIP-170's 24,576 B (3C-D1); a
@@ -209,6 +223,8 @@ interface IPqChat {
     /// @notice Anyone, no signature: `wraps[j]` must hash to `wrapHashes[first + j]` (P11).
     function addWraps(bytes32 epochId, uint32 first, Wrap[] calldata wraps) external;
     function leave(PqChatLeave calldata l, IUARegistry.UASig calldata sig) external;
+    /// @notice P48: an admin of `r.epochId` removes `r.members` from it; any child completes only without them.
+    function remove(PqChatRemove calldata r, IUARegistry.UASig calldata sig) external;
     function postMessage(PqChatMessage calldata m, IUARegistry.UASig calldata sig) external returns (uint256 index);
     /// @notice Anyone, no signature, membership or nonce (P29): `v == 1` and the blob fits; appends `abi.encode(v, hint,
     ///         env)` to `hint`'s list.
@@ -223,6 +239,11 @@ interface IPqChat {
     /// @notice Wrap `i` of `epochId`; all zero / empty while it has not landed.
     function wrapAt(bytes32 epochId, uint256 i) external view returns (Wrap memory);
     function leftIn(bytes32 epochId, bytes32 member) external view returns (bool);
+    function removedIn(bytes32 epochId, bytes32 member) external view returns (bool);
+    function removalCount(bytes32 epochId) external view returns (uint256);
+    function removalAt(bytes32 epochId, uint256 index) external view returns (PqChatRemove memory r, bytes32 sigHash);
+    /// @notice P48: at most this many members per `remove`.
+    function REMOVE_MAX() external view returns (uint256);
     /// @notice The nonce bitmaps (3C-D5): `scope` per `PqChatTypes.scopeSession` / `scopeEpoch` / `scopeMessage`.
     function nonceUsed(bytes32 scope, uint64 nonce) external view returns (bool);
     function messageCount(bytes32 sessionId) external view returns (uint256);

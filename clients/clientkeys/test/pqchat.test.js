@@ -13,7 +13,7 @@ import * as pc from '../src/pqchat.js';
 import { intWord } from '../src/evm.js';
 import { uaMessage } from '../src/ua.js';
 import { pqKeygen, verifyUA, uaMessage as pqUaMessage } from '../src/pq.js';
-import { hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
+import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from '../src/bytes.js';
 
 const dir = new URL('../../../smartcontracts/vectors/pqchat/', import.meta.url);
 const FILES = ['records.json', 'keys.json', 'messages.json', 'topics.json'];
@@ -29,6 +29,7 @@ const SPEC = {
   PqChatSession: 'PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)',
   PqChatEpoch: 'PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)',
   PqChatLeave: 'PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)',
+  PqChatRemove: 'PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)',
   PqChatMessage: 'PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext)',
   PqTopic: 'PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies)',
   PqTopicUpdate: 'PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)',
@@ -38,7 +39,8 @@ const SPEC = {
   PqTopicEdit: 'PqTopicEdit(bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body)',
   PqTopicVote: 'PqTopicVote(bytes32 entryId,bytes32 voter,int8 value,uint64 seq)',
 };
-const STRUCT_OF = { session: 'PqChatSession', epoch: 'PqChatEpoch', leave: 'PqChatLeave', message: 'PqChatMessage', topic: 'PqTopic',
+const STRUCT_OF = { session: 'PqChatSession', epoch: 'PqChatEpoch', leave: 'PqChatLeave', remove: 'PqChatRemove', message: 'PqChatMessage',
+  topic: 'PqTopic',
   update: 'PqTopicUpdate', writer: 'PqTopicWriter', post: 'PqTopicEntry', reply: 'PqTopicEntry', edit: 'PqTopicEdit', vote: 'PqTopicVote' };
 const signer = Object.fromEntries(R.signers.map((s) => [s.name, s]));
 const kemKey = Object.fromEntries(KEYS.kemKeys.map((k) => [k.name, { ...k, ...pc.kemKey(k.mlkemSeed, k.x25519Secret) }]));
@@ -132,6 +134,37 @@ test('session records: digests, ids, scopes, the message signature and blob', ()
   assert.equal(E.record.sealedInfo, M.sealedInfo.find((s) => s.name === 'epoch-1').sealedInfo);
 });
 
+test('remove (P48): the typehash, the row by hand, its scope and shape; member order and nextEpoch bind', () => {
+  const X = R.remove;
+  const r = X.record;
+  assert.equal(h(pc.TYPEHASH.PqChatRemove), '0x8f4939ececad5be22f7917c0c8087d80d372be36af3b0afb30046be9db0b6c56');
+  assert.equal(R.typehashes.PqChatRemove.hash, h(pc.TYPEHASH.PqChatRemove));
+  checkRow('remove', X);
+  // hashStruct as P48 writes it: keccak256(abi.encode(TYPEHASH, sessionId, epochId, nextEpoch, keccak256(abi.encodePacked(members)),
+  // admin, nonce)), beside the generic EIP-712 encoder
+  const membersHash = keccak_256(concatBytes(...r.members.map(fromHex)));
+  assert.equal(h(keccak_256(abiEncode(['bytes32', 'bytes32', 'bytes32', 'uint64', 'bytes32', 'bytes32', 'uint64'],
+    [pc.TYPEHASH.PqChatRemove, r.sessionId, r.epochId, r.nextEpoch, membersHash, r.admin, r.nonce]))), X.hashStruct);
+  // the admin's epoch scope, shared with her epoch; no id, no signature
+  assert.equal(X.scope, h(pc.scopeEpoch(r.sessionId, r.admin)));
+  assert.equal(X.scope, R.epoch.scope);
+  assert.ok(!('id' in X) && !X.uaSig);
+  // shape: epoch 1, one of its admins, 2 of its members strictly sorted, nextEpoch = its number + 1, a fresh nonce
+  assert.equal(r.epochId, R.epoch.id);
+  assert.equal(r.nextEpoch, R.epoch.record.epoch + 1);
+  assert.ok(R.epoch.record.admins.includes(r.admin));
+  assert.equal(r.members.length, 2);
+  assert.deepEqual(r.members, [...new Set(r.members)].sort());
+  assert.ok(r.members.every((u) => R.epoch.record.members.some((m) => m.ua === u)));
+  assert.notEqual(r.nonce, R.epoch.record.nonce);
+  for (const [f, v] of Object.entries(r)) assert.ok(v !== 0 && v !== Z32 && !(Array.isArray(v) && !v.length), f);
+  // one change at a time: the members swapped, nextEpoch + 1
+  for (const s of [{ ...r, members: [...r.members].reverse() }, { ...r, nextEpoch: r.nextEpoch + 1 }]) {
+    assert.notEqual(h(pc.typed('PqChatRemove', s)), X.typed);
+    assert.notEqual(h(pc.signedDigest(0x0131, 'PqChatRemove', s)), X.uaMessage.digest);
+  }
+});
+
 test('topic records: digests, ids, scopes, signatures, blobs', () => {
   for (const n of ['topic', 'update', 'writer', 'post', 'reply', 'edit', 'vote']) {
     checkRow(n, T[n]);
@@ -186,7 +219,7 @@ function changed(t, v) {
 }
 
 test('one changed field changes the typed digest and uaMessage of every record', () => {
-  for (const [name, row] of Object.entries({ ...Object.fromEntries(['session', 'epoch', 'leave', 'message'].map((n) => [n, R[n]])),
+  for (const [name, row] of Object.entries({ ...Object.fromEntries(['session', 'epoch', 'leave', 'remove', 'message'].map((n) => [n, R[n]])),
     ...Object.fromEntries(['topic', 'update', 'writer', 'post', 'reply', 'edit', 'vote'].map((n) => [n, T[n]])) })) {
     const struct = STRUCT_OF[name];
     for (const f of pc.TYPES[struct]) {

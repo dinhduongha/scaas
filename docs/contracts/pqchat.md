@@ -318,7 +318,7 @@ the parent** (owner D4 of 2026-11-04, O2 and O4; the exact test 3C-D7 is a contr
 
 <a id="CTR-CHAT-20"></a>**CTR-CHAT-20** — **An admin of an epoch removes members of it with a signed `remove`; a child of
 that epoch then completes only without them, and a removed member authors no rekey of it** (owner 2026-11-10, on the Fable
-review's P1-2 fix (b); **SPECIFIED**, plan 3c; UA-7 spec P48).
+review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spec P48).
 
 - `remove(PqChatRemove r, UASig sig)`, `PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,
   bytes32 admin,uint64 nonce)`: `epochId` stored for `sessionId` and complete (`PqChatUnknown`, `PqChatIncomplete`), at
@@ -517,6 +517,7 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 | `rekey(e, wraps, sig)` | anyone submits; `e.author` signs | parent, number, home slot, shapes, rights, signature, nonce, wraps | `PqChatUnknown`, `PqChatIncomplete`, `PqChatEpochNumber`, `PqChatEpochTaken`, `PqChatShape`, `PqChatKemKey`, `PqChatNotMember`, `PqChatNotAdmin`, registry, `PqChatNonceUsed`, `PqChatWrapHash` |
 | `addWraps(epochId, first, wraps)` | anyone, unsigned | epoch known, home slot free, range, hash, shape, landed once | `PqChatUnknown`, `PqChatEpochTaken`, `PqChatShape`, `PqChatWrapHash`, `PqChatWrapStored` |
 | `leave(l, sig)` | anyone submits; `l.member` signs | epoch of that session, member of it, signature, nonce | `PqChatUnknown`, `PqChatNotMember`, registry, `PqChatNonceUsed` |
+| `remove(r, sig)` | anyone submits; `r.admin` signs | epoch of that session, complete, no complete child at home, `nextEpoch`, 1–16 sorted members of it, admin of it, signature, nonce | `PqChatUnknown`, `PqChatIncomplete`, `PqChatEpochTaken`, `PqChatEpochNumber`, `PqChatShape`, `PqChatNotAdmin`, `PqChatNotMember`, registry, `PqChatNonceUsed` |
 | `postMessage(m, sig)` | anyone submits; `m.sender` signs | epoch of that session, complete, at home no complete child, sender a member, signature, nonce, one blob | `PqChatUnknown`, `PqChatIncomplete`, `PqChatEpochTaken`, `PqChatNotMember`, registry, `PqChatNonceUsed`, `PqChatShape` |
 | `storeMessage(v, hint, env)` | anyone, unsigned | `v == 1`, one blob | `PqChatShape` |
 | `createTopic(t, sig)` | anyone submits; `t.owner` signs | name length, home named, signature, nonce | `PqTopicShape`, registry, `PqChatNonceUsed` |
@@ -547,14 +548,14 @@ Status: **BUILT** (contract; the node's rows and policy BUILT on `ua-mtx-merge`,
 fee, a deadline or a submitter, and no write reads `msg.sender` except `initialize`** (owner answer 4 of 2026-10-25 and
 the rule that every state-changing write is relayable; the unsigned writes' relay policy owner D17 (2) of 2026-11-05).
 
-- The ten signed writes take the record and its `UASig`; whoever submits them, a relayer lane or the author's own
+- The eleven signed writes (with `remove`, CTR-CHAT-20) take the record and its `UASig`; whoever submits them, a relayer lane or the author's own
   account, changes nothing they do. A payer who wants to pay a relayer does it beside the record, through
   `RelayFeeRouter` ([CTR-MTX-27](metatx.md#CTR-MTX-27)); the contract knows no fee.
 - The two unsigned writes, `storeMessage` and `addWraps`, can be sent by anyone; whether a relayer pays gas for them is
   the node's policy, not the contract's: the node relays them only when paid or under the operator's lane policy, and by
   default never pays for unsigned spam ([job-api.md](../node/job-api.md#pqchat-calls)). An author whose write finds no
   relayer submits it from its own account.
-- Job shapes, the twelve call-table rows, the instance check (class 3, version ≠ 0) and the refusals are the node's:
+- Job shapes, the thirteen call-table rows, the instance check (class 3, version ≠ 0) and the refusals are the node's:
   [job-api.md](../node/job-api.md#pqchat-calls).
 
 ## 12. Gas and size
@@ -563,8 +564,8 @@ Status: **BUILT** (plan T90, `test/pqchat/PqChatGas.t.sol` with `isolate = true`
 the size gate's row `PqChat` in `smartcontracts/evm/size-baseline.json`).
 
 **Size and deployment.** Every deployed piece fits one transaction of 60 M asked (`(regular + state) × 1.05`, regular ×
-1.05 < 2^24; [CTR-TOK-30](token-wrappers.md#CTR-TOK-30)): `PqChat` 24,883 B runtime, its `deployRelease` 1,717,353
-regular + 38,646,270 state = 42.4 M asked; `PqChatTopics` 16,396 B, its CREATE2 1,099,442 + 25,269,480 = 27.7 M asked;
+1.05 < 2^24; [CTR-TOK-30](token-wrappers.md#CTR-TOK-30)): `PqChat` 27,825 B runtime (under 3C-D2's 33,594 B line), its `deployRelease` 1,908,760
+regular + 43,147,530 state = 47.3 M asked; `PqChatTopics` 16,396 B, its CREATE2 1,099,442 + 25,269,480 = 27.7 M asked;
 `createInstance` 227,583 + 1,523,880. Before the split the release was 34,223 B and asked 58.0 M.
 
 **Per transaction** (regular / state gas; the stand-in verifier, so a real signer adds its verifier's regular gas: about
@@ -574,7 +575,8 @@ regular + 38,646,270 state = 42.4 M asked; `PqChatTopics` 16,396 B, its CREATE2 
 |---|---:|---:|
 | `createSession`, 2 members, both wraps | 340,852 | 7,691,310 |
 | `createSession`, 2 members, one wrap; then `addWraps` of the other | 293,223; 144,280 | 5,010,750; 2,865,690 |
-| `rekey`, 2 members, plain (first epoch-list entry; next) | 366,316; 366,197 | 7,740,270; 7,642,350 |
+| `rekey`, 2 members, plain (first epoch-list entry; next) | 366,797; 366,678 | 7,740,270; 7,642,350 |
+| `remove` 1 of 3 members; then the rekey dropping it (2 left) | 168,513; 381,828 | 1,067,940; 7,642,350 |
 | `postMessage`, 2 members, 1,040 B ciphertext (new list; warm) | 153,744; 153,756 | 2,732,580; 2,536,740 |
 | `leave`, 2 members | 107,485 | 97,920 |
 | `storeMessage`, 2,400 B envelope (new hint; warm); 5,100 B | 177,048; 351,128 | 4,248,810 (4,150,890 warm); 8,312,490 |
@@ -591,7 +593,8 @@ and a wrap blob; a cold call is about 1.26 M higher, Fable P3-7): a client sends
 ([CTR-CHAT-07](#CTR-CHAT-07)). The topic writes pay the `DELEGATECALL` (`createTopic` 175,092 → 179,045 regular at the
 split); the 1:1 rows did not move up at the split (`createSession` 340,953 → 340,852, `postMessage` 151,543 → 151,490).
 The Fable fixes cost each `postMessage` and each plain `rekey` one SLOAD (`postMessage` 151,490 → 153,744, `rekey`
-364,096 → 366,316 regular; the release 24,771 → 24,883 B).
+364,096 → 366,316 regular; the release 24,771 → 24,883 B). `remove` (CTR-CHAT-20) reads one packed field on the
+1:1 path (`rekey` 366,316 → 366,797; `postMessage` unchanged); the release 24,883 → 27,825 B.
 
 ## 13. Tests
 
