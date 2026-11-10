@@ -653,7 +653,8 @@ fn plain_rows_match_the_forge_abi() {
             n += 1;
         }
     }
-    assert_eq!(n, 30, "30 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve)");
+    assert_eq!(n, 32, "32 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
+        30 -> 32: the DEX's mtxLiquidity (CTR-DEX-30) and PqChat's remove (UA-7 P48))");
 }
 
 /// The `UAEnvelope` of a native signer `from` (its padded id) on lane `batch` at `nonce`, fee 0, open relayer.
@@ -1567,6 +1568,10 @@ alloy::sol! {
     function createToken(uint8 kind, uint64 version, bytes initArgs, bytes32 salt) external returns (address);
     function registry() external view returns (address);
     function epoch(address token) external view returns (uint64);
+    // T66b §4.5 (CTR-TOK-30): a token release names its body modules in `implArgs`, one named struct; `modules()` lists them
+    struct ImplArgs { address[] modules; }
+    function implementationOf(uint8 kind, uint64 version) external view returns (address);
+    function modules() external view returns (address[]);
 }
 
 /// The init code of forge's artifact `out/<file>/<name>.json`, each library linked at the address the deploy of `chain_id` gave it
@@ -1602,7 +1607,11 @@ async fn registry_zero_token(rpc: &str, chain_id: u64, dep: &Value, holder: Addr
     env.registry = Address::ZERO;
     send(rpc, &deployer, f, publishEnvCall { kind: 0, envVersion: 2, env }.abi_encode()).await;
     let code = linked(chain_id, "NormalToken.sol", "NormalToken");
-    send(rpc, &deployer, f, deployTokenImplementationCall { kind: 0, version: 2, envVersion: 2, initcode: code.into(), implArgs: Bytes::new() }.abi_encode()).await;
+    // T66b §4.5: version 2 names version 1's body modules (pinned in env 1, so in env 2)
+    let v1 = view(rpc, f, implementationOfCall { kind: 0, version: 1 }).await;
+    let impl_args = ImplArgs { modules: view(rpc, v1, modulesCall {}).await }.abi_encode().into();
+    send(rpc, &deployer, f, deployTokenImplementationCall { kind: 0, version: 2, envVersion: 2, initcode: code.into(), implArgs: impl_args }
+        .abi_encode()).await;
     let c = TokenConfig { name: "SCaaS Registry Zero".into(), symbol: "bRZ".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         initialSupply: U256::from(supply), initialHolder: holder, ..Default::default() };
     let t = create(rpc, &deployer, f, createTokenCall { kind: 0, version: 2, initArgs: c.abi_encode().into(), salt: B256::repeat_byte(0x20) }.abi_encode()).await;
@@ -2246,6 +2255,12 @@ async fn deploy_code(rpc: &str, from: &PrivateKeySigner, code: Vec<u8>) -> Addre
 /// The init code of `out/<name>.sol/<name>.json`, every library linked by placeholder: the base deploy's
 /// (`broadcast/Deploy.s.sol/<chain_id>/run-latest.json`) or `extra`'s; with the transitive library closure, leaf first.
 fn linked_closure(chain_id: u64, name: &str, extra: &BTreeMap<String, Address>) -> (Vec<u8>, Vec<Address>) {
+    linked_closure_in(chain_id, None, name, extra)
+}
+
+/// As [`linked_closure`] for contract `name` of the artifact file `file` (`<name>.sol` when `None`; a body module sits in
+/// its kind's `<Kind>Modules.sol`).
+fn linked_closure_in(chain_id: u64, file: Option<&str>, name: &str, extra: &BTreeMap<String, Address>) -> (Vec<u8>, Vec<Address>) {
     let read = |p: String| -> Value { serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e}"))).unwrap() };
     let run = read(format!("{}/broadcast/Deploy.s.sol/{chain_id}/run-latest.json", sc()));
     let mut libs: BTreeMap<String, Address> = run["libraries"].as_array().unwrap().iter().map(|l| {
@@ -2273,8 +2288,35 @@ fn linked_closure(chain_id: u64, name: &str, extra: &BTreeMap<String, Address>) 
         alloy::hex::decode(code).unwrap()
     }
     let mut closure = Vec::new();
-    let code = walk(&format!("{name}.sol"), name, &libs, &mut closure);
+    let code = walk(file.unwrap_or(&format!("{name}.sol")), name, &libs, &mut closure);
     (code, closure)
+}
+
+/// T66b §4.5: `kind`'s body modules as (artifact file, contract) in its `implArgs` order, from the generated
+/// `script/KindModules.sol` (`kindModuleNames`, the list DeployBase reads).
+fn kind_module_names(kind: u8) -> Vec<(String, String)> {
+    let src = std::fs::read_to_string(format!("{}/script/KindModules.sol", sc())).unwrap();
+    let at = src.find(&format!("if (kind == {kind}) {{")).unwrap_or_else(|| panic!("kind {kind} in KindModules.sol"));
+    let body = &src[at..at + src[at..].find("return n;").unwrap()];
+    body.split('"').skip(1).step_by(2).map(|q| {
+        let (f, n) = q.split_once(':').unwrap();
+        (f.to_string(), n.to_string())
+    }).collect()
+}
+
+/// `kind`'s body modules for `factory` (`core`: the kind's constructor argument, "" on 0-5), each a plain CREATE, its
+/// libraries linked as `linked_closure`; the modules and the union of their link closures.
+async fn kind_modules(rpc: &str, chain_id: u64, from: &PrivateKeySigner, factory: Address, kind: u8, core: Bytes,
+    extra: &BTreeMap<String, Address>) -> (Vec<Address>, Vec<Address>)
+{
+    let (mut ms, mut libs) = (Vec::new(), Vec::new());
+    for (file, name) in kind_module_names(kind) {
+        let (mut code, closure) = linked_closure_in(chain_id, Some(&file), &name, extra);
+        code.extend((factory, core.clone()).abi_encode_params());
+        ms.push(deploy_code(rpc, from, code).await);
+        libs.extend(closure.into_iter().filter(|l| !libs.contains(l)).collect::<Vec<_>>());
+    }
+    (ms, libs)
 }
 
 /// The typed `PqzAuth` digest of a debit statement (`PqzCore.authDigest`, pqz-core `pqz-vectors`'s `auth_digest`): the typehash,
@@ -2364,7 +2406,11 @@ async fn offchain_stack(chain_id: u64) -> OffchainStack {
         let (code, _) = linked_closure(chain_id, lib, &BTreeMap::new());
         extra.insert(format!("src/pqz/{lib}.sol:{lib}"), deploy_code(&rpc, &deployer, code).await);
     }
-    let (code, libs) = linked_closure(chain_id, "NormalPqzToken", &extra);
+    let (code, mut libs) = linked_closure(chain_id, "NormalPqzToken", &extra);
+    // T66b §4.5: the kind's body modules, their link closures beside the face's, the modules pinned after the libraries
+    let (ms, mlibs) = kind_modules(&rpc, chain_id, &deployer, factory, 4, Bytes::new(), &extra).await;
+    libs.extend(mlibs.into_iter().filter(|l| !libs.contains(l)).collect::<Vec<_>>());
+    libs.extend(ms.iter().copied());
     let pr = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
     let mut hashes = Vec::new();
     for l in &libs {
@@ -2376,7 +2422,7 @@ async fn offchain_stack(chain_id: u64) -> OffchainStack {
     send(&rpc, &deployer, factory, publishEnvCall { kind: 4, envVersion: ev, env }.abi_encode()).await;
     let ver = view(&rpc, factory, pqz3f::latestVersionCall { kind: 4 }).await + 1;
     send(&rpc, &deployer, factory, deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
-        implArgs: Bytes::new() }.abi_encode()).await;
+        implArgs: ImplArgs { modules: ms }.abi_encode().into() }.abi_encode()).await;
     send(&rpc, &deployer, factory, pqz3f::setKindEnabledCall { kind: 4, on: true }.abi_encode()).await;
     let verifier = small_key(0x3f47);
     let c = TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
