@@ -22,7 +22,13 @@ a memory scope with no slot (VERIFY_MEM, default 1G), bounded by VERIFY_TIMEOUT 
 30 s; constructor arguments are the init code (the creating transaction's input, a broadcast's initCode) after the
 artifact's creation bytecode; a child created inside a call has no creation code on Blockscout, which then matches the
 deployed code. Any forge output that compiles aborts the run (exit 2): the snapshot build is stale.
-  python3 -I script/onchain/vcheck.py <net> <rpc> <blockscout api> --root <snapshot> [--root ...] [--fix] [--only a,b]
+  python3 -I script/onchain/vcheck.py <net> [--config] [--root <snapshot> ...] [--fix] [--only a,b]
+The explorer (NET-EVM-12) from the environment: VERIFY_EXPLORER blockscout | etherscan (the v2 API, the chain by
+`chainid`) | sourcify, VERIFY_URL its API, VERIFY_RPC the chain's RPC, VERIFY_API_KEY_ENV the NAME of the env var that
+holds the API key (required for etherscan; forge gets it in its environment, never as an argument), VERIFY_SCAN=1 the
+whole-chain scan (a chain of ours only). scaas-testnet defaults: its Blockscout and RPC on loopback (BLOCKSCOUT_API,
+RPC_7622), the scan on. A target without an explorer: VERIFY_NOT_CONFIGURED, exit 1. --config checks that and stops.
+On Etherscan and Sourcify a clone's own code is its link (no proxy link to read there).
 Rows: <state> | <name> | <address> [| note]. Test chains only."""
 import glob
 import json
@@ -33,6 +39,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -108,8 +115,10 @@ def classify(code, sc, impl_verified=False, genesis=False):
     if impl:
         li = [(x.get("address_hash") or x.get("address") or "").lower() for x in sc.get("implementations") or []]
         ok = sc.get("proxy_type") in ("eip1167", "clone_with_immutable_arguments") and impl in li and impl_verified
+        extra = (len(c) - 2) // 2 - 45
         return ("linked clone" if ok else "unverified"), f"{sc.get('proxy_type') or 'no proxy type'} of {impl}" + (
-            "" if ok else f": implementations {li}, implementation verified {bool(impl_verified)}")
+            "" if ok else f": implementations {li}, implementation verified {bool(impl_verified)}") + (
+            f"; {extra} B of data after the 45-byte proxy (the explorer does not link it)" if extra > 0 and not ok and impl_verified else "")
     if full(sc):
         return "verified", ""
     return "unverified", "partial match" if sc.get("is_verified") else "not verified"
@@ -164,6 +173,87 @@ def page_addrs(hexdata):
         return []
 
 
+# ---------------------------------------------------------------- explorer kinds (NET-EVM-12)
+
+KINDS = ("blockscout", "etherscan", "sourcify")
+
+
+class NotConfigured(Exception):
+    pass
+
+
+def config(net, env):
+    """The target's verification config from the environment: the explorer kind, its API URL, the RPC, the NAME of
+    the env var that holds the API key (never the key in a file or an argument) and whether the whole chain is
+    scanned (only a chain of ours: the SCaaS testnet). NotConfigured (VERIFY_NOT_CONFIGURED) when a remote target
+    names no explorer."""
+    c = {"kind": env.get("VERIFY_EXPLORER", ""), "url": env.get("VERIFY_URL", ""), "rpc": env.get("VERIFY_RPC", ""),
+         "key_env": env.get("VERIFY_API_KEY_ENV", ""), "scan": env.get("VERIFY_SCAN", "0") == "1"}
+    if net == "scaas-testnet":  # its own Blockscout and RPC, loopback (NET-EVM-09)
+        c["kind"] = c["kind"] or "blockscout"
+        c["url"] = c["url"] or env.get("BLOCKSCOUT_API", "http://127.0.0.1:4000/api")
+        c["rpc"] = c["rpc"] or env.get("RPC_7622", "http://127.0.0.1:8545")
+        c["scan"] = env.get("VERIFY_SCAN", "1") == "1"
+    if not c["kind"]:
+        raise NotConfigured(f"no explorer for target {net}: set VERIFY_EXPLORER ({', '.join(KINDS)}) and VERIFY_URL, "
+                            "or VERIFY=none with VERIFY_REASON")
+    if c["kind"] not in KINDS:
+        raise NotConfigured(f"VERIFY_EXPLORER {c['kind']!r} is not one of {', '.join(KINDS)}")
+    if not re.fullmatch(r"https?://\S+", c["url"]):
+        raise NotConfigured(f"VERIFY_URL {c['url']!r}: the {c['kind']} API URL is missing or not http(s)")
+    if not re.fullmatch(r"https?://\S+", c["rpc"]):
+        raise NotConfigured(f"VERIFY_RPC {c['rpc']!r}: the chain's RPC is missing or not http(s)")
+    if c["key_env"] and not re.fullmatch(r"[A-Z_][A-Z0-9_]*", c["key_env"]):
+        raise NotConfigured(f"VERIFY_API_KEY_ENV {c['key_env']!r} is not an env var name")
+    c["key"] = env.get(c["key_env"], "") if c["key_env"] else ""
+    if c["kind"] == "etherscan" and not c["key"]:
+        raise NotConfigured("etherscan needs VERIFY_API_KEY_ENV naming a set env var that holds the API key")
+    c["url"] = c["url"].rstrip("/")
+    return c
+
+
+def lookup_url(kind, url, chain, a, key=""):
+    """The explorer request that tells whether an address is verified."""
+    if kind == "blockscout":
+        return f"{url}/v2/smart-contracts/{a}"
+    if kind == "etherscan":  # the v2 API: one endpoint, the chain by `chainid`
+        return url + "?" + urllib.parse.urlencode({"chainid": chain, "module": "contract", "action": "getsourcecode",
+                                                   "address": a, "apikey": key})
+    return f"{url}/v2/contract/{chain}/{a}"  # sourcify
+
+
+def normalize(kind, j, code):
+    """An explorer's answer as Blockscout's smart-contracts fields. Etherscan and Sourcify have no link from an
+    EIP-1167 clone to its implementation that this check can read: there the clone's own code is the link."""
+    if kind == "blockscout":
+        return j
+    impl = clone_impl(code)
+    if kind == "etherscan":
+        r = j.get("result")
+        r = r[0] if isinstance(r, list) and r and isinstance(r[0], dict) else {}
+        ok = bool(r.get("SourceCode"))
+        out = {"is_verified": ok, "is_partially_verified": ok and bool(r.get("SimilarMatch")), "name": r.get("ContractName") or None}
+    else:  # sourcify: exact_match = the metadata hash too (full), match = the bytecode only (partial)
+        m = j.get("match")
+        out = {"is_verified": m in ("exact_match", "match"), "is_partially_verified": m == "match", "name": j.get("name")}
+    if impl:
+        out.update(proxy_type="eip1167", implementations=[{"address": impl}])
+    return out
+
+
+def forge_args(kind, url, chain):
+    """forge verify-contract's explorer arguments; the API key only in the environment (forge_env)."""
+    return ["--verifier", kind, "--verifier-url", url + ("/" if kind != "etherscan" else ""), "--chain-id", str(chain)]
+
+
+def forge_env(env, key):
+    e = {k: v for k, v in env.items() if k not in ("FOUNDRY_OUT", "FOUNDRY_CACHE_PATH", "VERIFIER_API_KEY", "ETHERSCAN_API_KEY")}
+    e["FOUNDRY_PROFILE"] = env.get("FOUNDRY_PROFILE", "scaas-testnet")
+    if key:
+        e["VERIFIER_API_KEY"] = e["ETHERSCAN_API_KEY"] = key
+    return e
+
+
 # ---------------------------------------------------------------- chain and explorer
 
 def say(msg):
@@ -192,11 +282,13 @@ def rpc(m, p):
     return batch([(m, p)])[0]
 
 
-def bs(path):
-    """Blockscout v2 GET; {} for a 404; backs off on 429 / 5xx / a timeout."""
+def get(url):
+    """An explorer GET; {} for a 404; backs off on 429 / 5xx / a timeout / an Etherscan rate-limit answer."""
     for t in range(6):
         try:
-            return json.load(urllib.request.urlopen(f"{API}/v2/{path}", timeout=30))
+            j = json.load(urllib.request.urlopen(url, timeout=30))
+            if not (isinstance(j, dict) and isinstance(j.get("result"), str) and "rate limit" in j["result"].lower()):
+                return j
         except urllib.error.HTTPError as e:
             if e.code in (404, 422):
                 return {}
@@ -204,6 +296,17 @@ def bs(path):
             pass
         time.sleep(5 * (t + 1))
     return {}
+
+
+def bs(path):
+    """Blockscout v2 GET (its own calls: an address's is_contract, block 1)."""
+    return get(f"{CFG['url']}/v2/{path}")
+
+
+def lookup(a, code, chain):
+    if CFG["kind"] == "etherscan":
+        time.sleep(0.25)  # the free API's 5 calls per second
+    return normalize(CFG["kind"], get(lookup_url(CFG["kind"], CFG["url"], chain, a, CFG["key"])), code)
 
 
 def keccak(hexdata):
@@ -388,11 +491,10 @@ def forge_verify(a, hit, args, chain):
     """One forge verify-contract; (ok, reason, seconds). Raises SystemExit(2) when forge compiles."""
     root, _, src, name = hit
     cmd = ["systemd-run", "--user", "--scope", "--quiet", "-p", f"MemoryMax={os.environ.get('VERIFY_MEM', '1G')}",
-           "-p", "MemorySwapMax=0", "--", "forge", "verify-contract", a, f"{src}:{name}", "--root", root,
-           "--verifier", "blockscout", "--verifier-url", API + "/", "--chain-id", str(chain), "--watch",
-           "--delay", "10", "--retries", "40", "--skip-is-verified-check"] + (["--constructor-args", "0x" + args] if args else [])
-    env = {**os.environ, "FOUNDRY_PROFILE": os.environ.get("FOUNDRY_PROFILE", "scaas-testnet")}
-    env.pop("FOUNDRY_OUT", None), env.pop("FOUNDRY_CACHE_PATH", None)
+           "-p", "MemorySwapMax=0", "--", "forge", "verify-contract", a, f"{src}:{name}", "--root", root]
+    cmd += forge_args(CFG["kind"], CFG["url"], chain) + ["--watch", "--delay", "10", "--retries", "40", "--skip-is-verified-check"]
+    cmd += ["--constructor-args", "0x" + args] if args else []
+    env = forge_env(os.environ, CFG["key"])
     t0, lim = time.time(), int(os.environ.get("VERIFY_TIMEOUT", "600"))
     p = subprocess.Popen(cmd, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     out = []
@@ -416,25 +518,39 @@ def forge_verify(a, hit, args, chain):
     if m:
         raise SystemExit(f"forge recompiled ({m.group(0)}) for {name} {a}: the snapshot build {root} is stale")
     s = int(time.time() - t0)
-    if p.returncode == 0:
-        return True, "", s
-    lines = [x for x in text.splitlines() if re.search(r"Details:|Error|error|Reason", x)] or text.splitlines() or ["?"]
-    return False, f"forge rc {p.returncode}: {lines[-1].strip()[:200]}", s
+    lines = [x for x in text.splitlines() if re.search(r"Details:|Error|error|Reason|Response|Status|GUID", x)] or text.splitlines() or ["?"]
+    tail = lines[-1].strip()[:200]
+    return p.returncode == 0, (f"forge ok ({tail})" if p.returncode == 0 else f"forge rc {p.returncode}: {tail}"), s
 
 
 def main():
-    global NET, RPC, API
+    global NET, RPC, CFG
     argv = sys.argv[1:]
-    NET, RPC, API = argv[:3]
-    API = API.rstrip("/")
+    NET = argv[0]
+    try:
+        CFG = config(NET, os.environ)
+    except NotConfigured as e:
+        say(f"FAIL VERIFY_NOT_CONFIGURED: {e}")
+        sys.exit(1)
+    RPC = CFG["rpc"]
+    if "--config" in argv:
+        say(f"explorer {CFG['kind']} {CFG['url']}" + (f", API key from ${CFG['key_env']}" if CFG["key_env"] else "")
+            + (", whole-chain scan" if CFG["scan"] else ""))
+        return
     fix = "--fix" in argv
     roots = [os.path.abspath(argv[k + 1]) for k, x in enumerate(argv) if x == "--root"]
     only = {x.lower() for k, x in enumerate(argv) if k and argv[k - 1] == "--only" for x in x.split(",")}
     chain = int(rpc("eth_chainId", []), 16)
     genesis = rpc("eth_getBlockByNumber", ["0x0", False])["hash"]
     head = int(rpc("eth_blockNumber", []), 16)
-    say(f"chain {chain}, genesis {genesis[:18]}…, head {head}, explorer {API}, snapshots {len(roots)}")
-    st = scan(chain, genesis, head)
+    say(f"chain {chain}, genesis {genesis[:18]}…, head {head}, explorer {CFG['kind']} {CFG['url']}, snapshots {len(roots)}")
+    if CFG["kind"] == "blockscout" and head > 12:  # the explorer indexes this chain, not a copy (same genesis) of it
+        n = head - 12  # a block the explorer has indexed; on a copy it lies after the fork once the copy has run
+        h = (rpc("eth_getBlockByNumber", [hex(n), False]) or {}).get("hash", "")
+        if bs(f"blocks/{n}").get("hash", "").lower() != h.lower():
+            say(f"FAIL the explorer's block {n} is not the RPC's ({h[:18]}…): another chain, or a copy of this one")
+            sys.exit(1)
+    st = scan(chain, genesis, head) if CFG["scan"] else {"creates": {}, "seen": {}}
     code, listed, inits, hint, first = discover(chain, NET, head, st)
     contracts = sorted(a for a, c in code.items() if c not in ("0x", "0x0") and not c.startswith("0x00"))
     gen = {a for a, c in zip(contracts, batch([("eth_getCode", [a, "0x0"]) for a in contracts])) if c not in (None, "0x", "0x0")}
@@ -443,13 +559,13 @@ def main():
     sc, rows, t0 = {}, {}, time.time()
     for k, a in enumerate(contracts):
         if a not in gen:
-            sc[a] = bs(f"smart-contracts/{a}")
+            sc[a] = lookup(a, code[a], chain)
         if k % 50 == 49:
             say(f"explorer lookups {k + 1}/{len(contracts)} ({int(time.time() - t0)}s)")
 
     def decide(a):
         impl = clone_impl(code[a])
-        iv = full(sc.get(impl) or bs(f"smart-contracts/{impl}")) if impl else False
+        iv = full(sc.get(impl) or lookup(impl, code.get(impl, ""), chain)) if impl else False
         return classify(code[a], sc.get(a, {}), iv, a in gen)
 
     for a, c in code.items():
@@ -484,29 +600,34 @@ def main():
                     rows[a] = ("unverified", hit[3], "its creating transaction's input does not start with the artifact's bytecode")
                     say(f"[{n}/{len(todo)}] {hit[3]} {a} FAIL {rows[a][2]}")
                     continue
-                for _ in range(5):  # Blockscout fetches a child's code on demand
+                for _ in range(5 if CFG["kind"] == "blockscout" else 0):  # Blockscout fetches a child's code on demand
                     if bs(f"addresses/{a}").get("is_contract") is True:
                         break
                     time.sleep(3)
-                ok, why, s = forge_verify(a, hit, args or "", chain)
-                j = {}
-                for _ in range(6):
-                    j = bs(f"smart-contracts/{a}")
-                    if full(j):
+                for attempt in (1, 2):  # forge "Pass - Verified" with nothing on the explorer was seen once per ~10: retry once
+                    ok, why, s = forge_verify(a, hit, args or "", chain)
+                    j = {}
+                    for _ in range(6):
+                        j = lookup(a, code[a], chain)
+                        if full(j):
+                            break
+                        time.sleep(5)
+                    if full(j) or not ok or attempt == 2:
                         break
-                    time.sleep(5)
+                    say(f"{hit[3]} {a}: {why}, not on the explorer; attempt 2")
                 sc[a] = j
-                rows[a] = ("verified", hit[3], "") if full(j) else ("unverified", hit[3], why or "forge ok, Blockscout not a full match")
+                rows[a] = ("verified", hit[3], "") if full(j) else ("unverified", hit[3], why + (
+                    f", the explorer: verified {j.get('is_verified')}, partial {j.get('is_partially_verified')}" if ok else ""))
                 say(f"[{n}/{len(todo)}] {hit[3]} {a} {'ok' if full(j) else 'FAIL ' + rows[a][2]} ({s}s)")
             for a in [a for a, r in rows.items() if r[0] == "unverified" and clone_impl(code[a]) and (not only or a in only)]:
                 impl = clone_impl(code[a])
-                sc[impl] = bs(f"smart-contracts/{impl}")
-                if full(sc[impl]) and bs(f"addresses/{a}").get("is_contract") is not True:
+                sc[impl] = lookup(impl, code.get(impl, ""), chain)
+                if CFG["kind"] == "blockscout" and full(sc[impl]) and bs(f"addresses/{a}").get("is_contract") is not True:
                     hit = idx.get(cbor(code.get(impl) or rpc("eth_getCode", [impl, "latest"])))
                     if hit:  # Blockscout never fetched the clone's code: a request for it makes it fetch (it fails)
                         forge_verify(a, hit, "", chain)
-                for _ in range(4):
-                    sc[a] = bs(f"smart-contracts/{a}")
+                for _ in range(4 if (len(code[a]) - 2) // 2 == 45 else 1):  # Blockscout never links one with data
+                    sc[a] = lookup(a, code[a], chain)
                     s, note = decide(a)
                     if s == "linked clone":
                         break
