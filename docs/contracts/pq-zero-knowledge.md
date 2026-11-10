@@ -1451,7 +1451,7 @@ confidential balances move only on the PQ `authSig` over the statement plus the 
 from its own public balance, its nonce, and for `mtxShield` the public amount it shields from that balance.
 
 **PQ-complete
-path:** the same selectors through the merged `mtxExecute(UAMetaTransaction, UASig)` ([CTR-MTX-30](../decisions.md#CTR-MTX-30)) ([CTR-UA-26](accounts.md#CTR-UA-26)) on
+path:** the same selectors through the merged `mtxExecute(UAMetaTransaction, UASig)` ([CTR-MTX-30](metatx.md#CTR-MTX-30)) ([CTR-UA-26](accounts.md#CTR-UA-26)) on
 `PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxUnshieldUnwrap` on `WRAPPED_PQZ`; `mtxWrapShield` is not on it, the pool holds no leg: a UA source wraps with `mtxWrapOrder` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)), then relays `mtxShield` through `mtxExecute` or its signed entry, [accounts.md](accounts.md#CTR-UA-18)), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
 classical key signs anything on the op path. Envelopes are not carried on the mesh, exactly as classical Zether
 ([NODE-MESH-01](../node/mesh.md#NODE-MESH-01)). Relayers, the node, the indexer and client systems handle PQZ with the
@@ -2391,7 +2391,7 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | `Sstore2` | existing pattern (classical generator blob) | reused |
 
 Selectors (normative ABI, explicit parameters since typed-signing and the `ua*` / `mtx*` merge,
-[CTR-MTX-30](../decisions.md#CTR-MTX-30); as built in `src/pqz/IPqzToken.sol` and `src/confidential/IConfidentialToken.sol`, selectors pinned in
+[CTR-MTX-30](metatx.md#CTR-MTX-30); as built in `src/pqz/IPqzToken.sol` and `src/confidential/IConfidentialToken.sol`, selectors pinned in
 `ConfidentialSelectors.t.sol`): the direct `mtxShield(bytes32 toUA, uint256 amount)` and `mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA)`,
 their signed entries `mtxShield(UAEnvelope, bytes32, uint256, UASig)` and `mtxWrapShield(Envelope, address, uint256, bytes32, bytes sig)` (no twin, so
 `Envelope`); the proof-taking ones end in `(bytes proof, UASig pqzAuth, bytes accHint, PqzSignedVerdict pqzVerdict)`:

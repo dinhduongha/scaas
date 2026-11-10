@@ -116,7 +116,7 @@ starting `0xef0100`), `isContract` (code, not a designator) and `requireNotDeleg
 the generic `MetaTransaction` ([CTR-MTX-15](#CTR-MTX-15)), its digest, the 2D nonces and `cancelNonce`, the transient
 sender and the ticket ([CTR-MTX-18](#CTR-MTX-18)), the per-implementation selector allowlist with fee classes and
 `mtxSelectors()` ([CTR-MTX-19](#CTR-MTX-19)), the alias `executeMetaTransaction` (which stays, owner 2026-11-01), `chainUid()` and
-`supportedModes()`. Since the merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)) the public entries sit in two bases on it: `UAMetaTxBase`
+`supportedModes()`. Since the merge ([CTR-MTX-30](#CTR-MTX-30)) the public entries sit in two bases on it: `UAMetaTxBase`
 (tokens, mandate wallets: `mtxExecute`, `mtxBatch`, `mtxCancelNonce` (the named entry of `cancelNonce`), `mtxDigest`, `mtxNonce` on
 `bytes32` ids) and `MetaTxAddressBase` (`SmartKeyAccount` through `WalletExecute`: the same names on `address from`, `IMetaTxAddress`). The fee is a virtual `_chargeFee(from, basis, m)` that **reverts unless the fee
 mode is `NONE`**; a contract that does not override it reports `supportedModes() = 0x03` (flags only).
@@ -136,7 +136,7 @@ mislead signers.
 ## 2. `MetaTransaction`, `MetaTransfer` and the pinned typehashes
 
 <a id="CTR-MTX-15"></a>**CTR-MTX-15** — **Two structs, one nonce space** (owner). The generic signed call of a SCaaS contract is
-`MetaTxLib.UAMetaTransaction` on tokens and the mandate wallets since the merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)), and the address
+`MetaTxLib.UAMetaTransaction` on tokens and the mandate wallets since the merge ([CTR-MTX-30](#CTR-MTX-30)), and the address
 `MetaTxLib.MetaTransaction` on `SmartKeyAccount` and for a token's `executeMetaTransaction` alias: `data` is one call of one of the contract's own
 allowlisted functions (a self-call, [CTR-MTX-17](#CTR-MTX-17)). `MetaTxLib.UAMetaTransfer` exists on tokens only and is the typed transfer or
 payment that outside wallets display field by field ("send `value` to `to`") ([CTR-MTX-23](#CTR-MTX-23)). Ids are `bytes32`: a native id is the
@@ -322,7 +322,7 @@ breaker per `(from, selector)` covers repeat offenders ([node/submit-lanes.md](.
 <a id="CTR-MTX-28"></a>**CTR-MTX-28** — **A named entry per operation: the signed struct is `from` + the operation's own explicit parameters + the envelope** (owner option B,
 2026-10-31: "a named entry point per operation, everything explicit"; shapes controller call, owner may override). Status: **BUILT** (typed-signing C2 base and public
 tokens, C3 Zether, C4 PQZ, C5 wallets, C6 trade / DEX / fees; the node builds them since N1). Every operation that was allowlisted for `mtxExecute` gets one entry `mtx<Op>`: since the merge
-([CTR-MTX-30](../decisions.md#CTR-MTX-30)) `mtx<Op>(MetaTxLib.UAEnvelope e, <explicit op parameters>, UASig auth)`, or, for an entry with no id form (the wraps), `mtx<Op>(MetaTxLib.Envelope e, <parameters>, bytes sig)`:
+([CTR-MTX-30](#CTR-MTX-30)) `mtx<Op>(MetaTxLib.UAEnvelope e, <explicit op parameters>, UASig auth)`, or, for an entry with no id form (the wraps), `mtx<Op>(MetaTxLib.Envelope e, <parameters>, bytes sig)`:
 
 ```solidity
 struct Envelope   { address from; uint256 batch; uint256 nonce; uint256 validUntil; uint32 mode; address relayer; uint256 fee; address feeRecipient; }
@@ -341,11 +341,11 @@ struct UAEnvelope { bytes32 from; /* the same seven fields */ }
 - **Names.** Entry = `mtx` + the operation's name, one per operation; the struct is `<Op>` for an `Envelope` entry and `UA<Op>` for a `UAEnvelope` entry (`UAUnwrap` signs `mtxUnwrap`). Where the operation function already carries that name (`mtxShield`, `mtxConfidentialTransfer*`, `mtxUnshield*`, `mtxRollOver`,
   `mtxPrepareAcc`, `mtxWrapShield`), the signed entry is an overload whose first parameter is the envelope, `UAEnvelope` since the merge (distinct selector; owner: open question 2 default). The wrap-by-signature entries
   are `mtxWrapOrder` (one entry, `UAWrapOrder` + `UASig`), so `mtxWrap(Envelope, uint256 amount, bytes sig)` is the named entry of `wrap(uint256)` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)).
-- **Signatures.** Since the `ua*` / `mtx*` merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)) every signed entry on tokens, the router and the mandate wallets takes `UASig`
+- **Signatures.** Since the `ua*` / `mtx*` merge ([CTR-MTX-30](#CTR-MTX-30)) every signed entry on tokens, the router and the mandate wallets takes `UASig`
   (`{keyData, signature, members}`, [CTR-UA-36](accounts.md#CTR-UA-36)), the generic `mtxExecute(UAMetaTransaction, UASig)`, `mtxBatch(UAMetaTransaction[], UASig[])` and
   `mtxShield(…, UASig)` included (the merge reverses the `bytes auth` these kept as `uaExecute` / `uaBatch` / `uaShield`); a native id's `UASig` has empty `keyData` and
   `members`, else `MetaTxBadSignature` (a controller call of the merge spec). The wrap entries without a twin stay on `Envelope` + `bytes sig`; `executeMetaTransaction` keeps `bytes signature`. `SmartKeyAccount`'s own entries take `AccountSig` ([CTR-ACC-10](accounts.md#CTR-ACC-10)). Fee classes follow [CTR-MTX-20](#CTR-MTX-20).
-- **Kept as they are** (owner 2026-10-31 / 2026-11-01): the generic `mtxExecute` and `mtxBatch` (since the merge in today's `ua*` form, [CTR-MTX-30](../decisions.md#CTR-MTX-30)), their structs and
+- **Kept as they are** (owner 2026-10-31 / 2026-11-01): the generic `mtxExecute` and `mtxBatch` (since the merge in today's `ua*` form, [CTR-MTX-30](#CTR-MTX-30)), their structs and
   typehashes, `mtxSelectors()`, `_mtxRule`, `_uaAllowed`, `executeMetaTransaction` and the direct (non-meta) functions; the four flat wallet builders went to
   `smartcontracts/evm/legacy/ua-mtx-merge/` (MD-11 (a), [mandates.md](mandates.md#mandatewallet)). Gone to `smartcontracts/evm/legacy/typed-signing/`:
   `mtxExecuteWithFee` and the flat `uaUnwrap(bytes32 from, …)`. No typed mixed batch ([CTR-MTX-11](#CTR-MTX-11)).
@@ -364,7 +364,18 @@ ciphertext, key or proof never exists only as a hash plus calldata or events ([C
 in every family's UA spec ([NET-ALL-84](../networks/README.md#NET-ALL-84)). Exceptions, each by ruling: the packed `register(kind, bytes keyData, …)` stays open for `webauthn-p256` and the MuSig2 / FROST kinds
 (owner 2026-10-31); a kind-specific signature stays one `bytes signature` (open question 3 default); `Execute.data`
 of a wallet is the call it makes; ERC-1271 `isValidSignature(bytes32, bytes)` and the Uniswap callbacks keep the standards' ABI. The former exception
-"`uaExecute` / `uaBatch` / `uaShield` keep `bytes auth`" is reversed by the merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)).
+"`uaExecute` / `uaBatch` / `uaShield` keep `bytes auth`" is reversed by the merge ([CTR-MTX-30](#CTR-MTX-30)).
+
+<a id="CTR-MTX-30"></a>**CTR-MTX-30** — **One signed entry per operation: the `ua*` / `mtx*` merge** (owner 2026-11-04, the merge spec
+[§10 Q1–Q7](../superpowers/specs/2026-11-04-ua-mtx-merge.md); the decision record, the reversals and the build's plan decisions MD-1 to MD-11
+are in [decisions.md](../decisions.md)). Status: **BUILT** on branch `ua-mtx-merge`, UNAUDITED. Per operation a SCaaS EVM contract has its
+direct entry and at most one contract-verified signed entry, `mtx<Op>`. On tokens, `RelayFeeRouter`, the DEX's SCaaS legs, the mandate
+wallets and `GovernanceRouter` that entry takes `bytes32` ids (a native id zero-padded, signing with its own key; a derived id through the
+registry) and `UASig`: `mtxExecute(UAMetaTransaction, UASig)` and `mtxBatch`, `mtxExecuteTransfer(UAMetaTransfer, UASig)` and
+`mtxBatchTransfer` ([CTR-MTX-15](#CTR-MTX-15), [CTR-MTX-23](#CTR-MTX-23)), and the named `mtx<Op>(UAEnvelope, …, UASig)`
+([CTR-MTX-28](#CTR-MTX-28)). A token keeps the EIP-1776 alias `executeMetaTransaction(MetaTransaction, bytes)` (owner 2026-11-01);
+`SmartKeyAccount` keeps its address path (`IMetaTxAddress`, [CTR-MTX-22](#CTR-MTX-22)). The address `MetaTransfer` and the `ua*` entries
+moved to `smartcontracts/evm/legacy/ua-mtx-merge/`.
 
 <a id="CTR-MTX-18"></a>**CTR-MTX-18** — **The signer travels in a transient slot, and one ticket admits exactly one
 self-call.** Transient slots `keccak256("scaas.mtx.guard")`, `"scaas.mtx.sender"`, `"scaas.mtx.ticket"`,
@@ -474,7 +485,7 @@ node side (simulation, no batching, the narrowed grief exemption) is
 
 ## 5. `mtxExecuteTransfer`: transfers and payments (tokens)
 
-<a id="CTR-MTX-23"></a>**CTR-MTX-23** — **The typed path: `mtxExecuteTransfer(UAMetaTransfer t, UASig auth)`** (owner; since the merge, [CTR-MTX-30](../decisions.md#CTR-MTX-30),
+<a id="CTR-MTX-23"></a>**CTR-MTX-23** — **The typed path: `mtxExecuteTransfer(UAMetaTransfer t, UASig auth)`** (owner; since the merge, [CTR-MTX-30](#CTR-MTX-30),
 one form for a native id signing with its own key and a derived UA through the registry; the address `MetaTransfer` forms are in
 `legacy/ua-mtx-merge/`). A token's transfer and payment are signed as a `UAMetaTransfer` ([CTR-MTX-15](#CTR-MTX-15)) so outside wallets show
 "send `value` to `to`" field by field, and they run through their own pipeline in `ERC20MetaTx`; the named functions
@@ -753,7 +764,7 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 | Contract | Entry points |
 |---|---|
 | every contract on `MetaTxBase` | `executeMetaTransaction(MetaTransaction, bytes)` (the EIP-1776 alias: on tokens over the address pipeline, [CTR-MTX-17](#CTR-MTX-17); the mandate wallets refuse it); `cancelNonce(uint256 batch)` (direct, or signed); views `mtxSelectors`, `chainUid`, `supportedModes` |
-| tokens and the mandate wallets (`UAMetaTxBase`), the router | + one form per operation since the merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)): `mtxExecute(UAMetaTransaction, UASig)`, `mtxBatch(UAMetaTransaction[], UASig[])`, `mtxCancelNonce(UAEnvelope, lane, UASig)` (Q2, nonce-ordered) |
+| tokens and the mandate wallets (`UAMetaTxBase`), the router | + one form per operation since the merge ([CTR-MTX-30](#CTR-MTX-30)): `mtxExecute(UAMetaTransaction, UASig)`, `mtxBatch(UAMetaTransaction[], UASig[])`, `mtxCancelNonce(UAEnvelope, lane, UASig)` (Q2, nonce-ordered) |
 | tokens | + `mtxExecuteTransfer(UAMetaTransfer, UASig)`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay(UAMetaTransfer, UASig, PayMeta)` ([CTR-MTX-26](#CTR-MTX-26); no `mtxPayMeta` / `uaPayMeta` on the EVM), `mtxPayReceiverFee`, `mtxRelayFee` ([CTR-MTX-27](#CTR-MTX-27)), `mtxBurn(UAEnvelope, amount, UASig)`, all with `bytes32` ids and `UASig`; (`mtxExecuteWithFee` went to `legacy/typed-signing/`); views `mtxTransferDigest(UAMetaTransfer)`, `payLane`, `metaPayId(PayMeta)` |
 | tokens (trade) | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-15)); `restorePulled` is called only by the order's `dex`, on no allowlist ([CTR-DEX-27](dex.md#CTR-DEX-27)) |
 | wrappers, `WRAPPED_ZETHER`, `WRAPPED_PQZ` | `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `mtxAddReserve` (no twin: `Envelope` + `bytes sig`); `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA` (`UAEnvelope` + `UASig`); `mtxWrapOrder(address, UAWrapOrder, UASig)` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
@@ -764,7 +775,7 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 
 <a id="CTR-MTX-09"></a>**CTR-MTX-09** — The named functions `mtxTransfer`, `mtxTransferWithFee`,
 `mtxPay` and the batches `mtxBatch`/`mtxBatchTransfer` live in `MetaTokenBase` (so every kind has them; pay only with `PAYABLE`), take the
-merged form since the `ua*` / `mtx*` merge (owner 2026-11-03 / 2026-11-04, [CTR-MTX-30](../decisions.md#CTR-MTX-30); the 2026-10-08 "kept separate,
+merged form since the `ua*` / `mtx*` merge (owner 2026-11-03 / 2026-11-04, [CTR-MTX-30](#CTR-MTX-30); the 2026-10-08 "kept separate,
 nothing merged" is reversed): `bytes32` ids and `UASig`, and they **only build the struct of their kind** — `UAMetaTransfer`
 for transfers and payments, `UAMetaTransaction` for calls — **and run that struct's pipeline**. Each enforces a mode shape
 (`MtxModeShape`), nothing else. The digest of a named call equals the digest of `mtxExecuteTransfer` or `mtxExecute`
@@ -789,7 +800,7 @@ mtxPay(t,s,meta)                               ≡ mtxExecuteTransfer(t, s)   (t
 ```
 
 `executeMetaTransaction(m, s)` (returns `true`) runs the address `MetaTransaction` beside these on tokens
-([CTR-MTX-17](#CTR-MTX-17)); it shares no digest with the merged `mtxExecute`. (The `ua*` / `mtx*` merge, [CTR-MTX-30](../decisions.md#CTR-MTX-30).)
+([CTR-MTX-17](#CTR-MTX-17)); it shares no digest with the merged `mtxExecute`. (The `ua*` / `mtx*` merge, [CTR-MTX-30](#CTR-MTX-30).)
 
 So: same digest, same events (the `UA…` events on a merged path; `UAPaymentSettled` for `mtxPay`), same nonce space (a
 signature consumed through one path fails `MetaTxBadNonce` on the other), same KAT. A named function never accepts an

@@ -47,7 +47,7 @@ spend), [CTR-PQZ-14](../../contracts/pq-zero-knowledge.md#CTR-PQZ-14) (disclosur
 [CTR-PQZ-23](../../contracts/pq-zero-knowledge.md#CTR-PQZ-23) and the never-lose-ciphertext rule,
 [CTR-UA-07](../../contracts/accounts.md#CTR-UA-07) (portable PoP), [CTR-UA-23](../../contracts/accounts.md#CTR-UA-23) (verify caps,
 the 66 % rule), [CTR-UA-39](../../contracts/accounts.md#CTR-UA-39) (`mldsa87` only with a precompile),
-[CTR-MTX-30](../../decisions.md#CTR-MTX-30) (one signed entry per operation),
+[CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30) (one signed entry per operation),
 [CTR-MTX-29](../../decisions.md#ctr-mtx-29--every-parameter-is-explicit) (explicit parameters),
 [CTR-GOV-10](../../decisions.md#ctr-gov-10--bit-bands-0-127-one-meaning-128-255-per-application-none-refused) (bit bands); the
 regulated-kinds spec [2026-11-05-regulated-kinds.md](2026-11-05-regulated-kinds.md) (FREEZE / PAUSE, RK-2's pending, §6.2's size

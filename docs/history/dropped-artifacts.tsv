@@ -1201,6 +1201,6 @@ soroban.rs:313	internal-path	line reference of 2026-10-03, `job_tx` and `tx_dead
 1337	obsolete	chain id of the Zether dev-chain allowlist, removed by zether-ungate; no current rule names a chain
 UNAUDITED — dev chains only	obsolete	label replaced by "UNAUDITED" (owner 2026-10-31); the dev-chain limit went with the allowlist (zether-ungate)
 1.90	obsolete	the node's Rust version in the mesh-gossip spec; one toolchain for the repository, 1.97.1 since 2026-11-05: decisions.md#ARCH-POS-12
-mtxTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: decisions.md#CTR-MTX-30
-mtxBatch(MetaTransaction[] ms, bytes[] sigs)	obsolete	the address generic batch, on SmartKeyAccount only since the ua* / mtx* merge (MetaTxAddressBase): decisions.md#CTR-MTX-30
-mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: decisions.md#CTR-MTX-30
+mtxTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-30
+mtxBatch(MetaTransaction[] ms, bytes[] sigs)	obsolete	the address generic batch, on SmartKeyAccount only since the ua* / mtx* merge (MetaTxAddressBase): contracts/metatx.md#CTR-MTX-30
+mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-30

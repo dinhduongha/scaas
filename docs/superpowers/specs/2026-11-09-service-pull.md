@@ -23,7 +23,7 @@ escrow, staking, bonds, subscriptions. The path may differ from `RelayFeeRouter`
 - [CTR-MTX-27](../../contracts/metatx.md#CTR-MTX-27): `RelayFeeRouter`. Its doc text lags the code; the code follows pay-meta-tax
   §4 O4: one `relay` on ids with `batch` / `nonce`.
 - [CTR-MTX-29](../../decisions.md#ctr-mtx-29--every-parameter-is-explicit): explicit parameters.
-- [CTR-MTX-30](../../decisions.md#CTR-MTX-30): the merge, one form on ids with `UASig`.
+- [CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30): the merge, one form on ids with `UASig`.
 - The 3e spec's O12 ([2026-11-05-pay-meta-tax.md](2026-11-05-pay-meta-tax.md) §2.3): `mtxExecuteTransfer` takes any `entryRef`
   and is never gated.
 - [CTR-TND-01](../../contracts/tender.md#CTR-TND-01): the tender's deposit, the first instance of this pattern.

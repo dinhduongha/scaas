@@ -14,7 +14,7 @@ sizes and continues instead of stopping. The only hard limit is the reset chain'
 window only.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
-rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
+rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30), its Q6 Change, and the Change
 lines it points to (CTR-MTX-09, CTR-MTX-29, CTR-TOK-24, CTR-UA-19, CTR-DEX-25, CTR-ACC-12, CTR-UA-27). Spike: `docs/research/governance/prototype/merge-entries.md`
 (branch `token-merge`, reference code only, **never merged**).
 

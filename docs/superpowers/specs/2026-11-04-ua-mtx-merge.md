@@ -1,6 +1,6 @@
 # `ua*` / `mtx*` merge: one signed entry per operation, and the base token size for public chains — design
 
-**Status:** ACCEPTED by the owner 2026-11-04 (Q1–Q7); Q3's final lever choice after the §9 measurement; numbers to re-measure. Reviewed by Claude (4 lenses), Fable, Codex. Nothing is built. Recorded as [CTR-MTX-30](../../decisions.md#CTR-MTX-30) (SPECIFIED); the answers are in §10. **Owner 2026-11-04, after T0 (§9.1): build M first; the lever (D, with L only if needed) is decided by the owner after M's PR.** **Owner 2026-11-04, after T1: Q6 changed: the mandate wallets `MandateWallet` and `HederaMandateWallet` are built in this round in the merged form (§2.7); `SmartKeyAccount` stays as it is.**
+**Status:** ACCEPTED by the owner 2026-11-04 (Q1–Q7); Q3's final lever choice after the §9 measurement; numbers to re-measure. Reviewed by Claude (4 lenses), Fable, Codex. Nothing is built. Recorded as [CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30) (SPECIFIED); the answers are in §10. **Owner 2026-11-04, after T0 (§9.1): build M first; the lever (D, with L only if needed) is decided by the owner after M's PR.** **Owner 2026-11-04, after T1: Q6 changed: the mandate wallets `MandateWallet` and `HederaMandateWallet` are built in this round in the merged form (§2.7); `SmartKeyAccount` stays as it is.**
 Work-order item 3 of TODO (owner 2026-11-03), its own round between SCaaS testnet reset 1 and reset 2. Owner 2026-11-04:
 the spec now, the measurement after PR #9 (governance) merges; PR #9 is merged into this branch (`d97f5a39`). Revised
 2026-11-04 after a Claude workflow review, then after Fable's counter-review and Codex's security review (§12).
@@ -282,7 +282,7 @@ nothing is renamed: each address body is widened to `bytes32` ids and moved onto
   validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient`. From `UAMetaTxBase`, as on tokens: the generic
   `mtxExecute(UAMetaTransaction, UASig)`, `mtxBatch`, the ordered `mtxCancelNonce(UAEnvelope, lane, UASig)` (Q2),
   `mtxNonce(bytes32, uint256)`, `mtxDigest(UAMetaTransaction)`. Fee mode `NONE` only, every entry relayable.
-- **Signers** ([CTR-MTX-30](../../decisions.md#CTR-MTX-30)'s B and C): a native signer (an EOA, or ERC-1271 code) signs with
+- **Signers** ([CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30)'s B and C): a native signer (an EOA, or ERC-1271 code) signs with
   its own key in `auth.signature`, R17 holds, and no registry is called; a derived UA authenticates through
   `UARegistry.requireAuthorized`, so the wallet's `registry` is needed only when a side is derived (`UALedgerOff` by name at
   0). On `HederaMandateWallet` the native branch keeps HIP-632 through `UAMetaTxBase`'s `IS_HEDERA`, as the token kinds.
@@ -728,7 +728,7 @@ invariant 7's tests and mutants on D (no module at T0: T9); a Hedera case and a 
 
 Seven questions; each is a reversal of an owner ruling, a departure from the owner's words, a target, scope or a wallet
 test. Everything else is decided below as the controller's call. **The owner answered on 2026-11-04**: Q1 accepted, Q2–Q7
-as recommended; recorded in [CTR-MTX-30](../../decisions.md#CTR-MTX-30) (SPECIFIED, nothing built). Later the same day,
+as recommended; recorded in [CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30) (SPECIFIED, nothing built). Later the same day,
 after T1, the owner changed Q6 (its row, and CTR-MTX-30's Change line).
 
 | # | Question | Recommendation | Owner, 2026-11-04 |

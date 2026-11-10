@@ -19,7 +19,7 @@ governance or voting token. The reviews: [Fable](../../research/regulated-kinds-
 asset-suite [CTR-AS-02](../../contracts/asset-suite.md#CTR-AS-02)…[CTR-AS-09](../../contracts/asset-suite.md#CTR-AS-09),
 [CTR-AS-16](../../contracts/asset-suite.md#CTR-AS-16), [CTR-AS-17](../../contracts/asset-suite.md#CTR-AS-17); the governance
 spec [§1.2, §4.2–§4.4, §7.7](2026-11-02-governance.md); the merge spec's entry form and §8
-([2026-11-04-ua-mtx-merge.md](2026-11-04-ua-mtx-merge.md), [CTR-MTX-30](../../decisions.md#CTR-MTX-30)). Where asset-suite §2
+([2026-11-04-ua-mtx-merge.md](2026-11-04-ua-mtx-merge.md), [CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30)). Where asset-suite §2
 writes `address`, this spec writes the `bytes32` id (CTR-AS-07's UA constraint, CTR-GOV-01's identity by UA); nothing else in
 those rules changes.
 

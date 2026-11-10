@@ -4,7 +4,7 @@ A mandate lets a delegate pay from a payer's own wallet within limits the chain 
 to approved payees, until an expiry, revocable at any time. It is a payment authority, not an account: the payer keeps
 its own account ([accounts.md](accounts.md)) and the funds sit in its `MandateWallet`. Status: **BUILT**
 (`smartcontracts/evm/src/wallet/`; the typed-struct wallet of P4 is in `legacy/p4/`). Since the `ua*` / `mtx*` merge
-([CTR-MTX-30](../decisions.md#CTR-MTX-30)) the wallet is on `UAMetaTxBase`, its ids are `bytes32` and each operation has
+([CTR-MTX-30](metatx.md#CTR-MTX-30)) the wallet is on `UAMetaTxBase`, its ids are `bytes32` and each operation has
 one signed entry ([CTR-ACC-12](#CTR-ACC-12)): **BUILT** on branch `ua-mtx-merge` (T3b), UNAUDITED; the address-only
 wallet and its flat builders are in `smartcontracts/evm/legacy/ua-mtx-merge/`.
 
@@ -36,7 +36,7 @@ them on `mandatePayLane(entryRef) = uint256(keccak256("scaas.mandate.pay" ‖ en
 `abi.encodePacked`, the epoch 8 bytes); `refUsed` and `epoch` stop a second signature for the same payment or revoke.
 From `UAMetaTxBase`: the generic `mtxExecute(UAMetaTransaction, UASig)` / `mtxBatch` and the ordered `mtxCancelNonce`.
 `executeMetaTransaction` refuses every call (`MtxSelectorNotAllowed`, MD-11 (b) in
-[CTR-MTX-30](../decisions.md#CTR-MTX-30)): the EIP-1776 alias is the token's exception. The flat builders of P4
+[CTR-MTX-30](metatx.md#CTR-MTX-30)): the EIP-1776 alias is the token's exception. The flat builders of P4
 (`mtxPayUnderMandate(token, payee, amount, entryRef, epoch, validUntil, sig)`, `mtxRevoke`, `mtxExecuteAsOwner`, Hedera's
 `mtxExecuteAsOwnerRaw`) and `mandate_pay_kat.json` / `mandate_revoke_kat.json` are in `legacy/ua-mtx-merge/` (MD-11 (a),
 owner 2026-11-05). `PaidUnderMandate` and the token's payment event carry `entryRef`, so reconciliation is exactly that of
@@ -102,7 +102,7 @@ vector. Status **BUILT** (P4).
 
 <a id="ua-mandates"></a>
 <a id="CTR-ACC-12"></a>**CTR-ACC-12** — **A UA may own, delegate and receive under a `MandateWallet`** (owner 2026-10-13,
-[CTR-UA-27](accounts.md#CTR-UA-27); merged form owner 2026-11-04, Q6 of [CTR-MTX-30](../decisions.md#CTR-MTX-30)). The
+[CTR-UA-27](accounts.md#CTR-UA-27); merged form owner 2026-11-04, Q6 of [CTR-MTX-30](metatx.md#CTR-MTX-30)). The
 wallet's ids are `bytes32` (a native address zero-padded, or a derived UA): constructor `(bytes32 owner, bytes32 chainUid,
 address registry, bool hedera)`, `Mandate.delegate` `bytes32`, `payeeAllowed[token][bytes32]`, and the events
 `MandateSet`, `MandateRevoked`, `PayeeSet`, `PaidUnderMandate` and the error `PayeeNotAllowed` take `bytes32` ids. Every
