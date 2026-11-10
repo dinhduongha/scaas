@@ -26,11 +26,30 @@ assert v.classify("0x363d3d37363d34f000", {})[0] == "unverified"
 linked = {"proxy_type": "eip1167", "implementations": [{"address_hash": "0x" + IMPL.upper()}]}
 assert v.classify(CLONE, linked, impl_verified=True)[0] == "linked clone"
 assert v.classify(CLONE + "beef", dict(linked, proxy_type="clone_with_immutable_arguments"), True)[0] == "linked clone"
-assert "2 B of data" in v.classify(CLONE + "beef", {"proxy_type": "unknown", "implementations": []}, True)[1]
+# a clone with appended data the explorer does not link (Blockscout 9.0.2: proxy_type unknown): vcheck links it
+# (owner 2026-11-10) when the first 45 bytes are exactly the EIP-1167 proxy and its implementation is verified
+UNK = {"proxy_type": "unknown", "implementations": []}
+APP = "linked (clone, appended data)"
+assert v.classify(CLONE + "beef", UNK, True) == (APP, f"EIP-1167 proxy of 0x{IMPL} (verified), 2 B appended; the explorer: unknown")
+assert v.classify(CLONE + "beef", {}, True)[0] == APP
+assert v.classify(CLONE + "beef", UNK, False)[0] == "unverified"  # mutant: implementation not verified
+for k in (0, 19, 60, 89):  # mutant: one nibble of the proxy's head or tail changed
+    bad = CLONE[:2 + k] + ("0" if CLONE[2 + k] != "0" else "1") + CLONE[3 + k:]
+    assert v.classify(bad + "beef", UNK, True)[0] == "unverified", k
+assert v.classify(CLONE, UNK, True)[0] == "unverified"  # no data appended: the explorer must link a plain clone
 assert v.classify(CLONE, linked, impl_verified=False)[0] == "unverified"  # implementation not verified
 assert v.classify(CLONE, dict(linked, proxy_type="unknown"), True)[0] == "unverified"  # not linked
 assert v.classify(CLONE, dict(linked, implementations=[]), True)[0] == "unverified"
 assert v.classify(CLONE, {"is_verified": True, "is_partially_verified": False}, True)[0] == "unverified"  # a clone is never "verified"
+# a partial match is accepted for a harness contract only (owner 2026-11-10): its metadata names a script/ artifact
+PART = {"is_verified": True, "is_partially_verified": True, "is_fully_verified": False, "name": "OnchainForwarder"}
+HIT = ("root", "out/OnchainForwarder.sol/OnchainForwarder.json", "script/onchain/OnchainForwarder.sol", "OnchainForwarder")
+assert v.harness(HIT, PART) and v.classify(CODE, PART, harness=True)[0] == "verified (partial, harness)"
+assert not v.harness(HIT[:2] + ("src/metatx/X.sol", "OnchainForwarder"), PART)  # mutant: a src contract
+assert not v.harness(HIT, dict(PART, name="Other")) and not v.harness(None, PART)  # another name; no artifact
+assert v.classify(CODE, PART, harness=False)[0] == "unverified"
+assert v.classify(CODE, dict(PART, is_verified=None), harness=True)[0] == "unverified"  # not verified at all
+assert v.classify(CODE, dict(PART, is_partially_verified=False, is_fully_verified=True), harness=True)[0] == "verified"
 
 # clone, metadata
 assert v.clone_impl(CLONE) == "0x" + IMPL and v.clone_impl(CLONE + "00") == "0x" + IMPL

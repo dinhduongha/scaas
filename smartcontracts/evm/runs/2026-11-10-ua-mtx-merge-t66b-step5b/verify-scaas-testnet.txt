@@ -1,5 +1,5 @@
-# NET-EVM-09: every contract on chain 7622 (scaas-testnet, head 89620), discovered from a block scan, the books, the broadcasts and the getters; script/onchain/vcheck.py
-verified 255 | linked clone 8 | data 90 | create3 proxy 35 | genesis 1 | no code 500 | unverified 46
+# NET-EVM-09: every contract on chain 7622 (scaas-testnet, head 90144), discovered from a block scan, the books, the broadcasts and the getters; script/onchain/vcheck.py
+verified 255 | verified (partial, harness) 3 | linked clone 8 | linked (clone, appended data) 43 | data 90 | create3 proxy 35 | genesis 1 | no code 500 | unverified 0
 verified | PqzPrecompileProbe | 0x060cc26038e69d73552679103271eca6e37d4ce6
 verified | GovernanceLib | 0x027ffae879fb201d2d2073164825043d5cdb2e26
 verified | HederaLib | 0xf72aa12b710a84da86233caaac8b494073135b11
@@ -255,6 +255,9 @@ verified | DexPuller | 0x23c395e8e76a895ea73a72fbf6b0e2c43c0f498f
 verified | DexPuller | 0x495e3d3fea7ba262287eb4da311506a3a9131439
 verified | SmartKeyAccount | 0xb2af39a3a99d6c8d0399cd88b911b7cc82676753
 verified | DexPuller | 0xc83d841d1bbf7ea39d804f01152ddc83696d532a
+verified (partial, harness) | OnchainFwd | 0x9b8145c08782ccb49cc66b294e4e0b6ee6d7c236 | partial match (the metadata hash differs) of a script/ harness contract
+verified (partial, harness) | OnchainFwd | 0x6353b4acc8c85629cc426d41e3f464e938883259 | partial match (the metadata hash differs) of a script/ harness contract
+verified (partial, harness) | OnchainFwd | 0xeb01fe3a6a55eb414418e94f9b05d96e20081e0e | partial match (the metadata hash differs) of a script/ harness contract
 linked clone | ? | 0x7588875db9778ec2825454a446fff5d14b78d2b0 | eip1167 of 0xf8acc490849606e72c4000e5f329f122b41ecbf7
 linked clone | ? | 0x16bfd88022f7191fdaf5988c31d394873d88f4b9 | eip1167 of 0xd9b8b7e9523a84d9b5a3a5433f555d4ea29bd2e2
 linked clone | ? | 0x0ed7067da472ef13b540359f808cbf6c5bcec41f | eip1167 of 0xe3fc1392e955758d0373f184a1e3ee272202decd
@@ -263,6 +266,49 @@ linked clone | ? | 0xfd812e5e97b30a48431ffcb04b73084c1eb7ff54 | eip1167 of 0x734
 linked clone | SmartKeyAccount | 0x4cac7606b47c8dcf1f640e426d6f93bc12afb05a | eip1167 of 0xb2af39a3a99d6c8d0399cd88b911b7cc82676753
 linked clone | SmartKeyAccount | 0xdfbc306f42bca8675a498f18bb1da2a6e834645a | eip1167 of 0xb2af39a3a99d6c8d0399cd88b911b7cc82676753
 linked clone | SmartKeyAccount | 0x99a7bf54b03a1117630d7a3ad450d7d80bafc4e7 | eip1167 of 0xb2af39a3a99d6c8d0399cd88b911b7cc82676753
+linked (clone, appended data) | NormalToken | 0x83ebdbbad51fdb123220e4f9e2bf832748a3020c | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0x5a47a4fedbc81327174b5d90a8e83d8c5aff0faa | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x5a94167bc4c71054a713e7651dc60f6354e2e63b | EIP-1167 proxy of 0xc340f8755e31dfc53b62bf4171a812d746ecb0e1 (verified), 115 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x9c02294c771765a613f656dd56980741cbbe0a41 | EIP-1167 proxy of 0x2f2519f16639f686322bcaa14582451d2766ba85 (verified), 115 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x56e924660155bf145b28169e71dd5153e4290c35 | EIP-1167 proxy of 0xc340f8755e31dfc53b62bf4171a812d746ecb0e1 (verified), 115 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x8d65a25097f7187a439f21e4fc57e875f0e1f358 | EIP-1167 proxy of 0x2f2519f16639f686322bcaa14582451d2766ba85 (verified), 115 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x5d107cc6d9ef8fedf095e40f91be1beec18796e6 | EIP-1167 proxy of 0x104af561c1a52a1a9a544771fd2c76d08e77efab (verified), 115 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0xdc94203d73968f69e7ba14e8640b9dd88c951cd8 | EIP-1167 proxy of 0xff94b8e28efa5ba0908c0279c73cf014ad439e63 (verified), 115 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x5357549b6beeb2734503c667888284c694fc8807 | EIP-1167 proxy of 0x104af561c1a52a1a9a544771fd2c76d08e77efab (verified), 115 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x0c6ad1871b39654f16b501ad8c2017ab878a32c0 | EIP-1167 proxy of 0xff94b8e28efa5ba0908c0279c73cf014ad439e63 (verified), 115 B appended; the explorer: unknown
+linked (clone, appended data) | NormalRegulatedToken | 0xedc4ef26ae4996ff5abb2583826143caa437ff76 | EIP-1167 proxy of 0xcd83f4103fc003b9e9d8022b4263a361e603787a (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0xef78ddbd42f0d6e0ba9fb4de710d8d3d0a94b822 | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0x7af2db7496c7676f0e2daa9af92cbe3ad8cfa3bf | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0xf9d1fd8028d0b6f819d6e8e450568707f2b588e2 | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedToken | 0xc5ad535ad464074b74f8d1b0061a87f85c505935 | EIP-1167 proxy of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4 (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalRegulatedToken | 0x98226e047e6b2221b3e8b66d877e6645ba54d7bc | EIP-1167 proxy of 0xcd83f4103fc003b9e9d8022b4263a361e603787a (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedRegulatedToken | 0xda2cf583f044d9eb360067c678bf4a7145f177e4 | EIP-1167 proxy of 0x95ef82703409359b8fb5c82191f7b9da91a22198 (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | SCaaSDex | 0x05fa178d13bfef3ef6af8b3d855a565e1c202ffb | EIP-1167 proxy of 0x4811e49551182523e5f44dd7374cd85665fa33cd (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x2f0eac8a3834b9afe28592a8c1e711f908cd8fc8 | EIP-1167 proxy of 0x4811e49551182523e5f44dd7374cd85665fa33cd (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0x0ccb2bb865c3bebf796d2fae2f6e53e884eb08e1 | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalRegulatedToken | 0x2ed11b33ac1330900dbee476b3953891c2f3023c | EIP-1167 proxy of 0xcd83f4103fc003b9e9d8022b4263a361e603787a (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedToken | 0x4324d005fbc1b65b41bfa9a272e97276c99e08c0 | EIP-1167 proxy of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4 (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0xc9379952c4a3e962e2234d42ee87c2db0118ecb1 | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0xec42daf80f2e72f27818c46bc86f15ee9aaaa6c8 | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | SCaaSDex | 0xaa3a4be7deea9da7916766c1023ce3e872b2cda5 | EIP-1167 proxy of 0x4811e49551182523e5f44dd7374cd85665fa33cd (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedToken | 0xe2d4748b217df5ab94ff061d78cee98e5bef7c7c | EIP-1167 proxy of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4 (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | SCaaSDex | 0x6dc64b8bb2842c66d9eadc39937f800f2a5e7104 | EIP-1167 proxy of 0x4811e49551182523e5f44dd7374cd85665fa33cd (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0xfdaefb44a79aca482c81d0790deffcf4709ae5f9 | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalZetherToken | 0xe09871f404dff0c3a6bc012a64f70b89a49b9835 | EIP-1167 proxy of 0x4587cdfeda46aea87882e2771680aafb58ed7905 (verified), 175 B appended; the explorer: unknown
+linked (clone, appended data) | NormalRegulatedToken | 0x824fb63d9b6faf8bc365cae5cf868cb34458ea36 | EIP-1167 proxy of 0xcd83f4103fc003b9e9d8022b4263a361e603787a (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | NormalZetherRegulatedToken | 0xe23e2a77f4bf81e32f7140cf8c772dc3d312ed6a | EIP-1167 proxy of 0x6c01e47c536d5f914e4a39135077b189df420a21 (verified), 175 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0x96c5233393c03867f4bb80d7f143683bc018da8c | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedToken | 0x23a6807f27d8768852a3c583e073a95fa1b2c3ec | EIP-1167 proxy of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4 (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedToken | 0xcd4719fa52330b0b62f9f806fa3de039d4832d55 | EIP-1167 proxy of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4 (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedZetherToken | 0xd86702df46edc78f5a1c76f1f4f966a129b64078 | EIP-1167 proxy of 0x8e9e403f7571b93590c59388ba0690d0aa1c4d1e (verified), 175 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedZetherToken | 0x25af77415aa55676626b64e7bd88ef6f5a7e2330 | EIP-1167 proxy of 0x8e9e403f7571b93590c59388ba0690d0aa1c4d1e (verified), 175 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedRegulatedToken | 0xf4082162c77fcede544fbc0fb367375e3c037188 | EIP-1167 proxy of 0x95ef82703409359b8fb5c82191f7b9da91a22198 (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedRegulatedToken | 0xd9ce72d208314b9f04b7a16fad6047334271348d | EIP-1167 proxy of 0x95ef82703409359b8fb5c82191f7b9da91a22198 (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedZetherRegulatedToken | 0x15a64871c1a04502c13604fe02b611cd82343f5a | EIP-1167 proxy of 0x7eb3ecc8360c9c249229b319f602110156728ba8 (verified), 175 B appended; the explorer: unknown
+linked (clone, appended data) | WrappedZetherRegulatedToken | 0xf7146e3010b45e120037ca1fe9ca909c6d1f2760 | EIP-1167 proxy of 0x7eb3ecc8360c9c249229b319f602110156728ba8 (verified), 175 B appended; the explorer: unknown
+linked (clone, appended data) | NormalToken | 0x0c7712c5ff80ed2f97c437626ad92a8e6be65ef8 | EIP-1167 proxy of 0x20e37855df4208447b64e4cbc743f6315f669d6b (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | PqChat | 0xdfae44b5071ee8a19d18b7b901353efa75738d03 | EIP-1167 proxy of 0xbf92fd65952419f91c5a2c873fd4aa08eb122698 (verified), 127 B appended; the explorer: unknown
+linked (clone, appended data) | PqChat | 0xd0359cd8f5e773cf681f8c90b105995ac1c5eb92 | EIP-1167 proxy of 0xbf92fd65952419f91c5a2c873fd4aa08eb122698 (verified), 127 B appended; the explorer: unknown
 create3 proxy | ? | 0x0154b8ba6f5f1f458ccf0597f65df7cdc915f787 | the 8-byte CREATE3 proxy of src/factory/Create3.sol, bytecode without a source
 create3 proxy | ? | 0x0bf00fe937f650ad641ffe1f849b7f0e7fe7e739 | the 8-byte CREATE3 proxy of src/factory/Create3.sol, bytecode without a source
 create3 proxy | ? | 0x12349c241d1c4c62d8969005556a2fb2bffece96 | the 8-byte CREATE3 proxy of src/factory/Create3.sol, bytecode without a source
@@ -799,50 +845,4 @@ no code | ? | 0xfd2dadcbb78b5e4fbc83b7e3116d0b9262fde260 | named by a book or br
 no code | ? | 0xfda7b14012b504ae3b74b5bd64f3691576c5b258 | named by a book or broadcast; nothing on this chain
 no code | ? | 0xff84364cee19f473ba04bbbf5553ed18ba1360ab | named by a book or broadcast; nothing on this chain
 no code | NormalToken | 0xffdfe9c249c36c05477d4481583ce086f86ce4c1 | named by a book or broadcast; nothing on this chain
-unverified | NormalToken | 0x83ebdbbad51fdb123220e4f9e2bf832748a3020c | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalToken | 0x5a47a4fedbc81327174b5d90a8e83d8c5aff0faa | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | ? | 0x5a94167bc4c71054a713e7651dc60f6354e2e63b | unknown of 0xc340f8755e31dfc53b62bf4171a812d746ecb0e1: implementations [], implementation verified True; 115 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | ? | 0x9c02294c771765a613f656dd56980741cbbe0a41 | unknown of 0x2f2519f16639f686322bcaa14582451d2766ba85: implementations [], implementation verified True; 115 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | ? | 0x56e924660155bf145b28169e71dd5153e4290c35 | unknown of 0xc340f8755e31dfc53b62bf4171a812d746ecb0e1: implementations [], implementation verified True; 115 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | ? | 0x8d65a25097f7187a439f21e4fc57e875f0e1f358 | unknown of 0x2f2519f16639f686322bcaa14582451d2766ba85: implementations [], implementation verified True; 115 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | ? | 0x5d107cc6d9ef8fedf095e40f91be1beec18796e6 | unknown of 0x104af561c1a52a1a9a544771fd2c76d08e77efab: implementations [], implementation verified True; 115 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | ? | 0xdc94203d73968f69e7ba14e8640b9dd88c951cd8 | unknown of 0xff94b8e28efa5ba0908c0279c73cf014ad439e63: implementations [], implementation verified True; 115 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | ? | 0x5357549b6beeb2734503c667888284c694fc8807 | unknown of 0x104af561c1a52a1a9a544771fd2c76d08e77efab: implementations [], implementation verified True; 115 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | ? | 0x0c6ad1871b39654f16b501ad8c2017ab878a32c0 | unknown of 0xff94b8e28efa5ba0908c0279c73cf014ad439e63: implementations [], implementation verified True; 115 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalRegulatedToken | 0xedc4ef26ae4996ff5abb2583826143caa437ff76 | unknown of 0xcd83f4103fc003b9e9d8022b4263a361e603787a: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalToken | 0xef78ddbd42f0d6e0ba9fb4de710d8d3d0a94b822 | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalToken | 0x7af2db7496c7676f0e2daa9af92cbe3ad8cfa3bf | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalToken | 0xf9d1fd8028d0b6f819d6e8e450568707f2b588e2 | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedToken | 0xc5ad535ad464074b74f8d1b0061a87f85c505935 | unknown of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalRegulatedToken | 0x98226e047e6b2221b3e8b66d877e6645ba54d7bc | unknown of 0xcd83f4103fc003b9e9d8022b4263a361e603787a: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedRegulatedToken | 0xda2cf583f044d9eb360067c678bf4a7145f177e4 | unknown of 0x95ef82703409359b8fb5c82191f7b9da91a22198: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | SCaaSDex | 0x05fa178d13bfef3ef6af8b3d855a565e1c202ffb | unknown of 0x4811e49551182523e5f44dd7374cd85665fa33cd: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | ? | 0x2f0eac8a3834b9afe28592a8c1e711f908cd8fc8 | unknown of 0x4811e49551182523e5f44dd7374cd85665fa33cd: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalToken | 0x0ccb2bb865c3bebf796d2fae2f6e53e884eb08e1 | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalRegulatedToken | 0x2ed11b33ac1330900dbee476b3953891c2f3023c | unknown of 0xcd83f4103fc003b9e9d8022b4263a361e603787a: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedToken | 0x4324d005fbc1b65b41bfa9a272e97276c99e08c0 | unknown of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalToken | 0xc9379952c4a3e962e2234d42ee87c2db0118ecb1 | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalToken | 0xec42daf80f2e72f27818c46bc86f15ee9aaaa6c8 | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | SCaaSDex | 0xaa3a4be7deea9da7916766c1023ce3e872b2cda5 | unknown of 0x4811e49551182523e5f44dd7374cd85665fa33cd: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedToken | 0xe2d4748b217df5ab94ff061d78cee98e5bef7c7c | unknown of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | SCaaSDex | 0x6dc64b8bb2842c66d9eadc39937f800f2a5e7104 | unknown of 0x4811e49551182523e5f44dd7374cd85665fa33cd: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | OnchainFwd | 0x9b8145c08782ccb49cc66b294e4e0b6ee6d7c236 | not verified
-unverified | OnchainFwd | 0x6353b4acc8c85629cc426d41e3f464e938883259 | not verified
-unverified | OnchainFwd | 0xeb01fe3a6a55eb414418e94f9b05d96e20081e0e | not verified
-unverified | NormalToken | 0xfdaefb44a79aca482c81d0790deffcf4709ae5f9 | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalZetherToken | 0xe09871f404dff0c3a6bc012a64f70b89a49b9835 | unknown of 0x4587cdfeda46aea87882e2771680aafb58ed7905: implementations [], implementation verified True; 175 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalRegulatedToken | 0x824fb63d9b6faf8bc365cae5cf868cb34458ea36 | unknown of 0xcd83f4103fc003b9e9d8022b4263a361e603787a: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalZetherRegulatedToken | 0xe23e2a77f4bf81e32f7140cf8c772dc3d312ed6a | unknown of 0x6c01e47c536d5f914e4a39135077b189df420a21: implementations [], implementation verified True; 175 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalToken | 0x96c5233393c03867f4bb80d7f143683bc018da8c | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedToken | 0x23a6807f27d8768852a3c583e073a95fa1b2c3ec | unknown of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedToken | 0xcd4719fa52330b0b62f9f806fa3de039d4832d55 | unknown of 0x2155992ccf783b9a9a9bbc48da58ab2735bf9fb4: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedZetherToken | 0xd86702df46edc78f5a1c76f1f4f966a129b64078 | unknown of 0x8e9e403f7571b93590c59388ba0690d0aa1c4d1e: implementations [], implementation verified True; 175 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedZetherToken | 0x25af77415aa55676626b64e7bd88ef6f5a7e2330 | unknown of 0x8e9e403f7571b93590c59388ba0690d0aa1c4d1e: implementations [], implementation verified True; 175 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedRegulatedToken | 0xf4082162c77fcede544fbc0fb367375e3c037188 | unknown of 0x95ef82703409359b8fb5c82191f7b9da91a22198: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedRegulatedToken | 0xd9ce72d208314b9f04b7a16fad6047334271348d | unknown of 0x95ef82703409359b8fb5c82191f7b9da91a22198: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedZetherRegulatedToken | 0x15a64871c1a04502c13604fe02b611cd82343f5a | unknown of 0x7eb3ecc8360c9c249229b319f602110156728ba8: implementations [], implementation verified True; 175 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | WrappedZetherRegulatedToken | 0xf7146e3010b45e120037ca1fe9ca909c6d1f2760 | unknown of 0x7eb3ecc8360c9c249229b319f602110156728ba8: implementations [], implementation verified True; 175 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | NormalToken | 0x0c7712c5ff80ed2f97c437626ad92a8e6be65ef8 | unknown of 0x20e37855df4208447b64e4cbc743f6315f669d6b: implementations [], implementation verified True; 95 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | PqChat | 0xdfae44b5071ee8a19d18b7b901353efa75738d03 | unknown of 0xbf92fd65952419f91c5a2c873fd4aa08eb122698: implementations [], implementation verified True; 127 B of data after the 45-byte proxy (the explorer does not link it)
-unverified | PqChat | 0xd0359cd8f5e773cf681f8c90b105995ac1c5eb92 | unknown of 0xbf92fd65952419f91c5a2c873fd4aa08eb122698: implementations [], implementation verified True; 127 B of data after the 45-byte proxy (the explorer does not link it)
 data | SSTORE2 | 90 contracts (code 0x00…), not listed one by one

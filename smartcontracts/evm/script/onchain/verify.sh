@@ -3,7 +3,9 @@
 # T66b Step 5b, NET-EVM-12 (owner 2026-11-10; the SCaaS testnet's specifics NET-EVM-09): the verification step on its
 # own. Every contract we deployed on the target's chain (vcheck.py's discovery: the deployment books, every broadcast,
 # the getters that name a child; on a chain of ours a whole-chain block scan) verified on its explorer, then the
-# completeness check: each address verified, a linked EIP-1167 clone or SSTORE2 data, else a fail row and exit 1.
+# completeness check: each address verified (a harness contract: a partial match accepted), a linked EIP-1167 clone
+# (linked by the explorer, or by vcheck for a clone with appended data, owner 2026-11-10) or SSTORE2 data, else a fail
+# row and exit 1.
 # From smartcontracts/evm, outside scripts/capped:
 #   sh script/onchain/verify.sh <target> [rev ...]
 # The explorer from the environment (vcheck.py's header): VERIFY_EXPLORER blockscout | etherscan | sourcify,

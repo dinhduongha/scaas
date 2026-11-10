@@ -9,8 +9,11 @@ releases json, onchain-<net>-*.json), every broadcast of the chain (broadcast/*/
 name a child: puller(), EXECUTOR(), modules(), an EIP-1167 clone's implementation, and per factory its releases, its
 envs' registry / account implementation / dependencies / libraries and contractsPage per class.
 
-Each address with code ends in one state: verified (full match), linked clone (EIP-1167, Blockscout links it to its
-verified implementation), data (SSTORE2, code 0x00...), create3 proxy (the 8-byte CREATE3 proxy, src/factory/Create3.sol:
+Each address with code ends in one state: verified (full match), verified (partial, harness) (a partial match of a
+harness contract: its code's metadata names a script/ source of a snapshot, owner 2026-11-10), linked clone (EIP-1167,
+Blockscout links it to its verified implementation), linked (clone, appended data) (vcheck links it, owner 2026-11-10:
+the first 45 bytes exactly the EIP-1167 proxy of a fully verified implementation, data after them; Blockscout 9.0.2
+answers proxy_type unknown), data (SSTORE2, code 0x00...), create3 proxy (the 8-byte CREATE3 proxy, src/factory/Create3.sol:
 bytecode without a Solidity source), genesis (code at block 0: a predeploy, not ours); an address a
 book or broadcast names without code on the chain is listed as `no code` (a fork broadcast); anything else is
 `unverified`, a fail row, exit 1.
@@ -47,7 +50,7 @@ EVM = os.path.abspath(os.path.join(HERE, "../.."))
 CLONE_HEAD, CLONE_TAIL = "363d3d373d3d3d363d73", "5af43d82803e903d91602b57fd5bf3"
 DEPLOYER = "0x4e59b44847b379578588920ca78fbf26c0b4956c"  # the deterministic CREATE2 deployer (NET-EVM-05)
 CREATE3_PROXY = "0x363d3d37363d34f0"  # src/factory/Create3.sol: the proxy that CREATEs its calldata
-STATES = ("verified", "linked clone", "data", "create3 proxy", "genesis", "no code", "unverified")
+STATES = ("verified", "verified (partial, harness)", "linked clone", "linked (clone, appended data)", "data", "create3 proxy", "genesis", "no code", "unverified")
 SEL = {  # cast sig
     "puller": "2b1826ea", "EXECUTOR": "630dc7cb", "modules": "f7e80e98", "latestDexVersion": "aca84f05",
     "latestVersion": "7f4782bd", "implementationOf": "c45d1620", "dexImplementationOf": "c4c41b19",
@@ -99,9 +102,15 @@ def full(sc):
     return sc.get("is_verified") is True and not sc.get("is_partially_verified") and sc.get("is_fully_verified") is not False
 
 
-def classify(code, sc, impl_verified=False, genesis=False):
-    """(state, note) of one address from its code, Blockscout's smart-contracts answer and, for a clone, whether its
-    implementation is verified."""
+def harness(hit, sc):
+    """The deployed code's metadata names an artifact compiled from script/ (a harness contract) and the explorer's
+    match carries that artifact's name."""
+    return bool(hit) and hit[2].startswith("script/") and sc.get("name") == hit[3]
+
+
+def classify(code, sc, impl_verified=False, genesis=False, harness=False):
+    """(state, note) of one address from its code, Blockscout's smart-contracts answer, for a clone whether its
+    implementation is verified, and whether it is a harness contract (harness())."""
     c = (code or "0x").lower()
     if c in ("0x", "0x0", ""):
         return "no code", ""
@@ -116,11 +125,17 @@ def classify(code, sc, impl_verified=False, genesis=False):
         li = [(x.get("address_hash") or x.get("address") or "").lower() for x in sc.get("implementations") or []]
         ok = sc.get("proxy_type") in ("eip1167", "clone_with_immutable_arguments") and impl in li and impl_verified
         extra = (len(c) - 2) // 2 - 45
-        return ("linked clone" if ok else "unverified"), f"{sc.get('proxy_type') or 'no proxy type'} of {impl}" + (
-            "" if ok else f": implementations {li}, implementation verified {bool(impl_verified)}") + (
-            f"; {extra} B of data after the 45-byte proxy (the explorer does not link it)" if extra > 0 and not ok and impl_verified else "")
+        if ok:
+            return "linked clone", f"{sc.get('proxy_type')} of {impl}"
+        if extra > 0 and impl_verified:
+            return "linked (clone, appended data)", (f"EIP-1167 proxy of {impl} (verified), {extra} B appended; the explorer: "
+                                                     f"{sc.get('proxy_type') or 'no proxy type'}")
+        return "unverified", (f"{sc.get('proxy_type') or 'no proxy type'} of {impl}: implementations {li}, "
+                              f"implementation verified {bool(impl_verified)}")
     if full(sc):
         return "verified", ""
+    if harness and sc.get("is_verified") is True and sc.get("is_partially_verified") is True:
+        return "verified (partial, harness)", "partial match (the metadata hash differs) of a script/ harness contract"
     return "unverified", "partial match" if sc.get("is_verified") else "not verified"
 
 
@@ -563,10 +578,14 @@ def main():
         if k % 50 == 49:
             say(f"explorer lookups {k + 1}/{len(contracts)} ({int(time.time() - t0)}s)")
 
+    idx = index(roots)
+    say(f"artifacts indexed: {len(idx)} (metadata hashes)")
+
     def decide(a):
         impl = clone_impl(code[a])
         iv = full(sc.get(impl) or lookup(impl, code.get(impl, ""), chain)) if impl else False
-        return classify(code[a], sc.get(a, {}), iv, a in gen)
+        j = sc.get(a, {})
+        return classify(code[a], j, iv, a in gen, harness(idx.get(cbor(code[a])), j))
 
     for a, c in code.items():
         if c in ("0x", "0x0"):
@@ -580,8 +599,6 @@ def main():
 
     rc = 0
     if fix:
-        idx = index(roots)
-        say(f"artifacts indexed: {len(idx)} (metadata hashes)")
         todo = [a for a, r in rows.items() if r[0] == "unverified" and not clone_impl(code[a]) and (not only or a in only)]
         todo.sort(key=lambda a: (first.get(a, head + 1), a))
         say(f"fix: {len(todo)} contracts, one at a time")
@@ -604,21 +621,23 @@ def main():
                     if bs(f"addresses/{a}").get("is_contract") is True:
                         break
                     time.sleep(3)
+                good = lambda j: classify(code[a], j, harness=harness(hit, j))[0] != "unverified"
                 for attempt in (1, 2):  # forge "Pass - Verified" with nothing on the explorer was seen once per ~10: retry once
                     ok, why, s = forge_verify(a, hit, args or "", chain)
                     j = {}
                     for _ in range(6):
                         j = lookup(a, code[a], chain)
-                        if full(j):
+                        if good(j):
                             break
                         time.sleep(5)
-                    if full(j) or not ok or attempt == 2:
+                    if good(j) or not ok or attempt == 2:
                         break
                     say(f"{hit[3]} {a}: {why}, not on the explorer; attempt 2")
                 sc[a] = j
-                rows[a] = ("verified", hit[3], "") if full(j) else ("unverified", hit[3], why + (
+                st_, note = classify(code[a], j, harness=harness(hit, j))
+                rows[a] = (st_, hit[3], note) if st_ != "unverified" else ("unverified", hit[3], why + (
                     f", the explorer: verified {j.get('is_verified')}, partial {j.get('is_partially_verified')}" if ok else ""))
-                say(f"[{n}/{len(todo)}] {hit[3]} {a} {'ok' if full(j) else 'FAIL ' + rows[a][2]} ({s}s)")
+                say(f"[{n}/{len(todo)}] {hit[3]} {a} {'ok' if good(j) else 'FAIL ' + rows[a][2]} ({s}s)")
             for a in [a for a, r in rows.items() if r[0] == "unverified" and clone_impl(code[a]) and (not only or a in only)]:
                 impl = clone_impl(code[a])
                 sc[impl] = lookup(impl, code.get(impl, ""), chain)
