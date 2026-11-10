@@ -2,3 +2,4 @@ M5 | test_everySelectorIsClassified, test_kind0_NormalToken | 1
 M7 | test_uaTransferAdminTypehashIsPinned | 1
 M8 | test_pqtopicAdminTypehashIsPinned, test_pqtopicTypehashIsPinned, test_topicVectors | 1
 M6 | test_index_adminRevertStillCreates | 1
+M12 | guard::tests::allow_lists_equal_the_selector_audit_both_directions | 101

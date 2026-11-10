@@ -75,3 +75,7 @@ size | 262fff1c | 0 | 0 errors, 166 contracts (OpenFactory 28,583, PqChat 27,801
 scripts | 262fff1c | 0 | Deploy, DeploySend and the eight on-chain scripts compile
 gen | 262fff1c | 0 | gen_faces.py --check, gen_set.py --all --check, test_vcheck ok
 t4-zether-state (ZetherStateVectors STATE_VECTORS=1 CONTRACT_COMMIT=262fff1c, twice) | 262fff1c | 0 | state.json: `record` two words, `contractCommit`; every other word equal; the two runs byte-equal (sha256 7f12cd62)
+node-test | f6108160 | 0 | 705 passed, 0 failed (T2's five reds green: guard allow_lists_equal_the_selector_audit_both_directions, guard_allows_every_named_entry_only, submit job_api_explicit_json_roundtrip, typed digest_and_calldata_cannot_diverge, typed_ops_kat_every_entry; T3's PqTopic typehash, T4's `Created`)
+node-clippy | f6108160 | 0 | cargo clippy --all-targets -- -D warnings clean
+zether-prover cargo test (red) | f6108160- | 101 | every_zether_row_digest_equals_the_vector: NOT_ZETHER lacked group 3l's UASetWrapLimits, UASetWrapMember (the three admin names already fixed)
+zether-prover cargo test | f6108160 | 0 | 70 passed, 0 failed (every_zether_row_digest_equals_the_vector green)
