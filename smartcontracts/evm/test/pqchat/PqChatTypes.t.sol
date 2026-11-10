@@ -29,7 +29,7 @@ contract PqChatTypesTest is Test {
     function test_pqchatTypehashIsPinned() public view {
         assertEq(PqChatTypes.MEMBER_KEY_TYPEHASH, 0x6d7e57dfbfdfbc352504f1e82bc1658aeeb466b69ba168e7a3d69b0c1d448113);
         assertEq(PqChatTypes.WRAP_TYPEHASH, 0xf7d817cc55f4324caed15db75da261c4bd468454b80ac0cc8d30cd5a0d331e87);
-        assertEq(PqChatTypes.SESSION_TYPEHASH, 0xf7feab992d33b04a998655786b28fde03f83b25d51d155746127927fa43d71dd);
+        assertEq(PqChatTypes.SESSION_TYPEHASH, 0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d);
         assertEq(PqChatTypes.EPOCH_TYPEHASH, 0x00b07f15a60f8d4960c9262ffd3a307a3f2f2e790bcbc65911b4630ad0d2888c);
         assertEq(PqChatTypes.LEAVE_TYPEHASH, 0xe68d65ceec0d13ce4006e86e03cca815b44ff94ced5a2aa4b7244abf7502eea1);
         assertEq(PqChatTypes.REMOVE_TYPEHASH, 0x8f4939ececad5be22f7917c0c8087d80d372be36af3b0afb30046be9db0b6c56); // P48
@@ -52,7 +52,7 @@ contract PqChatTypesTest is Test {
     }
 
     function test_pqtopicTypehashIsPinned() public view {
-        assertEq(PqChatTypes.TOPIC_TYPEHASH, 0x036410199359c4078236396c31f3e7dad433cc6683b909381bbf77498778cd92);
+        assertEq(PqChatTypes.TOPIC_TYPEHASH, 0x75bed97bd08d9acabb9129fcd4953224878dd1dcfd40b822cb4dc8df462e1623);
         assertEq(PqChatTypes.TOPIC_UPDATE_TYPEHASH, 0x91027af710f50981ddd96a8956a4741037e30cdb39510c7ccc497d9d7e95fd43);
         assertEq(PqChatTypes.TOPIC_WRITER_TYPEHASH, 0x98c6762cb0fe12a3e571a6e57e5356db25bd35abf3e71ee230c87c1a3979c6d6);
         assertEq(PqChatTypes.TOPIC_ENTRY_TYPEHASH, 0x52078674040d84432edab865e567b3fe279100575e5d4496f6be51acf924c32c);
@@ -101,7 +101,7 @@ contract PqChatTypesTest is Test {
         s.creator = _b32(rec, string.concat(p, ".creator"));
         s.nonce = _u64(rec, string.concat(p, ".nonce"));
         s.homeChain = _b32(rec, string.concat(p, ".homeChain"));
-        s.homeContract = vm.parseJsonAddress(rec, string.concat(p, ".homeContract"));
+        s.homeChatContract = vm.parseJsonAddress(rec, string.concat(p, ".homeChatContract"));
         s.admins = vm.parseJsonBytes32Array(rec, string.concat(p, ".admins"));
         s.members = _membersAt(rec, p);
         s.wrapHashes = vm.parseJsonBytes32Array(rec, string.concat(p, ".wrapHashes"));
@@ -178,7 +178,7 @@ contract PqChatTypesTest is Test {
     function test_topicVectors() public view {
         string memory p = ".topic.record";
         IPqChat.PqTopic memory t = IPqChat.PqTopic(_b32(top, string.concat(p, ".owner")), _u64(top, string.concat(p, ".nonce")),
-            _b32(top, string.concat(p, ".homeChain")), vm.parseJsonAddress(top, string.concat(p, ".homeContract")),
+            _b32(top, string.concat(p, ".homeChain")), vm.parseJsonAddress(top, string.concat(p, ".homeChatContract")),
             vm.parseJsonString(top, string.concat(p, ".name")), vm.parseJsonBytes(top, string.concat(p, ".about")),
             vm.parseJsonBool(top, string.concat(p, ".openReplies")));
         assertEq(h.topic(t), _b32(top, ".topic.typed"));

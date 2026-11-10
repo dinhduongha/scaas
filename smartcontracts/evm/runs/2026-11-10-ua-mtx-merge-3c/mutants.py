@@ -31,7 +31,7 @@ MUTANTS = {
     "t85-wrap-stored-twice": (C, "            if (ep.wrapAt[i] != 0) revert PqChatWrapStored(epochId, i);\n", "", "PqChat.t.sol"),
     # T86: epochs, roles
     "t86-parent-plus-one": (C, "if (e.epoch != pe.epoch + 1) revert", "if (e.epoch <= pe.epoch) revert", "PqChatEpochs.t.sol"),
-    "t86-home-chain-uid-ignored": (C, "ep.home = s.homeChain == uid && s.homeContract == address(this);", "ep.home = s.homeContract == address(this);", "PqChatEpochs.t.sol"),
+    "t86-home-chain-uid-ignored": (C, "ep.home = s.homeChain == uid && s.homeChatContract == address(this);", "ep.home = s.homeChatContract == address(this);", "PqChatEpochs.t.sol"),
     "t86-admin-check": (C, "        } else if (!_has(pa, e.author)) {\n            revert PqChatNotAdmin(e.author);", "        } else if (false) {\n            revert PqChatNotAdmin(e.author);", "PqChatEpochs.t.sol"),
     "t86-plain-ignores-admins": (C, "if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {", "if (_keeps(pe, pu, _uas(members))) {", "PqChatEpochs.t.sol"),
     "t86-leaver-drop-any": (C, "            else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false; // dropped without leaving or removal", "            else if (false) return false;", "PqChatEpochs.t.sol"),

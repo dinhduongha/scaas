@@ -2287,7 +2287,7 @@ rule, in the component doc):
   nonce)` with their own tags `…/scope/topic`, `…/scope/entry`; all pinned by the vectors.
 - **3C-D6 — shapes the contract checks.** `mlkemCt` 1,568 B, `sealedKey` 48 B; `wraps[j]` names `members[first + j]`'s `ua`
   and `keyId`; members strictly sorted by `ua` (≥ 2 in a session, ≥ 1 in an epoch); admins strictly sorted and registered; a
-  session's creator in both lists; `homeChain`, `homeContract` non-zero. `parents`, `sealedInfo` and padding are client rules
+  session's creator in both lists; `homeChain`, `homeChatContract` non-zero. `parents`, `sealedInfo` and padding are client rules
   (P19, §4.2, §6.5) and are not checked.
 - **3C-D7 — a plain rekey** (P10): `members(e) ⊆ members(parent)` by `ua` and `admins(e) ⊆ admins(parent)`, every one dropped
   has left the parent epoch; `keyId` and `via` may change; its author is a member of the parent. Anything else is a

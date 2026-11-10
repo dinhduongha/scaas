@@ -31,7 +31,7 @@ interface IPqChat {
         bytes32 creator;
         uint64 nonce;
         bytes32 homeChain;
-        address homeContract;
+        address homeChatContract;
         bytes32[] admins;
         MemberKey[] members;
         bytes32[] wrapHashes;
@@ -84,7 +84,7 @@ interface IPqChat {
         bytes32 owner;
         uint64 nonce;
         bytes32 homeChain;
-        address homeContract;
+        address homeChatContract;
         string name;
         bytes about;
         bool openReplies;

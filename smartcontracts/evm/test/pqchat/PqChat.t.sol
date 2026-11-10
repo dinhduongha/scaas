@@ -175,7 +175,7 @@ contract PqChatTest is PqChatBase {
         assertEq(m.length, 1);
         assertEq(m[0], address(topics), "the release names its module");
         IPqChat.PqTopic memory t;
-        (t.owner, t.homeChain, t.homeContract, t.name) = (ids[0], bytes32(uint256(1)), address(chat), "t");
+        (t.owner, t.homeChain, t.homeChatContract, t.name) = (ids[0], bytes32(uint256(1)), address(chat), "t");
         IUARegistry.UASig memory sig;
         vm.expectRevert(IPqChat.PqChatEnv.selector);
         IPqChat(address(topics)).createTopic(t, sig); // no env on the module itself
@@ -355,7 +355,7 @@ contract PqChatTest is PqChatBase {
             }
             if (k == 7) s.wrapHashes = _list(s.wrapHashes[0], s.wrapHashes[1]); // fewer hashes than members
             if (k == 8) s.homeChain = 0;
-            if (k == 9) s.homeContract = address(0);
+            if (k == 9) s.homeChatContract = address(0);
             if (k == 10) s.admins = new bytes32[](0);
             if (k <= 3) {
                 w = _wraps(s.members, PqChatTypes.sessionId(s.creator, 1));

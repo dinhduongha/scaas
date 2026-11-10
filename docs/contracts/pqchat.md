@@ -135,17 +135,22 @@ a `UASig` over `uaMessage(kind, PURPOSE_PQCHAT, typed(record))` and checked by t
 |---|---|---|
 | `MemberKey` | `MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` | (inside the session and epoch types) |
 | `Wrap` | `Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)` | not signed; `wrapHashes[i] = hashStruct(Wrap_i)` |
-| `PqChatSession` | `PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` | `creator` |
+| `PqChatSession` | `PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` | `creator` |
 | `PqChatEpoch` | `PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` | `author` |
 | `PqChatLeave` | `PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)` | `member` |
 | `PqChatMessage` | `PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext)` | `sender` |
-| `PqTopic` | `PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies)` | `owner` |
+| `PqTopic` | `PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)` | `owner` |
 | `PqTopicUpdate` | `PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)` | the topic's owner |
 | `PqTopicWriter` | `PqTopicWriter(bytes32 topicId,bytes32 writer,bool granted,uint64 seq)` | the topic's owner |
 | `EntryRef` | `EntryRef(bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash)` | (inside `PqTopicEntry`) |
 | `PqTopicEntry` | `PqTopicEntry(bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body)EntryRef(bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash)` | `author` |
 | `PqTopicEdit` | `PqTopicEdit(bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body)` | the entry's author |
 | `PqTopicVote` | `PqTopicVote(bytes32 entryId,bytes32 voter,int8 value,uint64 seq)` | `voter` |
+
+<a id="CTR-CHAT-21"></a>**CTR-CHAT-21** — **`PqChatSession` and `PqTopic` name their home instance by `homeChain` and
+`homeChatContract`** (owner 2026-11-10: the address field's new name; `homeChain` keeps its name). The field is part of both
+type strings above, so both typehashes moved with it: `PqChatSession` `0xe2c3b4c1…ad1e4d`, `PqTopic` `0x75bed97b…2e1623`
+(full values in `test/pqchat/PqChatTypes.t.sol` and `smartcontracts/vectors/pqchat/`). Status: **BUILT**.
 
 <a id="CTR-CHAT-04"></a>**CTR-CHAT-04** — **Ids are hashes of the signer and its nonce; a nonce is a bit in a per-scope
 bitmap, used in any order, checked after the signature; a record that replaces a value carries `seq` and lands only at
@@ -218,11 +223,11 @@ shapes 3C-D6 are a controller call, owner may override; the main case owner 2026
   are expanded by the author's client](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#3-members-kem-keys-devices));
 - `admins` is strictly sorted and each is registered; an admin needs a KEM key only if it is also a member
   (`PqChatShape`);
-- `creator` is in `admins` and in `members`, `homeChain ≠ 0`, `homeContract ≠ 0` (`PqChatShape`);
+- `creator` is in `admins` and in `members`, `homeChain ≠ 0`, `homeChatContract ≠ 0` (`PqChatShape`);
 - `creator` signed it ([CTR-CHAT-03](#CTR-CHAT-03)) and `(creator, nonce)` is unused ([CTR-CHAT-04](#CTR-CHAT-04));
 - the given wraps land ([CTR-CHAT-07](#CTR-CHAT-07)).
 
-The instance is the session's **home** when `homeChain == chainEnv().chainUid` and `homeContract == address(this)`, fixed
+The instance is the session's **home** when `homeChain == chainEnv().chainUid` and `homeChatContract == address(this)`, fixed
 at creation; anywhere else the record is a replica. `parents`, `sealedInfo` and padding are client rules and not checked.
 Anyone may create a session listing any UA: consent is the client's (D5, [CTR-CHAT-14](#CTR-CHAT-14)).
 
@@ -450,7 +455,7 @@ signature check, the nonce bitmaps and the blobs with sessions, and no cryptogra
 revokes writers; nothing on chain is hidden and nobody moderates** (owner D18, D19 and Q2 of 2026-11-07; topics spec P37,
 P41).
 
-- `createTopic(PqTopic t, UASig sig) returns (bytes32 topicId)`: `name` 1–128 B, `homeChain ≠ 0`, `homeContract ≠ 0`
+- `createTopic(PqTopic t, UASig sig) returns (bytes32 topicId)`: `name` 1–128 B, `homeChain ≠ 0`, `homeChatContract ≠ 0`
   (`PqTopicShape`; no other rule reads the home), signed by `owner`, `(owner, nonce)` unused in the topic scope. `about`
   is Markdown bytes; `openReplies` is the reply flag (clients create topics with `true`, D19). The owner is fixed for the
   topic's life; an `msig` owner gives shared ownership.

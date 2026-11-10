@@ -43,7 +43,7 @@ const sign = (who, struct, s) => ({ keyData: '0x', members: [],
   signature: hex(signUA('mldsa65', who.secretKey, pc.PURPOSE_PQCHAT, pc.typed(struct, s), { extraEntropy: false })) });
 
 const homeChain = hex(rnd('home-chain-uid'));
-const homeContract = hex(rnd('home-contract', 20));
+const homeChatContract = hex(rnd('home-contract', 20));
 const seat = hex(rnd('msig-seat'));
 
 /** A signed record's row; `sig` adds the signature, its hash and the stored blob (3C-D3). */
@@ -82,8 +82,8 @@ function sealed(name, K, sid, eid, info) {
 const sid = hex(pc.sessionId(alice.ua, 7));
 const K0 = rnd('K/session');
 const members0 = byUa.map((p) => ({ ua: p.ua, keyId: p.keyId, via: p === carol ? seat : Z32 }));
-const chainStore = { kind: 'chain', chainUid: homeChain, contract: homeContract };
-const session = { creator: alice.ua, nonce: 7, homeChain, homeContract, admins: sorted([alice.ua, bob.ua]), members: members0,
+const chainStore = { kind: 'chain', chainUid: homeChain, contract: homeChatContract };
+const session = { creator: alice.ua, nonce: 7, homeChain, homeChatContract, admins: sorted([alice.ua, bob.ua]), members: members0,
   wrapHashes: wraps('session', K0, sid, sid, members0),
   sealedInfo: sealed('session', K0, sid, sid, {
     stores: [{ kind: 'matrix', room: '!pqchat-vectors:example.org' }, { kind: 'hcs', topic: '0.0.4242' }, chainStore,
@@ -241,7 +241,7 @@ write('messages.json', {
 // ------------------------------------------------------------------ topics (public topics spec §2)
 const tid = hex(pc.topicId(alice.ua, 11));
 const md = 'text/markdown';
-const topic = { owner: alice.ua, nonce: 11, homeChain, homeContract, name: 'PqChat vectors', about: utf8('# PqChat vectors\n\nA topic for the vectors.\n'),
+const topic = { owner: alice.ua, nonce: 11, homeChain, homeChatContract, name: 'PqChat vectors', about: utf8('# PqChat vectors\n\nA topic for the vectors.\n'),
   openReplies: true };
 const update = { topicId: tid, seq: 1, name: 'PqChat vectors, renamed', about: utf8('# Renamed\n\nReplies by writers only.\n'), openReplies: false };
 const writer = { topicId: tid, writer: bob.ua, granted: true, seq: 1 };

@@ -106,12 +106,12 @@ const NESTED: &[(&str, &str)] = &[
     // the op of that name
     ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
     ("Wrap", "bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey"),
-    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
+    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
     ("PqChatEpoch", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
     ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
     ("PqChatRemove", "bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
     ("PqChatMessage", "bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext"),
-    ("PqTopic", "bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies"),
+    ("PqTopic", "bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies"),
     ("PqTopicUpdate", "bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies"),
     ("PqTopicWriter", "bytes32 topicId,bytes32 writer,bool granted,uint64 seq"),
     ("EntryRef", "bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash"),
@@ -2433,5 +2433,25 @@ mod tests {
         assert!(refused("postMessage", &|o| o["args"]["fee"] = json!("1")).starts_with("BAD_PAYLOAD: args.fee: unknown field"));
         assert!(refused("postMessage", &|o| o["envelope"] = json!({})).contains("takes no envelope"));
         assert!(refused("postMessage", &|o| o["auth"] = o["args"]["sig"].clone()).contains("takes its signature in args"));
+    }
+
+    /// The `PqChat` records' type strings and typehashes against `smartcontracts/vectors/pqchat/` (written by clientkeys), and a
+    /// literal pin of the two that name the home instance (owner 2026-11-10: `homeChatContract`), so a regenerated vector cannot
+    /// move one unnoticed.
+    #[test]
+    fn pqchat_typehashes_are_the_vectors() {
+        let th = |name: &str| type_string(name, nested(name).unwrap_or_else(|| panic!("{name}: no node struct")));
+        let mut n = 0;
+        for f in [include_str!("../../smartcontracts/vectors/pqchat/records.json"), include_str!("../../smartcontracts/vectors/pqchat/topics.json")] {
+            let v: Value = serde_json::from_str(f).unwrap();
+            for (name, t) in v["typehashes"].as_object().unwrap() {
+                let s = th(name);
+                assert_eq!((s.as_str(), format!("{:#x}", keccak256(&s))), (t["type"].as_str().unwrap(), t["hash"].as_str().unwrap().into()), "{name}");
+                n += 1;
+            }
+        }
+        assert_eq!(n, 14);
+        assert_eq!(format!("{:#x}", keccak256(th("PqChatSession"))), "0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d");
+        assert_eq!(format!("{:#x}", keccak256(th("PqTopic"))), "0x75bed97bd08d9acabb9129fcd4953224878dd1dcfd40b822cb4dc8df462e1623");
     }
 }

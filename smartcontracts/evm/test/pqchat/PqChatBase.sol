@@ -222,7 +222,7 @@ abstract contract PqChatBase is UARegistryBase {
         s.creator = ids[0];
         s.nonce = nonce;
         s.homeChain = chainUidA;
-        s.homeContract = home;
+        s.homeChatContract = home;
         s.admins = _list(ids[0]);
         s.members = _members(n);
         w = _wraps(s.members, PqChatTypes.sessionId(s.creator, nonce));

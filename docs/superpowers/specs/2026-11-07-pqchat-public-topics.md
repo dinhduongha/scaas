@@ -62,7 +62,7 @@ a payer pays a relayer through `RelayFeeRouter` (CTR-MTX-27). Every write is rel
 
 | Struct | Type string | Signed by |
 |---|---|---|
-| `PqTopic` | `PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies)` | `owner` |
+| `PqTopic` | `PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)` | `owner` |
 | `PqTopicUpdate` | `PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)` | the topic's owner |
 | `PqTopicWriter` | `PqTopicWriter(bytes32 topicId,bytes32 writer,bool granted,uint64 seq)` | the topic's owner |
 | `PqTopicEntry` | `PqTopicEntry(bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body)EntryRef(bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash)` | `author` |
@@ -71,7 +71,7 @@ a payer pays a relayer through `RelayFeeRouter` (CTR-MTX-27). Every write is rel
 
 **Fields.**
 
-- `homeChain`, `homeContract` — the instance whose state readers treat as the topic's reference (as a session's home,
+- `homeChain`, `homeChatContract` — the instance whose state readers treat as the topic's reference (as a session's home,
   parent P32); no contract rule reads them beyond "not zero". The same records may land in other instances as mirrors
   (P43).
 - `name` — UTF-8, 1–128 B; not unique (ids are hashes; no global name to squat). `about` — the topic's description,
@@ -86,7 +86,7 @@ a payer pays a relayer through `RelayFeeRouter` (CTR-MTX-27). Every write is rel
   `PqTopicEdit` record under `DS_C`). **The contract stores the reference as given and never checks it**: no bridge, no
   message across chains, no proof; the target may not exist. A reader resolves it by reading that chain's state (an RPC
   there), checks that its factory lists `pqchat` as a `PqChat` instance and that the referenced entry's topic names that
-  instance as its home (`homeChain`, `homeContract`; Fable P3-4: else a writer revoked at home could post in a replica
+  instance as its home (`homeChain`, `homeChatContract`; Fable P3-4: else a writer revoked at home could post in a replica
   holding only its grant, and the link would check), and compares `contentHash` when set; until then the client shows the
   link as unverified. Edits keep the original's reference.
 - `value` — `+1` up, `-1` down, `0` withdrawn (`PqTopicVoteValue` otherwise).
@@ -165,7 +165,7 @@ own. Counts are public `up` and `down`, never a combined score in state.
 
 | Entry | Checks |
 |---|---|
-| `createTopic(PqTopic t, UASig sig)` | sig; nonce; `homeChain`, `homeContract` not zero; lengths |
+| `createTopic(PqTopic t, UASig sig)` | sig; nonce; `homeChain`, `homeChatContract` not zero; lengths |
 | `updateTopic(PqTopicUpdate u, UASig sig)` | sig by the topic owner (`PqTopicNotOwner`); `seq == stored + 1`; lengths |
 | `setTopicWriter(PqTopicWriter w, UASig sig)` | sig by the topic owner; `seq == stored + 1`; `writer` not the owner |
 | `postEntry(PqTopicEntry e, UASig sig)` | sig; nonce; topic exists; P37 rights; parent exists in the same topic (`PqTopicParent`); `ref` shape; lengths |
@@ -315,7 +315,7 @@ To be numbered into the merge plan; sizes in agent-days. The factory index tasks
 | # | Task | Files | Size |
 |---|---|---|---|
 | ~~PF1~~ | **dropped** (owner-approved generic factory, §11): T70 builds the generic path; `PqChat`'s registration is three deploy-script calls in PC0 | — | 0 |
-| PC0 | `PqChat` as a release of class 3, kind 0 (parent P32, §11): `initialize(bytes32 ownerUA)` once, by the factory only (`ownerUA` 0 allowed, fixed, no transfer); `factoryInfo()`; `supportsInterface` (ERC-165, `type(IPqChat).interfaceId`); `owner()`; ERC-7201 storage; `initEnv` / `chainEnv()` (`ChainEnv`: `chainUid`, registry, code-size limit `params[0]`); constructor `(ReleaseId, factory_, implArgs)`; `DeployBase` publishes the class env, deploys release 1, enables `(3, 0)`, creates one instance; `homeContract` in `PqChatSession` and the home-instance check of P9; store-list `contract`; changes to UA-7 plan T5, T6, T8 (T8 becomes the release deploy in `DeployBase` plus one instance) | `src/pqchat/*`, `script/DeployBase.s.sol`, `test/pqchat/*` | +0.5–1 over T5–T8 |
+| PC0 | `PqChat` as a release of class 3, kind 0 (parent P32, §11): `initialize(bytes32 ownerUA)` once, by the factory only (`ownerUA` 0 allowed, fixed, no transfer); `factoryInfo()`; `supportsInterface` (ERC-165, `type(IPqChat).interfaceId`); `owner()`; ERC-7201 storage; `initEnv` / `chainEnv()` (`ChainEnv`: `chainUid`, registry, code-size limit `params[0]`); constructor `(ReleaseId, factory_, implArgs)`; `DeployBase` publishes the class env, deploys release 1, enables `(3, 0)`, creates one instance; `homeChatContract` in `PqChatSession` and the home-instance check of P9; store-list `contract`; changes to UA-7 plan T5, T6, T8 (T8 becomes the release deploy in `DeployBase` plus one instance) | `src/pqchat/*`, `script/DeployBase.s.sol`, `test/pqchat/*` | +0.5–1 over T5–T8 |
 | PT1 | Vectors: six topic typehashes, `EntryRef`, ids, a record and blob per struct, the new `PqChatSession` typehash, non-zero values in every field | `clients/clientkeys` `src/pqchat.js`, `scripts/pqchat-vectors.mjs`, `smartcontracts/vectors/pqchat/topics.json` | 0.5–1 |
 | PT2 | Topics: structs, five entries (no votes), rights, edits, multi-blob bodies, `ref`, lists, views, events, errors; tests 1–4, 6–10 | `src/pqchat/PqChat.sol`, `PqChatTypes.sol`, `IPqChat.sol`, `test/pqchat/PqTopics.t.sol` | 2–3 |
 | PT3 | Votes: `voteEntry`, vote and score slots, views; test 5 | same | 0.5–1 |

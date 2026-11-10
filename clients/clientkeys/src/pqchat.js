@@ -38,7 +38,7 @@ export class PqChatError extends Error {
 export const TYPE_STRINGS = Object.freeze({
   MemberKey: 'MemberKey(bytes32 ua,uint64 keyId,bytes32 via)',
   Wrap: 'Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)',
-  PqChatSession: 'PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,'
+  PqChatSession: 'PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,'
     + 'MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)',
   PqChatEpoch: 'PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,'
     + 'MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)',
@@ -46,7 +46,7 @@ export const TYPE_STRINGS = Object.freeze({
   PqChatRemove: 'PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)',
   PqChatMessage: 'PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,'
     + 'bytes ciphertext)',
-  PqTopic: 'PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies)',
+  PqTopic: 'PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)',
   PqTopicUpdate: 'PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)',
   PqTopicWriter: 'PqTopicWriter(bytes32 topicId,bytes32 writer,bool granted,uint64 seq)',
   PqTopicEntry: 'PqTopicEntry(bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body)'

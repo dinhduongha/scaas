@@ -137,8 +137,8 @@ in two instances; membership is therefore always read from the home instance, an
 
 **Where an instance replaces "the chain".** A record is still portable (domain `DS_C`: no chain id, no address, P7), so
 the same record may land in any instance on any chain, as a replica. Wherever this spec says **home chain**, read **home
-instance**: the pair `(homeChain, homeContract)` fixed in the session record (§4.2); the slot rule of P9 holds only where
-`chainUid() == homeChain` and `address(this) == homeContract`. A **chain store** (P27, P29) names an instance:
+instance**: the pair `(homeChain, homeChatContract)` fixed in the session record (§4.2); the slot rule of P9 holds only where
+`chainUid() == homeChain` and `address(this) == homeChatContract`. A **chain store** (P27, P29) names an instance:
 `{"kind": "chain", "chainUid": …, "contract": <instance address>}`. `postMessage` needs the epoch in the instance it is
 sent to. A client and the node accept as a `PqChat` only an address the chain's factory lists as class 3 with a
 registered release (version ≠ 0).
@@ -207,7 +207,7 @@ minimal form, CTR-UA-07). The contract verifies it through the registry's portab
 |---|---|
 | `MemberKey` | `MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
 | `Wrap` | `Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)` |
-| `PqChatSession` | `PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
+| `PqChatSession` | `PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
 | `PqChatEpoch` | `PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
 | `PqChatLeave` | `PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)` |
 | `PqChatMessage` | `PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext)` |
@@ -220,7 +220,7 @@ minimal form, CTR-UA-07). The contract verifies it through the registry's portab
   it, so wraps may arrive in chunks (P11).
 - `Wrap.mlkemCt` 1,568 B, `x25519Eph` the X25519 ephemeral public key, `sealedKey` 48 B (`K` under the KEK, with its tag).
 - `homeChain` = the `chain_uid` of the chain that orders this session's epochs (the family-neutral id the factory already
-  uses), and `homeContract` = the address of the `PqChat` instance on it that orders them (D22, P32); both fixed for the
+  uses), and `homeChatContract` = the address of the `PqChat` instance on it that orders them (D22, P32); both fixed for the
   session's life.
 - `sealedInfo` = AES-256-GCM-SIV under `HKDF(K, "scaas/pqchat/v1/info" ‖ sessionId ‖ epochId)`, a random 96-bit nonce
   prepended, over the padded (§6.5) canonical JSON `{"stores": [<store>, …], "name", "topic", "matrix": {<ua>: <Matrix
@@ -318,7 +318,7 @@ Anyone may create a session with any UA (owner answer 2); consent is in clients 
 **P9 — Epochs** (D3). `rekey` is accepted when: the signature is the author's; the parent epoch is stored and **complete**;
 `e.epoch == parent.epoch + 1` (`PqChatEpochNumber`); the author's rights hold (P10); every member holds `keyId` here. A
 child is **complete** when every wrap has landed. **On the home instance** (`chain_uid == homeChain` and
-`address(this) == homeContract`, P32), the first child of a
+`address(this) == homeChatContract`, P32), the first child of a
 parent to become complete takes the parent's child slot; any other child of that parent is refused or can no longer
 complete (`PqChatEpochTaken`). An incomplete child never takes the slot, so nobody can lock a session by starting an
 epoch and never finishing it; anyone may finish it with `addWraps` (the signed hashes fix the bytes). **In every other
@@ -1042,13 +1042,13 @@ Matrix homeserver works, public or self-hosted, SCaaS runs none, with the costs 
 **Decisions of 2026-11-07** (owner, relayed by the coordinator; a Change on
 [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)): **D22** — `PqChat` is a factory kind: `OpenFactory` creates instances
 freely from catalogued releases (EIP-1167 clones, versions in the catalogue, nothing deployed upgraded), each with its own
-owner UA, sessions and public topics; the home of a session is an instance `(homeChain, homeContract)`, a chain store
+owner UA, sessions and public topics; the home of a session is an instance `(homeChain, homeChatContract)`, a chain store
 names an instance (§2.1, P32). **D18–D21** — public topics in each instance: no hiding and no moderation on chain;
 replies open by default (a per-topic flag); bodies stored in full on chain, with an optional named reference to an entry
 on another chain; per-entry up and down counts, one vote per UA. They are stated in the sibling spec
 [`2026-11-07-pqchat-public-topics.md`](2026-11-07-pqchat-public-topics.md) §9. Why: anyone runs a chat or a community
 service of their own on the same audited code, as with tokens and DEXes; the owner keeps content public and permanent.
-Cost: a session record names its instance (the `PqChatSession` typehash gains `homeContract`); one more factory class.
+Cost: a session record names its instance (the `PqChatSession` typehash gains the instance's address, the field named `homeChatContract` since 2026-11-10); one more factory class.
 
 ## 16. Work
 

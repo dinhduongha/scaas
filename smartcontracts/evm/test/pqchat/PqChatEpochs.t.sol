@@ -356,7 +356,7 @@ contract PqChatEpochsTest is PqChatBase {
         assertEq(chat.childOf(sid), ea);
     }
 
-    /// The chain dimension of the home check: `homeContract` this instance but `homeChain` another chain's `chain_uid`.
+    /// The chain dimension of the home check: `homeChatContract` this instance but `homeChain` another chain's `chain_uid`.
     function test_replica_otherChainUid() public {
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(3, 7, address(chat));
         s.homeChain = keccak256("another chain");

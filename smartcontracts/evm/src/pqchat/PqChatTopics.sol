@@ -22,11 +22,11 @@ contract PqChatTopics is PqChatCore {
 
     // ------------------------------------------------------------------ public topics
 
-    /// @notice P41: any UA the registry verifies; `homeChain`, `homeContract` not zero; `name` 1-128 B.
+    /// @notice P41: any UA the registry verifies; `homeChain`, `homeChatContract` not zero; `name` 1-128 B.
     function createTopic(IPqChat.PqTopic calldata t, IUARegistry.UASig calldata sig) external returns (bytes32 tid) {
         (IUARegistry reg, uint256 limit,) = _env();
         uint256 nl = bytes(t.name).length;
-        if (nl == 0 || nl > 128 || t.homeChain == 0 || t.homeContract == address(0)) revert IPqChat.PqTopicShape();
+        if (nl == 0 || nl > 128 || t.homeChain == 0 || t.homeChatContract == address(0)) revert IPqChat.PqTopicShape();
         _auth(reg, t.owner, PqChatTypes.hashTopic(t), sig);
         _useNonce(PqChatTypes.scopeTopic(t.owner), t.nonce);
         tid = PqChatTypes.topicId(t.owner, t.nonce);

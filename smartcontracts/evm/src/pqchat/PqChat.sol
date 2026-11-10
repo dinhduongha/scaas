@@ -97,7 +97,7 @@ contract PqChat is IPqChat, PqChatCore {
         ep.sessionId = sid;
         ep.record = _put(abi.encode(s, keccak256(abi.encode(sig))), limit);
         ep.wraps = uint32(s.members.length);
-        ep.home = s.homeChain == uid && s.homeContract == address(this);
+        ep.home = s.homeChain == uid && s.homeChatContract == address(this);
         emit PqChatSessionCreated(sid, s.creator, s.homeChain);
         for (uint256 i; i < s.members.length; ++i) _s().sessions[s.members[i].ua].push(sid);
         _land(sid, ep, 0, wraps, s.members, s.wrapHashes, limit);
@@ -109,7 +109,7 @@ contract PqChat is IPqChat, PqChatCore {
         bytes32[] memory admins = s.admins;
         _checkLists(reg, admins, members, s.wrapHashes.length, 2);
         if (!_has(admins, s.creator) || _memberAt(members, s.creator) == type(uint256).max || s.homeChain == 0
-            || s.homeContract == address(0)) revert PqChatShape();
+            || s.homeChatContract == address(0)) revert PqChatShape();
     }
 
     /// @notice P9, P10: the parent stored and complete in this instance, `epoch == parent + 1`, the home slot free; a plain
