@@ -109,13 +109,12 @@ chain_uid = "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164"
 # ua_registry = "0x..."                          # UARegistry: the only target of register / setKemKey / storePqzPop /
                                                  # setPqzKey call jobs (unset: refused); a relayed PQ register over
                                                  # max_gas_per_tx or the block gas limit is refused UA_REGISTER_SPLIT
-governance_routers = ["0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0", "0xFeC9586a1639152bfAbC9F7946321F5aC9Dc6F52"]
+governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
                                                  # GovernanceRouter ("governance_router" in deployments/<id>.json): the only
                                                  # targets of gov_router jobs, direct or relayed (empty: refused); on 7622
-                                                 # since reset 1 (2026-11-04): deployments/7622.json's and 7622-pqz.json's;
-                                                 # the ua*/mtx* merge moves the router's bytecode, so a deploy of it (reset 2)
-                                                 # lists new CREATE2 addresses here (GovDeploy.t.sol
-                                                 # test_routerAndRelayFeeRouterNewAddresses)
+                                                 # since reset 2 (2026-11-10, NET-EVM-11): the Step 5 deploy's router
+                                                 # (GovDeploy.t.sol test_routerAndRelayFeeRouterNewAddresses); a PQZ e2e
+                                                 # run adds its own book's router here
 # compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<id>.json,
                                                  # DEPLOY_REGULATED=1): the canonical registry the regulated kinds 8-13
                                                  # pin; the DEX venue's pre-check reads it (NODE-DEX-11). An address, no
