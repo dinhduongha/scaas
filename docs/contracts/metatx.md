@@ -133,10 +133,13 @@ mislead signers.
 
 ## 2. `MetaTransaction`, `MetaTransfer` and the pinned typehashes
 
-<a id="CTR-MTX-15"></a>**CTR-MTX-15** — **Two structs, one nonce space** (owner). `MetaTxLib.MetaTransaction` is the
-generic signed call of **any** SCaaS contract: `data` is one call of one of the contract's own allowlisted functions
-(a self-call, [CTR-MTX-17](#CTR-MTX-17)). `MetaTxLib.MetaTransfer` exists on tokens only and is the typed transfer or
-payment that outside wallets display field by field ("send `value` to `to`") ([CTR-MTX-23](#CTR-MTX-23)).
+<a id="CTR-MTX-15"></a>**CTR-MTX-15** — **Two structs, one nonce space** (owner). The generic signed call of a SCaaS contract is
+`MetaTxLib.UAMetaTransaction` on tokens and the mandate wallets since the merge ([CTR-MTX-30](../decisions.md#CTR-MTX-30)), and the address
+`MetaTxLib.MetaTransaction` on `SmartKeyAccount` and for a token's `executeMetaTransaction` alias: `data` is one call of one of the contract's own
+allowlisted functions (a self-call, [CTR-MTX-17](#CTR-MTX-17)). `MetaTxLib.UAMetaTransfer` exists on tokens only and is the typed transfer or
+payment that outside wallets display field by field ("send `value` to `to`") ([CTR-MTX-23](#CTR-MTX-23)). Ids are `bytes32`: a native id is the
+address zero-padded (top 96 bits zero), a derived id a registered SIGNING UA ([accounts.md](accounts.md#CTR-UA-26)). The address `MetaTransfer`
+left `MetaTxLib` for `smartcontracts/evm/legacy/ua-mtx-merge/` (the merge; its typehash pin stays on the test copy `LegacyMetaTransfer`).
 `smartcontracts/evm/src/common/MetaTxLib.sol` is normative; a struct argument also keeps EIP-712 hashing clear of
 Solidity's "Stack too deep" limit. The fee, where a contract charges one, is paid in **this** token (no `feeToken`
 field: another token lies outside this contract and this contract holds no allowance of it; a contract that holds no
@@ -156,31 +159,40 @@ struct MetaTransaction {   // every SCaaS contract: a signed call of one of this
     address feeRecipient;  // bound fee recipient when MODE_RESTRICT_FEE_RECIPIENT
 }
 
-struct MetaTransfer {      // tokens only: the typed transfer or payment; fields as above, plus:
-    address from; address to; uint256 value;
-    bytes32 entryRef;      // 0 = transfer; ≠ 0 = payment (PaymentSettled with this reference)
+struct UAMetaTransaction { // tokens, mandate wallets: MetaTransaction with `bytes32 from` (a native or derived id)
+    bytes32 from; bytes data;
+    uint256 batch; uint256 nonce; uint256 validUntil; uint32 mode; address relayer; uint256 fee; address feeRecipient;
+}
+
+struct UAMetaTransfer {    // tokens only: the typed transfer or payment; fields as above, plus:
+    bytes32 from; bytes32 to; uint256 value;
+    bytes32 entryRef;      // 0 = transfer; ≠ 0 = payment (UAPaymentSettled with this reference)
     uint256 batch; uint256 nonce; uint256 validUntil; uint32 mode; address relayer; uint256 fee; address feeRecipient;
 }
 
 bytes32 constant METATX_TYPEHASH = keccak256(
   "MetaTransaction(address from,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,"
   "address relayer,uint256 fee,address feeRecipient)");
-bytes32 constant METATRANSFER_TYPEHASH = keccak256(
-  "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
+bytes32 constant UAMETATX_TYPEHASH = keccak256(
+  "UAMetaTransaction(bytes32 from,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,"
+  "address relayer,uint256 fee,address feeRecipient)");
+bytes32 constant UAMETATRANSFER_TYPEHASH = keccak256(
+  "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
   "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 
 hashStruct(m) = keccak256(abi.encode(METATX_TYPEHASH, m.from, keccak256(m.data), m.batch, m.nonce,
                                      m.validUntil, m.mode, canonRelayer, m.fee, canonFeeRecipient))
-hashStruct(t) = keccak256(abi.encode(METATRANSFER_TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce,
+hashStruct(t) = keccak256(abi.encode(UAMETATRANSFER_TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce,
                                      t.validUntil, t.mode, canonRelayer, t.fee, canonFeeRecipient))
 digest        = keccak256(0x1901 ‖ domainSeparator(name, "1", chainId, contract, salt = chain_uid) ‖ hashStruct(·))
 ```
 
-Both structs consume the **same** lane `mtxNonce(from, batch)`: a lane is spent once whichever struct spent it.
-**One intent, one digest** ([CTR-MTX-11](#CTR-MTX-11)): a transfer or payment is signed only as a `MetaTransfer`; no
-`transfer`/`pay` selector is ever allowlisted for `MetaTransaction`. `data` is always hashed (`keccak256(m.data)`) —
-encoding dynamic bytes directly would break injectivity. Both typehashes are pinned by tests
-(`test_metaTxTypehashIsPinned`, `test_metaTransferTypehashIsPinned`).
+(`hashStruct` of a `UAMetaTransaction` is that of `MetaTransaction` with `UAMETATX_TYPEHASH` and the `bytes32 from`.) The structs of a
+contract consume the **same** lane `mtxNonce(from, batch)`: a lane is spent once whichever struct spent it.
+**One intent, one digest** ([CTR-MTX-11](#CTR-MTX-11)): on a token a transfer or payment is signed only as a `UAMetaTransfer`; no
+`transfer`/`pay` selector is ever allowlisted for `UAMetaTransaction` or `MetaTransaction`. `data` is always hashed (`keccak256(m.data)`) —
+encoding dynamic bytes directly would break injectivity. The typehashes are pinned by tests
+(`test_metaTxTypehashIsPinned`, `test_uaTypehashesArePinned`; the retired `MetaTransfer` by `test_metaTransferTypehashIsPinned`).
 
 **Named structs (typed-signing).** A third family of structs sits beside these two: one struct per named entry (`Unwrap`, `Burn`, `PqzTransfer`, `CancelOrder`, `ReceiverFee`, `RelayFee`, …; 74 rows in `smartcontracts/vectors/typed/typed_ops.json`, [CTR-MTX-28](#CTR-MTX-28)). They consume the same `(from, batch)` lane `mtxNonce` as `MetaTransaction` and `MetaTransfer`, so a lane is spent once whichever struct spent it and one operation cannot run through both entries (`test_namedEntryReplayRefused`). `MetaTransaction`, its typehash, `mtxDigest` and the generic builders are unchanged. The node no longer asks `mtxDigest`: it computes the typed digest of the op itself and that digest is its in-flight key ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)); the views stay for other callers.
 
@@ -190,12 +202,13 @@ match it byte for byte: the client library's EIP-712 builder (the reference ERP 
 hashes it itself). Canonical zeroing (`relayer`/`feeRecipient` = 0 when their flag is off) applies in all of them.
 
 They are locked by known-answer vectors generated by forge (`vm.writeJson`):
-`smartcontracts/evm/test/vectors/metatx_kat.json` (v3 `MetaTransaction`, `MetaTxBase`) and `metatransfer_kat.json` (`MetaTransfer`);
+`smartcontracts/evm/test/vectors/metatx_kat.json` (`UAMetaTransaction` through the merged `mtxExecute`) and `metatransfer_kat.json` (`UAMetaTransfer`
+through the merged `mtxExecuteTransfer`, `auth` = `UASig{signature}`), written by `TokenKat.t.sol` since ua-mtx-merge T2;
 the v1 vector `metatx_v1_kat.json` is in `legacy/p5/` (P5), the two v3 vectors written by `TokenKat.t.sol` on a `NormalToken` clone, each with domain (with `salt`), struct, `structHash`, digest and the signature of key `0xA11CE`; the `MandateWallet` and
 `SmartKeyAccount` vectors are `MetaTransaction` vectors in their own domains (`mandate_pay_kat.json`, `mandate_revoke_kat.json`, `smart_key_account_kat.json`, P4). The contract, node and client tests read
 the same files; changing a typehash turns three tests red. Clients decode `MetaTransaction.data` against the
 contract's published allowlist (`mtxSelectors()`) and show the selector and its arguments before asking for a
-signature; a `MetaTransfer` shows its typed fields.
+signature; a `UAMetaTransfer` shows its typed fields.
 
 <a id="CTR-MTX-02"></a>**CTR-MTX-02** — The EIP-712 domain of a clone is the implementation's name and version plus
 `verifyingContract` = the clone and `salt` = the chain's `chain_uid`: `("SCaaS MetaToken", "1", chainId, clone,
