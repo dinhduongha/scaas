@@ -129,3 +129,35 @@ node-test | 47645f2a | 0 | 705 passed, 0 failed
 node-clippy | 47645f2a | 0 | cargo clippy --all-targets -- -D warnings clean
 clientkeys | 47645f2a | 0 | 322 tests, 320 passed, 0 failed, 2 skipped
 ua-rs | 47645f2a | 0 | 282 passed, 0 failed (the four feature runs; regulated_kat_receiver_table reads kycProviderEnabled), clippy clean
+t15-directory.red (FactoryDirectory.t.sol, its own ABI declaration, against the factory before T15) | 9bab97cd+test | 1 | 0 passed, 21 failed: the six-argument configureChain and setChainEntries do not exist (an empty revert in every fixture; the refusal rows read 0x against the named error); positive control: the refusals compare the exact revert data
+t15-iter (FactoryDirectory.t.sol) | 15e43b32 | 0 | 21 passed, 0 failed
+forge-v2 (red, before the carry) | 15e43b32- | 1 | 699 passed, 3 failed: ChainNeutralFactory setUp and ChainNeutralKinds test_dex_readsItsEnvAndItsReleaseSignsNothing (EnvSmartKeyAccountMismatch(0, 0xBEEF): the DEX env's implementation, not the router's), Factory test_sizes (OpenFactory 34,103 > 31,345: the row)
+forge-v2 (red, second) | 15e43b32- | 1 | 715 passed, 1 failed: ChainNeutralFactory test_create3_versionImplementationEnvNotInTheAddress (its env 2 named another registry beside the router's: EnvRegistryMismatch; env 2 now differs by no registry)
+forge-v2 | 15e43b32 | 0 | 717 passed, 0 failed (56 suites; FactoryDirectory 21 and the two-chain row new)
+forge-governance (red, before the pins) | 15e43b32- | 1 | 449 passed, 2 failed: GovDeploy test_routerAndRelayFeeRouterNewAddresses (the router's CREATE2 address), PlusZero test_plusZero_mtxCancelNonce_router (72,603 measured, 72,647 pinned)
+forge-governance | 15e43b32 | 0 | 451 passed, 0 failed (50 suites)
+forge-as | 15e43b32 | 0 | 487 passed, 0 failed (78 suites)
+forge-metatx | 15e43b32 | 0 | 544 passed, 0 failed, 1 skipped (44 suites)
+size | 15e43b32 | 0 | 0 errors, 166 contracts (OpenFactory 31,345 -> 34,103: its row moved; a notice: above the plain T-2 line 33,516 B, 57 M, under the 35,286 B stop line; GovernanceRouter, no row, 17,240 -> 17,292)
+scripts | 15e43b32 | 0 | Deploy, DeploySend and the eight on-chain scripts compile (configureChain with the router's code hash)
+gen | 15e43b32 | 0 | gen_faces.py --check, gen_set.py --all --check, the scripts' Python (pq.py, e2e.py) compiles, test_vcheck ok
+forge-ua | 15e43b32 | 0 | 732 passed, 0 failed (54 suites)
+forge-pqz | 15e43b32 | 0 | 598 passed, 0 failed, 4 skipped (51 suites)
+forge-zether | 15e43b32 | 0 | 441 passed, 0 failed, 4 skipped
+forge-wrap | 15e43b32 | 0 | 278 passed, 0 failed
+forge-liquidity | 15e43b32 | 0 | 90 passed, 0 failed, 1 skipped
+forge-pqchat | 15e43b32 | 0 | 98 passed, 0 failed
+forge-account | 15e43b32 | 0 | 98 passed, 0 failed
+forge-confidential | 15e43b32 | 0 | 5 passed, 0 failed
+forge-hedera | 15e43b32 | 0 | 20 passed, 0 failed
+forge-p6f | 15e43b32 | 0 | 4 passed, 0 failed
+forge-pqzh | 15e43b32 | 0 | 42 passed, 0 failed
+forge-wallet | 15e43b32 | 0 | 181 passed, 0 failed
+forge-fork | 15e43b32 | 0 | 0 passed, 1 skipped (no SCAAS_FORK_RPC_URL)
+forge-top | 15e43b32 | 0 | 29 passed, 0 failed
+forge-modules | 15e43b32 | 0 | 35 passed, 0 failed
+forge-merge | 15e43b32 | 0 | 341 passed, 0 failed
+forge-research | 15e43b32 | 1 | 358 passed, 1 failed, 7 skipped: the known red, unchanged (PqzProofStoreGas test_debitMinGas_isTheCheapestLogDebit 7,513,388 pinned / 7,513,432 measured, +44; the owner's set parameter)
+docs | 15e43b32 | 0 | docs_check.py check 0 errors; paths 0 machine paths; test_docs_check ok
+t15-gas (FactoryDirectory test_gas_configureChainAndEntries; each call its own transaction, regular / state) | 15e43b32 | 0 | configureChain without a router 36,128 / 97,920; with a router (code hash, chainUid, registry, the two clone hashes) 59,979 / 195,840; setChainEntries of the four entries 116,135 / 391,680 (four new slots)
+mutants D1-D14 (23 rows) | 15e43b32 | 0 | 23 of 23 killed by FactoryDirectory.t.sol (mutants.txt)

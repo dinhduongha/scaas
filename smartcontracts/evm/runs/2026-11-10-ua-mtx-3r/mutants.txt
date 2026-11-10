@@ -44,3 +44,26 @@ M20-zero | test_derivedAdmin_k1, test_derivedAdmin_mldsa, test_derivedAdmin_msig
 M20-other | test_derivedAdmin_k1, test_derivedAdmin_mldsa, test_derivedAdmin_msig, test_kycProvider_derivedThroughRouter, test_routerAnsweringZero_refused, test_router_anotherSignerNotAdmin, test_router_replayRefused | 1
 M21-router0 | test_constructor_refusals | 1
 M21-nocode | test_constructor_refusals | 1
+D1-relay | test_setChainEntries_eachEntryOnce | 1
+D1-compliance | test_setChainEntries_eachEntryOnce | 1
+D1-accountFactory | test_setChainEntries_eachEntryOnce | 1
+D1-zether | test_setChainEntries_eachEntryOnce | 1
+D2 | test_configureChain_routerCodeHash, test_relayPair_executorCodeHash, test_setChainEntries_wrongCodeHash | 1
+D3 | test_setChainEntries_noCode | 1
+D4-publishEnv | test_publishEnv_boundToTheRouter | 1
+D4-publishDexEnv | test_publishDexEnv_boundToTheRouter | 1
+D4-publishClassEnv | test_publishClassEnv_boundToTheRouter | 1
+D5 | test_derivedAdmin_writesThroughRouter, test_views_zeroUntilWritten_directoryEqualsViews | 1
+D6 | test_configureChain_routerCodeHash | 1
+D7 | test_complianceRegistry_otherRouterRefused | 1
+D8 | test_accountFactory_otherChainUidRefused | 1
+D9 | test_configureChain_cloneHashOfTheRegistry | 1
+D10-publishEnv | test_publishEnv_boundToTheRouter | 1
+D10-publishDexEnv | test_publishDexEnv_boundToTheRouter | 1
+D10-publishClassEnv | test_publishClassEnv_boundToTheRouter | 1
+D11 | test_accountFactory_otherImplementationRefused | 1
+D12-zero | test_configureChain_routerRegistryZeroOrNoCode | 1
+D12-nocode | test_configureChain_routerRegistryZeroOrNoCode | 1
+D13-hash | test_relayPair_executorCodeHash | 1
+D13-router | test_relayPair_executorRouter | 1
+D14 | test_derivedAdmin_writesThroughRouter, test_relayFeeExecutor_view, test_views_zeroUntilWritten_directoryEqualsViews | 1

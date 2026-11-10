@@ -158,6 +158,55 @@ MUTANTS = {
         ("M21-nocode", CR, "        } else if (govRouter_.code.length == 0) {\n            revert RouterNotContract(govRouter_);\n        }",
          "        }"),
     ]},
+    # T15 (§13.3, §13.4, §13.6, §13.9): the factory as the chain's directory; every row is killed by
+    # test/v2/FactoryDirectory.t.sol (the two-chain row is in ChainNeutralFactory.t.sol, D-free)
+    **{mid: (OF, old, new, "forge", "test/v2", "FactoryDirectory.t.sol") for mid, old, new in [
+        # D1: `setChainEntries` overwrites a written entry (one row per entry: its slot read as 0)
+        ("D1-relay", "            _entry(relayFeeRouter, relayFeeRouter_,", "            _entry(address(0), relayFeeRouter_,"),
+        ("D1-compliance", "            _entry(complianceRegistry, complianceRegistry_,", "            _entry(address(0), complianceRegistry_,"),
+        ("D1-accountFactory", "            _entry(smartKeyAccountFactory, smartKeyAccountFactory_,",
+         "            _entry(address(0), smartKeyAccountFactory_,"),
+        ("D1-zether", "            _entry(zetherStatements, zetherStatements_,", "            _entry(address(0), zetherStatements_,"),
+        # D2: no code-hash compare at the write
+        ("D2", "        if (codeHash == bytes32(0) || codeHash == keccak256(\"\") || target.codehash != codeHash) {",
+         "        if (codeHash == bytes32(0) || codeHash == keccak256(\"\")) {"),
+        # D3: 0 or keccak256("") taken as a code hash
+        ("D3", "        if (codeHash == bytes32(0) || codeHash == keccak256(\"\") || target.codehash != codeHash) {",
+         "        if (target.codehash != codeHash) {"),
+        # D4: an env publish without the registry agreement (one row per publish entry: its domain skips the check)
+        ("D4-publishEnv", "            if (env.registry != address(0) && env.registry != reg)",
+         "            if (domain >= DEX_DOMAIN && env.registry != address(0) && env.registry != reg)"),
+        ("D4-publishDexEnv", "            if (env.registry != address(0) && env.registry != reg)",
+         "            if (domain != DEX_DOMAIN && env.registry != address(0) && env.registry != reg)"),
+        ("D4-publishClassEnv", "            if (env.registry != address(0) && env.registry != reg)",
+         "            if (domain <= DEX_DOMAIN && env.registry != address(0) && env.registry != reg)"),
+        # D5: `directory()` reads another source than the views
+        ("D5", "            smartKeyAccountFactory, zetherStatements);", "            smartKeyAccountFactory, smartKeyAccountFactory);"),
+        # D6: `configureChain` skips the router's code hash
+        ("D6", "        _requireCode(r, codeHash);\n", ""),
+        # D7: `setChainEntries` drops the registry's `govRouter` check
+        ("D7", "            if (_addr(complianceRegistry_, _GOV_ROUTER, v) != govRouter) revert EntryMismatch(v);\n", ""),
+        # D8: `setChainEntries` drops the account factory's `chainUid` check
+        ("D8", "            _requireChainUid(smartKeyAccountFactory_, chainUid);\n", ""),
+        # D9: `configureChain` drops the router-registry clone-hash check
+        ("D9", "        if (!okR || !okG || a != b) revert SmartKeyCloneHashMismatch(bytes32(a), bytes32(b));\n", ""),
+        # D10: an env publish drops the implementation binding (one row per publish entry)
+        ("D10-publishEnv", "                if (_cloneHash(ska) != want)", "                if (domain >= DEX_DOMAIN && _cloneHash(ska) != want)"),
+        ("D10-publishDexEnv", "                if (_cloneHash(ska) != want)", "                if (domain != DEX_DOMAIN && _cloneHash(ska) != want)"),
+        ("D10-publishClassEnv", "                if (_cloneHash(ska) != want)", "                if (domain <= DEX_DOMAIN && _cloneHash(ska) != want)"),
+        # D11: `setChainEntries` drops the implementation binding
+        ("D11", "                if (got != want) revert SmartKeyCloneHashMismatch(want, got);\n", ""),
+        # D12: `configureChain` takes a router whose `registry()` is 0, or has no code
+        ("D12-zero", "|| reg.code.length == 0) revert RouterRegistryInvalid(reg);",
+         "|| (reg != address(0) && reg.code.length == 0)) revert RouterRegistryInvalid(reg);"),
+        ("D12-nocode", "|| reg.code.length == 0) revert RouterRegistryInvalid(reg);", "|| reg == address(0)) revert RouterRegistryInvalid(reg);"),
+        # D13: `setChainEntries` drops the executor's code-hash or `ROUTER()` check
+        ("D13-hash", "            _requireCode(x, relayFeeExecutorCodeHash);\n", ""),
+        ("D13-router", "            if (_addr(x, _ROUTER, v) != relayFeeRouter_) revert EntryMismatch(v);\n", ""),
+        # D14: `relayFeeExecutor()` answers anything but the written router's `EXECUTOR()`
+        ("D14", "        return r == address(0) ? address(0) : _addr(r, _EXECUTOR, IOpenFactory.relayFeeExecutor.selector);",
+         "        return r;"),
+    ]},
 }
 
 
