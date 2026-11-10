@@ -81,3 +81,14 @@ M-N3 the eight-item bound dropped | liquidity_rows ("p.order.inputs: more than 8
 M-N4 an int24 zero-extended | liquidity_rows (v4_mint_negative_tick's calldata)
 M-N5 the liquidity mark dropped | liquidity_pre_checks; e2e (the old DEX's job queued as starved, not DEX_NOT_LIQUIDITY)
 M-N6 the token interface pre-check dropped | e2e only (job 3 dead `revert 0x` instead of LIQUIDITY_TOKEN_UNSUPPORTED); the lib tests stay green
+
+mldsa65 two-input positive (L1d; test/liquidity/DexLiquidityMldsa.t.sol, the real UAMldsaVerifier at its 5.95 M cap, cached key;
+key, PoP and the signature over this run's h by script/pqz/mldsa.mjs through vm.ffi): the default profile has no ffi, so the suite
+skips without MLDSA_CLIENTKEYS, as test/zether/ZetherProverCross.t.sol does; run with
+`MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol`.
+step | commit | rc | counts
+red: the positive signing another digest | L1d | 1 | UAUnauthorized(ua) on the first input; the negative passed
+DexLiquidityMldsa (--ffi) | L1d | 0 | 2 passed: both inputs pulled (50 000 each, pulled(h) on both tokens, the DEX's 1), LP >= 48 000 to the recipient; the other order's signature refused UAUnauthorized, nothing moved
+gas (vm.lastCallGas, isolate; the call given 2^24 - 21 000 - calldata gas) | regular 12 143 505 <= 16 777 216 | state 979 200 | calldata 5 380 B
+test/liquidity, default profile (no ffi; the invariant left out) | L1d | 0 | 8 suites, 89 passed, 1 skipped (DexLiquidityMldsa's setUp)
+test/ExpectRevertLint.t.sol | L1d | 0 | 3 passed
