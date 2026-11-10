@@ -9,6 +9,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
+import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
@@ -81,6 +82,7 @@ abstract contract PqChatBase is UARegistryBase {
     UARegistry internal p;
     OpenFactory internal f;
     PqChatHasher internal h;
+    PqChatTopics internal topics; // the body module (CTR-TOK-30), pinned in the class env
     address internal impl;
     PqChat internal chat; // instance A, the home of the sessions the tests create unless they say otherwise
     PqChat internal chatB; // instance B, a replica
@@ -100,11 +102,12 @@ abstract contract PqChatBase is UARegistryBase {
         p = _deploy(REG_P, chainUidA, address(0), false, BUDGET, address(0), true, c);
         h = new PqChatHasher();
         f = EnvKit.factory(REGISTRAR, chainUidA, 0);
+        topics = new PqChatTopics(address(f));
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 1, _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
         impl = f.deployRelease(IOpenFactory.ReleaseId(3, 0, 1), 1, IPqChat.initialize.selector,
-            type(IPqChat).interfaceId, type(PqChat).creationCode, "");
+            type(IPqChat).interfaceId, type(PqChat).creationCode, _args());
         vm.prank(REGISTRAR);
         f.setClassKindEnabled(3, 0, true);
         chat = _instance("a", OWNER_UA);
@@ -112,10 +115,20 @@ abstract contract PqChatBase is UARegistryBase {
         for (uint8 i = 1; i <= 5; ++i) _member(i);
     }
 
-    function _classEnv(address registry, uint256 limit) internal pure returns (IFactoryToken.Env memory e) {
+    /// The class env: the registry, the code-size limit `params[0]`, the body module pinned in `libs` (3C-D2).
+    function _classEnv(address registry, uint256 limit) internal view returns (IFactoryToken.Env memory e) {
         e.registry = registry;
         e.params = new bytes32[](1);
         e.params[0] = bytes32(limit);
+        e.libs = new address[](1);
+        e.libs[0] = address(topics);
+        e.libCodeHashes = new bytes32[](1);
+        e.libCodeHashes[0] = address(topics).codehash;
+    }
+
+    /// The release's `implArgs`: its body module.
+    function _args() internal view returns (bytes memory) {
+        return abi.encode(address(topics));
     }
 
     function _instance(bytes32 salt, bytes32 ownerUA) internal returns (PqChat) {

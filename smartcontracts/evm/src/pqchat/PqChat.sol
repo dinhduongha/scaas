@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {IPqChat} from "./IPqChat.sol";
 import {PqChatTypes} from "./PqChatTypes.sol";
+import {PqChatCore} from "./PqChatCore.sol";
+import {PqChatTopics} from "./PqChatTopics.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
@@ -14,12 +16,12 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 ///        home-instance slot, admins, leave, on-chain and stored messages, public topics and votes.
 /// @notice One release, many EIP-1167 clones; each clone reads its chain values from its own code (`ChainEnv`, 3C-D1): the
 ///         registry, `chain_uid`, the code-size limit `params[0]`. State in the ERC-7201 namespace `scaas.pqchat`.
-///         Records are stored in SSTORE2 blobs (3C-D3), never only in an event. **UNAUDITED.**
-contract PqChat is IPqChat {
+///         Records are stored in SSTORE2 blobs (3C-D3), never only in an event. The public topics and votes run in the
+///         body module `PqChatTopics` by `DELEGATECALL` (CTR-TOK-30, 3C-D2); the sessions, messages and the store, the 1:1
+///         path, stay here. **UNAUDITED.**
+contract PqChat is IPqChat, PqChatCore {
     uint16 internal constant CLASS = 3;
     uint16 internal constant KIND = 0;
-    /// @notice EIP-170's limit, the smallest of any EVM chain (3C-D1).
-    uint256 internal constant MIN_CODE_LIMIT = 24_576;
     uint256 internal constant MLKEM_CT = 1568;
     uint256 internal constant SEALED_KEY = 48;
     /// @notice A packed wrap: member (32) ‖ keyId (8) ‖ mlkemCt (1,568) ‖ x25519Eph (32) ‖ sealedKey (48).
@@ -33,85 +35,16 @@ contract PqChat is IPqChat {
 
     address public immutable FACTORY;
     uint64 internal immutable VERSION;
+    /// @notice The body module of the topics (`PqChatTopics`, CTR-TOK-30), named in `implArgs`.
+    address internal immutable TOPICS;
 
-    struct Epoch {
-        bytes32 sessionId; // 0 = unknown
-        address record; // head blob of abi.encode(record, sigHash)
-        uint64 epoch;
-        uint32 wraps;
-        uint32 landed;
-        bool home; // epoch 0 only: this instance is the session's home (P32)
-        bytes32 parent;
-        mapping(uint256 => uint256) wrapAt; // pointer | offset << 160
-        mapping(bytes32 => bool) left;
-    }
-
-    struct Topic {
-        bytes32 owner; // 0 = unknown
-        address record; // the create record's head blob
-        uint64 seq;
-        bool openReplies;
-        address latest; // the latest update's head blob, 0 before one
-    }
-
-    struct Entry {
-        address record; // the original's head blob; 0 = unknown
-        uint32 depth;
-    }
-
-    struct Vote {
-        int8 value;
-        uint64 seq;
-    }
-
-    struct Writer {
-        bool granted;
-        uint64 seq;
-    }
-
-    struct Score {
-        uint128 up;
-        uint128 down;
-    }
-
-    /// @custom:storage-location erc7201:scaas.pqchat
-    struct S {
-        bytes32 ownerUA;
-        bool initialized;
-        mapping(bytes32 => Epoch) epochs;
-        mapping(bytes32 => bytes32) childOf;
-        mapping(bytes32 => mapping(uint256 => uint256)) nonces;
-        mapping(bytes32 => address[]) messages;
-        mapping(bytes8 => address[]) stored;
-        mapping(bytes32 => Topic) topics;
-        mapping(bytes32 => mapping(bytes32 => Writer)) writers;
-        mapping(bytes32 => Entry) entries;
-        mapping(bytes32 => address[]) versions;
-        mapping(bytes32 => mapping(bytes32 => Vote)) votes;
-        mapping(bytes32 => Score) scores;
-        bytes32[] allTopics;
-        mapping(bytes32 => bytes32[]) topicsByOwner;
-        mapping(bytes32 => bytes32[]) writersOf;
-        mapping(bytes32 => bytes32[]) posts;
-        mapping(bytes32 => bytes32[]) replies;
-        mapping(bytes32 => bytes32[]) byAuthor;
-        mapping(bytes32 => bytes32[]) sessions; // per UA (owner 2026-11-10)
-        mapping(bytes32 => bytes32[]) chain; // per session: its epochs >= 1 in completion order (epoch 0 implied)
-    }
-
-    /// @dev `keccak256(abi.encode(uint256(keccak256("scaas.pqchat")) - 1)) & ~bytes32(uint256(0xff))`.
-    bytes32 internal constant SLOT = 0xc7b36804b17476e9a19a6ebc690cd7b9326d322c515fd7dc91373f9bc6dc3000;
-
-    function _s() internal pure returns (S storage s) {
-        assembly ("memory-safe") {
-            s.slot := SLOT
-        }
-    }
-
-    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11); `implArgs` empty. The implementation is locked.
-    constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory) {
+    /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics)`: the body module
+    ///         `PqChatTopics` of this factory (CTR-TOK-30, 3C-D2), code present. The implementation is locked.
+    constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs) {
         if (id.contractClass != CLASS || id.kind != KIND || id.version == 0 || factory_ == address(0)) revert PqChatEnv();
-        (FACTORY, VERSION) = (factory_, id.version);
+        address topics_ = abi.decode(implArgs, (address));
+        if (topics_.code.length == 0 || PqChatTopics(topics_).FACTORY() != factory_) revert PqChatEnv();
+        (FACTORY, VERSION, TOPICS) = (factory_, id.version, topics_);
         _s().initialized = true;
     }
 
@@ -345,8 +278,8 @@ contract PqChat is IPqChat {
         return _s().epochs[epochId].left[member];
     }
 
-    function nonceUsed(bytes32 scope, uint64 nonce) public view returns (bool) {
-        return _s().nonces[scope][nonce >> 8] & (1 << (nonce & 0xff)) != 0;
+    function nonceUsed(bytes32 scope, uint64 nonce) external view returns (bool) {
+        return _nonceUsed(scope, nonce);
     }
 
     function messageCount(bytes32 sessionId) external view returns (uint256) {
@@ -411,256 +344,112 @@ contract PqChat is IPqChat {
         return n == 0 ? bytes32(0) : n == 1 ? sessionId : _s().chain[sessionId][n - 2];
     }
 
-    // ------------------------------------------------------------------ public topics
+    // ------------------------------------------------------------------ public topics: the module (CTR-TOK-30, 3C-D2)
 
-    /// @notice P41: any UA the registry verifies; `homeChain`, `homeContract` not zero; `name` 1-128 B.
-    function createTopic(PqTopic calldata t, IUARegistry.UASig calldata sig) external returns (bytes32 tid) {
-        (IUARegistry reg, uint256 limit,) = _env();
-        uint256 nl = bytes(t.name).length;
-        if (nl == 0 || nl > 128 || t.homeChain == 0 || t.homeContract == address(0)) revert PqTopicShape();
-        _auth(reg, t.owner, PqChatTypes.hashTopic(t), sig);
-        _useNonce(PqChatTypes.scopeTopic(t.owner), t.nonce);
-        tid = PqChatTypes.topicId(t.owner, t.nonce);
-        S storage s = _s();
-        Topic storage tp = s.topics[tid];
-        (tp.owner, tp.openReplies) = (t.owner, t.openReplies);
-        tp.record = _put(abi.encode(t, keccak256(abi.encode(sig))), limit);
-        s.allTopics.push(tid);
-        s.topicsByOwner[t.owner].push(tid);
-        emit PqTopicCreated(tid, t.owner);
+    function createTopic(PqTopic calldata, IUARegistry.UASig calldata) external returns (bytes32) {
+        _forward();
     }
 
-    /// @notice P41: by the topic's owner, `seq == stored + 1` (P36).
-    function updateTopic(PqTopicUpdate calldata u, IUARegistry.UASig calldata sig) external {
-        (IUARegistry reg, uint256 limit,) = _env();
-        Topic storage tp = _topic(u.topicId);
-        if (u.seq != tp.seq + 1) revert PqTopicSeq(tp.seq + 1, u.seq);
-        uint256 nl = bytes(u.name).length;
-        if (nl == 0 || nl > 128) revert PqTopicShape();
-        _ownerAuth(reg, tp.owner, PqChatTypes.hashTopicUpdate(u), sig);
-        (tp.seq, tp.openReplies) = (u.seq, u.openReplies);
-        tp.latest = _put(abi.encode(u, keccak256(abi.encode(sig))), limit);
-        emit PqTopicUpdated(u.topicId, u.seq);
+    function updateTopic(PqTopicUpdate calldata, IUARegistry.UASig calldata) external {
+        _forward();
     }
 
-    /// @notice P41: by the topic's owner, `seq == stored + 1` per `(topicId, writer)`, the writer not the owner.
-    function setTopicWriter(PqTopicWriter calldata w, IUARegistry.UASig calldata sig) external {
-        (IUARegistry reg,,) = _env();
-        Topic storage tp = _topic(w.topicId);
-        if (w.writer == tp.owner || w.writer == 0) revert PqTopicShape();
-        Writer storage wr = _s().writers[w.topicId][w.writer];
-        if (w.seq != wr.seq + 1) revert PqTopicSeq(wr.seq + 1, w.seq);
-        _ownerAuth(reg, tp.owner, PqChatTypes.hashTopicWriter(w), sig);
-        if (wr.seq == 0) _s().writersOf[w.topicId].push(w.writer); // its first record only
-        (wr.granted, wr.seq) = (w.granted, w.seq);
-        emit PqTopicWriterSet(w.topicId, w.writer, w.granted, w.seq);
+    function setTopicWriter(PqTopicWriter calldata, IUARegistry.UASig calldata) external {
+        _forward();
     }
 
-    /// @notice P37, P41: a post by the owner or a writer; a reply to an entry of the same topic here, by anyone while
-    ///         `openReplies`, else by the owner or a writer; `ref` all zero or `chainUid`, `pqchat`, `entryId` set.
-    function postEntry(PqTopicEntry calldata e, IUARegistry.UASig calldata sig) external returns (bytes32 eid) {
-        (IUARegistry reg, uint256 limit,) = _env();
-        uint32 depth = _entryRights(e);
-        _entryShape(e.ref, e.mediaType, e.body);
-        _auth(reg, e.author, PqChatTypes.hashEntry(e), sig);
-        _useNonce(PqChatTypes.scopeEntry(e.topicId, e.author), e.nonce);
-        eid = PqChatTypes.entryId(e.topicId, e.author, e.nonce);
-        S storage s = _s();
-        s.entries[eid] = Entry(_put(abi.encode(e, keccak256(abi.encode(sig))), limit), depth);
-        if (e.parentId == 0) s.posts[e.topicId].push(eid);
-        else s.replies[e.parentId].push(eid);
-        s.byAuthor[e.author].push(eid);
-        emit PqTopicEntryPosted(e.topicId, eid, e.parentId, e.author, sig);
+    function postEntry(PqTopicEntry calldata, IUARegistry.UASig calldata) external returns (bytes32) {
+        _forward();
     }
 
-    function _entryRights(PqTopicEntry calldata e) internal view returns (uint32 depth) {
-        Topic storage tp = _topic(e.topicId);
-        if (e.parentId != 0) {
-            Entry storage pe = _s().entries[e.parentId];
-            if (pe.record == address(0) || _word(pe.record, 64) != e.topicId) revert PqTopicParent(e.parentId);
-            depth = pe.depth + 1;
-            if (tp.openReplies) return depth;
-        }
-        if (e.author != tp.owner && !_s().writers[e.topicId][e.author].granted) revert PqTopicNotWriter(e.author);
+    function editEntry(PqTopicEdit calldata, IUARegistry.UASig calldata) external {
+        _forward();
     }
 
-    function _entryShape(EntryRef calldata r, string calldata mediaType, bytes calldata body) internal pure {
-        uint256 ml = bytes(mediaType).length;
-        if (ml == 0 || ml > 64 || body.length == 0) revert PqTopicShape();
-        bool none = r.chainUid == 0 && r.pqchat == address(0) && r.entryId == 0 && r.contentHash == 0;
-        if (!none && (r.chainUid == 0 || r.pqchat == address(0) || r.entryId == 0)) revert PqTopicRef();
+    function voteEntry(PqTopicVote calldata, IUARegistry.UASig calldata) external {
+        _forward();
     }
 
-    /// @notice P38: a new version of an existing entry by its author, `version == count + 1`, the nonce in the original's
-    ///         topic scope.
-    function editEntry(PqTopicEdit calldata d, IUARegistry.UASig calldata sig) external {
-        (IUARegistry reg, uint256 limit,) = _env();
-        address original = _s().entries[d.entryId].record;
-        if (original == address(0)) revert PqTopicUnknown(d.entryId);
-        if (_word(original, 96) != d.author) revert PqTopicNotAuthor(d.author);
-        address[] storage vs = _s().versions[d.entryId];
-        uint32 next = uint32(vs.length) + 2;
-        if (d.version != next) revert PqTopicVersion(next, d.version);
-        uint256 ml = bytes(d.mediaType).length;
-        if (ml == 0 || ml > 64 || d.body.length == 0) revert PqTopicShape();
-        _auth(reg, d.author, PqChatTypes.hashEdit(d), sig);
-        _useNonce(PqChatTypes.scopeEntry(_word(original, 64), d.author), d.nonce);
-        vs.push(_put(abi.encode(d, keccak256(abi.encode(sig))), limit));
-        emit PqTopicEntryEdited(d.entryId, d.version, sig);
+    function topicOf(bytes32) external view returns (PqTopic memory, uint64) {
+        _forwardView();
     }
 
-    /// @notice P40, D21: one slot per (entry, voter UA), `seq == stored + 1`; a new value moves the counts (old - 1, new + 1).
-    function voteEntry(PqTopicVote calldata v, IUARegistry.UASig calldata sig) external {
-        (IUARegistry reg,,) = _env();
-        if (_s().entries[v.entryId].record == address(0)) revert PqTopicUnknown(v.entryId);
-        if (v.value < -1 || v.value > 1) revert PqTopicVoteValue(v.value);
-        Vote storage vt = _s().votes[v.entryId][v.voter];
-        if (v.seq != vt.seq + 1) revert PqTopicSeq(vt.seq + 1, v.seq);
-        _auth(reg, v.voter, PqChatTypes.hashVote(v), sig);
-        Score storage sc = _s().scores[v.entryId];
-        if (vt.value == 1) --sc.up;
-        else if (vt.value == -1) --sc.down;
-        if (v.value == 1) ++sc.up;
-        else if (v.value == -1) ++sc.down;
-        (vt.value, vt.seq) = (v.value, v.seq);
-        emit PqTopicVoted(v.entryId, v.voter, v.value, v.seq);
+    function entryOf(bytes32) external view returns (EntryView memory) {
+        _forwardView();
     }
 
-    function topicOf(bytes32 topicId) external view returns (PqTopic memory t, uint64 seq) {
-        Topic storage tp = _topic(topicId);
-        (t,) = abi.decode(_get(tp.record), (PqTopic, bytes32));
-        if (tp.latest != address(0)) {
-            (PqTopicUpdate memory u,) = abi.decode(_get(tp.latest), (PqTopicUpdate, bytes32));
-            (t.name, t.about, t.openReplies) = (u.name, u.about, u.openReplies);
-        }
-        seq = tp.seq;
+    function versionAt(bytes32, uint32) external view returns (string memory, bytes memory, bytes32) {
+        _forwardView();
     }
 
-    function entryOf(bytes32 entryId) external view returns (EntryView memory v) {
-        Entry storage en = _s().entries[entryId];
-        if (en.record == address(0)) revert PqTopicUnknown(entryId);
-        (PqTopicEntry memory e, bytes32 sh) = abi.decode(_get(en.record), (PqTopicEntry, bytes32));
-        address[] storage vs = _s().versions[entryId];
-        (v.topicId, v.author, v.parentId, v.depth, v.ref) = (e.topicId, e.author, e.parentId, en.depth, e.ref);
-        (v.mediaType, v.body, v.sigHash, v.versionCount) = (e.mediaType, e.body, sh, uint32(vs.length) + 1);
-        if (vs.length != 0) {
-            (PqTopicEdit memory d, bytes32 dh) = abi.decode(_get(vs[vs.length - 1]), (PqTopicEdit, bytes32));
-            (v.mediaType, v.body, v.sigHash) = (d.mediaType, d.body, dh);
+    function writerOf(bytes32, bytes32) external view returns (bool, uint64) {
+        _forwardView();
+    }
+
+    function scoreOf(bytes32) external view returns (uint128, uint128) {
+        _forwardView();
+    }
+
+    function voteOf(bytes32, bytes32) external view returns (int8, uint64) {
+        _forwardView();
+    }
+
+    function topics(uint256, uint256) external view returns (bytes32[] memory, uint256) {
+        _forwardView();
+    }
+
+    function topicsByOwner(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
+        _forwardView();
+    }
+
+    function writersOf(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
+        _forwardView();
+    }
+
+    function posts(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
+        _forwardView();
+    }
+
+    function replies(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
+        _forwardView();
+    }
+
+    function byAuthor(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
+        _forwardView();
+    }
+
+    function topicNonceUsed(bytes32, uint64) external view returns (bool) {
+        _forwardView();
+    }
+
+    function entryNonceUsed(bytes32, bytes32, uint64) external view returns (bool) {
+        _forwardView();
+    }
+
+    /// @dev CTR-TOK-30's unguarded stub (no entry here holds a guard): `DELEGATECALL` of this call's calldata to the module,
+    ///      its revert data verbatim on failure, else its return data verbatim.
+    function _forward() internal {
+        (bool ok, bytes memory ret) = TOPICS.delegatecall(msg.data);
+        assembly ("memory-safe") {
+            if iszero(ok) { revert(add(ret, 32), mload(ret)) }
+            return(add(ret, 32), mload(ret))
         }
     }
 
-    function versionAt(bytes32 entryId, uint32 version)
-        external view returns (string memory mediaType, bytes memory body, bytes32 sigHash)
-    {
-        address original = _s().entries[entryId].record;
-        if (original == address(0)) revert PqTopicUnknown(entryId);
-        address[] storage vs = _s().versions[entryId];
-        if (version == 0 || version > vs.length + 1) revert PqTopicVersion(uint32(vs.length) + 1, version);
-        if (version == 1) {
-            (PqTopicEntry memory e, bytes32 sh) = abi.decode(_get(original), (PqTopicEntry, bytes32));
-            return (e.mediaType, e.body, sh);
+    /// @dev A `view` entry (the module's body writes nothing): `_forward` under a view cast, as the token faces do.
+    function _forwardView() internal view {
+        function() f = _forward;
+        function() view v;
+        assembly ("memory-safe") {
+            v := f
         }
-        (PqTopicEdit memory d, bytes32 dh) = abi.decode(_get(vs[version - 2]), (PqTopicEdit, bytes32));
-        return (d.mediaType, d.body, dh);
+        v();
     }
 
-    function writerOf(bytes32 topicId, bytes32 ua) external view returns (bool granted, uint64 seq) {
-        Writer storage w = _s().writers[topicId][ua];
-        return (w.granted, w.seq);
-    }
-
-    function scoreOf(bytes32 entryId) external view returns (uint128 up, uint128 down) {
-        Score storage sc = _s().scores[entryId];
-        return (sc.up, sc.down);
-    }
-
-    function voteOf(bytes32 entryId, bytes32 ua) external view returns (int8 value, uint64 seq) {
-        Vote storage vt = _s().votes[entryId][ua];
-        return (vt.value, vt.seq);
-    }
-
-    function topics(uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
-        return _page(_s().allTopics, start, count);
-    }
-
-    function topicsByOwner(bytes32 owner_, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
-        return _page(_s().topicsByOwner[owner_], start, count);
-    }
-
-    function writersOf(bytes32 topicId, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
-        return _page(_s().writersOf[topicId], start, count);
-    }
-
-    function posts(bytes32 topicId, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
-        return _page(_s().posts[topicId], start, count);
-    }
-
-    function replies(bytes32 parentId, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
-        return _page(_s().replies[parentId], start, count);
-    }
-
-    function byAuthor(bytes32 author, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
-        return _page(_s().byAuthor[author], start, count);
-    }
-
-    function topicNonceUsed(bytes32 owner_, uint64 nonce) external view returns (bool) {
-        return nonceUsed(PqChatTypes.scopeTopic(owner_), nonce);
-    }
-
-    function entryNonceUsed(bytes32 topicId, bytes32 author, uint64 nonce) external view returns (bool) {
-        return nonceUsed(PqChatTypes.scopeEntry(topicId, author), nonce);
-    }
-
-    /// @dev P42: at most `count` ids from `start`, fewer at the end, empty past it; and the list's length.
-    function _page(bytes32[] storage l, uint256 start, uint256 count)
-        internal view returns (bytes32[] memory page, uint256 total)
-    {
-        total = l.length;
-        if (start >= total) return (page, total);
-        uint256 end = total - start > count ? start + count : total;
-        page = new bytes32[](end - start);
-        for (uint256 i; i < page.length; ++i) page[i] = l[start + i];
-    }
-
-    function _topic(bytes32 topicId) internal view returns (Topic storage tp) {
-        tp = _s().topics[topicId];
-        if (tp.owner == 0) revert PqTopicUnknown(topicId);
-    }
-
-    /// @dev A record a topic's owner signs without naming itself (`PqTopicUpdate`, `PqTopicWriter`): any other signer's
-    ///      refusal by the registry is `PqTopicNotOwner` (P41); every other revert (a starved verifier) bubbles.
-    function _ownerAuth(IUARegistry reg, bytes32 owner_, bytes32 structHash, IUARegistry.UASig calldata sig) internal view {
-        try reg.requirePortable(owner_, UAKinds.PURPOSE_PQCHAT, PqChatTypes.typed(structHash), sig) {}
-        catch (bytes memory err) {
-            if (bytes4(err) == IUARegistry.UAUnauthorized.selector) revert PqTopicNotOwner(owner_);
-            assembly ("memory-safe") {
-                revert(add(err, 32), mload(err))
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------ internal: env, signatures, nonces
-
-    /// @dev The registry, the code-size limit and `chain_uid` of this clone (3C-D1); the implementation (no env) refuses.
-    function _env() internal view returns (IUARegistry reg, uint256 limit, bytes32 uid) {
-        IFactoryToken.ChainEnv memory e = ChainEnvCode.decode();
-        limit = e.params.length == 0 ? 0 : uint256(e.params[0]);
-        if (limit < MIN_CODE_LIMIT || e.registry == address(0)) revert PqChatEnv();
-        (reg, uid) = (IUARegistry(e.registry), e.chainUid);
-    }
-
-    /// @dev P7: `ua`'s portable signature over `typed(structHash)` under `PURPOSE_PQCHAT`.
-    function _auth(IUARegistry reg, bytes32 ua, bytes32 structHash, IUARegistry.UASig calldata sig) internal view {
-        reg.requirePortable(ua, UAKinds.PURPOSE_PQCHAT, PqChatTypes.typed(structHash), sig);
-    }
-
-    /// @dev A bitmap per scope, any order, never locked (§4.3); called after the signature.
-    function _useNonce(bytes32 scope, uint64 nonce) internal {
-        mapping(uint256 => uint256) storage b = _s().nonces[scope];
-        uint256 bit = 1 << (nonce & 0xff);
-        uint256 word = b[nonce >> 8];
-        if (word & bit != 0) revert PqChatNonceUsed(scope, nonce);
-        b[nonce >> 8] = word | bit;
+    /// @notice The body module (CTR-TOK-30), as the token faces list theirs.
+    function modules() external view returns (address[] memory m) {
+        m = new address[](1);
+        m[0] = TOPICS;
     }
 
     // ------------------------------------------------------------------ internal: epochs and wraps
@@ -775,43 +564,4 @@ contract PqChat is IPqChat {
         return type(uint256).max;
     }
 
-    // ------------------------------------------------------------------ internal: blobs (3C-D3)
-
-    /// @dev The largest runtime of one blob: the chain's limit, at most 65,535 B (`SSTORE2.write`'s PUSH2).
-    function _codeCap(uint256 limit) internal pure returns (uint256) {
-        return limit < 0xffff ? limit : 0xffff;
-    }
-
-    /// @dev `data` as one blob led by flag 0 when it fits the limit, else a chain: each blob led by flag 1 and the next
-    ///      blob's address, the last by flag 0. Returns the head.
-    function _put(bytes memory data, uint256 limit) internal returns (address head) {
-        uint256 cap = _codeCap(limit) - 1; // the bytes of one blob, flag included
-        if (data.length < cap) return SSTORE2.write(bytes.concat(bytes1(0), data));
-        uint256 piece = cap - 21;
-        for (uint256 i = (data.length + piece - 1) / piece; i > 0; --i) {
-            uint256 o = (i - 1) * piece;
-            uint256 len = data.length - o < piece ? data.length - o : piece;
-            bytes memory part = new bytes(len);
-            assembly ("memory-safe") {
-                mcopy(add(part, 32), add(add(data, 32), o), len)
-            }
-            head = SSTORE2.write(head == address(0) ? bytes.concat(bytes1(0), part) : bytes.concat(bytes1(0x01), bytes20(head), part));
-        }
-    }
-
-    function _get(address head) internal view returns (bytes memory data) {
-        for (address q = head; q != address(0);) {
-            uint256 len = q.code.length - 1;
-            bool more = SSTORE2.read(q, 0, 1)[0] != 0;
-            uint256 skip = more ? 21 : 1;
-            address next = more ? address(bytes20(SSTORE2.read(q, 1, 20))) : address(0);
-            data = bytes.concat(data, SSTORE2.read(q, skip, len - skip));
-            q = next;
-        }
-    }
-
-    /// @dev The 32 bytes at `off` of a record's first piece.
-    function _word(address head, uint256 off) internal view returns (bytes32) {
-        return bytes32(SSTORE2.read(head, (SSTORE2.read(head, 0, 1)[0] != 0 ? 21 : 1) + off, 32));
-    }
 }

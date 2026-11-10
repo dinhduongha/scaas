@@ -9,6 +9,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChat} from "../../src/pqchat/PqChat.sol";
+import {PqChatTopics} from "../../src/pqchat/PqChatTopics.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChatBase} from "./PqChatBase.sol";
 
@@ -92,24 +93,42 @@ contract PqChatTest is PqChatBase {
         vm.prank(REGISTRAR);
         vm.expectRevert(IPqChat.PqChatEnv.selector);
         f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, "");
+            type(PqChat).creationCode, _args());
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, _classEnv(address(p), 24_576));
         vm.prank(REGISTRAR);
         f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, "");
+            type(PqChat).creationCode, _args());
     }
 
     function test_constructor_refusesOtherIds() public {
-        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(f), "");
+        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(f), _args());
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        new PqChat(IOpenFactory.ReleaseId(4, 0, 1), address(f), "");
+        new PqChat(IOpenFactory.ReleaseId(4, 0, 1), address(f), _args());
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        new PqChat(IOpenFactory.ReleaseId(3, 1, 1), address(f), "");
+        new PqChat(IOpenFactory.ReleaseId(3, 1, 1), address(f), _args());
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        new PqChat(IOpenFactory.ReleaseId(3, 0, 0), address(f), "");
+        new PqChat(IOpenFactory.ReleaseId(3, 0, 0), address(f), _args());
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(0), "");
+        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(0), _args());
+    }
+
+    /// CTR-TOK-30, 3C-D2: `implArgs` names the body module of this factory; no code there, or another factory's module,
+    /// refused. The module called directly has no env; through an instance it runs in the instance's state.
+    function test_constructor_refusesAnotherModule() public {
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(f), abi.encode(address(0xBEEF)));
+        PqChatTopics other = new PqChatTopics(address(0xFAC7));
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        new PqChat(IOpenFactory.ReleaseId(3, 0, 1), address(f), abi.encode(address(other)));
+        address[] memory m = PqChat(impl).modules();
+        assertEq(m.length, 1);
+        assertEq(m[0], address(topics), "the release names its module");
+        IPqChat.PqTopic memory t;
+        (t.owner, t.homeChain, t.homeContract, t.name) = (ids[0], bytes32(uint256(1)), address(chat), "t");
+        IUARegistry.UASig memory sig;
+        vm.expectRevert(IPqChat.PqChatEnv.selector);
+        IPqChat(address(topics)).createTopic(t, sig); // no env on the module itself
     }
 
     /// Two instances share nothing: a session created in A is unknown in B.
@@ -175,7 +194,7 @@ contract PqChatTest is PqChatBase {
         f.publishClassEnv(3, 0, 2, _classEnv(address(p), 24_576));
         vm.prank(REGISTRAR);
         f.deployRelease(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, "");
+            type(PqChat).creationCode, _args());
         PqChat small = PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 2), "s", abi.encodeCall(IPqChat.initialize, (0))));
         for (uint8 i = 6; i <= 16; ++i) _member(i); // 16 members
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(16, 1, address(small));

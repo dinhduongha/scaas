@@ -20,6 +20,9 @@ contract PqChatLayoutTest is PqChatBase {
         string memory pin = vm.readFile("./test/v2/layout/PqChat.json");
         assertEq(pin.readStringArray(".labels").length, 0);
         assertFalse(vm.keyExistsJson(art, ".storageLayout.storage[0]"), "no plain slot");
+        string memory mod = vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")),
+            "/PqChatTopics.sol/PqChatTopics.json"));
+        assertFalse(vm.keyExistsJson(mod, ".storageLayout.storage[0]"), "the body module: no plain slot either (CTR-TOK-30)");
         assertEq(_root(), 0xc7b36804b17476e9a19a6ebc690cd7b9326d322c515fd7dc91373f9bc6dc3000);
     }
 
