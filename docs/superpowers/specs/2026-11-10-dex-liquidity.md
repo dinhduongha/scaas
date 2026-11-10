@@ -2,8 +2,8 @@
 
 **Status:** SPECIFIED, nothing built, **UNAUDITED**. Written 2026-11-10 at the owner's request, on the direction the owner
 approved the same day (§2). **Fable review 2026-11-10: approve with fixes** (one P0, two P1, six P2, the P3 notes; no
-redesign); every finding is applied, each checked against the code first (§19); a Fable re-check of the P0 / P1 fixes comes
-before the build. **Owner 2026-11-10: Q1–Q3 as recommended** (§2 R8–R10, §18). Branch `ua-mtx-merge`. No gas or size figure
+redesign); every finding is applied, each checked against the code first (§19). **Fable re-check 2026-11-10 (c15af56f):
+approve**, the three P0 / P1 closed, five new P3 notes folded in (§19.1), one of them as controller choice C10. **Owner 2026-11-10: Q1–Q3 as recommended** (§2 R8–R10, §18). Branch `ua-mtx-merge`. No gas or size figure
 here was measured for the new code: every such figure is an [estimate] over the measured figures it cites. Tags: [measured] a
 build or forge run already in the repo; [estimate] arithmetic over measured figures; [inference] follows from the EVM's or an
 AMM's rules and is checked at the build.
@@ -83,7 +83,8 @@ Controller calls the owner may override: C1 the order is signed in the DEX's dom
 measured again at the recipient as the fee-on-transfer backstop (§6 step 6; revised after review P1-1); C4 the fee applies to
 ERC-20 outputs only (§6 step 6); C5 cancel by lane and expiry only (§4.4); C6 tokens need no listing for this entry, their kind
 is the DEX's record (§6 step 1); C7 the `DexPuller` pulls a position by its unchanged `pull` (§7.1); C8 the rule ids of §16;
-C9 at most eight inputs, eight outputs and eight extra tokens (§4.1). The review's fixes (§19) are applied as the controller
+C9 at most eight inputs, eight outputs and eight extra tokens (§4.1); C10 **no `RelayFeeRouter` wrap of `mtxLiquidity` in this
+round**: the entry is relayable directly through its signed `relayer` and `fee`, `fee = 0` included (§6 step 6; re-check P3). The review's fixes (§19) are applied as the controller
 instructed and are rules of this spec, not open options.
 
 ## 3. Why the DEX path, not the service pull — SPECIFIED
@@ -100,7 +101,7 @@ service, one `UAMetaTransfer` per SCaaS input bound to the DEX, `entryRef` = the
 | Who holds the funds | the service, as custody, by its own ledger | nobody: one atomic plan, the DEX ends at its snapshot (CTR-DEX-16, -20) |
 | Execution against AMMs | the service's own code per AMM | the existing generic interactions, listed targets, approve reset, `InteractionFailed` |
 | Outcome guarantee | the service's logic | on chain, AMM-agnostic: minima, ownership, refunds, conservation |
-| Fee | `RelayFeeRouter` only | the DEX's signed fee rate (CTR-DEX-17); through `RelayFeeRouter` only at `fee = 0` and `relayer = 0` (§6 step 6) |
+| Fee | `RelayFeeRouter` only | the DEX's signed fee rate (CTR-DEX-17), `fee = 0` included; no `RelayFeeRouter` wrap in this round (C10, §6 step 6) |
 | Token change | none | one DEX-only entry in module T on every kind (§5): new token releases (R9) |
 | Signature verifies | one per SCaaS input (one signature each) | one per SCaaS input (one signature, each token verifies it) |
 
@@ -270,6 +271,11 @@ Checks, in order (errors from `ITradeToken`, each carrying `h` where it has one)
   the pull is refused. A release that answers it is one built from this spec, which also refuses `mtxLiquidityPull` in every
   interaction (§6 step 4; a test pins both together). The view takes no guard (§9.2), so T7 answers while `mtxLiquidity` holds
   the DEX's guard. Cost ≈ 3–6 k gas per SCaaS input and ≈ 100 B of module T [estimate].
+- **T7 under gas starvation** (re-check P3): a submitter that under-funds the call makes T7 fail as `NotLiquidityDex` on a
+  capable DEX too. Nothing is consumed (the transaction reverts), so the node maps `NotLiquidityDex` from a DEX that carries the
+  liquidity mark to a retry with more gas, never to a wrong DEX (§11).
+- **T7 is a new `STATICCALL` from module T to its caller** (re-check P3): M5 allows it (`CALL` / `STATICCALL` as the bodies
+  do); it is recorded in `module-opcodes.json` and in M5's list of whom a body calls (T66b §4.6; §14 wiring).
 - **The signature is always checked** (no `pulled[h] ≠ 0` skip as on a second trade fill): the order is one-shot.
 - **No transient pull counter.** T10 does not bump `TradeLib`'s `_inTx` counter, so `restorePulled` can never lower anything
   here; `mtxCancelOrder` and `restorePulled` compute digests of `UATradeOrder`s and cannot name `h` either.
@@ -373,22 +379,25 @@ failed read means burnt (review P2-4).
    recipient from elsewhere (a distributor's `claim(user)`, a vesting release, a `skim(to)`) counts. Measuring the backstop
    before the fee shares keeps a recipient that is also the submitter or the treasury from counting its share. **The fee (C4)**
    is the DEX's model applied to what the signer receives in ERC-20s; a received position carries none; `fee = 0` is valid and
-   the entry stays relayable. **Through `RelayFeeRouter`** (review P2-3): the DEX's caller is then the router's
-   `RelayFeeExecutor`, so `relayer` binds nobody (anyone relays through the router; only `relayer = 0` or the executor can pass)
-   and the relayer share would land in the executor, where any later relay through it can take it. A liquidity order meant for
-   the router therefore signs `fee = 0` and `relayer = 0`, its slack open to any submitter; the relayer is paid in the router's
-   token instead; clients refuse a router wrap of `mtxLiquidity` with `fee ≠ 0` or `relayer ≠ 0` and warn that the slack is
-   open.
+   the entry stays relayable. **No `RelayFeeRouter` wrap in this round (C10, re-check P3; the owner may reverse it):** through
+   the router the DEX's caller is the router's `RelayFeeExecutor`, so `relayer` binds nobody (anyone relays through the router;
+   only `relayer = 0` or the executor can pass) and the relayer share would land in the executor, where any later relay through
+   it can take it (review P2-3); a wrap would need `fee = 0` and `relayer = 0`, and then a front-runner can execute the order
+   directly and the relay reverts `OrderClosed`, so the relayer loses its gas (the signer keeps its bounds). `mtxLiquidity` is
+   relayed directly instead: its signed `relayer` and `fee` (the DEX's fee share pays the relayer, CTR-DEX-17), `fee = 0`
+   included. The contracts do not refuse a wrap (the router is a generic caller); clients, `ua-rs` and the node do not build
+   one.
 7. **Refunds** (review P2-2). For each input: `left = bal − snap` (below the snapshot ⇒ `ConservationBroken(token)`), sent to
    `from`, fee-free. There is **no upper bound** `left ≤ pull[i]`: a route may hand back more than it pulled (v4 collects a
    position's fees on any liquidity change, so a top-up of A into a position with owed fees in A returns more A; the same for a
    range move with a top-up), and the excess is the signer's, since the DEX holds only this plan's funds; a stray balance from
-   before the plan is in the snapshot and stays.
+   before the plan is in the snapshot and stays. So `refunded[i] > pulled[i]` is valid (re-check P3): no client, event check or
+   invariant may assume `refunded[i] ≤ pulled[i]`; each counts the collected fees.
 8. **Conservation.** Every snapshotted token, and the `positionManager` balance, equal their snapshots (`ConservationBroken`):
    an `extraTokens` leftover is a route bug, as on the exchange path. The DEX holds nothing of this plan after it; a stray balance
    in a plan token is neither paid out nor taken (the sweep rule of CTR-DEX-20 for other tokens is unchanged).
 9. **Event** `LiquiditySettled(ref, h, from, recipient, pulled, refunded, received, dexFees, positionId, liquidity)`: a client
-   checks every figure against the signed order without trusting the submitter.
+   checks every figure against the signed order without trusting the submitter (a refund may exceed its pull, step 7).
 
 New errors (`ISCaaSDex`): `LiquidityShape(uint8 code)`, `PositionNotReceived(uint256 id)`, `PositionReaderNotListed(address
 reader)`, `PositionMismatch(uint256 id)`, `PositionBelowMin(uint256 id, uint128 liquidity)`, `PositionNotDelivered(uint256 id)`,
@@ -579,7 +588,7 @@ bind `relayer` to the venue node by default, quote owed fees into the minima and
 | T12 | **A phishing contract as the DEX** | it can only use a signature made for its own address (§4.3), the residual CTR-DEX-19 accepts; clients and the signer refuse a `verifyingContract` off the chain profile's DEX list or without its liquidity mark |
 | T13 | **Misclassified tokens, mismatched releases** | the kind is the DEX's record, never the plan's; both wrong directions fail closed (step 1); a token release without `mtxLiquidityPull` fails closed and the node names it (§5, review P2-6) |
 | T14 | **Gas starvation** | no isolation, so a starved verify (`SigCheckGasStarved`, the registry's `UAVerifyGas`) reverts the whole transaction at the relayer's cost; interactions wrapped by `InteractionFailed` with at most 256 bytes; every read and the reader gas-capped |
-| T15 | **The relay-fee router around `mtxLiquidity`** | `relayer` cannot bind anyone and the relayer share would be lost to the executor, so router wraps sign `fee = 0` and `relayer = 0`; clients refuse otherwise and warn of the open slack (step 6, review P2-3) |
+| T15 | **The relay-fee router around `mtxLiquidity`** | `relayer` cannot bind anyone, the relayer share would be lost to the executor, and with `relayer = 0` a front-runner executes the order first and the relay reverts (the relayer's gas lost); so no router wrap is offered in this round (C10): clients, `ua-rs` and the node build none, and `mtxLiquidity` is relayed directly at its signed `relayer` / `fee`, `fee = 0` included (step 6, review P2-3, re-check P3) |
 | T16 | **Pool price set by a front-runner** (creation, initialisation) | §8.1: the signed minima bound the price band; quotes right before signing |
 | T17 | **The DEX's own funds or strays** | conservation of every plan token and of the position balance; strays in plan tokens are neither paid nor taken |
 | T18 | **EIP-7702** | a designator signs by its own key only (SigCheck, the pipeline); the submitter and `relayer` are open roles, compared without a designator check (owner rulings D3 / D4) |
@@ -611,6 +620,8 @@ bind `relayer` to the venue node by default, quote owed fees into the minima and
   P2-6); the verify budget: the signer's kind cap ([CTR-DEX-26](../../contracts/dex.md#CTR-DEX-26)'s table) times the number of
   SCaaS inputs, plus the plan's base, within min(`max_gas_per_tx`, the chain's block gas limit), else `LIQUIDITY_TOO_LARGE`
   (three `mldsa65`-signed SCaaS inputs do not fit, §13; review P3).
+- **A revert `NotLiquidityDex(dex)` from a DEX that carries the liquidity mark** is gas starvation of T7, not a wrong DEX
+  (re-check P3): the node retries the job with more gas under its usual retry bound, and never marks the DEX unsupported from it.
 - **Job example** (named fields only; `Interaction.data` is the AMM's calldata, `bytes`, as on `mtxExchange`; `auth` is the
   `UASig {keyData, signature, members}` shape, here a native signer's):
 
@@ -632,7 +643,10 @@ bind `relayer` to the venue node by default, quote owed fees into the minima and
 - **Indexer:** `LiquiditySettled` (DEX) and `LiquidityPulled` (tokens), by the registered contract's address as every DEX event.
 - **Who builds plans (proposed NODE-DEX-19):** in this round the submitter (a client or a namespace with `allow_call`) builds the
   plan and the node relays it as named fields; the `OrderRouter`'s liquidity planner (quotes, routes, the default `relayer`
-  binding) is PLANNED. The node keeps no surplus (NODE-DEX-18).
+  binding) is PLANNED. The node keeps no surplus (NODE-DEX-18). **A note for relayers** (re-check P3): a signer can take
+  proceeds as a fee-free refund by listing the proceeds token as an input with a tiny pull (step 7 refunds `bal − snap` with
+  no fee); the fee is the signer's own signed rate, so nothing is stolen, but a relayer that lives on the DEX fee looks at the
+  shape before relaying.
 - **Operators' note** (a new job shape): the `mtxLiquidity` row on `dex`; its refusals `DEX_NOT_LIQUIDITY`,
   `LIQUIDITY_TOKEN_UNSUPPORTED` (a token of an earlier release cannot be an input), `LIQUIDITY_TOO_LARGE`; the liquidity mark on
   the profile's DEX rows; and that `mtxLiquidityPull` is never relayed directly.
@@ -654,13 +668,13 @@ bind `relayer` to the venue node by default, quote owed fees into the minima and
   extra tokens; a duplicate or shared token; an outside input or a position under a derived `from`; an outside output or a
   position for a derived recipient; a recipient that is a plan token or the manager; `fee` above 1 %; a `positionReader` off the
   profile's reader list for its manager; `tickLower ≥ tickUpper`; a partial withdraw or a fee collect without the received
-  position; a `RelayFeeRouter` wrap with `fee ≠ 0` or `relayer ≠ 0`), the owed fees of a given position quoted into the minima,
-  every lane floor read, and a test reading the vectors.
+  position; any `RelayFeeRouter` wrap of `mtxLiquidity`, C10), the owed fees of a given position quoted into the minima,
+  every lane floor read, the event check that lets a refund exceed its pull, and a test reading the vectors.
 - **`ua-rs`** (branch `ua-rs-sign`, the only signer): the builder with the same refusals, signing under the purpose `trade`;
   **display:** the DEX (name and address), every input with its maximum, every output with its minimum (after the fee), the
   position (manager, reader, pool, range, minimum liquidity, or the id given, with "gives the WHOLE position" when none is
   received back), the owed fees it quoted, the recipient (a warning when ≠ `from`), the fee, the relayer (a warning when 0, and
-  the open-slack warning for a router wrap), the lane and the deadline; a derived signer is told it cancels on a token lane only.
+  no router wrap is built, C10), the lane and the deadline; a derived signer is told it cancels on a token lane only.
   Proposed CLI-SGN-49 (48 is the service pull's; re-check at the build). The bindings (`ua-c`, `ua-cxx`, `ua-qt`, `ua-cs`,
   `ua-py`, `ua-go`, `ua-dart`) call `ua-rs` and gain a smoke row. `zether-prover` gets nothing.
 
@@ -761,7 +775,8 @@ negative or positive red while the original stays green):
 inputs; runs 128, depth 64, 0 reverts in the handler): between calls the DEX holds 0 of every token and no position and no
 allowance; for every executed order each token's `pulled[h] ≤` its signed maximum and the DEX's `pulled[h] = 1`; each output's
 `got − dexFee` at the DEX and each recipient's delta reach each signed minimum; a position received, a returned one included,
-has at least its signed liquidity; each signer's balance plus refunds plus pulls balances.
+has at least its signed liquidity; each signer's balance change equals its refunds minus its pulls plus what it received, with
+a refund allowed above its pull (the collected fees, step 7; never `refunded ≤ pulled`).
 
 **Node:** the row and its selector; the both-ways equality against `selector_audit.json` with the new `NOT_ROWS` entry; the token
 entry refused; decode bounds (nine inputs or extra tokens, a nested struct where a field is atomic, `int24` out of range, a dirty
@@ -770,7 +785,8 @@ address); the digest against every vector row, the negative tick included; the r
 `mldsa65` inputs); completion by `LiquiditySettled`. Node mutants: M-N1 / M-N2 drop each direction of the equality; M-N3 drop
 the eight-item bound; M-N4 zero-extend `int24`; M-N5 drop the liquidity mark; M-N6 drop the token interface pre-check.
 
-**Wiring and layout:** `LinkClosure` (the DEX's closure ∪ both modules), the opcode scan of the new module (`module-opcodes.json`),
+**Wiring and layout:** `LinkClosure` (the DEX's closure ∪ both modules), the opcode scan of the new module (`module-opcodes.json`)
+and module T's new `STATICCALL` to its caller (T7) recorded in its rows,
 its storage layout row equal to the DEX's (`test/v2/layout/`), `selector_audit.json` rows for `mtxLiquidity` and every kind's
 `mtxLiquidityPull`, the size gate (§9.3).
 
@@ -802,7 +818,7 @@ One rule, one place; each lands SPECIFIED, BUILT only with code and tests.
 
 | Id | Where | Content |
 |---|---|---|
-| **CTR-DEX-30** (new) | `contracts/dex.md`, a new section "Liquidity" after §7 | `LiquidityOrder`, `mtxLiquidity`, steps 1–9, the domain and the one-shot rule, the lanes, the spent-whole rule, the router wrap |
+| **CTR-DEX-30** (new) | `contracts/dex.md`, a new section "Liquidity" after §7 | `LiquidityOrder`, `mtxLiquidity`, steps 1–9, the domain and the one-shot rule, the lanes, the spent-whole rule, a refund above its pull, no router wrap (C10) |
 | **CTR-DEX-31** (new) | `contracts/dex.md`, the same section | positions and `IPositionReader`, signed and listed; `exchangeTarget`'s three roles |
 | CTR-DEX-15 Change | `contracts/dex.md` §3 | the token's second DEX-only pull, `mtxLiquidityPull` (§5), with the T7 capability check |
 | CTR-DEX-22 Change | `contracts/dex.md` §7 | the puller also pulls a position, by `pull` |
@@ -812,7 +828,7 @@ One rule, one place; each lands SPECIFIED, BUILT only with code and tests.
 | CTR-UA-10 Change | `contracts/accounts.md`, the purposes table | `trade` also covers `LiquidityOrder` in the DEX's domain |
 | NET-ALL-24 Change | `networks/README.md` | the chain profile's DEX rows carry the liquidity mark (§11) |
 | NODE-JOB-20 row | `node/job-api.md` | `mtxLiquidity` on `dex`, plain; its refusals; `mtxLiquidityPull` among the entries no job names |
-| **NODE-DEX-19** (new) | `node/dex-venue.md` | §11's who-builds-plans rule |
+| **NODE-DEX-19** (new) | `node/dex-venue.md` | §11's who-builds-plans rule; the fee-free-refund note for relayers; `NotLiquidityDex` from a marked DEX is a retry |
 | **CLI-SGN-49** (new) | `clients/signers-clientkeys.md` on `ua-rs-sign` | §12's checks and display |
 | decisions | `decisions.md` | CTR-DEX-30, -31 with the owner's answers R8–R10 (`owner: yes`); R7, the module names |
 
@@ -886,3 +902,15 @@ the node's T14 test already holds the both-ways equality against `selector_audit
 | P3 lanes | clients read every floor; a derived signer has no DEX-side cancel (CLI-SGN-49) | §4.4, §12 |
 | P3 node | `mtxLiquidityPull` in `NOT_ROWS`; `LIQUIDITY_TOO_LARGE` before simulation; the job example's `UASig` shape stated | §11, §14 |
 | P3 rules and gas notes | recorded: several operations by zero fields (R2), `positionPool` per reader; one verify per SCaaS input accepted | §4.1, §13 |
+
+### 19.1 The re-check (Fable, 2026-11-10, c15af56f: approve)
+
+P0-1, P1-1 and P1-2 closed; no new P0 or P1. Its five new P3 notes, folded in:
+
+| Note | Fix | Section |
+|---|---|---|
+| T7 under gas starvation reports `NotLiquidityDex` on a capable DEX | the node maps it to a retry with more gas when the DEX carries the liquidity mark | §5, §11, §16 |
+| T7 is a new `STATICCALL` from module T to its caller | recorded in `module-opcodes.json` and in M5's list of whom a body calls | §5, §14 |
+| `refunded[i]` may exceed `pulled[i]` | stated; no client, event check or invariant assumes `≤` | §6 steps 7 and 9, §12, §14 |
+| a signer can take proceeds as a fee-free refund | a note for relayers in NODE-DEX-19 | §11, §16 |
+| the router wrap: with `relayer = 0` a front-runner executes first and the relay loses its gas | **C10**: no `RelayFeeRouter` wrap of `mtxLiquidity` in this round; relayed directly at its signed `relayer` / `fee`, `fee = 0` included; the owner may reverse it | §2, §3, §6 step 6, §10 T15, §12, §16 |
