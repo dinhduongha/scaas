@@ -29,7 +29,10 @@ view; a token kind's body module). Each group is one script with its own book (a
 From `smartcontracts/evm`: Foundry 1.8.5 on `PATH`, python3, node with `clients/clientkeys/node_modules`, a built
 `zether-cli` and `pqz_prove` (their READMEs), `lib/` (`../scripts/evm_libs.sh install`), and for the PQ groups a build at
 the default set in `EVM_OUT` (default `out/t66b-e2e`; never while `src/pqz/PqzSet.sol` is modified by an at-set run).
-`matrix.sh` runs through `../../scripts/capped`, in the foreground; never inside `timeout`.
+Run `matrix.sh` itself in the foreground, never inside `timeout`, and outside `scripts/capped`: it puts a local target
+wholly under `capped`; a remote target (the SCaaS testnet, another testnet) compiles under `capped` first, then runs its
+broadcasts without a slot under a memory scope (`MATRIX_REMOTE_MEM`, default 1G, no swap), where forge must print "No
+files changed, compilation skipped" or the step fails (owner 2026-11-10).
 
 ## Local
 
@@ -37,7 +40,7 @@ Fresh chains only; no other RPC is read (`RPC_7622` may point nowhere):
 
 ```sh
 cd smartcontracts/evm
-RPC_7622=http://127.0.0.1:9 COPY=$PWD/../../scratchpad/onchain-copy ../../scripts/capped sh script/onchain/matrix.sh local
+RPC_7622=http://127.0.0.1:9 COPY=$PWD/../../scratchpad/onchain-copy sh script/onchain/matrix.sh local
 ```
 
 - a fresh anvil (chain 31337, Amsterdam, 200 M block gas, 128 KiB code) with anvil's dev keys, `deploy.sh evm` on it with
@@ -56,7 +59,7 @@ Its RPC only; never its containers, config or port. It builds on the Step 5 depl
 
 ```sh
 cd smartcontracts/evm
-RPC_7622=http://127.0.0.1:8545 ../../scripts/capped sh script/onchain/matrix.sh scaas-testnet
+RPC_7622=http://127.0.0.1:8545 sh script/onchain/matrix.sh scaas-testnet
 ```
 
 `MATRIX_GROUPS="tokens misc"` runs some groups; groups run one after another (one set of keys and nonces).
@@ -70,7 +73,7 @@ SCaaS testnet:
 ```sh
 cd smartcontracts/evm
 RPC_7622=http://127.0.0.1:8545 COPY=$PWD/../../scratchpad/onchain-copy \
-  ../../scripts/capped sh script/onchain/matrix.sh local scaas-testnet
+  sh script/onchain/matrix.sh local scaas-testnet
 ```
 
 A named target `<name>` reads `ONCHAIN_RPC_<NAME>`, `PRIVATE_KEY_<NAME>`, `ONCHAIN_K1_<NAME>`… (upper case, `-` as
@@ -97,7 +100,7 @@ A named target `<name>` reads `ONCHAIN_RPC_<NAME>`, `PRIVATE_KEY_<NAME>`, `ONCHA
 ```sh
 cd smartcontracts/evm
 source ~/.profile
-ONCHAIN_RPC_SEPOLIA=https://<rpc> MATRIX_DEPLOY=1 ../../scripts/capped sh script/onchain/matrix.sh sepolia
+ONCHAIN_RPC_SEPOLIA=https://<rpc> MATRIX_DEPLOY=1 sh script/onchain/matrix.sh sepolia
 ```
 
 ## Gas

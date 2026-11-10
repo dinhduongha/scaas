@@ -29,7 +29,17 @@ fi
 fs() {
   f=$1 l=$2
   shift 2
-  forge script "$f" --rpc-url "$RPC" --ffi --disable-code-size-limit "$@" >> "$l" 2>&1
+  n0=$(grep -c 'No files changed, compilation skipped' "$l" || true) c0=$(grep -c '^Compiling' "$l" || true)
+  forge script "$f" --rpc-url "$RPC" --ffi --disable-code-size-limit "$@" >> "$l" 2>&1 &
+  p=$!
+  # a remote target (ONCHAIN_REMOTE=1, matrix.sh): compiled under scripts/capped first; a recompile here is killed
+  while kill -0 "$p" 2> /dev/null; do
+    sleep 1
+    [ "${ONCHAIN_REMOTE:-0}" != 1 ] || [ "$(grep -c '^Compiling' "$l" || true)" = "$c0" ] || { kill "$p" 2> /dev/null; break; }
+  done
+  wait "$p" || return 1
+  [ "${ONCHAIN_REMOTE:-0}" != 1 ] || [ "$(grep -c 'No files changed, compilation skipped' "$l" || true)" -gt "$n0" ] ||
+    { echo "FAIL forge did not skip compilation ($f): a remote run compiles under scripts/capped first"; return 1; }
 }
 if has reg; then
   rm -f "broadcast/ZetherRegE2E.s.sol/$CHAIN/run-latest.json"

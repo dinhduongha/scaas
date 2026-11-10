@@ -1,7 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # T66b Step 5b: the whole on-chain matrix, target by target; each target self-contained (nothing read from another
-# target's run). From smartcontracts/evm, through scripts/capped, in the foreground (README.md has the commands):
+# target's run). From smartcontracts/evm, in the foreground, outside scripts/capped: a local target runs wholly under it;
+# a remote one compiles under it, then broadcasts under a MATRIX_REMOTE_MEM (1G) scope (README.md has the commands):
 #   matrix.sh <target> [<target> …]   each target in turn in its own process (its env, temp dir, anvil / copy, teardown);
 #                                     one that fails does not stop the next; a summary table (target | group | result)
 #                                     at the end, non-zero if any target failed
@@ -29,8 +30,21 @@ if [ "${1:-}" != --one ]; then
   MATRIX_SUMMARY=$(mktemp)
   export MATRIX_SUMMARY MATRIX_NAMED=$n
   trap 'rm -f "$MATRIX_SUMMARY"' EXIT INT TERM
+  # local targets run wholly under scripts/capped; a remote one outside it (its compile under capped, its broadcasts
+  # under a 1 G scope: owner 2026-11-10), so the driver itself runs outside capped (inside it, local targets still run)
+  cg=$(cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.max" 2> /dev/null || echo max)
   rc=0
-  for t; do sh "$0" --one "$t" || rc=1; done
+  for t; do
+    if [ "$t" = local ]; then
+      if [ "$cg" = max ]; then ../../scripts/capped sh "$0" --one "$t" || rc=1; else sh "$0" --one "$t" || rc=1; fi
+    elif [ "$cg" != max ]; then
+      echo "[$t] FAIL setup: a remote target runs outside scripts/capped (compile under capped, broadcasts under a 1 G scope): call matrix.sh directly"
+      printf '%s | setup | fail\n' "$t" >> "$MATRIX_SUMMARY"
+      rc=1
+    else
+      sh "$0" --one "$t" || rc=1
+    fi
+  done
   echo "## summary (exit $rc)"
   echo "target | group | result"
   cat "$MATRIX_SUMMARY"
@@ -60,7 +74,7 @@ step() {
   l=$1 sr=$2 sa=$3
   shift 3
   t0=$(date +%s) n0=$(txs "$sr" "$sa") i=0
-  "$@" >> "$LOG" 2>&1 &
+  $SCOPE "$@" >> "$LOG" 2>&1 &
   P=$!
   while kill -0 "$P" 2> /dev/null; do
     sleep 1
@@ -165,6 +179,13 @@ scaas-testnet)
   PQ_RPC=$RPC ;;
 esac
 CHAIN=$(cast chain-id --rpc-url "$RPC" 2>> "$LOG") || fail "the RPC does not answer"
+# a remote target: compile under scripts/capped first; then every broadcast step under a memory scope without a slot
+# (MATRIX_REMOTE_MEM, default 1G, no swap), forge refusing any recompile there (run.sh, zether.sh: ONCHAIN_REMOTE)
+SCOPE=
+if [ "$tgt" != local ]; then
+  SCOPE="systemd-run --user --scope --quiet -p MemoryMax=${MATRIX_REMOTE_MEM:-1G} -p MemorySwapMax=0 --"
+  export ONCHAIN_REMOTE=1
+fi
 for k in "$PRIVATE_KEY" "$ONCHAIN_K1" "$ONCHAIN_K2" "$ONCHAIN_K3"; do ADDRS="$ADDRS $(cast wallet address --private-key "$k")"; done
 for k in 1 2 3; do PQ_ADDRS="$PQ_ADDRS $(cast wallet address --private-key "$(printf '0x%064x' "$k")")"; done
 say "" "start (chain $CHAIN, PQZ $PQZ${PQ_RPC:+ on chain $(cast chain-id --rpc-url "$PQ_RPC" 2> /dev/null || echo '?')})"
@@ -173,6 +194,11 @@ export ONCHAIN_RPC=$RPC DEPLOY_JSON=deployments/$CHAIN.json RELEASES_JSON=deploy
 [ "$tgt" != scaas-testnet ] || export RELEASES_JSON=deployments/7622-t66b-releases.json
 if [ "${MATRIX_DEPLOY:-0}" = 1 ] && { [ "$tgt" = local ] || [ ! -f "$DEPLOY_JSON" ]; }; then
   STAGE=deploy
+  if [ -n "$SCOPE" ]; then
+    say "" "deploy: compile (scripts/capped) …"
+    ../../scripts/capped env FOUNDRY_OUT=out/onchain-deploy FOUNDRY_CACHE_PATH=cache/onchain-deploy forge build \
+      script/Deploy.s.sol script/DeploySend.s.sol >> "$LOG" 2>&1 || fail "forge build of the deploy scripts"
+  fi
   say "" "deploy …"
   rm -f "$RELEASES_JSON"
   step "" "$RPC" "$ADDRS" env FOUNDRY_OUT=out/onchain-deploy FOUNDRY_CACHE_PATH=cache/onchain-deploy RELEASE_GAS_GATE=public \
@@ -183,6 +209,24 @@ if [ "${MATRIX_DEPLOY:-0}" = 1 ] && { [ "$tgt" = local ] || [ ! -f "$DEPLOY_JSON
   say "" "deploy ok $NTX txs (${SECS}s): $DEPLOY_JSON"
 fi
 if [ "$tgt" = scaas-testnet ]; then NOTE=runs/2026-11-10-ua-mtx-merge-t66b-step5-7622.txt; export NOTE; fi
+if [ -n "$SCOPE" ]; then
+  STAGE=compile
+  say "" "compile (scripts/capped) …"
+  python3 -I script/onchain/zether_reg.py gen >> "$LOG" 2>&1
+  for g in $GROUPS; do
+    case $g in
+    tokens|gov|dex|misc)
+      G=$(echo "$g" | sed 's/^./\U&/')
+      ../../scripts/capped forge build "script/onchain/$G.s.sol" --out "out/onchain-$g" --cache-path "cache/onchain-$g" \
+        >> "$LOG" 2>&1 || fail "forge build $G.s.sol" ;;
+    zether)
+      ../../scripts/capped env FOUNDRY_OUT=out/onchain-zether FOUNDRY_CACHE_PATH=cache/onchain-zether forge build \
+        script/ZetherE2E.s.sol script/onchain/ZetherMore.s.sol script/onchain/build/ZetherRegE2E.s.sol \
+        script/onchain/build/ZetherRegMore.s.sol >> "$LOG" 2>&1 || fail "forge build of the Zether scripts" ;;
+    esac
+  done
+  say "" "compile ok"
+fi
 python3 -I script/onchain/basebook.py "$tgt" >> "$LOG"
 rc=0
 STAGE=groups

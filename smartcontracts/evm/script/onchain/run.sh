@@ -11,6 +11,8 @@
 # transaction asks forge's estimate x ONCHAIN_GAS_MULTIPLIER / 100 (default 130, forge's own): the estimate is the
 # simulated gasUsed after the storage refund, so a call that frees storage needs headroom above it (at 110 the
 # GovernanceRouter's mtxCancelGrant ran out of gas on chain); 130 also covers anvil's low estimate of a CREATE.
+# ONCHAIN_REMOTE=1 (matrix.sh, a remote target: compiled under scripts/capped first, this under a 1 G scope): forge must
+# print "No files changed, compilation skipped"; a recompile is killed and fails the group.
 # Output: <runs>/<group>-<net>.log (git-ignored: forge's output, the records' and negatives' lines) and the records;
 # stdout one short line per event (start, a heartbeat every 30 s, ok / FAIL with the named error).
 set -eu
@@ -56,9 +58,19 @@ while kill -0 "$F" 2> /dev/null; do
   sleep 1
   i=$((i + 1))
   [ $((i % 30)) != 0 ] || echo "[$net/$lg] … forge, $(($(date +%s) - t0))s"
+  # a remote target (ONCHAIN_REMOTE=1, matrix.sh: compiled under scripts/capped first): no compile here, fail closed
+  if [ "${ONCHAIN_REMOTE:-0}" = 1 ] && grep -q '^Compiling' "$L"; then
+    kill "$F" 2> /dev/null
+    echo "[$net/$lg] FAIL forge recompiles (compile first)"
+    break
+  fi
 done
 wait "$F" || rc=$?
 F=
+if [ "${ONCHAIN_REMOTE:-0}" = 1 ] && ! grep -q 'No files changed, compilation skipped' "$L"; then
+  rc=1
+  echo "[$net/$lg] FAIL forge did not skip compilation: a remote run compiles under scripts/capped first"
+fi
 [ $rc = 0 ] || echo "[$net/$lg] FAIL forge: $(grep -E '^Error|revert' "$L" | tail -1 | cut -c1-160)"
 if [ -f "$B" ]; then
   python3 -I script/onchain/coverage.py forge "$net" "deployments/onchain-$net-$lg.json" "$B" >> "$L" 2>&1
