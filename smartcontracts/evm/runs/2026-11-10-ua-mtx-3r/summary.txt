@@ -8,3 +8,34 @@ PQZ set n2304-kmax4096; every heavy run through scripts/capped (4 GB; the node 6
 step | commit | rc | counts
 t1-governance.red (AdminNames, GovRouterTypehash) | 304afd16+T1 | 1 | 43 passed, 16 failed: AdminNames 13 (each kind and the DEX "an ownership selector answers"), the 3 new router typehash pins (old constant != new value); positive control (the fixture with the old selectors and errors) 13/13 passed
 t1-pqchat.red (PqChatTypes) | 304afd16+T1 | 1 | 7 passed, 1 failed: test_pqtopicAdminTypehashIsPinned (0x75bed97b != 0x66954727; T3 makes it green)
+forge-governance (red, before the pins) | e1651c7a | 1 | 442 passed, 9 failed: GovDeploy router CREATE2 address, PlusZero gas of 8 rows (the dispatcher order of the renamed selectors)
+forge-governance | 6e34e572 | 0 | 451 passed, 0 failed (50 suites; AdminNames 14/14, GovRouterTypehash, SelectorAudit, GovBitsVector)
+forge-metatx | 6e34e572 | 0 | 544 passed, 0 failed, 1 skipped (44 suites)
+forge-merge | 6e34e572 | 0 | 341 passed, 0 failed (29 suites)
+forge-v2 | 6e34e572 | 0 | 655 passed, 0 failed (54 suites; Layout: slots and offsets unchanged)
+forge-as | 6e34e572 | 0 | 463 passed, 0 failed (76 suites)
+forge-ua | 6e34e572 | 0 | 732 passed, 0 failed (54 suites)
+forge-pqz (red, before the pin) | 6e34e572 | 1 | 597 passed, 1 failed, 4 skipped: ProofPathInvariants test_P7_zetherPinsUnchanged (the plus-zero Zether rows moved in T2)
+forge-pqz | 7c547b85 | 0 | 598 passed, 0 failed, 4 skipped (51 suites)
+forge-zether | 6e34e572 | 0 | 441 passed, 0 failed, 4 skipped (37 suites)
+forge-wrap | 6e34e572 | 0 | 278 passed, 0 failed (29 suites)
+forge-liquidity | 6e34e572 | 0 | 90 passed, 0 failed, 1 skipped (9 suites)
+forge-pqchat | 6e34e572 | 1 | 96 passed, 1 failed: PqChatTypes test_pqtopicAdminTypehashIsPinned (T1's red pin; T3 builds PqTopic(bytes32 admin, ...))
+forge-account | 6e34e572 | 0 | 98 passed, 0 failed (5 suites)
+forge-confidential | 6e34e572 | 0 | 5 passed, 0 failed
+forge-hedera | 6e34e572 | 0 | 20 passed, 0 failed
+forge-p6f | 6e34e572 | 0 | 4 passed, 0 failed
+forge-pqzh | 6e34e572 | 0 | 42 passed, 0 failed (3 suites)
+forge-wallet | 6e34e572 | 0 | 181 passed, 0 failed (12 suites)
+forge-fork | 6e34e572 | 0 | 0 passed, 1 skipped (no SCAAS_FORK_RPC_URL)
+forge-research | 6e34e572 | 1 | 358 passed, 1 failed, 7 skipped: PqzProofStoreGas test_debitMinGas_isTheCheapestLogDebit, PQZ_DEBIT_MIN_GAS 7,513,388 pinned / 7,513,432 measured (+44, the PQZ faces' dispatch after the rename); a set parameter, the owner's
+forge-top | 6e34e572 | 0 | 29 passed, 0 failed (5 suites)
+gen | 6e34e572 | 0 | gen_faces.py --check 27 files 0 differ; gen_set.py --all --check 4 sets, 84 files; test_vcheck ok
+scripts | 6e34e572 | 0 | Deploy, DeploySend and the eight on-chain scripts compile
+size (red, before the rows) | 6e34e572 | 1 | 6 rows above the ratchet: GovernanceLib +5, NormalPqzRegulatedTokenA / NormalPqzTokenA / NormalRegulatedTokenA / NormalZetherRegulatedTokenA +4, WrappedLib +1 (and 9 false errors of out/m3r-sizes, fixed in gates.sh)
+size | 7c547b85 | 0 | 0 errors, 166 contracts
+forge-modules (red) | 7c547b85 | 1 | 12 passed, 23 failed: the differential's "call out" compare of every ownership row (the recorded call under test kept the old selector); out/t66b-legacy built by legacy_artifacts.py build
+forge-modules | d6a4c03d | 0 | 35 passed, 0 failed (12 suites; Diff*, Modules, Paths, Groups; the R3 map in LegacyDiff)
+clientkeys (red) | d6a4c03d | 1 | 319 passed, 1 failed: typed-ops.test.js "GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol" (35 !== 38: the T1 pin shape was not the one it parses)
+GovRouterTypehash.t.sol | bbfc6490 | 0 | 42 passed, 0 failed
+clientkeys | bbfc6490 | 0 | 322 tests, 320 passed, 0 failed (the three renamed TYPED_OPS rows, typed_ops.json regenerated)
