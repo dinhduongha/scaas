@@ -60,6 +60,12 @@ pub fn trade_order_hash(token_domain: &Eip712Domain, o: &UATradeOrder) -> B256 {
 }
 
 /// An outside sell token's order hash: `DexOrder(sellToken, order)` in the DEX's domain (`dexOrderDigest`).
+/// `h` of a liquidity order (CTR-DEX-30, spec 2026-11-10-dex-liquidity.md §4.3): the DEX's salted domain (`"SCaaS Dex"`), the
+/// order's `hashStruct` with `LiquidityToken` nested; the pre-check compares it with the DEX's `liquidityOrderDigest`.
+pub fn liquidity_order_hash(dex_domain: &Eip712Domain, o: &crate::abi::LiquidityOrder) -> B256 {
+    o.eip712_signing_hash(dex_domain)
+}
+
 pub fn dex_order_hash(dex_domain: &Eip712Domain, sell: Address, o: &TradeOrder) -> B256 {
     DexOrder { sellToken: sell, order: o.clone() }.eip712_signing_hash(dex_domain)
 }

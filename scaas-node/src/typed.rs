@@ -100,6 +100,10 @@ const NESTED: &[(&str, &str)] = &[
     ("Interaction", "address target,bytes data"),
     ("ExchangePlan", "bytes32 ref,ExchangeLeg[] legs,address[] extraTokens"),
     ("HybridPlan", "bytes32 ref,DexLeg taker,DexLeg[] makers,uint256 outsideSell,uint256 outsideFloor,address[] extraTokens"),
+    // CTR-DEX-30: the liquidity order (signed in the DEX's domain) and its plan; three levels, the lists bounded (`LIQUIDITY_MAX`)
+    ("LiquidityToken", "address token,uint256 amount"),
+    ("LiquidityOrder", "bytes32 from,LiquidityToken[] inputs,LiquidityToken[] outputs,address positionManager,address positionReader,uint256 positionIn,bytes32 positionPool,int24 tickLower,int24 tickUpper,uint128 minLiquidity,bytes32 recipient,uint256 fee,address relayer,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil"),
+    ("LiquidityPlan", "bytes32 ref,LiquidityOrder order,UASig auth,uint256[] pull,uint256 positionId,address[] extraTokens"),
     // `IGovernance.GrantTerms`: flat, so a decode is one level deep; its `hashStruct` is the signed word, the struct the argument
     ("GrantTerms", "uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope"),
     // `IPqChat`'s records (UA-7 spec §4.1, topics spec §2), by the contract's field names; `Wrap` here is a member's key wrap, not
@@ -264,6 +268,7 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("mtxExchangeBatch", D, "ExchangePlan[] ps,Interaction[][] interactions"),
     ("mtxHybrid", D, "HybridPlan p,Interaction[] interactions"),
     ("mtxHybridVia", D, "HybridPlan p,address executor,bytes data"),
+    ("mtxLiquidity", D, "LiquidityPlan p,Interaction[] interactions"),
     ("mtxCancelOrders", D, "DexOrder[] orders,bytes[] sigs"),
     // `PqChat` (T93): the ten signed writes take their record and its `UASig`; `addWraps` and `storeMessage` carry none (the
     // guard's unsigned-write rule, P17)
@@ -554,6 +559,8 @@ fn hash_tuple(name: &str, fields: &[(String, String)], vals: &[Val]) -> B256 {
 /// `msig` has at most 16 members (CTR-UA-09), so a `MemberSig[]` or an `InnerSig[]` has at most 16 slots. The two levels of the type bound the
 /// depth of a decode; this bounds its width: the registry copies a list to memory before its first index check, 16 × 16 at most here.
 const MSIG_MAX_SLOTS: usize = 16;
+/// C9 (spec 2026-11-10-dex-liquidity.md §4.1, §11): at most eight inputs, eight outputs and eight extra tokens per liquidity plan.
+const LIQUIDITY_MAX: usize = 8;
 
 fn fixed(v: &[u8]) -> Val {
     let mut w = B256::ZERO;
@@ -575,12 +582,20 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
         if matches!(el, "MemberSig" | "InnerSig") && a.len() > MSIG_MAX_SLOTS {
             return Err(bad("more than 16 slots"));
         }
+        // CTR-DEX-30 (C9): a liquidity order's inputs and outputs and its plan's extra tokens, at most eight each
+        if el == "LiquidityToken" && a.len() > LIQUIDITY_MAX {
+            return Err(bad(&format!("more than {LIQUIDITY_MAX}")));
+        }
         let v: Result<Vec<Val>> = a.iter().enumerate().map(|(i, x)| parse(el, x, &format!("{path}[{i}]"))).collect();
         return Ok(Val::Array(v?));
     }
     if let Some(f) = nested(ty) {
         let o = j.as_object().ok_or_else(|| bad("not an object"))?;
-        return Ok(Val::Tuple(take(f, o, path)?));
+        let t = take(f, o, path)?;
+        if ty == "LiquidityPlan" {
+            liquidity_plan(&t, path)?;
+        }
+        return Ok(Val::Tuple(t));
     }
     if ty == "PayMeta" {
         return pay_meta(j, path);
@@ -617,6 +632,26 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
             }
         }
     })
+}
+
+/// A `LiquidityPlan`'s own shape (spec 2026-11-10-dex-liquidity.md §11): at most eight extra tokens, one `pull` per input
+/// (fields in declaration order: `ref, order, auth, pull, positionId, extraTokens`; `order.inputs` its second field).
+fn liquidity_plan(t: &[Val], path: &str) -> Result<()> {
+    let len = |v: &Val| match v {
+        Val::Array(a) => a.len(),
+        _ => usize::MAX,
+    };
+    let inputs = match &t[1] {
+        Val::Tuple(o) => len(&o[1]),
+        _ => usize::MAX,
+    };
+    if len(&t[5]) > LIQUIDITY_MAX {
+        bail!("BAD_PAYLOAD: {path}.extraTokens: more than {LIQUIDITY_MAX}");
+    }
+    if len(&t[3]) != inputs {
+        bail!("BAD_PAYLOAD: {path}.pull: one per input");
+    }
+    Ok(())
 }
 
 const PAY_META_ABI: &str = "(bytes32,bytes32,bool,uint16,bytes)";
@@ -1588,8 +1623,8 @@ mod tests {
         // group 3g T55: -> 83, `UAPqzRollOver`
         // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`
         assert_eq!(rows().iter().filter(|r| r.typed).count(), 87, "84 vector rows, mtxPay, the two invalidations (DEX, token)");
-        // T93: 18 -> 30, `PqChat`'s twelve writes
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 30, "the wallet's three flat builders are gone (MD-11 (a))");
+        // T93: 18 -> 30, `PqChat`'s twelve writes; ua-mtx-liquidity L6: -> 31, the DEX's `mtxLiquidity` (CTR-DEX-30)
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 31, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 
     /// Group 3g (KV-10): the rollover is one row per kind (Zether's form kept; the PQZ one with `keyVersion`, its EIP-712 struct
@@ -2213,6 +2248,41 @@ mod tests {
             let h = p.typed.digest_on(u["chainId"].as_u64().unwrap(), u["chainUid"].as_str().unwrap().parse().unwrap());
             assert_eq!(format!("{:#x}", h.unwrap()), r["invalidateDigest"].as_str().unwrap(), "{}", r["name"]);
         }
+    }
+
+    /// `liquidity_kat.json` (spec 2026-11-10-dex-liquidity.md §12): each row as a named-field `mtxLiquidity` job builds the
+    /// generator's calldata byte for byte, the node's digest of the order is the row's `h` (the negative tick included), and the
+    /// liquidity lists are bounded by type (nine inputs, nine extra tokens, a `pull` short of the inputs).
+    #[test]
+    fn liquidity_rows_match_the_vectors() {
+        let path = format!("{}/../smartcontracts/vectors/ua/liquidity_kat.json", env!("CARGO_MANIFEST_DIR"));
+        let k: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let rows_ = k["rows"].as_array().unwrap();
+        assert_eq!(rows_.len(), 7);
+        let job = |r: &Value| json!({"entry": "mtxLiquidity", "contract": "dex", "token": k["dex"],
+            "args": {"p": {"ref": r["plan"]["ref"], "order": r["order"], "auth": r["auth"], "pull": r["plan"]["pull"],
+                           "positionId": r["plan"]["positionId"], "extraTokens": r["plan"]["extraTokens"]},
+                     "interactions": r["interactions"]},
+            "validUntil": r["order"]["validUntil"]});
+        for r in rows_ {
+            let p = Op::parse(&job(r), FEE).unwrap();
+            assert_eq!(format!("0x{}", alloy::hex::encode(&p.data)), r["mtxLiquidityCalldata"].as_str().unwrap(), "{}", r["name"]);
+            let c = crate::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&p.data).unwrap();
+            let d = crate::dex::domain("SCaaS Dex", k["chainId"].as_u64().unwrap(), k["dex"].as_str().unwrap().parse().unwrap(),
+                k["chainUid"].as_str().unwrap().parse().unwrap());
+            assert_eq!(format!("{:#x}", crate::dex::liquidity_order_hash(&d, &c.p.order)), r["h"].as_str().unwrap(), "{}", r["name"]);
+        }
+        let err = |f: &dyn Fn(&mut Value)| -> String {
+            let mut j = job(&rows_[0]);
+            f(&mut j);
+            format!("{}", Op::parse(&j, FEE).err().unwrap())
+        };
+        let nine = |x: &Value| Value::Array(vec![x.clone(); 9]);
+        assert!(err(&|j| j["args"]["p"]["order"]["inputs"] = nine(&j["args"]["p"]["order"]["inputs"][0]))
+            .contains("p.order.inputs: more than 8"));
+        assert!(err(&|j| j["args"]["p"]["extraTokens"] = nine(&json!(k["lp"]))).contains("p.extraTokens: more than 8"));
+        assert!(err(&|j| j["args"]["p"]["pull"] = json!(["1"])).contains("p.pull: one per input"));
+        assert!(err(&|j| j["args"]["p"]["order"]["tickLower"] = json!(8_388_608)).contains("outside int24"));
     }
 
     /// A job deadline narrows what is signed, never extends it; a cancel has none of its own.

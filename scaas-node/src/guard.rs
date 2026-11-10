@@ -1496,6 +1496,7 @@ mod tests {
         ("mtxTransferWithFee", "(bytes32,bytes32,", "the flat transfer with a fee: as mtxTransfer"),
         ("mtxTrade", "((bytes32,address,", "the DEX's pull (NotDex for any other caller)"),
         ("restorePulled", "((bytes32,address,", "the DEX's (NotDex)"),
+        ("mtxLiquidityPull", "((bytes32,(address,uint256)[],", "the DEX's liquidity pull (NotLiquidityDex, and no valid digest for any other caller): reached only through the relayed mtxLiquidity (spec 2026-11-10-dex-liquidity.md §11)"),
         ("exchangeOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
         ("settleOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
         ("mtxCreateToken", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
@@ -1832,9 +1833,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // twelve proof entries of 5 and 13 (ten of 4 and 12) moved selector in place (rowed or exempt as before)
     // group 3h T61: (257, 181, 241) -> (258, 181, 245): the router's `mtxSetProofStore` rowed; `setProofStore` governed (bit 24) on
     // each of the four PQZ kinds
-    const ROWED: usize = 258;
+    // ua-mtx-liquidity L6: ROWED 258 -> 259 (the DEX's `mtxLiquidity`), EXEMPT 181 -> 193 (`mtxLiquidityPull` on the twelve
+    // kinds, NOT_ROWS)
+    const ROWED: usize = 259;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
-    const EXEMPT: usize = 181;
+    const EXEMPT: usize = 193;
     const GOVERNED: usize = 245;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
