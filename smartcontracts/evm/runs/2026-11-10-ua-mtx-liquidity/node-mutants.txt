@@ -1,0 +1,8 @@
+mutant | tests that went red | rc (cargo test --lib / e2e on anvil)
+control (the original tree) | none red: green | 0/0
+M-N1 | guard::tests::allow_lists_equal_the_selector_audit_both_directions, typed::tests::liquidity_rows_match_the_vectors, typed::tests::typed_ops_kat_every_entry | 101
+M-N2 | guard::tests::allow_lists_equal_the_selector_audit_both_directions | 101
+M-N3 | typed::tests::liquidity_rows_match_the_vectors | 101
+M-N4 | typed::tests::liquidity_rows_match_the_vectors | 101
+M-N5 | guard::tests::liquidity_pre_checks, liquidity_pre_checks_on_a_chain | 101/101
+M-N6 | liquidity_pre_checks_on_a_chain | 0/101

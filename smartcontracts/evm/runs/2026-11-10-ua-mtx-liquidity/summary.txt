@@ -72,3 +72,12 @@ red: e2e liquidity_pre_checks_on_a_chain on L6b | L6c | 101 | jobs 1-3 as expect
 e2e liquidity_pre_checks_on_a_chain | L6c | 0 | 1 passed: v2 add of two SCaaS inputs mined (the node's h = liquidityOrderDigest); DEX_NOT_LIQUIDITY (modules() without group 11); LIQUIDITY_TOKEN_UNSUPPORTED (a listed input set to MockEarlierToken); starved NotLiquidityDex queued, never dead; LIQUIDITY_TOO_LARGE (1 M block); 0 sends by the refusals
 node cargo test --lib (liquidity, allow_lists, typed_ops_kat, known_errors, starved) | L6c | 0 | 5 passed
 node cargo clippy --all-targets -- -D warnings | L6c | 0 | clean
+
+node mutants (L8c; node_mutants.py, rows in node-mutants.txt: mutant | tests that went red | rc): 6 of 6 killed, each alone, its
+file restored and checked byte-equal (sha256); the original green first (lib 4 passed, e2e 1 passed).
+M-N1 the mtxLiquidity row dropped (signed -> ours) | allow_lists ("dex: SIGNED mtxLiquidity(...) has no row and no reason"), liquidity_rows, typed_ops_kat
+M-N2 the row on the token kinds too (ours -> signed) | allow_lists ("mtxLiquidity on token is no SIGNED entry of a token contract")
+M-N3 the eight-item bound dropped | liquidity_rows ("p.order.inputs: more than 8")
+M-N4 an int24 zero-extended | liquidity_rows (v4_mint_negative_tick's calldata)
+M-N5 the liquidity mark dropped | liquidity_pre_checks; e2e (the old DEX's job queued as starved, not DEX_NOT_LIQUIDITY)
+M-N6 the token interface pre-check dropped | e2e only (job 3 dead `revert 0x` instead of LIQUIDITY_TOKEN_UNSUPPORTED); the lib tests stay green
