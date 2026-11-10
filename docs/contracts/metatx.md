@@ -263,15 +263,18 @@ lane); unbound `relayer := 0`. Wire values of unbound fields are never submitted
 <a id="execution-pipeline"></a>
 <a id="CTR-MTX-17"></a>**CTR-MTX-17** — **`mtxExecute` runs the signer's calldata on the contract itself** (owner).
 One entry point serves every subject-signed call of a SCaaS contract; `data` is always a self-call of an allowlisted
-function (transfers and payments are `MetaTransfer`s, [CTR-MTX-23](#CTR-MTX-23)). `executeMetaTransaction` is its alias
+function (on a token transfers and payments are `UAMetaTransfer`s, [CTR-MTX-23](#CTR-MTX-23)). `executeMetaTransaction` is its alias
 under the EIP-1776 name for outside tools and returns `bool` (the return type that tender and other integrators
 decode); only `mtxExecute` returns the inner call's bytes.
 
 **What stands (owner 2026-10-31 and 2026-11-01).** `executeMetaTransaction` stays in `MetaTxBase` and `IMetaTx` beside `mtxExecute`, on every contract as before (it replaces the plan's removal): it signs `address from`, so it is not part of `UAMetaTxBase`. It shares the EIP-1776 name only: its selector `0x47aea5b5` is not the `0x0c53c51c` of the common `executeMetaTransaction(address,bytes,bytes32,bytes32,uint8)`, and ERC-1776 itself defines no such function. The generic `MetaTransaction` path and its allowlist were not replaced: `mtxExecute` is no longer the only way to run an operation (a named entry runs the same self-call under its own struct, [CTR-MTX-28](#CTR-MTX-28)), and it stays for a mixed batch and for an operation with no named entry.
 
 ```solidity
-function mtxExecute(MetaTransaction calldata m, bytes calldata signature) external returns (bytes memory ret);
+// tokens and mandate wallets since the merge (UAMetaTxBase; CTR-MTX-30)
+function mtxExecute(UAMetaTransaction calldata m, IUARegistry.UASig calldata auth) external returns (bytes memory ret);
+// MetaTxBase: the EIP-1776 alias on address `from`; IMetaTxAddress (SmartKeyAccount's address path) keeps this mtxExecute form
 function executeMetaTransaction(MetaTransaction calldata m, bytes calldata signature) external returns (bool); // alias
+function mtxExecute(MetaTransaction calldata m, bytes calldata signature) external returns (bytes memory ret);
 ```
 
 The flow from signature to event:
@@ -281,9 +284,9 @@ sequenceDiagram
     participant S as Subject
     participant R as Relayer
     participant C as SCaaS contract
-    S->>R: signed MetaTransaction (EIP-712)
+    S->>R: signed UAMetaTransaction (EIP-712)
     R->>R: simulate
-    R->>C: mtxExecute(m, signature)
+    R->>C: mtxExecute(m, auth)
     C->>C: 1-3 cheap checks: relayer, expiry, mode, nonce, signature, shape
     C->>C: 4 mtxNonce = expected + 1
     C->>C: 5 self-call of the allowlisted function
