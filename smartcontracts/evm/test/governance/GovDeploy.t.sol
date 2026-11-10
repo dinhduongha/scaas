@@ -533,7 +533,7 @@ contract GovDeployTest is Test {
     /// Plan T10 (T2 and T7 moved the bytecode): `RelayFeeRouter` (no constructor argument: one address on every chain) and the
     /// `GovernanceRouter` (here on the SCaaS testnet's reset-1 inputs: chain_uid, registry, `SmartKeyAccount`
     /// implementation, not Hedera) at their deploy CREATE2 addresses (the deterministic deployer, the default
-    /// `DEPLOY_SALT`), not the reset-1 ones (`deployments/7622.json`, which `node.example.toml`'s `governance_routers`
+    /// `DEPLOY_SALT`), not the reset-1 ones (that reset's book `7622.json`, which `node.example.toml`'s `governance_routers`
     /// names): a deploy of this tree lists the new ones.
     function test_routerAndRelayFeeRouterNewAddresses() public pure {
         bytes32 deploySalt = keccak256("scaas.deploy.v1");

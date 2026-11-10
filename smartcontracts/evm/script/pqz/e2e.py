@@ -51,6 +51,8 @@ EVM = os.path.abspath(os.path.join(HERE, "../.."))
 ROOT = os.path.abspath(os.path.join(EVM, "../.."))
 sys.path.insert(0, os.path.join(ROOT, "pqz-core/nethermind/chain"))
 sys.path.insert(0, os.path.join(ROOT, "smartcontracts/vectors/pqz"))
+sys.path.insert(0, os.path.join(EVM, "script"))
+import deploybook  # noqa: E402
 from eth import _mul, address, keccak256, legacy_tx, sign  # noqa: E402
 import pqz_kat as K  # noqa: E402
 
@@ -1248,6 +1250,7 @@ def run(kd, kr, ke):
     log(f"# P6g e2e on chain {chain}, {time.strftime('%Y-%m-%d %H:%M:%S %z')}; genesis {g['hash']}; head "
         f"{int(head['number'], 16)}, gasLimit {int(head['gasLimit'], 16):,}, baseFee {int(head['baseFeePerGas'], 16)}")
     check(chain == 7622, "chain id 7622")
+    book = deploybook.resolve(chain, g["hash"])  # NET-EVM-13: the book's key before anything is sent (a copy: DEPLOY_NAME)
     sd, sr, se = Sender(kd), Sender(kr), Sender(ke)
     VERIFIER[0] = sd
     log(f"deployer {sd.addr} (key {kd}), relayer {sr.addr} (key {kr}), envelope signer {se.addr} (key {ke})")
@@ -1298,7 +1301,7 @@ def run(kd, kr, ke):
     # plan T11 (CTR-GOV-15 Change): a GovernanceRouter (chain_uid, registry, SmartKeyAccount implementation 0, Hedera false)
     # before every release, each env naming it as govRouter. By CREATE2 as DeployBase (governance spec §3.1); on this run's
     # own registry (it carries the pqz-mlwe kind, the deploy JSON's has none), so it is not the deploy JSON's router: the
-    # node lists both in `governance_routers` (RUNBOOK); JSON key `governance_router` of deployments/7622-pqz.json
+    # node lists both in `governance_routers` (RUNBOOK); JSON key `governance_router` of deployments/<key>-pqz.json
     router = D.deploy2("GovernanceRouter", encs(["w", "w", "w", "w"], [uid, reg, 0, 0]), label="governance_router")
     # plan 5g-Z2: the factory (notice period 0 here) deploys every release itself: env version 1 of each kind
     # (factory, chain_uid, registry, SmartKeyAccount implementation 0, Hedera false, deps, the linked libraries with
@@ -1715,9 +1718,10 @@ def run(kd, kr, ke):
     log("\n## addresses")
     for k, v in {**D.libs, **D.addr}.items():
         log(f"      {k}: {v}")
-    with open(os.path.join(EVM, "deployments/7622-pqz.json") if os.path.isdir(os.path.join(EVM, "deployments"))
+    with open(os.path.join(EVM, f"deployments/{book[0]}-pqz.json") if os.path.isdir(os.path.join(EVM, "deployments"))
               else os.devnull, "w") as f:
-        json.dump({**D.libs, **D.addr, "chain_uid": "0x" + uid.hex()}, f, indent=2)
+        json.dump({**deploybook.header(book[0], book[1], chain, "0x" + uid.hex(), book[2]), **D.libs, **D.addr,
+                   "chain_uid": "0x" + uid.hex()}, f, indent=2)
     log(f"elapsed {time.time() - t0:.0f} s")
 
 

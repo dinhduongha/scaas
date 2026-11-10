@@ -43,6 +43,10 @@ contract ReleaseListTest is Test {
         assertEq(vm.parseJsonAddress(file, ".SCaaSDex.address"), dexA);
         assertEq(vm.parseJsonUint(file, ".SCaaSDex.class"), 2);
         assertEq(vm.parseJsonAddress(file, ".registrar.address"), address(h));
+        // NET-EVM-13: the book header first (the harness's chain: DEPLOY_NAME local-testnet)
+        assertEq(vm.indexOf(file, '{\n  "key": "local-testnet",\n  "name": "local-testnet",\n  "chainId": 31337,\n  "chainUid": "'), 0);
+        assertEq(vm.parseJsonString(file, ".network"), "testnet");
+        assertEq(vm.parseJsonBytes32(file, ".chainUid"), UID_A);
         assertEq(a.chainUid(), UID_A);
         vm.revertToState(snap);
         // the second chain: the same addresses, its own chain_uid; the list's reader passes
@@ -72,6 +76,18 @@ contract ReleaseListTest is Test {
         vm.writeFile(PATH2, good);
         vm.writeJson(string.concat('"', vm.toString(address(0xF00D)), '"'), PATH2, ".OpenFactory.address");
         vm.expectRevert(bytes("release list: OpenFactory at another address"));
+        h.deploy(UID_B, false, address(0));
+        // NET-EVM-13: a header whose network is not its key's, or no header
+        vm.writeFile(PATH2, good);
+        vm.writeJson('"mainnet"', PATH2, ".network");
+        vm.expectRevert(bytes("BOOK_NETWORK_MISMATCH: ./deployments/releases-test-b.json: network mainnet, key local-testnet"));
+        h.deploy(UID_B, false, address(0));
+        vm.writeFile(PATH2, good);
+        vm.writeJson('"local"', PATH2, ".key");
+        vm.expectRevert(bytes("BOOK_KEY_INVALID: local ends in neither -mainnet nor -testnet and is not in chain-uids.json"));
+        h.deploy(UID_B, false, address(0));
+        vm.writeFile(PATH2, vm.replace(good, '"key": "local-testnet"', '"keyX": "local-testnet"'));
+        vm.expectRevert(bytes("BOOK_HEADER_MISSING: ./deployments/releases-test-b.json has no key, name, chainId, chainUid, network (a book from before NET-EVM-13)"));
         h.deploy(UID_B, false, address(0));
         // positive control: the list as written
         vm.writeFile(PATH2, good);

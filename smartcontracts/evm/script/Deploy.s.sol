@@ -20,10 +20,11 @@ import {DeployBase} from "./DeployBase.sol";
 ///      (optional, testnet / public; Q4 of CTR-MTX-30): the release gas gate, `DeployBase._publicGate`. DEPLOY_PQCHAT
 ///      (optional, true/false; plan 3c T92): `PqChat` on the generic path (class 3, kind 0), its body module
 ///      `PqChatTopics`, and one instance when NOTICE_PERIOD is 0 (`_deployPqChat`; JSON `pqchat_topics`,
-///      `pqchat_implementation`, `pqchat_instance`).
-/// Ghi `deployments/<chainid>.json` (token factory, implementations, the DEX implementation, the SmartKeyAccount
-/// factory, `chain_uid`, the demo tokens) để seed client (`blockchain.token`) và config node; a DEX is a clone from
-/// `OpenFactory.createDex` (CTR-DEX-24). The v1 line (`OpenFactoryV1`, `MetaToken`, `MetaTxDex`, `SCaaSDexV1`) is in
+///      `pqchat_implementation`, `pqchat_instance`). DEPLOY_NAME (a chain not in chain-uids.json: `<name>-testnet` |
+///      `<name>-mainnet`, NET-EVM-13; refused before anything is sent when missing).
+/// Ghi `deployments/<key>.json` (NET-EVM-13: the chain's key, its header first; token factory, implementations, the DEX
+/// implementation, the SmartKeyAccount factory, `chain_uid`, the demo tokens) để seed client (`blockchain.token`) và config
+/// node; a DEX is a clone from `OpenFactory.createDex` (CTR-DEX-24). The v1 line (`OpenFactoryV1`, `MetaToken`, `MetaTxDex`, `SCaaSDexV1`) is in
 /// `legacy/p5/` (P5).
 contract Deploy is DeployBase {
     function run() external {
@@ -33,7 +34,10 @@ contract Deploy is DeployBase {
         uint256 demoSupply = vm.envOr("DEMO_SUPPLY", uint256(0));
         address demoHolder = vm.envOr("DEMO_HOLDER", deployer);
 
+        // a Hedera chain's deploy is script/hedera/DeployHedera.s.sol (NET-HED-04): its book is the chain's <key>.json
+        require(block.chainid < 295 || block.chainid > 298, "Hedera (295-298): script/hedera/DeployHedera.s.sol (NET-HED-04)");
         _setup();
+        string memory book = _bookPath(uid, ".json"); // the key now: DEPLOY_NAME_REQUIRED before anything is sent
         vm.startBroadcast(pk);
         SmartKeyAccountFactory accounts = new SmartKeyAccountFactory{salt: salt}(uid);
         _gate(address(accounts));
@@ -45,7 +49,7 @@ contract Deploy is DeployBase {
         vm.serializeAddress(k, "smart_key_account_factory", address(accounts));
         string memory out = vm.serializeAddress(k, "smart_key_account_implementation", accounts.IMPLEMENTATION());
         vm.createDir("./deployments", true);
-        vm.writeJson(out, string.concat("./deployments/", vm.toString(block.chainid), ".json"));
+        _writeBook(uid, book, out);
         _writeReleases();
         console.log(out);
     }

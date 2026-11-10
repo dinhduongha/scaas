@@ -762,6 +762,7 @@ struct TokenConfig {
     address rescueTo;                          // with RESCUABLE only (CTR-GOV-06), a payout address, immutable; never the token or a pool
     uint256 maxSupply;                         // WRAPPED* only (ConfigFieldForOtherKind(5) elsewhere): the hybrid's cap, with MINTABLE only; 0 = no hybrid (CTR-GOV-12)
     ConfidentialConfig conf;                   // auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL}, minDecoyFee (both confidential layers; the least per-leg `decoyFee`, renamed from `multiLegFee`, owner 2026-10-20) — confidential kinds only (modes: CTR-ZTH-48/49, built in P3b; the token refuses a key that does not match auditorMode); no verifier field since plan 5g-Z2: the verifiers are the release's env deps, CTR-ZTH-20
+    RegulatedParams reg;                       // *_REGULATED (8-13) only (ConfigFieldForOtherKind(6) elsewhere): complianceRegistry, requiredFlags, deniedFlags, termsHash ([asset-suite §2.2](asset-suite.md#22-configuration-and-init))
 }
 struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; } // owner a UA id
 ```
@@ -772,7 +773,8 @@ struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool
   ([CTR-TOK-27](#CTR-TOK-27)) and the one event; the implementation locks its own `initialize` in its constructor. The
   address is `predictAddress(creatorId, class, kind, salt)`, independent of the implementation.
 - **Kinds** (fresh enum, nothing deployed): `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ`,
-  `WRAPPED_PQZ`; 6 and 7 are `RETIRED_6`, `RETIRED_7` (were `NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ`, dropped 2026-10-20, ids not reused), decoded and refused by `deployTokenImplementation` (`KindRetired`); 8–13 are `NORMAL_REGULATED`, `WRAPPED_REGULATED`, `NORMAL_ZETHER_REGULATED`, `WRAPPED_ZETHER_REGULATED`, `NORMAL_PQZ_REGULATED`, `WRAPPED_PQZ_REGULATED`, off until a release is published and the kind enabled ([CTR-GOV-16](../decisions.md#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes); T4, `60406d42`). The catalogue keeps versions per kind
+  `WRAPPED_PQZ`; 6 and 7 are `RETIRED_6`, `RETIRED_7` (were `NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ`, dropped 2026-10-20, ids not reused), decoded and refused by `deployTokenImplementation` (`KindRetired`); 8–13 are `NORMAL_REGULATED`, `WRAPPED_REGULATED`, `NORMAL_ZETHER_REGULATED`, `WRAPPED_ZETHER_REGULATED`, `NORMAL_PQZ_REGULATED`, `WRAPPED_PQZ_REGULATED` (BUILT, ua-mtx-merge T24–T36: one regulated implementation each,
+  [asset-suite §2.1](asset-suite.md#21-shape)), off until a release is published and the kind enabled ([CTR-GOV-16](../decisions.md#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes); T4, `60406d42`). The catalogue keeps versions per kind
   (deploy, deprecate; [CTR-TOK-03](#CTR-TOK-03)); it is append-only.
 - **One event per creation:** `TokenCreated(token, creatorId, kind, version, implementation, features, lockedFeatures,
   owner, underlyings)` (`creatorId` a `bytes32` UA id, indexed: a native creator's padded address; through the router the

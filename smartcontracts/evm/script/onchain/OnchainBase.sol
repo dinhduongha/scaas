@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Script} from "forge-std/Script.sol";
+import {DeployBook} from "../DeployBook.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -10,8 +10,10 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 ///         `vm.broadcast` / `vm.startBroadcast` with a key, `vm.sign` off chain, reads of the deploy JSON). Each group
 ///         writes its book `deployments/onchain-<net>-<group>.json` (address -> contract label of groups.json) for
 ///         `coverage.py`. Keys from the environment, never printed: ONCHAIN_K1..K3 (default the 7622 genesis test keys
-///         0x…01-0x…03). ONCHAIN_NET (the target: local | scaas-testnet | <name>) names the book. Test chains only. UNAUDITED.
-abstract contract OnchainBase is Script {
+///         0x…01-0x…03). ONCHAIN_NET (the target: local | scaas-testnet | <name>) names the book. The deploy's book:
+///         DEPLOY_JSON, default this chain's `deployments/<key>.json` (NET-EVM-13), its header checked. Test chains
+///         only. UNAUDITED.
+abstract contract OnchainBase is DeployBook {
     bytes32 internal constant SALTED_DOMAIN =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");
     bytes32 internal constant PLAIN_DOMAIN =
@@ -19,7 +21,8 @@ abstract contract OnchainBase is Script {
 
     string internal net;
     string internal group;
-    string internal dj; // deployments/<chain>.json of the Step 5 deploy (DEPLOY_JSON)
+    string internal dj; // deployments/<key>.json of the Step 5 deploy (DEPLOY_JSON)
+    bytes32 internal bookUid; // this chain's genesis hash (its books)
     string internal bookJson;
     uint256 internal k1;
     uint256 internal k2;
@@ -33,7 +36,8 @@ abstract contract OnchainBase is Script {
     function _init(string memory g) internal {
         group = g;
         net = vm.envOr("ONCHAIN_NET", string("local"));
-        dj = vm.readFile(vm.envOr("DEPLOY_JSON", string("deployments/7622.json")));
+        bookUid = _chainUid();
+        dj = _envBook("DEPLOY_JSON", bookUid, ".json");
         k1 = vm.envOr("ONCHAIN_K1", uint256(1));
         k2 = vm.envOr("ONCHAIN_K2", uint256(2));
         k3 = vm.envOr("ONCHAIN_K3", uint256(3));

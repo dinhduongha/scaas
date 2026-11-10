@@ -45,7 +45,8 @@ pids=()
 down() {
   [ ${#pids[@]} -eq 0 ] || kill "${pids[@]}" 2>/dev/null || true
   "$QS" down
-  rm -f "$ROOT/smartcontracts/evm/deployments/$a.json" "$ROOT/smartcontracts/evm/deployments/$b.json"
+  # the anvils' books (NET-EVM-13: e2e_ua8.rs deploys each with DEPLOY_NAME=local-<chain id>-testnet)
+  rm -f "$ROOT/smartcontracts/evm/deployments/local-$a-testnet.json" "$ROOT/smartcontracts/evm/deployments/local-$b-testnet.json"
 }
 echo "== quickstart"
 "$QS" up   # exit 3 when a scaas-stellar container already exists: never ours to remove

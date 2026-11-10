@@ -195,8 +195,11 @@ Three properties distinguish a contract call from an ordinary API call:
 **The four-condition test for anchoring a commitment.** Data may be anchored on chain only if all four hold
 ([integration.md](integration.md#data-protection)):
 
-1. **Commitment only.** No plaintext amounts outside value transfers, no account numbers, tax ids or party names.
-   Business documents are referenced by an unlinkable value: a payment `entryRef` is 32 random bytes
+1. **Commitment only.** No plaintext amounts outside value transfers, no account numbers. **Recommended:** commitments
+   only; a business document number, tax id or party name in clear is not recommended and never refused by the contracts:
+   the payment metadata may carry it (`payNo`, schema 1 or 2) at the payer's choice, with the wallet's warning; schema 4
+   for private data ([ARCH-POS-17](decisions.md#ARCH-POS-17), owner O5). Business documents are referenced by an
+   unlinkable value: a payment `entryRef` is the commitment of its `PayMeta`, salted with 32 random bytes
    ([CTR-MTX-03](contracts/metatx.md#CTR-MTX-03)); other anchored records use a salted commitment such as
    `keccak256(salt ‖ payload)` with a per-record salt (current formats: [INT-ERP-23](integration.md#INT-ERP-23)).
 2. **Separable, destroyable salt.** Each salt is 256-bit CSPRNG output, stored off chain in the client's secret store,
@@ -908,10 +911,14 @@ SCaaS takes no position on any one country's law ([ARCH-POS-04](decisions.md#ARC
 technical controls to their own regime (GDPR-class: lawful basis, minimization, erasure, retention, cross-border
 transfer, processor agreements):
 
-1. **No personal data on chain.** On chain go addresses, amounts (or ciphertexts), random `entryRef`s, digests and
-   commitments; never names, document numbers, tax ids, order numbers or free text. A CI guard on calldata types
-   (allow `address`, `bool`, `uint*`, `int*`, `bytes32`, `bytes32[]`; deny `string` and `bytes` except declared proof
-   and signature fields) is PLANNED.
+1. **No personal data on chain, recommended.** On chain go addresses, amounts (or ciphertexts), salted `entryRef`s,
+   digests and commitments. Names, document numbers, tax ids, order numbers or free text are not recommended: a warning,
+   not a ban ([ARCH-POS-17](decisions.md#ARCH-POS-17), owner O5). A payer may put them in a payment's metadata in clear
+   (`payNo`, schema 1 or 2), where they are public and searchable forever, and wallets warn before signing; schema 4 (an
+   encrypted body) for private data. Factual point: the transaction carries `from` and `to` in clear, so a holder of the
+   document who learns something identifying the payment can link the payer's address to the payer. A CI guard on
+   calldata types (allow `address`, `bool`, `uint*`, `int*`, `bytes32`, `bytes32[]`; deny `string` and `bytes` except
+   declared proof and signature fields and the declared `PayMeta.payNo` and `PayMeta.body`) is PLANNED.
 2. **Linkage off chain.** The mapping address ↔ party lives in the client's system of record and can be erased there.
 3. **Minimized node state.** The node store keeps payloads (payer, payee, amounts) only as long as needed
    (`job_retention_secs`: 30 days for terminal jobs; feeds 7 days); backups are encrypted, file mode 0600 or database

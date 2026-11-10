@@ -34,7 +34,7 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 | Token | every kind with `IS_HEDERA`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); `WrappedToken` on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaLib.sol` (v1 `HederaMetaToken` in `legacy/p5/`) |
 | Account auth | library calling `isAuthorizedRaw` with `CALL` (100 000 gas cap); a revert or garbage ⇒ `false` | `smartcontracts/evm/src/hedera/HederaAccountAuth.sol` |
 | Mandate | `HederaMandateWallet is MandateWallet` checks HIP-632 signatures on every entry ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
-| DEX | a SCaaS leg's `TradeOrder` is checked by the Hedera token (HIP-632 included); `DexOrder` and DEX cancels have no HIP-632 branch ([Mandate and DEX](#mandate)) | — |
+| DEX | a SCaaS leg's `UATradeOrder` is checked by the Hedera token (HIP-632 included); `DexOrder` and DEX cancels have no HIP-632 branch ([Mandate and DEX](#mandate)) | — |
 | Relayer | EVM adapter pointed at the JSON-RPC relay, run under `lane_runner`; fee `eth_gasPrice × 1.2`, priority 0 | `scaas-node/src/adapters/hedera.rs` |
 | Client | long-zero payer `0.0.N` ⇒ native ED25519 path ([client families](../integration.md#families)) | — |
 
@@ -42,20 +42,22 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 
 <a id="payload"></a>
 
-On Hedera the `MetaOp` v1 **is** the token's EIP-712 `MetaTransfer` (P5; salted domain) — there is no second format:
+On Hedera the `MetaOp` v1 **is** the token's EIP-712 `UAMetaTransfer` (P5; salted domain; since the `ua*` / `mtx*` merge,
+[CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30)) — there is no second format. `from` is the account's EVM address
+zero-padded to a native id: the long-zero address for an ED25519 account, its alias for an ECDSA account:
 
-| `MetaOp` v1 | EIP-712 (`MetaTransfer`) |
+| `MetaOp` v1 | EIP-712 (`UAMetaTransfer`) |
 |---|---|
 | `domain="scaas.metaop.v1"` | `EIP712Domain{name:"SCaaS MetaToken", version:"1"}` |
 | `network` | `chainId` = 295 / 296 / 297 / 298 |
 | `contract` | `verifyingContract` = the token clone |
-| `op` | `data` = `pay(bytes32)` ‖ payRef (as built, op `trade` = `trade(address,uint256,address)`; target: a `MetaTransfer` with `entryRef` for transfer/payment, or a `MetaTransaction` whose `data` is an allowlisted self-call, [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15), [NODE-JOB-20](../node/job-api.md#NODE-JOB-20)) |
-| `from, to, amount` | `from, to, value` |
-| `payRef(32)` | `entryRef` of the `MetaTransfer` (as built inside `data`) |
-| `lane(32)`, `nonce` | `batch = keccak(entryRef)`, `nonce = 0` ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)) |
+| `op` | the struct: a `UAMetaTransfer` with `entryRef` for a transfer or a payment (a pay entry with its `PayMeta`, [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)), a `UAMetaTransaction` whose `data` is an allowlisted self-call, or a named entry's own struct ([CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15), [NODE-JOB-20](../node/job-api.md#NODE-JOB-20)) |
+| `from, to, amount` | `from, to, value` (`bytes32` ids; `from` = `pad(account address)`) |
+| `payRef(32)` | `entryRef` (for a pay: `metaPayId(meta)`) |
+| `lane(32)`, `nonce` | `batch`, `nonce`: any lane of `(from, batch)` (pay-meta-tax spec §2.2, O3); `payLane(entryRef)` with nonce 0 is a client convention ([CTR-MTX-10](../contracts/metatx.md#CTR-MTX-10)) |
 | `validUntil` | `validUntil` |
 | `relayer` | `relayer` + flag `MODE_RESTRICT_RELAYER` |
-| `extra` | `data` (hashed as `keccak256(data)` in the struct) |
+| `extra` | `data` of a `UAMetaTransaction` (hashed as `keccak256(data)` in the struct) |
 
 Target domain (SPECIFIED): `EIP712Domain{name, version, chainId, verifyingContract, salt = chain_uid}`
 ([NET-ALL-22](README.md#NET-ALL-22)). On Hedera `chain_uid` is the block-0 hash the JSON-RPC relay reports; before a
@@ -66,8 +68,10 @@ assumed); an unstable value keeps the profile `draft`.
 Cross-network replay: `chainId` in the domain (Hedera mainnet 295 differs from every other EVM chain). Cross-contract:
 `verifyingContract`. Cross-use: the token's own `(from, batch) → nonce`. Expiry: `validUntil` against
 `block.timestamp` (Hedera consensus seconds). Digest = `keccak256(0x1901 ‖ domainSeparator ‖ structHash)`; the
-client, Solidity (`mtxTransferDigest`) and Rust (`Mtx::digest`) compute the same value against the shared vectors
-`smartcontracts/evm/test/vectors/hedera_kat.json`.
+client, Solidity (`mtxTransferDigest`, `test/hedera/HederaKat.t.sol`) and Rust (`UaMtx::digest`,
+`adapters/hedera.rs` `hedera_kat_is_ua_meta_transfer`) compute the same value against the shared vectors
+`smartcontracts/evm/test/vectors/hedera_kat.json` (a `UAMetaTransfer` signed by the ED25519 account 0.0.1234567, `from` its
+long-zero address zero-padded).
 
 ## 3. Signatures
 
@@ -263,15 +267,20 @@ allows 1 000 blocks per call, equal to the indexer's step cap. The token list is
 
 ## 6. Mandate and DEX
 
-<a id="mandate"></a><a id="NET-HED-03"></a>**NET-HED-03** — **`HederaMandateWallet` checks HIP-632 64-byte signatures on every entry** (controller ruling, pending the owner). A signer
-without code (a native ED25519 account), owner or delegate, is checked through HIP-632 `isAuthorizedRaw` over the `MetaTransaction` digest and lane
-([CTR-ACC-06](../contracts/mandates.md#CTR-ACC-06)); every other signature takes the EVM path. `mtxExecuteAsOwnerRaw` is the owner entry under its
-Hedera name (equal to `mtxExecuteAsOwner`). `isValidSignature` (ERC-1271) stays ECDSA: it runs under STATICCALL, where HIP-632 halts, and the token
-is not special-cased. So an ED25519 owner pays by hand with an owner call `execute(token, payWithFee…)`, never with `from = wallet`.
-The owner's raw call is relayed as a `call` job (selector in the call table,
-[NODE-JOB-01](../node/job-api.md#NODE-JOB-01)) or submitted by the owner. Tests: forge with a `vm.etch` HAS mock — an
-ED25519 owner sets the mandate and pays by hand (`token.pay…` inside the owner call), an ED25519 delegate pays and revokes, and the owner works through the batch and the alias; a meta-tx with
-`from = wallet` fails ERC-1271. BUILT.
+<a id="mandate"></a><a id="NET-HED-03"></a>**NET-HED-03** — **`HederaMandateWallet` checks HIP-632 64-byte signatures on every entry** (controller ruling, pending the owner). Since the
+merge the wallet is `MandateWallet` on `UAMetaTxBase` with `IS_HEDERA` (T3b, [mandates.md](../contracts/mandates.md#mandatewallet)): on
+the native branch of every named entry (`mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxPayUnderMandate`,
+`mtxDelegateRevoke`, `mtxExecute(UAEnvelope, …)`) a 64-byte signature from an address without code (a native ED25519
+account), owner or delegate, is checked through HIP-632 `isAuthorizedRaw` over the entry's digest, on the same lanes
+([CTR-ACC-06](../contracts/mandates.md#CTR-ACC-06)); every other signature takes the EVM path, and a contract never takes
+HIP-632. The flat `mtxExecuteAsOwnerRaw` is in legacy (MD-11 (a)). `isValidSignature` (ERC-1271) stays ECDSA: it runs under
+STATICCALL, where HIP-632 halts, and the token is not special-cased. So an ED25519 owner pays by hand through its signed
+`mtxExecute(UAEnvelope, token, 0, payWithFee…, UASig)`, never with `from = wallet`. The owner's entry is relayed as a named
+job ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)) or submitted by the owner. Tests: forge with a `vm.etch` HAS mock
+(`test/wallet/MandateWallet.t.sol` `HederaMandateWalletTest`, `MandateWalletMerged.t.sol`
+`test_hederaEd25519OwnerSignsHip632`, `test_hip632RefusedForAContract`) — an ED25519 owner sets the mandate and pays by
+hand, an ED25519 delegate pays and revokes, a pay with a mismatched `PayMeta` is refused; a meta-tx with `from = wallet`
+fails ERC-1271. BUILT.
 
 DEX (BUILT, P2b–P5; `MetaTxDex` and `SCaaSDexV1` are in `legacy/p5/`): `SCaaSDex.mtxSettle` pulls each SCaaS leg through the sell token's
 `mtxTrade`, whose signature check is the Hedera token's own (HIP-632 for a 64-byte ED25519 signature, ECDSA,
@@ -398,7 +407,8 @@ Hedera item ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)).
 
 Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
 
-Hedera runs the same EVM contracts, so `mtxPayMeta` / `uaPayMeta` and `RelayFeeRouter` (CTR-MTX-26 / -27) are the EVM ones
+Hedera runs the same EVM contracts, so the pay entries with `PayMeta` (`mtxPay`, `mtxPayReceiverFee`, `payWithFee`,
+`payWithFeeToUA`; `mtxPayMeta` / `uaPayMeta` are in legacy since the merge) and `RelayFeeRouter` (CTR-MTX-26 / -27) are the EVM ones
 ([evm.md](evm.md#paymeta-relayfee)). What differs is the signature rule, which the split keeps inside `MtxPipelineLib`
 (`requireSignature`): a 64-byte signature from an address with no code goes to the HIP-632 `HederaLib.requireValid`
 (a library the pipeline library links); otherwise the ERC-1271 / ECDSA rule. The Hedera mandate wallet and

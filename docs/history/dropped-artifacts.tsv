@@ -1204,3 +1204,30 @@ UNAUDITED — dev chains only	obsolete	label replaced by "UNAUDITED" (owner 2026
 mtxTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-30
 mtxBatch(MetaTransaction[] ms, bytes[] sigs)	obsolete	the address generic batch, on SmartKeyAccount only since the ua* / mtx* merge (MetaTxAddressBase): contracts/metatx.md#CTR-MTX-30
 mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-30
+mtxPayReceiverFee(m, payerSig, fee, feeRecipient, rfValidUntil, payeeSig)	obsolete	the address form over MetaTransfer, merged into the UAMetaTransfer / UASig / PayMeta form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-05
+token.pay…	obsolete	the ED25519 owner's by-hand pay inside the flat owner call; since the ua* / mtx* merge through the wallet's signed mtxExecute(UAEnvelope, …): networks/hedera.md#NET-HED-03
+trade(address,uint256,address)	obsolete	the v1 MetaOp op encoding of a trade; a Hedera trade is a UATradeOrder checked by the token: networks/hedera.md#payload, contracts/dex.md#CTR-DEX-25
+batch = keccak(entryRef)	obsolete	the v1 pay lane derived on chain; lanes are free since pay-meta-tax O3, payLane(entryRef) a client convention: contracts/metatx.md#CTR-MTX-10
+smartcontracts/src/common/MetaTxLib.sol	renamed	smartcontracts/evm/src/common/MetaTxLib.sol; the mesh digest of a token body is the UA struct hash: node/mesh.md#NODE-MESH-08
+ERC20MetaTx.executeMetaTransaction	obsolete	the mesh digest of a token is the merged UA entries' (UAMetaTransactionExecuted.digest); executeMetaTransaction is the address alias of MetaTxBase: node/mesh.md#NODE-MESH-07, contracts/metatx.md#CTR-MTX-21
+_hashTypedDataV4(m.hashStruct())	obsolete	the address struct hash of the pre-merge token path; a token intent hashes its UAMetaTransfer / UAMetaTransaction: node/mesh.md#NODE-MESH-07
+scaas-node/tests/vectors/mesh-envelope-v1.2.json	renamed	scaas-node/tests/vectors/mesh-envelope-v1.3.json since the UA body (ua-mtx-merge R45): node/mesh.md#NODE-MESH-16
+meta_tx.data	obsolete	the selector of a UAMetaTransaction's data (ua_meta_tx) or a SmartKeyAccount's address meta_tx: node/mesh.md#NODE-MESH-21
+evm.ua_meta_tx = {token, m: UAMetaTransaction (hex fields), auth}	obsolete	the UA body as built: evm.ua_meta_tx = the wire UAMetaTransfer or UAMetaTransaction with evm.auth: node/mesh.md#NODE-MESH-18
+token.features ∋ ua	obsolete	the UA-ledger gate of a ua_metatx job; since ua-mtx-merge only a derived from or to needs registry() != 0: node/job-api.md#intake
+features ∋ ua	obsolete	the /v1/ua-metatx gate; since ua-mtx-merge only a derived from or to needs registry() != 0: node/gateway.md#routes
+issuer()	obsolete	the single-issuer view of the asset-suite draft; holders per bit by hasRole and regulatedConfig(): contracts/asset-suite.md#CTR-AS-03
+compliance()	obsolete	the single-compliance view of the asset-suite draft; holders per bit by hasRole: contracts/asset-suite.md#CTR-AS-03
+_checkOp	obsolete	the shape-step override of the draft; the built hook is _regPre before MtxPipelineLib.pre*: contracts/asset-suite.md#CTR-AS-08
+_regIsContract	obsolete	the draft's code-check hook; holders are checked by GovernanceLib._check (code or an msig UA): contracts/asset-suite.md#CTR-AS-20
+RoleNotContract(a)	renamed	RoleNotContract(bit, account): contracts/asset-suite.md#22-configuration-and-init
+NotEligible(creator, reason)	renamed	NotEligible(account, reason) on the initial-supply recipient: contracts/asset-suite.md#22-configuration-and-init
+requiredFlags u64 ‖ cooldownUntil u64	obsolete	the slot before DENYLIST; slot +1 is requiredFlags ‖ deniedFlags ‖ pauseCooldownUntil: contracts/asset-suite.md#22-configuration-and-init
+mapping(address ⇒ FreezeState)	renamed	mapping(bytes32 account ⇒ FreezeState), ids as bytes32: contracts/asset-suite.md#22-configuration-and-init
+ (the hot path reads slot a only); 	extraction-artifact	contracts/asset-suite.md#22-configuration-and-init (the storage table)
+m.feeRecipient == 0 ? msg.sender : m.feeRecipient	obsolete	the draft's shape-step fee resolution; the fee row is _regFeeTo after pre*: contracts/asset-suite.md#CTR-AS-25
+super._checkOp(m)	obsolete	the draft's shape-step placement; built as _regPre / _regFeeTo / _regMove: contracts/asset-suite.md#CTR-AS-08
+mtxPay(…, payId, …)	obsolete	the flat mtxPay with an on-chain lane; since pay-meta-tax O2 / O3 mtxPay(UAMetaTransfer, UASig, PayMeta) on any lane: contracts/metatx.md#CTR-MTX-10
+batch = payLane(payId) = uint256(keccak256("scaas.pay.lane" ‖ payId))	obsolete	the lane mtxPay derived on chain; a client convention since pay-meta-tax O3: contracts/metatx.md#CTR-MTX-10
+smartcontracts/evm/deployments/<chainid>.json	renamed	the books are named by chain key, deployments/<key>.json: networks/evm.md#NET-EVM-13
+deployments/<chain>.json	renamed	deployments/<key>.json, the key from chain-uids.json: networks/evm.md#NET-EVM-13

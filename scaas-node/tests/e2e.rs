@@ -91,6 +91,11 @@ fn sc() -> &'static str {
     concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm")
 }
 
+/// The anvil's `DEPLOY_NAME` (NET-EVM-13: a chain not in `chain-uids.json`), its book `deployments/<name>.json`.
+fn book_name(chain_id: u64) -> String {
+    format!("local-{chain_id}-testnet")
+}
+
 /// Deploy factory + implementation + DEX + token demo (một nửa cung cho `holder`).
 fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
     deploy_with(rpc, chain_id, holder, false)
@@ -110,10 +115,11 @@ fn deploy_with(rpc: &str, chain_id: u64, holder: Address, zether: bool) -> Value
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", format!("{holder:#x}"))
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        .env("DEPLOY_NAME", book_name(chain_id))
         .status()
         .expect("forge in PATH");
     assert!(status.success(), "forge script failed");
-    let raw = std::fs::read_to_string(format!("{sc}/deployments/{chain_id}.json")).expect("deployments json");
+    let raw = std::fs::read_to_string(format!("{sc}/deployments/{}.json", book_name(chain_id))).expect("deployments json");
     let dep: Value = serde_json::from_str(&raw).unwrap();
     // P4: the account keys are `smart_key_account_*` (the node reads neither; Odoo seeds from them)
     assert!(dep["smart_key_account_factory"].is_string() && dep["smart_key_account_implementation"].is_string());
@@ -2023,9 +2029,10 @@ async fn regulated_token(chain_id: u64, rpc: &str, issuer_key: &PrivateKeySigner
         .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--disable-code-size-limit", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER).env("DEMO_SUPPLY", "1000000000000").env("DEMO_HOLDER", format!("{holder:#x}"))
         .env("FOUNDRY_PROFILE", "scaas-testnet").env("DEPLOY_REGULATED", "true").env("COMPLIANCE_ADMIN", format!("{admin:#x}"))
+        .env("DEPLOY_NAME", book_name(chain_id))
         .status().expect("forge in PATH");
     assert!(status.success(), "forge script failed");
-    let dep: Value = serde_json::from_str(&std::fs::read_to_string(format!("{sc}/deployments/{chain_id}.json")).unwrap()).unwrap();
+    let dep: Value = serde_json::from_str(&std::fs::read_to_string(format!("{sc}/deployments/{}.json", book_name(chain_id))).unwrap()).unwrap();
     assert!(dep["implementation_normal_regulated"].is_string() && dep["compliance_registry"].is_string(), "{dep}");
     let deployer = key(DEPLOYER);
     let factory: Address = dep["smart_key_account_factory"].as_str().unwrap().parse().unwrap();

@@ -11,12 +11,12 @@ same model natively ([networks/README.md](../networks/README.md)).
 
 Status: the target layer of this file (two bases, two structs, the generic self-call `mtxExecute`, the typed
 `mtxExecuteTransfer`, the selector allowlist, fee classes, `mtx` names, salted domains) is **BUILT**
-(`smartcontracts/evm/src/metatx/`), receiver-pays too (`mtxPayReceiverFee`, P1b/P1c; its UA twin `uaPayReceiverFee`, UA-5a). The v1
+(`smartcontracts/evm/src/metatx/`), receiver-pays too (`mtxPayReceiverFee`, P1b/P1c, on ids since the merge, [CTR-MTX-05](#CTR-MTX-05)). The v1
 line with its hand-written op dispatch left the build in P5 (`legacy/p5/`); how the tree was built is under
 [Transitional (BUILT)](#transitional-built) at the end. Nothing is deployed outside test chains, so there is no version
 coexistence and no migration.
 
-Since typed-signing (C2-C6, owner option B, 2026-10-31) every operation also has a **named entry point** with its own EIP-712 struct ([CTR-MTX-28](#CTR-MTX-28), [CTR-MTX-29](#CTR-MTX-29)). **What stands:** the generic path stays beside them (owner 2026-10-31 and 2026-11-01): `mtxExecute`, `mtxBatch`, `uaExecute`, `uaBatch`, the `MetaTransaction` / `UAMetaTransaction` structs, typehashes and `mtxDigest` / `uaDigest`, `mtxSelectors()`, the selector allowlist and `executeMetaTransaction`. Only `mtxExecuteWithFee` and the flat `uaUnwrap(bytes32 from, …)` went to `smartcontracts/evm/legacy/typed-signing/`. Clients and the node build the named entry by default; the generic path serves a mixed batch and an operation with no named entry.
+Since typed-signing (C2-C6, owner option B, 2026-10-31) every operation also has a **named entry point** with its own EIP-712 struct ([CTR-MTX-28](#CTR-MTX-28), [CTR-MTX-29](#CTR-MTX-29)). **What stands:** the generic path stays beside them (owner 2026-10-31 and 2026-11-01): `mtxExecute(UAMetaTransaction, UASig)`, `mtxBatch`, the `UAMetaTransaction` struct, its typehash and `mtxDigest`, `mtxSelectors()`, the selector allowlist, and `executeMetaTransaction` over the address `MetaTransaction` (the `ua*` names merged into these, [CTR-MTX-30](#CTR-MTX-30)). Only `mtxExecuteWithFee` and the flat `uaUnwrap(bytes32 from, …)` went to `smartcontracts/evm/legacy/typed-signing/`. Clients and the node build the named entry by default; the generic path serves a mixed batch and an operation with no named entry.
 
 **Contents**
 
@@ -412,14 +412,22 @@ consumes the ticket, a re-entry from an underlying's hook during the self-call r
 or the ticket is spent), and no allowlisted function runs with a live ticket; `mtxBatch` sets a fresh ticket per item.
 
 Authority and balance owners are read through `_msgSender()` everywhere; the reads that **stay** `msg.sender` are
-exactly: the relayer binding, the default fee recipient and the event `relayer` of the pipeline; the factory check in
-`initialize`; `mtxTrade`'s and `uaTrade`'s `msg.sender == o.dex` ([CTR-DEX-15](dex.md#CTR-DEX-15),
-[CTR-DEX-25](dex.md#CTR-DEX-25)); and `mtxWrap`'s and `uaWrap`'s relayer binding and fee payee
-([CTR-TOK-20](token-wrappers.md#CTR-TOK-20); the `ua*` reads BUILT, UA-5b). A lint test greps the sources and pins that set
-(`MsgSenderLint`, as of UA-5b: `msg.sender` appears 8 times in `ERC20MetaTx` — the event relayer ×3, the default fee
-recipient ×3, the `mtxTrade` and `uaTrade` callers —, 4 times in `WrappedToken` for the `mtxWrap` and `uaWrap`
-submitter, never in `TradeLib`, whose caller is a parameter; with no7702, `MetaTxBase` 8 (the designator guard in
-`_msgSender()`) and `MtxPipelineLib` 5 (the relayer binding's designator guard)). Defence in
+exactly: the reentrancy guard, `_msgSender()` and `_ticketSubject()` themselves (with the designator refusal); the relayer
+binding (with its designator refusal), the default fee recipient and the event `relayer` of every pipeline; the factory
+check in `initialize`; the callers that must be the order's DEX: `mtxTrade`'s, `restorePulled`'s and `mtxLiquidityPull`'s
+([CTR-DEX-15](dex.md#CTR-DEX-15), [CTR-DEX-25](dex.md#CTR-DEX-25), [CTR-DEX-27](dex.md#CTR-DEX-27),
+[CTR-DEX-30](dex.md#CTR-DEX-30)); the relayer of `mtxRelayFee`, which is the router ([CTR-MTX-27](#CTR-MTX-27));
+`mtxWrapOrder`'s submitter ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)); and the governance subject and the router's target
+compare ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). A lint test reads the sources
+and pins that set per file (`test/metatx/MsgSenderLint.t.sol` `test_msgSenderReadsArePinned`): `msg.sender` appears 8 times
+in `MetaTxBase` (the guard, the event, `_msgSender()` ×3 with the designator refusal, the fee default, the ticket binding,
+`_ticketSubject`), 5 in `MtxPipelineLib` (the relayer binding ×3 with its designator refusal, the fee default ×2), 5 in
+`ERC20MetaTx` (the event relayer ×2, the `mtxTrade`, `restorePulled` and `mtxLiquidityPull` callers), 2 in `UAMetaTxBase`
+(the event relayer of `_uaSettle` and `mtxCancelNonce`), 3 in `MetaTokenBase` (the factory check, `mtxRelayFee`'s relayer
+×2), 3 in `WrappedTokenCore` (`mtxWrapOrder`'s submitter: the pull, the fee mint, the fee leg's hook), 1 in `WrappedLib`
+(the factory in `_addLeg`'s leg check), 4 in `RelayFeeRouter`, 12 in `SCaaSDex` and 2 in `SCaaSDexAdmin`, 2 each in
+`GovernanceBase` and `GovernanceRouterBase`; never in `TradeLib` (its caller is a parameter), `MetaTxAddressBase`, the PQZ
+and Zether token cores and libraries, the mandate wallets (they read `_subject()`) or the regulated layer and kinds. Defence in
 depth: `from ≠ address(this)` (step 1), and `_update` refuses transfers and mints **to** `address(this)`
 (`TransferToSelf()`), because tokens parked at the token's own address are what a spoofed self-call would spend.
 
@@ -471,7 +479,7 @@ re-encodes the decoded arguments and refuses non-canonical `data` before it comp
 non-canonical duplicate on chain is harmless, because only the signer can produce one (`data` is signed) and the
 sequential nonce lets only one variant execute.
 
-<a id="CTR-MTX-12"></a>**CTR-MTX-12** — **Gasless unwrap** is the named entry `mtxUnwrap` / `mtxUnwrapLeg` ([CTR-MTX-28](#CTR-MTX-28); `uaUnwrap` for a UA) or, still, `mtxExecute` with the wrapper's real `unwrap` calldata:
+<a id="CTR-MTX-12"></a>**CTR-MTX-12** — **Gasless unwrap** is the named entry `mtxUnwrap` / `mtxUnwrapLeg` ([CTR-MTX-28](#CTR-MTX-28); `UAEnvelope` + `UASig`, a native or a derived id) or, still, `mtxExecute` with the wrapper's real `unwrap` calldata:
 `unwrap(uint256 wrapped, address recipient, uint256 minOut)` on `WrappedToken` with one leg, `unwrap(address underlying,
 uint256 wrapped, address recipient, uint256 minOut)` with one or several legs, `unwrap(uint256, address)` (public
 balance) on `WRAPPED_ZETHER` (built in P3 with `WrappedToken`'s `minOut` forms only). The function runs exactly as a direct call by `from` (checks, burn
@@ -549,11 +557,12 @@ Hedera 64-byte payer; direct and through `RelayFeeRouter`; N1–N20 with N14b, e
 (`smartcontracts/vectors/metatx/servicepull.json`); 16 mutants of the reference service, each killed. The node's kind:
 [NODE-JOB-25](../node/job-api.md#NODE-JOB-25); every family: [NET-ALL-85](../networks/README.md#NET-ALL-85).
 
-<a id="CTR-MTX-01"></a>**CTR-MTX-01** — A payment is a `MetaTransfer` with `entryRef ≠ 0` (`entryRef` = the payment
-reference, [CTR-MTX-03](#CTR-MTX-03)), run through `mtxExecuteTransfer` or built by `mtxPay`
-([CTR-MTX-10](#CTR-MTX-10)) and `mtxPayReceiverFee` ([CTR-MTX-05](#CTR-MTX-05)); `entryRef = 0` is a plain transfer.
-One pinned struct per intent means one type that wallets display. It emits `PaymentSettled(from, to, value, feeAmount,
-feeRecipient, entryRef)` with the real fee. Tender's deposit ([CTR-TND-01](tender.md#CTR-TND-01)) and every service pull
+<a id="CTR-MTX-01"></a>**CTR-MTX-01** — A payment is a `UAMetaTransfer` with `entryRef ≠ 0` (`entryRef` = the payment
+reference, [CTR-MTX-03](#CTR-MTX-03)), run through a pay entry, `mtxPay`, `mtxPayReceiverFee` ([CTR-MTX-05](#CTR-MTX-05)) or,
+on the regulated kinds, `mtxPayWithTax` ([CTR-AS-18](asset-suite.md#CTR-AS-18)), each with its `PayMeta`
+([CTR-MTX-26](#CTR-MTX-26)), or through the generic `mtxExecuteTransfer`, which carries no metadata (pay-meta-tax O12);
+`entryRef = 0` is a plain transfer. One pinned struct per intent means one type that wallets display. It emits
+`UAPaymentSettled(from, to, value, feeAmount, feeRecipient, entryRef)` with the real fee. Tender's deposit ([CTR-TND-01](tender.md#CTR-TND-01)) and every service pull
 ([CTR-MTX-32](#CTR-MTX-32), group 3i) are this shape: there `entryRef` is the operation's digest in the service's domain.
 
 <a id="CTR-MTX-24"></a>**CTR-MTX-24** — **`mtxBatchTransfer(UAMetaTransfer[] ts, UASig[] auths)`** is the batch of the
@@ -570,7 +579,7 @@ mtxNonce(from, batch)`; execution increments it. Both structs share the one map.
 
 | Lane derivation | Rule | Status |
 |---|---|---|
-| Payment request | `batch = keccak256("scaas.pay.lane" ‖ entryRef)`, `nonce = 0` ⇒ each request is payable at most once and the client can build typed data without reading the chain; `mtxPay` derives the same lane on chain (`payLane(payId)`) | **BUILT** |
+| Payment request | any lane of the payer (pay-meta-tax O3): the token ties no lane to `entryRef`. A client that wants one payment per request signs on `batch = keccak256("scaas.pay.lane" ‖ entryRef)` at `nonce = 0` (the view `payLane(entryRef)`, a client convention, not enforced) and builds typed data without reading the chain | **BUILT** (free lanes, T37 `3740b85e`) |
 | Agent × purpose | `batch = uint256(keccak256(agentId ‖ purpose))` (e.g. procurement settlement, logistics milestones, payout distribution, treasury rebalance), sequential nonce inside | **SPECIFIED** (client convention) |
 | Non-EVM | `(subject, lane: bytes32) → nonce: u64` in the subject's account object/wallet/PDA | **BUILT** |
 
@@ -584,32 +593,31 @@ X stuck on contract 1 never blocks Y on contract 2 ([networks/README.md](../netw
 orders have their own **order lane** (`minNonce`, [CTR-DEX-15](dex.md#CTR-DEX-15)); clients label the two.
 
 <a id="entryref"></a>
-<a id="CTR-MTX-03"></a>**CTR-MTX-03** — **Payment references.** `entryRef` is 32 random bytes; the lane of a
-payment request is `keccak256("scaas.pay.lane" ‖ entryRef)` with nonce 0. A random value is unlinkable by
-construction (better than a salted hash of business data) and needs no salt management; a fixed lane per request
-lets the client build typed data without reading the chain and makes each request payable at most once (under
-[CTR-MTX-04](#CTR-MTX-04)). Accepted cost: the first use of the lane costs +17 k gas on the pre-Amsterdam figures (`MetaTxGas`) and ≈ +98 k under Amsterdam (`MetaTxGasV2`: 178,157 against 80,249 for a warm lane, §8), and `mtxPay`, which always opens a fresh lane, ≈ 182 k in all (181,810).
-Tokens also derive the lane on chain ([CTR-MTX-10](#CTR-MTX-10)).
+<a id="CTR-MTX-03"></a>**CTR-MTX-03** — **Payment references.** A pay entry's `entryRef` is the commitment
+`metaPayId(meta)` of its `PayMeta` ([CTR-MTX-26](#CTR-MTX-26)), whose `salt` is 32 bytes from a CSPRNG: unlinkable by
+construction (better than a salted hash of business data) and with no salt management. A payment takes any lane of its payer
+(pay-meta-tax O3): one `entryRef` may be settled by several payments, partial payments and refunds included
+([CTR-MTX-31](#CTR-MTX-31)); the contract no longer makes a request payable at most once. A client that wants that signs on
+`payLane(entryRef)` at nonce 0, its own convention ([CTR-MTX-10](#CTR-MTX-10)); one signature still runs at most once (its
+nonce, [CTR-MTX-04](#CTR-MTX-04)). Accepted cost: the first use of a lane costs +17 k gas on the pre-Amsterdam figures
+(`MetaTxGas`) and ≈ +98 k under Amsterdam (`MetaTxGasV2`: 178,157 against 80,249 for a warm lane, §8); `mtxPay` on a fresh lane
+was ≈ 182 k in all (181,810) before `PayMeta`.
 
 ```text
-entryRef = 32 bytes from a CSPRNG                     # carries no information; unlinkable by construction
-batch    = keccak256("scaas.pay.lane" ‖ entryRef)     # lane of this request (on chain: payLane(entryRef))
-nonce    = 0
+salt     = 32 bytes from a CSPRNG                     # carries no information; unlinkable by construction
+entryRef = metaPayId(PayMeta{salt, payNo, save, schema, body})
+batch    = any lane of the payer                      # convention for one payment per request: payLane(entryRef), nonce 0
 ```
 
-- One `entryRef` per **payment request** (an invoice may have several requests over time; each request is payable at
-  most once because its lane has nonce 0).
-- Pay-once holds only if every signature a client issues on a pay lane has `validUntil ≤ t_first_issue + 30 d`.
-  Re-issuing terms on the same lane later than that, or signing an op with `valid_until > now + 30 d` on a pruning
-  family (GRAM, Aptos, Solana, Sui), gives no pay-once guarantee — issue a new request (new `entryRef`, new lane)
-  instead. Wallet connectors and `clientkeys` refuse such ops.
+- One `entryRef` per **payment request**; several payments on it add up, and a refund is a payment payee → payer on the same
+  key ([CTR-MTX-31](#CTR-MTX-31)).
+- On a family that prunes lane state the horizon rules of [CTR-MTX-04](#CTR-MTX-04) stay: a signature with
+  `valid_until > now + 30 d` there gives no replay guarantee after a prune. Wallet connectors and `clientkeys` refuse such ops.
 - The client stores `entryRef` with a UNIQUE constraint on the request, together with `chain`, `token`,
-  `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until`.
+  `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until`, and the `PayMeta` preimage.
 - Do **not** derive `entryRef` from business identifiers (`keccak256(company ‖ move ‖ amount ‖ salt)` as in older
-  drafts): a random value needs no salt management and cannot be brute-forced from known invoice numbers.
-- Splitting: classical Zether with `n_v = 64` removed the need to split large payments; for transparent tokens one
-  payment per request. If a business case needs partial payments, issue one request (one `entryRef`) per
-  instalment.
+  drafts): a random salt needs no management and cannot be brute-forced from known invoice numbers; a business number, if
+  any, goes in `payNo` or the body, not recommended in clear ([ARCH-POS-17](../decisions.md#ARCH-POS-17)).
 
 ```mermaid
 sequenceDiagram
@@ -617,28 +625,29 @@ sequenceDiagram
     participant P as Payer
     participant N as Node
     participant T as Token
-    E->>E: entryRef = 32 random bytes, lane = keccak256("scaas.pay.lane" ‖ entryRef)
-    E->>P: MetaTransfer typed data (to, value, entryRef, validUntil)
+    E->>E: PayMeta (random salt), entryRef = metaPayId(meta), a lane of the payer
+    E->>P: UAMetaTransfer typed data (to, value, entryRef, validUntil) and the PayMeta
     P-->>E: signature
     E->>N: push the signed intent
     N->>N: recompute digest, simulate
-    N->>T: mtxExecuteTransfer
-    T-->>N: PaymentSettled(…, entryRef), MetaTransactionExecuted(digest)
+    N->>T: mtxPay(t, auth, meta)
+    T-->>N: PaymentMeta(payId, …), UAPaymentSettled(…, entryRef), UAMetaTransactionExecuted(digest)
     N-->>E: finalized range
     E->>E: match contract, to, entry_ref, then sum amount against amount_base
 ```
 
-Two-way verification. **Client → chain** (before signing and at push): (1) the `MetaTransfer` typed data is built server-side
-from the request: `to = receiving_address`, `value = amount_base`, `entryRef`, `batch` as above, `validUntil =
+Two-way verification. **Client → chain** (before signing and at push): (1) the `UAMetaTransfer` typed data is built server-side
+from the request: `to = receiving_address`, `value = amount_base`, `entryRef = metaPayId(meta)`, the lane the client chose, `validUntil =
 issued_valid_until` (server-chosen, e.g. now + 300 s); (2) after signing the client recomputes the digest; a 65-byte
 signature must recover `payer_address` (EOA); a contract wallet (ERC-1271) is accepted unverified and judged by the
 node's simulation; (3) the node recomputes the digest and simulates before broadcast.
 
 **Chain → client** (on each
-finalized range): (1) filter `PaymentSettled` by `contract == request.token` **and** `from == request.payer_address` **and** `to == request.receiving_address`
+finalized range): (1) filter `UAPaymentSettled` by `contract == request.token` **and** `from == request.payer_address` **and** `to == request.receiving_address`
 **and** `entry_ref == request.entryRef`; (2) `amount_settled = Σ amount` of matching events; `amount_settled ≥
 amount_base` ⇒ request final; more than due ⇒ final + needs attention (refund manually); less ⇒ partial; (3)
-cross-check `MetaTransactionExecuted(digest)` to mark the job final; (4) drift checks: an unmatched inbound
+cross-check `UAMetaTransactionExecuted(digest)` to mark the job final; a taxed row reconciles by its `PaymentTaxed`
+([CTR-AS-18](asset-suite.md#CTR-AS-18)); (4) drift checks: an unmatched inbound
 `Transfer` to a watched wallet ⇒ a drift record; hourly `balances` vs the ledger balance of the token's journal. A
 third party paying 1 unit with someone else's `entryRef` is not counted at all (`from` is not the request's payer), so it can neither complete a request nor push it into "needs attention";
 it is just money received (review C5-10: one rule, the key `(token, payer, payee, entryRef)`, in every document). The full client procedure is in
@@ -646,16 +655,19 @@ it is just money received (review C5-10: one rule, the key `(token, payer, payee
 
 ## 7. Pay-once horizon
 
-<a id="CTR-MTX-04"></a>**CTR-MTX-04** — **Pay-once is conditional and is a protocol rule.** "Each payment request is
-payable at most once" holds iff (1) every signature issued on a pay lane has `validUntil ≤ t_first_issue + H`,
-`H = LANE_HORIZON = 30 d`, and (2) every family that prunes lane state keeps an executed lane for ≥ `H` after the
-executed op's `validUntil` ([NET-ALL-01](../networks/README.md#NET-ALL-01): GRAM two `LANE_TTL` generations; Aptos and
-Solana `PRUNE_DELAY_S`; Sui `prune` after `valid_until + LANE_HORIZON_S`). Issuers that sign terms on a lane beyond
-`H` get no pay-once guarantee; a node chain on a pruning family must have `max_valid_for_secs ≤ H`. Obligations:
+<a id="CTR-MTX-04"></a>**CTR-MTX-04** — **A signature runs at most once; on a family that prunes lane state that needs the
+lane horizon.** Invoice pay-once left the protocol (pay-meta-tax O3, C3): lanes are free and one `entryRef` takes several
+payments ([CTR-MTX-31](#CTR-MTX-31)). What stays is the nonce lifetime: one signature runs at most once (its `(from, batch,
+nonce)`), which on EVM is persistent; on a family that prunes lane state (GRAM, Aptos, Solana, Sui) forgetting a lane forgets
+which nonces were consumed, so it holds iff (1) every signature has `validUntil ≤ t_first_issue + H`, `H = LANE_HORIZON =
+30 d`, and (2) the family keeps an executed lane for ≥ `H` after the executed op's `validUntil`
+([NET-ALL-01](../networks/README.md#NET-ALL-01): GRAM two `LANE_TTL` generations; Aptos and Solana `PRUNE_DELAY_S`; Sui `prune`
+after `valid_until + LANE_HORIZON_S`), until the family's own round gives a complete replay answer. A node chain on a pruning
+family must have `max_valid_for_secs ≤ H`. Obligations:
 
 | Who | Obligation | Status |
 |---|---|---|
-| Issuer (ERP, app) | Sign one op per pay lane, or keep every op on that lane inside `H` of the first; terms signed beyond `H` get no pay-once guarantee | reference ERP client complies (**BUILT**) |
+| Issuer (ERP, app) | On a pruning family, keep every op on a lane inside `H` of the first; ops signed beyond `H` get no replay guarantee | reference ERP client complies (**BUILT**) |
 | Every signing client (connectors, `clientkeys`, app) | Refuse to sign an op with `valid_until > now + LANE_HORIZON_S` on a pruning family ([NET-APT-24](../networks/aptos.md#NET-APT-24), [NET-SOL-25](../networks/solana.md#NET-SOL-25), [NET-SUI-12](../networks/sui.md#NET-SUI-12)) | **SPECIFIED** |
 | Contract | Sui `relay_pay` refuses `valid_until > now + LANE_HORIZON_S` on chain; Solana caps `valid_until` and order `expiry` at `MAX_TTL_S = 31 d` ([NET-SOL-22](../networks/solana.md#NET-SOL-22)) | **SPECIFIED** |
 | Node | Refuses `max_valid_for_secs > LANE_HORIZON` on a pruning family ([NODE-STO-01](../node/store.md#NODE-STO-01)); constants pinned equal in tests (GRAM `LANE_TTL`, Aptos/Solana `PRUNE_DELAY_S`, node `LANE_TTL_S`, client `LANE_HORIZON_S`) | **SPECIFIED** |
@@ -758,7 +770,7 @@ is the typed path, not a self-call.
 <a id="named-functions"></a>
 <a id="CTR-MTX-21"></a>**CTR-MTX-21** — **Every entry point whose authority comes from a subject's signature starts
 with `mtx`** (owner); a submitter only relays. `executeMetaTransaction` stays as the alias of `mtxExecute` (the
-EIP-1776 name, for outside tools; kept by owner ruling 2026-11-01). EIP-712 type names (`MetaTransaction`, `MetaTransfer`, `TradeOrder`, …) name what is
+EIP-1776 name, for outside tools; kept by owner ruling 2026-11-01). EIP-712 type names (`UAMetaTransaction`, `UAMetaTransfer`, `UATradeOrder`, …) name what is
 signed, not the entry point, and stay. Non-EVM families follow the same rule in their own case ([NET-ALL-28](../networks/README.md#NET-ALL-28)).
 
 | Contract | Entry points |
@@ -789,7 +801,7 @@ with the same struct, so one signature works on both paths and one lane is consu
 | `mtxPay(UAMetaTransfer t, UASig auth, PayMeta meta)` ([CTR-MTX-26](#CTR-MTX-26)) | `t` as given, `t.entryRef == metaPayId(meta)` (else `PayMetaMismatch`), any lane | any valid mode (fee optional) | `PaymentMeta` before `UAPaymentSettled(…, entryRef)`; the separate `mtxPayMeta` is gone on the EVM |
 | `mtxBatch(UAMetaTransaction[] ms, UASig[] auths)` | each `ms[i]` as given | as `mtxExecute` per item | atomic; one outer tx for many items |
 | `mtxBatchTransfer(UAMetaTransfer[] ts, UASig[] auths)` | each `ts[i]` as given | as `mtxExecuteTransfer` per item | atomic ([CTR-MTX-24](#CTR-MTX-24)) |
-| `payLane(bytes32 payId) view returns (uint256)` | — | — | the lane clients must use for `payId` on this token |
+| `payLane(bytes32 payId) view returns (uint256)` | — | — | a client convention, not enforced (pay-meta-tax spec §2.2, O3): the lane a client signs on, at nonce 0, when it wants one payment per request |
 
 Exact equivalences (each is a test):
 
@@ -808,7 +820,7 @@ intent that the generic path would refuse, and refuses some the generic path acc
 way round. Gas (P1c): named `mtxTransfer` costs +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672; logged, not
 asserted). `mtxPay` on a fresh lane costs +2.6 k (56,182 vs 53,568), the `PAYABLE` gate's cold SLOAD. The gasless unwrap is the named entry `mtxUnwrap` ([CTR-MTX-12](#CTR-MTX-12), [CTR-MTX-28](#CTR-MTX-28)).
 
-**Typed-signing (TS-D14, TS-D16).** `mtxExecuteWithFee(m, sig)` was a second name of `mtxExecute` with a shape check (fee nibble not `NONE`); owner option B (shape: fee nibble not `NONE`, recipient bound **or** relayer-default, "relayer or a third party"; its point was "a selector that says \"this intent pays a fee\"") gives way to owner option B, which gives every operation its own named entry, so it went to `smartcontracts/evm/legacy/typed-signing/` (controller call, owner may override). The named functions above are the *flat* ABI sugar of `MetaTransfer`; the named entry of every other operation takes an `Envelope` and its own explicit parameters ([CTR-MTX-28](#CTR-MTX-28)). Entry = `mtx` / `ua` + struct name; where the operation function already carries that name (the confidential ops) the signed entry is an overload whose first parameter is `MetaTxLib.Envelope`.
+**Typed-signing (TS-D14, TS-D16).** `mtxExecuteWithFee(m, sig)` was a second name of `mtxExecute` with a shape check (fee nibble not `NONE`); owner option B (shape: fee nibble not `NONE`, recipient bound **or** relayer-default, "relayer or a third party"; its point was "a selector that says \"this intent pays a fee\"") gives way to owner option B, which gives every operation its own named entry, so it went to `smartcontracts/evm/legacy/typed-signing/` (controller call, owner may override). The named functions above are the *flat* ABI sugar of `UAMetaTransfer`; the named entry of every other operation takes a `UAEnvelope` (or, for the wraps, an `Envelope`) and its own explicit parameters ([CTR-MTX-28](#CTR-MTX-28)). Entry = `mtx` + the operation's name, one entry per operation since the merge ([CTR-MTX-30](#CTR-MTX-30)); where the operation function already carries that name (the confidential ops) the signed entry is an overload whose first parameter is the envelope.
 
 `fee` is not canonicalised under fee mode `NONE` (only `relayer`/`feeRecipient` are, by `canon`): a struct signed
 with fee `NONE` and a leftover `fee ≠ 0` is valid on `mtxExecuteTransfer` but not through `mtxTransfer`, which
@@ -820,18 +832,26 @@ amount" for transfer and payment (the amount is `t.value`); no gas promise — t
 entry and save only calldata (for `mtxPay` no `batch`/`nonce`). An earlier estimate of a "≈ 4 k gas"
 saving assumed a fast path with its own short typehash and does not apply.
 
-<a id="CTR-MTX-10"></a>**CTR-MTX-10** — In `mtxPay(…, payId, …)`, `payId` **is** the payment reference `entryRef`
-(`PaymentSettled.entryRef`), and the lane is derived **on chain**: `batch = payLane(payId) =
-uint256(keccak256("scaas.pay.lane" ‖ payId))`, `nonce = 0`, so `mtxPay` pays a given `(payer, payId)` at most once
-**through `mtxPay`**. The same `entryRef` can still appear in a `PaymentSettled` from `payWithFee`, from a `MetaTransfer`
-on another lane, or after `cancelNonce` on a later nonce: reconcilers match
-`(token, payer, payee, entryRef)` (the key of the chain → client rule above: amounts of that key add up), book the first `PaymentSettled` for it and treat a later one as a
-reconciliation exception, never as a second payment. A client that wants a different lane for a payment uses
-`mtxExecuteTransfer` with `entryRef` set ([CTR-MTX-23](#CTR-MTX-23)).
+<a id="CTR-MTX-10"></a>**CTR-MTX-10** — **The payment id is `entryRef`; `payLane` is a client convention** (pay-meta-tax O3,
+BUILT T37 `3740b85e`). In every pay entry `entryRef` is the payment reference (`metaPayId(meta)`,
+`UAPaymentSettled.entryRef`); the token derives no lane from it. 
+`payLane(p) = uint256(keccak256(abi.encodePacked("scaas.pay.lane", p)))` (short: `payLane(p) = uint256(keccak256("scaas.pay.lane" ‖ p))`) stays a pure view (an API is not
+dropped because nothing calls it): a client that wants one payment per request signs on that lane at nonce 0. The same
+`entryRef` can appear in several `UAPaymentSettled` (partial payments, a refund, `payWithFee`, the generic path):
+reconcilers match `(token, payer, payee, entryRef)` and add the amounts ([CTR-MTX-31](#CTR-MTX-31)). The node and the client
+store the lane with the job, so a pay job never changes lanes after it is signed. Tests: `test/metatx/PayLanes.t.sol`.
 
-`payLane(p) = uint256(keccak256(abi.encodePacked("scaas.pay.lane", p)))` (short: `payLane(p) = uint256(keccak256("scaas.pay.lane" ‖ p))`) — the
-same value clients derive off chain, so "at most once" holds per path. The node and the client store the derived lane
-with the job, so a pay job never changes lanes after it is signed.
+<a id="CTR-MTX-31"></a>**CTR-MTX-31** — **The pay entries are the ERP interface** (owner O1, O3, O12; pay-meta-tax PT-1; BUILT
+on the EVM, T37 `3740b85e`, UNAUDITED). A payment is found by the key `(token, payer, payee, entryRef)`; every pay through a
+pay entry carries its `PayMeta` on chain (`PaymentMeta`, [CTR-MTX-26](#CTR-MTX-26)); one landed through the generic
+`mtxExecuteTransfer` has none and is reconciled off chain from `entryRef` and the preimage the ERP kept (O12). Amounts of one
+key add up (gross for an untaxed row; `net` and `tax` for a taxed row, [CTR-AS-18](asset-suite.md#CTR-AS-18)); the ERP decides
+when a document is settled. A refund is a new payment payee → payer with the same `entryRef` and `PayMeta`: the key includes the
+direction, so it never adds to the original sum. A `payId` may be paid many times; pay lanes are free; `payNo` is compared byte
+for byte (no normalisation on chain). The nonce-lifetime safeguards of the pruning families stay ([CTR-MTX-04](#CTR-MTX-04)).
+The non-EVM families keep their pay-once lane until their own rounds. Tests: `test/metatx/PayLanes.t.sol` (`test_mtxPay_freeLane`,
+`test_mtxPay_payLaneConventionStillWorks`, `test_mtxPay_twoPartialsSameRef`, `test_genericPath_landsWithoutPaymentMeta`,
+`test_mtxPayMeta_selectorAbsent`), `PayRecords.t.sol`.
 
 <a id="CTR-MTX-26"></a>**CTR-MTX-26** — **Payment metadata: every pay entry takes `PayMeta` last; the payment id commits to
 it; the payer may store the payment's record on chain.** **BUILT** on the EVM (pay-meta-tax T37–T42; plan T83, owner
@@ -859,7 +879,10 @@ function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit) external view 
   `PayMetaShape()`; then `entryRef == metaPayId(meta)`, else `PayMetaMismatch(entryRef, payId)`; then `PaymentMeta`, before
   the payment's events. The payer signs `entryRef` (in `UAMetaTransfer`, `UAPayWithTax`, `UAReceiverFee`'s payment,
   `UAPayUnderMandate`), so `payNo`, `save`, `schema` and `body` are signed through it; no typehash changed
-  ([CTR-MTX-11](#CTR-MTX-11)). The separate `mtxPayMeta` / `uaPayMeta` entries are gone on the EVM.
+  ([CTR-MTX-11](#CTR-MTX-11)). The separate `mtxPayMeta` / `uaPayMeta` entries are gone on the EVM. The generic `mtxExecuteTransfer` /
+  `mtxBatchTransfer` still take any `entryRef` with no metadata (O12): a `UAMetaTransfer` signed for `mtxPay` can land there
+  without `PaymentMeta`, its nonce consumed; the payment is then reconciled off chain ([CTR-MTX-31](#CTR-MTX-31)). The node
+  sends a pay job only as its pay entry.
 - **`payNo`** is a `bytes32`, never parsed: 0 = none, any other 32-byte id accepted. **Recommended: a UUIDv7, right-aligned**
   (its 128 bits in the low 16 bytes, the high 16 bytes zero, as `MetaTxLib.pad` places an address): unique without
   coordination, time-ordered (a compact index), no business sequence number on chain. A readable document number stays off
@@ -881,7 +904,9 @@ function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit) external view 
   a `payNo` and `save` off 202,814 gas; `save` on, the first payment of a `payNo` 534,203 (+331,389: three new slots), a later
   one 436,300 (+233,486: two new slots).
 - **Body encodings** (fixed and family-neutral, one rule for every chain kind): 1, note: the raw UTF-8 bytes; 2, structured
-  reference: `abi.encode(string creditorRef, string invoiceNo, uint64 dueDate)`, `dueDate` in Unix seconds; 3, a bound
+  reference: `abi.encode(string creditorRef, uint64 dueDate)`, `dueDate` in Unix seconds (the document number is `payNo`,
+  pay-meta-tax O7(3), O15; the non-EVM v1 form keeps `abi.encode(string creditorRef, string invoiceNo, uint64 dueDate)` until
+  its round); 3, a bound
   on-chain call: `abi.encode(uint256 chainId, bytes32 target, bytes32 callHash)` (`target` 32 bytes, `callHash =
   keccak256(callData)`, the call hash of [CTR-MTX-27](#CTR-MTX-27)'s `ref`); 4, any of these encrypted to the payee (a KEM
   wrap to the payee's `UARegistry` KEM key ‖ AES-256-GCM; the inner layout is a later client item). The contract parses no
@@ -901,29 +926,33 @@ function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit) external view 
   and the pay records in its own round.
 
 <a id="CTR-MTX-11"></a>**CTR-MTX-11** — **One intent, one digest; no second typehash for the same struct.** A transfer
-or payment is signed only as a `MetaTransfer` and a call only as a `MetaTransaction` ([CTR-MTX-15](#CTR-MTX-15)); there
+or payment is signed only as a `UAMetaTransfer` and a call only as a `UAMetaTransaction` ([CTR-MTX-15](#CTR-MTX-15); the
+address `MetaTransaction` of `executeMetaTransaction` and `SmartKeyAccount` is the one address form left); there
 is no `PAY_TYPEHASH` and no `batchMtxPay` with a partial-success bitmap: one type per intent means one wallet display.
+The payer signs two other payment types, each an outer struct nesting nothing it could be confused with: `UARelayFee`
+(TS-D19, [CTR-MTX-27](#CTR-MTX-27)) and, on the regulated kinds, `UAPayWithTax` (pay-meta-tax O6, O7(2),
+[CTR-AS-18](asset-suite.md#CTR-AS-18)).
 `mtxBatch` (and `mtxBatchTransfer`, [CTR-MTX-24](#CTR-MTX-24)) is **atomic** (all items or
 none) — partial success would need a non-reverting copy of the pipeline. One failing item costs the relayer the whole
 batch's gas, so the node batches only items bound to its own lane ([NODE-LANE-11](../node/submit-lanes.md#NODE-LANE-11)):
 items whose `relayer` is bound (`MODE_RESTRICT_RELAYER`) to the submitting lane, per `(chain_key, token)`, flushed at
 50 items or 3 s; unwrap items are never batched.
 
-**Typed-signing (TS-D15, owner 2026-10-31): the batch is kept.** `mtxBatch` / `uaBatch` and `mtxBatchTransfer` / `uaBatchTransfer` stay as they are. There is no typed mixed batch: an EIP-712 array is homogeneous, so a batch of different operations stays a generic `MetaTransaction[]`. A homogeneous `mtx<Op>Batch` would be built only for a named use case (none today; owner ruling on open question 1: the default stands). A named entry and the generic call of one operation share the `(from, batch)` lane, so one signature cannot run through both.
+**Typed-signing (TS-D15, owner 2026-10-31): the batch is kept.** `mtxBatch` and `mtxBatchTransfer` stay (the former `uaBatch` / `uaBatchTransfer` merged into them, [CTR-MTX-30](#CTR-MTX-30)). There is no typed mixed batch: an EIP-712 array is homogeneous, so a batch of different operations stays a generic `UAMetaTransaction[]`. A homogeneous `mtx<Op>Batch` would be built only for a named use case (none today; owner ruling on open question 1: the default stands). A named entry and the generic call of one operation share the `(from, batch)` lane, so one signature cannot run through both.
 
 Rules: `ms.length == sigs.length` (`MtxBatchLengthMismatch`), `≥ 1`
 (`MtxBatchEmpty`), no explicit cap (the binding limit is EIP-7825's 2^24 regular gas per transaction plus the EIP-7976 calldata floor, not the block gas limit; [NODE-LANE-11](../node/submit-lanes.md#NODE-LANE-11) bounds a node batch further); items run in order through the pipeline, each
 with a fresh ticket; `msg.sender` is the relayer for every item (restricted-relayer intents keep working); any item
 reverting reverts the batch, so all-or-nothing holds per item and per batch; items may mix selectors and payers but
 never structs, contracts or chains (it is a function of one contract). Different structs signed in the token's domain
-are not a second hash of one intent: `MetaTransfer` beside `MetaTransaction`, the Universal Account path's
-`UAMetaTransaction` and `UAMetaTransfer` ([CTR-UA-19](accounts.md#CTR-UA-19), [CTR-UA-26](accounts.md#CTR-UA-26)),
-and trading has `TradeOrder`, `CancelOrder` and `InvalidateNonces` ([CTR-DEX-13](dex.md#CTR-DEX-13)) and, for UAs,
-`UATradeOrder` and `UAInvalidateNonces` ([CTR-DEX-25](dex.md#CTR-DEX-25)).
+are not a second hash of one intent: `UAMetaTransfer` beside `UAMetaTransaction` ([CTR-UA-19](accounts.md#CTR-UA-19),
+[CTR-UA-26](accounts.md#CTR-UA-26)), and trading has `UATradeOrder`, `CancelUAOrder` and `UAInvalidateNonces`
+([CTR-DEX-13](dex.md#CTR-DEX-13), [CTR-DEX-25](dex.md#CTR-DEX-25)); the address `TradeOrder` is signed only in the
+DEX's domain, for its outside legs.
 
 `mtxBatch` saves the 21 000 intrinsic gas per item after the first, plus warm re-reads of shared slots, minus the ABI
 overhead of `MetaTransaction[]`/`bytes[]` (the token address is pre-warmed as `tx.to` anyway). Measured on the built
-v2 path (`test/v2/MetaTxGasV2.t.sol`, clones, warm lane): `mtxTransferWithFee` 42,302 vs `mtxExecuteTransfer` 41,799
+v2 path before the merge (`test/v2/MetaTxGasV2.t.sol`, clones, warm lane): `mtxTransferWithFee` 42,302 vs `mtxExecuteTransfer` 41,799
 execution gas (≈ +370 net after its ~32 calldata bytes); `mtxPay` 53,868 vs 53,613 execution but ≈ −400 net with
 calldata (57,344 vs 57,741). Every v2 row is still ≤ v1 + 300.
 
@@ -1028,7 +1057,7 @@ their errors are in [dex.md](dex.md#CTR-DEX-15); the kind functions (wrap, unwra
 | Sponsored (company relayer) | Subject signs with `MODE_FEE_NONE` + `MODE_RESTRICT_RELAYER` = company lane | Company (OPEX) | **BUILT** (portal default, [INT-ERP-06](../integration.md#INT-ERP-06)) |
 | Fee in token | `MODE_FEE_PERCENT`/`FIXED`, fee ≤ 1 % to `feeRecipient` (absolute for `ABSOLUTE` selectors) | Relayer, reimbursed in token | **BUILT** |
 | **Payee self-relay / direct settlement** | Payer signs offline (`fee = 0`, relayer unbound or bound to the payee); hands the signature to the payee by QR, NFC, message or file; the payee's wallet submits it, paying gas itself; `PaymentSettled` identical. The signature is an expiring electronic cheque (`validUntil`) | Payee | **BUILT** at contract level (any `msg.sender` may submit an unbound intent); QR (EIP-681-style) tooling and a user `cancelNonce` screen **PLANNED** |
-| **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **BUILT** in the contracts (`mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; [receiver-pays](#receiver-pays)); the node refuses `receiver_fee` jobs until its receiver-pays job is built; the UA twin `uaPayReceiverFee` **BUILT** (UA-5a) |
+| **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **BUILT** in the contracts (`mtxPayReceiverFee` on ids, the payee co-signs `UAReceiverFee` nesting the payer's `UAMetaTransfer`; [receiver-pays](#receiver-pays)); the node refuses `receiver_fee` jobs until its receiver-pays job is built |
 | Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)); on-chain `SponsorshipPool` **PLANNED** later |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
 | **Token fee for a fee-less call** | The payer signs a token payment bound to one call on another contract (a PqChat record, a `UARegistry` write); `RelayFeeRouter` runs the call, then the payment, atomically ([CTR-MTX-27](#CTR-MTX-27)) | Relayer, paid in token by the payer | **BUILT** |
@@ -1225,10 +1254,9 @@ Algorand: `relayfee` takes `[MBR]? [target, sender = executor] [relay(token, op,
 
 **Cost [measured, Amsterdam, `smartcontracts/evm/runs/2026-10-27-metatx-split-t9-fix1-relaygas.txt`, `test_relayGas_ecdsaAndMldsa65`].**
 Over the bare relayed call (`mtxExecute`, 63,205 regular + 195,840 state = 259,045): +109,276 regular gas with an ECDSA
-payer in open mode, +92,718 with an ECDSA payer and a bound payee, +246,963 with an `mldsa65` UA payer (`uaRelay`, open
-mode); in each case 195,840 more state gas (391,680 against 195,840: the new slots, among them the payment's first-use pay lane). The whole transaction is
-564,161 gas (172,481 regular + 391,680 state) against 259,045 for the bare call; 547,603 bound; 701,848 for `uaRelay`
-with `mldsa65`. It covers the token's payment path, the payer's signature check, the new slots, the open-mode forward and the
+payer in open mode, +92,718 with an ECDSA payer and a bound payee, +246,963 with an `mldsa65` UA payer (open mode; measured on the pre-merge `uaRelay`, now `relay` on ids); in each case 195,840 more state gas (391,680 against 195,840: the new slots, among them the payment's first-use pay lane). The whole transaction is
+564,161 gas (172,481 regular + 391,680 state) against 259,045 for the bare call; 547,603 bound; 701,848 for the `mldsa65`
+UA payer. It covers the token's payment path, the payer's signature check, the new slots, the open-mode forward and the
 two events. (The plan's estimate was ≈ +200–230 k on Amsterdam.)
 
 **Conformance:**
@@ -1236,11 +1264,13 @@ two events. (The plan's estimate was ≈ +200–230 k on Amsterdam.)
 - the token refuses the payment submitted directly by an EOA (relayer binding);
 - a `callData` that tries to execute another router-bound payment through the executor fails;
 - a target revert leaves no payment;
-- a second `relay` with the same `ref` fails (pay lane);
+- a second `relay` with the same signature fails (the payer's nonce, `test_relay_payOnce`); a second signature for the
+  same call pays only if the target runs again (`test_relayFee_twoSignaturesReplayableTargetPaysTwice`,
+  `test_relayFee_guardedTargetSecondReverts`);
 - open mode pays `msg.sender`, and a bound payee is paid directly;
 - a target without code or with an EIP-7702 designator (to code or to a code-less address) is refused
   (`RelayTargetNoCode`, `test_relay_targetDesignatorRefused`);
-- a UA payer works through `uaRelay`;
+- a derived UA payer works through the same `relay` (`test_uaRelay_mldsa65Payer`);
 - re-entry into the router is refused;
 - the target must exist as code / an executable program / an instantiated contract at relay time, on every family: a
   relay to a target that does not exist yet (a counterfactual address) is refused and leaves the payment unspent
@@ -1249,74 +1279,84 @@ two events. (The plan's estimate was ≈ +200–230 k on Amsterdam.)
 ## <a id="receiver-pays"></a>13. Receiver-pays
 
 <a id="receiver-pays"></a>
-<a id="CTR-MTX-05"></a>**CTR-MTX-05** — A named function `mtxPayReceiverFee(m, payerSig, fee, feeRecipient,
-rfValidUntil, payeeSig)` in `MetaTokenBase` carries the payee's EIP-712 co-signature `ReceiverFee(MetaTransfer payment, uint256 fee, address feeRecipient, uint256 validUntil)` in the token's own domain, where
-`payment` is the payer's **whole `MetaTransfer` struct, nested** ([CTR-MTX-23](#CTR-MTX-23); typed-signing C6, TS-D19: a wallet shows the payment's fields, not a digest; `UAReceiverFee` nests `UAMetaTransfer`). Until C6 the field was `bytes32 paymentDigest`, the payer's full EIP-712 digest (kept in the Change entry of CTR-MTX-05); the event `ReceiverFeePaid` still names that digest as `paymentDigest`. The payer's
-struct and typehash are unchanged; the payer runs the typed pipeline untouched; then `fee` moves from the payee to the resolved fee recipient in the
-same transaction. `paymentDigest` is consumed once by the payer's nonce, so the co-signature is single-use with no new
-storage, and it is bound to one token, chain, payer, amount and `entryRef`. The "no second typehash" rule concerns the
-**payment intent**; `ReceiverFee` is a different message signed by a different party (as `MandateWallet` has its own
-types), so payer wallets still show one transaction type. Cost: payees sign one more typed message.
+<a id="CTR-MTX-05"></a>**CTR-MTX-05** — A named function `mtxPayReceiverFee(t, payerAuth, fee, feeRecipient, rfValidUntil,
+payeeAuth, meta)` in `MetaTokenBase` carries the payee's EIP-712 co-signature `UAReceiverFee(UAMetaTransfer payment, uint256
+fee, address feeRecipient, uint256 validUntil)` in the token's own domain, where `payment` is the payer's **whole
+`UAMetaTransfer` struct, nested** ([CTR-MTX-23](#CTR-MTX-23); typed-signing C6, TS-D19: a wallet shows the payment's fields,
+not a digest). Payer and payee are ids, a native address zero-padded or a derived UA, in one form since the `ua*` / `mtx*`
+merge ([CTR-MTX-30](#CTR-MTX-30); the address `ReceiverFee` over `MetaTransfer` and the twin
+`uaPayReceiverFee` are in `legacy/ua-mtx-merge/`). The event `UAReceiverFeePaid` names the payer's `UAMetaTransfer` digest
+as `paymentDigest`. The payer's struct and typehash are unchanged; the payer runs the typed pipeline untouched; then `fee`
+moves from the payee to the co-signed fee recipient in the same transaction. The payer's digest is consumed once by the
+payer's nonce, so the co-signature is single-use with no new storage, and it is bound to one token, chain, payer, lane,
+amount and `entryRef`. The "no second typehash" rule concerns the **payment intent**; `UAReceiverFee` is a different
+message signed by a different party (as `MandateWallet` has its own types), so payer wallets still show one transaction
+type. Cost: payees sign one more typed message.
 
-<a id="CTR-MTX-06"></a>**CTR-MTX-06** — **Shape and availability.** The payer shape is a `MetaTransfer` with `entryRef ≠
-0` and fee mode `NONE` (one fee per intent), `MODE_RESTRICT_RELAYER` set, `batch = payLane(entryRef)`, `nonce = 0` (as
-`mtxPay`, so "once per `(payer, entryRef)`" holds); `fee` is an absolute amount, `0 < fee ≤ t.value`; the co-signed
-`feeRecipient` is non-zero (the named-fee convention), `≠ t.to` (the payee check) and neither `UA_POOL` nor `SHIELD_POOL` (refused first, before the payer's payment runs; review C5-3). The payer's `feeRecipient`
-field is **not** checked (`canon` zeroes it, and the submitter may rewrite it, [NODE-LANE-10](../node/submit-lanes.md#NODE-LANE-10)).
-No 1 % cap: the payee signs the exact amount it gives up and can never lose more than it receives in this call.
-Events: `PaymentSettled(…, N, entryRef)` unchanged (gross), plus `ReceiverFeePaid(paymentDigest, payee, feeRecipient,
-fee)`; the payer's books do not change; the payee books receipt `N` and expense `F` (net `N − F`). **Availability:**
-every kind of the one base (EVM and Hedera); not in `mtxBatchTransfer`. Jobs carrying a receiver fee travel only on
-the restricted bus scope (`bus.scope = restricted`) ([NODE-MESH-17](../node/mesh.md#NODE-MESH-17)). A co-signing
-receiving wallet is a **hot collection wallet**.
+<a id="CTR-MTX-06"></a>**CTR-MTX-06** — **Shape and availability.** The payer shape is a `UAMetaTransfer` with `entryRef ==
+metaPayId(meta)` (so `entryRef ≠ 0`, [CTR-MTX-26](#CTR-MTX-26)), fee mode `NONE` and `fee == 0` (one fee per intent),
+`MODE_RESTRICT_RELAYER` set, on any lane: the former `batch = payLane(entryRef)`, `nonce = 0` terms are gone (pay-meta-tax
+spec §2.5, O3), and the nested `batch` and `nonce` keep the co-signature single-use. `fee` is an absolute amount, `0 < fee ≤
+t.value`; the co-signed `feeRecipient` is non-zero (the named-fee convention), `pad(feeRecipient) ≠ t.to` (the payee check),
+not the token, and neither `UA_POOL` nor `SHIELD_POOL` (refused first, before the payer's payment runs; review C5-3). The
+payer's `feeRecipient` field is **not** checked (`canon` zeroes it, and the submitter may rewrite it,
+[NODE-LANE-10](../node/submit-lanes.md#NODE-LANE-10)). No 1 % cap: the payee signs the exact amount it gives up and can never
+lose more than it receives in this call. Events: `PaymentMeta`, then `UAPaymentSettled(…, N, entryRef)` unchanged (gross),
+plus `UAReceiverFeePaid(paymentDigest, payee, feeRecipient, fee)`; the payer's books do not change; the payee books receipt
+`N` and expense `F` (net `N − F`; a saved pay record holds `N − F`). **Availability:** every kind of the one base with
+`PAYABLE` (EVM and Hedera); not in `mtxBatchTransfer`. On the regulated kinds the fee leg is checked like the token's other
+fee legs, so a frozen payee cannot pay a receiver fee (regulated-kinds spec §3.2, RK-6; `test/as/FeeLegs.t.sol`). Jobs
+carrying a receiver fee travel only on the restricted bus scope (`bus.scope = restricted`)
+([NODE-MESH-17](../node/mesh.md#NODE-MESH-17)). A co-signing receiving wallet is a **hot collection wallet**.
 
-Messages. Payer: `MetaTransfer{from: payer, to: payee, value: N, entryRef, batch: payLane(entryRef), nonce: 0,
+Messages. Payer: `UAMetaTransfer{from: payer, to: payee, value: N, entryRef: metaPayId(meta), batch, nonce (any lane),
 validUntil, mode (fee NONE | MODE_RESTRICT_RELAYER), relayer: the submitting lane, fee: 0, feeRecipient: any (not
-checked)}` in domain `("SCaaS MetaToken", "1", chainId, token, chain_uid)`; `paymentDigest =
-_hashTypedDataV4(hashStruct(t))`. Payee (new, same domain):
+checked)}` in domain `("SCaaS MetaToken", "1", chainId, token, chain_uid)`; `paymentDigest = mtxTransferDigest(t)`. Payee
+(same domain):
 
 ```solidity
-bytes32 constant RECEIVER_FEE_TYPEHASH = keccak256(
-    "ReceiverFee(MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)"
-    "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+bytes32 constant UA_RECEIVER_FEE_TYPEHASH = keccak256(   // MtxPipelineLib
+    "UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)"
+    "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 // hashStruct = keccak256(abi.encode(typehash, hashStruct(payment), fee, feeRecipient, validUntil)); the nested struct hashes with canonical zeros
 ```
 
 `feeRecipient` must be non-zero: with "0 ⇒ `msg.sender`" a mempool copier could front-run and take the fee; the
-payee names the relayer's fee address (the node's `chains.fee_recipient`). No nonce: `paymentDigest` executes at most
+payee names the relayer's fee address (the node's `chains.fee_recipient`). No nonce: the payer's digest executes at most
 once (payer nonce), and only through this function does the co-signature have any effect.
 
 ```solidity
-event ReceiverFeePaid(bytes32 indexed paymentDigest, address indexed payee, address indexed feeRecipient, uint256 fee);
-error ReceiverFeeShape();   // not pay; payer fee mode != NONE or fee != 0; relayer unbound; lane/nonce not payLane/0; feeRecipient 0
+event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
+error ReceiverFeeShape();   // payer fee mode != NONE or fee != 0; relayer unbound; feeRecipient 0
 error ReceiverFeeExpired(uint256 validUntil, uint256 nowTs);
 error ReceiverFeeAmount(uint256 fee, uint256 value);        // fee == 0 or fee > value
 
-function mtxPayReceiverFee(MetaTxLib.MetaTransfer calldata t, bytes calldata payerSig,
-                           uint256 fee, address feeRecipient, uint256 rfValidUntil, bytes calldata payeeSig)
-    external nonReentrant returns (bool);
-function receiverFeeDigest(MetaTxLib.MetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
+function mtxPayReceiverFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
+                           uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth,
+                           MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool);
+function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
     external view returns (bytes32);          // the nested struct, not a digest (C6)
-function uaReceiverFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
-    external view returns (bytes32);
 ```
 
 Order:
 
-1. Shape (`ReceiverFeeShape`): `t.entryRef = p ≠ 0`, `feeModeOf(t.mode) == NONE`, `t.fee == 0`,
-   `t.mode & MODE_RESTRICT_RELAYER ≠ 0`, `t.batch == payLane(p)`, `t.nonce == 0`, `feeRecipient ≠ 0`; `t.feeRecipient`
-   is deliberately not checked (`canon` zeroes it; a submitter may set it). Then `block.timestamp ≤ rfValidUntil`;
-   `0 < fee ≤ t.value`.
-2. `feeRecipient == t.to` ⇒ `FeeRecipientIsPayee`.
-3. `bytes32 d = _executeTransfer(t, payerSig)` — the unchanged typed pipeline (payer → payee `N`, `PaymentSettled`,
-   `MetaTransactionExecuted`); it returns its digest (internal change only).
-4. `_requireValidSignature(t.to, receiverFeeDigest(t, fee, feeRecipient, rfValidUntil), payeeSig)` (EOA, ERC-1271 with
-   `_erc1271Gas(t.to)`, HIP-632 on Hedera children).
-5. `_transfer(t.to, feeRecipient, fee)` (cannot fail: the payee just received `N ≥ fee`); emit `ReceiverFeePaid(d,
-   t.to, feeRecipient, fee)`.
+1. `PAYABLE`; the `PayMeta` shape and `t.entryRef == metaPayId(meta)` (`PayMetaShape`, `PayMetaMismatch`), then
+   `PaymentMeta` ([CTR-MTX-26](#CTR-MTX-26)).
+2. Shape (`ReceiverFeeShape`): `feeModeOf(t.mode) == NONE`, `t.fee == 0`, `t.mode & MODE_RESTRICT_RELAYER ≠ 0`,
+   `feeRecipient ≠ 0`; `t.feeRecipient` is deliberately not checked (`canon` zeroes it; a submitter may set it). Then
+   `block.timestamp ≤ rfValidUntil` (`ReceiverFeeExpired`); `0 < fee ≤ t.value` (`ReceiverFeeAmount`).
+3. `pad(feeRecipient) == t.to` ⇒ `FeeRecipientIsPayee`; `feeRecipient` the token ⇒ `TransferToSelf`; `UA_POOL` ⇒
+   `UAPoolNotPayable`, `SHIELD_POOL` ⇒ `ShieldPoolNotPayable`; on the regulated kinds the fee recipient's check.
+4. `d =` the unchanged typed pipeline on `t` with `payerAuth` (payer → payee `N`, `UAPaymentSettled`,
+   `UAMetaTransactionExecuted`).
+5. The payee's co-signature over `receiverFeeDigest(t, fee, feeRecipient, rfValidUntil)`: a native `t.to` signs it itself
+   (ECDSA, ERC-1271 by [CTR-UA-24](accounts.md#CTR-UA-24), HIP-632 on Hedera), a derived one through the registry under
+   the purpose `receiver-fee` ([accounts.md](accounts.md#purposes)).
+6. `fee` moves from `t.to` to `feeRecipient` (cannot fail: the payee just received `N ≥ fee`); emit `UAReceiverFeePaid(d,
+   t.to, feeRecipient, fee)`; with `meta.save` the pay record `(t.to, N − fee)`.
 
-Equivalence: the payer side is exactly `mtxPay`/`mtxExecuteTransfer` with the same struct — same digest, events and nonce. A
-payer signature landed through any other path makes the co-signature dead (no fee is taken).
+Equivalence: the payer side is exactly `mtxPay` / `mtxExecuteTransfer` with the same struct — same digest, events and
+nonce. A payer signature landed through any other path makes the co-signature dead (no fee is taken).
 
 Invariants: **RP1** the payee's net change from the call is `N − fee ≥ 0`; the payer's is `−N`; the fee recipient's
 `+fee`. **RP2** A co-signature takes effect at most once and only together with the exact payer intent it names.
@@ -1325,8 +1365,8 @@ Invariants: **RP1** the payee's net change from the call is `N − fee ≥ 0`; t
 | Threat | Defence |
 |---|---|
 | Relayer raises the fee or redirects it | `fee`, `feeRecipient` signed by the payee |
-| Payee signature replayed on another payment | bound to `paymentDigest` (domain = token + chain) |
-| Payer forces a fee on the payee | needs `payeeSig` |
+| Payee signature replayed on another payment | bound to the nested payment, lane and nonce included (domain = token + chain) |
+| Payer forces a fee on the payee | needs `payeeAuth` |
 | Race: someone lands the payer intent alone, or copies the call to take the fee | payer relayer bound (required) and `feeRecipient` non-zero (required) |
 | Co-sign key compromised | it controls the receiving wallet: use a hot collection wallet with an automated sweep |
 | Fee leaves the payee negative | `fee ≤ t.value` (RP1) |
@@ -1334,48 +1374,28 @@ Invariants: **RP1** the payee's net change from the call is `N − fee ≥ 0`; t
 
 The co-signing key controls the receiving wallet (a `SmartKeyAccount` key validates any digest and authorizes
 `mtxExecuteAsOwner`; there is no scoped key kind), so the receiving wallet for this mode is a dedicated hot collection
-wallet (EOA or `SmartKeyAccount`) holding only incoming receiver-pays funds, swept automatically to a cold treasury; a
-cold receiving wallet cannot co-sign and must not offer this mode. A scoped key kind that validates only
-`ReceiverFee` preimages with a fee cap is a planned `SmartKeyAccount` change ([accounts.md](accounts.md#smart-account-limitations)).
-Bytecode size: the CI size gate (20,480 B per implementation, 24,576 B per library, [CTR-TOK-24](token-wrappers.md#CTR-TOK-24)) covers every kind; if one exceeds it, the
-`ReceiverFee` hashing and check move to an external library (`ReceiverFeeLib`, public functions). Node and client
+wallet (EOA, `SmartKeyAccount` or a derived UA) holding only incoming receiver-pays funds, swept automatically to a cold
+treasury; a cold receiving wallet cannot co-sign and must not offer this mode. A scoped key kind that validates only
+`UAReceiverFee` preimages with a fee cap is a planned `SmartKeyAccount` change
+([accounts.md](accounts.md#smart-account-limitations)). Bytecode size: the `UAReceiverFee` hashing lives in the external
+`MtxPipelineLib`; the CI size gate ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)) covers every kind. Node and client
 touchpoints (job field `receiver_fee`, `token.features`, booking): [node/sponsorship.md](../node/sponsorship.md#receiver-pays),
 [integration.md](../integration.md#inbound).
 
-Gas (estimate): `mtxPay` + payee signature (~4 k EOA, ERC-1271 up to its cap) + `ReceiverFee` hashing (~1 k) + one
-transfer (~7 k warm, ~25 k new recipient) + event (~2 k): **+14 to +32 k** over `mtxPay`. Tests: each shape error
-(unbound payer relayer, wrong lane or nonce, zero `feeRecipient`); a payer intent with a non-zero unbound
-`m.feeRecipient` succeeds; fee 0, fee = value, fee > value; recipient = payee; co-signature over another digest;
-expired co-signature; replay after the payer intent landed through `mtxExecuteTransfer` (bad nonce); ERC-1271 payee
-(`SmartKeyAccount`) and Hedera HIP-632 payee; RP1/RP4 under fuzz; event fields; node accept rules and the forced
-`restricted` scope. Families: EVM and Hedera only; non-EVM families do not have it (no fee fields off EVM) — there the
-options are payee self-relay and sponsorship.
+Tests: `test/ua/UAReceiverFee.t.sol` (each shape error, fee 0, fee = value, fee > value, recipient = payee, the token and
+the pools, purpose separation, a co-signature over another digest, a payer intent landed elsewhere, ERC-1271 and EIP-7702
+payees, RP1 under fuzz), `test/metatx/PayLanes.t.sol` (a free lane, the co-signature dead after the payer's nonce was used
+elsewhere, a metadata mismatch), `test/metatx/PayRecords.t.sol` (the net record), `test/hedera/HederaV2.t.sol` (a HIP-632
+payee), `test/merge/TransferGroup.t.sol` (the payer leg's fee `NONE`, no entry for the address form), `test/as/FeeLegs.t.sol`
+(a frozen payee). Families: EVM and Hedera only; non-EVM families do not have it (no fee fields off EVM) — there the options
+are payee self-relay and sponsorship.
 
-<a id="ua-receiver-pays"></a>**The UA twin: `uaPayReceiverFee`** (owner 2026-10-13, [CTR-UA-27](accounts.md#CTR-UA-27);
-BUILT, UA-5a). Payer and payee are ids (**U**); the payee co-signs the same `ReceiverFee` over the payer's
-`UAMetaTransfer` digest:
-
-```solidity
-function uaPayReceiverFee(MetaTxLib.UAMetaTransfer calldata t, bytes calldata payerAuth, uint256 fee,
-                          address feeRecipient, uint256 rfValidUntil, bytes calldata payeeAuth)
-    external nonReentrant returns (bool);
-event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
-```
-
-Order: `PAYABLE`; step 1's shape on `t` (`ReceiverFeeShape`: `entryRef ≠ 0`, fee `NONE` and `fee == 0`, relayer bound,
-`batch == payLane(entryRef)`, `nonce == 0`, `feeRecipient ≠ 0`), `ReceiverFeeExpired`, `ReceiverFeeAmount`; `pad(feeRecipient) ==
-t.to` ⇒ `FeeRecipientIsPayee`, `feeRecipient` the token ⇒ `TransferToSelf`, `UA_POOL` ⇒ `UAPoolNotPayable`; then `d =`
-the unchanged typed UA pipeline on `t` with `payerAuth` (payer → payee `N`, `UAPaymentSettled`,
-`UAMetaTransactionExecuted`); then the payee's co-signature over `receiverFeeDigest(d, fee, feeRecipient,
-rfValidUntil)` — a native `t.to` signs it itself (ECDSA, ERC-1271 by [CTR-UA-24](accounts.md#CTR-UA-24), HIP-632 on
-Hedera), a derived one through `requireAuthorized(t.to, receiver-fee, digest, payeeAuth)` (the purpose exists for this,
-[accounts.md](accounts.md#purposes)); then `fee` moves from `t.to` to `feeRecipient` in the UA ledger; emit
-`UAReceiverFeePaid(d, t.to, feeRecipient, fee)`. RP1–RP4 and the threat table above hold with ids for addresses.
-Measured (forge, osaka): a native payer and payee 103,349 cold (`mtxPayReceiverFee` 103,876); with the real verifiers
+Gas, measured before the merge on the UA twin `uaPayReceiverFee` (UA-5a, forge, osaka; the figures were not re-run on the
+merged entry): a native payer and payee 103,349 cold (the address `mtxPayReceiverFee` 103,876); with the real verifiers
 (`UAMetaTx3Vectors.t.sol`, warm token) a native payer × a `p256` payee 98,052 … × an `ed25519` payee 256,335, `p256` ×
-`bip340` 85,175. Two `mldsa65` signatures (`UAMetaTx3Pq.t.sol`): calldata 7,492 B (110,644 gas), execution 11,743,018,
-transaction **11,874,662** (asserted under 16,777,216; also under Hedera's 15 M, not run on a Hedera profile); an `msig` payer at its 12 M budget with any PQ
-payee does not fit one transaction. Not in `uaBatchTransfer` (as the address path).
+`bip340` 85,175. Two `mldsa65` signatures (`UAMetaTx3Pq.t.sol` `test_receiverFee_twoMldsa65_underCap`): calldata 7,492 B
+(110,644 gas), execution 11,743,018, transaction **11,874,662** (asserted under 16,777,216; also under Hedera's 15 M, not run
+on a Hedera profile); an `msig` payer at its 12 M budget with any PQ payee does not fit one transaction.
 
 ## <a id="security"></a>14. Security
 

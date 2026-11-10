@@ -573,7 +573,7 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
    `PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=scaas-testnet CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh
    evm http://127.0.0.1:8545`: 31 transactions, all status 1, through the genesis CREATE2 deployer (UA registry with 17
    `KindConfig`s + `msig`: no `zether-bls12381`, no `0x0142` — the run predates the branch's rebase onto `zether-ungate`;
-   OpenFactory, the relay-fee router (formerly `MtxRelayFee`) + executor, the NormalToken and SCaaSDex releases); `deployments/7622.json`
+   OpenFactory, the relay-fee router (formerly `MtxRelayFee`) + executor, the NormalToken and SCaaSDex releases); the book `7622.json` (now `scaas-testnet.json`, NET-EVM-13)
    (git-ignored; copy in `smartcontracts/evm/runs/2026-10-31-fs3-t13-deploy-7622.txt`). UniswapExecutor: no deploy
    script (plan decision PD7). **Superseded 2026-10-31** by the [salt-v2 set with Zether](#zether-on-the-scaas-testnet-executed-2026-10-31)
    (kept on chain, still verified on Blockscout).
@@ -623,7 +623,7 @@ owner before 22776's gen-1 registry and for the audit).
    http://192.168.1.72:8545` (the public `rpc`; signed locally, `eth_sendRawTransaction`): 40 transactions, all status 1,
    **gasUsed 716,134,332** (forge's estimate 810,592,383), blocks 5157–5235. AdminLib, TradeLib and HederaLib were already
    on chain at their CREATE2 addresses (same code) and were reused; every other contract is new.
-2. The new set (`deployments/7622.json`, git-ignored; copy in the deploy log):
+2. The new set (the book `7622.json`, now `scaas-testnet.json`, git-ignored; copy in the deploy log):
 
    | Contract | Address |
    |---|---|
@@ -714,12 +714,12 @@ in the same reset. 22776 is the owner's and is never touched (`--testnet-reset` 
    `MLDSA87` probe 1 / 0 at 102,006 gas; node e2e **84 ok, 0 FAIL**; `codesize` 65,537 B (100,505,947 gas, block 37) and
    119,800 B (183,562,782 gas, block 39), status 1.
 6. Deploy (below) rc 0: 49 transactions, all status 1, 986,967,204 gas, blocks 49–145; `eth_getCode` non-empty for every
-   address of `deployments/7622.json` and `7622-pqz.json` and the three PQZ releases (`WrappedPqzToken` 72,160 B, 112,574,619
+   address of the books `7622.json` and `7622-pqz.json` (now `scaas-testnet*.json`) and the three PQZ releases (`WrappedPqzToken` 72,160 B, 112,574,619
    gas: the first release above 64 KiB on 7622). PQZ e2e **386 ok, 0 FAIL**; Zether e2e **82 ok, 0 FAIL** (24 transactions);
    `mldsa87` and `fndsa1024` registrations status 1; governance smoke (`../../../smartcontracts/evm/runs/2026-11-04-gov-smoke-7622.sh`):
    `mtxSetListedOnly` through the `GovernanceRouter` at fee 0, relayed by another key, `listedOnly` false → true.
-7. Node: `scaas-node/node.example.toml` (7622 row) `governance_routers` = `0xB64D2D5f…b8E0` (`deployments/7622.json`) and
-   `0xFeC9586a…6F52` (`deployments/7622-pqz.json`).
+7. Node: `scaas-node/node.example.toml` (7622 row) `governance_routers` = `0xB64D2D5f…b8E0` (the book `7622.json`) and
+   `0xFeC9586a…6F52` (`7622-pqz.json`; both now `scaas-testnet*.json`, NET-EVM-13).
 8. Blockscout: DB reset (the renamed `explorer_*` dirs, fresh migrate); `verify-blockscout.sh` with the two broadcasts **and
    the new e2e log named**: 69 ok, 15 skip, 0 fail; by hand the `forge create` contracts, the node's probe and the governance
    smoke's DEX clone: **68 of 68 contracts with source verified, all full matches**, 5 clones linked; the 15 SSTORE2 data
@@ -765,7 +765,7 @@ anything is sent (GD-4).
 **Checks** (as the 2026-10-22 section, plus): `e2e.py codesize --rpc <rpc> --key <test key 0x…04> --sizes 65537:ok,119800:ok
 --gas 199900000` (arm C's rows: 65,537 B deploys once EIP-7954 is out); `eth_getCode` of every release of the deploy JSON
 non-empty; the node's `governance_routers` set to the deploy JSON's `governance_router` and, once `script/pqz/e2e.py` has run, the
-`governance_router` of `smartcontracts/evm/deployments/7622-pqz.json` (the PQZ stack's router on its own registry, by CREATE2 as well).
+`governance_router` of `smartcontracts/evm/deployments/scaas-testnet-pqz.json` (NET-EVM-13) (the PQZ stack's router on its own registry, by CREATE2 as well).
 
 **Rollback:** as the 2026-10-22 section: stop both nodes, put the `genesis.json` backup back, swap the data dirs back, start.
 For reset 1: `SCAAS_TESTNET_DIR=<stack> sh ../runs/2026-11-04-testnet-reset1.sh rollback` puts the four
@@ -1017,7 +1017,7 @@ docker compose stop sc-verifier
 `http://192.168.1.72:8545`, `FOUNDRY_PROFILE` default `scaas-testnet`): one `forge verify-contract … --verifier blockscout`
 per CREATE / CREATE2 row and per factory child of the broadcast (RelayFeeExecutor, the SmartKeyAccount implementation,
 the NormalToken / SCaaSDex implementations), constructor arguments from the init code; for the PQZ e2e
-(`script/pqz/e2e.py`, no broadcast file; `deployments/7622-pqz.json` holds only its last run) every
+(`script/pqz/e2e.py`, no broadcast file; `deployments/scaas-testnet-pqz.json` holds only its last run) every
 `<Name> at 0x…` line of its run logs (constructor arguments from the creation transaction) and every
 `<Name> release at 0x…` (an OpenFactory release: arguments `abi.encode(envVersion, env, implArgs)` rebuilt from the
 factory's `releaseOf` / `envOf`); its tokens (pqUSD, pqW) are EIP-1167 clones of those releases (`Clones` in
