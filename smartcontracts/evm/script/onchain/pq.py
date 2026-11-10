@@ -305,11 +305,13 @@ def ml_classical(pq, sr, tok, nm, alice, bob, burn=True):
     sr.send(tok, E.cd(f"mtxBatchTransfer({UMT_S}[],{UAS}[])", [("a", UMT_T), ("a", E.UASIG_T)], ms, [sig(dg(x)) for x in ms]),
             f"{nm} mtxBatchTransfer alice→bob 1 + 1, ML-DSA-65")
     n += 2
-    inner = E.cd("transferToUA(bytes32,uint256)", ["w", "w"], bob.ua, 4)
+    # the generic entry's op: a derived signer's allow-list is burn (a normal kind) or an unwrap (a wrapped one), CTR-UA-26
+    inner = (E.cd("burn(uint256)", ["w"], 4) if burn else
+             E.cd("unwrap(uint256,address,uint256)", ["w", "w", "w"], 4, sr.addr, 0))
     mx = [alice.ua, inner, 0, n, vu, 0, 0, 0, 0]
     d = E.words(E.call(tok, E.cd(f"mtxDigest({E.UMTX_S})", [E.MTX], mx)))[0]
     sr.send(tok, E.cd(f"mtxExecute({E.UMTX_S},{UAS})", [E.MTX, E.UASIG_T], mx, sig(d)),
-            f"{nm} mtxExecute(transferToUA bob 4), ML-DSA-65")
+            f"{nm} mtxExecute({'burn 4' if burn else 'unwrap 4 to the relayer'}), ML-DSA-65")
     n += 1
     env = [alice.ua, 0, n, vu, 0, 0, 0, 0]
     d = None if not burn else named(tok, "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)", [6], env)
@@ -324,15 +326,18 @@ def ml_classical(pq, sr, tok, nm, alice, bob, burn=True):
     n += 1
     lane, nm_ = 7, 4
     d = E.words(E.call(tok, E.cd("invalidateNoncesDigest(bytes32,uint256,uint256)", ["w", "w", "w"], alice.ua, lane, nm_)))[0]
-    sr.send(tok, E.cd(f"mtxInvalidateNonces(bytes32,uint256,uint256,{UAS})", ["w", "w", "w", E.UASIG_T], alice.ua, lane, nm_, sig(d)),
+    # the order-nonce floor: purpose `trade` (ERC20MetaTx, a trade-order lane), not `metatx`
+    sig_t = E.ml_sig(pq, alice, E.kc("scaas.ua.purpose.trade.v1"), d)
+    sr.send(tok, E.cd(f"mtxInvalidateNonces(bytes32,uint256,uint256,{UAS})", ["w", "w", "w", E.UASIG_T], alice.ua, lane, nm_, sig_t),
             f"{nm} mtxInvalidateNonces(lane 7, min 4), ML-DSA-65")
     E.check(u(E.call(tok, E.cd("minNonce(bytes32,uint256)", ["w", "w"], alice.ua, lane))) == nm_, f"{nm} minNonce(alice, 7) = 4")
     got = bal_ua(tok, bob.ua) - b0
-    E.check(got == 7 + 100 + 3 + 3 + 2 + 2 + 4, f"{nm} bob received {got} through the ML-DSA-signed entries")
+    E.check(got == 7 + 100 + 3 + 3 + 2 + 2, f"{nm} bob received {got} through the ML-DSA-signed entries")
     # negatives: an ML-DSA signature over another digest; a transfer above alice's balance
     m = umt(bob.ua, 1, n)
     bad = sig(dg(umt(bob.ua, 2, n)))
-    neg(sr.addr, tok, E.cd(f"mtxExecuteTransfer({UMT_S},{UAS})", [UMT_T, E.UASIG_T], m, bad), sel_hex("MetaTxBadSignature()"),
+    # a derived signer: the registry refuses it by the UA's name (UAUnauthorized), not the native MetaTxBadSignature
+    neg(sr.addr, tok, E.cd(f"mtxExecuteTransfer({UMT_S},{UAS})", [UMT_T, E.UASIG_T], m, bad), sel_hex("UAUnauthorized(bytes32)"),
         f"{nm} mtxExecuteTransfer with an ML-DSA signature over another digest")
 
 
