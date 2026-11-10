@@ -4,7 +4,8 @@
 # usage: verify-blockscout.sh [broadcast.json ...] [e2e-run-log ...]  (paths relative to smartcontracts/evm; an argument
 #   ending in .json is a broadcast; default broadcast/Deploy.s.sol/7622/run-latest.json and, when present,
 #   broadcast/ZetherE2E.s.sol/7622/run-latest.json)
-#   env BLOCKSCOUT_API (default http://192.168.1.72:4000/api), RPC (default http://192.168.1.72:8545),
+#   env BLOCKSCOUT_API (default http://127.0.0.1:4000/api), RPC (default http://127.0.0.1:8545; loopback: the host's LAN
+#   address is not fixed),
 #   FOUNDRY_PROFILE (default scaas-testnet)
 # Run after every 7622 reset or deploy. Broadcast: the CREATE / CREATE2 rows and the contracts they create
 # (additionalContracts: RelayFeeExecutor, the SmartKeyAccount implementation, the token / DEX implementations); the
@@ -38,8 +39,8 @@ if [ ${#bs[@]} -eq 0 ]; then
 fi
 for B in "${bs[@]}"; do [ -f "$B" ] || { echo "no broadcast $B" >&2; exit 2; }; done
 B="${bs[0]}"
-API="${BLOCKSCOUT_API:-http://192.168.1.72:4000/api}"
-RPC="${RPC:-http://192.168.1.72:8545}"
+API="${BLOCKSCOUT_API:-http://127.0.0.1:4000/api}"
+RPC="${RPC:-http://127.0.0.1:8545}"
 export FOUNDRY_PROFILE="${FOUNDRY_PROFILE:-scaas-testnet}"
 CAPPED="$(git rev-parse --show-toplevel)/scripts/capped"
 CHAIN="$(jq -r .chain "$B")"
@@ -72,7 +73,9 @@ verify() {
 }
 
 # clone <label> <address>: an EIP-1167 clone of a release is not verified itself; Blockscout must link it (proxy_type
-# eip1167) to its implementation, which must be verified. A data contract (SSTORE2, code 0x00…) is a skip.
+# eip1167, or clone_with_immutable_arguments for a clone with data appended after the 45-byte proxy, e.g. a factory
+# token or a PqChat instance) to its implementation, which must be verified. A data contract (SSTORE2, code 0x00…) is a
+# skip.
 clone() {
   local name=$1 addr=$2 code impl j pt li iv
   code="$(cast code -r "$RPC" "$addr")"
@@ -97,8 +100,8 @@ clone() {
   pt="$(jq -r '.proxy_type // "none"' <<< "$j")"
   li="$(jq -r '[.implementations[]?.address_hash | ascii_downcase] | join(",")' <<< "$j")"
   iv="$(addr_field "$impl" is_verified)"
-  if [ "$pt" = eip1167 ] && [ "$li" = "$impl" ] && [ "$iv" = true ]; then
-    table+=("ok    $name  $addr  eip1167 clone of $impl (verified)")
+  if { [ "$pt" = eip1167 ] || [ "$pt" = clone_with_immutable_arguments ]; } && [ "$li" = "$impl" ] && [ "$iv" = true ]; then
+    table+=("ok    $name  $addr  $pt clone of $impl (verified, $(( (${#code} - 2) / 2 )) B)")
   else
     table+=("fail  $name  $addr  clone of $impl: proxy_type $pt, implementations [$li], implementation verified $iv"); fails=$((fails + 1))
   fi

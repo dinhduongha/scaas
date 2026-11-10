@@ -15,8 +15,8 @@
                                                   node: refused with the expected named error or not
   coverage.py views <net> <rpc>                   every view with static parameters of every booked contract, by eth_call
                                                   with zero arguments (records-<net>-views.jsonl)
-  coverage.py note [--net N]... [--reasons R]     the runs note's body (table, entries not called with their reason,
-                                                  negatives, heaviest, every transaction)
+  coverage.py note [--net N]... [--reasons R] [--txs]   the runs note's body (per record file, table, entries not called
+                                                  with their reason, negatives, heaviest; every transaction with --txs)
   coverage.py table [--net N]...                  coverage.json updated from the records; the per-contract table
 
 A book (deployments/onchain-<net>-<group>.json, git-ignored, written by each group script) maps an address to a contract label of groups.json. A
@@ -280,6 +280,16 @@ def note(a):
         recs = [json.loads(x) for p in sorted(glob.glob(os.path.join(a.out, f"records-{n}-*.jsonl"))) for x in open(p)]
         if not recs:
             continue
+        out.append(f"\n## {n}: per record file (txs, status 1, the heaviest gasUsed; eth_calls answered; negatives refused as expected)")
+        out.append("records | txs | status 1 | max gasUsed | calls ok | negatives")
+        for p in sorted(glob.glob(os.path.join(a.out, f"records-{n}-*.jsonl"))):
+            rr = [json.loads(x) for x in open(p)]
+            t = [r for r in rr if r["tx"]]
+            ng = [r for r in rr if r["what"].startswith("negative")]
+            c = [r for r in rr if not r["tx"] and r not in ng]
+            out.append(f"{os.path.basename(p)[len(f'records-{n}-'):-6]} | {len(t)} | {sum(r['status'] == 1 for r in t)} | "
+                       f"{max([r['gas'] for r in t], default=0):,} | {sum(r['status'] == 1 for r in c)} / {len(c)} | "
+                       f"{sum(r['status'] == 2 for r in ng)} / {len(ng)}")
         out.append(f"\n## {n}: state-changing entries not called by a transaction, with the reason")
         miss = 0
         for g, cs in cov["groups"].items():
@@ -306,8 +316,9 @@ def note(a):
         txs = [r for r in recs if r["tx"]]
         out.append(f"\n## {n}: transactions {len(txs)}, status 1: {sum(r['status'] == 1 for r in txs)}; the heaviest ten")
         out += [f"{r['gas']:,} | {r['tx']} | {r.get('label', '')} | {r['what']}" for r in sorted(txs, key=lambda r: -r["gas"])[:10]]
-        out.append(f"\n## {n}: every transaction (script | status | gasUsed | hash | contract | what)")
-        out += [f"{r['script']} | {r['status']} | {r['gas']:,} | {r['tx']} | {r.get('label', '')} | {r['what'][:90]}" for r in txs]
+        if a.txs:  # the records hold every transaction; the note lists them only when asked
+            out.append(f"\n## {n}: every transaction (script | status | gasUsed | hash | contract | what)")
+            out += [f"{r['script']} | {r['status']} | {r['gas']:,} | {r['tx']} | {r.get('label', '')} | {r['what'][:90]}" for r in txs]
     print("\n".join(out))
 
 
@@ -337,6 +348,7 @@ def main():
     p = sp.add_parser("note")
     p.add_argument("--net", action="append", default=[])
     p.add_argument("--reasons", default=os.path.join(HERE, "notrun.json"))
+    p.add_argument("--txs", action="store_true", help="also list every transaction")
     a = ap.parse_args()
     if a.cmd in ("table", "note") and not a.net:
         a.net = ["local", "scaas-testnet"]
