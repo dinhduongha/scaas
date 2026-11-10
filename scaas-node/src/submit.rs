@@ -686,6 +686,11 @@ impl Submitter {
             Ok(false) if crate::abi::regulated_refusal(&reason).is_some() => {
                 self.requeue(w, format!("REGULATED_REFUSED: {reason}")).await
             }
+            // group 3l (wrap limits spec §9): a window ends, a member is added, a redeemer is granted, a later wrap raises the
+            // entitlement: a named refusal, back in the queue, never `dead`
+            Ok(false) if crate::abi::wrap_limit_refusal(&reason).is_some() => {
+                self.requeue(w, format!("WRAP_LIMIT_REFUSED: {reason}")).await
+            }
             // group 3f (spec §11.1): a PQZ verifier mode refusal by name, never `dead` while the op may land with another verdict
             Ok(false) if crate::abi::pqz_verdict_refusal(&reason).is_some() => self.pqz_refused(w, reason).await,
             // group 3g (spec §7.3): the PQZ key-version reverts by name; a stale debit or two equal keys never land, a version
@@ -1804,8 +1809,8 @@ pub(crate) mod tests {
         }
         // plan T34 added the router's eight regulated control rows to typed_ops.json (97 -> 105); pay-meta-tax T41: -> 110
         // (UAPayWithTax's three domains, the router's two tax ops); group 3f T46 / T47: -> 113, the router's three verifier ops
-        // group 3h T61: -> 114, the router's `UASetProofStore`
-        assert_eq!(n, 114, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // group 3h T61: -> 114, the router's `UASetProofStore`; group 3l: -> 116, the router's two wrap-limit ops
+        assert_eq!(n, 116, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the

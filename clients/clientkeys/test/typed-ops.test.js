@@ -186,8 +186,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // ua-mtx-merge T76: + the router's three creations (`UACreateToken`, `UACreateDex`, `UACreateInstance`): 83, 73
   // T46 (group 3f): + the router's three PQZ verifier ops (`UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier`): 86, 76
   // group 3h T61: + the router's `UASetProofStore` (bit 24): 87, 77
-  assert.equal(Object.keys(TYPED_OPS).length, 87);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 77);
+  // group 3l: + the router's `UASetWrapLimits`, `UASetWrapMember`: 89, 79
+  assert.equal(Object.keys(TYPED_OPS).length, 89);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 79);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -318,12 +319,13 @@ test('GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol, target the first 
   // pay-meta-tax T39 / T41: + `UASetTaxRate`, `UASetTaxRecipient`; ua-mtx-merge T76: + the three creations
   // T46 (group 3f): the three PQZ verifier ops are checked against GovernanceRouterBase.sol in pqz-verdict.test.js, and here
   // too once this pin file carries them
-  const rows = pins.filter(([s]) => !s.startsWith('GrantTerms('));
+  // group 3l: the leg array's two struct types are pinned there too, not rows
+  const rows = pins.filter(([s]) => !s.startsWith('GrantTerms(') && !s.startsWith('WrapLimit(') && !s.startsWith('WrapLegLimits('));
   const pqzPinned = rows.filter(([s]) => s.startsWith('UAPqz')).length;
   assert.ok(pqzPinned === 0 || pqzPinned === 3, `${pqzPinned} PQZ verifier pins`);
-  // group 3h T61: + `UASetProofStore` (bit 24)
-  assert.equal(pins.length - pqzPinned, 34);
-  assert.equal(rows.length - pqzPinned, 33);
+  // group 3h T61: + `UASetProofStore` (bit 24); group 3l: + `UASetWrapLimits`, `UASetWrapMember` and the two struct pins
+  assert.equal(pins.length - pqzPinned, 38);
+  assert.equal(rows.length - pqzPinned, 35);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -339,7 +341,7 @@ test('GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol, target the first 
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
     assert.deepEqual([r.message.mode, r.message.fee], [1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 37); // 3h T61: + UASetProofStore
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 39); // 3h T61: + UASetProofStore; 3l: + 2
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
 });

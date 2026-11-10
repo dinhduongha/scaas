@@ -519,6 +519,20 @@ sol! {
         function order(bytes32 recordId) external view returns (OrderRecord);
     }
 
+    /// Group 3l (wrap limits spec 2026-11-10 §7, §9): the wrapped kinds' named refusals of a wrap or an unwrap under the
+    /// limits, which a later block may lift (a window ends, a member is added, a redeemer is granted, a later wrap raises the
+    /// entitlement): [`wrap_limit_refusal`].
+    #[derive(Debug)]
+    interface IWrapLimits {
+        error WrapLimitExceeded(address underlying, uint8 limit, bytes32 account, uint256 amount, uint256 remaining);
+        error WrapCapExceeded(address underlying, uint8 limit, uint256 amount, uint256 remaining);
+        error UnwrapAboveNetWrapped(address underlying, bytes32 account, uint256 amount, uint256 entitlement);
+        error WrapperNotListed(bytes32 account);
+        error UnwrapperNotListed(bytes32 account);
+        error WrapControlNeedsHybrid(uint8 bit);
+        error WrapSubjectZero();
+    }
+
     /// ERC-165 (`MetaTokenBase.supportsInterface`): a regulated kind answers [`regulated_interface_id`], kinds 0-5 do not (M-10).
     #[derive(Debug)]
     interface IERC165 {
@@ -590,6 +604,16 @@ pub fn regulated_refusal(reason: &str) -> Option<&'static str> {
     LIFTABLE.into_iter().find(|n| *n == name)
 }
 
+/// Group 3l (wrap limits spec §9, NODE-LANE-09's class): a wrap or an unwrap a wrap limit refuses at simulation. A window ends,
+/// a member is added, a redeemer is granted or a later wrap raises the entitlement, so the payload may still land: the job stays
+/// `queued` with `WRAP_LIMIT_REFUSED: <named error>`, never `dead` (expiry or the attempt cap ends it), and no grief score.
+/// `WrapControlNeedsHybrid` (a creation refusal, permanent) is not in the class. `reason` is a `decode_revert` string.
+pub fn wrap_limit_refusal(reason: &str) -> Option<&'static str> {
+    const LIFTABLE: [&str; 5] = ["WrapLimitExceeded", "WrapCapExceeded", "UnwrapAboveNetWrapped", "WrapperNotListed", "UnwrapperNotListed"];
+    let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
+    LIFTABLE.into_iter().find(|n| *n == name)
+}
+
 /// What a PQZ token's key-version refusal means for a job (group 3g, spec §7.3), from a `decode_revert` string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PqzRefusal {
@@ -650,6 +674,9 @@ pub fn decode_revert(data: &[u8]) -> String {
         return format!("{e:?}");
     }
     if let Ok(e) = IRegulatedToken::IRegulatedTokenErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IWrapLimits::IWrapLimitsErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     if let Ok(e) = IGovernance::IGovernanceErrors::abi_decode(data) {
@@ -743,6 +770,35 @@ mod tests {
         assert_eq!(pqz_verdict_refusal("PqzVerdictMismatchX(..)"), None);
     }
 
+    /// Group 3l (wrap limits spec §9): the five liftable wrap-limit refusals decode by name and are the class; the creation
+    /// refusal and the subject check are named but not in it.
+    #[test]
+    fn wrap_limit_refusals_are_named() {
+        let a = alloy::primitives::B256::repeat_byte(0xf1);
+        let u = alloy::primitives::Address::repeat_byte(5);
+        for (data, name) in [
+            (IWrapLimits::WrapLimitExceeded { underlying: u, limit: 2, account: a, amount: U256::from(7), remaining: U256::ZERO }.abi_encode(), "WrapLimitExceeded"),
+            (IWrapLimits::WrapCapExceeded { underlying: u, limit: 0, amount: U256::from(7), remaining: U256::ZERO }.abi_encode(), "WrapCapExceeded"),
+            (IWrapLimits::UnwrapAboveNetWrapped { underlying: u, account: a, amount: U256::from(7), entitlement: U256::from(1) }.abi_encode(), "UnwrapAboveNetWrapped"),
+            (IWrapLimits::WrapperNotListed { account: a }.abi_encode(), "WrapperNotListed"),
+            (IWrapLimits::UnwrapperNotListed { account: a }.abi_encode(), "UnwrapperNotListed"),
+        ] {
+            let r = decode_revert(&data);
+            assert!(r.starts_with(&format!("{name}(")), "{r}");
+            assert_eq!(wrap_limit_refusal(&r), Some(name), "{r}");
+            assert_eq!(regulated_refusal(&r), None, "{r}: not a regulated refusal");
+        }
+        for (data, name) in [
+            (IWrapLimits::WrapControlNeedsHybrid { bit: 25 }.abi_encode(), "WrapControlNeedsHybrid"),
+            (IWrapLimits::WrapSubjectZero {}.abi_encode(), "WrapSubjectZero"),
+        ] {
+            let r = decode_revert(&data);
+            assert!(r.starts_with(name), "{r}");
+            assert_eq!(wrap_limit_refusal(&r), None, "{name}: named, not liftable");
+        }
+        assert_eq!(wrap_limit_refusal("WrapLimitExceededX(..)"), None);
+    }
+
     /// Regulated-kinds spec §7: every §3.1 error and `NotProposer` decoded by name; the six a later block may lift are the
     /// refusals the submit path and the venue keep apart from `dead` and from blame; the others are not.
     #[test]
@@ -772,6 +828,8 @@ mod tests {
             assert_eq!(regulated_refusal(&r), None, "{name}: named, not liftable");
         }
         assert_eq!(regulated_refusal("FrozenX(..)"), None);
+        assert_eq!(regulated_refusal(&decode_revert(&IWrapLimits::WrapperNotListed { account: a }.abi_encode())), None,
+            "a wrap limit is its own class");
         assert_eq!(regulated_refusal("revert 0x1234"), None);
     }
 
