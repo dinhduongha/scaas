@@ -339,7 +339,7 @@ def main():
     p.add_argument("--reasons", default=os.path.join(HERE, "notrun.json"))
     a = ap.parse_args()
     if a.cmd in ("table", "note") and not a.net:
-        a.net = ["local", "7622"]
+        a.net = ["local", "scaas-testnet"]
     {"gen": gen, "forge": forge, "trace": trace, "neg": neg, "views": views, "table": table, "note": note}[a.cmd](a)
 
 

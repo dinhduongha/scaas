@@ -8,6 +8,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {PqUA} from "../../src/ua/PqUA.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -45,7 +46,9 @@ contract OnchainFwd {
 ///         id, sent by test key 2), fee 0 and with a fee. A wrapped kind gets two tokens: W1, one MockERC20 leg (the sole-leg
 ///         entries, the common entries, the hybrid mint), W2, two legs (a MockERC20 and the kind-0 token, a SCaaS ledger leg:
 ///         the per-leg and `…ToUA` entries, the rate and the guardian). The regulated kinds 8-11 carry `DENYLIST` on the Step 5
-///         ComplianceRegistry and `TAX`. A secp256k1 UA registered on the Step 5 registry receives the `…ToUA` entries.
+///         ComplianceRegistry and `TAX`. A secp256k1 UA registered on the Step 5 registry receives the `…ToUA` entries; an
+///         ML-DSA-65 UA (keys by script/pqz/mldsa.mjs through `vm.ffi`: run with `--ffi`) signs a relayed `mtxTransfer` and
+///         an `mtxTransferWithFee` on every kind.
 ///         Not here (other streams): the confidential layers (Zether, PQZ), the regulated controls, the trade entries.
 ///         UNAUDITED.
 contract Tokens is OnchainBase {
@@ -76,12 +79,15 @@ contract Tokens is OnchainBase {
     uint32 internal constant FIXED_FEE = MetaTxLib.MODE_FEE_FIXED | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
     uint32 internal constant PERCENT_FEE = MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
     uint256 internal constant LANE_FEE = 2; // the relay-fee lane (Smoke.s.sol)
+    uint16 internal constant ML65 = UAKinds.MLDSA65; // the PQ signer's kind (0x0131)
 
     OpenFactory f;
     address router;
     address registry;
     address compliance;
     bytes32 uaD; // a secp256k1 UA on the Step 5 registry (a receiver only)
+    bytes32 uaM; // an ML-DSA-65 UA on the Step 5 registry: the PQ signer of a relayed transfer on every kind
+    bytes32 mlSeed;
     MockERC20 m1; // W1's leg
     MockERC20 m2; // W2's first leg
     MockERC20 stray; // what `rescue` sends back
@@ -106,6 +112,7 @@ contract Tokens is OnchainBase {
         _book(registry, "UARegistry");
         _fixtures();
         _registerDerived();
+        _registerMl();
         // the plain normal kinds and the regulated normal kinds
         uint8[4] memory ns = [uint8(0), 2, 8, 10];
         for (uint256 i; i < 4; ++i) _normalKind(ns[i]);
@@ -151,6 +158,50 @@ contract Tokens is OnchainBase {
         vm.broadcast(k1);
         uaD = IUARegistry(registry).register(kind, keyData, none, pop, "");
         require(uaD == ua && IUARegistry(registry).isRegistered(ua), "derived UA");
+    }
+
+    /// @dev The ML-DSA-65 key and signatures from script/pqz/mldsa.mjs (@noble/post-quantum, FIPS 204, empty context)
+    ///      through `vm.ffi` (the script needs `--ffi`); the seed is the run's, never a secret worth keeping.
+    function _ml(string memory job) internal returns (bytes memory) {
+        string[] memory c = new string[](3);
+        (c[0], c[1]) = ("sh", "-c");
+        c[2] = string.concat("printf '%s\\n' '", job,
+            "' | node script/pqz/mldsa.mjs ../../clients/clientkeys | sed 's/^/0x/'");
+        return vm.ffi(c);
+    }
+
+    function _bare(bytes32 x) internal pure returns (string memory) {
+        bytes memory h = bytes(vm.toString(x));
+        bytes memory o = new bytes(64);
+        for (uint256 i; i < 64; ++i) o[i] = h[i + 2];
+        return string(o);
+    }
+
+    /// @dev The ML-DSA signature of `uaMsg` (the registry's `uaMessage`): over `pq_msg = keccak256(TAG ‖ uaMsg)`, as
+    ///      UAMldsaVerifier checks it (PqUA.pqMessage).
+    function _mlSign(bytes32 uaMsg) internal returns (bytes memory) {
+        return _ml(string.concat("sign 65 ", _bare(mlSeed), " ", _bare(PqUA.pqMessage(PqUA.tag(ML65), uaMsg))));
+    }
+
+    /// @dev Registered as `_registerDerived` (no attributes), the PoP an ML-DSA-65 signature; the Step 5 verifiers are pure
+    ///      Solidity (PRECOMPILE() = 0), so this runs on the fork and on the SCaaS testnet alike, after `cacheExpandedKey`.
+    function _registerMl() internal {
+        mlSeed = keccak256(abi.encode(runSalt, "mldsa65"));
+        bytes memory pk = _ml(string.concat("keygen 65 ", _bare(mlSeed)));
+        require(pk.length == 1952, "ML-DSA-65 key");
+        bytes32 ua = UAKinds.uaOf(ML65, pk);
+        bytes32 rd = UAKinds.registrationDigest(ua, ML65, 0, UAKinds.kemRecordHash(ua, 0, bytes("")), 0);
+        bytes memory pop = _mlSign(IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_POP_V2, rd));
+        IUARegistry.UAAttrs memory none;
+        // no precompile: the registry verifies an ML-DSA key through its cached expanded key (two SSTORE2 parts for
+        // ML-DSA-65, CTR-UA-39's verifyCached); a FIPS-key verify does not fit the kind's verify cap
+        // each asks a fixed 56 M (under 60 M): the fork's estimate undershoots regular + state gas (EIP-8037)
+        vm.startBroadcast(k1);
+        IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 0);
+        IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 1);
+        uaM = IUARegistry(registry).register{gas: 56_000_000}(ML65, pk, none, pop, "");
+        vm.stopBroadcast();
+        require(uaM == ua && IUARegistry(registry).kindOf(ua) == ML65, "ML-DSA UA");
     }
 
     // ------------------------------------------------------------------ token configs
@@ -368,6 +419,7 @@ contract Tokens is OnchainBase {
 
     function _common() internal {
         _direct();
+        _pq();
         _executeMeta();
         _transfers();
         _generic();
@@ -386,6 +438,27 @@ contract Tokens is OnchainBase {
         NormalToken(t).transferToUA(uaD, 10);
         vm.stopBroadcast();
         require(IERC20(t).allowance(address(fA), address(fB)) == 0, "allowance spent");
+    }
+
+    /// @dev The PQ signer: test key 1 funds the ML-DSA-65 UA (`transferToUA`), which signs one relayed `mtxTransfer` (fee 0)
+    ///      and one `mtxTransferWithFee` (FIXED 5 to test key 3), sent by test key 2; the registry verifies each by
+    ///      `requireAuthorized` under `metatx`.
+    function _pq() internal {
+        NormalToken n = NormalToken(t);
+        vm.broadcast(k1);
+        n.transferToUA(uaM, 10_000);
+        MetaTxLib.UAMetaTransfer memory x = _tr(_pad(a3), 100, 0);
+        (x.from, x.nonce) = (uaM, n.mtxNonce(uaM, 0));
+        IUARegistry.UASig memory s;
+        s.signature = _mlSign(IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_METATX, n.mtxTransferDigest(x)));
+        vm.broadcast(k2);
+        n.mtxTransfer(uaM, x.to, 100, 0, x.nonce, vu, 0, address(0), s);
+        x = _tr(_pad(a2), 1_000, 0);
+        (x.from, x.nonce, x.mode, x.fee, x.feeRecipient) = (uaM, n.mtxNonce(uaM, 0), FIXED_FEE, 5, a3);
+        s.signature = _mlSign(IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_METATX, n.mtxTransferDigest(x)));
+        vm.broadcast(k2);
+        n.mtxTransferWithFee(uaM, x.to, 1_000, 0, x.nonce, vu, FIXED_FEE, address(0), 5, a3, s);
+        require(n.balanceOfUA(uaM) == 10_000 - 100 - 1_000 - 5, "PQ signer balance");
     }
 
     /// @dev The address `MetaTransaction` (v3) of `cancelNonce(77)`, signed by test key 1, relayed.
@@ -536,7 +609,9 @@ contract Tokens is OnchainBase {
         NormalRegulatedToken r = NormalRegulatedToken(t);
         vm.startBroadcast(k1);
         r.setTaxRate(10_000); // 1 %; a rise waits noticePeriod(), 0 on this factory
-        r.setTaxRecipient(_pad(a3));
+        // a fixed limit: RegulatedBase refuses the registry check below REGISTRY_GAS x 64/63 + margin left
+        // (RegistryGasStarved(50000, 54362) at forge's simulated 51,440 x 2.00 on a fresh anvil): gasUsed is not that floor
+        r.setTaxRecipient{gas: 500_000}(_pad(a3));
         vm.stopBroadcast();
         IRegulatedToken.TaxConfig memory tc = r.taxConfig();
         require(tc.effectivePpm == 10_000, "tax rate");

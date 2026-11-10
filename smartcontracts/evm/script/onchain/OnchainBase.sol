@@ -10,7 +10,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 ///         `vm.broadcast` / `vm.startBroadcast` with a key, `vm.sign` off chain, reads of the deploy JSON). Each group
 ///         writes its book `deployments/onchain-<net>-<group>.json` (address -> contract label of groups.json) for
 ///         `coverage.py`. Keys from the environment, never printed: ONCHAIN_K1..K3 (default the 7622 genesis test keys
-///         0x…01-0x…03). ONCHAIN_NET (local | 7622) names the book. Test chains only. UNAUDITED.
+///         0x…01-0x…03). ONCHAIN_NET (the target: local | scaas-testnet | <name>) names the book. Test chains only. UNAUDITED.
 abstract contract OnchainBase is Script {
     bytes32 internal constant SALTED_DOMAIN =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");

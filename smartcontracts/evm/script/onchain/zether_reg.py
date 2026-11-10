@@ -68,8 +68,9 @@ def book(net, script):
     reg = script in ("ZetherRegE2E", "ZetherRegMore")
     tag = {"ZetherE2E": "zether-e2e", "ZetherRegE2E": "zether-reg-e2e", "ZetherMore": "zether-more",
            "ZetherRegMore": "zether-reg-more"}[script]
-    e = json.load(open(os.path.join(EVM, f"deployments/7622-{tag}.json")))
-    d = json.load(open(os.path.join(EVM, "deployments/7622.json")))
+    chain = os.environ["CHAIN"]  # the target chain id (zether.sh): its own deploy and e2e files
+    e = json.load(open(os.path.join(EVM, f"deployments/{chain}-{tag}.json")))
+    d = json.load(open(os.path.join(EVM, f"deployments/{chain}.json")))
     b = {e["normal_zether_token"]: "NormalZetherRegulatedToken" if reg else "NormalZetherToken",
          e["wrapped_zether_token"]: "WrappedZetherRegulatedToken" if reg else "WrappedZetherToken",
          e["underlying_erc20"]: "MockERC20", d["zether_registry"]: "UARegistry", d["token_factory"]: "OpenFactory",

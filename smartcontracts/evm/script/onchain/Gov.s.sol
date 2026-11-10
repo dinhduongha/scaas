@@ -364,36 +364,54 @@ contract Gov is OnchainBase {
         }
     }
 
+    /// @dev The direct powers on kind 8, then on the Zether regulated kinds 10 and 11 (their public layer: the same
+    ///      RegulatedLib entries through each release's own dispatch; BLS12-381 version 1, no auditor, as ZetherE2E).
     function _regulatedDirect() internal {
-        t8 = _create(IOpenFactory.TokenKind.NORMAL_REGULATED, _regCfg("oG8", false), "NormalRegulatedToken");
+        t8 = _regulatedDirect(IOpenFactory.TokenKind.NORMAL_REGULATED, "oG8", false, false, "NormalRegulatedToken");
+        _regulatedDirect(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, "oG10", false, true, "NormalZetherRegulatedToken");
+        _regulatedDirect(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, "oG11", true, true, "WrappedZetherRegulatedToken");
+    }
+
+    function _regulatedDirect(IOpenFactory.TokenKind kind, string memory sym, bool wrapped, bool zether, string memory label)
+        internal returns (address t)
+    {
+        IFactoryToken.TokenConfig memory c = _regCfg(sym, wrapped);
+        if (zether) c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0);
+        t = _create(kind, c, label);
+        if (wrapped) {
+            vm.startBroadcast(k1);
+            u.approve(t, 100_000);
+            IWrappedToken(t).wrap(100_000);
+            vm.stopBroadcast();
+        }
         vm.broadcast(k1);
-        IERC20(t8).transfer(a2, 1_000);
+        IERC20(t).transfer(a2, 1_000);
         bytes32 r = _ref();
-        _skaExec(iss, pkI, t8, abi.encodeCall(IRegulatedToken.freeze, (_pad(a3), r, bytes32(0))));
-        require(IRegulatedToken(t8).isFrozen(_pad(a3)), "frozen");
-        _skaExec(iss, pkI, t8, abi.encodeCall(IRegulatedToken.unfreeze, (_pad(a3), r)));
-        _skaExec(iss, pkI, t8, abi.encodeCall(IRegulatedToken.pause, (r, uint64(block.timestamp + 1 hours))));
-        _skaExec(iss, pkI, t8, abi.encodeCall(IRegulatedToken.unpause, (r)));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.freeze, (_pad(a3), r, bytes32(0))));
+        require(IRegulatedToken(t).isFrozen(_pad(a3)), "frozen");
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.unfreeze, (_pad(a3), r)));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.pause, (r, uint64(block.timestamp + 1 hours))));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.unpause, (r)));
         bytes32 oid = _ref();
-        _skaExec(cmp, pkC, t8, abi.encodeCall(IRegulatedToken.recordOrder,
+        _skaExec(cmp, pkC, t, abi.encodeCall(IRegulatedToken.recordOrder,
             (oid, keccak256("order doc"), _pad(a2), _pad(a3), uint256(100), uint64(block.timestamp + 1 days))));
         bytes32 rid = keccak256(abi.encode(oid, _pad(a2), _pad(a3)));
-        _skaExec(iss, pkI, t8, abi.encodeCall(IRegulatedToken.freeze, (_pad(a2), r, rid)));
-        _skaExec(iss, pkI, t8, abi.encodeCall(IRegulatedToken.forceTransfer, (rid, uint256(40))));
-        _skaExec(cmp, pkC, t8, abi.encodeCall(IRegulatedToken.revokeOrder, (rid, _ref())));
-        require(!IRegulatedToken(t8).isFrozen(_pad(a2)), "revoke ends the record freeze");
-        _skaExec(iss, pkI, t8, abi.encodeCall(IRegulatedToken.setTaxRate, (uint32(1_000))));
-        _skaExec(iss, pkI, t8, abi.encodeCall(IRegulatedToken.setTaxRecipient, (_pad(a1))));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.freeze, (_pad(a2), r, rid)));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.forceTransfer, (rid, uint256(40))));
+        _skaExec(cmp, pkC, t, abi.encodeCall(IRegulatedToken.revokeOrder, (rid, _ref())));
+        require(!IRegulatedToken(t).isFrozen(_pad(a2)), "revoke ends the record freeze");
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.setTaxRate, (uint32(1_000))));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.setTaxRecipient, (_pad(a1))));
         vm.broadcast(k1);
-        IGovernance(t8).grantRole(GovernanceBits.OPERATOR_TRANSFER, _pad(a1)); // any holder (bit 22)
+        IGovernance(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, _pad(a1)); // any holder (bit 22)
         vm.broadcast(k1);
-        IRegulatedToken(t8).operatorTransfer(_pad(a2), _pad(a3), 10, _ref());
+        IRegulatedToken(t).operatorTransfer(_pad(a2), _pad(a3), 10, _ref());
         vm.broadcast(k1);
-        u2.mint(t8, 77); // a stray asset
+        u2.mint(t, 77); // a stray asset
         vm.broadcast(k2);
-        IRescuable(t8).rescue(address(u2)); // anyone, to rescueTo
+        IRescuable(t).rescue(address(u2)); // anyone, to rescueTo
         vm.broadcast(k1);
-        IGovernance(t8).disableFeature(GovernanceBits.PAUSE); // the regulated override clears the control
+        IGovernance(t).disableFeature(GovernanceBits.PAUSE); // the regulated override clears the control
     }
 
     // ------------------------------------------------------------------ kind 9: the powers through the router

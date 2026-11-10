@@ -3,20 +3,18 @@
 """T66b Step 5b, group `verifiers`: every UA verifier of the Step 5 deploy asked by eth_call on the node with the
 cross-language vectors (smartcontracts/vectors/ua/signatures.json `derived`, pq_signatures.json `kinds`): `verifyPop`
 over the PoP and `verify` over the first signature must answer true, and the same with the message flipped must answer
-false (a negative). The verifier addresses are the Step 5 deploy's (its runs note, the deploy rows). Records:
+false (a negative). The verifier addresses come from the target's base book (basebook.py, its own deploy). Records:
 runs/…-step5b/records-<net>-verifiers.jsonl, book deployments/onchain-<net>-verifiers.json.
   python3 -I script/onchain/verifiers.py <net> <rpc>
 MuSig2 / FROST have no row in these vectors (their keys are aggregates): not asked here. UNAUDITED."""
 import json
 import os
-import re
 import sys
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.abspath(os.path.join(HERE, "../.."))
 VEC = os.path.join(EVM, "../vectors/ua")
-NOTE = os.path.join(EVM, "runs/2026-11-10-ua-mtx-merge-t66b-step5-7622.txt")
 OUTD = os.path.join(EVM, "runs/2026-11-10-ua-mtx-merge-t66b-step5b")
 VERIFY, VERIFY_POP = "024ad318", "53e5293f"
 BY_NAME = {"webauthn-p256": "WebAuthnP256Verifier", "p256": "P256Verifier", "bip340": "Bip340Verifier",
@@ -46,9 +44,8 @@ def enc(sel, kd, msg, sig):
 
 def main():
     net, url = sys.argv[1], sys.argv[2]
-    rows = re.findall(r"^\d+ \| (\w+) -> (0x[0-9a-f]{40}) \|", open(NOTE).read(), re.M)
-    at = {}
-    for name, a in rows:
+    at = {}  # the target's base book (basebook.py), in deploy order: the first UAMldsaVerifier is 44, the second 65
+    for a, name in json.load(open(os.path.join(EVM, f"deployments/onchain-{net}-base.json"))).items():
         at.setdefault(name, []).append(a)
     vec = [(x["name"], x) for x in json.load(open(os.path.join(VEC, "signatures.json")))["derived"]]
     vec += [(x["name"], x) for x in json.load(open(os.path.join(VEC, "pq_signatures.json")))["kinds"]]

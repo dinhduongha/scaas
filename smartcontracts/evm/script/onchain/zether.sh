@@ -55,7 +55,7 @@ for s in ZetherE2E:plain:run ZetherRegE2E:reg:run ZetherMore:more:more ZetherReg
   B=broadcast/$n.s.sol/$CHAIN/$f-latest.json
   [ -f "$B" ] || continue
   lc=$(echo "$n" | tr 'A-Z' 'a-z')
-  python3 -I script/onchain/zether_reg.py book "$NET" "$n"
+  CHAIN=$CHAIN python3 -I script/onchain/zether_reg.py book "$NET" "$n"
   python3 -I script/onchain/coverage.py forge "$NET" "deployments/onchain-$NET-$lc.json" "$B"
   [ "$NET" != local ] || python3 -I script/onchain/coverage.py trace "$NET" "$lc" "$RPC"
 done

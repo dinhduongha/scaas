@@ -1,0 +1,19 @@
+{
+  "_comment": "T66b Step 5b: why a state-changing entry has no transaction of its own (coverage.py note --reasons). {contract label or *: {signature glob: reason}}; the first match wins, the contract's own rows before *. A reason names what stops the call, never 'not done'.",
+  "GovernanceRouter": {
+    "executeMetaTransaction(*": "refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)",
+    "mtxExecute(*": "refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)",
+    "mtxBatch(*": "refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)",
+    "mtxExecuteRate(*": "waits the token's rate delay (2 days) after mtxProposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (gov)"
+  },
+  "MandateWallet": {
+    "executeMetaTransaction(*": "refused by design (an address meta-transaction: none is taken); its negative runs (misc)"
+  },
+  "SmartKeyAccount": {
+    "completeRecovery(*": "waits RECOVERY_DELAY (2 days) after initiateRecovery; a real chain cannot skip time: its negative runs (gov)"
+  },
+  "*": {
+    "initialize(*": "the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)",
+    "executeRate()": "waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)"
+  }
+}

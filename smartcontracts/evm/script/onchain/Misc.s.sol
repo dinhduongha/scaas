@@ -50,6 +50,8 @@ contract Misc is OnchainBase {
     ///      (seen on the local copy: `mtxRevokeMandate` out of gas at 118,611, `eth_estimateGas` 126,858). An explicit call
     ///      gas is the transaction's limit.
     uint256 internal constant REFUND_GAS = 1_000_000;
+    /// @dev The SCaaSDex release (`deployDexImplementation`): at most 60 M asked (NET-EVM-11).
+    uint256 internal constant DEX_RELEASE_GAS = 59_000_000;
 
     IUARegistry reg;
     OpenFactory f5; // the Step 5 factory
@@ -137,29 +139,9 @@ contract Misc is OnchainBase {
         _expandedKey();
     }
 
-    /// @dev The UA kinds' verifiers of the Step 5 registry (its deploy rows 13-31 in
-    ///      runs/2026-11-10-ua-mtx-merge-t66b-step5-7622.txt; CREATE2, the same on a copy of the chain).
-    function _verifiers() internal {
-        _book(vm.parseAddress("0xbc186910a2e41472774bc70309b520bc6c91c377"), "WebAuthnP256Verifier");
-        _book(vm.parseAddress("0x5413a1ebb4532ccb5fae826c9f988a2f4ab491b9"), "P256Verifier");
-        _book(vm.parseAddress("0x8fe751cd903738f3a97fe907599c76fe5b990c56"), "Ed25519Verifier");
-        _book(vm.parseAddress("0x4928c005b33041f3e1c76a00c9091c43c930c0c3"), "Bip340Verifier");
-        _book(vm.parseAddress("0xa83e3322e92b3ad98aa8640ecc67aa5a7fa73b17"), "Secp256k1Verifier");
-        _book(vm.parseAddress("0x1db18239bc33375db786d5400c349819e1c40088"), "SchnorrBn254Verifier");
-        _book(vm.parseAddress("0x6c38a4728c97207648fc18e7e7b355f7a357562d"), "SchnorrBls12381Verifier");
-        _book(vm.parseAddress("0xcd4a9c294ed124a1c168c9290f0039a907da4ff6"), "BlsMinSigBls12381Verifier");
-        _book(vm.parseAddress("0x36ea0cbbca4675e437cc7e5706ea2f084d165f2f"), "BlsMinSigBn254Verifier");
-        _book(vm.parseAddress("0xaf6673eeb81c7ddf3f3c7be31773543364920bb4"), "Musig2Secp256k1Verifier");
-        _book(vm.parseAddress("0x423df3b68abd3b956fe548474eb5a725cfc20465"), "UAFrostSecp256k1Verifier");
-        _book(vm.parseAddress("0xc87bd16c2fcc769c8f9b656a705e54a2eebb013e"), "Musig2Bn254Verifier");
-        _book(vm.parseAddress("0x7efb601126ace67bce7c41c677d42020bf92b214"), "FrostBn254Verifier");
-        _book(vm.parseAddress("0xbc3d1bf1401cadbe794e2da2e2b13fff06d81511"), "ZetherSchnorrBls12381Verifier");
-        _book(vm.parseAddress("0x341f2e6b9076cb674ac7550e9adf18459d893d00"), "UAMldsaVerifier");
-        _book(vm.parseAddress("0xc14253172b6f91fcd796380e34cec79f23a7df75"), "UAMldsaVerifier");
-        _book(vm.parseAddress("0x96093a8e1217d8f570548b4bcfd8620c2938e62a"), "UAFndsaVerifier");
-        _book(vm.parseAddress("0xda0701e649a6104d028c5956338c1f5bfcf9bbb1"), "UASlhdsaVerifier");
-        _book(vm.parseAddress("0x1241f1cf26116373806c592b96ea356ec956bc26"), "UAFndsaVerifier");
-    }
+    /// @dev The UA kinds' verifiers: booked by the target's base book (basebook.py, from the target's own deploy), so the
+    ///      script names no address of one chain.
+    function _verifiers() internal {}
 
     /// @dev The portable vectors' UAs, one per kind (their PoPs carry no chain context, UA-8): each registered as it is.
     function _vectors() internal {
@@ -317,8 +299,10 @@ contract Misc is OnchainBase {
         _classKind();
         vm.startBroadcast(k1);
         f2.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "onchain matrix: deprecated after its use");
-        f2.setKindEnabled(IOpenFactory.TokenKind.WRAPPED, true); // already on (the default 0 and 1): an idempotent write
-        f2.setKindEnabled(IOpenFactory.TokenKind.NORMAL, false);
+        // already on (the default 0 and 1): an idempotent write. Both carry REFUND_GAS: the simulated 21,147 x 1.10 ran out
+        // of gas on a fresh anvil (the fork's receipt: 19,904), and the NORMAL write frees a slot
+        f2.setKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.WRAPPED, true);
+        f2.setKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.NORMAL, false);
         vm.stopBroadcast();
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.deployImplementation, (IOpenFactory.TokenKind.NORMAL, 2, 2,
             type(NormalToken).creationCode, implArgs)), IOpenFactory.ModuleNotPinned.selector,
@@ -390,7 +374,9 @@ contract Misc is OnchainBase {
         ISCaaSDex.DexConfig memory c = ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, a1);
         vm.startBroadcast(k1);
         f2.publishDexEnv(1, e);
-        address impl = f2.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, abi.encode(ImplArgs(d)));
+        // a fixed limit: the release's regular + EIP-8037 state gas, simulated 51.9 M on the SCaaS testnet and 55.1 M on a
+        // fresh anvil, would ask more than 60 M at the group's x 1.30
+        address impl = f2.deployDexImplementation{gas: DEX_RELEASE_GAS}(1, 1, type(SCaaSDex).creationCode, abi.encode(ImplArgs(d)));
         address dex = f2.createDex(1, abi.encode(c), _salt("f2-dex"));
         f2.deprecateDex(1, "onchain matrix: deprecated after its use");
         vm.stopBroadcast();
