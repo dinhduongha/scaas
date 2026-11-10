@@ -3,13 +3,9 @@
 **Status:** SPECIFIED, nothing built, **UNAUDITED**. Written 2026-11-10 for three owner rulings of the same day (§1); **the
 owner answered Q1–Q6 and ruled the directory the same day (§10, §13)**, recorded in `decisions.md` as CTR-GOV-23 and its
 Changes (§11). **Fable review 2026-11-10: approve with fixes, no P0**; every finding is applied below, each checked against the
-code first, and tagged (Fable P1-1 …). **The owner ruled P1-2 the same day (option (A)): the admin deploys releases
-by calling the factory directly, never through the router; a derived admin signs an entry the factory verifies itself; each
-release face's deploy asks at most 50 M (§5.6).** The owner also ruled P2-5 (no usage restriction) and made the relay pair a
-write-once entry (§13). Branch
-`ua-mtx-3r`, off `ua-mtx-merge` `74262fa0`; every `file:line` below is at that commit (contracts under
-`smartcontracts/evm/`). No figure here was measured for the new code: [measured] a figure already in the repo, [estimate]
-arithmetic over one, [inference] from the EVM's rules, checked at the build. Owner rulings: §10. Decisions: §11.
+code first, and tagged (Fable P1-1 …). **The owner's final ruling on P1-2 the same day: the admin
+approves one release by hash, and anyone deploys it straight to the factory; a native admin's own deploy is its own approval
+(§5.6).** The owner also ruled P2-5 (no usage restriction) and made the relay pair a write-once entry (§13).
 
 ## 1. The rulings (owner, 2026-11-10, in chat)
 
@@ -187,7 +183,7 @@ modifier onlyAdmin() { bytes32 c = _adminSubject(); if (c == 0 || c != $().admin
 
 The semantics are `GovernanceLib`'s (`:382-408`) and CTR-GOV-07's: two steps with acceptance, a renounce clears the pending and
 is one-way. No pool check (the factory and the registry hold no pool). `adminGeneration` moves at every accept and renounce, as
-`GovernanceLib`'s `ownerGeneration` does, so a derived admin's signed deploy dies with the admin's term (§5.6). The pending has
+`GovernanceLib`'s `ownerGeneration` does, so an approval dies with the admin's term (§5.6). The pending has
 no expiry, as in `GovernanceLib`: a forgotten pending can accept years later; the admin cancels it with `transferAdmin(0)`
 (Fable P3).
 
@@ -197,7 +193,7 @@ no expiry, as in `GovernanceLib`: a forgotten pending can accept years later; th
   `AdminTransferred(0, admin_)`. The factory's address stays chain-neutral: the first admin is the same native id on every chain.
 - `onlyRegistrar` → `onlyAdmin` on `configureChain`, `publishEnv`, `publishDexEnv`, `publishClassEnv`, `deprecate`,
   `deprecateDex`, `deprecateRelease`, `setKindEnabled`, `setClassKindEnabled` (`OpenFactory.sol:113-416`); the three release
-  deploys: a native admin's direct call, or a derived admin's signed `mtxDeploy*` on the factory, never the router (§5.6).
+  deploys: open to anyone against an approval, and a native admin's own call is its own approval (§5.6).
   `_adminRouter()` is `govRouter`; the router's subject read shares `_creatorId()`'s source (`:631-636`).
 - **`configureChain` is direct only, by construction:** before it `govRouter` is 0, so the router path does not exist; the factory
   cannot trust a router it has not been told of (a contract that names itself the router could answer any `subject()`). Hence a
@@ -263,7 +259,7 @@ attester sends its own `attest`.) Hence:
 
 In `GovernanceRouterBase` (every `IAdmin` contract): the three renamed ops, which reach the factory and the registry too, as
 their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creations
-(`src/governance/GovernanceRouter.sol:215-241`), eleven new ops (`UASetChainEntries` from §13), each
+(`src/governance/GovernanceRouter.sol:215-241`), fifteen new ops (the four of §5.6, `UASetChainEntries` from §13), each
 `mtx<Op>(UAEnvelope e, address target, <params>, UASig auth)` over `UA<Op>(bytes32 from,address target,<words>,E)`, fee mode
 `NONE`, relayable at fee 0:
 
@@ -272,6 +268,10 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
 | `UAPublishEnv` | `uint8 kind,uint16 envVersion,Env env` | `publishEnv` |
 | `UAPublishDexEnv` | `uint16 envVersion,Env env` | `publishDexEnv` |
 | `UAPublishClassEnv` | `uint16 contractClass,uint16 kind,uint16 envVersion,Env env` | `publishClassEnv` |
+| `UAApproveTokenRelease` | `uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveTokenRelease` (§5.6) |
+| `UAApproveDexRelease` | `uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveDexRelease` |
+| `UAApproveRelease` | `uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveRelease` |
+| `UARevokeApproval` | `bytes32 key` | `revokeApproval` |
 | `UADeprecate` | `uint8 kind,uint64 version,string reason` | `deprecate` |
 | `UADeprecateDex` | `uint64 version,string reason` | `deprecateDex` |
 | `UADeprecateRelease` | `uint16 contractClass,uint16 kind,uint64 version,string reason` | `deprecateRelease` |
@@ -284,15 +284,14 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
 - `Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[]
   libCodeHashes)` is appended to the three publish types and hashed as EIP-712 does (each array `keccak256` of its 32-byte
   words), so every field of the env is signed by name.
-- No release deploy is a router op (§5.6). A
+- No release deploy is a router op (§5.6); the approvals sign the release's hashes as `UACreateToken` signs `initHash` (S3). A
   `string reason` is signed as `keccak256(bytes(reason))`, as EIP-712 hashes a string (Fable P1-3). The ids flat, as
   `UACreateInstance` (`:234-241`). `UAAttest` names its third array `until` because `validUntil` is an envelope word (the
   precedent: `UAOperatorTransfer`'s `account`, `GovernanceRouter.sol:105`).
-- No `mtxConfigureChain` (§5.2) and no deploy op. The router's entries go from 38 to 49.
-- **Release deploys are not router ops and not node jobs** (owner, Q3 as updated, §5.6): a native admin's deploy is its own direct
-  call; a derived admin's signed `mtxDeploy*` is a direct factory call that anyone sends, fee 0 too, with init code over the
-  gateway's 64 KiB body (`scaas-node/src/gateway.rs:142`, not raised); the three are in `NOT_ROWS` with the reason "initcode over
-  the gateway limit; anyone may send it" (§7). Every other admin op is a router op and a node row.
+- No `mtxConfigureChain` (§5.2) and no deploy op. The router's entries go from 38 to 53.
+- **Release management is not a node job** (owner 2026-11-10; Q3 as updated, §5.6): neither the four approval ops nor the three
+  deploys are node rows; all seven are in `NOT_ROWS` with the reason "release management is not a node job (owner 2026-11-10)"
+  (§7). The gateway's limit is irrelevant. Every other admin op is a router op and a node row.
 - **Node decode bounds** (Fable P3): `Env.deps` ≤ 4 and `Env.params` ≤ 2 (the factory's `ChainEnvCode.MAX_DEPS`, `MAX_PARAMS`);
   `libs` and `libCodeHashes` of one length ≤ 32, with a new factory bound `MAX_LIBS` (`EnvInvalid`) so the node and the contract
   refuse the same (today's largest env measured in T7); `UAAttest`'s three arrays of one length ≤ 256 (§5.3.1); every array
@@ -326,119 +325,75 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
 - **The router and the UA registry join the trust root for code** (Fable P2-5). Today a flaw there forges a creator id at worst;
   after 3r any flaw that makes `subject()` answer the admin's id (the pipeline, a kind's verifier, `msig` aggregation) publishes
   envs and moves the admin, and nothing detaches the router (written once); a flaw in the registry's check of the admin's
-  signature also deploys releases through the factory's signed entries (§5.6). Both are UNAUDITED. Stated as information only:
+  signature also approves releases (§5.6). Both are UNAUDITED. Stated as information only:
   derived admins may be used on every chain at once, with no audit gate (owner 2026-11-10, on P2-5). The notice period gives
   watchers time to see a release before it is creatable; it does not stop one, as a deprecation needs the admin. Tests (§8): a
   7702-delegated native admin through the router is verified by its own key, never by the delegate's ERC-1271 (D1, CTR-UA-24); a
   nested router op is refused by the router's guard (`src/metatx/MetaTxBase.sol:285`).
 
-### 5.6 Release deploys: straight to the factory (owner ruling 2026-11-10 on Fable P1-2, option (A))
+### 5.6 Release deploys: approve, then an open deploy (owner ruling 2026-11-10, final)
 
-**Ruling (owner).** The admin deploys releases by calling the factory directly; a release deploy never goes through the router.
-There is no approval step: a deploy is a deploy (an approve-then-open-deploy split was drafted and dropped the same day). Status:
-decided, SPECIFIED. **Why** (Fable P1-2): through the router a release would pay one more call frame under the 63/64 rule, the
-copy and `keccak256` of its init code and the admin's check, and a derived admin has no other path.
+**Ruling (owner, final).** It replaces two drafts of the same day (an approval split with node rows; then "option (A)": signed
+deploy entries on the factory under a 50 M per-release rule). Status: decided, SPECIFIED. **Why** (Fable P1-2): through the router
+a release would pay one more call frame, the copy and `keccak256` of its init code and the admin's check, and a derived admin has
+no other path; split, the signed part is small and the large transaction verifies nothing.
 
-- **A native admin** (an EOA, or a contract, by its native id) calls `deployTokenImplementation`, `deployDexImplementation`,
-  `deployImplementation` with `pad(msg.sender) == admin` and `requireNotDelegated` (D2): today's path and today's gas. These three
-  read no router subject (`onlyNativeAdmin`), so no router op, present or future, reaches them.
-- **A derived admin** (`msig`, ML-DSA, passkey, …) has no sending address, so the factory takes one signed entry per deploy,
-  sent by anyone, fee 0 (the factory pays no one):
-  - `mtxDeployTokenImplementation(bytes32 from, TokenKind kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs,
-    uint256 validUntil, UASig sig)`, `mtxDeployDexImplementation(bytes32 from, uint64 version, uint16 envVersion, bytes initcode,
-    bytes implArgs, uint256 validUntil, UASig sig)`, `mtxDeployImplementation(bytes32 from, ReleaseId id, uint16 envVersion, bytes4
-    initSelector, bytes4 interfaceId, bytes initcode, bytes implArgs, uint256 validUntil, UASig sig)`.
-  - Typed structs in the factory's own EIP-712 domain `("SCaaS OpenFactory", "1", chainId, factory, chain_uid)`:
-    `UADeployTokenImplementation(bytes32 from,uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32
-    implArgsHash,uint32 adminGeneration,uint256 validUntil)`, `UADeployDexImplementation(bytes32 from,uint64 version,uint16
-    envVersion,bytes32 initcodeHash,bytes32 implArgsHash,uint32 adminGeneration,uint256 validUntil)`,
-    `UADeployImplementation(bytes32 from,uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4
-    initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,uint32 adminGeneration,uint256 validUntil)`. The
-    factory computes both hashes from the call's bytes and reads `adminGeneration` from storage.
-  - Checks, in order: `configured`; `from == admin` (`NotAdmin(from)`); `block.timestamp ≤ validUntil` (`SignatureExpired`);
-    `IUARegistry(uaRegistry()).requireAuthorized(from, PURPOSE_METATX, digest, sig)`, the registry the factory learnt at
-    `configureChain` (§13.4; it takes native ids too, `src/ua/IUARegistry.sol:429-437`); then today's deploy body. No router frame.
-  - No `UAEnvelope`: the factory takes no fee, and a version registers once, so the envelope's nonce, fee and relayer words would
-    bind nothing; the struct binds `adminGeneration` (a signature dies at every change of admin, A → B → A included) and
-    `validUntil` instead. A signed deploy that reverted (out of gas) stays valid until it lands or expires.
-  - Not a router op and not a node job (§5.4): the three `mtxDeploy*` are in `NOT_ROWS` with the reason "initcode over the
-    gateway limit; anyone may send it". Without a router (`uaRegistry()` 0) only the native path exists.
+1. **Approve.** The factory admin, any UA kind, through the `governed` pattern (directly as its native id, or the router's
+   `subject()`), approves **one release by hash**:
+   - `approveTokenRelease(TokenKind kind, uint64 version, uint16 envVersion, bytes32 initcodeHash, bytes32 implArgsHash, bytes32
+     chainUid, address factory, uint32 adminGeneration, uint64 until)`;
+   - `approveDexRelease(uint64 version, uint16 envVersion, bytes32 initcodeHash, bytes32 implArgsHash, bytes32 chainUid, address
+     factory, uint32 adminGeneration, uint64 until)`;
+   - `approveRelease(ReleaseId id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId, bytes32 initcodeHash, bytes32
+     implArgsHash, bytes32 chainUid, address factory, uint32 adminGeneration, uint64 until)` (what `deployImplementation` binds).
 
-**The size and gas rule (owner).** Every release face's deploy asks at most **50 M** (NET-EVM-11's measure,
-`(regular + state) × 1.05`), which leaves about **10 M** of a 60 M block for the admin's signature check in the same
-transaction; the whole transaction keeps `regular × 1.05 < 2^24`. A gate test asserts the measured asked gas of every release
-face ≤ 50 M (its red case: a face padded past it fails). Recorded as a NET-EVM-11 Change (§11). Modules, libraries and the
-factory itself are deployed without an admin signature and keep the 60 M rule only (`NormalPqzRegulatedTokenQ` 54,760,898
-[measured, `runs/2026-11-10-ua-mtx-3p/summary.txt`]; `OpenFactory` 49,297,879 at reset 2, about +2 to +3 KB in 3r, so
-roughly 53–54 M [estimate]).
+   Each is `onlyAdmin configured`; `chainUid`, `factory` and `adminGeneration` must be the factory's own
+   (`ApprovalFieldMismatch(field)`), `until` in the future. It stores `approvals[key] = {LIVE, adminGeneration, until}` with
+   `key = keccak256(abi.encode(tag, chainUid, factory, <the release fields>, envVersion, initcodeHash, implArgsHash))`, one tag
+   per domain (`"scaas.factory.release.token"`, `.dex`, `.class`), and emits `ReleaseApproved(key, …)`; a live approval for the
+   same key is refused (`ApprovalLive(key)`); `approvalOf(key)` answers it. Through the router these are `UAApproveTokenRelease`,
+   `UAApproveDexRelease`, `UAApproveRelease` (§5.4): relayable, anyone sends them, fee 0 too, and small, so an `msig` of several
+   PQ signatures fits (its check is bounded by the registry's per-call budget, `UA_VERIFY_BUDGET` 12 M,
+   `script/DeployBase.sol:128-130`, far under NET-EVM-11's 60 M). The approval's expiry is named `until`, not `validUntil`,
+   because the router's envelope already has `validUntil`, the signature's deadline (the precedent of `UAAttest`).
+2. **Revoke.** `revokeApproval(bytes32 key)`, `onlyAdmin configured`, deletes a live approval (`ApprovalNotLive(key)` for an
+   unknown or consumed one) and emits `ReleaseApprovalRevoked(key)`; through the router `UARevokeApproval`.
+3. **Deploy.** `deployTokenImplementation`, `deployDexImplementation`, `deployImplementation` keep their names and ABI, carry no
+   signature and go **straight to the factory, open to anyone**. The factory accepts one only if a live, unexpired approval of
+   the current `adminGeneration` matches its id, `envVersion` and the `keccak256` of its `initcode` and `implArgs` (it rebuilds
+   `key` from the call; else `ReleaseNotApproved(key)`, checked before the version); it marks the approval consumed (each is used
+   once), then runs today's body. `configured` stays: a deploy before `configureChain` is refused. **The shortcut, in the owner's
+   words** (2026-11-10):
 
-| Release face | Asked through the factory | Against 50 M |
-|---|---:|---|
-| `NormalToken` (0) | 24,202,929 [reset 2] | fits |
-| `NormalZetherToken` (2) | 29,833,614 [reset 2] | fits |
-| `NormalRegulatedToken` (8) | 30,541,945 [reset 2] | fits |
-| `NormalPqzToken` (4) | ≈ 33.1 M [estimate, 19,199 B] | fits |
-| `WrappedToken` (1) | 33,669,785 [reset 2] | fits |
-| `NormalZetherRegulatedToken` (10) | 35,781,417 [reset 2] | fits |
-| `NormalPqzRegulatedToken` (12) | ≈ 38.9 M [estimate, 22,710 B] | fits |
-| `WrappedZetherToken` (3) | 39,889,987 [reset 2] | fits |
-| `WrappedRegulatedToken` (9) | 39,931,110 [reset 2] | fits |
-| `WrappedPqzToken` (5) | ≈ 44.5 M [estimate, 26,026 B] | fits |
-| `WrappedZetherRegulatedToken` (11) | 46,211,331 [reset 2] | fits |
-| `PqChat` (class 3) | 47,823,184 [reset 2] | fits (2.2 M spare) |
-| `WrappedPqzRegulatedToken` (13) | ≈ 50.8 M (50,512,802 direct [measured, 3p probe] + the factory frame ≈ 0.31 M) | **over**: about 0.5–1 KB out |
-| `SCaaSDex` | 55,820,670 [reset 2] (51,632,211 used) | **over**: about 4 KB out |
+   | The factory admin | Who sends `deploy*` | Approval |
+   |---|---|---|
+   | a native id | that same account (`msg.sender == admin`) | **none**: one transaction, as today |
+   | a native EOA | another account | **needed**: the EOA signs the approval (its direct `approve*` call or its signed router op), and anyone deploys |
+   | a derived UA (`msig`, ML-DSA, passkey, …) | anyone | **always**: it cannot send a transaction itself |
 
-[reset 2] is `smartcontracts/evm/runs/2026-11-10-scaas-testnet-reset2/summary.txt`, the factory's release transactions. The
-estimates use the fit over the ten reset 2 faces, about 1,671 asked gas per runtime byte plus 0.99 M (within 0.2 M of each),
-with the faces' sizes from `size-baseline.json`.
+   The shortcut checks only `msg.sender` (`pad(msg.sender) == admin`, with `requireNotDelegated`, D2), never a signature, and reads
+   no router subject. Once the admin moves to an `msig` or a PQ UA, the original deployer EOA has no shortcut.
+4. **No node involvement** (owner): the four approval ops and the three deploys are not node rows; all seven are in `NOT_ROWS`
+   with the reason "release management is not a node job (owner 2026-11-10)".
 
-- **`SCaaSDex` under 50 M**, with the lever the liquidity round used for the cancels (`mtxCancelOrders`, `mtxInvalidateNonces`
-  forwarded to `SCaaSDexLiquidityModule`, `src/dex/SCaaSDex.sol:271-286`; liquidity spec §9.3): the hybrid path (`mtxHybrid`,
-  `mtxHybridVia` and their private bodies `_hybridCall`, `_hybridIn`, `_hybridOut`, `_takerSoldCheck`, `_restorePulled`,
-  `:535-648`) moves into `SCaaSDexLiquidityModule` behind two S1-variant stubs, about 3–4.5 KB; the four market setters
-  (`setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit`, with `_power`, `_setFeeSplit`, `_classify`, `:162-216`) move
-  into the governance module (`SCaaSDexGovernanceModule`), about 0.8–1.2 KB [estimate]. Target: the face at most 28.8 KB (from
-  32,809 B), asked about 49 M [estimate]. Each forwarded call pays one warm `DELEGATECALL` frame and the calldata copy, about
-  2–3 k gas [estimate]; the `DexGas` pins move old → new. The build measures and stops if the face is still over 50 M.
-- **Kind 13** (`WrappedPqzRegulatedToken`, 29,795 B): about 0.5–1 KB out, by the same lever in `script/modules/entries.json` (one
-  face-resident body to one of its modules), chosen at the build from `gen_faces.py`'s per-entry sizes. Every other kind fits.
-
-**The admin's check against about 10 M.** The verifier figures below are the repo's measured ones (`script/DeployBase.sol:128-152`,
-`test/ua/PqGas.t.sol`); the factory path adds the `keccak256` of the init code and the EIP-712 hashing, about 0.1–0.2 M
-[estimate]. Nothing here was measured through the factory path, which does not exist yet: T16 measures every row there, regular
-and state apart, before the rule is final.
-
-| Admin | Verify gas | About 10 M? |
-|---|---|---|
-| native EOA or contract, direct call | none: `msg.sender` | yes (today's path) |
-| `secp256k1`, native through the signed entry | ECDSA, cap 50 k | yes |
-| `p256`, `webauthn-p256` | cap 400 k (a Solidity verifier 200–330 k without EIP-7951, `docs/networks/evm.md:170`) | yes |
-| `slhdsa128s` | 1.32 M worst case, cap 1.4 M | yes |
-| `fndsa512` | 2.27–2.35 M, cap 2.5 M | yes |
-| `mldsa44` (cached key, no precompile) | 4.11 M, cap 4.25 M | yes |
-| `fndsa1024` | 4.93 M (largest KAT), cap 5.25 M (provisional) | yes |
-| `mldsa65` (cached key, no precompile) | 5.80 M, cap 5.95 M | yes |
-| `mldsa87` | precompile only, cap 0.25 M (provisional); no verifier without one (Solidity ≈ 8.8 M) | yes where enabled |
-| `msig` 2-of-3 `secp256k1` | two ECDSA, about 0.1 M | yes |
-| `msig` 2-of-n `slhdsa128s` / `fndsa512` | about 2.8 M / 5.0 M (two caps) | yes |
-| `msig` 2-of-n `mldsa44` | about 8.5 M (two caps) | at the edge: measure |
-| `msig` 2-of-n `fndsa1024` / `mldsa65` | about 10.5 M / 11.9 M (two caps) | **no** |
-
-Consequence: one signature of any admitted kind fits, and so does a classical `msig`; an `msig` that needs two ML-DSA-65 or two
-FN-DSA-1024 signatures does not, and two ML-DSA-44 sit at the edge. Such an admin cannot deploy releases (its other admin ops
-are small and unaffected); the admin's shape is chosen with this table. (The registry's per-call budget, `UA_VERIFY_BUDGET` 12 M,
-`script/DeployBase.sol:128-130`, bounds any `msig` anyway.)
+**Gas.** A deploy transaction verifies no signature, so the release gas is exactly today's direct deploy, plus the approval
+lookup when another account sends it (one cold `SLOAD` and one `SSTORE`, a few thousand gas [inference]). NET-EVM-11's 60 M
+per-transaction bound stays as today: every release of the SCaaS testnet reset 2 fits it (the largest, `SCaaSDex`, 55,820,670
+asked [measured, `smartcontracts/evm/runs/2026-11-10-scaas-testnet-reset2/summary.txt`]). An approval costs about one new slot
+(about 98 k state gas) plus the admin's check.
 
 **Threats.**
-- **A wrong admin:** `from` other than the admin refused; a signature by anyone but `from` refused by the registry.
-- **Tampered `initcode` or `implArgs`:** the factory hashes the bytes it deploys, so any change breaks the digest.
-- **Replay across chains or factories:** the domain binds `chainId`, the factory (`verifyingContract`) and `chain_uid` (the salt,
-  so a sibling with the same chain id refuses). On the same factory the version registers once; after a transfer away and back
-  `adminGeneration` differs.
-- **Front-running:** anyone may send the signed bytes; the same release lands at the same `CREATE2` address. A sender who gives
-  too little gas loses only its own gas; the signature stays valid.
-- **A deploy before `configureChain`:** refused (`configured`).
+- **Front-running the open deploy** is harmless: the same bytes land at the same `CREATE2` address with the same result, and the
+  slower sender reverts.
+- **An approval for a wrong hash:** the admin revokes it; it wins only if it lands before a deploy (anyone holding the bytes may
+  send them once the approval is public); after a deploy the remedy is `deprecate*`, and the release is not creatable before
+  `noticePeriod`.
+- **Replay across chains or factories:** blocked by the bound `chainUid` and factory (checked fields, in the key, and in the
+  router's domain and `target`).
+- **A stale approval after an admin change:** dead by `adminGeneration` (a transfer or a renounce moves it, so Q1's "renounce =
+  no release ever" holds and a thief's approvals die at recovery); an expired one is dead at `until`.
+- **A deploy before `configureChain`:** refused.
+- **State:** an approval is about one new slot (about 98 k state gas).
 ## 6. Deploy order (NET-EVM-05, NET-EVM-11)
 
 ```mermaid
@@ -467,7 +422,8 @@ sequenceDiagram
 - `FACTORY_ADMIN_NEXT` (optional `bytes32`): the run's last transaction is `transferAdmin(next)`; the accept is `next`'s signed
   `mtxAcceptAdmin`, a separate step; until then the deployer stays admin and the gate reports the pending.
 - `COMPLIANCE_ADMIN` becomes a `bytes32` UA id, required with `DEPLOY_REGULATED` (no default).
-- NET-EVM-11 and the release deploys: §5.6 (every release face at most 50 M asked; the native deploy is today's transaction).
+- NET-EVM-11 and the release deploys: §5.6 (no signature in a deploy transaction: today's gas plus the approval lookup; the 60 M
+  bound as today).
 - With the directory (§13.10): the relay pair, always under the constant salt and reused when its code is there, comes before
   the factory; `setChainEntries` writes it with the other entries after `configureChain`.
 
@@ -477,11 +433,11 @@ sequenceDiagram
 |---|---|
 | Contracts | §3–§5; `entries.json` → `gen_faces.py`; `face_abi.json` through the rename map |
 | `scaas-node/src/typed.rs` | `:121` `PqTopic(bytes32 admin,…)`; `:207-209` the three renamed rows; eleven new `GR` rows (§5.4) |
-| `scaas-node/src/guard.rs` | the router count `36` → `47` (`:1726`); `AUDIT_KINDS` gains `OpenFactory` as `factory`, whose `SIGNED` entries are exactly the three `mtxDeploy*`, each in `NOT_ROWS` (`:1649-1663`) with the reason "initcode over the gateway limit; anyone may send it"; the decode bounds of §5.4; class `ADMIN` (`:1718`); the `infoOf` mock (`:2465-2466`) |
+| `scaas-node/src/guard.rs` | the router count `36` → `47` (`:1726`); `NOT_ROWS` (`:1649-1663`) + the four approval ops and the three deploys, reason "release management is not a node job (owner 2026-11-10)": the approval ops join the creations' exclusion, and `AUDIT_KINDS` gains `OpenFactory` as `factory`, whose three deploys (class `APPROVED(release)`) the test requires in `NOT_ROWS`; the decode bounds of §5.4; class `ADMIN` (`:1718`); the `infoOf` mock (`:2465-2466`) |
 | `scaas-node/src/abi.rs` | `Created` without `ownerUA` (`:597-605`) |
-| `test/vectors/selector_audit.json` | class `ADMIN`; the router's 11 new `SIGNED` rows; `OpenFactory` added (its `ADMIN` entries, the creations, the three native deploys `ADMIN`, the three `mtxDeploy*` `SIGNED`); the old names gone (both directions, `SelectorAudit.t.sol`) |
-| `clients/clientkeys` | `src/evm.js:360-362` renamed + 11 router rows; the three factory-domain deploy structs (the `Env` type, the arrays); `src/pqchat.js:49`; the governance-bits sentence table; `scripts/typed-ops-vectors.mjs`, `scripts/pqchat-vectors.mjs` |
-| `clients/ua-rs` | a router-op table for the 14 ops and the three factory deploy structs (the pattern of `src/regulated.rs`, `src/wraplimit.rs`), so a PQ or `msig` admin signs them (ua-rs signs every kind); tested against `typed_ops.json` |
+| `test/vectors/selector_audit.json` | class `ADMIN`; the router's 15 new `SIGNED` rows; `OpenFactory` added (its `ADMIN` entries, the creations, the three deploys `APPROVED(release)`); the old names gone (both directions, `SelectorAudit.t.sol`) |
+| `clients/clientkeys` | `src/evm.js:360-362` renamed + 15 router rows (the four approval ops among them); the approval keys (the `Env` type, the arrays); `src/pqchat.js:49`; the governance-bits sentence table; `scripts/typed-ops-vectors.mjs`, `scripts/pqchat-vectors.mjs` |
+| `clients/ua-rs` | a router-op table for the 18 ops and the approval keys (the pattern of `src/regulated.rs`, `src/wraplimit.rs`), so a PQ or `msig` admin signs them (ua-rs signs every kind); tested against `typed_ops.json` |
 | `clients/zether-prover/tests/typed_ops.rs` | `:22-23` the names |
 | `src/regulated/RegulatedLib.sol` | `init` takes the token's `ChainEnv.govRouter` and checks the registry's (§5.3, Fable P1-1); every regulated kind's call site |
 | Verification (NET-EVM-12) | `script/onchain/verify.sh`, `vcheck.py`: the new constructor arguments (`bytes32`; `(bytes32, address)`) and the directory's entries in the completeness check (Fable P3) |
@@ -514,10 +470,10 @@ router each write rows under their own id; a derived attester's id called direct
 
 **Field binding of every new signed op** (Fable P1-3): for each op (`UAPublishEnv`, `UAPublishDexEnv`, `UAPublishClassEnv`,
 `UADeprecate`, `UADeprecateDex`, `UADeprecateRelease`, `UASetKindEnabled`, `UASetClassKindEnabled`, `UASetAttester`, `UAAttest`,
-`UASetChainEntries`, and the factory's `UADeployTokenImplementation`, `UADeployDexImplementation`, `UADeployImplementation`), a
+`UASetChainEntries`, `UAApproveTokenRelease`, `UAApproveDexRelease`, `UAApproveRelease`, `UARevokeApproval`), a
 matrix test that changes one signed word at a time against the signature (each scalar; for each array one element, the length
 and the order; the bytes of `reason`) and expects the router's refusal, with a positive control (the untouched call passes); one
-mutant per op that drops a word from its hash (B1–B14); the digests reproduced by `clientkeys` and `ua-rs` from the same
+mutant per op that drops a word from its hash (B1–B15); the digests reproduced by `clientkeys` and `ua-rs` from the same
 `typed_ops.json` rows, one of them with a non-zero unbound `relayer` and `feeRecipient` (the zeroing of `MetaTxLib`'s canonical
 form; AGENTS, Cryptography).
 
@@ -528,14 +484,17 @@ without a router and a router without code; `transferAdmin` and `renounceAdmin` 
 pending (a renounced factory never comes back through it); a 7702-delegated native admin through the router is checked by its own
 key only (a delegate whose ERC-1271 says yes changes nothing); a nested router op refused; the gas rows of §5.6.
 
-**The deploy ruling** (§5.6): a native admin's direct deploy works as today, at today's gas; a derived admin's (`mldsa65`,
-an `msig` 2-of-3 `secp256k1`, `webauthn-p256`) signed deploy works when a stranger sends it; refused: a wrong admin (`from` not the
-admin, or a signer not `from`), one byte of `initcode` or `implArgs` changed, an expired one, one signed for another chain (another
-`chainId` or `chain_uid`) or another factory, one signed before a transfer away and back (A → B → A), a native deploy through the
-router (no subject is read), a deploy before `configureChain`; the same signed deploy sent twice lands once
-(`VersionAlreadyRegistered`). **The 50 M gate**: every release face's measured asked gas at most 50 M, with its red case (a face
-padded past 50 M fails it); the admin-check table's rows through the factory path, regular and state apart, each transaction
-with `regular × 1.05 < 2^24`.
+**The deploy ruling** (§5.6). Passing: the shortcut's three rows, one test each: (1) the native admin sends `deploy*` itself,
+one transaction, no approval, at today's gas; (2) a native EOA admin approves (directly, and in a second test through the router)
+and another account deploys; (3) a derived admin (`mldsa65`, an `msig` of three ML-DSA-65 at 2-of-3, `webauthn-p256`) approves
+through the router, sent by a stranger, and another account deploys. Refused (`ReleaseNotApproved` unless named): a deploy
+without approval by a non-admin sender; one whose `initcode`, `implArgs`, `envVersion` or id differs from the approval's by one
+byte or one field; an approval used twice; a revoked approval; an expired one (`until`); one of a previous admin term (after a
+transfer, after a renounce); after the admin moves to an `msig`, the original deployer EOA's own deploy without approval; an
+approval naming another `chainUid` or factory (`ApprovalFieldMismatch`), or one made on another chain or factory, opening
+nothing here; a deploy before `configureChain` (`ChainNotConfigured`); revoking a consumed approval (`ApprovalNotLive`). The
+approval structs' field binding is the per-word matrix above (B12–B15) with its mutants; their digests are reproduced in
+`clientkeys` and `ua-rs`.
 
 Mutants (each must turn a named test red; the round's mutant log records it):
 
@@ -563,13 +522,14 @@ Mutants (each must turn a named test red; the round's mutant log records it):
 | M20 | the registry's `_adminRouter()` answers 0 or another address | the derived registry-admin tests |
 | M21 | the registry constructor takes a derived admin with router 0, or a router without code | the constructor tests |
 | M22 | `transferAdmin` / `renounceAdmin` without `configured` | the unconfigured tests |
-| M23 | `mtxDeploy*` skips `from == admin` | the wrong-admin test |
-| M24 | `mtxDeploy*` signs hashes passed in, not the deployed bytes' | the tampered `initcode` / `implArgs` tests |
-| M25 | the factory's domain leaves out `chain_uid` or `verifyingContract` | the cross-chain and cross-factory tests |
-| M26 | `adminGeneration` or `validUntil` not checked | the A → B → A and expired tests |
-| M27 | a native deploy takes the router's `subject()` | the through-the-router test |
-| M28 | the 50 M gate skips a release | its red case |
-| B1–B14 | one per new signed struct: a word dropped from its hash | that struct's binding matrix |
+| M23 | the shortcut accepts a sender that is not the admin (or reads the router's `subject()`) | the non-admin-sender and through-the-router tests |
+| M24 | the deploy skips the approval lookup, or takes the hashes from somewhere but the call's bytes | the no-approval and one-byte tests |
+| M25 | the key leaves out `chainUid`, the factory, `envVersion` or the tag | the cross-chain, cross-factory, `envVersion` and cross-domain tests |
+| M26 | `adminGeneration` or `until` not checked at the deploy | the stale-generation and expired tests |
+| M27 | the deploy does not mark the approval consumed | the used-twice test (the approval check runs before the version check) |
+| M28 | `revokeApproval` without `onlyAdmin`, or on a consumed key | the revoke tests |
+| M29 | an approval that ignores its `chainUid`, `factory` or `adminGeneration` field | the `ApprovalFieldMismatch` tests |
+| B1–B15 | one per new signed struct: a word dropped from its hash | that struct's binding matrix |
 
 Gates: every `forge` directory and the node e2e (the change is shared), `script/pqz/at-set.sh <set> test` at the four sets,
 the size gate, layout, ABI and gas pins, `cargo test` + `clippy -D warnings`, clientkeys and ua-rs tests, the local matrix run.
@@ -582,10 +542,11 @@ the size gate, layout, ABI and gas pins, `cargo test` + `clippy -D warnings`, cl
   `createToken`, `createDex`, `createInstance` fall from their last pins (2,183,102 / 4,383,367 / 1,826,732 [measured,
   CTR-TOK-27]); new pins measured.
 - **Admin ops:** a cold `SLOAD` of the admin instead of an immutable read (+2,100 [inference]); through the router, the router's
-  verification on top (a native ECDSA in the tens of thousands, a PQ or `msig` more). A native release deploy is today's
-  transaction; a derived admin's adds its check (§5.6's table) and about 0.1–0.2 M of hashing [estimate].
+  verification on top (a native ECDSA in the tens of thousands, a PQ or `msig` more). A release deploy verifies no signature:
+  today's gas, plus the approval lookup when another account sends it; an approval is about one new slot (about 98 k state
+  gas) and the admin's check (§5.6).
 - **Size:** `OpenFactory` 29,238 B [measured, `size-baseline.json`] gains `UAAdmin` and loses the owner index (net about +0.5 to
-  +1 KB [estimate]); `GovernanceRouter` (not in the baseline) gains 11 entries with the `Env` and array hashing (several KB
+  +1 KB [estimate]); `GovernanceRouter` (not in the baseline) gains 15 entries with the `Env` and array hashing (several KB
   [estimate]); the registry about +1 KB. Measured in T12; a baseline row moves only with its reason.
 
 ## 10. Owner rulings on the questions (2026-11-10)
@@ -600,10 +561,9 @@ Each answer is the owner's, in chat, relayed by the controller; status: decided,
 - **Q2. The `ComplianceRegistry` admin: a two-step transfer, no renounce.** Why: a derived UA's keys never change
   (`accounts.md:70-72`), so the transfer is how an `msig` or PQ admin rotates; with no admin nobody could void a bad attester's
   rows or write an `ELIGIBLE_CONTRACT` row.
-- **Q3. Option (i), updated by the P1-2 ruling the same day: the derived admin's signed deploy is a direct factory call, not a
-  node job; the other admin ops are node rows.** The deploy carries init code over the gateway's 64 KiB body; anyone sends it,
-  fee 0 too; the three `mtxDeploy*` are in `NOT_ROWS` with the reason "initcode over the gateway limit; anyone may send it"; the
-  gateway's limit is not raised (§5.4, §5.6, §7).
+- **Q3. Option (i), updated by the final P1-2 ruling the same day: release management is not a node job.** Neither the approval
+  ops nor the deploys are node rows; all are in `NOT_ROWS` with the reason "release management is not a node job (owner
+  2026-11-10)"; the gateway's limit is irrelevant; every other admin op is a node row (§5.4, §5.6, §7).
 - **Q4. `FactoryInfo.ownerUA` is dropped** (six words, 192 B). The PqChat instance keeps `owner()` (`bytes32`).
 - **Q5. Yes: the attester becomes a UA too, inside 3r**, in the `governed` / `UAAdmin` pattern (§5.3.1): an attester is the
   subject of its own call, not a signer riding in another's; every 3f rule (CTR-PQZ-27 to CTR-PQZ-30) and every attestation-row
@@ -615,11 +575,10 @@ Each answer is the owner's, in chat, relayed by the controller; status: decided,
   `PqTopicNotAdmin`, the factory's `AdminNotNative`, the registry's `AdminZero`.
 - **Directory: option (a)**, write-once, one address per name, no versions (§13); **then (owner, same day) no constants: the relay
   pair is a write-once entry too**, under its constant salt.
-- **The release deploys (owner, on Fable P1-2, option (A)): the admin deploys by calling the factory directly, never through the
-  router; no approval step.** A native admin calls the deploy entries itself (today's path and gas); a derived admin signs
-  `UADeploy*` in the factory's domain and anyone sends `mtxDeploy*`, which the factory verifies against its registry. **Every
-  release face's deploy asks at most 50 M**, leaving about 10 M for the admin's check; `SCaaSDex` and kind 13 move bodies into
-  modules to fit (§5.6).
+- **The release deploys (owner, final, on Fable P1-2): approve, then an open deploy.** The admin approves one release by hash
+  (`approve*`, relayable, fee 0 too; `revokeApproval` for an unused one; dead at an admin change or at `until`); the deploys keep
+  their names, are open to anyone, carry no signature and go straight to the factory, each approval consumed once; the native
+  admin's own deploy is its own approval (the three-row table of §5.6). No 50 M rule: NET-EVM-11's 60 M stays as today.
 - **P2-5 (owner): no restriction.** Derived admins may be used everywhere at once; the trust-root note stays as information (§5.5).
 
 ## 11. `decisions.md`
@@ -627,8 +586,8 @@ Each answer is the owner's, in chat, relayed by the controller; status: decided,
 Recorded on this branch: [CTR-GOV-23](../../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)
 (owner: yes; status SPECIFIED) with the rulings R1–R3, Q1–Q6 and the directory, and Change lines on CTR-TOK-27 (R1, Q4),
 CTR-TOK-29 (the constructor, Q1, the directory), CTR-AS-07 (Q2, Q5, the registry-router check), CTR-GOV-01 (the names) and
-NET-EVM-05 (the deploy order, the first admin's custody) and NET-EVM-11 (the 50 M rule); the deploy ruling is in
-CTR-GOV-23.
+NET-EVM-05 (the deploy order, the first admin's custody) and NET-EVM-11 (a deploy carries no signature check); the deploy
+ruling is in CTR-GOV-23.
 The component docs (`token-wrappers.md`, `asset-suite.md`, `pqchat.md`, `networks/evm.md`, the node's) move with the build
 (T14), when the code exists.
 
@@ -640,19 +599,18 @@ The component docs (`token-wrappers.md`, `asset-suite.md`, `pqchat.md`, `network
 | T2 | R3 in the governed contracts: `IAdmin`, `IGovernance`, `GovernanceLib`, `GovernanceBase`, `SCaaSDexAdmin`, `SCaaSDex`, `WrappedLib`, `PqzStateLib`, `ZetherLib`, the config fields, `entries.json` + `gen_faces.py`, `face_abi.json` map, layout labels, `GovBitsVector` sentences | 1 d |
 | T3 | R3 on the topic: `IPqChat`, `PqChatTypes`, `PqChatCore`, `PqChatTopics`, `PqChat`; `topics.json`; node `typed.rs:121`; clientkeys `pqchat.js` | 0.5 d |
 | T4 | R1: record, views, events, `FactoryInfo`, reads; `ZetherStateVectors` + `state.json`; node `abi.rs`, guard mock | 1 d |
-| T5 | `UAAdmin`; `OpenFactory` admin (constructor, `onlyAdmin`, transfer and renounce under `configured`), the native and the signed deploys (§5.6); `FactoryAdmin.t.sol` green | 2 d |
+| T5 | `UAAdmin`; `OpenFactory` admin (constructor, `onlyAdmin`, transfer and renounce under `configured`), the approvals, the revoke, the open deploys and the native admin's shortcut (§5.6); `FactoryAdmin.t.sol` green | 2 d |
 | T6 | `ComplianceRegistry` admin, router, constructor refusals, transfer without renounce, attesters by UA (§5.3.1), the row bound; `RegulatedLib`'s registry-router check; `RegistryAdmin.t.sol`; `regulated_kat.json`; `Gov.s.sol`'s `setAttester` | 2 d |
-| T7 | Router: the 3 renamed and the 11 new ops, the binding matrix per signed struct and its mutants (B1–B14, the three factory structs included), `Env` and array hashing, the view `smartKeyCloneHash()`, pins, `GovRouter.t.sol` | 2 d |
+| T7 | Router: the 3 renamed and the 15 new ops, the binding matrix per signed struct and its mutants (B1–B15), `Env` and array hashing, the view `smartKeyCloneHash()`, pins, `GovRouter.t.sol` | 2 d |
 | T8 | Clients and vectors: clientkeys rows + `typed_ops.json`, ua-rs router-op table + test, zether-prover list | 1 d |
 | T9 | Node: rows, `NOT_ROWS`, counts, class `ADMIN`; `cargo test`, `clippy` | 0.5 d |
 | T10 | Deploy: `DeployBase` order (§6, §13.10), the relay pair under the constant salt, `FACTORY_ADMIN_NEXT`, `COMPLIANCE_ADMIN` as UA, release rows, the gate; every release on a 60 M anvil (§5.6, NET-EVM-11) | 1 d |
 | T11 | Matrix: scripts renamed, the router steps for the factory and the registry, coverage, local run | 1 d |
 | T12 | Gates and pins: every forge dir, the four PQZ sets, size, layout, ABI, gas old → new | 0.5 d |
-| T13 | Mutants M1–M28, B1–B14, D1–D14, log | 1 d |
+| T13 | Mutants M1–M29, B1–B15, D1–D14, log | 1 d |
 | T14 | Docs: component docs (`decisions.md` done, §11), `docs_check` | 0.5 d |
 | T15 | The directory (§13): the relay pair under the constant salt and its reuse, every entry write-once, `setChainEntries`, `configureChain`'s checks, the registry and `SmartKeyAccount` bindings, `directory()`; `FactoryDirectory.t.sol`, mutants D1–D14; `DeployBase` and `e2e.py` order | 1.5 d |
-| T16 | The 50 M rule: the gate test; `SCaaSDex`'s hybrid path and market setters into its modules; kind 13's face; the admin-check table through the factory path | 2 d |
-|  | **Total** | **≈ 18 d** |
+|  | **Total** | **≈ 16 d** |
 
 ## 13. `OpenFactory` as the chain's directory (owner ruling 2026-11-10, option (a))
 
@@ -718,13 +676,12 @@ confers nothing: a regulated token names its own registry in its config and chec
 
 ### 13.4 One source for the registry and the `SmartKeyAccount` implementation
 
-- **The registry.** `uaRegistry()` stores nothing. Its value is the router's `registry()` (`src/metatx/UAMetaTxBase.sol:365`), an
-  immutable of the router's runtime, so the router's code-hash check at `configureChain` pins it too; and every `publishEnv`,
-  `publishDexEnv`, `publishClassEnv` refuses an `env.registry` other than 0 or that value (`EnvRegistryMismatch(expected, got)`).
-  The env each clone carries, the router that authenticates its governance, the registry the factory checks a signed deploy
-  against (§5.6) and the directory name one registry. Without a router `uaRegistry()` is 0 and the envs are free, as today. A
-  stack with its own registry has its own router and its own factory (`script/pqz/e2e.py:1295-1315`), so one registry per factory
-  holds.
+- **The registry.** `uaRegistry()` stores nothing. Its value is the router's `registry()` (`src/metatx/UAMetaTxBase.sol:365`),
+  an immutable of the router's runtime, so the router's code-hash check at `configureChain` pins it too; and every `publishEnv`,
+  `publishDexEnv`, `publishClassEnv` refuses an `env.registry` other than 0 or that value (`EnvRegistryMismatch(expected,
+  got)`). The env each clone carries, the router that authenticates its governance and the directory name one registry. Without
+  a router `uaRegistry()` is 0 and the envs are free, as today. A stack with its own registry has its own router and its own
+  factory (`script/pqz/e2e.py:1295-1315`), so one registry per factory holds.
 - **The `SmartKeyAccount` implementation, bound from the router** (Fable P2-6). The router holds it as `_SMART_KEY_CLONE_CODEHASH`
   (the EIP-1167 clone code hash of the implementation, `src/metatx/UAMetaTxBase.sol:38-48`), and so does the UA registry
   (`smartKeyCloneHash()`, `src/ua/UARegistry.sol:378`). The router gains the view `smartKeyCloneHash()`. `configureChain` requires
