@@ -138,11 +138,13 @@ function kindArgs(uint8 kind, address factory, bytes memory coreArgs) returns (b
     (, implArgs) = deployKindModules(kind, factory, coreArgs);
 }
 
-/// @notice Deploys the DEX's admin module D for `factory` (T66b §4.2) and returns it with the DEX release's `implArgs`.
+/// @notice Deploys the DEX's modules for `factory` (T66b §4.2; the liquidity spec §9.1): the governance module (group 10) and
+///         the liquidity module (group 11), and returns them with the DEX release's `implArgs`.
 function deployDexModules(address factory) returns (address[] memory modules, bytes memory implArgs) {
     Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    modules = new address[](1);
+    modules = new address[](2);
     modules[0] = vm.deployCode("SCaaSDexAdmin.sol:SCaaSDexGovernanceModule", abi.encode(factory, bytes("")));
+    modules[1] = vm.deployCode("SCaaSDexLiquidityModule.sol:SCaaSDexLiquidityModule", abi.encode(factory, bytes("")));
     implArgs = abi.encode(ImplArgs(modules));
 }
 

@@ -47,10 +47,10 @@ KFILE = {'NormalToken': 'src/metatx', 'WrappedToken': 'src/metatx', 'NormalZethe
          'NormalRegulatedToken': 'src/regulated', 'WrappedRegulatedToken': 'src/regulated',
          'NormalZetherRegulatedToken': 'src/regulated', 'WrappedZetherRegulatedToken': 'src/regulated',
          'NormalPqzRegulatedToken': 'src/regulated', 'WrappedPqzRegulatedToken': 'src/regulated'}
-GROUP_ID = {'P': 1, 'T': 2, 'A': 3, 'W': 4, 'Z': 5, 'Q': 6, 'P2': 7, 'Q2': 8, 'G': 9, 'D': 10}  # D: the DEX's (src/dex/SCaaSDexAdmin.sol)
+GROUP_ID = {'P': 1, 'T': 2, 'A': 3, 'W': 4, 'Z': 5, 'Q': 6, 'P2': 7, 'Q2': 8, 'G': 9, 'D': 10, 'L': 11}  # D, L: the DEX's (src/dex/SCaaSDexAdmin.sol, SCaaSDexLiquidityModule.sol)
 GROUP_DOC = {'P': 'the signed pipeline, named transfers and pay', 'T': 'trade', 'A': 'admin: governance, init, tables, token meta',
              'W': 'wrapped and regulated', 'Z': 'Zether', 'Q': 'PQZ', 'P2': 'pay and the relay fee',
-             'Q2': 'the PQZ state, setters and views', 'G': 'governance', 'D': 'the DEX\'s governance'}
+             'Q2': 'the PQZ state, setters and views', 'G': 'governance', 'D': 'the DEX\'s governance', 'L': 'the DEX\'s liquidity'}
 TOKEN_KIND = {'NormalToken': 'NORMAL', 'WrappedToken': 'WRAPPED', 'NormalZetherToken': 'NORMAL_ZETHER',
               'WrappedZetherToken': 'WRAPPED_ZETHER', 'NormalPqzToken': 'NORMAL_PQZ', 'WrappedPqzToken': 'WRAPPED_PQZ',
               'NormalRegulatedToken': 'NORMAL_REGULATED', 'WrappedRegulatedToken': 'WRAPPED_REGULATED',
@@ -274,11 +274,13 @@ function kindArgs(uint8 kind, address factory, bytes memory coreArgs) returns (b
     (, implArgs) = deployKindModules(kind, factory, coreArgs);
 }
 
-/// @notice Deploys the DEX's admin module D for `factory` (T66b §4.2) and returns it with the DEX release's `implArgs`.
+/// @notice Deploys the DEX's modules for `factory` (T66b §4.2; the liquidity spec §9.1): the governance module (group 10) and
+///         the liquidity module (group 11), and returns them with the DEX release's `implArgs`.
 function deployDexModules(address factory) returns (address[] memory modules, bytes memory implArgs) {
     Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-    modules = new address[](1);
+    modules = new address[](2);
     modules[0] = vm.deployCode("SCaaSDexAdmin.sol:SCaaSDexGovernanceModule", abi.encode(factory, bytes("")));
+    modules[1] = vm.deployCode("SCaaSDexLiquidityModule.sol:SCaaSDexLiquidityModule", abi.encode(factory, bytes("")));
     implArgs = abi.encode(ImplArgs(modules));
 }
 

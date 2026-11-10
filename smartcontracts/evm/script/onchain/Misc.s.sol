@@ -17,6 +17,7 @@ import {NormalTokenP, NormalTokenT, NormalTokenA} from "../../src/metatx/NormalT
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {SCaaSDexGovernanceModule} from "../../src/dex/SCaaSDexAdmin.sol";
+import {SCaaSDexLiquidityModule} from "../../src/dex/SCaaSDexLiquidityModule.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {RefServiceEscrow} from "../../test/metatx/helpers/RefServiceEscrow.sol";
@@ -361,16 +362,22 @@ contract Misc is OnchainBase {
         (c.initialSupply, c.initialHolder) = (1e12, a1);
     }
 
-    /// @dev The DEX on f2: the Step 5 DEX env (GovernanceLib, TradeLib, module D) and the release, one clone, deprecated.
+    /// @dev The DEX on f2: the deployed DEX env (GovernanceLib, TradeLib, the governance and liquidity modules) and the
+    ///      release, one clone, deprecated.
     function _dex() internal {
-        IFactoryToken.Env memory e = f5.dexEnvOf(1); // GovernanceLib, TradeLib, the Step 5 factory's D
+        IFactoryToken.Env memory e = f5.dexEnvOf(1); // GovernanceLib, TradeLib, the deployed factory's two modules
         _book(e.libs[1], "TradeLib");
         _book(e.libs[2], "SCaaSDexGovernanceModule");
-        address[] memory d = new address[](1);
-        vm.broadcast(k1);
-        d[0] = address(new SCaaSDexGovernanceModule(address(f2), "")); // D names its factory (M1): this factory's own D
+        _book(e.libs[3], "SCaaSDexLiquidityModule");
+        address[] memory d = new address[](2);
+        vm.startBroadcast(k1);
+        d[0] = address(new SCaaSDexGovernanceModule(address(f2), "")); // a module names its factory (M1): this factory's own
+        d[1] = address(new SCaaSDexLiquidityModule(address(f2), ""));
+        vm.stopBroadcast();
         _book(d[0], "SCaaSDexGovernanceModule");
+        _book(d[1], "SCaaSDexLiquidityModule");
         (e.libs[2], e.libCodeHashes[2]) = (d[0], d[0].codehash);
+        (e.libs[3], e.libCodeHashes[3]) = (d[1], d[1].codehash);
         ISCaaSDex.DexConfig memory c = ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, a1);
         vm.startBroadcast(k1);
         f2.publishDexEnv(1, e);

@@ -190,9 +190,9 @@ library Catalogue {
         uint16 v = f.latestDexEnvVersion();
         if (v != 0) {
             address[] memory l = f.dexEnvOf(v).libs;
-            if (l.length == 3 && l[2].code.length != 0) {
-                ms = new address[](1);
-                ms[0] = l[2];
+            if (l.length == 4 && l[2].code.length != 0 && l[3].code.length != 0) {
+                ms = new address[](2);
+                (ms[0], ms[1]) = (l[2], l[3]);
                 return (ms, abi.encode(ImplArgs(ms)));
             }
         }

@@ -20,10 +20,16 @@ contract UADexAdminTest is UADexBase {
         return abi.encode(ImplArgs(ms));
     }
 
+    function _two(address m0, address m1) internal pure returns (bytes memory) {
+        address[] memory ms = new address[](2);
+        (ms[0], ms[1]) = (m0, m1);
+        return abi.encode(ImplArgs(ms));
+    }
+
     /// The DEX's governance views and writes run in D (one DELEGATECALL each), with the DEX's state.
     function test_d_governanceRunsInD() public {
         address d = dex.modules()[0];
-        assertEq(dex.modules().length, 1);
+        assertEq(dex.modules().length, 2);
         assertEq(ITokenModule(d).moduleGroup(), 10);
         assertEq(ITokenModule(d).factory(), address(f));
         vm.expectCall(d, abi.encodeCall(IGovernance.owner, ()));
@@ -52,24 +58,29 @@ contract UADexAdminTest is UADexBase {
         assertEq(d.validBits(), GovernanceBits.DEX_BITS);
     }
 
-    /// §4.5: the DEX's constructor takes exactly one module with code, of group D, for its own factory.
+    /// §4.5 and the liquidity spec §9.1 (L33): the DEX's constructor takes exactly two modules with code, the governance
+    /// module (group 10) then the liquidity module (group 11), each for its own factory.
     function test_d_constructorChecksD() public {
-        address d = dex.modules()[0];
-        new SCaaSDex(address(f), _one(d)); // control
+        (address d, address l) = (dex.modules()[0], dex.modules()[1]);
+        assertEq(ITokenModule(l).moduleGroup(), 11);
+        new SCaaSDex(address(f), _two(d, l)); // control
         vm.expectRevert(abi.encodeWithSelector(SCaaSDex.ModuleMissing.selector, 0));
         new SCaaSDex(address(f), abi.encode(ImplArgs(new address[](0))));
-        address[] memory two = new address[](2);
-        (two[0], two[1]) = (d, d);
-        vm.expectRevert(abi.encodeWithSelector(SCaaSDex.ModuleMissing.selector, 2));
-        new SCaaSDex(address(f), abi.encode(ImplArgs(two)));
+        vm.expectRevert(abi.encodeWithSelector(SCaaSDex.ModuleMissing.selector, 1));
+        new SCaaSDex(address(f), _one(d)); // one module
+        vm.expectRevert(abi.encodeWithSelector(SCaaSDex.ModuleMismatch.selector, 1));
+        new SCaaSDex(address(f), _two(d, d)); // the second of group 10
+        vm.expectRevert(abi.encodeWithSelector(SCaaSDex.ModuleMissing.selector, 1));
+        new SCaaSDex(address(f), _two(d, address(0xD0D0)));
         vm.expectRevert(abi.encodeWithSelector(SCaaSDex.ModuleMissing.selector, 0));
-        new SCaaSDex(address(f), _one(address(0xD0D0)));
-        bytes memory p = _one(A.modules()[0]); // a token's module P: another group
+        new SCaaSDex(address(f), _two(address(0xD0D0), l));
+        address p = A.modules()[0]; // a token's module P: another group
         vm.expectRevert(abi.encodeWithSelector(SCaaSDex.ModuleMismatch.selector, 0));
-        new SCaaSDex(address(f), p);
-        (address[] memory other,) = deployDexModules(address(0xF00)); // a D of another factory
-        p = _one(other[0]);
+        new SCaaSDex(address(f), _two(p, l));
+        (address[] memory other,) = deployDexModules(address(0xF00)); // modules of another factory
         vm.expectRevert(abi.encodeWithSelector(SCaaSDex.ModuleMismatch.selector, 0));
-        new SCaaSDex(address(f), p);
+        new SCaaSDex(address(f), _two(other[0], l));
+        vm.expectRevert(abi.encodeWithSelector(SCaaSDex.ModuleMismatch.selector, 1));
+        new SCaaSDex(address(f), _two(d, other[1]));
     }
 }
