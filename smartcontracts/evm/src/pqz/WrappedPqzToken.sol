@@ -76,6 +76,9 @@ interface IWrappedPqzTokenAbi {
     event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned, uint256 out);
     event WrapDisabled(address indexed underlying, bytes32 indexed guardian, bytes32 reason);
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
+    event WrapLimitsSet(bytes32 indexed by, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
+    event WrapLimitsProposed(bytes32 indexed by, uint64 eta, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
+    event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
     error AccNotPrepared(bytes32 ua);
     error AccountNotRegistered(bytes32 ua);
     error AmountNotScaled(uint256 minted, uint256 shieldScale);
@@ -246,6 +249,17 @@ interface IWrappedPqzTokenAbi {
     error ZeroFill(bytes32 orderHash);
     error ZeroRecipient();
     error ZeroU();
+    error WrapLimitExceeded(address underlying, uint8 limit, bytes32 account, uint256 amount, uint256 remaining);
+    error WrapCapExceeded(address underlying, uint8 limit, uint256 amount, uint256 remaining);
+    error UnwrapAboveNetWrapped(address underlying, bytes32 account, uint256 amount, uint256 entitlement);
+    error WrapperNotListed(bytes32 account);
+    error UnwrapperNotListed(bytes32 account);
+    error WrapLimitInvalid(address underlying, uint8 limit);
+    error WrapLegMismatch(uint256 index, address underlying);
+    error WrapUnitInvalid(address underlying, uint8 unitExp);
+    error WrapControlNeedsHybrid(uint8 bit);
+    error WrapControlActive(uint8 bit);
+    error WrapSubjectZero();
 }
 
 /// @title WrappedPqzToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA

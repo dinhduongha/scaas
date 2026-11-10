@@ -105,6 +105,20 @@ def _abi_t(i):
     return t
 
 
+W3L_EVENTS = [
+    '    event WrapLimitsSet(bytes32 indexed by, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);',
+    '    event WrapLimitsProposed(bytes32 indexed by, uint64 eta, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);',
+    '    event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);',
+]
+W3L_ERRORS = [f'    error {e};' for e in [
+    'WrapLimitExceeded(address underlying, uint8 limit, bytes32 account, uint256 amount, uint256 remaining)',
+    'WrapCapExceeded(address underlying, uint8 limit, uint256 amount, uint256 remaining)',
+    'UnwrapAboveNetWrapped(address underlying, bytes32 account, uint256 amount, uint256 entitlement)',
+    'WrapperNotListed(bytes32 account)', 'UnwrapperNotListed(bytes32 account)', 'WrapLimitInvalid(address underlying, uint8 limit)',
+    'WrapLegMismatch(uint256 index, address underlying)', 'WrapUnitInvalid(address underlying, uint8 unitExp)',
+    'WrapControlNeedsHybrid(uint8 bit)', 'WrapControlActive(uint8 bit)', 'WrapSubjectZero()']]
+
+
 def abi_iface(k):
     """`I<k>Abi` (controller 2026-11-09, option B): the pre-split face's events and errors that the face does not declare
     itself (face_abi.json, from d142b57c), declarations only: the face's ABI lists them as before, its runtime is unchanged."""
@@ -114,6 +128,9 @@ def abi_iface(k):
           + (') anonymous;' if x.get('anonymous') else ');') for x in d['event']]
     er = [f'    error {x["name"]}(' + ', '.join(_abi_t(i) + (f' {i["name"]}' if i['name'] else '') for i in x['inputs']) + ');'
           for x in d['error']]
+    if k.startswith('Wrapped'):  # group 3l (wrap limits spec §7): what `WrappedLib` raises and emits since the split
+        ev += W3L_EVENTS
+        er += W3L_ERRORS
     return f'''
 /// @notice The events and errors of `{k}` before the split (d142b57c) that its core does not declare: the face's ABI lists them
 ///         as before (metatx-split R4: a client decodes an error a library or a module raises), declarations only, no code.

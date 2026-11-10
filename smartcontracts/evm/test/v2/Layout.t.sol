@@ -61,6 +61,8 @@ contract NamespaceProbe is UAMetaTxBase {
         w.legIndex[A] = 0x95;
         w.pending = WrappedLib.PendingRate(0x96, 0x97, 0x98, 0x99);
         (w.legCount, w.rateDelay, w.maxRateStepBps, w.maxSupply) = (0x9a, 0x9b, 0x9c, 0x9d);
+        l.ctl = 0x9e; // group 3l (wrap limits spec §5): byte 24 of slot a
+        _pokeWrapLimit();
         _ua().balance[bytes32(uint256(0xa1))] = 0xa2;
         _ua().cancelUsed[bytes32(uint256(0xa3))] = true;
         MtxPipelineLib._mtxStorage().nonce[bytes32(uint256(0xb1))][2] = 0xb2;
@@ -110,6 +112,24 @@ contract NamespaceProbe is UAMetaTxBase {
         z.entries[V] = NamespaceProbeIds.blob(200);
         z.entryPtrs[V] = B;
         (z.memos[V], z.memos[U]) = (NamespaceProbeIds.blob(33), NamespaceProbeIds.blob(20));
+    }
+
+    /// Group 3l (wrap limits spec §5, R26): `scaas.wraplimit`, leg 1's two config words and two token-wide window words by
+    /// field, `U`'s quota word on leg 1, its member byte, the pending.
+    function _pokeWrapLimit() internal {
+        WrappedLib.WrapLimitStorage storage x = WrappedLib.wl();
+        WrappedLib.LegConfig storage c = x.config[1];
+        (c.wrapShortPerUser, c.wrapShortTokenWide, c.wrapShortPeriodMin, c.wrapLongPerUser) = (0x101, 0x102, 0x103, 0x104);
+        (c.wrapLongTokenWide, c.wrapLongPeriodMin, c.unitExp, c.decayDays) = (0x105, 0x106, 0x07, 0x108);
+        (c.unwrapShortPerUser, c.unwrapShortTokenWide, c.unwrapShortPeriodMin, c.unwrapLongPerUser) = (0x109, 0x10a, 0x10b, 0x10c);
+        (c.unwrapLongTokenWide, c.unwrapLongPeriodMin, c.unitExpCopy, c.decayDaysCopy) = (0x10d, 0x10e, 0x0f, 0x110);
+        WrappedLib.TokenWindow storage t = x.total[1][0];
+        (t.shortStart, t.shortUsed, t.longStart, t.longUsed) = (0x111, 0x112, 0x113, 0x114);
+        t = x.total[1][1];
+        (t.shortStart, t.shortUsed, t.longStart, t.longUsed) = (0x115, 0x116, 0x117, 0x118);
+        x.quota[U][1] = 0x119;
+        x.member[U] = 3;
+        (x.pendingCommit, x.pendingEta, x.pendingGeneration) = (bytes32(uint256(0x11a)), 0x11b, 0x11c);
     }
 }
 
@@ -213,7 +233,9 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("maxRateStepBps", 0, 0, 0x9c, 2));
         f = _more(f, F("legs[1].capped", 1, 0, 1, 1)); // governance T9 (spec §5.2): appended, `reserve` unmoved
         f = _more(f, F("maxSupply", 0, 0, 0x9d, 32));
+        f = _more(f, F("legs[1].ctl", 1, 0, 0x9e, 1)); // group 3l: appended, slots b and c unmoved
         _ns(address(p), "underlying", "scaas.underlying", f);
+        _wrapLimitPinned(address(p), u);
         f = new F[](2);
         f[0] = F("balance[0xa1]", 0xa1, 0, 0xa2, 32);
         f[1] = F("cancelUsed[0xa3]", 0xa3, 0, 1, 1);
@@ -350,6 +372,29 @@ contract LayoutTest is V2Fixture {
                 + pin.readUintArray(".payRecords.inner")[i];
         uint256 mask = width == 32 ? type(uint256).max : (uint256(1) << (8 * width)) - 1;
         return (uint256(vm.load(p, bytes32(s))) >> (8 * pin.readUintArray(".payRecords.bytes")[i])) & mask;
+    }
+
+    /// Group 3l (wrap limits spec §5, R26): `scaas.wraplimit` at the probe's keys (leg 1, `U`).
+    function _wrapLimitPinned(address p, uint256 u) internal {
+        string[16] memory cfg = ["wrapShortPerUser", "wrapShortTokenWide", "wrapShortPeriodMin", "wrapLongPerUser",
+            "wrapLongTokenWide", "wrapLongPeriodMin", "unitExp", "decayDays", "unwrapShortPerUser", "unwrapShortTokenWide",
+            "unwrapShortPeriodMin", "unwrapLongPerUser", "unwrapLongTokenWide", "unwrapLongPeriodMin", "unitExpCopy", "decayDaysCopy"];
+        uint8[8] memory cw = [3, 8, 3, 3, 8, 3, 1, 2];
+        string[8] memory tot = ["[0].shortStart", "[0].shortUsed", "[0].longStart", "[0].longUsed", "[1].shortStart",
+            "[1].shortUsed", "[1].longStart", "[1].longUsed"];
+        uint8[4] memory tw = [3, 8, 3, 8];
+        F[] memory f = new F[](29);
+        for (uint256 i; i < 16; ++i) {
+            uint256 v = i % 8 == 6 ? 0x07 + 8 * (i / 8) : 0x101 + i;
+            f[i] = F(string.concat("config[1].", cfg[i]), 1, 0, v, cw[i % 8]);
+        }
+        for (uint256 i; i < 8; ++i) f[16 + i] = F(string.concat("total[1]", tot[i]), 1, 0, 0x111 + i, tw[i % 4]);
+        f[24] = F("quota[U][1]", u, 1, 0x119, 32);
+        f[25] = F("member[U]", u, 0, 3, 1);
+        f[26] = F("pendingCommit", 0, 0, 0x11a, 32);
+        f[27] = F("pendingEta", 0, 0, 0x11b, 8);
+        f[28] = F("pendingGeneration", 0, 0, 0x11c, 4);
+        _ns(p, "wrapLimit", "scaas.wraplimit", f);
     }
 
     function _more(F[] memory f, F memory x) internal pure returns (F[] memory g) {

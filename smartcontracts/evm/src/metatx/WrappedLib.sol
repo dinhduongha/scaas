@@ -119,23 +119,20 @@ library WrappedLib {
         uint16 decayDaysCopy;
     }
 
-    /// @dev The token-wide windows, slot 0 the wrap side and slot 1 the unwrap side, each two of 88 bits (start 24, minutes on
-    ///      the 21-bit circle of the quota word; used 64).
-    struct TokenWindows {
-        uint24 wrapShortStart;
-        uint64 wrapShortUsed;
-        uint24 wrapLongStart;
-        uint64 wrapLongUsed;
-        uint24 unwrapShortStart;
-        uint64 unwrapShortUsed;
-        uint24 unwrapLongStart;
-        uint64 unwrapLongUsed;
+    /// @dev One side's token-wide windows, two of 88 bits (start 24, minutes on the 21-bit circle of the quota word; used
+    ///      64); `total[leg]` holds the wrap side in its slot 0 and the unwrap side in its slot 1 (an array element starts a
+    ///      new slot, so the two sides never share one).
+    struct TokenWindow {
+        uint24 shortStart;
+        uint64 shortUsed;
+        uint24 longStart;
+        uint64 longUsed;
     }
 
     /// @custom:storage-location erc7201:scaas.wraplimit
     struct WrapLimitStorage {
         mapping(uint256 leg => LegConfig) config;
-        mapping(uint256 leg => TokenWindows) total;
+        mapping(uint256 leg => TokenWindow[2]) total;
         /// @dev One word per id and leg (R7, R26; spec §5): by limit id `l` the window start (minutes mod 2^21) at bit 21·l,
         ///      its used quanta (19 bits) at 84 + 19·l; `base` (`b`, quanta, saturating, 32 bits) at 160; `startMin` (`s`, the
         ///      weighted start, an absolute minute, 64 bits) at 192. Not byte-aligned, so a word; `Layout.t.sol` pins it.
@@ -655,7 +652,7 @@ library WrappedLib {
     // decaying linearly over `decayDays` from a weighted-average start in absolute minutes (R4, R11, R23, R24, R26). UNAUDITED.
 
     /// @dev The two limits of one side (`side` 0 wrap, 1 unwrap) on `x` raw units: per-user parts in `qw` (the id's quota
-    ///      word), token-wide parts in `tw` (the side's `TokenWindows` word); `q = ⌈x/unit⌉` (spec §2, "A use").
+    ///      word), token-wide parts in `tw` (the side's `TokenWindow` word); `q = ⌈x/unit⌉` (spec §2, "A use").
     function _side(uint256 cfg, uint256 qw, uint256 tw, uint256 side, Use memory c)
         private pure returns (uint256, uint256)
     {
@@ -1092,7 +1089,7 @@ library WrappedLib {
         assembly ("memory-safe") { p := x.slot }
     }
 
-    function _slot(TokenWindows storage x) private pure returns (uint256 p) {
+    function _slot(TokenWindow[2] storage x) private pure returns (uint256 p) {
         assembly ("memory-safe") { p := x.slot }
     }
 
