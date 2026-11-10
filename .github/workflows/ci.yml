@@ -15,6 +15,9 @@
 #   contract-cosmos:   test.sh cosmos (cargo test)
 #   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
+#   pqz:           in pqz-core at PQZ_SET n2304-kmax4096: pqzl/build.sh native, kat/check.py (KAT); pqzl/check_tbox_fixes.sh, sv/check_sv_fixes.sh;
+#                  ffi pqz-vectors --check, smartcontracts/vectors/pqz/pqz_kat.py --check, ffi/vectors/tamper.py; cargo test --release (stmt, pqzh/ligero, ffi);
+#                  fuzz smoke (fuzz/run.sh precompile, mutate, codec: 60 s each on the committed corpora)
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths;
 #                  ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security)
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test; its ML-DSA-65 signer (script/pqz/mldsa.mjs) against the DEX:
