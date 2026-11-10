@@ -47,7 +47,10 @@ tender recomputes `depositRef`, checks the shape, calls `token.mtxExecuteTransfe
 `data = pay(depositRef)` shape through `executeMetaTransaction`. The
 payment reference binds the deposit to this commitment: no tender-level signature, no allowance, and nobody lands the
 deposit outside `commitBid` (every entry point checks the relayer first). Bidders reconcile it as a payment
-(`entryRef = depositRef`). Cost: wallets show "pay 1000 to <tender>" rather than "bid".
+(`entryRef = depositRef`). Cost: wallets show "pay 1000 to <tender>" rather than "bid". **Change (2026-11-09, group 3i,
+SPECIFIED):** the deposit is an instance of the service pull ([CTR-MTX-32](metatx.md#CTR-MTX-32)): a `UAMetaTransfer` with a
+`UASig`, and `depositRef` becomes the EIP-712 digest of the tender's `Deposit` operation in the tender's domain. Nothing
+moves: the tender is not built.
 
 <a id="commitment-format"></a>
 <a id="CTR-TND-02"></a>**CTR-TND-02** — **Commitment** `= keccak256(abi.encode(BID_TAG, block.chainid, address(this),
@@ -485,7 +488,7 @@ probe refuses a chain without EIP-1153.
 | EVM | **SPECIFIED** | this file |
 | Hedera | **SPECIFIED** | the same bytecode on HSCS (no child: the tender checks no signature); deposit token = a Hedera v2 meta token; gas limit tight (HSCS charges ≥ 80 % of the limit); EIP-1153 as for the Hedera token children |
 | Cosmos (CosmWasm) | PLANNED | the contract holds the deposit; commit = the meta token's signed `Relay` op with a `pay` memo = `depositRef`, executed by the tender via submessage; commitment over `(chain_id, contract, tender, bidder, price, salt)` with SHA-256 |
-| Soroban | PLANNED | `require_auth` entries of the bidder for `commit_bid` (deposit = a SAC/token `transfer` sub-invocation in the same auth tree); reveal/withdraw permissionless |
-| Sui / Aptos | PLANNED | tender object / resource; the deposit coin moved by the relayer-submitted PTB / entry function under the bidder's signed op; time from `Clock` / `timestamp` |
-| GRAM | PLANNED | async: the deposit arrives as a jetton `transfer_notification` with `forward_payload = (tenderId, commitment)`; reveal/withdraw are internal messages; bounce handling on refunds |
+| Soroban | PLANNED | `require_auth` entries of the bidder for `commit_bid` (the deposit = SCaaS `pay` / `ua_pay` with `pay_ref` = the operation's digest as a sub-invocation in the same auth tree, not a SEP-41 `transfer`; [NET-ALL-85](../networks/README.md#NET-ALL-85)); reveal/withdraw permissionless |
+| Sui / Aptos | PLANNED | tender object / resource; the deposit coin moved by the relayer-submitted PTB / entry function under the bidder's signed op; time from `Clock` / `timestamp`; not possible on today's packages (Sui binds the relayer to `ctx.sender()`, Aptos's `relay_pay` is a `package entry fun`): a token change in their rounds (group 3i) |
+| GRAM | PLANNED | async: the deposit arrives as a jetton `transfer_notification` with `(tenderId, commitment)` bound through the operation digest in `pay_ref`, not in `forward_payload` (group 3i); reveal/withdraw are internal messages; bounce handling on refunds |
 | Solana | PLANNED | program + PDA vault per tender; deposit via the token program CPI under the bidder's Ed25519-precompile-verified op |

@@ -536,6 +536,7 @@ immutable: see the administration bullet below.
 | 17 | `RESCUABLE` | none, `rescueTo` | all token kinds | anyone's `rescue(asset)` moves what the token does not owe to the immutable `rescueTo` ([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto)); set at creation iff `rescueTo ≠ 0`, always locked |
 | 21 | `MODERATE` | contract | regulated implementations; re-scoped by the owner 2026-11-05 ("other hierarchical moderation", TBD), no body | — |
 | 22 | `OPERATOR_TRANSFER` | any (an EOA, a single-key UA, an `msig`, a contract); each holder's grant `WHOLE` or `LIMITED` | regulated kinds 8–13 only; a plain kind refuses it (`FeatureInvalidForKind`); SPECIFIED, entry in plan T32 | `operatorTransfer(from, to, amount, ref)`: moves public units with no record, the CTR-GOV-08 refusals ([CTR-GOV-20](../decisions.md#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds), [CTR-GOV-13](../decisions.md#ctr-gov-13--moderate-only-on-public-balances)) |
+| 24 | `PQZ_PROOF` | any holder (`roles.issuer` on a plain PQZ kind takes this bit alone) | the PQZ kinds 4, 5, 12, 13 | `setProofStore(uint8)`: the token's proof storage mode NONE / LOG, from the next debit; disabling the bit freezes the mode ([CTR-PQZ-35](pq-zero-knowledge.md#CTR-PQZ-35), [CTR-GOV-22](../decisions.md#CTR-GOV-22); BUILT, group 3h T61) |
 
 The bits are the one table of [CTR-GOV-10](../decisions.md#ctr-gov-10--bit-bands-0-127-one-meaning-128-255-per-application-none-refused): bits 0–127 belong to SCaaS, with the same meaning on every SCaaS contract (bits 11 `LISTING` and 12 `FEE_ROUTING` are the DEX's, [CTR-DEX-03](dex.md#CTR-DEX-03)); bits 128–255 belong to an application, labelled by its `bitLabel(bit)`; no band is refused, and a contract's `_validBits()` is the only check. `smartcontracts/vectors/governance/governance_bits.json` holds each SCaaS bit's name, type and disclosure sentence, read by every client (BUILT on branch `governance`, T14, `7887a712`).
 
@@ -596,6 +597,9 @@ check was dropped); the rule handles each one explicitly:
   approve)`, a Safe `execTransaction`, or a Safe MultiSend that approves and uses the allowance in one transaction. The
   token sees `msg.sender` = the account. A signature check (`isValidSignature`) is not the account's execution policy
   (Safe guards, modules and thresholds run only on execution), which is why a gasless `approve` by ERC-1271 is refused.
+- A contract that must take a payer's SCaaS tokens into its custody does it by a service pull, the payer's one signed
+  transfer bound to the service and one operation, never an allowance ([CTR-MTX-32](metatx.md#CTR-MTX-32); group 3i,
+  owner 2026-11-09).
 - Payments never need allowances (`pay`, `payWithFee`), the DEX needs none for SCaaS tokens
   ([CTR-DEX-15](dex.md#CTR-DEX-15)), and a mandate is not an allowance: a `MandateWallet` delegate (possibly an EOA)
   pays from the wallet under caps, and the wallet, a contract, is the token's `msg.sender` ([CTR-ACC-06](mandates.md#CTR-ACC-06)).
@@ -642,17 +646,19 @@ empty output — with no symptom until someone has deposited funds.
   made are untouched), `createTokenUnregistered` deploys an off-catalogue implementation with `version() == 0` (visibly),
   plain kinds only (owner 2026-10-19). A bug in a version is permanent for that version's tokens; the remedy is
   voluntary migration (unwrap the old token, wrap the new one).
-- **Atomic init**: CREATE2 salt = `keccak256(abi.encode(msg.sender, salt))` (nobody can take another creator's
-  address); `initialize` runs in the same call and requires `msg.sender == FACTORY`; implementations lock themselves
-  in the constructor.
+- **Atomic init**: CREATE3 with `s = keccak256(abi.encode(creatorId, class, kind, salt))` (nobody can take another
+  creator's address; [CTR-TOK-29](#CTR-TOK-29); the CREATE2 salt `keccak256(abi.encode(msg.sender, salt))` before T72);
+  `initialize` runs in the same call and requires `msg.sender == FACTORY`;
+  implementations lock themselves in the constructor.
 - **Kind gate**: `setKindEnabled(kind, on)` (registrar); the plain kinds start on, the confidential kinds off (owner
   2026-10-20, plan 5g-Z2; it replaces `setZetherEnabled` / `setPqzEnabled`). The chain gates are the implementations':
   a Zether `initialize` reverts when the release's transfer verifier does not run on the chain (no chain-id
   allowlist, [CTR-ZTH-52](zether.md#CTR-ZTH-52)); a PQZ `initialize` runs `PqzSafety` (the
   precompile self-test; no chain allowlist). `OpenFactoryV1` (with its own gate) is in `legacy/p5/` (P5).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
-  `publishEnv`, `publishDexEnv`, `deployTokenImplementation`, `deployDexImplementation`, `deprecate`, `deprecateDex` and
-  `setKindEnabled`.
+  `configureChain` (once), `publishEnv`, `publishDexEnv`, `deployTokenImplementation`, `deployDexImplementation`,
+  `deprecate`, `deprecateDex`, `setKindEnabled` and the generic catalogue's `publishClassEnv`, `deployImplementation`,
+  `deprecateRelease`, `setClassKindEnabled` ([CTR-TOK-28](#CTR-TOK-28)).
 - **Same rule on every family**: a fix to an Aptos package, Sui package, Solana program, Cosmos contract, GRAM or
   Soroban contract is a new deployment at a new address plus voluntary migration by the owners of the balances;
   accounts on the old deployment keep working with the old code ([CTR-GEN-02](README.md#CTR-GEN-02)).
@@ -683,25 +689,27 @@ wrappers the live reserve `underlying.balanceOf(token)` — readable by anyone f
 <a id="factory-v2"></a>
 
 <a id="CTR-TOK-03"></a>**CTR-TOK-03** — **One factory, `OpenFactory`** (owner), the only factory of a chain. The
-constructor takes the registrar, `chain_uid` (immutable, exposed as `chainUid()`) and the notice period (`noticePeriod()`,
-seconds); an env must name this factory and `chain_uid`, and `deployTokenImplementation` refuses a release whose `chainUid()`
-differs, so a clone's domain `salt` has exactly one source ([CTR-GEN-05](README.md#CTR-GEN-05)). The kinds are in [CTR-TOK-21](#CTR-TOK-21), the creation API in
-[CTR-TOK-25](#CTR-TOK-25). The factory is deployed through the deterministic CREATE2 deployer
-([CTR-GEN-06](README.md#CTR-GEN-06)).
+constructor takes the registrar only (the same bytes, so the same address, on every chain); the chain's values are set once
+by the registrar's `configureChain(chainUid, noticePeriod, govRouter, refBlock, refHash)` ([CTR-TOK-29](#CTR-TOK-29)), and
+every publish, deploy and creation entry refuses before it (`ChainNotConfigured`). A clone's domain `salt` has exactly one
+source, the `chain_uid` the factory appends to its code ([CTR-GEN-05](README.md#CTR-GEN-05)). The kinds are in [CTR-TOK-21](#CTR-TOK-21), the creation API in
+[CTR-TOK-25](#CTR-TOK-25), the index in [CTR-TOK-27](#CTR-TOK-27), the generic catalogue in [CTR-TOK-28](#CTR-TOK-28). The
+factory is deployed through the deterministic CREATE2 deployer ([CTR-GEN-06](README.md#CTR-GEN-06)).
 
 <a id="release-env"></a>**Releases and their environment** (owner 2026-10-20, plan 5g-Z2). The factory deploys every
 implementation itself, so what a release depends on is fixed in its code by construction:
 
-- **Split.** The implementation carries what never changes for it: the release's `Env` as constructor immutables —
-  `factory`, `chainUid`, the UA `registry`, the `SmartKeyAccount` implementation, `hedera`, the kind's dependencies
+- **Split.** Since the chain-neutral releases ([CTR-TOK-29](#CTR-TOK-29)) the implementation's code holds no chain value:
+  each instance's `ChainEnv` (the factory's `chainUid` and `govRouter`, and the release env's values below) is appended to
+  its clone's code. The env carries the UA `registry`, the `SmartKeyAccount` implementation, `hedera`, `params`, the kind's dependencies
   `deps` by position (`*_ZETHER`: transfer, burn and inner-product verifier and `ZetherDisclosure` of one curve;
   `*_PQZ`: the `PqzKeyVerifier`; plain kinds and the DEX: none) and the linked libraries `libs` with their
   `libCodeHashes`. Each instance carries its own configuration in `initArgs` (rates, features, roles, the confidential
   settings…), decoded by the implementation's generic `initialize(creator, version, initArgs)`; the factory never reads it
   (owner 2026-10-20).
 - **Envs** are published per kind (and one domain for the DEX) by `publishEnv(kind, envVersion, Env)` /
-  `publishDexEnv(envVersion, Env)`: versions from 1, append-only, never changed (`EnvAlreadyPublished`), `Env.factory` and
-  `Env.chainUid` the factory's own and no library code hash `0` or `keccak256("")`, a pin that checks nothing
+  `publishDexEnv(envVersion, Env)`: versions from 1, append-only, never changed (`EnvAlreadyPublished`), no factory, `chainUid`
+  or router in it (the factory adds its own), and no library code hash `0` or `keccak256("")`, a pin that checks nothing
   (`EnvInvalid`); `EnvPublished(domain, envVersion, envHash)` with
   `envHash = keccak256(abi.encode(env))`; views `envOf`, `dexEnvOf`, `latestEnvVersion`, `latestDexEnvVersion`.
 - **Deployment.** `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)` /
@@ -710,10 +718,12 @@ implementation itself, so what a release depends on is fixed in its code by cons
   override; the owner declined "bind the kind's latest env"): the final binding rule belongs to a later
   governance-matrix spec. The factory checks each `libs[i].codehash` against `libCodeHashes[i]`
   (`LibraryCodeHashMismatch`; the list is the registrar's, checked by code hash, not compared with the init code's link
-  references — owner 2026-10-20), `CREATE2`s `initcode ‖ abi.encode(envVersion, env, implArgs)` (salt
-  `keccak256(abi.encode(kind, version))`, DEX `keccak256(abi.encode("dex", version))`), bubbles a constructor's revert
+  references — owner 2026-10-20), `CREATE2`s the init code with its chain-neutral arguments (no env in them, so the
+  release has the same address on every chain; salt `keccak256(abi.encode(kind, version))`, DEX
+  `keccak256(abi.encode("dex", version))`), bubbles a constructor's revert
   (`DeployFailed` without revert data, e.g. a runtime over the chain's code-size limit; init code over the chain's
-  EIP-3860 limit halts the factory's frame instead, so the registrar's call consumes all its gas without `DeployFailed`), checks `kind()`, `factory()`, `chainUid()`, and records
+  EIP-3860 limit halts the factory's frame instead, so the registrar's call consumes all its gas without `DeployFailed`), checks `kind()`, `factory()`, `validateEnv` and the
+  body modules ([CTR-TOK-30](#CTR-TOK-30)), and records
   `Release {implementation, envVersion, envHash, usableFrom, deprecated}`. The event carries the env version and hash,
   `keccak256(initcode)` (without the appended arguments: a reproducible-build check) and the deployed code hash.
   **Names (owner 2026-11-10):** the token-kind path is `deployTokenImplementation` (was `deployImplementation`), the
@@ -756,19 +766,71 @@ struct TokenConfig {
 struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; } // owner a UA id
 ```
 
-- **Creation (unchanged pattern).** `CREATE2` of an EIP-1167 clone, then `initialize(creator, version, initArgs)` **in the same call** (no
-  front-run of `initialize`, no deployed-but-uninitialized state); the implementation locks its own `initialize` in
-  its constructor. The address is predictable from `(factory, salt, implementation)`.
+- **Creation** (order since T71–T72): `CREATE3` of an EIP-1167 clone with its `ChainEnv` appended to its code
+  ([CTR-TOK-29](#CTR-TOK-29)), then `initialize(creatorId, version, initArgs)` **in the same call** (no front-run of
+  `initialize`, no deployed-but-uninitialized state), then the post-init `chainUid()` check, the index record
+  ([CTR-TOK-27](#CTR-TOK-27)) and the one event; the implementation locks its own `initialize` in its constructor. The
+  address is `predictAddress(creatorId, class, kind, salt)`, independent of the implementation.
 - **Kinds** (fresh enum, nothing deployed): `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ`,
   `WRAPPED_PQZ`; 6 and 7 are `RETIRED_6`, `RETIRED_7` (were `NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ`, dropped 2026-10-20, ids not reused), decoded and refused by `deployTokenImplementation` (`KindRetired`); 8–13 are `NORMAL_REGULATED`, `WRAPPED_REGULATED`, `NORMAL_ZETHER_REGULATED`, `WRAPPED_ZETHER_REGULATED`, `NORMAL_PQZ_REGULATED`, `WRAPPED_PQZ_REGULATED`, off until a release is published and the kind enabled ([CTR-GOV-16](../decisions.md#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes); T4, `60406d42`). The catalogue keeps versions per kind
   (deploy, deprecate; [CTR-TOK-03](#CTR-TOK-03)); it is append-only.
-- **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
-  owner, underlyings)`, where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
-  back from `lockedFeatures()` after `initialize`), not the requested one; `DexCreated(dex, creator, version, implementation, owner)` for a DEX clone; `owner` is a `bytes32` UA id in both events
+- **One event per creation:** `TokenCreated(token, creatorId, kind, version, implementation, features, lockedFeatures,
+  owner, underlyings)` (`creatorId` a `bytes32` UA id, indexed: a native creator's padded address; through the router the
+  signing UA), where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
+  back from `lockedFeatures()` after `initialize`), not the requested one; `DexCreated(dex, creatorId, version, implementation, owner)` for a DEX clone; `owner` is a `bytes32` UA id in both events
   ([CTR-DEX-24](dex.md#CTR-DEX-24)).
 - **Registry views:** `isToken`, `versionOf`; for a DEX `isDex`, `dexVersionOf` (advisory, tokens never consult them,
   [CTR-DEX-24](dex.md#CTR-DEX-24)); catalogue `deployDexImplementation`, `dexReleaseOf`, `dexImplementationOf`,
-  `latestDexVersion`.
+  `latestDexVersion`. All of them read the index record ([CTR-TOK-27](#CTR-TOK-27)), which replaced the per-token info.
+
+<a id="CTR-TOK-27"></a>**CTR-TOK-27** — **The factory indexes every contract it creates, in its own state** (owner
+2026-11-07: "no event filtering, because events are lost"; factory index spec Q1–Q6 as recommended). **BUILT** (T67;
+creator ids T71; `test/v2/FactoryIndex.t.sol`). One record per created contract, never changed or deleted:
+`Created {addr, creatorId, ownerUA, contractClass, kind, version, createdBlock, createdAt}` (three slots), and per class
+three lists: all, by owner UA at creation (never 0), by creator. Views `infoOf(c)`, `contractsPage(class, from, n)`,
+`contractsOfOwner(ownerUA, class, from, n)`, `contractsOfCreator(creatorId, class, from, n)`, each `(page, total)`, oldest
+first, `n ≤ MAX_PAGE = 100` (`PageTooLarge`), `n = 0` the count, `from ≥ total` an empty page; an unknown class is
+`ClassUnknown`. Class ids are `uint16` (Q12): 0 not made here, 1 `TOKEN`, 2 `DEX`, 3 `PQCHAT`
+([pqchat.md](pqchat.md#CTR-CHAT-02)), 4–65535 the registrar's, next free. `ownerUA` is the contract's `owner()` right after
+`initialize`, not now (Q2): a claim, so wallets show `version ≠ 0` and the creator beside it (Q1); releases are not
+indexed (Q3). Measured (`GovGas`): `createToken` 1,446,879 → 1,805,428, `createDex` 3,416,944 → 4,006,661 gas with the
+index (T67), 2,183,102 / 4,383,367 with CREATE3 and the env (T72); `createInstance` 1,826,732 (T70).
+
+<a id="CTR-TOK-28"></a>**CTR-TOK-28** — **The generic catalogue: a new class or kind without a factory change** (owner
+2026-11-07: "`OpenFactory` must be built so that later the admin can easily add another kind / implementation"; Q7–Q12 as
+recommended). **BUILT** (T70; `test/v2/FactoryGenericKind.t.sol`). A release is `ReleaseId {contractClass, kind,
+version}` for a class ≥ 3 (0–2 `ClassReserved`: tokens and the DEX keep their typed paths, Q10). Registrar only:
+`publishClassEnv(class, kind, envVersion, Env)`; `deployImplementation(id, envVersion, initSelector, interfaceId, initcode,
+implArgs)` (was `deployRelease`, renamed by the owner 2026-11-10), which checks code, `factoryInfo()` (224 B naming this
+factory and the release's own id, owner 0, initialized: `ReleaseInfoMismatch`), ERC-165 (`0x01ffc9a7`, `interfaceId`, not
+`0xffffffff`: `InterfaceNotSupported`), `validateEnv` and the modules ([CTR-TOK-30](#CTR-TOK-30)); `deprecateRelease(id,
+reason)` (immediate, `ReleaseIsDeprecated` on creation: an error cannot share the event's name); `setClassKindEnabled`
+(a new `(class, kind)` starts off, Q7; `ClassKindDisabled`). Anyone: `createInstance(id, salt, initCall)` — a usable,
+non-deprecated release of an enabled pair, `initCall` the catalogued initializer only (`InitSelectorMismatch`), value 0,
+to the fresh clone only, then its `factoryInfo()` and `chainUid()` checked (`InstanceInfoMismatch`), the record and the
+lists, `InstanceCreated`. `creating()` returns the creator of the creation in progress (EIP-1153, Q8). No unregistered
+generic path (Q9); not a node job (Q11). The factory enforces the release's code, env, initializer, interface and
+`chain_uid`; it cannot know whether the release's own logic is sound: that is the registrar's trust root, as for tokens.
+
+<a id="CTR-TOK-29"></a>**CTR-TOK-29** — **Chain-neutral releases: one address per release on every chain, the chain's
+values in each clone's code** (owner 2026-11-07, option I; S3 the signing UA). **BUILT** (T71, T72, T76; deploy T73; two
+chains T74; `test/v2/ChainNeutral.t.sol`, `ChainNeutralFactory.t.sol`, `test/governance/GovRouterCreate.t.sol`).
+- `OpenFactory(registrar)`; `configureChain(chainUid, noticePeriod, govRouter, refBlock, refHash)` once
+  (`ChainAlreadyConfigured`): `chainUid` the genesis hash whenever the EVM can prove it (`BLOCKHASH(0)`, EIP-2935;
+  `ChainUidNotGenesis`), a reference block's hash checked when given (`RefBlockMismatch`, against a sibling chain with the
+  same chain id), the router's `chainUid()` equal; `noticePeriod` at most 30 days (`NoticePeriodTooLong`).
+- The published `Env` holds no factory, `chainUid` or router; the factory appends each instance's `ChainEnv {chainUid,
+  registry, govRouter, smartKeyAccountImpl, hedera, deps, params}` to its clone's runtime code (`ChainEnvCode`), read by
+  `EXTCODECOPY` (one copy of the 138-byte head per signed call, no cache), never an immutable and never an entry's
+  parameter. `initialize` on code that is not such a clone reverts `EnvMissing`; the implementation reads an all-zero env
+  and signs nothing (`ChainUidZero`).
+- Every creation is CREATE3 with `s = keccak256(abi.encode(creatorId, class, kind, salt))`; `predictAddress(creatorId,
+  class, kind, salt)`; `InstanceNotCreated`, `SaltAlreadyUsed`; the clone's `chainUid()` checked after `initialize`.
+- Through the chain's `GovernanceRouter` the creator is the signing UA (S3): `mtxCreateToken`, `mtxCreateDex`,
+  `mtxCreateInstance` ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)); the factory reads the router's
+  `subject()` once at entry and refuses 0 (`RouterSubjectZero`).
+- Cost (T72, the env read): `mtxTransfer` +636 to +646 gas, `transferToUA` +1,311 to +1,400, the router's `mtxMint` +682;
+  every kind's runtime +0.8 to +1.2 KB.
 - One `IOpenFactory` and one `IFactoryToken` (the v1 and v2 interfaces are in `legacy/`).
 
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `initArgs`.
@@ -787,18 +849,17 @@ implArgs)` (the factory's append), `initialize(creator, version, bytes initArgs)
 node and clientkeys moved (P5), not deleted.
 Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
 
-- `constructor(address registrar, bytes32 chainUid, uint64 noticePeriod)`, `chainUid` non-zero (`ChainUidZero`).
-  `publishEnv`, `publishDexEnv`, `deployTokenImplementation`, `deployDexImplementation`, `deprecate`, `deprecateDex` and
+- `constructor(address registrar)`, then `configureChain` once ([CTR-TOK-29](#CTR-TOK-29); `chainUid` non-zero,
+  `ChainUidZero`). `publishEnv`, `publishDexEnv`, `deployTokenImplementation`, `deployDexImplementation`, `deprecate`, `deprecateDex` and
   `setKindEnabled` are registrar-only (`NotRegistrar`; a registrar that is an EIP-7702 designator gets
   `CallerDelegated`, owner ruling D2, 2026-10-30); envs and the catalogue are append-only (`EnvAlreadyPublished`,
   `VersionAlreadyRegistered`, `DexVersionAlreadyRegistered`); env version 0 and release version 0 are refused.
 - **Deployment** ([CTR-TOK-03](#CTR-TOK-03)): `EnvUnknown`, `LibraryCodeHashMismatch`, the constructor's own error or
-  `DeployFailed`, then `kind()`, `factory()` and `chainUid()` read by staticcall: `ImplementationNotAContract` (also for an
+  `DeployFailed`, then `kind()` and `factory()` read by staticcall: `ImplementationNotAContract` (also for an
 EIP-7702 designator: `SigCheck.isContract`, owner ruling D5, 2026-10-30; a designator implementation would be a mutable
 backdoor, since clones `DELEGATECALL` through it),
   `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
-  `ImplementationFactoryMismatch`, `ChainUidMismatch`. The constructor refuses a notice period over 30 days
-  (`NoticePeriodTooLong`). Kinds 6–7 do not exist (`NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ` dropped, plan 5h D21: `KindReserved` removed, the ABI decoder rejects them); kinds 2–5 are built (Zether P3, PQZ P6g; review W-Q, 2026-10-19: this text had kinds 4–7 reserved).
+  `ImplementationFactoryMismatch`. `configureChain` refuses a notice period over 30 days (`NoticePeriodTooLong`). Kinds 6–7 do not exist (`NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ` dropped, plan 5h D21: `KindReserved` removed, the ABI decoder rejects them); kinds 2–5 are built (Zether P3, PQZ P6g; review W-Q, 2026-10-19: this text had kinds 4–7 reserved).
   The constructors check their env: a confidential kind needs its `deps` (`*_ZETHER`: four with code, a registry, the
   two verifiers of one `proofSystemId`, both fixed to `deps[2]`, two addresses, the transfer verifier answering
   `ringSize()` and the burn verifier not; `*_PQZ`: the verifier) and refuses a Hedera env
@@ -807,7 +868,7 @@ backdoor, since clones `DELEGATECALL` through it),
 - **Creation:** `createToken` (a deployed release: `VersionUnknown`; not deprecated: `VersionDeprecated`; past
   `usableFrom`: `VersionNotYetUsable`) and `createTokenUnregistered` (plain kinds only, `UnregisteredConfidentialKind`
   for 2–7; the implementation checks of a deployment, recorded with `version == 0`) refuse a disabled kind
-  (`KindDisabled`), clone with salt `keccak256(abi.encode(msg.sender, salt))` (`SaltAlreadyUsed` when the predicted address is already in the
+  (`KindDisabled`), clone by CREATE3 ([CTR-TOK-29](#CTR-TOK-29); `SaltAlreadyUsed` when the predicted address is already in the
   index or has code: an unregistered implementation may self-destruct its clone in `initialize`), call `initialize` in the same call,
   then read the token's `underlyings()` (at most 8, else `UnderlyingCountInvalid`; the token checks the count per kind:
   `NORMAL*` 0, `WRAPPED*` 1–8), `features()`, `lockedFeatures()` and `owner()` for the index and the one
@@ -833,7 +894,7 @@ backdoor, since clones `DELEGATECALL` through it),
 <a id="factory-interface"></a>
 
 The built interface is `IOpenFactory.sol` and the `TokenConfig` block of [CTR-TOK-25](#CTR-TOK-25); the event is
-`TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures, owner, underlyings)`, the
+`TokenCreated(token, creatorId, kind, version, implementation, features, lockedFeatures, owner, underlyings)`, the
 enum `TokenKind { NORMAL, WRAPPED, NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_PQZ, WRAPPED_PQZ }`. The deploy scripts publish env 1 of `NORMAL` and of the DEX and deploy `NormalToken` as
 version 1 of `NORMAL` and `SCaaSDex` as DEX version 1 through the factory (with `DEPLOY_ZETHER=1` also both `*_ZETHER` kinds on
 the BLS12-381 env, the kinds enabled); `WrappedToken` is not deployed ([CTR-GEN-06](README.md#CTR-GEN-06), [CTR-TOK-24](#CTR-TOK-24)). Separate `AssetFactory` for action

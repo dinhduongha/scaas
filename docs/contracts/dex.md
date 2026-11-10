@@ -506,21 +506,24 @@ power: there is nothing to wait for — no signed order can be charged more than
 ```solidity
 struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; }
 function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) external returns (address); // initArgs = abi.encode(DexConfig)
-// event DexCreated(address dex, address creator, uint64 version, address implementation, bytes32 owner)
+// event DexCreated(address indexed dex, bytes32 indexed creatorId, uint64 version, address implementation, bytes32 owner)
 // owner: a UA id (a native account: its address padded to 32 bytes; CTR-GOV-01 Change, owner 2026-11-04)
 ```
 
-- **Clone.** `CREATE2` of an EIP-1167 clone and `initialize(creator, version, initArgs)` in the same call, as for tokens
+- **Clone.** `CREATE3` of an EIP-1167 clone with its `ChainEnv` appended to its code and `initialize(creatorId, version, initArgs)` in the same call, as for tokens
   ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)); the implementation locks its own `initialize`. `initialize` writes the owner
   and gives it `LISTING` and `FEE_ROUTING`; it moves by `transferOwnership` ([CTR-DEX-03](#CTR-DEX-03)); `grantDelay` (≤ 30
   days) and `rescueTo` are immutable after it; the `DexPuller` is deployed by `initialize` with `rescueTo`; the EIP-712 `verifyingContract` is the clone.
-- **Registry.** The factory keeps `isDex(addr)` and `dexVersionOf(addr)` (`versionOf` is the token one). Clients and
+- **Registry.** The factory keeps `isDex(addr)` and `dexVersionOf(addr)` (`versionOf` is the token one), both read from
+  the DEX's record in the factory index (class 2, kind 0, [CTR-TOK-27](token-wrappers.md#CTR-TOK-27)). Clients and
   the node use them with the implementation version to warn about or refuse an unlisted `dex`; tokens do not consult them.
+  The DEX's chain values come from its clone's code (`chainEnv()`, `SMART_KEY_ACCOUNT_IMPL()`, `GOV_ROUTER()`), its
+  release takes `(factory_, implArgs)` only ([CTR-TOK-29](token-wrappers.md#CTR-TOK-29); BUILT, T71–T72).
 
 **Transitional (BUILT, P2b-1; 5g-Z2).** Built: `publishDexEnv(envVersion, Env)` and
 `deployDexImplementation(version, envVersion, initcode, implArgs)` (registrar; the factory deploys the release on the
-DEX env it names — `factory`, `chainUid`, the `SmartKeyAccount` implementation, `hedera`, the linked `TradeLib` by code
-hash — as for tokens, [CTR-TOK-03](token-wrappers.md#release-env); append-only; the release answers `factory()` and
+DEX env it names — the `SmartKeyAccount` implementation, `hedera`, the linked `TradeLib` by code hash; the factory and
+`chainUid` reach the clone through its appended `ChainEnv` since T71 — as for tokens, [CTR-TOK-03](token-wrappers.md#release-env); append-only; the release answers `factory()` and
 `chainUid()`; usable after the notice period: `DexVersionNotYetUsable`), `dexReleaseOf`, `dexImplementationOf`,
 `latestDexVersion`, `createDex`, `isDex`, `dexVersionOf`, `DexImplementationDeployed` (env version and hash, init-code
 and code hashes), `DexCreated` (controller ruling, pending the owner); the scripts deploy the implementation

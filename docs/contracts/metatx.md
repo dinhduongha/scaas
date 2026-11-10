@@ -470,11 +470,58 @@ shape — and returns `bool`. Steps, all or nothing and cheap first as [CTR-MTX-
 
 These are the transfer and `pay` shapes of the earlier single struct, moved out of `data` into typed fields.
 
+<a id="service-pull"></a><a id="CTR-MTX-32"></a>**CTR-MTX-32** — **Service pull: a contract takes a payer's tokens into its
+custody by the payer's one signed transfer, never by an allowance** (owner 2026-11-09, service-pull spec Q1–Q5 as
+recommended). Status: **BUILT** for the token side (no token change: `mtxExecuteTransfer` with `MODE_RESTRICT_RELAYER`
+on every EVM kind 0–13 and Hedera) and as the reference service `test/metatx/helpers/RefServiceEscrow.sol` with its tests
+(test only, never deployed; group 3i T77); **SPECIFIED** for every third-party service, whose rule this is. UNAUDITED.
+
+The payer signs one `UAMetaTransfer` in the pulled token's own domain: `to` = `pad(S)`, `relayer` = `S` with
+`MODE_RESTRICT_RELAYER`, fee mode `NONE`, `fee` 0, no `feeRecipient`, and `entryRef` = the EIP-712 digest of the one
+service operation in S's own domain (`keccak256(0x1901 ‖ domainSeparator(S) ‖ hashStruct(<Op>, op))`). Anyone submits
+`S.<op>(op, t, auth)`; only S can make the token execute `t`, once, before `validUntil` ([CTR-MTX-15](#CTR-MTX-15)). A
+service contract S follows these rules:
+
+- **Entry shape.** One external function per operation, `<op>(<Op> calldata op, MetaTxLib.UAMetaTransfer calldata t,
+  IUARegistry.UASig calldata auth)`; `<Op>` a struct of named fields, the first `bytes32 payer`, its EIP-712 type that
+  struct exactly; every value S reads is a field of `<Op>` or S's own state, never of `t` alone ([CTR-MTX-29](#CTR-MTX-29)).
+  A node-relayable `<Op>` has at most 16 fields of EIP-712 atomic types plus `bytes` and `string`, no array, no nested
+  struct (C3). No entry of S ever verifies a signature over an `<Op>` type (`entryRef` is a full signing digest).
+- **Permissionless.** The signed transfer is the entry's only authority; S never reads `msg.sender` for it.
+- **Discovery.** `servicePullEntries() returns (bytes4[] selectors, string[] opTypes, address[] tokens)` (`address(0)`:
+  `<Op>` names it in `address token`) and ERC-5267 `eip712Domain()`.
+- **The checks, in order** (a shape check reverts `ServicePullShape(code)`): 1 `t.to == pad(this)`; 2 `t.mode ==
+  MODE_RESTRICT_RELAYER`, `t.relayer == this`, `t.fee == 0`, `t.feeRecipient == 0`; 3 `t.entryRef` = the digest of `op`;
+  4 `t.from == op.payer`; 5 `t.value` = the amount the operation requires, above 0; 6 the `entryRef` not seen
+  (`ServicePullReplayed`), on a regulated token S not frozen (`ServicePullFrozen`), the operation's own checks; 7 record
+  the `entryRef` and the operation; 8 `token.mtxExecuteTransfer(t, auth)` (no `try`), then `balanceOf(this)` grew by
+  exactly `t.value` (`ServicePullNotReceived`); 9 the rest of the logic.
+- **The token is S's own** (immutable, or an `op` field checked against S's list or the factory's provenance,
+  [CTR-TND-07](tender.md#CTR-TND-07)), never one named only by the caller.
+- **Custody** is S's ledger, credited after step 8; `balanceOf(S) ≥ Σ owed` except after a recorded `forceTransfer`.
+  Payout destinations are fixed at pull time; a payout the token refuses stays owed, never redirected. On the regulated
+  kinds 8–13 a recorded `forceTransfer` on a frozen S drains the pooled balance: the shortfall equals the forced amount,
+  falls on the last claimants, and their payouts fail closed; a service on a regulated kind states it in its own
+  documentation (owner Q5). Reentrancy: checks-effects-interactions with a transient guard (EIP-1153).
+- **The relayer fee** is [`RelayFeeRouter`](#CTR-MTX-27) or nothing: every pull is at fee `NONE` (owner Q3). Through
+  `relay(target = S, …)` the router runs S first, so with the fee in the pulled token on the pull's lane the pull takes
+  nonce `n` and the fee `n + 1`.
+- **Out of scope:** confidential balances (PQZ, Zether: a keeper would be a decryption oracle,
+  [ARCH-POS-13](../decisions.md#ARCH-POS-13)), standing authority (one signed pull per charge, or a `MandateWallet`),
+  several payers or tokens in one entry.
+
+Tests (T77): `test/metatx/ServicePull.t.sol` (a native EOA, a derived single-key UA, an `msig`, a `SmartKeyAccount`, a
+Hedera 64-byte payer; direct and through `RelayFeeRouter`; N1–N20 with N14b, each by its named error),
+`ServicePullKinds.t.sol` (kinds 0–5, 8–13), `ServicePullInvariant.t.sol`, `ServicePullVectors.t.sol`
+(`smartcontracts/vectors/metatx/servicepull.json`); 16 mutants of the reference service, each killed. The node's kind:
+[NODE-JOB-25](../node/job-api.md#NODE-JOB-25); every family: [NET-ALL-85](../networks/README.md#NET-ALL-85).
+
 <a id="CTR-MTX-01"></a>**CTR-MTX-01** — A payment is a `MetaTransfer` with `entryRef ≠ 0` (`entryRef` = the payment
 reference, [CTR-MTX-03](#CTR-MTX-03)), run through `mtxExecuteTransfer` or built by `mtxPay`
 ([CTR-MTX-10](#CTR-MTX-10)) and `mtxPayReceiverFee` ([CTR-MTX-05](#CTR-MTX-05)); `entryRef = 0` is a plain transfer.
 One pinned struct per intent means one type that wallets display. It emits `PaymentSettled(from, to, value, feeAmount,
-feeRecipient, entryRef)` with the real fee. Tender's deposit ([CTR-TND-01](tender.md#CTR-TND-01)) is this shape.
+feeRecipient, entryRef)` with the real fee. Tender's deposit ([CTR-TND-01](tender.md#CTR-TND-01)) and every service pull
+([CTR-MTX-32](#CTR-MTX-32), group 3i) are this shape: there `entryRef` is the operation's digest in the service's domain.
 
 <a id="CTR-MTX-24"></a>**CTR-MTX-24** — **`mtxBatchTransfer(MetaTransfer[] ts, bytes[] sigs)`** is the batch of the
 typed path, beside `mtxBatch` for `MetaTransaction`s, with the rules of [CTR-MTX-11](#CTR-MTX-11): atomic, items in
@@ -751,46 +798,72 @@ reconciliation exception, never as a second payment. A client that wants a diffe
 same value clients derive off chain, so "at most once" holds per path. The node and the client store the derived lane
 with the job, so a pay job never changes lanes after it is signed.
 
-<a id="CTR-MTX-26"></a>**CTR-MTX-26** — **Payment metadata: `mtxPayMeta` / `uaPayMeta`, the payment id commits to
-its metadata.** **BUILT** on the EVM and every non-EVM family (owner 2026-10-26; metatx-split T7, T10-T16; decision [CTR-MTX-26](../decisions.md#ctr-mtx-26--payment-metadata-by-commitment-mtxpaymeta--uapaymeta)). NEAR: `mtx_pay_meta(op, auth, salt, meta)` in the token, no contract cap on `meta` (7,530 B settles), node cap 2,048 B (near-algorand T6, [NET-NEAR-07](../networks/near.md#NET-NEAR-07)). Algorand: ABI `mtx_pay_meta(op, auth, salt, meta)`, `meta` ≤ 507 B by the 1,024 B log limit (T11, [algorand.md](../networks/algorand.md#paymeta-relayfee)). The
-payment id is a commitment, so the payer's signature over `entryRef` binds the metadata with no new struct field and no
-new typehash ([CTR-MTX-11](#CTR-MTX-11)):
+<a id="CTR-MTX-26"></a>**CTR-MTX-26** — **Payment metadata: every pay entry takes `PayMeta` last; the payment id commits to
+it; the payer may store the payment's record on chain.** **BUILT** on the EVM (pay-meta-tax T37–T42; plan T83, owner
+2026-11-09; UNAUDITED); the non-EVM families keep the v1 form below until their own round, one rule (decision
+[CTR-MTX-26](../decisions.md#ctr-mtx-26--payment-metadata-by-commitment-mtxpaymeta--uapaymeta)).
 
-```text
-salt  = 32 bytes from a CSPRNG
-meta  = abi.encode(uint16 schema, bytes body)
-payId = metaPayId(salt, meta) = keccak256(abi.encodePacked("scaas.pay.meta", salt, keccak256(meta)))
+```solidity
+struct PayMeta {
+    bytes32 salt;    // 32 bytes from a CSPRNG; never 0
+    bytes32 payNo;   // the payment request's id; 0 = none; recommended a right-aligned UUIDv7
+    bool    save;    // store a PayRecord under payNo after the transfer
+    uint16  schema;  // 0 = no body; 1 note, 2 structured reference, 3 bound call, 4 encrypted
+    bytes   body;    // the schema's encoding; empty iff schema == 0
+}
+metaPayId(m) = keccak256(abi.encodePacked("scaas.pay.meta.v3", m.salt, keccak256(abi.encode(m.payNo, m.save, m.schema, m.body))))
+event PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body);
+struct PayRecord { bytes32 to; uint192 amount; uint64 blockNumber; }   // two slots
+function paymentCount(bytes32 payNo) external view returns (uint256);
+function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit) external view returns (PayRecord[] memory);
 ```
 
-- **On chain:** `mtxPayMeta(from, to, amount, salt, meta, validUntil, mode, relayer, fee, feeRecipient, signature)` and
-  its UA twin `uaPayMeta(bytes32 from, bytes32 to, amount, salt, meta, validUntil, mode, relayer, fee, feeRecipient,
-  auth)` compute `payId = metaPayId(salt, meta)` and then run exactly `mtxPay` / `uaPay` with it: the same
-  `MetaTransfer` / `UAMetaTransfer`, lane `payLane(payId)`, nonce 0, the same digest, signature and `PAYABLE` gate. They
-  emit `PaymentMeta(bytes32 indexed payId, bytes meta)` before `PaymentSettled`. View: `metaPayId(salt, meta)`.
-- **Off chain:** plain `mtxPay` / `uaPay` with `payId = metaPayId(salt, meta)`. The payee receives `(salt, meta)` on
-  its own channel and checks the commitment; nothing is published.
-- **Every tier** (owner 2026-10-26): every `MetaTokenBase` kind, and every non-EVM family's pay relay with the same
-  derivation (owner: non-EVM must work too).
-- The contract does not parse `meta`. The body encodings are fixed and family-neutral, one rule for every chain kind
-  (controller call 2026-10-27, owner may override; [decision](../decisions.md#ctr-mtx-26--payment-metadata-by-commitment-mtxpaymeta--uapaymeta)),
-  always inside the envelope `meta = abi.encode(uint16 schema, bytes body)`:
-  - 1, note: the raw UTF-8 bytes;
-  - 2, structured reference: `abi.encode(string creditorRef, string invoiceNo, uint64 dueDate)`, `dueDate` in Unix
-    seconds;
-  - 3, a bound on-chain call: `abi.encode(uint256 chainId, bytes32 target, bytes32 callHash)`; `target` is 32 bytes
-    (an EVM address left-padded with zeros, another family's native 32-byte id), `callHash = keccak256(callData)`
-    (the same call hash as [CTR-MTX-27](#CTR-MTX-27)'s `ref`);
-  - 4, any of these encrypted to the payee (a KEM wrap to the payee's `UARegistry` KEM key ‖ AES-256-GCM); the
-    inner layout is not defined yet (a later client item).
-- **Vectors:** `smartcontracts/vectors/metatx/paymeta.json` (`[{name, schema, salt, meta, payId, payLane}]`, hex), read
-  by the EVM forge test, `clientkeys` and every family's tests. The hashes do not depend on how a body is encoded (only
-  on the `meta` bytes); the schema 4 bodies are illustrative filler. `long_body_4096` (4,192 B of `meta`) is a hash
-  vector only: above the node's 2,048 B cap and Solana's transaction size, never submitted on chain.
-- **Privacy:** a `meta` emitted in clear is public forever, so [CTR-MTX-03](#CTR-MTX-03)'s warning about business
-  identifiers applies to it. `payId` stays unlinkable (the salt is random). Private metadata uses schema 4 or the
-  off-chain path.
-- **Wallets:** EIP-712 shows `entryRef` only. Connectors and `clientkeys` recompute `payId` from `(salt, meta)`, show
-  the decoded meta next to the typed data, and refuse to sign on a mismatch.
+- **Every pay entry** (`mtxPay`, `mtxPayReceiverFee`, `payWithFee`, `payWithFeeToUA`; on the regulated kinds
+  `mtxPayWithTax`, `payWithTax`; the mandate wallets' `payUnderMandate` through the token's direct entries) takes `PayMeta`
+  last, never empty: a non-zero `salt`, `schema == 0` iff `body` is empty, and no `save` without a `payNo`, else
+  `PayMetaShape()`; then `entryRef == metaPayId(meta)`, else `PayMetaMismatch(entryRef, payId)`; then `PaymentMeta`, before
+  the payment's events. The payer signs `entryRef` (in `UAMetaTransfer`, `UAPayWithTax`, `UAReceiverFee`'s payment,
+  `UAPayUnderMandate`), so `payNo`, `save`, `schema` and `body` are signed through it; no typehash changed
+  ([CTR-MTX-11](#CTR-MTX-11)). The separate `mtxPayMeta` / `uaPayMeta` entries are gone on the EVM.
+- **`payNo`** is a `bytes32`, never parsed: 0 = none, any other 32-byte id accepted. **Recommended: a UUIDv7, right-aligned**
+  (its 128 bits in the low 16 bytes, the high 16 bytes zero, as `MetaTxLib.pad` places an address): unique without
+  coordination, time-ordered (a compact index), no business sequence number on chain. A readable document number stays off
+  chain or goes in `body` (schema 2, or 4 encrypted). A payee that must match each request issues one `payNo` per request.
+- **The tag is `scaas.pay.meta.v3`**: a v2 (`string payNo`) or v1 commitment over the same bytes is refused
+  `PayMetaMismatch`.
+- **The pay records** (`scaas.pay.records`, ERC-7201, per token): `mapping(bytes32 payNo => PayRecord[])`. Every public pay
+  entry whose `PayMeta.save` is set appends `PayRecord(to, amount, block.number)` after its transfer: `to` the payee id,
+  `amount` what the payee received (the fee on top for `mtxPay`, `payWithFee`, `payWithFeeToUA`; `value - fee` for
+  receiver-pays; `value - tax` for the tax entries); `amount ≥ 2^192` reverts `PayRecordAmount(amount)`. `save` is the
+  payer's choice per payment, usually set by the payee's request; `save == false` costs what a pay cost before and still puts
+  `payNo` in the event. Confidential pays (PQZ, Zether) are never recorded. No sum on chain: the reader keeps the records
+  whose `to` is one of its own addresses. Anyone may append (a 1-wei pay with any `payNo`): the reader filters by `to`, the
+  spammer pays the gas, reads are paged. Why on chain: logs are not kept for ever (EIP-4444), so an ERP asks the chain by
+  `payNo` alone with `eth_call`; keyed by `payNo` only, because an ERP may roll its receiving addresses. No node API.
+- **Views:** `paymentCount(payNo)`; `paymentsOf(payNo, offset, limit)` returns records `[offset, offset + limit)` cut at the
+  end, an empty page from the end on.
+- **Cost** (forge `MetaTxGasV2.test_gasP_paySave_logOnly`, fresh lane, relayer bound, fee `NONE`, Amsterdam): `mtxPay` with
+  a `payNo` and `save` off 202,814 gas; `save` on, the first payment of a `payNo` 534,203 (+331,389: three new slots), a later
+  one 436,300 (+233,486: two new slots).
+- **Body encodings** (fixed and family-neutral, one rule for every chain kind): 1, note: the raw UTF-8 bytes; 2, structured
+  reference: `abi.encode(string creditorRef, string invoiceNo, uint64 dueDate)`, `dueDate` in Unix seconds; 3, a bound
+  on-chain call: `abi.encode(uint256 chainId, bytes32 target, bytes32 callHash)` (`target` 32 bytes, `callHash =
+  keccak256(callData)`, the call hash of [CTR-MTX-27](#CTR-MTX-27)'s `ref`); 4, any of these encrypted to the payee (a KEM
+  wrap to the payee's `UARegistry` KEM key ‖ AES-256-GCM; the inner layout is a later client item). The contract parses no
+  body.
+- **Vectors:** `smartcontracts/vectors/metatx/paymeta.json` (v3 rows; the v2 rows in `legacy/ua-mtx-merge/t83/`),
+  `payrecords.json` (one `payNo`, two records, the slots, the views' calldata and return data).
+- **Privacy:** a `body` emitted in clear is public forever ([CTR-MTX-03](#CTR-MTX-03)'s warning about business identifiers
+  applies); `payId` stays unlinkable (the salt is random). Private metadata uses schema 4 or the off-chain path (a plain pay
+  whose `PayMeta` the payee receives on its own channel).
+- **Wallets:** EIP-712 shows `entryRef` only. Connectors and `clientkeys` recompute `payId` from the `PayMeta`, show the
+  decoded fields next to the typed data, and refuse to sign on a mismatch.
+- **Non-EVM families (v1, BUILT on each, owner 2026-10-26; metatx-split T10–T16):** `meta = abi.encode(uint16 schema, bytes
+  body)`, `payId = metaPayId(salt, meta) = keccak256(abi.encodePacked("scaas.pay.meta", salt, keccak256(meta)))`, run as
+  the family's pay with that id and `PaymentMeta(payId, meta)`; NEAR `mtx_pay_meta(op, auth, salt, meta)` in the token, node
+  cap 2,048 B ([NET-NEAR-07](../networks/near.md#NET-NEAR-07)); Algorand ABI `mtx_pay_meta(op, auth, salt, meta)`, `meta` ≤
+  507 B by the 1,024 B log limit ([algorand.md](../networks/algorand.md#paymeta-relayfee)). Each family moves to `PayMeta`
+  and the pay records in its own round.
 
 <a id="CTR-MTX-11"></a>**CTR-MTX-11** — **One intent, one digest; no second typehash for the same struct.** A transfer
 or payment is signed only as a `MetaTransfer` and a call only as a `MetaTransaction` ([CTR-MTX-15](#CTR-MTX-15)); there
@@ -948,8 +1021,7 @@ entry with fee `NONE`. The call and its contract are unchanged: no token logic i
 - **A token fee:** the relayer sends `relay` to the router. Every `relay` carries a token payment (`UARelayFee`, signed by
   the payer): the router exists only for that, and there is no `relay` without one.
 
-A service pull (a service contract taking the payer's tokens into its custody, SPECIFIED:
-[spec](../superpowers/specs/2026-11-09-service-pull.md)) follows the same two ways: the target is the service and its
+A service pull (a service contract taking the payer's tokens into its custody, [CTR-MTX-32](#CTR-MTX-32)) follows the same two ways: the target is the service and its
 pull is the service's own operation, never the router's fee. The two compared (who pulls, what the signature binds, where
 the funds go): [service-pull spec §2.5](../superpowers/specs/2026-11-09-service-pull.md#25-the-relay-fee-and-a-service-pull-compared).
 
