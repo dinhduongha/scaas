@@ -31,7 +31,7 @@ contract ProofPathInvariantsTest is PqzFixture {
         h = new ProofPathHandler(reg, u);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features |= uint256(1) << GovernanceBits.PQZ_PROOF;
-        (c.owner, c.roles.issuer, c.lockedFeatures) = (nid(address(h)), nid(address(h)), 0);
+        (c.admin, c.roles.issuer, c.lockedFeatures) = (nid(address(h)), nid(address(h)), 0);
         tok = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "proof-path-inv"));
         h.setToken(tok);
         _public(tok, address(h), 1_000_000 * SCALE);

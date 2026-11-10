@@ -43,7 +43,7 @@ function regulate(IFactoryToken.TokenConfig memory c, address issuer, address co
     pure returns (IFactoryToken.TokenConfig memory)
 {
     c.lockedFeatures = 0;
-    c.owner = nid(address(0x0A11));
+    c.admin = nid(address(0x0A11));
     c.grantDelay = 1 days;
     c.features |= RIG_REG_FEATURES;
     (c.roles.issuer, c.roles.compliance) = (nid(issuer), nid(compliance));

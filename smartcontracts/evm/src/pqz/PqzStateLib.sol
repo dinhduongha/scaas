@@ -129,7 +129,7 @@ library PqzStateLib {
             _assign(s, next, registry);
             return;
         }
-        (s.pqzPendingVerifier, s.pqzProposer, s.pqzProposerGeneration, s.eta) = (next, caller, g.ownerGeneration, eta);
+        (s.pqzPendingVerifier, s.pqzProposer, s.pqzProposerGeneration, s.eta) = (next, caller, g.adminGeneration, eta);
     }
 
     /// @notice The owner deletes a live pending transfer (`PqzVerifierCancelled`); none live: nothing happens.
@@ -182,7 +182,7 @@ library PqzStateLib {
     /// @dev The owner first (a stranger learns nothing of the configuration), then an `OFFCHAIN` token with a transferable
     ///      verifier.
     function _owner(bytes32 caller, GovernanceLib.GovernanceStorage storage g) private view {
-        if (caller == 0 || caller != g.owner) revert IGovernance.NotOwner(caller);
+        if (caller == 0 || caller != g.admin) revert IGovernance.NotAdmin(caller);
     }
 
     function _transferable(PqzCore.PqzStorage storage s) private view {
@@ -193,7 +193,7 @@ library PqzStateLib {
     /// @dev A pending transfer still confirmable: proposed in this owner generation, its window `[eta, eta + notice]` not
     ///      passed.
     function _live(PqzCore.PqzStorage storage s, GovernanceLib.GovernanceStorage storage g) private view returns (bool) {
-        return s.pqzPendingVerifier != 0 && s.pqzProposerGeneration == g.ownerGeneration
+        return s.pqzPendingVerifier != 0 && s.pqzProposerGeneration == g.adminGeneration
             && block.timestamp <= uint256(s.eta) + s.noticePeriod;
     }
 

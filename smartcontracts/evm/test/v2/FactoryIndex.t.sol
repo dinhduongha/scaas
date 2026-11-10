@@ -33,7 +33,7 @@ import {ChainEnvCode} from "../../src/factory/ChainEnvCode.sol";
 contract IxHolder {}
 
 /// An unregistered implementation for the index's negatives (factory index spec §7): answers what the factory reads, its
-/// `owner()` whatever the test set (a claim), optionally reverting, and its `initialize` optionally creating a nested token.
+/// `admin()` whatever the test set (a claim), optionally reverting, and its `initialize` optionally creating a nested token.
 contract IndexImpl {
     address immutable F;
     bytes32 immutable U;
@@ -55,7 +55,7 @@ contract IndexImpl {
     function underlyings() external pure returns (address[] memory) {}
 
     /// Read through the implementation: a clone has no storage of its own for these.
-    function owner() external view returns (bytes32) {
+    function admin() external view returns (bytes32) {
         if (IndexImpl(_impl()).ownerReverts()) revert("owner reverts");
         return IndexImpl(_impl()).ownerClaim();
     }
@@ -172,13 +172,13 @@ contract FactoryIndexTest is IndexAsserts {
 
     function _normal(bytes32 owner) internal view returns (IFactoryToken.TokenConfig memory c) {
         c = normalInit("N", "N", 0, 1000, alice, address(0));
-        c.owner = owner;
+        c.admin = owner;
     }
 
     function _wrapped(bytes32 owner) internal view returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol, c.decimals) = ("W", "W", 6);
         c.features = 1 << GovernanceBits.PAYABLE;
-        c.owner = owner;
+        c.admin = owner;
         if (owner == 0) c.lockedFeatures = c.features;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
@@ -320,10 +320,10 @@ contract FactoryIndexTest is IndexAsserts {
     function test_index_ownerMovedKeepsCreationOwner() public {
         address t = _token(bob, NORMAL, _normal(nid(alice)), "m");
         vm.prank(alice);
-        IGovernance(t).transferOwnership(nid(bob));
+        IGovernance(t).transferAdmin(nid(bob));
         vm.prank(bob);
-        IGovernance(t).acceptOwnership();
-        assertEq(IGovernance(t).owner(), nid(bob), "the contract's own owner moved");
+        IGovernance(t).acceptAdmin();
+        assertEq(IGovernance(t).admin(), nid(bob), "the contract's own owner moved");
         assertEq(f.infoOf(t).ownerUA, nid(alice), "the index keeps the creation owner");
         (, uint256 n) = f.contractsOfOwner(nid(alice), TOKEN, 0, 0);
         assertEq(n, 1);
@@ -369,7 +369,7 @@ contract FactoryIndexTest is IndexAsserts {
         assertEq(f.creatorOf(t), relayer);
     }
 
-    /// `owner()` reverting reverts the creation (as before the index).
+    /// `admin()` reverting reverts the creation (as before the index).
     function test_index_ownerRevertRevertsCreation() public {
         IndexImpl impl = _impl();
         impl.set(nid(alice), true, address(0));
@@ -565,7 +565,7 @@ contract FactoryIndexZetherTest is ZetherFixture, IndexAsserts {
 
     function _z(bool wrapped, bool regulated) internal view returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(false, uint256(1) << 40);
-        c.owner = nid(address(0x0A11));
+        c.admin = nid(address(0x0A11));
         c.lockedFeatures = 0;
         if (regulated) {
             c.grantDelay = 1 days;
@@ -618,7 +618,7 @@ contract FactoryIndexPqzTest is PqzFixture, IndexAsserts {
 
     function _p(bool wrapped, bool regulated) internal view returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(uint256(1) << 40);
-        c.owner = nid(address(0x0A11));
+        c.admin = nid(address(0x0A11));
         c.lockedFeatures = 0;
         if (regulated) {
             c.grantDelay = 1 days;

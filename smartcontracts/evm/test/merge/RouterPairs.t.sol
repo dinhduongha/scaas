@@ -131,16 +131,16 @@ contract RouterPairsTest is GovRouterFixture {
         } else if (op == TRANSFER_OWNERSHIP) {
             NormalToken t = _normal(s, 0, 0);
             _m(op, s, address(t), abi.encode(y));
-            assertEq(t.pendingOwner(), y, "TransferOwnership");
+            assertEq(t.pendingAdmin(), y, "TransferOwnership");
         } else if (op == ACCEPT_OWNERSHIP) {
             NormalToken t = _normal(_pad(address(this)), 0, 0);
-            t.transferOwnership(s);
+            t.transferAdmin(s);
             _m(op, s, address(t), "");
-            assertEq(t.owner(), s, "AcceptOwnership");
+            assertEq(t.admin(), s, "AcceptOwnership");
         } else if (op == RENOUNCE_OWNERSHIP) {
             NormalToken t = _normal(s, 0, 0);
             _m(op, s, address(t), "");
-            assertEq(t.owner(), bytes32(0), "RenounceOwnership");
+            assertEq(t.admin(), bytes32(0), "RenounceOwnership");
         } else if (op == RENOUNCE_ROLE) {
             NormalToken t = _normal(s, s, 0);
             _m(op, s, address(t), abi.encode(MINT));

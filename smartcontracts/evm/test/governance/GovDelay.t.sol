@@ -68,7 +68,7 @@ contract GovDelayTest is Test {
     }
 
     function _cfg(uint64 delay) internal pure returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.features, c.owner, c.grantDelay) = ("G", "G", 18, 7, nid(OWNER), delay);
+        (c.name, c.symbol, c.decimals, c.features, c.admin, c.grantDelay) = ("G", "G", 18, 7, nid(OWNER), delay);
     }
 
     function _token(bytes32 salt, uint64 delay) internal returns (NormalToken) {
@@ -342,11 +342,11 @@ contract GovDelayTest is Test {
         _grant(MANAGER);
         assertTrue(_live(MANAGER));
         vm.prank(OWNER);
-        t.renounceOwnership();
+        t.renounceAdmin();
         assertFalse(_live(MANAGER));
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, OWNER));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, OWNER));
         t.grantRole(MINT, nid(MANAGER));
         assertFalse(t.hasRole(MINT, nid(MANAGER)));
     }
@@ -354,9 +354,9 @@ contract GovDelayTest is Test {
     function test_afterTransferTheNewOwnerProposesAgain() public {
         _grant(MANAGER);
         vm.prank(OWNER);
-        t.transferOwnership(nid(NEXT));
+        t.transferAdmin(nid(NEXT));
         vm.prank(NEXT);
-        t.acceptOwnership();
+        t.acceptAdmin();
         assertFalse(_live(MANAGER));
         vm.warp(block.timestamp + D);
         vm.prank(NEXT);
@@ -375,14 +375,14 @@ contract GovDelayTest is Test {
     function test_aToBToAKillsThePending() public {
         _grant(MANAGER);
         vm.prank(OWNER);
-        t.transferOwnership(nid(NEXT));
+        t.transferAdmin(nid(NEXT));
         vm.prank(NEXT);
-        t.acceptOwnership();
+        t.acceptAdmin();
         vm.prank(NEXT);
-        t.transferOwnership(nid(OWNER));
+        t.transferAdmin(nid(OWNER));
         vm.prank(OWNER);
-        t.acceptOwnership();
-        assertEq(t.owner(), nid(OWNER));
+        t.acceptAdmin();
+        assertEq(t.admin(), nid(OWNER));
         assertFalse(_live(MANAGER));
         vm.warp(block.timestamp + D);
         _grant(MANAGER);
@@ -394,14 +394,14 @@ contract GovDelayTest is Test {
         _grant(MANAGER);
         _grant(OFFICER);
         vm.startPrank(OWNER);
-        t.transferOwnership(nid(NEXT));
-        t.transferOwnership(bytes32(0));
+        t.transferAdmin(nid(NEXT));
+        t.transferAdmin(bytes32(0));
         vm.stopPrank();
         vm.warp(block.timestamp + D);
         _grant(MANAGER);
         assertTrue(t.hasRole(MINT, nid(MANAGER)));
         vm.prank(OWNER);
-        t.transferOwnership(nid(NEXT)); // pending, never accepted
+        t.transferAdmin(nid(NEXT)); // pending, never accepted
         _grant(OFFICER);
         assertTrue(t.hasRole(MINT, nid(OFFICER)));
     }
@@ -500,7 +500,7 @@ contract GovDelayTest is Test {
     function test_cancelGrantLiveAndDead() public {
         _grant(MANAGER);
         vm.prank(MANAGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, MANAGER));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, MANAGER));
         t.cancelGrant(MINT, nid(MANAGER));
         vm.expectEmit(address(t));
         emit IGovernance.GrantCancelled(MINT, nid(MANAGER), nid(OWNER));

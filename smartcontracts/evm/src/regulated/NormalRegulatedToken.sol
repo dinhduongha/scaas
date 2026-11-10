@@ -26,6 +26,8 @@ import "../zether/ZetherTypes.sol";
 interface INormalRegulatedTokenAbi {
     event AccountFrozen(bytes32 indexed account, bytes32 indexed ref, bytes32 recordId, uint64 until);
     event AccountUnfrozen(bytes32 indexed account, bytes32 indexed ref);
+    event AdminTransferStarted(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
+    event AdminTransferred(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
     event EIP712DomainChanged();
     event FeatureDisabled(uint8 indexed bit, bytes32 indexed by);
     event ForcedTransfer(bytes32 indexed recordId, bytes32 indexed from, bytes32 indexed to, uint256 amount);
@@ -41,8 +43,6 @@ interface INormalRegulatedTokenAbi {
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
     event OrderRecorded(bytes32 indexed recordId, bytes32 indexed orderId, bytes32 indexed subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil, bytes32 documentHash);
     event OrderRevoked(bytes32 indexed recordId, bytes32 reasonRef);
-    event OwnershipTransferStarted(bytes32 indexed previousOwner, bytes32 indexed newOwner);
-    event OwnershipTransferred(bytes32 indexed previousOwner, bytes32 indexed newOwner);
     event Paused(bytes32 indexed ref, uint64 until);
     event PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body);
     event PaymentSettled(address indexed from, address indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
@@ -63,6 +63,8 @@ interface INormalRegulatedTokenAbi {
     event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
     event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
     event Unpaused(bytes32 indexed ref);
+    error AdminAccountPool(bytes32 account);
+    error AdminHasHolders(uint8 bit);
     error AlreadyRecordFrozen(bytes32 account);
     error AmountZero();
     error BadFlags(bytes32 orderHash);
@@ -120,12 +122,12 @@ interface INormalRegulatedTokenAbi {
     error NoSuchRole(uint8 bit);
     error NonceAboveCap(bytes32 orderHash);
     error NonceInvalidated(bytes32 orderHash);
+    error NotAdmin(bytes32 caller);
     error NotDex(address caller);
     error NotFrozen(bytes32 account);
     error NotLiquidityDex(address caller);
-    error NotOwner(bytes32 caller);
     error NotPaused();
-    error NotPendingOwner(bytes32 caller);
+    error NotPendingAdmin(bytes32 caller);
     error NotProposer(uint8 bit, bytes32 account, bytes32 proposer);
     error OperatorTargetRefused(bytes32 account);
     error OrderClosed(bytes32 orderHash);
@@ -135,8 +137,6 @@ interface INormalRegulatedTokenAbi {
     error OrderInactive(bytes32 recordId);
     error OrderUnknown(bytes32 recordId);
     error Overfill(bytes32 orderHash);
-    error OwnerAccountPool(bytes32 account);
-    error OwnerHasHolders(uint8 bit);
     error PauseCooldown(uint64 until);
     error PauseTooLong(uint64 until);
     error PayMetaMismatch(bytes32 entryRef, bytes32 payId);
@@ -237,8 +237,12 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
         _forwardView(_MA);
     }
 
-    function acceptOwnership() external {
+    function acceptAdmin() external {
         _forward(_MA);
+    }
+
+    function admin() external view returns (bytes32 _p0) {
+        _forwardView(_MA);
     }
 
     function bitLabel(uint8) external view returns (IGovernance.BitType _p0, bytes4 _p1, string memory _p2) {
@@ -445,10 +449,6 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
         _forwardView(_MR);
     }
 
-    function owner() external view returns (bytes32 _p0) {
-        _forwardView(_MA);
-    }
-
     function pause(bytes32, uint64) external {
         _forward(_MR);
     }
@@ -477,11 +477,11 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
         _forwardView(_MA);
     }
 
-    function pendingGrant(uint8, bytes32) external view returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3) {
+    function pendingAdmin() external view returns (bytes32 _p0) {
         _forwardView(_MA);
     }
 
-    function pendingOwner() external view returns (bytes32 _p0) {
+    function pendingGrant(uint8, bytes32) external view returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3) {
         _forwardView(_MA);
     }
 
@@ -501,7 +501,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
         _forwardView(_MR);
     }
 
-    function renounceOwnership() external {
+    function renounceAdmin() external {
         _forward(_MA);
     }
 
@@ -557,7 +557,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
         _forwardView(_MT);
     }
 
-    function transferOwnership(bytes32) external {
+    function transferAdmin(bytes32) external {
         _forward(_MA);
     }
 

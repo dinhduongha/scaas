@@ -138,7 +138,7 @@ abstract contract RegFixture is Test {
         (c.name, c.symbol) = ("Reg", "REG");
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE)
             | REG_FEATURES;
-        c.owner = nid(ownerA);
+        c.admin = nid(ownerA);
         c.grantDelay = GD;
         (c.roles.minter, c.roles.issuer, c.roles.compliance) = (nid(address(this)), nid(issuer), nid(compliance));
         (c.initialSupply, c.initialHolder) = (SUPPLY, alice);
@@ -149,7 +149,7 @@ abstract contract RegFixture is Test {
     function _cfg9() internal view returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol) = ("WReg", "WREG");
         c.features = (1 << GovernanceBits.PAYABLE) | REG_FEATURES;
-        c.owner = nid(ownerA);
+        c.admin = nid(ownerA);
         c.grantDelay = GD;
         (c.roles.issuer, c.roles.compliance) = (nid(issuer), nid(compliance));
         c.legs = new IFactoryToken.Leg[](1);

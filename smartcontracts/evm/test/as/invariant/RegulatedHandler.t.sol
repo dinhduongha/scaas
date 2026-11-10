@@ -272,7 +272,7 @@ abstract contract RegCore is Test {
                 gPauseEnd = until;
             } else if (s == IRegulatedToken.Unpaused.selector) {
                 gPauseEnd = uint64(block.timestamp);
-            } else if (s == IGovernance.OwnershipTransferred.selector) {
+            } else if (s == IGovernance.AdminTransferred.selector) {
                 ++cGen;
             } else if (s == IGovernance.RelaxProposed.selector) {
                 (uint8 action, bytes32 proposer, uint64 eta) = abi.decode(l.data, (uint8, bytes32, uint64));
@@ -548,11 +548,11 @@ abstract contract RegCore is Test {
         }
     }
 
-    /// The owner hands over to the other owner (`acceptOwnership` kills every pending, Codex 2).
+    /// The owner hands over to the other owner (`acceptAdmin` kills every pending, Codex 2).
     function handover() external {
         address next = cGov[1 - cOwner];
-        _op(K_GOV, _owner(), abi.encodeCall(IGovernance.transferOwnership, (nid(next))));
-        if (_op(K_GOV, next, abi.encodeCall(IGovernance.acceptOwnership, ()))) cOwner = 1 - cOwner;
+        _op(K_GOV, _owner(), abi.encodeCall(IGovernance.transferAdmin, (nid(next))));
+        if (_op(K_GOV, next, abi.encodeCall(IGovernance.acceptAdmin, ()))) cOwner = 1 - cOwner;
     }
 
     function attest(uint256 i, uint256 how) external {

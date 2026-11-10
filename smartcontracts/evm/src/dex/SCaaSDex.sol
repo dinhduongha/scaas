@@ -137,11 +137,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         if (s.initialized) revert AlreadyInitialized();
         s.initialized = true;
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(GovernanceBits.DEX_BITS, 0, cfg.owner, cfg.grantDelay, address(0), none, GovernanceBits.DEX_BITS,
+        GovernanceLib.init(GovernanceBits.DEX_BITS, 0, cfg.admin, cfg.grantDelay, address(0), none, GovernanceBits.DEX_BITS,
             GovernanceBits.DEX_BITS, 0, address(0)); // no contract-only bit: no registry read
-        if (cfg.owner != 0) { // the owner holds both bits from creation (B-27: `grantRole` would only propose)
-            GovernanceLib.initHolder(GovernanceBits.LISTING, cfg.owner, GovernanceBits.DEX_BITS, 0, address(0));
-            GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.owner, GovernanceBits.DEX_BITS, 0, address(0));
+        if (cfg.admin != 0) { // the admin holds both bits from creation (B-27: `grantRole` would only propose)
+            GovernanceLib.initHolder(GovernanceBits.LISTING, cfg.admin, GovernanceBits.DEX_BITS, 0, address(0));
+            GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.admin, GovernanceBits.DEX_BITS, 0, address(0));
         }
         s.listedOnly = cfg.listedOnly;
         address p = address(new DexPuller(cfg.rescueTo)); // the DEX itself rescues nothing (CTR-DEX-20, spec §6.2)
@@ -806,8 +806,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function GOV_ROUTER() external view returns (address r) { _forwardView(_MD); }
     function features() external view override returns (uint256 r) { _forwardView(_MD); }
     function lockedFeatures() external view override returns (uint256 r) { _forwardView(_MD); }
-    function owner() external view override returns (bytes32 r) { _forwardView(_MD); }
-    function pendingOwner() external view override returns (bytes32 r) { _forwardView(_MD); }
+    function admin() external view override returns (bytes32 r) { _forwardView(_MD); }
+    function pendingAdmin() external view override returns (bytes32 r) { _forwardView(_MD); }
     function hasRole(uint8, bytes32) external view override returns (bool r) { _forwardView(_MD); }
     function validBits() external pure override returns (uint256 r) { _forwardPure(); }
     function holderCount(uint8) external view override returns (uint256 r) { _forwardView(_MD); }
@@ -829,9 +829,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function revokeRole(uint8, bytes32) external override { _forward(); }
     function renounceRole(uint8) external override { _forward(); }
     function disableFeature(uint8) external override { _forward(); }
-    function transferOwnership(bytes32) external override { _forward(); }
-    function acceptOwnership() external override { _forward(); }
-    function renounceOwnership() external override { _forward(); }
+    function transferAdmin(bytes32) external override { _forward(); }
+    function acceptAdmin() external override { _forward(); }
+    function renounceAdmin() external override { _forward(); }
 
     /// @dev S1: today's `governed` entry: `_guardIn` (on the DEX the transient guard's check), DELEGATECALL of this call's
     ///      calldata to D, its revert data verbatim on failure, `_guardOut`, its return data verbatim (never a modifier

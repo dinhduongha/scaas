@@ -111,7 +111,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.symbol = "zW";
         c.decimals = 6;
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE) | (1 << GovernanceBits.WRAP_DISABLEABLE);
-        c.owner = nid(address(this));
+        c.admin = nid(address(this));
         c.roles.rateAdmin = nid(address(this));
         c.roles.guardian = nid(address(this));
         c.rate = IFactoryToken.RateConfig(2 days, 1000);

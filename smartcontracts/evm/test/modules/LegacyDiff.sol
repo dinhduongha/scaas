@@ -152,12 +152,13 @@ abstract contract LegacyDiff is Test {
     function _diff(address token, address oldImpl, address caller, bytes memory data, string memory what) internal {
         bytes memory code = token.code;
         uint256 snap = vm.snapshotState();
-        Run memory n = _run(token, caller, data);
+        Run memory n = _run(token, caller, _r3Call(data));
         vm.revertToState(snap);
         vm.etch(token, _withImpl(code, oldImpl));
         Run memory o = _run(token, caller, data);
         vm.revertToStateAndDelete(snap);
         o.ret = _intended(token, data, o);
+        _r3Old(o);
         assertEq(n.ok, o.ok, string.concat(what, ": outcome"));
         assertEq(n.ret, o.ret, string.concat(what, ": return / revert data"));
         assertEq(n.logs.length, o.logs.length, string.concat(what, ": log count"));
@@ -193,6 +194,42 @@ abstract contract LegacyDiff is Test {
         uint8 k = _kindOf(token);
         if (k != 1 && k != 3 && k != 5 && k != 9 && k != 11 && k != 13) return o.ret;
         return abi.encode(abi.decode(o.ret, (uint256)) | GovernanceBits.WRAP_CONTROLS);
+    }
+
+    /// @dev Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1-§4.3): d142b57c's ownership names are the admin
+    ///      names now, same arguments, storage and rules. A row of an old entry runs on the new side under its new selector;
+    ///      the old side's revert selector and event topic0 are read under the new names. Nothing else is mapped.
+    function _r3Sel(bytes4 s) internal pure returns (bytes4) {
+        if (s == bytes4(keccak256("owner()"))) return bytes4(keccak256("admin()"));
+        if (s == bytes4(keccak256("pendingOwner()"))) return bytes4(keccak256("pendingAdmin()"));
+        if (s == bytes4(keccak256("transferOwnership(bytes32)"))) return bytes4(keccak256("transferAdmin(bytes32)"));
+        if (s == bytes4(keccak256("acceptOwnership()"))) return bytes4(keccak256("acceptAdmin()"));
+        if (s == bytes4(keccak256("renounceOwnership()"))) return bytes4(keccak256("renounceAdmin()"));
+        if (s == bytes4(keccak256("NotOwner(bytes32)"))) return bytes4(keccak256("NotAdmin(bytes32)"));
+        if (s == bytes4(keccak256("NotPendingOwner(bytes32)"))) return bytes4(keccak256("NotPendingAdmin(bytes32)"));
+        if (s == bytes4(keccak256("OwnerAccountPool(bytes32)"))) return bytes4(keccak256("AdminAccountPool(bytes32)"));
+        if (s == bytes4(keccak256("OwnerHasHolders(uint8)"))) return bytes4(keccak256("AdminHasHolders(uint8)"));
+        return s;
+    }
+
+    function _r3Call(bytes memory data) internal pure returns (bytes memory out) {
+        out = bytes.concat(data);
+        if (out.length < 4) return out;
+        bytes4 s = _r3Sel(bytes4(out));
+        for (uint256 i; i < 4; ++i) out[i] = s[i];
+    }
+
+    function _r3Old(Run memory o) internal pure {
+        if (!o.ok) o.ret = _r3Call(o.ret);
+        for (uint256 i; i < o.logs.length; ++i) {
+            if (o.logs[i].topics.length == 0) continue;
+            bytes32 t = o.logs[i].topics[0];
+            if (t == keccak256("OwnershipTransferStarted(bytes32,bytes32)")) {
+                o.logs[i].topics[0] = keccak256("AdminTransferStarted(bytes32,bytes32)");
+            } else if (t == keccak256("OwnershipTransferred(bytes32,bytes32)")) {
+                o.logs[i].topics[0] = keccak256("AdminTransferred(bytes32,bytes32)");
+            }
+        }
     }
 
     /// @dev `_diff` as its own call, so a positive control can expect its assertion to fail.

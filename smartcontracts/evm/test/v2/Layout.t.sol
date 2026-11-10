@@ -46,9 +46,9 @@ contract NamespaceProbe is UAMetaTxBase {
         (t.name, t.symbol) = ("N", "S");
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
         // every governance identity a UA id (CTR-GOV-01 Change): the owner words and the mapping keys are `bytes32`
-        (g.features, g.lockedFeatures, g.owner) = (0x81, 0x82, U);
-        (g.grantDelay, g.ownerGeneration) = (0x83, 0x84);
-        (g.pendingOwner, g.lastProposedAt, g.rescueTo) = (V, 0x85, B);
+        (g.features, g.lockedFeatures, g.admin) = (0x81, 0x82, U);
+        (g.grantDelay, g.adminGeneration) = (0x83, 0x84);
+        (g.pendingAdmin, g.lastProposedAt, g.rescueTo) = (V, 0x85, B);
         g.roles[1][U] = 2;
         (g.counts[1].holders, g.counts[1].roots) = (0x86, 0x87);
         (g.grants[1][U].grantorEpoch, g.grants[1][U].barred, g.grants[1][U].grantor) = (0x8c, true, V);
@@ -198,10 +198,10 @@ contract LayoutTest is V2Fixture {
         f = new F[](19);
         f[0] = F("features", 0, 0, 0x81, 32);
         f[1] = F("lockedFeatures", 0, 0, 0x82, 32);
-        f[2] = F("owner", 0, 0, u, 32);
-        f[3] = F("pendingOwner", 0, 0, v, 32);
+        f[2] = F("admin", 0, 0, u, 32);
+        f[3] = F("pendingAdmin", 0, 0, v, 32);
         f[4] = F("grantDelay", 0, 0, 0x83, 8);
-        f[5] = F("ownerGeneration", 0, 0, 0x84, 4);
+        f[5] = F("adminGeneration", 0, 0, 0x84, 4);
         f[6] = F("lastProposedAt", 0, 0, 0x85, 8);
         f[7] = F("roles[1][A]", 1, u, 2, 1);
         f[8] = F("counts[1].holders", 1, 0, 0x86, 16);

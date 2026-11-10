@@ -56,7 +56,7 @@ contract GovHybridTest is UALedgerBase {
     /// `PAYABLE` plus `extra`, owner `OWNER`; a hybrid (`MINTABLE`, minter `MINTER`) iff `cap != 0`; the test is the rate admin
     /// (a contract), `GUARD` the guardian.
     function _cfg(address[] memory legs, uint256 cap, uint256 extra) internal pure returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.owner, c.maxSupply) = ("H", "H", 6, nid(OWNER), cap);
+        (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, nid(OWNER), cap);
         c.features = 1 | extra | (cap != 0 ? uint256(1) << MINT : 0);
         if (cap != 0) c.roles.minter = nid(MINTER);
         if (extra & RATE != 0) (c.roles.rateAdmin, c.rate) = (nid(address(1)), IFactoryToken.RateConfig(2 days, 1000)); // _make: this

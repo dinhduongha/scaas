@@ -26,7 +26,7 @@ abstract contract SCaaSDexGovernance is ReentrancyGuardTransient, GovernanceBase
 
     function _guardOut(bool) internal pure override {}
 
-    /// @dev An owner or holder that is an EIP-7702 designator is refused (owner ruling 2026-10-30, D2).
+    /// @dev An admin or holder that is an EIP-7702 designator is refused (owner ruling 2026-10-30, D2).
     function _caller() internal view override returns (address) {
         SigCheck.requireNotDelegated(msg.sender);
         return msg.sender;
@@ -70,8 +70,8 @@ contract SCaaSDexGovernanceModule is SCaaSDexGovernance {
     function GOV_ROUTER() external view onlyDelegated returns (address) { return _GOV_ROUTERBody(); }
     function features() external view onlyDelegated returns (uint256) { return _featuresBody(); }
     function lockedFeatures() external view onlyDelegated returns (uint256) { return _lockedFeaturesBody(); }
-    function owner() external view onlyDelegated returns (bytes32) { return _ownerBody(); }
-    function pendingOwner() external view onlyDelegated returns (bytes32) { return _pendingOwnerBody(); }
+    function admin() external view onlyDelegated returns (bytes32) { return _adminBody(); }
+    function pendingAdmin() external view onlyDelegated returns (bytes32) { return _pendingAdminBody(); }
 
     function hasRole(uint8 bit, bytes32 account) external view onlyDelegated returns (bool) {
         return _hasRoleBody(bit, account);
@@ -104,7 +104,7 @@ contract SCaaSDexGovernanceModule is SCaaSDexGovernance {
     function revokeRole(uint8 bit, bytes32 account) external onlyDelegated { _revokeRoleBody(bit, account); }
     function renounceRole(uint8 bit) external onlyDelegated { _renounceRoleBody(bit); }
     function disableFeature(uint8 bit) external onlyDelegated { _disableFeatureBody(bit); }
-    function transferOwnership(bytes32 newOwner) external onlyDelegated { _transferOwnershipBody(newOwner); }
-    function acceptOwnership() external onlyDelegated { _acceptOwnershipBody(); }
-    function renounceOwnership() external onlyDelegated { _renounceOwnershipBody(); }
+    function transferAdmin(bytes32 newAdmin) external onlyDelegated { _transferAdminBody(newAdmin); }
+    function acceptAdmin() external onlyDelegated { _acceptAdminBody(); }
+    function renounceAdmin() external onlyDelegated { _renounceAdminBody(); }
 }

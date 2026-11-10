@@ -150,7 +150,7 @@ contract Dex is OnchainBase {
 
     function _normal(string memory name, string memory symbol, address holder) internal returns (address t) {
         IFactoryToken.TokenConfig memory c = _base(name, symbol);
-        c.owner = _pad(a1);
+        c.admin = _pad(a1);
         (c.initialSupply, c.initialHolder) = (1e12, holder);
         vm.broadcast(k1);
         t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), _salt(symbol));
@@ -159,7 +159,7 @@ contract Dex is OnchainBase {
 
     function _wrapped(string memory name, string memory symbol, address leg) internal returns (address t) {
         IFactoryToken.TokenConfig memory c = _base(name, symbol);
-        c.owner = _pad(a1);
+        c.admin = _pad(a1);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
         vm.broadcast(k1);
@@ -169,7 +169,7 @@ contract Dex is OnchainBase {
 
     function _regulated() internal returns (address t) {
         IFactoryToken.TokenConfig memory c = _base("Onchain Dex R", "oDR");
-        c.owner = _pad(a1);
+        c.admin = _pad(a1);
         (c.initialSupply, c.initialHolder) = (1e12, a2);
         // no regulated control set: every `RegulatedParams` field stays 0 (RegulatedLib's shape rule)
         vm.broadcast(k1);
@@ -407,7 +407,7 @@ contract Dex is OnchainBase {
 
     function _kindToken(uint8 n, string memory label) internal returns (address x) {
         IFactoryToken.TokenConfig memory c = _base("Onchain Dex K", string.concat("oDK", vm.toString(n)));
-        c.owner = _pad(a1);
+        c.admin = _pad(a1);
         if (n == 2 || n == 3 || n == 10 || n == 11) {
             c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0);
         }
@@ -474,10 +474,10 @@ contract Dex is OnchainBase {
         vm.startBroadcast(k1);
         g.revokeRole{gas: G}(GovernanceBits.LISTING, _pad(a2));
         dex.setListedOnly{gas: G}(true); // after the trades: with it every interaction target (the token of an approve too) is listed
-        g.transferOwnership{gas: G}(_pad(a2));
+        g.transferAdmin{gas: G}(_pad(a2));
         vm.stopBroadcast();
         vm.broadcast(k2);
-        g.acceptOwnership{gas: G}();
+        g.acceptAdmin{gas: G}();
         // dex2 (grantDelay 1 h): a grant proposed then cancelled, a feature off, the owner's roles and ownership renounced
         IGovernance g2 = IGovernance(address(dex2));
         vm.startBroadcast(k1);
@@ -485,7 +485,7 @@ contract Dex is OnchainBase {
         g2.cancelGrant{gas: G}(GovernanceBits.LISTING, _pad(a3));
         g2.disableFeature{gas: G}(GovernanceBits.LISTING);
         g2.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING);
-        g2.renounceOwnership{gas: G}();
+        g2.renounceAdmin{gas: G}();
         vm.stopBroadcast();
     }
 

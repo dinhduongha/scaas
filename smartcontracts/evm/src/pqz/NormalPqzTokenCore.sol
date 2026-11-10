@@ -47,7 +47,7 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
     function _init(IFactoryToken.TokenConfig memory cfg) internal override(MetaTokenBase, NormalTokenCore) {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
             _roleBits(), _contractOnlyBits(), _registry());
         PqzStateLib.init(cfg.conf, _registry(), _pqzVerifier(), FACTORY);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);

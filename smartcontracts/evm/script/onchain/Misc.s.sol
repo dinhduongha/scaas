@@ -357,7 +357,7 @@ contract Misc is OnchainBase {
     function _cfg0(string memory name, string memory symbol) internal view returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol, c.decimals) = (name, symbol, 6);
         c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.MINTABLE | 1 << GovernanceBits.BURNABLE;
-        c.owner = _pad(a1);
+        c.admin = _pad(a1);
         c.roles.minter = _pad(a1);
         (c.initialSupply, c.initialHolder) = (1e12, a1);
     }

@@ -42,7 +42,7 @@ contract PqzVerifierTest is PqzOffchainBase {
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, v, fixed_);
         c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        c.owner = owner_;
+        c.admin = owner_;
     }
 
     /// An OFFCHAIN token with verifier `v` on the factory `f` (owner: this test).
@@ -262,11 +262,11 @@ contract PqzVerifierTest is PqzOffchainBase {
         assertEq(t.pqzVerifyConfig().pending, vA, "a new proposal");
     }
 
-    /// A confirm by anyone but the proposer: `NotProposer`; a proposal by a non-owner: `NotOwner`.
+    /// A confirm by anyone but the proposer: `NotProposer`; a proposal by a non-owner: `NotAdmin`.
     function test_transfer_notProposer() public {
         NormalPqzToken t = _tok(fN, vA, false);
         vm.prank(address(0xBEEF));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, nid(address(0xBEEF))));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(address(0xBEEF))));
         t.pqzSetVerifier(vB);
         t.pqzSetVerifier(vB);
         vm.warp(block.timestamp + NOTICE);
@@ -274,21 +274,21 @@ contract PqzVerifierTest is PqzOffchainBase {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotProposer.selector, uint8(0), vB, me));
         t.pqzSetVerifier(vB);
         vm.prank(address(0xBEEF));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, nid(address(0xBEEF))));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(address(0xBEEF))));
         t.pqzCancelVerifier();
         vm.prank(address(0xBEEF));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, nid(address(0xBEEF))));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(address(0xBEEF))));
         t.pqzRevokeVerifier();
     }
 
-    /// An owner change between proposal and confirm kills the pending (`ownerGeneration`).
+    /// An owner change between proposal and confirm kills the pending (`adminGeneration`).
     function test_transfer_ownerChanged() public {
         NormalPqzToken t = _tok(fN, vA, false);
         t.pqzSetVerifier(vB);
         address o2 = address(0x0A2);
-        IGovernance(address(t)).transferOwnership(nid(o2));
+        IGovernance(address(t)).transferAdmin(nid(o2));
         vm.prank(o2);
-        IGovernance(address(t)).acceptOwnership();
+        IGovernance(address(t)).acceptAdmin();
         vm.warp(block.timestamp + NOTICE);
         assertEq(t.pqzVerifyConfig().pending, 0, "dead");
         vm.prank(o2);
@@ -334,7 +334,7 @@ contract PqzVerifierTest is PqzOffchainBase {
     /// A PRECOMPILE token has no verifier: every op refuses `PqzVerifyConfigInvalid`.
     function test_transfer_precompileRefused() public {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        c.owner = me;
+        c.admin = me;
         NormalPqzToken t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "precompile-owned"));
         vm.expectRevert(IPqzToken.PqzVerifyConfigInvalid.selector);
         t.pqzSetVerifier(vB);

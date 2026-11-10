@@ -65,9 +65,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -75,6 +75,24 @@
     "params": [],
     "names": [],
     "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -1320,24 +1338,6 @@
     "group": "K"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "dfe8a97e",
     "sig": "payLane(bytes32)",
     "name": "payLane",
@@ -1477,6 +1477,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -1493,24 +1511,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -1587,9 +1587,9 @@
     "group": "K"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -1865,6 +1865,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "23b872dd",
     "sig": "transferFrom(address,address,uint256)",
     "name": "transferFrom",
@@ -1890,28 +1912,6 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "b3dcb494",
@@ -2093,9 +2093,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -2133,6 +2133,24 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
    },
    {
     "sel": "dd62ed3e",
@@ -3696,24 +3714,6 @@
     "group": "K"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "dfe8a97e",
     "sig": "payLane(bytes32)",
     "name": "payLane",
@@ -3853,6 +3853,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -3869,24 +3887,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -4091,9 +4091,9 @@
     "group": "K"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -4423,6 +4423,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "23b872dd",
     "sig": "transferFrom(address,address,uint256)",
     "name": "transferFrom",
@@ -4448,28 +4470,6 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "b3dcb494",
@@ -4896,9 +4896,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -4934,6 +4934,24 @@
     "vis": "external",
     "domain": "zether",
     "group": "Z"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
    },
    {
     "sel": "dd62ed3e",
@@ -6828,24 +6846,6 @@
     "group": "K"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "dfe8a97e",
     "sig": "payLane(bytes32)",
     "name": "payLane",
@@ -6985,6 +6985,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -7001,24 +7019,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -7117,9 +7117,9 @@
     "group": "K"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -7453,6 +7453,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "4a19383e",
     "sig": "transferEntry(bytes32)",
     "name": "transferEntry",
@@ -7522,28 +7544,6 @@
     "vis": "external",
     "domain": "zether",
     "group": "Z"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "b3dcb494",
@@ -7743,9 +7743,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -7805,6 +7805,24 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
    },
    {
     "sel": "dd62ed3e",
@@ -10132,24 +10150,6 @@
     "group": "K"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "dfe8a97e",
     "sig": "payLane(bytes32)",
     "name": "payLane",
@@ -10289,6 +10289,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -10305,24 +10323,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -10549,9 +10549,9 @@
     "group": "K"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -10939,6 +10939,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "4a19383e",
     "sig": "transferEntry(bytes32)",
     "name": "transferEntry",
@@ -11008,28 +11030,6 @@
     "vis": "external",
     "domain": "zether",
     "group": "Z"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "b3dcb494",
@@ -11474,9 +11474,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -11484,6 +11484,24 @@
     "params": [],
     "names": [],
     "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -13384,24 +13402,6 @@
     "group": "K"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "dfe8a97e",
     "sig": "payLane(bytes32)",
     "name": "payLane",
@@ -13541,6 +13541,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -13557,24 +13575,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -13923,9 +13923,9 @@
     "group": "K"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -14259,6 +14259,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "eda74ca6",
     "sig": "transferCiphertextHash(bytes32)",
     "name": "transferCiphertextHash",
@@ -14326,28 +14348,6 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "931415ee",
@@ -14653,9 +14653,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -14693,6 +14693,24 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
    },
    {
     "sel": "dd62ed3e",
@@ -17032,24 +17050,6 @@
     "group": "K"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "dfe8a97e",
     "sig": "payLane(bytes32)",
     "name": "payLane",
@@ -17189,6 +17189,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -17205,24 +17223,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -17699,9 +17699,9 @@
     "group": "K"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -18089,6 +18089,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "eda74ca6",
     "sig": "transferCiphertextHash(bytes32)",
     "name": "transferCiphertextHash",
@@ -18156,28 +18178,6 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "931415ee",
@@ -18789,9 +18789,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -18799,6 +18799,24 @@
     "params": [],
     "names": [],
     "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -20240,24 +20258,6 @@
     "group": "W"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "c620d896",
     "sig": "pause(bytes32,uint64)",
     "name": "pause",
@@ -20453,6 +20453,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -20469,24 +20487,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -20613,9 +20613,9 @@
     "group": "W"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -20977,6 +20977,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "23b872dd",
     "sig": "transferFrom(address,address,uint256)",
     "name": "transferFrom",
@@ -21002,28 +21024,6 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "b3dcb494",
@@ -21266,9 +21266,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -21306,6 +21306,24 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
    },
    {
     "sel": "dd62ed3e",
@@ -23065,24 +23083,6 @@
     "group": "W"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "c620d896",
     "sig": "pause(bytes32,uint64)",
     "name": "pause",
@@ -23278,6 +23278,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -23294,24 +23312,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -23566,9 +23566,9 @@
     "group": "W"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -23984,6 +23984,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "23b872dd",
     "sig": "transferFrom(address,address,uint256)",
     "name": "transferFrom",
@@ -24009,28 +24031,6 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "b3dcb494",
@@ -24518,9 +24518,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -24556,6 +24556,24 @@
     "vis": "external",
     "domain": "zether",
     "group": "Z"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
    },
    {
     "sel": "dd62ed3e",
@@ -26646,24 +26664,6 @@
     "group": "W"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "c620d896",
     "sig": "pause(bytes32,uint64)",
     "name": "pause",
@@ -26859,6 +26859,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -26875,24 +26893,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -27041,9 +27041,9 @@
     "group": "W"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -27463,6 +27463,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "4a19383e",
     "sig": "transferEntry(bytes32)",
     "name": "transferEntry",
@@ -27532,28 +27554,6 @@
     "vis": "external",
     "domain": "zether",
     "group": "Z"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "b3dcb494",
@@ -27814,9 +27814,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -27876,6 +27876,24 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
    },
    {
     "sel": "dd62ed3e",
@@ -30399,24 +30417,6 @@
     "group": "W"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "c620d896",
     "sig": "pause(bytes32,uint64)",
     "name": "pause",
@@ -30612,6 +30612,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -30628,24 +30646,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -30922,9 +30922,9 @@
     "group": "W"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -31398,6 +31398,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "4a19383e",
     "sig": "transferEntry(bytes32)",
     "name": "transferEntry",
@@ -31467,28 +31489,6 @@
     "vis": "external",
     "domain": "zether",
     "group": "Z"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "b3dcb494",
@@ -31994,9 +31994,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -32004,6 +32004,24 @@
     "params": [],
     "names": [],
     "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -34100,24 +34118,6 @@
     "group": "W"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "c620d896",
     "sig": "pause(bytes32,uint64)",
     "name": "pause",
@@ -34313,6 +34313,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -34329,24 +34347,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -34745,9 +34745,9 @@
     "group": "W"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -35167,6 +35167,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "eda74ca6",
     "sig": "transferCiphertextHash(bytes32)",
     "name": "transferCiphertextHash",
@@ -35234,28 +35256,6 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "931415ee",
@@ -35622,9 +35622,9 @@
     "group": "K"
    },
    {
-    "sel": "79ba5097",
-    "sig": "acceptOwnership()",
-    "name": "acceptOwnership",
+    "sel": "0e18b681",
+    "sig": "acceptAdmin()",
+    "name": "acceptAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -35662,6 +35662,24 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
+   },
+   {
+    "sel": "f851a440",
+    "sig": "admin()",
+    "name": "admin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
    },
    {
     "sel": "dd62ed3e",
@@ -38197,24 +38215,6 @@
     "group": "W"
    },
    {
-    "sel": "8da5cb5b",
-    "sig": "owner()",
-    "name": "owner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
     "sel": "c620d896",
     "sig": "pause(bytes32,uint64)",
     "name": "pause",
@@ -38410,6 +38410,24 @@
     "group": "A"
    },
    {
+    "sel": "26782247",
+    "sig": "pendingAdmin()",
+    "name": "pendingAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "240f3575",
     "sig": "pendingGrant(uint8,bytes32)",
     "name": "pendingGrant",
@@ -38426,24 +38444,6 @@
      "account"
     ],
     "returns": "uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
-   },
-   {
-    "sel": "e30c3978",
-    "sig": "pendingOwner()",
-    "name": "pendingOwner",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [],
-    "names": [],
-    "returns": "bytes32 _p0",
     "ifaces": [
      "IGovernance"
     ],
@@ -38970,9 +38970,9 @@
     "group": "W"
    },
    {
-    "sel": "715018a6",
-    "sig": "renounceOwnership()",
-    "name": "renounceOwnership",
+    "sel": "8bad0c0a",
+    "sig": "renounceAdmin()",
+    "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
@@ -39446,6 +39446,28 @@
     "group": "K"
    },
    {
+    "sel": "e923bc3d",
+    "sig": "transferAdmin(bytes32)",
+    "name": "transferAdmin",
+    "decl": "GovernanceBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "governed",
+    "params": [
+     "bytes32 newAdmin"
+    ],
+    "names": [
+     "newAdmin"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IGovernance"
+    ],
+    "vis": "external",
+    "domain": "governance",
+    "group": "A"
+   },
+   {
     "sel": "eda74ca6",
     "sig": "transferCiphertextHash(bytes32)",
     "name": "transferCiphertextHash",
@@ -39513,28 +39535,6 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
-   },
-   {
-    "sel": "f807e3da",
-    "sig": "transferOwnership(bytes32)",
-    "name": "transferOwnership",
-    "decl": "GovernanceBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "governed",
-    "params": [
-     "bytes32 newOwner"
-    ],
-    "names": [
-     "newOwner"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IGovernance"
-    ],
-    "vis": "external",
-    "domain": "governance",
-    "group": "A"
    },
    {
     "sel": "931415ee",

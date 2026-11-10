@@ -45,7 +45,7 @@ contract SelfDestructImpl {
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function features() external pure returns (uint256) { return 0; }
     function lockedFeatures() external pure returns (uint256) { return 0; }
-    function owner() external pure returns (address) { return address(0); }
+    function admin() external pure returns (address) { return address(0); }
     function underlyings() external pure returns (address[] memory) {}
 
     function initialize(bytes32, uint64, bytes calldata) external {

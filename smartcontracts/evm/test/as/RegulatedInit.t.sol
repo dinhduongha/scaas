@@ -112,7 +112,7 @@ contract RegulatedInitTest is RegFixture {
     }
 
     /// The holders (spec §2.4, RK-1, CTR-AS-03): `roles.issuer` / `roles.compliance` contracts (an EOA `RoleNotContract`),
-    /// never one id for `FORCE` and `RECORD` (`RoleConflict`); with no owner and the role bits unlocked, `OwnerHasHolders`.
+    /// never one id for `FORCE` and `RECORD` (`RoleConflict`); with no owner and the role bits unlocked, `AdminHasHolders`.
     function test_holderRules() public {
         for (uint256 i; i < 2; ++i) {
             IOpenFactory.TokenKind k = i == 0 ? K8 : K9;
@@ -126,9 +126,9 @@ contract RegulatedInitTest is RegFixture {
             c.roles.compliance = nid(issuer);
             _refused(k, c, abi.encodeWithSelector(IGovernance.RoleConflict.selector, uint8(10), nid(issuer)));
             c = _cfg(i);
-            c.owner = 0;
+            c.admin = 0;
             if (i == 0) c.roles.minter = 0;
-            _refused(k, c, abi.encodeWithSelector(IGovernance.OwnerHasHolders.selector, uint8(5)));
+            _refused(k, c, abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, uint8(5)));
             c.lockedFeatures = c.features & ~uint256(1); // locked: the holders survive (the control)
             _create(k, c);
         }

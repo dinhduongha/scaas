@@ -34,11 +34,11 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// governance T13, the selector audit (spec §10.1; CTR-GOV-11; GD-6). Every external that writes state on the six kinds,
 /// `SCaaSDex`, `DexPuller` and `GovernanceRouter`, read from its ABI in `FOUNDRY_OUT` (else `./out`), is a row of
-/// `test/vectors/selector_audit.json` with one class: `BIT(n)`, `OWNER`, `HOLDER_OWN`, `OWN_BALANCE`, `SIGNED`, `FACTORY`,
+/// `test/vectors/selector_audit.json` with one class: `BIT(n)`, `ADMIN`, `HOLDER_OWN`, `OWN_BALANCE`, `SIGNED`, `FACTORY`,
 /// `PERMISSIONLESS(reason)`. An unclassified or moved selector fails. The sentence it pins: no entry point moves, freezes or
 /// pauses a balance its caller does not own unless gated by a feature bit. Each class is checked by behaviour, a stranger
 /// calling every row with zero arguments on a live instance (features on, owner and holders set, the stranger none of
-/// them): a `BIT`, `OWNER`, `HOLDER_OWN` or `FACTORY` row reverts with its named error, the refused subject the stranger's
+/// them): a `BIT`, `ADMIN`, `HOLDER_OWN` or `FACTORY` row reverts with its named error, the refused subject the stranger's
 /// own id and a `MissingRole` its own bit; any other row is refused by no governance gate. So a gated row pinned as
 /// another class goes red, and so does a gate removed. No governance selector is on a governed contract's allow-lists
 /// (`mtxSelectors()`, and `_uaAllowed` by a signed generic call); the router publishes no allow-list at all.
@@ -148,7 +148,7 @@ abstract contract SelectorAuditRows is Test {
     }
 
     function _named(string memory c) internal pure returns (bool) {
-        return _bitOf(c) != 0 || _eq(c, "OWNER") || _eq(c, "HOLDER_OWN") || _eq(c, "FACTORY");
+        return _bitOf(c) != 0 || _eq(c, "ADMIN") || _eq(c, "HOLDER_OWN") || _eq(c, "FACTORY");
     }
 
     function _known(string memory c) internal pure returns (bool) {
@@ -158,8 +158,8 @@ abstract contract SelectorAuditRows is Test {
 
     /// The governance gates: the errors that refuse a caller for who it is.
     function _gate(bytes4 e) internal pure returns (bool) {
-        return e == bytes4(keccak256("MissingRole(uint8,bytes32)")) || e == bytes4(keccak256("NotOwner(bytes32)"))
-            || e == bytes4(keccak256("NotPendingOwner(bytes32)")) || e == bytes4(keccak256("NotGuardian()"))
+        return e == bytes4(keccak256("MissingRole(uint8,bytes32)")) || e == bytes4(keccak256("NotAdmin(bytes32)"))
+            || e == bytes4(keccak256("NotPendingAdmin(bytes32)")) || e == bytes4(keccak256("NotGuardian()"))
             || e == bytes4(keccak256("NotRateAdmin()"));
     }
 
@@ -169,10 +169,10 @@ abstract contract SelectorAuditRows is Test {
         if (_bitOf(r.class) != 0) {
             require(_eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotGuardian()") || _eq(r.error, "NotRateAdmin()"),
                 string.concat(where, ": a BIT row names a role's refusal"));
-        } else if (_eq(r.class, "OWNER")) {
-            require(_eq(r.error, "NotOwner(bytes32)"), string.concat(where, ": an OWNER row names NotOwner"));
+        } else if (_eq(r.class, "ADMIN")) {
+            require(_eq(r.error, "NotAdmin(bytes32)"), string.concat(where, ": an ADMIN row names NotAdmin"));
         } else if (_eq(r.class, "HOLDER_OWN")) {
-            require(_eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotPendingOwner(bytes32)"),
+            require(_eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotPendingAdmin(bytes32)"),
                 string.concat(where, ": a HOLDER_OWN row names the holder's refusal"));
         } else {
             require(bytes(r.error).length == 0 || !_gate(e), string.concat(where, ": a gate's error on an ungated class"));
@@ -230,7 +230,7 @@ abstract contract SelectorAuditRows is Test {
                 (uint8 bit, bytes32 who) = abi.decode(_args(ret), (uint8, bytes32));
                 assertEq(who, me, where);
                 if (_bitOf(r.class) != 0) assertEq(uint256(bit) + 1, _bitOf(r.class), string.concat(where, ": another bit"));
-            } else if (_eq(r.error, "NotOwner(bytes32)") || _eq(r.error, "NotPendingOwner(bytes32)")) {
+            } else if (_eq(r.error, "NotAdmin(bytes32)") || _eq(r.error, "NotPendingAdmin(bytes32)")) {
                 assertEq(abi.decode(_args(ret), (bytes32)), me, where);
             }
         }
@@ -243,7 +243,7 @@ abstract contract SelectorAuditRows is Test {
 
     // ------------------------------------------------------------------ the allow-lists of a governed token
 
-    /// Every gated row (`BIT`, `OWNER`, `HOLDER_OWN`, `FACTORY`) is off `mtxSelectors()`, and a native signer's own
+    /// Every gated row (`BIT`, `ADMIN`, `HOLDER_OWN`, `FACTORY`) is off `mtxSelectors()`, and a native signer's own
     /// `executeMetaTransaction` / `mtxExecute` of it is refused by the allow-list, past its valid signature. (ua-mtx-merge
     /// T1, meaning: on the merged `mtxExecute` a native signer reads `_mtxRule` (B), so `MtxSelectorNotAllowed` where
     /// `uaExecute` answered `MetaTxUnknownOp` from `_uaAllowed`; the address `mtxExecute` left tokens, R3's alias stays.)
@@ -292,7 +292,7 @@ abstract contract SelectorAuditRows is Test {
     /// Features on for every power, owner `OWNER_ID`, the holders the test (a contract: the contract-only rate bit) and
     /// `OWNER_ID`; never the stranger.
     function _govern(IFactoryToken.TokenConfig memory c, address leg) internal view {
-        c.owner = OWNER_ID;
+        c.admin = OWNER_ID;
         c.features |= (uint256(1) << GovernanceBits.PAYABLE) | (uint256(1) << GovernanceBits.MINTABLE);
         c.roles.minter = bytes32(uint256(uint160(address(this))));
         if (leg == address(0)) return;

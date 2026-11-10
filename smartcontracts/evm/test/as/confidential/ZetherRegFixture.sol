@@ -105,7 +105,7 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     function _regCfg(bool auditor, uint256 maxShielded) internal view returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(auditor, maxShielded);
         c.lockedFeatures = 0;
-        c.owner = nid(ownerA);
+        c.admin = nid(ownerA);
         c.grantDelay = 1 days;
         c.features |= REG_FEATURES;
         (c.roles.issuer, c.roles.compliance) = (nid(issuer), nid(compliance));

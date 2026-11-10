@@ -81,7 +81,7 @@ function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memor
     c.features = 1 << GovernanceBits.PAYABLE;
     if (cfg.adjustable) c.features |= 1 << GovernanceBits.RATE_ADJUSTABLE;
     if (guardian != address(0)) c.features |= 1 << GovernanceBits.WRAP_DISABLEABLE;
-    c.owner = nid(owner);
+    c.admin = nid(owner);
     c.roles.rateAdmin = nid(cfg.rateAdmin);
     c.roles.guardian = nid(guardian);
     if (owner == address(0)) c.lockedFeatures = c.features; // no owner disables nothing; holders survive creation (B-06, GD-14)

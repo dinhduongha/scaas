@@ -157,7 +157,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
     }
 
     function _rCfg(bool wrapped, uint256 features) internal override returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.features, c.owner) = ("R", "R", 18, features, nid(OWNER));
+        (c.name, c.symbol, c.decimals, c.features, c.admin) = ("R", "R", 18, features, nid(OWNER));
         if (wrapped) {
             c.legs = new IFactoryToken.Leg[](1);
             c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);

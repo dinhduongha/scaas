@@ -25,8 +25,12 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _GOV_ROUTERBody();
     }
 
-    function acceptOwnership() external governed {
-        _acceptOwnershipBody();
+    function acceptAdmin() external governed {
+        _acceptAdminBody();
+    }
+
+    function admin() external view returns (bytes32 _p0) {
+        return _adminBody();
     }
 
     function bitLabel(uint8 bit) external view returns (IGovernance.BitType _p0, bytes4 _p1, string memory _p2) {
@@ -181,10 +185,6 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _mtxTransferWithFeeBody(from, to, amount, batch, nonce, validUntil, mode, relayer, fee, feeRecipient, auth);
     }
 
-    function owner() external view returns (bytes32 _p0) {
-        return _ownerBody();
-    }
-
     function payLane(bytes32 payId) external pure returns (uint256 _p0) {
         return _payLaneBody(payId);
     }
@@ -205,12 +205,12 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _paymentsOfBody(payNo, offset, limit);
     }
 
-    function pendingGrant(uint8 bit, bytes32 account) external view returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3) {
-        return _pendingGrantBody(bit, account);
+    function pendingAdmin() external view returns (bytes32 _p0) {
+        return _pendingAdminBody();
     }
 
-    function pendingOwner() external view returns (bytes32 _p0) {
-        return _pendingOwnerBody();
+    function pendingGrant(uint8 bit, bytes32 account) external view returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3) {
+        return _pendingGrantBody(bit, account);
     }
 
     function pulled(bytes32 orderHash) external view returns (uint256 _p0) {
@@ -221,8 +221,8 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _receiverFeeDigestBody(t, fee, feeRecipient, validUntil);
     }
 
-    function renounceOwnership() external governed {
-        _renounceOwnershipBody();
+    function renounceAdmin() external governed {
+        _renounceAdminBody();
     }
 
     function renounceRole(uint8 bit) external governed {
@@ -261,8 +261,8 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _tradeOrderDigestBody(o);
     }
 
-    function transferOwnership(bytes32 newOwner) external governed {
-        _transferOwnershipBody(newOwner);
+    function transferAdmin(bytes32 newAdmin) external governed {
+        _transferAdminBody(newAdmin);
     }
 
     function underlyings() external view returns (address[] memory us) {

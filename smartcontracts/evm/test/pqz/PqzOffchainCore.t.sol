@@ -507,7 +507,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, v, fixed_);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        c.owner = bytes32(uint256(uint160(address(this))));
+        c.admin = bytes32(uint256(uint160(address(this))));
         t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), keccak256(abi.encode(v, fixed_,
             gasleft()))));
     }

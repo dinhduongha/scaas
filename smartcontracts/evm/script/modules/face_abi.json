@@ -34,6 +34,28 @@
        "type": "bytes32"
       }
      ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
      "name": "AlreadyRecordFrozen",
      "type": "error"
     },
@@ -892,6 +914,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -923,17 +956,6 @@
      "type": "error"
     },
     {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
      "inputs": [],
      "name": "NotPaused",
      "type": "error"
@@ -946,7 +968,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -1056,28 +1078,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -1818,6 +1818,44 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "entryRef",
        "type": "bytes32"
       },
@@ -2451,44 +2489,6 @@
       }
      ],
      "name": "OrderRevoked",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -3390,6 +3390,28 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "uint256",
        "name": "minted",
        "type": "uint256"
@@ -4182,6 +4204,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -4209,18 +4242,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -4275,28 +4297,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -4852,6 +4852,44 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "entryRef",
        "type": "bytes32"
       },
@@ -5355,44 +5393,6 @@
       }
      ],
      "name": "OrderCancelled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -6164,6 +6164,28 @@
        "type": "bytes32"
       }
      ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
      "name": "AlreadyRecordFrozen",
      "type": "error"
     },
@@ -6807,6 +6829,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -6838,17 +6871,6 @@
      "type": "error"
     },
     {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
      "inputs": [],
      "name": "NotPaused",
      "type": "error"
@@ -6861,7 +6883,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -6971,28 +6993,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -7474,6 +7474,44 @@
     },
     {
      "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
      "inputs": [],
      "name": "EIP712DomainChanged",
      "type": "event"
@@ -7939,44 +7977,6 @@
       }
      ],
      "name": "OrderRevoked",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -8577,6 +8577,28 @@
      "inputs": [
       {
        "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "bytes32",
        "name": "orderHash",
        "type": "bytes32"
       }
@@ -9153,6 +9175,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -9180,18 +9213,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -9246,28 +9268,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -9562,6 +9562,44 @@
     }
    ],
    "event": [
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
     {
      "anonymous": false,
      "inputs": [],
@@ -9899,44 +9937,6 @@
       }
      ],
      "name": "OrderCancelled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -10429,6 +10429,28 @@
       }
      ],
      "name": "AccountNotRegistered",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
      "type": "error"
     },
     {
@@ -11215,6 +11237,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -11246,17 +11279,6 @@
      "type": "error"
     },
     {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
      "inputs": [],
      "name": "NotPaused",
      "type": "error"
@@ -11269,7 +11291,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -11379,28 +11401,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -12020,6 +12020,44 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "entryRef",
        "type": "bytes32"
       },
@@ -12585,44 +12623,6 @@
       }
      ],
      "name": "OrderRevoked",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -13364,6 +13364,28 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "uint256",
        "name": "minted",
        "type": "uint256"
@@ -14074,6 +14096,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -14101,18 +14134,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -14167,28 +14189,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -14617,6 +14617,44 @@
     }
    ],
    "event": [
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
     {
      "anonymous": false,
      "inputs": [
@@ -15058,44 +15096,6 @@
       }
      ],
      "name": "OrderCancelled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -15730,6 +15730,28 @@
       }
      ],
      "name": "AccountNotRegistered",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
      "type": "error"
     },
     {
@@ -16736,6 +16758,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -16772,17 +16805,6 @@
      "type": "error"
     },
     {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
      "inputs": [],
      "name": "NotPaused",
      "type": "error"
@@ -16795,7 +16817,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -16910,28 +16932,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -17917,6 +17917,44 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "entryRef",
        "type": "bytes32"
       },
@@ -18550,44 +18588,6 @@
       }
      ],
      "name": "OrderRevoked",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -19768,6 +19768,28 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "uint256",
        "name": "minted",
        "type": "uint256"
@@ -20698,6 +20720,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -20730,18 +20763,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -20801,28 +20823,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -21623,6 +21623,44 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "entryRef",
        "type": "bytes32"
       },
@@ -22126,44 +22164,6 @@
       }
      ],
      "name": "OrderCancelled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -23214,6 +23214,28 @@
        "type": "bytes32"
       }
      ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
      "name": "AlreadyRecordFrozen",
      "type": "error"
     },
@@ -23995,6 +24017,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -24031,17 +24064,6 @@
      "type": "error"
     },
     {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
      "inputs": [],
      "name": "NotPaused",
      "type": "error"
@@ -24054,7 +24076,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -24169,28 +24191,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -24917,6 +24917,44 @@
     },
     {
      "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
      "inputs": [],
      "name": "EIP712DomainChanged",
      "type": "event"
@@ -25382,44 +25420,6 @@
       }
      ],
      "name": "OrderRevoked",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -26298,6 +26298,28 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "int64",
        "name": "responseCode",
        "type": "int64"
@@ -27013,6 +27035,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -27045,18 +27078,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -27116,28 +27138,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -27679,6 +27679,44 @@
    "event": [
     {
      "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
      "inputs": [],
      "name": "EIP712DomainChanged",
      "type": "event"
@@ -28014,44 +28052,6 @@
       }
      ],
      "name": "OrderCancelled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -28823,6 +28823,28 @@
       }
      ],
      "name": "AccountNotRegistered",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
      "type": "error"
     },
     {
@@ -29747,6 +29769,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -29783,17 +29816,6 @@
      "type": "error"
     },
     {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
      "inputs": [],
      "name": "NotPaused",
      "type": "error"
@@ -29806,7 +29828,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -29921,28 +29943,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -30807,6 +30807,44 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "entryRef",
        "type": "bytes32"
       },
@@ -31372,44 +31410,6 @@
       }
      ],
      "name": "OrderRevoked",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {
@@ -32430,6 +32430,28 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "account",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminAccountPool",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "AdminHasHolders",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "uint256",
        "name": "minted",
        "type": "uint256"
@@ -33278,6 +33300,17 @@
     {
      "inputs": [
       {
+       "internalType": "bytes32",
+       "name": "caller",
+       "type": "bytes32"
+      }
+     ],
+     "name": "NotAdmin",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "caller",
        "type": "address"
@@ -33310,18 +33343,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "NotOwner",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "caller",
-       "type": "bytes32"
-      }
-     ],
-     "name": "NotPendingOwner",
+     "name": "NotPendingAdmin",
      "type": "error"
     },
     {
@@ -33381,28 +33403,6 @@
       }
      ],
      "name": "Overfill",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "account",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnerAccountPool",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint8",
-       "name": "bit",
-       "type": "uint8"
-      }
-     ],
-     "name": "OwnerHasHolders",
      "type": "error"
     },
     {
@@ -34082,6 +34082,44 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferStarted",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "previousAdmin",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "newAdmin",
+       "type": "bytes32"
+      }
+     ],
+     "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "entryRef",
        "type": "bytes32"
       },
@@ -34517,44 +34555,6 @@
       }
      ],
      "name": "OrderCancelled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferStarted",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "previousOwner",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "newOwner",
-       "type": "bytes32"
-      }
-     ],
-     "name": "OwnershipTransferred",
      "type": "event"
     },
     {

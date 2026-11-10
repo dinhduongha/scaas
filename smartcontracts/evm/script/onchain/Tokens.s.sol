@@ -211,7 +211,7 @@ contract Tokens is OnchainBase {
 
     function _base(uint8 kind, string memory sym) internal view returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol, c.decimals) = (string.concat("Onchain ", _label(kind)), sym, 6);
-        c.owner = _pad(a1);
+        c.admin = _pad(a1);
         if (_zether(kind)) c.conf = IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 2, 0, 0, 0, 0, 0, false, 0);
     }
 
@@ -273,9 +273,9 @@ contract Tokens is OnchainBase {
         (uint64 eta,,,) = NormalToken(x).pendingGrant(GovernanceBits.MINTABLE, _pad(a2));
         require(eta != 0, "pending grant");
         NormalToken(x).cancelGrant(GovernanceBits.MINTABLE, _pad(a2));
-        NormalToken(x).renounceOwnership();
+        NormalToken(x).renounceAdmin();
         vm.stopBroadcast();
-        require(NormalToken(x).owner() == 0, "renounced");
+        require(NormalToken(x).admin() == 0, "renounced");
     }
 
     // ------------------------------------------------------------------ the wrapped kinds 1, 3, 9, 11
@@ -636,17 +636,17 @@ contract Tokens is OnchainBase {
         vm.broadcast(k3);
         n.mint(a3, 10); // the limited holder: `useLimited`
         vm.broadcast(k1);
-        n.transferOwnership(_pad(a2));
+        n.transferAdmin(_pad(a2));
         vm.startBroadcast(k2);
-        n.acceptOwnership();
-        n.transferOwnership(_pad(a1));
+        n.acceptAdmin();
+        n.transferAdmin(_pad(a1));
         vm.stopBroadcast();
         vm.startBroadcast(k1);
-        n.acceptOwnership();
+        n.acceptAdmin();
         stray.mint(t, 5);
         n.rescue(address(stray));
         vm.stopBroadcast();
-        require(stray.balanceOf(a3) >= 5 && n.owner() == _pad(a1), "rescue, ownership");
+        require(stray.balanceOf(a3) >= 5 && n.admin() == _pad(a1), "rescue, ownership");
         _govEnd(n);
     }
 
@@ -661,9 +661,9 @@ contract Tokens is OnchainBase {
         } else {
             n.disableFeature(GovernanceBits.MINTABLE);
         }
-        n.renounceOwnership();
+        n.renounceAdmin();
         vm.stopBroadcast();
-        require(n.owner() == 0, "renounced");
+        require(n.admin() == 0, "renounced");
     }
 
     // ------------------------------------------------------------------ negatives (eth_call on the final state)

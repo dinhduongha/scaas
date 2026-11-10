@@ -40,7 +40,7 @@ abstract contract NormalTokenCore is MetaTokenBase {
         _requireUnused(cfg, false, true, true, true);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         // 5-9 are not in the kind's mask: `init` refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3)
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles,
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles,
             _validBits(), _roleBits(), _contractOnlyBits(), _registry());
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }

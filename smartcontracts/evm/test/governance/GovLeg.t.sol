@@ -38,7 +38,7 @@ contract FlagLeg {
     function initialize(bytes32, uint64, bytes calldata a) external { features = abi.decode(a, (uint256)); }
     function underlyings() external pure returns (address[] memory) {}
     function lockedFeatures() external view returns (uint256) { return features; }
-    function owner() external pure returns (address) {}
+    function admin() external pure returns (address) {}
     function decimals() external pure returns (uint8) { return 6; }
 }
 

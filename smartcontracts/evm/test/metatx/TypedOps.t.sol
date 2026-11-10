@@ -1409,7 +1409,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         t = NormalToken(_addr(op, "target"));
         _clone(normalImpl, address(t));
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.features, c.owner, c.grantDelay) = ("G", "G", 6, 1 | (uint256(1) << MINT), owner_, delay);
+        (c.name, c.symbol, c.decimals, c.features, c.admin, c.grantDelay) = ("G", "G", 6, 1 | (uint256(1) << MINT), owner_, delay);
         c.roles.minter = minter;
         t.initialize(nid(address(this)), 1, abi.encode(c));
     }
@@ -1421,7 +1421,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         w = WrappedToken(payable(_addr(op, "target")));
         _clone(wrappedImpl, address(w));
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.features, c.owner) = ("W", "W", 6,
+        (c.name, c.symbol, c.decimals, c.features, c.admin) = ("W", "W", 6,
             1 | (uint256(1) << GovernanceBits.RATE_ADJUSTABLE) | (uint256(1) << GovernanceBits.WRAP_DISABLEABLE), me);
         (c.roles.guardian, c.roles.rateAdmin) = (me, me);
         c.legs = new IFactoryToken.Leg[](1);
@@ -1438,7 +1438,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         w = WrappedToken(payable(_addr(op, "target")));
         _clone(wrappedImpl, address(w));
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.owner, c.maxSupply) = ("H", "H", 6, me, 1e30);
+        (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, me, 1e30);
         c.features = 1 | (uint256(1) << GovernanceBits.MINTABLE) | GovernanceBits.WRAP_CONTROLS;
         c.roles.minter = me;
         c.legs = new IFactoryToken.Leg[](1);
@@ -1588,7 +1588,7 @@ contract TypedOpsRouterTest is UALedgerBase {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
-            assertEq(t.pendingOwner(), _b32(f[i], "newOwner"), f[i]);
+            assertEq(t.pendingAdmin(), _b32(f[i], "newOwner"), f[i]);
         }
     }
 
@@ -1598,9 +1598,9 @@ contract TypedOpsRouterTest is UALedgerBase {
         for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], bytes32(uint256(uint160(address(this)))), 0, 0);
-            t.transferOwnership(me);
+            t.transferAdmin(me);
             _row(f[i]);
-            assertEq(t.owner(), me, f[i]);
+            assertEq(t.admin(), me, f[i]);
         }
     }
 
@@ -1611,7 +1611,7 @@ contract TypedOpsRouterTest is UALedgerBase {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
-            assertEq(t.owner(), bytes32(0), f[i]);
+            assertEq(t.admin(), bytes32(0), f[i]);
         }
     }
 
@@ -1831,7 +1831,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         t = NormalRegulatedToken(_addr(op, "target"));
         _clone(regImpl, address(t));
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.owner) = ("R", "R", 6, MetaTxLib.pad(address(this)));
+        (c.name, c.symbol, c.decimals, c.admin) = ("R", "R", 6, MetaTxLib.pad(address(this)));
         c.features = 1 | (uint256(1) << GovernanceBits.FREEZE) | (uint256(1) << GovernanceBits.FORCE)
             | (uint256(1) << GovernanceBits.PAUSE) | (uint256(1) << GovernanceBits.RECORD)
             | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER) | (uint256(1) << GovernanceBits.TAX);

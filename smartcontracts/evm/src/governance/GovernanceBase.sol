@@ -21,7 +21,7 @@ library GovernanceUse {
     }
 }
 
-/// @title One layer for owner, features and roles (owner 2026-11-02, CTR-GOV-01), for any contract: one-line wrappers
+/// @title One layer for admin, features and roles (owner 2026-11-02, CTR-GOV-01), for any contract: one-line wrappers
 ///        over `GovernanceLib`, the masks of compile-time constants, nothing of its own in storage. Every power runs
 ///        through `GovernanceUse.use`; `hasRole` is a view (listed, not able to act). Every identity is a UA id
 ///        (`bytes32`, CTR-GOV-01 Change, owner 2026-11-04), and `_govSubject()` names the caller.
@@ -89,8 +89,8 @@ abstract contract GovernanceBaseCore {
 
     function _featuresBody() internal view returns (uint256) { return GovernanceLib.$().features; }
     function _lockedFeaturesBody() internal view returns (uint256) { return GovernanceLib.$().lockedFeatures; }
-    function _ownerBody() internal view returns (bytes32) { return GovernanceLib.$().owner; }
-    function _pendingOwnerBody() internal view returns (bytes32) { return GovernanceLib.$().pendingOwner; }
+    function _adminBody() internal view returns (bytes32) { return GovernanceLib.$().admin; }
+    function _pendingAdminBody() internal view returns (bytes32) { return GovernanceLib.$().pendingAdmin; }
     function _hasRoleBody(uint8 bit, bytes32 account) internal view returns (bool) { return GovernanceLib.hasRole(bit, account); }
     function _validBitsBody() internal pure returns (uint256) { return _validBits(); }
     function _holderCountBody(uint8 bit) internal view returns (uint256) { return GovernanceLib.$().counts[bit].holders; }
@@ -111,7 +111,7 @@ abstract contract GovernanceBaseCore {
     function _grantRoleBody(uint8 bit, bytes32 account) internal {
         GovernanceLib.grantRole(bit, account, _govSubject(), _roleBits(), _contractOnlyBits(), _uaRegistry());
     }
-    /// @notice The owner sets any holder's grant, a widening in two calls (spec §1.6); a holder with a `delegable` grant sets
+    /// @notice The admin sets any holder's grant, a widening in two calls (spec §1.6); a holder with a `delegable` grant sets
     ///         a narrower leaf at once. Spent is carried.
     function _setGrantBody(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) internal {
         (bool leaf, bytes32 parentScope) = GovernanceLib.setGrant(bit, holder, terms, _govSubject(), _roleBits(),
@@ -131,11 +131,11 @@ abstract contract GovernanceBaseCore {
     function _disableFeatureBody(uint8 bit) internal virtual {
         GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
     }
-    function _transferOwnershipBody(bytes32 newOwner) internal {
-        GovernanceLib.transferOwnership(newOwner, _govSubject());
+    function _transferAdminBody(bytes32 newAdmin) internal {
+        GovernanceLib.transferAdmin(newAdmin, _govSubject());
     }
-    function _acceptOwnershipBody() internal { GovernanceLib.acceptOwnership(_govSubject()); }
-    function _renounceOwnershipBody() internal { GovernanceLib.renounceOwnership(_govSubject(), _roleBits()); }
+    function _acceptAdminBody() internal { GovernanceLib.acceptAdmin(_govSubject()); }
+    function _renounceAdminBody() internal { GovernanceLib.renounceAdmin(_govSubject(), _roleBits()); }
 }
 
 /// @notice `GovernanceBaseCore` with its external entries, each calling its body (T66b, spec 2026-11-09-t66b-library-organisation.md §4.4):
@@ -153,12 +153,12 @@ abstract contract GovernanceBase is GovernanceBaseCore, IGovernance {
         return _lockedFeaturesBody();
     }
 
-    function owner() external view override returns (bytes32) {
-        return _ownerBody();
+    function admin() external view override returns (bytes32) {
+        return _adminBody();
     }
 
-    function pendingOwner() external view override returns (bytes32) {
-        return _pendingOwnerBody();
+    function pendingAdmin() external view override returns (bytes32) {
+        return _pendingAdminBody();
     }
 
     function hasRole(uint8 bit, bytes32 account) external view override returns (bool) {
@@ -217,15 +217,15 @@ abstract contract GovernanceBase is GovernanceBaseCore, IGovernance {
         _disableFeatureBody(bit);
     }
 
-    function transferOwnership(bytes32 newOwner) external override governed {
-        _transferOwnershipBody(newOwner);
+    function transferAdmin(bytes32 newAdmin) external override governed {
+        _transferAdminBody(newAdmin);
     }
 
-    function acceptOwnership() external override governed {
-        _acceptOwnershipBody();
+    function acceptAdmin() external override governed {
+        _acceptAdminBody();
     }
 
-    function renounceOwnership() external override governed {
-        _renounceOwnershipBody();
+    function renounceAdmin() external override governed {
+        _renounceAdminBody();
     }
 }

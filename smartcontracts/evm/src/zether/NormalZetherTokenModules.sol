@@ -304,8 +304,12 @@ contract NormalZetherTokenA is NormalZetherTokenCore {
         return _GOV_ROUTERBody();
     }
 
-    function acceptOwnership() external onlyDelegated {
-        _acceptOwnershipBody();
+    function acceptAdmin() external onlyDelegated {
+        _acceptAdminBody();
+    }
+
+    function admin() external view onlyDelegated returns (bytes32 _p0) {
+        return _adminBody();
     }
 
     function bitLabel(uint8 bit) external view onlyDelegated returns (IGovernance.BitType _p0, bytes4 _p1, string memory _p2) {
@@ -388,10 +392,6 @@ contract NormalZetherTokenA is NormalZetherTokenCore {
         return _mtxSelectorsBody();
     }
 
-    function owner() external view onlyDelegated returns (bytes32 _p0) {
-        return _ownerBody();
-    }
-
     function paymentCount(bytes32 payNo) external view onlyDelegated returns (uint256 _p0) {
         return _paymentCountBody(payNo);
     }
@@ -400,16 +400,16 @@ contract NormalZetherTokenA is NormalZetherTokenCore {
         return _paymentsOfBody(payNo, offset, limit);
     }
 
+    function pendingAdmin() external view onlyDelegated returns (bytes32 _p0) {
+        return _pendingAdminBody();
+    }
+
     function pendingGrant(uint8 bit, bytes32 account) external view onlyDelegated returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3) {
         return _pendingGrantBody(bit, account);
     }
 
-    function pendingOwner() external view onlyDelegated returns (bytes32 _p0) {
-        return _pendingOwnerBody();
-    }
-
-    function renounceOwnership() external onlyDelegated {
-        _renounceOwnershipBody();
+    function renounceAdmin() external onlyDelegated {
+        _renounceAdminBody();
     }
 
     function renounceRole(uint8 bit) external onlyDelegated {
@@ -436,8 +436,8 @@ contract NormalZetherTokenA is NormalZetherTokenCore {
         return _supportsInterfaceBody(id);
     }
 
-    function transferOwnership(bytes32 newOwner) external onlyDelegated {
-        _transferOwnershipBody(newOwner);
+    function transferAdmin(bytes32 newAdmin) external onlyDelegated {
+        _transferAdminBody(newAdmin);
     }
 
     function underlyings() external view onlyDelegated returns (address[] memory us) {

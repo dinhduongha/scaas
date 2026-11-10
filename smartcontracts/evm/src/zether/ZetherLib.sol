@@ -290,7 +290,7 @@ library ZetherLib {
     ///         `ZetherWrappedLib.init`): `legs`, `rate` and `maxSupply` must be empty, `reg` too on a plain kind, the metadata
     ///         and the token's `kind` are written; returns what the token hands `GovernanceLib.init`, so this library holds no
     ///         DELEGATECALL (`LinkClosure`).
-    function initNormal(bytes calldata initArgs, uint8 kind) public returns (uint256 features, uint256 lockedFeatures, bytes32 owner,
+    function initNormal(bytes calldata initArgs, uint8 kind) public returns (uint256 features, uint256 lockedFeatures, bytes32 admin,
         uint64 grantDelay, address rescueTo, GovernanceLib.Roles memory roles)
     {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
@@ -303,7 +303,7 @@ library ZetherLib {
         t.symbol = cfg.symbol;
         t.decimals = cfg.decimals;
         t.kind = kind;
-        return (cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles);
+        return (cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles);
     }
 
     /// @notice Part 2, after the token's `GovernanceLib.init`: `init` of `conf`; returns the initial mint the token makes.

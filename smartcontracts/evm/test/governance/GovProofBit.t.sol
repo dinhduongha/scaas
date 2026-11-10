@@ -115,7 +115,7 @@ contract GovProofBitTest is PqzOffchainBase {
     /// the test its owner, `delay` its grant delay.
     function _tok24(uint8 k, bytes32 issuer, bool withBit, uint64 delay) internal returns (NormalPqzToken t) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        (c.owner, c.grantDelay, c.lockedFeatures) = (owner_, delay, 0);
+        (c.admin, c.grantDelay, c.lockedFeatures) = (owner_, delay, 0);
         if (k == 5 || k == 13) {
             c.features = 1 << GovernanceBits.PAYABLE;
             c.roles.minter = 0;
@@ -244,7 +244,7 @@ contract GovProofBitTest is PqzOffchainBase {
             assertTrue(IGovernance(address(t)).hasRole(BIT, nId));
             assertEq(IGovernance(address(t)).holderCount(BIT), 1);
             IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-            (c.owner, c.lockedFeatures, c.roles.issuer) = (owner_, 0, nId);
+            (c.admin, c.lockedFeatures, c.roles.issuer) = (owner_, 0, nId);
             if (k == 5) {
                 c.features = 1 << GovernanceBits.PAYABLE;
                 c.roles.minter = 0;

@@ -295,7 +295,7 @@ contract GovDeployTest is Test {
         address alice = address(0xA11CE);
         _attest(r, nid(alice), 1, type(uint64).max);
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.owner) = ("Reg", "REG", nid(address(0x0A11)));
+        (c.name, c.symbol, c.admin) = ("Reg", "REG", nid(address(0x0A11)));
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.ALLOWLIST);
         (c.initialSupply, c.initialHolder) = (1000, alice);
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.termsHash) = (address(r), 1, keccak256("terms"));

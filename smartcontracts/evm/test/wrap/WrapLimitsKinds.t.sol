@@ -54,7 +54,7 @@ contract WrapLimitsZetherTest is ZetherFixture {
     function _token(uint256 features, bool hybrid, bytes32 salt) internal returns (WrappedZetherToken) {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1 | features | (hybrid ? WL_MINT : 0);
-        c.owner = nid(address(this));
+        c.admin = nid(address(this));
         c.lockedFeatures = 0;
         if (!hybrid) c.roles.minter = 0;
         c.maxSupply = hybrid ? 1e30 : 0;
@@ -144,7 +144,7 @@ contract WrapLimitsPqzTest is PqzFixture {
     function _token(uint256 features, bool hybrid, bytes32 salt) internal returns (WrappedPqzToken) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1 | features | (hybrid ? WL_MINT : 0);
-        c.owner = nid(address(this));
+        c.admin = nid(address(this));
         c.lockedFeatures = 0;
         if (!hybrid) c.roles.minter = 0;
         c.maxSupply = hybrid ? 1e30 : 0;

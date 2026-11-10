@@ -205,7 +205,7 @@ contract RegulatedSkeletonTest is PqzFixture {
         IFactoryToken.TokenConfig memory c = _plainCfg(kind == IOpenFactory.TokenKind.WRAPPED_REGULATED);
         address iss = address(new SkeletonIssuer());
         c.features |= 1 << 7;
-        (c.owner, c.roles.issuer, c.reg.termsHash) = (bytes32(uint256(0xA11)), bytes32(uint256(uint160(iss))), keccak256("t"));
+        (c.admin, c.roles.issuer, c.reg.termsHash) = (bytes32(uint256(0xA11)), bytes32(uint256(uint160(iss))), keccak256("t"));
         t = factory.createToken(kind, 1, abi.encode(c), salt);
         vm.prank(iss);
         IRegulatedToken(t).pause(bytes32(uint256(2)), uint64(block.timestamp + 1 days));

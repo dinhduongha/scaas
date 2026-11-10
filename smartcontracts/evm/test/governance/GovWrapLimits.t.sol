@@ -35,7 +35,7 @@ contract GovWrapLimitsTest is WrapLimitsBase {
         router = new GovernanceRouter(chainUidA, REG_L, address(0), false);
         (address[] memory l, uint256[] memory n) = _one(u);
         IFactoryToken.TokenConfig memory c = _cfg(l, n, 1 | (uint256(1) << GovernanceBits.MINTABLE) | CONTROLS);
-        c.owner = _pad(alice);
+        c.admin = _pad(alice);
         address impl_ = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         w = WrappedToken(payable(EnvKit.clone(impl_, EnvKit.env(chainUidA, REG_L, address(0), false, address(router)))));
         w.initialize(nid(address(this)), 1, abi.encode(c));
@@ -96,7 +96,7 @@ contract GovWrapLimitsTest is WrapLimitsBase {
     function test_theSubjectIsTheSigner() public {
         IWrappedToken.WrapLegLimits[] memory legs = _cfg1(0, 0, L(10, 0, 1 days), OFF(), OFF(), OFF());
         _setLimits(BOB_PK, _pad(bob), string.concat(SET, LEG, LIMIT), legs,
-            abi.encodeWithSelector(IGovernance.NotOwner.selector, _pad(bob)));
+            abi.encodeWithSelector(IGovernance.NotAdmin.selector, _pad(bob)));
     }
 
     /// A wallet that leaves a referenced struct type out of the type string signs another digest: refused.

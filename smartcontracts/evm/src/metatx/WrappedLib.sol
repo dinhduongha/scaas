@@ -187,7 +187,7 @@ library WrappedLib {
                 ? GovernanceBits.WRAP_LIMIT : wc & (uint256(1) << GovernanceBits.WRAP_LIST) != 0
                 ? GovernanceBits.WRAP_LIST : GovernanceBits.REDEEMER);
         }
-        GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.grantDelay, c.rescueTo, c.roles, valid, roleBits,
+        GovernanceLib.init(c.features, c.lockedFeatures, c.admin, c.grantDelay, c.rescueTo, c.roles, valid, roleBits,
             contractOnly, uaRegistry);
         bool adjustable = GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
         WrappedStorage storage s = $();
@@ -828,7 +828,7 @@ library WrappedLib {
     {
         (bool slow, uint8 ctl) = _classify(legs, netUnwrap, wrapList, unwrapList, caller);
         if (slow && !_due(keccak256(abi.encode(legs, netUnwrap, wrapList, unwrapList)), caller,
-            GovernanceLib.$().ownerGeneration, IOpenFactory(factory).noticePeriod(), legs, netUnwrap, wrapList, unwrapList)) {
+            GovernanceLib.$().adminGeneration, IOpenFactory(factory).noticePeriod(), legs, netUnwrap, wrapList, unwrapList)) {
             return;
         }
         _apply(legs, ctl);
@@ -852,7 +852,7 @@ library WrappedLib {
         private view returns (bool has25)
     {
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
-        if (caller == 0 || caller != g.owner) revert IGovernance.NotOwner(caller);
+        if (caller == 0 || caller != g.admin) revert IGovernance.NotAdmin(caller);
         if (n != $().legCount) revert IWrappedToken.WrapLegMismatch(n, address(0));
         has25 = g.features & (uint256(1) << GovernanceBits.WRAP_LIMIT) != 0;
         if (netUnwrap && !has25) revert IGovernance.FeatureNotSet(GovernanceBits.WRAP_LIMIT);
@@ -1003,7 +1003,7 @@ library WrappedLib {
         (netUnwrap, wrapList, unwrapList) = (ctl & CTL_NET != 0, ctl & CTL_WLIST != 0, ctl & CTL_ULIST != 0);
         WrapLimitStorage storage w = wl();
         (pendingCommit, pendingEta, delay) = (w.pendingCommit, w.pendingEta, IOpenFactory(factory).noticePeriod());
-        pendingLive = _live(w, GovernanceLib.$().ownerGeneration, delay);
+        pendingLive = _live(w, GovernanceLib.$().adminGeneration, delay);
     }
 
     function _legLimits() private view returns (IWrappedToken.WrapLegLimits[] memory legs) {

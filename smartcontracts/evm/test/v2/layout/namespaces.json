@@ -46,10 +46,10 @@
     "labels": [
       "features",
       "lockedFeatures",
-      "owner",
-      "pendingOwner",
+      "admin",
+      "pendingAdmin",
       "grantDelay",
-      "ownerGeneration",
+      "adminGeneration",
       "lastProposedAt",
       "roles[1][A]",
       "counts[1].holders",

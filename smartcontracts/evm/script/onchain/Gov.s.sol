@@ -134,7 +134,7 @@ contract Gov is OnchainBase {
     }
 
     function _cfg(string memory sym, uint256 features) internal view returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.features, c.owner) = ("Onchain Gov", sym, 6, features, _pad(a1));
+        (c.name, c.symbol, c.decimals, c.features, c.admin) = ("Onchain Gov", sym, 6, features, _pad(a1));
     }
 
     function _create(IOpenFactory.TokenKind k, IFactoryToken.TokenConfig memory c, string memory label)
@@ -296,7 +296,7 @@ contract Gov is OnchainBase {
         (e, s) = _auth(du, _ty("UARenounceOwnership", ""), t0r, "");
         vm.broadcast(k2);
         gr.mtxRenounceOwnership(e, t0r, s);
-        require(IGovernance(t0r).owner() == 0, "renounced");
+        require(IGovernance(t0r).admin() == 0, "renounced");
         // the router's own lanes: a direct cancel and a signed one
         vm.broadcast(k2);
         gr.cancelNonce(7);
@@ -748,7 +748,7 @@ contract Gov is OnchainBase {
         _neg(a1, tc, abi.encodeCall(IERC20.transfer, (address(0xdEaD), 1)), IRegulatedToken.NotEligible.selector,
             "transfer to an account the ComplianceRegistry does not attest (kind 8, ALLOWLIST)");
         // the guard: a governed entry by a non-owner
-        _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3))), IGovernance.NotOwner.selector,
+        _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3))), IGovernance.NotAdmin.selector,
             "grantRole by a non-owner (kind 8)");
         // a router op signed by another key than its `from`
         MetaTxLib.UAEnvelope memory e = _env(a1, 0, gr.mtxNonce(_pad(a1), 0));

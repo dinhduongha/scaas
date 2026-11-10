@@ -327,7 +327,7 @@ contract OpenFactory is IOpenFactory {
         dex = _instance(creatorId, CLASS_DEX, 0, salt, impl, _chainEnv(DEX_DOMAIN, r.envVersion));
         ISCaaSDex(dex).initialize(creatorId, version, initArgs);
         _requireChainUid(dex, chainUid);
-        bytes32 owner = IGovernance(dex).owner();
+        bytes32 owner = IGovernance(dex).admin();
         _index(dex, creatorId, owner, CLASS_DEX, 0, version);
         emit DexCreated(dex, creatorId, version, impl, owner);
     }
@@ -744,7 +744,7 @@ contract OpenFactory is IOpenFactory {
     /// @dev The generic gate (the kind enabled), the CREATE3 clone with its env, `initialize` with the creator's
     ///      `initArgs`, the `chainUid()` post-check (an unregistered implementation's code is unvetted: what it reports as
     ///      its domain salt must be this factory's), then the record and its lists, the leg index and the event from the
-    ///      token's own views (`owner()` read once, after `initialize`).
+    ///      token's own views (`admin()` read once, after `initialize`).
     function _create(TokenKind kind, uint64 version, address impl, uint16 envVersion, bytes calldata initArgs, bytes32 salt)
         private returns (address token)
     {
@@ -754,7 +754,7 @@ contract OpenFactory is IOpenFactory {
         IFactoryToken(token).initialize(creatorId, version, initArgs);
         _requireChainUid(token, chainUid);
         IGovernance t = IGovernance(token);
-        bytes32 owner = t.owner();
+        bytes32 owner = t.admin();
         _index(token, creatorId, owner, CLASS_TOKEN, uint16(kind), version);
         address[] memory us = IFactoryToken(token).underlyings();
         if (us.length > MAX_LEGS) revert UnderlyingCountInvalid(us.length);

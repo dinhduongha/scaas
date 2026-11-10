@@ -118,7 +118,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
     function _regCfg() internal view returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(uint256(1) << 40);
         c.lockedFeatures = 0;
-        c.owner = nid(ownerA);
+        c.admin = nid(ownerA);
         c.grantDelay = 1 days;
         c.features |= REG_FEATURES;
         (c.roles.issuer, c.roles.compliance) = (nid(issuer), nid(compliance));

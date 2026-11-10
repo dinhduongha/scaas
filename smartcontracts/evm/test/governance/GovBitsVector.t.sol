@@ -324,7 +324,7 @@ contract GovBitsVectorTest is Test {
                 "capability",
                 _one(
                     "all",
-                    "The owner may limit wraps and unwraps per leg: a short and a long fixed window per direction, per account and optionally for all accounts together, counted in the underlying moved in quanta of 10^unitExp of the leg; it may require that an account unwraps at most what it wrapped net of its unwraps (rounded against the account), and let that entitlement decay linearly to 0 over a horizon counted from a weighted-average start (an unwrap and a new wrap make the start younger). Tightening the unwrap side and loosening the wrap side wait the factory's notice period {noticePeriod} (0: at once); the rest applies at once. A window can pass up to twice its cap across its boundary; per-account limits can be split across accounts; a token-wide unwrap cap can be used up by one holder; an account that wrapped before the first configuration has no entitlement; units the issuer mints never count; after a rate rise the extra underlying is not redeemable under the rule; an account with unused entitlement can unwrap other holders' units; a shielded account is a separate account from the public one that wrapped."
+                    "The admin may limit wraps and unwraps per leg: a short and a long fixed window per direction, per account and optionally for all accounts together, counted in the underlying moved in quanta of 10^unitExp of the leg; it may require that an account unwraps at most what it wrapped net of its unwraps (rounded against the account), and let that entitlement decay linearly to 0 over a horizon counted from a weighted-average start (an unwrap and a new wrap make the start younger). Tightening the unwrap side and loosening the wrap side wait the factory's notice period {noticePeriod} (0: at once); the rest applies at once. A window can pass up to twice its cap across its boundary; per-account limits can be split across accounts; a token-wide unwrap cap can be used up by one holder; an account that wrapped before the first configuration has no entitlement; units the issuer mints never count; after a rate rise the extra underlying is not redeemable under the rule; an account with unused entitlement can unwrap other holders' units; a shielded account is a separate account from the public one that wrapped."
                 )
             )
         );
@@ -336,7 +336,7 @@ contract GovBitsVectorTest is Test {
                 "power",
                 _one(
                     "all",
-                    "The owner may let only listed accounts wrap, or only listed accounts unwrap (turning the unwrap list on waits the notice period); any holder of this power adds or removes an account at once, which can stop that account's unwraps at once."
+                    "The admin may let only listed accounts wrap, or only listed accounts unwrap (turning the unwrap list on waits the notice period); any holder of this power adds or removes an account at once, which can stop that account's unwraps at once."
                 )
             )
         );

@@ -335,7 +335,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, vA, false);
         c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        c.owner = nid(address(this));
+        c.admin = nid(address(this));
         off = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-owned"));
         _shieldOn(off, alice, 100);
         (bytes32 ref, bytes memory st) = _sent(7);
@@ -359,7 +359,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, vA, false);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        c.owner = nId;
+        c.admin = nId;
         NormalPqzToken t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-router"));
         _rop(router, GovernanceRouterTypes.UA_PQZ_SET_VERIFIER, address(t), abi.encode(vB));
         assertEq(t.pqzVerifyConfig().verifier, vB, "notice 0: at once");

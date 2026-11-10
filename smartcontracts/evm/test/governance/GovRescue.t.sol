@@ -96,7 +96,7 @@ contract GovRescueTest is Test {
     function isRegisteredToken(address) external pure returns (bool) { return false; }
 
     function _base(address rescueTo) internal pure returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.owner, c.rescueTo) = ("R", "R", 6, nid(OWNER), rescueTo);
+        (c.name, c.symbol, c.decimals, c.admin, c.rescueTo) = ("R", "R", 6, nid(OWNER), rescueTo);
         c.features = 1 | (rescueTo != address(0) ? RESCUABLE : 0);
     }
 
@@ -333,9 +333,9 @@ contract GovRescueTest is Test {
     function test_rescueOnNormalTakesAll() public {
         NormalToken n = _normal(TO);
         vm.prank(OWNER);
-        n.transferOwnership(nid(BOB));
+        n.transferAdmin(nid(BOB));
         vm.prank(BOB);
-        n.acceptOwnership();
+        n.acceptAdmin();
         assertEq(n.rescueTo(), TO);
         foo.mint(address(n), 50);
         vm.expectEmit(address(n));
@@ -460,7 +460,7 @@ contract GovRescueDexTest is Test {
     function test_interfaceIdIsOneOnDexAndToken() public {
         SCaaSDex d = _dex(TO, "d");
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.features, c.owner, c.rescueTo) =
+        (c.name, c.symbol, c.decimals, c.features, c.admin, c.rescueTo) =
             ("N", "N", 6, 1 | (uint256(1) << GovernanceBits.RESCUABLE), nid(OWNER), TO);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "t");
         assertTrue(d.supportsInterface(type(IGovernance).interfaceId));

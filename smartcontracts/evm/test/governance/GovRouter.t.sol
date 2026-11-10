@@ -236,7 +236,7 @@ abstract contract GovRouterFixture is UARegistryBase {
         if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         t = NormalToken(EnvKit.clone(normalImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.features, c.owner, c.grantDelay) =
+        (c.name, c.symbol, c.decimals, c.features, c.admin, c.grantDelay) =
             ("G", "G", 6, 1 | (uint256(1) << MINT), owner_, delay);
         c.roles.minter = minter;
         t.initialize(nid(address(this)), 1, abi.encode(c));
@@ -246,7 +246,7 @@ abstract contract GovRouterFixture is UARegistryBase {
         if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.features, c.owner) =
+        (c.name, c.symbol, c.decimals, c.features, c.admin) =
             ("W", "W", 6, 1 | (uint256(1) << RATE) | (uint256(1) << WRAPOFF), owner_);
         (c.roles.guardian, c.roles.rateAdmin) = (guardian, rateAdmin);
         c.legs = new IFactoryToken.Leg[](1);
@@ -414,11 +414,11 @@ contract GovRouterTest is GovRouterFixture {
         _do(DISABLE_FEATURE, s, address(t), abi.encode(MINT));
         assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
         _do(TRANSFER_OWNERSHIP, s, address(t), abi.encode(y));
-        assertEq(t.pendingOwner(), y, "TransferOwnership");
+        assertEq(t.pendingAdmin(), y, "TransferOwnership");
         _do(ACCEPT_OWNERSHIP, y, address(t), "");
-        assertEq(t.owner(), y, "AcceptOwnership");
+        assertEq(t.admin(), y, "AcceptOwnership");
         _do(RENOUNCE_OWNERSHIP, y, address(t), "");
-        assertEq(t.owner(), bytes32(0), "RenounceOwnership");
+        assertEq(t.admin(), bytes32(0), "RenounceOwnership");
     }
 
     function _wrappedOps(bytes32 s, bytes32 w, WrappedToken wt) internal {
@@ -469,20 +469,20 @@ contract GovRouterTest is GovRouterFixture {
         NormalToken t = _normal(_pad(creator), 0, 0);
         SCaaSDex d = _dex(msig);
         vm.prank(creator);
-        t.transferOwnership(msig);
+        t.transferAdmin(msig);
         _do(ACCEPT_OWNERSHIP, msig, address(t), "");
-        assertEq(t.owner(), msig, "the msig became owner through the router");
+        assertEq(t.admin(), msig, "the msig became owner through the router");
         _do(GRANT_ROLE, msig, address(t), abi.encode(MINT, pq));
         _do(OP_MINT, pq, address(t), abi.encode(BOB, uint256(9)));
         assertEq(t.balanceOf(BOB), 9);
         _do(TRANSFER_OWNERSHIP, msig, address(t), abi.encode(pq));
         _do(ACCEPT_OWNERSHIP, pq, address(t), "");
-        assertEq(t.owner(), pq);
+        assertEq(t.admin(), pq);
 
         _do(SET_MARKET, msig, address(d), abi.encode(address(usd), address(t), true));
         _do(TRANSFER_OWNERSHIP, msig, address(d), abi.encode(pq));
         _do(ACCEPT_OWNERSHIP, pq, address(d), "");
-        assertEq(d.owner(), pq);
+        assertEq(d.admin(), pq);
         _do(GRANT_ROLE, pq, address(d), abi.encode(LISTING, pq));
         _do(REVOKE_ROLE, pq, address(d), abi.encode(LISTING, msig));
         bytes memory cd = _op(SET_LISTED_ONLY, msig, address(d), abi.encode(true));
@@ -519,7 +519,7 @@ contract GovRouterTest is GovRouterFixture {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, msig));
         _run(cd);
         cd = _op(GRANT_ROLE, stranger, address(t), abi.encode(MINT, stranger));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, stranger));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, stranger));
         _run(cd);
         assertEq(router.mtxNonce(msig, 0), 0);
         assertEq(router.mtxNonce(stranger, 0), 0);
@@ -618,7 +618,7 @@ contract GovRouterTest is GovRouterFixture {
             abi.encode(MINT, stranger));
         _do(TRANSFER_OWNERSHIP, eoa, address(t), abi.encode(next));
         _do(ACCEPT_OWNERSHIP, next, address(t), "");
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, eoa));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, eoa));
         _run(late);
         assertEq(router.mtxNonce(eoa, 1), 0, "the nonce stays unspent: the target's refusal reverts the call");
     }
@@ -838,7 +838,7 @@ contract GovRouterRegulatedTest is GovRouterFixture {
         if (regImpl == address(0)) regImpl = address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs())));
         t = NormalRegulatedToken(EnvKit.clone(regImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.owner) = ("R", "R", 6, eoa);
+        (c.name, c.symbol, c.decimals, c.admin) = ("R", "R", 6, eoa);
         c.features = 1 | (uint256(1) << 5) | (uint256(1) << 6) | (uint256(1) << 7) | (uint256(1) << 10)
             | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER) | (uint256(1) << GovernanceBits.TAX);
         c.reg.taxRecipient = _pad(address(0x7A0)); // pay-meta-tax T39: bit 23 with the issuer seat

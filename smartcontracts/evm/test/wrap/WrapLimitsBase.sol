@@ -49,7 +49,7 @@ abstract contract WrapLimitsBase is UALedgerBase {
     function _cfg(address[] memory legs, uint256[] memory num, uint256 features)
         internal pure returns (IFactoryToken.TokenConfig memory c)
     {
-        (c.name, c.symbol, c.decimals, c.owner, c.maxSupply) = ("H", "H", 6, nid(OWNER), CAP);
+        (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, nid(OWNER), CAP);
         c.features = features;
         if (features & (uint256(1) << GovernanceBits.MINTABLE) != 0) c.roles.minter = nid(MINTER);
         else c.maxSupply = 0;

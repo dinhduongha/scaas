@@ -304,7 +304,7 @@ contract KindPairsTest is UALedgerBase {
     /// CTR-GOV-12: the hybrid's one cap holds on the merged entry.
     function test_wrapOrderCapStillHolds() public {
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.owner, c.maxSupply) = ("H", "H", 6, nid(address(0x0A)), CAP);
+        (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, nid(address(0x0A)), CAP);
         c.features = 1 | (uint256(1) << GovernanceBits.MINTABLE);
         c.roles.minter = nid(address(0x313));
         c.legs = new IFactoryToken.Leg[](1);

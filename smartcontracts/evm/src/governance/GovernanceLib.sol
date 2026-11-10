@@ -12,12 +12,12 @@ import {IRescuable} from "./IRescuable.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 
-/// @title Features, owner and roles of every SCaaS contract (CTR-GOV-01, CTR-TOK-22), in the ERC-7201 namespace
+/// @title Features, admin and roles of every SCaaS contract (CTR-GOV-01, CTR-TOK-22), in the ERC-7201 namespace
 ///        `scaas.governance`.
 /// @notice External library: the contract keeps one-line wrappers (`GovernanceBase`), the logic is linked at deploy
 ///         (CTR-TOK-24). `features`/`lockedFeatures` are written once by `init`; a flag can later only be cleared, once, by
-///         the owner and only when not locked. One `owner` (0 = no administration ever) grants and revokes the role of a
-///         set flag, disables disableable flags, transfers (two-step) or renounces ownership. The renounce is refused while
+///         the admin and only when not locked. One `admin` (0 = no administration ever) grants and revokes the role of a
+///         set flag, disables disableable flags, transfers (two-step) or renounces the admin role. The renounce is refused while
 ///         a set bit that is not locked has holders (CTR-GOV-02, spec §1.7); a locked bit's holders survive it, since a lock
 ///         promises the power is permanent. A holder may renounce its own role. A power runs through `GovernanceUse.use`
 ///         (`GovernanceBase.sol`): a whole-shape holder inline, a limited one by one DELEGATECALL to `useLimited` (B-26).
@@ -52,7 +52,7 @@ library GovernanceLib {
     }
 
     /// @notice A proposed grant or relaxation (spec §1.6; regulated-kinds spec §3.6): live while `eta != 0`,
-    ///         `generation == ownerGeneration` and `now <= eta + grantDelay`. `commit` is `keccak256(abi.encode(action, bit,
+    ///         `generation == adminGeneration` and `now <= eta + grantDelay`. `commit` is `keccak256(abi.encode(action, bit,
     ///         account, argsHash))` (`GRANT` .. `DISABLE`); the slot of the former `termsHash`.
     struct PendingGrant {
         uint64 eta;
@@ -67,10 +67,10 @@ library GovernanceLib {
     struct GovernanceStorage {
         uint256 features;                                                       // +0, written by init, cleared one-way
         uint256 lockedFeatures;                                                 // +1, no writer after init
-        bytes32 owner;                                                          // +2
-        bytes32 pendingOwner;                                                   // +3
+        bytes32 admin;                                                          // +2
+        bytes32 pendingAdmin;                                                   // +3
         uint64 grantDelay;                                                      // +4, no writer after init (spec §1.6)
-        uint32 ownerGeneration;                                                 //    completed changes of owner
+        uint32 adminGeneration;                                                 //    completed changes of admin
         uint64 lastProposedAt;
         mapping(uint256 bit => mapping(bytes32 account => uint8)) roles;        // +5, 0 none, 1 WHOLE, 2 LIMITED
         mapping(uint256 bit => Counts) counts;                                  // +6
@@ -90,12 +90,12 @@ library GovernanceLib {
 
     // ------------------------------------------------------------------ init (CTR-TOK-22 "Validation in the token")
 
-    /// @notice Validates the flags against the contract's masks and writes features, owner, `grantDelay` and initial roles.
+    /// @notice Validates the flags against the contract's masks and writes features, admin, `grantDelay` and initial roles.
     ///         Called once by the contract's `initialize`. `grantDelay` above 30 days is refused (B-27); `rescueTo` comes with
     ///         bit 17 and is never the contract itself or a pool (spec §6.2, `RescueConfigInvalid`). `roles.issuer` holds
     ///         each set bit of 5-7, `roles.compliance` bit 10 (regulated-kinds spec §2.4); `uaRegistry` answers `kindOf` for
     ///         a derived holder of a regulated contract-only bit (RK-1).
-    function init(uint256 features, uint256 locked, bytes32 owner, uint64 grantDelay, address rescueTo, Roles memory roles,
+    function init(uint256 features, uint256 locked, bytes32 admin, uint64 grantDelay, address rescueTo, Roles memory roles,
         uint256 valid, uint256 roleBits, uint256 contractOnly, address uaRegistry) public
     {
         if (grantDelay > MAX_GRANT_DELAY) revert IGovernance.GrantDelayTooLong(grantDelay);
@@ -125,28 +125,28 @@ library GovernanceLib {
             if (features & _bit(GovernanceBits.RECORD) == 0) revert IGovernance.RoleWithoutFeature(GovernanceBits.RECORD);
             _grant(s, GovernanceBits.RECORD, roles.compliance, 0, roleBits, contractOnly, uaRegistry);
         }
-        if (owner != 0) {
-            _notPool(owner);
-            s.owner = owner;
-            emit IGovernance.OwnershipTransferred(0, owner);
+        if (admin != 0) {
+            _notPool(admin);
+            s.admin = admin;
+            emit IGovernance.AdminTransferred(0, admin);
         } else {
             _noLiveHolder(s, roleBits); // B-06: no token is born in the state a renounce refuses (spec §1.7)
         }
     }
 
-    /// @notice The DEX's owner holds bits 11 and 12 from `initialize` (spec §2.3, B-27): an INIT grant, undelayed, as
+    /// @notice The DEX's admin holds bits 11 and 12 from `initialize` (spec §2.3, B-27): an INIT grant, undelayed, as
     ///         `init`'s roles. Reachable from a contract's `initialize` alone.
     function initHolder(uint8 bit, bytes32 account, uint256 roleBits, uint256 contractOnly, address uaRegistry) public {
         _grant($(), bit, account, 0, roleBits, contractOnly, uaRegistry);
     }
 
-    // ------------------------------------------------------------------ owner
+    // ------------------------------------------------------------------ admin
 
     /// @notice Spec §1.6: on a `WHOLE` holder a no-op; else, with a `grantDelay`, two calls (action `GRANT`).
     function grantRole(uint8 bit, bytes32 account, bytes32 caller, uint256 roleBits, uint256 contractOnly, address uaRegistry)
         public
     {
-        GovernanceStorage storage s = _onlyOwner(caller);
+        GovernanceStorage storage s = _onlyAdmin(caller);
         _check(s, bit, account, roleBits, contractOnly, uaRegistry);
         if (s.roles[bit][account] == WHOLE) return;
         IGovernance.GrantTerms memory none;
@@ -154,36 +154,36 @@ library GovernanceLib {
         _grant(s, bit, account, caller, roleBits, contractOnly, uaRegistry);
     }
 
-    /// @notice Deletes a pending of any action, live or dead; none is a no-op (spec §1.6, agy C-3). The owner, or the
+    /// @notice Deletes a pending of any action, live or dead; none is a no-op (spec §1.6, agy C-3). The admin, or the
     ///         pending's proposer (regulated-kinds spec §3.6).
     function cancelGrant(uint8 bit, bytes32 account, bytes32 caller) public {
         GovernanceStorage storage s = $();
         PendingGrant storage p = s.pending[bit][account];
-        if (caller == 0 || (caller != s.owner && caller != p.proposer)) revert IGovernance.NotOwner(caller);
+        if (caller == 0 || (caller != s.admin && caller != p.proposer)) revert IGovernance.NotAdmin(caller);
         if (p.eta == 0) return;
         delete s.pending[bit][account];
         emit IGovernance.GrantCancelled(bit, account, caller);
     }
 
-    /// @notice The owner, or the grantor of a leaf while the account is its `LIMITED` leaf and the grantor still holds the
-    ///         bit (B-04). The owner's revoke bars the account, a non-holder too, before `_clear`'s early return: only the owner
+    /// @notice The admin, or the grantor of a leaf while the account is its `LIMITED` leaf and the grantor still holds the
+    ///         bit (B-04). The admin's revoke bars the account, a non-holder too, before `_clear`'s early return: only the admin
     ///         re-admits it (B-05, Claude M-8). On a bit of `delayedRelax` with a `grantDelay`, two calls by the same caller
     ///         (regulated-kinds spec §3.6): the first only proposes; the bar and `_clear` happen at the confirm.
     function revokeRole(uint8 bit, bytes32 account, bytes32 caller, uint256 delayedRelax) public {
         GovernanceStorage storage s = $();
-        bool owner = caller != 0 && caller == s.owner;
-        if (!owner && (caller == 0 || caller != s.grants[bit][account].grantor || s.roles[bit][account] != LIMITED
+        bool admin = caller != 0 && caller == s.admin;
+        if (!admin && (caller == 0 || caller != s.grants[bit][account].grantor || s.roles[bit][account] != LIMITED
             || s.roles[bit][caller] == 0))
         {
-            revert IGovernance.NotOwner(caller);
+            revert IGovernance.NotAdmin(caller);
         }
         if (_delayed(s, bit, delayedRelax)) {
             IGovernance.GrantTerms memory none;
             if (!_due(s, bit, account, caller, REVOKE, none)) return;
-        } else if (owner) {
+        } else if (admin) {
             delete s.pending[bit][account]; // a confirm must not restore what the revoke took (agy C-3)
         }
-        if (owner) s.grants[bit][account].barred = true;
+        if (admin) s.grants[bit][account].barred = true;
         _clear(s, bit, account, caller);
     }
 
@@ -206,7 +206,7 @@ library GovernanceLib {
         return delayedRelax & _bit(bit) != 0 && s.grantDelay != 0;
     }
 
-    /// @notice CTR-GOV-02: the owner replaces any grant; a holder with a `delegable` grant sets a leaf that narrows its own,
+    /// @notice CTR-GOV-02: the admin replaces any grant; a holder with a `delegable` grant sets a leaf that narrows its own,
     ///         on an account that holds nothing or is its own leaf. Spent, uses and the window carry over: an edit never
     ///         refreshes a budget. Returns whether this is a leaf and its parent's scope: the order on scopes is the contract's.
     ///         Every caller: a word the contract does not bind is refused (`scalarBits`, `scopeBits`, B-09, B-10), and a
@@ -224,7 +224,7 @@ library GovernanceLib {
         if (_setDue(bit, holder, t, caller, leaf, delayedRelax)) _write(bit, holder, t, caller, leaf);
     }
 
-    /// @dev Whether a `setGrant` applies now: a leaf's or, with no `grantDelay`, at once; the owner's narrowing at once (spec
+    /// @dev Whether a `setGrant` applies now: a leaf's or, with no `grantDelay`, at once; the admin's narrowing at once (spec
     ///      §1.6); a widening, or a `validUntil` cut on a bit of `delayedRelax`, in two calls (regulated-kinds spec §3.6).
     function _setDue(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller, bool leaf,
         uint256 delayedRelax) private returns (bool)
@@ -242,7 +242,7 @@ library GovernanceLib {
     /// @dev Spec §1.6: a pure narrowing of a root, applied at once. On a `WHOLE` root any terms not `delegable`; on a
     ///      `LIMITED` root every word field by field: `min` not lower, `max` not higher, each of `total`, `perWindow`,
     ///      `validUntil`, `maxUses` 0 before (0 is no bound, so `0 → finite` narrows) or finite and not higher, `window`
-    ///      equal or new with the limit it carries, `scope` equal, `delegable` not raised. A leaf the owner would make a root
+    ///      equal or new with the limit it carries, `scope` equal, `delegable` not raised. A leaf the admin would make a root
     ///      drops its parent's bound, and a new holder adds one: neither is a narrowing.
     function _narrowing(GovernanceStorage storage s, uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t)
         private view returns (bool)
@@ -279,16 +279,16 @@ library GovernanceLib {
             return true;
         }
         uint64 eta = uint64(block.timestamp) + s.grantDelay;
-        (p.eta, p.proposer, p.generation, p.commit) = (eta, caller, s.ownerGeneration, c);
+        (p.eta, p.proposer, p.generation, p.commit) = (eta, caller, s.adminGeneration, c);
         s.lastProposedAt = uint64(block.timestamp);
         if (action <= SET) emit IGovernance.GrantProposed(bit, account, caller, eta, action == GRANT, t);
         else emit IGovernance.RelaxProposed(bit, account, action, caller, eta);
         return false;
     }
 
-    /// @dev Live: proposed, by the current owner generation, and `now <= eta + grantDelay`.
+    /// @dev Live: proposed, by the current admin generation, and `now <= eta + grantDelay`.
     function _live(GovernanceStorage storage s, PendingGrant storage p) private view returns (bool) {
-        return p.eta != 0 && p.generation == s.ownerGeneration && block.timestamp <= uint256(p.eta) + s.grantDelay;
+        return p.eta != 0 && p.generation == s.adminGeneration && block.timestamp <= uint256(p.eta) + s.grantDelay;
     }
 
     /// @notice `pendingGrant(bit, account)`: dead ones too, with `live`.
@@ -300,21 +300,21 @@ library GovernanceLib {
         return (p.eta, p.proposer, p.commit, _live(s, p));
     }
 
-    /// @dev A caller that is not the owner sets a leaf (spec §1.5): it holds a `delegable` `LIMITED` grant, an owner exists
-    ///      (B-08: nothing above changes once the owner is 0, the holder list included), the caller is not expired, the target
+    /// @dev A caller that is not the admin sets a leaf (spec §1.5): it holds a `delegable` `LIMITED` grant, an admin exists
+    ///      (B-08: nothing above changes once the admin is 0, the holder list included), the caller is not expired, the target
     ///      holds nothing or is its own leaf and is not barred (B-05), and the terms narrow its own, so an expired parent or
     ///      one with nothing left adds nobody. Returns the parent's scope, which the contract's order checks.
     function _leafPath(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller)
         private view returns (bool leaf, bytes32 parentScope)
     {
         GovernanceStorage storage s = $();
-        leaf = caller != s.owner || caller == 0;
+        leaf = caller != s.admin || caller == 0;
         if (leaf) {
             IGovernance.Grant storage p = s.grants[bit][caller];
-            if (s.owner == 0 || s.roles[bit][caller] != LIMITED || !p.delegable) revert IGovernance.NotOwner(caller);
+            if (s.admin == 0 || s.roles[bit][caller] != LIMITED || !p.delegable) revert IGovernance.NotAdmin(caller);
             if (p.validUntil != 0 && block.timestamp > p.validUntil) revert IGovernance.GrantExpired(bit, caller);
             IGovernance.Grant storage h = s.grants[bit][holder];
-            if (s.roles[bit][holder] != 0 && h.grantor != caller) revert IGovernance.NotOwner(caller);
+            if (s.roles[bit][holder] != 0 && h.grantor != caller) revert IGovernance.NotAdmin(caller);
             if (h.barred) revert IGovernance.GrantBarred(bit, holder);
             _narrows(t, p);
             parentScope = p.scope;
@@ -322,7 +322,7 @@ library GovernanceLib {
     }
 
     /// @dev Writes the terms; spent, uses and the window's start carry (an edit never refreshes a budget). `Counts` by spec §1.7,
-    ///      `r` read first: a leaf is a holder with `grantor != 0`. The owner's apply makes a root (`grantor`, `grantorEpoch`,
+    ///      `r` read first: a leaf is a holder with `grantor != 0`. The admin's apply makes a root (`grantor`, `grantorEpoch`,
     ///      `barred` cleared) and, on a `LIMITED` holder whose `scope` changes or whose delegation ends, kills its leaves (B-11).
     function _write(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller, bool leaf) private {
         GovernanceStorage storage s = $();
@@ -343,7 +343,7 @@ library GovernanceLib {
         emit IGovernance.GrantSet(bit, holder, leaf ? caller : bytes32(0));
     }
 
-    /// @dev The owner's apply, by either entry (spec §1.5, §1.7): rows 1, 4, 5, 6; the record becomes a root's.
+    /// @dev The admin's apply, by either entry (spec §1.5, §1.7): rows 1, 4, 5, 6; the record becomes a root's.
     function _root(GovernanceStorage storage s, uint8 bit, uint8 r, IGovernance.Grant storage g) private {
         Counts storage c = s.counts[bit];
         if (r == 0) {
@@ -366,7 +366,7 @@ library GovernanceLib {
     ///         `grantDelay`, two calls keyed `(bit, 0)` (regulated-kinds spec §3.6): the first proposes and returns false;
     ///         `applied` is true only when `features` was cleared, and a contract acts on the disable only then (RK-3).
     function disableFeature(uint8 bit, bytes32 caller, uint256 delayedRelax) public returns (bool applied) {
-        GovernanceStorage storage s = _onlyOwner(caller);
+        GovernanceStorage storage s = _onlyAdmin(caller);
         uint256 m = _bit(bit);
         if ((s.lockedFeatures | GovernanceBits.ALWAYS_LOCKED) & m != 0) revert IGovernance.FeatureLocked(bit);
         if (s.features & m == 0) revert IGovernance.FeatureNotSet(bit);
@@ -379,32 +379,32 @@ library GovernanceLib {
         return true;
     }
 
-    function transferOwnership(bytes32 newOwner, bytes32 caller) public {
-        GovernanceStorage storage s = _onlyOwner(caller);
-        _notPool(newOwner);
-        s.pendingOwner = newOwner;
-        emit IGovernance.OwnershipTransferStarted(caller, newOwner);
+    function transferAdmin(bytes32 newAdmin, bytes32 caller) public {
+        GovernanceStorage storage s = _onlyAdmin(caller);
+        _notPool(newAdmin);
+        s.pendingAdmin = newAdmin;
+        emit IGovernance.AdminTransferStarted(caller, newAdmin);
     }
 
-    function acceptOwnership(bytes32 caller) public {
+    function acceptAdmin(bytes32 caller) public {
         GovernanceStorage storage s = $();
-        if (caller != s.pendingOwner || caller == 0) revert IGovernance.NotPendingOwner(caller);
-        bytes32 previous = s.owner;
-        s.owner = caller;
-        s.pendingOwner = 0;
-        ++s.ownerGeneration; // every pending of the previous term dies (Codex 2)
-        emit IGovernance.OwnershipTransferred(previous, caller);
+        if (caller != s.pendingAdmin || caller == 0) revert IGovernance.NotPendingAdmin(caller);
+        bytes32 previous = s.admin;
+        s.admin = caller;
+        s.pendingAdmin = 0;
+        ++s.adminGeneration; // every pending of the previous term dies (Codex 2)
+        emit IGovernance.AdminTransferred(previous, caller);
     }
 
-    /// @notice The owner becomes 0 forever. Refused while a set bit that is not locked has holders (CTR-GOV-02): revoke
+    /// @notice The admin becomes 0 forever. Refused while a set bit that is not locked has holders (CTR-GOV-02): revoke
     ///         first. A locked bit's holders survive: a lock promises the power is permanent.
-    function renounceOwnership(bytes32 caller, uint256 roleBits) public {
-        GovernanceStorage storage s = _onlyOwner(caller);
+    function renounceAdmin(bytes32 caller, uint256 roleBits) public {
+        GovernanceStorage storage s = _onlyAdmin(caller);
         _noLiveHolder(s, roleBits);
-        s.owner = 0;
-        s.pendingOwner = 0;
-        ++s.ownerGeneration;
-        emit IGovernance.OwnershipTransferred(caller, 0);
+        s.admin = 0;
+        s.pendingAdmin = 0;
+        ++s.adminGeneration;
+        emit IGovernance.AdminTransferred(caller, 0);
     }
 
     // ------------------------------------------------------------------ checks used inline by the token
@@ -505,19 +505,19 @@ library GovernanceLib {
     }
 
     /// @dev The renounce rule (CTR-GOV-02, spec §1.7): no set, unlocked power bit has a live root. A dead leaf does not count
-    ///      (B-07); an expired root does until it is revoked (C7). `renounceOwnership`, and `init` with no owner.
+    ///      (B-07); an expired root does until it is revoked (C7). `renounceAdmin`, and `init` with no admin.
     function _noLiveHolder(GovernanceStorage storage s, uint256 roleBits) private view {
         for (uint256 live = s.features & ~s.lockedFeatures & roleBits; live != 0; live &= live - 1) {
             uint8 bit = _lowest(live);
-            if (s.counts[bit].roots != 0) revert IGovernance.OwnerHasHolders(bit);
+            if (s.counts[bit].roots != 0) revert IGovernance.AdminHasHolders(bit);
         }
     }
 
     function _notPool(bytes32 account) private view {
-        if (_isPool(account)) revert IGovernance.OwnerAccountPool(account);
+        if (_isPool(account)) revert IGovernance.AdminAccountPool(account);
     }
 
-    /// @dev `UA_POOL`, `SHIELD_POOL` and the contract itself as native ids: never owner, never holder (B-19, F-07).
+    /// @dev `UA_POOL`, `SHIELD_POOL` and the contract itself as native ids: never admin, never holder (B-19, F-07).
     function _isPool(bytes32 account) private view returns (bool) {
         return account == MetaTxLib.pad(MetaTxLib.UA_POOL) || account == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)
             || account == MetaTxLib.pad(address(this));
@@ -592,9 +592,9 @@ library GovernanceLib {
         if (p.maxUses != 0 && (t.maxUses == 0 || uint256(p.uses) + t.maxUses > p.maxUses)) revert IGovernance.GrantNotNarrower(5);
     }
 
-    function _onlyOwner(bytes32 caller) private view returns (GovernanceStorage storage s) {
+    function _onlyAdmin(bytes32 caller) private view returns (GovernanceStorage storage s) {
         s = $();
-        if (caller != s.owner || caller == 0) revert IGovernance.NotOwner(caller);
+        if (caller != s.admin || caller == 0) revert IGovernance.NotAdmin(caller);
     }
 
     function _bit(uint8 bit) private pure returns (uint256) {

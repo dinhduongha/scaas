@@ -721,7 +721,7 @@ contract DexTest is Test {
         assertTrue(f.isDex(address(dex)));
         assertEq(f.dexVersionOf(address(dex)), 1);
         assertFalse(f.isDex(address(dexImpl)));
-        assertEq(dex.owner(), nid(admin));
+        assertEq(dex.admin(), nid(admin));
         assertEq(dex.treasury(), treasury);
         assertEq(dex.relayerSharePpm(), 200_000);
         vm.expectRevert(ISCaaSDex.NotFactory.selector);
@@ -790,7 +790,7 @@ contract DexTest is Test {
         emit IOpenFactory.DexCreated(address(0), nid(creator), 1, address(dexImpl), nid(address(0xADD)));
         vm.prank(creator);
         address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(0xADD)), 0, treasury, false, 0, address(0))), "ev");
-        assertEq(SCaaSDex(d).owner(), nid(address(0xADD)));
+        assertEq(SCaaSDex(d).admin(), nid(address(0xADD)));
     }
 
     /// Where `deployDexImplementation(version, latest DEX env, code, "")` puts the release.

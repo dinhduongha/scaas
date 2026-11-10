@@ -253,7 +253,7 @@ contract PqChatOnchain is OnchainBase {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("Onchain pqchat", "oPC", 6);
         c.features = 1 << GovernanceBits.PAYABLE;
-        (c.owner, c.initialSupply, c.initialHolder) = (_pad(a1), 1e12, a1);
+        (c.admin, c.initialSupply, c.initialHolder) = (_pad(a1), 1e12, a1);
         vm.broadcast(k1);
         tok = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), _salt("fee-token"));
         _book(tok, "NormalToken");

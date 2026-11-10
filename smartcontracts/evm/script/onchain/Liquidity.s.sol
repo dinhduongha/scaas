@@ -86,7 +86,7 @@ contract Liquidity is OnchainBase {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = (name, symbol, 6);
         c.features = 1 << GovernanceBits.PAYABLE;
-        c.owner = _pad(a1);
+        c.admin = _pad(a1);
         (c.initialSupply, c.initialHolder) = (1e12, a1);
         vm.broadcast(k1);
         t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), _salt(symbol));

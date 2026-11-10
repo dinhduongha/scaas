@@ -18,7 +18,7 @@ uint256 constant ENV_PQZ_VERIFIER = 0;
 ///        chain), the instance's chain values in its own code (`ChainEnv`, appended to the clone by the factory and exposed
 ///        by `chainEnv()`), one generic `initialize(creatorId, version, initArgs)` the factory calls in the SAME call as
 ///        the clone's creation, `kind()` and `validateEnv`. The factory also reads `factory()` at deployment and
-///        `chainUid()`, `features()`, `lockedFeatures()`, `owner()`, `underlyings()` after `initialize` (the post-check,
+///        `chainUid()`, `features()`, `lockedFeatures()`, `admin()`, `underlyings()` after `initialize` (the post-check,
 ///        provenance, the index). The kinds of this repository take `initArgs = abi.encode(TokenConfig)`; a later version
 ///        may take another encoding without a factory change.
 interface IFactoryToken {
@@ -125,14 +125,14 @@ interface IFactoryToken {
         uint8 decimals;
         uint256 features;
         uint256 lockedFeatures;
-        bytes32 owner;               // a UA id (a native account: its padded address); 0 = no administration ever
+        bytes32 admin;               // a UA id (a native account: its padded address); 0 = no administration ever
         GovernanceLib.Roles roles;        // initial holders, each only for a set flag
         uint256 initialSupply;       // NORMAL* only
         address initialHolder;       // NORMAL* only
         Leg[] legs;                  // WRAPPED* only, 1..8
         RateConfig rate;             // WRAPPED* only, with RATE_ADJUSTABLE
         ConfidentialConfig conf;     // *_ZETHER only
-        uint64 grantDelay;           // spec §1.6: the owner's two calls, at most 30 days; 0 = one call
+        uint64 grantDelay;           // spec §1.6: the admin's two calls, at most 30 days; 0 = one call
         address rescueTo;            // spec §6.2: with `RESCUABLE` only, immutable; never the token or a pool
         uint256 maxSupply;           // WRAPPED* only, spec §5.2: the hybrid's cap, with `MINTABLE` only; 0 = no hybrid
         RegulatedParams reg;         // *_REGULATED (8-13) only

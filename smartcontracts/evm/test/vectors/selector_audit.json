@@ -1,10 +1,10 @@
 {
- "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. OWNER: the owner (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending ownership. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, OWNER, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5).",
+ "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. ADMIN: the admin (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending admin role. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, ADMIN, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5). Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1): class OWNER renamed ADMIN, the three admin entries acceptAdmin(), renounceAdmin(), transferAdmin(bytes32) and their errors NotAdmin(bytes32), NotPendingAdmin(bytes32) in place of the ownership names, every class unchanged.",
  "NormalToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -18,8 +18,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -28,8 +28,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -38,8 +38,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -142,9 +142,9 @@
    "error": ""
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -163,13 +163,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -177,14 +177,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -194,9 +194,9 @@
  ],
  "WrappedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -210,8 +210,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -225,8 +225,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "disableWrap(address,bytes32)",
@@ -245,8 +245,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -389,9 +389,9 @@
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -410,18 +410,18 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapMember(bytes32,bool,bool)",
@@ -434,14 +434,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -486,9 +486,9 @@
  ],
  "NormalZetherToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -502,8 +502,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -512,8 +512,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -522,8 +522,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -716,9 +716,9 @@
    "error": ""
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -737,13 +737,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -751,14 +751,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -768,9 +768,9 @@
  ],
  "WrappedZetherToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -784,8 +784,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -799,8 +799,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "disableWrap(address,bytes32)",
@@ -819,8 +819,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -1073,9 +1073,9 @@
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -1094,18 +1094,18 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapMember(bytes32,bool,bool)",
@@ -1118,14 +1118,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -1170,9 +1170,9 @@
  ],
  "NormalPqzToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -1186,8 +1186,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -1196,8 +1196,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -1206,8 +1206,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -1391,23 +1391,23 @@
   },
   {
    "sig": "pqzCancelVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "pqzRevokeVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "pqzSetVerifier(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -1426,13 +1426,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setProofStore(uint8)",
@@ -1445,14 +1445,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -1462,9 +1462,9 @@
  ],
  "WrappedPqzToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -1478,8 +1478,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -1493,8 +1493,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "disableWrap(address,bytes32)",
@@ -1513,8 +1513,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -1753,18 +1753,18 @@
   },
   {
    "sig": "pqzCancelVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "pqzRevokeVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "pqzSetVerifier(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "proposeRate(address,uint96,uint96)",
@@ -1772,9 +1772,9 @@
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -1793,13 +1793,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setProofStore(uint8)",
@@ -1808,8 +1808,8 @@
   },
   {
    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapMember(bytes32,bool,bool)",
@@ -1822,14 +1822,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -1874,9 +1874,9 @@
  ],
  "NormalRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -1890,8 +1890,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -1900,8 +1900,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -1920,8 +1920,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -2049,9 +2049,9 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -2075,13 +2075,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setTaxRate(uint32)",
@@ -2099,14 +2099,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -2126,9 +2126,9 @@
  ],
  "WrappedRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -2142,8 +2142,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -2157,8 +2157,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "disableWrap(address,bytes32)",
@@ -2187,8 +2187,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -2356,9 +2356,9 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -2382,13 +2382,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setTaxRate(uint32)",
@@ -2402,8 +2402,8 @@
   },
   {
    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapMember(bytes32,bool,bool)",
@@ -2416,14 +2416,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -2478,9 +2478,9 @@
  ],
  "NormalZetherRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -2494,8 +2494,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -2504,8 +2504,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -2524,8 +2524,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -2743,9 +2743,9 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -2769,13 +2769,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setTaxRate(uint32)",
@@ -2793,14 +2793,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -2820,9 +2820,9 @@
  ],
  "WrappedZetherRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -2836,8 +2836,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -2851,8 +2851,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "disableWrap(address,bytes32)",
@@ -2881,8 +2881,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -3160,9 +3160,9 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -3186,13 +3186,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setTaxRate(uint32)",
@@ -3206,8 +3206,8 @@
   },
   {
    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapMember(bytes32,bool,bool)",
@@ -3220,14 +3220,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -3282,9 +3282,9 @@
  ],
  "NormalPqzRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -3298,8 +3298,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -3308,8 +3308,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -3328,8 +3328,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -3533,18 +3533,18 @@
   },
   {
    "sig": "pqzCancelVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "pqzRevokeVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "pqzSetVerifier(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
@@ -3552,9 +3552,9 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -3578,13 +3578,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setProofStore(uint8)",
@@ -3607,14 +3607,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -3634,9 +3634,9 @@
  ],
  "WrappedPqzRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -3650,8 +3650,8 @@
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -3665,8 +3665,8 @@
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "disableWrap(address,bytes32)",
@@ -3695,8 +3695,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -3955,18 +3955,18 @@
   },
   {
    "sig": "pqzCancelVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "pqzRevokeVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "pqzSetVerifier(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "proposeRate(address,uint96,uint96)",
@@ -3979,9 +3979,9 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -4005,13 +4005,13 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setProofStore(uint8)",
@@ -4030,8 +4030,8 @@
   },
   {
    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapMember(bytes32,bool,bool)",
@@ -4044,14 +4044,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -4106,19 +4106,19 @@
  ],
  "SCaaSDex": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "exchangeOne((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[]),(address,bytes)[],address)",
@@ -4127,8 +4127,8 @@
   },
   {
    "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -4181,9 +4181,9 @@
    "error": ""
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "renounceRole(uint8)",
@@ -4192,8 +4192,8 @@
   },
   {
    "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setExchangeTarget(address,bool)",
@@ -4207,8 +4207,8 @@
   },
   {
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setListedOnly(bool)",
@@ -4226,9 +4226,9 @@
    "error": "NotSelf()"
   },
   {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   }
  ],
  "DexPuller": [

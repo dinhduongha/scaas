@@ -32,27 +32,27 @@ contract UADexAdminTest is UADexBase {
         assertEq(dex.modules().length, 2);
         assertEq(ITokenModule(d).moduleGroup(), 10);
         assertEq(ITokenModule(d).factory(), address(f));
-        vm.expectCall(d, abi.encodeCall(IGovernance.owner, ()));
-        assertEq(dex.owner(), nid(address(this)));
+        vm.expectCall(d, abi.encodeCall(IGovernance.admin, ()));
+        assertEq(dex.admin(), nid(address(this)));
         assertEq(dex.validBits(), GovernanceBits.DEX_BITS);
         assertTrue(dex.hasRole(GovernanceBits.LISTING, nid(address(this))));
-        vm.expectCall(d, abi.encodeCall(IGovernance.transferOwnership, (nid(dave))));
-        dex.transferOwnership(nid(dave));
-        assertEq(dex.pendingOwner(), nid(dave));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, nid(dave)));
+        vm.expectCall(d, abi.encodeCall(IGovernance.transferAdmin, (nid(dave))));
+        dex.transferAdmin(nid(dave));
+        assertEq(dex.pendingAdmin(), nid(dave));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(dave)));
         vm.prank(dave);
-        dex.renounceOwnership(); // D's revert data, verbatim through the stub
+        dex.renounceAdmin(); // D's revert data, verbatim through the stub
     }
 
     /// M2: D's entries answer only under DELEGATECALL; `validBits` is `pure` and reads nothing.
     function test_d_directCallRefused() public {
         SCaaSDexGovernanceModule d = SCaaSDexGovernanceModule(dex.modules()[0]);
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
-        d.owner();
+        d.admin();
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.features();
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
-        d.transferOwnership(nid(dave));
+        d.transferAdmin(nid(dave));
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.grantRole(GovernanceBits.LISTING, nid(dave));
         assertEq(d.validBits(), GovernanceBits.DEX_BITS);

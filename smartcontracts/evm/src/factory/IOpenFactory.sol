@@ -46,7 +46,7 @@ interface IOpenFactory {
 
     /// @notice Factory index spec §2.1 (CTR-TOK-27, owner 2026-11-07): one record per contract this factory created, in
     ///         its own state, never changed or deleted. `creatorId` the creator's UA id (a direct call: `pad(msg.sender)`);
-    ///         `ownerUA` the contract's `owner()` right after `initialize` (a claim, 0 = no administration ever);
+    ///         `ownerUA` the contract's `admin()` right after `initialize` (a claim, 0 = no administration ever);
     ///         (a signed creation through the router: the signing UA, S3);
     ///         `contractClass` `CLASS_TOKEN` (`kind` a `TokenKind`) or `CLASS_DEX` (`kind` 0), 0 = not made here; `version`
     ///         the release (0 = `createTokenUnregistered`); `createdBlock` / `createdAt` the chain's `block.number` /

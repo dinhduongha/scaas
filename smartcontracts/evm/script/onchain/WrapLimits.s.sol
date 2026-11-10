@@ -335,7 +335,7 @@ abstract contract WrapLimitsKit is OnchainBase {
     // ------------------------------------------------------------------ the token configs
 
     function _tokenCfg(uint256 i, uint256 features, bool hybrid) internal view returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.owner) = (string.concat("Onchain WL ", _h(i)), string.concat("oWL", _h(i)), 6, _pad(a1));
+        (c.name, c.symbol, c.decimals, c.admin) = (string.concat("Onchain WL ", _h(i)), string.concat("oWL", _h(i)), 6, _pad(a1));
         c.features = 1 << GovernanceBits.PAYABLE | features;
         if (hybrid) (c.features, c.roles.minter, c.maxSupply) = (c.features | 1 << GovernanceBits.MINTABLE, _pad(a1), 1e30);
         c.legs = new IFactoryToken.Leg[](1);

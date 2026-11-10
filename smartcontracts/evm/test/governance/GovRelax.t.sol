@@ -369,10 +369,10 @@ contract GovRelaxTest is Test {
         vm.prank(OWNER);
         a.disableFeature(PAUSE);
         vm.prank(OWNER);
-        a.transferOwnership(nid(NEXT));
+        a.transferAdmin(nid(NEXT));
         assertTrue(_live(FREEZE, nid(issuer)), "control: live before the accept");
         vm.prank(NEXT);
-        a.acceptOwnership();
+        a.acceptAdmin();
         assertFalse(_live(FREEZE, nid(issuer)));
         assertFalse(_live(FORCE, nid(issuer)), "a holder's renounce dies too");
         assertFalse(_live(PAUSE, 0));
@@ -409,10 +409,10 @@ contract GovRelaxTest is Test {
         vm.prank(issuer);
         a.renounceRole(FREEZE);
         vm.prank(STRANGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, nid(STRANGER)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(STRANGER)));
         a.cancelGrant(FREEZE, nid(issuer));
         vm.prank(compliance); // a holder of another bit, not the proposer
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, nid(compliance)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(compliance)));
         a.cancelGrant(FREEZE, nid(issuer));
         vm.expectEmit(true, true, true, true, address(a));
         emit IGovernance.GrantCancelled(FREEZE, nid(issuer), nid(issuer));
@@ -510,7 +510,7 @@ contract GovRelaxTest is Test {
         RelaxApp x = new RelaxApp(address(reg));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, FREEZE, nid(address(x))));
         x.init(FEATURES, nid(OWNER), D, _roles(nid(address(x)), 0));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.OwnerAccountPool.selector, nid(address(x))));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, nid(address(x))));
         x.init(FEATURES, nid(address(x)), D, _roles(0, 0));
         // positive control
         vm.prank(OWNER);

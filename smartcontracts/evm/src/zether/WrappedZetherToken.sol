@@ -25,6 +25,8 @@ import "./ZetherTypes.sol";
 /// @notice The events and errors of `WrappedZetherToken` before the split (d142b57c) that its core does not declare: the face's ABI lists them
 ///         as before (metatx-split R4: a client decodes an error a library or a module raises), declarations only, no code.
 interface IWrappedZetherTokenAbi {
+    event AdminTransferStarted(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
+    event AdminTransferred(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
     event ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed toUA, bytes32 beneficiary, uint256 fee, uint64 sendCounter, address blob);
     event ConfidentialTransferMulti(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob);
     event EIP712DomainChanged();
@@ -38,8 +40,6 @@ interface IWrappedZetherTokenAbi {
     event MetaTransactionExecuted(address indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
-    event OwnershipTransferStarted(bytes32 indexed previousOwner, bytes32 indexed newOwner);
-    event OwnershipTransferred(bytes32 indexed previousOwner, bytes32 indexed newOwner);
     event PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body);
     event PaymentSettled(address indexed from, address indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
     event PullRestored(bytes32 indexed orderHash, uint256 amount);
@@ -73,6 +73,8 @@ interface IWrappedZetherTokenAbi {
     event WrapLimitsProposed(bytes32 indexed by, uint64 eta, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
     event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
     error AccountNotRegistered(ZetherTypes.UA account);
+    error AdminAccountPool(bytes32 account);
+    error AdminHasHolders(uint8 bit);
     error AmountNotScaled(uint256 minted, uint256 shieldScale);
     error AmountOutOfRange(uint256 amount, uint256 max);
     error AssociateFailed(int64 responseCode);
@@ -149,18 +151,16 @@ interface IWrappedZetherTokenAbi {
     error NoSuchRole(uint8 bit);
     error NonceAboveCap(bytes32 orderHash);
     error NonceInvalidated(bytes32 orderHash);
+    error NotAdmin(bytes32 caller);
     error NotDex(address caller);
     error NotGuardian();
     error NotLiquidityDex(address caller);
-    error NotOwner(bytes32 caller);
-    error NotPendingOwner(bytes32 caller);
+    error NotPendingAdmin(bytes32 caller);
     error NotProposer(uint8 bit, bytes32 account, bytes32 proposer);
     error NotRateAdmin();
     error OrderClosed(bytes32 orderHash);
     error OrderExpired(bytes32 orderHash);
     error Overfill(bytes32 orderHash);
-    error OwnerAccountPool(bytes32 account);
-    error OwnerHasHolders(uint8 bit);
     error PayMetaMismatch(bytes32 entryRef, bytes32 payId);
     error PayMetaShape();
     error PayRecordAmount(uint256 amount);
@@ -297,7 +297,7 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forwardView(_MA);
     }
 
-    function acceptOwnership() external {
+    function acceptAdmin() external {
         _forward(_MA);
     }
 
@@ -307,6 +307,10 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
 
     function addReserve(address, uint256) external payable {
         _forward(_MW);
+    }
+
+    function admin() external view returns (bytes32 _p0) {
+        _forwardView(_MA);
     }
 
     function auditorKey() external view returns (bytes memory _p0) {
@@ -661,10 +665,6 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forward(_MW);
     }
 
-    function owner() external view returns (bytes32 _p0) {
-        _forwardView(_MA);
-    }
-
     function payLane(bytes32) external pure returns (uint256 _p0) {
         _forwardPure(_modulePure(1));
     }
@@ -685,11 +685,11 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forwardView(_MA);
     }
 
-    function pendingGrant(uint8, bytes32) external view returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3) {
+    function pendingAdmin() external view returns (bytes32 _p0) {
         _forwardView(_MA);
     }
 
-    function pendingOwner() external view returns (bytes32 _p0) {
+    function pendingGrant(uint8, bytes32) external view returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3) {
         _forwardView(_MA);
     }
 
@@ -729,7 +729,7 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forwardView(_MZ);
     }
 
-    function renounceOwnership() external {
+    function renounceAdmin() external {
         _forward(_MA);
     }
 
@@ -789,16 +789,16 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forwardView(_MT);
     }
 
+    function transferAdmin(bytes32) external {
+        _forward(_MA);
+    }
+
     function transferEntry(bytes32) external view returns (bytes memory _p0) {
         _forwardView(_MZ);
     }
 
     function transferMemo(bytes32) external view returns (bytes memory _p0) {
         _forwardView(_MZ);
-    }
-
-    function transferOwnership(bytes32) external {
-        _forward(_MA);
     }
 
     function underlying() external view returns (address _p0) {

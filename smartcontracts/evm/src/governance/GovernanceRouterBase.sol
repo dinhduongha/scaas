@@ -190,18 +190,18 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     function mtxTransferOwnership(MetaTxLib.UAEnvelope calldata e, address target, bytes32 newOwner,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_TRANSFER_OWNERSHIP, e, target, IGovernance.transferOwnership.selector,
+        _ua(GovernanceRouterTypes.UA_TRANSFER_OWNERSHIP, e, target, IGovernance.transferAdmin.selector,
             abi.encode(newOwner), auth);
     }
 
     function mtxAcceptOwnership(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
-        _ua(GovernanceRouterTypes.UA_ACCEPT_OWNERSHIP, e, target, IGovernance.acceptOwnership.selector, "", auth);
+        _ua(GovernanceRouterTypes.UA_ACCEPT_OWNERSHIP, e, target, IGovernance.acceptAdmin.selector, "", auth);
     }
 
     function mtxRenounceOwnership(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth)
         external
     {
-        _ua(GovernanceRouterTypes.UA_RENOUNCE_OWNERSHIP, e, target, IGovernance.renounceOwnership.selector, "", auth);
+        _ua(GovernanceRouterTypes.UA_RENOUNCE_OWNERSHIP, e, target, IGovernance.renounceAdmin.selector, "", auth);
     }
 
     function mtxRenounceRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)

@@ -468,9 +468,9 @@ contract WrapLimitsTest is WrapLimitsBase {
         (uint64 eta,) = _pending(w);
         address next = address(0x0B);
         vm.prank(OWNER);
-        w.transferOwnership(_pad(next));
+        w.transferAdmin(_pad(next));
         vm.prank(next);
-        w.acceptOwnership();
+        w.acceptAdmin();
         vm.warp(eta);
         vm.prank(next);
         w.setWrapLimits(_cfg1(0, 0, L(100, 0, DAY), OFF(), OFF(), OFF()), false, false, false);
@@ -617,7 +617,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, WLIST, _pad(OWNER)));
         vm.prank(OWNER);
         w.setWrapMember(_pad(bob), true, true); // no holder of bit 26 can exist without it
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, _pad(bob)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, _pad(bob)));
         vm.prank(bob);
         w.setWrapLimits(a, false, false, false);
     }
