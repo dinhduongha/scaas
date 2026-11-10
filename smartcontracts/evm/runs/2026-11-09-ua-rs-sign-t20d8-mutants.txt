@@ -18,3 +18,6 @@ killed     | M6 reader: a call through another contract read | clients/ua-rs/src
 killed     | M7 reader: a Compact entry not commit-reveal | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: balance_proven_against_anvil | called `Result::unwrap()` on an `Err` value: "error: ua-rs refused the credits [1] (their P did not check): take path (A) under R1–R6, or stop\n" | at bcea8f90
 killed     | M8 reader: a header of any length | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: tests::proof_log_rows_decode | a header of 608 bytes | at bcea8f90
 # bcea8f90 re-run: 5 killed, 0 survived, 0 not loaded (git diff --exit-code 0; M1-M3 above stand, every string checked at HEAD)
+# T20e5 re-run (2026-11-10, after the fifth sync): T20e3 moved the reader's envelope binding into envelope_binding (d0ec7d9c), so M4's replacement string brought to HEAD (env[3] -> *valid), the mutant run again:
+killed     | M4 reader: the envelope binding without validUntil | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: balance_proven_against_anvil | called `Result::unwrap()` on an `Err` value: "error: ua-rs refused the credits [2] (their P did not check): take path (A) under R1–R6, or stop\n" | at 54494609
+# T20e5 re-run: 1 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

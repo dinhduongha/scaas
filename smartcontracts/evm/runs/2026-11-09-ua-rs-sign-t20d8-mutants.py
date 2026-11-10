@@ -28,7 +28,7 @@ M = [
     ("more than K_MAX credits taken", [(P, "    let list = f.list(\"credits\")?;\n    if list.len() > K_MAX {", "    let list = f.list(\"credits\")?;\n    if list.len() > usize::MAX - 1 {")], T),
     ("a sender window past K_MAX taken", [(P, "                    let l = c.list(\"senderPending\")?;\n                    if l.len() > K_MAX {", "                    let l = c.list(\"senderPending\")?;\n                    if l.len() > usize::MAX - 1 {")], T),
     ("more than 10 key records taken", [(P, "                    let l = c.list(\"keyRecords\")?;\n                    if l.len() > KEY_RECORDS_MAX {", "                    let l = c.list(\"keyRecords\")?;\n                    if l.len() > usize::MAX - 1 {")], T),
-    ("reader: the envelope binding without validUntil", [(B, "env[0], env[1], env[2], env[3], env[4],", "env[0], env[1], env[2], [0; 32], env[4],")], A),
+    ("reader: the envelope binding without validUntil", [(B, "*from, *batch, *nonce, *valid,", "*from, *batch, *nonce, [0; 32],")], A),
     ("reader: the sender counter searched one short", [(B, "let k = (counter.saturating_sub(MAX_COUNTER_SEARCH)..counter).rev()", "let k = (counter.saturating_sub(MAX_COUNTER_SEARCH)..counter.saturating_sub(1)).rev()")], A),
     ("reader: a call through another contract read", [(B, "if tx[\"to\"].as_str().map(|t| t.to_ascii_lowercase()) != Some(hx(&a.token)) {", "if false {")], A),
     ("reader: a Compact entry not commit-reveal", [(B, "hash: e.compact || compact_token,", "hash: compact_token,")], A),
