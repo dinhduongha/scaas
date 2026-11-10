@@ -7,7 +7,10 @@ code first, and tagged (Fable P1-1 …). **The owner's final ruling on P1-2 the 
 approves one release by hash, and anyone deploys it straight to the factory; a native admin's own deploy is its own approval
 (§5.6).** The owner also ruled P2-5 (no usage restriction) and made the relay pair a write-once entry (§13). **Owner ruling, the same day,
 added to the rename map: in `ComplianceRegistry` the "attester" becomes the "KYC provider"** (§4.1, §5.3.1), the party the
-registry admin enables to write compliance rows; it is a UA `bytes32` as Q5 says.
+registry admin enables to write compliance rows; it is a UA `bytes32` as Q5 says. **And (owner, same day):** the contract keeps
+its name `ComplianceRegistry` and stays a full deploy pinned by code hash (no factory clone class); `REGISTRY_CODEHASH` becomes
+`COMPLIANCE_REGISTRY_CODEHASH`, the new error is `ComplianceRegistryRouterMismatch`, and the bare "registry" names of the
+regulated code that would read as `UARegistry` take `ComplianceRegistry` (§4.1).
 
 ## 1. The rulings (owner, 2026-11-10, in chat)
 
@@ -101,6 +104,7 @@ equal everywhere.
 | Registry: the row (named after what it writes) | `attest(bytes32[] accounts, uint64[] flags, uint64[] validUntil)`; `Attested(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed attesterId)`; `attestationOf(bytes32) returns (flags, validUntil, attesterId)`; struct `Attestation {flags, validUntil, attesterId}` | `setCompliance(bytes32[] accounts, uint64[] flags, uint64[] until)`; `ComplianceSet(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed providerId)`; `complianceOf(bytes32) returns (flags, validUntil, providerId)`; struct `ComplianceRow {flags, validUntil, providerId}` (one slot, same packing) |
 | Registry: router ops | the draft's `UASetAttester(…,bytes32 attester,bool enabled,…)` / `mtxSetAttester` and `UAAttest(…,bytes32[] accounts,uint64[] flags,uint64[] until,…)` / `mtxAttest` (never built) | `UASetKycProvider(…,bytes32 provider,bool enabled,…)` / `mtxSetKycProvider`; `UASetCompliance(…,bytes32[] accounts,uint64[] flags,uint64[] until,…)` / `mtxSetCompliance` |
 | Registry: readers | `RegulatedBase` (`attestationOf`, `attesterEnabled`, `canReceive` reason 3 "attester disabled"), `IRegulatedToken`, `IComplianceRegistry`, the node's `abi.rs` / `dex/venue.rs`, clientkeys `regulated.js` (`attesterEnabled`), `regulated_kat.json` | `complianceOf`, `kycProviderEnabled`, reason 3 "KYC provider disabled", the same names everywhere; `hasFlags`, `LengthMismatch`, `EligibleContractAdminOnly`, `AdminWrittenSlot`, `admin` unchanged |
+| Compliance registry names in the regulated code (owner 2026-11-10: unambiguous next to `UARegistry`) | `RegulatedBase.REGISTRY_CODEHASH` (public immutable, in the faces' `entries.json` and `ITokenModule`); `RegulatedImplArgs.registryCodehash`; `RegulatedLib.init(…, bytes32 registryCodehash, address uaRegistry)`; `IRegulatedToken.RegistryCodeMismatch(address registry, bytes32 codehash)`, `RegistryUnavailable(address registry)`, `RegistryGasStarved(uint256 cap, uint256 left)`; `RegulatedBase.REGISTRY_GAS`, `REGISTRY_GAS_MARGIN`; `DeployBase._registryCodehash()`; the draft's `RegistryRouterMismatch` | `COMPLIANCE_REGISTRY_CODEHASH`; `complianceRegistryCodehash`; `init(…, bytes32 complianceRegistryCodehash, address uaRegistry)`; `ComplianceRegistryCodeMismatch(address complianceRegistry, bytes32 codehash)`, `ComplianceRegistryUnavailable(address complianceRegistry)`, `ComplianceRegistryGasStarved(uint256 cap, uint256 left)`; `COMPLIANCE_REGISTRY_GAS`, `COMPLIANCE_REGISTRY_GAS_MARGIN`; `_complianceRegistryCodehash()`; `ComplianceRegistryRouterMismatch(address complianceRegistry, address got)`. The contract keeps its name `ComplianceRegistry` (a full deploy pinned by code hash, no factory clone class). Not renamed: `complianceRegistry` (already explicit), `IComplianceRegistry`, `RegulatedBase._registry()` and `uaRegistry` (they are the UA registry), `_requireRegistryGas` in `DeployBase` (the UA registry's verify budget), short locals (`reg`, `_regCall`), the test file and contract names of `test/as/Registry.t.sol`, and the node's `compliance_registry_codehash` (already explicit) |
 
 One shared interface, `IAdmin` (`src/governance/IAdmin.sol`): `admin()`, `pendingAdmin()`, `transferAdmin(bytes32)`,
 `acceptAdmin()`, the two events, `NotAdmin(bytes32)`, `NotPendingAdmin(bytes32)`. `IGovernance is IAdmin` and adds
@@ -139,6 +143,11 @@ nonce scope likewise; only the field name and `TOPIC_TYPEHASH` change.
 | `AttesterZero()` (draft, never built) | | `KycProviderZero()` | `0x42a1ea7f` |
 | `mtxSetAttester` (draft, never built) | `0xa0224cf5` | `mtxSetKycProvider` | `0xd4733492` |
 | `mtxAttest` (draft, never built) | `0x3957a8be` | `mtxSetCompliance` | `0x37a68821` |
+| `REGISTRY_CODEHASH()` | `0xbeb598de` | `COMPLIANCE_REGISTRY_CODEHASH()` | `0xd10351b4` |
+| `RegistryCodeMismatch(address,bytes32)` | `0x84dfcab7` | `ComplianceRegistryCodeMismatch(address,bytes32)` | `0xd4cff8d4` |
+| `RegistryUnavailable(address)` | `0x2466be0b` | `ComplianceRegistryUnavailable(address)` | `0x4c06f1f3` |
+| `RegistryGasStarved(uint256,uint256)` | `0xaf0824dc` | `ComplianceRegistryGasStarved(uint256,uint256)` | `0x966a8ed1` |
+| `RegistryRouterMismatch(address,address)` (draft, never built) | `0x8b4535bc` | `ComplianceRegistryRouterMismatch(address,address)` | `0x6c36f6ee` |
 
 The `mtx*` selectors are over `(UAEnvelope, address target[, bytes32], UASig)` as `typed_ops.json:8016` pins the old one.
 
@@ -163,7 +172,7 @@ The `mtx*` selectors are over `(UAEnvelope, address target[, bytes32], UASig)` a
 
 `E` is the seven envelope words (`uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address
 feeRecipient`). The registry rows of §4.2 and §4.3 were recomputed with `cast sig` / `cast keccak` on 2026-11-10 (the KYC
-provider ruling); the draft rows were never built. No other typehash names `owner` (`src/` scan); the old four stay pinned as legacy pins. Every chain test-only: no
+provider and compliance-registry rulings); the draft rows were never built. No other typehash names `owner` (`src/` scan); the old four stay pinned as legacy pins. Every chain test-only: no
 alias, no old selector kept.
 
 ### 4.4 Layout pins
@@ -237,16 +246,16 @@ no expiry, as in `GovernanceLib`: a forgotten pending can accept years later; th
 ### 5.3 `ComplianceRegistry`
 
 - `constructor(bytes32 admin_, address govRouter_)`, both written once to storage (no immutable: F-11's one runtime holds; the
-  regulated releases' `REGISTRY_CODEHASH` changes once, with the new runtime). `admin_ ≠ 0` (`AdminZero`); `AdminNotContract`
+  regulated releases' `COMPLIANCE_REGISTRY_CODEHASH` changes once, with the new runtime). `admin_ ≠ 0` (`AdminZero`); `AdminNotContract`
   goes: any UA, an EOA, a contract, an `msig` or a PQ UA (CTR-AS-07 Change, §11). `govRouter_` 0 = no router path, so a derived
   `admin_` with `govRouter_` 0 is refused (`AdminUnreachable(admin_)`), and a `govRouter_` without code too
   (`RouterNotContract(govRouter_)`): no registry is born with an admin nobody can act as (Fable P2-3). `govRouter()` is a view.
   The registry's address now differs per chain (the router is per chain); every book names it per chain already.
 - **A canonical-code registry behind another router** (Fable P1-1): the code hash pins the code, not the `govRouter` word, so
-  `ComplianceRegistry(admin_ = a regulator's UA, govRouter_ = Evil)` passes every regulated release's `REGISTRY_CODEHASH` check
+  `ComplianceRegistry(admin_ = a regulator's UA, govRouter_ = Evil)` passes every regulated release's `COMPLIANCE_REGISTRY_CODEHASH` check
   (`src/regulated/RegulatedLib.sol:114-116`) while `Evil` answers `subject() = admin`: `admin()` shows one UA and another party
   writes. Hence `RegulatedLib.init` also requires `registry.govRouter()` to be 0 or the token's own `ChainEnv.govRouter`
-  (`RegistryRouterMismatch(registry, got)`), and a client checks the same before it trusts `admin()`.
+  (`ComplianceRegistryRouterMismatch(complianceRegistry, got)`), and a client checks the same before it trusts `admin()`.
 - `setKycProvider(bytes32 provider, bool enabled)`: `onlyAdmin`; provider 0 refused (`KycProviderZero`: 0 is what a router read
   outside a live call answers, Fable P3). `setCompliance`: `c = _adminSubject()`; `c == admin` ⇒ id 0, else
   `id = kycProviderId[c]`, enabled, else `NotKycProvider` (§5.3.1). D2 applies to every direct caller, a KYC provider's too (the
@@ -530,7 +539,7 @@ mutant per op that drops a word from its hash (B1–B15); the digests reproduced
 form; AGENTS, Cryptography).
 
 **Further** (Fable P1-1, P1-2, P2-3 to P2-5, P2-8): a regulated token refuses a canonical-code registry whose `govRouter()` is
-another router (`RegistryRouterMismatch`) and takes one with 0 or its own; the registry constructor refuses a derived admin
+another router (`ComplianceRegistryRouterMismatch`) and takes one with 0 or its own; the registry constructor refuses a derived admin
 without a router and a router without code; `transferAdmin` and `renounceAdmin` before `configureChain` refuse
 (`ChainNotConfigured`); a derived pending on a router-less factory cannot accept and the admin stays; a renounce clears the
 pending (a renounced factory never comes back through it); a 7702-delegated native admin through the router is checked by its own
@@ -572,7 +581,7 @@ Mutants (each must turn a named test red; the round's mutant log records it):
 | M13 | `setCompliance` looks the KYC provider up by `msg.sender`, not the subject | the derived-provider test |
 | M14 | the registry keeps a `renounceAdmin` | the no-renounce test, `SelectorAudit.t.sol` |
 | M15 | a node row for a release deploy | the guard test (`NOT_ROWS`, `APPROVED`) |
-| M16 | `RegulatedLib.init` drops the registry-router check | the `RegistryRouterMismatch` test |
+| M16 | `RegulatedLib.init` drops the registry-router check | the `ComplianceRegistryRouterMismatch` test |
 | M17 | `_renounceAdmin` leaves the pending | the renounce-clears-pending test |
 | M18 | `transferAdmin` writes the admin in one step | the two-step tests |
 | M19 | `acceptAdmin` drops `c != 0` | a mock router answering 0 with no pending |
