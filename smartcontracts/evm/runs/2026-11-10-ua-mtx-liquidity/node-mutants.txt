@@ -6,3 +6,12 @@ M-N3 | typed::tests::liquidity_rows_match_the_vectors | 101
 M-N4 | typed::tests::liquidity_rows_match_the_vectors | 101
 M-N5 | guard::tests::liquidity_pre_checks, liquidity_pre_checks_on_a_chain | 101/101
 M-N6 | liquidity_pre_checks_on_a_chain | 0/101
+control (the original tree, L6d) | none red: green | 0/0
+M-N7 | liquidity_pre_checks_on_a_chain | 0/101
+M-N8 | liquidity_pre_checks_on_a_chain | 0/101
+M-N9 | liquidity_pre_checks_on_a_chain | 0/101
+M-N10 | liquidity_pre_checks_on_a_chain | 0/101
+M-N11 | liquidity_pre_checks_on_a_chain | 0/101
+M-N12 | liquidity_pre_checks_on_a_chain, typed::tests::liquidity_rows_match_the_vectors | 101/101
+M-N13 | liquidity_pre_checks_on_a_chain | 0/101
+M-N14 | guard::tests::liquidity_pre_checks | 101

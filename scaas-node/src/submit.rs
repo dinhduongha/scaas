@@ -557,6 +557,13 @@ impl Submitter {
     pub async fn submit(&mut self, w: Work) {
         match self.guard.check(&self.chain, &w).await {
             Ok(()) => {}
+            // spec §11: a liquidity order the DEX already pulled landed (here or by another relayer): consumed, never dead (G6)
+            Err(Refusal::Policy(reason)) if reason.starts_with(guard::LIQUIDITY_ORDER_CLOSED) => {
+                if let Some(id) = w.job_id {
+                    self.report(id, "consumed", None, None, Some(reason)).await;
+                }
+                return;
+            }
             Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
             Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
         }

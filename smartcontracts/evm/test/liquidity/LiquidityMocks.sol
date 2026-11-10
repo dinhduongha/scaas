@@ -9,6 +9,7 @@ import {PoolKey} from "../../src/dex/uniswap/IUniswapV4.sol";
 import {ITradeToken, ILiquidityPullToken} from "../../src/trade/ITradeToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IPositionReader} from "../../src/dex/IPositionReader.sol";
+import {LiquidityLib} from "../../src/trade/LiquidityLib.sol";
 
 /// Test mocks of the liquidity spec (2026-11-10-dex-liquidity.md §14). Test only, UNAUDITED.
 
@@ -316,21 +317,30 @@ contract MockDigestProbe {
 }
 
 /// The node's RPC-level pre-check test (`scaas-node/tests/e2e.rs`, `liquidity_pre_checks_on_a_chain`): a DEX bound to the
-/// chain whose `modules()` lists `ms`. With the governance module only, a DEX release before the liquidity module; with both,
-/// a marked DEX whose `mtxLiquidity` answers what a token's T7 answers when starved, `NotLiquidityDex(dex)`. No token is a
-/// SCaaS token to it.
+/// chain whose `modules()` lists `ms`, answering `liquidityOrderDigest` (`LiquidityLib`'s, or another word when `wrong`) and
+/// `pulled` 0. With the governance module only, a DEX release before the liquidity module; with both, a marked DEX whose
+/// `mtxLiquidity` answers what a token's T7 answers when starved, `NotLiquidityDex(dex)`. No token is a SCaaS token to it.
 contract MockNodeDex {
     error NotLiquidityDex(address caller);
 
     bytes32 public immutable chainUid;
+    bool public immutable wrong;
     address[] internal _ms;
 
-    constructor(bytes32 uid, address[] memory ms) {
-        (chainUid, _ms) = (uid, ms);
+    constructor(bytes32 uid, address[] memory ms, bool wrong_) {
+        (chainUid, _ms, wrong) = (uid, ms, wrong_);
     }
 
     function modules() external view returns (address[] memory) {
         return _ms;
+    }
+
+    function liquidityOrderDigest(ITradeToken.LiquidityOrder calldata o) external view returns (bytes32) {
+        return wrong ? keccak256("another") : LiquidityLib.digest(o, address(this), chainUid);
+    }
+
+    function pulled(bytes32) external pure returns (uint256) {
+        return 0;
     }
 
     function tokenKind(address) external pure returns (uint8) {

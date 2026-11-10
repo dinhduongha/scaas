@@ -225,7 +225,9 @@ and its interactions; the node checks and relays it (`mtxLiquidity`, [CTR-DEX-30
 token as an input with a tiny pull (the refund of step 7 carries no fee); the fee is the signer's own rate, so nothing is
 stolen, but a relayer that lives on the DEX fee looks at the shape before relaying. A revert `NotLiquidityDex(dex)` from a
 DEX that carries the liquidity mark is gas starvation of the token's capability check: a retry with more gas, never a
-wrong DEX. No `RelayFeeRouter` wrap of `mtxLiquidity` is built (C10). Status: the row, the pre-checks, the liquidity
+wrong DEX. An order the DEX already pulled is `consumed`, never `dead` (`LIQUIDITY_ORDER_CLOSED`, G6). No `RelayFeeRouter`
+wrap of `mtxLiquidity` is built (C10). Status: the row, the pre-checks of spec §11 (the codes in
+[job-api.md](job-api.md)), the liquidity
 mark (read by the guard) and the retry BUILT (`guard.rs` `check_liquidity`, `liquidity_pre_checks`; through the RPC on
 anvil, `tests/e2e.rs` `liquidity_pre_checks_on_a_chain`, which also found the starved revert unnamed, fixed in `abi.rs`); completion by
 `LiquiditySettled` and the indexer rows SPECIFIED.

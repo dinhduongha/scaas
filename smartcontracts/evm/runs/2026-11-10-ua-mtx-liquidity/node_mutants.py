@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""ua-mtx-liquidity L8c (spec 2026-11-10-dex-liquidity.md §14, "Node mutants"): M-N1..M-N6, one at a time, each edit applied
-to its scaas-node/src file, the node tests through `scripts/capped` (cargo test --lib on the liquidity, allow-list and KAT tests;
-M-N5 and M-N6 also the RPC-level e2e `liquidity_pre_checks_on_a_chain` on anvil), the file restored in the same process and
+"""ua-mtx-liquidity L8c (spec 2026-11-10-dex-liquidity.md §14, "Node mutants"): M-N1..M-N6, and L6d's M-N7..M-N14 (one per
+pre-check it added), one at a time, each edit applied to its scaas-node/src file, the node tests through `scripts/capped`
+(cargo test --lib on the liquidity, allow-list and KAT tests; most also the RPC-level e2e `liquidity_pre_checks_on_a_chain` on
+anvil), the file restored in the same process and
 checked byte-equal (sha256) to its content before the run. Each must turn a named test red while the original stays green.
 Stops before a launch while another capped job runs (no waiting here): rerun with the ids left.
 
@@ -20,6 +21,7 @@ NODE = os.path.join(os.path.dirname(os.path.dirname(HERE)), "..", "..", "scaas-n
 CAPPED = os.path.join(NODE, "..", "scripts", "capped")
 G = "src/guard.rs"
 T = "src/typed.rs"
+S = "src/submit.rs"
 LIB = ["cargo", "test", "--lib", "--", "liquidity", "allow_lists", "typed_ops_kat"]
 E2E = ["cargo", "test", "--test", "e2e", "--", "--ignored", "liquidity_pre_checks_on_a_chain"]
 
@@ -37,6 +39,18 @@ MUTANTS = {
     "M-N5": ([(G, "    groups.contains(&GROUP_LIQUIDITY)\n", "    let _ = groups;\n    true\n", 1)], [LIB, E2E]),
     "M-N6": ([(G, "        if !ok {\n            return Err(policy(format!(\"LIQUIDITY_TOKEN_UNSUPPORTED",
                "        if false {\n            return Err(policy(format!(\"LIQUIDITY_TOKEN_UNSUPPORTED", 1)], [LIB, E2E]),
+    # L6d: one per added pre-check
+    "M-N7": ([(G, "    if o.relayer != Address::ZERO && o.relayer != chain.address() {", "    if false {", 1)], [LIB, E2E]),
+    "M-N8": ([(G, "        Ok(d) if d == h => {}", "        Ok(_) => {}", 1)], [LIB, E2E]),
+    "M-N9": ([(G, "        if !typed::recovers(h, &a.signature, who) {", "        if false {", 1)], [LIB, E2E]),
+    "M-N10": ([(G, "        Ok(n) if n.is_zero() => {}", "        Ok(_) => {}", 1)], [LIB, E2E]),
+    "M-N11": ([(S, "            Err(Refusal::Policy(reason)) if reason.starts_with(guard::LIQUIDITY_ORDER_CLOSED) => {",
+                "            Err(Refusal::Policy(reason)) if false && reason.starts_with(guard::LIQUIDITY_ORDER_CLOSED) => {", 1)],
+              [LIB, E2E]),
+    "M-N12": ([(T, '.chain(nested("payment", 6)).chain(plan).min();', '.chain(nested("payment", 6)).min();', 1)], [LIB, E2E]),
+    "M-N13": ([(G, "kind, max_gas_per_tx.min(block.limit)) {", "kind, block.limit.min(MAX_TX_GAS)) {", 1)], [LIB, E2E]),
+    "M-N14": ([(G, "        0x0101 | 0x0100 | 0x0103 | 0x0108 | 0 => 50_000,", "        0x0101 | 0x0100 | 0x0103 | 0 => 50_000,", 1)],
+              [LIB]),
 }
 
 
@@ -46,7 +60,7 @@ def sha(b):
 
 def others():
     out = subprocess.run(["pgrep", "-af", "scripts/capped"], capture_output=True, text=True).stdout.splitlines()
-    return [l for l in out if "pgrep" not in l]
+    return [l for l in out if "pgrep" not in l and "bash -c source" not in l]  # not an agent's own shell line
 
 
 def run(mid):

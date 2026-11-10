@@ -2685,7 +2685,7 @@ fn liquidity_mock(name: &str, runtime: bool) -> Vec<u8> {
 
 /// A `mtxLiquidity` job on `dex` of `(chain_id, chain_uid, dex)` (spec 2026-11-10-dex-liquidity.md §11's shape): `who`'s native
 /// order of `inputs` (each pulled whole) for at least `min_lp` of `lp` to `to` (`out`), fee 0, bound to the lane, lane 7 at nonce
-/// `id`; signed by `who` over the node's `h` in `dex`'s domain.
+/// `id`; signed by `who` over the node's `h` in `dex`'s domain ([`sign_liquidity`]).
 fn liquidity_job(id: i64, (chain_id, uid, dex): (u64, B256, Address), who: &PrivateKeySigner, inputs: &[(Address, u64)],
     (lp, min_lp, to): (Address, u64, Address), interactions: Value) -> Value {
     let toks = |v: &[(Address, u64)]| v.iter().map(|(t, a)| json!({"token": format!("{t:#x}"), "amount": a.to_string()})).collect::<Vec<_>>();
@@ -2701,11 +2701,16 @@ fn liquidity_job(id: i64, (chain_id, uid, dex): (u64, B256, Address), who: &Priv
             "auth": {"keyData": "0x", "signature": "0x", "members": []},
             "pull": inputs.iter().map(|(_, a)| a.to_string()).collect::<Vec<_>>(), "positionId": "0", "extraTokens": []},
             "interactions": interactions}}});
-    let (w, _) = scaas_node::submit::work_of_op(Some(id), &j["op"], None).unwrap();
+    sign_liquidity(&mut j, (chain_id, uid, dex), who);
+    j
+}
+
+/// `who`'s signature over the node's `h` of the job's order in `dex`'s domain, again after an edit of the order.
+fn sign_liquidity(j: &mut Value, (chain_id, uid, dex): (u64, B256, Address), who: &PrivateKeySigner) {
+    let (w, _) = scaas_node::submit::work_of_op(None, &j["op"], None).unwrap();
     let o = scaas_node::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&w.data).unwrap().p.order;
     let h = scaas_node::dex::liquidity_order_hash(&domain("SCaaS Dex", chain_id, dex, uid), &o);
     j["op"]["args"]["p"]["auth"]["signature"] = json!(sign_hash(who, h));
-    j
 }
 
 /// A submitter on the `RELAYER` lane for a chain whose profile lists `dex` as its DEX.
@@ -2718,8 +2723,13 @@ async fn liquidity_lane(chain_id: u64, rpc: &str, odoo: &Odoo, dex: Address, nam
 /// v2 add of two SCaaS inputs (mined: the positive control); a DEX bound to the chain whose `modules()` lacks group 11 is
 /// `DEX_NOT_LIQUIDITY`; a listed SCaaS input whose code answers no `ILiquidityPullToken` (a token of an earlier release, its
 /// code set by `anvil_setCode` after the listing) is `LIQUIDITY_TOKEN_UNSUPPORTED`; a marked DEX whose simulation answers
-/// `NotLiquidityDex(dex)` (T7 starved) is requeued, never `dead`; the same one-input order under a 1 M block gas limit is
-/// `LIQUIDITY_TOO_LARGE`. Every refusal sends nothing.
+/// `NotLiquidityDex(dex)` (T7 starved) is requeued, never `dead`; `LIQUIDITY_TOO_LARGE` under a lane's `max_gas_per_tx` of 1 M
+/// (the block 200 M; two inputs, 1.1 M) and under a 1 M block (`max_gas_per_tx` 3 M; one input, 1.05 M). L6d, the order's own
+/// pre-checks on the deployed DEX, each one change from a mined add: the same order again is `consumed`
+/// (`LIQUIDITY_ORDER_CLOSED`, pulled), a signature over
+/// another digest `BAD_SIGNATURE`, another relayer `LIQUIDITY_WRONG_RELAYER`, a signed `validUntil` past while the job's is
+/// ahead `expired before submit`, a marked DEX answering another `liquidityOrderDigest` `LIQUIDITY_DIGEST_MISMATCH`. Every
+/// refusal sends nothing.
 #[tokio::test]
 #[ignore]
 async fn liquidity_pre_checks_on_a_chain() {
@@ -2741,13 +2751,14 @@ async fn liquidity_pre_checks_on_a_chain() {
     let mut pair_code = liquidity_mock("MockV2LiquidityPair", false);
     pair_code.extend((a, b).abi_encode_params());
     let pair = deploy_code(&rpc, &deployer, pair_code).await;
-    let node_dex = |ms: Vec<Address>| {
+    let node_dex = |ms: Vec<Address>, wrong: bool| {
         let mut c = liquidity_mock("MockNodeDex", false);
-        c.extend((uid, ms).abi_encode_params());
+        c.extend((uid, ms, wrong).abi_encode_params());
         c
     };
-    let old_dex = deploy_code(&rpc, &deployer, node_dex(vec![ms[0]])).await;
-    let starved_dex = deploy_code(&rpc, &deployer, node_dex(ms.clone())).await;
+    let old_dex = deploy_code(&rpc, &deployer, node_dex(vec![ms[0]], false)).await;
+    let starved_dex = deploy_code(&rpc, &deployer, node_dex(ms.clone(), false)).await;
+    let wrong_dex = deploy_code(&rpc, &deployer, node_dex(ms.clone(), true)).await;
 
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{a:#x}"), format!("{b:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
@@ -2755,9 +2766,10 @@ async fn liquidity_pre_checks_on_a_chain() {
     let sends = || async { pr.get_transaction_count(key(RELAYER).address()).await.unwrap() };
     let reports = |id: i64| state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).cloned().collect::<Vec<_>>();
     let ix = |t: Address, d: Vec<u8>| json!({"target": format!("{t:#x}"), "data": format!("0x{}", alloy::hex::encode(d))});
-    let add = json!([ix(a, IToken::transferCall { to: pair, value: U256::from(100_000u64) }.abi_encode()),
-        ix(b, IToken::transferCall { to: pair, value: U256::from(100_000u64) }.abi_encode()),
+    let add_n = |x: u64| json!([ix(a, IToken::transferCall { to: pair, value: U256::from(x) }.abi_encode()),
+        ix(b, IToken::transferCall { to: pair, value: U256::from(x) }.abi_encode()),
         ix(pair, liq::mintCall { to: dex }.abi_encode())]);
+    let add = add_n(100_000);
 
     // the positive control: the deployed DEX, two SCaaS inputs, mined; the node's `h` is the DEX's
     let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-dex").await;
@@ -2766,11 +2778,54 @@ async fn liquidity_pre_checks_on_a_chain() {
     let o1 = scaas_node::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&w1.data).unwrap().p.order;
     assert_eq!(view(&rpc, dex, scaas_node::abi::ISCaaSDex::liquidityOrderDigestCall { o: o1.clone() }).await,
         scaas_node::dex::liquidity_order_hash(&domain("SCaaS Dex", chain_id, dex, uid), &o1), "the node's h is the DEX's");
-    state.lock().unwrap().jobs.push(j1);
+    state.lock().unwrap().jobs.push(j1.clone());
     run_outbox(&mut s).await;
     assert_eq!(report(&state, 1)["chain_state"], "mined", "{}", report(&state, 1));
     assert!(balance(&rpc, pair, carol).await >= U256::from(98_000u64), "the LP to the recipient");
+    // L6d's positive control: a second add of 1 000 each, mined; jobs 7-9 and 11 are this shape with one change
+    let two = [(a, 1_000), (b, 1_000)];
+    let dom = (chain_id, uid, dex);
+    state.lock().unwrap().jobs.push(liquidity_job(12, dom, &alice, &two, (pair, 1, carol), add_n(1_000)));
+    run_outbox(&mut s).await;
+    assert_eq!(report(&state, 12)["chain_state"], "mined", "{}", report(&state, 12));
     let n0 = sends().await;
+
+    // L6d: the order's own pre-checks (spec §11), each one change from a passing job; every miss listed at once
+    let mut red: Vec<String> = vec![];
+    let mut want = |id: i64, st: &str, code: &str| {
+        let r = reports(id).pop().unwrap_or_default();
+        if !(r["chain_state"] == st && r["error"].as_str().unwrap_or_default().contains(code)) {
+            red.push(format!("job {id}: want {st} {code}, got {r}"));
+        }
+    };
+    let mut j6 = j1.clone();
+    j6["id"] = json!(6);
+    let mut j7 = liquidity_job(7, dom, &alice, &two, (pair, 1, carol), add_n(1_000));
+    j7["op"]["args"]["p"]["auth"]["signature"] = json!(sign_hash(&alice, B256::repeat_byte(7)));
+    let mut j8 = liquidity_job(8, dom, &alice, &two, (pair, 1, carol), add_n(1_000));
+    j8["op"]["args"]["p"]["order"]["relayer"] = json!(format!("{:#x}", Address::repeat_byte(0xbe)));
+    sign_liquidity(&mut j8, dom, &alice);
+    let mut j9 = liquidity_job(9, dom, &alice, &two, (pair, 1, carol), add_n(1_000));
+    j9["op"]["args"]["p"]["order"]["validUntil"] = json!((now() - 1).to_string());
+    sign_liquidity(&mut j9, dom, &alice);
+    state.lock().unwrap().jobs.extend([j6, j7, j8, j9]);
+    run_outbox(&mut s).await;
+    want(6, "consumed", "LIQUIDITY_ORDER_CLOSED");
+    want(7, "dead", "BAD_SIGNATURE");
+    want(8, "dead", "LIQUIDITY_WRONG_RELAYER");
+    want(9, "dead", "expired before submit");
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, wrong_dex, "e2e-liq-wrong").await;
+    state.lock().unwrap().jobs.push(liquidity_job(10, (chain_id, uid, wrong_dex), &alice, &two, (pair, 1, carol), add_n(1_000)));
+    run_outbox(&mut s).await;
+    want(10, "dead", "LIQUIDITY_DIGEST_MISMATCH");
+    // the budget against the lane's per-transaction cap, below the block's 200 M: two inputs need 1.1 M, the lane allows 1 M
+    let cfg = ChainCfg { max_gas_per_tx: 1_000_000, ..chain_cfg(chain_id, &rpc, Some(dex)) };
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg, "e2e-liq-pertx".into(),
+        Default::default()).await.unwrap();
+    state.lock().unwrap().jobs.push(liquidity_job(11, dom, &alice, &two, (pair, 1, carol), add_n(1_000)));
+    run_outbox(&mut s).await;
+    want(11, "dead", "LIQUIDITY_TOO_LARGE");
+    assert!(red.is_empty(), "{red:#?}");
 
     // a DEX of the release before the liquidity module: bound, on the profile, no group 11
     let mut s = liquidity_lane(chain_id, &rpc, &odoo, old_dex, "e2e-liq-old").await;
@@ -2797,7 +2852,8 @@ async fn liquidity_pre_checks_on_a_chain() {
     assert!(!r4.is_empty() && r4.iter().all(|r| r["chain_state"] == "queued"), "requeued, never dead: {r4:?}");
     assert!(r4.iter().all(|r| r["error"].as_str().unwrap_or_default().contains("NotLiquidityDex(")), "{r4:?}");
 
-    // the verify budget against this chain's block: a native signer's one input needs 1.05 M, the block holds 1 M
+    // the verify budget against this chain's block: a native signer's one input needs 1.05 M, the block holds 1 M, the lane's
+    // max_gas_per_tx 3 M
     let _: Value = pr.raw_request("evm_setBlockGasLimit".into(), (U256::from(1_000_000u64),)).await.unwrap();
     let _: Value = pr.raw_request("evm_mine".into(), ()).await.unwrap();
     let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-large").await;

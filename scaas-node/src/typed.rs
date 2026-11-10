@@ -1217,7 +1217,7 @@ impl Op {
             }
             None => (a.data.clone(), token),
         };
-        let valid_until = deadline(o, &a)?;
+        let valid_until = deadline(o, &a, row.entry == "mtxLiquidity")?;
         let at = |t: &Val, i: usize| t.as_tuple().and_then(|x| x.get(i).cloned());
         let order = a.vals.get("order");
         // who signed: `from`, `ua`, the order's `from` (a `DexOrder`'s inner order), the payment's payee
@@ -1311,14 +1311,16 @@ fn payment_lane(p: &Val) -> Option<(B256, U256, U256)> {
 /// A job's deadline: what the chain enforces on the op (the envelope, a fee's, the sooner of a receiver fee and its payment)
 /// and `op.validUntil`, the job's own, whichever comes first: a job deadline narrows a signed one, never extends it. A cancel
 /// has no enforced deadline, so its order's `validUntil` is used only when the job names none.
-fn deadline(o: &Map<String, Value>, a: &Assembled) -> Result<u64> {
+fn deadline(o: &Map<String, Value>, a: &Assembled, liquidity: bool) -> Result<u64> {
     let job = o.get("validUntil").map(|v| {
         let s = v.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: op.validUntil is not a string"))?;
         uint(s).map_err(|e| anyhow!("BAD_PAYLOAD: op.validUntil: {e}"))
     }).transpose()?;
     let nested = |k: &str, i: usize| a.vals.get(k).and_then(|t| t.as_tuple()).and_then(|t| t.get(i)).and_then(|v| v.as_uint()).map(|x| x.0);
     let own = a.vals.get("validUntil").and_then(|v| v.as_uint()).map(|x| x.0);
-    let enforced = own.into_iter().chain(nested("payment", 6)).min();
+    // a liquidity plan's signed order, `p.order.validUntil` (spec 2026-11-10-dex-liquidity.md §11 "validUntil ahead")
+    let plan = liquidity.then(|| a.vals.get("p")?.as_tuple()?.get(1)?.as_tuple()?.get(16)?.as_uint().map(|x| x.0)).flatten();
+    let enforced = own.into_iter().chain(nested("payment", 6)).chain(plan).min();
     let t = match (enforced, job) {
         (Some(x), Some(y)) => x.min(y),
         (Some(x), None) | (None, Some(x)) => x,
@@ -2283,6 +2285,13 @@ mod tests {
         assert!(err(&|j| j["args"]["p"]["extraTokens"] = nine(&json!(k["lp"]))).contains("p.extraTokens: more than 8"));
         assert!(err(&|j| j["args"]["p"]["pull"] = json!(["1"])).contains("p.pull: one per input"));
         assert!(err(&|j| j["args"]["p"]["order"]["tickLower"] = json!(8_388_608)).contains("outside int24"));
+        // L6d (spec §11 "validUntil ahead"): the job's deadline narrows to the signed order's, never past it
+        let signed: u64 = rows_[0]["order"]["validUntil"].as_str().unwrap().parse().unwrap();
+        let mut j = job(&rows_[0]);
+        j["validUntil"] = json!((signed + 100).to_string());
+        assert_eq!(Op::parse(&j, FEE).unwrap().valid_until, signed, "the order's validUntil");
+        j["validUntil"] = json!((signed - 100).to_string());
+        assert_eq!(Op::parse(&j, FEE).unwrap().valid_until, signed - 100, "the job's, sooner");
     }
 
     /// A job deadline narrows what is signed, never extends it; a cancel has none of its own.

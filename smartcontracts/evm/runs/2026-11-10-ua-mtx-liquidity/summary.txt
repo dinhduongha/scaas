@@ -92,3 +92,23 @@ DexLiquidityMldsa (--ffi) | L1d | 0 | 2 passed: both inputs pulled (50 000 each,
 gas (vm.lastCallGas, isolate; the call given 2^24 - 21 000 - calldata gas) | regular 12 143 505 <= 16 777 216 | state 979 200 | calldata 5 380 B
 test/liquidity, default profile (no ffi; the invariant left out) | L1d | 0 | 8 suites, 89 passed, 1 skipped (DexLiquidityMldsa's setUp)
 test/ExpectRevertLint.t.sol | L1d | 0 | 3 passed
+
+node vs spec §11 (L6d, controller 2026-11-10: the spec rules); red first, then the fix:
+gap | fix | test (red -> green) | mutant
+budget min(block, 2^24) | min(max_gas_per_tx, block limit); the config always has max_gas_per_tx (serde default 3 M) | e2e job 11 (lane cap 1 M, block 200 M: red dead InteractionFailed in simulation -> LIQUIDITY_TOO_LARGE); job 5 (block 1 M, cap 3 M) | M-N13 killed (job 11 mined)
+h vs liquidityOrderDigest: no path | LIQUIDITY_DIGEST_MISMATCH | e2e job 10 (MockNodeDex answering another word: red queued as starved -> dead) | M-N8 killed
+native signature over h: no path (the plain row has no typed signer) | BAD_SIGNATURE (CTR-UA-24, as check_signature) | e2e job 7 (red dead MetaTxBadSignature in simulation -> BAD_SIGNATURE) | M-N9 killed
+relayer 0 or this lane: no path | LIQUIDITY_WRONG_RELAYER | e2e job 8 (red dead WrongRelayer in simulation) | M-N7 killed
+validUntil ahead: only op.validUntil | the job deadline narrows to p.order.validUntil (typed.rs), the lane refuses before simulation | unit liquidity_rows (red) ; e2e job 9 (red dead OrderExpired -> "expired before submit") | M-N12 killed
+pulled(h) == 0: no path; a closed order went dead (G6) | LIQUIDITY_ORDER_CLOSED, reported consumed | e2e job 6 (job 1 again: red dead OrderClosed -> consumed) | M-N10 (the read) and M-N11 (consumed mapping) killed
+verify_cap secp256k1 | 0x0108 in CTR-DEX-26's classical row (<= 50,000; the deploy's cap 50,000) | unit liquidity_pre_checks (red) | M-N14 killed
+positive control: e2e job 12 (two inputs of 1 000, mined); jobs 7-9 and 11 are its shape with one change.
+also: guard_allows_every_named_entry_only was red since L6 (79c3501e added the mtxLiquidity row, the row count pin stayed 116):
+moved 116 -> 117 (86 typed with an entry, 31 plain).
+step | commit | rc | counts
+unit red (secp256k1, deadline) | L6d | 101 | 2 failed
+e2e red | L6d | 101 | jobs 6-11 all missed (listed at once)
+cargo test --lib (whole) | L6d | 0 | 702 passed
+e2e liquidity_pre_checks_on_a_chain | L6d | 0 | 1 passed
+cargo clippy --all-targets -- -D warnings | L6d | 0 | clean
+node mutants M-N7..M-N14 | L6d | - | 8 of 8 killed (node-mutants.txt), the original green first
