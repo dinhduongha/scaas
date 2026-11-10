@@ -12,7 +12,7 @@
 # constructor arguments are the tail of each init code after the artifact's creation bytecode. A child forge cannot
 # name: an EIP-1167 clone (a factory token, `createToken`) is checked as below, an SSTORE2 data contract (code starting
 # 0x00: the inner-product verifier's generators, registry records, memos) is listed as skip (data, nothing to verify).
-# PQZ e2e (script/pqz/e2e.py, which writes only the last run's addresses to deployments/7622-pqz.json): its run logs,
+# PQZ e2e (script/pqz/e2e.py, which writes only the last run's addresses to deployments/scaas-testnet-pqz.json): its run logs,
 # default every runs/*.txt whose "# P6g e2e on chain" header names this chain's genesis hash (older logs name a reset
 # chain, whose addresses now hold other code). Per log line "      <Name> at 0x…": a direct CREATE from the deployer,
 # constructor arguments = the input of the log's last "tx …: 0x…" line before it (the creation) after the artifact's

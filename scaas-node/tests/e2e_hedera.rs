@@ -88,10 +88,11 @@ fn deploy(rpc: &str) -> Value {
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        .env("DEPLOY_NAME", format!("local-{CHAIN_ID}-testnet")) // NET-EVM-13: the anvil is not in chain-uids.json
         .status()
         .expect("forge in PATH");
     assert!(status.success(), "forge script failed");
-    let raw = std::fs::read_to_string(format!("{}/deployments/hedera-{CHAIN_ID}.json", sc())).unwrap();
+    let raw = std::fs::read_to_string(format!("{}/deployments/hedera-local-{CHAIN_ID}-testnet.json", sc())).unwrap();
     serde_json::from_str(&raw).unwrap()
 }
 

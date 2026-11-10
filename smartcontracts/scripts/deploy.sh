@@ -5,8 +5,10 @@
 #                            DEMO_HOLDER?, CHAIN_UID? (genesis hash from evm/chain-uids.json; defaults to blockhash(0),
 #                            which is 0 past block 256, so a long-running chain needs it), DEPLOY_SALT? (CREATE2 salt);
 #                            FOUNDRY_PROFILE=scaas-testnet|gnosis|celo|bsc|polygon|base (all osaka). Needs the deterministic
-#                            CREATE2 deployer on the chain (NET-EVM-05). Writes evm/deployments/<chainid>.json (the
-#                            previous file is put back if the broadcast fails). Every chain gets the UA registry
+#                            CREATE2 deployer on the chain (NET-EVM-05). Writes evm/deployments/<key>.json (NET-EVM-13:
+#                            the key from evm/chain-uids.json by (chain id, genesis hash); a chain not in it needs
+#                            DEPLOY_NAME=<name>-testnet | <name>-mainnet, else DEPLOY_NAME_REQUIRED before anything is
+#                            sent; the book's header first; the previous file is put back if the broadcast fails). Every chain gets the UA registry
 #                            (`ua_registry`; its EIP-2537 / bn254-G2 kinds by an eth_call precompile probe, the Zether
 #                            kind on every chain with EIP-2537, the PQ kinds
 #                            wherever their cap fits half the verify budget: unaudited, P6c; no chain-id lock).
@@ -43,7 +45,7 @@
 #                            run once in the simulation on the RPC's fork, (regular + state) x 1.05 within the block gas
 #                            limit and regular x 1.05 < 2^24, refused by name before anything is sent; the figures are the
 #                            script's "release gas |" log lines). Any other value refuses.
-#   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
+#   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<key>.json)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas; Move.toml upgrade_policy = "immutable"
 #                            (NET-APT-20, owner ruling 2026-10-28): check the package registry reports policy 2
 #   sui     <client-env>     sui client --client.env <env> publish, then in the same run
@@ -75,8 +77,10 @@ FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shif
 case "$FAMILY" in
   evm)     cd "$SC/evm"; Z=(--disable-code-size-limit) # forge 1.8.5: EIP-3860 on the script contract itself (Deploy.s.sol initcode > 48 KiB); the chain enforces 64 KiB
            C="$(cast chain-id --rpc-url "$NET")"; S="$(cast wallet address --private-key "$PRIVATE_KEY")"
+           # NET-EVM-13: the book by the chain's key (DEPLOY_NAME for a chain not in chain-uids.json), a named fail first
+           K="$(python3 -I script/deploybook.py key "$C" "$(cast block 0 --field hash --rpc-url "$NET")")"
            # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
-           J="deployments/$C.json"; [ -f "$J" ] && cp "$J" "$J.prev"
+           J="deployments/$K.json"; [ -f "$J" ] && cp "$J" "$J.prev"
            # NET-EVM-11: Deploy.s.sol simulated on the RPC's fork, nothing sent (the JSON, the release list, the plan in
            # forge's dry-run file), then DeploySend.s.sol sends that plan, each transaction with an explicit gas limit
            rm -f "broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" # never a stale plan

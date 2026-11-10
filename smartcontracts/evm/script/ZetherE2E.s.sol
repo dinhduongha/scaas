@@ -3,7 +3,8 @@ pragma solidity ^0.8.24;
 
 import {NormalZetherToken} from "../src/zether/NormalZetherToken.sol";
 
-import {Script, console} from "forge-std/Script.sol";
+import {console} from "forge-std/Script.sol";
+import {DeployBook} from "./DeployBook.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -24,9 +25,10 @@ import {ZetherTypes} from "../src/zether/ZetherTypes.sol";
 import {MockERC20} from "../test/helpers/Mocks.sol";
 
 /// @title The classical Zether e2e (`scripts/e2e-zether.sh`) on a chain deployed by `deploy.sh evm` with `DEPLOY_ZETHER=1`
-///        (`deployments/<chainid>.json`): an anvil, or the SCaaS testnet. Needs `--ffi`: the proofs come from the Rust
-///        prover (`zether-cli`, env `ZETHER_CLI`, default `clients/zether-prover/target/release/zether-cli`), the
-///        registration PoPs from clientkeys (`zetherPop`, node). **UNAUDITED** contracts.
+///        (`deployments/<key>.json`, NET-EVM-13: an anvil needs DEPLOY_NAME): an anvil, or the SCaaS testnet. Needs
+///        `--ffi`: the proofs come from the Rust prover (`zether-cli`, env `ZETHER_CLI`, default
+///        `clients/zether-prover/target/release/zether-cli`), the registration PoPs from clientkeys (`zetherPop`, node).
+///        **UNAUDITED** contracts.
 /// @notice `run()` (broadcast): six `zether-bls12381` UAs registered with clientkeys PoPs (relayed by the deployer;
 ///         skipped when already registered); a `NORMAL_ZETHER` token (BUNDLE, no auditor, scale 1): shield 1234 to
 ///         alice, roll-over, a single transfer alice → bob 100, a multi-recipient commit-reveal (Compact) transfer M = 4
@@ -40,11 +42,11 @@ import {MockERC20} from "../test/helpers/Mocks.sol";
 ///         script's and the token's `envelopeBinding`; then a test ERC-20 (`MockERC20`) and a `WRAPPED_ZETHER` token over it
 ///         (1:1): wrap-shield 500 to alice, roll-over. Each step is checked by decryption (`zether-cli decrypt`) in the
 ///         simulation, and the single transfer by the disclosure view (`ZetherDisclosure.verifyTransferAmount`,
-///         `SENDER_S`). Writes `deployments/<chainid>-zether-e2e.json` (tokens, entry refs, the sender's `s`).
+///         `SENDER_S`). Writes `deployments/<key>-zether-e2e.json` (its header first; tokens, entry refs, the sender's `s`).
 ///         `check()` (no broadcast): the same final balances and the disclosure view against the chain's state.
 ///         env PRIVATE_KEY (the deployer: holds the tokens' initial supply, relays the registrations), E2E_SALT
 ///         (optional, the token salts; default from the block number).
-contract ZetherE2E is Script {
+contract ZetherE2E is DeployBook {
     using stdJson for string;
 
     uint8 internal constant N = 6; // alice, bob, carol, three decoys
@@ -64,6 +66,7 @@ contract ZetherE2E is Script {
     uint256 internal constant WRAPPED = 500;
 
     string internal dep;
+    bytes32 internal bookUid; // this chain's genesis hash: its books (NET-EVM-13)
     IUARegistry internal reg;
     OpenFactory internal fac;
     ITransferDisclosure internal dis;
@@ -73,7 +76,8 @@ contract ZetherE2E is Script {
     bytes32[N] internal uas;
 
     function _load() internal {
-        dep = vm.readFile(string.concat("./deployments/", vm.toString(block.chainid), ".json"));
+        bookUid = _chainUid();
+        dep = _readBook(bookUid, "", ".json");
         reg = IUARegistry(dep.readAddress(".zether_registry"));
         fac = OpenFactory(dep.readAddress(".token_factory"));
         dis = ITransferDisclosure(dep.readAddress(".zether_disclosure"));
@@ -244,7 +248,7 @@ contract ZetherE2E is Script {
         vm.serializeBytes32(k, "entry_compact_m4", refCompact);
         vm.serializeBytes32(k, "entry_bundle_m2", refBundle);
         string memory j = vm.serializeBytes32(k, "s_single", sSingle);
-        vm.writeJson(j, string.concat("./deployments/", vm.toString(block.chainid), "-zether-e2e.json"));
+        vm.writeFile(_bookPath(bookUid, "", "-zether-e2e.json"), _bookHeader(bookUid, j));
         console.log(j);
     }
 
@@ -479,7 +483,7 @@ contract ZetherE2E is Script {
     function check() external {
         _load();
         for (uint256 i; i < N; ++i) (ys[i], uas[i],) = _pop(xs[i]);
-        string memory e = vm.readFile(string.concat("./deployments/", vm.toString(block.chainid), "-zether-e2e.json"));
+        string memory e = _readBook(bookUid, "", "-zether-e2e.json");
         (t, wt) = (e.readAddress(".normal_zether_token"), e.readAddress(".wrapped_zether_token"));
         _expect(t, 0, SHIELDED - SINGLE - MULTI4 - MULTI2 - UNSHIELD - RELAYED_SINGLE - RELAYED_MULTI - RELAYED_UNSHIELD - NAMED_SINGLE
             - NAMED_MULTI - NAMED_UNSHIELD, 0, "chain: alice");

@@ -23,7 +23,7 @@ import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialTok
 ///         entry's own struct in the token's domain), the account-owner ops `mtxRollOverSigned` / `mtxSetRollOverMode`
 ///         (Schnorr by the Zether key, `zether-cli ownerAuth`), the direct shield of the wrapped kind and its named
 ///         `mtxWrapShield` (address `WrapShield` envelope). The regulated twin (kinds 10, 11) is generated from this file by
-///         zether_reg.py. Writes `deployments/<chainid>-zether-more.json`. Needs --ffi, `PRIVATE_KEY` (the sender).
+///         zether_reg.py. Writes `deployments/<key>-zether-more.json` (its header first, NET-EVM-13). Needs --ffi, `PRIVATE_KEY` (the sender).
 ///         UNAUDITED contracts.
 contract ZetherMore is ZetherE2E {
     using stdJson for string;
@@ -71,7 +71,7 @@ contract ZetherMore is ZetherE2E {
         vm.serializeAddress(k, "normal_zether_token", tn);
         vm.serializeAddress(k, "wrapped_zether_token", wt);
         string memory j = vm.serializeAddress(k, "underlying_erc20", und);
-        vm.writeJson(j, string.concat("./deployments/", vm.toString(block.chainid), "-zether-more.json"));
+        vm.writeFile(_bookPath(bookUid, "", "-zether-more.json"), _bookHeader(bookUid, j));
     }
 
     // ------------------------------------------------------------------ the sequence on `t`

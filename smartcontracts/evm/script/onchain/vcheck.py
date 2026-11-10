@@ -4,8 +4,8 @@
 
 Discovery over the whole chain, to a fixed point: every top-level creation (a CREATE transaction, a CREATE2 through the
 deterministic deployer), every transaction's `to`, every log's emitter and the address-shaped words of its topics and
-data (a block scan, cached in cache/vcheck-<chain>-<genesis>.json), the deployment books (deployments/<chain>.json, its
-releases json, onchain-<net>-*.json), every broadcast of the chain (broadcast/*/<chain>/*.json), then the getters that
+data (a block scan, cached in cache/vcheck-<chain>-<genesis>.json), the deployment books (deployments/<key>.json and its
+releases json by the chain's key, NET-EVM-13, their headers checked; onchain-<net>-*.json), every broadcast of the chain (broadcast/*/<chain>/*.json), then the getters that
 name a child: puller(), EXECUTOR(), modules(), an EIP-1167 clone's implementation, and per factory its releases, its
 envs' registry / account implementation / dependencies / libraries and contractsPage per class.
 
@@ -47,6 +47,8 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.abspath(os.path.join(HERE, "../.."))
+sys.path.insert(0, os.path.join(EVM, "script"))
+import deploybook  # noqa: E402
 CLONE_HEAD, CLONE_TAIL = "363d3d373d3d3d363d73", "5af43d82803e903d91602b57fd5bf3"
 DEPLOYER = "0x4e59b44847b379578588920ca78fbf26c0b4956c"  # the deterministic CREATE2 deployer (NET-EVM-05)
 CREATE3_PROXY = "0x363d3d37363d34f0"  # src/factory/Create3.sol: the proxy that CREATEs its calldata
@@ -371,7 +373,7 @@ def scan(chain, genesis, head):
 
 # ---------------------------------------------------------------- discovery
 
-def discover(chain, net, head, st):
+def discover(chain, books, net, head, st):
     listed, inits, hint, first = set(), {}, {}, {}  # book / broadcast addresses, init codes, names, first block
 
     def add(a, n=None, code=None, block=None):
@@ -386,15 +388,12 @@ def discover(chain, net, head, st):
         if block is not None:
             first[a] = min(first.get(a, block), block)
 
-    rel = os.environ.get("RELEASES_JSON") or (f"deployments/{chain}-t66b-releases.json" if net == "scaas-testnet"
-                                              else f"deployments/{chain}-releases.json")
-    for p in [f"deployments/{chain}.json", rel]:
-        if os.path.exists(os.path.join(EVM, p)):
-            for k, v in json.load(open(os.path.join(EVM, p))).items():
-                if isinstance(v, str):
-                    add(v)
-                elif isinstance(v, dict) and "address" in v:
-                    add(v["address"], k)
+    for b in books:
+        for k, v in b.items():
+            if isinstance(v, str):
+                add(v)
+            elif isinstance(v, dict) and "address" in v:
+                add(v["address"], k)
     for p in glob.glob(os.path.join(EVM, f"deployments/onchain-{net}-*.json")):
         for a, lab in json.load(open(p)).items():
             add(a, lab if isinstance(lab, str) else None)
@@ -565,8 +564,15 @@ def main():
         if bs(f"blocks/{n}").get("hash", "").lower() != h.lower():
             say(f"FAIL the explorer's block {n} is not the RPC's ({h[:18]}…): another chain, or a copy of this one")
             sys.exit(1)
+    try:  # NET-EVM-13: the chain's books by its key (an unknown chain needs DEPLOY_NAME), headers checked, before the scan
+        rel = os.environ.get("RELEASES_JSON") or deploybook.find(
+            chain, genesis, "-t66b-releases.json" if NET == "scaas-testnet" else "-releases.json")
+        books = [deploybook.load(p) for p in (deploybook.find(chain, genesis), rel) if os.path.exists(os.path.join(EVM, p))]
+    except deploybook.BookError as e:
+        say(f"FAIL {e}")
+        sys.exit(1)
     st = scan(chain, genesis, head) if CFG["scan"] else {"creates": {}, "seen": {}}
-    code, listed, inits, hint, first = discover(chain, NET, head, st)
+    code, listed, inits, hint, first = discover(chain, books, NET, head, st)
     contracts = sorted(a for a, c in code.items() if c not in ("0x", "0x0") and not c.startswith("0x00"))
     gen = {a for a, c in zip(contracts, batch([("eth_getCode", [a, "0x0"]) for a in contracts])) if c not in (None, "0x", "0x0")}
     say(f"discovery done: {len(code)} addresses, {len(contracts)} contracts with code ({len(gen)} at genesis)")
