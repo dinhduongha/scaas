@@ -1,6 +1,6 @@
 # Service pull: the signed, contract-bound pull that replaces `approve` — design
 
-**Status:** SPECIFIED, nothing built, **UNAUDITED**. Written 2026-11-09 at the owner's request. Revised the same day after the
+**Status:** **Built (T19, 2026-11-10):** T77 `b9b130bb` (the reference service, test only), T78 `9fe6253d` (vectors, `clientkeys`), T79 `711f4f35` (node kind `service`) on branch `ua-mtx-merge`; T80 (`ua-rs`) on `ua-rs-sign`; rules CTR-MTX-32, NODE-JOB-25, NET-ALL-85. SPECIFIED, nothing built, **UNAUDITED**. Written 2026-11-09 at the owner's request. Revised the same day after the
 Fable review (approve with fixes; no P0 or P1; every P2 and P3 applied). **Approved by the owner 2026-11-09: Q1–Q5 as
 recommended** (§13): the generic node kind `service`, one signature, the relay-fee router as the only fee path, a seen
 `entryRef` refused, the regulated custody rule accepted. The EVM token needs **no change**. This was verified against the code of every EVM kind (0–13) and Hedera (§2, §6); no

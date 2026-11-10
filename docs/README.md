@@ -151,14 +151,15 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | Doc | Covers |
 |---|---|
 | [README](contracts/README.md) | Immutability, admin powers, production gates, build pins |
-| [metatx.md](contracts/metatx.md) | `MetaTransaction` / `MetaTransfer`, lanes, `mtxExecute`, fees, names |
-| [token-wrappers.md](contracts/token-wrappers.md) | Token tree and kinds, features and owner, libraries, rates and reserve, factory |
+| [metatx.md](contracts/metatx.md) | `MetaTransaction` / `MetaTransfer`, lanes, `mtxExecute`, fees, names, payment metadata and records, service pull |
+| [token-wrappers.md](contracts/token-wrappers.md) | Token tree and kinds, features and owner, libraries, rates and reserve, factory: index, class catalogue, chain-neutral releases |
 | [accounts.md](contracts/accounts.md) | Native accounts, Universal Account registry, `SmartKeyAccount` |
 | [mandates.md](contracts/mandates.md) | `MandateWallet`: delegated payments without allowances |
 | [dex.md](contracts/dex.md) | `TradeOrder`, the DEX, AMM exchange path, `DexPuller` |
 | [tender.md](contracts/tender.md) | Sealed-bid tender |
 | [asset-suite.md](contracts/asset-suite.md) | Regulated flags, vesting, distributions, `ExchangeOffer`, templates |
-| [zether.md](contracts/zether.md) · [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) | Classical Zether and PQZ: shield / transfer / unshield, proofs, disclosure |
+| [zether.md](contracts/zether.md) · [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) | Classical Zether; PQZ: shield / transfer / unshield, proofs, disclosure (PQZ also: verifier mode, key versions, proof path) |
+| [pqchat.md](contracts/pqchat.md) | `PqChat`: post-quantum chat sessions, epochs, messages, public topics |
 | [settlement.md](contracts/settlement.md) | Map of every settlement kind: entry points, who checks what, fees, finality |
 
 ### Node (`NODE-*`)

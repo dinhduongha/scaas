@@ -33,7 +33,7 @@ Every new name above is owner-approved (2026-11-07), the derived ones included (
 `pqzVerifyConfig()` / `PqzVerifyConfig`, `PQZ_VERDICT_*`, `pqz_verdict`, `[pqz_verifier]`, `scaas-pqz-verifier`,
 `/v1/pqz-verdict`); kept as they are: `PURPOSE_PQZ_VERDICT`, `vectors/pqz/verdict.json`, `OFFCHAIN`, the `*_offchain` test names.
 
-**Status:** **approved by the owner 2026-11-06; build after T57 (3g; owner 2026-11-07: 3g before 3f).** SPECIFIED; nothing is built. Revised after the Codex and Fable
+**Status:** **approved by the owner 2026-11-06; build after T57 (3g; owner 2026-11-07: 3g before 3f).** **BUILT on branch `ua-mtx-merge`** (T19, 2026-11-10): contracts T44 + T45 `2cce490d`; vectors and `clientkeys` T46 `134560c1`, `e452b88f`, `8563eb78`; node T47 `75ddccc4`, `fd2dfb2f`, `e50251b4`, `b3b31560`, `062133b6` (the token view SPECIFIED); the PQZ verifier (off-chain) T48 `06e11d23`, `5d4a2780`; invariants T49 `9d7c2576`; UNAUDITED. The normative text is `contracts/pq-zero-knowledge.md` §9.5 and `node/job-api.md` NODE-JOB-22. Revised after the Codex and Fable
 reviews of the first draft ([Codex](../../research/attest-codex-review.md): 2 high, 6 medium, 3 low;
 [Fable](../../research/attest-fable-review.md): 0 P0, 4 P1, 8 P2, 4 P3, its answers (a) and (b)) and the owner's rulings R1–R4 of
 2026-11-06; every finding's outcome is in §17. Work-order group **3f** of branch `ua-mtx-merge`: tasks **T44–T50** after 3e

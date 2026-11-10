@@ -1,6 +1,6 @@
 # Versioned PQZ keys (group 3g) — design
 
-**Status:** **approved by the owner 2026-11-06; build after T43, before 3f (owner 2026-11-07: 3g before 3f), with T66b's registry generation (owner 2026-11-07: `requirePortable`, the `msig` KEM refusal and the rebalance moved from 3c to plan task T66b).** SPECIFIED; nothing is built.
+**Status:** **approved by the owner 2026-11-06; build after T43, before 3f (owner 2026-11-07: 3g before 3f), with T66b's registry generation (owner 2026-11-07: `requirePortable`, the `msig` KEM refusal and the rebalance moved from 3c to plan task T66b).** **BUILT on branch `ua-mtx-merge`** (T19, 2026-11-10): EVM registry and tokens T51–T54, node T55, invariants T56 `e1336e60`; `ua-rs-sign`'s share SPECIFIED; UNAUDITED. Rule ids as landed: CTR-UA-42 (this spec's CTR-UA-41: that id went to the verifier-naming rule of 2026-11-10), CTR-PQZ-31, CTR-PQZ-32, NODE-JOB-23, CLI-SGN-49 (this spec's CLI-SGN-43: taken on `ua-rs-sign`).
 Revised after the Codex and Fable reviews of the first draft ([Codex](../../research/pqzver-codex-review.md): 2 high, 2 medium;
 [Fable](../../research/pqzver-fable-review.md): 0 P0, 0 P1, 5 P2, 10 P3, verdicts on Q1–Q4, a missing-items list) and the
 owner's rulings R1–R5 of 2026-11-06; every finding's outcome is in §17. Work-order group **3g** of branch `ua-mtx-merge`: tasks

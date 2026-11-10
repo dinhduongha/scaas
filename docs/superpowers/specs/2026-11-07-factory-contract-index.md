@@ -1,6 +1,6 @@
 # `OpenFactory`: an on-chain index of every contract it creates 
 
-**Status:** SPECIFIED, **revised 2026-11-07**. The index (§1–§7) is **approved by the owner 2026-11-07** (the six questions
+**Status:** **Built (T19, 2026-11-10):** the index (§1–§7, T67 `658f684f`) and the extensible catalogue (§8, T70) are BUILT on branch `ua-mtx-merge`, UNAUDITED; rules CTR-TOK-27, CTR-TOK-28. SPECIFIED, **revised 2026-11-07**. The index (§1–§7) is **approved by the owner 2026-11-07** (the six questions
 of §6 answered as recommended). The **extension** (§8, an extensible catalogue: generic classes and kinds, `createInstance`,
 `PqChat` as class 3) is **approved by the owner 2026-11-07** (direction first, then Q7–Q12 of §8.11 answered as
 recommended, among them the one change to the approved index: Q12, class and kind ids `uint16`, written into §2 below).

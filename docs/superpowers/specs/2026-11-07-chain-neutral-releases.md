@@ -1,6 +1,6 @@
 # Chain-neutral releases: the same factory, release and instance addresses on every chain
 
-**Status:** SPECIFIED, **approved by the owner 2026-11-07 (option I); Fable review applied** (decisions A and B; the eight
+**Status:** **Built (T19, 2026-11-10):** §2–§4 and §6.1 (T71, T72), §6.2 (T73), §6.3–§6.4 (T74), §4.4 (T76) BUILT on branch `ua-mtx-merge`, UNAUDITED; rule CTR-TOK-29. SPECIFIED, **approved by the owner 2026-11-07 (option I); Fable review applied** (decisions A and B; the eight
 questions of §10.3 answered as recommended, then question 5 overridden by option I: `ChainEnv` appended to each clone's code,
 §2; the Fable review's findings, no P0, applied as listed in §11). Nothing is built. Companion of the factory index spec
 [`2026-11-07-factory-contract-index.md`](2026-11-07-factory-contract-index.md) (index §1–§7 and extension §8 approved; S3's
