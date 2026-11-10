@@ -475,13 +475,89 @@ ciphertext = AES-256-GCM-SIV(mk_i, n_i, pt, aad)
 
 GCM-SIV stays (v1 C6): a device id reused by mistake does not turn into a nonce reuse. The record `PqChatMessage`
 (header + ciphertext) is then signed by the sender (D7, §4); the signature authenticates the author to every member.
-There is no deniability: a signature proves authorship of a ciphertext for good.
+There is no deniability: a signature proves authorship of a ciphertext for good. The fields of each content type are
+§6.4.1.
+
+#### 6.4.1 Content types
+
+SPECIFIED (owner 2026-11-10); nothing built. All of it lives in the plaintext `pt` before padding and encryption (§6.4):
+the contract, the record and the envelope do not change.
+
+**P49 — Content: common rules** (owner 2026-11-10).
+
+- **Form.** `content` is one JSON object in canonical JSON (§6.4: object keys sorted by UTF-16 code units, no whitespace,
+  `JSON.stringify` escapes; UTF-8). Byte strings are lowercase `0x`-hex, ids 32 B; integers are JSON numbers in
+  `[0, 2^53 − 1]`; every bound below is in bytes of UTF-8 (strings) or of the decoded value (hex).
+- **Common fields.** `type`, required, 1–32 B of ASCII letters. `ts`, optional: the sender's clock in milliseconds since
+  1970-01-01 UTC, display only and the tie-break of P19 (absent: the tie goes to `messageId`). `onBehalfOf`, optional: the
+  UA id (32 B) of an `msig` seat the sender writes for (P13); display only, shown only when the sender is a leaf of that seat
+  in the epoch's members (`via`).
+- **Forward compatibility.** A field the reader does not know is ignored. A `type` the reader does not know is shown as
+  "unsupported" and never acted on. A content that is not a canonical JSON object, lacks `type`, or breaks a bound or a
+  field's type is shown the same way. The whole content is bounded by the padding buckets and the transport (§6.5).
+- **The target of a reference** is the `messageId` of §4.3 (`typed(PqChatMessage)`), the one id a message has on every
+  store (P19). A reference to a message the reader has not seen yet is kept until it arrives, as a message for an unknown
+  epoch is (P19); it is never fetched on its own.
+- **Who may act.** An `edit` or a `redact` counts only when its sender is the target's sender UA (any of its devices); one
+  from another UA is ignored. Nothing stored can be removed (P16, P29): a client hides what a `redact` names and says that
+  the bytes stay in every store.
+- **Paths.** The call types go over the call signalling path of P21 (libp2p, else Matrix, else HCS) and are not replicated
+  to the other stores. `typing` goes only to a Matrix room or a Waku topic the session lists (no gas, no fee), never to a
+  chain store, `postMessage` or HCS; with neither listed, a client sends none. Every other type follows P27 (every listed
+  store).
+- **No network call or write before acceptance** (P12, Fable P2-4): before its user accepts the session, no content makes a
+  client fetch (`store`, `url`), reply, send a receipt or join a call. After acceptance: a `url` is fetched only on the
+  user's action for that file, because the fetch shows the reader's network address to the host the sender chose (a
+  `store` read shows it to the RPC provider, as every chain read does, P20); `text/markdown` renders with no remote fetch at
+  all (no image, no preview; a link opens only when the user follows it, marked as external).
+- **No decryption oracle** ([ARCH-POS-13](../../decisions.md#ARCH-POS-13)). A client sends nothing back that depends on
+  whether a content it did not expect opened, parsed or checked: no receipt, reaction, error, retry request or other write
+  for a message that did not open, failed a check of P25, or is unsupported; a `callKey` is acted on only for a call its
+  user joined or is joining, and a wrap that does not open is treated as no key, silently; a file that fails its hashes is
+  shown as failed on the device only.
+
+| `type` | Fields (besides the common ones) | Target |
+|---|---|---|
+| `text` | `mediaType` `text/plain` or `text/markdown`, 1–64 B (as in topics, topics spec P35), absent = `text/plain`; `body` 1–16,000 B (a longer text goes as a `file`) | — |
+| `file` | `mediaType` 1–64 B; `name` 1–255 B; `size` (plaintext bytes, 1 to 2^36 − 32); `sha256`; `ctSha256`; `key` 32 B; `store` and / or `url` (below) | — |
+| `edit` | `target`; `mediaType` as `text`; `body` 1–16,000 B, the new body | `target` = the `messageId` of the original `text` (never of an edit); the newest edit in display order (P19) is shown |
+| `redact` | `target`; `reason` optional, 0–512 B | `target` = the `messageId` of any message of the sender (a `text`, a `file`, a `react`, …) |
+| `react` | `target`; `reaction` 1–64 B, one emoji or a short token | `target` = the `messageId` reacted to; one count per (UA, target, `reaction`); removed by a `redact` of the `react` message |
+| `receipt` | `target` | `target` = the `messageId` of the newest message the user has seen: read up to it in display order (P19). Read receipts only (no delivery receipt: it would answer for every message that opened); a user may turn them off |
+| `typing` | `on` (bool) | none: the header names session, sender and device; a reader drops the state 30 s after the last `typing` |
+| `callMember` | `callId` 32 B; `callEpoch` (u32); `state` `joined` or `left`; `foci` 0–4 entries `{"kind": "livekit", "url": 1–2,048 B}` | `callId`: join and leave, the group membership and transport discovery of P21 off Matrix |
+| `callOffer`, `callAnswer` | `callId`; `sdp` 1–12,288 B | `callId` |
+| `callCandidates` | `callId`; `candidates` 1–32 entries `{"candidate": 0–512 B, "sdpMid": 0–64 B, "sdpMLineIndex": u16}` (an empty `candidate` ends the list, as WebRTC) | `callId` |
+| `callKey` | `callId`; `callEpoch` (u32); `wraps`: one `Wrap` of §4.1 per participant (named fields, hex), sealed as §6.2 with the call ids (P22); empty for 1:1 (the keys come from `K`) | `callId`, `callEpoch` |
+
+**`file`.** The sender draws `key`, 32 random bytes, fresh for every file and never reused; the key travels only inside this
+content, so only the session's members read it. `ct = AES-256-GCM(key, nonce = 0^96, file, aad = empty)` (one encryption per
+key, as §6.2); `sha256` = SHA-256 of the plaintext file, checked after decryption; `ctSha256` = SHA-256 of `ct`, the hash
+that binds the ciphertext: a reader checks it on the bytes it fetched before it decrypts, so a host that swaps the bytes is
+caught without a decryption. Both hashes and the key are signed with the message (D7).
+
+- `store` (the default): the file's place in a chain store of the session (P29, P32), `{"chainUid": …, "contract": <PqChat
+  instance>, "hint": <8 B>, "indices": [i₀, …]}`. `ct` is cut into parts, each at most one blob (P11), each appended as
+  one `storeMessage(1, hint, part)`; `ct` is the `env` of the payloads at `storedAt(hint, iⱼ)`, in the listed order
+  (anyone may append to a hint, so the indices are listed, not a range).
+  `hint = HMAC-SHA-256(key, "scaas/pqchat/v1/file-hint")[0:8]`: it links the parts of one file and nothing else. The message is sent once every part has landed. A chain store costs state gas
+  (§11, about 1.6 G per MiB): the client shows the cost and the user chooses it, as for any on-chain write (P16).
+- `url` (optional): 1–2,048 B, `https://`, `ipfs://` or `mxc://` (P28), naming `ct` itself. When both are given the
+  reader tries `store` first.
+- `name` is display only: a client never uses it as a path without making it safe.
+
+**Other contents the spec names, and where they are defined.** `hello` (P30) is sealed under `k_peer`, not an envelope
+content. The store list, room id and Matrix ids are `sealedInfo` (§4.2), not message content. The contact card (§14 O7) is
+out of band. Device linking (P6) carries the UA's secrets sealed to the new device's ephemeral key, not to the epoch, so it
+is not a content of this section; its format is fixed with the linking flow (PLANNED). The sender's timestamp of P19 is
+`ts`, the "on behalf of" field of P13 is `onBehalfOf` (above).
 
 ### 6.5 Padding
 
 Plaintexts are padded (length prefix, then zeros) to 256, 1,024, 4,096 or 16,384 B, then multiples of 16,384 B (D10).
 The buckets apply on every transport. A message posted on chain is at most one 1,024-B bucket unless the user confirms
-the cost; attachments never go on chain (1 MiB ≈ 1.6 G state gas; P28). An HCS message is bounded by the chunk limit
+the cost; an attachment goes on chain only as a `file` in a chain store, by the user's choice (1 MiB ≈ 1.6 G state
+gas; owner 2026-11-10, §6.4.1; old: never). An HCS message is bounded by the chunk limit
 (P25), a `storeMessage` envelope by one blob (P29), a Waku message by the network's maximum message size (P31).
 
 ## 7. Transports
@@ -504,7 +580,9 @@ lists one.
 **P28 — Without Matrix** (D15, D16). **Attachments**: the file is encrypted as today (a random AES-256-GCM key) and put in a
 content-addressed blob store (IPFS or any HTTP store), or in the Matrix media repository when Matrix is listed; the `file`
 content inside the envelope carries `{src, key, sha256, size bucket}`, `src` the content id (or the `mxc://` URI), so the
-key and the content hash travel only inside the envelope. Attachments never go on chain (§6.5). **Call signalling**:
+key and the content hash travel only inside the envelope. Change (owner 2026-11-10): the `file` fields are §6.4.1;
+`src` is now `url`, and the default place is a chain store of the session (`store`), the user choosing its cost (P16);
+old: attachments never went on chain. **Call signalling**:
 over libp2p first when the list names it (P30); otherwise in the Matrix room when Matrix is listed (P21), then over the
 HCS topic (D14), as encrypted envelope content types, as on Matrix; media stays WebRTC 1:1 and an SFU for groups (D12). A
 session that lists none of libp2p, Matrix and HCS (only chains) has no call signalling; listing libp2p gives it one
