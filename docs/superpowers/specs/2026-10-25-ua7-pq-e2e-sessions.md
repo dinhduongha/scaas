@@ -508,8 +508,8 @@ the contract, the record and the envelope do not change.
 - **No network call or write before acceptance** (P12, Fable P2-4): before its user accepts the session, no content makes a
   client fetch (`store`, `url`), reply, send a receipt or join a call. After acceptance: a `url` is fetched only on the
   user's action for that file, because the fetch shows the reader's network address to the host the sender chose (a
-  `store` read shows it to the RPC provider, as every chain read does, P20); `text/markdown` renders with no remote fetch at
-  all (no image, no preview; a link opens only when the user follows it, marked as external).
+  `store` fetch shows it to that store's server, for Matrix media the homeserver, P20); `text/markdown` renders with no
+  remote fetch at all (no image, no preview; a link opens only when the user follows it, marked as external).
 - **No decryption oracle** ([ARCH-POS-13](../../decisions.md#ARCH-POS-13)). A client sends nothing back that depends on
   whether a content it did not expect opened, parsed or checked: no receipt, reaction, error, retry request or other write
   for a message that did not open, failed a check of P25, or is unsupported; a `callKey` is acted on only for a call its
@@ -519,7 +519,7 @@ the contract, the record and the envelope do not change.
 | `type` | Fields (besides the common ones) | Target |
 |---|---|---|
 | `text` | `mediaType` `text/plain` or `text/markdown`, 1–64 B (as in topics, topics spec P35), absent = `text/plain`; `body` 1–16,000 B (a longer text goes as a `file`) | — |
-| `file` | `mediaType` 1–64 B; `name` 1–255 B; `size` (plaintext bytes, 1 to 2^36 − 32); `sha256`; `ctSha256`; `key` 32 B; `store` and / or `url` (below) | — |
+| `file` | `mediaType` 1–64 B; `name` 1–255 B; `size` (plaintext bytes, 1 to 2^36 − 32); `sha256`; `ctSha256`; `key` 32 B; `store` or `url`, at least one (below) | — |
 | `edit` | `target`; `mediaType` as `text`; `body` 1–16,000 B, the new body | `target` = the `messageId` of the original `text` (never of an edit); the newest edit in display order (P19) is shown |
 | `redact` | `target`; `reason` optional, 0–512 B | `target` = the `messageId` of any message of the sender (a `text`, a `file`, a `react`, …) |
 | `react` | `target`; `reaction` 1–64 B, one emoji or a short token | `target` = the `messageId` reacted to; one count per (UA, target, `reaction`); removed by a `redact` of the `react` message |
@@ -534,16 +534,16 @@ the contract, the record and the envelope do not change.
 content, so only the session's members read it. `ct = AES-256-GCM(key, nonce = 0^96, file, aad = empty)` (one encryption per
 key, as §6.2); `sha256` = SHA-256 of the plaintext file, checked after decryption; `ctSha256` = SHA-256 of `ct`, the hash
 that binds the ciphertext: a reader checks it on the bytes it fetched before it decrypts, so a host that swaps the bytes is
-caught without a decryption. Both hashes and the key are signed with the message (D7).
+caught without a decryption. Both hashes and the key are signed with the message (D7). **The file never goes on chain**
+(P28, §6.5: 1 MiB ≈ 1.6 G state gas): a chain holds at most the message, with the key, the hashes and the locator inside
+its ciphertext.
 
-- `store` (the default): the file's place in a chain store of the session (P29, P32), `{"chainUid": …, "contract": <PqChat
-  instance>, "hint": <8 B>, "indices": [i₀, …]}`. `ct` is cut into parts, each at most one blob (P11), each appended as
-  one `storeMessage(1, hint, part)`; `ct` is the `env` of the payloads at `storedAt(hint, iⱼ)`, in the listed order
-  (anyone may append to a hint, so the indices are listed, not a range).
-  `hint = HMAC-SHA-256(key, "scaas/pqchat/v1/file-hint")[0:8]`: it links the parts of one file and nothing else. The message is sent once every part has landed. A chain store costs state gas
-  (§11, about 1.6 G per MiB): the client shows the cost and the user chooses it, as for any on-chain write (P16).
-- `url` (optional): 1–2,048 B, `https://`, `ipfs://` or `mxc://` (P28), naming `ct` itself. When both are given the
-  reader tries `store` first.
+- `store`: one of the session's listed off-chain stores (P27, P28) and the object's locator there,
+  `{"kind": <the store's kind>, "locator": 1–2,048 B}`, `kind` a store the epoch's `sealedInfo` lists. Today one listed
+  kind holds files: `matrix`, its media repository, `locator` the `mxc://` URI of `ct` (P28). HCS and Waku carry messages
+  within their size bounds (P25, P31), not files; a later store kind that holds objects adds its locator here.
+- `url` (optional): 1–2,048 B, `https://` or `ipfs://` (a blob store, P28), naming `ct` itself.
+- At least one of `store` and `url`; when both are given the reader tries `store` first.
 - `name` is display only: a client never uses it as a path without making it safe.
 
 **Other contents the spec names, and where they are defined.** `hello` (P30) is sealed under `k_peer`, not an envelope
@@ -556,8 +556,7 @@ is not a content of this section; its format is fixed with the linking flow (PLA
 
 Plaintexts are padded (length prefix, then zeros) to 256, 1,024, 4,096 or 16,384 B, then multiples of 16,384 B (D10).
 The buckets apply on every transport. A message posted on chain is at most one 1,024-B bucket unless the user confirms
-the cost; an attachment goes on chain only as a `file` in a chain store, by the user's choice (1 MiB ≈ 1.6 G state
-gas; owner 2026-11-10, §6.4.1; old: never). An HCS message is bounded by the chunk limit
+the cost; attachments never go on chain (1 MiB ≈ 1.6 G state gas; P28). An HCS message is bounded by the chunk limit
 (P25), a `storeMessage` envelope by one blob (P29), a Waku message by the network's maximum message size (P31).
 
 ## 7. Transports
@@ -579,10 +578,9 @@ lists one.
 
 **P28 — Without Matrix** (D15, D16). **Attachments**: the file is encrypted as today (a random AES-256-GCM key) and put in a
 content-addressed blob store (IPFS or any HTTP store), or in the Matrix media repository when Matrix is listed; the `file`
-content inside the envelope carries `{src, key, sha256, size bucket}`, `src` the content id (or the `mxc://` URI), so the
-key and the content hash travel only inside the envelope. Change (owner 2026-11-10): the `file` fields are §6.4.1;
-`src` is now `url`, and the default place is a chain store of the session (`store`), the user choosing its cost (P16);
-old: attachments never went on chain. **Call signalling**:
+content inside the envelope carries the fields of §6.4.1: the locator (`store`, the `mxc://` URI; or `url`, the content
+id or HTTP URL), the key, the hashes and the size, so the key and the content hashes travel only inside the envelope.
+Attachments never go on chain (§6.5). **Call signalling**:
 over libp2p first when the list names it (P30); otherwise in the Matrix room when Matrix is listed (P21), then over the
 HCS topic (D14), as encrypted envelope content types, as on Matrix; media stays WebRTC 1:1 and an SFU for groups (D12). A
 session that lists none of libp2p, Matrix and HCS (only chains) has no call signalling; listing libp2p gives it one
