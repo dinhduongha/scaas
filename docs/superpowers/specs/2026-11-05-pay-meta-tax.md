@@ -1,6 +1,9 @@
 # Payment metadata, free pay lanes and tax on the regulated kinds (group 3e) — design
 
-**Status:** **approved by the owner 2026-11-06; build after T36.** SPECIFIED; nothing is built. Revised after the Codex and Fable reviews of the first draft
+**Status:** **approved by the owner 2026-11-06.** **BUILT** on branch `ua-mtx-merge`, T37–T43 (UNAUDITED; `payNo` as
+`bytes32`, `save` and the pay records by plan T83). PT-1 is CTR-MTX-31, PT-4 CTR-AS-18, PT-5 CTR-AS-19, PT-6 CTR-GOV-21, PT-7
+ARCH-POS-17 (the proposed ARCH-POS-13 is taken), PT-2 / PT-3 Changes of CTR-MTX-26 / -27 (T19). The section tags below are the
+design's. Revised after the Codex and Fable reviews of the first draft
 ([Codex](../../research/paytax-codex-review.md): 4 medium, 3 low, 1 info; [Fable](../../research/paytax-fable-review.md): 0 P0,
 3 P1, 14 P2, 12 P3, addendum A-1, B-1…B-6) and the owner's rulings O8–O18 of 2026-11-05 and 2026-11-06; every finding's outcome is in §17.
 Work-order group **3e** of branch `ua-mtx-merge`: tasks **T37–T43** after T36 (regulated kinds) and before 3c (`PqChat` and the

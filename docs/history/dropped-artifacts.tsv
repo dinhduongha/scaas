@@ -1227,3 +1227,5 @@ mapping(address ⇒ FreezeState)	renamed	mapping(bytes32 account ⇒ FreezeState
  (the hot path reads slot a only); 	extraction-artifact	contracts/asset-suite.md#22-configuration-and-init (the storage table)
 m.feeRecipient == 0 ? msg.sender : m.feeRecipient	obsolete	the draft's shape-step fee resolution; the fee row is _regFeeTo after pre*: contracts/asset-suite.md#CTR-AS-25
 super._checkOp(m)	obsolete	the draft's shape-step placement; built as _regPre / _regFeeTo / _regMove: contracts/asset-suite.md#CTR-AS-08
+mtxPay(…, payId, …)	obsolete	the flat mtxPay with an on-chain lane; since pay-meta-tax O2 / O3 mtxPay(UAMetaTransfer, UASig, PayMeta) on any lane: contracts/metatx.md#CTR-MTX-10
+batch = payLane(payId) = uint256(keccak256("scaas.pay.lane" ‖ payId))	obsolete	the lane mtxPay derived on chain; a client convention since pay-meta-tax O3: contracts/metatx.md#CTR-MTX-10

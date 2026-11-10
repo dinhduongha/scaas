@@ -23,6 +23,7 @@ controls and `ComplianceRegistry`, **BUILT** on EVM and Hedera (`IS_HEDERA`) (br
    - 2.9 [Security](#29-security)
    - 2.10 [Tests (`test/as/`)](#210-tests-testas)
    - 2.11 [Rules of the regulated build](#regulated-rules)
+   - 2.12 [Tax on the regulated kinds](#tax)
 3. [Vesting and streaming](#3-vesting-and-streaming)
 4. [Dividend and coupon distribution](#4-dividend-and-coupon-distribution)
 5. [Corporate actions: `ExchangeOffer`](#5-corporate-actions-exchangeoffer)
@@ -204,7 +205,7 @@ each its base kind's source with the hooks overridden (BUILT, `smartcontracts/ev
 | 12 | `NORMAL_PQZ_REGULATED` | `NormalPqzRegulatedToken` | `NormalPqzToken` | 5, 6, 7, 9, 10, 21, 22 |
 | 13 | `WRAPPED_PQZ_REGULATED` | `WrappedPqzRegulatedToken` | `WrappedPqzToken` | 5, 6, 7, 9, 10, 21, 22 |
 
-Bit 23 `TAX` joins kinds 8–13 with pay-meta-tax (pay-meta-tax spec §6.1). Each kind is a forwarding core
+Bit 23 `TAX` joins kinds 8–13 with pay-meta-tax ([§2.12](#tax)). Each kind is a forwarding core
 with its modules (`*RegulatedTokenCore`, `*RegulatedTokenModules`, the T66b split of every kind), on `RegulatedBase`
 (abstract over `MetaTokenBase`: the masks, the ledger and fee hooks, `disableFeature`, `supportsInterface`, the checks `F`,
 `P`, `R`) and the external `RegulatedLib` (the controls' bodies, `DELEGATECALL`ed so they run on the clone's storage; the
@@ -230,6 +231,7 @@ struct RegulatedParams {
     uint64  requiredFlags;      // ≠ 0 iff ALLOWLIST
     uint64  deniedFlags;        // ≠ 0 iff DENYLIST
     bytes32 termsHash;          // ≠ 0 iff any of 5-10, 21
+    bytes32 taxRecipient;       // ≠ 0 iff bit 23 TAX (CTR-AS-19)
 }
 ```
 
@@ -255,7 +257,7 @@ Storage (namespace `scaas.regulated`, ERC-7201, pinned in `test/v2/layout/namesp
 | +2 | `termsHash` |
 | +3 | `mapping(bytes32 account ⇒ FreezeState)`: slot a `until u64 ‖ episodeStart u64 ‖ issuerCooldownUntil u64 ‖ recordBacked bool`, slot b `recordId` (the hot path reads slot a only) |
 | +4 | `mapping(bytes32 recordId ⇒ OrderRecord)` |
-| +5, +6 | the tax recipient and rate (pay-meta-tax spec §6.2) |
+| +5, +6 | `taxRecipient`; `TaxRate {ratePpm, pendingPpm, eta}` ([CTR-AS-19](#CTR-AS-19)) |
 
 ### 2.3 Interface
 
@@ -285,7 +287,7 @@ holder arrives through the `GovernanceRouter`, which carries one merged entry pe
 `AmountZero`, `NotPaused`; the role and pending errors are `IGovernance`'s. Owner relaxations are the governance entries
 `disableFeature(bit)`, `revokeRole`, `renounceRole` ([CTR-AS-21](#CTR-AS-21)); the draft's `ControlsDisabled` and
 `RoleRenounced` events are `FeatureDisabled` and `RoleRevoked` ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)). The tax entries
-(`mtxPayWithTax`, `payWithTax`, `setTaxRate`, `setTaxRecipient`) are pay-meta-tax's (spec §5, §6).
+(`mtxPayWithTax`, `payWithTax`, `setTaxRate`, `setTaxRecipient`) are [§2.12](#tax).
 
 The node, venue and wallet compose a transfer pre-check from `isFrozen`, `canReceive`, `regulatedConfig().pausedUntil` and
 `balanceOf` (one table of reason codes in the node: `1`/`2`/`3` receiver, `4` sender frozen, `5` paused, `6` balance); there
@@ -488,7 +490,7 @@ Built (T24–T36; each suite at its build commit's gate, UNAUDITED):
 | Vectors | `RegulatedKat.t.sol` (the regulated rows of the shared vectors, T34) |
 | Relaxation, holders | `test/governance/GovRelax.t.sol`, `GovDelay.t.sol` |
 | Invariants | `invariant/RegulatedInvariants.t.sol` with `RegulatedHandler.t.sol` (I1–I13); the tax invariants J1–J5 in `invariant/PayTaxInvariants.t.sol` |
-| Tax | `Tax.t.sol`, `confidential/TaxConfidential.t.sol` (pay-meta-tax) |
+| Tax | `Tax.t.sol`, `confidential/TaxConfidential.t.sol` ([§2.12](#tax)) |
 
 ### <a id="regulated-rules"></a>2.11 Rules of the regulated build (RK-1…RK-11)
 
@@ -559,6 +561,40 @@ the regulated override, so the plain kinds' empty hooks cost nothing. Tests: the
 
 <a id="CTR-AS-30"></a>**CTR-AS-30** — **A PQZ refresh (`amount = 0`) is open under `FREEZE` and `PAUSE`** (RK-11); its `shieldIn`
 payer and beneficiary are still checked. Test: `test/as/confidential/PqzRefresh.t.sol`.
+
+### <a id="tax"></a>2.12 Tax on the regulated kinds
+
+**BUILT** on EVM (pay-meta-tax T39 `0d054f65`, T40 `bc6592b1`, T43 `f2cc725d`; UNAUDITED); Hedera on kinds 8, 9. Bit 23 `TAX`
+is [CTR-GOV-21](../decisions.md#CTR-GOV-21).
+
+<a id="CTR-AS-18"></a>**CTR-AS-18** — **`mtxPayWithTax` on the regulated kinds 8–13, public balances only** (owner O6–O8, O13,
+pay-meta-tax PT-4). `mtxPayWithTax(UAMetaTransfer t, uint8 taxMode, uint256 tax, UASig auth, PayMeta meta)`, signed by the payer
+as `UAPayWithTax(UAMetaTransfer payment, uint8 taxMode, uint256 tax)` in the token's domain (the nested struct hash, unbound
+`relayer` / `feeRecipient` zeroed); `PAYABLE` and `TAX` gated; the `PayMeta` check of [CTR-MTX-26](metatx.md#CTR-MTX-26).
+`taxMode` 1 PERCENT (`tax == floor(value × effectiveRate / 10^6)`, else `TaxMismatch(expected, got)`), 2 AMOUNT (as signed,
+unchecked), else `TaxModeInvalid`; `tax ≤ value` (`TaxExceedsAmount`). The recipient is read from the token, never signed:
+`taxRecipient ≠ t.to` (`TaxRecipientIsPayee`), and the fee-leg check of [CTR-AS-25](#CTR-AS-25) on it. One split by the payer:
+payer → payee `value − tax` and payer → `taxRecipient` `tax`, both hooked (`_regMove`); the payer's fee on top, as `mtxPay`;
+then `UAPaymentSettled` (gross), `UAMetaTransactionExecuted`, and `PaymentTaxed(entryRef, payee, taxRecipient, from, taxMode,
+tax, digest)`, also at `tax == 0`. A frozen payee does not block the tax leg (its `from` is the payer). The direct twin
+`payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef, PayMeta meta)` serves contract payers
+(the caller pays; `digest` 0; not allowlisted). No other entry reads tax state and none is blocked (O7(1)); no confidential site
+has a tax leg (O8); `mtxBatchTransfer` carries no tax. A PERCENT payment in flight across a rate change reverts `TaxMismatch`:
+ERPs use AMOUNT (C7). Reconciliation of a taxed row: `net = value − tax`; a request is final iff `Σ net ≥ amount_base −
+expected_tax` and `Σ tax == expected_tax` ([integration.md](../integration.md#payment-references)). Tests: `test/as/Tax.t.sol`,
+`confidential/TaxConfidential.t.sol`, `invariant/PayTaxInvariants.t.sol` (J1–J5).
+
+<a id="CTR-AS-19"></a>**CTR-AS-19** — **One token-wide PERCENT rate: an increase after the factory's notice period, a decrease at
+once; floor rounding** (owner O10, Q3, Q9, pay-meta-tax PT-5). `setTaxRate(uint32 ratePpm)` (bit 23, `≤ 10^6`, else
+`TaxRateInvalid`): a matured pending folds in first; a value at or below the effective rate applies at once and clears the
+pending; a higher one waits `eta = now + noticePeriod` (the factory's `noticePeriod()`, 0 possible on a test chain; shown, never
+promised) and a later decrease cancels it. `setTaxRecipient(bytes32)` (bit 23, immediate, Q4): not 0, a pool or the token
+(`TaxRecipientInvalid`), a derived id registered SIGNING, not frozen and passing `R` at set time. `taxConfig()` is the one view.
+Storage `scaas.regulated` +5 `taxRecipient`, +6 `TaxRate {ratePpm, pendingPpm, eta}`; `RegulatedParams.taxRecipient ≠ 0` iff
+bit 23 at creation. Router ops `mtxSetTaxRate`, `mtxSetTaxRecipient` (fee 0). **Accepted limitation (O14):** the router's
+open-mode relay fee stays on kinds 8–13; a frozen relayer can still collect a fee the router forwards, because the fee-leg check
+reads the signed payee (the router). Tests: `test/as/Tax.t.sol` (`test_setTaxRate_*`, `test_setTaxRecipient_*`),
+`FeeLegs.t.sol`.
 
 ## 3. Vesting and streaming
 

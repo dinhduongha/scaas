@@ -399,41 +399,50 @@ non-terminal pushed jobs return to `local`). Node admin mutations are audited se
 
 <a id="payment-references"></a>
 
-**Generation (BUILT; [CTR-MTX-03](contracts/metatx.md#CTR-MTX-03)):**
+**Generation (BUILT; [CTR-MTX-03](contracts/metatx.md#CTR-MTX-03), [CTR-MTX-26](contracts/metatx.md#CTR-MTX-26), [CTR-MTX-31](contracts/metatx.md#CTR-MTX-31)):**
 
 ```
-entryRef = 32 bytes from a CSPRNG                     # carries no information; unlinkable by construction
-batch    = keccak256("scaas.pay.lane" ‖ entryRef)     # lane of this request (v2 tokens: payLane(entryRef) on chain)
-nonce    = 0
+salt     = 32 bytes from a CSPRNG                     # carries no information; unlinkable by construction
+entryRef = metaPayId(PayMeta{salt, payNo, save, schema, body})
+batch    = any lane of the payer                      # convention for one payment per request: payLane(entryRef), nonce 0
 ```
 
-- One `entryRef` per **payment request** (an invoice may have several requests over time; each request is payable at
-  most once because its lane has nonce 0).
-- **Lane horizon** ([CTR-MTX-04](contracts/metatx.md#CTR-MTX-04)): pay-once holds only if every signature the client
-  issues on a pay lane has `validUntil ≤ t_first_issue + 30 d`. Re-issuing terms on the same lane later than that, or
-  signing an op with `valid_until > now + 30 d` on a pruning family (GRAM, Aptos, Solana, Sui), gives no pay-once
-  guarantee — issue a new request (new `entryRef`, new lane) instead. Wallet connectors and `clientkeys` refuse such ops
-  ([NET-ALL-01](networks/README.md#NET-ALL-01)).
+- One `entryRef` per **payment request**. Partial payments and refunds use the same `entryRef` and `PayMeta` (pay-meta-tax O3,
+  PT-1): the amounts of the key `(token, payer, payee, entryRef)` add up and the ERP decides when the request is settled; a
+  refund is a payment payee → payer on the same `entryRef`, a key of the other direction, so it never adds to the original sum.
+  The UNIQUE constraint on the request stays; the settled sum is the ERP's.
+- `payNo` (`bytes32`, recommended a right-aligned UUIDv7) names the business document, so its payments can be read back with
+  `paymentsOf(payNo, …)` when the payer set `save`; a readable document number in clear is not recommended
+  ([ARCH-POS-17](decisions.md#ARCH-POS-17)): use schema 4 for private data.
+- **Lane horizon** ([CTR-MTX-04](contracts/metatx.md#CTR-MTX-04)): on a pruning family (GRAM, Aptos, Solana, Sui) the
+  replay guarantee holds only if every signature on a lane has `validUntil ≤ t_first_issue + 30 d`; a signature with
+  `valid_until > now + 30 d` gives none after a prune; wallet connectors and `clientkeys` refuse
+  such ops ([NET-ALL-01](networks/README.md#NET-ALL-01)). The non-EVM families keep their pay-once lane until their rounds.
 - The client stores `entryRef` with a UNIQUE constraint on the request, together with `chain`, `token`,
-  `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until`.
+  `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until` and the `PayMeta` preimage (a
+  payment landed through the generic `mtxExecuteTransfer` carries no `PaymentMeta`, O12, and is reconciled from it).
 - Do **not** derive `entryRef` from business identifiers (`keccak256(company ‖ move ‖ amount ‖ salt)` as in older
-  drafts): a random value needs no salt management and cannot be brute-forced from known invoice numbers.
-- Splitting: Zether `n_v = 64` removed the need to split large payments; for transparent tokens one payment per
-  request. If a business case needs partial payments, issue one request (one `entryRef`) per instalment.
+  drafts): a random salt needs no management and cannot be brute-forced from known invoice numbers.
+- **Taxed payments** (the regulated kinds, [CTR-AS-18](contracts/asset-suite.md#CTR-AS-18)): the gross-sum rule below
+  applies only to rows without `PaymentTaxed`. A row joined with its `PaymentTaxed` (same transaction, token, `entryRef` and
+  `from`, `PaymentTaxed.digest == UAMetaTransactionExecuted.digest`) books `net = value − tax` as the settlement and `tax` as
+  withheld by the payer; the request is final iff `Σ net ≥ amount_base − expected_tax` and `Σ tax == expected_tax`, else a
+  reconciliation exception. ERPs use the AMOUNT mode (their own tax figures, immune to a rate change in flight); a PERCENT
+  payment signed before a rate change fails `TaxMismatch` and is re-signed.
 
 **Client → chain (before signing and at push):**
-1. The payment `MetaTransfer` built server-side from the request: `to = receiving_address`, `value = amount_base`,
-   `entryRef`, `batch` as above, `validUntil = issued_valid_until` (server-chosen, e.g. now + 300 s).
+1. The payment `UAMetaTransfer` built server-side from the request: `to = receiving_address`, `value = amount_base`,
+   `entryRef = metaPayId(meta)`, the lane chosen above, `validUntil = issued_valid_until` (server-chosen, e.g. now + 300 s).
 2. After signing: recompute the digest; a 65-byte signature must recover `payer_address` (EOA); a contract wallet
    (ERC-1271) is accepted unverified and judged by the node's simulation ([INT-ERP-03](#INT-ERP-03)).
 3. The node recomputes the digest and simulates before broadcast.
 
 **Chain → client (on each finalized range):**
-1. Filter `PaymentSettled` by `contract == request.token` **and** `from == request.payer_address` **and**
+1. Filter `UAPaymentSettled` by `contract == request.token` **and** `from == request.payer_address` **and**
    `to == request.receiving_address` **and** `entry_ref == request.entryRef`.
 2. `amount_settled = Σ amount` of matching events; `amount_settled ≥ amount_base` ⇒ request final; more than due ⇒
    final + needs attention (refund manually); less ⇒ partial.
-3. Cross-check `MetaTransactionExecuted(digest)` to mark the outbox job final.
+3. Cross-check `UAMetaTransactionExecuted(digest)` to mark the outbox job final.
 4. Drift checks: unmatched inbound `Transfer` to a watched wallet ⇒ drift A record; hourly `balances` vs ledger balance
    of the token's bank journal ⇒ drift C ([accounting](#accounting)).
 
