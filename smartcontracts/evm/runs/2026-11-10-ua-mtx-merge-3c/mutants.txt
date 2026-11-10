@@ -2,7 +2,10 @@
 # compiled alone (out/mutants-3c), the file restored byte-equal (git diff --quiet). Run 2026-11-10 at 81734769, all 40
 # in one capped slot (MUT_IN_CAPPED=1): 39 killed; t85-nonce-before-sig survived (the revert undoes a nonce either
 # way), so test_createSession_signatureBeforeNonce pins the observable order (a used nonce under a forged signature
-# is UAUnauthorized) and its rerun, the last line, is killed: 40 of 40.
+# is UAUnauthorized) and its rerun is killed: 40 of 40.
+# Run 2026-11-10 at 69309f9e (the Fable review fixes, UA-7 P48 remove): the 15 new mutants, each alone, all killed
+# (fable-p1-1, fable-p1-2, the 13 p48-*), then t86-leaver-drop-any again on its changed line (the last line), killed.
+# Total: 55 of 55 killed.
 t85-completion-at-any-landing | test_createSession_chunks | 1
 t85-wrap-hash-index | test_addWraps_storedOnceUnknownAndRange, test_addWraps_wrongWrapRefused, test_createSession_chunks | 1
 t85-nonce-before-sig | none | 0
@@ -44,3 +47,19 @@ t92-initialize-any-caller | test_initialize_onceAndOnlyByTheFactory | 1
 t90-module-check | test_constructor_refusesAnotherModule | 1
 t92-factory-info-class | setUp | 1
 t85-nonce-before-sig | test_createSession_signatureBeforeNonce | 1
+fable-p1-1-superseded-epoch | test_postMessage_supersededEpochRefusedAtHome | 1
+fable-p1-2-leaver-authors-plain | test_rekey_leaverAuthorsNoPlainRekey | 1
+p48-admin-check | test_remove_refusals | 1
+p48-sorted | test_remove_refusals | 1
+p48-bound | test_remove_refusals | 1
+p48-member-check | test_remove_refusals | 1
+p48-nonce | test_remove_raceIsClosed, test_remove_refusals | 1
+p48-next-epoch | test_remove_refusals | 1
+p48-slot-taken | test_remove_refusals | 1
+p48-author-removed | test_remove_raceIsClosed | 1
+p48-drop-is-plain | test_remove_dropIsPlain | 1
+p48-completion-check | test_remove_childAdminsExcludeRemoved, test_remove_incompleteChildCannotComplete, test_remove_raceIsClosed | 1
+p48-admins-excluded | test_remove_childAdminsExcludeRemoved | 1
+p48-count | test_remove_childAdminsExcludeRemoved, test_remove_incompleteChildCannotComplete, test_remove_raceIsClosed | 1
+p48-record-kept | test_remove_raceIsClosed | 1
+t86-leaver-drop-any | test_O4_noAdminFreezesMembership, test_msigAdminSignsByQuorum, test_rekey_membershipChangeNeedsAdmin, test_rekey_plainDropsLeaversOnly | 1
