@@ -989,9 +989,9 @@ first (`forge build src --sizes`, T66b 4.4):
 | 12 `NormalPqzRegulatedToken` | 22,556 | 30,177 | 15,576 | 28,131 | 11,827 | | 32,423 | |
 | 13 `WrappedPqzRegulatedToken` | 27,713 | 30,783 | 17,045 | 18,594 | 29,202 | | 29,465 | 19,038 |
 
-55 token modules and the DEX's D (6,459 B; `SCaaSDex` 32,991 B). Liquidity (ua-mtx-liquidity, measured, `size-baseline.json`
-not moved, [CTR-DEX-30](dex.md#CTR-DEX-30)'s size stop): T 17,418-20,219 B per kind (+3.1-3.2 KB: `mtxLiquidityPull`), A +27 B,
-the faces +154-181 B, `SCaaSDexLiquidityModule` 16,024 B, `SCaaSDex` 33,628 B. **Which entry runs where** (`script/t66b/entries.json`, the
+55 token modules and the DEX's D (6,459 B; `SCaaSDex` 32,991 B). Liquidity (ua-mtx-liquidity, measured,
+[CTR-DEX-30](dex.md#CTR-DEX-30)): T 17,418-20,219 B per kind (+3.1-3.2 KB: `mtxLiquidityPull`), A +27 B, the faces +154-181 B,
+`SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B. **Which entry runs where** (`script/t66b/entries.json`, the
 generator's input; a kind has the subset it declares):
 
 | Group | Entries |

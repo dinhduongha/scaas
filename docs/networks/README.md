@@ -302,7 +302,8 @@ and its list of SCaaS DEX contracts.** Status: **SPECIFIED**. Every EVM and Hede
 with its registered contracts ([store.md](../node/store.md)), the signer's own pinned profile
 ([CLI-SGN-08](../clients/signers-clientkeys.md#CLI-SGN-08)) and the app's chain configuration — holds `chain_uid` and
 the list of DEX contracts deployed by SCaaS on that chain (each with its `chainUid()` checked), each DEX row with its
-liquidity mark (a module of group 11 among its `modules()`, [CTR-DEX-30](../contracts/dex.md#CTR-DEX-30); SPECIFIED).
+liquidity mark (a module of group 11 among its `modules()`, [CTR-DEX-30](../contracts/dex.md#CTR-DEX-30): the node reads it
+before a `mtxLiquidity` job, BUILT; the profile's published mark SPECIFIED).
 
 Clients fill
 `domain.salt` from `chain_uid` and refuse to build or sign a trade order whose `dex` is not on the list

@@ -3063,10 +3063,10 @@ round (relayed directly at its signed relayer / fee, fee 0 included). Fable's re
 **Source.** `docs/superpowers/specs/2026-11-10-dex-liquidity.md`.
 Change (2026-11-10): **built** on branch `ua-mtx-liquidity` (UNAUDITED): `SCaaSDexLiquidityModule`, `SCaaSDexCore`,
 `LiquidityLib`, `mtxLiquidityPull` on the twelve kinds, `test/liquidity/`, `liquidity_kat.json`, `clientkeys`, the node row.
-**Size stop (spec §9.3), open for the owner:** `SCaaSDex` 33,628 B, over its 33,594 B margin by 34 B (under the 35,386 B line);
-the liquidity module 16,024 B; module T 17,418-20,219 B per kind (+3.1-3.2 KB); module A +27 B; the faces +154-181 B. The
-spec's lever (forward the DEX-domain cancels and their digest views into the liquidity module) is not applied: the owner
-decides; `size-baseline.json` is not moved until then.
+Change (2026-11-10, owner): the size stop of spec §9.3 (`SCaaSDex` 33,628 B, over its 33,594 B margin by 34 B) is resolved by
+lever (a) (the liquidity views already in the module: 0 B) then lever (b): `mtxCancelOrders`, `mtxInvalidateNonces` and their
+digest views move into the liquidity module behind typed stubs. Measured: `SCaaSDex` 32,809 B, the module 19,055 B, module T
+17,418-20,219 B per kind, module A +27 B, the faces +154-181 B; `size-baseline.json` moved in its own commit. Status: done.
 
 ### CTR-DEX-31 — A received position is bound by a signed, listed reader
 - old: — · status: current · owner: yes · date: 2026-11-10 · normative: contracts/dex.md#CTR-DEX-31 · superseded-by: —

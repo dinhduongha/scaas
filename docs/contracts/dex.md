@@ -863,10 +863,9 @@ upper bound** (a position's collected fees may exceed the pull); (8) conservatio
 position balance; (9) `LiquiditySettled`. No `RelayFeeRouter` wrap of `mtxLiquidity` in this round (C10): it is relayed
 directly at its signed `relayer` and `fee`, `fee = 0` included. Cancel by a lane (the DEX's `mtxInvalidateNonces`, or an
 input token's) or expiry. Status **BUILT** on EVM: `src/dex/SCaaSDexLiquidityModule.sol`, `SCaaSDexCore.sol`,
-`src/trade/LiquidityLib.sol`; tests `test/liquidity/` (UNAUDITED). **Size stop (spec §9.3):** the built `SCaaSDex` is 33,628 B,
-34 B over its 33,594 B release margin (57 M) and under the 35,386 B line (60 M); the build stopped there for the owner's
-decision (the spec's lever: forward `mtxCancelOrders`, `mtxInvalidateNonces` and their digest views into the liquidity module,
-≈ −0.5 to −0.9 KB [estimate]); `size-baseline.json` is not moved.
+`src/trade/LiquidityLib.sol`; tests `test/liquidity/` (UNAUDITED). Size (owner 2026-11-10, spec §9.3's lever (b)): the
+DEX-domain cancels `mtxCancelOrders`, `mtxInvalidateNonces` and their digest views run in the liquidity module too, behind
+typed stubs (the same rules, [CTR-DEX-18](#CTR-DEX-18)); `SCaaSDex` 32,809 B (its margin 33,594 B), the module 19,055 B.
 
 <a id="CTR-DEX-31"></a>**CTR-DEX-31** — **A received position is bound by a signed, listed, read-only reader** (owner
 2026-11-10, Q1 = A). `IPositionReader { manager(); position(id) → (poolId, tickLower, tickUpper, liquidity, encumbered) }`, one
