@@ -28,7 +28,7 @@ library PqChatTypes {
         "PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,"
         "bytes ciphertext)");
     bytes32 internal constant TOPIC_TYPEHASH = keccak256(
-        "PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)");
+        "PqTopic(bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)");
     bytes32 internal constant TOPIC_UPDATE_TYPEHASH =
         keccak256("PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)");
     bytes32 internal constant TOPIC_WRITER_TYPEHASH =
@@ -100,7 +100,7 @@ library PqChatTypes {
     }
 
     function hashTopic(IPqChat.PqTopic calldata t) internal pure returns (bytes32) {
-        return keccak256(abi.encode(TOPIC_TYPEHASH, t.owner, t.nonce, t.homeChain, t.homeChatContract,
+        return keccak256(abi.encode(TOPIC_TYPEHASH, t.admin, t.nonce, t.homeChain, t.homeChatContract,
             keccak256(bytes(t.name)), keccak256(t.about), t.openReplies));
     }
 
@@ -139,8 +139,8 @@ library PqChatTypes {
         return keccak256(abi.encode(TAG_EPOCH, sessionId_, author, nonce));
     }
 
-    function topicId(bytes32 owner, uint64 nonce) internal pure returns (bytes32) {
-        return keccak256(abi.encode(TAG_TOPIC, owner, nonce));
+    function topicId(bytes32 admin, uint64 nonce) internal pure returns (bytes32) {
+        return keccak256(abi.encode(TAG_TOPIC, admin, nonce));
     }
 
     function entryId(bytes32 topicId_, bytes32 author, uint64 nonce) internal pure returns (bytes32) {
@@ -159,8 +159,8 @@ library PqChatTypes {
         return keccak256(abi.encode(SCOPE_MESSAGE, epochId_, sender, device));
     }
 
-    function scopeTopic(bytes32 owner) internal pure returns (bytes32) {
-        return keccak256(abi.encode(SCOPE_TOPIC, owner));
+    function scopeTopic(bytes32 admin) internal pure returns (bytes32) {
+        return keccak256(abi.encode(SCOPE_TOPIC, admin));
     }
 
     function scopeEntry(bytes32 topicId_, bytes32 author) internal pure returns (bytes32) {

@@ -185,7 +185,7 @@ contract PqChatGasTest is PqTopicsBase {
     function test_gas_topics() public {
         IPqChat.PqTopic memory t = _topicRec(ids[0], 1, true);
         t.about = new bytes(256);
-        IUARegistry.UASig memory sig = _sig(t.owner, h.topic(t));
+        IUARegistry.UASig memory sig = _sig(t.admin, h.topic(t));
         vm.prank(STRANGER);
         bytes32 tid = chat.createTopic(t, sig);
         _row("createTopic 256 B about", 179_045, 1_851_300);

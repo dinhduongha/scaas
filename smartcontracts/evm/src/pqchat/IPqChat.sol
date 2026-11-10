@@ -81,7 +81,7 @@ interface IPqChat {
     // ------------------------------------------------------------------ topic records (topics spec §2)
 
     struct PqTopic {
-        bytes32 owner;
+        bytes32 admin;
         uint64 nonce;
         bytes32 homeChain;
         address homeChatContract;
@@ -164,7 +164,7 @@ interface IPqChat {
     event PqChatMessagePosted(
         bytes32 indexed sessionId, bytes32 indexed messageId, bytes32 indexed sender, uint256 index, IUARegistry.UASig sig);
     event PqChatStored(bytes8 indexed hint, uint256 index);
-    event PqTopicCreated(bytes32 indexed topicId, bytes32 indexed owner);
+    event PqTopicCreated(bytes32 indexed topicId, bytes32 indexed admin);
     event PqTopicUpdated(bytes32 indexed topicId, uint64 seq);
     event PqTopicWriterSet(bytes32 indexed topicId, bytes32 indexed writer, bool granted, uint64 seq);
     event PqTopicEntryPosted(
@@ -197,7 +197,7 @@ interface IPqChat {
     ///         constructor id other than class 3, kind 0, version >= 1.
     error PqChatEnv();
     error PqTopicSeq(uint64 expected, uint64 got);
-    error PqTopicNotOwner(bytes32 owner);
+    error PqTopicNotAdmin(bytes32 admin);
     error PqTopicNotWriter(bytes32 author);
     error PqTopicNotAuthor(bytes32 author);
     error PqTopicParent(bytes32 parentId);
@@ -299,7 +299,7 @@ interface IPqChat {
     /// @notice The paged lists (P42, 3C-D8): at most `count` ids from `start` and the list's length (`count = 0`: the
     ///         length only).
     function topics(uint256 start, uint256 count) external view returns (bytes32[] memory ids, uint256 total);
-    function topicsByOwner(bytes32 owner_, uint256 start, uint256 count)
+    function topicsByAdmin(bytes32 admin_, uint256 start, uint256 count)
         external view returns (bytes32[] memory ids, uint256 total);
     function writersOf(bytes32 topicId, uint256 start, uint256 count)
         external view returns (bytes32[] memory ids, uint256 total);
@@ -308,6 +308,6 @@ interface IPqChat {
         external view returns (bytes32[] memory ids, uint256 total);
     function byAuthor(bytes32 author, uint256 start, uint256 count)
         external view returns (bytes32[] memory ids, uint256 total);
-    function topicNonceUsed(bytes32 owner_, uint64 nonce) external view returns (bool);
+    function topicNonceUsed(bytes32 admin_, uint64 nonce) external view returns (bool);
     function entryNonceUsed(bytes32 topicId, bytes32 author, uint64 nonce) external view returns (bool);
 }

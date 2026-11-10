@@ -118,7 +118,7 @@ const NESTED: &[(&str, &str)] = &[
     ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
     ("PqChatRemove", "bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
     ("PqChatMessage", "bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext"),
-    ("PqTopic", "bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies"),
+    ("PqTopic", "bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies"),
     ("PqTopicUpdate", "bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies"),
     ("PqTopicWriter", "bytes32 topicId,bytes32 writer,bool granted,uint64 seq"),
     ("EntryRef", "bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash"),
@@ -2540,6 +2540,6 @@ mod tests {
         }
         assert_eq!(n, 14);
         assert_eq!(format!("{:#x}", keccak256(th("PqChatSession"))), "0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d");
-        assert_eq!(format!("{:#x}", keccak256(th("PqTopic"))), "0x75bed97bd08d9acabb9129fcd4953224878dd1dcfd40b822cb4dc8df462e1623");
+        assert_eq!(format!("{:#x}", keccak256(th("PqTopic"))), "0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e"); // 3r: `admin`
     }
 }

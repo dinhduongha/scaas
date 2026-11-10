@@ -455,7 +455,7 @@ contract PqChat is IPqChat, PqChatCore {
         _forwardView();
     }
 
-    function topicsByOwner(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
+    function topicsByAdmin(bytes32, uint256, uint256) external view returns (bytes32[] memory, uint256) {
         _forwardView();
     }
 
