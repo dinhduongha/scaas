@@ -244,20 +244,22 @@ struct UATradeOrder {
 }
 // "UATradeOrder(bytes32 from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,"
 // "address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
-// "UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)"; cancel: CancelUAOrder(UATradeOrder order), nested (typed-signing C6); `uaTrade`, `uaCancelOrder`, `uaInvalidateNonces` take `UASig`
-function uaTrade(UATradeOrder calldata o, bytes calldata auth, TradeFill calldata f) external;           // only o.dex
-function uaCancelOrder(UATradeOrder calldata o, bytes calldata auth) external;                          // never expires
-function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, bytes calldata auth) external; // strictly up
-function restorePulled(UATradeOrder calldata o, uint256 amount) external;                              // only o.dex (CTR-DEX-27)
-function uaTradeOrderDigest(UATradeOrder calldata o) external view returns (bytes32);
-function uaInvalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) external view returns (bytes32);
-function uaMinNonce(bytes32 from, uint256 batch) external view returns (uint256);
+// "UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)"; cancel: CancelUAOrder(UATradeOrder order), nested (typed-signing C6); `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` take `UASig` (the `ua*` names before the merge)
+// since the ua*/mtx* merge (decisions CTR-MTX-30) the token's only trade entries (src/trade/ITradeToken.sol):
+function mtxTrade(UATradeOrder calldata o, UASig calldata auth, TradeFill calldata f) external;          // only o.dex
+function mtxCancelOrder(UATradeOrder calldata o, UASig calldata auth) external;                          // never expires
+function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, UASig calldata auth) external; // strictly up
+function restorePulled(UATradeOrder calldata o, uint256 amount) external;                               // only o.dex (CTR-DEX-27)
+function tradeOrderDigest(UATradeOrder calldata o) external view returns (bytes32);
+function cancelOrderDigest(UATradeOrder calldata o) external view returns (bytes32);
+function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) external view returns (bytes32);
+function minNonce(bytes32 from, uint256 batch) external view returns (uint256);
 event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
 event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
 event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
 ```
 
-`uaTrade` checks exactly [CTR-DEX-15](#CTR-DEX-15) steps 1–8 with `o.from ≠ pad(this)` (`SelfOrder`) and step 4 by the
+`mtxTrade` checks exactly [CTR-DEX-15](#CTR-DEX-15) steps 1–8 with `o.from ≠ pad(this)` (`SelfOrder`) and step 4 by the
 UA rule: a native `from` signs the digest itself, a derived one through `requireAuthorized(from, trade, h, auth)` (the
 purpose `trade`, [accounts.md](accounts.md#purposes)); the same purpose covers the `CancelOrder` digest over a UA order
 hash and the `UAInvalidateNonces` digest. The fill moves by `_uaMove(o.from, pad(o.dex), sellFill)` (a derived seller:
@@ -400,7 +402,7 @@ The DEX decodes each leg into one internal form with ids as `bytes32` and runs t
 | Step | Shape 1 |
 |---|---|
 | leg kind | `sellToken` recorded SCaaS at `setMarket` and its ledger on, else `UALegNotLedger(sellToken)`; never a `DexOrder`, never the `DexPuller` (a UA holds no outside token) |
-| pull | `uaTrade(o, sig, f)` on the sell token, which verifies ([CTR-DEX-25](#CTR-DEX-25)) |
+| pull | `mtxTrade(o, auth, f)` on the sell token, which verifies ([CTR-DEX-25](#CTR-DEX-25)) |
 | self-trade | over ids: a native order and its padded id are one party (`SelfTrade`) |
 | payout | `to = destination == 0 ? from : destination`; a derived `to` is paid by `IUALedger(receiveToken).transferToUA(to, amount)` from the DEX's own balance (`receiveToken` a SCaaS ledger token, else `UAReceiveNotLedger(receiveToken)`), a native one by `_send` (`trySafeTransfer`, W-O) |
 | Path B refund | to a derived `from` by `transferToUA` on the sell token |
