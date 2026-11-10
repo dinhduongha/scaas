@@ -25,6 +25,20 @@ FORGE = os.path.expanduser("~/.foundry/bin/forge")
 
 # Rows are added by the task that builds the code they mutate (T2 ... T15); T13 runs the rest and checks the count.
 MUTANTS = {
+    # T2 (§4.1): a token face keeps an ownership alias beside the admin entries: `owner()` answering the admin (a view, caught
+    # by AdminNames) and a `transferOwnership(bytes32)` stub (a write, caught by SelectorAudit as unclassified). The face is
+    # generated from entries.json by gen_faces.py, which the harness does not run, so the generated face is mutated.
+    "M5": ("smartcontracts/evm/src/metatx/NormalToken.sol",
+           "    function admin() external view returns (bytes32 _p0) {\n        _forwardView(_MA);\n    }\n",
+           "    function admin() external view returns (bytes32 _p0) {\n        _forwardView(_MA);\n    }\n\n"
+           "    function owner() external view returns (bytes32) {\n        return IGovernance(address(this)).admin();\n    }\n\n"
+           "    function transferOwnership(bytes32) external {\n        _forward(_MA);\n    }\n",
+           "forge", "test/governance", "{AdminNames,SelectorAudit}.t.sol"),
+    # T7a (§4.3): UATransferAdmin keeps the word `newOwner` (the typehash pin)
+    "M7": ("smartcontracts/evm/src/governance/GovernanceRouterBase.sol",
+           "\"UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,",
+           "\"UATransferAdmin(bytes32 from,address target,bytes32 newOwner,",
+           "forge", "test/governance", "GovRouterTypehash.t.sol"),
 }
 
 
