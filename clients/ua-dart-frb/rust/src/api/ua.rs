@@ -69,7 +69,7 @@ impl TryFrom<UaDomain> for scaas_ua::Domain {
     }
 }
 
-/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-23,
+/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-27,
 /// any other `UAArgument`.
 #[frb(sync)]
 pub fn governance_bit(bit: i64) -> R<String> {

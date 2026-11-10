@@ -801,15 +801,15 @@ TestCase {
         compare(UaKinds.lastError, "UAArgument")
     }
 
-    // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 23 "" and UAArgument
+    // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 27 "" and UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
     function test_governance_bits_rows() {
         const v = vectors.load("../governance/governance_bits.json")
-        compare(v.bits.length, 24)
+        compare(v.bits.length, 28)
         for (const r of v.bits) {
             compare(JSON.parse(UaKinds.governanceBit(r.bit)), r, "bit " + r.bit)
             compare(UaKinds.lastError, "")
         }
-        for (const bit of [24, 127, 128, 255, 256, -1]) {
+        for (const bit of [28, 127, 128, 255, 256, -1]) {
             compare(UaKinds.governanceBit(bit), "", bit)
             compare(UaKinds.lastError, "UAArgument", bit)
         }
