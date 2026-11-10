@@ -50,7 +50,7 @@ function zetherEnv(address factory, bytes32 uid, address registry, address trans
     (e.deps[0], e.deps[1], e.deps[2], e.deps[3]) = (transfer, burn, innerProduct, disclosure);
 }
 
-/// @notice A `*_PQZ` environment: `deps` = the `UAPqzVerifier`; the libraries are the kind's link closure
+/// @notice A `*_PQZ` environment: `deps` = the `PqzKeyVerifier`; the libraries are the kind's link closure
 ///         (`Catalogue.env` pins them, task 6).
 function pqzEnv(address factory, bytes32 uid, address registry, address verifier)
     pure returns (IFactoryToken.Env memory e)

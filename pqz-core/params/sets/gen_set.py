@@ -14,7 +14,7 @@ approval, max_input, roll_max, [pqzh_preset], the proofSystemId labels pqzl_id /
   PqzSet.sol          the Solidity constants of the set (make.sh <set> sol compiles it; PQZ_SOL_INSTALL=1 copies it to
                       smartcontracts/evm/src/pqz/, where the contracts read it: plan 5h Task 8d part 2): HAS_PQZH and
                       PQZH_ID (0 without PQZH), ROLL_MAX (set.toml roll_max: plan 5h Task 8d part 2b), the P46 packed `acc` slot count, and from the set's vectors (zero words
-                      until the set has them) the precompile's self-test hash and UAPqzVerifier's R_REG probe hashes
+                      until the set has them) the precompile's self-test hash and PqzKeyVerifier's R_REG probe hashes
   pqzh_set.rs         a set with `pqzh = true`: PQZH's (Ligero, pqz-core/pqzh/ligero) constants from set.toml's
                       [pqzh_preset] (radices, n, k, t) and q (the factors of q - 1, the generator, the non-square)
 
@@ -422,7 +422,7 @@ STALE = []  # sets whose vectors carry another id (sol_vectors)
 def sol_vectors(name):
     """(SELFTEST, PROBE_PQZL, PROBE_PQZH) of the set's vectors: selftest.json's hash, and keccak256(psid || message ||
     pk || proof) of the self-test's R_REG vector (statement_register.json row 0, proof_<sys>.json row 4 REGISTER) per
-    proof system, UAPqzVerifier's pinned probe. Zero words where the set has no vectors (yet) or no PQZH."""
+    proof system, PqzKeyVerifier's pinned probe. Zero words where the set has no vectors (yet) or no PQZH."""
     d, z = vec_dir(name), bytes(32)
     if not os.path.exists(os.path.join(d, "selftest.json")):
         return z, z, z
@@ -540,7 +540,7 @@ def sol_text(name):
     out.append(f"    /// the precompile's OP_SELFTEST answer at this set ({src}/selftest.json hash; 0: no vectors yet)\n"
                f"    bytes32 internal constant SELFTEST = 0x{sv[0].hex()};")
     out.append("    /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,\n"
-               "    /// proof_<sys>.json row 4): UAPqzVerifier's pinned probe per proof system (0: no vectors / no PQZH)\n"
+               "    /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)\n"
                f"    bytes32 internal constant PROBE_PQZL = 0x{sv[1].hex()};\n    bytes32 internal constant PROBE_PQZH = 0x{sv[2].hex()};")
     out += ["", "    /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f",
             "    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)",

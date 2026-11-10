@@ -1,6 +1,6 @@
 # PQZ verifier mode (3f) — design
 
-**PQZ verifier** = a UA that signs a `PqzVerdict` off chain; not `UAPqzVerifier` (the registry's on-chain PoP verifier contract,
+**PQZ verifier** = a UA that signs a `PqzVerdict` off chain; not `PqzKeyVerifier` (the registry's on-chain PoP verifier contract,
 unchanged). "Verdict" also keeps its older sense here: the precompile's (or `pqz-ffi`'s) 0 / 1 result on a proof.
 
 **Names renamed by the owner 2026-11-07.** "Attest" is reserved for identity and compliance attestation (KYC,
@@ -167,7 +167,7 @@ decodes it in `_init`, so the encoding moves for every kind (the regulated spec 
   dep, still never Hedera; a non-zero dep must be a contract); `PqzLayer._init` / `PqzStateLib.init` in PRECOMPILE mode refuse a
   zero `releaseProofVerifier` with `SelfTestFailed(address(0))` **before any call**, then run today's reads and self-test
   unchanged; in OFFCHAIN mode they read nothing from it. The PQZ releases are deployed by `script/pqz/e2e.py` (not `DeployBase`,
-  whose comment names it), which gains the zero-dep form for a chain where `UAPqzVerifier` cannot be deployed. `OpenFactory` is
+  whose comment names it), which gains the zero-dep form for a chain where `PqzKeyVerifier` cannot be deployed. `OpenFactory` is
   unchanged: it has no canonical-verifier list ([CTR-ZTH-20](../../contracts/zether.md#CTR-ZTH-20)'s 5g-Z2 note). The mode is never
   inferred from a missing dependency.
 - **`proofSystemId` in OFFCHAIN mode:** `PqzSet.PQZL_ID` of the release's build (Q2 answered: PQZL only). The set is implicit in the

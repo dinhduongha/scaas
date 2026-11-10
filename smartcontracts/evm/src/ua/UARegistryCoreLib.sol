@@ -8,7 +8,7 @@ import {IUAPopVerifier} from "./IUAVerifier.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
 import {PqzSet} from "../pqz/PqzSet.sol";
-import {UAMldsaVerifier} from "./MlDsa.sol";
+import {MldsaVerifier} from "./MlDsa.sol";
 
 /// @title `UARegistry`'s core library (typed-signing R2, owner 2026-11-01; T66b 3.1b, owner 2026-11-09, spec
 ///        2026-11-09-t66b-library-organisation.md §11 (f)): the `register` forms, the `msig`, `acceptMembership`,
@@ -589,7 +589,7 @@ library UARegistryCoreLib {
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         bytes memory ek = UAStore.expanded(ua, kind); // ML-DSA: a complete cache is the key the PoP verifies on
         bytes memory data = ek.length != 0
-            ? abi.encodeWithSelector(UAMldsaVerifier.verifyCached.selector, ek, message, sig)
+            ? abi.encodeWithSelector(MldsaVerifier.verifyCached.selector, ek, message, sig)
             : abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, sig);
         // group kinds: the whole group check runs here, bounded by verifyBudget (§1.8 step 6), without the hold
         if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) {

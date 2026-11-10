@@ -8,7 +8,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
 import {Ed25519Verifier} from "../../src/ua/verifiers/Ed25519Verifier.sol";
-import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
+import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
 
@@ -30,7 +30,7 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         for (uint256 i; i < base.length; ++i) c[i] = base[i];
         c[1].verifier = address(new P256Verifier());
         c[2].verifier = address(new Ed25519Verifier());
-        c[base.length] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier(0x0132)), 2_500_000);
+        c[base.length] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(0x0132)), 2_500_000);
         return _deploy(at, chainUidA, address(0), false, BUDGET, address(0), true, c);
     }
 

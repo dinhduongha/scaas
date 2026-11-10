@@ -9,7 +9,7 @@ import {IPqzToken} from "./IPqzToken.sol";
 import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {PqzCt} from "./PqzCt.sol";
 import {PqzSafety} from "./PqzSafety.sol";
-import {UAPqzVerifier} from "./UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "./PqzKeyVerifier.sol";
 import {PqzCore} from "./PqzCore.sol";
 import {PqzSet, PQZ_ACC_WORDS} from "./PqzSet.sol";
 import {PqzVerifierRevoked} from "./IPqzToken.sol";
@@ -23,7 +23,7 @@ import {IOpenFactory} from "../factory/IOpenFactory.sol";
 library PqzStateLib {
     /// @notice The PQZ kinds' checks of an instance env (CTR-ZTH-20 / CTR-PQZ-10; the constructors' before chain-neutral
     ///         releases, now `validateEnv`, which the factory calls once per release and chain): exactly one dep, the
-    ///         release's `UAPqzVerifier` (`ENV_PQZ_VERIFIER`) with code or 0 (group 3f, spec §3, C6: the zero-dep release of
+    ///         release's `PqzKeyVerifier` (`ENV_PQZ_VERIFIER`) with code or 0 (group 3f, spec §3, C6: the zero-dep release of
     ///         a chain where it cannot be deployed; only an `OFFCHAIN` token initialises on it), never Hedera, a registry
     ///         with code. The mode is never inferred from a missing dependency.
     function validateEnv(address[] calldata d, bool hedera, address registry) public view {
@@ -33,7 +33,7 @@ library PqzStateLib {
         }
     }
 
-    /// @notice The kind's `_init` (P6g plan D9): `verifier` the release's `UAPqzVerifier` (CTR-ZTH-20: the creator never
+    /// @notice The kind's `_init` (P6g plan D9): `verifier` the release's `PqzKeyVerifier` (CTR-ZTH-20: the creator never
     ///         chooses one; precompile and proof system: exactly `PqzSafety.PQZ`, PQZL or PQZH,
     ///         the self-test passing now; review W-B), `auditorKey` empty or the auditor's 32-byte `pqz-mlwe` UA, cap
     ///         `≤ 2^62`, `confidentialFee + 8 · minDecoyFee` `< 2^64` and `< cap` (no chain-level floor, owner 2026-10-20).
@@ -79,12 +79,12 @@ library PqzStateLib {
             s.pqzVerifierFixed = c.pqzVerifierFixed;
             s.noticePeriod = IOpenFactory(factory).noticePeriod();
         } else {
-            UAPqzVerifier v = UAPqzVerifier(verifier);
+            PqzKeyVerifier v = PqzKeyVerifier(verifier);
             s.pqz = v.PRECOMPILE();
             s.psid = v.PROOF_SYSTEM_ID();
             PqzSafety.requirePqz(s.pqz, s.psid); // the token's verdicts come from `s.pqz`, never from the verifier (W-B)
             // C2-1 (owner 2026-10-27, C0-2): a PQZH value token only where its debits fit one transaction; registration
-            // and disclosure through `UAPqzVerifier` stay at every set that has PQZH
+            // and disclosure through `PqzKeyVerifier` stay at every set that has PQZH
             if (s.psid == PqzSet.PQZH_ID && !PqzSet.PQZH_VALUE) revert IPqzToken.PqzhValueUnsupported();
         }
         s.verifier = verifier;

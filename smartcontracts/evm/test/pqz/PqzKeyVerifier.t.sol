@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {PqzRegistryBase, PQZL_ID, PQZH_ID} from "./helpers/PqzRegistryBase.sol";
-import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "../../src/pqz/PqzKeyVerifier.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
@@ -10,10 +10,10 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UACall} from "../ua/UACall.sol";
 
-/// `UAPqzVerifier` (P6g plan Task 3, D3) and the `pqz-mlwe` kind in a gen-1 registry.
-contract UAPqzVerifierTest is PqzRegistryBase {
+/// `PqzKeyVerifier` (P6g plan Task 3, D3) and the `pqz-mlwe` kind in a gen-1 registry.
+contract PqzKeyVerifierTest is PqzRegistryBase {
     function test_constructorProbes() public {
-        UAPqzVerifier v = _newPqzVerifier(PQZL_ID);
+        PqzKeyVerifier v = _newPqzVerifier(PQZL_ID);
         assertEq(v.PRECOMPILE(), PQZ);
         assertEq(v.PROOF_SYSTEM_ID(), PQZL_ID);
         assertTrue(v.isSupportedOnThisChain());
@@ -21,23 +21,23 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         bytes32 m = bytes32(_slice(regStmt, 64, 32));
         // the precompile accepting the flipped proof too: refused
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
-        vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
-        new UAPqzVerifier(PQZ, PQZL_ID, pk, m, regProof);
+        vm.expectRevert(PqzKeyVerifier.UAPqzProbe.selector);
+        new PqzKeyVerifier(PQZ, PQZL_ID, pk, m, regProof);
         // accepting nothing: refused
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(0)));
         vm.clearMockedCalls();
         _mockSelfTest();
-        vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
-        new UAPqzVerifier(PQZ, PQZL_ID, pk, m, regProof);
-        vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
-        new UAPqzVerifier(PQZ, PQZL_ID, pk, m, "");
+        vm.expectRevert(PqzKeyVerifier.UAPqzProbe.selector);
+        new PqzKeyVerifier(PQZ, PQZL_ID, pk, m, regProof);
+        vm.expectRevert(PqzKeyVerifier.UAPqzProbe.selector);
+        new PqzKeyVerifier(PQZ, PQZL_ID, pk, m, "");
         // no self-test: refused on any chain id (owner ruling 2026-10-31: no chain allowlist)
         vm.clearMockedCalls();
         vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
-        new UAPqzVerifier(PQZ, PQZL_ID, pk, m, regProof);
+        new PqzKeyVerifier(PQZ, PQZL_ID, pk, m, regProof);
         vm.chainId(22776);
         vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
-        new UAPqzVerifier(PQZ, PQZL_ID, pk, m, regProof);
+        new PqzKeyVerifier(PQZ, PQZL_ID, pk, m, regProof);
         assertFalse(v.isSupportedOnThisChain(), "no precompile");
     }
 
@@ -46,7 +46,7 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         uint256[2] memory ids = [uint256(22776), 987654321];
         for (uint256 i; i < ids.length; ++i) {
             vm.chainId(ids[i]);
-            UAPqzVerifier v = _newPqzVerifier(PQZL_ID);
+            PqzKeyVerifier v = _newPqzVerifier(PQZL_ID);
             assertTrue(v.isSupportedOnThisChain());
         }
     }
@@ -58,33 +58,33 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         this.newVerifier(PQZH_ID);
     }
 
-    function newVerifier(bytes32 id) external returns (UAPqzVerifier) {
+    function newVerifier(bytes32 id) external returns (PqzKeyVerifier) {
         return _newPqzVerifier(id);
     }
 
     /// Review W-B: only the `PQZ` precompile, only PQZL / PQZH, only the pinned vector of that id.
     function test_constructorPins() public {
-        UAPqzVerifier v = _newPqzVerifier(PQZL_ID);
+        PqzKeyVerifier v = _newPqzVerifier(PQZL_ID);
         bytes memory pk = _slice(regStmt, 96, PqzCt.PK);
         bytes32 m = bytes32(_slice(regStmt, 64, 32));
         address fake = address(0xFA4E);
         vm.mockCall(fake, hex"0600000000", abi.encode(PqzSafety.SELFTEST));
         vm.mockCall(fake, abi.encodePacked(uint8(3)), abi.encode(uint256(0)));
         vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, fake, PQZL_ID));
-        new UAPqzVerifier(fake, PQZL_ID, pk, m, regProof);
+        new PqzKeyVerifier(fake, PQZL_ID, pk, m, regProof);
         bytes32 other = keccak256("another proof system");
         vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, PQZ, other));
-        new UAPqzVerifier(PQZ, other, pk, m, regProof);
+        new PqzKeyVerifier(PQZ, other, pk, m, regProof);
         // the PQZL vector under the PQZH id: the precompile (mocked) would accept it, the pin does not (no PQZH at the
         // set: its zero id is no proof system)
         bytes memory st = bytes.concat(_slice(regStmt, 0, 32), PQZH_ID, _slice(regStmt, 64, (ST_REG - 64)));
         vm.mockCall(PQZ, abi.encodePacked(uint8(3), uint32(ST_REG), st, regProof), abi.encode(uint256(1)));
-        if (PqzSet.HAS_PQZH) vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
+        if (PqzSet.HAS_PQZH) vm.expectRevert(PqzKeyVerifier.UAPqzProbe.selector);
         else vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, PQZ, PQZH_ID));
-        new UAPqzVerifier(PQZ, PQZH_ID, pk, m, regProof);
+        new PqzKeyVerifier(PQZ, PQZH_ID, pk, m, regProof);
         // another message or key with the right proof: refused before the precompile
-        vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
-        new UAPqzVerifier(PQZ, PQZL_ID, pk, keccak256("m"), regProof);
+        vm.expectRevert(PqzKeyVerifier.UAPqzProbe.selector);
+        new PqzKeyVerifier(PQZ, PQZL_ID, pk, keccak256("m"), regProof);
         assertEq(v.PRECOMPILE(), PQZ);
     }
 
@@ -92,7 +92,7 @@ contract UAPqzVerifierTest is PqzRegistryBase {
     /// word 1 (under PQZH where the set has it, else PQZL).
     function test_verifyInputAndVerdict() public {
         bytes32 id = PqzSet.HAS_PQZH ? PQZH_ID : PQZL_ID;
-        UAPqzVerifier v = _newPqzVerifier(id);
+        PqzKeyVerifier v = _newPqzVerifier(id);
         bytes memory pk = _slice(regStmt, 96, PqzCt.PK);
         bytes32 m = keccak256("message");
         bytes memory input = abi.encodePacked(uint8(3), uint32(ST_REG), _slice(regStmt, 0, 32), id, m, pk, hex"0102");

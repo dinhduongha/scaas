@@ -65,7 +65,7 @@ function frostVerify(Y, msg, sig) {
   return mul(G, z).equals(R.add(mul(point(Y), c)));
 }
 /** frost-core keys::dkg: c_i = HDKG(id_i (32 B) ‖ C_i0 ‖ R_i), R_i == μ_i·G − c_i·C_i0; Y == Σ C_i0, refusing a C_i0 that
- *  shares its x with the partial sum (repeated or cancelling: UAFrostSecp256k1Verifier's mixed addition refuses it). */
+ *  shares its x with the partial sum (repeated or cancelling: FrostSecp256k1Verifier's mixed addition refuses it). */
 function frostDkg(kd) {
   const t = u16(kd, 33), n = u16(kd, 35), per = (t + 1) * 33 + 32;
   let S = Pt.ZERO;

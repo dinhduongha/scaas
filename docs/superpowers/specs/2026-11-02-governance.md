@@ -988,7 +988,7 @@ Replaces gov-inventory's line numbers, from code at `08e92597` and the rulings. 
 
 | Property or power | Fixed | Creation | After |
 |---|---|---|---|
-| `UAPqzVerifier` | `Env.deps[0]` | by picking a version | — ; not on Hedera |
+| `PqzKeyVerifier` | `Env.deps[0]` | by picking a version | — ; not on Hedera |
 | Precompile, proof system | self-test at `init` | — | — |
 | `maxShielded` | `≠ 0`, `≤ 2^62` | `conf` | — |
 | `shieldScale` | `≠ 0`, and `maxShielded · shieldScale` fits `uint256`; no other bound | `conf` | — |

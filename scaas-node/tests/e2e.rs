@@ -2231,7 +2231,7 @@ mod pqz3f {
     }
 }
 
-/// `UAKinds.FNDSA512`: Falcon-512 over the 32-byte `ua_msg` (pure Solidity, `UAFndsaVerifier`; no precompile).
+/// `UAKinds.FNDSA512`: Falcon-512 over the 32-byte `ua_msg` (pure Solidity, `FndsaVerifier`; no precompile).
 const UA_FNDSA512: u16 = 0x0132;
 
 /// A plain CREATE of `code` by `from`: the new contract.

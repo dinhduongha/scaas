@@ -636,10 +636,10 @@ Zether worker and `pqz-cli` open (`sealPqKey` / `openPqKey`). PQZ adds no signin
 
 | No. | Name (tag `scaas.ua.<name>.v1`) | Key | keyHash group | Proof | Verifier (EVM) | Chains |
 |---|---|---|---|---|---|---|
-| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(signerUA, kind, pqzKeyHash, kemRecordHash))` (`PURPOSE_PQZ_KEY` and `pqzKeyDigest` for a key added by `setPqzKey`) | `UAPqzVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
+| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(signerUA, kind, pqzKeyHash, kemRecordHash))` (`PURPOSE_PQZ_KEY` and `pqzKeyDigest` for a key added by `setPqzKey`) | `PqzKeyVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
 
 **Record storage.** The signer's UA `Record` is unchanged; the PQZ key is a second SSTORE2 pointer beside it
-(`recordOf(ua)` returns it, 0 = none; `UAPqzVerifier` refuses any key that is not exactly `PqzCt.PK` bytes with every
+(`recordOf(ua)` returns it, 0 = none; `PqzKeyVerifier` refuses any key that is not exactly `PqzCt.PK` bytes with every
 coefficient `< q`, so the registry hard-codes no length). `UARegistered` carries the pointer, not the key (≈ 0.13 M gas of
 log data saved). Registration total: [gas](#gas). Wallets read the key with `eth_getCode(pointer)` minus the leading
 `STOP` byte. The holder is also in the registry's list `0x0142` ([CTR-UA-29](accounts.md#CTR-UA-29)), the set PQZ decoys
@@ -839,7 +839,7 @@ states and values in signed 64-bit for clients. The classical 2^54 rationale (th
 `register(kind, keyData, attrs, pop, pqzPop)` of a PQ signer follows the UA register steps
 ([registry](accounts.md#registry)); PQZ-specific content of each step (only when `attrs.pqzKey` is given):
 
-1. Verifier slot: a generation deployed with `UAPqzVerifier` in slot `0x0142` ([CTR-UA-05](accounts.md#CTR-UA-05),
+1. Verifier slot: a generation deployed with `PqzKeyVerifier` in slot `0x0142` ([CTR-UA-05](accounts.md#CTR-UA-05),
    [CTR-UA-23](accounts.md#CTR-UA-23)) checks the proof; with the slot empty the key is accepted unproven (`proven = false`). A gen 2 whose
    gen 1 enables `0x0142` refuses a PQZ key (`UAKindDisabled(0x0142)`, before the holder check). A generation enables `0x0142` for at most one generation per chain.
 2. Key data of the signer as for its kind (`UAKeyData`). The PQZ key's length is one of the four sets' `PqzCt.PK` (`UAKeyData(0x0142)`, step 5); every coefficient `< q` is checked by the verifier in step 7.
@@ -847,9 +847,9 @@ states and values in signed 64-bit for clients. The classical 2^54 rationale (th
 4. `keyHash = keccak256(GROUP("pqz-mlwe") ‖ pqzKey)`; free here and in the predecessor (`UAKeyInUse`) only when the key becomes proven (step 7 or `storePqzPop`).
 5. Holder rule of [CTR-PQZ-12](#CTR-PQZ-12) (`UAPqzHolder`); `attrs.pqzPopHash` ≠ 0 and not the hash of an empty proof (`UAPqzPopHash`); `pqzPop`, if given, hashes to it.
 6. The signer's PoP over `registrationDigest(ua, kind, pqzKeyHash, kemRecordHash, pqzPopHash)` with its kind's verifier; a PQ-eligible `msig` signs with its m-of-n.
-7. PoP of the PQZ key: `UAPqzVerifier.verifyPop(pk, message, pqzPop)` = `PQZ(OP_REGISTER, stmt ‖ pop) == 1` with
+7. PoP of the PQZ key: `PqzKeyVerifier.verifyPop(pk, message, pqzPop)` = `PQZ(OP_REGISTER, stmt ‖ pop) == 1` with
    `stmt = opTag(REGISTER) ‖ proofSystemId ‖ message ‖ pk` (prefix as [encodings](#encodings); `proofSystemId` is an
-   immutable of `UAPqzVerifier`) and `message = uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash))` — relation
+   immutable of `PqzKeyVerifier`) and `message = uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash))` — relation
    `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `portableRecordDigest` is
    the typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}` ([CTR-UA-07](accounts.md#CTR-UA-07)): it binds the signer's id and
    the attributes, not a chain, a registry or the caller, so anyone may submit on any chain, nobody can strip or swap the key,
@@ -1555,7 +1555,7 @@ challenge before it fixes the message is not bound by the check, so **v2 proofs 
 LaZer's and was in all four verifiers (C generic and specialised, Rust generic and specialised) and in both provers
 (C, Rust). v3 adds the two rounds ([transcript](#transcript), rounds 3 and 5); the proof layout, the parameters and the
 relations are unchanged. **v2 is retired**: it leaves the accepted set and `pqz-stmt`, and the SCaaS testnet is reset from
-genesis at the v3 roll-out (owner 2026-10-19, path B), since the PQZ tokens and `UAPqzVerifier` hold their id
+genesis at the v3 roll-out (owner 2026-10-19, path B), since the PQZ tokens and `PqzKeyVerifier` hold their id
 immutably and are redeployed. v3 also carries the two prover-side fixes below (z2 rejection, β signs), which change
 honest proofs but no verifier rule. Regression check: `pqz-core/pqzl/check_tbox_fixes.sh` (P6-FS,
 `pqz-core/pqzl/sz/README.md`); analysis `docs/research/pqz-tbox-soundness.md` §8.
@@ -1994,7 +1994,7 @@ hint padding, hint count over ω, z out of range, t1 at its maximum, message bit
 constant, `PQZ-REFUSE` on a mismatch; code review 2026-10-25, precompile unit, finding C4) and logs the OpenSSL version in `PQZ-START` (the start-up
 proofSystemId check is in [§9.1](#91-precompile-pqz)). The low address bytes repeat EIP-8355's own `0x12` / `0x13`; the
 `0x5caa5` prefix keeps them off the contested `0x12`–`0x15` (EIP-8051 / EIP-8355). The UA `mldsa44` / `mldsa65`
-verifier for the SCaaS testnet (`UAMldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an immutable constructor
+verifier for the SCaaS testnet (`MldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an immutable constructor
 argument checked by self-test, so a later standard precompile means a new verifier in a new registry generation.
 Elsewhere the UA PQ kinds use a pure-Solidity verifier ([CTR-UA-23](accounts.md#CTR-UA-23)). Gas:
 [CTR-PQZ-11](#CTR-PQZ-11).
@@ -2235,8 +2235,8 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | Contract | Role | Notes |
 |---|---|---|
 | `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) self-test helper (no chain allowlist since the owner ruling of 2026-10-31) | BUILT (P6g D2): `selfTest` = op 6 answers exactly the build's set's hash (`PqzSet.SELFTEST`: `n2304-kmax4096` `0x23d7a1db…c97c0`, `n2048-kmax1024` `0xed910a2c…d205`, `n2560-kmax16384` `0x167c772e…45e7`, `n2816-kmax65536` `0x0aa1dfe2…1882`); the set's ids only, at `0x…5caa0f01` (plan 5h Task 8d part 2) |
-| `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3; plan 5h Task 8d part 2: the set's ids, sizes and probe hashes from `PqzSet`, so a new id or set is a new instance, hence a new `Env` version of `NORMAL_PQZ` / `WRAPPED_PQZ` and new releases): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
-| `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
+| `PqzKeyVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3; plan 5h Task 8d part 2: the set's ids, sizes and probe hashes from `PqzSet`, so a new id or set is a new instance, hence a new `Env` version of `NORMAL_PQZ` / `WRAPPED_PQZ` and new releases): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
+| `MldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
 | `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1, state redesign plan 5h part A) as the kinds `NORMAL_PQZ` (`NormalPqzToken`) and `WRAPPED_PQZ` (`WrappedPqzToken`): `PqzLayer` on `MetaTokenBase` + four external libraries in the one namespace `scaas.pqz` over the internal `PqzCore` (`PqzStateLib` init / shield / rollover / prepare, `PqzTransferLib` op 1 and op 7, `PqzBurnLib` burn / refresh / unwrap debit, `PqzViewLib` statement views and disclosure; they are the release's `Env.libs`, code hashes checked by `deployTokenImplementation`, plan 5g-Z2); clones via `OpenFactory.createToken` behind the kind gate (`setKindEnabled`); disclosure `verifyTransferAmount` on the token (D11); op 7 entries and `minDecoyFee`. Sizes at the 5h Task 3 fix: `WrappedPqzToken` 60,907 B, `NormalPqzToken` 48,412 B (hard limit 65,536; the 4 KiB margin target was dropped), libraries 6,378 / 13,194 / 7,633 / 12,111 B (each < 24,576) |
 | `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the `shieldIn` term and `subTrivial` / `addMem` / `subMem` / `loadBlob` / `isZero` for the queue, `reduce`, the `< q` check; the [stored form](#stored-form) (`packCd` / `packMem`, `expandAt`, `addBlob`, the rollover accumulators `addBlobEO` / `combineEO`) | BUILT (P6g; P46 and `PqzSet` in plan 5h Task 8d part 2): pure Solidity, no precompile; checked on the set's vectors (round trip, all `q − 1`, the bit layout) |
@@ -2322,22 +2322,22 @@ split, never a silent acceptance (fail closed).
    (`InvalidWithdrawalsRoot`), and without `maximumExtraDataSize` (default 32 B) it rejects every Clique header (97 B
    `extraData`); a follower needs `eip4895TransitionTimestamp` and `maximumExtraDataSize` `0xffff` in the chainspec.
 
-<a id="self-test"></a>**Contract self-test.** The constructor of `UAPqzVerifier` and
+<a id="self-test"></a>**Contract self-test.** The constructor of `PqzKeyVerifier` and
 `PqzToken.initialize` (`PqzStateLib.init`) require the precompile to be exactly `PqzSafety.PQZ` and the proof system to be
 the set's PQZL id or, where the set has PQZH, its PQZH id (`NotPqz`), then call `OP_SELFTEST` and require the expected
 hash (`PqzSet.SELFTEST`, the set's, compiled into the contract; it folds in the precompile's own valid and invalid
 `R_REG` verdicts for the set's ids). A token takes the precompile and the
-id from its `verifier` (a `UAPqzVerifier`) but never trusts that contract: a verifier naming another "precompile" that
+id from its `verifier` (a `PqzKeyVerifier`) but never trusts that contract: a verifier naming another "precompile" that
 answers 1 to everything is refused at creation (review W-B, 2026-10-19). Since plan 5g-Z1 the creator names no verifier
 at all (plan 5g-Z2: `ConfidentialConfig` has no verifier field): it is an immutable of the implementation release, the
 `deps[0]` of the env the factory deployed the release with (owner 2026-10-19 / 2026-10-20,
 [CTR-ZTH-20](zether.md#CTR-ZTH-20)), so the proof system is an attribute of the release (`proofSystemId()`); the init
-check stays as a second line. `UAPqzVerifier`'s
+check stays as a second line. `PqzKeyVerifier`'s
 constructor also takes the self-test's `R_REG` vector of its id (≈ 45 KB PQZL / ≈ 200 KB PQZH, too large to compile
 into code under EIP-170) as an argument, requires `keccak256(psid ‖ message ‖ pk ‖ proof) == SELFTEST_VECTOR_HASH`
 (`PROBE_PQZL` / `PROBE_PQZH`), requires `OP_REGISTER` on it to return 1, then flips one proof bit in memory and requires
 0 (`UAPqzProbe`). `PqzToken.initialize` takes no vector: bound to `PQZ`, whose self-test already covers those verdicts,
-the probe would add nothing (a 45–200 KB argument on every token creation). `UAMldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the SCaaS testnet deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
+the probe would add nothing (a 45–200 KB argument on every token creation). `MldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the SCaaS testnet deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
 This self-test, not the chain id, is what keeps PQZ off chains whose client is not ours (no chain allowlist since the
 owner ruling of 2026-10-31).
 

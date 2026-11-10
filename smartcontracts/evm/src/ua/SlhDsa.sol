@@ -156,7 +156,7 @@ library SlhDsaSha2128s {
 
 /// @title `slhdsa128s` UA verifier (accounts.md CTR-UA-23, kind 0x0133): SLH-DSA-SHA2-128s over `pq_msg` with the empty
 ///        context, pure Solidity on SHA-256 `0x02` (no EIP proposes an SLH-DSA precompile). **UNAUDITED.**
-contract UASlhdsaVerifier is IUAPopVerifier {
+contract SlhdsaVerifier is IUAPopVerifier {
     bytes32 public constant TAG = keccak256("scaas.ua.slhdsa128s.v1");
 
     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {

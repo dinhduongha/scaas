@@ -12,7 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "../../src/pqz/PqzKeyVerifier.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -619,8 +619,8 @@ contract PqzStatePinGasTest is PqzSlots {
     bytes32[8] internal ys;
     UARegistry internal regL; // the register rows: PQZ verify cap 12 M, the PQZL / PQZH verifier
     UARegistry internal regH;
-    UAPqzVerifier internal verL;
-    UAPqzVerifier internal verH;
+    PqzKeyVerifier internal verL;
+    PqzKeyVerifier internal verH;
     string internal gj; // test/vectors/pqz-gas/<set>.json (script/pqz/gas-inputs.py)
 
     /// One row per relation and form at the build's set and proof system, each its own transaction after `setUp` under
@@ -957,7 +957,7 @@ contract PqzStatePinGasTest is PqzSlots {
         IUARegistry.UAAttrs memory a = UACall.attrs(_pk(60), keccak256(proof), "");
         bytes memory d = abi.encodeCall(r.register, (UAKinds.MLDSA65, _mlPk(60), a, new bytes(ML65_SIG), proof));
         _row(sys, "REGISTER", "register (UARegistry.register: mldsa65 UA with a PQZ key)", address(r), d, false);
-        UAPqzVerifier v = h ? verH : verL;
+        PqzKeyVerifier v = h ? verH : verL;
         d = abi.encodeCall(v.verifyPop, (_pk(60), bytes32(uint256(1)), proof));
         _row(sys, "REGISTER", "register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover)", address(v), d, false);
     }

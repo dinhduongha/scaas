@@ -1506,7 +1506,7 @@ Items, each with a failing test first where it is code:
    is counted (nesting levels of objects and arrays, bounded) and test it.
 2. **The verifier's key-ownership record** (keys it checked off chain, KV-12 OFFCHAIN column) persists across restarts in the
    service's own store; an unreadable store fails closed (no verdict), a lost store only costs re-checks.
-3. **`e2e.py --zero-dep` still deploys `UAPqzVerifier`** for the registration proofs: the zero-dependency release must run with no
+3. **`e2e.py --zero-dep` still deploys `PqzKeyVerifier`** for the registration proofs: the zero-dependency release must run with no
    PQ verifier on the chain (OFFCHAIN accepts unproven keys its verifier checks): drop the deploy there and register the keys
    unproven; a failing run first.
 4. **ARCH-POS-15:** `scaas-pqz-verifier` takes a list of RPC endpoints (failover; the majority option for its reads).

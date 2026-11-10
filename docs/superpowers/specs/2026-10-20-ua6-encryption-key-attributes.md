@@ -22,7 +22,7 @@ also carries the B-1 transcript fix) in the roll-out of plan fs3 Task 13 (§9).
 
 **Code read** (main `c173de37`): `smartcontracts/evm/src/ua/UARegistry.sol` (`register` 330–352, `_checkAuthRef` 375,
 `_checkPqzAuthRef` 390, `_authorized` 486, `_zetherAuthorized` 541), `IUARegistry.sol`, `UAKinds.sol`,
-`src/pqz/UAPqzVerifier.sol`, `src/pqz/PqzLib.sol` (`_check` 807, `_registered` 871, `_keyPtr` 876),
+`src/pqz/PqzKeyVerifier.sol`, `src/pqz/PqzLib.sol` (`_check` 807, `_registered` 871, `_keyPtr` 876),
 `src/zether/ZetherLib.sol` (`rollOverSigned` 335, `setRollOverMode` 357, `_check` 604, `registeredOn` 597),
 `src/zether/ZetherTypes.sol`, `src/ua/verifiers/PairingVerifiers.sol` (`ZetherSchnorrBn254Verifier` 116),
 `src/metatx/ERC20MetaTx.sol` (`_checkTo` 426), `clients/ua-rs/src/lib.rs`, `smartcontracts/vectors/ua/`,
@@ -59,7 +59,7 @@ removed: mapping(bytes32 ua => bytes32) _authRef
   `authPop` (the `register` argument). The `Record` struct keeps its one slot: the PQZ pointer does not fit, and a
   separate mapping costs one cold SLOAD only on the PQZ paths that need it.
 - **PQZ key storage:** SSTORE2 of the key bytes, as `keyPtr` today (16,384 B now; 20,608 B after the 16k parameter set,
-  still under EIP-170 for the data contract). The registry does **not** hard-code the length: `UAPqzVerifier.verifyPop`
+  still under EIP-170 for the data contract). The registry does **not** hard-code the length: `PqzKeyVerifier.verifyPop`
   already refuses any key that is not exactly `PqzCt.PK` bytes with every coefficient `< q` (CTR-PQZ-13 change
   2026-10-16), so the registry stays unchanged when 5h changes `PK`.
 - **Uniqueness (CTR-UA-30 (4)):** the PQZ key claims `keyHash = keccak256(GROUP("pqz-mlwe") ‖ pqzKey)` in the existing
@@ -128,7 +128,7 @@ change). The registration bound of step 4 already covers the cost of that check 
    non-empty without `pqzKey`, or empty with it — `UAPoP`.
 6. PoP: single key over `popDigest(ua, h)` (ML-DSA: cached path as today); classical `msig`: `pop` empty; PQ-eligible
    `msig`: `_msig(ua, PURPOSE_POP, popDigest(ua, h), keyData, pop)` — `UAPoP`.
-7. `R_REG` (only with `pqzKey`): `UAPqzVerifier.verifyPop(pqzKey, uaMessage(0x0142, POP, popDigest(ua, h)), pqzPop)`
+7. `R_REG` (only with `pqzKey`): `PqzKeyVerifier.verifyPop(pqzKey, uaMessage(0x0142, POP, popDigest(ua, h)), pqzPop)`
    through `_capped` at `verifyCap(0x0142)` with the hold — `UAPoP` (the verifier's length / coefficient refusal included).
 8. Store `Record`, `keyPtr` (stored kinds), `_pqzKey[ua] = SSTORE2.write(pqzKey)`, `_keyOwner[keyHash] = ua`,
    `_keyOwner[h] = ua`, append to the kind's list and (holder) to the `0x0142` list; emit
@@ -139,7 +139,7 @@ sequenceDiagram
     participant W as Wallet (PQ signer + PQZ key)
     participant R as Relayer / node
     participant G as UARegistry
-    participant V as UAPqzVerifier (0x0142)
+    participant V as PqzKeyVerifier (0x0142)
     W->>W: h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey); d = popDigest(ua, h)
     W->>W: pop = ML-DSA sig over uaMessage(kind, POP, d)
     W->>W: pqzPop = R_REG proof over uaMessage(0x0142, POP, d)
@@ -173,7 +173,7 @@ function verifyCap(uint16 kind) external view returns (uint64);   // verifyCap(0
 pointer read serves every reader.
 
 **Kind table.** The registry's slot 12 (`zether-bn254`) goes; slot 18 (today `pqz-mlwe`) stays, now meaning "PQZ key
-verifier and its cap" (`KindConfig(0x0142, UAPqzVerifier, cap)` at deploy). The generation rule keeps 0x0142 in at most
+verifier and its cap" (`KindConfig(0x0142, PqzKeyVerifier, cap)` at deploy). The generation rule keeps 0x0142 in at most
 one generation per chain (its keyHash group `pqz-mlwe`, `_groupInPredecessor`), because gen 1 cannot see a key claimed
 in gen 2. On every chain but the SCaaS testnet slot 18 is 0: a `pqzKey` reverts `UAKindDisabled(0x0142)` (CTR-PQZ-01).
 
@@ -282,13 +282,13 @@ quotas, CTR-UA-25).
 ## 9. `R_REG`, `proofSystemId` and the 5h dependency (U13)
 
 `R_REG` absorbs a 32-byte `message` (statement offset 64): the relation, the 16,480-byte statement (20,576 under the 16k
-parameters), `UAPqzVerifier`, the precompile and `statement_register.json` (which takes the message as an input word)
+parameters), `PqzKeyVerifier`, the precompile and `statement_register.json` (which takes the message as an input word)
 do not change. Only the **pre-image** of the message changes (signer id instead of the PQZ id, keyHash instead of
 `authRef`), which is registry and client code. Consequences:
 
 - No `proofSystemId` of its own: the change "rides the 16k bump" (CTR-UA-30) in the sense that the SCaaS testnet gets the new
   registry when fs3 Task 13 resets it with the K_MAX = 16,384 / B-1 id; until then the SCaaS testnet keeps today's registry.
-- The constructor probe of `UAPqzVerifier` (the pinned self-test vector with its fixed message) is untouched.
+- The constructor probe of `PqzKeyVerifier` (the pinned self-test vector with its fixed message) is untouched.
 - 5h changes `PqzCt.PK` (20,608 B); the registry follows automatically (U1: no length in the registry).
 
 ## 10. Clients, node, vectors, size, gas (U14–U19)
@@ -351,7 +351,7 @@ ops through `requireAuthorized`; PQZ transfer from an ML-DSA holder and an `msig
 `UARegistryZether.t.sol` / `UARegistryPq.t.sol`) go to `legacy/ua6/`.
 
 **U20 — migration** (all chains test-only, owner; mainnet 22776 not launched): no compatibility path. The registry ABI,
-the Zether entry points and every client change at once. SCaaS testnet: the new gen-1 registry (with `UAPqzVerifier` in
+the Zether entry points and every client change at once. SCaaS testnet: the new gen-1 registry (with `PqzKeyVerifier` in
 slot 0x0142 on the 16k id), the PQZ and Zether tokens and the e2e accounts are redeployed by
 `smartcontracts/evm/script/pqz/e2e.py` in plan fs3 **Task 13** (back up, reset, deploy; controller may do this on the SCaaS testnet,
 owner 2026-10-15). Other dev chains: `DeployBase` redeploys on their next reset. No record is carried over.

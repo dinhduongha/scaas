@@ -61,13 +61,13 @@
       {"label": "BlsMinSigBn254Verifier", "artifact": "PairingVerifiers.sol/BlsMinSigBn254Verifier"},
       {"label": "ZetherSchnorrBls12381Verifier", "artifact": "PairingVerifiers.sol/ZetherSchnorrBls12381Verifier"},
       {"label": "Musig2Secp256k1Verifier", "artifact": "Musig2Secp256k1Verifier.sol/Musig2Secp256k1Verifier"},
-      {"label": "UAFrostSecp256k1Verifier", "artifact": "UAFrostSecp256k1Verifier.sol/UAFrostSecp256k1Verifier"},
+      {"label": "FrostSecp256k1Verifier", "artifact": "FrostSecp256k1Verifier.sol/FrostSecp256k1Verifier"},
       {"label": "Musig2Bn254Verifier", "artifact": "Musig2Bn254Verifier.sol/Musig2Bn254Verifier"},
       {"label": "FrostBn254Verifier", "artifact": "FrostBn254Verifier.sol/FrostBn254Verifier"},
-      {"label": "UAMldsaVerifier", "artifact": "MlDsa.sol/UAMldsaVerifier"},
-      {"label": "UAFndsaVerifier", "artifact": "FnDsa.sol/UAFndsaVerifier"},
-      {"label": "UASlhdsaVerifier", "artifact": "SlhDsa.sol/UASlhdsaVerifier"},
-      {"label": "UAPqzVerifier", "artifact": "UAPqzVerifier.sol/UAPqzVerifier"}
+      {"label": "MldsaVerifier", "artifact": "MlDsa.sol/MldsaVerifier"},
+      {"label": "FndsaVerifier", "artifact": "FnDsa.sol/FndsaVerifier"},
+      {"label": "SlhdsaVerifier", "artifact": "SlhDsa.sol/SlhdsaVerifier"},
+      {"label": "PqzKeyVerifier", "artifact": "PqzKeyVerifier.sol/PqzKeyVerifier"}
     ],
     "zether": [
       {"label": "ZetherStatements", "artifact": "ZetherStatements.sol/ZetherStatements"},

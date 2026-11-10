@@ -42,7 +42,7 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
     );
 
     /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; no
-    ///      `implArgs`. The env (`deps[ENV_PQZ_VERIFIER]` the release's `UAPqzVerifier`, CTR-ZTH-20 / CTR-PQZ-10; a
+    ///      `implArgs`. The env (`deps[ENV_PQZ_VERIFIER]` the release's `PqzKeyVerifier`, CTR-ZTH-20 / CTR-PQZ-10; a
     ///      registry) is checked by `validateEnv` (`PqzStateLib`).
     constructor(address factory_, bytes memory implArgs) WrappedTokenCore(factory_, implArgs) {}
 

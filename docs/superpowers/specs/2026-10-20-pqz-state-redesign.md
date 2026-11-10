@@ -632,7 +632,7 @@ the owner folded into the same bump (CTR-PQZ-09 Change, review B-1; CTR-UA-30 Co
   17-bit limbs), constraint widths, the FFT domains of §6.5; its id bumps too;
 - **`pqz-stmt`**: lengths per form, `MAX_PROOF`, `MAX_INPUT` (512 KiB, O8), the ids; Nethermind plugin limits;
 - **Solidity**: `PqzCt` (`Q`, `DELTA`, `PK`, `CT`, `ZERO_HASH`), `PqzSafety` ids, probe proofs, self-test hash;
-  `ROLL_MAX` re-pinned (lanes hold 2^14 terms); a new `UAPqzVerifier` instance → a new `Env` version
+  `ROLL_MAX` re-pinned (lanes hold 2^14 terms); a new `PqzKeyVerifier` instance → a new `Env` version
   (`OpenFactory.publishEnv`) and new PQZ releases (`deployTokenImplementation`) [Z2];
 - **vectors and KATs** (`smartcontracts/vectors/pqz/`, `pqz_kat.py`, fuzz seeds, the package), every digest;
 - **ids** (controller proposal): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4")` — the label's d/k/q/l
@@ -671,11 +671,11 @@ This changes the owner's stated q, so it is **owner question Q1**.
 
 ## 7. Dependencies: 5g-Z, UA-6, the Zether side, the kinds and the curve
 
-- **5g-Z1 and 5g-Z2 are merged** (`77f7478`, `c173de37`) [Z2]: the PQZ tokens take their `UAPqzVerifier` from
+- **5g-Z1 and 5g-Z2 are merged** (`77f7478`, `c173de37`) [Z2]: the PQZ tokens take their `PqzKeyVerifier` from
   `Env.deps[ENV_PQZ_VERIFIER]` and are released by `OpenFactory.deployTokenImplementation` with the linked libraries listed
   in `Env.libs` and checked by `libCodeHashes`. 5h builds on that: D14's four libraries are four `Env.libs` entries
   (deploy scripts publish a new `Env` version for `NORMAL_PQZ` / `WRAPPED_PQZ`); the 16k step adds a new
-  `UAPqzVerifier` (new id, new probe) and so another `Env` version and release. No factory logic changes for PQZ
+  `PqzKeyVerifier` (new id, new probe) and so another `Env` version and release. No factory logic changes for PQZ
   besides [kinds].
 - **UA-6 comes before 5h** [ua] (CTR-UA-30; spec and plan written separately): the PQZ key becomes an attribute of a
   PQ-signing UA supplied in `register`, the `pqz-mlwe` kind and `authRef` go (Zether's `authRef` too), and the `R_REG`

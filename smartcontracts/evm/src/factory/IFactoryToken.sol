@@ -6,7 +6,7 @@ import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {TokenStore} from "../metatx/TokenStore.sol";
 
 // Positions in `IFactoryToken.Env.deps` (plan 5g-Z2): the `*_ZETHER` kinds' transfer, burn and inner-product verifiers
-// and `ZetherDisclosure` of one curve (CTR-ZTH-20); the `*_PQZ` kinds' `UAPqzVerifier`.
+// and `ZetherDisclosure` of one curve (CTR-ZTH-20); the `*_PQZ` kinds' `PqzKeyVerifier`.
 uint256 constant ENV_ZETHER_TRANSFER = 0;
 uint256 constant ENV_ZETHER_BURN = 1;
 uint256 constant ENV_ZETHER_INNER_PRODUCT = 2;

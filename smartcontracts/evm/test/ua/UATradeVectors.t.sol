@@ -18,7 +18,7 @@ import {
     BlsMinSigBn254Verifier,
     ZetherSchnorrBls12381Verifier
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
-import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
@@ -117,7 +117,7 @@ contract UATradeVectorsTest is UARegistryBase {
         ];
         c = new UARegistry.KindConfig[](11);
         for (uint256 i; i < 8; ++i) c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
-        c[8] = UARegistry.KindConfig(0x0131, address(new UAMldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
+        c[8] = UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
         c[9] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
         c[10] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
     }

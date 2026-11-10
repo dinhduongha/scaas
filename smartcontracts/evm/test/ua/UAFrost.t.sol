@@ -5,7 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {HashToCurve} from "../../src/common/HashToCurve.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {Bip340Verifier} from "../../src/ua/verifiers/Bip340Verifier.sol";
-import {FrostSecp256k1, UAFrostSecp256k1Verifier} from "../../src/ua/verifiers/UAFrostSecp256k1Verifier.sol";
+import {FrostSecp256k1, FrostSecp256k1Verifier} from "../../src/ua/verifiers/FrostSecp256k1Verifier.sol";
 import {FrostBn254Verifier} from "../../src/ua/verifiers/FrostBn254Verifier.sol";
 
 /// RFC 9591 verify over an arbitrary-length message (the RFC vectors sign "test", the UA kinds sign 32 bytes).
@@ -21,14 +21,14 @@ contract KindsHarness {
     }
 }
 
-/// `UAFrostSecp256k1Verifier` and `FrostBn254Verifier` (accounts.md §1.6.1, §1.9) on smartcontracts/vectors/ua/groups.json:
+/// `FrostSecp256k1Verifier` and `FrostBn254Verifier` (accounts.md §1.6.1, §1.9) on smartcontracts/vectors/ua/groups.json:
 /// every FROST group (PoP via `verifyPop`, stored-key `verify`), the DKG rows' `H_dkg` preimages and challenges, `zfDkg`,
 /// RFC 9591 Appendix E.5, T-FROST (`tFrost[]`), the main groups' sigs and negatives; plus RFC 9380 K.1, extra DKG
 /// negatives, malformed input never reverts, gas (`-vv`).
 contract UAFrostTest is Test {
     string internal gj;
     string internal sj;
-    UAFrostSecp256k1Verifier internal fs;
+    FrostSecp256k1Verifier internal fs;
     FrostBn254Verifier internal fb;
     Bip340Verifier internal bip;
     FrostHarness internal h;
@@ -56,7 +56,7 @@ contract UAFrostTest is Test {
     function setUp() public {
         gj = vm.readFile("../vectors/ua/groups.json");
         sj = vm.readFile("../vectors/ua/signatures.json");
-        fs = new UAFrostSecp256k1Verifier();
+        fs = new FrostSecp256k1Verifier();
         fb = new FrostBn254Verifier();
         bip = new Bip340Verifier();
         h = new FrostHarness();

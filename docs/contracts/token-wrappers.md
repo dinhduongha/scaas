@@ -695,7 +695,7 @@ implementation itself, so what a release depends on is fixed in its code by cons
 - **Split.** The implementation carries what never changes for it: the release's `Env` as constructor immutables —
   `factory`, `chainUid`, the UA `registry`, the `SmartKeyAccount` implementation, `hedera`, the kind's dependencies
   `deps` by position (`*_ZETHER`: transfer, burn and inner-product verifier and `ZetherDisclosure` of one curve;
-  `*_PQZ`: the `UAPqzVerifier`; plain kinds and the DEX: none) and the linked libraries `libs` with their
+  `*_PQZ`: the `PqzKeyVerifier`; plain kinds and the DEX: none) and the linked libraries `libs` with their
   `libCodeHashes`. Each instance carries its own configuration in `initArgs` (rates, features, roles, the confidential
   settings…), decoded by the implementation's generic `initialize(creator, version, initArgs)`; the factory never reads it
   (owner 2026-10-20).

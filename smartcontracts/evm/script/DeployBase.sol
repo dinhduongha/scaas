@@ -49,12 +49,12 @@ import {
     ZetherSchnorrBls12381Verifier
 } from "../src/ua/verifiers/PairingVerifiers.sol";
 import {Musig2Secp256k1Verifier} from "../src/ua/verifiers/Musig2Secp256k1Verifier.sol";
-import {UAFrostSecp256k1Verifier} from "../src/ua/verifiers/UAFrostSecp256k1Verifier.sol";
+import {FrostSecp256k1Verifier} from "../src/ua/verifiers/FrostSecp256k1Verifier.sol";
 import {Musig2Bn254Verifier} from "../src/ua/verifiers/Musig2Bn254Verifier.sol";
 import {FrostBn254Verifier} from "../src/ua/verifiers/FrostBn254Verifier.sol";
-import {UAMldsaVerifier} from "../src/ua/MlDsa.sol";
-import {UAFndsaVerifier} from "../src/ua/FnDsa.sol";
-import {UASlhdsaVerifier} from "../src/ua/SlhDsa.sol";
+import {MldsaVerifier} from "../src/ua/MlDsa.sol";
+import {FndsaVerifier} from "../src/ua/FnDsa.sol";
+import {SlhdsaVerifier} from "../src/ua/SlhDsa.sol";
 import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
 import {kindModuleNames, kindImplArgs} from "./KindModules.sol";
 import {ImplArgs} from "../src/metatx/ITokenModule.sol";
@@ -728,7 +728,7 @@ abstract contract DeployBase is Script {
         k[n++] = UARegistry.KindConfig(
             UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier{salt: salt}()), 50_000
         );
-        k[n++] = UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new UAFrostSecp256k1Verifier{salt: salt}()), 50_000);
+        k[n++] = UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new FrostSecp256k1Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000);
         if (bls && !isHedera) { // never on Hedera: no Zether token can exist there (`ZetherLayer`)
@@ -739,31 +739,31 @@ abstract contract DeployBase is Script {
         // the PQ signing kinds (CTR-UA-23): wherever the kind's cap is at most 66 % of the chain's verify budget
         if (_pqKindFits(CAP_MLDSA44, budget)) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.MLDSA44, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA44, address(0), "", "")), CAP_MLDSA44
+                UAKinds.MLDSA44, address(new MldsaVerifier{salt: salt}(UAKinds.MLDSA44, address(0), "", "")), CAP_MLDSA44
             );
         }
         if (_pqKindFits(CAP_MLDSA65, budget)) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.MLDSA65, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA65, address(0), "", "")), CAP_MLDSA65
+                UAKinds.MLDSA65, address(new MldsaVerifier{salt: salt}(UAKinds.MLDSA65, address(0), "", "")), CAP_MLDSA65
             );
         }
         if (_pqKindFits(CAP_FNDSA512, budget)) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.FNDSA512, address(new UAFndsaVerifier{salt: salt}(UAKinds.FNDSA512)), CAP_FNDSA512
+                UAKinds.FNDSA512, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA512)), CAP_FNDSA512
             );
         }
         if (_pqKindFits(CAP_SLHDSA128S, budget)) {
-            k[n++] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new UASlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
+            k[n++] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
         }
         if (_pqKindFits(CAP_FNDSA1024, budget)) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.FNDSA1024, address(new UAFndsaVerifier{salt: salt}(UAKinds.FNDSA1024)), CAP_FNDSA1024
+                UAKinds.FNDSA1024, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA1024)), CAP_FNDSA1024
             );
         }
         (address p87, bytes memory v87, bytes memory i87) = _mldsa87Precompile();
         if (p87 != address(0) && _pqKindFits(CAP_MLDSA87, budget)) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.MLDSA87, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA87, p87, v87, i87)), CAP_MLDSA87
+                UAKinds.MLDSA87, address(new MldsaVerifier{salt: salt}(UAKinds.MLDSA87, p87, v87, i87)), CAP_MLDSA87
             );
         }
         assembly ("memory-safe") {

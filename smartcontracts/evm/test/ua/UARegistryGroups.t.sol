@@ -7,7 +7,7 @@ import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {Musig2Secp256k1Verifier} from "../../src/ua/verifiers/Musig2Secp256k1Verifier.sol";
 import {Musig2Bn254Verifier} from "../../src/ua/verifiers/Musig2Bn254Verifier.sol";
-import {UAFrostSecp256k1Verifier} from "../../src/ua/verifiers/UAFrostSecp256k1Verifier.sol";
+import {FrostSecp256k1Verifier} from "../../src/ua/verifiers/FrostSecp256k1Verifier.sol";
 import {FrostBn254Verifier} from "../../src/ua/verifiers/FrostBn254Verifier.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {GroupFixtures} from "./GroupFixtures.sol";
@@ -43,7 +43,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
     function setUp() public override {
         super.setUp();
         (vMS, vMB) = (address(new Musig2Secp256k1Verifier()), address(new Musig2Bn254Verifier()));
-        (vFS, vFB) = (address(new UAFrostSecp256k1Verifier()), address(new FrostBn254Verifier()));
+        (vFS, vFB) = (address(new FrostSecp256k1Verifier()), address(new FrostBn254Verifier()));
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _allCfgs(KINDS.length));
     }
 

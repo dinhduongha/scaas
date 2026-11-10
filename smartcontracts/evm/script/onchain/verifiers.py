@@ -21,8 +21,8 @@ BY_NAME = {"webauthn-p256": "WebAuthnP256Verifier", "p256": "P256Verifier", "bip
            "schnorr-bn254": "SchnorrBn254Verifier", "schnorr-bls12381": "SchnorrBls12381Verifier",
            "bls12381-minsig": "BlsMinSigBls12381Verifier", "bls-bn254-minsig": "BlsMinSigBn254Verifier",
            "ed25519": "Ed25519Verifier", "secp256k1": "Secp256k1Verifier", "zether-bls12381": "ZetherSchnorrBls12381Verifier",
-           "mldsa44": ("UAMldsaVerifier", 0), "mldsa65": ("UAMldsaVerifier", 1), "fndsa512": ("UAFndsaVerifier", 0),
-           "fndsa1024": ("UAFndsaVerifier", 1), "slhdsa128s": ("UASlhdsaVerifier", 0)}
+           "mldsa44": ("MldsaVerifier", 0), "mldsa65": ("MldsaVerifier", 1), "fndsa512": ("FndsaVerifier", 0),
+           "fndsa1024": ("FndsaVerifier", 1), "slhdsa128s": ("SlhdsaVerifier", 0)}
 
 
 def rpc(url, m, p):
@@ -44,7 +44,7 @@ def enc(sel, kd, msg, sig):
 
 def main():
     net, url = sys.argv[1], sys.argv[2]
-    at = {}  # the target's base book (basebook.py), in deploy order: the first UAMldsaVerifier is 44, the second 65
+    at = {}  # the target's base book (basebook.py), in deploy order: the first MldsaVerifier is 44, the second 65
     for a, name in json.load(open(os.path.join(EVM, f"deployments/onchain-{net}-base.json"))).items():
         at.setdefault(name, []).append(a)
     vec = [(x["name"], x) for x in json.load(open(os.path.join(VEC, "signatures.json")))["derived"]]

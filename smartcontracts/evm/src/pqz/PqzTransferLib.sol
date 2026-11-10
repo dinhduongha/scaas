@@ -7,7 +7,7 @@ import {ZetherTypes} from "../zether/ZetherTypes.sol";
 import {IPqzToken} from "./IPqzToken.sol";
 import {PqzCt} from "./PqzCt.sol";
 import {PqzSafety} from "./PqzSafety.sol";
-import {UAPqzVerifier} from "./UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "./PqzKeyVerifier.sol";
 import {PqzCore} from "./PqzCore.sol";
 
 /// @title op 1 and op 7 transfers (D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201

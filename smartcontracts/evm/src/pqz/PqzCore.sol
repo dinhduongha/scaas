@@ -14,7 +14,7 @@ import {IPqzToken} from "./IPqzToken.sol";
 import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {PqzCt} from "./PqzCt.sol";
 import {PqzSet, PQZ_ACC_WORDS} from "./PqzSet.sol";
-import {UAPqzVerifier} from "./UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "./PqzKeyVerifier.sol";
 
 /// @title The PQZ layer of the `*_PQZ` kinds (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1), in the ERC-7201 namespace
 ///        `scaas.pqz`: statements, the precompile call, account updates, rollover, shield / burn, entries, disclosure.

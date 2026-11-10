@@ -456,7 +456,7 @@ library MlDsa {
 ///        EIP-8051 expanded key it derived itself and stored in parts (`expandedKeyPart`, `verifyCached`; P6c).
 ///        `mldsa87` exists only with a precompile (CTR-UA-39 Q1: its Solidity cost fails the 66 % rule): without one the
 ///        constructor reverts `UAMldsaNoPrecompile`, so the kind gets no verifier there; it has no cache parts. **UNAUDITED.**
-contract UAMldsaVerifier is IUAPopVerifier {
+contract MldsaVerifier is IUAPopVerifier {
     uint16 public immutable KIND;
     bytes32 public immutable KIND_TAG;
     address public immutable PRECOMPILE; // 0 = pure Solidity

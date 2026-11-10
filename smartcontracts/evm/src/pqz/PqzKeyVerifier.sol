@@ -17,7 +17,7 @@ import {PqzSet} from "./PqzSet.sol";
 ///         `verifier` of a PQZ token's `ConfidentialConfig` (P6g plan D9): the token takes `PRECOMPILE` and
 ///         `PROOF_SYSTEM_ID` from it. `verify` (the registry never calls it: a PQZ key is an attribute of a PQ signing
 ///         UA, which authorizes with its own signature, CTR-PQZ-12; `register` calls `verifyPop` over the key, UA-6 U3) is the same check as `verifyPop`.
-contract UAPqzVerifier is IUAPopVerifier {
+contract PqzKeyVerifier is IUAPopVerifier {
     /// @notice `keccak256("SCAAS-PQZ-OP-REGISTER-V1")` (pq-zero-knowledge.md §8.1).
     bytes32 internal constant OP_TAG_REGISTER = 0x69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088;
     uint8 internal constant OP_REGISTER = 3;

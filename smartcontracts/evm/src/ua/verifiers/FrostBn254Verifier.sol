@@ -15,7 +15,7 @@ import {SCHNORR_TAG} from "./PairingVerifiers.sol";
 ///         `[μ_i]G + [r − c_i]C_i0 == R_i` with `c_i = H_dkg(i (32 BE) ‖ C_i0 ‖ R_i)`,
 ///         `H_dkg(m) = int(keccak256(ctx ‖ "dkg" ‖ m ‖ 0x00) ‖ keccak256(ctx ‖ "dkg" ‖ m ‖ 0x01)) mod r`,
 ///         `ctx = "FROST-BN254-KECCAK256-SCAAS-v1"`; `Y == Σ C_i0`; then `verify(Y, msg, sig)`. `C_ik` for k ≥ 1 are
-///         checked by `UAKinds.validateKeyData` at registration, not here (see `UAFrostSecp256k1Verifier`).
+///         checked by `UAKinds.validateKeyData` at registration, not here (see `FrostSecp256k1Verifier`).
 ///         Malformed input returns false; only a caller that gives too little gas for the precompiles sees a revert.
 contract FrostBn254Verifier is IUAPopVerifier {
     bytes internal constant DKG_PREFIX = "FROST-BN254-KECCAK256-SCAAS-v1dkg";
