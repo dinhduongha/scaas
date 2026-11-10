@@ -39,3 +39,5 @@ forge-modules | d6a4c03d | 0 | 35 passed, 0 failed (12 suites; Diff*, Modules, P
 clientkeys (red) | d6a4c03d | 1 | 319 passed, 1 failed: typed-ops.test.js "GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol" (35 !== 38: the T1 pin shape was not the one it parses)
 GovRouterTypehash.t.sol | bbfc6490 | 0 | 42 passed, 0 failed
 clientkeys | bbfc6490 | 0 | 322 tests, 320 passed, 0 failed (the three renamed TYPED_OPS rows, typed_ops.json regenerated)
+node-test (red, expected: T9) | 43b5eeea | 101 | 700 passed, 5 failed: guard allow_lists_equal_the_selector_audit_both_directions (UATransferOwnership is no SIGNED router entry; class OWNER counted), guard guard_allows_every_named_entry_only, submit job_api_explicit_json_roundtrip, typed digest_and_calldata_cannot_diverge, typed typed_ops_kat_every_entry ("no row UAAcceptAdmin on gov_router": typed.rs:207-209 keep the old rows)
+zether-prover --test typed_ops (red, expected: T8) | 43b5eeea | 101 | 5 passed, 1 failed: every_zether_row_digest_equals_the_vector (NOT_ZETHER, typed_ops.rs:22-23, names the old three)
