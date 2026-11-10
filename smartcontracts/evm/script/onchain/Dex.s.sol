@@ -44,7 +44,8 @@ contract OnchainExecutor is IExchangeExecutor {
 /// @notice T66b Step 5b, group `dex`: a DEX created by the Step 5 factory (`createDex`, its module D through the DEX's
 ///         governance stubs) and tokens created by `createToken` (kinds 0, 1 on a MockERC20 leg, 1 on a SCaaS leg, 8);
 ///         every DEX entry, the token trade entries (mtxTrade and restorePulled reached through the DEX, mtxCancelOrder,
-///         mtxInvalidateNonces, mtxWrapOrder), negatives listed for `coverage.py neg`. Orders are signed by k1 (and k2, k3
+///         mtxInvalidateNonces, mtxWrapOrder; then mtxTrade, restorePulled, mtxCancelOrder and mtxWrapOrder on a token of
+///         each of the kinds 1, 2, 3, 8-11), negatives listed for `coverage.py neg`. Orders are signed by k1 (and k2, k3
 ///         for their own legs), submitted by k2 or k3. UNAUDITED.
 contract Dex is OnchainBase {
     address constant TREASURY = address(0x7EA5);
@@ -83,6 +84,7 @@ contract Dex is OnchainBase {
         _hybrid();
         _cancels();
         _wrapOrder();
+        _kinds();
         _gov();
         _negatives();
         _writeBook();
@@ -368,6 +370,89 @@ contract Dex is OnchainBase {
         bytes memory sig = _ecdsa(k1, ITradeToken(A).tradeOrderDigest(t));
         vm.broadcast(k2);
         IWrappedToken(W2).mtxWrapOrder{gas: G}(A, o, _uaSig(sig));
+    }
+
+    // ------------------------------------------------------------------ the trade entries on every other kind
+
+    uint256 wn = 1; // the wrap orders' nonce on A (lane 7; `_wrapOrder` took 1)
+
+    /// @dev Kinds 1, 2, 3 and 8-11 (each its own release and trade module): a token X of the kind (Zether: BLS12-381
+    ///      version 1, no auditor; regulated: no control set; wrapped: one leg, the SCaaS token A, X minted to a1 by its
+    ///      signed `mtxWrapOrder`), then a settle of X against A (`mtxTrade` on X), a hybrid whose route sells 400 of the
+    ///      500 X sent outside (100 back: `restorePulled` on X) and a cancelled order (`mtxCancelOrder` on X).
+    function _kinds() internal {
+        vm.broadcast(k1);
+        IERC20(A).transfer(a2, 1e7); // a2's A for the makers below
+        uint8[7] memory ks = [1, 2, 3, 8, 9, 10, 11];
+        string[12] memory lb = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "", "", "", "",
+            "NormalRegulatedToken", "WrappedRegulatedToken", "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken"];
+        for (uint256 i; i < 7; ++i) _kind(ks[i], lb[ks[i]]);
+    }
+
+    function _kind(uint8 n, string memory label) internal {
+        address x = _kindToken(n, label);
+        vm.startBroadcast(k1);
+        dex.setMarket{gas: G}(x, A, true);
+        dex.setMarket{gas: G}(x, B, true);
+        vm.stopBroadcast();
+        _kindSettle(x, n);
+        _kindHybrid(x, n);
+        ITradeToken.UATradeOrder memory o = _o(_pad(a1), B, 1000, 1900, 0);
+        bytes memory sg = _ecdsa(k1, ITradeToken(x).cancelOrderDigest(o));
+        vm.broadcast(k2);
+        ITradeToken(x).mtxCancelOrder{gas: G}(o, _uaSig(sg));
+    }
+
+    function _kindToken(uint8 n, string memory label) internal returns (address x) {
+        IFactoryToken.TokenConfig memory c = _base("Onchain Dex K", string.concat("oDK", vm.toString(n)));
+        c.owner = _pad(a1);
+        if (n == 2 || n == 3 || n == 10 || n == 11) {
+            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0);
+        }
+        if (n % 2 == 1) {
+            c.legs = new IFactoryToken.Leg[](1);
+            c.legs[0] = IFactoryToken.Leg(A, 1, 1);
+        } else {
+            (c.initialSupply, c.initialHolder) = (1e12, a1);
+        }
+        vm.broadcast(k1);
+        x = f.createToken(IOpenFactory.TokenKind(n), 1, abi.encode(c), _salt(c.symbol));
+        _book(x, label);
+        if (n % 2 == 1) _wrapOrderOn(x, 10_000);
+    }
+
+    function _kindSettle(address x, uint8 n) internal {
+        ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
+        ss[0] = _one(keccak256(abi.encode("kind", n)), _leg(x, _o(_pad(a1), A, 1000, 1000, 0), k1, 1000),
+            _leg(A, _o(_pad(a2), x, 1000, 1000, 0), k2, 1000));
+        vm.broadcast(k2);
+        require(dex.mtxSettle{gas: G}(ss)[0], string.concat("settle: kind ", vm.toString(n)));
+    }
+
+    function _kindHybrid(address x, uint8 n) internal {
+        ISCaaSDex.HybridPlan memory p;
+        p.ref = keccak256(abi.encode("hybrid", n));
+        p.taker = _leg(x, _o(_pad(a1), B, 1000, 1000, 0), k1, 1000);
+        p.makers = new ISCaaSDex.DexLeg[](1);
+        p.makers[0] = _leg(B, _o(_pad(a2), x, 500, 500, 0), k2, 500);
+        (p.outsideSell, p.outsideFloor) = (500, 500);
+        bytes32 h = ITradeToken(x).tradeOrderDigest(p.taker.uaOrder);
+        ISCaaSDex.Interaction[] memory xs = _swap(router, x, B, 400, 500);
+        vm.broadcast(k3);
+        dex.mtxHybrid{gas: G}(p, xs);
+        require(ITradeToken(x).pulled(h) == 900, string.concat("restorePulled: kind ", vm.toString(n)));
+    }
+
+    /// @dev a1 wraps `amt` A into the wrapped token `wt` by a signed `UAWrapOrder` (A's trade-order digest), relayed by k2.
+    function _wrapOrderOn(address wt, uint256 amt) internal {
+        ITradeToken.UAWrapOrder memory o;
+        (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (_pad(a1), wt, amt, amt, amt);
+        (o.batch, o.nonce, o.validUntil) = (7, ++wn, vu);
+        ITradeToken.UATradeOrder memory t = ITradeToken.UATradeOrder(o.from, wt, o.amount, o.minMinted, o.minFill, o.fee,
+            o.relayer, wt, o.destination, o.flags, o.batch, o.nonce, o.validUntil);
+        bytes memory sig = _ecdsa(k1, ITradeToken(A).tradeOrderDigest(t));
+        vm.broadcast(k2);
+        IWrappedToken(wt).mtxWrapOrder{gas: G}(A, o, _uaSig(sig));
     }
 
     // ------------------------------------------------------------------ the DEX's governance (module D)

@@ -4,7 +4,8 @@
     "executeMetaTransaction(*": "refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)",
     "mtxExecute(*": "refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)",
     "mtxBatch(*": "refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)",
-    "mtxExecuteRate(*": "waits the token's rate delay (2 days) after mtxProposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (gov)"
+    "mtxExecuteRate(*": "waits the token's rate delay (2 days) after mtxProposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (gov)",
+    "mtxCreateInstance(*": "needs a class release on the deploy's factory, and deploy.sh publishes none (misc's own factory runs createInstance directly); through the router: its negative ReleaseUnknown runs (gov)"
   },
   "MandateWallet": {
     "executeMetaTransaction(*": "refused by design (an address meta-transaction: none is taken); its negative runs (misc)"
