@@ -75,7 +75,7 @@ reached by DELEGATECALL and does not count towards a token's size; `internal` li
 ## Deploying
 
 `script/Deploy.s.sol` (with `DeployBase.sol`) deploys the factory, the token catalogue, the UA registry generation 1
-with the per-chain kinds (`UAPrecompileProbe`) and writes `deployments/<chainid>.json`, `ua_registry_core_lib` and `ua_registry_aux_lib` included: forge
+with the per-chain kinds (`UAPrecompileProbe`) and writes `deployments/<key>.json` (NET-EVM-13: the chain's key from `chain-uids.json`, else `DEPLOY_NAME`), `ua_registry_core_lib` and `ua_registry_aux_lib` included: forge
 links and deploys `UARegistryCoreLib` and `UARegistryAuxLib` by CREATE2 before the registry, each behind the same release gas gate. No script deploys a
 registry generation 2. `script/ZetherE2E.s.sol` is the classical Zether e2e (`scripts/e2e-zether.sh`: an anvil, or the
 SCaaS testnet with `RPC`), direct calls and relayed named entries. The SCaaS testnet's PQZ stack is deployed and exercised

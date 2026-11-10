@@ -187,7 +187,7 @@ Before the
 run passes, the deploy gate requires, for each deployed contract, `chainUid()` = the RPC's genesis hash = the chain
 profile's `chain_uid`; refuses a genesis hash already present in another chain profile
 ([NET-ALL-25](README.md#NET-ALL-25)); and requires the factory to have registered only implementations whose
-`chainUid()` equals its own. The run writes `chain_uid` and the DEX list into `deployments/<chainid>.json`, which seeds
+`chainUid()` equals its own. The run writes `chain_uid` and the DEX list into `deployments/<key>.json` ([NET-EVM-13](#NET-EVM-13)), which seeds
 the chain profiles of the node and the clients ([NET-ALL-24](README.md#NET-ALL-24)). Why: a CREATE address depends on
 the deployer's nonce, so the same contract lands at unrelated addresses on each chain and a missed transaction shifts
 every later address; with CREATE2 the address follows from what was deployed. Cost: a fixed-salt deployer must exist on
@@ -328,7 +328,7 @@ T-GAS). The other families refuse `0x0135` until their own round; Algorand's `fa
 salt) and cannot verify this kind's randomized round-3 signatures.
 
 It writes
-`deployments/<chainid>.json` (`token_factory`, `implementation_normal`, `implementation_wrapped` (with `DEPLOY_WRAPPED`), `dex_implementation`, `ua_registry`, `governance_router`, `chain_uid`, `smart_key_account_factory`,
+`deployments/<key>.json` ([NET-EVM-13](#NET-EVM-13): its header first; `token_factory`, `implementation_normal`, `implementation_wrapped` (with `DEPLOY_WRAPPED`), `dex_implementation`, `ua_registry`, `governance_router`, `chain_uid`, `smart_key_account_factory`,
 `smart_key_account_implementation`, `demo_token`, `demo_token_2`; `factory`, `implementation`, `dex`, `scaas_dex` are gone with v1),
 which seeds the client and the node configuration. forge writes it during the simulation, before the broadcast; `deploy.sh` puts the previous file back (or removes the new one) when the broadcast fails.
 Zether (built, P3; UNAUDITED; any chain with EIP-2537, owner ruling 2026-10-31): opt in with `DEPLOY_ZETHER=1` (default off; on Hedera, or where the precompile probe finds no EIP-2537, the script refuses before deploying anything). It deploys `ZetherStatements`, `ZetherDisclosure` and per curve the inner-product, transfer and burn verifiers; when the deployer is the registrar it publishes per curve an env of `NORMAL_ZETHER` and `WRAPPED_ZETHER` (the UA registry, whose Zether kinds it enables there; `deps` = transfer, burn, inner-product verifier, disclosure, [CTR-ZTH-20](../contracts/zether.md#CTR-ZTH-20); env 1, BLS12-381), has the factory deploy the two confidential implementations on it (BLS12-381 as version 1 of each kind; the curve is the release's `curve()`) and enables both kinds, with the keys `zether_registry` (= `ua_registry`), `zether_disclosure`, `zether_statements`, `zether_inner_product_verifier_<curve>`, `zether_verifier_<curve>` (transfer), `zether_burn_verifier_<curve>`, `implementation_normal_zether_<curve>`, `implementation_wrapped_zether_<curve>` (`<curve>` = `bls12381`; plan 5g-Z1). The implementations exceed 24,576 B and the BLS inner-product verifier's deploy (the generators) uses ~14 M gas, so each of its transactions carries an explicit gas limit ([NET-EVM-11](#NET-EVM-11); forge's default estimate ×1.30 exceeded the Osaka per-transaction cap of 16,777,216, EIP-7825; the largest implementation, `WrappedPqzToken`, 13,467,833 gas measured through `deployTokenImplementation` (plan 5g-Z2; 63,975 B of init code with the env), is deployed by `script/pqz/e2e.py`, which sets its own limit; at 72,160 B it needs `CHAIN_CODE_LIMIT=131072` and a chain without EIP-7954) and the anvil needs `--code-size-limit 131072` (`scripts/e2e-zether.sh`); `ZetherDeploy.t` checks each deploy fits. `scripts/e2e-zether.sh` runs the
@@ -397,11 +397,25 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   (`ethereum-mainnet`, `ethereum-testnet` = Sepolia, `polygon-testnet` = Amoy, `avalanche-testnet` = Fuji, …); a second testnet
   keeps its own name (`ethereum-hoodi`); the full name stays in `name` ("Polygon Amoy"); every row carries
   `"network": "mainnet" | "testnet"`; `scaas-testnet` stays and 22776 will be `scaas-mainnet`. `src/chains/<key>/` uses the
-  same keys. **Books (SPECIFIED):** `deployments/<key>.json` replaces `deployments/<chainid>.json` (`scaas-testnet.json`,
-  `scaas-testnet-zether-e2e.json`, `hedera-<key>.json`), the key resolved from `chain-uids.json` by (chainId, chain_uid)
-  ([NET-ALL-22](README.md#NET-ALL-22)); a chain not in the table needs `DEPLOY_NAME`, else a named fail, never a chain-id
-  fallback. Every book carries `key`, `name`, `chainId`, `chainUid` and `network` at its top, and a reader checks `network`
-  against the key's suffix (a mismatch is a named fail). forge's own `broadcast/<Script>/<chainid>/` stays.
+  same keys. **Books (BUILT, branch `ua-mtx-3q`):** `deployments/<key>.json` replaces `deployments/<chainid>.json`: `<key>.json` is the chain's
+  book and a companion is `<key>-<what>.json` (`scaas-testnet.json`, `scaas-testnet-t66b-releases.json`,
+  `scaas-testnet-zether-e2e.json`, `scaas-testnet-pqz.json`); a Hedera chain's book is its `<key>.json` too
+  (`hedera-testnet.json`), written by `DeployHedera.s.sol`, its only deploy ([NET-HED-04](hedera.md#NET-HED-04);
+  `Deploy.s.sol` refuses chain ids 295–298). The key resolved from `chain-uids.json` by (chainId, chain_uid) ([NET-ALL-22](README.md#NET-ALL-22)); a chain not in the table
+  (a listed chain id with another genesis too) needs `DEPLOY_NAME` = `<name>-mainnet` | `<name>-testnet` (`[a-z0-9-]`),
+  else `DEPLOY_NAME_REQUIRED`, never a chain-id fallback; `DEPLOY_NAME_INVALID`, `DEPLOY_NAME_TAKEN` (another chain's key)
+  and `DEPLOY_NAME_MISMATCH` (a listed chain under another name) are named fails too. A deploy resolves the key before it
+  sends anything. Every book starts with `key`, `name`, `chainId`, `chainUid` and `network`, then the rest as forge writes it
+  (`vm.serialize*` sorts the keys), in the form of `json.dumps(…, indent=2)` (the header put first by hand after forge's pretty write), and a reader checks `network` against the key's suffix (a key without one, `ethereum-hoodi`: its
+  table row's) and fails `BOOK_NETWORK_MISMATCH`, `BOOK_HEADER_MISSING` or `BOOK_KEY_INVALID`; a book still named by chain
+  id with none by the key stops the reader with `BOOK_OLD_NAME` (rename it; no fallback). One rule in two places:
+  [`script/DeployBook.sol`](../../smartcontracts/evm/script/DeployBook.sol) for the forge scripts (`Deploy`, `DeployHedera`,
+  `ZetherE2E`, the `script/onchain/` groups, the release list) and
+  [`script/deploybook.py`](../../smartcontracts/evm/script/deploybook.py) for Python and shell (`deploy.sh`, `matrix.sh`,
+  `zether.sh`, `basebook.py`, `vcheck.py`, `zether_reg.py`, `pqz/e2e.py`); tests `script/test_deploybook.py`,
+  `test/governance/DeployBook.t.sol`, `test/governance/ReleaseList.t.sol`. A local anvil is named by the script that starts
+  it, `local-<chain id>-testnet` (`matrix.sh local`, `e2e-zether.sh`, the node e2e). forge's own
+  `broadcast/<Script>/<chainid>/` stays.
 - **The relayer's gas share.** A relayed op crosses more call frames (a PQZ op: clone, implementation, P, the self-call,
   clone, implementation, Q, its library, the precompile: 7 frames against 5), and each frame keeps 1/64 of the gas it passes
   on, about 10.4 % of the gas sent against 7.6 % before. A relayer that sets its limit from `eth_estimateGas` changes nothing;

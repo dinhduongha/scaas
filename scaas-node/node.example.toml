@@ -99,7 +99,7 @@ rpc_urls = ["http://nethermind:8545"]            # >= finality.quorum independen
 lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas only, never user funds
 # private_key = { env = "SCAAS_RELAYER_KEY_7622" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
-# dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/7622.json)
+# dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/scaas-testnet.json)
 chain_uid = "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164"  # block 0 (evm/chain-uids.json):
                                                  # a lane whose RPC block 0 differs never starts (NODE-GW-07)
 # account_factory = "0x..."                      # SmartKeyAccountFactory: the only `deploy` call target (unset: refused)
@@ -110,12 +110,12 @@ chain_uid = "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164"
                                                  # setPqzKey call jobs (unset: refused); a relayed PQ register over
                                                  # max_gas_per_tx or the block gas limit is refused UA_REGISTER_SPLIT
 governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
-                                                 # GovernanceRouter ("governance_router" in deployments/<id>.json): the only
+                                                 # GovernanceRouter ("governance_router" in deployments/<key>.json): the only
                                                  # targets of gov_router jobs, direct or relayed (empty: refused); on 7622
                                                  # since reset 2 (2026-11-10, NET-EVM-11): the Step 5 deploy's router
                                                  # (GovDeploy.t.sol test_routerAndRelayFeeRouterNewAddresses); a PQZ e2e
                                                  # run adds its own book's router here
-# compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<id>.json,
+# compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<key>.json,
                                                  # DEPLOY_REGULATED=1): the canonical registry the regulated kinds 8-13
                                                  # pin; the DEX venue's pre-check reads it (NODE-DEX-11). An address, no
                                                  # secret (regulated-kinds spec §6.1, §7). Set with the next key, or neither.
@@ -128,7 +128,7 @@ governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)
 # params = { relay_fee = { router = "0x...", min_amount = 1, min_wei_value = { "0x<token>" = "100000000000" } } }
-#                                                # RelayFeeRouter ("relay_fee_router" in deployments/<id>.json; one CREATE2
+#                                                # RelayFeeRouter ("relay_fee_router" in deployments/<key>.json; one CREATE2
 #                                                # address on every chain, new with the ua*/mtx* merge); min_wei_value:
 #                                                # wei per token base unit (or "<wei>/<10^k>" per 10^k units), the floor
 #                                                # price a relay fee must reach the quote at (gas limit x 2 x first max fee

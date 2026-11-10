@@ -7,7 +7,7 @@
 # static views by eth_call too) and the summary (step | commit | rc | counts, every row with its gas and hash). Local
 # target only: the windows, the notice and the decay need a clock the run moves (another target: listed as not run).
 # From smartcontracts/evm, through scripts/capped, in the foreground (matrix.sh sets the environment):
-#   NET=local RPC=<url> DEPLOY_JSON=deployments/<chainid>.json ONCHAIN_K1=… ONCHAIN_K2=… ONCHAIN_K3=… sh script/onchain/wraplimits.sh
+#   NET=local RPC=<url> DEPLOY_JSON=deployments/<key>.json ONCHAIN_K1=… ONCHAIN_K2=… ONCHAIN_K3=… sh script/onchain/wraplimits.sh
 # Output: runs/2026-11-10-ua-mtx-merge-3l-onchain/ (summary.txt, records-<net>-wraplimits.jsonl, coverage.json,
 # table-<net>.txt; the log git-ignored). Keys are never printed.
 set -eu

@@ -6,16 +6,21 @@
 #   matrix.sh <target> [<target> …]   each target in turn in its own process (its env, temp dir, anvil / copy, teardown);
 #                                     one that fails does not stop the next; a summary table (target | group | result)
 #                                     at the end, non-zero if any target failed
-#   matrix.sh local           a fresh anvil (chain 31337, Amsterdam, 200 M gas, 128 KiB code) on $PORT, deploy.sh on it,
+#   matrix.sh local           a fresh anvil (chain 31337, Amsterdam, 200 M gas, 128 KiB code) on $PORT, deploy.sh on it
+#                             (DEPLOY_NAME=local-31337-testnet: its books deployments/local-31337-testnet*.json),
 #                             every group, stopped after; the PQ groups on a fresh local Nethermind copy with the PQZ and
 #                             ML-DSA precompiles: COPY=<git-ignored dir> (copy.sh init, genesis0, copygen.py, up; down
 #                             after), or one already up at LOCAL_PQ_RPC; neither: listed as not run. Needs no other chain.
-#   matrix.sh scaas-testnet   the SCaaS testnet RPC (RPC_7622), its Step 5 deploy deployments/7622.json
+#   matrix.sh scaas-testnet   the SCaaS testnet RPC (RPC_7622), its Step 5 deploy deployments/scaas-testnet.json and
+#                             scaas-testnet-t66b-releases.json
 #   matrix.sh <name>          another testnet ([a-z0-9-]): ONCHAIN_RPC_<NAME> (upper case, - as _; ONCHAIN_RPC when it
 #                             is the only named target); PRIVATE_KEY_<NAME> (its deployer) and ONCHAIN_K1_<NAME>..K3 (the
 #                             plain names when it is the only named target), or else indices 0-3 of
-#                             SCAAS_TESTNET_MNEMONIC_FILE; deploy.sh first if deployments/<chainid>.json is missing and
+#                             SCAAS_TESTNET_MNEMONIC_FILE; deploy.sh first if deployments/<key>.json is missing and
 #                             MATRIX_DEPLOY=1
+# Books by the chain's key (NET-EVM-13, script/deploybook.py: chain-uids.json by (chain id, genesis hash); a chain not in
+# it needs DEPLOY_NAME), DEPLOY_JSON = deployments/<key>.json, RELEASES_JSON = deployments/<key>-releases.json; a book
+# still named by chain id stops the target (BOOK_OLD_NAME: rename it).
 # ONCHAIN_PQZ: precompile (the node answers OP_SELFTEST), offchain (only the OFFCHAIN group), off (no PQ group).
 # MATRIX_GROUPS: the groups to run (default all). Outputs are named by target: records-<target>-<group>.jsonl,
 # deployments/onchain-<target>-<group>.json. Stdout: one short line per event ([target] / [target/group] start, ok, FAIL,
@@ -142,7 +147,7 @@ local)
   done
   say "" "anvil up (chain 31337, port $PORT)"
   RPC=http://127.0.0.1:$PORT
-  export ONCHAIN_K1=$D1 ONCHAIN_K2=$D2 ONCHAIN_K3=$D3 PRIVATE_KEY=$D0
+  export ONCHAIN_K1=$D1 ONCHAIN_K2=$D2 ONCHAIN_K3=$D3 PRIVATE_KEY=$D0 DEPLOY_NAME=local-31337-testnet
   PQZ=${ONCHAIN_PQZ:-precompile}
   PQ_RPC=${LOCAL_PQ_RPC:-}
   if [ -z "$PQ_RPC" ] && [ -n "${COPY:-}" ] && [ "$PQZ" != off ]; then
@@ -196,6 +201,12 @@ scaas-testnet)
   PQ_RPC=$RPC ;;
 esac
 CHAIN=$(cast chain-id --rpc-url "$RPC" 2>> "$LOG") || fail "the RPC does not answer"
+G=$(cast block 0 --field hash --rpc-url "$RPC" 2>> "$LOG") || fail "the RPC gives no block 0"
+# the target's books by its key (NET-EVM-13): DEPLOY_NAME_REQUIRED, BOOK_OLD_NAME, … stop it here
+rs=-releases.json
+[ "$tgt" != scaas-testnet ] || rs=-t66b-releases.json
+DEPLOY_JSON=$(python3 -I script/deploybook.py path "$CHAIN" "$G" 2>&1) || fail "$DEPLOY_JSON"
+RELEASES_JSON=$(python3 -I script/deploybook.py path "$CHAIN" "$G" "$rs" 2>&1) || fail "$RELEASES_JSON"
 # a remote target: compile under scripts/capped first; then every broadcast step under a memory scope without a slot
 # (MATRIX_REMOTE_MEM, default 1G, no swap), forge refusing any recompile there (run.sh, zether.sh: ONCHAIN_REMOTE)
 SCOPE=
@@ -208,8 +219,7 @@ ADDRS=$(printf '%s\n' $ADDRS | sort -u | tr '\n' ' ')  # the deployer may be a s
 for k in 1 2 3; do PQ_ADDRS="$PQ_ADDRS $(cast wallet address --private-key "$(printf '0x%064x' "$k")")"; done
 say "" "start (chain $CHAIN, PQZ $PQZ${PQ_RPC:+ on chain $(cast chain-id --rpc-url "$PQ_RPC" 2> /dev/null || echo '?')})"
 say "" "deployer and signers:$ADDRS"
-export ONCHAIN_RPC=$RPC DEPLOY_JSON=deployments/$CHAIN.json RELEASES_JSON=deployments/$CHAIN-releases.json
-[ "$tgt" != scaas-testnet ] || export RELEASES_JSON=deployments/7622-t66b-releases.json
+export ONCHAIN_RPC=$RPC DEPLOY_JSON RELEASES_JSON
 if [ "${MATRIX_DEPLOY:-0}" = 1 ] && { [ "$tgt" = local ] || [ ! -f "$DEPLOY_JSON" ]; }; then
   STAGE=deploy
   if [ -n "$SCOPE" ]; then
@@ -273,7 +283,10 @@ for g in $GROUPS; do
     if [ "$PQZ" = off ] || { [ "$PQZ" = offchain ] && [ $g = pq ]; } || [ -z "$PQ_RPC" ]; then
       res="not run"
     else
-      step "/$g" "$PQ_RPC" "$PQ_ADDRS" env EVM_OUT="${EVM_OUT:-out/t66b-e2e}" \
+      # e2e.py's own book on the PQ node (NET-EVM-13): the local copy is its own chain, not the anvil
+      dn=${DEPLOY_NAME:-}
+      [ "$tgt" != local ] || dn=local-pq-testnet
+      step "/$g" "$PQ_RPC" "$PQ_ADDRS" env EVM_OUT="${EVM_OUT:-out/t66b-e2e}" ${dn:+DEPLOY_NAME=$dn} \
         python3 -I script/onchain/pq.py --net "$tgt" --rpc "$PQ_RPC" $o || r=1
     fi ;;
   verify) verify verify; continue ;;

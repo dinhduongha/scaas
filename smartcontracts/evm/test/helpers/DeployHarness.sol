@@ -84,6 +84,9 @@ contract DeployHarness is DeployBase {
 
     function writeReleases() external { _writeReleases(); }
 
+    /// NET-EVM-13: a test chain is not in `chain-uids.json`; its books' name stands for `DEPLOY_NAME` (no env in a test).
+    function _deployName() internal pure override returns (string memory) { return "local-testnet"; }
+
     function checkGas(string calldata name, uint256 limit) external view { _checkReleaseGas(name, limit); }
 
     function requireGas(string calldata name) external view { _requireReleaseGas(name); }

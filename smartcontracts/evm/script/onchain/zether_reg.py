@@ -5,17 +5,21 @@
                                   script/onchain/ZetherMore.s.sol -> build/ZetherRegMore.s.sol (on ZetherRegE2E): the
                                   regulated Zether kinds 10 and 11 in place of 2 and 3, each config naming the Step 5
                                   ComplianceRegistry with DENYLIST (denied flag 1, which no account has: RegulatedLib
-                                  takes a registry only with ALLOWLIST or DENYLIST, a terms bit: a termsHash), its own deployments/<chain>-zether-reg-e2e.json; every other
+                                  takes a registry only with ALLOWLIST or DENYLIST, a terms bit: a termsHash), its own deployments/<key>-zether-reg-e2e.json; every other
                                   line as ZetherE2E (so the e2e stays one script; the twin is rebuilt from it every run)
-  zether_reg.py book <net> <Script>  deployments/onchain-<net>-<script>.json from the e2e's deployments json (coverage.py)"""
+  zether_reg.py book <net> <Script>  deployments/onchain-<net>-<script>.json from the e2e's books (coverage.py; CHAIN and
+                                  GENESIS: the target chain, its books deployments/<key>*.json, NET-EVM-13)"""
 import json
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.abspath(os.path.join(HERE, "../.."))
+sys.path.insert(0, os.path.join(EVM, "script"))
+import deploybook  # noqa: E402
 SUBS = [  # (old, new, count)
-    ("contract ZetherE2E is Script", "contract ZetherRegE2E is Script", 1),
+    ("contract ZetherE2E is DeployBook", "contract ZetherRegE2E is DeployBook", 1),
+    ('"./DeployBook.sol"', '"../../DeployBook.sol"', 1),
     ('"../src/', '"../../../src/', None),
     ('"../test/', '"../../../test/', None),
     ("IOpenFactory.TokenKind.NORMAL_ZETHER,", "IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED,", 1),
@@ -68,9 +72,9 @@ def book(net, script):
     reg = script in ("ZetherRegE2E", "ZetherRegMore")
     tag = {"ZetherE2E": "zether-e2e", "ZetherRegE2E": "zether-reg-e2e", "ZetherMore": "zether-more",
            "ZetherRegMore": "zether-reg-more"}[script]
-    chain = os.environ["CHAIN"]  # the target chain id (zether.sh): its own deploy and e2e files
-    e = json.load(open(os.path.join(EVM, f"deployments/{chain}-{tag}.json")))
-    d = json.load(open(os.path.join(EVM, f"deployments/{chain}.json")))
+    chain, g = os.environ["CHAIN"], os.environ["GENESIS"]  # the target chain (zether.sh): its own deploy and e2e books
+    e = deploybook.load(deploybook.find(chain, g, f"-{tag}.json"))
+    d = deploybook.load(deploybook.find(chain, g))
     b = {e["normal_zether_token"]: "NormalZetherRegulatedToken" if reg else "NormalZetherToken",
          e["wrapped_zether_token"]: "WrappedZetherRegulatedToken" if reg else "WrappedZetherToken",
          e["underlying_erc20"]: "MockERC20", d["zether_registry"]: "UARegistry", d["token_factory"]: "OpenFactory",

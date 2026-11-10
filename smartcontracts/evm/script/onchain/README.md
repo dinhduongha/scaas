@@ -46,7 +46,8 @@ RPC_7622=http://127.0.0.1:9 COPY=$PWD/../../scratchpad/onchain-copy sh script/on
 ```
 
 - a fresh anvil (chain 31337, Amsterdam, 200 M block gas, 128 KiB code) with anvil's dev keys, `deploy.sh evm` on it with
-  every option (wrapped, regulated, Zether; `deployments/31337.json`, `31337-releases.json`), then tokens, gov, dex, misc,
+  every option (wrapped, regulated, Zether; `DEPLOY_NAME=local-31337-testnet`: `deployments/local-31337-testnet.json`,
+  `local-31337-testnet-releases.json`, NET-EVM-13), then tokens, gov, dex, misc,
   zether, verifiers, views, wraplimits;
 - a fresh Nethermind copy under `COPY` (git-ignored; `copy.sh init`, `genesis0 engine-pqz.json`, `copygen.py`: the
   Amsterdam transitions `init`'s chainspec lacks, test keys 0x…01-0x…03, the CREATE2 deployer; then `up`) for pq and
@@ -56,8 +57,8 @@ RPC_7622=http://127.0.0.1:9 COPY=$PWD/../../scratchpad/onchain-copy sh script/on
 
 ## SCaaS testnet
 
-Its RPC only; never its containers, config or port. It builds on the Step 5 deploy (`deployments/7622.json`,
-`7622-t66b-releases.json`, the Step 5 runs note's deploy rows); test keys 0x…01-0x…03 sign (genesis-funded):
+Its RPC only; never its containers, config or port. It builds on the Step 5 deploy (`deployments/scaas-testnet.json`,
+`scaas-testnet-t66b-releases.json`, the Step 5 runs note's deploy rows); test keys 0x…01-0x…03 sign (genesis-funded):
 
 ```sh
 cd smartcontracts/evm
@@ -88,7 +89,8 @@ A named target `<name>` reads `ONCHAIN_RPC_<NAME>`, `PRIVATE_KEY_<NAME>`, `ONCHA
   the block, NET-EVM-11), and every transaction here asks at most 60 M; the deterministic CREATE2 deployer
   `0x4e59b44847b379578588920cA78FbF26c0B4956C` (NET-EVM-05); its `chain_uid` profile (a `chain-uids.json` row, or
   `CHAIN_UID` for `deploy.sh`); funded accounts.
-- **Deploy first:** `MATRIX_DEPLOY=1` runs `deploy.sh evm` as for local when `deployments/<chainid>.json` is missing.
+- **Deploy first:** `MATRIX_DEPLOY=1` runs `deploy.sh evm` as for local when `deployments/<key>.json` is missing (a chain not in `chain-uids.json`
+  needs `DEPLOY_NAME`).
 - **Keys:** `PRIVATE_KEY_<NAME>` (the deployer) and `ONCHAIN_K1_<NAME>..K3` (the plain names when it is the only named
   target), or else indices 0-3 of the testnet-only mnemonic in
   `SCAAS_TESTNET_MNEMONIC_FILE` (`source ~/.profile`): `matrix.sh` copies its `mnemonic:` line into its private temp dir
@@ -131,7 +133,7 @@ every state-changing entry not called with its reason (`notrun.json`), the negat
 
 ## One group by hand
 
-`ONCHAIN_RPC=<url> DEPLOY_JSON=deployments/<chainid>.json ../../scripts/capped script/onchain/run.sh <target> <Group>
+`ONCHAIN_RPC=<url> DEPLOY_JSON=deployments/<key>.json ../../scripts/capped script/onchain/run.sh <target> <Group>
 --tc <Group>`; without `ONCHAIN_RPC`, `run.sh local` forks `FORK_RPC` on `PORT` for that run. `zether.sh` (`NET`, `RPC`,
 `PRIVATE_KEY`, `ZETHER_PARTS`) and `pq.py --net <target> --rpc <url> [--offchain] [--extra-only]` print their usage at the
 top of the file.

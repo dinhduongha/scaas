@@ -824,7 +824,7 @@ make that refund impossible through an executor) — and requires a zero balance
 (`Leftover(token)`), so it holds nothing between calls and ends at 0 in every token. No admin, no owner, no upgrade, no
 sweep, no approvals; a stray balance sent to it becomes surplus at its next use. A holder of `LISTING` lists it with
 `setExchangeTarget` where listed-only mode or `LISTED_POOLS` asks; the node names it in `order_router.executor`.
-Deployed per chain only where Uniswap exists (a `uniswap_executor` key in `deployments/<chainid>.json` when deployed);
+Deployed per chain only where Uniswap exists (a `uniswap_executor` key in `deployments/<key>.json` when deployed);
 not on 7622 (no Uniswap there), and **no deploy script yet**: it comes with the first chain that has Uniswap. v2 and v3
 routers stay on path (a). Status **BUILT** (`src/dex/UniswapExecutor.sol`, `src/dex/uniswap/IUniswapV3.sol`,
 `IUniswapV4.sol` — minimal in-repo interfaces, no Uniswap source vendored; 5,536 B runtime, 6,109 B init, no
