@@ -56,4 +56,18 @@ contract PqChatLayoutTest is PqChatBase {
         uint256 nw = _map(bytes32(0), _map(PqChatTypes.scopeSession(s.creator), r + 4));
         assertEq(_at(nw), 1 << 5, "nonce 5");
     }
+
+    /// UA-7 P48: `removed` packed after `home` in the epoch's slot +2 (bits 40..55), `removedOf` at +6, the namespace's
+    /// `removals` at +21; the fields above keep their slots.
+    function test_removalFieldsArePinned() public {
+        uint256 r = _root();
+        (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(3, 5, address(chat));
+        bytes32 sid = _create(chat, s, w);
+        IPqChat.PqChatRemove memory rm = IPqChat.PqChatRemove(sid, sid, 1, _list(ids[2]), ids[0], 7);
+        chat.remove(rm, _sig(ids[0], h.remove(rm)));
+        uint256 e = _map(sid, r + 2);
+        assertEq(_at(e + 2), 3 | 1 << 32 | 1 << 40, "landed 3, home, removed 1");
+        assertEq(_at(_map(ids[2], e + 6)), 1, "removedOf");
+        assertEq(_at(_map(sid, r + 21)), 1, "removals: one record");
+    }
 }
