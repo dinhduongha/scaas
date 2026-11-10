@@ -23,23 +23,7 @@ import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {MockERC20} from "../../test/helpers/Mocks.sol";
-
-/// @notice A contract holder for the entries that take a contract (the allowance rule CTR-TOK-01: `approve` and
-///         `transferFrom` from a contract only; `RATE_ADJUSTABLE`'s holder a native id with code). Its deployer alone calls.
-contract OnchainFwd {
-    address internal immutable O;
-
-    constructor() {
-        O = msg.sender;
-    }
-
-    function exec(address target, bytes calldata data) external returns (bytes memory r) {
-        require(msg.sender == O, "OnchainFwd: not the deployer");
-        bool ok;
-        (ok, r) = target.call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(r, 32), mload(r)) }
-    }
-}
+import {OnchainForwarder} from "./OnchainForwarder.sol";
 
 /// @notice T66b Step 5b, group `tokens`: the token kinds of the Step 5 factory (0-3, 8-11), each created by
 ///         `OpenFactory.createToken` (release 1), then its public entries direct and relayed (signed by test key 1's native
@@ -91,9 +75,9 @@ contract Tokens is OnchainBase {
     MockERC20 m1; // W1's leg
     MockERC20 m2; // W2's first leg
     MockERC20 stray; // what `rescue` sends back
-    OnchainFwd fA;
-    OnchainFwd fB;
-    OnchainFwd fR; // the rate admin
+    OnchainForwarder fA;
+    OnchainForwarder fB;
+    OnchainForwarder fR; // the rate admin
     address base; // the kind-0 token: W2's SCaaS ledger leg and the negatives' token
     address t8; // the kind-8 token: the MissingRole negative
     address t; // the token under test
@@ -130,18 +114,18 @@ contract Tokens is OnchainBase {
         m1 = new MockERC20("Onchain leg 1", "oL1", 6);
         m2 = new MockERC20("Onchain leg 2", "oL2", 6);
         stray = new MockERC20("Onchain stray", "oST", 6);
-        fA = new OnchainFwd();
-        fB = new OnchainFwd();
-        fR = new OnchainFwd();
+        fA = new OnchainForwarder();
+        fB = new OnchainForwarder();
+        fR = new OnchainForwarder();
         m1.mint(a1, 1e15);
         m2.mint(a1, 1e15);
         vm.stopBroadcast();
         _book(address(m1), "MockERC20");
         _book(address(m2), "MockERC20");
         _book(address(stray), "MockERC20");
-        _book(address(fA), "OnchainFwd");
-        _book(address(fB), "OnchainFwd");
-        _book(address(fR), "OnchainFwd");
+        _book(address(fA), "OnchainForwarder");
+        _book(address(fB), "OnchainForwarder");
+        _book(address(fR), "OnchainForwarder");
     }
 
     /// @dev A secp256k1 UA (0x0108) of a fresh key, registered on the Step 5 registry with its portable PoP (UA-8, no
@@ -357,9 +341,9 @@ contract Tokens is OnchainBase {
         w.addReserve(address(m2), 100);
         // the SCaaS leg: a contract holder wraps it (an EOA cannot approve, CTR-TOK-01), then hands units to test key 1
         IERC20(base).transfer(address(fA), 10_000);
-        fA.exec(base, abi.encodeCall(IERC20.approve, (t, 10_000)));
-        fA.exec(t, abi.encodeWithSignature("wrap(address,uint256)", base, uint256(10_000)));
-        fA.exec(t, abi.encodeCall(IERC20.transfer, (a1, 5_000)));
+        fA.forwardCall(base, abi.encodeCall(IERC20.approve, (t, 10_000)));
+        fA.forwardCall(t, abi.encodeWithSignature("wrap(address,uint256)", base, uint256(10_000)));
+        fA.forwardCall(t, abi.encodeCall(IERC20.transfer, (a1, 5_000)));
         w.unwrapToUA(base, 100, uaD, 0);
         vm.stopBroadcast();
     }
@@ -394,14 +378,14 @@ contract Tokens is OnchainBase {
     function _w2Rate() internal {
         bytes memory prop = abi.encodeCall(WrappedToken.proposeRate, (address(m2), uint96(1001), uint96(1000)));
         vm.startBroadcast(k1);
-        fR.exec(t, prop);
-        fR.exec(t, abi.encodeCall(WrappedToken.cancelRate, ()));
-        fR.exec(t, prop);
+        fR.forwardCall(t, prop);
+        fR.forwardCall(t, abi.encodeCall(WrappedToken.cancelRate, ()));
+        fR.forwardCall(t, prop);
         WrappedToken(payable(t)).disableWrap(address(m2), keccak256("scaas.onchain.disable"));
         vm.stopBroadcast();
         if (k == 1) {
             (,,, uint64 eta) = WrappedToken(payable(t)).pendingRate();
-            _neg(a1, address(fR), abi.encodeCall(OnchainFwd.exec, (t, abi.encodeCall(WrappedToken.executeRate, ()))),
+            _neg(a1, address(fR), abi.encodeCall(OnchainForwarder.forwardCall, (t, abi.encodeCall(WrappedToken.executeRate, ()))),
                 IWrappedToken.RateChangeNotReady.selector, string.concat("executeRate before the 2-day delay (eta ",
                 vm.toString(eta), ")"));
         }
@@ -433,8 +417,8 @@ contract Tokens is OnchainBase {
         vm.startBroadcast(k1);
         IERC20(t).transfer(a2, 100);
         IERC20(t).transfer(address(fA), 100);
-        fA.exec(t, abi.encodeCall(IERC20.approve, (address(fB), 50)));
-        fB.exec(t, abi.encodeCall(IERC20.transferFrom, (address(fA), a2, 50)));
+        fA.forwardCall(t, abi.encodeCall(IERC20.approve, (address(fB), 50)));
+        fB.forwardCall(t, abi.encodeCall(IERC20.transferFrom, (address(fA), a2, 50)));
         NormalToken(t).transferToUA(uaD, 10);
         vm.stopBroadcast();
         require(IERC20(t).allowance(address(fA), address(fB)) == 0, "allowance spent");

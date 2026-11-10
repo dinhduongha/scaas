@@ -429,12 +429,21 @@ Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts 
 First whole-chain run, 2026-11-10 (BUILT, after the T66b Step 5 deploy had only its 7 linked libraries verified): of 345
 contracts with code, 255 verified (full match), 8 linked clones, 35 CREATE3 proxies, 1 genesis predeploy, plus 90 SSTORE2 data
 contracts; sources from four snapshots (`6df89135`: Step 5, PqChat, the tokens harness; `11349728`: the dex harness;
-`bf6f3d04`: the 2026-11-04 reset's PQZ e2e `GovernanceRouter`); **46 open, for the owner**: 43 EIP-1167 clones carrying 95–175
-bytes of appended data (the chain values `IFactoryToken.ChainEnv` the factory appends; PqChat instances), which Blockscout 9.0.2 does not link
-(`proxy_type` `unknown`) although each implementation is verified, and the 3 tokens-group `OnchainFwd` harness contracts, which
-`sc-verifier` refuses (`Fail - Unable to verify`) while their init and runtime code match the snapshot byte for byte (bar the
-immutable); their standard JSON is 1.72 MB, above every verified one (largest 1.26 MB), so a request-size limit is the likely
-cause (not confirmed). Rows: `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-step5b/verify-scaas-testnet.txt`.
+`bf6f3d04`: the 2026-11-04 reset's PQZ e2e `GovernanceRouter`); **46 open, closed by the owner's rulings of 2026-11-10**
+(BUILT): 43 EIP-1167 clones carrying 95–175 bytes of appended data (the chain values `IFactoryToken.ChainEnv` the factory appends;
+PqChat instances), which Blockscout 9.0.2 does not link (`proxy_type` `unknown`) although each implementation is verified:
+`script/onchain/vcheck.py` links them itself, state `linked (clone, appended data)`, when the first 45 bytes are exactly the
+EIP-1167 proxy naming a fully verified implementation (Blockscout's own link stays `linked clone`); and the 3 tokens-group
+`OnchainFwd` harness contracts, which `sc-verifier` refused (`Fail - Unable to verify`) while their init and runtime code match the
+snapshot byte for byte (bar the immutable): their standard JSON was 1.72 MB, above every verified one (largest 1.26 MB), and a
+flattened file was refused too, the whole `Tokens.s.sol` (1.65 MB) and the forwarder alone (1,011 B; the single-file form carries
+no `experimental` setting, which Amsterdam needs: likely, not confirmed). A standard JSON of the forwarder's source alone
+(1,784 B) verified all 3, a partial match (only the metadata hash differs): state `verified (partial, harness)`, a partial match
+accepted only where the code's metadata hash names a `script/` artifact of a source snapshot and the explorer's name matches.
+Later deploys get a full match: the forwarder is `OnchainForwarder` (`forwardCall(address,bytes)`, was `OnchainFwd.exec`) in
+`script/onchain/OnchainForwarder.sol`, no imports, a 2,048 B standard JSON. Read-only pass after: 255 verified, 3 verified
+(partial, harness), 8 linked clones, 43 linked (clone, appended data), 35 CREATE3 proxies, 1 genesis, 90 data, 0 unverified.
+Rows: `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-step5b/verify-scaas-testnet.txt`.
 
 <a id="NET-EVM-10"></a>**NET-EVM-10** — **The SCaaS testnet runs two nodes: a `sealer` and a public `rpc`** (owner
 ruling 2026-10-31): in the stack's one `docker-compose.yml`, both on the PQZ image. `sealer` holds the Clique key
