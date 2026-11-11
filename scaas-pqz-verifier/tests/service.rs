@@ -52,6 +52,8 @@ const C: B256 = B256::repeat_byte(0xc3);
 const D: B256 = B256::repeat_byte(0xd4);
 const AUD: B256 = B256::repeat_byte(0xad);
 const EPOCH: u32 = 3;
+/// A debit's `ownTag` (group 3h): a named field of every debit's args.
+const TAG: B256 = B256::repeat_byte(0x7a);
 const CONFIG: &str = r#"
 bind = "127.0.0.1:0"
 rpc_url = "http://127.0.0.1:1"
@@ -301,7 +303,7 @@ fn request(op: Value, st: &[u8], proof: &[u8]) -> Value {
 
 fn single(from: B256, kv: u64, to: B256) -> Value {
     json!({"entry": "mtxConfidentialTransferSingle", "args": {"p": 0, "validUntilBlock": "100", "shieldIn": "0",
-        "fromUA": from, "keyVersion": kv, "toUA": to, "beneficiaryUA": B256::ZERO, "salt": hx(&[0; 16]), "u": "0x",
+        "fromUA": from, "keyVersion": kv, "toUA": to, "beneficiaryUA": B256::ZERO, "salt": hx(&[0; 16]), "ownTag": TAG, "u": "0x",
         "vTo": "0x", "vFrom": "0x", "vAuditor": "0x", "sealedMemo": "0x"}})
 }
 
@@ -311,14 +313,14 @@ fn multi(from: B256, legs: &[B256], aud: bool) -> Value {
     let v = hx(&[0; stmt::V_BYTES]);
     let va = if aud { v.clone() } else { "0x".into() };
     json!({"entry": "mtxConfidentialTransfer", "args": {"p": 0, "validUntilBlock": "100", "shieldIn": "0", "fromUA": from,
-        "keyVersion": 0, "beneficiaryUA": B256::ZERO, "decoyFee": "0", "salt": hx(&[0; 16]),
+        "keyVersion": 0, "beneficiaryUA": B256::ZERO, "decoyFee": "0", "salt": hx(&[0; 16]), "ownTag": TAG,
         "u": vec![hx(&[0; PK]); g], "legs": legs.iter().map(|l| json!({"ua": l, "v": v, "vAuditor": va})).collect::<Vec<_>>(),
         "vFrom": v, "sealedMemo": hx(&vec![0; 2 + 40 * legs.len()])}})
 }
 
 fn unshield(from: B256, kv: u64) -> Value {
     json!({"entry": "mtxUnshield", "args": {"p": 0, "validUntilBlock": "100", "shieldIn": "0", "fromUA": from,
-        "keyVersion": kv, "beneficiaryUA": B256::ZERO, "u": "0x", "vFrom": "0x"}, "amount": "5", "recipient": C})
+        "keyVersion": kv, "beneficiaryUA": B256::ZERO, "ownTag": TAG, "u": "0x", "vFrom": "0x"}, "amount": "5", "recipient": C})
 }
 
 /// Signed by this verifier: the verdict exactly the expected one, the signature over the registry's `uaAuthDigest` of
@@ -561,10 +563,12 @@ async fn rreg_message_per_path_real_vector() {
 
 #[tokio::test]
 async fn disclosure_names_the_leg_owner() {
-    // an op blob `salt ‖ u_0 ‖ (v_j ‖ UA_j)_{j<2} ‖ v_f`, packed at PACK_BITS = q's bit length (PqzCore._legOf)
+    // an op blob `salt ‖ u_0 ‖ (v_j ‖ UA_j)_{j<2} ‖ P(v_f) ‖ ownTag ‖ kv(8·2) ‖ u8(2)`, packed at PACK_BITS = q's bit length
+    // (group 3h: PqzCore.rOf, _legOf)
     let group = (u64::BITS - stmt::Q.leading_zeros()) as usize / 2;
     let (pkp, vp) = (PK / 32 * group, stmt::V_BYTES / 32 * group);
-    let blob = [&[0u8; 16][..], &vec![0; pkp], &vec![0; vp], C.as_slice(), &vec![0; vp], D.as_slice(), &vec![0; vp]].concat();
+    let blob = [&[0u8; 16][..], &vec![0; pkp], &vec![0; vp], C.as_slice(), &vec![0; vp], D.as_slice(), &vec![0; vp],
+        TAG.as_slice(), &[0; 16], &[2]].concat();
     let (st, proof) = vector("DISCLOSE-RECEIVER", None);
     let mut w = world(&st, &[]);
     w.blob = blob;
@@ -642,6 +646,20 @@ async fn ignores_forged_rpc_digest() {
     assert_signed(&r, keccak256(PROBE_STATEMENT), keccak256(b""));
     let sig = Signature::from_raw(&bytes(&r.1["pqzVerdictSig"]["signature"])).unwrap();
     assert_ne!(sig.recover_address_from_prehash(&FORGED).ok(), Some(signer().address()));
+}
+
+/// Fable C-2: the views the service calls are the contract's after group 3h (`ownTag` in the three args tuples): the
+/// selectors of the forge artifact `out/IPqzToken.sol/IPqzToken.json` (`methodIdentifiers`, the same pins as the node's
+/// `views_are_the_contracts`); the opt-in anvil test reads the artifact itself.
+#[test]
+fn views_are_the_contracts() {
+    use scaas_pqz_verifier::abi::IPqzToken as T;
+    assert_eq!(T::transferSingleStatementCall::SELECTOR, hex!("931415ee"));
+    assert_eq!(T::transferStatementCall::SELECTOR, hex!("8a2161ba"));
+    assert_eq!(T::burnStatementCall::SELECTOR, hex!("da8c9eed"));
+    assert_eq!(T::unshieldUnwrapStatementCall::SELECTOR, hex!("8e4ccf2e"));
+    assert_eq!(T::pqzVerifyConfigCall::SELECTOR, hex!("dc59c66e"));
+    assert_eq!(T::proofSystemIdCall::SELECTOR, hex!("1f3b28f2"));
 }
 
 /// `smartcontracts/vectors/pqz/verdict.json` (the contracts' forge writer): the verifier's digest and signature.

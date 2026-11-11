@@ -15,6 +15,8 @@ alloy::sol! {
         bytes32 toUA;
         bytes32 beneficiaryUA;
         bytes16 salt;
+        // group 3h (PP-3): the holder's tag of its own `(u, v_f)`, at the contract's position (`IPqzToken.sol`)
+        bytes32 ownTag;
         bytes u;
         bytes vTo;
         bytes vFrom;
@@ -41,6 +43,7 @@ alloy::sol! {
         bytes32 beneficiaryUA;
         uint256 decoyFee;
         bytes16 salt;
+        bytes32 ownTag;
         bytes[] u;
         PqzLeg[] legs;
         bytes vFrom;
@@ -56,6 +59,7 @@ alloy::sol! {
         bytes32 fromUA;
         uint64 keyVersion;
         bytes32 beneficiaryUA;
+        bytes32 ownTag;
         bytes u;
         bytes vFrom;
     }

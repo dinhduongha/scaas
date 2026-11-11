@@ -38,7 +38,9 @@ keystore's path and the environment variable holding its password, never a secre
 - `POST /v1/pqz-verdict` `{token, chainId, op: {entry, args, binding, amount?, recipient?, unwrap?}, statement, proof,
   pqzVerifierEpoch}` → `{pqzVerdict, pqzVerdictSig}`; `entry` one of the PQZ proof-carrying entries
   (`mtxConfidentialTransfer[Compact]`, `mtxConfidentialTransferSingle[Compact]`, `mtxUnshield`, `mtxUnshieldUnwrap`;
-  `binding` 0 for a direct call, the envelope's binding for a relayed one) or `verifyTransferAmount`.
+  `binding` 0 for a direct call, the envelope's binding for a relayed one) or `verifyTransferAmount`. `args` is the entry's
+  argument struct by its field names (`IPqzToken.sol`; group 3h: `ownTag` in `PqzTransferArgs`, `PqzMultiArgs`,
+  `PqzBurnArgs`); a disclosure reads the leg owner from the op blob `R ‖ P(v_f) ‖ ownTag ‖ kv(8·n) ‖ u8(n)`.
 - `POST /v1/pqz-verdict/probe` `{token, chainId}`: a verdict over a fixed probe statement, for an `OFFCHAIN` token of the
   pinned chain that names this verifier (else `NOT_OFFCHAIN`, `NOT_THIS_VERIFIER`); what the node's
   `refuse_shield_when_unserved` asks. A verifier proposed but not yet confirmed is not named by the token, so the probe

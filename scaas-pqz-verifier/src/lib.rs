@@ -325,12 +325,14 @@ fn chain_refusal(what: &str, e: ChainError) -> Refusal {
     }
 }
 
-/// The owner of leg `leg` of an op blob `R ‖ v_f` (`PqzCore._legOf` / `_bundleShape`; the bundle packed at
-/// `PACK_BITS` = q's bit length): `R = salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}`.
+/// The owner of leg `leg` of an op blob `R ‖ P(v_f) ‖ ownTag ‖ kv(8·n) ‖ u8(n)` (group 3h; `PqzCore.rOf`, `_legOf`,
+/// `_bundleShape`; packed at `PACK_BITS` = q's bit length): `R = salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}`.
 fn leg_owner(blob: &[u8], leg: U256) -> Option<B256> {
     let group = (u64::BITS - stmt::Q.leading_zeros()) as usize / 2;
     let (pkp, vp) = (PK / 32 * group, stmt::V_BYTES / 32 * group);
-    let r = &blob[..blob.len().checked_sub(vp)?];
+    // the tail `ownTag(32) ‖ kv(8·n) ‖ u8(n)` (`_tailLen`), then `P(v_f)`
+    let tail = 33 + 8 * usize::from(*blob.last()?);
+    let r = &blob[..blob.len().checked_sub(tail + vp)?];
 
     if r.len() < 16 + pkp {
         return None;
