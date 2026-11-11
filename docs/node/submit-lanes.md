@@ -348,16 +348,19 @@ nonce is gap-filled): `args.pqz_fee` against word 256 of the token's own stateme
 `VerifierFeeNotReady`, `VerifierFeePending`; final: `VerifierFeeAboveMax`, `VerifierFeeSame`.
 
 <a id="rpc-failover"></a>**Chain reads fail over** ([ARCH-POS-15](../decisions.md#ARCH-POS-15), failover; BUILT, `chain::tests::chain_reads_fail_over_on_transport_errors_never_on_a_revert`;
-Fable review of ua-mtx-merge E N-11). Every chain read behind the node's checks (the simulation, `chainUid()`, `pqzVerifyConfig`
-and the statement views, the service and registry reads, `eip712Domain()`, the subject nonce, code reads, and the
-`VerifierFeeSet`, `UAPqzKeyCurrent` and executed-event logs) goes through one read helper (`Chain::read`): one endpoint answers
+Fable review of ua-mtx-merge E N-11; recheck 2 P3-4). These reads go through one read helper (`Chain::read`): the simulation,
+`chainUid()`, `pqzVerifyConfig` and the statement views, the service and registry reads, `eip712Domain()`, the subject nonce, code
+reads, the latest block's gas limit, the `VerifierFeeSet`, `UAPqzKeyCurrent` and executed-event logs, the DEX venue's checks
+(its views, a failed settlement's evidence, ERC-1271) and the drift reader's balances. Not through it: the lane's own sends,
+nonces, fees and receipts, and the indexers' log scans (their quorum). One endpoint answers
 the whole read (a log window's head and logs alike), `rpc_urls` in the order given; a transport error (the endpoint down, an
 error answer that is no revert) moves the read to the next endpoint, a revert is the contract's answer and is final. A failover
 endpoint (not the first) answers only when its `eth_blockNumber` is at or above the highest block the chain has seen (a receipt's,
 an endpoint's head): a stale one could revert a job that lands at the head, so it counts as a transport error and the job is back
 in the queue, never `dead` (Fable recheck 2 P2-1). The lane's
 own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The
-strict-majority option stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15).
+strict-majority option stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Every RPC request has a 30 s
+timeout, so an endpoint that accepts and never answers fails the read over (test `a_hung_endpoint_and_the_block_gas_read_fail_over`).
 
 **Log windows** (Fable recheck R-6; BUILT, `chain::tests::a_log_window_is_chunked_for_an_rpc_that_caps_the_range`). The
 `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` and the executed-event lookup

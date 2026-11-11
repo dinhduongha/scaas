@@ -87,6 +87,10 @@ pub fn classify_sim(e: &TransportError) -> SimError {
 const LOG_SPAN_MIN: u64 = 10;
 const LOG_WINDOW_SPANS: u64 = 20;
 
+/// One RPC request's whole time (connect, send, answer): past it the request is a transport error and a read fails over.
+// ponytail: one fixed bound, generous for a heavy `eth_call` / `eth_estimateGas`; a config field if an operator needs another
+const RPC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(if cfg!(test) { 2 } else { 30 });
+
 /// The `latest` header's gas facts ([`Chain::block_gas`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockGas {
@@ -121,7 +125,9 @@ impl Chain {
         let providers = cfg
             .rpc_urls
             .iter()
-            .map(|u| Ok(ProviderBuilder::new().disable_recommended_fillers().connect_http(u.parse()?).erased()))
+            // Fable recheck 2 P3-4: a request timeout, so an endpoint that accepts and never answers fails a read over
+            .map(|u| Ok(ProviderBuilder::new().disable_recommended_fillers()
+                .connect_reqwest(reqwest::Client::builder().timeout(RPC_TIMEOUT).build()?, u.parse()?).erased()))
             .collect::<Result<Vec<_>>>()?;
         if providers.is_empty() {
             return Err(anyhow!("chain {}: no rpc_urls", cfg.evm_chain_number));
@@ -230,8 +236,9 @@ impl Chain {
     /// it) and whether the chain runs Amsterdam — the header carries EIP-7928's `blockAccessListHash` (as
     /// `pqz-core/nethermind/chain/e2e.py` decides it). Read from the raw header, so any RPC's block shape works.
     pub async fn block_gas(&self) -> Result<BlockGas> {
-        let b: serde_json::Value =
-            self.primary().raw_request("eth_getBlockByNumber".into(), ("latest", false)).await?;
+        let b: serde_json::Value = self.read(|p| async move {
+            p.raw_request("eth_getBlockByNumber".into(), ("latest", false)).await.map_err(|e| SimError::Transport(e.to_string()))
+        }).await.map_err(|e| anyhow!("{e}"))?;
         let g = b["gasLimit"].as_str().ok_or_else(|| anyhow!("chain {}: latest block without gasLimit", self.number))?;
         Ok(BlockGas { limit: u64::from_str_radix(g.trim_start_matches("0x"), 16)?, amsterdam: b.get("blockAccessListHash").is_some() })
     }
@@ -627,6 +634,31 @@ mod tests {
         let (capped3, _) = fake_rpc(|r| capped_logs(r, u64::MAX)).await;
         assert_eq!(chain_of(&[&down, &capped3]).logs_since(Address::ZERO, B256::ZERO, 10_000).await.unwrap().len(), 1);
         assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1, "one request, then the next endpoint");
+    }
+
+    /// Fable recheck 2 P3-4: an endpoint that accepts and never answers fails the read over after [`RPC_TIMEOUT`]; the block gas
+    /// limit (every job's cap) fails over too. Control: the good endpoint alone.
+    #[tokio::test]
+    async fn a_hung_endpoint_and_the_block_gas_read_fail_over() {
+        let hung = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let hung_url = format!("http://{}", hung.local_addr().unwrap());
+        tokio::spawn(async move {
+            let mut held = vec![];
+            while let Ok((c, _)) = hung.accept().await {
+                held.push(c); // accepted, never answered
+            }
+        });
+        let (good, _) = fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x64"}),
+            Some("eth_getBlockByNumber") => json!({"result": {"gasLimit": "0x1c9c380"}}),
+            _ => json!({"result": format!("0x{:064x}", 5)}),
+        }).await;
+        assert_eq!(chain_of(&[&good]).block_gas().await.unwrap().limit, 30_000_000, "control");
+        let two = chain_of(&[&hung_url, &good]);
+        let got = tokio::time::timeout(std::time::Duration::from_secs(6), two.call_raw(Address::ZERO, Bytes::new())).await;
+        assert_eq!(got.expect("one timeout, then the next endpoint").unwrap().len(), 32);
+        let (busy, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "header not found"}})).await;
+        assert_eq!(chain_of(&[&busy, &good]).block_gas().await.unwrap().limit, 30_000_000, "the gas cap's read fails over");
     }
 
     /// NODE-GW-07: the chain's `chain_uid` is its block 0 hash; a configured one that differs refuses the chain.

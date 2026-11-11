@@ -566,8 +566,20 @@ impl Venue {
     async fn fault(&self, p: &PlannedSettlement) -> Vec<B256> {
         let data = ISCaaSDex::settleOneCall { s: p.to_settlement(), submitter: self.relayer() }.abi_encode();
         let tx = TransactionRequest::default().from(self.dex).to(self.dex).input(data.into());
-        let Err(err) = self.chain.primary().call(tx).await else { return vec![] };
-        let Some(raw) = err.as_error_resp().and_then(|r| r.as_revert_data()) else { return vec![] };
+        // Fable recheck 2 P3-4: through `Chain::read`; the revert data of an error answer, nothing on a success
+        let raw = self.chain.read(|p| {
+            let tx = tx.clone();
+            async move {
+                match p.call(tx).await {
+                    Ok(_) => Ok(None),
+                    Err(e) => match e.as_error_resp() {
+                        Some(r) => Ok(r.as_revert_data()),
+                        None => Err(SimError::Transport(e.to_string())),
+                    },
+                }
+            }
+        }).await;
+        let Ok(Some(raw)) = raw else { return vec![] };
         let legs: Vec<B256> = p.makers.iter().map(|(m, _, _)| m.hash).chain([p.taker.hash]).collect();
         let mut named: Vec<B256> = vec![];
         for w in raw.get(4..).unwrap_or_default().as_chunks::<32>().0.iter().copied().map(B256::from) {
@@ -597,21 +609,32 @@ impl Venue {
             let f = TradeFill { sellFill: sold, receiveFill: recv, dexFee: fee(recv, &r.order), submitter: self.relayer() };
             let data = IToken::mtxTradeCall { o: r.order.clone(), auth: auth.clone(), f }.abi_encode();
             let tx = TransactionRequest::default().from(self.dex).to(r.sell).input(data.into());
-            match self.chain.primary().call(tx).await {
-                Ok(_) => {}
-                Err(e) => {
+            // Fable recheck 2 P3-4: through `Chain::read`; `Some(revert data)` when the leg's own pull reverts
+            let leg = self.chain.read(|p| {
+                let tx = tx.clone();
+                async move {
+                    match p.call(tx).await {
+                        Ok(_) => Ok(None),
+                        Err(e) => match classify(&e) {
+                            SimError::Revert(_) => Ok(Some(e.as_error_resp().and_then(|x| x.as_revert_data()))),
+                            SimError::Transport(t) => Err(SimError::Transport(t)),
+                        },
+                    }
+                }
+            }).await;
+            match leg {
+                Ok(None) => {}
+                Ok(Some(raw)) => {
                     // F-16: a pause is no leg's fault; the market halts until it ends, nobody is blamed
-                    let paused = e.as_error_resp().and_then(|x| x.as_revert_data()).filter(|_| self.is_regulated(r.sell))
+                    let paused = raw.filter(|_| self.is_regulated(r.sell))
                         .and_then(|raw| <IRegulatedToken::TokenPaused as alloy::sol_types::SolError>::abi_decode(&raw).ok());
                     if let Some(p) = paused {
                         self.set_paused(r.sell, p.until);
                         return Err(bad(format!("PAUSED: {:#x} until {}", r.sell, p.until)));
                     }
-                    match classify(&e) {
-                        SimError::Revert(_) => out.push(r.hash),
-                        SimError::Transport(e) => return Err(down(format!("rpc: {e}"))),
-                    }
+                    out.push(r.hash);
                 }
+                Err(e) => return Err(down(format!("rpc: {}", e.to_string().trim_start_matches("transport: ")))),
             }
         }
         Ok(out)
@@ -622,7 +645,7 @@ impl Venue {
     /// only, the delegate is never asked; a contract ⇒ ERC-1271 called from `verifier` with the cap by codehash as the
     /// callee's gas, accepted only as exactly 32 bytes equal to the magic word. `Err` = the RPC, never a verdict.
     async fn valid_sig(&self, verifier: Address, signer: Address, digest: B256, sig: &Bytes) -> Result<bool> {
-        let code = self.chain.primary().get_code_at(signer).await?;
+        let code = self.chain.code_at(signer).await.map_err(|e| anyhow!("{e}"))?;
         if !is_contract(&code) {
             return Ok(ecdsa_ok(signer, digest, sig));
         }
@@ -633,15 +656,21 @@ impl Venue {
         // the callee of a top-level call gets `gas − intrinsic`: exactly the cap `staticcall` gives it
         let gas = sig_cap(&code, self.clone_codehash) + intrinsic(&data);
         let tx = TransactionRequest::default().from(verifier).to(signer).input(data.into()).gas_limit(gas);
-        match self.chain.primary().call(tx).await {
-            Ok(out) => Ok(magic_ok(&out)),
-            // the EVM's answer (a revert, out of gas inside the cap) is `false`, as a failed `staticcall` is
-            Err(e) if e.as_error_resp().is_some_and(|r| {
-                let m = r.message.to_ascii_lowercase();
-                r.as_revert_data().is_some() || m.contains("revert") || m.contains("execution") || m.contains("gas")
-            }) => Ok(false),
-            Err(e) => Err(e.into()),
-        }
+        // Fable recheck 2 P3-4: through `Chain::read`
+        self.chain.read(|p| {
+            let tx = tx.clone();
+            async move {
+                match p.call(tx).await {
+                    Ok(out) => Ok(magic_ok(&out)),
+                    // the EVM's answer (a revert, out of gas inside the cap) is `false`, as a failed `staticcall` is
+                    Err(e) if e.as_error_resp().is_some_and(|r| {
+                        let m = r.message.to_ascii_lowercase();
+                        r.as_revert_data().is_some() || m.contains("revert") || m.contains("execution") || m.contains("gas")
+                    }) => Ok(false),
+                    Err(e) => Err(SimError::Transport(e.to_string())),
+                }
+            }
+        }).await.map_err(|e| anyhow!("{e}"))
     }
 
     // ------------------------------------------------------------------------------ intake
