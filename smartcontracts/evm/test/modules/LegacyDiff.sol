@@ -189,12 +189,21 @@ abstract contract LegacyDiff is Test {
     ///      its rule; every other byte is compared as before. Group 3l (CTR-TOK-31, docs/superpowers/specs/2026-11-10-wrap-
     ///      limits.md §2, commit 7ba002dc): `validBits()` of the six wrapped kinds 1, 3, 5, 9, 11, 13 adds bits 25
     ///      `WRAP_LIMIT`, 26 `WRAP_LIST`, 27 `REDEEMER` (`GovernanceBits.WRAP_CONTROLS`) to the old answer. Bit 24 `PQZ_PROOF`
-    ///      of the PQZ kinds predates d142b57c (3h T61) and is in both answers.
+    ///      of the PQZ kinds predates d142b57c (3h T61) and is in both answers. Round 3s (CTR-GOV-24, spec
+    ///      2026-11-10-token-lists.md §3): `validBits()` of the regulated kinds 8-13 adds bit 28 `KYC`
+    ///      (`GovernanceBits.REGULATED`). Round 3t (CTR-PQZ-36, spec 2026-11-11-verifier-fee.md §7.3): `pqzVerifyConfig()` of
+    ///      the PQZ kinds 4, 5, 12, 13 appends `verifierFee`, `verifierFeeMax`, `verifierFeePending`, `verifierFeeEta` to the
+    ///      seven old words; a token created without a fee reads 0 for the four.
     function _intended(address token, bytes memory data, Run memory o) internal view returns (bytes memory) {
+        if (o.ok && o.ret.length == 7 * 32 && bytes4(data) == bytes4(keccak256("pqzVerifyConfig()"))) {
+            return bytes.concat(o.ret, new bytes(4 * 32));
+        }
         if (!o.ok || o.ret.length != 32 || bytes4(data) != bytes4(keccak256("validBits()"))) return o.ret;
         uint8 k = _kindOf(token);
-        if (k != 1 && k != 3 && k != 5 && k != 9 && k != 11 && k != 13) return o.ret;
-        return abi.encode(abi.decode(o.ret, (uint256)) | GovernanceBits.WRAP_CONTROLS);
+        uint256 b = abi.decode(o.ret, (uint256));
+        if (k >= 8 && k <= 13) b |= uint256(1) << GovernanceBits.KYC;
+        if (k == 1 || k == 3 || k == 5 || k == 9 || k == 11 || k == 13) b |= GovernanceBits.WRAP_CONTROLS;
+        return abi.encode(b);
     }
 
     /// @dev Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1-§4.3): d142b57c's ownership names are the admin
