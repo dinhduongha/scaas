@@ -8,6 +8,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {ISCaaSDex, IExchangeExecutor} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -171,7 +172,10 @@ contract Dex is OnchainBase {
         IFactoryToken.TokenConfig memory c = _base("Onchain Dex R", "oDR");
         c.admin = _pad(a1);
         (c.initialSupply, c.initialHolder) = (1e12, a2);
-        // no regulated control set: every `RegulatedParams` field stays 0 (RegulatedLib's shape rule)
+        // no control set at creation; group 3s (CTR-GOV-24): a1's issuer seat holds the list bits 8, 9 (off, enableable), so
+        // the token carries its terms (the `enableable` predicate); `_admin` lists the parties and switches the allow list on
+        c.roles.issuer = _pad(a1);
+        c.reg.termsHash = keccak256("onchain dex terms");
         vm.broadcast(k1);
         t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), _salt("oDR"));
         _book(t, "NormalRegulatedToken");
@@ -191,6 +195,12 @@ contract Dex is OnchainBase {
         dex.setMarket{gas: G}(A, address(usdc), true);
         dex.setMarket{gas: G}(W, B, true);
         dex.setMarket{gas: G}(R, A, true);
+        // group 3s (spec 2026-11-10-token-lists.md §4.4, §15 T8): R's allow list, written while off by a1's issuer seat: both
+        // traders, the DEX and its puller listed like anyone else; then switched on at once (`FeatureEnabled(8)`)
+        bytes32[] memory listed = new bytes32[](4);
+        (listed[0], listed[1], listed[2], listed[3]) = (_pad(a1), _pad(a2), _pad(address(dex)), _pad(_puller()));
+        IRegulatedToken(R).setAllowed{gas: G}(listed, true);
+        IRegulatedToken(R).enableFeature{gas: G}(GovernanceBits.ALLOWLIST);
         dex.setFeeSplit{gas: G}(300_000, TREASURY);
         dex.setExchangeTarget{gas: G}(address(router), true);
         dex.setExchangeTarget{gas: G}(address(exec), true);

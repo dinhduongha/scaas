@@ -237,6 +237,13 @@ contract Gov is OnchainBase {
         IERC20(tc).transfer(a3, 10); // to an attested holder
         vm.broadcast(k1);
         IERC20(tc).transfer(a2, 10); // to the KYC provider's own row
+        // group 3s (CTR-GOV-24, spec §5.2, §15 T8): KYC off (grantDelay 0: at once; a1 the admin) and on again, at once; the
+        // attested receiver still receives
+        vm.startBroadcast(k1);
+        IGovernance(tc).disableFeature(GovernanceBits.KYC);
+        IRegulatedToken(tc).enableFeature(GovernanceBits.KYC);
+        IERC20(tc).transfer(a3, 1);
+        vm.stopBroadcast();
     }
 
     /// Round 3r (CTR-GOV-23, spec §7 "Matrix"): the registry's admin moves from `iss` to the derived secp256k1 UA (the
