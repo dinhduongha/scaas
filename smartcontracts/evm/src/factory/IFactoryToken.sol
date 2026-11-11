@@ -170,5 +170,7 @@ interface IFactoryToken {
 ///      (8-13) reads it. Every init path of the kinds calls it with the token's own `kind()`.
 function requireRegOfKind(uint8 kind, IFactoryToken.RegulatedParams memory r) pure {
     if (kind < TokenStore.KIND_NORMAL_REGULATED && (r.complianceRegistry != address(0) || r.requiredFlags != 0
-        || r.deniedFlags != 0 || r.termsHash != 0)) revert IFactoryToken.ConfigFieldForOtherKind(6);
+        || r.deniedFlags != 0 || r.termsHash != 0 || r.taxRecipient != 0)) {
+        revert IFactoryToken.ConfigFieldForOtherKind(6); // every field, `taxRecipient` too (Fable A-3)
+    }
 }
