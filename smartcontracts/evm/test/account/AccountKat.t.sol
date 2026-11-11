@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {kindArgs} from "../../script/KindModules.sol";
 
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
@@ -24,6 +25,7 @@ import {nid} from "../helpers/Ids.sol";
 /// `WRITE_KAT=true forge test --match-path test/account/AccountKat.t.sol` rewrites them; clientkeys reads them.
 abstract contract MtxKatBase is Test {
     using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MtxHash for MetaTxLib.MetaTransaction;
 
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 

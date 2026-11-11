@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {UAMetaTxBase, UAMetaTxBaseCore} from "../../src/metatx/UAMetaTxBase.sol";
@@ -92,7 +93,7 @@ contract MergeInvariantsTest is MergeBase {
         MetaTxLib.UAMetaTransaction memory m = _burn(_pad(alice), 0);
         (m.mode, m.fee) = (MODE_FIX, 10);
         m.feeRecipient = FEE_TO;
-        bytes32 d = _callDigest(address(tok), m); // `MetaTxLib.hashStruct` zeroes both unbound fields
+        bytes32 d = _callDigest(address(tok), m); // `MtxPipelineLib._structHash` zeroes both unbound fields
         MetaTxLib.UAMetaTransaction memory canonical = _copy(m);
         (canonical.relayer, canonical.feeRecipient) = (address(0), address(0));
         assertEq(d, _callDigest(address(tok), canonical), "both unbound");
@@ -157,7 +158,7 @@ contract MergeInvariantsTest is MergeBase {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
             data: abi.encodeCall(IMetaTx.cancelNonce, (5)), batch: 1, nonce: 0, validUntil: block.timestamp + 600, mode: 0,
             relayer: address(0), fee: 0, feeRecipient: address(0)});
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, _dig(address(tok), MetaTxLib.hashStruct(m)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, _dig(address(tok), MtxHash.hashStruct(m)));
         bytes memory sig = abi.encodePacked(r, s, v);
         uint256 snap = vm.snapshotState();
         vm.prank(RELAYER);

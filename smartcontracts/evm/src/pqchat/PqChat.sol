@@ -52,11 +52,14 @@ contract PqChat is IPqChat, PqChatCore {
 
     // ------------------------------------------------------------------ the instance
 
+    /// @notice The factory's only. `ownerUA` is 0 (no owner) or the creator (`IOpenFactory.creating()`, Fable D P3-1): nobody
+    ///         names another UA as the owner of an instance it creates.
     function initialize(bytes32 ownerUA) external {
         if (msg.sender != FACTORY) revert PqChatNotFactory();
         S storage s = _s();
         if (s.initialized) revert PqChatInitialized();
         ChainEnvCode.requirePresent();
+        if (ownerUA != 0 && ownerUA != IOpenFactory(FACTORY).creating()) revert PqChatOwnerNotCreator(ownerUA);
         (s.initialized, s.ownerUA) = (true, ownerUA);
     }
 

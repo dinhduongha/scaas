@@ -316,19 +316,162 @@ contract GovRelaxTest is Test {
         assertTrue(_live(FREEZE, nid(other)));
     }
 
-    function test_ownerCannotConfirmHolderRenounce() public {
+    /// Fable D P2-1: a holder's live pending does not block the owner. The owner's revoke proposes over the issuer's
+    /// renounce (it does not confirm it); the issuer can neither confirm nor replace nor cancel the owner's proposal; the
+    /// owner confirms after `grantDelay` and bars. Negative control: the holder over the owner's live pending still reverts.
+    function test_ownerProposesOverHolderPending() public {
+        vm.prank(issuer);
+        a.renounceRole(FREEZE);
+        vm.prank(OWNER);
+        a.revokeRole(FREEZE, nid(issuer)); // proposes over the renounce
+        assertTrue(a.hasRole(FREEZE, nid(issuer)), "proposal only");
+        (uint64 eta, bytes32 proposer, bytes32 commit, bool live) = a.pendingGrant(FREEZE, nid(issuer));
+        assertEq(proposer, nid(OWNER));
+        assertEq(commit, _commit(REVOKE, FREEZE, nid(issuer)));
+        assertEq(eta, block.timestamp + D);
+        assertTrue(live);
+        vm.prank(issuer);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(issuer)));
+        a.renounceRole(FREEZE); // the squat: refused over the owner's proposal
+        vm.prank(issuer);
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(issuer)));
+        a.cancelGrant(FREEZE, nid(issuer));
+        vm.warp(eta);
+        vm.prank(OWNER);
+        a.revokeRole(FREEZE, nid(issuer));
+        assertFalse(a.hasRole(FREEZE, nid(issuer)));
+        assertTrue(a.barred(FREEZE, nid(issuer)));
+
+        // a delegable holder's leaf proposal at `(bit, X)` does not block the owner's grant to X either
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 10, true));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 10, true));
+        vm.prank(issuer);
+        a.setGrant(PAUSE, nid(other), _t(uint64(block.timestamp + D - 1), 1, false)); // a leaf proposal at (7, other)
+        (, proposer,,) = a.pendingGrant(PAUSE, nid(other));
+        assertEq(proposer, nid(issuer));
+        vm.prank(OWNER);
+        a.grantRole(PAUSE, nid(other));
+        (, proposer, commit,) = a.pendingGrant(PAUSE, nid(other));
+        assertEq(proposer, nid(OWNER));
+        assertEq(commit, _commit(1, PAUSE, nid(other)));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.grantRole(PAUSE, nid(other));
+        assertTrue(a.hasRole(PAUSE, nid(other)));
+    }
+
+    /// The other proposer may still confirm its own pending when the owner does not propose over it (positive control).
+    function test_holderConfirmsOwnRenounce() public {
         vm.prank(issuer);
         a.renounceRole(FREEZE);
         vm.warp(block.timestamp + D);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(issuer)));
-        vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
-        assertTrue(a.hasRole(FREEZE, nid(issuer)));
-        assertFalse(a.barred(FREEZE, nid(issuer)));
-        // positive control: the holder confirms its own
         vm.prank(issuer);
         a.renounceRole(FREEZE);
         assertFalse(a.hasRole(FREEZE, nid(issuer)));
+        assertFalse(a.barred(FREEZE, nid(issuer)));
+    }
+
+    /// Fable re-check C1, C2: every word that narrows a delayed bit's holder is a cut. FORCE (scalar) rows: a `total`, a
+    /// `perWindow` and a raised `min` on the `WHOLE` issuer only propose (the issuer keeps forcing); a `LIMITED` root whose
+    /// `delegable` is dropped (its leaves would die at once) only proposes. Control: the same terms confirm after the delay.
+    function test_relaxSetGrantEveryNarrowingIsACut() public {
+        IGovernance.GrantTerms[3] memory f;
+        (f[0].max, f[0].total) = (NONE, 1);
+        (f[1].max, f[1].perWindow, f[1].window) = (NONE, 1, 1 days);
+        (f[2].max, f[2].min) = (NONE, 5);
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(OWNER);
+            a.setGrant(FORCE, nid(issuer), f[i]);
+            assertTrue(_live(FORCE, nid(issuer)), "FORCE narrowing: proposed");
+            assertTrue(a.hasRole(FORCE, nid(issuer)));
+            vm.prank(issuer);
+            a.act(FORCE, 10); // still WHOLE: 10 > total 1, perWindow 1, and below min 5 would fail if written
+            vm.prank(OWNER);
+            a.cancelGrant(FORCE, nid(issuer));
+        }
+        vm.prank(OWNER);
+        a.setGrant(FORCE, nid(issuer), f[0]);
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(FORCE, nid(issuer), f[0]);
+        assertEq(a.grantOf(FORCE, nid(issuer)).total, 1, "control: confirmed after the delay");
+
+        // C2: a LIMITED delegable root on FREEZE; dropping `delegable` is a cut
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true));
+        vm.prank(issuer);
+        a.setGrant(FREEZE, nid(other), _t(uint64(block.timestamp + D + 1), 1, false)); // a leaf, at once
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, false));
+        assertTrue(a.grantOf(FREEZE, nid(issuer)).delegable, "delegable dropped: proposed only");
+        assertTrue(_live(FREEZE, nid(issuer)));
+        vm.prank(other);
+        a.act(FREEZE, 0); // the leaf lives until the confirm
+    }
+
+    /// Fable D P2-2, A-4: on a delayed bit a new or lower `maxUses`, or a lower `max`, is a cut like a `validUntil` cut: the
+    /// owner's call only proposes, the holder keeps acting until the confirm; the grantor's on its leaf likewise. Positive
+    /// controls: the same terms apply at once on an unmasked bit, and a delayed-bit narrowing of neither word applies at once.
+    function test_relaxSetGrantMaxUsesAndMaxAreCuts() public {
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 1, false)); // WHOLE -> maxUses 1
+        assertEq(a.grantOf(FREEZE, nid(issuer)).maxUses, 0, "proposal: nothing written");
+        (, bytes32 proposer,, bool live) = a.pendingGrant(FREEZE, nid(issuer));
+        assertTrue(live);
+        assertEq(proposer, nid(OWNER));
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(issuer);
+            a.act(FREEZE, 0); // still unbounded
+        }
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 1, false));
+        assertEq(a.grantOf(FREEZE, nid(issuer)).maxUses, 1, "confirm: written");
+
+        // FORCE (scalar): a lower `max` waits
+        IGovernance.GrantTerms memory f;
+        f.max = 0;
+        vm.prank(OWNER);
+        a.setGrant(FORCE, nid(issuer), f);
+        assertTrue(_live(FORCE, nid(issuer)), "max cut: proposed");
+        vm.prank(issuer);
+        a.act(FORCE, 5);
+
+        // a LIMITED holder: a lower maxUses waits, an equal one is no cut
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 10, true));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 10, true));
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 9, true));
+        assertEq(a.grantOf(PAUSE, nid(issuer)).maxUses, 10, "LIMITED, lower maxUses: proposed");
+        vm.prank(OWNER);
+        a.cancelGrant(PAUSE, nid(issuer));
+        uint64 far = uint64(block.timestamp + D + 1);
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(far, 10, true)); // control: a narrowing of validUntil alone, past the delay
+        assertEq(a.grantOf(PAUSE, nid(issuer)).validUntil, far, "no cut: at once");
+
+        // leaf path: the grantor lowers its leaf's maxUses
+        vm.prank(issuer);
+        a.setGrant(PAUSE, nid(other), _t(far, 5, false)); // a new leaf: at once
+        assertEq(a.grantOf(PAUSE, nid(other)).maxUses, 5);
+        vm.prank(issuer);
+        a.setGrant(PAUSE, nid(other), _t(far, 1, false));
+        assertEq(a.grantOf(PAUSE, nid(other)).maxUses, 5, "leaf cut: proposed");
+        assertTrue(_live(PAUSE, nid(other)));
+
+        // control: an unmasked bit (RECORD) takes the same cut at once
+        vm.prank(OWNER);
+        a.setGrant(RECORD, nid(compliance), _t(0, 1, false));
+        assertEq(a.grantOf(RECORD, nid(compliance)).maxUses, 1, "unmasked: at once");
     }
 
     /// The holder cannot turn the owner's revoke into its renounce; a grantor cannot confirm the owner's revoke of its leaf

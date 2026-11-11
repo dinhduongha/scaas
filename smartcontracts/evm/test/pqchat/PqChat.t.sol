@@ -56,6 +56,23 @@ contract PqChatTest is PqChatBase {
         assertEq(chat.owner(), OWNER_UA);
     }
 
+    /// Fable D P3-1: the owner is 0 or the creator (`creating()`): a creator naming another UA is refused; the controls, its
+    /// own id and 0, pass.
+    function test_initialize_ownerIsTheCreator() public {
+        bytes memory other = abi.encodeCall(IPqChat.initialize, (OWNER_UA));
+        vm.prank(address(0xB0B));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatOwnerNotCreator.selector, OWNER_UA));
+        f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "forged", other);
+        vm.prank(address(0xB0B));
+        PqChat own = PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "own",
+            abi.encodeCall(IPqChat.initialize, (bytes32(uint256(0xB0B))))));
+        assertEq(own.owner(), bytes32(uint256(0xB0B)));
+        vm.prank(address(0xB0B));
+        PqChat none = PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "none",
+            abi.encodeCall(IPqChat.initialize, (bytes32(0)))));
+        assertEq(none.owner(), bytes32(0));
+    }
+
     function test_validateEnv_refusals() public view {
         IFactoryToken.ChainEnv memory e;
         e.chainUid = chainUidA;

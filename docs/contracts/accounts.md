@@ -2513,6 +2513,12 @@ bytes sig)`. An empty `proof` ⇒ the signed message is the digest; a non-empty 
 OpenZeppelin). A one-item batch signs the digest directly. P-256: `sig = abi.encode(authenticatorData,
 clientDataJSON, r, s)`, challenge = base64url(message). secp256k1: `sig` is a 65-byte ECDSA signature (low-s) over the
 raw message.
+**Limitation (documented 2026-11-11, Fable review B P3-2; no code change).** `SmartKeyAccount.isValidSignature` and
+`MandateWallet`'s ERC-1271 answer over the raw `hash`, not wrapped in the account's own domain (no ERC-7739 nesting). Inside
+SCaaS nothing replays: every signed struct names its `from` and the verifying contract's domain. Outside it, a digest that
+does not name the signer (some third-party order formats) signed by a key is valid for every account that key controls:
+the owner's EOA and its `MandateWallet`, or two `SmartKeyAccount`s that share a key. A client signing for an outside
+protocol through an account checks that the digest binds the account's address; an ERC-7739 wrapper is a later round.
 
 <a id="recovery"></a>
 <a id="CTR-ACC-03"></a>**CTR-ACC-03** — **Guardian recovery adds a key; it removes none.** The guardian calls

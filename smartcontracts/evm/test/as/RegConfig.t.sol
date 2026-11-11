@@ -35,21 +35,22 @@ import {WrappedPqzTokenA} from "../../src/pqz/WrappedPqzTokenModules.sol";
 // `ConfigFieldForOtherKind(6)` through the factory (the same config with `reg` empty is the positive control); the wrapped
 // Zether and PQZ kinds' raw init decoders take the kind id and the masks from the token, not the fixed `WRAPPED_*`.
 
-/// The four fields of `reg`, each alone non-zero.
+/// The five fields of `reg`, each alone non-zero (`taxRecipient`: Fable A-3).
 abstract contract RegRows is Test {
     bytes32 internal constant TOKEN_SLOT = 0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00; // scaas.token
 
-    function _regs() internal pure returns (IFactoryToken.RegulatedParams[4] memory r) {
+    function _regs() internal pure returns (IFactoryToken.RegulatedParams[5] memory r) {
         r[0].complianceRegistry = address(0xC0FFEE);
         r[1].requiredFlags = 1;
         r[2].deniedFlags = 1 << 63;
         r[3].termsHash = bytes32(uint256(1));
+        r[4].taxRecipient = bytes32(uint256(0x7A));
     }
 
     /// Each field of `reg` alone refuses `ConfigFieldForOtherKind(6)`; `reg` empty creates the token of `kind`.
     function _refusesReg(OpenFactory f, IOpenFactory.TokenKind kind, IFactoryToken.TokenConfig memory c) internal {
-        IFactoryToken.RegulatedParams[4] memory r = _regs();
-        for (uint256 i; i < 4; ++i) {
+        IFactoryToken.RegulatedParams[5] memory r = _regs();
+        for (uint256 i; i < 5; ++i) {
             c.reg = r[i];
             vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, uint8(6)));
             f.createToken(kind, 1, abi.encode(c), bytes32(i));

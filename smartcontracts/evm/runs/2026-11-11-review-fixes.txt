@@ -1,0 +1,51 @@
+Fable review fixes, branch ua-mtx-fix-contracts (from ca8a4773). Foundry 1.8.5, forge test -j 1 under scripts/capped
+(4 GB), per directory (runs/2026-11-11-review-fixes/gate.sh) and per PQZ set (atset.sh); full output in git-ignored logs.
+Mutants: runs/2026-11-11-review-fixes/mutants.py. UNAUDITED.
+
+step | commit | rc | counts
+--- round 1 (every forge directory once, default set n2304-kmax4096) ---
+test/account | 65b8be6f..b17e290f tree | 0 | 3 suites, 54 passed
+test/as | tree before b17e290f | 1 | 351 passed, 2 failed (RegulatedGas mtx rows; moved in b17e290f)
+test/confidential, test/fork, test/p6f, test/vectors | tree | 0 | all passed
+test/governance | tree | 1 | 458 passed, 17 failed (PlusZero gas rows, GovDeploy addresses; moved in b17e290f)
+test/hedera | tree | 1 | 19 passed, 1 failed (size row; baseline moved in b17e290f)
+test/liquidity | tree | 0 | 79 passed, 1 skipped
+test/merge | tree | 0 | 118 passed
+test/metatx | tree | 0 | 400 passed
+test/modules | tree | 0 | 35 passed
+test/pqchat | 792793b3 | 0 | 99 passed
+test/pqzh | tree | 0 | 42 passed
+test/ua | tree | 0 | 46 suites, 635 passed
+test/v2 | tree | 1 | 606 passed, 2 failed (size row; UniswapExecutor refund event; fixed in b17e290f)
+test/wallet | tree | 0 | 99 passed
+test/wrap | tree | 0 | 72 passed
+test/zether | tree | 0 | 335 passed, 4 skipped
+test/pqz | tree | 1 | 453 passed, 1 failed (ProofPathInvariants Zether rows; moved in b17e290f)
+test/research | tree | 1 | 92 passed, 1 failed (debit_min_gas, the owner's; moved in 660f3ee7)
+test/{BlsKat,ExpectRevertLint,FeePolicy,HashToCurve,MultiSig} | b17e290f | 0 | 29 passed
+re-run of the moved pins (RegulatedGas, PlusZero, GovDeploy, HederaV2, Factory, UniswapExecutor, ProofPathInvariants) | b17e290f | 0 | all passed
+four sets, debit_min_gas before the move: test/research | b17e290f | 1 at each set | pinned / measured: n2048 7,299,074 / 7,299,398;
+  n2304 7,514,360 / 7,514,684; n2560 7,727,209 / 7,727,533; n2816 7,969,003 / 7,969,327 (+324 each); test/pqz 0 at each set
+size gate | b17e290f + 2046afe0 | 0 | 166 contracts; 46 rows moved in all (45 in b17e290f incl. GovernanceLib 14,946 -> 15,249;
+  GovernanceLib 15,249 -> 15,574 in 2046afe0); largest OpenFactory 34,184 B
+--- round 2 (after the Fable re-check, 2046afe0, and debit_min_gas, 660f3ee7) ---
+test/governance | 660f3ee7 | 1 | 475 passed, 1 failed (GovDeploy addresses: the metadata hash; moved in the next commit), then GovDeploy 19 passed
+test/as | 660f3ee7 | 0 | 69 suites, 353 passed
+test/merge | 660f3ee7 | 0 | 118 passed
+test/v2 | 660f3ee7 | 0 | 46 suites, 608 passed
+test/hedera | 660f3ee7 | 0 | 20 passed
+test/metatx | 660f3ee7 | 0 | 400 passed
+GovRelax (C1, C2) | 2046afe0 | 0 | 31 passed
+size gate | 2046afe0 | 0 | 166 contracts, 0 errors
+n2048-kmax1024: research / pqz / ua | 660f3ee7 | 0 / 0 / 0 | 95 passed 4 skipped / 455 passed 3 skipped / 635 passed
+n2304-kmax4096: research / pqz / ua | 660f3ee7 | 0 / 0 / 0 | 93 passed 6 skipped / 454 passed 4 skipped / 635 passed
+n2560-kmax16384: research / pqz / ua | 660f3ee7 | 0 / 0 / 0 | 93 passed 6 skipped / 450 passed 8 skipped / 635 passed
+n2816-kmax65536: research / pqz / ua | 660f3ee7 | 0 / 0 / 0 | 86 passed 13 skipped / 445 passed 13 skipped / 635 passed
+src/pqz/PqzSet.sol after the runs | 660f3ee7 | 0 | equal to HEAD; gen_set.py --all --check clean (4 sets, 84 files)
+
+mutants (each patched one line, ran its test file, restored), all killed:
+M1 no admin overwrite | M2 no _cuts | M3 no max cut | M4 equal maxUses a cut | B-P2-1 restore moves nothing (12 hybrid/restore
+tests) | A-2 code.length | A-1 refresh fee unchecked | A-3 taxRecipient ignored (6 rows) | B-P3-4 late self refusal | B-P3-4
+late shield refusal | D-P3-1 any owner | P3-9 no floor | P3-9 no used-all check | P3-10 no executor event | C1 whole-no-total |
+C1 whole-no-perWindow | C1 whole-no-min | C1 whole-no-maxUses | C1 whole-no-max | C1 limited-no-maxUses | C2 no-delegable
+(21 of 21). The first P3-9 test survived its mutant (a cheap ringSize cannot be starved); the costly-answer row killed it.

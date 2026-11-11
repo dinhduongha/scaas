@@ -4,6 +4,8 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {FeePolicy, FeeMode} from "../src/common/FeePolicy.sol";
 import {MetaTxLib} from "../src/common/MetaTxLib.sol";
+import {MtxPipelineLib} from "../src/metatx/MtxPipelineLib.sol";
+import {IMetaTx} from "../src/metatx/IMetaTx.sol";
 
 contract FeePolicyTest is Test {
     function test_percentFeeIsForbiddenOnConfidential() public {
@@ -67,15 +69,23 @@ contract FeePolicyTest is Test {
 
     function test_unknownFeeNibbleReverts() public {
         vm.expectRevert(abi.encodeWithSelector(MetaTxLib.ModeFeeInvalid.selector, uint32(0x30)));
-        this.callValidateMode(0x30);
+        this.callFeeModeOf(0x30);
+        // the check every contract runs (`MtxPipelineLib._checkEnvelope`, step 1; `validateMode` moved to legacy, B P3-3)
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, uint32(0x30)));
+        this.callCheckEnvelope(0x30);
     }
 
     function test_unknownModeBitsRevert() public {
-        vm.expectRevert(abi.encodeWithSelector(MetaTxLib.ModeUnknownBits.selector, uint32(0x100)));
-        this.callValidateMode(0x100);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, uint32(0x100)));
+        this.callCheckEnvelope(0x100);
+        this.callCheckEnvelope(MetaTxLib.MODE_FEE_FIXED); // control: a known mode passes
     }
 
-    function callValidateMode(uint32 m) external pure { MetaTxLib.validateMode(m); }
+    function callFeeModeOf(uint32 m) external pure returns (FeeMode) { return MetaTxLib.feeModeOf(m); }
+
+    function callCheckEnvelope(uint32 m) external view {
+        MtxPipelineLib._checkEnvelope(bytes32(uint256(1)), 0, 0, type(uint256).max, m, address(0));
+    }
 
     // Wrapper external để `vm.expectRevert` bắt được revert của library internal.
     function callRequireConfidentialSafe(FeeMode m) external pure {

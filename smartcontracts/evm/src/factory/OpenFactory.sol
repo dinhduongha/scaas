@@ -184,6 +184,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
             address x = _addr(relayFeeRouter_, _EXECUTOR, v);
             _requireCode(x, relayFeeExecutorCodeHash);
             if (_addr(x, _ROUTER, v) != relayFeeRouter_) revert EntryMismatch(v);
+            emit ChainEntrySet(v, x, relayFeeExecutorCodeHash); // the executor's checked hash too (Fable 3r3s3t P3-10)
             relayFeeRouter = relayFeeRouter_;
         }
         if (complianceRegistry_ != address(0)) {

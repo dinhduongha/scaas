@@ -198,7 +198,9 @@ encoding dynamic bytes directly would break injectivity. The typehashes are pinn
 
 **Named structs (typed-signing).** A third family of structs sits beside these two: one struct per named entry (`Unwrap`, `Burn`, `PqzTransfer`, `CancelOrder`, `ReceiverFee`, `RelayFee`, …; 74 rows in `smartcontracts/vectors/typed/typed_ops.json`, [CTR-MTX-28](#CTR-MTX-28)). They consume the same `(from, batch)` lane `mtxNonce` as `MetaTransaction` and `MetaTransfer`, so a lane is spent once whichever struct spent it and one operation cannot run through both entries (`test_namedEntryReplayRefused`). `MetaTransaction`, its typehash, `mtxDigest` and the generic builders are unchanged. The node no longer asks `mtxDigest`: it computes the typed digest of the op itself and that digest is its in-flight key ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)); the views stay for other callers.
 
-<a id="digest"></a>**One rule, four places.** `MetaTxLib.hashStruct` (Solidity, one per struct) is the reference. Three copies must
+<a id="digest"></a>**One rule, four places.** `MtxPipelineLib._structHash` / `_namedHash` (Solidity, the copy every contract runs)
+is the reference; the unused `MetaTxLib.hashStruct` overloads moved to `legacy/ua-mtx-fix-contracts/` (Change 2026-11-11, Fable
+review B P3-3), and the tests reproduce digests through the same functions (`test/helpers/MtxHash.sol`). Three copies must
 match it byte for byte: the client library's EIP-712 builder (the reference ERP client keeps it in
 `lib/eip712.py`), `scaas-node` (an alloy `sol!` struct) and the typed-data JSON handed to the wallet (the wallet
 hashes it itself). Canonical zeroing (`relayer`/`feeRecipient` = 0 when their flag is off) applies in all of them.
@@ -245,8 +247,9 @@ bit  31 ........................ 8 | 7  6  5  4 | 3  2  1  0
 
 The low nibble holds independent **flags** (`mode & FLAG`); the high nibble holds an **enumerated** fee mode
 (mutually exclusive, mask + shift). `mode & MODE_FEE_PERCENT` is a bug (a future value `0x30` would contain bit
-`0x10`); use `feeModeOf(mode)` (values 0/1/2, otherwise `ModeFeeInvalid`). `validateMode` checks both unknown flag
-bits (`ModeUnknownBits`, surfaced as `MetaTxUnknownMode`) and fee values above 2: accepting `0x30` today would freeze
+`0x10`); use `feeModeOf(mode)` (values 0/1/2, otherwise `ModeFeeInvalid`). `MtxPipelineLib._checkEnvelope` (step 1) refuses both
+unknown flag bits and fee values above 2 with `MetaTxUnknownMode` (the unused `validateMode` moved to legacy with
+`hashStruct`): accepting `0x30` today would freeze
 its meaning through signatures already issued. `FeeMode` stays the canonical type of `FeePolicy`; only the separate
 struct field was dropped. `mode` is part of the hash, so a bitmask creates no cross-mode replay.
 
@@ -302,7 +305,7 @@ prefix:
 
 | Step | Check / action | Error |
 |---|---|---|
-| 1 | `MODE_RESTRICT_RELAYER` ⇒ `msg.sender == m.relayer`, and that relayer is not an EIP-7702 designator (owner ruling D3, 2026-10-30); `block.timestamp ≤ m.validUntil`; `validateMode(m.mode)`; `m.nonce == mtxNonce(from, batch)`; the fee-recipient binding; `from ≠ address(this)` (the `_selfSender` hook; overridden by `SmartKeyAccount`, which signs as itself, [CTR-ACC-10](accounts.md#CTR-ACC-10)) | `MetaTxUnauthorizedRelayer`, `CallerDelegated(relayer)`, `MetaTxExpired`, `MetaTxUnknownMode`, `MetaTxBadNonce(expected, got)`, `SelfSender()` |
+| 1 | `MODE_RESTRICT_RELAYER` ⇒ `msg.sender == m.relayer`, and that relayer is not an EIP-7702 designator (owner ruling D3, 2026-10-30); `block.timestamp ≤ m.validUntil`; no unknown `m.mode` flag bit or fee value; `m.nonce == mtxNonce(from, batch)`; the fee-recipient binding; `from ≠ address(this)` (the `_selfSender` hook; overridden by `SmartKeyAccount`, which signs as itself, [CTR-ACC-10](accounts.md#CTR-ACC-10)) | `MetaTxUnauthorizedRelayer`, `CallerDelegated(relayer)`, `MetaTxExpired`, `MetaTxUnknownMode`, `MetaTxBadNonce(expected, got)`, `SelfSender()` |
 | 2 | Signature over the digest (`_hashTypedDataV4(hashStruct(m))`) through the virtual `_requireValidSignature`: EOA (no code, or an EIP-7702 designator) ⇒ `ECDSA.tryRecover` (65 bytes, low-s); contract ⇒ ERC-1271 `isValidSignature` staticcall (50 000 gas; 400 000 for `SmartKeyAccount` clones, which verify P-256 in Solidity when no precompile, [CTR-ACC-05](accounts.md#CTR-ACC-05)) | `MetaTxBadSignature` |
 | 3 | Shape: `data.length ≥ 4`; `bytes4(data)` allowlisted; `data.length` equals the selector's static ABI length where it has one; the fee mode is allowed by the selector's fee class ([CTR-MTX-20](#CTR-MTX-20)) and by `supportedModes()` | `MtxSelectorNotAllowed(bytes4)`, `MtxDataShape(bytes4)`, `MtxFeeClass(bytes4, uint32 mode)`, `MetaTxUnknownMode` |
 | 4 | Write `mtxNonce = expected + 1` | — |

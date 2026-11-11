@@ -226,11 +226,21 @@ library ZetherLib {
         }
     }
 
-    /// @dev `target` answers `sel()` with one word.
+    /// @dev `target` answers `sel()` with one word. The call gets exactly `_PROBE_GAS` (the gas floor of
+    ///      `OpenFactory._supports` first) and a failed call that used all of it reverts `BadInit`: a starved or costly
+    ///      answer never reads as "does not answer", so the negative probe of the burn verifier fails closed too (spec 3r
+    ///      §5.6 N3; Fable 3r3s3t P3-9).
     function _answers(address target, bytes4 sel) private view returns (bool) {
-        (bool ok, bytes memory r) = target.staticcall(abi.encodeWithSelector(sel));
+        uint256 g = gasleft();
+        if (g < _PROBE_GAS * 64 / 63 + _PROBE_GAS_MARGIN) revert IZetherToken.BadInit();
+        (bool ok, bytes memory r) = target.staticcall{gas: _PROBE_GAS}(abi.encodeWithSelector(sel));
+        if (!ok && g - gasleft() >= _PROBE_GAS) revert IZetherToken.BadInit();
         return ok && r.length == 32;
     }
+
+    /// @dev The probe's cap and margin, `OpenFactory`'s (`_PROBE_GAS`, `_PROBE_GAS_MARGIN`).
+    uint256 private constant _PROBE_GAS = 30_000;
+    uint256 private constant _PROBE_GAS_MARGIN = 5_000;
 
     /// @dev The transfer verifier: the clone's env dependency `ENV_ZETHER_TRANSFER` (its code, under the token's
     ///      `DELEGATECALL`; chain-neutral spec §2.2: the copy into storage at `init` is dropped).

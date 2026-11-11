@@ -83,7 +83,7 @@ pub struct UAMetaTx {
 pub const UA_METATX_TYPE: &str = "UAMetaTransaction(bytes32 from,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
 
 impl UAMetaTx {
-    /// `MetaTxLib.hashStruct(UAMetaTransaction)`: unbound relayer / feeRecipient hash as `address(0)`.
+    /// `MtxPipelineLib._structHash(UAMETATX_TYPEHASH, …)` (the contracts' one copy): unbound relayer / feeRecipient hash as `address(0)`.
     pub fn struct_hash(&self) -> [u8; 32] {
         let (r, f) = canon(self.mode, &self.relayer, &self.fee_recipient);
         keccak256(

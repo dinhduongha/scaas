@@ -273,8 +273,8 @@ contract UniswapExecutorTest is UADexBase {
 
     /// `mtxHybridVia` with the DX7 refund: alice sells 500 A (minFill 400) for at least 1.8 B per A, 400 A to bob's
     /// order at his price (800 B), 100 A outside for at least 180 B. The fee-500 pool takes only 60 A and pays
-    /// ⌊60 · 997 · 200 000 / (50 000 000 + 59 820)⌋ = 238 B; the executor returns the 40 A it could not sell, the DEX
-    /// refunds them to alice (sold 460 ≥ minFill), she gets 980 − 3 + 58 B.
+    /// ⌊60 · 997 · 200 000 / (50 000 000 + 59 820)⌋ = 238 B; the executor returns the 40 A it could not sell, the
+    /// token's restore refunds them to alice (B P2-1) (sold 460 ≥ minFill), she gets 980 − 3 + 58 B.
     function test_executor_viaDex_mtxHybridVia_withRefund() public {
         MockV3Pool(pAB500).setMaxIn(60);
         ITradeToken.TradeOrder memory t = _nat(alice, address(B), 1000, 1800, 3_000);
@@ -288,7 +288,7 @@ contract UniswapExecutorTest is UADexBase {
         p.outsideFloor = 180;
         uint256 a0 = A.balanceOf(alice);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("hy", A.tradeOrderDigest(DexLegs.ua(t)), DexLegs.pad(alice), DexLegs.pad(alice), 460, 980, 58, 3, 40, 828);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", A.tradeOrderDigest(DexLegs.ua(t)), DexLegs.pad(alice), DexLegs.pad(alice), 460, 980, 58, 3, 0, 828); // the 40: by the restore (B P2-1)
         vm.prank(RELAYER);
         dex.mtxHybridVia(p, address(ex), _hops(_v3(address(A), address(B), 500)));
         assertEq(A.balanceOf(alice), a0 - 460);

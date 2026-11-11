@@ -357,6 +357,32 @@ contract FactoryDirectoryTest is Test {
         _call(deployer, address(f), _cd(_only(0))); // positive control
     }
 
+    /// Fable 3r3s3t P3-10: writing the relay router also emits `ChainEntrySet` for its executor, with the checked code hash
+    /// (`view_` = `relayFeeExecutor.selector`), after the router's own.
+    function test_relayPair_executorEvent() public {
+        OpenFactory f = _factory(address(router));
+        E memory a = _all();
+        vm.recordLogs();
+        _call(deployer, address(f), _cd(_only(0)));
+        Vm.Log[] memory l = vm.getRecordedLogs();
+        bytes32 topic = IFactoryDirectory.ChainEntrySet.selector;
+        uint256 n;
+        for (uint256 i; i < l.length; ++i) {
+            if (l[i].emitter != address(f) || l[i].topics[0] != topic) continue;
+            bytes4 v = bytes4(l[i].topics[1]);
+            (address at, bytes32 h) = abi.decode(l[i].data, (address, bytes32));
+            if (n == 0) assertEq(v, _sel(0), "the router first");
+            if (n == 0) assertEq(at, a.relay);
+            if (n == 1) {
+                assertEq(v, IFactoryDirectory.relayFeeExecutor.selector, "then the executor");
+                assertEq(at, relay.EXECUTOR());
+                assertEq(h, a.execHash);
+            }
+            ++n;
+        }
+        assertEq(n, 2, "two entries");
+    }
+
     /// D14: `relayFeeExecutor()` is 0 until the relay router is written, then its `EXECUTOR()`.
     function test_relayFeeExecutor_view() public {
         OpenFactory f = _factory(address(router));

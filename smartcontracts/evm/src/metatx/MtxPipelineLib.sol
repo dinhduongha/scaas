@@ -291,15 +291,20 @@ library MtxPipelineLib {
 
     /// @dev The fee of a self-call (both paths): `ABSOLUTE` + `FIXED` = the signed amount, uncapped (step 3 refused
     ///      `ABSOLUTE` + `PERCENT`); anything else = `FeePolicy.compute` on the basis (≤ 1 %). A `UA_POOL` recipient
-    ///      would credit the pool's slot.
+    ///      would credit the pool's slot; the token itself and `SHIELD_POOL` are refused here too, before the self-call,
+    ///      as `_checkTransfer` does (CTR-MTX-17 cheap checks first; Fable B P3-4).
     function _callFee(uint8 feeClass, uint256 basis, uint32 mode, uint256 signed, address feeTo)
-        internal pure returns (uint256 fee, address)
+        internal view returns (uint256 fee, address)
     {
         FeeMode fm = MetaTxLib.feeModeOf(mode);
         if (fm == FeeMode.NONE) return (0, feeTo);
         fee = fm == FeeMode.FIXED && feeClass == FEE_CLASS_ABSOLUTE ? signed : FeePolicy.compute(fm, basis, signed);
         FeePolicy.validateRecipient(fm, feeTo);
-        if (fee != 0 && feeTo == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
+        if (fee != 0) {
+            if (feeTo == address(this)) revert IERC20MetaTx.TransferToSelf();
+            if (feeTo == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
+            if (feeTo == MetaTxLib.SHIELD_POOL) revert IUALedger.ShieldPoolNotPayable();
+        }
         return (fee, feeTo);
     }
 

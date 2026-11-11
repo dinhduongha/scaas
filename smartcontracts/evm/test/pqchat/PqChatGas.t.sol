@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -30,9 +31,11 @@ contract PqChatGasTest is PqTopicsBase {
     uint256 internal constant SLACK = 500;
     // round 3r T4 (R1, Q4: `factoryInfo()` six words, no owner): 27,825 -> 27,801 B; regular 1,908,760 -> 1,906,679; state
     // 43,147,530 -> 43,110,810 (-24 x 1,530)
-    uint256 internal constant RUNTIME = 27_801;
-    uint256 internal constant RELEASE_REGULAR = 1_906_679;
-    uint256 internal constant RELEASE_STATE = 43_110_810;
+    // Fable D P3-1 (2026-11-11, `initialize` checks `creating()`): 27,801 -> 27,999 B; regular 1,906,679 -> 1,921,243;
+    // state 43,110,810 -> 43,413,750 (+198 x 1,530)
+    uint256 internal constant RUNTIME = 27_999;
+    uint256 internal constant RELEASE_REGULAR = 1_921_243;
+    uint256 internal constant RELEASE_STATE = 43_413_750;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
     uint256 internal constant MODULE_RUNTIME = 16_398;
@@ -276,11 +279,12 @@ contract PqChatGasTest is PqTopicsBase {
     }
 
     function test_gas_createInstance() public {
-        bytes memory init = abi.encodeCall(IPqChat.initialize, (OWNER_UA));
+        bytes memory init = abi.encodeCall(IPqChat.initialize, (MetaTxLib.pad(STRANGER))); // the owner is the creator (D P3-1)
         vm.prank(STRANGER);
         f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "gas", init);
         // round 3r T4 (R1: no owner word in the record, no owner list, no `factoryInfo().ownerUA`): 227,583 / 1,523,880 ->
         // 188,761 / 1,328,040 (state -2 x 97,920)
-        _row("createInstance PqChat", 188_761, 1_328_040);
+        // Fable D P3-1 (the `creating()` staticcall in `initialize`): regular 188,761 -> 189,561
+        _row("createInstance PqChat", 189_561, 1_328_040);
     }
 }

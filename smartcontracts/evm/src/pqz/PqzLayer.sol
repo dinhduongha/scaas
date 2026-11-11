@@ -479,6 +479,7 @@ abstract contract PqzLayer is MetaTokenBase {
         _regName(PqzCore.verifierPayee());
         _pullShieldIn(b.shieldIn);
         PqzCore.Paid memory f = PqzBurnLib.unshield(e, b, accHint, proof, pqzAuth, pqzVerdict);
+        if (e.amount == 0 && f.fee != 0) _regSender(b.fromUA); // a refresh that pays fees moves value out (Fable A-1)
         _payFees(f, f.fee - f.verifierFee);
     }
 

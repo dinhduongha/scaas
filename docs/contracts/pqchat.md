@@ -89,7 +89,9 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
   a release, refuses `PqChatEnv` for `chainUid == 0`, `registry == 0`, no `params[0]`, or `params[0] < 24,576`
   (EIP-170's limit, the smallest of any EVM chain; one wrap blob needs 1,689 B). `chainEnv()` returns the decoded env.
 - **`initialize(bytes32 ownerUA)`**: only `FACTORY` (`PqChatNotFactory`), once (`PqChatInitialized`), only on a clone
-  with a well-formed env (`EnvMissing`). `ownerUA` may be 0, is fixed and has no transfer.
+  with a well-formed env (`EnvMissing`). `ownerUA` may be 0, is fixed and has no transfer. Otherwise it must be the
+  creator, the factory's `creating()` (`PqChatOwnerNotCreator(ownerUA)`; Change 2026-11-11, Fable review D P3-1; BUILT on
+  branch `ua-mtx-fix-contracts`): nobody names another UA as the owner of an instance it creates.
 - **The owner UA names the instance and nothing more** (Q2): `owner()` returns it; it has no power over sessions, epochs,
   messages, topics, entries or votes, and no entry reads it. The instance has no pause, no admin and no upgrade.
 - **Introspection**: `factoryInfo()` returns `(factory, chainUid, contractClass = 3, kind = 0, version,
@@ -519,7 +521,7 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 |---|---|---|---|
 | `constructor(ReleaseId, factory_, implArgs)` | the factory, at `deployImplementation` | class 3, kind 0, version ≥ 1, factory ≠ 0 | `PqChatEnv` |
 | `validateEnv(ChainEnv)` | the factory, at `deployImplementation` (view) | `chainUid`, registry, `params[0] ≥ 24,576` | `PqChatEnv` |
-| `initialize(bytes32 ownerUA)` | `FACTORY` only, at `createInstance` | the caller, once, a well-formed env | `PqChatNotFactory`, `PqChatInitialized`, `EnvMissing` |
+| `initialize(bytes32 ownerUA)` | `FACTORY` only, at `createInstance` | the caller, once, a well-formed env, `ownerUA` 0 or `creating()` | `PqChatNotFactory`, `PqChatInitialized`, `EnvMissing`, `PqChatOwnerNotCreator` |
 | `createSession(s, wraps, sig)` | anyone submits; `s.creator` signs | shapes, KEM keys, creator in both lists, home named, signature, nonce, wraps | `PqChatShape`, `PqChatKemKey`, registry, `PqChatNonceUsed`, `PqChatWrapHash` |
 | `rekey(e, wraps, sig)` | anyone submits; `e.author` signs | parent, number, home slot, shapes, rights, signature, nonce, wraps | `PqChatUnknown`, `PqChatIncomplete`, `PqChatEpochNumber`, `PqChatEpochTaken`, `PqChatShape`, `PqChatKemKey`, `PqChatNotMember`, `PqChatNotAdmin`, registry, `PqChatNonceUsed`, `PqChatWrapHash` |
 | `addWraps(epochId, first, wraps)` | anyone, unsigned | epoch known, home slot free, range, hash, shape, landed once | `PqChatUnknown`, `PqChatEpochTaken`, `PqChatShape`, `PqChatWrapHash`, `PqChatWrapStored` |

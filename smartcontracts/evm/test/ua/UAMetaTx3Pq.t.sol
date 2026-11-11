@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {kindArgs} from "../../script/KindModules.sol";
 
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
@@ -136,7 +137,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             string memory r = string.concat(".metatx3.call[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransaction memory m = _call(pj, r);
             bytes32 digest = vm.parseJsonBytes32(pj, string.concat(r, "digest"));
-            assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
+            assertEq(MtxHash.hashStruct(m), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
             assertEq(tok.mtxDigest(m), digest);
             reg.requireAuthorized(m.from, UAKinds.PURPOSE_METATX, digest, UACall.auth(m.from, vm.parseJsonBytes(pj, string.concat(r, "auth"))));
             ++n;
@@ -152,7 +153,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             string memory r = string.concat(".metatx3.transfer[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransfer memory t = _transfer(pj, r);
             bytes32 digest = vm.parseJsonBytes32(pj, string.concat(r, "digest"));
-            assertEq(MetaTxLib.hashStruct(t), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
+            assertEq(MtxHash.hashStruct(t), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
             assertEq(tok.mtxTransferDigest(t), digest);
             bytes memory auth = vm.parseJsonBytes(pj, string.concat(r, "auth"));
             tok.mint(address(this), t.value + t.fee);

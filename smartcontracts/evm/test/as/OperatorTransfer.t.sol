@@ -154,6 +154,21 @@ contract OperatorTransferTest is RegFixture {
         }
     }
 
+    /// Fable A-2: an EIP-7702 designator account (23 bytes `0xef0100 ‖ delegate`) is an EOA (CTR-UA-24, `SigCheck.isContract`):
+    /// it stays within the operator's reach. Negative control: a real contract `from` is refused (the test above).
+    function test_designatorFromIsAnEoa() public {
+        for (uint256 i; i < 2; ++i) {
+            address t = ts[i];
+            vm.prank(alice);
+            IERC20(t).transfer(carol, 10);
+            vm.etch(carol, abi.encodePacked(hex"ef0100", address(0xDE1E)));
+            assertEq(carol.code.length, 23);
+            _op(t, nid(carol), b, 4);
+            assertEq(IERC20(t).balanceOf(carol), 6);
+            vm.etch(carol, "");
+        }
+    }
+
     /// A derived `to` must be a registered SIGNING UA (`_checkTo`): unregistered and non-SIGNING refused; a SIGNING one passes.
     function test_derivedToMustBeSigning() public {
         bytes32 uy = bytes32(uint256(UA_X) + 7);

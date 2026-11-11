@@ -4,9 +4,10 @@
 # smartcontracts/evm, through scripts/capped, in the foreground:
 #   ONCHAIN_RPC=<url> … run.sh <target> <Group> [forge args]   the target's node (matrix.sh sets it: a fresh local chain,
 #                                                              the SCaaS testnet, another testnet); DEPLOY_JSON its deploy
-#   … run.sh local <Group>   without ONCHAIN_RPC: an anvil fork of FORK_RPC (default RPC_7622) on 127.0.0.1:$PORT for
+#   … run.sh local <Group>   without ONCHAIN_RPC: an anvil fork of FORK_RPC (else RPC_7622) on 127.0.0.1:$PORT for
 #                            this run only (an option; the local target of matrix.sh needs no other chain)
-#   … run.sh 7622 <Group>    without ONCHAIN_RPC: the SCaaS testnet RPC (RPC_7622)
+#   … run.sh 7622 <Group>    without ONCHAIN_RPC: the SCaaS testnet RPC (RPC_7622; also as scaas-testnet)
+# No default RPC (Fable D P3-3, as matrix.sh): every URL is named explicitly; any other target needs ONCHAIN_RPC.
 # Each group builds into its own out/onchain-<group> and cache/onchain-<group> (groups run side by side). Every
 # transaction asks forge's estimate x ONCHAIN_GAS_MULTIPLIER / 100 (default 130, forge's own): the estimate is the
 # simulated gasUsed after the storage refund, so a call that frees storage needs headroom above it (at 110 the
@@ -19,7 +20,6 @@ set -eu
 net=$1
 g=$2
 shift 2
-RPC_7622=${RPC_7622:-http://127.0.0.1:8545}
 OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix} # matrix.sh's run dir (MATRIX_OUT), else today's
 mkdir -p "$OUTD"
 lg=$(echo "$g" | tr 'A-Z' 'a-z')
@@ -31,7 +31,8 @@ if [ -n "${ONCHAIN_RPC:-}" ]; then
   RPC=$ONCHAIN_RPC
 elif [ "$net" = local ]; then
   PORT=${PORT:-18601}
-  anvil --fork-url "${FORK_RPC:-$RPC_7622}" --port "$PORT" --hardfork amsterdam > "$T/anvil.log" 2>&1 &
+  FORK=${FORK_RPC:-${RPC_7622:?the local target forks FORK_RPC or RPC_7622, named explicitly (no default)}}
+  anvil --fork-url "$FORK" --port "$PORT" --hardfork amsterdam > "$T/anvil.log" 2>&1 &
   A=$!
   for i in $(seq 90); do
     cast chain-id --rpc-url "http://127.0.0.1:$PORT" > /dev/null 2>&1 && break
@@ -39,8 +40,11 @@ elif [ "$net" = local ]; then
     sleep 1
   done
   RPC=http://127.0.0.1:$PORT
+elif [ "$net" = 7622 ] || [ "$net" = scaas-testnet ]; then
+  RPC=${RPC_7622:?the $net target needs RPC_7622, named explicitly (no default)}
 else
-  RPC=$RPC_7622
+  echo "[$net/$lg] the target $net needs ONCHAIN_RPC (no default RPC)"
+  exit 1
 fi
 CHAIN=$(cast chain-id --rpc-url "$RPC")
 B=broadcast/$g.s.sol/$CHAIN/run-latest.json
