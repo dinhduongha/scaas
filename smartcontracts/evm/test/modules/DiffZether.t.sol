@@ -29,7 +29,7 @@ contract DiffZetherTest is ZetherFixture, LegacyDiff {
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(u), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 1 << 30, FEE, 0, 0, 1, 0, bytes32(0), false, 0);
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 1 << 30, FEE, 0, 0, 1, 0, bytes32(0), false, 0, 0, 0);
         w = factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "dw");
         vm.etch(address(0xB0B), hex"00");
     }

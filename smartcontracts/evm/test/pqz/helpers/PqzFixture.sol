@@ -57,6 +57,9 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     bool internal vFixed;
     // group 3h (pqz-proof-path spec §4.1): the next token's `proofStore` (0 `NONE` by default, 1 `LOG`)
     uint8 internal pStore;
+    // round 3t (CTR-PQZ-36): the next token's `verifierFee` and `verifierFeeMax` (`OFFCHAIN` only; 0 by default)
+    uint64 internal vFee;
+    uint64 internal vFeeMax;
 
     /// the client's view of each account: `acc` and every entry ever appended (TRIVIAL amounts in `triv`)
     mapping(bytes32 => bytes) internal accOf;
@@ -94,7 +97,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
-            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy, vMode, vUA, vFixed, pStore
+            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy, vMode, vUA, vFixed, pStore, vFee, vFeeMax
         );
     }
 

@@ -210,7 +210,7 @@ contract ZetherE2E is DeployBook {
 
     function _conf() internal pure returns (IFactoryToken.ConfidentialConfig memory) {
         // version 1 of each Zether kind is the BLS12-381 release (CTR-ZTH-20, CTR-ZTH-32): BUNDLE, no auditor, scale 1
-        return IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0);
+        return IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0);
     }
 
     // ------------------------------------------------------------------ run

@@ -103,6 +103,10 @@ interface IFactoryToken {
         /// `LOG` (a `PqzDebitProof` event of the token); any other value `ProofStoreInvalid`. Changed later only through bit
         /// 24 `PQZ_PROOF` (`setProofStore`), effective at the next debit.
         uint8 proofStore;
+        /// `*_PQZ` kinds in `OFFCHAIN` mode only (round 3t, CTR-PQZ-36; every other kind and `PRECOMPILE` require both 0): the
+        /// verifier fee each proof-carrying debit pays to the current verifier UA, in the fee word's unit, and its immutable cap.
+        uint64 verifierFee;
+        uint64 verifierFeeMax;
     }
 
     /// @notice Regulated-kinds spec §2.4: the regulated kinds' (8-13) only; a plain kind (0-5) refuses any set field

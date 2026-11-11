@@ -101,7 +101,8 @@ interface IPqzToken is IConfidentialToken {
 
     /// @notice `pqzVerifyConfig()` (spec §4.4), for wallets and the node: the mode, the verifier (0: revoked, or a
     ///         `PRECOMPILE` token), fixed or transferable, the epoch, a pending transfer and its `eta`, the notice period
-    ///         stored at init (the factory's `noticePeriod()`).
+    ///         stored at init (the factory's `noticePeriod()`). Round 3t (CTR-PQZ-36): the verifier fee, its immutable cap,
+    ///         a live pending increase and its `eta` (a dead one reads 0, 0; `PRECOMPILE` 0 for the four).
     struct PqzVerifyConfig {
         uint8 pqzVerifyMode;
         bytes32 verifier;
@@ -110,6 +111,10 @@ interface IPqzToken is IConfidentialToken {
         bytes32 pending;
         uint64 eta;
         uint64 noticePeriod;
+        uint64 verifierFee;
+        uint64 verifierFeeMax;
+        uint64 verifierFeePending;
+        uint64 verifierFeeEta;
     }
 
     /// @notice `amount` and `recipient` of the signed `mtxUnshield`: one calldata struct keeps those two
@@ -264,6 +269,21 @@ interface IPqzToken is IConfidentialToken {
     ///         3 statementHash, 4 proofHash, 5 pqzVerifierEpoch, 6 validUntil: below the block's timestamp).
     error PqzVerdictMismatch(uint8 field);
 
+    // ---- round 3t, the verifier fee (CTR-PQZ-36, spec 2026-11-11-verifier-fee §7)
+    /// @notice An increase of the verifier fee proposed by the admin; confirmable by its proposer in `[eta, eta + noticePeriod]`.
+    event VerifierFeeProposed(uint64 current, uint64 next, uint64 eta);
+    /// @notice The verifier fee written (a decrease, a confirmed increase, an increase at notice 0); `previous == next` is the
+    ///         cancel of a live pending increase.
+    event VerifierFeeSet(uint64 previous, uint64 next);
+    /// @notice `verifierFee > verifierFeeMax` at init, or a setter's `next` above the immutable cap.
+    error VerifierFeeAboveMax(uint64 fee, uint64 max);
+    /// @notice Another increase proposed while `pending` is live.
+    error VerifierFeePending(uint64 pending);
+    /// @notice The current fee with no live pending increase to cancel.
+    error VerifierFeeSame();
+    /// @notice The confirm of an increase before its `eta`.
+    error VerifierFeeNotReady(uint64 eta);
+
     /// @notice Multi-recipient, in the token's default storage mode. Every proof-carrying entry takes the verdict pair last
     ///         (group 3f, spec §5.3): empty and never read on a `PRECOMPILE` token, required on an `OFFCHAIN` one.
     function mtxConfidentialTransfer(PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
@@ -313,6 +333,11 @@ interface IPqzToken is IConfidentialToken {
     function pqzCancelVerifier() external;
     function pqzRevokeVerifier() external;
     function pqzVerifyConfig() external view returns (PqzVerifyConfig memory);
+    /// @notice Round 3t (CTR-PQZ-36): the admin sets an `OFFCHAIN` token's verifier fee within `[0, verifierFeeMax]`: a
+    ///         decrease (to 0 included) at once, an increase proposed by the first call and confirmed by the same call of the
+    ///         same proposer in the same admin generation within `[eta, eta + noticePeriod]`; the current value cancels a live
+    ///         pending increase. Through the router as `mtxSetVerifierFee`.
+    function setVerifierFee(uint64 next) external;
 }
 
 /// @title `mtxUnshieldUnwrap` of `WRAPPED_PQZ`, its explicit form (typed-signing Appendix X.3).

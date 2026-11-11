@@ -98,6 +98,9 @@ contract NamespaceProbe is UAMetaTxBase {
         // group 3h T58 (pqz-proof-path spec §2.2, §6): the account's `lastDebit`, the debit record appended
         (qa.lastDebit, q.debitRec[U][7]) = (0xdd, PqzCore.DebitRecord(0xde, 0xdf));
         q.proofStore = 1; // group 3h T60: byte 23 of slot 0
+        // round 3t (CTR-PQZ-36, verifier fee spec §4): slots 20-22 appended
+        (q.verifierFee, q.verifierFeeMax, q.verifierFeePending, q.verifierFeeEta) = (0xb1, 0xb2, 0xb3, 0xb4);
+        (q.verifierFeeProposer, q.verifierFeeProposerGeneration) = (bytes32(uint256(0xb5)), 0xb6);
         q.entryPtr[V] = A;
         (q.memos[V], q.memos[U]) = (NamespaceProbeIds.blob(58), NamespaceProbeIds.blob(21));
         ZetherLib.ZetherStorage storage z = ZetherLib.$();
@@ -324,6 +327,12 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("debitRec[U][7].w0", u, 0, 0xde, 32));
         f = _more(f, F("debitRec[U][7].w1", u, 0, 0xdf, 32));
         f = _more(f, F("proofStore", 0, 0, 1, 1));
+        f = _more(f, F("verifierFee", 0, 0, 0xb1, 8));
+        f = _more(f, F("verifierFeeMax", 0, 0, 0xb2, 8));
+        f = _more(f, F("verifierFeePending", 0, 0, 0xb3, 8));
+        f = _more(f, F("verifierFeeEta", 0, 0, 0xb4, 8));
+        f = _more(f, F("verifierFeeProposer", 0, 0, 0xb5, 32));
+        f = _more(f, F("verifierFeeProposerGeneration", 0, 0, 0xb6, 4));
         _ns(address(p), "pqz", "scaas.pqz", f);
         f = new F[](25);
         f[0] = F("verifier", 0, 0, a, 20);

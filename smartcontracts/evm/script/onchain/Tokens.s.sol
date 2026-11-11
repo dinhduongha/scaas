@@ -212,7 +212,7 @@ contract Tokens is OnchainBase {
     function _base(uint8 kind, string memory sym) internal view returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol, c.decimals) = (string.concat("Onchain ", _label(kind)), sym, 6);
         c.admin = _pad(a1);
-        if (_zether(kind)) c.conf = IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 2, 0, 0, 0, 0, 0, false, 0);
+        if (_zether(kind)) c.conf = IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 2, 0, 0, 0, 0, 0, false, 0, 0, 0);
     }
 
     /// @dev `DENYLIST` (the Step 5 ComplianceRegistry, flag 1 denied: nobody attested, so everyone passes) and `TAX` (the

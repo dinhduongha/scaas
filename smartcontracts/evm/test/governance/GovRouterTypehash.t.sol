@@ -222,6 +222,13 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_SET_PROOF_STORE, 0xcd4ab7150dc9686c7487ea24b688ec51c778304d95fa7690b26c39c447a9203d);
     }
 
+    /// Round 3t (CTR-PQZ-36, verifier fee spec §7.2, §8): the admin's verifier fee router op.
+    function test_uaSetVerifierFeeTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_VERIFIER_FEE, keccak256(
+                "UASetVerifierFee(bytes32 from,address target,uint64 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_VERIFIER_FEE, 0xffa3baec15773742773872cec5ac6e8000b668a4576324f215b5e663818dd14d);
+    }
+
     function test_uaPauseTypehashIsPinned() public pure {
         assertEq(T.UA_PAUSE, keccak256(
                 "UAPause(bytes32 from,address target,bytes32 ref,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));

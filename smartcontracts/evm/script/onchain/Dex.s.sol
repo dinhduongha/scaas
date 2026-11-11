@@ -409,7 +409,7 @@ contract Dex is OnchainBase {
         IFactoryToken.TokenConfig memory c = _base("Onchain Dex K", string.concat("oDK", vm.toString(n)));
         c.admin = _pad(a1);
         if (n == 2 || n == 3 || n == 10 || n == 11) {
-            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0);
+            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0);
         }
         if (n % 2 == 1) {
             c.legs = new IFactoryToken.Leg[](1);

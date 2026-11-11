@@ -11,3 +11,7 @@ default PQZ set n2304-kmax4096; every heavy run through scripts/capped (CAPPED_S
 UNAUDITED.
 
 step | commit | rc | counts
+t1-pqz.red (PqzVerifierFee, PqzVerifierFeeZether) | 2e5bffeb+T1 | 1 | 4 passed, 24 failed (the T1 ABI skeleton: declarations only, no behaviour): every init row, fee word, payment, setter, router, built-op and split test red; passed: the TAG_DIRECT_MODE_VF pin, the PRECOMPILE no-fee-slot control, the allow-list control, the disclosure control
+t1-as.red (PqzVerifierFeeKinds 12, 13) | 2e5bffeb+T1 | 1 | 0 passed, 6 failed: the frozen / denied verifier and the order tests on both kinds (no payout, no check)
+t1-v2.red (Layout, FactoryZether) | 2e5bffeb+T1 | 1 | 6 passed, 1 failed: test_publicKinds_refuseEveryConfField (kind 0 accepts the two fields); Layout green (the slots 20-22 rows pinned with the skeleton's fields)
+t1-governance (GovRouterTypehash) | 2e5bffeb+T1 | 0 | 59 passed (test_uaSetVerifierFeeTypehashIsPinned green with the skeleton's constant: 0xffa3baec…, = cast keccak)

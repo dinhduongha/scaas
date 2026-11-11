@@ -196,6 +196,16 @@ contract FactoryZetherTest is Test {
         c.conf.auditorMode = 1;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
         g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        // round 3t (CTR-PQZ-36): the verifier fee and its cap are the PQZ kinds' (`_requireUnused`, kinds 0, 1, 8, 9)
+        c.conf.auditorMode = 0;
+        c.conf.verifierFee = 1;
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        (c.conf.verifierFee, c.conf.verifierFeeMax) = (0, 1);
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        c.conf.verifierFeeMax = 0;
+        assertTrue(g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a") != address(0), "control: all 0");
     }
 
     /// CTR-MTX-02: the confidential kinds sign under "SCaaS ZetherToken", the public ones under "SCaaS MetaToken".

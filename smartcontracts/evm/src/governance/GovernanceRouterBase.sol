@@ -102,6 +102,9 @@ library GovernanceRouterTypes {
         "UAPqzCancelVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_PQZ_REVOKE_VERIFIER = keccak256(
         "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit; fee mode `NONE`
+    bytes32 internal constant UA_SET_VERIFIER_FEE = keccak256(
+        "UASetVerifierFee(bytes32 from,address target,uint64 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     // ---- bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): any holder; fee mode `NONE`
     bytes32 internal constant UA_SET_PROOF_STORE = keccak256(
         "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");

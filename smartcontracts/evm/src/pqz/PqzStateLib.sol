@@ -176,8 +176,9 @@ library PqzStateLib {
     function verifyConfig() public view returns (IPqzToken.PqzVerifyConfig memory c) {
         PqzCore.PqzStorage storage s = PqzCore.$();
         bool live = _live(s, GovernanceLib.$());
-        c = IPqzToken.PqzVerifyConfig(s.pqzVerifyMode, s.pqzVerifierUA, s.pqzVerifierFixed, s.pqzVerifierEpoch,
-            live ? s.pqzPendingVerifier : bytes32(0), live ? s.eta : 0, s.noticePeriod);
+        (c.pqzVerifyMode, c.verifier, c.fixed_, c.pqzVerifierEpoch, c.noticePeriod) =
+            (s.pqzVerifyMode, s.pqzVerifierUA, s.pqzVerifierFixed, s.pqzVerifierEpoch, s.noticePeriod);
+        if (live) (c.pending, c.eta) = (s.pqzPendingVerifier, s.eta);
     }
 
     /// @dev The admin first (a stranger learns nothing of the configuration), then an `OFFCHAIN` token with a transferable

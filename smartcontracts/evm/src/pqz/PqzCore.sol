@@ -93,6 +93,14 @@ library PqzCore {
         // group 3h (PP-2): one record per debit, keyed by the debiting UA and its counter before the increment; written
         // once by the debit, never changed
         mapping(bytes32 => mapping(uint64 => DebitRecord)) debitRec;
+        // round 3t (CTR-PQZ-36), read on the `OFFCHAIN` branch only: the fee, its immutable cap, a pending increase and its
+        // `eta` in one slot; the increase's proposer and its admin generation (the pending verifier's pattern, slots 16-18)
+        uint64 verifierFee;
+        uint64 verifierFeeMax;
+        uint64 verifierFeePending;
+        uint64 verifierFeeEta;
+        bytes32 verifierFeeProposer;
+        uint32 verifierFeeProposerGeneration;
     }
 
     /// @dev Group 3h (pqz-proof-path spec §2.2, PP-2): `w0 = prevBlob(160) ‖ p(64) ‖ Δp(16) ‖ proofStore(8) ‖ flags(8)`
@@ -180,6 +188,9 @@ library PqzCore {
     ///         direct (review W-A) or the envelope's binding relayed (plan 5h D15, review L1): the statement, hence
     ///         `authSig`, names the storage mode on both paths.
     bytes32 internal constant TAG_DIRECT_MODE = keccak256("SCAAS-PQZ-DIRECT-MODE-V1");
+    /// @notice Round 3t (Fable P1-1, CTR-PQZ-25's Change): the direct transfer's binding on an `OFFCHAIN` token, which also
+    ///         binds the fee in force: `keccak256(abi.encode(TAG_DIRECT_MODE_VF, uint8(mode), uint256(verifierFee)))`.
+    bytes32 internal constant TAG_DIRECT_MODE_VF = 0x822f04ee19aa5a54b870d8babefc1258b09f62ef5bdd149928367a05388476a8; // keccak256("SCAAS-PQZ-DIRECT-MODE-VF-V1")
     bytes32 internal constant TAG_ENTRY = keccak256("SCAAS-PQZ-ENTRY-V1");
     /// @notice The authority's typed struct (TS-D19): `op`, the 20 statement header words verbatim, the rest of the
     ///         statement by hash. Purpose `zether-auth`, the token's domain.

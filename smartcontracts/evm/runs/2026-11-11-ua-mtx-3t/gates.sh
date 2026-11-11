@@ -6,7 +6,7 @@
 # Each step logs to <step>.log here (git-ignored) and ends it with `rc=<n>`; a step whose log ends with `rc=0` is skipped
 # (RERUN=1 runs it again). Heavy commands go through scripts/capped, foreground, one at a time. The committed record is
 # summary.txt here (step | commit | rc | counts). Steps:
-#   t-<dir>[@<glob>]         targeted: FOUNDRY_TEST=test/<dir>, `forge test --match-path test/<dir>/<glob>` (the touched files);
+#   t-<dir>[@<glob>]         targeted, sparse: FOUNDRY_TEST=test/<dir>, `forge test --match-path test/<dir>/<glob>` (the touched files);
 #                            the log name has `/`, `@`, `{`, `}`, `,`, `*` as `_`
 #   sizes-<set>              forge build src --sizes at one PQZ set (script/pqz/at-set.sh), the JSON kept as sizes-<set>.json
 #   size                     forge build src --sizes, then scripts/size_gate.py
@@ -35,8 +35,8 @@ step() {
   case $1 in
     t-*) spec=${1#t-}; dd=${spec%%@*}; m=${spec#*@}; [ "$m" = "$spec" ] && m='**'; d=test/$dd
       n=t66a-test-$(echo "$dd" | cut -d/ -f1) # the per-directory build of the top directory, reused incrementally
-      (cd $EVM && FOUNDRY_TEST=$d FOUNDRY_SCRIPT=$d FOUNDRY_OUT=out/$n FOUNDRY_CACHE_PATH=cache/$n "$C" forge test -j 2 \
-        --match-path "$d/$m") ;;
+      (cd $EVM && FOUNDRY_SPARSE_MODE=true FOUNDRY_TEST=$d FOUNDRY_SCRIPT=$d FOUNDRY_OUT=out/$n FOUNDRY_CACHE_PATH=cache/$n \
+        "$C" forge test -j 2 --match-path "$d/$m") ;;
     sizes-*) s=${1#sizes-}
       (cd $EVM && mkdir -p out/m3t-sizes && "$C" sh -c "script/pqz/at-set.sh $s build src --sizes --json > out/m3t-sizes/sizes-$s.json"); r=$?
       git diff --exit-code -- $EVM/src/pqz/PqzSet.sol || r=3

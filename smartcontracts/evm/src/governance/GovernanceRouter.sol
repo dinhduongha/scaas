@@ -143,6 +143,15 @@ contract GovernanceRouter is GovernanceRouterBase {
         _ua(T.UA_PQZ_REVOKE_VERIFIER, e, target, IPqzToken.pqzRevokeVerifier.selector, "", auth);
     }
 
+    /// @notice Round 3t (CTR-PQZ-36): the admin sets an `OFFCHAIN` PQZ token's verifier fee (`setVerifierFee`: a decrease at
+    ///         once, an increase after the notice period); fee mode `NONE`, relayable at fee 0. `next` the new verifier fee; the
+    ///         envelope's `fee` is the relay fee.
+    function mtxSetVerifierFee(MetaTxLib.UAEnvelope calldata e, address target, uint64 next, IUARegistry.UASig calldata auth)
+        external
+    {
+        _ua(T.UA_SET_VERIFIER_FEE, e, target, IPqzToken.setVerifierFee.selector, abi.encode(next), auth);
+    }
+
     /// @notice Bit 24 `PQZ_PROOF` (group 3h, PQZ proof path spec §5): any holder sets a PQZ token's `proofStore` (`NONE` /
     ///         `LOG`, from its next debit); fee mode `NONE`, relayable at fee 0.
     function mtxSetProofStore(MetaTxLib.UAEnvelope calldata e, address target, uint8 next, IUARegistry.UASig calldata auth)
