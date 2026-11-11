@@ -392,12 +392,17 @@ node's, for every consumer. **UNAUDITED.**
   `OFFCHAIN` tokens: a consumer on the old shape gets `BAD_PAYLOAD: no pqz_fee`.
 - **Deadline.** A PQZ debit keeps two deadlines: its envelope's, and the one it is sent under, the sooner of the envelope's and
   its verdict's `validUntil`. A renewed verdict (a stuck replacement re-runs the fill) moves the second up to the envelope's, so
-  the tracked work always ends with the transaction it sent. Past the verdict's alone the job is never `dead`: a stuck
-  transaction is re-filled with a fresh verdict and re-sent, or its nonce is gap-filled and the job is back in the queue; a job
-  waiting to be sent is requeued `PQZ_VERDICT_EXPIRED`. Only the envelope's deadline ends it (Fable review of ua-mtx-merge E N-3,
-  recheck R-1, R-2; tests `a_stuck_pqz_debit_with_an_expired_verdict_is_renewed_never_dead`,
-  `a_refused_re_fill_requeues_never_dead`, `a_retry_past_its_verdict_only_requeues`). A re-fill refused by any rule gap-fills the nonce and requeues, never `dead`: the
-  first transaction may still land.
+  the tracked work always ends with the transaction it sent. While a transaction of the job may still land, the job is never
+  `dead` for its verdict: a stuck transaction past its verdict is re-filled with a fresh verdict and re-sent, or (the re-fill
+  refused by any rule, or renewing nothing) its nonce is gap-filled and the job is back in the queue; a job waiting to be sent is
+  requeued `PQZ_VERDICT_EXPIRED`. At intake a fill refusal is reported only after the subject nonce is read: a debit that
+  landed (its first transaction won over the gap-filler, another relayer) is `consumed`. With nothing in flight, the next
+  intake may end the job by name: on a node without endpoints a job whose own verdict ran out is `PQZ_VERDICT_MISSING`
+  (`dead`). Past the envelope's deadline the job is `dead` "expired before submit" before the fill (`consumed` if it landed)
+  (Fable review of ua-mtx-merge E N-3, rechecks R-1, R-2, S-1..S-3; tests
+  `a_stuck_pqz_debit_with_an_expired_verdict_is_renewed_never_dead`, `a_refused_re_fill_requeues_never_dead`,
+  `a_retry_past_its_verdict_only_requeues`, `a_job_past_its_envelope_is_dead_before_the_fill`,
+  `a_re_fill_that_renews_nothing_gap_fills`).
 - **Pre-checks**, before any simulation: `pqzVerifyConfig()` (mode, verifier, epoch; verifier 0 = revoked), the epoch equal, the
   `validUntil` at least `valid_margin_secs` ahead; then the simulation of the whole entry (signature, shape, hashes). A verdict
   at another epoch, or expiring, is re-fetched once.

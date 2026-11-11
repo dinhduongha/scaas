@@ -568,11 +568,28 @@ impl Submitter {
             Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
         }
         let mut w = w;
+        // Fable recheck S-2: past the op's own deadline nothing can land: `dead` before the fill, whose refusals would requeue
+        // without end (after the guard, so a pulled liquidity order stays `consumed`); a landed op is `consumed`, never `dead`
+        if w.envelope_until <= now() {
+            return match self.consumed(&w).await {
+                Ok(true) => self.report_consumed(&w).await,
+                Ok(false) => self.fail(&w, "expired before submit".into()).await,
+                Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+            };
+        }
         // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt by the node, before the digest and any simulation
-        match self.guard.pqz_fill(&self.chain, &mut w).await {
-            Ok(()) => {}
-            Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
-            Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
+        if let Err(refusal) = self.guard.pqz_fill(&self.chain, &mut w).await {
+            // Fable recheck S-1: the fill runs before any simulation, so a debit that already landed (a first transaction
+            // mined after a gap-filled re-fill, another relayer) is `consumed` first, never refused by its stale verdict
+            match self.consumed(&w).await {
+                Ok(true) => return self.report_consumed(&w).await,
+                Ok(false) => {}
+                Err(e) => return self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+            }
+            return match refusal {
+                Refusal::Policy(reason) => self.fail(&w, reason).await,
+                Refusal::Transport(reason) => self.requeue(&w, reason).await,
+            };
         }
         match guard::fill_digest(&self.chain, &mut w).await {
             Ok(()) => {}
@@ -829,7 +846,14 @@ impl Submitter {
             // (recheck R-2); an unreadable chain waits a round, no bump
             let mut refused = None;
             if let Some(w) = live.as_mut().filter(|w| crate::pqz::is_debit(w)) {
-                match self.guard.pqz_fill(&self.chain, w).await {
+                let filled = match self.guard.pqz_fill(&self.chain, w).await {
+                    // Fable recheck S-3: a fill that renewed nothing (the view refused the op) leaves an expired verdict: never
+                    // re-sent as it is
+                    Ok(()) if w.valid_until <= now() => Err(Refusal::Transport("PQZ_VERDICT_EXPIRED: the re-fill renewed no \
+                        verdict".into())),
+                    r => r,
+                };
+                match filled {
                     Ok(()) => {}
                     Err(Refusal::Transport(r)) if !r.starts_with("PQZ_") => {
                         warn!(nonce = n, "PQZ fill: {r}; no bump this round");
@@ -1089,6 +1113,8 @@ pub(crate) mod tests {
         logs_down: bool,
         /// The statement views answer 288 bytes whose word 256 (the fee word) is this; `None`: `STATEMENT` (word 256 = 0).
         stmt_fee: Option<u64>,
+        /// The statement views revert (the token refuses the op).
+        stmt_revert: bool,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1217,6 +1243,8 @@ pub(crate) mod tests {
                             Ok(json!(format!("{PSID:#x}")))
                         } else if s4 == crate::abi::IPqzToken::envelopeBindingCall::SELECTOR {
                             Ok(json!(format!("{BINDING:#x}")))
+                        } else if e.stmt_revert {
+                            Err(err(3, "execution reverted", Some("0x".into())))
                         } else {
                             let st = match e.stmt_fee {
                                 None => STATEMENT.to_vec(),
@@ -3409,6 +3437,56 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_MISSING"), "{last}");
         let sent = rpc.lock().unwrap().sent.clone();
         assert!(sent.len() == 2 && sent[1].1 == s.address() && sent[1].2.is_empty(), "a gap-filler");
+        // recheck S-1: the first transaction wins the nonce (the debit landed); the job polled again is `consumed`, never `dead`
+        rpc.lock().unwrap().receipts.insert(sent[0].0, true);
+        rpc.lock().unwrap().mtx_nonce = Some(u64::MAX);
+        s.track().await;
+        assert_eq!(s.inflight_count(), 0);
+        o.lock().unwrap().jobs.push(with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e)));
+        s.poll_outbox().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "consumed", "{last}");
+    }
+
+    /// Fable recheck S-2: a PQZ job past its envelope is `dead` before the fill (whose refusal, here a fee mismatch, would requeue
+    /// it on every poll), nothing sent; the control: the envelope live, the same job is `PQZ_FEE_MISMATCH`, queued.
+    #[tokio::test]
+    async fn a_job_past_its_envelope_is_dead_before_the_fill() {
+        for (expired, state) in [(true, "dead"), (false, "queued")] {
+            let (url, rpc) = fake_evm(Evm { stmt_fee: Some(5), ..offchain() }).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (mut w, _) = work_of_op(Some(7), &with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e))["op"], None).unwrap();
+            if expired {
+                (w.valid_until, w.envelope_until) = (now() - 1, now() - 1);
+            }
+            s.submit(w).await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{last}");
+            let want = if expired { "expired before submit" } else { "PQZ_FEE_MISMATCH" };
+            assert!(last["error"].as_str().unwrap().starts_with(want), "{last}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// Fable recheck S-3: a stuck debit past its verdict whose re-fill renews nothing (the token's view refuses the op) is never
+    /// re-sent as it is: its nonce is gap-filled and the job back in the queue.
+    #[tokio::test]
+    async fn a_re_fill_that_renews_nothing_gap_fills() {
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.pqz_verifier.valid_margin_secs = 0).await.unwrap();
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        rpc.lock().unwrap().stmt_revert = true;
+        s.track().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "queued", "{last}");
+        assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_EXPIRED"), "{last}");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].1 == s.address() && sent[1].2.is_empty(), "a gap-filler, never the stale debit");
     }
 
     /// The node never asks for the PQZ precompile on an `OFFCHAIN` token's job (spec §3, O1: OFFCHAIN ignores whether a
