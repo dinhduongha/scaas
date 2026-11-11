@@ -1112,7 +1112,7 @@ are in [decisions.md](../decisions.md#ctr-tok-30--body-modules-every-body-but-th
 
 58 token modules (55 before 2026-11-10: 9, 11, 13 split W into W and R) and the DEX's D (6,459 B; `SCaaSDex` 32,991 B at T66b 4.4). Liquidity (ua-mtx-liquidity, measured,
 [CTR-DEX-30](dex.md#CTR-DEX-30)): T 17,418-20,219 B per kind (+3.1-3.2 KB: `mtxLiquidityPull`), A +27 B, the faces +154-181 B,
-`SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B. **Which entry runs where** (`script/modules/entries.json`, the
+`SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B (fix2 2026-11-12: 19,487 B and 33,238 B). **Which entry runs where** (`script/modules/entries.json`, the
 generator's input; a kind has the subset it declares):
 
 | Group | Entries |

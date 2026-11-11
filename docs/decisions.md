@@ -1861,6 +1861,7 @@ Change (2026-11-11, controller call under the owner's leave of 2026-11-10, quote
 **Why.** A stray on a wrapper is stuck forever today; a destination the admin can rewrite is a power with a holder again.
 **Cost if wrong.** Bytes on each kind that takes it; a kind without it keeps strays stuck, as today.
 **Source.** `research/governance/permission-model.md` §3 A15, A16, §6; `research/governance/permission-model-attack.md` A15, A16.
+Change (2026-11-12, owner, Fable review D P3-5; status: BUILT on branch `ua-mtx-fix2-contracts`): the DEX takes `rescue(token)` too, to the puller's `rescueTo`, by anyone, ERC-20 only, under its entry guard ([dex.md CTR-DEX-20](contracts/dex.md#CTR-DEX-20)); "else on `DexPuller` alone" no longer holds for the DEX.
 
 ### CTR-GOV-07 — set_admin and renounce_admin outside the EVM
 - old: governance:D7 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-07 · superseded-by: —
@@ -3204,6 +3205,7 @@ Change (2026-10-30): a failing interaction of a path (a) call no longer "reverts
 **Cost if wrong.** An allowance on the DEX itself makes every open-mode interaction a theft path for every outside-token holder.
 **Source.** `history/specs/2026-10-08-dex-exchange-design.md` §3 DS-4, §4.
 Change (2026-11-04, governance T17; owner ruling CTR-GOV-06): `DexPuller.rescue(token)`, by anyone, pays a stray balance to the puller's immutable `rescueTo` (0 = no rescue); the DEX itself takes no `rescue` entry, CTR-DEX-20 stands. Status: BUILT on branch `governance` (T10 `dc9bfde0`).
+Change (2026-11-12, owner: fix the documented limits now, Fable review D P3-5; status: BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED): `SCaaSDex.rescue(token)`, by anyone, sends the DEX's whole balance of an ERC-20 to the puller's immutable `rescueTo` (0: `RescueOff`), the puller's rule, under the DEX's entry guard; the DEX now takes a `rescue` entry (the 2026-11-04 line above and CTR-GOV-06's "on `DexPuller` alone" are superseded for the DEX), and the sweep rule of [CTR-DEX-20](contracts/dex.md#CTR-DEX-20) stands for a DEX without `rescueTo`. The documented limit of 2026-11-11 (CTR-DEX-30 Change) is replaced.
 
 ### CTR-DEX-23 — What an exchange interaction may call; listed targets by flag or admin mode
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-23 · superseded-by: —

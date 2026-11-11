@@ -508,7 +508,7 @@ executor (`setExchangeTarget(target, listed)`; emit `ExchangeTargetSet`), and sw
 `FeeSplitSet(relayerSharePpm, treasury)`). `initialize` gives a non-zero owner both bits; a handover needs `revokeRole` for
 the old owner, and a new holder of either bit waits `grantDelay` (two calls, CTR-GOV-04). They change who receives fees and in
 what proportion, **never the amount**: the amount comes only from the signed `fee`. No access to funds, no upgrade, no
-sweep, no `rescue` entry ([CTR-DEX-20](#CTR-DEX-20) pays strays out; `DexPuller.rescue`, [CTR-DEX-22](#CTR-DEX-22)), no global pause (delisting a market stops that pair on `mtxSettle`; the exchange path checks only that each token is known, [CTR-DEX-20](#CTR-DEX-20), so an exchange-only pair keeps working: review C6-6). No
+sweep (strays: [CTR-DEX-20](#CTR-DEX-20)'s sweep rule, `SCaaSDex.rescue` and `DexPuller.rescue` to the immutable `rescueTo`, by anyone, [CTR-DEX-22](#CTR-DEX-22)), no global pause (delisting a market stops that pair on `mtxSettle`; the exchange path checks only that each token is known, [CTR-DEX-20](#CTR-DEX-20), so an exchange-only pair keeps working: review C6-6). No
 governance entry has an `mtx*` or `ua*` twin on the DEX: a gas-less owner signs through the router. No timelock on a use of a
 power: there is nothing to wait for — no signed order can be charged more than it signed. Status: **BUILT** on branch `governance` (T3 `7825361b`: bits, guard, `supportsInterface`; T7 `c2525e28`:
 `grantDelay`; T10b `ac29de05`: owner and holders as UA ids; T11 `ea9f4e9d`: the router's DEX ops).
@@ -600,10 +600,14 @@ the DEX outside a running settlement or plan (a mistaken transfer, a fee an inte
 submitter fee minted to the DEX) belongs to nobody: the plan tokens' end balances must equal their snapshots, so a
 plan cannot take it in those tokens, but an interaction may move any other token the DEX holds, so the next
 exchange-path submitter can sweep it. Clients and the node never send tokens to a DEX; no on-chain accounting is kept.
-The liquidity path ([CTR-DEX-30](#CTR-DEX-30)) is one such plan too: its tokens need no listing, conservation covers only
-the plan's named tokens, and any submitter's one-unit plan can move a stray of another token out by a `transfer`
-interaction (documented 2026-11-11, Fable review D P3-5; no code change: strays are anyone's, the DEX has no `rescue`;
-only the puller's `rescue` exists, [CTR-DEX-22](#CTR-DEX-22)).
+The liquidity path ([CTR-DEX-30](#CTR-DEX-30)) is one such plan too: its tokens need no listing and conservation covers
+only the plan's named tokens. **`SCaaSDex.rescue(token)`** (fix2 2026-11-12, Fable review D P3-5, the owner's call; was a
+documented limit): anyone sends the DEX's whole balance of an ERC-20 `token` to the puller's immutable `rescueTo`
+(`DexConfig.rescueTo`; 0 = no rescue, `RescueOff`), `IRescuable.Rescued`, the puller's rule ([CTR-DEX-22](#CTR-DEX-22)),
+under the DEX's entry guard (`nonReentrant`), so nothing inside a running settlement or plan reaches it. With a
+`rescueTo`, a stray goes there before a submitter's plan can move it; with none, the sweep above stands. Tests
+`test_dexRescueWholeBalance`, `test_dexRescueNotReentrant` (`test/governance/GovRescue.t.sol`). Status **BUILT** (branch
+`ua-mtx-fix2-contracts`).
 Not to be confused with
 `ExchangeOffer.exchange` ([CTR-AS-13](asset-suite.md#CTR-AS-13)), another contract. EVM only. Status **BUILT** (P2c; Transitional after [CTR-DEX-23](#CTR-DEX-23)). Independent plans can share one transaction
 ([CTR-DEX-28](#CTR-DEX-28)), and a taker can take the book and a route in one call ([CTR-DEX-27](#CTR-DEX-27)).
@@ -625,7 +629,7 @@ Holders of an **outside** token approve the puller, never the DEX; the DEX calls
 held could be spent by `outsideToken.transferFrom(victim, attacker, x)`. SCaaS tokens need no allowance at all.
 `DexPuller.rescue(token)`, callable by anyone, sends the puller's whole balance of `token` to its immutable `rescueTo`
 (`DexConfig.rescueTo`; 0 = no rescue, `RescueOff`; never `UA_POOL`, `SHIELD_POOL`, the DEX or the puller, `RescueConfigInvalid` at `initialize`); it calls only `balanceOf` and `transfer`, so no allowance is spent
-([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto); BUILT on branch `governance`, T10 `dc9bfde0`). The DEX itself has no `rescue`.
+([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto); BUILT on branch `governance`, T10 `dc9bfde0`). `SCaaSDex.rescue(token)` applies the same rule to a stray at the DEX ([CTR-DEX-20](#CTR-DEX-20); fix2 2026-11-12).
 Change (2026-11-10, [CTR-DEX-30](#CTR-DEX-30)): the puller also pulls a given ERC-721 position by its unchanged `pull(manager, from, id)` (ERC-721 `transferFrom` shares ERC-20's selector); the DEX then checks `ownerOf(id) == DEX`, so the selector's double meaning decides nothing. BUILT.
 
 <a id="CTR-DEX-23"></a>**CTR-DEX-23** — **What an interaction may call; listed targets** (owner). (a) refuses an
@@ -896,7 +900,7 @@ input token's) or expiry. Status **BUILT** on EVM: `src/dex/SCaaSDexLiquidityMod
 `src/trade/LiquidityLib.sol`; tests `test/liquidity/` (UNAUDITED; the `mldsa65` two-input fit, `DexLiquidityMldsa.t.sol`,
 signs through `vm.ffi` and runs with `--ffi` and `MLDSA_CLIENTKEYS`: 12,143,505 regular gas within 2^24). Size (owner 2026-11-10, spec §9.3's lever (b)): the
 DEX-domain cancels `mtxCancelOrders`, `mtxInvalidateNonces` and their digest views run in the liquidity module too, behind
-typed stubs (the same rules, [CTR-DEX-18](#CTR-DEX-18)); `SCaaSDex` 32,809 B (its margin 33,594 B), the module 19,055 B.
+typed stubs (the same rules, [CTR-DEX-18](#CTR-DEX-18)); `SCaaSDex` 32,809 B (its margin 33,594 B), the module 19,055 B; after fix2 (2026-11-12: `rescue`, the live read) 33,238 B and 19,487 B.
 **The trust is read at use** (fix2 2026-11-12, Fable review D P3-4; was a documented limit): the kind stays the
 `setMarket` snapshot ([CTR-DEX-18](#CTR-DEX-18)), but the skip of the DEX's own verify of `h` is decided at use: a SCaaS
 input whose release the factory reports deprecated now (`versionOf`, `isTokenDeprecated`) makes the DEX verify `h` itself,

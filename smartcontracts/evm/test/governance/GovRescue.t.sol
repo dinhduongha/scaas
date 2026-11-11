@@ -6,6 +6,7 @@ import {kindArgs, dexArgs} from "../../script/KindModules.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -392,7 +393,8 @@ contract GovRescueTest is Test {
     }
 }
 
-/// `DexPuller.rescue` (spec §6.2): the DEX's `rescueTo`, immutable; not on `SCaaSDex` itself.
+/// `DexPuller.rescue` (spec §6.2): the DEX's `rescueTo`, immutable; `SCaaSDex.rescue` the same rule for a stray at the DEX
+/// (Fable D P3-5).
 contract GovRescueDexTest is Test {
     bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     address constant OWNER = address(0x0A);
@@ -426,6 +428,41 @@ contract GovRescueDexTest is Test {
         foo.mint(address(p), 70);
         vm.expectRevert(DexPuller.RescueOff.selector);
         p.rescue(address(foo));
+    }
+
+    /// Fable D P3-5: a stray at the DEX goes to the same `rescueTo` by anyone (the puller's rule): the whole balance, the
+    /// event; `RescueOff` with no `rescueTo`.
+    function test_dexRescueWholeBalance() public {
+        SCaaSDex d = _dex(TO, "d");
+        foo.mint(address(d), 70);
+        vm.expectEmit(address(d));
+        emit IRescuable.Rescued(address(foo), TO, 70);
+        vm.prank(address(0xBEEF)); // anyone
+        d.rescue(address(foo));
+        assertEq(foo.balanceOf(TO), 70);
+        assertEq(foo.balanceOf(address(d)), 0);
+        SCaaSDex off = _dex(address(0), "off");
+        foo.mint(address(off), 70);
+        vm.expectRevert(DexPuller.RescueOff.selector);
+        off.rescue(address(foo));
+    }
+
+    /// The rescue runs under the DEX's entry guard, so nothing inside a running call (a plan's interaction, a token's
+    /// hook) reaches it: an asset whose transfer re-enters `rescue` fails the outer rescue whole; the control without the
+    /// re-entry moves both.
+    function test_dexRescueNotReentrant() public {
+        SCaaSDex d = _dex(TO, "d");
+        HookLeg hook = new HookLeg();
+        hook.mint(address(d), 10);
+        foo.mint(address(d), 5);
+        hook.arm(address(d), abi.encodeCall(SCaaSDex.rescue, (address(foo))));
+        vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(hook)));
+        d.rescue(address(hook));
+        assertEq(foo.balanceOf(address(d)), 5, "the inner rescue did not run");
+        hook.arm(address(0), ""); // positive control: no re-entry
+        d.rescue(address(hook));
+        d.rescue(address(foo));
+        assertEq(hook.balanceOf(TO) + foo.balanceOf(TO), 15);
     }
 
     /// R-16: the puller holds users' allowances; its rescue calls only `balanceOf` and `transfer`, so none is spent.

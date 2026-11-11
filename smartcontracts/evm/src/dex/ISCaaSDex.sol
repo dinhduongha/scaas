@@ -13,7 +13,7 @@ interface ISCaaSDex {
     /// @notice Written once by `initialize` (CTR-DEX-24). `relayerSharePpm` of every fee goes to the submitter, the
     ///         rest to `treasury`. `listedOnly`: every exchange target or executor must be listed (CTR-DEX-23).
     ///         `grantDelay`: the admin's two calls (spec §1.6), at most 30 days. `rescueTo`: the `DexPuller`'s rescue
-    ///         destination (spec §6.2), immutable, 0 = none; the DEX itself rescues nothing (CTR-DEX-20).
+    ///         destination (spec §6.2), immutable, 0 = none; the DEX's own `rescue` sends a stray there too (Fable D P3-5).
     struct DexConfig {
         bytes32 admin;
         uint32 relayerSharePpm;
@@ -271,6 +271,9 @@ interface ISCaaSDex {
     function minNonce(address from, uint256 batch) external view returns (uint256);
     /// @notice The `DexPuller` holders of outside tokens approve (CTR-DEX-22), deployed by `initialize`.
     function puller() external view returns (address);
+    /// @notice Anyone: the DEX's whole balance of `token` to the puller's `rescueTo` (0: `RescueOff`), the puller's rule
+    ///         (Fable D P3-5); under the entry guard, so never inside a running settlement or plan.
+    function rescue(address token) external;
 
     function relayerSharePpm() external view returns (uint32);
     function treasury() external view returns (address);

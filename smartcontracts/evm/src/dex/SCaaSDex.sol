@@ -144,7 +144,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.admin, GovernanceBits.DEX_BITS, 0, address(0));
         }
         s.listedOnly = cfg.listedOnly;
-        address p = address(new DexPuller(cfg.rescueTo)); // the DEX itself rescues nothing (CTR-DEX-20, spec §6.2)
+        address p = address(new DexPuller(cfg.rescueTo)); // its `rescueTo` serves `rescue` here too (Fable D P3-5)
         // the tokens' rule (`GovernanceLib.init`): a pool would swallow a stray, the DEX or the puller keep it (M-2)
         address r = cfg.rescueTo;
         if (r == MetaTxLib.UA_POOL || r == MetaTxLib.SHIELD_POOL || r == address(this) || r == p) {
@@ -255,6 +255,17 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function _domainSeparatorV4() internal view override returns (bytes32) { return _separator(_chainUid()); }
 
     function puller() external view returns (address) { return _s().puller; }
+
+    /// @notice Anyone, no signature, not an `mtx*` (Fable D P3-5; `DexPuller.rescue`'s rule, CTR-DEX-22): the DEX's whole
+    ///         balance of `token` to `rescueTo` (`DexConfig.rescueTo`, held by the puller; 0 = no rescue, `RescueOff`). The
+    ///         entry guard keeps it out of a running settlement or plan: only a stray between calls moves.
+    function rescue(address token) external nonReentrant {
+        address to = DexPuller(_s().puller).rescueTo();
+        if (to == address(0)) revert DexPuller.RescueOff();
+        uint256 amount = IERC20(token).balanceOf(address(this));
+        _send(token, to, amount);
+        emit IRescuable.Rescued(token, to, amount);
+    }
     function pulled(bytes32 orderHash) external view returns (uint256) { return TradeLib.$().pulled[orderHash]; }
     function minNonce(address from, uint256 batch) external view returns (uint256) {
         return TradeLib.$().minNonce[TradeLib.pad(from)][batch];

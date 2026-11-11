@@ -4301,6 +4301,11 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(a stray's whole balance to the puller's immutable rescueTo, under the entry guard; no user fund rests at the DEX, Fable D P3-5)",
+   "error": ""
+  },
+  {
    "sig": "revokeRole(uint8,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
