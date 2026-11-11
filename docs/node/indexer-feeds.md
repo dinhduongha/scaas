@@ -194,9 +194,11 @@ Further events, same object, same filters (decoders for a new kind ship before t
   `PqzVerifierCancelled` (`next`) rows without. **Health signal:** per `OFFCHAIN` token the indexer keeps, across ranges,
   `pqz_last_verdict_at` (the block of the last joined `PqzVerified`), `pqz_verifier_epoch`, `pqz_verifier_revoked` and (group 3t)
   `pqz_verifier_fee` (the last `VerifierFeeSet`'s `next`, `null` until one is seen), stamped on the token's verified op rows and
-  verifier rows. *Known limit* (Fable review of ua-mtx-merge E N-9; PLANNED, open): this state lives in memory; after a restart a token whose
-  verifier was revoked earlier is stamped `pqz_verifier_revoked: false` and epoch `null` until its next `PqzVerifierRevoked` or
-  `PqzVerifierSet`; target: seed it from `pqzVerifyConfig()` on the token's first row, or stamp `null` until known. **The verifier fee** (group 3t, [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); BUILT,
+  verifier rows. The state lives in memory and starts unknown: `pqz_verifier_revoked` and `pqz_verifier_epoch` are `null` until the
+  indexer sees what sets them (a joined `PqzVerified`: not revoked, its epoch; `PqzVerifierRevoked`: revoked; `PqzVerifierSet`: not
+  revoked), so a restart never stamps a revoked verifier "not revoked" (Fable review of ua-mtx-merge E N-9; BUILT,
+  `indexer::tests::pqz_health_is_unknown_until_seen`). **Operator note:** `pqz_verifier_revoked` may be `null` (it was `false`
+  before anything was seen). **The verifier fee** (group 3t, [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); BUILT,
   `indexer::tests::verifier_fee_rows`): `VerifierFeeProposed` (`current`, `next`, `eta`) a row with `alert: true` (the hostage
   notice, T29), `VerifierFeeSet` (`previous`, `next`) a row without (`previous == next`: a cancel of a pending increase).
   **Operator note:** `ConfidentialTransfer.fee` and `ConfidentialTransferMulti.fee` are the whole word, now three payees
