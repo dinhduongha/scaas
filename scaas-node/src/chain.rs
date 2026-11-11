@@ -60,7 +60,9 @@ pub fn classify(e: &TransportError) -> SimError {
             Some(data) => SimError::Revert(decode_revert(&data)),
             // Node trả lỗi JSON-RPC có nghĩa (execution reverted không data, out of gas…):
             // đó là câu trả lời của EVM, không phải mạng.
-            None if resp.message.contains("revert") || resp.message.contains("execution") => {
+            // Fable recheck 2 P3-8: but a node's own limit ("execution aborted (timeout = 5s)") is the endpoint's, not the EVM's
+            None if (resp.message.contains("revert") || resp.message.contains("execution"))
+                && !resp.message.contains("timeout") && !resp.message.contains("aborted") => {
                 SimError::Revert(resp.message.to_string())
             }
             None => SimError::Transport(resp.message.to_string()),
@@ -716,6 +718,19 @@ mod tests {
         assert_eq!(got.expect("one timeout, then the next endpoint").unwrap().len(), 32);
         let (busy, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "header not found"}})).await;
         assert_eq!(chain_of(&[&busy, &good]).block_gas().await.unwrap().limit, 30_000_000, "the gas cap's read fails over");
+    }
+
+    /// Fable recheck 2 P3-8: an error answer saying execution was aborted by the node's own timeout is a transport error (it fails
+    /// over); an EVM revert or an execution error without data stays a revert (the controls).
+    #[tokio::test]
+    async fn an_aborted_execution_is_transport() {
+        let (aborted, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "execution aborted (timeout = 5s)"}})).await;
+        let (exec, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "VM execution error."}})).await;
+        let (rev, _) = fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted"}})).await;
+        let call = |u: String| async move { chain_of(&[&u]).call_raw(Address::ZERO, Bytes::new()).await };
+        assert!(matches!(call(aborted).await, Err(SimError::Transport(_))));
+        assert!(matches!(call(exec).await, Err(SimError::Revert(_))), "control: an execution error");
+        assert!(matches!(call(rev).await, Err(SimError::Revert(_))), "control: a revert");
     }
 
     /// NODE-GW-07: the chain's `chain_uid` is its block 0 hash; a configured one that differs refuses the chain.

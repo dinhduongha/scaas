@@ -361,7 +361,9 @@ in the queue, never `dead` (Fable recheck 2 P2-1). A failover endpoint is used o
 number, read at its first use and kept; one on another chain is dropped with a log line (Fable recheck 2 P3-5). The lane's
 own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The
 strict-majority option stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Every RPC request has a 30 s
-timeout, so an endpoint that accepts and never answers fails the read over (test `a_hung_endpoint_and_the_block_gas_read_fail_over`).
+timeout, so an endpoint that accepts and never answers fails the read over (test `a_hung_endpoint_and_the_block_gas_read_fail_over`). An
+error answer counts as a revert when it carries revert data or names a revert or an execution error, except a node's own limit
+(`execution aborted (timeout = …)`), which is a transport error (Fable recheck 2 P3-8; `an_aborted_execution_is_transport`).
 
 **Log windows** (Fable recheck R-6; BUILT, `chain::tests::a_log_window_is_chunked_for_an_rpc_that_caps_the_range`). The
 `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` and the executed-event lookup
