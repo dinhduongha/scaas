@@ -17,10 +17,12 @@ contract RegulatedGasTest is ListFixture {
     uint256 constant PIN_LISTS = 57_503;
     uint256 constant PIN_KYC = 61_880;
     uint256 constant PIN_KYC_LIST = 66_488;
-    uint256 constant PIN_MTX_LISTS = 97_074;
-    uint256 constant PIN_MTX_FEE_LISTS = 120_471;
+    uint256 constant PIN_MTX_LISTS = 97_075;
+    uint256 constant PIN_MTX_FEE_LISTS = 120_472;
     /// T9 (no regulated transfer pin existed before; spec §14's estimates: lists +4.6 k over no control, measured; KYC +9.0 k,
-    /// KYC with a list +13.6 k): measured at 298ddc5b, Foundry 1.8.5, the token's frame gas.
+    /// KYC with a list +13.6 k): measured at 298ddc5b, Foundry 1.8.5, the token's frame gas. Stacked gate (3r + 3s + 3t): the
+    /// two `mtxExecuteTransfer` rows 97,074 -> 97,075 and 120,471 -> 120,472, from round 3t's two `ConfidentialConfig` fields
+    /// (`verifierFee`, `verifierFeeMax`) alone (the 3s tip with only that struct change measures the same +1).
     bool constant PINNED = true;
 
     uint256 nonce;
