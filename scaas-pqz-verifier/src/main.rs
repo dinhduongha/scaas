@@ -18,10 +18,12 @@ async fn main() -> anyhow::Result<()> {
     let password = std::env::var(&cfg.keystore_password_env)
         .with_context(|| format!("the keystore password: env {}", cfg.keystore_password_env))?;
     let signer = PrivateKeySigner::decrypt_keystore(&cfg.keystore, password).context("the keystore")?;
-    let rpc = Rpc::connect(&cfg.rpc_url)?;
-    let chain_id = rpc.chain_id().await.context("the RPC's chain id")?;
-    let svc = Arc::new(Service::new(Arc::new(rpc), Arc::new(pqz_ffi::precompile), signer, &cfg, chain_id));
-    tracing::info!(verifier = %svc.ua(), set = pqz_ffi::stmt::SET, chain_id, bind = %cfg.bind, "scaas-pqz-verifier");
+    let rpc = Rpc::connect(&cfg.rpc_urls, cfg.chain_id).await?;
+    scaas_pqz_verifier::check_pins(&rpc, &cfg).await?;
+    let chain_id = cfg.chain_id;
+    let svc = Arc::new(Service::new(Arc::new(rpc), Arc::new(pqz_ffi::precompile), signer, &cfg));
+    tracing::info!(verifier = %svc.ua(), set = pqz_ffi::stmt::SET, chain_id, registry = %cfg.registry, bind = %cfg.bind,
+        "scaas-pqz-verifier");
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     axum::serve(listener, http::router(svc, &cfg).into_make_service_with_connect_info::<SocketAddr>()).await?;
     Ok(())

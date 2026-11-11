@@ -15,6 +15,8 @@ alloy::sol! {
         bytes32 toUA;
         bytes32 beneficiaryUA;
         bytes16 salt;
+        // group 3h (PP-3): the holder's tag of its own `(u, v_f)`, at the contract's position (`IPqzToken.sol`)
+        bytes32 ownTag;
         bytes u;
         bytes vTo;
         bytes vFrom;
@@ -41,6 +43,7 @@ alloy::sol! {
         bytes32 beneficiaryUA;
         uint256 decoyFee;
         bytes16 salt;
+        bytes32 ownTag;
         bytes[] u;
         PqzLeg[] legs;
         bytes vFrom;
@@ -56,9 +59,11 @@ alloy::sol! {
         bytes32 fromUA;
         uint64 keyVersion;
         bytes32 beneficiaryUA;
+        bytes32 ownTag;
         bytes u;
         bytes vFrom;
     }
+
 
     #[derive(Debug, serde::Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -78,6 +83,15 @@ alloy::sol! {
         bytes32 proofHash;
         uint32 pqzVerifierEpoch;
         uint64 validUntil;
+    }
+
+    /// `UAKinds.UAAUTH_TYPEHASH`'s struct: what a native EOA UA signs, in the registry's domain. Built here from configured
+    /// values only; the registry's `uaAuthDigest` view is never read (a hash an RPC returns is never signed).
+    #[derive(Debug)]
+    struct UAAuth {
+        bytes32 ua;
+        bytes32 purpose;
+        bytes32 digest;
     }
 
     #[derive(Debug)]
@@ -139,6 +153,7 @@ alloy::sol! {
         function pqzKeyDigest(bytes32 ua, bytes32 pqzKeyHash) external pure returns (bytes32);
         function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32);
         function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
-        function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
+        function generation() external view returns (uint8);
+        function chainUid() external view returns (bytes32);
     }
 }

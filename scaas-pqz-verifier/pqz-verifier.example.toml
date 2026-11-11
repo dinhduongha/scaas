@@ -3,8 +3,21 @@
 
 # the HTTP listener: POST /v1/pqz-verdict, POST /v1/pqz-verdict/probe
 bind = "127.0.0.1:8547"
-# the chain's JSON-RPC (state reads, eth_call of the token's statement views); the chain id is read from it at start
-rpc_url = "http://127.0.0.1:8545"
+# the chain's JSON-RPC endpoints, one or more (ARCH-POS-15): asked in order; one request's reads all come from one node at
+# one block, and the next node starts the request over only when one does not answer. URLs only, no secret.
+# OPERATOR RULE (owner 2026-11-11): every endpoint must be a node you trust, until the strict-majority option exists
+# (scaas-rpc): nodes are not compared, and a lying RPC could pass a key check that OFFCHAIN tokens trust you for.
+rpc_urls = ["http://127.0.0.1:8545"]
+
+# The one chain this process serves, pinned (Fable C-1): the RPC must answer `chain_id` at start, or the service does not
+# start; every served token's code must name `chain_uid` and `registry`, else NOT served (FOREIGN_CHAIN_UID,
+# FOREIGN_REGISTRY). The digest signed is built from these four values, never read from the chain.
+chain_id = 7622
+chain_uid = "0x0000000000000000000000000000000000000000000000000000000000000000"
+registry = "0x0000000000000000000000000000000000000000"
+# the registry's generation (1 or 2): the version of its EIP-712 domain
+registry_generation = 1
+
 # the verifier's own key (a native EOA verifier UA): an encrypted JSON keystore, never a lane key, never the node's
 keystore = "/etc/scaas-pqz-verifier/verifier.json"
 keystore_password_env = "SCAAS_PQZ_VERIFIER_PASSWORD"

@@ -22,15 +22,24 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 
 use scaas_pqz_verifier::abi::{IPqzToken as T, IUARegistry as R, KemKey, PqzVerdict, PqzVerifyConfig, UAAttrs};
-use scaas_pqz_verifier::chain::{Chain, ChainError};
+use scaas_pqz_verifier::chain::{Chain, ChainError, Rpc};
 use scaas_pqz_verifier::{
-    body_limit, http, pqz_key_hash, purpose_pqz_verdict, statement_lengths, verdict_digest, Config, Pqz, Service,
-    PROBE_STATEMENT, VALID,
+    body_limit, check_pins, http, pqz_key_hash, purpose_pqz_verdict, registry_domain, statement_lengths, verdict_auth_digest,
+    verdict_digest, Config, Pqz, ProbeRequest, Service, PROBE_STATEMENT, VALID,
 };
+
+alloy::sol! {
+    /// The registry's view the service used to sign before Fable C-1; the fake answers it with a forged hash.
+    function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
+}
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/vectors/pqz/");
 const TOKEN: Address = address!("7A7a7A7a7a7a7a7A7a7a7a7A7a7a7A7A7A7a7A7a");
 const REGISTRY: Address = address!("5CA5000000000000000000000000000000000001");
+/// A registry of the attacker's (Fable C-1): it answers every view as the real one, and a forged `uaAuthDigest`.
+const ROGUE: Address = address!("BADBAD0000000000000000000000000000000001");
+/// What a lying RPC or a rogue registry answers for `uaAuthDigest`.
+const FORGED: B256 = B256::repeat_byte(0x66);
 const RELEASE: Address = address!("5CA5000000000000000000000000000000000002");
 const CHAIN_ID: u64 = 7622;
 const CHAIN_UID: B256 = b256!("24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464");
@@ -43,9 +52,15 @@ const C: B256 = B256::repeat_byte(0xc3);
 const D: B256 = B256::repeat_byte(0xd4);
 const AUD: B256 = B256::repeat_byte(0xad);
 const EPOCH: u32 = 3;
+/// A debit's `ownTag` (group 3h): a named field of every debit's args.
+const TAG: B256 = B256::repeat_byte(0x7a);
 const CONFIG: &str = r#"
 bind = "127.0.0.1:0"
-rpc_url = "http://127.0.0.1:1"
+rpc_urls = ["http://127.0.0.1:1"]
+chain_id = 7622
+chain_uid = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"
+registry = "0x5CA5000000000000000000000000000000000001"
+registry_generation = 1
 keystore = "unused-in-tests.json"
 keystore_password_env = "UNUSED_IN_TESTS"
 valid_minutes = 5
@@ -104,6 +119,10 @@ fn key(pk: &[u8], pop: &[u8]) -> Key {
 #[derive(Default)]
 struct World {
     release: Address,
+    /// the registry and `chainUid` the token's code names
+    named: (Address, B256),
+    /// what the registry answers for `generation()` and `chainUid()`
+    pins: (u8, B256),
     mode: u8,
     verifier: B256,
     epoch: u32,
@@ -117,6 +136,12 @@ struct World {
     message: HashMap<(B256, B256), B256>,
     /// what `pqzEntryBlob` answers
     blob: Vec<u8>,
+    /// how many nodes the chain has (at least one); node `n` is at block `100 + n`
+    nodes: usize,
+    /// node → how many reads it answers before it stops answering (0: down, its head too)
+    down: HashMap<usize, usize>,
+    /// every read as `(node, block)`, in order
+    seen: Vec<(usize, u64)>,
 }
 
 struct Fake(Mutex<World>);
@@ -150,17 +175,42 @@ macro_rules! answer {
     };
 }
 
+impl Fake {
+    /// One read by `node` at `block`: recorded, then refused when the node has stopped answering.
+    fn reach(&self, node: usize, block: u64) -> Result<(), ChainError> {
+        let mut w = self.0.lock().unwrap();
+        let before = w.seen.iter().filter(|s| s.0 == node).count();
+        w.seen.push((node, block));
+        match w.down.get(&node) {
+            Some(&n) if before >= n => Err(ChainError::Rpc(format!("node {node} down"))),
+            _ => Ok(()),
+        }
+    }
+}
+
 #[async_trait]
 impl Chain for Fake {
-    async fn code(&self, at: Address) -> Result<Bytes, ChainError> {
+    fn nodes(&self) -> usize {
+        self.0.lock().unwrap().nodes.max(1)
+    }
+
+    async fn head(&self, node: usize) -> Result<u64, ChainError> {
+        match self.0.lock().unwrap().down.get(&node) {
+            Some(0) => Err(ChainError::Rpc(format!("node {node} down"))),
+            _ => Ok(100 + node as u64),
+        }
+    }
+
+    async fn code(&self, node: usize, block: u64, at: Address) -> Result<Bytes, ChainError> {
+        self.reach(node, block)?;
         let w = self.0.lock().unwrap();
         if at == TOKEN {
             // ChainEnvCode: proxy(release) ‖ chainUid ‖ registry ‖ govRouter ‖ ska ‖ hedera ‖ counts
             let mut c = hex!("363d3d373d3d3d363d73").to_vec();
             c.extend(w.release);
             c.extend(hex!("5af43d82803e903d91602b57fd5bf3"));
-            c.extend(CHAIN_UID);
-            c.extend(REGISTRY);
+            c.extend(w.named.1);
+            c.extend(w.named.0);
             c.extend([0u8; 43]);
             return Ok(c.into());
         }
@@ -168,7 +218,8 @@ impl Chain for Fake {
         Ok(k.map(|(_, k)| [&[0u8][..], &k.pk].concat().into()).unwrap_or_default())
     }
 
-    async fn call(&self, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
+    async fn call(&self, node: usize, block: u64, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
+        self.reach(node, block)?;
         let w = self.0.lock().unwrap();
         let sel: [u8; 4] = data[..4].try_into().unwrap();
         let st = || Bytes::from(w.statement.clone());
@@ -188,8 +239,11 @@ impl Chain for Fake {
                     verifierFeePending: 0, verifierFeeEta: 0 },
             }
         }
-        if to == REGISTRY {
+        if to == REGISTRY || to == ROGUE {
             answer! { sel, data;
+                uaAuthDigestCall => |_| FORGED,
+                R::generationCall => |_| w.pins.0,
+                R::chainUidCall => |_| w.pins.1,
                 R::pqzKeyOfCall => |c| {
                     let v = w.current.get(&c.ua).copied().unwrap_or(0);
                     R::pqzKeyOfReturn { version: v, ptr: ptr(c.ua, v), pqzPopHash: at(c.ua, v).pop_hash, proven: false }
@@ -212,7 +266,6 @@ impl Chain for Fake {
                 R::pqzKeyVersionDigestCall => |c| tagged("version", (c.ua, c.version, c.pqzKeyHash).abi_encode()),
                 R::uaMessageCall => |c| w.message.get(&(c.purposeTag, c.digest)).copied()
                     .unwrap_or_else(|| tagged("message", (c.kind, c.purposeTag, c.digest).abi_encode())),
-                R::uaAuthDigestCall => |c| ua_auth_digest_at(registry_separator(), c.ua, c.purposeTag, c.digest),
             }
         }
         Err(ChainError::Revert(Bytes::new()))
@@ -228,7 +281,7 @@ fn signer() -> PrivateKeySigner {
 /// An OFFCHAIN token naming this verifier at `EPOCH`; `uas[i]` holds the statement's key `i` (at `640 + i·PK`) as
 /// version 0 with stored proof bytes `[i + 1; 8]`.
 fn world(st: &[u8], uas: &[B256]) -> World {
-    let mut w = World { release: RELEASE, mode: 1, verifier: signer().address().into_word(), epoch: EPOCH, auditor: AUD,
+    let mut w = World { release: RELEASE, named: (REGISTRY, CHAIN_UID), pins: (1, CHAIN_UID), mode: 1, verifier: signer().address().into_word(), epoch: EPOCH, auditor: AUD,
         statement: st.to_vec(), ..Default::default() };
     for (i, &u) in uas.iter().enumerate() {
         w.keys.insert((u, 0), key(&st[640 + i * PK..640 + (i + 1) * PK], &[i as u8 + 1; 8]));
@@ -259,7 +312,7 @@ impl Svc {
 fn service(w: World, pqz: Pqz) -> Svc {
     let fake = Arc::new(Fake(Mutex::new(w)));
     let cfg = Config::parse(CONFIG).unwrap();
-    let svc = Arc::new(Service::new(fake.clone(), pqz, signer(), &cfg, CHAIN_ID));
+    let svc = Arc::new(Service::new(fake.clone(), pqz, signer(), &cfg));
     Svc { app: http::router(svc, &cfg), fake }
 }
 
@@ -286,7 +339,7 @@ fn request(op: Value, st: &[u8], proof: &[u8]) -> Value {
 
 fn single(from: B256, kv: u64, to: B256) -> Value {
     json!({"entry": "mtxConfidentialTransferSingle", "args": {"p": 0, "validUntilBlock": "100", "shieldIn": "0",
-        "fromUA": from, "keyVersion": kv, "toUA": to, "beneficiaryUA": B256::ZERO, "salt": hx(&[0; 16]), "u": "0x",
+        "fromUA": from, "keyVersion": kv, "toUA": to, "beneficiaryUA": B256::ZERO, "salt": hx(&[0; 16]), "ownTag": TAG, "u": "0x",
         "vTo": "0x", "vFrom": "0x", "vAuditor": "0x", "sealedMemo": "0x"}})
 }
 
@@ -296,14 +349,14 @@ fn multi(from: B256, legs: &[B256], aud: bool) -> Value {
     let v = hx(&[0; stmt::V_BYTES]);
     let va = if aud { v.clone() } else { "0x".into() };
     json!({"entry": "mtxConfidentialTransfer", "args": {"p": 0, "validUntilBlock": "100", "shieldIn": "0", "fromUA": from,
-        "keyVersion": 0, "beneficiaryUA": B256::ZERO, "decoyFee": "0", "salt": hx(&[0; 16]),
+        "keyVersion": 0, "beneficiaryUA": B256::ZERO, "decoyFee": "0", "salt": hx(&[0; 16]), "ownTag": TAG,
         "u": vec![hx(&[0; PK]); g], "legs": legs.iter().map(|l| json!({"ua": l, "v": v, "vAuditor": va})).collect::<Vec<_>>(),
         "vFrom": v, "sealedMemo": hx(&vec![0; 2 + 40 * legs.len()])}})
 }
 
 fn unshield(from: B256, kv: u64) -> Value {
     json!({"entry": "mtxUnshield", "args": {"p": 0, "validUntilBlock": "100", "shieldIn": "0", "fromUA": from,
-        "keyVersion": kv, "beneficiaryUA": B256::ZERO, "u": "0x", "vFrom": "0x"}, "amount": "5", "recipient": C})
+        "keyVersion": kv, "beneficiaryUA": B256::ZERO, "ownTag": TAG, "u": "0x", "vFrom": "0x"}, "amount": "5", "recipient": C})
 }
 
 /// Signed by this verifier: the verdict exactly the expected one, the signature over the registry's `uaAuthDigest` of
@@ -322,6 +375,7 @@ fn assert_signed(r: &(u16, Value), statement_hash: B256, proof_hash: B256) {
         verdict_digest(&v, CHAIN_UID));
     let s = Signature::from_raw(&bytes(&sig["signature"])).unwrap();
     assert_eq!(s.recover_address_from_prehash(&auth).unwrap(), signer().address());
+    assert_ne!(s.recover_address_from_prehash(&FORGED).ok(), Some(signer().address()), "the RPC's uaAuthDigest signed");
 }
 
 fn assert_refused(r: &(u16, Value), error: &str) {
@@ -545,10 +599,12 @@ async fn rreg_message_per_path_real_vector() {
 
 #[tokio::test]
 async fn disclosure_names_the_leg_owner() {
-    // an op blob `salt ‖ u_0 ‖ (v_j ‖ UA_j)_{j<2} ‖ v_f`, packed at PACK_BITS = q's bit length (PqzCore._legOf)
+    // an op blob `salt ‖ u_0 ‖ (v_j ‖ UA_j)_{j<2} ‖ P(v_f) ‖ ownTag ‖ kv(8·2) ‖ u8(2)`, packed at PACK_BITS = q's bit length
+    // (group 3h: PqzCore.rOf, _legOf)
     let group = (u64::BITS - stmt::Q.leading_zeros()) as usize / 2;
     let (pkp, vp) = (PK / 32 * group, stmt::V_BYTES / 32 * group);
-    let blob = [&[0u8; 16][..], &vec![0; pkp], &vec![0; vp], C.as_slice(), &vec![0; vp], D.as_slice(), &vec![0; vp]].concat();
+    let blob = [&[0u8; 16][..], &vec![0; pkp], &vec![0; vp], C.as_slice(), &vec![0; vp], D.as_slice(), &vec![0; vp],
+        TAG.as_slice(), &[0; 16], &[2]].concat();
     let (st, proof) = vector("DISCLOSE-RECEIVER", None);
     let mut w = world(&st, &[]);
     w.blob = blob;
@@ -585,7 +641,247 @@ async fn probe_signature() {
     assert_refused(&post(&s, "/v1/pqz-verdict/probe", req).await, "UNKNOWN_RELEASE");
 }
 
+/// Fable C-1: the probe signs only for an `OFFCHAIN` token that names this verifier (one change at a time, then back);
+/// a proposal probe (spec §4.2's typo guard of the proposed `next`) also while the token names another verifier or none,
+/// never for a token not `OFFCHAIN` or of another chain.
+#[tokio::test]
+async fn probe_refuses_token_not_served() {
+    let s = service(world(&[], &[]), all_valid());
+    let req = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
+    let proposal = json!({"token": TOKEN, "chainId": CHAIN_ID, "proposal": true}).to_string();
+    let probe = |b: &str| post(&s, "/v1/pqz-verdict/probe", b.to_string());
+    s.world().mode = 0;
+    assert_refused(&probe(&req).await, "NOT_OFFCHAIN");
+    assert_refused(&probe(&proposal).await, "NOT_OFFCHAIN");
+    s.world().mode = 1;
+    for other in [C, B256::ZERO] {
+        s.world().verifier = other;
+        assert_refused(&probe(&req).await, "NOT_THIS_VERIFIER");
+        assert_signed(&probe(&proposal).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    }
+    let wrong_chain = json!({"token": TOKEN, "chainId": 1, "proposal": true}).to_string();
+    assert_refused(&probe(&wrong_chain).await, "CHAIN_MISMATCH");
+    s.world().verifier = signer().address().into_word();
+    assert_signed(&probe(&req).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    assert_signed(&probe(&proposal).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+}
+
+/// The probe's `statementHash` is no real op statement's: its 27 bytes are shorter than every statement length of the
+/// set, each at least 640 bytes, and its keccak is none of the
+/// vector rows' (every form). A real debit's `_check` refuses a probe verdict on chain: `tests/anvil.rs`.
+#[test]
+fn probe_statement_is_no_op_statement() {
+    assert!(PROBE_STATEMENT.len() < stmt::HEADER_BYTES && PROBE_STATEMENT.len() < 32);
+    assert!(statement_lengths().iter().all(|&n| n >= stmt::HEADER_BYTES && n != PROBE_STATEMENT.len()));
+    let rows = json_file("n2304-kmax4096/proof_pqzl.json");
+    let ours = hex::encode(keccak256(PROBE_STATEMENT));
+    let rows = rows["rows"].as_array().unwrap();
+    assert!(rows.len() > 10 && rows.iter().all(|r| r["stmt_keccak"].as_str().unwrap() != ours));
+}
+
+/// Fable C-1 (P0): a clone-shaped contract (proxy of the configured release) whose code names a registry or a `chainUid`
+/// other than the pinned ones is refused on both routes, though that registry answers every view; the control is signed.
+#[tokio::test]
+async fn refuses_clone_naming_rogue_registry() {
+    let (st, proof) = vector("TRANSFER", None);
+    let s = service(world(&st, &[A, B, AUD]), all_valid());
+    let req = request(single(A, 0, B), &st, &proof);
+    let probe = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
+    for (named, error) in [((ROGUE, CHAIN_UID), "FOREIGN_REGISTRY"), ((REGISTRY, B256::repeat_byte(7)), "FOREIGN_CHAIN_UID")] {
+        s.world().named = named;
+        assert_refused(&verdict(&s, &req).await, error);
+        assert_refused(&post(&s, "/v1/pqz-verdict/probe", probe.clone()).await, error);
+        let proposal = json!({"token": TOKEN, "chainId": CHAIN_ID, "proposal": true}).to_string();
+        assert_refused(&post(&s, "/v1/pqz-verdict/probe", proposal).await, error);
+    }
+    s.world().named = (REGISTRY, CHAIN_UID);
+    assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
+    assert_signed(&post(&s, "/v1/pqz-verdict/probe", probe).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+}
+
+/// Fable C-1 (P0): the registry (or the RPC) answers `uaAuthDigest` with a forged hash; the service signs the digest it
+/// builds itself from the pinned values (`assert_signed` recovers over the test's own `UAAuth`, never over `FORGED`).
+#[tokio::test]
+async fn ignores_forged_rpc_digest() {
+    let s = service(world(&[], &[]), all_valid());
+    let r = post(&s, "/v1/pqz-verdict/probe", json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string()).await;
+    assert_signed(&r, keccak256(PROBE_STATEMENT), keccak256(b""));
+    let sig = Signature::from_raw(&bytes(&r.1["pqzVerdictSig"]["signature"])).unwrap();
+    assert_ne!(sig.recover_address_from_prehash(&FORGED).ok(), Some(signer().address()));
+}
+
+/// Fable C-3 (ARCH-POS-15): a list of nodes, failover per request, one node and one block for every read of a request.
+#[tokio::test]
+async fn fails_over_one_node_one_block() {
+    let (st, proof) = vector("TRANSFER", None);
+    let s = service(world(&st, &[A, B, AUD]), all_valid());
+    let req = request(single(A, 0, B), &st, &proof);
+    // node 0 down from the start: node 1 answers every read, at its block 101
+    (s.world().nodes, s.world().down) = (3, HashMap::from([(0, 0)]));
+    assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
+    assert!(s.world().seen.iter().all(|&r| r == (1, 101)), "{:?}", s.world().seen);
+    // node 0 answers four reads, then stops: the request starts over on node 1, never mixing its answers with node 0's
+    (s.world().down, s.world().seen) = (HashMap::from([(0, 4)]), vec![]);
+    assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
+    let seen = s.world().seen.clone();
+    assert_eq!(seen[..5], [(0, 100); 5], "four answered, the fifth refused");
+    assert!(seen[5..].iter().all(|&r| r == (1, 101)) && seen.len() > 5, "{seen:?}");
+    // a refusal on what node 0 answered is final: no failover (only an RPC that does not answer moves on)
+    (s.world().down, s.world().seen, s.world().epoch) = (HashMap::new(), vec![], EPOCH + 1);
+    assert_refused(&verdict(&s, &req).await, "EPOCH_MISMATCH");
+    assert!(s.world().seen.iter().all(|r| r.0 == 0));
+    s.world().epoch = EPOCH;
+    // every node down
+    s.world().down = HashMap::from([(0, 0), (1, 0), (2, 0)]);
+    assert_refused(&verdict(&s, &req).await, "RPC_UNAVAILABLE");
+    assert_refused(&post(&s, "/v1/pqz-verdict/probe", json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string()).await,
+        "RPC_UNAVAILABLE");
+}
+
+/// Fable C-4: a client that sends its headers and then no body holds no queue place: with every place's worth of such
+/// clients connected, a whole request is still served; each slow one is refused `BODY_TIMEOUT` (408) after `BODY_TIMEOUT`.
+/// The clock runs while the slow clients reach their handlers, then is paused, so the timeout passes at once when nothing
+/// else runs.
+#[tokio::test]
+async fn slow_body_holds_no_queue_place() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let s = service(world(&[], &[]), all_valid());
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let at = l.local_addr().unwrap();
+    let app = s.app.clone().into_make_service_with_connect_info::<SocketAddr>();
+    tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+    let mut slow = Vec::new();
+    for _ in 0..Config::parse(CONFIG).unwrap().queue {
+        let mut c = tokio::net::TcpStream::connect(at).await.unwrap();
+        c.write_all(b"POST /v1/pqz-verdict/probe HTTP/1.1\r\nhost: v\r\ncontent-type: application/json\r\ncontent-length: 64\r\n\r\n{")
+            .await.unwrap();
+        slow.push(c);
+    }
+    // real time for the server to accept them and enter each handler (reading its body), then the paused clock
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    tokio::time::pause();
+    let probe = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
+    assert_signed(&post(&s, "/v1/pqz-verdict/probe", probe).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    let start = tokio::time::Instant::now();
+    for mut c in slow {
+        let mut b = vec![0; 4096];
+        let n = c.read(&mut b).await.unwrap();
+        let answer = String::from_utf8_lossy(&b[..n]);
+        assert!(answer.starts_with("HTTP/1.1 408") && answer.contains("BODY_TIMEOUT"), "{answer}");
+    }
+    assert!(start.elapsed() + std::time::Duration::from_secs(1) >= http::BODY_TIMEOUT);
+}
+
+/// A JSON-RPC endpoint: `answer(request)` is the response's `result` or `error` member; `None` accepts and never answers.
+type Answer = Arc<dyn Fn(&Value) -> Option<Value> + Send + Sync>;
+
+async fn rpc_server(answer: Answer) -> String {
+    let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+        let answer = answer.clone();
+        async move {
+            let Some(mut a) = answer(&r) else { return std::future::pending().await };
+            (a["jsonrpc"], a["id"]) = (json!("2.0"), r["id"].clone());
+            axum::Json(a)
+        }
+    }));
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", l.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+    url
+}
+
+/// A JSON-RPC endpoint that answers `eth_chainId` with `chain_id` (and nothing else).
+async fn rpc_answering(chain_id: u64) -> String {
+    rpc_server(Arc::new(move |r| (r["method"] == "eth_chainId").then(|| json!({"result": format!("{chain_id:#x}")})))).await
+}
+
+/// Fable R-1: a node that accepts and never answers times out (`ChainError::Rpc`) and the request fails over: node 0 silent
+/// after `eth_chainId`, node 1 answering (the token has no code there), the probe comes back refused by what node 1 said.
+#[tokio::test]
+async fn silent_node_times_out_and_fails_over() {
+    let chain_id = json!({"result": format!("{CHAIN_ID:#x}")});
+    let c = chain_id.clone();
+    let silent = rpc_server(Arc::new(move |r| (r["method"] == "eth_chainId").then(|| c.clone()))).await;
+    let serving = rpc_server(Arc::new(move |r| Some(match r["method"].as_str().unwrap() {
+        "eth_chainId" => chain_id.clone(),
+        "eth_blockNumber" => json!({"result": "0x65"}),
+        "eth_getCode" => json!({"result": "0x"}),
+        _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+    }))).await;
+    let rpc = Rpc::connect_within(&[silent, serving], CHAIN_ID, std::time::Duration::from_millis(300)).await.unwrap();
+    // the outer bound turns a hang into this test's failure
+    let bound = std::time::Duration::from_secs(5);
+    let head = tokio::time::timeout(bound, rpc.head(0)).await.expect("a silent node times out");
+    assert!(matches!(head, Err(ChainError::Rpc(_))), "{head:?}");
+    let svc = Service::new(Arc::new(rpc), all_valid(), signer(), &Config::parse(CONFIG).unwrap());
+    let r = tokio::time::timeout(bound, svc.probe(ProbeRequest { token: TOKEN, chain_id: CHAIN_ID, proposal: false })).await
+        .expect("the request fails over, never hangs");
+    assert_eq!(r.unwrap_err().error, "NOT_A_TOKEN", "node 1's answer");
+}
+
+/// Fable R-2: an `eth_call` error is a revert only with revert data or an `execution reverted` message; `header not found`
+/// or a rate limit is the node's (`ChainError::Rpc`, so the request fails over).
+#[tokio::test]
+async fn only_a_revert_is_a_revert() {
+    let node = rpc_server(Arc::new(|r| Some(match r["method"].as_str().unwrap() {
+        "eth_chainId" => json!({"result": format!("{CHAIN_ID:#x}")}),
+        _ => match r["params"][0]["to"].as_str().unwrap().chars().last().unwrap() {
+            '1' => json!({"error": {"code": 3, "message": "execution reverted: no", "data": "0x08c379a0"}}),
+            '2' => json!({"error": {"code": -32000, "message": "execution reverted"}}),
+            '3' => json!({"error": {"code": -32000, "message": "header not found"}}),
+            _ => json!({"error": {"code": -32005, "message": "rate limit exceeded"}}),
+        },
+    }))).await;
+    let rpc = Rpc::connect(&[node], CHAIN_ID).await.unwrap();
+    let call = |n: u8| rpc.call(0, 1, Address::with_last_byte(n), Bytes::from_static(b"\x01\x02\x03\x04"));
+    assert!(matches!(call(1).await, Err(ChainError::Revert(d)) if d[..] == [0x08, 0xc3, 0x79, 0xa0]));
+    assert!(matches!(call(2).await, Err(ChainError::Revert(d)) if d.is_empty()));
+    assert!(matches!(call(3).await, Err(ChainError::Rpc(_))));
+    assert!(matches!(call(4).await, Err(ChainError::Rpc(_))));
+}
+
+/// Fable R-4: at start, the registry's `generation()` and `chainUid()` on every node equal the configured ones.
+#[tokio::test]
+async fn start_pins_generation_and_chain_uid() {
+    let s = service(world(&[], &[]), all_valid());
+    let cfg = Config::parse(CONFIG).unwrap();
+    check_pins(&*s.fake, &cfg).await.unwrap();
+    s.world().pins.0 = 2;
+    let e = check_pins(&*s.fake, &cfg).await.unwrap_err().to_string();
+    assert!(e.contains("is generation 2, the config pins 1"), "{e}");
+    s.world().pins = (1, B256::repeat_byte(7));
+    let e = check_pins(&*s.fake, &cfg).await.unwrap_err().to_string();
+    assert!(e.contains("has chainUid"), "{e}");
+}
+
+/// Fable C-6: the configured `chain_id` is compared with every endpoint's `eth_chainId` at start; one other chain, or one
+/// endpoint that does not answer, and the service does not start.
+#[tokio::test]
+async fn start_pins_chain_id() {
+    let (ours, other) = (rpc_answering(CHAIN_ID).await, rpc_answering(1).await);
+    assert_eq!(Rpc::connect(std::slice::from_ref(&ours), CHAIN_ID).await.unwrap().nodes(), 1);
+    let e = Rpc::connect(&[ours.clone(), other], CHAIN_ID).await.err().expect("another chain");
+    assert!(e.to_string().contains("rpc_urls[1] answers chain 1, the config pins 7622"), "{e}");
+    assert!(Rpc::connect(&[ours, "http://127.0.0.1:1".into()], CHAIN_ID).await.is_err(), "an endpoint that does not answer");
+    assert!(Config::parse(&CONFIG.replace("chain_id = 7622\n", "")).is_err(), "chain_id is required");
+}
+
+/// Fable C-2: the views the service calls are the contract's after group 3h (`ownTag` in the three args tuples): the
+/// selectors of the forge artifact `out/IPqzToken.sol/IPqzToken.json` (`methodIdentifiers`, the same pins as the node's
+/// `views_are_the_contracts`); the opt-in anvil test reads the artifact itself.
+#[test]
+fn views_are_the_contracts() {
+    use scaas_pqz_verifier::abi::IPqzToken as T;
+    assert_eq!(T::transferSingleStatementCall::SELECTOR, hex!("931415ee"));
+    assert_eq!(T::transferStatementCall::SELECTOR, hex!("8a2161ba"));
+    assert_eq!(T::burnStatementCall::SELECTOR, hex!("da8c9eed"));
+    assert_eq!(T::unshieldUnwrapStatementCall::SELECTOR, hex!("8e4ccf2e"));
+    assert_eq!(T::pqzVerifyConfigCall::SELECTOR, hex!("dc59c66e"));
+    assert_eq!(T::proofSystemIdCall::SELECTOR, hex!("1f3b28f2"));
+}
+
 /// `smartcontracts/vectors/pqz/verdict.json` (the contracts' forge writer): the verifier's digest and signature.
+
 #[test]
 fn verdict_vectors() {
     let v = json_file("verdict.json");
@@ -613,6 +909,10 @@ fn verdict_vectors() {
         assert_eq!(digest, word(&r["digest"]), "{r}");
         let auth = ua_auth_digest_at(reg.separator(), k.address().into_word(), purpose_pqz_verdict(), digest);
         assert_eq!(auth, word(&r["uaAuthDigest"]), "{r}");
+        // the service's own builder, from the configured values
+        let mine = registry_domain(g["version"].as_str().unwrap().parse().unwrap(), uint(&g["chainId"]),
+            g["verifyingContract"].as_str().unwrap().parse().unwrap(), word(&g["salt"]));
+        assert_eq!(verdict_auth_digest(&mine, k.address().into_word(), digest), auth, "{r}");
         assert_eq!(k.sign_hash_sync(&auth).unwrap().as_bytes().to_vec(), bytes(&r["signature"]), "{r}");
     }
 }

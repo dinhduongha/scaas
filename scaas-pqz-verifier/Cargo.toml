@@ -24,6 +24,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+# the paused clock of the slow-body test (Fable C-4)
+tokio = { version = "1", features = ["full", "test-util"] }
+# tests/anvil.rs (opt-in): the PQ signer of the holders, Falcon-512 verified in Solidity on anvil (the node e2e's pins)
+pqcrypto-falcon = { version = "=0.4.1", default-features = false }
+pqcrypto-traits = { version = "=0.3.5", default-features = false }
 
 # the PQZL verifier is slow unoptimised; the tests verify real proofs
 [profile.dev.package.pqzl]

@@ -861,13 +861,28 @@ refuse_shield_when_unserved = false                # opt-in
     `FEE_WORD_MISMATCH` with its three terms (`confidentialFee()`, `pqzVerifyConfig().verifierFee`, `M·d`); the fee is the token's,
     not the service's policy. A fee change between the config read and the view call gives `STATEMENT_MISMATCH` or
     `FEE_WORD_MISMATCH`, never a wrong signature (the verdict binds the statement's hash).
+  - **The reference service's configuration and refusals** (`scaas-pqz-verifier`, Fable C-1…C-6 on branch
+    `ua-mtx-fix-verifier`; [pqz-verifier.example.toml](../../scaas-pqz-verifier/pqz-verifier.example.toml), names and paths
+    only, no secret): `rpc_urls` (one or more, asked in order; one request's reads from one node at one block, the next node
+    only when one does not answer within 10 s or answers an error that is not a revert,
+    [ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover; **every endpoint must be a node the verifier's operator trusts,
+    until the strict-majority option exists (`scaas-rpc`)**, owner ruling 2026-11-11 ([decisions.md](../decisions.md)
+    CTR-PQZ-29 Change): the option is deferred to the shared `scaas-rpc` crate (TODO 8b), the block is pinned by number not
+    hash (R-6, deferred with it), and a lying RPC could pass a key check (§6, CTR-PQZ-30: the key record, its stored `pqzPop` bytes, `keyOwner`) that `OFFCHAIN` tokens trust the verifier for), `chain_id` (required; every endpoint must answer it at start or
+    the service does not start), `chain_uid`, `registry` and `registry_generation` (1 or 2; at start the registry's
+    `chainUid()` and `generation()` on every endpoint must equal them): the one chain and registry it serves, and the only inputs of the `UAAuth` digest it signs (never a hash read from the
+    chain). New refusals: `FOREIGN_REGISTRY` and `FOREIGN_CHAIN_UID` (the token's code names another registry or `chainUid`),
+    `BODY_TIMEOUT` (408: the body not read within 15 s; read before a queue place is taken), `KEY_RECORD_FULL` (503: the
+    in-memory key ownership record holds 2^18 keys; a restart empties it).
   - **Paid on the token** (group 3t): an `OFFCHAIN` token with `verifierFee ≠ 0` pays the verifier UA `verifierFee ·
     shieldScale` per debit from `SHIELD_POOL`: a native verifier's ERC-20 balance, a derived one's UA-ledger balance (its first
     payout creates the slot); the verifier spends it with its own key, as any holder. An operator's price floor is not specified. Open (owner): the request body limit (built
     1,244,672 B against the spec formula's 722,688 B), how JSON depth is counted, whether the key-ownership record persists across
     restarts.
   - **Served**, for the shield switch: some endpoint answers 2xx to the probe `POST <endpoint>/v1/pqz-verdict/probe {token,
-    chainId}` (a fixed probe statement, also the check before a verifier transfer is proposed); one probe per shield job. With
+    chainId}` (a fixed probe statement; the reference service answers it only for an `OFFCHAIN` token naming it); one probe per
+    shield job. The check before a verifier transfer is proposed asks the proposed `next` with `proposal: true`, answered while
+    the token still names another verifier or none. With
     `refuse_shield_when_unserved = true`, shield and wrap-shield jobs (`UAShield`, `WrapShield` on a PQZ token) into an `OFFCHAIN`
     token whose verifier is revoked (`pqzVerifyConfig().verifier == 0`) or that no endpoint serves (none configured counts as
     unreachable) are refused `PQZ_VERIFIER_UNREACHABLE`, for every consumer.
