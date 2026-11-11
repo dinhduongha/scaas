@@ -124,6 +124,14 @@ MUTANTS = {
            "_ua(T.UA_ENABLE_FEATURE, e, target, IRegulatedToken.enableFeature.selector, abi.encode(bit), auth);",
            "_uaCall(T.UA_ENABLE_FEATURE, e, target, \"\", abi.encodeCall(IRegulatedToken.enableFeature, (bit)), auth);",
            "forge", "test/as", "ListRouter.t.sol"),
+    # T7 (spec §9, test (13); Fable P2-1, R-1, R-7): the venue's list effects
+    "M32": ("scaas-node/src/dex/venue.rs",
+            "    if controls & bit == 0 {\n        return ListEffect::None; // R-1: a dormant list changes nothing on chain, nothing here\n    }\n",
+            "", "cargo", "scaas-node", "list_effects_follow_the_live_bit"),
+    "M32b": ("scaas-node/src/dex/venue.rs", "    } else if blocks {\n        ListEffect::Drop(a)\n",
+             "    } else if blocks {\n        ListEffect::None\n", "cargo", "scaas-node", "list_effects_follow_the_live_bit"),
+    "M34": ("scaas-node/src/dex/venue.rs", "    if venue.contains(&a) {\n        ListEffect::Halt(blocks)\n    } else if blocks {",
+            "    if blocks {", "cargo", "scaas-node", "list_effects_follow_the_live_bit"),
 }
 
 

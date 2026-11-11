@@ -1111,6 +1111,18 @@ async fn pull_digest(chain: &Chain, token: Address, struct_hash: B256) -> Result
 /// meta-tx gets at least the ERC-1271 floor.
 /// NODE-JOB-24: a refusal of [`gas`] for the lane's per-transaction cap (`max_gas_per_tx`, the block gas limit, 2^24 before
 /// Amsterdam), not for the calldata floor or a revert of the call itself.
+/// The router's list edits (spec 2026-11-10-token-lists.md §6.2): `mtxSetAllowed`, `mtxSetDenied`.
+const SEL_LIST_EDITS: [[u8; 4]; 2] = [[0x06, 0xb9, 0x8e, 0x72], [0x1d, 0x28, 0x8f, 0xdc]];
+
+/// Round 3s (spec §6.1, §14; Fable P3-4): a list edit's estimate above the chain's block gas limit is refused by name, before
+/// sending: a smaller batch fits (256 new rows ≈ 31 M with the verification).
+fn list_batch_note(data: &[u8]) -> &'static str {
+    match data.get(..4) {
+        Some(s) if SEL_LIST_EDITS.iter().any(|x| x == s) => " (LIST_BATCH_TOO_LARGE: send fewer accounts per setAllowed / setDenied)",
+        _ => "",
+    }
+}
+
 pub fn over_cap(reason: &str) -> bool {
     reason.starts_with("gas ") && (reason.contains(" above max_gas_per_tx ") || reason.contains(" above the chain's block gas limit ")
         || reason.contains(" above the 2^24 gas limit of a transaction"))
@@ -1139,7 +1151,7 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
         return Err(SimError::Revert(format!("gas {est} above max_gas_per_tx {max}")));
     }
     if est > block.limit {
-        return Err(SimError::Revert(format!("gas {est} above the chain's block gas limit {}", block.limit)));
+        return Err(SimError::Revert(format!("gas {est} above the chain's block gas limit {}{}", block.limit, list_batch_note(&w.data))));
     }
     if !block.amsterdam && est > MAX_TX_GAS {
         return Err(SimError::Revert(format!("gas {est} above the 2^24 gas limit of a transaction (EIP-7825, before Amsterdam)")));
@@ -1327,15 +1339,17 @@ mod tests {
         // -> (110, 3, 110), UAPayWithTax's three domains and the router's two tax ops
         // group 3f T46 / T47: -> (113, 3, 113), the router's three verifier ops' vector rows
         // group 3h T61: -> (114, 3, 114), the router's `UASetProofStore`; group 3l: -> (116, 3, 116), the router's two wrap-limit ops
-        // round 3r (CTR-GOV-23): -> (127, 3, 127), the router's eleven admin rows
-        assert_eq!((sent, relayed, refused), (127, 3, 127), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // round 3r (CTR-GOV-23): -> (127, 3, 127), the router's eleven admin rows; round 3s (CTR-GOV-24): -> (130, 3, 130), the
+        // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`
+        assert_eq!((sent, relayed, refused), (130, 3, 130), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
         // T93: 104 -> 116, `PqChat`'s twelve plain rows; group 3l: -> 118, the router's two wrap-limit ops; UA-7 P48:
         // -> 119, `remove`; ua-mtx-liquidity L6 (79c3501e, moved at L6d): -> 120, `mtxLiquidity`
-        // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 131, "table rows: 99 typed with an entry, 32 plain");
+        // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows; round 3s (CTR-GOV-24): -> 134, the router's three list /
+        // enable rows
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 134, "table rows: 102 typed with an entry, 32 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1743,7 +1757,8 @@ mod tests {
         // group 3f T45 / T47: 30 -> 33, the three verifier ops; group 3h T61: -> 34, `mtxSetProofStore` (bit 24); group 3l: -> 36,
         // `mtxSetWrapLimits`, `mtxSetWrapMember`
         // round 3r: -> 47, the eleven admin ops of the factory and the compliance registry (the four approvals in NOT_ROWS)
-        assert_eq!(router.len(), 47, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r); the three creations (T76) and the four release approvals (3r) in NOT_ROWS");
+        // round 3s (CTR-GOV-24): -> 50, `mtxSetAllowed`, `mtxSetDenied`, `mtxEnableFeature`
+        assert_eq!(router.len(), 50, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three list / enable ops (3s); the three creations (T76) and the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -1812,10 +1827,13 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             "revokeOrder(bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
             // pay-meta-tax T39 / T40: bit 23's two powers, the direct payWithTax (the caller's own balance), mtxPayWithTax
             "setTaxRate(uint32)", "setTaxRecipient(bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
-            PAY_WITH_TAX];
+            PAY_WITH_TAX,
+            // round 3s (CTR-GOV-24): the lists (bits 8, 9; on 10-13 setAllowed's row holds, no holder can exist) and the enable
+            "setAllowed(bytes32[],bool)", "setDenied(bytes32[],bool)", "enableFeature(uint8)"];
         assert_eq!(added.keys().map(|s| s.as_str()).collect::<std::collections::BTreeSet<_>>(), controls.into_iter().collect(), "{kind}");
         for (s, c) in added.iter().filter(|(s, _)| s.as_str() != PAY_WITH_TAX) {
-            assert!(c.starts_with("BIT(") || (c.as_str() == "OWN_BALANCE" && s.starts_with("payWithTax(")), "{kind}: {s} is {c}");
+            assert!(c.starts_with("BIT(") || (c.as_str() == "OWN_BALANCE" && s.starts_with("payWithTax("))
+                || (c.as_str() == "ADMIN" && s.as_str() == "enableFeature(uint8)"), "{kind}: {s} is {c}");
             for nk in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
                 assert!(row(sel(s), nk).is_none(), "{kind}: the control {s} is a {nk} row");
             }
@@ -2056,10 +2074,12 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // round 3r (CTR-GOV-23): (261, 193, 257) -> (272, 200, 274), measured and counted from selector_audit.json: the router's
     // eleven admin ops rowed; its four release approvals and `OpenFactory`'s three open deploys in NOT_ROWS; `OpenFactory`'s
     // 17 `ADMIN` / `HOLDER_OWN` entries governed
-    const ROWED: usize = 272;
+    // round 3s (CTR-GOV-24): (272, 200, 274) -> (275, 200, 292), measured and counted from selector_audit.json: the router's three
+    // list / enable ops rowed (SIGNED); the six regulated kinds' setAllowed BIT(8), setDenied BIT(9), enableFeature ADMIN governed
+    const ROWED: usize = 275;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 200;
-    const GOVERNED: usize = 274;
+    const GOVERNED: usize = 292;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {
@@ -2610,5 +2630,21 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         paid.check(&chain, &relayed(other, cancel.clone())).await.unwrap_or_else(|e| panic!("a token's cancel relayed to a bound contract: {e:?}"));
         let e = paid.check(&chain, &relayed(chat, cancel)).await;
         assert!(matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("CHAIN_UID_MISMATCH")), "another kind's call relayed to an instance: {e:?}");
+    }
+
+    /// Round 3s (spec 2026-11-10-token-lists.md §9, Fable P3-4): a list edit's estimate above the block limit names its remedy;
+    /// any other call does not. The selectors are the router's (spec §7).
+    #[test]
+    fn list_batch_over_block_limit_named() {
+        let mut cd = vec![0x06, 0xb9, 0x8e, 0x72];
+        assert!(list_batch_note(&cd).contains("LIST_BATCH_TOO_LARGE"));
+        cd[..4].copy_from_slice(&[0x1d, 0x28, 0x8f, 0xdc]);
+        assert!(list_batch_note(&cd).contains("LIST_BATCH_TOO_LARGE"));
+        assert_eq!(list_batch_note(&[0x2e, 0xb8, 0xc7, 0x08]), "", "mtxEnableFeature: no batch");
+        let rows = typed::testkit::vectors();
+        for (op, sel) in [("UASetAllowed", SEL_LIST_EDITS[0]), ("UASetDenied", SEL_LIST_EDITS[1])] {
+            let cd = rows["ops"][op]["domains"]["gov_router"]["calldata"].as_str().unwrap();
+            assert_eq!(&cd[2..10], alloy::hex::encode(sel), "{op}: the router's selector");
+        }
     }
 }

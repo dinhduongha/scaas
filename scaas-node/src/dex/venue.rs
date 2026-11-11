@@ -11,7 +11,7 @@
 //! - A shape-1 order is authorized as the token's `authorize` does (ua-mtx-merge T17, R12): a native id by its own key
 //!   (`SigCheck`, `keyData` and `members` empty, R17), a derived id by the registry's `requireAuthorized` under `trade`.
 //! - The final-event watcher has its own cursor (RS5-8): a DEX failure never blocks payment finality.
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -211,6 +211,9 @@ pub struct Venue {
     /// The regulated legs (kinds 8-13: ERC-165 at start) and the `pausedUntil` last seen of each (regulated-kinds spec §7,
     /// NODE-DEX-11): a market with a regulated leg halts while it is in the future.
     regulated: std::sync::Mutex<HashMap<Address, u64>>,
+    /// Round 3s (spec 2026-11-10-token-lists.md §9, Fable R-7): the regulated legs whose list blocks the DEX or its puller
+    /// (a `DeniedSet(on)` / `AllowedSet(off)` naming one while the bit is on): their markets halt until the reverse event.
+    list_halted: std::sync::Mutex<HashSet<Address>>,
     /// The chain's `compliance_registry`, its code hash checked when the chain was loaded (fail closed); `None`: a regulated
     /// leg with a list on is refused `REGISTRY_NOT_CONFIGURED`.
     registry: Option<Address>,
@@ -262,6 +265,7 @@ impl Venue {
             trades: Default::default(),
             cancels: Default::default(),
             regulated: Default::default(),
+            list_halted: Default::default(),
             registry: me_registry,
         });
         me.load_pending(&mut *me.book.lock().await).await.context("pending fills")?;
@@ -340,25 +344,51 @@ impl Venue {
 
     /// `Some(pausedUntil)` while a regulated `token` is paused at `at` (a market with it halts); reopens at `pausedUntil`.
     fn halted(&self, token: Address, at: u64) -> Option<u64> {
+        if self.list_halted.lock().is_ok_and(|h| h.contains(&token)) {
+            return Some(u64::MAX); // round 3s: until the reverse list event
+        }
         self.regulated.lock().ok()?.get(&token).copied().filter(|u| *u > at)
+    }
+
+    fn set_list_halt(&self, token: Address, on: bool) {
+        if let Ok(mut h) = self.list_halted.lock() {
+            if on {
+                h.insert(token);
+            } else {
+                h.remove(&token);
+            }
+        }
+    }
+
+    /// Round 3s (spec 2026-11-10-token-lists.md §4.2, §9): `L(who)` on a regulated leg, read live: under `ALLOWLIST` not
+    /// `ALLOWED` `NOT_ALLOWED`, under `DENYLIST` `DENIED`; both lists off, no read.
+    async fn leg_listed(&self, token: Address, c: &IRegulatedToken::RegulatedConfig, who: B256) -> std::result::Result<(), VenueError> {
+        if c.controls & (C_ALLOW | C_DENY) == 0 {
+            return Ok(());
+        }
+        let f = view(&self.chain, token, IRegulatedToken::listFlagsOfCall { account: who }).await.map_err(down)?;
+        if !list_admits(c.controls, f) {
+            let name = if c.controls & C_ALLOW != 0 && f & 1 == 0 { "NOT_ALLOWED" } else { "DENIED" };
+            return Err(bad(format!("{name}: {who:#x} on {token:#x}")));
+        }
+        Ok(())
     }
 
     fn is_regulated(&self, token: Address) -> bool {
         self.regulated.lock().is_ok_and(|m| m.contains_key(&token))
     }
 
-    /// `R(who)` on a regulated leg as its `canReceive` answers it (`scaas_ua::regulated::can_receive` over the registry's
-    /// `complianceOf` and `kycProviderEnabled`), with the row's `validUntil`; both lists off: `(true, 0, u64::MAX)`.
+    /// `R(who)` on a regulated leg as its `canReceive` answers it under `KYC` (`scaas_ua::regulated::can_receive` over the
+    /// registry's `complianceOf` and `kycProviderEnabled`, both masks; round 3s), with the row's `validUntil`; `KYC` off:
+    /// `(true, 0, u64::MAX)`.
     /// The leg's registry must be the configured one: `REGISTRY_NOT_CONFIGURED`, `REGISTRY_MISMATCH` otherwise.
     async fn leg_receivable(&self, token: Address, c: &IRegulatedToken::RegulatedConfig, who: B256, at: u64)
         -> std::result::Result<(bool, u8, u64), VenueError>
     {
-        const C_ALLOW: u8 = 1 << 3; // RegulatedLib: `controls` = features bits 5-10 >> 5; ALLOWLIST 8, DENYLIST 9
-        const C_DENY: u8 = 1 << 4;
-        let (req, den) = ((c.controls & C_ALLOW != 0).then_some(c.requiredFlags), (c.controls & C_DENY != 0).then_some(c.deniedFlags));
-        if req.is_none() && den.is_none() {
+        if c.controls & C_KYC == 0 {
             return Ok((true, 0, u64::MAX));
         }
+        let (req, den) = (Some(c.requiredFlags), Some(c.deniedFlags));
         let reg = match self.registry {
             None => return Err(bad(format!("REGISTRY_NOT_CONFIGURED: {token:#x} reads registry {:#x}; set compliance_registry", c.complianceRegistry))),
             Some(r) if r != c.complianceRegistry => {
@@ -389,6 +419,17 @@ impl Venue {
             }
             if t == sell && view(&self.chain, t, IRegulatedToken::isFrozenCall { account: o.from }).await.map_err(down)? {
                 return Err(bad(format!("FROZEN: {:#x} on {t:#x}", o.from)));
+            }
+            // round 3s: the lists, both parties (the seller on the leg it sells, the venue and its puller on every leg, the
+            // receiver on the leg it buys)
+            if t == sell {
+                self.leg_listed(t, &c, o.from).await?;
+            }
+            for v in [self.dex, self.puller] {
+                self.leg_listed(t, &c, v.into_word()).await?;
+            }
+            if t == o.receiveToken {
+                self.leg_listed(t, &c, if o.destination.is_zero() { o.from } else { o.destination }).await?;
             }
             // the venue receives every leg of a regulated token: pulled in, then paid out
             if let (false, reason, _) = self.leg_receivable(t, &c, self.dex.into_word(), at).await? {
@@ -1009,6 +1050,55 @@ impl Venue {
         frozen_out
     }
 
+    /// Round 3s (spec §9; NODE-DEX-11): the lists' events of each regulated leg against its live `controls` ([`list_effect`]):
+    /// the orders a list now refuses leave the book (for the client store, as an `AccountFrozen`'s), the venue named halts or
+    /// reopens the leg's markets; `FeatureEnabled(8 | 9)` reads every maker and receiver of the leg's orders, the DEX and its
+    /// puller again. An unreadable leg drops nothing (the token is the arbiter regardless) and is alerted.
+    async fn apply_lists(&self, book: &mut Book, events: &[Value]) -> Vec<Resting> {
+        let mut out = vec![];
+        let venue = [self.dex.into_word(), self.puller.into_word()];
+        for e in events.iter().filter(|e| matches!(e["event"].as_str(), Some("AllowedSet" | "DeniedSet" | "FeatureEnabled"))) {
+            let Ok(t) = e["contract"].as_str().unwrap_or_default().parse::<Address>() else { continue };
+            let c = match view(&self.chain, t, IRegulatedToken::regulatedConfigCall {}).await {
+                Ok(c) => c,
+                Err(err) => {
+                    warn!(chain = self.chain.number, token = %t, alert = "LIST_UNREAD", "a list event's leg: {err}");
+                    continue;
+                }
+            };
+            let receiver = |r: &Resting| if r.order.destination.is_zero() { r.order.from } else { r.order.destination };
+            let mut drop_of = |book: &mut Book, a: B256| {
+                let gone: Vec<B256> = book.all().filter(|r| (r.sell == t && r.order.from == a)
+                    || (r.order.receiveToken == t && receiver(r) == a)).map(|r| r.hash).collect();
+                out.extend(gone.into_iter().filter_map(|h| book.remove(h)));
+            };
+            match list_effect(e, c.controls, venue) {
+                ListEffect::Drop(a) => drop_of(book, a),
+                ListEffect::Halt(on) => self.set_list_halt(t, on),
+                ListEffect::None => {}
+                ListEffect::Recheck => {
+                    let mut who: Vec<B256> = book.all().filter(|r| r.sell == t).map(|r| r.order.from)
+                        .chain(book.all().filter(|r| r.order.receiveToken == t).map(receiver)).collect();
+                    who.sort();
+                    who.dedup();
+                    for v in venue {
+                        if let Ok(f) = view(&self.chain, t, IRegulatedToken::listFlagsOfCall { account: v }).await {
+                            self.set_list_halt(t, !list_admits(c.controls, f));
+                        }
+                    }
+                    for a in who {
+                        if let Ok(f) = view(&self.chain, t, IRegulatedToken::listFlagsOfCall { account: a }).await {
+                            if !list_admits(c.controls, f) {
+                                drop_of(book, a);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// One watcher round: the DEX's and the market tokens' logs in the final range ⇒ `dex_fill_ingest` ⇒ orders
     /// closed on chain leave the book. `true` = progressed.
     pub async fn watch_once(&self) -> Result<bool> {
@@ -1042,11 +1132,15 @@ impl Venue {
             IRegulatedToken::Paused::SIGNATURE_HASH,
             IRegulatedToken::Unpaused::SIGNATURE_HASH,
             IRegulatedToken::AccountFrozen::SIGNATURE_HASH,
+            IRegulatedToken::AllowedSet::SIGNATURE_HASH,
+            IRegulatedToken::DeniedSet::SIGNATURE_HASH,
+            crate::abi::IGovernance::FeatureEnabled::SIGNATURE_HASH,
         ]);
         let logs = self.chain.primary().get_logs(&f).await?;
         let events = self.accepted(&logs);
         // the regulated legs' events are the venue's own (the halt, the frozen makers): the client gets the orders' states
-        let fills: Vec<&Value> = events.iter().filter(|e| !matches!(e["event"].as_str(), Some("Paused" | "Unpaused" | "AccountFrozen"))).collect();
+        let fills: Vec<&Value> = events.iter().filter(|e| !matches!(e["event"].as_str(),
+            Some("Paused" | "Unpaused" | "AccountFrozen" | "AllowedSet" | "DeniedSet" | "FeatureEnabled"))).collect();
         let _: Value = idx
             .call(
                 "blockchain.dex.trade",
@@ -1057,7 +1151,8 @@ impl Venue {
             .await?;
         // The client closed the orders; the book in memory follows (review D13).
         let mut book = self.book.lock().await;
-        let frozen = self.apply_events(&mut book, &events);
+        let mut frozen = self.apply_events(&mut book, &events);
+        frozen.extend(self.apply_lists(&mut book, &events).await);
         if !frozen.is_empty() {
             let mut commit = Commit::default();
             for r in &frozen {
@@ -1379,18 +1474,99 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["event"] = json!("AccountFrozen");
         v["account"] = json!(format!("{:#x}", e.account));
         v["until"] = json!(e.until);
+    } else if topic0 == IRegulatedToken::AllowedSet::SIGNATURE_HASH {
+        let e = log.log_decode::<IRegulatedToken::AllowedSet>().ok()?.inner.data;
+        (v["event"], v["account"], v["on"]) = (json!("AllowedSet"), json!(format!("{:#x}", e.account)), json!(e.on));
+    } else if topic0 == IRegulatedToken::DeniedSet::SIGNATURE_HASH {
+        let e = log.log_decode::<IRegulatedToken::DeniedSet>().ok()?.inner.data;
+        (v["event"], v["account"], v["on"]) = (json!("DeniedSet"), json!(format!("{:#x}", e.account)), json!(e.on));
+    } else if topic0 == crate::abi::IGovernance::FeatureEnabled::SIGNATURE_HASH {
+        let e = log.log_decode::<crate::abi::IGovernance::FeatureEnabled>().ok()?.inner.data;
+        (v["event"], v["bit"]) = (json!("FeatureEnabled"), json!(e.bit));
     } else {
         return None;
     }
     Some(v)
 }
 
-/// The regulated legs' events the venue reads (NODE-DEX-11), from a regulated token only.
-const REGULATED_TOPICS: [B256; 3] =
-    [IRegulatedToken::Paused::SIGNATURE_HASH, IRegulatedToken::Unpaused::SIGNATURE_HASH, IRegulatedToken::AccountFrozen::SIGNATURE_HASH];
+/// The regulated legs' events the venue reads (NODE-DEX-11), from a regulated token only; round 3s (spec §9, Fable P2-1): the
+/// lists' edits and `FeatureEnabled`.
+const REGULATED_TOPICS: [B256; 6] = [IRegulatedToken::Paused::SIGNATURE_HASH, IRegulatedToken::Unpaused::SIGNATURE_HASH,
+    IRegulatedToken::AccountFrozen::SIGNATURE_HASH, IRegulatedToken::AllowedSet::SIGNATURE_HASH,
+    IRegulatedToken::DeniedSet::SIGNATURE_HASH, crate::abi::IGovernance::FeatureEnabled::SIGNATURE_HASH];
+
+/// `RegulatedLib`'s `controls`: the lists (bits 8, 9) and `KYC` (bit 28 in byte bit 6), round 3s.
+const C_ALLOW: u8 = 1 << 3;
+const C_DENY: u8 = 1 << 4;
+const C_KYC: u8 = 1 << 6;
+
+/// `L` (spec §4.2) on a `listFlagsOf` byte under `controls`: off the allow list or on the deny list is refused.
+fn list_admits(controls: u8, flags: u8) -> bool {
+    !(controls & C_ALLOW != 0 && flags & 1 == 0) && !(controls & C_DENY != 0 && flags & 2 != 0)
+}
+
+/// Round 3s (spec §9, Fable P2-1, R-1, R-7): what one list event does to the book of its leg, against the leg's live
+/// `controls`: `Drop(account)` (every order of that token, both sides, of an account the list now refuses), `Halt(on)` (the
+/// DEX or its puller named: the leg's markets halt or reopen), `Recheck` (`FeatureEnabled(8 | 9)`: every maker and receiver
+/// of the leg read again), or nothing (a dormant list, a relaxing edit of another account, another bit).
+#[derive(Debug, PartialEq, Eq)]
+enum ListEffect {
+    Drop(B256),
+    Halt(bool),
+    Recheck,
+    None,
+}
+
+fn list_effect(e: &Value, controls: u8, venue: [B256; 2]) -> ListEffect {
+    let (ev, on) = (e["event"].as_str().unwrap_or_default(), e["on"].as_bool().unwrap_or(false));
+    if ev == "FeatureEnabled" {
+        return if matches!(e["bit"].as_u64(), Some(8 | 9)) { ListEffect::Recheck } else { ListEffect::None };
+    }
+    let bit = match ev { "DeniedSet" => C_DENY, "AllowedSet" => C_ALLOW, _ => return ListEffect::None };
+    if controls & bit == 0 {
+        return ListEffect::None; // R-1: a dormant list changes nothing on chain, nothing here
+    }
+    let Ok(a) = e["account"].as_str().unwrap_or_default().parse::<B256>() else { return ListEffect::None };
+    let blocks = (ev == "DeniedSet") == on; // DeniedSet(on) or AllowedSet(off)
+    if venue.contains(&a) {
+        ListEffect::Halt(blocks)
+    } else if blocks {
+        ListEffect::Drop(a)
+    } else {
+        ListEffect::None
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    /// Round 3s (spec 2026-11-10-token-lists.md §9, test (13); Fable P2-1, R-1, R-7; M32, M34): a list edit drops a refused
+    /// account's orders only while its bit is on (a dormant list drops nothing), the reverse edit drops nothing; an edit
+    /// naming the DEX or its puller halts the leg's markets and the reverse reopens them; `FeatureEnabled(8 | 9)` re-reads.
+    #[test]
+    fn list_effects_follow_the_live_bit() {
+        use super::{list_admits, list_effect, ListEffect, C_ALLOW, C_DENY};
+        use alloy::primitives::B256;
+        use serde_json::json;
+        let (a, dex, puller) = (B256::repeat_byte(0xa1), B256::repeat_byte(0xd1), B256::repeat_byte(0xd2));
+        let ev = |name: &str, who: B256, on: bool| json!({"event": name, "account": format!("{who:#x}"), "on": on});
+        let v = [dex, puller];
+        assert_eq!(list_effect(&ev("DeniedSet", a, true), C_DENY, v), ListEffect::Drop(a));
+        assert_eq!(list_effect(&ev("DeniedSet", a, true), C_ALLOW, v), ListEffect::None, "R-1: the deny list dormant");
+        assert_eq!(list_effect(&ev("DeniedSet", a, false), C_DENY, v), ListEffect::None, "a relaxing edit");
+        assert_eq!(list_effect(&ev("AllowedSet", a, false), C_ALLOW, v), ListEffect::Drop(a));
+        assert_eq!(list_effect(&ev("AllowedSet", a, false), C_DENY, v), ListEffect::None, "R-1: the allow list dormant");
+        assert_eq!(list_effect(&ev("AllowedSet", a, true), C_ALLOW, v), ListEffect::None);
+        for who in v {
+            assert_eq!(list_effect(&ev("DeniedSet", who, true), C_DENY, v), ListEffect::Halt(true), "R-7: the venue's contract");
+            assert_eq!(list_effect(&ev("DeniedSet", who, false), C_DENY, v), ListEffect::Halt(false), "the reverse event");
+            assert_eq!(list_effect(&ev("AllowedSet", who, false), C_ALLOW, v), ListEffect::Halt(true));
+        }
+        assert_eq!(list_effect(&json!({"event": "FeatureEnabled", "bit": 9}), 0, v), ListEffect::Recheck);
+        assert_eq!(list_effect(&json!({"event": "FeatureEnabled", "bit": 28}), 0, v), ListEffect::None);
+        assert!(list_admits(0, 0) && list_admits(C_ALLOW, 1) && !list_admits(C_ALLOW, 0) && !list_admits(C_DENY, 2));
+        assert!(list_admits(C_DENY, 1) && !list_admits(C_ALLOW | C_DENY, 3));
+    }
+
     /// T5 minor: an interaction out of gas inside a batch plan is `InteractionFailed(i, target, "")`, read as out_of_gas.
     #[test]
     fn a_wrapped_empty_interaction_revert_is_out_of_gas() {
@@ -1612,6 +1788,8 @@ mod tests {
         reg: HashMap<Address, (u8, u64, u64, u64)>,
         /// `isFrozen` on every regulated token.
         frozen: HashSet<B256>,
+        /// Round 3s: `listFlagsOf` on every regulated token (absent: 0).
+        lists: HashMap<B256, u8>,
         /// `REG_REGISTRY.complianceOf`: `(flags, validUntil)`, provider 0 (the admin, enabled); absent: `(0, 0)`.
         attest: HashMap<B256, (u64, u64)>,
         /// The leg on this token reverts `TokenPaused(until)`, in a settlement and in its own `mtxTrade` (a pause that lands after
@@ -1741,6 +1919,10 @@ mod tests {
                         Ok(hexs(&IRegulatedToken::regulatedConfigCall::abi_encode_returns(&IRegulatedToken::RegulatedConfig {
                             complianceRegistry: REG_REGISTRY, controls, requiredFlags: required, deniedFlags: denied, termsHash: B256::ZERO,
                             pausedUntil: paused, pauseCooldownUntil: 0 })))
+                    } else if sel == IRegulatedToken::listFlagsOfCall::SELECTOR {
+                        assert!(w.reg.contains_key(&to));
+                        let a = IRegulatedToken::listFlagsOfCall::abi_decode(&input).unwrap().account;
+                        Ok(hexs(&U256::from(w.lists.get(&a).copied().unwrap_or_default()).abi_encode()))
                     } else if sel == IRegulatedToken::isFrozenCall::SELECTOR {
                         assert!(w.reg.contains_key(&to));
                         let a = IRegulatedToken::isFrozenCall::abi_decode(&input).unwrap().account;
@@ -1807,6 +1989,7 @@ mod tests {
         let v = Venue { chain, relay, indexer: None, dex: DEX, puller: Address::repeat_byte(0x9),
             kinds: [(BASE, KIND_SCAAS), (QUOTE, KIND_SCAAS)].into_iter().collect(), clone_codehash: None,
             book: Mutex::new(book), trades: Default::default(), cancels: Default::default(), regulated: Default::default(),
+            list_halted: Default::default(),
             registry: None };
         (v, world)
     }
@@ -1903,17 +2086,17 @@ mod tests {
             Err(VenueError::Bad(e)) => e,
             other => panic!("{:?}", other.map(|p| p.status)),
         };
-        // the taker sells QUOTE (plain) and buys BASE (regulated, ALLOWLIST = 8, KYC required)
-        let (v, _) = regulated_venue(World { attest: attest(&[(DEX, eligible, max)]), ..ok_world() }, 8, kyc, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        // the taker sells QUOTE (plain) and buys BASE (regulated, round 3s: KYC = controls bit 6, KYC required)
+        let (v, _) = regulated_venue(World { attest: attest(&[(DEX, eligible, max)]), ..ok_world() }, 64, kyc, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
         let e = refused(take(&v, &t, 30, 10, 1).await);
         assert!(e.starts_with("NOT_ELIGIBLE") && e.contains("reason 1"), "{e}");
-        let (v, _) = regulated_venue(World { attest: attest(&[(DEX, eligible, max), (t.address(), kyc, now() + 60)]), ..ok_world() }, 8, kyc, 0,
+        let (v, _) = regulated_venue(World { attest: attest(&[(DEX, eligible, max), (t.address(), kyc, now() + 60)]), ..ok_world() }, 64, kyc, 0,
             vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
         assert!(refused(take(&v, &t, 30, 10, 1).await).starts_with("ATTESTATION_SHORTER"));
-        let (v, _) = regulated_venue(World { attest: attest(&[(t.address(), kyc, max)]), ..ok_world() }, 8, kyc, 0,
+        let (v, _) = regulated_venue(World { attest: attest(&[(t.address(), kyc, max)]), ..ok_world() }, 64, kyc, 0,
             vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
         assert!(refused(take(&v, &t, 30, 10, 1).await).starts_with("VENUE_NOT_ELIGIBLE"));
-        let (mut v, _) = regulated_venue(ok_world(), 8, kyc, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let (mut v, _) = regulated_venue(ok_world(), 64, kyc, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
         v.registry = None;
         assert!(refused(take(&v, &t, 30, 10, 1).await).starts_with("REGISTRY_NOT_CONFIGURED"));
         // a frozen seller of the regulated leg: the taker selling BASE
@@ -1924,7 +2107,20 @@ mod tests {
         let e = refused(v.place(BASE, &WireOrder::from_ua(&sell_base), None, Some(&ua_sig_json(&ua(sig_of(&t, oh(&sell_base)))))).await);
         assert!(e.starts_with("FROZEN"), "{e}");
         // eligible: trades
-        let (v, _) = regulated_venue(ok_world(), 8, kyc, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let (v, _) = regulated_venue(ok_world(), 64, kyc, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        assert_eq!(take(&v, &t, 30, 10, 1).await.unwrap().status, "filled");
+        // round 3s (spec 2026-11-10-token-lists.md §9): the lists, both parties, no registry: the receiver denied on the
+        // leg it buys (DENYLIST = 16), the DEX not on the allow list (ALLOWLIST = 8), each refused by name; listed, it trades
+        let (v, _) = regulated_venue(World { lists: [(t.address().into_word(), 2)].into_iter().collect(), ..ok_world() }, 16, 0, 0,
+            vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let e = refused(take(&v, &t, 30, 10, 1).await);
+        assert!(e.starts_with("DENIED") && e.contains(&format!("{:#x}", t.address().into_word())), "{e}");
+        let (v, _) = regulated_venue(World { lists: [(t.address().into_word(), 1)].into_iter().collect(), ..ok_world() }, 8, 0, 0,
+            vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let e = refused(take(&v, &t, 30, 10, 1).await);
+        assert!(e.starts_with("NOT_ALLOWED") && e.contains(&format!("{:#x}", DEX.into_word())), "{e}");
+        let all = [t.address(), DEX, v.puller].iter().map(|a| (a.into_word(), 1u8)).collect();
+        let (v, _) = regulated_venue(World { lists: all, ..ok_world() }, 8, 0, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
         assert_eq!(take(&v, &t, 30, 10, 1).await.unwrap().status, "filled");
     }
 
