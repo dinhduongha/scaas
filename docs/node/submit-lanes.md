@@ -356,13 +356,18 @@ error answer that is no revert) moves the read to the next endpoint, a revert is
 own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The
 strict-majority option stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15).
 
-*Known limits* (Fable review of ua-mtx-merge E N-7, recheck R-6; PLANNED, open). The verifier fetch and the shield probe run inside the
+**Log windows** (Fable recheck R-6; BUILT, `chain::tests::a_log_window_is_chunked_for_an_rpc_that_caps_the_range`). The
+`VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` and the executed-event lookup
+span a fixed window (`ROTATION_LOOKBACK`, 10,000 blocks). An endpoint that refuses a span (an RPC that caps the `eth_getLogs`
+range) is asked again in tenths of it, contiguous up to the head, down to 10 blocks; one that refuses that too fails the read
+over to the next endpoint. *Known limit* (PLANNED, open): the window is not bounded by the job's intake block (the pull path
+carries none; `ponytail:` on `ROTATION_LOOKBACK`).
+
+*Known limits* (Fable review of ua-mtx-merge E N-7; PLANNED, open). The verifier fetch and the shield probe run inside the
 lane's single loop (at intake, and again in `track` when a stuck debit's replacement re-runs the fill), `timeout_ms` (5 s) per
 endpoint and up to two fetches per job: two slow endpoints and ten PQZ jobs in one poll stall
 receipts and replacements for up to 200 s; target: bound the fetch time per round, or remember a failed endpoint for a few
-seconds. The `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` span a fixed
-10,000-block window (`ROTATION_LOOKBACK`, not the job's intake block): an RPC that caps `eth_getLogs` below it
-keeps every such job queued until its `validUntil` (never `dead` wrongly); target: chunk the range, bound it by the intake block.
+seconds.
 
 <a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
 P2; **BUILT**, T63 `39fa296c`, `a6040f9a`, node mutants N1–N3 killed). A PQZ debit whose simulation is over the lane's cap (`gas …

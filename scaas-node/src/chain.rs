@@ -82,6 +82,9 @@ pub fn classify_sim(e: &TransportError) -> SimError {
     }
 }
 
+/// The smallest `eth_getLogs` span [`Chain::logs_back`] asks before it gives an endpoint up (R-6).
+const LOG_SPAN_MIN: u64 = 10;
+
 /// The `latest` header's gas facts ([`Chain::block_gas`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockGas {
@@ -333,13 +336,30 @@ impl Chain {
         self.logs_back(Filter::new().address(address).event_signature(topic0), lookback).await
     }
 
-    /// The logs of `filter` in the last `lookback` blocks, the head and the logs from one endpoint ([`Chain::read`]).
+    /// The logs of `filter` in the last `lookback` blocks, the head and the logs from one endpoint ([`Chain::read`]). Fable recheck
+    /// R-6: an RPC that caps the `eth_getLogs` range refuses the whole window, so a refused span is asked again in tenths, down
+    /// to [`LOG_SPAN_MIN`] blocks; an endpoint that refuses that too fails the read over.
     async fn logs_back(&self, filter: Filter, lookback: u64) -> Result<Vec<alloy::rpc::types::Log>> {
         self.read(|p| {
             let filter = filter.clone();
             async move {
                 let latest = p.get_block_number().await.map_err(|e| classify(&e))?;
-                p.get_logs(&filter.from_block(latest.saturating_sub(lookback)).to_block(latest)).await.map_err(|e| classify(&e))
+                let (mut from, mut span, mut out) = (latest.saturating_sub(lookback), lookback.saturating_add(1), vec![]);
+                while from <= latest {
+                    let to = latest.min(from.saturating_add(span - 1));
+                    match p.get_logs(&filter.clone().from_block(from).to_block(to)).await {
+                        Ok(l) => {
+                            out.extend(l);
+                            from = to + 1;
+                        }
+                        Err(e) if span > LOG_SPAN_MIN => {
+                            tracing::debug!(span, error = %redact_urls(&e.to_string()), "eth_getLogs span refused; a tenth of it");
+                            span = (span / 10).max(LOG_SPAN_MIN);
+                        }
+                        Err(e) => return Err(classify(&e)),
+                    }
+                }
+                Ok(out)
             }
         })
         .await
@@ -471,6 +491,49 @@ mod tests {
         assert_eq!(good_n.load(SeqCst) - before, 2, "eth_blockNumber and eth_getLogs, both on the good endpoint");
         assert_eq!(c.subject_nonce(&MetaRef { token: Address::ZERO, from: B256::ZERO, batch: U256::ZERO, nonce: U256::ZERO,
             digest: None, ua: true, addr_nonce: false }).await.unwrap(), U256::from(5), "the subject nonce view fails over too");
+    }
+
+    /// An RPC at head 12,288 whose `eth_getLogs` caps the range at `cap(request)` blocks and answers one log per accepted request,
+    /// its `blockNumber` the request's `fromBlock` and its `logIndex` the span's length.
+    fn capped_logs(r: &Value, cap: u64) -> Value {
+        let n = |v: &Value| u64::from_str_radix(v.as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+        match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x3000"}),
+            Some("eth_getLogs") => {
+                let (from, to) = (n(&r["params"][0]["fromBlock"]), n(&r["params"][0]["toBlock"]));
+                if to - from + 1 > cap {
+                    return json!({"error": {"code": -32005, "message": format!("query exceeds max block range {cap}")}});
+                }
+                json!({"result": [{"address": format!("{:#x}", Address::ZERO), "topics": [], "data": "0x",
+                    "blockNumber": format!("{from:#x}"), "blockHash": format!("{:#x}", B256::repeat_byte(9)),
+                    "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0",
+                    "logIndex": format!("{:#x}", to - from + 1), "removed": false}]})
+            }
+            _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+        }
+    }
+
+    /// Fable recheck R-6: a log window an RPC refuses whole (it caps the `eth_getLogs` range) is read in tenths, contiguous and
+    /// complete; an endpoint that refuses even `LOG_SPAN_MIN` blocks fails the read over. Control: an uncapped RPC answers the
+    /// window in one request.
+    #[tokio::test]
+    async fn a_log_window_is_chunked_for_an_rpc_that_caps_the_range() {
+        let spans = |logs: Vec<alloy::rpc::types::Log>| logs.iter().map(|l| (l.block_number.unwrap(), l.log_index.unwrap())).collect::<Vec<_>>();
+        let (open, _) = fake_rpc(|r| capped_logs(r, u64::MAX)).await;
+        let (capped, _) = fake_rpc(|r| capped_logs(r, 1_000)).await;
+        let (stingy, _) = fake_rpc(|r| capped_logs(r, 5)).await;
+        let head = 0x3000u64;
+        let read = |url: String| async move { chain_of(&[&url]).logs_since(Address::ZERO, B256::ZERO, 10_000).await };
+        assert_eq!(spans(read(open).await.unwrap()), vec![(head - 10_000, 10_001)], "control: one request");
+        let got = spans(read(capped).await.unwrap());
+        let want: Vec<(u64, u64)> = (0..11).map(|i| (head - 10_000 + i * 1_000, if i < 10 { 1_000 } else { 1 })).collect();
+        assert_eq!(got, want, "contiguous 1,000-block spans up to the head");
+        assert!(read(stingy.clone()).await.is_err(), "a cap below LOG_SPAN_MIN gives the endpoint up");
+        assert!(chain_of(&[&stingy]).logs_since(Address::ZERO, B256::ZERO, 50).await.is_err(),
+            "a 51-block window: a tenth is 5, floored at LOG_SPAN_MIN, still refused");
+        let (capped2, _) = fake_rpc(|r| capped_logs(r, 1_000)).await;
+        assert_eq!(chain_of(&[&stingy, &capped2]).logs_since(Address::ZERO, B256::ZERO, 10_000).await.unwrap().len(), 11,
+            "and the read fails over to the next endpoint");
     }
 
     /// NODE-GW-07: the chain's `chain_uid` is its block 0 hash; a configured one that differs refuses the chain.
