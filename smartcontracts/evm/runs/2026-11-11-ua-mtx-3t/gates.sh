@@ -8,7 +8,8 @@
 # summary.txt here (step | commit | rc | counts). Steps:
 #   t-<dir>[@<glob>]         targeted, sparse: FOUNDRY_TEST=test/<dir>, `forge test --match-path test/<dir>/<glob>` (the touched files);
 #                            the log name has `/`, `@`, `{`, `}`, `,`, `*` as `_`
-#   sizes-<set>              forge build src --sizes at one PQZ set (script/pqz/at-set.sh), the JSON kept as sizes-<set>.json
+#   sizes-<set>              forge build --sizes of the PQZ files 3t changes (src/pqz, the regulated PQZ kinds, the router) at one
+#                            PQZ set (script/pqz/at-set.sh), the JSON in out/m3t-sizes/sizes-<set>.json
 #   size                     forge build src --sizes, then scripts/size_gate.py
 #   forge-<dir>              FOUNDRY_TEST=test/<dir> (out/t66a-test-<dir>, its cache; scripts only as imported); forge-top: test/*.t.sol
 #   set-<set>-<dir>          test/<dir> at one PQZ set (script/pqz/at-set.sh), src/pqz/PqzSet.sol restored and checked
@@ -38,7 +39,8 @@ step() {
       (cd $EVM && FOUNDRY_SPARSE_MODE=true FOUNDRY_TEST=$d FOUNDRY_SCRIPT=$d FOUNDRY_OUT=out/$n FOUNDRY_CACHE_PATH=cache/$n \
         "$C" forge test -j 2 --match-path "$d/$m") ;;
     sizes-*) s=${1#sizes-}
-      (cd $EVM && mkdir -p out/m3t-sizes && "$C" sh -c "script/pqz/at-set.sh $s build src --sizes --json > out/m3t-sizes/sizes-$s.json"); r=$?
+      (cd $EVM && mkdir -p out/m3t-sizes && "$C" sh -c "script/pqz/at-set.sh $s build src/pqz/*.sol src/regulated/*Pqz*.sol \
+        src/governance/GovernanceRouter.sol --sizes --json > out/m3t-sizes/sizes-$s.json"); r=$?
       git diff --exit-code -- $EVM/src/pqz/PqzSet.sol || r=3
       return $r ;;
     size) # the default out/: size_gate.py measures the libraries from out/<file>.sol/ next to the baseline
