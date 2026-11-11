@@ -188,8 +188,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // group 3h T61: + the router's `UASetProofStore` (bit 24): 87, 77
   // group 3l: + the router's `UASetWrapLimits`, `UASetWrapMember`: 89, 79
   // round 3r: + the router's fifteen admin ops of the factory and a compliance registry: 104, 94
-  assert.equal(Object.keys(TYPED_OPS).length, 104);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 94);
+  // round 3t: + the router's `UASetVerifierFee` (CTR-PQZ-36): 105, 95
+  assert.equal(Object.keys(TYPED_OPS).length, 105);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 95);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -326,9 +327,10 @@ test('GovernanceRouter: 50 rows equal GovRouterTypehash.t.sol, target the first 
     && !s.startsWith('Env('));
   const pqzPinned = rows.filter(([s]) => s.startsWith('UAPqz')).length;
   assert.ok(pqzPinned === 0 || pqzPinned === 3, `${pqzPinned} PQZ verifier pins`);
-  // group 3h T61: + `UASetProofStore` (bit 24); group 3l: + `UASetWrapLimits`, `UASetWrapMember` and the two struct pins
-  assert.equal(pins.length - pqzPinned, 54);
-  assert.equal(rows.length - pqzPinned, 50);
+  // group 3h T61: + `UASetProofStore` (bit 24); group 3l: + `UASetWrapLimits`, `UASetWrapMember` and the two struct pins;
+  // round 3t: + `UASetVerifierFee`
+  assert.equal(pins.length - pqzPinned, 55);
+  assert.equal(rows.length - pqzPinned, 51);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -342,10 +344,12 @@ test('GovernanceRouter: 50 rows equal GovRouterTypehash.t.sol, target the first 
     const r = V.ops[name];
     assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
-    // fee mode NONE; round 3r's `UAApproveTokenRelease` leaves the relayer unbound too (mode 0, the canonical-zero row)
-    assert.deepEqual([r.message.mode, r.message.fee], [name === 'UAApproveTokenRelease' ? 0 : 1, '0'], `${name}: fee mode NONE`);
+    // fee mode NONE; round 3r's `UAApproveTokenRelease` and round 3t's `UASetVerifierFee` leave the relayer unbound too (mode
+    // 0, the canonical-zero rows)
+    const open = name === 'UAApproveTokenRelease' || name === 'UASetVerifierFee';
+    assert.deepEqual([r.message.mode, r.message.fee], [open ? 0 : 1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 54); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 55); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15; 3t: + 1
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
 });
@@ -560,7 +564,9 @@ test('an unbound relayer or feeRecipient is signed as 0 and shown as unbound: ev
   assert.equal(open3h, 6, 'the six 3h rows');
   // round 3r: `UAApproveTokenRelease` leaves both open too (mode 0), given a non-zero relayer and fee recipient above
   assert.equal(TYPED_OPS.UAApproveTokenRelease && V.ops.UAApproveTokenRelease.message.mode, 0);
-  assert.equal(relayerOpen, open3h + 1, 'the 3h rows and UAApproveTokenRelease leave the relayer open');
+  // round 3t: `UASetVerifierFee` too (mode 0), the row with a non-zero unbound relayer and fee recipient given above
+  assert.equal(V.ops.UASetVerifierFee.message.mode, 0);
+  assert.equal(relayerOpen, open3h + 2, 'the 3h rows, UAApproveTokenRelease and UASetVerifierFee leave the relayer open');
 });
 
 test('the builder refuses a field off the struct, a value out of range, a domain the op does not live in', () => {

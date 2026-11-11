@@ -405,6 +405,9 @@ const OPS = {
   UAPqzSetVerifier: { fields: 'address target,bytes32 next', on: ROUTER },
   UAPqzCancelVerifier: { fields: 'address target', on: ROUTER },
   UAPqzRevokeVerifier: { fields: 'address target', on: ROUTER },
+  // round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit (a decrease at once, an increase after
+  // the notice)
+  UASetVerifierFee: { fields: 'address target,uint64 next', on: ROUTER },
   // bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): `NONE` or `LOG` from the next debit
   UASetProofStore: { fields: 'address target,uint8 next', on: ROUTER },
   // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds (two calls when it relaxes the wrap side
@@ -577,6 +580,29 @@ export function pqzVerdictTypedData({ contract, chainId, chainUid, message }) {
   return { types: VERDICT_TYPES, primaryType: 'PqzVerdict', domain: salted({ name: 'SCaaS PqzToken', contract, chainId, chainUid }), message: m };
 }
 export const pqzVerdictDigest = (o) => hashTypedData(pqzVerdictTypedData(o));
+
+/** Round 3t (CTR-PQZ-36, verifier fee spec §5.1): a debit's public fee word, header word 256, `txFee + verifierFee + M·d`
+ *  (`txFee = confidentialFee` with a beneficiary, else 0; `legs`, `decoyFee` op 7's, 0 otherwise; `verifierFee` the token's
+ *  in force on `OFFCHAIN`, 0 on `PRECOMPILE`), for display and the node / verifier parity: a wallet's witness takes word
+ *  256 of the statement view, never this sum. `< 2^64` or refused, as the token refuses it. */
+export function pqzFeeWord({ confidentialFee = 0, beneficiaryUA = ZERO_ID, verifierFee = 0, legs = 0, decoyFee = 0 }) {
+  const ben = BigInt(beneficiaryUA) !== 0n;
+  const w = (ben ? BigInt(confidentialFee) : 0n) + BigInt(verifierFee) + BigInt(legs) * BigInt(decoyFee);
+  if (w >= 2n ** 64n) refuse('the fee word is 2^64 or more');
+  return w;
+}
+
+/** `pqzVerifyConfig()`'s return data (11 static words, round 3t's four appended): the mode, the verifier, fixed, its epoch, a
+ *  live pending transfer and its `eta`, the notice period, the verifier fee, its immutable cap, a live pending increase and
+ *  its `eta` (a dead one reads 0, 0). Wallets show `verifierFeeMax` as the headline price (Fable P2-2). */
+export function decodePqzVerifyConfig(data) {
+  const b = asBytes(data);
+  if (b.length !== 11 * 32) refuse('pqzVerifyConfig: 11 words');
+  const w = (i) => BigInt(hex(b.subarray(32 * i, 32 * i + 32)));
+  const id = (i) => hex(b.subarray(32 * i, 32 * i + 32));
+  return { pqzVerifyMode: Number(w(0)), verifier: id(1), fixed: w(2) !== 0n, pqzVerifierEpoch: Number(w(3)), pending: id(4),
+    eta: w(5), noticePeriod: w(6), verifierFee: w(7), verifierFeeMax: w(8), verifierFeePending: w(9), verifierFeeEta: w(10) };
+}
 
 /** `x.pqzVerdict = {pqzVerdict, sig}` as the entry takes it: required; a verdict needs its signature, an empty one has none. */
 function pqzSignedVerdictOf(v) {

@@ -102,6 +102,8 @@ const ROW = {
   UAPqzSetVerifier: { next: padId('0x5ca00000000000000000000000000000000000f1') },
   // group 3h (T61): LOG
   UASetProofStore: { next: 1 },
+  // round 3t (CTR-PQZ-36): the verifier fee 3; relayer and fee recipient unbound (mode 0), as MetaTxLib.canon hashes them
+  UASetVerifierFee: { next: 3, mode: 0, fee: 0 },
   // group 3l (wrap limits spec §6, §9): one leg at a hundredth of a 6-decimal unit, a daily wrap window, the net rule with a
   // two-year decay; values a hybrid at `target` with bits 25 and 26 takes (TypedOps.t.sol's router rows); a member both ways
   UASetWrapLimits: { legs: [{ underlying: '0x5ca00000000000000000000000000000000000c3', unitExp: 4, decayDays: 730,

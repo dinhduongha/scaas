@@ -509,9 +509,10 @@ UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)
 # T39: taxRecipient; empty on
 # the PQZ kinds 4, 5); `owner` and the five `roles` are UA ids (bytes32, a native account's address padded: the same word as
 # the address it was, CTR-GOV-01 Change)
-# (group 3f: `conf` ends pqzVerifyMode, pqzVerifierUA, pqzVerifierFixed; group 3h T60: then proofStore)
+# (group 3f: `conf` ends pqzVerifyMode, pqzVerifierUA, pqzVerifierFixed; group 3h T60: then proofStore; round 3t: then
+# verifierFee, verifierFeeMax)
 CFG = ("t", ["b", "b", "w", "w", "w", "w", ("t", ["w"] * 5), "w", "w", ("a", ("t", ["w", "w", "w"])), ("t", ["w", "w"]),
-             ("t", ["b"] + ["w"] * 10), "w", "w", "w", ("t", ["w"] * 5)])
+             ("t", ["b"] + ["w"] * 12), "w", "w", "w", ("t", ["w"] * 5)])
 # IFactoryToken.Env (plan 5g-Z2; chain-neutral releases, plan T71: the factory fills its own chainUid and router):
 # registry, smartKeyAccountImpl, hedera, deps, params, libs, libCodeHashes
 ENV = ("t", ["w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w"), ("a", "w")])
@@ -1525,8 +1526,9 @@ def run(kd, kr, ke):
         # OFFCHAIN with the deployer EOA (a native id, its padded address) as a transferable verifier
         mode = [1, pad(sd.addr), 0] if ZERO_DEP else [0, 0, 0]
         mode += [PROOF_STORE if store is None else store]  # group 3h T60: proofStore, NONE unless --proof-store log
+        mode += [0, 0]  # round 3t: verifierFee, verifierFeeMax (no fee: the e2e's OFFCHAIN verifier is its own deployer)
         c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, issuer, 0], supply, holder, legs, [0, 0],
-             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] + mode if conf else [b""] + [0] * 10, 0, 0, 0, [0, 0, 0, 0, 0]]
+             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] + mode if conf else [b""] + [0] * 12, 0, 0, 0, [0, 0, 0, 0, 0]]
         # plan 5g-Z2: initArgs = abi.encode(TokenConfig), opaque to the factory; the verifier is the release's
         data = cd("createToken(uint8,uint64,bytes,bytes32)", ["w", "w", "b", "w"], kind, 1, encs([CFG], [c]), kc(salt))
         r = sd.send(fac, data, f"createToken {sym} (kind {kind})")
@@ -2081,10 +2083,15 @@ def header_of(tok, ua, k, r, txh, form, aud, m):
     d = calldata(txh)
     x = arg(CALL_T[form], d, 0)
     fee = u_(words(call(tok, cd("confidentialFee()", [])))[0])
+    # round 3t (CTR-PQZ-36): an OFFCHAIN token's verifier fee is in the word (`txFee + vf (+ M·d)`) and, direct, in the
+    # transfer's binding (TAG_DIRECT_MODE_VF, Fable P1-1); the fee read now is the fee of the debit (e2e never changes it)
+    vc = words(call(tok, cd("pqzVerifyConfig()", [])))
+    off, vf = u_(vc[0]) == 1, u_(vc[7])
     if form in ("op1", "op7"):  # ZetherTypes.TransferMode: HASH (0) with a sealed memo or on a COMPACT token, else BUNDLE (1)
         compact = u_(words(call(tok, cd("disclosureMode()", [])))[0]) == 1
         mode = 0 if x[13 if form == "op1" else 12] or compact else 1
-        binding = kc(kc("SCAAS-PQZ-DIRECT-MODE-V1"), K.word(mode))
+        binding = (kc(kc("SCAAS-PQZ-DIRECT-MODE-VF-V1"), K.word(mode), K.word(vf)) if off
+                   else kc(kc("SCAAS-PQZ-DIRECT-MODE-V1"), K.word(mode)))
     elif form == "unwrap":
         xu = arg(CALL_T[form], d, 1)  # Unwrap(underlying, recipient, amount, minOut)
         binding = kc(kc("SCAAS-PQZ-UNWRAP-V1"), xu[0], xu[3])
@@ -2094,15 +2101,15 @@ def header_of(tok, ua, k, r, txh, form, aud, m):
              registry=words(call(tok, cd("registry()", [])))[0][12:], fromUA=ua, sendCounter=k, p=r["p"],
              validUntilBlock=u_(x[1]), plainUsed=r["shieldIn"], chainUid=CTX[1], envelopeBinding=binding)
     if form == "op1":  # TRANSFER_F
-        f.update(toUA=x[5], beneficiaryUA=x[6], fee=fee if u_(x[6]) else 0, auditorOn=int(aud), salt=x[7][:16], memoHash=kc(x[8]))
+        f.update(toUA=x[5], beneficiaryUA=x[6], fee=(fee if u_(x[6]) else 0) + vf, auditorOn=int(aud), salt=x[7][:16], memoHash=kc(x[8]))
         return K.build_header("TRANSFER", f)
     if form == "op7":  # MULTI_F
-        f.update(beneficiaryUA=x[5], fee=(fee if u_(x[5]) else 0) + m * u_(x[6]), salt=x[7][:16], memoHash=kc(x[8]),
+        f.update(beneficiaryUA=x[5], fee=(fee if u_(x[5]) else 0) + vf + m * u_(x[6]), salt=x[7][:16], memoHash=kc(x[8]),
                  recipientsHash=K.recipients_hash([leg[0] for leg in x[10]]), M=m, auditorOn=int(aud), opTag=K.OP_TAG["TRANSFER-MULTI"])
         return b"".join(K.word(f.get(n, 0)) for n in K.MULTI_HEADER)
     amount, rcp = (u_(arg(CALL_T[form], d, 1)), arg(CALL_T[form], d, 2)) if form == "burn" else (u_(arg(CALL_T[form], d, 1)[2]),
                                                                                                   arg(CALL_T[form], d, 1)[1])
-    f.update(beneficiaryUA=x[5], amount=amount, recipient=rcp, memoHash=kc(x[6]))  # BURN_F
+    f.update(beneficiaryUA=x[5], fee=(fee if u_(x[5]) else 0) + vf, amount=amount, recipient=rcp, memoHash=kc(x[6]))  # BURN_F
     return K.build_header("BURN" if amount else "REFRESH", f)
 
 

@@ -1440,6 +1440,11 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
+   "sig": "setVerifierFee(uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transfer(address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
@@ -1805,6 +1810,11 @@
    "sig": "setProofStore(uint8)",
    "class": "BIT(24)",
    "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setVerifierFee(uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
@@ -3602,6 +3612,11 @@
    "error": "MissingRole(uint8,bytes32)"
   },
   {
+   "sig": "setVerifierFee(uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transfer(address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
@@ -4027,6 +4042,11 @@
    "sig": "setTaxRecipient(bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setVerifierFee(uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
@@ -4506,6 +4526,11 @@
   },
   {
    "sig": "mtxSetTokenKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetVerifierFee((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },

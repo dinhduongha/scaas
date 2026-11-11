@@ -20,10 +20,11 @@ contract GroupsTest is Test {
         "operatorTransfer", "order", "pause", "recordOrder", "regulatedConfig", "revokeOrder", "unfreeze", "unpause"];
     /// S on 5 and 13: the PQZ state, the four setters and the views but `verifyTransferAmount`; on 13 without `underlyings`
     /// (kind 13 restates it from the wrapped layer: its W holds it).
-    string[33] internal sNames = ["auditorMode", "auditorUA", "burnStatement", "confidentialFee", "disclosureMode",
+    // round 3t: + setVerifierFee (gen_faces.py S_SETTERS)
+    string[34] internal sNames = ["auditorMode", "auditorUA", "burnStatement", "confidentialFee", "disclosureMode",
         "disclosureStatement", "envelopeBinding", "maxShielded", "minDecoyFee", "pqzAcc", "pqzAccount", "pqzCancelVerifier",
         "pqzDebitRecord", "pqzEntryBlob", "pqzPending", "pqzPendingCt", "pqzRevokeVerifier", "pqzSetVerifier",
-        "pqzVerifyConfig", "precompile", "proofStore", "proofSystemId", "setProofStore", "shieldScale", "totalShielded",
+        "pqzVerifyConfig", "precompile", "proofStore", "proofSystemId", "setProofStore", "setVerifierFee", "shieldScale", "totalShielded",
         "transferCiphertextHash", "transferEntry", "transferSingleStatement", "transferStatement", "unshieldUnwrapStatement",
         "unwrapBinding", "verifier", "underlyings"];
 

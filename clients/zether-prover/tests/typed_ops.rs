@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 76] = [
+const NOT_ZETHER: [&str; 77] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "UAPrepareAcc",
     // SmartKeyAccount: signed by its owner's keys, not by a Zether key
@@ -32,6 +32,7 @@ const NOT_ZETHER: [&str; 76] = [
     "UAPqzSetVerifier", "UAPqzCancelVerifier", "UAPqzRevokeVerifier",
     // group 3h T61: bit 24's router op
     "UASetProofStore",
+    "UASetVerifierFee", // round 3t (CTR-PQZ-36): the PQZ verifier fee router op
     // group 3l: the two wrap-limit router ops (bit 26 and the wrapped kinds' admin); no Zether key signs them
     "UASetWrapLimits", "UASetWrapMember",
     // round 3r (CTR-GOV-23): the factory's and a compliance registry's admin ops on the router; signed by that admin's key
