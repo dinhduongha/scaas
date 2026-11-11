@@ -612,8 +612,10 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
     if 13 in E.SKIP_KINDS:
         E.log("      kind 13 skipped on this chain (--skip-kind 13)")
     else:
+        # FREEZE (bit 5) is contract-only (RoleNotContract): the issuer seat is an OnchainForwarder of the deployer
+        fw = D.deploy("OnchainForwarder", b"", label="OnchainForwarder (pqVF13 issuer)")
         t13 = create_cfg(sd, fac, 13, "PQZ regulated wrapped verifier fee", "pqVF13", [[tusd, 1, 1]], 1 | 1 << 5, b"3t-vf13",
-                         fconf(VF, 1), [0, 0, 0, E.kc("scaas.onchain.terms"), 0], issuer=sd.addr)
+                         fconf(VF, 1), [0, 0, 0, E.kc("scaas.onchain.terms"), 0], issuer=fw)
         D.addr["pqVF13"] = t13
         C13 = E.Client(t13, "pqVF13")
         sd.send(tusd, E.cd("approve(address,uint256)", ["w", "w"], t13, 10**12), "tUSD approve pqVF13")
@@ -623,7 +625,8 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
         paid(t13, C13, VF, "unshield-unwrap", lambda: E.burn(pq, sd, C13, alice, 5, sd.addr, "pqVF13 unshield-unwrap alice 5",
                                                               unwrap=(tusd, 5 * E.SCALE)))
         vid, ref = E.pad(s3.addr), E.kc("scaas.onchain.3t-freeze")
-        sd.send(t13, E.cd("freeze(bytes32,bytes32,bytes32)", ["w", "w", "w"], vid, ref, 0), "pqVF13 freeze the verifier")
+        sd.send(fw, E.cd("forwardCall(address,bytes)", ["w", "b"], t13, E.cd("freeze(bytes32,bytes32,bytes32)", ["w", "w", "w"],
+                                                                                  vid, ref, 0)), "pqVF13 freeze the verifier")
         op1 = lambda what: E.transfer(pq, sd, C13, alice, bob, E.ZERO32, 7, False, what, send=False)[1]  # noqa: E731
         frozen = sel_hex("FeeRecipientFrozen(bytes32)")
         neg(sd.addr, t13, op1("pqVF13 op 1 with a frozen verifier"), frozen, "pqVF13 op 1 while the verifier is frozen, vf set")
@@ -632,7 +635,8 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
                                                               "pqVF13 op 1 at fee 0: lands, the frozen verifier unchecked"))
         set_fee(t13, "pqVF13", VF, "the fee restored (notice 0)", ["VerifierFeeProposed", "VerifierFeeSet"])
         neg(sd.addr, t13, op1("pqVF13 op 1 after the fee restored"), frozen, "pqVF13 op 1: the restored fee halts it again")
-        sd.send(t13, E.cd("unfreeze(bytes32,bytes32)", ["w", "w"], vid, ref), "pqVF13 unfreeze the verifier")
+        sd.send(fw, E.cd("forwardCall(address,bytes)", ["w", "b"], t13, E.cd("unfreeze(bytes32,bytes32)", ["w", "w"], vid, ref)),
+                "pqVF13 unfreeze the verifier")
         paid(t13, C13, VF, "op 1 after the unfreeze", lambda: E.transfer(pq, sd, C13, alice, bob, E.ZERO32, 7, False,
                                                                          "pqVF13 op 1 after the unfreeze"))
         E.restore(C13, "pqVF13")

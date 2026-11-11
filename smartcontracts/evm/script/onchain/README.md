@@ -30,7 +30,9 @@ view; a token kind's body module). Each group is one script with its own book (a
 
 From `smartcontracts/evm`: Foundry 1.8.5 on `PATH`, python3, node with `clients/clientkeys/node_modules`, a built
 `zether-cli` and `pqz_prove` (their READMEs), `lib/` (`../scripts/evm_libs.sh install`), and for the PQ groups a build at
-the default set in `EVM_OUT` (default `out/t66b-e2e`; never while `src/pqz/PqzSet.sol` is modified by an at-set run).
+the default set in `EVM_OUT` (default `out/t66b-e2e`: `FOUNDRY_OUT=out/t66b-e2e forge build src test/helpers/Mocks.sol
+script/onchain/OnchainForwarder.sol`, the forwarder pqoff's kind-13 issuer; never while `src/pqz/PqzSet.sol` is modified by an
+at-set run).
 Run `matrix.sh` itself in the foreground, never inside `timeout`, and outside `scripts/capped`: it puts a local target
 wholly under `capped`; a remote target (the SCaaS testnet, another testnet) compiles under `capped` first, then runs its
 broadcasts without a slot under a memory scope (`MATRIX_REMOTE_MEM`, default 1G, no swap), where forge must print "No
