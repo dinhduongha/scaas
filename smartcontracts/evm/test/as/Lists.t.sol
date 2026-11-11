@@ -131,12 +131,13 @@ contract ListsTest is ListFixture {
             else WrappedToken(payable(t)).unwrap(1, alice);
             _open(t, bit, a);
             _block(t, bit, b); // the recipient blocked: not checked
+            uint256 before = usd.balanceOf(bob);
             vm.prank(alice);
             if (k < 2) {
                 NormalToken(t).burn(1);
             } else {
                 WrappedToken(payable(t)).unwrap(1, bob);
-                assertEq(usd.balanceOf(bob), 1, "the unwrap recipient is not checked");
+                assertEq(usd.balanceOf(bob), before + 1, "the unwrap recipient is not checked");
             }
         }
     }

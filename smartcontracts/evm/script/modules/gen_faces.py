@@ -130,6 +130,11 @@ W3L_ERRORS = [f'    error {e};' for e in [
     'WrapControlNeedsHybrid(uint8 bit)', 'WrapControlActive(uint8 bit)', 'WrapSubjectZero()']]
 # Round 3r (spec 2026-11-10-admin-not-owner.md §5.3, Fable P1-1): what `RegulatedLib.init` raises since, on 8-13
 REG3R_ERRORS = ['    error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);']
+# Round 3s (spec 2026-11-10-token-lists.md §7, CTR-GOV-24): the lists' events and errors on 8-13 (`RegulatedLib`, `RegulatedBase`)
+REG3S_EVENTS = ['    event AllowedSet(bytes32 indexed account, bytes32 indexed by, bool on);',
+                '    event DeniedSet(bytes32 indexed account, bytes32 indexed by, bool on);']
+REG3S_ERRORS = [f'    error {e};' for e in ['NotAllowed(bytes32 account)', 'Denied(bytes32 account)', 'ListBatchInvalid(uint256 length)',
+                                          'ListAccountZero()', 'ComplianceRegistryNotSet()', 'ListHolderMissing(uint8 bit)']]
 
 
 def abi_iface(k):
@@ -145,7 +150,8 @@ def abi_iface(k):
         ev += W3L_EVENTS
         er += W3L_ERRORS
     if REG(k):
-        er += REG3R_ERRORS
+        er += REG3R_ERRORS + REG3S_ERRORS
+        ev += REG3S_EVENTS
     return f'''
 /// @notice The events and errors of `{k}` before the split (d142b57c) that its core does not declare: the face's ABI lists them
 ///         as before (metatx-split R4: a client decodes an error a library or a module raises), declarations only, no code.

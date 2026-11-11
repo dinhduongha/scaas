@@ -1,5 +1,5 @@
 {
- "_comment": "T66b \u00a74.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures. Liquidity spec 2026-11-10 (re-check P3): module T of every kind also makes one STATICCALL to its caller (T7, `liquidityOrderDigest`, capped, one word read), which M5 allows; the DEX liquidity module SCaaSDexLiquidityModule makes no DELEGATECALL. Owner 2026-11-10 (CTR-TOK-30's Change, group 3p): the W of 8, 10, 12 renamed R and the Q2 of 5, 13 renamed S, their figures unchanged; 9, 11, 13 split W into W and R: W [26, 0] -> [21, 0] on 9, [26, 0] -> [21, 0] on 11, [26, 0] -> [21, 0] on 13, R [8, 0] on each (measured by runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol).",
+ "_comment": "T66b \u00a74.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures. Liquidity spec 2026-11-10 (re-check P3): module T of every kind also makes one STATICCALL to its caller (T7, `liquidityOrderDigest`, capped, one word read), which M5 allows; the DEX liquidity module SCaaSDexLiquidityModule makes no DELEGATECALL. Owner 2026-11-10 (CTR-TOK-30's Change, group 3p): the W of 8, 10, 12 renamed R and the Q2 of 5, 13 renamed S, their figures unchanged; 9, 11, 13 split W into W and R: W [26, 0] -> [21, 0] on 9, [26, 0] -> [21, 0] on 11, [26, 0] -> [21, 0] on 13, R [8, 0] on each (measured by runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol). Round 3s (spec 2026-11-10-token-lists.md, CTR-GOV-24): R gains enableFeature, setAllowed, setDenied, listFlagsOf: R [7, 0] -> [8, 0] on 8, 10, 12, [8, 0] -> [9, 0] on 9, 11, 13 (measured on the built modules).",
  "NormalTokenP": [
   2,
   0
@@ -117,7 +117,7 @@
   0
  ],
  "NormalRegulatedTokenR": [
-  7,
+  8,
   0
  ],
  "WrappedRegulatedTokenP": [
@@ -137,7 +137,7 @@
   0
  ],
  "WrappedRegulatedTokenR": [
-  8,
+  9,
   0
  ],
  "NormalZetherRegulatedTokenP": [
@@ -153,7 +153,7 @@
   0
  ],
  "NormalZetherRegulatedTokenR": [
-  7,
+  8,
   0
  ],
  "NormalZetherRegulatedTokenZ": [
@@ -177,7 +177,7 @@
   0
  ],
  "WrappedZetherRegulatedTokenR": [
-  8,
+  9,
   0
  ],
  "WrappedZetherRegulatedTokenZ": [
@@ -197,7 +197,7 @@
   0
  ],
  "NormalPqzRegulatedTokenR": [
-  7,
+  8,
   0
  ],
  "NormalPqzRegulatedTokenQ": [
@@ -221,7 +221,7 @@
   0
  ],
  "WrappedPqzRegulatedTokenR": [
-  8,
+  9,
   0
  ],
  "WrappedPqzRegulatedTokenQ": [

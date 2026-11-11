@@ -48,8 +48,9 @@ contract RegulatedInitTest is RegFixture {
         }
     }
 
-    /// Spec §2.4: `FORCE ⇒ FREEZE ∧ RECORD`, `RECORD ⇒ FREEZE`, `termsHash ≠ 0 ⇔` any of 5-10, 21, the flags and the
-    /// registry with their bits; each `RegulatedConfigInvalid`. `MODERATE` alone (with terms) creates.
+    /// Spec §2.4: `FORCE ⇒ FREEZE ∧ RECORD`, `RECORD ⇒ FREEZE`, `termsHash ≠ 0 ⇔` any of 5-10, 21, 28 or a bit that can
+    /// still be enabled (round 3s, §5.5), a registry iff a mask; each `RegulatedConfigInvalid`. `MODERATE` alone (with
+    /// terms) creates; `ALLOWLIST` needs no flag and no registry (the token's own list).
     function test_regulatedConfigInvalid() public {
         bytes memory bad = abi.encodeWithSelector(IRegulatedToken.RegulatedConfigInvalid.selector);
         for (uint256 i; i < 2; ++i) {
@@ -67,20 +68,24 @@ contract RegulatedInitTest is RegFixture {
             c = _cfg(i);
             c.features &= ~REG_FEATURES; // no regulated bit, terms set
             (c.roles.issuer, c.roles.compliance) = (0, 0);
+            c.lockedFeatures = (1 << 8) | (1 << 9); // round 3s: and no list that could be enabled (§5.5)
             _refused(k, c, bad);
             c.reg.termsHash = 0;
             _create(k, c); // the control: a regulated kind with no control
-            c.reg.requiredFlags = 1; // flags without ALLOWLIST
+            c.reg.requiredFlags = 1; // a mask without a registry
             _refused(k, c, bad);
             c.reg.requiredFlags = 0;
             c.reg.deniedFlags = 1;
             _refused(k, c, bad);
             c.reg.deniedFlags = 0;
-            c.reg.complianceRegistry = address(0xC0FFEE); // a registry with neither list
+            c.reg.complianceRegistry = address(0xC0FFEE); // a registry with no mask
             _refused(k, c, bad);
             c = _cfg(i);
-            c.features |= 1 << 8; // ALLOWLIST without requiredFlags
+            c.features |= 1 << 28; // KYC without a registry
             _refused(k, c, bad);
+            c = _cfg(i);
+            c.features |= 1 << 8; // round 3s: ALLOWLIST is the token's list, no flag and no registry
+            _create(k, c);
             c = _cfg(i);
             c.features |= 1 << 21; // MODERATE with the other controls: allowed
             _create(k, c);

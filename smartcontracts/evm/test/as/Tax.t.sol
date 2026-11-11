@@ -88,6 +88,7 @@ contract TaxTest is RegFixture {
     function test_taxBit_issuerOnlyBit23Init() public {
         IFactoryToken.TokenConfig memory c = _cfg8();
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.TAX);
+        c.lockedFeatures = (1 << GovernanceBits.ALLOWLIST) | (1 << GovernanceBits.DENYLIST); // round 3s: no list, no terms
         c.reg.termsHash = 0;
         c.reg.taxRecipient = nid(taxTo);
         (c.roles.issuer, c.roles.compliance, c.roles.minter) = (nid(clerk), 0, 0);
@@ -212,7 +213,7 @@ contract TaxTest is RegFixture {
         _attest(nid(alice), KYC, type(uint64).max);
         IFactoryToken.TokenConfig memory c = _taxCfg8(nid(taxTo));
         (c.features, c.reg.complianceRegistry, c.reg.requiredFlags) =
-            (c.features | (1 << GovernanceBits.ALLOWLIST), address(creg), KYC);
+            (c.features | (1 << GovernanceBits.KYC), address(creg), KYC);
         _attest(nid(taxTo), KYC, type(uint64).max);
         c.reg.taxRecipient = nid(taxTo);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "tl2");
@@ -344,7 +345,7 @@ contract TaxTest is RegFixture {
         _attest(nid(taxTo), KYC, type(uint64).max);
         IFactoryToken.TokenConfig memory c = _taxCfg8(nid(taxTo));
         (c.features, c.reg.complianceRegistry, c.reg.requiredFlags) =
-            (c.features | (1 << GovernanceBits.ALLOWLIST), address(creg), KYC);
+            (c.features | (1 << GovernanceBits.KYC), address(creg), KYC);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "tl3");
         _payTax(t, "pu", V, 2, 1, ""); // control: attested
         _attest(nid(taxTo), 0, type(uint64).max);

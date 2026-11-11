@@ -76,7 +76,7 @@ contract RegulatedGasTest is ListFixture {
     function _mtxCd(address t, uint32 mode, uint256 fee) internal returns (bytes memory) {
         MetaTxLib.UAMetaTransfer memory x;
         (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.fee) =
-            (nid(alice), nid(bob), 1, 1, nonce++, block.timestamp + 60, mode, fee);
+            (nid(alice), nid(bob), 100, 1, nonce++, block.timestamp + 60, mode, fee); // FIXED: at most 1 %
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
         IUARegistry.UASig memory a;
         a.signature = abi.encodePacked(r, s, v);

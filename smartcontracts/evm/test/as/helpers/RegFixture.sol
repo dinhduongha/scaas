@@ -30,7 +30,7 @@ contract Holder {}
 /// `FREEZE`, `FORCE`, `PAUSE`, `RECORD`: the issuer and the compliance holders are two contracts (`FORCE` and `RECORD` never
 /// one id), the owner an EOA, `grantDelay` one day; `alice` holds 1,000,000 units of each. Plan T29: one canonical
 /// `ComplianceRegistry` (`creg`, its admin the native id of the contract `cadmin`, no router, one enabled KYC provider: the
-/// native id of `attester`), and `_listed` for a token of kind 8 or 9 with `ALLOWLIST` / `DENYLIST` on it.
+/// native id of `attester`), and `_listed` for a token of kind 8 or 9 with the registry check (`KYC`, round 3s) on it.
 abstract contract RegFixture is Test {
     uint256 internal constant ALICE_PK = 0xA11CE;
     uint256 internal constant BOB_PK = 0xB0B;
@@ -92,11 +92,11 @@ abstract contract RegFixture is Test {
     }
 
     /// A token of kind 8 (`i == 0`, `SUPPLY` minted to `alice`, who is attested `KYC` first) or 9 (`alice` wraps `SUPPLY`)
-    /// as the fixture's, with `ALLOWLIST` (`required`, 0 = off) and `DENYLIST` (`denied`, 0 = off) on `creg`.
+    /// as the fixture's, with the registry check on `creg` (round 3s: bit 28 `KYC`, both masks; spec 2026-11-10-token-lists
+    /// §3) when `required | denied != 0`.
     function _listed(uint256 i, uint64 required, uint64 denied, bytes32 salt) internal returns (address t) {
         IFactoryToken.TokenConfig memory c = i == 0 ? _cfg8() : _cfg9();
-        if (required != 0) c.features |= 1 << GovernanceBits.ALLOWLIST;
-        if (denied != 0) c.features |= 1 << GovernanceBits.DENYLIST;
+        if (required | denied != 0) c.features |= 1 << GovernanceBits.KYC;
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.deniedFlags) = (address(creg), required, denied);
         _attest(nid(alice), KYC, type(uint64).max);
         t = f.createToken(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,

@@ -371,7 +371,7 @@ abstract contract RegCore is Test {
         uint8 c = IRegulatedToken(cT).regulatedConfig().controls;
         uint256 f = NormalToken(cT).features();
         ++hits[12];
-        if (c != uint8((f >> 5) & 0x3F)) _flag(12, "controls != (features >> 5) & 0x3F");
+        if (c != uint8((f >> 5) & 0x3F) | uint8((f >> 28) & 1) << 6) _flag(12, "controls != mirror(features)");
         ++hits[6];
         if (c & ~pCtl != 0) _flag(6, "controls gained a bit");
         if (kind >= K_CTRL && kind <= K_GOV) {
@@ -579,8 +579,8 @@ abstract contract RegCore is Test {
     }
 }
 
-/// Kinds 8 and 9 (`which` 0 or 1): `RegFixture`'s factory and registry, one token with every control, `ALLOWLIST`
-/// (`KYC`) and `DENYLIST` (`SANCTIONED`) on `creg`, bit 22 granted to an operator EOA. Ids: `alice`, `bob`, `carol` (EOAs
+/// Kinds 8 and 9 (`which` 0 or 1): `RegFixture`'s factory and registry, one token with every control, the registry
+/// check `KYC` (bit 28; masks `KYC` and `SANCTIONED`) on `creg`, bit 22 granted to an operator EOA. Ids: `alice`, `bob`, `carol` (EOAs
 /// with keys), `UA_X` (a derived SIGNING UA), this handler (the minter or the wrapper) and `relayer`. The ledger paths:
 /// `transfer`, `transferToUA` (`_update`, `_uaMove`), the generic `mtxExecute` with a fee to the relayer (the pre row, the
 /// fee leg), `payWithFee`, mint / burn (8), wrap / unwrap (9), the pause-open set at fee `NONE` and fee-bearing.
@@ -601,7 +601,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         _attest(UA_X, KYC, type(uint64).max);
         _attest(nid(relayer), KYC, type(uint64).max);
         IFactoryToken.TokenConfig memory c = which == 0 ? _cfg8() : _cfg9();
-        c.features |= (1 << GovernanceBits.ALLOWLIST) | (1 << GovernanceBits.DENYLIST) | (1 << GovernanceBits.OPERATOR_TRANSFER);
+        c.features |= (1 << GovernanceBits.KYC) | (1 << GovernanceBits.OPERATOR_TRANSFER); // round 3s: both masks under KYC
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.deniedFlags) = (address(creg), KYC, SANCTIONED);
         _attest(nid(alice), KYC, type(uint64).max);
         address t = f.createToken(which == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED,

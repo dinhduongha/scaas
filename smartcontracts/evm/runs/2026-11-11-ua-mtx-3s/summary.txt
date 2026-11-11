@@ -9,3 +9,6 @@ creation state on or off. Spec docs/superpowers/specs/2026-11-10-token-lists.md.
 
 step | commit | rc | counts
 t1-lists (red first) | 93ffd525+T1 | 1 | 0 passed, 37 failed (8 suites: Lists 10, ListGovernance 16, ListRouter 1 setUp, RegulatedGas 6, Zether/PqzLists 4 setUp); every failure the absent build (RegulatedConfigInvalid, FeatureInvalidForKind(28), LockedNotSubset, NoSuchRole(8), no enableFeature)
+t3-as (targeted: test/as, T1's suites green) | T3 tree | 0 | 548 passed, 0 failed after the migrations (first run 520 / 26: I12's formula, the registry tests under KYC, the termsHash predicate; then 547 / 1: RegulatedSkeleton's role constant)
+forge-v2 (targeted: layout, opcodes) | T3 tree | 1 -> fixed | 716 passed, 2 failed: the DELEGATECALL pins (RegulatedLib 1 -> 2, R +1 on each kind), moved; rerun with T9
+forge-governance (targeted) | T3+T4 tree | 1 -> fixed | 595 passed, 2 failed: governance_bits.json stale (T6), GovRelax's issuer seat (8, 9 now taken); both fixed, the two suites 31 / 31 passed

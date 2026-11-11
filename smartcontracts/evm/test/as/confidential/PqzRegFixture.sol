@@ -136,7 +136,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
         if (_lists()) {
             c.features |= 1 << GovernanceBits.DENYLIST; // round 3s: the token's own deny list, no registry
         } else if (_denylist()) {
-            c.features |= 1 << GovernanceBits.DENYLIST;
+            c.features |= 1 << GovernanceBits.KYC; // round 3s: the registry's deny mask is under bit 28
             (c.reg.complianceRegistry, c.reg.deniedFlags) = (address(creg), SANCTIONED);
         }
         if (_isWrapped()) {
