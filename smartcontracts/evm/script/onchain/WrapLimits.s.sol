@@ -352,13 +352,13 @@ contract WrapLimitsSetup is WrapLimitsKit {
     function setup() external {
         _start("setup", false);
         OpenFactory f5 = OpenFactory(_dep("token_factory"));
-        bytes memory init = abi.encodePacked(vm.getCode("OpenFactory.sol:OpenFactory"), abi.encode(a1));
+        bytes memory init = abi.encodePacked(vm.getCode("OpenFactory.sol:OpenFactory"), abi.encode(_pad(a1)));
         fw = OpenFactory(_create2(init, "fw", "factory: this group's OpenFactory"));
         _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.configureChain, (vm.parseJsonBytes32(dj, ".chain_uid"), NOTICE,
-            address(gr), 0, bytes32(0))), false, "factory | configureChain, noticePeriod 3600 s");
+            address(gr), address(gr).codehash, 0, bytes32(0))), false, "factory | configureChain, noticePeriod 3600 s");
         init = abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain WL USD", "oWLUSD", uint8(6)));
         usd = MockERC20(_create2(init, "usd", "leg | MockERC20, 6 decimals"));
-        IFactoryToken.Env memory e5 = f5.envOf(IOpenFactory.TokenKind.WRAPPED, 1);
+        IFactoryToken.Env memory e5 = f5.tokenEnvOf(IOpenFactory.TokenKind.WRAPPED, 1);
         for (uint256 i; i < 3; ++i) _release(i, e5);
         console2.log(string.concat("wl setup factory ", vm.toString(address(fw)), " leg ", vm.toString(address(usd)),
             " notice ", vm.toString(fw.noticePeriod())));
@@ -410,14 +410,14 @@ contract WrapLimitsSetup is WrapLimitsKit {
         bytes memory core = k >= 8 ? abi.encode(vm.parseJsonBytes32(dj, ".compliance_registry_codehash")) : bytes("");
         address[] memory ms = _modules(k, core);
         IOpenFactory.TokenKind kind = IOpenFactory.TokenKind(k);
-        _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.publishEnv, (kind, 1, _env(i, e5, ms))), false,
-            string.concat("factory | publishEnv kind ", vm.toString(k)));
+        _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.publishTokenEnv, (kind, 1, _env(i, e5, ms))), false,
+            string.concat("factory | publishTokenEnv kind ", vm.toString(k)));
         string memory face = string.concat(_label(i), ".sol:", _label(i));
         _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.deployTokenImplementation, (kind, 1, 1, vm.getCode(face),
             kindImplArgs(k, ms, core))), true, string.concat("release | ", _label(i)));
         if (k != 1) {
-            _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.setKindEnabled, (kind, true)), false,
-                string.concat("factory | setKindEnabled kind ", vm.toString(k)));
+            _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.setTokenKindEnabled, (kind, true)), false,
+                string.concat("factory | setTokenKindEnabled kind ", vm.toString(k)));
         }
     }
 }

@@ -6,6 +6,7 @@ import {SaltedEIP712Core} from "../../src/common/SaltedEIP712.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
@@ -128,32 +129,32 @@ contract FactoryZetherTest is Test {
 
     function _enable() internal {
         vm.startPrank(registrar);
-        f.setKindEnabled(NZ, true);
-        f.setKindEnabled(UZ, true);
+        f.setTokenKindEnabled(NZ, true);
+        f.setTokenKindEnabled(UZ, true);
         vm.stopPrank();
     }
 
     function test_confidentialKinds_offByDefault_registrarOnly() public {
-        assertFalse(f.kindEnabled(NZ));
-        assertFalse(f.kindEnabled(UZ));
+        assertFalse(f.tokenKindEnabled(NZ));
+        assertFalse(f.tokenKindEnabled(UZ));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NZ));
         f.createToken(NZ, 1, abi.encode(_conf()), "a");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, UZ));
         f.createToken(UZ, 1, abi.encode(_wrapped()), "a");
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.setKindEnabled(NZ, true);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
+        f.setTokenKindEnabled(NZ, true);
         vm.recordLogs();
         _enable();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs.length, 2);
-        assertEq(logs[0].topics[0], IOpenFactory.KindEnabled.selector);
+        assertEq(logs[0].topics[0], IOpenFactory.TokenKindEnabled.selector);
         assertEq(abi.decode(logs[0].data, (bool)), true);
         address t = f.createToken(NZ, 1, abi.encode(_conf()), "on");
         assertTrue(f.isRegisteredToken(t));
         address w = f.createToken(UZ, 1, abi.encode(_wrapped()), "on");
         assertEq(f.getWrapper(nid(address(this)), address(usd)), w, "the index reads underlyings() after initialize");
         vm.prank(registrar);
-        f.setKindEnabled(NZ, false);
+        f.setTokenKindEnabled(NZ, false);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NZ));
         f.createToken(NZ, 1, abi.encode(_conf()), "off again");
     }
@@ -201,8 +202,8 @@ contract FactoryZetherTest is Test {
     /// Chain-neutral releases (plan T72): on the clones (a release carries no env and builds no domain).
     function test_domainNameHook() public {
         vm.startPrank(registrar);
-        f.setKindEnabled(NZ, true);
-        f.setKindEnabled(UZ, true);
+        f.setTokenKindEnabled(NZ, true);
+        f.setTokenKindEnabled(UZ, true);
         vm.stopPrank();
         address t = f.createToken(NZ, 1, abi.encode(_conf()), "dom");
         address w = f.createToken(UZ, 1, abi.encode(_wrapped()), "dom");

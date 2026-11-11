@@ -163,12 +163,16 @@ MODULE_ERRORS = {"ModuleMissing(uint256)", "ModuleMismatch(uint256)", "NotDelega
 
 # Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1): the pre-split ownership names under the admin names
 # (same arguments, storage and rules); `abi` and `faceabi` read the pre-split side through it, so the faces declare the new
-# names. The cores declare none of them, so face_abi.json is the committed one with `_r3` applied to each entry.
+# names. The cores declare none of them, so face_abi.json is the committed one with `_r3` applied to each entry. T6 (§4.1's
+# row "Compliance registry names in the regulated code", owner 2026-11-10): the regulated code's registry names likewise.
 R3 = {"owner": "admin", "pendingOwner": "pendingAdmin", "transferOwnership": "transferAdmin", "acceptOwnership": "acceptAdmin",
       "renounceOwnership": "renounceAdmin", "OwnershipTransferStarted": "AdminTransferStarted",
       "OwnershipTransferred": "AdminTransferred", "NotOwner": "NotAdmin", "NotPendingOwner": "NotPendingAdmin",
-      "OwnerAccountPool": "AdminAccountPool", "OwnerHasHolders": "AdminHasHolders"}
-R3_INPUTS = {"previousOwner": "previousAdmin", "newOwner": "newAdmin"}
+      "OwnerAccountPool": "AdminAccountPool", "OwnerHasHolders": "AdminHasHolders",
+      "REGISTRY_CODEHASH": "COMPLIANCE_REGISTRY_CODEHASH", "RegistryCodeMismatch": "ComplianceRegistryCodeMismatch",
+      "RegistryUnavailable": "ComplianceRegistryUnavailable", "RegistryGasStarved": "ComplianceRegistryGasStarved"}
+# `registry` is an input of the two errors above only (the pre-split faces, d142b57c)
+R3_INPUTS = {"previousOwner": "previousAdmin", "newOwner": "newAdmin", "registry": "complianceRegistry"}
 
 
 def _r3(x):

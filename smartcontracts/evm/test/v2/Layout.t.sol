@@ -15,6 +15,7 @@ import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {ZetherLib} from "../../src/zether/ZetherLib.sol";
+import {UAAdmin} from "../../src/governance/UAAdmin.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
 
@@ -130,6 +131,16 @@ contract NamespaceProbe is UAMetaTxBase {
         x.quota[U][1] = 0x119;
         x.member[U] = 3;
         (x.pendingCommit, x.pendingEta, x.pendingGeneration) = (bytes32(uint256(0x11a)), 0x11b, 0x11c);
+    }
+}
+
+/// Round 3r T5 (admin-not-owner spec §5.1): writes `scaas.admin` through `UAAdmin`'s own accessor.
+contract AdminProbe is UAAdmin {
+    function _adminRouter() internal pure override returns (address) {}
+
+    function poke() external {
+        AdminStorage storage s = _adminStorage();
+        (s.admin, s.pendingAdmin, s.adminGeneration) = (NamespaceProbeIds.U, NamespaceProbeIds.V, 0x12345678);
     }
 }
 
@@ -341,6 +352,13 @@ contract LayoutTest is V2Fixture {
         f[23] = F("memos[U]", u, 0, 20, 32);
         f[24] = F("minDecoyFee", 0, 0, 0xf7, 32);
         _ns(address(p), "zether", "scaas.zether", f);
+        AdminProbe ap = new AdminProbe();
+        ap.poke();
+        f = new F[](3);
+        f[0] = F("admin", 0, 0, u, 32);
+        f[1] = F("pendingAdmin", 0, 0, v, 32);
+        f[2] = F("adminGeneration", 0, 0, 0x12345678, 4);
+        _ns(address(ap), "admin", "scaas.admin", f);
     }
 
     /// Plan T83: `scaas.pay.records` (`payRecords` in the pin): the root is ERC-7201 of its id and `PAY_RECORDS_SLOT`;

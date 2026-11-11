@@ -23,7 +23,7 @@ uint256 constant ENV_PQZ_VERIFIER = 0;
 ///        may take another encoding without a factory change.
 interface IFactoryToken {
     /// @notice The registrar's deployment environment of a release (owner 2026-10-20, CTR-ZTH-20; chain-neutral spec §2.1):
-    ///         the chain values the factory publishes per kind and version (`OpenFactory.publishEnv`), never changed.
+    ///         the chain values the factory publishes per kind and version (`OpenFactory.publishTokenEnv`), never changed.
     ///         `registry` the UA registry (0 = none; its `chainUid()` must be the factory's); `deps` the kind's dependencies
     ///         by position (`*_ZETHER`: `ENV_ZETHER_*`; `*_PQZ`: `ENV_PQZ_VERIFIER`; plain kinds and the DEX: none; at most
     ///         4); `params` a generic class's chain values by documented position (at most 2); `libs` the linked

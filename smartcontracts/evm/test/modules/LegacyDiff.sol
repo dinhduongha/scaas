@@ -9,7 +9,7 @@ import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 interface ILive {
     function kind() external view returns (uint8);
     function factory() external view returns (address);
-    function REGISTRY_CODEHASH() external view returns (bytes32);
+    function COMPLIANCE_REGISTRY_CODEHASH() external view returns (bytes32);
 }
 
 /// @notice T66b §10, the differential test per entry (the registry's R2 `test_diff` pattern): the pre-split body (the
@@ -54,7 +54,8 @@ abstract contract LegacyDiff is Test {
     function _legacyFor(address token, uint8 k) internal returns (address impl) {
         _legacyLibs();
         address f = ILive(token).factory();
-        bytes memory core = k >= 8 && k != type(uint8).max ? abi.encode(ILive(token).REGISTRY_CODEHASH()) : bytes("");
+        bytes memory core =
+            k >= 8 && k != type(uint8).max ? abi.encode(ILive(token).COMPLIANCE_REGISTRY_CODEHASH()) : bytes("");
         bytes32 id = keccak256(abi.encode(k, f, core));
         impl = legacyImpl[id];
         if (impl != address(0)) return impl;
@@ -198,7 +199,9 @@ abstract contract LegacyDiff is Test {
 
     /// @dev Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1-§4.3): d142b57c's ownership names are the admin
     ///      names now, same arguments, storage and rules. A row of an old entry runs on the new side under its new selector;
-    ///      the old side's revert selector and event topic0 are read under the new names. Nothing else is mapped.
+    ///      the old side's revert selector, event topic0 and the selector of each call it records (the call under test is the
+    ///      first) are read under the new names. T6 (§4.1's row "Compliance registry names in the regulated code"): the
+    ///      regulated kinds' `REGISTRY_CODEHASH()` and three registry errors likewise. Nothing else is mapped.
     function _r3Sel(bytes4 s) internal pure returns (bytes4) {
         if (s == bytes4(keccak256("owner()"))) return bytes4(keccak256("admin()"));
         if (s == bytes4(keccak256("pendingOwner()"))) return bytes4(keccak256("pendingAdmin()"));
@@ -209,6 +212,16 @@ abstract contract LegacyDiff is Test {
         if (s == bytes4(keccak256("NotPendingOwner(bytes32)"))) return bytes4(keccak256("NotPendingAdmin(bytes32)"));
         if (s == bytes4(keccak256("OwnerAccountPool(bytes32)"))) return bytes4(keccak256("AdminAccountPool(bytes32)"));
         if (s == bytes4(keccak256("OwnerHasHolders(uint8)"))) return bytes4(keccak256("AdminHasHolders(uint8)"));
+        if (s == bytes4(keccak256("REGISTRY_CODEHASH()"))) return bytes4(keccak256("COMPLIANCE_REGISTRY_CODEHASH()"));
+        if (s == bytes4(keccak256("RegistryCodeMismatch(address,bytes32)"))) {
+            return bytes4(keccak256("ComplianceRegistryCodeMismatch(address,bytes32)"));
+        }
+        if (s == bytes4(keccak256("RegistryUnavailable(address)"))) {
+            return bytes4(keccak256("ComplianceRegistryUnavailable(address)"));
+        }
+        if (s == bytes4(keccak256("RegistryGasStarved(uint256,uint256)"))) {
+            return bytes4(keccak256("ComplianceRegistryGasStarved(uint256,uint256)"));
+        }
         return s;
     }
 
@@ -221,6 +234,11 @@ abstract contract LegacyDiff is Test {
 
     function _r3Old(Run memory o) internal pure {
         if (!o.ok) o.ret = _r3Call(o.ret);
+        for (uint256 i; i < o.calls.length; ++i) {
+            (VmSafe.AccountAccessKind k, address a, uint256 v, bytes memory d, bool r) =
+                abi.decode(o.calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
+            o.calls[i] = abi.encode(k, a, v, _r3Call(d), r);
+        }
         for (uint256 i; i < o.logs.length; ++i) {
             if (o.logs[i].topics.length == 0) continue;
             bytes32 t = o.logs[i].topics[0];

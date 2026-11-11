@@ -9,6 +9,7 @@ import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {GovernanceRouterBase} from "../../src/governance/GovernanceRouterBase.sol";
 import {IGovernanceRouter} from "../../src/governance/IGovernanceRouter.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -519,7 +520,7 @@ contract GovRouterTest is GovRouterFixture {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, msig));
         _run(cd);
         cd = _op(GRANT_ROLE, stranger, address(t), abi.encode(MINT, stranger));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, stranger));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, stranger));
         _run(cd);
         assertEq(router.mtxNonce(msig, 0), 0);
         assertEq(router.mtxNonce(stranger, 0), 0);
@@ -618,7 +619,7 @@ contract GovRouterTest is GovRouterFixture {
             abi.encode(MINT, stranger));
         _do(TRANSFER_ADMIN, eoa, address(t), abi.encode(next));
         _do(ACCEPT_ADMIN, next, address(t), "");
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, eoa));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eoa));
         _run(late);
         assertEq(router.mtxNonce(eoa, 1), 0, "the nonce stays unspent: the target's refusal reverts the call");
     }

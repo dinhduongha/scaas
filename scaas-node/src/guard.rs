@@ -1361,7 +1361,7 @@ mod tests {
             "mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)", "mtxRevoke(address,uint64,uint256,bytes)",
             "mtxExecuteAsOwnerRaw(bytes,uint256,uint256,bytes)",
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-            "transferOwnership(bytes32)", "setListedOnly(bool)"] {
+            "transferAdmin(bytes32)", "setListedOnly(bool)"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
                 let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
@@ -1670,7 +1670,7 @@ mod tests {
     /// through the router); every `SIGNED` entry of those contracts is a row of the kind, a `ua_metatx` struct job's entry
     /// (`mtxExecuteTransfer`, `mtxPayMeta`, the calldata [`crate::metatx::UaMtx`] builds), the inner operation an envelope row of the
     /// same name self-calls (also the holder's direct call), or named in `NOT_ROWS` with its reason. The router's generic entries
-    /// (`PERMISSIONLESS(refuses every call)`) are no row; no `BIT`, `OWNER` or `HOLDER_OWN` entry of a governed contract is a row of any
+    /// (`PERMISSIONLESS(refuses every call)`) are no row; no `BIT`, `ADMIN` or `HOLDER_OWN` entry of a governed contract is a row of any
     /// kind, so no governance op is relayable on it.
     #[test]
     fn allow_lists_equal_the_selector_audit_both_directions() {
@@ -1715,7 +1715,7 @@ mod tests {
                     assert!(row(sel(s), k).is_none(), "{kind}: {s} ({}) is a {k} row", e["class"]);
                 }
                 let class = e["class"].as_str().unwrap();
-                governed += usize::from(class.starts_with("BIT") || class == "OWNER" || class == "HOLDER_OWN");
+                governed += usize::from(class.starts_with("BIT") || class == "ADMIN" || class == "HOLDER_OWN");
             }
         }
         let creation = |s: &str| s.starts_with("mtxCreateToken(") || s.starts_with("mtxCreateDex(") || s.starts_with("mtxCreateInstance(");
@@ -2030,7 +2030,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // group 3h T61: (257, 181, 241) -> (258, 181, 245): the router's `mtxSetProofStore` rowed; `setProofStore` governed (bit 24) on
     // each of the four PQZ kinds
     // group 3l: (258, 181, 245) -> (260, 181, 257): the router's `mtxSetWrapLimits`, `mtxSetWrapMember` rowed; the tokens'
-    // `setWrapLimits` (OWNER) and `setWrapMember` (BIT(26)) governed on each of the six wrapped kinds
+    // `setWrapLimits` (ADMIN) and `setWrapMember` (BIT(26)) governed on each of the six wrapped kinds
     // ua-mtx-liquidity L6: ROWED -> 261 (the DEX's `mtxLiquidity`), EXEMPT 181 -> 193 (`mtxLiquidityPull` on the twelve
     // kinds, NOT_ROWS)
     const ROWED: usize = 261;
@@ -2463,7 +2463,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                         let c = IOpenFactory::infoOfCall::abi_decode(&input).unwrap().c;
                         let (class, version) = listed(c);
                         Some(IOpenFactory::infoOfCall::abi_encode_returns(&IOpenFactory::Created { addr: if class == 0 { Address::ZERO } else { c },
-                            creatorId: B256::ZERO, ownerUA: B256::ZERO, contractClass: class, kind: 0, version, createdBlock: 1, createdAt: 1 }))
+                            creatorId: B256::ZERO, contractClass: class, kind: 0, version, createdBlock: 1, createdAt: 1 }))
                     }
                     "eth_call" if listed(to).0 != 0 => Some(vec![]),
                     "eth_call" => Some(uid.to_vec()),

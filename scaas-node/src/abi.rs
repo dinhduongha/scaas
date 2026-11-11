@@ -498,9 +498,10 @@ sol! {
         error FeeRecipientFrozen(bytes32 account);
         error RefRequired();
         error RegulatedConfigInvalid();
-        error RegistryCodeMismatch(address registry, bytes32 codehash);
-        error RegistryUnavailable(address registry);
-        error RegistryGasStarved(uint256 cap, uint256 left);
+        error ComplianceRegistryCodeMismatch(address complianceRegistry, bytes32 codehash);
+        error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
+        error ComplianceRegistryUnavailable(address complianceRegistry);
+        error ComplianceRegistryGasStarved(uint256 cap, uint256 left);
         error OrderExists(bytes32 recordId);
         error OrderUnknown(bytes32 recordId);
         error OrderInactive(bytes32 recordId);
@@ -578,28 +579,32 @@ sol! {
         function supportsInterface(bytes4 id) external view returns (bool);
     }
 
-    /// `IComplianceRegistry` (regulated-kinds spec §5): the two reads `canReceive` makes, read by the venue to compute `R` with
-    /// `scaas_ua::regulated::can_receive` and to know the receiver's attestation `validUntil` (NODE-DEX-11, `ATTESTATION_SHORTER`).
+    /// `IComplianceRegistry` (regulated-kinds spec §5; round 3r, spec 2026-11-10-admin-not-owner §5.3.1: the KYC provider): the
+    /// two reads `canReceive` makes, read by the venue to compute `R` with `scaas_ua::regulated::can_receive` and to know the
+    /// receiver's compliance row `validUntil` (NODE-DEX-11, `ATTESTATION_SHORTER`); its events and errors, decoded by name.
     #[derive(Debug)]
     interface IComplianceRegistry {
-        event AttesterSet(address indexed attester, uint32 indexed attesterId, bool enabled);
-        event Attested(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed attesterId);
-        function attestationOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 attesterId);
-        function attesterEnabled(uint32 id) external view returns (bool);
-        error NotAdmin();
-        error NotAttester();
-        error AdminNotContract(address a);
+        event KycProviderSet(bytes32 indexed provider, uint32 indexed providerId, bool enabled);
+        event ComplianceSet(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed providerId);
+        function complianceOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 providerId);
+        function kycProviderEnabled(uint32 id) external view returns (bool);
+        error AdminZero();
+        error AdminUnreachable(bytes32 admin);
+        error RouterNotContract(address govRouter);
+        error NotKycProvider();
+        error KycProviderZero();
+        error TooManyRows(uint256 n);
         error LengthMismatch();
         error EligibleContractAdminOnly();
         error AdminWrittenSlot(bytes32 account);
     }
 
     /// `IOpenFactory.infoOf` (factory index spec §8.6): the record of a contract the chain's factory made, read for the generic
-    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45).
+    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45); no owner since round 3r R1.
     #[derive(Debug)]
     interface IOpenFactory {
         struct Created {
-            address addr; bytes32 creatorId; bytes32 ownerUA; uint16 contractClass; uint16 kind; uint64 version;
+            address addr; bytes32 creatorId; uint16 contractClass; uint16 kind; uint64 version;
             uint64 createdBlock; uint64 createdAt;
         }
         function infoOf(address c) external view returns (Created memory);
@@ -638,7 +643,8 @@ pub fn regulated_interface_id() -> [u8; 4] {
 /// attestation); it is never counted against the subject's or a maker's grief score (asset-suite §2.7, F-16). `reason`
 /// is a `decode_revert` string.
 pub fn regulated_refusal(reason: &str) -> Option<&'static str> {
-    const LIFTABLE: [&str; 6] = ["Frozen", "TokenPaused", "NotEligible", "FeeRecipientFrozen", "RegistryUnavailable", "RegistryGasStarved"];
+    const LIFTABLE: [&str; 6] =
+        ["Frozen", "TokenPaused", "NotEligible", "FeeRecipientFrozen", "ComplianceRegistryUnavailable", "ComplianceRegistryGasStarved"];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
     LIFTABLE.into_iter().find(|n| *n == name)
 }
@@ -848,8 +854,10 @@ mod tests {
             (IRegulatedToken::TokenPaused { until: 7 }.abi_encode(), "TokenPaused"),
             (IRegulatedToken::NotEligible { account: a, reason: 1 }.abi_encode(), "NotEligible"),
             (IRegulatedToken::FeeRecipientFrozen { account: a }.abi_encode(), "FeeRecipientFrozen"),
-            (IRegulatedToken::RegistryUnavailable { registry: alloy::primitives::Address::repeat_byte(5) }.abi_encode(), "RegistryUnavailable"),
-            (IRegulatedToken::RegistryGasStarved { cap: U256::from(50_000), left: U256::from(1) }.abi_encode(), "RegistryGasStarved"),
+            (IRegulatedToken::ComplianceRegistryUnavailable { complianceRegistry: alloy::primitives::Address::repeat_byte(5) }.abi_encode(),
+                "ComplianceRegistryUnavailable"),
+            (IRegulatedToken::ComplianceRegistryGasStarved { cap: U256::from(50_000), left: U256::from(1) }.abi_encode(),
+                "ComplianceRegistryGasStarved"),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(&format!("{name}(")), "{r}");
@@ -861,6 +869,9 @@ mod tests {
             (IRegulatedToken::RefRequired {}.abi_encode(), "RefRequired"),
             (IRegulatedToken::PauseCooldown { until: 1 }.abi_encode(), "PauseCooldown"),
             (IComplianceRegistry::AdminWrittenSlot { account: a }.abi_encode(), "AdminWrittenSlot"),
+            (IComplianceRegistry::NotKycProvider {}.abi_encode(), "NotKycProvider"),
+            (IRegulatedToken::ComplianceRegistryRouterMismatch { complianceRegistry: alloy::primitives::Address::repeat_byte(5),
+                got: alloy::primitives::Address::repeat_byte(6) }.abi_encode(), "ComplianceRegistryRouterMismatch"),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(&format!("{name}(")), "{r}");
@@ -894,7 +905,7 @@ mod tests {
         assert_eq!(named, 17, "every refused freeze row");
         let rows = v["receiver"].as_array().unwrap();
         for r in rows {
-            let a = Attestation { flags: n(&r["flags"]), valid_until: n(&r["validUntil"]), attester_enabled: r["attesterEnabled"].as_bool().unwrap() };
+            let a = Attestation { flags: n(&r["flags"]), valid_until: n(&r["validUntil"]), attester_enabled: r["kycProviderEnabled"].as_bool().unwrap() };
             let (req, den) = (r["allowlist"].as_bool().unwrap().then(|| n(&r["requiredFlags"])), r["denylist"].as_bool().unwrap().then(|| n(&r["deniedFlags"])));
             let got = can_receive(req, den, &a, n(&r["now"]));
             assert_eq!(got, (r["ok"].as_bool().unwrap(), r["reason"].as_u64().unwrap() as u8), "{}", r["name"]);

@@ -7,23 +7,23 @@ import {PqChat} from "../../src/pqchat/PqChat.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
 import {PqChatBase} from "./PqChatBase.sol";
 
-/// Builders of the topic records (topics spec §2): `ids[0]` owns the topics unless a test says otherwise.
+/// Builders of the topic records (topics spec §2): `ids[0]` is the topics' admin unless a test says otherwise.
 abstract contract PqTopicsBase is PqChatBase {
-    function _topicRec(bytes32 owner_, uint64 nonce, bool open) internal view returns (IPqChat.PqTopic memory t) {
-        t = IPqChat.PqTopic(owner_, nonce, chainUidA, address(chat), "General", bytes("# About\n"), open);
+    function _topicRec(bytes32 admin_, uint64 nonce, bool open) internal view returns (IPqChat.PqTopic memory t) {
+        t = IPqChat.PqTopic(admin_, nonce, chainUidA, address(chat), "General", bytes("# About\n"), open);
     }
 
     function _createTopic(PqChat c, IPqChat.PqTopic memory t) internal returns (bytes32) {
-        return c.createTopic(t, _sig(t.owner, h.topic(t)));
+        return c.createTopic(t, _sig(t.admin, h.topic(t)));
     }
 
     function _newTopic(bool open) internal returns (bytes32) {
         return _createTopic(chat, _topicRec(ids[0], 1, open));
     }
 
-    function _grant(PqChat c, bytes32 tid, bytes32 owner_, bytes32 writer, bool granted, uint64 seq) internal {
+    function _grant(PqChat c, bytes32 tid, bytes32 admin_, bytes32 writer, bool granted, uint64 seq) internal {
         IPqChat.PqTopicWriter memory w = IPqChat.PqTopicWriter(tid, writer, granted, seq);
-        c.setTopicWriter(w, _sig(owner_, h.topicWriter(w)));
+        c.setTopicWriter(w, _sig(admin_, h.topicWriter(w)));
     }
 
     function _entryRec(bytes32 tid, bytes32 author, uint64 nonce, bytes32 parent, bytes memory body)

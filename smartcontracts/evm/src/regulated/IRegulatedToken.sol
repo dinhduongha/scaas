@@ -87,9 +87,12 @@ interface IRegulatedToken {
     error FeeRecipientFrozen(bytes32 account);
     error RefRequired();
     error RegulatedConfigInvalid();
-    error RegistryCodeMismatch(address registry, bytes32 codehash);
-    error RegistryUnavailable(address registry);
-    error RegistryGasStarved(uint256 cap, uint256 left);
+    error ComplianceRegistryCodeMismatch(address complianceRegistry, bytes32 codehash);
+    /// @notice The registry's `govRouter()` is neither 0 nor the token's own `ChainEnv.govRouter` (spec
+    ///         2026-11-10-admin-not-owner.md §5.3, Fable P1-1): the code hash pins the code, not the router.
+    error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
+    error ComplianceRegistryUnavailable(address complianceRegistry);
+    error ComplianceRegistryGasStarved(uint256 cap, uint256 left);
     error OrderExists(bytes32 recordId);
     error OrderUnknown(bytes32 recordId);
     error OrderInactive(bytes32 recordId);
@@ -146,7 +149,7 @@ interface IRegulatedToken {
     function freezeOf(bytes32 account) external view returns (FreezeState memory);
     /// @notice `F(account)` of spec §3.2.
     function isFrozen(bytes32 account) external view returns (bool);
-    /// @notice `reason` 1-4 from the registry's `attestationOf` and `attesterEnabled`.
+    /// @notice `reason` 1-4 from the registry's `complianceOf` and `kycProviderEnabled`.
     function canReceive(bytes32 account) external view returns (bool ok, uint8 reason);
     function order(bytes32 recordId) external view returns (OrderRecord memory);
 }

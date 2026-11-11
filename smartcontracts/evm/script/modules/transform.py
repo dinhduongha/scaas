@@ -43,7 +43,7 @@ SHARED = {'SaltedEIP712': 'src/common/SaltedEIP712.sol', 'MetaTxBase': 'src/meta
 SCOPE_FILES = set(KINDS.values()) | set(BASES) | set(SHARED.values())
 KEEP = {'transfer', 'transferFrom', 'approve', 'balanceOf', 'allowance', 'totalSupply', 'name', 'symbol', 'decimals',
         'balanceOfUA', 'transferToUA', 'kind', 'factory', 'implementation', 'registry', 'chainUid', 'IS_HEDERA',
-        'SMART_KEY_ACCOUNT_IMPL', 'pqzSet', 'FACTORY', 'REGISTRY_CODEHASH', 'RATE_WINDOW'}
+        'SMART_KEY_ACCOUNT_IMPL', 'pqzSet', 'FACTORY', 'COMPLIANCE_REGISTRY_CODEHASH', 'RATE_WINDOW'}
 GUARDS = {'nonReentrant', 'governed'}
 
 nodes, parent, fileof = {}, {}, {}

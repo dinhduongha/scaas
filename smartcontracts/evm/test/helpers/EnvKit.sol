@@ -5,6 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../../src/factory/ChainEnvCode.sol";
+import {nid} from "./Ids.sol";
 
 /// @notice Chain-neutral releases for tests (chain-spec §2, §3; plan T71, T72): a factory configured for one chain, and
 ///         clones with an appended `ChainEnv` for the tests that play the factory themselves (the test is `FACTORY`).
@@ -29,6 +30,11 @@ library EnvKit {
         return abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3", ChainEnvCode.encode(e));
     }
 
+    /// @dev The EIP-1167 clone code hash of `impl` (the router's and the UA registry's `smartKeyCloneHash()`).
+    function cloneHash(address impl) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+    }
+
     /// @dev A clone of `impl` with `e` appended, created by the caller (which plays the factory).
     function clone(address impl, IFactoryToken.ChainEnv memory e) internal returns (address c) {
         bytes memory code = ChainEnvCode.initCode(impl, ChainEnvCode.encode(e));
@@ -42,17 +48,22 @@ library EnvKit {
         return factory(registrar, uid, notice, address(0));
     }
 
-    /// @dev `new OpenFactory(registrar)` and its `configureChain(uid, notice, router)`, on a chain whose genesis hash
-    ///      is `uid` (`BLOCKHASH(0)`, provable while `block.number <= 256`). Pranks the registrar once: no `startPrank`.
+    /// @dev `new OpenFactory(nid(registrar))` and its `configureChain(uid, notice, router, its code hash)`, on a chain whose genesis hash
+    ///      is `uid` (`BLOCKHASH(0)`, provable while `block.number <= 256`). Pranks the admin once: no `startPrank`.
     function factory(address registrar, bytes32 uid, uint64 notice, address router) internal returns (OpenFactory f) {
-        f = new OpenFactory(registrar);
+        f = new OpenFactory(nid(registrar));
         configure(f, uid, notice, router);
     }
 
     function configure(OpenFactory f, bytes32 uid, uint64 notice, address router) internal {
         genesis(uid);
-        vm.prank(f.registrar());
-        f.configureChain(uid, notice, router, 0, bytes32(0));
+        vm.prank(address(uint160(uint256(f.admin()))));
+        f.configureChain(uid, notice, router, codeHashOf(router), 0, bytes32(0));
+    }
+
+    /// @dev `configureChain`'s router code hash argument: 0 for no router (spec §13.3).
+    function codeHashOf(address router) internal view returns (bytes32) {
+        return router == address(0) ? bytes32(0) : router.codehash;
     }
 
     /// @dev EIP-2935's history contract (forge runs it at Amsterdam): its ring buffer keeps block `n` at slot `n % 8191`.

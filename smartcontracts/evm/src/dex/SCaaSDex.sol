@@ -212,7 +212,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         IOpenFactory f = IOpenFactory(FACTORY);
         if (!f.isToken(token)) return KIND_OUTSIDE;
         (IOpenFactory.TokenKind k, uint64 v) = f.versionOf(token);
-        return v != 0 && !f.isDeprecated(k, v) ? KIND_SCAAS : KIND_OUTSIDE;
+        return v != 0 && !f.isTokenDeprecated(k, v) ? KIND_SCAAS : KIND_OUTSIDE;
     }
 
     function _pair(address a, address b) private pure returns (bytes32) {

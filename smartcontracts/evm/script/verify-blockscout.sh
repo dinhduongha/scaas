@@ -145,7 +145,7 @@ for log in "${logs[@]}"; do
       [ "$v" -gt 0 ] && ev="$(cast call -r "$RPC" "$fac" 'releaseOf(uint8,uint64)((address,uint16,bytes32,uint64,bool))' "$kind" "$v" \
                               | sed -E 's/^\([^,]+, ([0-9]+),.*/\1/')"
       if [ -z "$ev" ]; then table+=("fail  $name  $addr  not a release of factory $fac"); fails=$((fails + 1)); continue; fi
-      env="$(cast call -r "$RPC" "$fac" "envOf(uint8,uint16)($ENV_T)" "$kind" "$ev")"
+      env="$(cast call -r "$RPC" "$fac" "tokenEnvOf(uint8,uint16)($ENV_T)" "$kind" "$ev")"
       args="$(cast abi-encode "f(uint16,$ENV_T,bytes)" "$ev" "$env" 0x)"
       verify "$name" "$addr" "${args#0x}" "$name (release kind $kind v$v)"; progress
     elif ls out/*/"$name".json >/dev/null 2>&1; then    # a direct CREATE from the e2e deployer

@@ -187,8 +187,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // T46 (group 3f): + the router's three PQZ verifier ops (`UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier`): 86, 76
   // group 3h T61: + the router's `UASetProofStore` (bit 24): 87, 77
   // group 3l: + the router's `UASetWrapLimits`, `UASetWrapMember`: 89, 79
-  assert.equal(Object.keys(TYPED_OPS).length, 89);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 79);
+  // round 3r: + the router's fifteen admin ops of the factory and a compliance registry: 104, 94
+  assert.equal(Object.keys(TYPED_OPS).length, 104);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 94);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -311,7 +312,7 @@ test('the cancel row is ordered and native-capable: UACancelNonce(bytes32 from,u
 // governance T12 (spec §3.2): the router's rows read from the contract's own pin, test/governance/GovRouterTypehash.t.sol
 // (literal strings and `cast keccak` hashes), apart from the table in src/evm.js: a mismatch is a stop-and-report.
 // ua-mtx-merge T7 / T11 (R14): 19 `UA<Op>` rows on the `mtx<Op>` entries; the 19 address rows retired.
-test('GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
+test('GovernanceRouter: 50 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
   const sol = readFileSync(new URL('../../../smartcontracts/evm/test/governance/GovRouterTypehash.t.sol', import.meta.url), 'utf8');
   const pins = [...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\);\s*assertEq\(T\.\w+, (0x[0-9a-f]{64})\)/g)]
     .map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(''), hash]);
@@ -320,12 +321,14 @@ test('GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol, target the first 
   // T46 (group 3f): the three PQZ verifier ops are checked against GovernanceRouterBase.sol in pqz-verdict.test.js, and here
   // too once this pin file carries them
   // group 3l: the leg array's two struct types are pinned there too, not rows
-  const rows = pins.filter(([s]) => !s.startsWith('GrantTerms(') && !s.startsWith('WrapLimit(') && !s.startsWith('WrapLegLimits('));
+  // round 3r: + the fifteen admin ops of the factory and a compliance registry, and the `Env` struct pin
+  const rows = pins.filter(([s]) => !s.startsWith('GrantTerms(') && !s.startsWith('WrapLimit(') && !s.startsWith('WrapLegLimits(')
+    && !s.startsWith('Env('));
   const pqzPinned = rows.filter(([s]) => s.startsWith('UAPqz')).length;
   assert.ok(pqzPinned === 0 || pqzPinned === 3, `${pqzPinned} PQZ verifier pins`);
   // group 3h T61: + `UASetProofStore` (bit 24); group 3l: + `UASetWrapLimits`, `UASetWrapMember` and the two struct pins
-  assert.equal(pins.length - pqzPinned, 38);
-  assert.equal(rows.length - pqzPinned, 35);
+  assert.equal(pins.length - pqzPinned, 54);
+  assert.equal(rows.length - pqzPinned, 50);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -339,9 +342,10 @@ test('GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol, target the first 
     const r = V.ops[name];
     assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
-    assert.deepEqual([r.message.mode, r.message.fee], [1, '0'], `${name}: fee mode NONE`);
+    // fee mode NONE; round 3r's `UAApproveTokenRelease` leaves the relayer unbound too (mode 0, the canonical-zero row)
+    assert.deepEqual([r.message.mode, r.message.fee], [name === 'UAApproveTokenRelease' ? 0 : 1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 39); // 3h T61: + UASetProofStore; 3l: + 2
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 54); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
 });
@@ -425,7 +429,8 @@ test('checkOp refuses every changed field; the server supplies only the envelope
         const k = path.at(-1);
         const v = o[k];
         o[k] = typeof v === 'boolean' ? !v : typeof v === 'number' ? v + 1
-          : /^0x/.test(v) ? (v.length === 2 ? '0x00' : v.slice(0, -2) + (v.endsWith('00') ? '01' : '00')) : String(BigInt(v) + 1n);
+          : /^0x/.test(v) ? (v.length === 2 ? '0x00' : v.slice(0, -2) + (v.endsWith('00') ? '01' : '00'))
+            : /^[0-9]+$/.test(v) ? String(BigInt(v) + 1n) : `${v}!`; // round 3r: a `string` (a deprecation's reason)
         assert.throws(() => checkOp(bad, want), /Refusing to sign/, `${name} ${kind} ${path.join('.')}`);
       }
     }
@@ -553,7 +558,9 @@ test('an unbound relayer or feeRecipient is signed as 0 and shown as unbound: ev
   // other row binds its relayer (the open case of a token op is the mode-0 burn above)
   const open3h = rows().filter(([, x]) => x.release === '3h').length;
   assert.equal(open3h, 6, 'the six 3h rows');
-  assert.equal(relayerOpen, open3h, 'only the 3h rows leave the relayer open');
+  // round 3r: `UAApproveTokenRelease` leaves both open too (mode 0), given a non-zero relayer and fee recipient above
+  assert.equal(TYPED_OPS.UAApproveTokenRelease && V.ops.UAApproveTokenRelease.message.mode, 0);
+  assert.equal(relayerOpen, open3h + 1, 'the 3h rows and UAApproveTokenRelease leave the relayer open');
 });
 
 test('the builder refuses a field off the struct, a value out of range, a domain the op does not live in', () => {

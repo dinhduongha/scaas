@@ -593,8 +593,8 @@ contract Tokens is OnchainBase {
         NormalRegulatedToken r = NormalRegulatedToken(t);
         vm.startBroadcast(k1);
         r.setTaxRate(10_000); // 1 %; a rise waits noticePeriod(), 0 on this factory
-        // a fixed limit: RegulatedBase refuses the registry check below REGISTRY_GAS x 64/63 + margin left
-        // (RegistryGasStarved(50000, 54362) at forge's simulated 51,440 x 2.00 on a fresh anvil): gasUsed is not that floor
+        // a fixed limit: RegulatedBase refuses the registry check below COMPLIANCE_REGISTRY_GAS x 64/63 + margin left
+        // (ComplianceRegistryGasStarved(50000, 54362) at forge's simulated 51,440 x 2.00 on a fresh anvil): gasUsed is not that floor
         r.setTaxRecipient{gas: 500_000}(_pad(a3));
         vm.stopBroadcast();
         IRegulatedToken.TaxConfig memory tc = r.taxConfig();

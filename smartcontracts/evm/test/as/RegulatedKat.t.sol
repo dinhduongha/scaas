@@ -126,11 +126,11 @@ contract RegulatedKatTest is RegFixture {
         uint8 reason;
     }
 
-    /// The account's attestation and the token's answer; with a list on, `ok` is the registry's `hasFlags` on its masks.
+    /// The account's compliance row and the token's answer; with a list on, `ok` is the registry's `hasFlags` on its masks.
     function _rx(address t, bool allow, bool deny, Acct memory a) internal view returns (Rx memory x) {
         uint32 id;
-        (x.flags, x.until, id) = creg.attestationOf(a.id);
-        x.enabled = creg.attesterEnabled(id);
+        (x.flags, x.until, id) = creg.complianceOf(a.id);
+        x.enabled = creg.kycProviderEnabled(id);
         (x.ok, x.reason) = _r(t).canReceive(a.id);
         if (allow || deny) {
             assertEq(x.ok, creg.hasFlags(a.id, allow ? KYC : 0, deny ? SANCTIONED : 0), a.name);
@@ -152,7 +152,7 @@ contract RegulatedKatTest is RegFixture {
     }
 
     function _rxTail(Rx memory x) internal view returns (string memory j) {
-        j = string.concat(_c("flags", _u(x.flags)), _c("validUntil", _u(x.until)), _c("attesterEnabled", _b(x.enabled)));
+        j = string.concat(_c("flags", _u(x.flags)), _c("validUntil", _u(x.until)), _c("kycProviderEnabled", _b(x.enabled)));
         j = string.concat(j, _c("now", _u(block.timestamp)), _c("ok", _b(x.ok)), _c("reason", vm.toString(x.reason)));
     }
 
@@ -160,10 +160,10 @@ contract RegulatedKatTest is RegFixture {
         uint256 s = vm.snapshotState();
         address att2 = address(0xA772);
         vm.prank(cadmin);
-        creg.setAttester(att2, true);
+        creg.setKycProvider(nid(att2), true);
         string[11] memory nm = ["unattested", "KYC", "KYC and SANCTIONED", "SANCTIONED", "ELIGIBLE_CONTRACT, by the admin",
             "ELIGIBLE_CONTRACT and SANCTIONED, by the admin", "KYC lapsed", "KYC, validUntil == now",
-            "KYC and SANCTIONED, attester disabled", "SANCTIONED lapsed", "KYC, by the admin"];
+            "KYC and SANCTIONED, KYC provider disabled", "SANCTIONED lapsed", "KYC, by the admin"];
         Acct[] memory as_ = new Acct[](11);
         for (uint256 i; i < 11; ++i) as_[i] = Acct(nm[i], nid(address(uint160(0xA0 + i))));
         uint64 max = type(uint64).max;
@@ -178,7 +178,7 @@ contract RegulatedKatTest is RegFixture {
         _attest(as_[9].id, SANCTIONED, N - 1);
         _attestAs(cadmin, as_[10].id, KYC, max);
         vm.prank(cadmin);
-        creg.setAttester(att2, false);
+        creg.setKycProvider(nid(att2), false);
         address[4] memory ts;
         ts[0] = t8;
         ts[1] = _listed(0, KYC, 0, "A");
@@ -556,7 +556,7 @@ contract RegulatedKatTest is RegFixture {
             " keccak256(abi.encode(orderId, subject, beneficiary)), the key the token stores the order under. receiver: canReceive(account)",
             " (ok, reason) of a token with ALLOWLIST (requiredFlags) and DENYLIST (deniedFlags) on or off; ok equals hasFlags(account,",
             " ALLOWLIST ? requiredFlags : 0, DENYLIST ? deniedFlags : 0), both off true with no call; reason 1 not attested or flags",
-            " missing, 2 expired, 3 attester disabled, 4 denied. freeze: one row per transition of spec 3.3 on freezeOf(account), the",
+            " missing, 2 expired, 3 KYC provider disabled, 4 denied. freeze: one row per transition of spec 3.3 on freezeOf(account), the",
             " state before (record: the order the call names, read before it) and after, F after (isFrozen), or the revert (sig, args,",
             " data); a row with call null is time or a feature going, the state unchanged. commit: pendingGrant(bit, account).commit",
             " after the proposal, keccak256(abi.encode(uint8 action, uint8 bit, bytes32 account, argsHash)), argsHash",

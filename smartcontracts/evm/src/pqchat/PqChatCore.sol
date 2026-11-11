@@ -32,7 +32,7 @@ abstract contract PqChatCore {
     }
 
     struct Topic {
-        bytes32 owner; // 0 = unknown
+        bytes32 admin; // 0 = unknown
         address record; // the create record's head blob
         uint64 seq;
         bool openReplies;
@@ -75,7 +75,7 @@ abstract contract PqChatCore {
         mapping(bytes32 => mapping(bytes32 => Vote)) votes;
         mapping(bytes32 => Score) scores;
         bytes32[] allTopics;
-        mapping(bytes32 => bytes32[]) topicsByOwner;
+        mapping(bytes32 => bytes32[]) topicsByAdmin;
         mapping(bytes32 => bytes32[]) writersOf;
         mapping(bytes32 => bytes32[]) posts;
         mapping(bytes32 => bytes32[]) replies;

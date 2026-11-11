@@ -169,7 +169,8 @@ def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
     """Sections 8 and 9: the regulated PQZ kinds, then the public layer of every kind signed by an ML-DSA-65 UA."""
     alice, bob = U["alice"], U["bob"]
     E.log("\n## 8. (T66b Step 5b) the regulated PQZ kinds 12 and 13 (DENYLIST on a ComplianceRegistry, no account denied)")
-    cr = D.deploy("ComplianceRegistry", E.encs(["w"], [E.CREATE2_DEPLOYER]), label="ComplianceRegistry")
+    # round 3r: (bytes32 admin, address govRouter): the deployer contract's native id, no router
+    cr = D.deploy("ComplianceRegistry", E.encs(["w", "w"], [E.CREATE2_DEPLOYER, 0]), label="ComplianceRegistry")
 
     def create_reg(kind, name, sym, legs, dmode, amode, feat, salt):
         conf = [aud.ua if amode else b"", E.SCALE, E.MAXS, E.FEE, dmode, amode, E.MIN_DECOY, 0, 0, 0, 0]
@@ -455,7 +456,9 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     fac2 = D.deploy("OpenFactory", E.encs(["w"], [sd.addr]), label="OpenFactory#notice")
     ref_b = int(_rpc0("eth_blockNumber", []), 16) - 1
     ref_h = E.hb(_rpc0("eth_getBlockByNumber", [hex(ref_b), False])["hash"])
-    sd.send(fac2, E.cd("configureChain(bytes32,uint64,address,uint256,bytes32)", ["w"] * 5, E.CTX[1], N, router, ref_b, ref_h),
+    router_h = E.keccak256(E.hb(_rpc0("eth_getCode", [router, "latest"])))  # spec §13.3: the router's code hash
+    sd.send(fac2, E.cd("configureChain(bytes32,uint64,address,bytes32,uint256,bytes32)", ["w"] * 6, E.CTX[1], N, router, router_h,
+                       ref_b, ref_h),
             "factory 2 configureChain (notice 30 s)")
     code, libs = D.linked("NormalPqzToken")
     ms = []
@@ -465,11 +468,11 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         ms.append(D.deploy2(mn, E.encs(["w", "b"], [fac2, E.core_args(4)]), f"module {mn} (factory 2)", src=src))
     libs += ms
     hashes = [E.keccak256(E.hb(_rpc0("eth_getCode", [x, "latest"]))) for x in libs]
-    sd.send(fac2, E.cd(f"publishEnv(uint8,uint16,{E.ENV_S})", ["w", "w", E.ENV], 4, 1, [reg, 0, 0, [0], [], libs, hashes]),
-            "factory 2 publishEnv(kind 4, 1), deps [0x0]")
+    sd.send(fac2, E.cd(f"publishTokenEnv(uint8,uint16,{E.ENV_S})", ["w", "w", E.ENV], 4, 1, [reg, 0, 0, [0], [], libs, hashes]),
+            "factory 2 publishTokenEnv(kind 4, 1), deps [0x0]")
     sd.send(fac2, E.cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"], 4, 1, 1, code,
                        E.impl_args(4, ms)), "factory 2 deployTokenImplementation(kind 4, 1)")
-    sd.send(fac2, E.cd("setKindEnabled(uint8,bool)", ["w", "w"], 4, 1), "factory 2 setKindEnabled(4, true)")
+    sd.send(fac2, E.cd("setTokenKindEnabled(uint8,bool)", ["w", "w"], 4, 1), "factory 2 setTokenKindEnabled(4, true)")
     # a release on a factory with a notice period is usable only after it (VersionNotYetUsable)
     t0 = int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16)
     while int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16) <= t0 + N + 1:

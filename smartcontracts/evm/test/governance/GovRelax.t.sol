@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
@@ -409,10 +410,10 @@ contract GovRelaxTest is Test {
         vm.prank(issuer);
         a.renounceRole(FREEZE);
         vm.prank(STRANGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(STRANGER)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(STRANGER)));
         a.cancelGrant(FREEZE, nid(issuer));
         vm.prank(compliance); // a holder of another bit, not the proposer
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(compliance)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(compliance)));
         a.cancelGrant(FREEZE, nid(issuer));
         vm.expectEmit(true, true, true, true, address(a));
         emit IGovernance.GrantCancelled(FREEZE, nid(issuer), nid(issuer));

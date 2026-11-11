@@ -18,7 +18,7 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 /// @notice **UNAUDITED.** Measured first with kind 13 (plan T27); FREEZE, RECORD, FORCE, PAUSE and the fee seats built
 ///         (T28). The wrap payer and the wrap order reach the regulated hooks through `WrappedToken`'s seats.
 abstract contract WrappedRegulatedTokenCore is WrappedTokenCore, RegulatedBase {
-    /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
+    /// @dev `implArgs = abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` (plan T29).
     constructor(address factory_, bytes memory implArgs)
         WrappedTokenCore(factory_, implArgs)
         RegulatedBase(implArgs)

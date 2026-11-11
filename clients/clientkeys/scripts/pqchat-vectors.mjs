@@ -241,7 +241,7 @@ write('messages.json', {
 // ------------------------------------------------------------------ topics (public topics spec §2)
 const tid = hex(pc.topicId(alice.ua, 11));
 const md = 'text/markdown';
-const topic = { owner: alice.ua, nonce: 11, homeChain, homeChatContract, name: 'PqChat vectors', about: utf8('# PqChat vectors\n\nA topic for the vectors.\n'),
+const topic = { admin: alice.ua, nonce: 11, homeChain, homeChatContract, name: 'PqChat vectors', about: utf8('# PqChat vectors\n\nA topic for the vectors.\n'),
   openReplies: true };
 const update = { topicId: tid, seq: 1, name: 'PqChat vectors, renamed', about: utf8('# Renamed\n\nReplies by writers only.\n'), openReplies: false };
 const writer = { topicId: tid, writer: bob.ua, granted: true, seq: 1 };
@@ -258,9 +258,9 @@ const topicRow = (struct, s, who, x = {}) => recordRow(struct, s, who, { ...x, s
 const replyRow = topicRow('PqTopicEntry', reply, carol, { id: replyId, scope: pc.scopeEntry(tid, carol.ua) });
 write('topics.json', {
   _comment: `${COMMON} Public topics (topics spec P35, P36). Domain, purpose and signing as records.json (the same DS_C, PURPOSE_PQCHAT, `
-    + 'kind 0x0131, the signers of records.json). Ids: topicId = keccak256(abi.encode(tag topic, owner, uint64 nonce)); entryId = '
+    + 'kind 0x0131, the signers of records.json). Ids: topicId = keccak256(abi.encode(tag topic, admin, uint64 nonce)); entryId = '
     + 'keccak256(abi.encode(tag entry, topicId, author, uint64 nonce)). Scopes (3C-D5): topic keccak256(abi.encode(tag scope/topic, '
-    + 'owner)); entries and edits keccak256(abi.encode(tag scope/entry, topicId, author)), an edit under its original\'s topicId; '
+    + 'admin)); entries and edits keccak256(abi.encode(tag scope/entry, topicId, author)), an edit under its original\'s topicId; '
     + 'update, writer and vote replace a value by seq and have no scope. Each row: uaSig a real ML-DSA-65 signature over '
     + 'uaMessage.digest, sigHash = keccak256(abi.encode(UASig)), blob = abi.encode(record as its ABI tuple, sigHash) (P39, 3C-D3); '
     + 'int8 value as its sign-extended word (-1 = 0xff…ff). post: a post (parentId 0) with ref all zero; reply: every field '

@@ -26,7 +26,7 @@ import "../zether/ZetherTypes.sol";
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract NormalRegulatedTokenP is NormalRegulatedTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) NormalRegulatedTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -240,7 +240,7 @@ contract NormalRegulatedTokenP is NormalRegulatedTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract NormalRegulatedTokenT is NormalRegulatedTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) NormalRegulatedTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -300,7 +300,7 @@ contract NormalRegulatedTokenT is NormalRegulatedTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract NormalRegulatedTokenA is NormalRegulatedTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) NormalRegulatedTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -477,7 +477,7 @@ contract NormalRegulatedTokenA is NormalRegulatedTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract NormalRegulatedTokenR is NormalRegulatedTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) NormalRegulatedTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {

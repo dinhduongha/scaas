@@ -39,7 +39,7 @@ contract ReceiverTest is RegFixture {
         assertEq(o, creg.hasFlags(a, req, den), string.concat(what, ": agrees with hasFlags"));
     }
 
-    /// Reasons (spec §3.1): 1 not attested or flags missing, 2 expired, 3 attester disabled, 4 denied; 0 when it may
+    /// Reasons (spec §3.1): 1 not attested or flags missing, 2 expired, 3 KYC provider disabled, 4 denied; 0 when it may
     /// receive. Both lists, `DENYLIST` alone, both off (no call).
     function test_canReceiveReasons() public {
         for (uint256 i; i < 2; ++i) {
@@ -57,10 +57,10 @@ contract ReceiverTest is RegFixture {
             _reason(t, b, false, 2, KYC, SANCTIONED, "expired");
             _attest(b, KYC, MAX);
             vm.prank(cadmin);
-            creg.setAttester(attester, false);
-            _reason(t, b, false, 3, KYC, SANCTIONED, "attester disabled");
+            creg.setKycProvider(nid(attester), false);
+            _reason(t, b, false, 3, KYC, SANCTIONED, "KYC provider disabled");
             vm.prank(cadmin);
-            creg.setAttester(attester, true);
+            creg.setKycProvider(nid(attester), true);
             _attest(b, KYC | SANCTIONED, MAX);
             _reason(t, b, false, 4, KYC, SANCTIONED, "denied");
             _attestAs(cadmin, b, ELIGIBLE, MAX);

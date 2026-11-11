@@ -105,6 +105,7 @@ equal everywhere.
 | Registry: router ops | the draft's `UASetAttester(…,bytes32 attester,bool enabled,…)` / `mtxSetAttester` and `UAAttest(…,bytes32[] accounts,uint64[] flags,uint64[] until,…)` / `mtxAttest` (never built) | `UASetKycProvider(…,bytes32 provider,bool enabled,…)` / `mtxSetKycProvider`; `UASetCompliance(…,bytes32[] accounts,uint64[] flags,uint64[] until,…)` / `mtxSetCompliance` |
 | Registry: readers | `RegulatedBase` (`attestationOf`, `attesterEnabled`, `canReceive` reason 3 "attester disabled"), `IRegulatedToken`, `IComplianceRegistry`, the node's `abi.rs` / `dex/venue.rs`, clientkeys `regulated.js` (`attesterEnabled`), `regulated_kat.json` | `complianceOf`, `kycProviderEnabled`, reason 3 "KYC provider disabled", the same names everywhere; `hasFlags`, `LengthMismatch`, `EligibleContractAdminOnly`, `AdminWrittenSlot`, `admin` unchanged |
 | Compliance registry names in the regulated code (owner 2026-11-10: unambiguous next to `UARegistry`) | `RegulatedBase.REGISTRY_CODEHASH` (public immutable, in the faces' `entries.json` and `ITokenModule`); `RegulatedImplArgs.registryCodehash`; `RegulatedLib.init(…, bytes32 registryCodehash, address uaRegistry)`; `IRegulatedToken.RegistryCodeMismatch(address registry, bytes32 codehash)`, `RegistryUnavailable(address registry)`, `RegistryGasStarved(uint256 cap, uint256 left)`; `RegulatedBase.REGISTRY_GAS`, `REGISTRY_GAS_MARGIN`; `DeployBase._registryCodehash()`; the draft's `RegistryRouterMismatch` | `COMPLIANCE_REGISTRY_CODEHASH`; `complianceRegistryCodehash`; `init(…, bytes32 complianceRegistryCodehash, address uaRegistry)`; `ComplianceRegistryCodeMismatch(address complianceRegistry, bytes32 codehash)`, `ComplianceRegistryUnavailable(address complianceRegistry)`, `ComplianceRegistryGasStarved(uint256 cap, uint256 left)`; `COMPLIANCE_REGISTRY_GAS`, `COMPLIANCE_REGISTRY_GAS_MARGIN`; `_complianceRegistryCodehash()`; `ComplianceRegistryRouterMismatch(address complianceRegistry, address got)`. The contract keeps its name `ComplianceRegistry` (a full deploy pinned by code hash, no factory clone class). Not renamed: `complianceRegistry` (already explicit), `IComplianceRegistry`, `RegulatedBase._registry()` and `uaRegistry` (they are the UA registry), `_requireRegistryGas` in `DeployBase` (the UA registry's verify budget), short locals (`reg`, `_regCall`), the test file and contract names of `test/as/Registry.t.sol`, and the node's `compliance_registry_codehash` (already explicit) |
+| The factory's token member of each token / DEX / class triple (owner 2026-11-11: "UADeprecateToken chứ?"; the two others the controller's, for consistency) | `publishEnv`, `deprecate`, `setKindEnabled`; the views `envOf`, `latestEnvVersion`, `isDeprecated`, `kindEnabled`; the events `ImplementationDeprecated`, `KindEnabled`; the router's `UAPublishEnv` / `mtxPublishEnv`, `UADeprecate` / `mtxDeprecate`, `UASetKindEnabled` / `mtxSetKindEnabled` (§5.4, never built) | `publishTokenEnv`, `deprecateToken`, `setTokenKindEnabled`; `tokenEnvOf`, `latestTokenEnvVersion`, `isTokenDeprecated`, `tokenKindEnabled`; `TokenImplementationDeprecated`, `TokenKindEnabled`; `UAPublishTokenEnv` / `mtxPublishTokenEnv`, `UADeprecateToken` / `mtxDeprecateToken`, `UASetTokenKindEnabled` / `mtxSetTokenKindEnabled`. Renamed only where the DEX or class sibling carries `Dex` / `Class` (`dexEnvOf`, `classKindEnabled`, `isDexDeprecated`, `DexImplementationDeprecated`, `ClassKindEnabled`, …). Not renamed: `EnvPublished` (the token kinds' and the DEX's, by domain), `deployTokenImplementation`, `approveTokenRelease` (already `Token`), and the rest of the token side (`releaseOf`, `implementationOf`, `latestVersion`, `ImplementationDeployed`, the errors `KindDisabled`, `VersionDeprecated`, …) |
 
 One shared interface, `IAdmin` (`src/governance/IAdmin.sol`): `admin()`, `pendingAdmin()`, `transferAdmin(bytes32)`,
 `acceptAdmin()`, the two events, `NotAdmin(bytes32)`, `NotPendingAdmin(bytes32)`. `IGovernance is IAdmin` and adds
@@ -148,6 +149,13 @@ nonce scope likewise; only the field name and `TOPIC_TYPEHASH` change.
 | `RegistryUnavailable(address)` | `0x2466be0b` | `ComplianceRegistryUnavailable(address)` | `0x4c06f1f3` |
 | `RegistryGasStarved(uint256,uint256)` | `0xaf0824dc` | `ComplianceRegistryGasStarved(uint256,uint256)` | `0x966a8ed1` |
 | `RegistryRouterMismatch(address,address)` (draft, never built) | `0x8b4535bc` | `ComplianceRegistryRouterMismatch(address,address)` | `0x6c36f6ee` |
+| `publishEnv(uint8,uint16,Env)` | `0x79f23f46` | `publishTokenEnv(uint8,uint16,Env)` | `0x15735a6c` |
+| `deprecate(uint8,uint64,string)` | `0xcd26d6c9` | `deprecateToken(uint8,uint64,string)` | `0xb7fdb2fa` |
+| `setKindEnabled(uint8,bool)` | `0x3941ae68` | `setTokenKindEnabled(uint8,bool)` | `0xbb4aac3a` |
+| `envOf(uint8,uint16)` | `0xbb072443` | `tokenEnvOf(uint8,uint16)` | `0x4ae0f85a` |
+| `latestEnvVersion(uint8)` | `0xfeb1775e` | `latestTokenEnvVersion(uint8)` | `0xcaf571af` |
+| `isDeprecated(uint8,uint64)` | `0x5fdcad9a` | `isTokenDeprecated(uint8,uint64)` | `0x40d34668` |
+| `kindEnabled(uint8)` | `0xcb196d20` | `tokenKindEnabled(uint8)` | `0xffb1d907` |
 
 The `mtx*` selectors are over `(UAEnvelope, address target[, bytes32], UASig)` as `typed_ops.json:8016` pins the old one.
 
@@ -169,6 +177,8 @@ The `mtx*` selectors are over `(UAEnvelope, address target[, bytes32], UASig)` a
 | `PqTopic(bytes32 owner,…)` | `0x75bed97b…` | `PqTopic(bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)` | `0x66954727…` |
 | `UASetAttester` (draft, never built) | `0xbd91b79a…` | `UASetKycProvider(bytes32 from,address target,bytes32 provider,bool enabled,E)` | `0x297e6c85…` |
 | `UAAttest` (draft, never built) | `0x1e48485c…` | `UASetCompliance(bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,E)` | `0x0c697df1…` |
+| `KindEnabled(uint8,bool)` | `0x437ef05e…` | `TokenKindEnabled(uint8,bool)` | `0x5c5afa9d…` |
+| `ImplementationDeprecated(uint8,uint64,string)` | `0x78f6ee1e…` | `TokenImplementationDeprecated(uint8,uint64,string)` | `0x70d98086…` |
 
 `E` is the seven envelope words (`uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address
 feeRecipient`). The registry rows of §4.2 and §4.3 were recomputed with `cast sig` / `cast keccak` on 2026-11-10 (the KYC
@@ -297,21 +307,21 @@ In `GovernanceRouterBase` (every `IAdmin` contract): the three renamed ops, whic
 their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creations
 (`src/governance/GovernanceRouter.sol:215-241`), fifteen new ops (the four of §5.6, `UASetChainEntries` from §13), each
 `mtx<Op>(UAEnvelope e, address target, <params>, UASig auth)` over `UA<Op>(bytes32 from,address target,<words>,E)`, fee mode
-`NONE`, relayable at fee 0:
+`NONE`, relayable at fee 0 (the token members named `Token`, owner 2026-11-11, §4.1):
 
 | Op | Signed words after `target` | Calls |
 |---|---|---|
-| `UAPublishEnv` | `uint8 kind,uint16 envVersion,Env env` | `publishEnv` |
+| `UAPublishTokenEnv` | `uint8 kind,uint16 envVersion,Env env` | `publishTokenEnv` |
 | `UAPublishDexEnv` | `uint16 envVersion,Env env` | `publishDexEnv` |
 | `UAPublishClassEnv` | `uint16 contractClass,uint16 kind,uint16 envVersion,Env env` | `publishClassEnv` |
 | `UAApproveTokenRelease` | `uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveTokenRelease` (§5.6) |
 | `UAApproveDexRelease` | `uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveDexRelease` |
 | `UAApproveRelease` | `uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveRelease` |
 | `UARevokeApproval` | `bytes32 key` | `revokeApproval` |
-| `UADeprecate` | `uint8 kind,uint64 version,string reason` | `deprecate` |
+| `UADeprecateToken` | `uint8 kind,uint64 version,string reason` | `deprecateToken` |
 | `UADeprecateDex` | `uint64 version,string reason` | `deprecateDex` |
 | `UADeprecateRelease` | `uint16 contractClass,uint16 kind,uint64 version,string reason` | `deprecateRelease` |
-| `UASetKindEnabled` | `uint8 kind,bool on` | `setKindEnabled` |
+| `UASetTokenKindEnabled` | `uint8 kind,bool on` | `setTokenKindEnabled` |
 | `UASetClassKindEnabled` | `uint16 contractClass,uint16 kind,bool on` | `setClassKindEnabled` |
 | `UASetKycProvider` | `bytes32 provider,bool enabled` | `ComplianceRegistry.setKycProvider` |
 | `UASetCompliance` | `bytes32[] accounts,uint64[] flags,uint64[] until` | `ComplianceRegistry.setCompliance` (the admin or a KYC provider, §5.3.1) |
@@ -529,8 +539,8 @@ router each write rows under their own id; a derived provider's id called direct
 `KycProviderZero`; 257 rows `TooManyRows`; the old selectors (`setAttester`, `attest`, `attestationOf`, `attesterEnabled`,
 `attesterId`) revert with no data; the `RegulatedKat` rows regenerated and equal.
 
-**Field binding of every new signed op** (Fable P1-3): for each op (`UAPublishEnv`, `UAPublishDexEnv`, `UAPublishClassEnv`,
-`UADeprecate`, `UADeprecateDex`, `UADeprecateRelease`, `UASetKindEnabled`, `UASetClassKindEnabled`, `UASetKycProvider`, `UASetCompliance`,
+**Field binding of every new signed op** (Fable P1-3): for each op (`UAPublishTokenEnv`, `UAPublishDexEnv`, `UAPublishClassEnv`,
+`UADeprecateToken`, `UADeprecateDex`, `UADeprecateRelease`, `UASetTokenKindEnabled`, `UASetClassKindEnabled`, `UASetKycProvider`, `UASetCompliance`,
 `UASetChainEntries`, `UAApproveTokenRelease`, `UAApproveDexRelease`, `UAApproveRelease`, `UARevokeApproval`), a
 matrix test that changes one signed word at a time against the signature (each scalar; for each array one element, the length
 and the order; the bytes of `reason`) and expects the router's refusal, with a positive control (the untouched call passes); one

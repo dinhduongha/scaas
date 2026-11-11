@@ -28,7 +28,8 @@ flock -n 9 || { echo "gates.sh: another run holds $EVM/out/m3r-gates.lock"; exit
 
 step() {
   case $1 in
-    size) (cd $EVM && mkdir -p out/m3r-sizes && FOUNDRY_OUT=out/m3r-sizes FOUNDRY_CACHE_PATH=cache/m3r-sizes "$C" forge build src \
+    size) # the default out/: size_gate.py measures the libraries from out/<file>.sol/ next to the baseline
+      (cd $EVM && mkdir -p out/m3r-sizes && FOUNDRY_OUT=out FOUNDRY_CACHE_PATH=cache "$C" forge build src \
         --sizes --json > out/m3r-sizes/sizes.json && python3 ../../scripts/size_gate.py out/m3r-sizes/sizes.json size-baseline.json) ;;
     forge-top) # the files directly in test/, copied to a sibling directory (their `../src` imports hold) so the compile set is
       # theirs alone (sparse mode over test/ was OOM-killed at 4 GB); the copy is removed after

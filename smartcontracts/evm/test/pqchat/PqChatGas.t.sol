@@ -28,9 +28,11 @@ contract Create2Once {
 /// exact; a move needs old -> new figures in its commit.
 contract PqChatGasTest is PqTopicsBase {
     uint256 internal constant SLACK = 500;
-    uint256 internal constant RUNTIME = 27_825;
-    uint256 internal constant RELEASE_REGULAR = 1_908_760;
-    uint256 internal constant RELEASE_STATE = 43_147_530;
+    // round 3r T4 (R1, Q4: `factoryInfo()` six words, no owner): 27,825 -> 27,801 B; regular 1,908,760 -> 1,906,679; state
+    // 43,147,530 -> 43,110,810 (-24 x 1,530)
+    uint256 internal constant RUNTIME = 27_801;
+    uint256 internal constant RELEASE_REGULAR = 1_906_679;
+    uint256 internal constant RELEASE_STATE = 43_110_810;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
     uint256 internal constant MODULE_RUNTIME = 16_398;
@@ -185,7 +187,7 @@ contract PqChatGasTest is PqTopicsBase {
     function test_gas_topics() public {
         IPqChat.PqTopic memory t = _topicRec(ids[0], 1, true);
         t.about = new bytes(256);
-        IUARegistry.UASig memory sig = _sig(t.owner, h.topic(t));
+        IUARegistry.UASig memory sig = _sig(t.admin, h.topic(t));
         vm.prank(STRANGER);
         bytes32 tid = chat.createTopic(t, sig);
         _row("createTopic 256 B about", 179_045, 1_851_300);
@@ -277,6 +279,8 @@ contract PqChatGasTest is PqTopicsBase {
         bytes memory init = abi.encodeCall(IPqChat.initialize, (OWNER_UA));
         vm.prank(STRANGER);
         f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "gas", init);
-        _row("createInstance PqChat", 227_583, 1_523_880);
+        // round 3r T4 (R1: no owner word in the record, no owner list, no `factoryInfo().ownerUA`): 227,583 / 1,523,880 ->
+        // 188,761 / 1,328,040 (state -2 x 97,920)
+        _row("createInstance PqChat", 188_761, 1_328_040);
     }
 }

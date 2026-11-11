@@ -5,6 +5,7 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
@@ -97,7 +98,6 @@ contract FactoryGenericKindTest is Test {
         IOpenFactory.Created memory c = f.infoOf(b);
         assertEq(c.addr, b);
         assertEq(c.creatorId, nid(relayer));
-        assertEq(c.ownerUA, nid(alice));
         assertEq(c.contractClass, 4);
         assertEq(c.kind, 0);
         assertEq(c.version, 1);
@@ -106,8 +106,6 @@ contract FactoryGenericKindTest is Test {
         (IOpenFactory.Created[] memory p, uint256 n) = f.contractsPage(4, 0, 10);
         assertEq(n, 2);
         assertEq(p[0].addr, a);
-        (p, n) = f.contractsOfOwner(nid(alice), 4, 0, 10);
-        assertEq(n, 2);
         (p, n) = f.contractsOfCreator(nid(relayer), 4, 0, 10);
         assertEq(n, 1);
         assertEq(p[0].addr, b);
@@ -198,7 +196,7 @@ contract FactoryGenericKindTest is Test {
         bytes memory code = type(BadKind).creationCode;
         bytes4 sel = INoteKind.initialize.selector;
         bytes4 iface = type(INoteKind).interfaceId;
-        for (uint8 m = 1; m <= 9; ++m) { // another factory, class, kind, version; uninitialized; an owner; 192 B; 256 B; none
+        for (uint8 m = 1; m <= 9; ++m) { // another factory, class, kind, version; uninitialized; the pre-3r 224 B; 160 B; 256 B; none
             address at = vm.computeCreate2Address(keccak256(abi.encode("release", _id(4, 0, 1))),
                 keccak256(bytes.concat(code, abi.encode(_id(4, 0, 1), address(f), abi.encode(m)))), address(f));
             vm.prank(registrar);
@@ -317,14 +315,14 @@ contract FactoryGenericKindTest is Test {
         assertEq(f.creating(), bytes32(0));
     }
 
-    function test_generic_registrarOnly() public {
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+    function test_generic_adminOnly() public {
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.publishClassEnv(4, 0, 1, _env());
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
         f.deployImplementation(_id(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, "", "");
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.deprecateRelease(_id(4, 0, 1), "x");
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.setClassKindEnabled(4, 0, true);
         vm.etch(registrar, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(registrar);
@@ -364,20 +362,21 @@ contract FactoryGenericKindTest is Test {
         assertEq(n, 0);
     }
 
-    /// Slots (spec §3, §8.9): a generic creation writes the index's +5 steady / +7 first, as a token's.
+    /// Slots (spec §3, §8.9): a generic creation writes the index's +4 steady / +5 first, as a token's (3r R1: no owner
+    /// word, no owner list; T67 +6 / +8).
     function test_generic_slotCount() public {
         _publish(4, 0, 1);
         _note(1);
         vm.warp(block.timestamp + NOTICE);
         _enable(4, 0, true);
-        f.createInstance(_id(4, 0, 1), "seed", _noteCall(nid(alice), "")); // the creator, owner and class lists exist
+        f.createInstance(_id(4, 0, 1), "seed", _noteCall(nid(alice), "")); // the creator and class lists exist
         vm.startStateDiffRecording();
         f.createInstance(_id(4, 0, 1), "steady", _noteCall(nid(alice), ""));
-        assertEq(_newSlots(address(f)), 6, "record 3, three elements");
+        assertEq(_newSlots(address(f)), 4, "record 2, two elements");
         vm.startStateDiffRecording();
         vm.prank(relayer);
         f.createInstance(_id(4, 0, 1), "first", _noteCall(nid(address(0x0A)), ""));
-        assertEq(_newSlots(address(f)), 8, "record 3, three elements, two first list lengths");
+        assertEq(_newSlots(address(f)), 5, "record 2, two elements, the creator list's first length");
     }
 
     function _newSlots(address who) internal returns (uint256 m) {

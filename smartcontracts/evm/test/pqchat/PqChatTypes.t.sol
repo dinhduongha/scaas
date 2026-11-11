@@ -64,7 +64,7 @@ contract PqChatTypesTest is Test {
     }
 
     function test_pqtopicTypehashIsPinned() public view {
-        assertEq(PqChatTypes.TOPIC_TYPEHASH, 0x75bed97bd08d9acabb9129fcd4953224878dd1dcfd40b822cb4dc8df462e1623);
+        assertEq(PqChatTypes.TOPIC_TYPEHASH, 0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e); // 3r: `admin`
         assertEq(PqChatTypes.TOPIC_UPDATE_TYPEHASH, 0x91027af710f50981ddd96a8956a4741037e30cdb39510c7ccc497d9d7e95fd43);
         assertEq(PqChatTypes.TOPIC_WRITER_TYPEHASH, 0x98c6762cb0fe12a3e571a6e57e5356db25bd35abf3e71ee230c87c1a3979c6d6);
         assertEq(PqChatTypes.TOPIC_ENTRY_TYPEHASH, 0x52078674040d84432edab865e567b3fe279100575e5d4496f6be51acf924c32c);
@@ -189,13 +189,13 @@ contract PqChatTypesTest is Test {
 
     function test_topicVectors() public view {
         string memory p = ".topic.record";
-        IPqChat.PqTopic memory t = IPqChat.PqTopic(_b32(top, string.concat(p, ".owner")), _u64(top, string.concat(p, ".nonce")),
+        IPqChat.PqTopic memory t = IPqChat.PqTopic(_b32(top, string.concat(p, ".admin")), _u64(top, string.concat(p, ".nonce")),
             _b32(top, string.concat(p, ".homeChain")), vm.parseJsonAddress(top, string.concat(p, ".homeChatContract")),
             vm.parseJsonString(top, string.concat(p, ".name")), vm.parseJsonBytes(top, string.concat(p, ".about")),
             vm.parseJsonBool(top, string.concat(p, ".openReplies")));
         assertEq(h.topic(t), _b32(top, ".topic.typed"));
-        assertEq(PqChatTypes.topicId(t.owner, t.nonce), _b32(top, ".topic.id"));
-        assertEq(PqChatTypes.scopeTopic(t.owner), _b32(top, ".topic.scope"));
+        assertEq(PqChatTypes.topicId(t.admin, t.nonce), _b32(top, ".topic.id"));
+        assertEq(PqChatTypes.scopeTopic(t.admin), _b32(top, ".topic.scope"));
         assertEq(abi.encode(t, keccak256(abi.encode(_uaSig(top, ".topic.uaSig")))), vm.parseJsonBytes(top, ".topic.blob"));
         p = ".update.record";
         IPqChat.PqTopicUpdate memory u = IPqChat.PqTopicUpdate(_b32(top, string.concat(p, ".topicId")),

@@ -107,7 +107,7 @@ fn regulated_kat_receiver_table() {
         let a = Attestation {
             flags: num(&r["flags"]) as u64,
             valid_until: num(&r["validUntil"]) as u64,
-            attester_enabled: r["attesterEnabled"].as_bool().unwrap(),
+            attester_enabled: r["kycProviderEnabled"].as_bool().unwrap(),
         };
         let req = r["allowlist"].as_bool().unwrap().then(|| num(&r["requiredFlags"]) as u64);
         let den = r["denylist"].as_bool().unwrap().then(|| num(&r["deniedFlags"]) as u64);

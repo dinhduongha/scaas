@@ -92,7 +92,7 @@ contract GovProofBitTest is PqzOffchainBase {
         nId = nid(vm.addr(NKEY));
         owner_ = nid(address(this));
         router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
-        f = new OpenFactory(registrar);
+        f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
         IFactoryToken.Env memory e = pqzEnv(address(f), PQZ_UID, address(reg), address(pqv));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, e, type(NormalPqzToken).creationCode);
@@ -102,10 +102,10 @@ contract GovProofBitTest is PqzOffchainBase {
         Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e, type(WrappedPqzRegulatedToken).creationCode,
             regArgs());
         vm.startPrank(registrar);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
         vm.stopPrank();
     }
 
@@ -189,7 +189,7 @@ contract GovProofBitTest is PqzOffchainBase {
         c.features |= m;
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL, 1, _plain(), type(NormalToken).creationCode);
         vm.prank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL, true);
         c.conf = IFactoryToken.ConfidentialConfig("", 0, 0, 0, 0, 0, 0, 0, bytes32(0), false, 0);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, BIT));
         factory.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "plain-24");

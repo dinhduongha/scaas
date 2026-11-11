@@ -12,6 +12,7 @@ import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {DexPuller} from "../../src/dex/DexPuller.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IRescuable} from "../../src/governance/IRescuable.sol";
 import {GovernanceBase, GovernanceBaseCore} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
@@ -346,7 +347,7 @@ contract GovDelayTest is Test {
         assertFalse(_live(MANAGER));
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, OWNER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, OWNER));
         t.grantRole(MINT, nid(MANAGER));
         assertFalse(t.hasRole(MINT, nid(MANAGER)));
     }
@@ -500,7 +501,7 @@ contract GovDelayTest is Test {
     function test_cancelGrantLiveAndDead() public {
         _grant(MANAGER);
         vm.prank(MANAGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, MANAGER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, MANAGER));
         t.cancelGrant(MINT, nid(MANAGER));
         vm.expectEmit(address(t));
         emit IGovernance.GrantCancelled(MINT, nid(MANAGER), nid(OWNER));

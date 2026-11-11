@@ -28,7 +28,7 @@ import "../zether/ZetherTypes.sol";
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedPqzTokenP is WrappedPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -222,7 +222,7 @@ contract WrappedPqzTokenP is WrappedPqzTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedPqzTokenT is WrappedPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -286,7 +286,7 @@ contract WrappedPqzTokenT is WrappedPqzTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedPqzTokenA is WrappedPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -439,7 +439,7 @@ contract WrappedPqzTokenA is WrappedPqzTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedPqzTokenW is WrappedPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -591,7 +591,7 @@ contract WrappedPqzTokenW is WrappedPqzTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedPqzTokenQ is WrappedPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {
@@ -703,7 +703,7 @@ contract WrappedPqzTokenQ is WrappedPqzTokenCore {
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract WrappedPqzTokenS is WrappedPqzTokenCore {
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) WrappedPqzTokenCore(factory_, args) {}
 
     function moduleGroup() external pure returns (uint8) {

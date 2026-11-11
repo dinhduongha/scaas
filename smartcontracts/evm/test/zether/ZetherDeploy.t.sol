@@ -62,7 +62,7 @@ contract ZetherDeployTest is Test {
         for (uint8 k = 2; k <= 3; ++k) {
             IOpenFactory.Release memory rel = f.releaseOf(IOpenFactory.TokenKind(k), c + 1);
             assertEq(rel.envVersion, c + 1);
-            IFactoryToken.Env memory e = f.envOf(IOpenFactory.TokenKind(k), c + 1);
+            IFactoryToken.Env memory e = f.tokenEnvOf(IOpenFactory.TokenKind(k), c + 1);
             assertEq(rel.envHash, keccak256(abi.encode(e)));
             assertEq(e.deps[0], tv);
             assertEq(e.deps[1], bv);
@@ -91,8 +91,8 @@ contract ZetherDeployTest is Test {
     function test_devChain_registersBothConfidentialKinds() public {
         DeployHarness h = new DeployHarness();
         (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
-        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
-        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
+        assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+        assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
         NormalZetherToken none = NormalZetherToken(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1));
         WrappedZetherToken und =
             WrappedZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1)));
@@ -109,10 +109,10 @@ contract ZetherDeployTest is Test {
         address dis = _at(h, type(ZetherDisclosure).creationCode);
         // chain-neutral releases (plan T72): the releases carry no env; the published envs name them, every clone reads them
         assertEq(none.registry(), address(0), "a release carries no env");
-        assertEq(f.envOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).registry, reg);
-        assertEq(f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).deps[3], dis);
-        assertEq(f.envOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).smartKeyAccountImpl, ska);
-        assertEq(f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).smartKeyAccountImpl, ska);
+        assertEq(f.tokenEnvOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).registry, reg);
+        assertEq(f.tokenEnvOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).deps[3], dis);
+        assertEq(f.tokenEnvOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).smartKeyAccountImpl, ska);
+        assertEq(f.tokenEnvOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).smartKeyAccountImpl, ska);
         assertEq(address(und.disclosure()), address(0));
         // the JSON keys the node and Odoo read
         assertEq(vm.parseJsonAddress(json, ".zether_disclosure"), dis);
@@ -159,7 +159,7 @@ contract ZetherDeployTest is Test {
             vm.chainId(ids[i]);
             DeployHarness h = new DeployHarness();
             (OpenFactory f,) = h.deploy(ZUID, false, ska);
-            assertFalse(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+            assertFalse(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1), address(0));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1), address(0));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) == address(0), false, "the public kinds still");
@@ -176,8 +176,8 @@ contract ZetherDeployTest is Test {
             vm.chainId(ids[i]);
             DeployHarness h = new DeployHarness();
             (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
-            assertTrue(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
-            assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
+            assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+            assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
             _checkCurve(f, h, json);
             assertTrue(IUARegistry(vm.parseJsonAddress(json, ".ua_registry")).kindEnabled(UAKinds.ZETHER_BLS12381));
             IFactoryToken.TokenConfig memory c;

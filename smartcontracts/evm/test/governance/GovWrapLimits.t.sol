@@ -6,6 +6,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -96,7 +97,7 @@ contract GovWrapLimitsTest is WrapLimitsBase {
     function test_theSubjectIsTheSigner() public {
         IWrappedToken.WrapLegLimits[] memory legs = _cfg1(0, 0, L(10, 0, 1 days), OFF(), OFF(), OFF());
         _setLimits(BOB_PK, _pad(bob), string.concat(SET, LEG, LIMIT), legs,
-            abi.encodeWithSelector(IGovernance.NotAdmin.selector, _pad(bob)));
+            abi.encodeWithSelector(IAdmin.NotAdmin.selector, _pad(bob)));
     }
 
     /// A wallet that leaves a referenced struct type out of the type string signs another digest: refused.

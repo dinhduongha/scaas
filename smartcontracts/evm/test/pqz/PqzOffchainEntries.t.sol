@@ -350,12 +350,12 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     /// The three ops relayed through a router at fee 0 for the owner `nId` (its own key, no registry call).
     function test_router_pqzVerifierOps() public {
         GovernanceRouter router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
-        OpenFactory f = new OpenFactory(registrar);
+        OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, vA, false);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
