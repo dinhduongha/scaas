@@ -67,3 +67,18 @@ D12-nocode | test_configureChain_routerRegistryZeroOrNoCode | 1
 D13-hash | test_relayPair_executorCodeHash | 1
 D13-router | test_relayPair_executorRouter | 1
 D14 | test_derivedAdmin_writesThroughRouter, test_relayFeeExecutor_view, test_views_zeroUntilWritten_directoryEqualsViews | 1
+B1 | test_binding_PublishTokenEnv, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B2 | test_binding_PublishDexEnv, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B3 | test_binding_PublishClassEnv, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B4 | test_binding_ApproveTokenRelease, test_binding_RevokeApproval, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B5 | test_binding_ApproveDexRelease, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B6 | test_binding_ApproveRelease, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B7 | test_binding_RevokeApproval, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B8 | test_binding_DeprecateToken, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B9 | test_binding_DeprecateDex, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B10 | test_binding_DeprecateRelease, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+B11 | test_anotherSignerNotAdmin, test_binding_SetTokenKindEnabled, test_designatorAdmin_ownKeyOnly, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_nestedRouterOpRefused, test_replay_otherChainRefused, test_rows_runOnTheRouter | 1
+B12 | test_binding_SetClassKindEnabled, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_nestedRouterOpRefused, test_rows_runOnTheRouter | 1
+B13 | test_anotherSignerNotAdmin, test_binding_SetKycProvider, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_kycProvider_derivedWritesThroughRouter, test_replay_otherChainRefused, test_rows_runOnTheRouter | 1
+B14 | test_binding_SetCompliance, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_kycProvider_derivedWritesThroughRouter, test_rows_runOnTheRouter | 1
+B15 | test_binding_SetChainEntries, test_directory_derivedAdminWritesThroughRouter, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1

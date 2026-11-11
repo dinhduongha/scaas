@@ -170,3 +170,7 @@ size | WIP | 0 | 0 errors, 166 contracts (OpenFactory 34,103 -> 34,106, notice a
 forge-as | WIP | 0 | 487 passed, 0 failed
 clientkeys | WIP | 0 | 322 tests, 320 passed, 0 failed, 2 skipped (typed_ops.json 89 -> 104 rows)
 t7-gas (GovRouterAdmin test_gas_*; regular / state) | WIP | 0 | router deploy 1,608,600 / 36,534,870, asked (x1.05 + 32,000) 40,082,643 < 60 M; per op through the router native ECDSA / msig 2-of-3 mldsa65 (stand-in verifier): publish token env 296,434 / 352,612, approve token release 92,241 / 151,308, setCompliance 105,912 / 164,965, setChainEntries 162,253 / 221,308 (the full table in STATE.md)
+forge-pqz | 1e87cc41 | 0 | 598 passed, 0 failed, 4 skipped (51 suites; the rename moved no pin)
+forge-zether | 1e87cc41 | 0 | 441 passed, 0 failed, 4 skipped (37 suites)
+forge-ua | 1e87cc41 | 0 | 732 passed, 0 failed (54 suites)
+mutants B1-B15 (GovernanceRouter.sol, one signed word dropped per new struct; GovRouterAdmin.t.sol alone, each restored byte-equal) | 1e87cc41 | 1 each | 15 of 15 killed, each by its own test_binding_<Op> (mutants.txt)
