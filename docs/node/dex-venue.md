@@ -524,7 +524,12 @@ relayer-bound settlement, [networks/README.md](../networks/README.md)) are **PLA
 <a id="managed-markets"></a><a id="NODE-DEX-11"></a>**NODE-DEX-11** — **Managed markets are home-bound and check
 eligibility at intake.** A licensed operator runs its own `SCaaSDex` instance with managed pairs
 ([CTR-DEX-12](../contracts/dex.md#CTR-DEX-12)). Node config per market: `dex_market.managed = 1`, `unbound = 0`
-(forced), `gossip = 0` (default), `eligibility_tokens` (the regulated legs, read from `versionOf(token).kind`).
+(forced), `gossip = 0` (default), `eligibility_tokens` (the regulated legs, read from `versionOf(token).kind`). Group 3s
+([CTR-AS-31](../contracts/asset-suite.md#CTR-AS-31); BUILT, UNAUDITED): the registry check runs under `KYC` (controls bit 6, both
+masks); under a list that is on, intake reads `listFlagsOf` of the seller, the DEX, its puller and the receiver (`NOT_ALLOWED`,
+`DENIED`); `DeniedSet(on)` / `AllowedSet(off)` drop that account's orders of the leg, both sides, and `FeatureEnabled(8 | 9)`
+re-reads every maker and receiver, only while the bit is on in the leg's live `controls`; naming the DEX or its puller halts the
+leg's markets until the reverse event (test `list_effects_follow_the_live_bit`).
 
 | Point | Check | Refusal |
 |---|---|---|

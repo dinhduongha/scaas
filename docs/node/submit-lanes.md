@@ -471,7 +471,7 @@ someone else landed it; the client marks it final from the event feed (landed el
 `dead` when superseded. One per-chain in-flight digest set prevents our node from holding two live outer txs for one
 intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per reverted receipt. After the consumption
 check, a simulation revert that a later block may lift on a regulated token (`Frozen`, `TokenPaused`, `NotEligible`,
-`FeeRecipientFrozen`, `RegistryUnavailable`, `RegistryGasStarved`) is a named refusal: `queued` with `REGULATED_REFUSED:
+`FeeRecipientFrozen`, `RegistryUnavailable`, `RegistryGasStarved`; group 3s: `NotAllowed`, `Denied` of a party not the job's subject) is a named refusal: `queued` with `REGULATED_REFUSED:
 <error>`, never `dead` while the payload may still land; expiry or the attempt cap ([NODE-LANE-14](#NODE-LANE-14)) ends it
 (BUILT, ua-mtx-merge T35; regulated-kinds spec §7). A wrapped hybrid's wrap-limit refusal (`WrapLimitExceeded`,
 `WrapCapExceeded`, `UnwrapAboveNetWrapped`, `WrapperNotListed`, `UnwrapperNotListed`: a window ends, a member is added, a

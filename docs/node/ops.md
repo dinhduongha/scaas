@@ -914,7 +914,9 @@ only. **UNAUDITED.**
 | Compromised issuer (bits 5–7) | its harm is bounded: ≤ 30 d per issuer-only freeze (≤ 60 d per episode), ≤ 7 d pause, then cooldowns; `unfreeze` and `unpause` by another issuer root | owner `revokeRole(5/6/7)` or `disableFeature`, confirmed by the proposer |
 | Compromised `FORCE` holder | compliance `revokeOrder` of each live record; or owner `revokeRole(10, ·)` of every compliance root; or `disableFeature(RECORD)`; each stops `FORCE` | owner `revokeRole(6)` |
 | Compromised compliance (bit 10) | owner `revokeRole(10, holder)` (not delayed); `FORCE` still needs a frozen subject and the issuer | — |
-| Registry hostile, unavailable or gas-starving | owner `disableFeature(8)` / `(9)` when not locked (not delayed); a locked bit has no recovery, as disclosed | — |
+| Registry hostile, unavailable or gas-starving | admin `disableFeature(28)` (`KYC`, group 3s) when not locked: two calls with `grantDelay`; `enableFeature(28)` again, at once, once the registry is trusted; a locked bit has no recovery, as disclosed | — |
+| Compromised list holder (bits 8, 9, group 3s, [CTR-AS-31](../contracts/asset-suite.md#CTR-AS-31)) | it denies or unlists any account at once; the bits are never switched off, so relief is a holder's list edit | admin `revokeRole(8 / 9)`, at once (not delayed); a second holder granted ahead avoids the `grantDelay` of a new grant |
+| Before `enableFeature(8)` (an allow list) | list, `ALLOWED`, every party first: the holders, the DEX and its `puller()`, `RelayFeeRouter`, the tax recipient and every fee recipient, wrappers holding the token, the clones and escrows; check the issuer seat (or a granted lister) holds bit 8 (`ListHolderMissing` otherwise). A contract holding a denied or unlisted party's units cannot pay it out until a holder edits the list; a payout to several recipients reverts as a whole when one is blocked | — |
 | Owner proposes a relaxation | `RelaxProposed` is public for `grantDelay`; the node alerts | the proposer confirms in the window |
 
 Alerts: the indexer marks `alert` on `OrderRecorded`, `RelaxProposed`, `AccountFrozen` and `Paused` (BUILT, T35,
