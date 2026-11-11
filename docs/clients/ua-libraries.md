@@ -71,14 +71,20 @@ ua-dart-frb export `keccak256(data)` (ua-rs `keccak256`; ua-qt hex in and out, `
 (keccak256 of the slot's `sig`, or of an `msig` member's `abi.encode(InnerSig[])`, encoded in the test) and every `memberships` row's
 `storedHash` = keccak256(`stored`). BUILT.
 
-**Metatx hashes (metatx split T18).** The Rust crate and QML also carry the three hashes a wallet needs for
-[CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) / [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27):
-`meta_pay_id(salt, meta)` (`keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`), `pay_lane(p)` (`keccak256("scaas.pay.lane"
-‖ p)`, 32 bytes) and `relay_ref(chain_id, target, call_data)` (the EVM router's `ref`; other families' forms differ, see
-[CLI-SGN-39](signers-clientkeys.md#CLI-SGN-39)); QML `UaKinds.metaPayId(saltHex, metaHex)`, `payLane(hex)`,
-`relayRef(chainId, targetHex, callDataHex)` (chain id exact to 2^53). Vectors: `smartcontracts/vectors/metatx/paymeta.json`
-and `relayref.json` (written by forge); the JS twins are in `clientkeys` `evm.js`. The C, C++ and Dart bindings and the
-independent ports do not carry them yet.
+**Metatx hashes (metatx split T18; pay-meta-tax T41 / T83).** The Rust crate and QML also carry the hashes a wallet needs
+for [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) / [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27). EVM pay entries:
+`pay::meta_pay_id_v3(PayMeta {salt, pay_no, save, schema, body})` (`keccak256("scaas.pay.meta.v3" ‖ salt ‖
+keccak256(abi.encode(bytes32 payNo, bool save, uint16 schema, bytes body)))`, after the contract's shape checks), as JSON
+`json::meta_pay_id_json` `{salt, payNo, save, schema, body}` → `{payId}`, exported by ua-c `scaas_ua_meta_pay_id`, ua-cxx and
+ua-dart-frb `metaPayId`, QML `UaKinds.metaPayIdV3`; vectors `smartcontracts/vectors/metatx/paymeta.json` (written by forge).
+The v2 form (`string payNo`, `scaas.pay.meta.v2`) is kept under each client's `legacy/ua-mtx-merge/`, not built. The non-EVM
+families keep the v1 form until their own round: `meta_pay_id(salt, meta)` (`keccak256("scaas.pay.meta" ‖ salt ‖
+keccak256(meta))`), QML `UaKinds.metaPayId(saltHex, metaHex)`, vectors `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`.
+Both: `pay_lane(p)` (`keccak256("scaas.pay.lane" ‖ p)`, 32 bytes) and `relay_ref(chain_id, target, call_data)` (the EVM
+router's `ref`; other families' forms differ, see [CLI-SGN-39](signers-clientkeys.md#CLI-SGN-39)); QML `payLane(hex)`,
+`relayRef(chainId, targetHex, callDataHex)` (chain id exact to 2^53); vectors `relayref.json`. The JS twins are in
+`clientkeys` `evm.js`. The C, C++ and Dart bindings carry `metaPayId` (v3) and `payDigest` only; the independent ports
+(ua-py, ua-go, ua-cs, ua-dart) carry none of them. BUILT.
 
 **Bindings.** C: the caller owns every buffer and nothing is freed; a fixed-size argument points to 32 bytes (20 for
 `registry20`), a variable output takes `(out, size_t *out_len)` and returns `SCAAS_UA_ERR_BUFFER` with the size needed
