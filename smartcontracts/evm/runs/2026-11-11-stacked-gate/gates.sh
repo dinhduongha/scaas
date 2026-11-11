@@ -13,6 +13,7 @@
 #   size              size_gate.py --self-test; forge build src --sizes --json; size_gate.py against size-baseline.json
 #   gen               gen_faces.py --check, gen_set.py --all --check, the on-chain scripts' Python parses, test_vcheck.py
 #   set-<set>-<dir>   test/<dir> at one PQZ set (script/pqz/at-set.sh), src/pqz/PqzSet.sol checked byte-equal after
+#   legacy-<set>      legacy-at-set.sh: the modules differential's pre-split side at <set> (legacy-default: back)
 #   node-test, node-clippy, node-e2e   scaas-node (CAPPED_MEM=6G; e2e alone, --test-threads=1); node-flaky: the soroban
 #                     timing unit test alone (flaky under load)
 #   pq-build, e2e-self-test   pqz_prove and out/t66b-e2e for the matrix PQ groups; e2e.py --self-test on that build
@@ -60,7 +61,10 @@ step() {
         && python3 script/onchain/test_vcheck.py) ;;
     set-*) s=$(echo "$1" | cut -d- -f2-3); dd=$(echo "$1" | cut -d- -f4-); d=test/$dd; m=
       [ "$dd" != modules ] || m="--match-contract ^(Diff|Modules|Paths|Groups)"
+      # top: test/*.t.sol in a sibling copy, as forge-top (removed after)
+      [ "$dd" != top ] || { d=test-sg-top; rm -rf $EVM/$d && mkdir $EVM/$d && cp $EVM/test/*.t.sol $EVM/$d/; }
       FOUNDRY_TEST=$d FOUNDRY_SCRIPT=$d "$C" $EVM/script/pqz/at-set.sh "$s" test -j 2 $m; r=$?
+      [ "$dd" != top ] || rm -rf $EVM/test-sg-top
       git diff --exit-code -- $EVM/src/pqz/PqzSet.sol || r=3
       return $r ;;
     node-test) (cd scaas-node && CAPPED_MEM=6G "$C" cargo test -j 2 --lib) ;;
@@ -104,6 +108,7 @@ step() {
     matrix) (cd $EVM && RPC_7622=http://127.0.0.1:9 COPY=$ROOT/scratchpad/stacked-gate-copy MATRIX_OUT=runs/2026-11-11-stacked-gate/onchain \
         sh script/onchain/matrix.sh local) ;;
     pqchat) (cd $EVM && MATRIX_OUT=runs/2026-11-11-stacked-gate/onchain "$C" sh runs/2026-11-11-stacked-gate/pqchat.sh) ;;
+    legacy-*) sh $HERE/legacy-at-set.sh ${1#legacy-} ;; # out/t66b-legacy at a set (or default), for set-<set>-modules
     release-gas) "$C" sh $HERE/release-gas.sh ;;
     release-probe) (cd $EVM && FOUNDRY_TEST=runs/2026-11-10-ua-mtx-3p/probe FOUNDRY_SCRIPT=runs/2026-11-10-ua-mtx-3p/probe \
         FOUNDRY_OUT=out/sg-probe FOUNDRY_CACHE_PATH=cache/sg-probe "$C" forge test -j 2 --match-test test_3pModules -vv) ;;
@@ -111,12 +116,12 @@ step() {
   esac
 }
 
-for s in "$@"; do
-  log=$HERE/$s.log
-  if [ "${RERUN:-0}" != 1 ] && [ -f "$log" ] && tail -1 "$log" | grep -qx 'rc=0'; then echo "$s: done"; continue; fi
-  [ ! -f "$log" ] || mv "$log" "$HERE/$s.red.log"
-  echo "$(date +%H:%M:%S) $s: start" | tee -a $HERE/progress.log
-  { step "$s"; echo "rc=$?"; } > "$log" 2>&1
-  line="$(date +%H:%M:%S) $s: $(tail -1 "$log") | $(grep -aE '^Ran |^test result|tests? (passed|failed)|passed|^## summary|errors?,' "$log" | tail -2 | tr '\n' ' ' | cut -c1-220)"
+for st in "$@"; do # not `s`: step() sets its own `s`
+  log=$HERE/$st.log
+  if [ "${RERUN:-0}" != 1 ] && [ -f "$log" ] && tail -1 "$log" | grep -qx 'rc=0'; then echo "$st: done"; continue; fi
+  [ ! -f "$log" ] || mv "$log" "$HERE/$st.red.log"
+  echo "$(date +%H:%M:%S) $st: start" | tee -a $HERE/progress.log
+  { step "$st"; echo "rc=$?"; } > "$log" 2>&1
+  line="$(date +%H:%M:%S) $st: $(tail -1 "$log") | $(grep -aE '^Ran |^test result|tests? (passed|failed)|passed|^## summary|errors?,' "$log" | tail -2 | tr '\n' ' ' | cut -c1-220)"
   echo "$line" | tee -a $HERE/progress.log
 done
