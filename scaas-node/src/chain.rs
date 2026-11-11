@@ -39,7 +39,8 @@ pub fn is_contract(code: &[u8]) -> bool {
 }
 
 /// Fable E N-8: an endpoint URL (an RPC's, a verifier's: an internal host, a key in a path) never reaches a job's error or a
-/// gateway reply: each `scheme://…` up to a blank, a quote or a bracket becomes `<url>`.
+/// gateway reply: each `scheme://…` up to a blank, a quote or a bracket becomes `<url>` (never ending at `,` or `;`: a key after
+/// one in a path or query is part of the URL; Fable recheck R-7).
 pub fn redact_urls(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -47,7 +48,7 @@ pub fn redact_urls(s: &str) -> String {
         out.push_str(&rest[..i]);
         out.push_str("<url>");
         let tail = &rest[i..];
-        rest = &tail[tail.find(|c: char| c.is_whitespace() || "()<>\"',;".contains(c)).unwrap_or(tail.len())..];
+        rest = &tail[tail.find(|c: char| c.is_whitespace() || "()<>\"'".contains(c)).unwrap_or(tail.len())..];
     }
     out.push_str(rest);
     out

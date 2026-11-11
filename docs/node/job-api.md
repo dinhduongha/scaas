@@ -411,8 +411,9 @@ node's, for every consumer. **UNAUDITED.**
 - **Shield refusal** (opt-in, `[pqz_verifier] refuse_shield_when_unserved = true`, default `false`): shield and wrap-shield jobs
   into an `OFFCHAIN` token whose verifier is revoked or which none of the endpoints serves (their probe answers, none 2xx, or no
   endpoint is configured) are refused `PQZ_VERIFIER_UNREACHABLE` (`dead`), the same rule for every consumer, so no relayer of the
-  node adds value to a pool nobody serves. A probe that does not get through (a timeout, a refused connection) while no endpoint
-  serves is no answer: `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue (Fable review of ua-mtx-merge E N-2). `PRECOMPILE` tokens are never affected.
+  node adds value to a pool nobody serves. A probe that does not get through (a timeout, a refused connection) or answers 5xx
+  (a restart behind a proxy) while no endpoint serves is no answer: `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue (Fable review
+  of ua-mtx-merge E N-2, recheck R-5). `PRECOMPILE` tokens are never affected.
 - **Rows:** `typed.rs` / `guard.rs` carry the entries with the verdict and the router's `mtxPqzSetVerifier`,
   `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` and (group 3t) `mtxSetVerifierFee` over `UASetVerifierFee` (selector
   `0xf0d8cbbf`) ([call table](#call-table)), equal both directions with the contract's

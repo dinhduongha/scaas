@@ -289,7 +289,7 @@ impl Verifier {
 
     /// Some configured endpoint serves `token`: its probe (`POST /v1/pqz-verdict/probe {token, chainId}`, spec §4.2, §11.2: a
     /// verdict over the fixed probe statement) answers 2xx: `Some(true)`; every endpoint answered, none 2xx (or none configured):
-    /// `Some(false)`; none served and one had a transport error (a timeout, a refused connection): `None`, unknown.
+    /// `Some(false)`; none served and one had a transport error (a timeout, a refused connection) or a 5xx: `None`, unknown.
     // ponytail: one probe per shield job; keep each endpoint's last outcome if shields come often
     async fn serves(&self, chain: &Chain, token: alloy::primitives::Address) -> Option<bool> {
         let body = json!({"token": format!("{token:#x}"), "chainId": chain.number});
@@ -298,6 +298,11 @@ impl Verifier {
             let url = format!("{}{ROUTE}/probe", e.trim_end_matches('/'));
             match self.http.post(url).json(&body).send().await {
                 Ok(r) if r.status().is_success() => return Some(true),
+                // Fable recheck R-5: a 5xx (a restart behind a proxy) says nothing about the pool either
+                Ok(r) if r.status().is_server_error() => {
+                    tracing::warn!(endpoint = i + 1, "pqz verifier probe: HTTP {}", r.status());
+                    known = false;
+                }
                 Ok(_) => {}
                 Err(x) => {
                     tracing::warn!(endpoint = i + 1, "pqz verifier probe: {x}");

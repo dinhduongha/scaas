@@ -1505,7 +1505,8 @@ pub(crate) mod tests {
             error: Some("rpc: error sending request for url (https://rpc.example/v3/KEY) after http://10.0.0.7:8545/ x".into()) };
         odoo.relay_report(&r).await.unwrap();
         assert_eq!(o.lock().unwrap().reports[0]["error"], "rpc: error sending request for url (<url>) after <url> x");
-        assert_eq!(crate::chain::redact_urls("no url; wss://h:1/p,ws://q"), "no url; <url>,<url>");
+        assert_eq!(crate::chain::redact_urls("no url; wss://h:1/p,ws://q"), "no url; <url>");
+        assert_eq!(crate::chain::redact_urls("x http://h/p?a=1;key=SECRET,b=2 y"), "x <url> y", "recheck R-7: a key after ; or ,");
     }
 
     /// Fable E N-1 (NODE-LANE-09, one rule on every chain): the generic lane runner of a Hedera chain classifies a refused
@@ -3439,8 +3440,11 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             assert!(r.len() == 2 && r.iter().all(|x| x.0 == "dead" && x.1.starts_with("PQZ_VERIFIER_UNREACHABLE")), "{why}: {r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
         }
-        // Fable E N-2: a probe with a transport error (nothing listens) is no answer: back in the queue, never `dead`
-        for urls in [vec![DEAD.to_string()], vec![refusing.clone(), DEAD.to_string()]] {
+        // Fable E N-2: a probe with a transport error (nothing listens) or a 5xx (recheck R-5) is no answer: back in the queue,
+        // never `dead`
+        let (busy, b) = fake_verifier(json!({"error": "upstream"})).await;
+        b.lock().unwrap().status = 503;
+        for urls in [vec![DEAD.to_string()], vec![refusing.clone(), DEAD.to_string()], vec![busy]] {
             let (r, rpc) = outcomes(offchain(), shield_jobs(), on(urls)).await;
             assert!(r.len() == 2 && r.iter().all(|x| x.0 == "queued" && x.1.starts_with("PQZ_VERIFIER_PROBE_UNREAD")), "{r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty());
