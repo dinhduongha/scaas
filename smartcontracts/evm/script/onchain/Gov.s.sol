@@ -233,16 +233,19 @@ contract Gov is OnchainBase {
         (c.initialSupply, c.initialHolder) = (1_000_000, a1);
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.termsHash) = (address(cr), 1, keccak256("onchain terms"));
         tc = _create(IOpenFactory.TokenKind.NORMAL_REGULATED, c, "NormalRegulatedToken");
+        // each transfer under KYC a fixed limit, as Tokens.s.sol's _tax: RegulatedBase refuses the registry check below
+        // COMPLIANCE_REGISTRY_GAS x 64/63 + margin left (ComplianceRegistryGasStarved(50000, 49725) at forge's estimate x 1.30
+        // on a fresh anvil): gasUsed is not that floor
         vm.broadcast(k1);
-        IERC20(tc).transfer(a3, 10); // to an attested holder
+        IERC20(tc).transfer{gas: 500_000}(a3, 10); // to an attested holder
         vm.broadcast(k1);
-        IERC20(tc).transfer(a2, 10); // to the KYC provider's own row
+        IERC20(tc).transfer{gas: 500_000}(a2, 10); // to the KYC provider's own row
         // group 3s (CTR-GOV-24, spec §5.2, §15 T8): KYC off (grantDelay 0: at once; a1 the admin) and on again, at once; the
         // attested receiver still receives
         vm.startBroadcast(k1);
         IGovernance(tc).disableFeature(GovernanceBits.KYC);
         IRegulatedToken(tc).enableFeature(GovernanceBits.KYC);
-        IERC20(tc).transfer(a3, 1);
+        IERC20(tc).transfer{gas: 500_000}(a3, 1);
         vm.stopBroadcast();
     }
 

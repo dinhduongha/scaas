@@ -750,21 +750,24 @@ contract Misc is OnchainBase {
     }
 
     /// Group 3s (spec 2026-11-10-token-lists.md §5.2, §6, §15 T8): a deny list written while off by a1's issuer seat, switched
-    /// on at once (`FeatureEnabled(9)`): a transfer to the denied account refused `Denied` (a negative), then the account
-    /// cleared, at once, and the same transfer passes.
+    /// on at once (`FeatureEnabled(9)`): a transfer to a denied account refused `Denied` (a negative), and a second denied
+    /// account cleared, at once, then a transfer to it passes. The negative is an `eth_call` at the run's last block
+    /// (`coverage.py neg`), so the account it names stays denied; the cleared one is another.
     function _denyList(address t) internal {
-        address denied = address(0xDE41ED);
+        (address denied, address cleared) = (address(0xDE41ED), address(0xC1EA2ED));
+        bytes32[] memory two = new bytes32[](2);
+        (two[0], two[1]) = (_pad(denied), _pad(cleared));
         bytes32[] memory one = new bytes32[](1);
-        one[0] = _pad(denied);
+        one[0] = _pad(cleared);
         vm.startBroadcast(k1);
-        IRegulatedToken(t).setDenied(one, true);
+        IRegulatedToken(t).setDenied(two, true);
         IRegulatedToken(t).enableFeature(GovernanceBits.DENYLIST);
         vm.stopBroadcast();
         _neg(a1, t, abi.encodeCall(IERC20.transfer, (denied, 1)), IRegulatedToken.Denied.selector,
             "transfer to an account on the deny list (kind 8, DENYLIST switched on at once)");
         vm.startBroadcast(k1);
         IRegulatedToken(t).setDenied(one, false);
-        IERC20(t).transfer(denied, 1);
+        IERC20(t).transfer(cleared, 1);
         vm.stopBroadcast();
     }
 

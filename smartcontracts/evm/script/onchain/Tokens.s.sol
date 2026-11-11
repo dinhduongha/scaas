@@ -306,6 +306,8 @@ contract Tokens is OnchainBase {
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(m2), 1, 1);
         c.legs[1] = IFactoryToken.Leg(base, 1, 1);
+        // round 3s (token-lists spec §5.5): the list bits stay enableable on a regulated W2, so its terms are required
+        if (_regulated(kind)) c.reg.termsHash = keccak256("scaas.onchain.terms");
         t = _create(kind, c, string.concat("w2-", vm.toString(kind)));
         _w2();
         _w2Relayed();

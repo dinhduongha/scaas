@@ -427,6 +427,8 @@ contract Dex is OnchainBase {
         } else {
             (c.initialSupply, c.initialHolder) = (1e12, a1);
         }
+        // round 3s (token-lists spec §5.5): a regulated kind with an admin keeps its list bits enableable, so it carries terms
+        if (n >= 8) c.reg.termsHash = keccak256("onchain dex terms");
         vm.broadcast(k1);
         x = f.createToken(IOpenFactory.TokenKind(n), 1, abi.encode(c), _salt(c.symbol));
         _book(x, label);

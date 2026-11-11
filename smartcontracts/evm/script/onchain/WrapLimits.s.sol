@@ -342,6 +342,8 @@ abstract contract WrapLimitsKit is OnchainBase {
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         // the PQZ kinds in the OFFCHAIN verify mode (no PQZ precompile here): a fixed verifier, test key 3's native id
         if (i != 0) c.conf = IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 2, 0, 0, 0, 1, _pad(a3), true, 0, 0, 0);
+        // round 3s (token-lists spec §5.5): kind 13 with an admin keeps its deny list enableable, so it carries terms
+        if (_kind(i) >= 8) c.reg.termsHash = keccak256("onchain wl terms");
     }
 }
 
