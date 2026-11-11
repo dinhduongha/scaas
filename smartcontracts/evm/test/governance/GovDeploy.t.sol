@@ -559,8 +559,9 @@ contract GovDeployTest is Test {
         // `PayRecord`, owner 2026-11-09): -> 0x70ba50D63EC511e4a39bf34d8EE01F3e85D3cEaC; T66b (the metadata hash: the
         // T66b sources it imports, the `IERC20MetaTx` comment of f0c03715 among them; its code unchanged):
         // 0xd981282EC3f2F979B953BDE7c7c3c4100caDfe89; Fable review fixes 2026-11-11 (the metadata hash: `MetaTxLib` loses
-        // `hashStruct` / `validateMode`, B P3-3; its code unchanged): -> this
-        assertEq(rf, 0x43E08564FE056f53014bb2c40C4f845E550Eb8Cf, "RelayFeeRouter");
+        // `hashStruct` / `validateMode`, B P3-3; its code unchanged): -> 0x43E08564FE056f53014bb2c40C4f845E550Eb8Cf;
+        // re-check C6 (the metadata hash: `ModeUnknownBits` leaves `MetaTxLib`): -> this
+        assertEq(rf, 0xa3097e517E91B9e0f807815f92052212AD53a454, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -603,8 +604,10 @@ contract GovDeployTest is Test {
         // 0x668B713392eEcF586D1BAbF16be677b94a71E8f0; round 3s T4 (CTR-GOV-24: `mtxSetAllowed`, `mtxSetDenied`,
         // `mtxEnableFeature`) and round 3t (CTR-PQZ-36: `mtxSetVerifierFee`), both in (merge 0d6bc40c; 3t alone was
         // 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a): -> 0xf6cEa6aB1eF258779F44546EE3BD596aD2576EFe; Fable review fixes
-        // 2026-11-11 (`MtxPipelineLib._callFee`'s refusals, B P3-4; the metadata hash: `MetaTxLib`, `GovernanceLib`): -> this
-        assertEq(router, 0xc1F97DFA09Ee3D51D370542dbD2c0f5024d8C880, "GovernanceRouter");
+        // 2026-11-11 (`MtxPipelineLib._callFee`'s refusals, B P3-4; the metadata hash: `MetaTxLib`, `GovernanceLib`):
+        // 0xc1F97DFA09Ee3D51D370542dbD2c0f5024d8C880; re-check C1, C2, C4, C6 (the metadata hash: `GovernanceLib._cuts`,
+        // `ITradeToken`, `MetaTxLib`): -> this
+        assertEq(router, 0xD05a7FF11D301Cd9112Ea2eAb6174f3E84bA7c3A, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
