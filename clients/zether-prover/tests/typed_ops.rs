@@ -239,6 +239,27 @@ fn named_call_equals_the_vector_calldata() {
     }
 }
 
+/// Review E C-3: a corrupted leg count `M` in a multi payload is refused by name, never wrapped into a short length or a panic.
+#[test]
+fn named_call_refuses_a_corrupted_leg_count() {
+    let v = vector();
+    for op in ["UAZetherTransfer", "UAZetherTransferCompact"] {
+        let good = named_req(&v, op, Value::Null);
+        assert!(call("namedCall", &good.to_string()).is_ok(), "{op} positive control");
+        let p = h(&good["payload"]);
+        // M = 2^55: 512 · M wraps to 0 in 64 bits; M = 2^64 - 1; M one more than the legs given
+        let legs = u64::from_be_bytes(p[136..144].try_into().unwrap());
+        for m in [1u64 << 55, u64::MAX, legs + 1] {
+            let mut q = p.clone();
+            q[136..144].copy_from_slice(&m.to_be_bytes());
+            let mut r = good.clone();
+            r["payload"] = json!(format!("0x{}", hex::encode(&q)));
+            let e = call("namedCall", &r.to_string()).unwrap_err();
+            assert!(e.contains("not a multi transfer's"), "{op} M = {m}: {e}");
+        }
+    }
+}
+
 /// A derived subject (R35): `from` any `bytes32` id, signed by its own record's key through `requireAuthorized`; the digest is
 /// `typedDigest`'s over the same message, and differs from the native row's. `from` as a 20-byte address is refused.
 #[test]

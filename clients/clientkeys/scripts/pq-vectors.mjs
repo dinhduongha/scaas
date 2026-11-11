@@ -78,7 +78,7 @@ out.ownTag = [[0, 0], [0, 7], [1, 8]].map(([version, sendCounter]) => {
   const seed32 = hex(pqzKeySeed(seed, 0, 0, version));
   const ctHash = hex(kat(`ct ${version} ${sendCounter}`));
   const t = pqzOwnTag({ seed32, ...TAG_IN, sendCounter, ctHash });
-  return { label: 'PQZ/owntag/v1', version, seed32, ...TAG_IN, sendCounter, ctHash, key: t.key, message: t.message, ownTag: t.ownTag };
+  return { label: 'PQZ/owntag/v1', version, seed32, ...TAG_IN, sendCounter, ctHash, key: hex(t.key), message: t.message, ownTag: t.ownTag };
 });
 // group 3h (spec §3.3, C3): `memoHash = keccak256(memo ‖ ownTag)`: an op 1 commit-reveal (HASH) memo `salt(16) ‖ sealedMemo(42)`,
 // a BUNDLE transfer and a burn (memo empty); forge reads these rows against the statement views (PqzOwnTag.t.sol)

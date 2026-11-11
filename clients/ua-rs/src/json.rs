@@ -284,11 +284,12 @@ pub fn pay_digest_json(t: &str) -> JsonResult<String> {
     Ok(json!({ "structHash": hx(&sh), "digest": hx(&typed_digest(&ds, &sh)) }).to_string())
 }
 
-/// `{salt, payNo, schema, body}` → `{payId}`: `metaPayId` under `scaas.pay.meta.v2`, after the shape and `payNo` checks
-/// (`Argument` when refused).
+/// `{salt, payNo, save, schema, body}` → `{payId}`: `metaPayId` under `scaas.pay.meta.v3`, after the shape checks (`Argument`
+/// when refused). `payNo` 32 bytes hex (absent: 0), `save` a boolean (absent: false).
 pub fn meta_pay_id_json(t: &str) -> JsonResult<String> {
     let v = parse(t)?;
-    let m = crate::pay::PayMeta { salt: ua_in(&v["salt"])?, pay_no: v["payNo"].as_str().unwrap_or("").to_string(),
-        schema: small_in(&v["schema"])?, body: unhex(&v["body"])? };
-    Ok(json!({ "payId": hx(&crate::pay::meta_pay_id_v2(&m).map_err(|_| Argument)?) }).to_string())
+    let pay_no = if v["payNo"].is_null() { [0; 32] } else { ua_in(&v["payNo"])? };
+    let save = if v["save"].is_null() { false } else { v["save"].as_bool().ok_or(Argument)? };
+    let m = crate::pay::PayMeta { salt: ua_in(&v["salt"])?, pay_no, save, schema: small_in(&v["schema"])?, body: unhex(&v["body"])? };
+    Ok(json!({ "payId": hx(&crate::pay::meta_pay_id_v3(&m).map_err(|_| Argument)?) }).to_string())
 }

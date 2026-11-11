@@ -70,13 +70,16 @@ export function listed(controls, listFlags) {
 }
 
 const ENABLEABLE = (1n << 8n) | (1n << 9n) | (1n << 28n);
+/** `admin` / `registry` as given: a boolean, or the on-chain id (a bytes32 UA or an address, hex); 0, false or absent is none. */
+const none = (v) => v == null || BigInt(v) === 0n;
 /** Spec §5.5 (round 3s): the bits of 8, 9, 28 that can still be switched on (`enableFeature`): valid for the kind, not set,
- *  not locked (off), the admin not 0, and for 28 a compliance registry. A wallet prints a bit's `enableable` sentence of
- *  governance_bits.json only then, and never for a bit locked off. */
+ *  not locked (off), the admin not 0, and for 28 a compliance registry. `admin` and `registry` a boolean or the views' id
+ *  (`'0x00…00'` is none, as on chain). A wallet prints a bit's `enableable` sentence of governance_bits.json only then, and
+ *  never for a bit locked off. */
 export function enableable({ features, lockedFeatures, valid, admin, registry }) {
-  if (!admin) return 0n;
+  if (none(admin)) return 0n;
   let e = ENABLEABLE & BigInt(valid) & ~BigInt(features) & ~BigInt(lockedFeatures);
-  if (!registry) e &= ~(1n << 28n);
+  if (none(registry)) e &= ~(1n << 28n);
   return e;
 }
 

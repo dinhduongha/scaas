@@ -303,21 +303,29 @@ pools" (default off); allows `receiveToken` = the sell token with a "cycle" labe
 amount`; asks an outside-token holder to approve the listed DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)),
 never the DEX; and checks each `ExchangeLegSettled` against `limitReceive`, showing `surplus` as price improvement.
 
-<a id="CLI-SGN-38"></a>**CLI-SGN-38** — **A pay-meta payment is signed only when its `entryRef` is `metaPayId(salt, meta)` of
-the `(salt, meta)` the client holds, and the decoded `meta` is shown next to the typed data.** Status: clientkeys
-**BUILT** (metatx split T18; [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)). `metaPayId(salt, meta)`, `decodeMeta`
-(the envelope `abi.encode(uint16 schema, bytes body)` in canonical form only; schema 1 a UTF-8 note, 2 `{creditorRef,
-invoiceNo, dueDate}`, 3 `{chainId, target, callHash}`, 4 encrypted (its length only; not decrypted here); any other
-schema refused), `buildMtxPayMeta` / `buildUaPayMeta` (the payment of `mtxPay` / `uaPay` with `entryRef = payId`, lane
-`payLane(payId)`, nonce 0; calldata `mtxPayMeta` / `uaPayMeta`, or with `onChain: false` the off-chain variant `mtxPay` /
-`uaPay` with the same digest, `(salt, meta)` then kept by the payee) and `checkPayMeta` (the server's `MetaTransfer` must
-carry that `payId`, then every [CLI-SGN-05](#CLI-SGN-05) `checkPayment` check). A request whose `entryRef` differs from
-`metaPayId(salt, meta)` is refused before anything is signed. The vectors are `smartcontracts/vectors/metatx/paymeta.json`
-(also read by `scaas-ua` `meta_pay_id` / `pay_lane` and QML `UaKinds.metaPayId` / `payLane`). A `meta` sent on chain is
-public forever ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)); private metadata uses schema 4 or the off-chain variant.
-Family wallets (other families sign their own `MetaOp`): the same `payId` derivation byte for byte; **TON**: a pay-meta
-whose payee bounces still uses up that `(payer, payId)` (its lane is spent), so a retry picks a new `salt` (a new
-`payId`).
+<a id="CLI-SGN-38"></a>**CLI-SGN-38** — **A pay-meta payment is signed only when its `entryRef` is `metaPayId` of the payment
+metadata the client holds, and the decoded metadata is shown next to the typed data.** Status: clientkeys **BUILT** (EVM:
+pay-meta-tax T41, plan T83; non-EVM families: metatx split T18; [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)).
+**Change (pay-meta-tax T41 / plan T83, review E C-2):** on the EVM the separate `mtxPayMeta` / `uaPayMeta` entries are gone
+and the v1 helpers with them (`metaPayId(salt, meta)`, `decodeMeta`, `buildMtxPayMeta`, `buildUaPayMeta`). The EVM API is
+`payMeta({salt, payNo, save, schema, body | fields})` (the checked `PayMeta`: a non-zero salt from the CSPRNG when absent,
+`schema == 0` iff the body is empty, no `save` without a `payNo`; `payNo` 32 bytes, recommended a right-aligned UUIDv7,
+`payNoFromUuid` / `payNoToUuid`), `metaPayId(PayMeta)` (`keccak256("scaas.pay.meta.v3" ‖ salt ‖ keccak256(abi.encode(bytes32
+payNo, bool save, uint16 schema, bytes body)))`), `encodeMetaBody` / `decodeMetaBody` (schema 1 a UTF-8 note, 2 `{creditorRef,
+invoiceNo, dueDate}`, 3 `{chainId, target, callHash}`, 4 encrypted (its length only; not decrypted here); any other schema
+refused), `payMetaWarning` (a clear `payNo` or a schema 1 or 2 body is public forever, once per payee per session),
+`buildPay` / `buildPayReceiverFee` / `buildPayWithTax` (the `UAMetaTransfer` of `mtxPay` / `mtxPayReceiverFee` /
+`mtxPayWithTax` with `entryRef = metaPayId(meta)`, by default the lane `payLane(payId)` nonce 0, `PayMeta` last in the
+calldata) and `checkPayMeta(td, {meta, entryRef, …})` (the server's `UAMetaTransfer` must carry that `payId`, then every
+[CLI-SGN-05](#CLI-SGN-05) `checkPayment` check). A request whose `entryRef` differs from `metaPayId(meta)` is refused before
+anything is signed. Vectors `smartcontracts/vectors/metatx/paymeta.json`, written by forge; also read by `scaas-ua`
+`pay::meta_pay_id_v3` / `json::meta_pay_id_json`, ua-c `scaas_ua_meta_pay_id`, ua-cxx and ua-dart-frb `metaPayId`, QML
+`UaKinds.metaPayIdV3`. The non-EVM families keep the v1 form (`keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, their
+own `MetaOp`): `metaop.js` `checkPayMeta(op, salt, meta)` over `metaPayIdV1`, the NEAR / Algorand `buildPayMeta`, `scaas-ua`
+`meta_pay_id` and QML `UaKinds.metaPayId(salt, meta)`, vectors `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`.
+A body sent on chain is public forever ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)); private metadata uses schema 4.
+**TON**: a pay-meta whose payee bounces still uses up that `(payer, payId)` (its lane is spent), so a retry picks a new
+`salt` (a new `payId`).
 
 <a id="CLI-SGN-39"></a>**CLI-SGN-39** — **A relay-fee payment is built for exactly one signed call, shown together with
 it, and never pays or approves the router's executor or marker.** Status: clientkeys (EVM) **BUILT** (metatx split T18;

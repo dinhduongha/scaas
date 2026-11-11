@@ -1340,7 +1340,9 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
  *  "PQZ/owntag/v1", 32)`, `seed32` the PQZ key seed of the version debited (`pqzKeySeed`); `ownTag = HMAC-SHA256(K, chainUid(32) ‖
  *  token(20) ‖ fromUA(32) ‖ be32(sendCounter) ‖ keccak256(P(u) ‖ P(v_f)))`, `P` the stored packed form and `u` the debit's `u_0`
  *  (op 1, op 7) or `u'` (burn, refresh, unwrap); `ctHash` may be given for `keccak256(P(u) ‖ P(v_f))`. Authorship, not inclusion:
- *  a match says this seed wrote the bytes, never that they are the latest state. Returns `{ key, message, ownTag }` (hex). */
+ *  a match says this seed wrote the bytes, never that they are the latest state. Returns `{ key, message, ownTag }`: `message`
+ *  and `ownTag` hex; `key` a fresh `Uint8Array`, SECRET (it recognises every own-tag of this seed version, so whoever holds it
+ *  links the holder's debits): never log or store it, wipe it (`key.fill(0)`) when done; only the vector generator reads it. */
 export function pqzOwnTag({ seed32, chainUid, token, fromUA, sendCounter, pu, pvf, ctHash }) {
   const n = BigInt(sendCounter);
   if (n < 0n || n >= 1n << 32n) refuse('sendCounter: be32, below 2^32');
@@ -1350,7 +1352,7 @@ export function pqzOwnTag({ seed32, chainUid, token, fromUA, sendCounter, pu, pv
   const be32 = new Uint8Array(4);
   new DataView(be32.buffer).setUint32(0, Number(n));
   const message = concatBytes(bytes32(chainUid), fromHex(token), bytes32(fromUA), be32, ct);
-  return { key: hex(key), message: hex(message), ownTag: hex(hmac(sha256, key, message)) };
+  return { key, message: hex(message), ownTag: hex(hmac(sha256, key, message)) };
 }
 
 /** Group 3h (spec §3.3, C3): a PQZ debit's `memoHash` (statement header word 608): `keccak256(memo ‖ ownTag)`, `memo = salt ‖

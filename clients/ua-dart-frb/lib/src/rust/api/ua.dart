@@ -397,8 +397,8 @@ String setPqzKeyArgs({required String input}) =>
 String payDigest({required String input}) =>
     ScaasUa.instance.api.crateApiUaPayDigest(input: input);
 
-/// `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
-/// `payNo` is `UAArgument`.
+/// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41 / T83): in `{salt, payNo, save, schema, body}` (`payNo` 32 bytes hex),
+/// out `{payId}`; a refused shape (`save` without a `payNo` too) is `UAArgument`.
 String metaPayId({required String input}) =>
     ScaasUa.instance.api.crateApiUaMetaPayId(input: input);
 
