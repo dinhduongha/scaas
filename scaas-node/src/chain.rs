@@ -112,6 +112,9 @@ pub struct Chain {
     /// Fable recheck 2 P2-1: the highest block this chain has seen (a receipt's, an endpoint's head); a failover endpoint below it
     /// answers no read.
     head: std::sync::atomic::AtomicU64,
+    /// Fable recheck 2 P3-5: per endpoint, its `eth_chainId` equals `number` (checked once, at a failover endpoint's first use);
+    /// `false`: another chain, dropped from every read.
+    chain_ok: Vec<std::sync::OnceLock<bool>>,
 }
 
 impl Chain {
@@ -141,6 +144,7 @@ impl Chain {
             uid: Default::default(),
             compliance: cfg.compliance_registry.zip(cfg.compliance_registry_codehash),
             head: Default::default(),
+            chain_ok: cfg.rpc_urls.iter().map(|_| Default::default()).collect(),
         })
     }
 
@@ -173,6 +177,7 @@ impl Chain {
         for (i, p) in self.providers.iter().enumerate() {
             let fresh = match i {
                 0 => Ok(()),
+                _ if !self.same_chain(i, p).await => Err(SimError::Transport(format!("endpoint {i} is not chain {}", self.number))),
                 _ => match p.get_block_number().await {
                     Ok(n) if n >= self.head.load(Relaxed) => {
                         self.saw_block(n);
@@ -197,6 +202,24 @@ impl Chain {
             }
         }
         Err(SimError::Transport(last))
+    }
+
+    /// Endpoint `i` answers `eth_chainId` = `number`: read once and kept; another chain is dropped with one log line, an unread
+    /// id is asked again next time (Fable recheck 2 P3-5).
+    async fn same_chain(&self, i: usize, p: &DynProvider) -> bool {
+        if let Some(ok) = self.chain_ok[i].get() {
+            return *ok;
+        }
+        match p.get_chain_id().await {
+            Ok(id) => {
+                let ok = id == self.number;
+                if !ok {
+                    tracing::warn!(chain = self.number, endpoint = i, got = id, "rpc_urls endpoint is on another chain; dropped");
+                }
+                *self.chain_ok[i].get_or_init(|| ok)
+            }
+            Err(_) => false,
+        }
     }
 
     /// A block this chain has seen (a receipt's, an endpoint's head): failover endpoints below it answer no read.
@@ -486,11 +509,20 @@ mod tests {
 
     /// A fake RPC answering each request with `f(request)` (a `result` or an `error` member), counting the requests.
     async fn fake_rpc(f: fn(&Value) -> Value) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        fake_rpc_on(f, 296).await
+    }
+
+    /// [`fake_rpc`] answering `eth_chainId` with `id` (P3-5); `eth_chainId` is not counted.
+    async fn fake_rpc_on(f: fn(&Value) -> Value, id: u64) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         let n: std::sync::Arc<std::sync::atomic::AtomicUsize> = Default::default();
         let n2 = n.clone();
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-            n2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let mut a = f(&r);
+            let mut a = if r["method"] == "eth_chainId" {
+                json!({"result": format!("{id:#x}")})
+            } else {
+                n2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                f(&r)
+            };
             async move {
                 a["jsonrpc"] = json!("2.0");
                 a["id"] = r["id"].clone();
@@ -550,6 +582,31 @@ mod tests {
         }).await;
         assert!(matches!(call(chain_of(&["http://127.0.0.1:9", &headless])).await, Err(SimError::Transport(_))),
             "a failover endpoint whose head is unread answers nothing");
+        // Fable recheck 2 P3-5: a failover endpoint on another chain answers nothing, checked once; the control is `good` above
+        let (other, other_n) = fake_rpc_on(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x64"}),
+            _ => json!({"result": format!("0x{:064x}", 5)}),
+        }, 1).await;
+        let c = chain_of(&["http://127.0.0.1:9", &other]);
+        for _ in 0..2 {
+            assert!(matches!(c.call_raw(Address::ZERO, Bytes::new()).await, Err(SimError::Transport(e)) if e.contains("not chain 296")));
+        }
+        assert_eq!(other_n.load(SeqCst), 0, "nothing but its chain id was asked");
+        assert_eq!(c.chain_ok[1].get(), Some(&false), "dropped, once");
+        // an unread chain id is no answer: the endpoint is not used, and it is asked again next time
+        let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
+            axum::Json(match r["method"].as_str() {
+                Some("eth_chainId") => json!({"jsonrpc": "2.0", "id": r["id"], "error": {"code": -32000, "message": "busy"}}),
+                Some("eth_blockNumber") => json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x64"}),
+                _ => json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("0x{:064x}", 5)}),
+            })
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mute = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let c = chain_of(&["http://127.0.0.1:9", &mute]);
+        assert!(matches!(c.call_raw(Address::ZERO, Bytes::new()).await, Err(SimError::Transport(_))), "unread chain id: not used");
+        assert_eq!(c.chain_ok[1].get(), None, "not kept");
         // a window of logs: the busy endpoint refuses the head, the good one answers the head and the logs
         let c = chain_of(&[&busy, &good]);
         let before = good_n.load(SeqCst);

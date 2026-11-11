@@ -300,6 +300,8 @@ Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable review of ua-mtx-merge E N-
 
 Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck 2 P2-1; status: BUILT, UNAUDITED): a failover endpoint answers a node read only when its `eth_blockNumber` is at or above the highest block the chain has seen (receipts, endpoint heads); a stale or headless one is a transport error, so its answer never makes a job `dead` that would land at the head ([submit-lanes.md](node/submit-lanes.md#rpc-failover)).
 
+Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck 2 P3-5; status: BUILT, UNAUDITED): a failover endpoint answers a node read only once its `eth_chainId` equals the chain's number (read at first use, kept); an endpoint on another chain is dropped from every read with a log line, an unread id is asked again ([submit-lanes.md](node/submit-lanes.md#rpc-failover)).
+
 Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck R-6 and recheck 2 P3-3; status: BUILT, UNAUDITED): the node's log windows (`VerifierFeeSet`, `UAPqzKeyCurrent`, the executed events; `ROTATION_LOOKBACK`) are read on one endpoint in spans: a span refused by an error answer is asked again in tenths down to max(10 blocks, a twentieth of the window), the span doubles back after an answer below half of a refused one, and an endpoint that refuses the floor or has a transport error fails the read over (about 25 requests per window at most) ([submit-lanes.md](node/submit-lanes.md)).
 
 <a id="audit-rounds"></a>

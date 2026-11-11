@@ -357,7 +357,8 @@ the whole read (a log window's head and logs alike), `rpc_urls` in the order giv
 error answer that is no revert) moves the read to the next endpoint, a revert is the contract's answer and is final. A failover
 endpoint (not the first) answers only when its `eth_blockNumber` is at or above the highest block the chain has seen (a receipt's,
 an endpoint's head): a stale one could revert a job that lands at the head, so it counts as a transport error and the job is back
-in the queue, never `dead` (Fable recheck 2 P2-1). The lane's
+in the queue, never `dead` (Fable recheck 2 P2-1). A failover endpoint is used only once its `eth_chainId` equals the chain's
+number, read at its first use and kept; one on another chain is dropped with a log line (Fable recheck 2 P3-5). The lane's
 own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The
 strict-majority option stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Every RPC request has a 30 s
 timeout, so an endpoint that accepts and never answers fails the read over (test `a_hung_endpoint_and_the_block_gas_read_fail_over`).
