@@ -24,13 +24,22 @@ use tower::ServiceExt;
 use scaas_pqz_verifier::abi::{IPqzToken as T, IUARegistry as R, KemKey, PqzVerdict, PqzVerifyConfig, UAAttrs};
 use scaas_pqz_verifier::chain::{Chain, ChainError};
 use scaas_pqz_verifier::{
-    body_limit, http, pqz_key_hash, purpose_pqz_verdict, statement_lengths, verdict_digest, Config, Pqz, Service,
-    PROBE_STATEMENT, VALID,
+    body_limit, http, pqz_key_hash, purpose_pqz_verdict, registry_domain, statement_lengths, verdict_auth_digest,
+    verdict_digest, Config, Pqz, Service, PROBE_STATEMENT, VALID,
 };
+
+alloy::sol! {
+    /// The registry's view the service used to sign before Fable C-1; the fake answers it with a forged hash.
+    function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
+}
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/vectors/pqz/");
 const TOKEN: Address = address!("7A7a7A7a7a7a7a7A7a7a7a7A7a7a7A7A7A7a7A7a");
 const REGISTRY: Address = address!("5CA5000000000000000000000000000000000001");
+/// A registry of the attacker's (Fable C-1): it answers every view as the real one, and a forged `uaAuthDigest`.
+const ROGUE: Address = address!("BADBAD0000000000000000000000000000000001");
+/// What a lying RPC or a rogue registry answers for `uaAuthDigest`.
+const FORGED: B256 = B256::repeat_byte(0x66);
 const RELEASE: Address = address!("5CA5000000000000000000000000000000000002");
 const CHAIN_ID: u64 = 7622;
 const CHAIN_UID: B256 = b256!("24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464");
@@ -46,6 +55,10 @@ const EPOCH: u32 = 3;
 const CONFIG: &str = r#"
 bind = "127.0.0.1:0"
 rpc_url = "http://127.0.0.1:1"
+chain_id = 7622
+chain_uid = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"
+registry = "0x5CA5000000000000000000000000000000000001"
+registry_generation = 1
 keystore = "unused-in-tests.json"
 keystore_password_env = "UNUSED_IN_TESTS"
 valid_minutes = 5
@@ -104,6 +117,8 @@ fn key(pk: &[u8], pop: &[u8]) -> Key {
 #[derive(Default)]
 struct World {
     release: Address,
+    /// the registry and `chainUid` the token's code names
+    named: (Address, B256),
     mode: u8,
     verifier: B256,
     epoch: u32,
@@ -159,8 +174,8 @@ impl Chain for Fake {
             let mut c = hex!("363d3d373d3d3d363d73").to_vec();
             c.extend(w.release);
             c.extend(hex!("5af43d82803e903d91602b57fd5bf3"));
-            c.extend(CHAIN_UID);
-            c.extend(REGISTRY);
+            c.extend(w.named.1);
+            c.extend(w.named.0);
             c.extend([0u8; 43]);
             return Ok(c.into());
         }
@@ -188,8 +203,9 @@ impl Chain for Fake {
                     verifierFeePending: 0, verifierFeeEta: 0 },
             }
         }
-        if to == REGISTRY {
+        if to == REGISTRY || to == ROGUE {
             answer! { sel, data;
+                uaAuthDigestCall => |_| FORGED,
                 R::pqzKeyOfCall => |c| {
                     let v = w.current.get(&c.ua).copied().unwrap_or(0);
                     R::pqzKeyOfReturn { version: v, ptr: ptr(c.ua, v), pqzPopHash: at(c.ua, v).pop_hash, proven: false }
@@ -212,7 +228,6 @@ impl Chain for Fake {
                 R::pqzKeyVersionDigestCall => |c| tagged("version", (c.ua, c.version, c.pqzKeyHash).abi_encode()),
                 R::uaMessageCall => |c| w.message.get(&(c.purposeTag, c.digest)).copied()
                     .unwrap_or_else(|| tagged("message", (c.kind, c.purposeTag, c.digest).abi_encode())),
-                R::uaAuthDigestCall => |c| ua_auth_digest_at(registry_separator(), c.ua, c.purposeTag, c.digest),
             }
         }
         Err(ChainError::Revert(Bytes::new()))
@@ -228,7 +243,7 @@ fn signer() -> PrivateKeySigner {
 /// An OFFCHAIN token naming this verifier at `EPOCH`; `uas[i]` holds the statement's key `i` (at `640 + i·PK`) as
 /// version 0 with stored proof bytes `[i + 1; 8]`.
 fn world(st: &[u8], uas: &[B256]) -> World {
-    let mut w = World { release: RELEASE, mode: 1, verifier: signer().address().into_word(), epoch: EPOCH, auditor: AUD,
+    let mut w = World { release: RELEASE, named: (REGISTRY, CHAIN_UID), mode: 1, verifier: signer().address().into_word(), epoch: EPOCH, auditor: AUD,
         statement: st.to_vec(), ..Default::default() };
     for (i, &u) in uas.iter().enumerate() {
         w.keys.insert((u, 0), key(&st[640 + i * PK..640 + (i + 1) * PK], &[i as u8 + 1; 8]));
@@ -259,7 +274,7 @@ impl Svc {
 fn service(w: World, pqz: Pqz) -> Svc {
     let fake = Arc::new(Fake(Mutex::new(w)));
     let cfg = Config::parse(CONFIG).unwrap();
-    let svc = Arc::new(Service::new(fake.clone(), pqz, signer(), &cfg, CHAIN_ID));
+    let svc = Arc::new(Service::new(fake.clone(), pqz, signer(), &cfg));
     Svc { app: http::router(svc, &cfg), fake }
 }
 
@@ -322,6 +337,7 @@ fn assert_signed(r: &(u16, Value), statement_hash: B256, proof_hash: B256) {
         verdict_digest(&v, CHAIN_UID));
     let s = Signature::from_raw(&bytes(&sig["signature"])).unwrap();
     assert_eq!(s.recover_address_from_prehash(&auth).unwrap(), signer().address());
+    assert_ne!(s.recover_address_from_prehash(&FORGED).ok(), Some(signer().address()), "the RPC's uaAuthDigest signed");
 }
 
 fn assert_refused(r: &(u16, Value), error: &str) {
@@ -585,7 +601,51 @@ async fn probe_signature() {
     assert_refused(&post(&s, "/v1/pqz-verdict/probe", req).await, "UNKNOWN_RELEASE");
 }
 
+/// Fable C-1: the probe signs only for an `OFFCHAIN` token that names this verifier (one change at a time, then back).
+#[tokio::test]
+async fn probe_refuses_token_not_served() {
+    let s = service(world(&[], &[]), all_valid());
+    let req = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
+    s.world().mode = 0;
+    assert_refused(&post(&s, "/v1/pqz-verdict/probe", req.clone()).await, "NOT_OFFCHAIN");
+    s.world().mode = 1;
+    s.world().verifier = C;
+    assert_refused(&post(&s, "/v1/pqz-verdict/probe", req.clone()).await, "NOT_THIS_VERIFIER");
+    s.world().verifier = signer().address().into_word();
+    assert_signed(&post(&s, "/v1/pqz-verdict/probe", req).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+}
+
+/// Fable C-1 (P0): a clone-shaped contract (proxy of the configured release) whose code names a registry or a `chainUid`
+/// other than the pinned ones is refused on both routes, though that registry answers every view; the control is signed.
+#[tokio::test]
+async fn refuses_clone_naming_rogue_registry() {
+    let (st, proof) = vector("TRANSFER", None);
+    let s = service(world(&st, &[A, B, AUD]), all_valid());
+    let req = request(single(A, 0, B), &st, &proof);
+    let probe = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
+    for (named, error) in [((ROGUE, CHAIN_UID), "FOREIGN_REGISTRY"), ((REGISTRY, B256::repeat_byte(7)), "FOREIGN_CHAIN_UID")] {
+        s.world().named = named;
+        assert_refused(&verdict(&s, &req).await, error);
+        assert_refused(&post(&s, "/v1/pqz-verdict/probe", probe.clone()).await, error);
+    }
+    s.world().named = (REGISTRY, CHAIN_UID);
+    assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
+    assert_signed(&post(&s, "/v1/pqz-verdict/probe", probe).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+}
+
+/// Fable C-1 (P0): the registry (or the RPC) answers `uaAuthDigest` with a forged hash; the service signs the digest it
+/// builds itself from the pinned values (`assert_signed` recovers over the test's own `UAAuth`, never over `FORGED`).
+#[tokio::test]
+async fn ignores_forged_rpc_digest() {
+    let s = service(world(&[], &[]), all_valid());
+    let r = post(&s, "/v1/pqz-verdict/probe", json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string()).await;
+    assert_signed(&r, keccak256(PROBE_STATEMENT), keccak256(b""));
+    let sig = Signature::from_raw(&bytes(&r.1["pqzVerdictSig"]["signature"])).unwrap();
+    assert_ne!(sig.recover_address_from_prehash(&FORGED).ok(), Some(signer().address()));
+}
+
 /// `smartcontracts/vectors/pqz/verdict.json` (the contracts' forge writer): the verifier's digest and signature.
+
 #[test]
 fn verdict_vectors() {
     let v = json_file("verdict.json");
@@ -613,6 +673,11 @@ fn verdict_vectors() {
         assert_eq!(digest, word(&r["digest"]), "{r}");
         let auth = ua_auth_digest_at(reg.separator(), k.address().into_word(), purpose_pqz_verdict(), digest);
         assert_eq!(auth, word(&r["uaAuthDigest"]), "{r}");
+        // the service's own builder, from the configured values
+        let mine = registry_domain(g["version"].as_str().unwrap().parse().unwrap(), uint(&g["chainId"]),
+            g["verifyingContract"].as_str().unwrap().parse().unwrap(), word(&g["salt"]));
+        assert_eq!(verdict_auth_digest(&mine, k.address().into_word(), digest), auth, "{r}");
+
         assert_eq!(k.sign_hash_sync(&auth).unwrap().as_bytes().to_vec(), bytes(&r["signature"]), "{r}");
     }
 }

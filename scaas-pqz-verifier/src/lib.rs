@@ -25,7 +25,7 @@ use pqz_ffi::stmt::{self, Form};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
-use abi::{IPqzToken, IUARegistry, PqzBurnArgs, PqzMultiArgs, PqzTransferArgs, PqzVerdict, Unwrap};
+use abi::{IPqzToken, IUARegistry, PqzBurnArgs, PqzMultiArgs, PqzTransferArgs, PqzVerdict, UAAuth, Unwrap};
 use chain::{Chain, ChainError};
 
 pub use pqz_ffi::{Word, INVALID, VALID};
@@ -75,12 +75,22 @@ pub fn body_limit() -> usize {
     2 * (2 * statement_lengths().into_iter().max().unwrap_or(0) + stmt::MAX_PROOF_PQZL) + 4096
 }
 
-/// The service's own configuration (`pqz-verifier.example.toml`); no secret in it.
+/// The service's own configuration (`pqz-verifier.example.toml`); no secret in it. One process serves one chain, pinned
+/// here: its chain id, its `chainUid` and the UA registry (with its generation) every served token must name. The digest
+/// signed is built from these values only (Fable C-1).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub bind: SocketAddr,
     pub rpc_url: String,
+    /// the chain served; every RPC endpoint must answer it at start, every request must name it
+    pub chain_id: u64,
+    /// the chain's `chainUid` (the salt of the token's and the registry's EIP-712 domains)
+    pub chain_uid: B256,
+    /// the UA registry every served token names in its code
+    pub registry: Address,
+    /// that registry's generation (1 or 2): its domain's version
+    pub registry_generation: u8,
     pub keystore: PathBuf,
     /// the name of the environment variable that holds the keystore's password
     pub keystore_password_env: String,
@@ -96,6 +106,9 @@ impl Config {
     pub fn parse(s: &str) -> anyhow::Result<Self> {
         let c: Self = toml::from_str(s)?;
         anyhow::ensure!(!c.releases.is_empty(), "no release configured");
+        anyhow::ensure!(c.chain_id != 0 && c.chain_uid != B256::ZERO && c.registry != Address::ZERO,
+            "chain_id, chain_uid, registry: required, non-zero");
+        anyhow::ensure!(matches!(c.registry_generation, 1 | 2), "registry_generation: 1 or 2");
         for (a, set) in &c.releases {
             anyhow::ensure!(set == stmt::SET, "release {a}: set {set}; this build verifies {} only", stmt::SET);
         }
@@ -185,6 +198,19 @@ pub fn verdict_digest(v: &PqzVerdict, chain_uid: B256) -> B256 {
     v.eip712_signing_hash(&d)
 }
 
+/// The registry's `UAAuth` domain (`UAKinds.uaAuthDomainSeparator`): `"SCaaS UARegistry"`, the generation in decimal, the
+/// chain id, the registry, salt `chainUid`.
+pub fn registry_domain(generation: u8, chain_id: u64, registry: Address, chain_uid: B256) -> Eip712Domain {
+    Eip712Domain::new(Some("SCaaS UARegistry".into()), Some(generation.to_string().into()), Some(U256::from(chain_id)),
+        Some(registry), Some(chain_uid))
+}
+
+/// What a native EOA verifier signs for a verdict digest (`UAKinds.uaAuthDigest`): `UAAuth{ua, PURPOSE_PQZ_VERDICT, digest}`
+/// in the registry's domain, built locally.
+pub fn verdict_auth_digest(registry: &Eip712Domain, ua: B256, digest: B256) -> B256 {
+    UAAuth { ua, purpose: purpose_pqz_verdict(), digest }.eip712_signing_hash(registry)
+}
+
 enum Plan {
     Multi(PqzMultiArgs),
     Single(PqzTransferArgs),
@@ -264,11 +290,9 @@ impl Plan {
     }
 }
 
-/// A factory instance: its registry and `chainUid` from its code (`ChainEnvCode`).
+/// A factory instance of a configured release whose code names the pinned registry and `chainUid`.
 struct Token {
     at: Address,
-    registry: Address,
-    chain_uid: B256,
 }
 
 #[derive(Default)]
@@ -285,6 +309,9 @@ pub struct Service {
     signer: PrivateKeySigner,
     ua: B256,
     chain_id: u64,
+    chain_uid: B256,
+    registry: Address,
+    registry_domain: Eip712Domain,
     releases: HashSet<Address>,
     valid_secs: u64,
     work: Semaphore,
@@ -304,6 +331,7 @@ fn leg_owner(blob: &[u8], leg: U256) -> Option<B256> {
     let group = (u64::BITS - stmt::Q.leading_zeros()) as usize / 2;
     let (pkp, vp) = (PK / 32 * group, stmt::V_BYTES / 32 * group);
     let r = &blob[..blob.len().checked_sub(vp)?];
+
     if r.len() < 16 + pkp {
         return None;
     }
@@ -320,13 +348,16 @@ fn leg_owner(blob: &[u8], leg: U256) -> Option<B256> {
 }
 
 impl Service {
-    pub fn new(chain: Arc<dyn Chain>, pqz: Pqz, signer: PrivateKeySigner, cfg: &Config, chain_id: u64) -> Self {
+    pub fn new(chain: Arc<dyn Chain>, pqz: Pqz, signer: PrivateKeySigner, cfg: &Config) -> Self {
         Self {
             chain,
             pqz,
             ua: signer.address().into_word(),
             signer,
-            chain_id,
+            chain_id: cfg.chain_id,
+            chain_uid: cfg.chain_uid,
+            registry: cfg.registry,
+            registry_domain: registry_domain(cfg.registry_generation, cfg.chain_id, cfg.registry, cfg.chain_uid),
             releases: cfg.releases.keys().copied().collect(),
             valid_secs: cfg.valid_minutes * 60,
             work: Semaphore::new(cfg.concurrency),
@@ -369,7 +400,27 @@ impl Service {
         if !self.releases.contains(&release) {
             return Err(refuse("UNKNOWN_RELEASE", format!("{at}: release {release} is not configured")));
         }
-        Ok(Token { at, chain_uid: B256::from_slice(&c[45..77]), registry: Address::from_slice(&c[77..97]) })
+        // ChainEnvCode: proxy ‖ chainUid ‖ registry ‖ …; the shape proves nothing, the pinned values do (Fable C-1)
+        let (chain_uid, registry) = (B256::from_slice(&c[45..77]), Address::from_slice(&c[77..97]));
+        if registry != self.registry {
+            return Err(refuse("FOREIGN_REGISTRY", format!("{at}: names registry {registry}, not {}", self.registry)));
+        }
+        if chain_uid != self.chain_uid {
+            return Err(refuse("FOREIGN_CHAIN_UID", format!("{at}: names chainUid {chain_uid}, not {}", self.chain_uid)));
+        }
+        Ok(Token { at })
+    }
+
+    /// The token's verifier configuration: `OFFCHAIN`, naming this verifier.
+    async fn served(&self, t: &Token) -> Result<abi::PqzVerifyConfig, Refusal> {
+        let cfg = self.read(t.at, IPqzToken::pqzVerifyConfigCall {}).await?;
+        if cfg.pqzVerifyMode != OFFCHAIN {
+            return Err(refuse("NOT_OFFCHAIN", format!("{}: pqzVerifyMode {}", t.at, cfg.pqzVerifyMode)));
+        }
+        if cfg.verifier != self.ua {
+            return Err(refuse("NOT_THIS_VERIFIER", format!("{}: verifier {}", t.at, cfg.verifier)));
+        }
+        Ok(cfg)
     }
 
     /// Spec §11.2: sign only when every check passes.
@@ -387,13 +438,7 @@ impl Service {
             return Err(refuse("STATEMENT_PROOF_SYSTEM", "the statement's word 32 is not the set's PQZL id"));
         }
         let t = self.token(req.token).await?;
-        let cfg = self.read(t.at, IPqzToken::pqzVerifyConfigCall {}).await?;
-        if cfg.pqzVerifyMode != OFFCHAIN {
-            return Err(refuse("NOT_OFFCHAIN", format!("{}: pqzVerifyMode {}", t.at, cfg.pqzVerifyMode)));
-        }
-        if cfg.verifier != self.ua {
-            return Err(refuse("NOT_THIS_VERIFIER", format!("{}: verifier {}", t.at, cfg.verifier)));
-        }
+        let cfg = self.served(&t).await?;
         if cfg.pqzVerifierEpoch != req.pqz_verifier_epoch {
             return Err(refuse("EPOCH_MISMATCH", format!("the token's epoch is {}", cfg.pqzVerifierEpoch)));
         }
@@ -420,23 +465,24 @@ impl Service {
             return Err(refuse("VERDICT_ZERO", "pqz-ffi does not accept the proof"));
         }
         for (ua, version, off) in self.named_keys(&plan, st, &t).await? {
-            self.check_key(t.registry, ua, version, &st[off..off + PK]).await?;
+            self.check_key(ua, version, &st[off..off + PK]).await?;
         }
         self.sign(&t, keccak256(st), keccak256(&req.proof), cfg.pqzVerifierEpoch).await
     }
 
-    /// Spec §4.2's probe: a verdict over [`PROBE_STATEMENT`] and an empty proof at the token's current epoch.
+    /// Spec §4.2's probe: a verdict over [`PROBE_STATEMENT`] and an empty proof at the token's current epoch, for an
+    /// `OFFCHAIN` token naming this verifier.
     pub async fn probe(&self, req: ProbeRequest) -> Result<Signed, Refusal> {
         if req.chain_id != self.chain_id {
             return Err(refuse("CHAIN_MISMATCH", format!("chain {}, not {}", req.chain_id, self.chain_id)));
         }
         let t = self.token(req.token).await?;
-        let cfg = self.read(t.at, IPqzToken::pqzVerifyConfigCall {}).await?;
+        let cfg = self.served(&t).await?;
         self.sign(&t, keccak256(PROBE_STATEMENT), keccak256(b""), cfg.pqzVerifierEpoch).await
     }
 
-    async fn current(&self, t: &Token, ua: B256) -> Result<u64, Refusal> {
-        Ok(self.read(t.registry, IUARegistry::pqzKeyOfCall { ua }).await?.version)
+    async fn current(&self, ua: B256) -> Result<u64, Refusal> {
+        Ok(self.read(self.registry, IUARegistry::pqzKeyOfCall { ua }).await?.version)
     }
 
     /// The keys the statement names, `(ua, version, offset)`: the sender at the args' `keyVersion`, the receiver or every
@@ -454,11 +500,11 @@ impl Service {
                 };
                 return Ok(vec![(owner, d.key_version, stmt::DISC_WORDS * 32)]);
             }
-            Plan::Single(a) => vec![(a.fromUA, a.keyVersion, HEADER), (a.toUA, self.current(t, a.toUA).await?, HEADER + PK)],
+            Plan::Single(a) => vec![(a.fromUA, a.keyVersion, HEADER), (a.toUA, self.current(a.toUA).await?, HEADER + PK)],
             Plan::Multi(a) => {
                 let mut k = vec![(a.fromUA, a.keyVersion, HEADER)];
                 for l in &a.legs {
-                    let v = self.current(t, l.ua).await?;
+                    let v = self.current(l.ua).await?;
                     k.push((l.ua, v, HEADER + k.len() * PK));
                 }
                 k
@@ -466,7 +512,7 @@ impl Service {
         };
         if st[stmt::H_AUDITOR_ON * 32..][..32] == B256::with_last_byte(1)[..] {
             let a = self.read(t.at, IPqzToken::auditorUACall {}).await?;
-            let v = self.current(t, a).await?;
+            let v = self.current(a).await?;
             k.push((a, v, HEADER + k.len() * PK));
         }
         Ok(k)
@@ -476,7 +522,8 @@ impl Service {
     /// own record across UAs and versions); then once per `(ua, version, pqzKeyHash)`: the record holds `pk`, its `pqzPop`
     /// bytes are stored and hash to its `pqzPopHash` (a hash-only record is refused), and they verify as `R_REG` over
     /// that version's message.
-    async fn check_key(&self, registry: Address, ua: B256, version: u64, pk: &[u8]) -> Result<(), Refusal> {
+    async fn check_key(&self, ua: B256, version: u64, pk: &[u8]) -> Result<(), Refusal> {
+        let registry = self.registry;
         let h = pqz_key_hash(pk);
         let owner = self.read(registry, IUARegistry::keyOwnerCall { keyHash: h }).await?;
         if owner != B256::ZERO && owner != ua {
@@ -560,8 +607,8 @@ impl Service {
         self.read(reg, IUARegistry::uaMessageCall { kind: PQZ_MLWE, purposeTag: purpose, digest }).await
     }
 
-    /// The verdict, its `UAAuth` digest by the registry (`uaAuthDigest`, the registry's rule for a native EOA), the
-    /// 65-byte low-s signature; logged with the token and both hashes.
+    /// The verdict, its `UAAuth` digest built locally from the pinned chain id, `chainUid` and registry (never a hash an
+    /// RPC returned: Fable C-1), the 65-byte low-s signature; logged with the token and both hashes. The only signing path.
     async fn sign(&self, t: &Token, statement_hash: B256, proof_hash: B256, epoch: u32) -> Result<Signed, Refusal> {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
         let v = PqzVerdict {
@@ -573,9 +620,8 @@ impl Service {
             pqzVerifierEpoch: epoch,
             validUntil: now + self.valid_secs,
         };
-        let digest = verdict_digest(&v, t.chain_uid);
-        let call = IUARegistry::uaAuthDigestCall { ua: self.ua, purposeTag: purpose_pqz_verdict(), digest };
-        let auth = self.read(t.registry, call).await?;
+        let auth = verdict_auth_digest(&self.registry_domain, self.ua, verdict_digest(&v, self.chain_uid));
+
         let sig = self.signer.sign_hash_sync(&auth).map_err(|e| refuse("SIGNER_FAULT", e.to_string()))?;
         tracing::info!(token = %t.at, statement_hash = %statement_hash, proof_hash = %proof_hash, epoch,
             valid_until = v.validUntil, "pqz verdict signed");

@@ -6,14 +6,21 @@ The reference **PQZ verifier (off-chain)** of the PQZ verifier mode (group 3f,
 A token created in `OFFCHAIN` mode names a verifier UA; a proof-carrying operation on it is accepted with that UA's
 signed `PqzVerdict` instead of the precompile's answer. This binary is one such verifier: it signs a verdict only when
 
-- the token is a factory instance of a configured release (release address → parameter set; this build verifies the set
-  of its `pqz-ffi` features only, `n2304-kmax4096` by default), names this verifier, is `OFFCHAIN`, and is at the
-  request's `pqzVerifierEpoch`;
+- the token is a proxy of a configured release (release address → parameter set; this build verifies the set of its
+  `pqz-ffi` features only, `n2304-kmax4096` by default) whose code names the configured registry and `chainUid`, names
+  this verifier, is `OFFCHAIN`, and is at the request's `pqzVerifierEpoch`;
 - the statement has one of the set's lengths and the set's PQZL id in word 32, and the token's own statement view,
   called with the request's named arguments at the current state, builds exactly these bytes;
 - `pqz-ffi` (byte for byte the precompile) answers `…01`;
 - every key the statement names passes spec §6 per key version (3g KV-12): its `pqzPop` bytes are stored and hash to
   its `pqzPopHash`, its `R_REG` proof verifies over that version's message, and no other UA or version owns it.
+
+**What it signs.** One process serves one chain, pinned in its configuration: `chain_id` (the RPC must answer it at start),
+`chain_uid`, and the UA `registry` with its `registry_generation`. The only thing signed is the `UAAuth` digest of a
+`PqzVerdict` (`UAKinds.uaAuthDigest`: `UAAuth{ua, PURPOSE_PQZ_VERDICT, digest}` in the registry's domain `"SCaaS UARegistry"`,
+the generation, the chain id, the registry, salt `chainUid`), built locally from those pinned values; a hash an RPC or a
+contract returns is never signed (Fable C-1). A token whose code names another registry or `chainUid` is refused
+(`FOREIGN_REGISTRY`, `FOREIGN_CHAIN_UID`).
 
 It verifies public bytes only and decrypts nothing ([ARCH-POS-13](../docs/decisions.md#ARCH-POS-13)). A refusal is a
 named JSON error, never a signature. Every signature is logged with the token, `statementHash` and `proofHash`.
@@ -32,8 +39,11 @@ keystore's path and the environment variable holding its password, never a secre
   pqzVerifierEpoch}` → `{pqzVerdict, pqzVerdictSig}`; `entry` one of the PQZ proof-carrying entries
   (`mtxConfidentialTransfer[Compact]`, `mtxConfidentialTransferSingle[Compact]`, `mtxUnshield`, `mtxUnshieldUnwrap`;
   `binding` 0 for a direct call, the envelope's binding for a relayed one) or `verifyTransferAmount`.
-- `POST /v1/pqz-verdict/probe` `{token, chainId}`: a verdict over a fixed probe statement (the typo guard before a
-  verifier transfer, spec §4.2).
+- `POST /v1/pqz-verdict/probe` `{token, chainId}`: a verdict over a fixed probe statement, for an `OFFCHAIN` token of the
+  pinned chain that names this verifier (else `NOT_OFFCHAIN`, `NOT_THIS_VERIFIER`); what the node's
+  `refuse_shield_when_unserved` asks. A verifier proposed but not yet confirmed is not named by the token, so the probe
+  refuses it.
+
 
 Bounds: a body limit set from the set's largest statement and proof, JSON nesting at most 4 below the request object,
 both checked before decoding; a per-address rate limit, a bounded queue, bounded verification concurrency.
