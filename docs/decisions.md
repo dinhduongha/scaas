@@ -693,6 +693,8 @@ Change (2026-11-10, the `ua*` / `mtx*` merge, [CTR-MTX-30](contracts/metatx.md#C
 
 **Source.** Spec `superpowers/specs/2026-11-06-attested-verify.md` §11.1 (approved by the owner 2026-11-06 with its controller calls C7, C8), §10 rows 6, 10; contract rules CTR-PQZ-27, CTR-PQZ-29.
 
+Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](#CTR-PQZ-36); status: SPECIFIED, not built): every proof-carrying PQZ job names `args.pqz_fee`, the fee word its proof was built over (a `uint64` decimal string); the node compares it with the token's word (`txFee + verifierFee + M·d`) at intake and before every send and refuses a difference `PQZ_FEE_MISMATCH`, zero sends, back in the queue and never `dead` while the op may land; a simulation's `AuthRejected` after an indexed `VerifierFeeSet` of the token maps to the same.
+
 ### NODE-JOB-23 — A PQZ job names the key version it debits; stale, reused, unknown, pending and rotated versions are refused by name
 - old: — · status: current · owner: yes · date: 2026-11-06 · normative: node/job-api.md#NODE-JOB-23 · superseded-by: —
 
@@ -1952,6 +1954,8 @@ Change (2026-11-10, ua-mtx-merge T19; status: BUILT for bit 22, UNAUDITED): `ope
 Change (2026-11-06 to 2026-11-07, groups 3f, 3h and the factory's S3): the router's closed table gains `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` over `UAPqzSetVerifier` / `UAPqzCancelVerifier` / `UAPqzRevokeVerifier` (`target` a PQZ token, which reads the router's subject as `_govSubject()` and requires the owner; CTR-PQZ-28, T45 `2cce490d`), `mtxSetProofStore` over `UASetProofStore` (CTR-GOV-22, T61 `6fb7a845`), and the factory's three creations `mtxCreateToken`, `mtxCreateDex`, `mtxCreateInstance` (`target` the chain's `OpenFactory`, the creation's named parameters, `initHash = keccak256(initArgs or initCall)` signed; the factory reads `subject()` once at entry and refuses 0, `RouterSubjectZero`; CTR-TOK-29, T76 `e8ca069b`); all fee mode `NONE`, relayable at fee 0. The router's code and CREATE2 address move. No node row for the creations until relaying them is decided (anyone submits them). Status: BUILT.
 Change (2026-11-10, the `ua*` / `mtx*` merge, [CTR-MTX-30](contracts/metatx.md#CTR-MTX-30), spec row R14; status: BUILT on branch `ua-mtx-merge`, UNAUDITED: `src/governance/`, `test/governance/GovRouter.t.sol`): the router's pairs merge to one `mtx<Op>(UAEnvelope e, …, UASig auth)` per operation, no `ua*` entry left. The spec counted 19 ops; the router today has **38** `mtx*` entries (9 in `GovernanceRouterBase`, 29 in `GovernanceRouter`; `git grep -c 'function mtx'`), the later rounds' operations included (tax, PQZ verifier, proof store, wrap limits, market, factory). G19 holds on the governed contracts.
 
+Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](#CTR-PQZ-36); status: SPECIFIED, not built): the router's closed table gains `mtxSetVerifierFee(UAEnvelope e, address target, uint64 next, UASig auth)` over `UASetVerifierFee` (`target` a PQZ token, which reads the router's subject as `_govSubject()` and requires the admin), fee mode `NONE`, relayable at fee 0.
+
 ### CTR-GOV-16 — Regulated kinds are real enum members before the factory freezes
 - old: governance:enum-ids · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-16 · superseded-by: —
 
@@ -2802,6 +2806,8 @@ Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
 Change (2026-11-04, governance T17; owner rulings CTR-GOV-01 with its Change, -04, -06, -12): `TokenConfig.owner` and the initial holders are UA ids (`bytes32`); `TokenConfig` gains `grantDelay`, `rescueTo` and `maxSupply`, each fixed at creation. Status: BUILT on branch `governance` (T7 `c2525e28`, T9 `20620a1e`, T10 `dc9bfde0`, T10b `ac29de05`).
 Change (2026-11-07, factory index and chain-neutral releases, CTR-TOK-27, CTR-TOK-29): the creation order is CREATE3 (with the instance's `ChainEnv` appended to the clone's code) → `initialize(creatorId, …)` → the post-init `chainUid()` check → the index record → the event; `predictAddress(creatorId, class, kind, salt)`; `TokenCreated` and `DexCreated` carry `bytes32 indexed creatorId` (the signing UA through the router); the index record replaces the per-token info behind the registry views. Status: BUILT (T67 `658f684f`, T71 `b61ac38d`, T72 `612981b9`, T76 `e8ca069b`).
 
+Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](#CTR-PQZ-36); status: SPECIFIED, not built): `TokenConfig.conf` gains `uint64 verifierFee` and `uint64 verifierFeeMax` after `proofStore`, so the encoding of every kind's `TokenConfig` moves (all chains test-only: no alias); every kind but an `OFFCHAIN` PQZ token requires both 0 (`ConfigFieldForOtherKind(4)`, or `PqzVerifyConfigInvalid()` on a `PRECOMPILE` PQZ token).
+
 ### CTR-TOK-26 — A leg may be the native coin
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-26 · superseded-by: —
 
@@ -3610,6 +3616,8 @@ Change (owner 2026-11-10, group 3s, [CTR-GOV-24](#ctr-gov-24--kyc-bit-28-allowli
 **Why.** Codex 1, Fable F-15: `payWithFee`, `mtxWrapOrder`, `mtxPayReceiverFee` and `mtxRelayFee` moved a fee to an unchecked recipient. Owner 2026-11-05: the DEX relayer share is an ordinary credit; a frozen payee cannot pay a receiver fee.
 **Cost if wrong.** A frozen or ineligible account receives the token through a fee.
 **Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-6, §3.2, the owner's five calls 1 and 2.
+
+Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](#CTR-PQZ-36); status: SPECIFIED, not built): on kinds 12, 13 the verifier fee is a fee leg: its payee, the current verifier UA, is checked as a fee recipient before effects while the fee is not 0.
 
 ### CTR-AS-26 — The pause-open set: unwrap x2, unwrapToUA and burn at fee mode NONE, on every path
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: contracts/asset-suite.md#CTR-AS-26 · superseded-by: —
@@ -5290,6 +5298,8 @@ Change (2026-10-21, owner rulings, controller record): **Amsterdam re-plan** (sp
 
 Change (2026-10-27): **review C0-7, option (1) (controller proposal 2026-10-27, owner may override)**: the fee beneficiary of a PQZ debit is any registered UA-ledger receiver (`kindOf(ua) ≠ 0`); it needs no PQZ key (the `txFee` is a public pool → UA-ledger credit, as this entry, the UA-6 spec and the pq-zero-knowledge.md §7.10 say). The PQZ holder rule still applies to the sender, the credited legs and the auditor. Status: **done** (review2 T1, branch `review2-fix`; `PqzGuards.t.sol` `test_beneficiary_anyRegisteredUA`).
 
+Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](#CTR-PQZ-36); status: SPECIFIED, not built): **a third fee on `OFFCHAIN` tokens.** Old: two fees, the statement's `fee` word `txFee + M·d`. New: `verifierFee` (kinds 4, 5, 12, 13 in `OFFCHAIN` mode; 0 on every other token) joins the word once per debit, `txFee + verifierFee + M·d`, and goes from `SHIELD_POOL` to the current verifier UA's public balance beside the beneficiary's `txFee` and the legs' `decoyFee`; a refresh and a stale version's migration pay it too.
+
 ### CTR-PQZ-07 — Ciphertexts in calldata, hashes in storage
 - old: R276 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-07 · superseded-by: —
 
@@ -5566,6 +5576,8 @@ Change (2026-11-06, owner ruling R2; NODE-JOB-22): **applied, not changed.** The
 
 Change (2026-10-20, controller record): with `plainPending` removed the limit reads `totalShielded ≤ maxShielded` and `totalShielded · shieldScale == balanceOf(SHIELD_POOL)`; `initialize` also requires `confidentialFee + 8 · minDecoyFee < 2^64` and `< maxShielded`; an op 7 `decoyFee < 2^64` (`DecoyFeeOutOfRange`). Status: built (plan 5h Task 3).
 
+Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](#CTR-PQZ-36); status: SPECIFIED, not built): the init row reads `confidentialFee + verifierFeeMax + 8·minDecoyFee < 2^64` and `< maxShielded` (`BadInit`), after `verifierFee ≤ verifierFeeMax` (`VerifierFeeAboveMax`); both are 0 on a `PRECOMPILE` token, whose row is today's.
+
 ### CTR-PQZ-18 — Native and WASM prover platforms early
 - old: R287 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-18 · superseded-by: —
 
@@ -5706,6 +5718,8 @@ Change (2026-10-26): controller proposal, owner may override — **R0 review fix
 **Cost if wrong.** A verifier that signs a false proof fabricates a balance under a UA it controls and drains the pool up to the maximum loss; a verifier that stops signing freezes every confidential balance of its token.
 **Source.** Owner rulings O1, O2, R1, R4 (2026-11-06); names (owner 2026-11-07); spec [superpowers/specs/2026-11-06-attested-verify.md](superpowers/specs/2026-11-06-attested-verify.md) §2 (AV-1), §3 (AV-2), §10 rows 1, 7, 9; reviews [Codex](research/attest-codex-review.md), [Fable](research/attest-fable-review.md); threat T27 ([pq-zero-knowledge.md §12](contracts/pq-zero-knowledge.md#threats)).
 
+Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](#CTR-PQZ-36); status: SPECIFIED, not built): `ConfidentialConfig` gains `verifierFee` and `verifierFeeMax` (`OFFCHAIN` only; a `PRECOMPILE` token refuses a non-zero value with `PqzVerifyConfigInvalid()`), and the trust model shown at creation, in wallets and before a shield adds the fee, its cap and a pending increase. The maximum loss is unchanged: the verifier's fees leave the pool only as `totalShielded` falls.
+
 ### CTR-PQZ-28 — The verifier UA: kinds, frozen shape, fixed or transferable with notice, immediate revocation
 - old: — · status: current · owner: yes · date: 2026-11-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-28 · superseded-by: —
 
@@ -5723,6 +5737,8 @@ Change (2026-10-26): controller proposal, owner may override — **R0 review fix
 **Why.** R2: no verdict book; the verdict inline as the last parameters, one `requireAuthorized` in `_check` with the existing `UAVerifyGas` shape, outside the subject's typed struct so no typehash moves. Codex #1: the epoch is signed, so a signature dies at every verifier change, A → B → A included. C1: `statementHash` over the exact bytes the token builds, field-by-field binding. The pair is one struct because the legacy code generator ran out of stack: the spec's sanctioned fallback (§5.3 "Stack"; the 3e `RelayPay` precedent), still explicit.
 **Cost if wrong.** A verdict that fits another statement, proof, token, chain or epoch would accept a proof nobody checked.
 **Source.** Owner ruling R2 (2026-11-06); owner 2026-11-08 (the measured effects); spec §5 (AV-5), §10 rows 5, 6, 8; Codex #1, #3, #7 and Fable P1-4 (closed by R2), Fable (a).
+
+Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](#CTR-PQZ-36); status: SPECIFIED, not built): the statement a verdict hashes carries the verifier fee in its `fee` word, so a `VerifierFeeSet` makes every statement built before it stale: the op refuses (`AuthRejected`, and with a re-signed `pqzAuth` `PqzVerdictMismatch(3)`) and the holder re-proves; `PqzVerdict` and its typehash are unchanged.
 
 ### CTR-PQZ-30 — OFFCHAIN tokens accept unproven PQZ keys of the set length; the verifier checks them off chain
 - old: — · status: current · owner: yes · date: 2026-11-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-30 · superseded-by: —
@@ -5777,6 +5793,16 @@ Change (2026-10-26): controller proposal, owner may override — **R0 review fix
 **Why.** O3, O9: an issuer may choose to keep every proof in the logs for audits, at a gas price; NONE costs nothing new.
 **Cost if wrong.** A LOG token can hold a large debit in the node's queue (`PROOF_STORE_OVER_LANE_CAP`, NODE-JOB-24) until the issuer sets NONE or the job expires.
 **Source.** Owner rulings O3, O9, O11, O13 (2026-11-07); controller calls C7, C8 and the rulings of 2026-11-09; spec `superpowers/specs/2026-11-06-pqz-proof-path.md` §5, §12, Appendix A; matrix `smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-proofpath-matrix.txt`.
+
+<a id="CTR-PQZ-36"></a>
+### CTR-PQZ-36 — The verifier fee: an OFFCHAIN token pays its verifier UA from the fee word, capped, raised only with notice
+- old: — · status: current · owner: yes · date: 2026-11-11 · normative: decisions.md#CTR-PQZ-36 · superseded-by: —
+
+**Rule.** PQZ kinds 4, 5, 12, 13 in `OFFCHAIN` mode only. (1) **Config.** `ConfidentialConfig` gains `uint64 verifierFee` and `uint64 verifierFeeMax` after `proofStore`, the cap immutable; a `PRECOMPILE` token refuses either non-zero (`PqzVerifyConfigInvalid()`), every other kind `ConfigFieldForOtherKind(4)`; `verifierFee = 0` is off, with no flag; init checks `verifierFee ≤ verifierFeeMax` (`VerifierFeeAboveMax(fee, max)`) and the range row `confidentialFee + verifierFeeMax + 8·minDecoyFee < 2^64` and `< maxShielded` (`BadInit()`). (2) **Payment.** Every proof-carrying debit (op 1, op 7, burn, refresh, unwrap; direct and envelope forms) adds the current `verifierFee` once to the statement's public `fee` word, `txFee + verifierFee + M·d`; the relations and `proofSystemId` are unchanged (`fee` is a public input of every debit relation). `totalShielded` falls by the whole word as today, and the token pays `verifierFee · shieldScale` from `SHIELD_POOL` to the current verifier UA's public balance (a native id's ERC-20 balance, a derived UA's ledger balance, created by the first payout; no PQZ key needed), after the beneficiary's `txFee` and before the decoy legs; on 12, 13 that payee is checked as a fee recipient before effects (CTR-AS-25) while the fee is not 0. `verifyTransferAmount` charges nothing; `confidentialFee` is unchanged. (3) **Changing it.** The admin calls `setVerifierFee(uint64 next)` or the router's `mtxSetVerifierFee` over `UASetVerifierFee` (fee mode `NONE`, relayable at fee 0), within `[0, verifierFeeMax]`: a decrease, to 0 included, applies at once and drops a pending increase; an increase proposes with `eta = now + noticePeriod` (the factory's, stored at init), and the same call by the same proposer in the same admin generation within `[eta, eta + noticePeriod]` confirms, as the verifier transfer of CTR-PQZ-28; events `VerifierFeeProposed(current, next, eta)` and `VerifierFeeSet(previous, next)`; `pqzVerifyConfig()` shows the fee, the cap and a live pending increase. A change makes every op built at the old fee refuse (the holder's `PqzAuth` and the verdict bind the word), so relayers simulate first. Storage: `scaas.pqz` slots 20–22, appended.
+**Status.** SPECIFIED (spec `superpowers/specs/2026-11-11-verifier-fee.md`, branch `ua-mtx-3t`); nothing built; the build follows 3s. Defaults the owner may override (spec §18): the fee counts in the fee word's unit and is paid as `verifierFee · shieldScale` public units; the init range row uses the cap; a decrease drops a pending increase.
+**Why.** A verifier UA that checks every proof off chain is a paid service; its fee comes from the debit it verifies, through the fee word the proof already binds, so no relation moves and the pool pays out only what a hidden balance lost. The cap and the notice bound what an admin can take from holders.
+**Cost if wrong.** An admin can raise every debit's cost to the cap after the notice (at once where the notice is 0); dust below the fee cannot leave without a `shieldIn` top-up; a fee change strands every op built before it; on 12, 13 a payee that fails a compliance check stops every debit until the fee is 0.
+**Source.** Owner 2026-11-11, in chat, on the controller's proposal of the same day: "OK, vậy đi" (OK, go with it). The controller's additions of the same day, after the owner asked whether `SHIELD_POOL` can be drained by continuous confidential transfers: the verifier fee is inside the proved fee, `totalShielded` and the pool move together, the invariant test, and the drain row (a lying verifier is the only path, bounded by the maximum loss of CTR-PQZ-27). Spec `superpowers/specs/2026-11-11-verifier-fee.md` §1, §3 to §9.
 
 ### CTR-PQZ-80 — PqzMetaTx: own mixin with op arguments sliced from calldata
 - old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-PQZ-21
