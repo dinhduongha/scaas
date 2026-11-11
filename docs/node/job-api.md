@@ -372,6 +372,17 @@ node's, for every consumer. **UNAUDITED.**
   ([ops.md](ops.md#pqz-verifier)); none configured ⇒ `PQZ_VERDICT_MISSING` (`dead`); configured but none answers, or the answer
   is still at another epoch after one re-fetch ⇒ `PQZ_VERDICT_MISSING`, back in the queue; zero sends either way. The node holds
   no verifier key and signs nothing.
+- **`pqz_fee`** (group 3t, [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); BUILT, UNAUDITED): the twelve entries take
+  `args.pqz_fee`, the fee word the proof was built over, a `uint64` decimal string (hex `HEX_ARGS_REFUSED`, `≥ 2^64`
+  `BAD_PAYLOAD`); required on an `OFFCHAIN` token (`BAD_PAYLOAD: no pqz_fee`, `dead`) and optional on a `PRECOMPILE` one. It is
+  never sent: the node compares it, before the verdict fetch, at intake and again before every send, with **one source**, word
+  256 of the statement the token's own view builds for the job (on a `PRECOMPILE` token one view call, made only when the job
+  names it). A difference is `PQZ_FEE_MISMATCH: proved {p}, the token's fee word is {e} (txFee {a}, verifierFee {b}, M·d {c})`,
+  zero sends: a 422 at the gateway, back in the queue on the lane until the deadline (a decrease may restore the word), never
+  `dead` while the op may land. A simulation that reverts `AuthRejected()` or `PqzVerdictMismatch(3)` after an indexed
+  `VerifierFeeSet` of the job's token since intake (the `PQZ_KEY_ROTATED` window) is `PQZ_FEE_MISMATCH: <error> after
+  VerifierFeeSet`, back in the queue; without that event `AuthRejected` stays `dead`. **Operator note:** a job shape change for
+  `OFFCHAIN` tokens: a consumer on the old shape gets `BAD_PAYLOAD: no pqz_fee`.
 - **Deadline.** The job's deadline becomes the sooner of the envelope's and the verdict's `validUntil`; a stuck replacement past
   the verdict would revert, so it is gap-filled instead.
 - **Pre-checks**, before any simulation: `pqzVerifyConfig()` (mode, verifier, epoch; verifier 0 = revoked), the epoch equal, the
@@ -381,15 +392,18 @@ node's, for every consumer. **UNAUDITED.**
   `PqzVerifierChanged`, `PqzVerifierNotReady(eta)`, `PqzVerifierPending(next)`, `PqzVerifierUnregistered(ua)`, and a revoked
   verifier at the pre-check) are `PQZ_VERDICT_REFUSED: <error>`, back in the queue, never `dead` while the op may land with another
   verdict; the final ones (`PqzVerifierFixed`, `PqzVerifierSame`, `PqzVerifierKind(kind)`, `PqzVerdictRequired`,
-  `PqzVerifyModeInvalid(mode)`, `PqzVerifyConfigInvalid`) are `dead` under their own name. A `PqzVerdictMismatch` after an indexed
+  `PqzVerifyModeInvalid(mode)`, `PqzVerifyConfigInvalid`) are `dead` under their own name; group 3t: the fee setter's
+`VerifierFeeNotReady(eta)` and `VerifierFeePending(pending)` liftable, `VerifierFeeAboveMax(fee, max)` and `VerifierFeeSame` final. A `PqzVerdictMismatch` after an indexed
   `UAPqzKeyCurrent` of a party is `PQZ_KEY_ROTATED` ([NODE-JOB-23](#NODE-JOB-23)).
 - **Shield refusal** (opt-in, `[pqz_verifier] refuse_shield_when_unserved = true`, default `false`): shield and wrap-shield jobs
   into an `OFFCHAIN` token whose verifier is revoked or which none of the endpoints serves (their probe) are refused
   `PQZ_VERIFIER_UNREACHABLE` (`dead`), the same rule for every consumer, so no relayer of the node adds value to a pool nobody
   serves. `PRECOMPILE` tokens are never affected.
 - **Rows:** `typed.rs` / `guard.rs` carry the entries with the verdict and the router's `mtxPqzSetVerifier`,
-  `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` ([call table](#call-table)), equal both directions with the contract's
-  `mtxSelectors()` and `selector_audit.json`. The token's owner stubs `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier` are
+  `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` and (group 3t) `mtxSetVerifierFee` over `UASetVerifierFee` (selector
+  `0xf0d8cbbf`) ([call table](#call-table)), equal both directions with the contract's
+  `mtxSelectors()` and `selector_audit.json`. The token's owner stubs `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier`
+  and `setVerifierFee` are
   no rows (the owner's own call, relayed through the router only), nor is the seven-argument `verifyTransferAmount` (a view). No new
   job kind ([CTR-PQZ-15](../contracts/pq-zero-knowledge.md#CTR-PQZ-15)); never on the mesh. A `PRECOMPILE`-only probe of the chain
   never refuses an `OFFCHAIN` job ([ops.md](ops.md#pqz-verifier)).
@@ -958,12 +972,12 @@ cancels 2 rps (burst 10).
 | 409 | `IDEMPOTENCY_MISMATCH`, `PREVIOUS_GENERATION_LIVE`, `SUPERSEDED` (all with `uid`), `DUPLICATE_DIGEST`, `DUPLICATE_CALL` (with `uid`), `TOO_LATE` (with `state`, `published`), `CHAIN_HALTED` | [intake](#intake), [cancel](#cancel) |
 | 410 | `CURSOR_EXPIRED` | [indexer-feeds.md#cursors](indexer-feeds.md#cursors) |
 | 413 | `TOO_LARGE` | body > 1 MiB |
-| 422 | `BAD_PAYLOAD`, `HEX_DATA_REFUSED`, `HEX_ARGS_REFUSED`, `PQZ_VERDICT_MISSING`, `PQZ_VERDICT_NOT_EXPECTED`, `PQZ_VERIFIER_UNREACHABLE` ([NODE-JOB-22](#NODE-JOB-22)), `PQZ_KEY_ROTATION_PENDING` ([NODE-JOB-23](#NODE-JOB-23)), `SERVICE_PULL_SHAPE`, `SERVICE_TOKEN_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)), `UNKNOWN_ENTRY`, `ENTRY_AMBIGUOUS`, `OP_KIND_MISMATCH`, `MANDATE_LANE`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
+| 422 | `BAD_PAYLOAD`, `HEX_DATA_REFUSED`, `HEX_ARGS_REFUSED`, `PQZ_VERDICT_MISSING`, `PQZ_VERDICT_NOT_EXPECTED`, `PQZ_VERIFIER_UNREACHABLE`, `PQZ_FEE_MISMATCH` ([NODE-JOB-22](#NODE-JOB-22)), `PQZ_KEY_ROTATION_PENDING` ([NODE-JOB-23](#NODE-JOB-23)), `SERVICE_PULL_SHAPE`, `SERVICE_TOKEN_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)), `UNKNOWN_ENTRY`, `ENTRY_AMBIGUOUS`, `OP_KIND_MISMATCH`, `MANDATE_LANE`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
 | 429 | `RATE_LIMITED`, `QUOTA`, `SPONSOR_BUDGET`, `SPONSOR_RATE`, `SPONSOR_TOO_SHORT` (all three with `policy`), `SUBJECT_THROTTLED` (with `retry_after`) | per key: POST 20 rps (burst 40), GET 10 rps, tombstone-creating cancels 2 rps (burst 10); `Retry-After` |
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost |
 
 Terminal reasons that are not HTTP codes: job `dead` with `error = ATTEMPTS_EXHAUSTED` (`attempt_count >
-chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_KEY_ROTATED`,
+chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_FEE_MISMATCH`, `PQZ_KEY_ROTATED`,
 `PQZ_KEY_VERSION_UNKNOWN`, `PROOF_STORE_OVER_LANE_CAP` ([NODE-JOB-24](submit-lanes.md#NODE-JOB-24)); a lane stopped by
 `SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 

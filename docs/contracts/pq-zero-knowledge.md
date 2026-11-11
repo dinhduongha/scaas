@@ -777,7 +777,8 @@ unwraps, `Σ balanceOf == totalSupply`, escrow `underlying.balanceOf(this) ≥ t
 
 <a id="credit-cap"></a>
 <a id="CTR-PQZ-06"></a>**CTR-PQZ-06** — **No credit is refused: an unbounded ordered queue, a capped `acc`, public amounts as
-TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; built in part A on today's parameters.)
+TRIVIAL entries, two fees and the verifier fee.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; built in part A on today's
+parameters; the verifier fee: owner 2026-11-11, [CTR-PQZ-36](#CTR-PQZ-36), group 3t.)
 
 - **Credits.** An op 1 or op 7 credit appends one pending slot (≈ 26 k gas, ≈ 46 k for an account's first) and never reverts
   for the receiver's state: `RefreshRequired` and every cap check on a credit are gone, `pendingCount` is unbounded.
@@ -799,10 +800,13 @@ TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; 
   queue (`plainPending`, removed) is rejected for the same reason: a rollover between prove and submit would make the
   contract's `T` differ from the proof's. `shieldIn` (formerly `plainUsed`) is the same-call top-up: public units moved from
   the signer into `SHIELD_POOL` and added as one `Trivial(digits(shieldIn))` term of `T`; the relation is unchanged.
-- **Fees (owner 2026-10-20), both paid out of `SHIELD_POOL` to public UA-ledger balances.** `txFee` = `confidentialFee`,
-  per transaction on any op that names a beneficiary, to that beneficiary. `decoyFee`, op 7 only: an explicit
+- **Fees (owner 2026-10-20; group 3t), all paid out of `SHIELD_POOL` to public balances.** `txFee` = `confidentialFee`,
+  per transaction on any op that names a beneficiary, to that beneficiary. `verifierFee`, `OFFCHAIN` tokens of kinds 4, 5,
+  12, 13 only ([CTR-PQZ-36](#CTR-PQZ-36)): the token's current fee, once per proof-carrying debit (op 1, op 7, burn,
+  refresh, unwrap), to the current verifier UA. `decoyFee`, op 7 only: an explicit
   sender-chosen payload word `d ≥ minDecoyFee`, the same `d` to **every** leg (the real recipient included, so it reveals
-  no decoy); the statement's `fee` word is `txFee + M·d`, so the proof binds `d`. `minDecoyFee` is immutable at
+  no decoy); the statement's `fee` word is `txFee + verifierFee + M·d`; the proof binds `d` with the envelope's signature
+  relayed and the binding word's `verifierFee` direct ([CTR-PQZ-25](#CTR-PQZ-25)), so the word's split is bound on both forms. `minDecoyFee` is immutable at
   `initialize`, may be 0, has no chain floor (`ConfidentialConfig.multiLegFee` is renamed `minDecoyFee`; the Zether
   kinds take the same rule on their multi-recipient format, [zether.md §7](zether.md#CTR-ZTH-37)). `d < minDecoyFee` or `d ≥ 2^64` reverts `DecoyFeeOutOfRange(d, min)`. Op 1 never pays a decoy fee
   and **shields are free** (gas only; a tx fee only when relayed). A fee needs a registered beneficiary with a UA-ledger
@@ -839,8 +843,9 @@ the 5h Task 3 fix; the earlier 4 KiB margin target was dropped by the owner, the
 
 <a id="limits"></a>
 <a id="CTR-PQZ-17"></a>**CTR-PQZ-17** — **Limits.** `MAX_TOTAL_SHIELDED = 2^62`; transfer and burn amounts `< 2^64` (16
-base-16 digits); `confidentialFee < 2^64`, `d < 2^64` and `confidentialFee + 8·minDecoyFee < 2^64` and `< maxShielded` at
-`initialize` (`BadInit`); `totalShielded ≤ maxShielded` (it equals `balanceOf(SHIELD_POOL) / shieldScale`); `shieldScale`
+base-16 digits); `confidentialFee < 2^64`, `d < 2^64` and `confidentialFee + verifierFeeMax + 8·minDecoyFee < 2^64` and
+`< maxShielded` at `initialize` (`BadInit`; `verifierFeeMax` 0 on every token but an `OFFCHAIN` one, group 3t,
+[CTR-PQZ-36](#CTR-PQZ-36); the cap, so every value the setter can write keeps the row); `totalShielded ≤ maxShielded` (it equals `balanceOf(SHIELD_POOL) / shieldScale`); `shieldScale`
 as classical ([CTR-ZTH-04](zether.md#CTR-ZTH-04)). No BSGS bound any more; 2^62 keeps `b' + v + fee < 2^64` for honest
 states and values in signed 64-bit for clients. The classical 2^54 rationale (the BSGS decryption bound,
 [CTR-ZTH-26](zether.md#CTR-ZTH-26)) does not carry over.
@@ -1053,17 +1058,23 @@ credit), indistinguishable on chain from a real leg; 7 real recipients ⇒ `M = 
 Decoys are the wallet's choice (D16): no on-chain consent or decoy rule. **`decoyFee`** (owner 2026-10-20, replacing the
 earlier `multiLegFee`): op 7 carries an explicit payload word `d` (after `M`, before the salt: `… ‖ be32(M) ‖ d ‖ salt(16) ‖ UA_0 …`);
 `d ≥ minDecoyFee` (the token's immutable `ConfidentialConfig.minDecoyFee`, default 0; the Zether kinds take it too) and `d < 2^64`, else
-`DecoyFeeOutOfRange(d, minDecoyFee)`. The statement's public `fee` word is `txFee + M·d` (`txFee = confidentialFee` with a
-beneficiary; `≥ 2^64` ⇒ `AmountOutOfRange`), so the proof binds `d`. The beneficiary gets the `txFee` part and **every**
+`DecoyFeeOutOfRange(d, minDecoyFee)`. The statement's public `fee` word is `txFee + verifierFee + M·d` (`txFee =
+confidentialFee` with a beneficiary; `verifierFee` on `OFFCHAIN` only, [CTR-PQZ-36](#CTR-PQZ-36); `≥ 2^64` ⇒
+`AmountOutOfRange`), so the proof binds `d` (relayed by the envelope's signature over `decoyFee`, direct by the binding
+word's `verifierFee` below). The beneficiary gets the `txFee` part and **every**
 listed leg, real recipient included, gets `d` — the same for every leg, so it reveals nothing, and listing a victim as a
 decoy costs the sender `d` paid to the victim (T22); all of it is paid out of `SHIELD_POOL` to the public UA-ledger
-balances, from the amount the library debited. `confidentialFee + 8 · minDecoyFee < 2^64` and `< maxShielded`
-(`BadInit`). Op 1 never charges `d`. The storage mode is the user's per
+balances, from the amount the library debited; the verifier fee goes to the verifier UA. `confidentialFee + verifierFeeMax +
+8 · minDecoyFee < 2^64` and `< maxShielded` (`BadInit`). Op 1 never charges `d`. The storage mode is the user's per
 transfer through the entry they call: the contract never switches it, and nobody else can. A relayed call is bound by
 the envelope signature over `data`, selector included, **and the mode is folded into the statement binding** (plan 5h D15,
 review L1): `binding = keccak256(abi.encode(envelopeBinding, uint8(mode)))`; a **direct call** uses
 `keccak256(abi.encode(keccak256("SCAAS-PQZ-DIRECT-MODE-V1"), uint8(mode)))` with mode HASH 0 (`…Compact`,
-`mtxConfidentialTransfer*` on a COMPACT token) and BUNDLE 1 (NONE, 2, is retired). A proof built for one mode therefore does
+`mtxConfidentialTransfer*` on a COMPACT token) and BUNDLE 1 (NONE, 2, is retired); on an `OFFCHAIN` token (group 3t,
+[CTR-PQZ-36](#CTR-PQZ-36), Fable P1-1) the direct binding also binds the verifier fee in force,
+`keccak256(abi.encode(TAG_DIRECT_MODE_VF, uint8(mode), uint256(verifierFee)))` with `TAG_DIRECT_MODE_VF =
+keccak256("SCAAS-PQZ-DIRECT-MODE-VF-V1")` = `0x822f04ee…76a8` (pinned), so a fee change of `M·k` met by `d ∓ k` on a built op
+refuses; `PRECOMPILE` bindings and every relayed binding are unchanged. A proof built for one mode therefore does
 not verify through the other entry, relayed or direct (review W-A, 2026-10-19; classical Zether puts the mode in `opTag`). An
 unwrap's binding folds the leg and `minOut` the same way (`keccak256(abi.encode(envelopeBinding, unwrapBinding(u, minOut)))`
 relayed; direct unchanged); burns and refreshes have no mode and keep the envelope binding. The statement views take `binding` 0
@@ -1264,7 +1275,7 @@ Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 | 160 | `fromUA` |
 | 192 | `toUA` (0 for burn/refresh) |
 | 224 | `beneficiaryUA` (0 if none) |
-| 256 | `fee` |
+| 256 | `fee`: `txFee + verifierFee (+ M·d)` (`verifierFee` on `OFFCHAIN`, [CTR-PQZ-36](#CTR-PQZ-36)) |
 | 288 | `amount` (burn; else 0) |
 | 320 | `recipient` (burn; else 0) |
 | 352 | `sendCounter` |
@@ -1273,7 +1284,7 @@ Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 | 448 | `auditorOn` (0/1) |
 | 480 | `shieldIn` ([CTR-PQZ-06](#CTR-PQZ-06); named `plainUsed` before plan 5h, same word, same relation) |
 | 512 | `chainUid` (the token's copy of `registry.chainUid()`, [CTR-PQZ-01](#CTR-PQZ-01)) |
-| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)), per op and path. **Transfer** (op 1, op 7): `keccak256(abi.encode(b, mode))` with `b` = `TAG_DIRECT_MODE` direct, the envelope's v1 or v3 binding relayed (`_bindMode`, [CTR-PQZ-25](#CTR-PQZ-25)). **Burn / refresh** (`mtxUnshield`): 0 direct, the raw envelope binding relayed (`prepareBurn` never folds the mode). **`mtxUnshieldUnwrap`**: `unwrapBinding(leg, minOut)` direct, `keccak256(abi.encode(envelope, unwrapBinding(leg, minOut)))` relayed. A prover that uses the raw envelope binding for a relayed transfer gets `ProofRejected` |
+| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)), per op and path. **Transfer** (op 1, op 7): `keccak256(abi.encode(b, mode))` with `b` = `TAG_DIRECT_MODE` direct, the envelope's v1 or v3 binding relayed (`_bindMode`, [CTR-PQZ-25](#CTR-PQZ-25)); direct on an `OFFCHAIN` token `keccak256(abi.encode(TAG_DIRECT_MODE_VF, mode, verifierFee))` (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)). **Burn / refresh** (`mtxUnshield`): 0 direct, the raw envelope binding relayed (`prepareBurn` never folds the mode). **`mtxUnshieldUnwrap`**: `unwrapBinding(leg, minOut)` direct, `keccak256(abi.encode(envelope, unwrapBinding(leg, minOut)))` relayed. A prover that uses the raw envelope binding for a relayed transfer gets `ProofRejected` |
 | 576 | `salt` (16 zero bytes ‖ the build salt, [CTR-PQZ-19](#CTR-PQZ-19); burn/refresh 0, their randomness is fresh CSPRNG output) |
 | 608 | `memoHash`: since 3h `keccak256(memo ‖ ownTag)` ([CTR-PQZ-34](#CTR-PQZ-34); HASH `memo = salt ‖ sealedMemo`, every other debit `keccak256(ownTag)`); before 3h `keccak256(memo)` on commit-reveal, else 0 |
 
@@ -1296,7 +1307,7 @@ blob of `entryRef`), `Debited(bytes32 indexed ua, uint64 rolled, uint64 floor, a
 `rolled` move; `acc` now references `blob`), `ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32
 indexed toUA, bytes32 beneficiary, uint256 fee, uint64 sendCounter, address blob)` and `ConfidentialTransferMulti(bytes32 indexed
 entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob)`
-(as built in `IConfidentialToken`; `fee` = the proven fee word, op 7: txFee + M·decoyFee; the blob is the op blob, the salt its first 16 bytes; `recipients` replaces the
+(as built in `IConfidentialToken`; `fee` = the proven fee word, `txFee + verifierFee + M·decoyFee` (`verifierFee` on `OFFCHAIN` only, group 3t; the word's three payees are split in the same transaction's pool moves, `Transfer` / `UATransfer` from `SHIELD_POOL`); the blob is the op blob, the salt its first 16 bytes; `recipients` replaces the
 earlier `recipientsHash, legs`, both derivable from it),
 `RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash)`, `Unshielded(bytes32 indexed ua, uint256 amount,
 bytes32 indexed recipient, address blob)` (burn or refresh, `amount = 0`; the as-built PQZ event of plan 5h Task 3 had an `address`
@@ -2418,7 +2429,11 @@ unreachable unless accounting is broken), `RollOverRange`, `CapReached`, `RollTo
 `InlineMismatch`, `RefreshRequired`, `PlainOverdraw`, `CiphertextOffState`. Group 3f: `PqzVerifyModeInvalid`,
 `PqzVerifyConfigInvalid`, `PqzVerifierUnregistered`, `PqzVerifierKind`, `PqzVerifierFixed`, `PqzVerifierSame`,
 `PqzVerifierChanged`, `PqzVerifierRevoked`, `PqzVerifierNotReady`, `PqzVerifierPending`, `PqzVerdictRequired`,
-`PqzVerdictRejected`, `PqzVerdictMismatch` ([§9.5](#pqz-verifier-mode)).
+`PqzVerdictRejected`, `PqzVerdictMismatch` ([§9.5](#pqz-verifier-mode)). Round 3t ([CTR-PQZ-36](#CTR-PQZ-36)):
+`VerifierFeeAboveMax(fee, max)`, `VerifierFeePending(pending)`, `VerifierFeeSame()`, `VerifierFeeNotReady(eta)`; the entry
+`setVerifierFee(uint64)` (kinds 4, 5, 12, 13: module Q on 4, 12, S on 5, 13), the events `VerifierFeeProposed(current, next,
+eta)`, `VerifierFeeSet(previous, next)`, and `pqzVerifyConfig()`'s four appended fields `verifierFee`, `verifierFeeMax`,
+`verifierFeePending`, `verifierFeeEta` (0 on `PRECOMPILE`; a dead pending reads 0, 0); `type(IPqzToken).interfaceId` `0xd87fe345`.
 
 ### <a id="pqz-verifier-mode"></a>9.5 PQZ verifier mode (OFFCHAIN)
 
@@ -2437,9 +2452,11 @@ of 2026-11-06, spec 3f AV-1, AV-2). `IFactoryToken.ConfidentialConfig` carries t
 | `pqzVerifyMode` | `uint8` | 0 | 1; any other value `PqzVerifyModeInvalid(uint8)` |
 | `pqzVerifierUA` | `bytes32` | 0 | the verifier UA ([CTR-PQZ-28](#CTR-PQZ-28)) |
 | `pqzVerifierFixed` | `bool` | false | true: fixed for ever; false: transferable |
+| `verifierFee` | `uint64` | 0, else `PqzVerifyConfigInvalid()` | the verifier fee per debit, shielded units ([CTR-PQZ-36](#CTR-PQZ-36), group 3t) |
+| `verifierFeeMax` | `uint64` | 0, else `PqzVerifyConfigInvalid()` | its immutable cap, `≥ verifierFee` (`VerifierFeeAboveMax`) |
 
 A field set against the mode reverts `PqzVerifyConfigInvalid()`. Every other kind, the Zether kinds included, refuses any of the
-three set (`ConfigFieldForOtherKind(4)`); the `TokenConfig` encoding moved for every kind. `pqzVerifyMode` is byte 22 of
+five set (`ConfigFieldForOtherKind(4)`); the `TokenConfig` encoding moved for every kind. `pqzVerifyMode` is byte 22 of
 `scaas.pqz` slot 0, beside `pqz` and the two mode enums (a `PRECOMPILE` debit reads no new slot), written by `init` only; no entry
 or router op writes it. **Releases:** `validateEnv` admits `deps = [0]` (exactly one dep, never Hedera, a non-zero dep must be
 code). `PRECOMPILE` init on a zero-dep release refuses `SelfTestFailed(address(0))` before any call, then runs today's reads and
@@ -2454,7 +2471,11 @@ in the verifier UA. A verifier that signs a false proof can create value that do
 shieldScale` public units.** Unchanged: every debit still needs the subject's `PqzAuth` signature ([CTR-PQZ-12](#CTR-PQZ-12)), so
 the verifier cannot spend a victim's balance; every ciphertext stays in contract state exactly as in `PRECOMPILE` mode
 ([CTR-PQZ-07](#CTR-PQZ-07)); honestly formed data stays confidential — the verifier sees only the statement and the proof, which
-are public, and decrypts nothing ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). Liveness, censorship and containment: threat T27
+are public, and decrypts nothing ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). **The verifier fee** (group 3t,
+[CTR-PQZ-36](#CTR-PQZ-36)): the token charges every debit up to `verifierFeeMax` for its verifier; the cap is the price a holder
+accepts at shield (wallets show it first, the current fee beside it); an increase waits the stored notice, which helps only
+while the verifier keeps answering; the maximum loss is unchanged (the verifier's fees leave the pool only as `totalShielded`
+falls, T28). Liveness, censorship and containment: threat T27
 ([§12](#threats), [containment](#verifier-containment)).
 
 <a id="CTR-PQZ-28"></a>**CTR-PQZ-28** — **The verifier UA** (owner rulings of 2026-11-06, spec 3f AV-3, AV-4). Accepted at init and at a proposal
@@ -2542,6 +2563,10 @@ the domain and purpose. Typehash pinned (`PqzVerdictTypehashIsPinned`).
   frame out of gas: no data, under `g/63` left) ⇒ `UAVerifyGas()`, never a refusal. Success emits `PqzVerified(statementHash,
   proofHash, verifier, pqzVerifierEpoch)`; the precompile is never called. Nothing is stored: no book, no record; a failed op
   reverts its event.
+- **A fee change** (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)): the statement a verdict hashes carries the verifier fee in its `fee`
+  word (and, direct, in the binding word 544), so every statement built before a `VerifierFeeSet` is stale: the op refuses
+  `AuthRejected()` (and, with a re-signed `pqzAuth`, `PqzVerdictMismatch(3)`), and the holder re-proves; `PqzVerdict` and its
+  typehash are unchanged.
 - **Disclosure**: [§7.9](#disclosure).
 
 <a id="CTR-PQZ-30"></a>**CTR-PQZ-30** — **Keys in `OFFCHAIN` mode** (owner 2026-11-06, spec 3f AV-6; per version, 3g KV-12). Every key read of
@@ -2561,6 +2586,52 @@ refuses lands (shields carry no proof) and stays undebitable until the key passe
 (BUILT, T48). It verifies public statements and proofs with `pqz-ffi` and signs; it decrypts nothing and holds no PQZ secret
 ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). Open (owner): who assembles the k member signatures of an `msig` verifier's one
 verdict within its `validUntil` (the node and the reference service take one complete `UASig` from one endpoint). **UNAUDITED.**
+
+<a id="CTR-PQZ-36"></a>**CTR-PQZ-36** — **The verifier fee: an `OFFCHAIN` token pays its verifier UA from the fee word, capped,
+raised only with notice** (owner 2026-11-11; group 3t; register entry and rulings
+[decisions.md](../decisions.md) (CTR-PQZ-36); design [spec 3t](../superpowers/specs/2026-11-11-verifier-fee.md)). Status: **BUILT**
+on branch `ua-mtx-3t` (contracts, tests, vectors, clientkeys, ua-rs, the node, the PQZ verifier (off-chain), the matrix group
+`pqoff`, its local run in the stacked gate; `smartcontracts/evm/runs/2026-11-11-ua-mtx-3t/summary.txt`), **UNAUDITED**. PQZ kinds 4, 5, 12, 13 in `OFFCHAIN` mode
+only; `PRECOMPILE` tokens and every Zether kind keep their behaviour.
+
+- **Config.** `ConfidentialConfig` gains `uint64 verifierFee` and `uint64 verifierFeeMax` after `proofStore`, the cap immutable,
+  both in shielded units like `confidentialFee` and the fee word; the payout is `verifierFee · shieldScale` public units, so at
+  `shieldScale ≠ 1` a creator types the public price divided by `shieldScale` (controller call 1, an interpretation of the
+  ruling's "public units"). A `PRECOMPILE` token refuses either non-zero (`PqzVerifyConfigInvalid()`), every other kind
+  `ConfigFieldForOtherKind(4)`; `verifierFee = 0` is off, with no flag. Init checks, in order: the range row
+  `confidentialFee + verifierFeeMax + 8·minDecoyFee < 2^64` and `< maxShielded` (`BadInit()`; with the cap, controller call 2,
+  so the setter needs no range check), the mode rows, then `verifierFee ≤ verifierFeeMax` (`VerifierFeeAboveMax(fee, max)`).
+- **Payment.** Every proof-carrying debit (op 1, op 7, burn, refresh and a stale version's migration, the unwrap; direct and
+  envelope forms) adds the current `verifierFee` once to the statement's public `fee` word, `txFee + verifierFee + M·d`; the
+  relations and `proofSystemId` are unchanged (`fee` is a public input of every debit relation, so `verifierFee` comes out of
+  the sender's proved hidden balance and the same call's `shieldIn`, as `txFee` does). On an `OFFCHAIN` token the direct
+  transfer's binding word binds the fee in force ([CTR-PQZ-25](#CTR-PQZ-25), `TAG_DIRECT_MODE_VF`), so the word's split between
+  `verifierFee` and `d` is bound on both forms (Fable P1-1). `totalShielded` falls by the whole word and the token pays from
+  `SHIELD_POOL`, in order: `txFee` to the beneficiary, `verifierFee · shieldScale` to the current verifier UA's public balance
+  (a native id's ERC-20 balance, a derived UA's ledger balance, created by its first payout; no PQZ key needed), `d` to every
+  leg, then the amount; `balanceOf(SHIELD_POOL) == totalShielded · shieldScale` after every op. On 12, 13 the payee is checked
+  as a fee recipient before any effect (CTR-AS-25: frozen `FeeRecipientFrozen`, `R` under `KYC`, `L` under the lists) while the
+  fee is not 0: such a verifier halts every debit of the token, exits included, while shields keep landing; the relief is the
+  admin's `setVerifierFee(0)`, at once, or the cause lifted, and with admin 0 only the cause's own (T31). `verifyTransferAmount`
+  charges nothing (a view); `confidentialFee` is unchanged.
+- **Changing it.** The admin calls `setVerifierFee(uint64 next)` (`governed`, `nonReentrant`) or the router's
+  `mtxSetVerifierFee(UAEnvelope e, address target, uint64 next, UASig auth)` over `UASetVerifierFee` (typehash
+  `0xffa3baec…d14d`, fee mode `NONE`, relayable at fee 0 by any submitter), within `[0, verifierFeeMax]`: a decrease, to 0
+  included, applies at once and cancels a pending increase (controller call 3); an increase proposes with `eta = now +
+  noticePeriod` (the factory's, stored at init; at once when it is 0, both events), and the same call by the same proposer in
+  the same admin generation within `[eta, eta + noticePeriod]` confirms, as the verifier transfer of
+  [CTR-PQZ-28](#CTR-PQZ-28); an admin change or a passed window leaves the pending dead; the current value with a live pending
+  cancels it without moving the fee (`VerifierFeeSet(cur, cur)`, Fable P3-1), without one `VerifierFeeSame()`. Refusals in
+  order: `NotProposer`, `NotAdmin`, `PqzVerifyConfigInvalid` (`PRECOMPILE`), `VerifierFeeNotReady(eta)`,
+  `VerifierFeeAboveMax`, `VerifierFeeSame`, `VerifierFeePending(pending)`. A fixed verifier fixes the verifier, not its fee;
+  admin 0 freezes the fee at its init value. Events `VerifierFeeProposed(current, next, eta)` (the indexer's alert) and
+  `VerifierFeeSet(previous, next)`; `pqzVerifyConfig()` shows the fee, the cap and a live pending increase with its `eta`.
+- **Built ops.** Every fee change, a decrease included, makes every op built at the old fee refuse (`AuthRejected`, then
+  `PqzVerdictMismatch(3)`), so relayers simulate first; the node keeps such a job queued, `PQZ_FEE_MISMATCH`
+  ([NODE-JOB-22](../node/job-api.md#NODE-JOB-22)), and the PQZ verifier (off-chain) refuses a request whose fee word is not the
+  view's (`FEE_WORD_MISMATCH`, [ops.md](../node/ops.md#pqz-verifier)). An immediate decrease is a stranding lever (T32).
+- **Storage.** `scaas.pqz` slots 20–22, appended (`verifierFee`, `verifierFeeMax`, the pending value and `eta` in slot 20; the
+  proposer and its admin generation after), read on the `OFFCHAIN` branch only; pinned in `test/v2/layout/`.
 
 **Measured at T45** (before the T66b body modules; current sizes under [CTR-TOK-30](token-wrappers.md#CTR-TOK-30);
 `smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-pqz-verifier-sizes.txt`; runtime bytes before → with 3f): kind 13
@@ -2790,6 +2861,12 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T25 | Op confusion (op 1 vs op 7, sizes, groupings, auditor on / off) | distinct `opTag`, the length bound to `(id, M, A)`, `M` and `recipientsHash` in the statement; negative vectors |
 | T26 | A disclosure reveals that its leg was a decoy (amount 0), narrowing the other recipients' set | by consent of the discloser, as classical |
 | T27 | **Dishonest, censoring or compromised verifier UA** (`OFFCHAIN` tokens, [CTR-PQZ-27](#CTR-PQZ-27)) | A false verdict fabricates a balance under a signing UA the verifier controls and drains the pool through it: **maximum loss `min(totalShielded, maxShielded) · shieldScale` public units** (the whole shielded pool; on kinds 5 and 13 that much underlying); it cannot spend a victim's balance (every debit needs the subject's `PqzAuth`, [CTR-PQZ-12](#CTR-PQZ-12)). Outputs of a dishonest verdict need not be valid encryptions, correct auditor copies or recoverable balances. The verifier sees every debit **before inclusion** and can refuse or delay any party selectively; a relayer is replaced at once, a verifier only after the notice (a revocation stops everyone). A verifier that stops signing freezes every confidential balance (debits, unshield, refresh) while shields still land (the node's opt-in refusal, [NODE-JOB-22](../node/job-api.md#NODE-JOB-22)); a lost **fixed** verifier freezes them for ever. With an auditor on, it learns which ops are audited (public on chain anyway). Controls: the containment below; every acceptance auditable (the proof and the verdict in calldata, `PqzVerified` naming the verifier, both hashes and the epoch; the replay at the exact transaction position, [integration.md](../integration.md#pqz-offchain-checks)); the frozen shape and the epoch ([CTR-PQZ-28](#CTR-PQZ-28), [CTR-PQZ-29](#CTR-PQZ-29)); a k-of-n `msig` of derived keys recommended; the reference verifier rebuilds the statement from state and binds release → set. Not slashable. **UNAUDITED.** |
+| T28 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **Drain of `SHIELD_POOL`** by continuous confidential transfers (controller A3) | An honest proof cannot pay out more than a hidden balance lost ([CTR-PQZ-36](#CTR-PQZ-36)): `vf` is inside the proved `fee`, and `totalShielded` moves with the pool (A2), its subtraction checked. **A lying `OFFCHAIN` verifier is the only path to a drain** (on a `PRECOMPILE` token only a broken proof system, T2), bounded by CTR-PQZ-27's maximum loss `min(totalShielded, maxShielded) · shieldScale` public units; `verifierFee` does not widen it: every payout of a debit, the verifier's included, leaves the pool only as `totalShielded` falls, and the verifier's own fees count inside that bound, not beside it. `PRECOMPILE` tokens: `vf = 0`, unchanged |
+| T29 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **Admin raises the fee as a hostage** (Fable P2-2, controller call) | **The real bound is the immutable cap**: no op pays more than `verifierFeeMax` to the verifier, whoever acts. The notice protects only against an admin who does not control the verifier: `VerifierFeeProposed` (an indexer alert, [indexer-feeds.md](../node/indexer-feeds.md#pqz-verifier-rows)) gives holders `noticePeriod` to leave at the old fee, but every exit is a debit that needs a verdict, so a verifier that is the admin, or sides with it, can withhold verdicts in the window and leave nobody able to go (inside CTR-PQZ-27's trust, which already lets such a verifier take the pool). A confirm comes no earlier than `eta` and dies after `eta + noticePeriod` or at an admin change; a live pending past its `eta` is confirmable in one transaction, so wallets treat its value as the fee of any op not yet landed. With `noticePeriod = 0` there is no notice (disclosed). A transferable verifier lets the admin name itself the payee (with the verifier's own notice), still within the cap. A creator that wants no fee power sets `verifierFeeMax = 0` |
+| T30 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **Dust below the fee** | A hidden balance below `txFee + vf` (with `M·d` on op 7) cannot be debited at all, unshield, refresh and a stale version's migration included, unless the same call tops it up with `shieldIn` from the holder's public balance of the same token, or the admin lowers the fee (at once). A top-up is public: a wallet tops up a round amount, never the exact shortfall, which would publish `v + fee − balance` (Fable P3-5). The largest unshield is `T − fee`. With admin 0 the fee never moves: such dust stays until topped up. Wallets warn ([clients/app.md](../clients/app.md#pqz-verifier-display)) |
+| T31 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **The verifier as a payee fails a regulated check** (12, 13; Fable P2-1, controller call) | A frozen, `KYC`-lapsed (an expiry counts) or listed-out (3s) verifier halts every debit of the token while `vf ≠ 0`, transfers, unshields, refreshes and unwraps alike (CTR-AS-25 refuses the leg), while shields keep landing: a token-wide stop that is not the pause and has no `pausedUntil`, in the hands of the freezer, the registry's KYC providers or the list holders. Relief: the admin sets the fee to 0 at once, or the cause is lifted; **with admin 0 there is no relief** (the fee never moves, the verifier is never replaced) but the cause's own. Under `ALLOWLIST` a verifier not yet listed makes every debit fail from the first block. Wallets and the wizard warn ([clients/app.md](../clients/app.md#pqz-verifier-display)); the matrix runs the frozen case and its relief (matrix group `pqoff`); no new mechanism. With `vf = 0` nothing is checked. A verifier nobody can sign for (a pool address as a native id) passes no op, so no fee reaches it |
+| T32 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **A fee change strands built ops** | Every op proved and signed at the old fee refuses, op 7 in both forms included, and no fee change can move value between the legs and the verifier ([CTR-PQZ-25](#CTR-PQZ-25); Fable P1-1); funds are not at risk, the holder re-proves. Relayers simulate first; a queued job is `PQZ_FEE_MISMATCH`, back in the queue, never `dead` ([NODE-JOB-22](../node/job-api.md#NODE-JOB-22)). **The immediate decrease is a lever** (Fable P3-2): an admin can strand every in-flight debit by one-unit decreases, up to `verifierFee` times, on a fixed-verifier token too (a new admin power over debits there); liveness only, disclosed. A cancel (`setVerifierFee(cur)`) strands nothing. A wallet that sees a pending increase with `eta` before its op's deadline warns or waits |
+| T33 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **Forced refreshes** | A full `acc` needs a debit (CTR-PQZ-06), which now costs `vf`. A griefer forces one refresh per `K_MAX − 2` credits into the victim, paying it at least `K_MAX − 2` units (shields) or `(K_MAX − 2)·minDecoyFee` (decoy legs) for each; the victim loses net only when `vf` exceeds that. Disclosed; the wizard shows the ratio for the chosen set |
 
 <a id="verifier-containment"></a>**Containment of a dishonest verifier, by configuration** (T27; Codex #11):
 
@@ -2981,6 +3058,15 @@ is accepted after a transfer or a revocation, A → B → A included; (I4) a deb
 `PRECOMPILE` token never reads the verdict, an `OFFCHAIN` token never calls the precompile; (I6) public balances, `totalShielded`
 and the escrow invariant hold in both modes. Runs: 64 runs × 32 calls, 0 reverts, green at the four sets; mutants: 10 of 10
 killed on the final suite (`smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-t49-summary.txt`).
+
+**The verifier fee** (group 3t, [CTR-PQZ-36](#CTR-PQZ-36); BUILT, UNAUDITED): `test/pqz/PqzVerifierFee.t.sol` (init rows and
+their order, the fee word of every form, the payouts, the setter and its refusals, the router op, a built op after a change,
+the split case of [CTR-PQZ-25](#CTR-PQZ-25), the disclosure moves nothing), `test/as/confidential/PqzVerifierFeeKinds.t.sol`
+(12, 13: a frozen, KYC-denied or list-denied verifier halts debits while the fee is set, shields land, fee 0 the relief, the
+check before `_pullShieldIn`), the invariants F1–F6 and I-V1–I-V3 (`test/pqz/invariant/PqzFeeInvariants.t.sol`: the pool
+equals `totalShielded · shieldScale`, payouts equal the debited words, no debit above a ghost balance, every landed word the fee
+in force), real proofs at `fee ± 1` (`pqz-core/ffi/tests/fee_word.rs`), the vectors `smartcontracts/vectors/pqz/verifier_fee.json`;
+mutants: `smartcontracts/evm/runs/2026-11-11-ua-mtx-3t/mutants.txt`.
 
 Build order (serial heavy builds, one at a time): parameter and literature spike (estimator, leaky-LWE, per-round
 soundness) → engine rewrite and first measurements (incl. a WASM measurement of a toy relation) → relations, codegen and

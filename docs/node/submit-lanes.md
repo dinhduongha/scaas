@@ -341,7 +341,11 @@ signing. A subject that crossed the grief threshold gets a re-simulation right b
 **PQZ verdicts** (group 3f, BUILT, T47; [NODE-JOB-22](job-api.md#NODE-JOB-22)): the verdict fill runs after the guard and before the
 digest and any simulation on every path (the lane, the gateway's `POST /v1/op`, the generic lane runner); a verdict the gateway
 fetched is reused by the lane. A tracked PQZ debit after a restart gets its verdict again before any replacement; without one its
-nonce is gap-filled only.
+nonce is gap-filled only. **The fee pre-check** (group 3t, BUILT; [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36)) runs first in the same
+fill, before the verdict fetch, on every path and again before every send: `args.pqz_fee` against word 256 of the token's own
+statement view; `PQZ_FEE_MISMATCH` keeps the job queued (a 422 at the gateway). Liftable, back in the queue: `PQZ_FEE_MISMATCH`
+(also a simulation's `AuthRejected` / `PqzVerdictMismatch(3)` after an indexed `VerifierFeeSet` of the token), and the setter's
+`VerifierFeeNotReady`, `VerifierFeePending`; final: `VerifierFeeAboveMax`, `VerifierFeeSame`.
 
 <a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
 P2; **BUILT**, T63 `39fa296c`, `a6040f9a`, node mutants N1–N3 killed). A PQZ debit whose simulation is over the lane's cap (`gas …

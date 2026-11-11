@@ -855,7 +855,15 @@ refuse_shield_when_unserved = false                # opt-in
     set's PQZL id; `pqz-ffi`'s `pqz_precompile`; the statement rebuilt from the token's state and compared; every key named passes
     [CTR-PQZ-30](../contracts/pq-zero-knowledge.md#CTR-PQZ-30)'s checks; signs only a valid proof, `validUntil` short (minutes),
     the token's current epoch, every signature logged with `token`, `statementHash`, `proofHash`; a refusal is a named JSON error,
-    never a signature; a bounded queue, concurrency and per-client rate limits. Open (owner): the request body limit (built
+    never a signature; a bounded queue, concurrency and per-client rate limits. Group 3t
+    ([CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); BUILT, `tests/service.rs` `refuses_stale_fee_word`): after the
+    view call and before the byte compare, the request's statement word 256 must equal the view's (one source), else
+    `FEE_WORD_MISMATCH` with its three terms (`confidentialFee()`, `pqzVerifyConfig().verifierFee`, `M·d`); the fee is the token's,
+    not the service's policy. A fee change between the config read and the view call gives `STATEMENT_MISMATCH` or
+    `FEE_WORD_MISMATCH`, never a wrong signature (the verdict binds the statement's hash).
+  - **Paid on the token** (group 3t): an `OFFCHAIN` token with `verifierFee ≠ 0` pays the verifier UA `verifierFee ·
+    shieldScale` per debit from `SHIELD_POOL`: a native verifier's ERC-20 balance, a derived one's UA-ledger balance (its first
+    payout creates the slot); the verifier spends it with its own key, as any holder. An operator's price floor is not specified. Open (owner): the request body limit (built
     1,244,672 B against the spec formula's 722,688 B), how JSON depth is counted, whether the key-ownership record persists across
     restarts.
   - **Served**, for the shield switch: some endpoint answers 2xx to the probe `POST <endpoint>/v1/pqz-verdict/probe {token,
@@ -864,8 +872,9 @@ refuse_shield_when_unserved = false                # opt-in
     token whose verifier is revoked (`pqzVerifyConfig().verifier == 0`) or that no endpoint serves (none configured counts as
     unreachable) are refused `PQZ_VERIFIER_UNREACHABLE`, for every consumer.
 - **`OFFCHAIN` token health** (BUILT, T47; the token view SPECIFIED): per `OFFCHAIN` token the indexer keeps
-  `pqz_last_verdict_at`, the epoch and the revoked state ([indexer-feeds.md](indexer-feeds.md#pqz-verifier-rows)). Alerts:
-  `PqzVerifierProposed` (with `eta`) and `PqzVerifierRevoked` are feed rows with `alert: true`; no metric yet.
+  `pqz_last_verdict_at`, the epoch, the revoked state and (group 3t) `pqz_verifier_fee` ([indexer-feeds.md](indexer-feeds.md#pqz-verifier-rows)). Alerts:
+  `PqzVerifierProposed` (with `eta`), `PqzVerifierRevoked` and `VerifierFeeProposed` (with `eta`) are feed rows with `alert: true`;
+  no metric yet. **Operator note** (group 3t): a `ConfidentialTransfer*.fee` is the whole fee word, `txFee + verifierFee + M·d`.
 
 ## <a id="operator-notes"></a>14. Operator notes, branch `ua-mtx-merge`
 

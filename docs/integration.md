@@ -652,8 +652,12 @@ precompiles once enabled ([contracts/zether](contracts/zether.md)).
 <a id="pqz-offchain-checks"></a>**PQZ tokens in `OFFCHAIN` mode: checking a disclosed amount and auditing an accepted proof**
 (SPECIFIED; the contract side BUILT, group 3f, [CTR-PQZ-27](contracts/pq-zero-knowledge.md#CTR-PQZ-27)). Read
 `pqzVerifyConfig()` once per token: mode, verifier, fixed or transferable, epoch, a pending transfer and its `eta`, the notice
-period. On an `OFFCHAIN` token the chain accepts a proof because the token's verifier UA signed it, so a client that must not
-trust that UA checks the proof itself. Both recipes use public bytes only: nothing is decrypted and no ciphertext is sent to
+period, and (group 3t, [CTR-PQZ-36](contracts/pq-zero-knowledge.md#CTR-PQZ-36), BUILT) the verifier fee: `verifierFee`, its cap
+`verifierFeeMax` (the price a holder accepts at shield) and a live pending increase with its `eta`. Every debit's fee word is
+`txFee + verifierFee + M·d`: take it from the token's statement view (word 256), never from your own sum, and name it in the job
+as `args.pqz_fee` (required on an `OFFCHAIN` token); after a `VerifierFeeSet` re-prove, since an op built at the old fee
+refuses (`PQZ_FEE_MISMATCH`). On an `OFFCHAIN` token the chain accepts a proof because the token's verifier UA signed it, so a
+client that must not trust that UA checks the proof itself. Both recipes use public bytes only: nothing is decrypted and no ciphertext is sent to
 anyone ([ARCH-POS-13](decisions.md#ARCH-POS-13)). **UNAUDITED.**
 
 *A disclosed amount.* The counterparty hands over `(entryRef, leg, amount, kind, keyVersion, proof)`.
@@ -978,7 +982,7 @@ factory call plus optional action contracts ([CTR-AS-14](contracts/asset-suite.m
 | Loyalty points (tier 1) | `createToken(NORMAL, version, abi.encode(cfg), salt)` on `OpenFactory` (built, P1e; the v1 `OpenFactoryV1.createMetaToken` is in `legacy/p5`, not deployed) | `minter` = the issuer's mint contract or multisig; earn rules in the ERP trigger `mint` jobs; fee 0 | **BUILT** |
 | Internal 1:1 money (tier 2) | `createToken(WRAPPED, version, abi.encode(cfg), salt)` with one leg, `num = den = 1` (built) | Journal per (company, token) for accounting; wrap/unwrap by holders | **BUILT** |
 | Wrapper with a rate, multi-underlying (tiers 2/3, v2) | `createToken(WRAPPED, version, abi.encode(cfg), salt)` with 1–8 `cfg.legs` (built: `WrappedToken`, not yet deployed by the script: over EIP-170) | rates fixed or adjustable (contract rate-role holder), optional guardian | **BUILT** (contracts; client fields SPECIFIED) |
-| Confidential money | `createToken(NORMAL_ZETHER or WRAPPED_ZETHER, version, abi.encode(cfg), salt)` with `cfg.conf` (auditor key; the verifiers are the release's, `shieldScale`, `maxShielded`, `confidentialFee`) on `OpenFactory` (built, P3) | unaudited (no chain lock, kind gate per chain); auditor key custody | **BUILT** |
+| Confidential money | `createToken(NORMAL_ZETHER or WRAPPED_ZETHER, version, abi.encode(cfg), salt)` with `cfg.conf` (auditor key; the verifiers are the release's, `shieldScale`, `maxShielded`, `confidentialFee`; on an `OFFCHAIN` PQZ token also `verifierFee` and its cap `verifierFeeMax`, group 3t, 0 everywhere else) on `OpenFactory` (built, P3) | unaudited (no chain lock, kind gate per chain); auditor key custody | **BUILT** |
 | Regulated tokens (flags 5–8, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)), vesting (`VestingGrant`), distributions, `ExchangeOffer` | `createToken` with flags 5–8 ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); counterfactual clones via `predict*` | issuer/compliance contracts, `ComplianceRegistry`, `termsHash` disclosure | **SPECIFIED** |
 | NFT kinds | — | — | **PLANNED** |
 
@@ -1096,6 +1100,7 @@ commitment computationally unlinkable (2^256 preimage space); the on-chain value
 | Simulation revert (insufficient balance, expired, bad signature) | Snapshot `dead` with decoded `error` (`MetaTxBadNonce`, `MetaTxExpired`, …) | Request stays open; ask the payer to fund and re-sign |
 | Lost race / paid elsewhere | `consumed` then a range with `MetaTransactionExecuted(digest)` | Mark final, `landed_elsewhere = true`; no business failure |
 | `PQZ_VERDICT_MISSING` | `dead` / refusal with that error, nothing sent | The `OFFCHAIN` token's verifier gave no verdict (none sent, none fetched). Retry once it answers; if it is revoked or gone, the token's owner sets a new one through the notice ([CTR-PQZ-28](contracts/pq-zero-knowledge.md#CTR-PQZ-28)) |
+| `PQZ_FEE_MISMATCH` | refusal at the gateway (422); on the lane the job stays `queued` | The job's `args.pqz_fee` is not the token's fee word now (a `VerifierFeeSet` since the proof was built, or a wrong sum): rebuild the statement from the token's view and prove again ([NODE-JOB-22](node/job-api.md#NODE-JOB-22), [CTR-PQZ-36](contracts/pq-zero-knowledge.md#CTR-PQZ-36)) |
 | `PQZ_VERDICT_NOT_EXPECTED` | refusal per item | The token is `PRECOMPILE`: drop `args.pqz_verdict` and re-push |
 | `PQZ_VERIFIER_UNREACHABLE` | refusal of a shield or wrap-shield job | The operator refuses shields into an `OFFCHAIN` token whose verifier is revoked or unreachable (opt-in); do not shield until it is served again |
 | Superseded intent | `consumed`, no event by `valid_until + grace + 1 h` | Mark dead; the subject spent that lane nonce on another intent — investigate if unexpected |

@@ -530,6 +530,16 @@ wizards build Safe transactions the same way.
 verifier UA, fixed or transferable, the epoch, a pending transfer with its `eta`, and a revocation; before a shield into an
 `OFFCHAIN` token, and in the creation wizard, it shows the trust model with the maximum loss `min(totalShielded, maxShielded) ·
 shieldScale` public units. A proposal is submitted only with a probe verdict signed by the proposed verifier.
+**The verifier fee** (group 3t, [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); SPECIFIED in the app, the contract
+and `clientkeys`' decoder BUILT): **`verifierFeeMax` is the headline price** (what a holder accepts at shield), with the current
+`verifierFee` and a pending increase with its value and `eta` (a live pending past its `eta` is the fee of any op not yet
+landed); before signing, the op's whole fee word split `txFee` / `verifierFee` / `M·d`; both figures at `shieldScale ≠ 1` (the
+fee is in shielded units, paid as `verifierFee · shieldScale` public units). The wizard shows the cap, the stored notice period
+("it helps only while the verifier answers") and the forced-refresh ratio (T33). **Warnings:** a hidden balance below the fee
+(T30: a `shieldIn` top-up is a round amount, never the exact shortfall, which would publish it); a pending increase whose `eta`
+precedes the op's deadline; on kinds 12, 13 with `verifierFee ≠ 0`, a verifier that fails the fee-recipient check (`isFrozen`,
+`canReceive`, `listFlagsOf`; under a list a verifier not yet listed fails every debit from the first block) and admin 0 with a
+fee ("no relief if the verifier is frozen or loses its KYC").
 
 ## 10. Screens
 
