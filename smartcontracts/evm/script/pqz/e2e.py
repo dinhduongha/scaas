@@ -1783,7 +1783,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     salt = os.urandom(16)
     sealed = os.urandom(2 + 40 * 1) if compact else b""  # op 7's encoding, M = 1 (CTR-PQZ-23); ponytail: body random (stored unread);
     # the CTR-ZTH-50 HKDF memo is the client's (P6h)
-    fee = FEE if ben != b"\0" * 32 else 0
+    tx = FEE if ben != b"\0" * 32 else 0
     ben_ua = ben.ua if isinstance(ben, UA) else ben
     blen = K.CT_BYTES + K.V_BYTES * (2 if aud_on else 1)
     v3 = K.PK_BYTES + K.V_BYTES  # `out` = u ‖ v_t ‖ v_f ‖ [v_a]
@@ -1791,6 +1791,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
                        out[v3:v3 + K.V_BYTES], out[v3 + K.V_BYTES:], sealed]
     view = lambda t: dec_bytes(call(tok, cd(API["singleStmt"], [TRANSFER_T, "w"], t, binding)))  # noqa: E731
     st0 = view(hdr(probe(blen)))
+    fee = fee_word(st0)
     tOff = K.HEADER_BYTES + K.PK_BYTES * (3 if aud_on else 2)
     T = st0[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
@@ -1817,7 +1818,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     log(f"      {what}: balance {b} → {rest} (+{v} to {to.name}, fee {fee}, shieldIn {shield_in}), p {p}, rolled {stt['rolled']}, "
         f"hint {len(hint)} B, proof {len(proof):,} B")
     # the client's next state: the sender's acc is the new reference u ‖ v_f; the credit is the recipient's
-    C.set_next(bal=[(frm, shield_in - v - fee), (to, v)], pub=[(ben, FEE)] if fee else [], acc={frm.ua: u + vs[1]},
+    C.set_next(bal=[(frm, shield_in - v - fee), (to, v)], pub=[(ben, FEE)] if tx else [], acc={frm.ua: u + vs[1]},
                total=shield_in - fee, accv=kv_of(frm))
     bundle = salt + pack(u + vs[0]) + (pack(vs[2]) if aud_on else b"") + to.ua  # R as stored (P46)
     if not send:
@@ -1831,6 +1832,12 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     check(head == bundle + pack(vs[1]) and tag == OWN_TAG and len(kv) == 1 + (1 if aud_on else 0),
           f"{C.name} pqzEntryBlob(ref) = R ‖ v_f ‖ ownTag ‖ kv {kv} ‖ n as built, packed ({len(blob):,} B)")
     return rc, ref, bundle, (r_, e1, e2)
+
+
+def fee_word(stmt):
+    """Round 3t (CTR-PQZ-36, spec §12): a debit's fee from the statement the token's view built, header word 256 (`txFee + vf
+    (+ M·d)`), never this script's own sum."""
+    return int.from_bytes(stmt[256:288], "big")
 
 
 def kv_of(u):
@@ -1852,10 +1859,11 @@ def multi_args(p, frm, ben, decoy, salt, uas, g, aud_on, out, sealed, kv=0):
     return [p, 10**9, 0, frm, kv, ben, decoy, salt + bytes(16), OWN_TAG, us, legs, out[o + vb * m:o + vb * (m + 1)], sealed]
 
 
-def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None, at=None):
+def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None, at=None, send=True):
     """An op 7 transfer (CTR-PQZ-26) at `p = pendingCount`, legs [(UA, amount)] (decoys: amount 0), proved over the
-    token's own statement; header fee word `txFee + M · decoyFee` (the proof binds the decoyFee); returns (receipt,
-    entryRef, bundle, enc). `signed` as in `transfer`."""
+    token's own statement; header fee word `txFee + vf + M · decoyFee` (round 3t: the view's word 256; the proof binds the
+    decoyFee); returns (receipt, entryRef, bundle, enc). `signed` as in `transfer`. `send=False`: nothing sent, returns
+    (None, (args, proof, auth, hint, verdict), None, enc) to re-encode (round 3t: the split case, Fable P1-1)."""
     tok = C.tok
     binding = signed.binding if signed else ZERO32
     stt = C.state(frm)
@@ -1866,13 +1874,14 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None, at=None)
     sealed = os.urandom(2 + 40 * m) if compact else b""  # ponytail: memo body random, as transfer()
     mind = int(call(tok, cd("minDecoyFee()", [])), 16)
     assert DEC_FEE >= mind, (DEC_FEE, mind)
-    fee = (FEE if ben != b"\0" * 32 else 0) + m * DEC_FEE
     ben_ua = ben.ua if isinstance(ben, UA) else ben
     olen = K.PK_BYTES * g + K.V_BYTES * (m + 1) + (K.V_BYTES * m if aud_on else 0)
     hdr = lambda out: multi_args(p, frm.ua, ben_ua, DEC_FEE, salt, [u.ua for u, _ in legs], g, aud_on, out, sealed, kv_of(frm))  # noqa: E731
     view = lambda t: dec_bytes(call(tok, cd(API["multiStmt"], [MULTI_T, "w"], t, binding)))  # noqa: E731
     tOff = K.HEADER_BYTES + K.PK_BYTES * (1 + m + (1 if aud_on else 0))
-    T = view(hdr(probe(olen)))[tOff:tOff + K.CT_BYTES]
+    st0 = view(hdr(probe(olen)))
+    fee = fee_word(st0)
+    T = st0[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
     rest = b - sum(a for _, a in legs) - fee
     assert rest >= 0, (b, legs, fee)
@@ -1897,6 +1906,8 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None, at=None)
     data = cd(API["transfer"], [MULTI_T] + AUTH_T + [SV_T], pl, proof, auth, hint, sv)
     log(f"      {what}: M {m}, balance {b} → {rest}, header fee {fee}, hint {len(hint)} B, proof {len(proof):,} B in {tp:.2f} s, "
         f"calldata {len(data):,} B")
+    if not send:
+        return None, (pl, proof, auth, hint, sv), None, e
     newacc = e["us"][0] + e["v_f"]
     C.set_next(bal=[(frm, -sum(a for _, a in legs) - fee)] + [(u, a) for u, a in legs],
                pub=([(ben, FEE)] if ben != b"\0" * 32 else []) + [(u, DEC_FEE) for u, _ in legs], acc={frm.ua: newacc},
@@ -1929,9 +1940,11 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None, signed=None, at=No
     else:
         view = lambda t: dec_bytes(call(tok, cd(API["burnStmt"], [BURN_T, "w", "w", "w"], t, amount, rcp, binding)))  # noqa: E731
     tOff = K.HEADER_BYTES + K.PK_BYTES
-    T = view(hdr(probe(K.CT_BYTES)))[tOff:tOff + K.CT_BYTES]
+    st0 = view(hdr(probe(K.CT_BYTES)))
+    fee = fee_word(st0)  # round 3t: the verifier fee of an OFFCHAIN token (no beneficiary here: txFee 0)
+    T = st0[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
-    rest = b - amount
+    rest = b - amount - fee
     r_, e1, e2, _ = K.enc_sample(os.urandom(32), 1)
     u, vs = K.encrypt([frm.pk], [K.digits(rest)], r_, e1, e2)
     pl = hdr(u + vs[0])
@@ -1941,14 +1954,14 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None, signed=None, at=No
     auth = ua_sig(pq, frm, P_ZAUTH, K.auth_digest(2, stmt))
     hint = C.hint(frm)
     sv = verdict(tok, stmt, proof)
-    log(f"      {what}: balance {b} → {rest}, p {p}, rolled {stt['rolled']}, hint {len(hint)} B, proof {len(proof):,} B")
+    log(f"      {what}: balance {b} → {rest} (fee {fee}), p {p}, rolled {stt['rolled']}, hint {len(hint)} B, proof {len(proof):,} B")
     if signed:
         rc = signed.send("PqzUnshieldUnwrap" if unwrap else "PqzUnshield", [pl, x if unwrap else [amount, rcp], proof, auth, hint], f"{C.name} {what}", sv)
     elif unwrap:
         rc = s.send(tok, cd(API["unshieldUnwrap"], [BURN_T, UNWRAP] + AUTH_T + [SV_T], pl, x, proof, auth, hint, sv), f"{C.name} {what}")
     else:
         rc = s.send(tok, cd(API["unshield"], [BURN_T, "w", "w"] + AUTH_T + [SV_T], pl, amount, rcp, proof, auth, hint, sv), f"{C.name} {what}")
-    C.set_next(bal=[(frm, -amount)], acc={frm.ua: u + vs[0]}, total=-amount)
+    C.set_next(bal=[(frm, -amount - fee)], acc={frm.ua: u + vs[0]}, total=-amount - fee)
     C.commit()
     return rc
 

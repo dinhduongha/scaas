@@ -168,6 +168,9 @@ def create_cfg(sd, fac, kind, name, sym, legs, feat, salt, conf=None, reg=None, 
 def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
     """Sections 8 and 9: the regulated PQZ kinds, then the public layer of every kind signed by an ML-DSA-65 UA."""
     alice, bob = U["alice"], U["bob"]
+    if "pqUSD" in D.addr:  # round 3t (spec §13): the setter on a PRECOMPILE token
+        neg(sd.addr, D.addr["pqUSD"], E.cd("setVerifierFee(uint64)", ["w"], 1), sel_hex("PqzVerifyConfigInvalid()"),
+            "pqUSD (PRECOMPILE) setVerifierFee(1)")
     E.log("\n## 8. (T66b Step 5b) the regulated PQZ kinds 12 and 13 (KYC on a ComplianceRegistry, no account denied)")
     # round 3r: (bytes32 admin, address govRouter): the deployer contract's native id, no router
     cr = D.deploy("ComplianceRegistry", E.encs(["w", "w"], [E.CREATE2_DEPLOYER, 0]), label="ComplianceRegistry")
@@ -506,6 +509,134 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     E.VERIFIER[0] = sd
     E.transfer(pq, sd, CT, alice, bob, E.ZERO32, 3, True, "pqOT op 1 alice→bob 3 after the re-assignment")
     E.restore(CT, "pqOT")
+    verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, life, router_op, calldata_with)
+
+
+def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, life, router_op, calldata_with):
+    """Section 10b (round 3t, CTR-PQZ-36, verifier fee spec §13): `OFFCHAIN` tokens with `verifierFee` VF and cap VMAX, the
+    verifier key 3's EOA (its ERC-20 balance is its payout, read before and after each debit): kind 4 on the notice-0
+    factory (op 1, op 7, unshield, refresh each pay VF; a decrease at once; an op built at the old fee refused `AuthRejected`;
+    an increase at once with both events; the router op at fee 0 by a stranger relayer; the direct op 7 rebuilt with
+    `d ∓ k` after `Δvf = M·k` refused, both signs, Fable P1-1), kind 4 on factory 2 (30 s notice: the proposal, a confirm
+    before `eta` refused, the confirm, a cancel by the current value, the setter's refusals), and kind 13 (a frozen verifier
+    halts the debit `FeeRecipientFrozen`, `setVerifierFee(0)` the relief, the fee restored halts it again, the unfreeze).
+    The `PRECOMPILE` setter's refusal is group pq's (`mine`: no `PRECOMPILE` token on zero-dep releases)."""
+    E.log("\n## 10b. (round 3t) the verifier fee: payouts per form, the setter, the router op, stale and split ops, a frozen verifier")
+    VF, VMAX = 2, 6
+    T_FEE = ("UASetVerifierFee(bytes32 from,address target,uint64 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,"
+             "address relayer,uint256 fee,address feeRecipient)")
+    EV = {e: "0x" + E.kc(e + sig).hex() for e, sig in (("VerifierFeeProposed", "(uint64,uint64,uint64)"),
+                                                         ("VerifierFeeSet", "(uint64,uint64)"))}
+    AUTH_REJ = sel_hex("AuthRejected()")
+    E.VERIFIER[0] = s3
+
+    def fconf(vf, dmode=0):
+        return [aud.ua, E.SCALE, E.MAXS, E.FEE, dmode, 2, E.MIN_DECOY, 1, E.pad(s3.addr), 0, 0, vf, VMAX]
+
+    def vcfg(t):
+        """`pqzVerifyConfig()`'s round-3t words: verifierFee, verifierFeeMax, verifierFeePending, verifierFeeEta."""
+        h = E.call(t, E.cd("pqzVerifyConfig()", []))
+        return [u(h, i) for i in (7, 8, 9, 10)]
+
+    def vbal(t):
+        return u(E.call(t, E.cd("balanceOf(address)", ["w"], s3.addr)))
+
+    def paid(t, C, vf, what, fn):
+        b0 = vbal(t)
+        r = fn()
+        E.check(vbal(t) - b0 == vf * E.SCALE, f"{C.name} {what}: the verifier paid {vf} · scale ({vbal(t) - b0:,})")
+        E.check_public(C, f"after {what}")
+        return r
+
+    def set_fee(t, nm, nxt, what, events, by=None):
+        r = (by or sd).send(t, E.cd("setVerifierFee(uint64)", ["w"], nxt), f"{nm} setVerifierFee({nxt}): {what}")
+        got = [x["topics"][0] for x in r["logs"] if x["address"].lower() == t.lower()]
+        E.check(got == [EV[e] for e in events], f"{nm} setVerifierFee({nxt}) emitted {', '.join(events)}")
+        return r
+
+    # kind 4 on the notice-0 factory
+    tf = create_cfg(sd, fac, 4, "PQZ verifier fee", "pqVF", [], 1 | 2 | 4, b"3t-vf4", fconf(VF))
+    D.addr["pqVF"] = tf
+    E.check(vcfg(tf) == [VF, VMAX, 0, 0], f"pqVF pqzVerifyConfig(): verifierFee {VF}, cap {VMAX}, nothing pending")
+    C = E.Client(tf, "pqVF")
+    life(tf, "pqVF", C, transfers=False)
+    paid(tf, C, VF, "op 1", lambda: E.transfer(pq, sd, C, alice, bob, E.ZERO32, 30, True, "pqVF op 1 alice→bob 30, fee word vf"))
+    paid(tf, C, VF, "op 7", lambda: E.transfer_multi(pq, sd, C, alice, [(bob, 4), (DEC[0], 0)], E.ZERO32, False,
+                                                      "pqVF op 7 M = 2, fee word vf + 2d"))
+    paid(tf, C, VF, "unshield", lambda: E.burn(pq, sd, C, alice, 10, sd.addr, "pqVF unshield alice 10, fee word vf"))
+    paid(tf, C, VF, "refresh", lambda: E.burn(pq, sd, C, bob, 0, None, "pqVF refresh bob, fee word vf"))
+    set_fee(tf, "pqVF", 1, "a decrease, at once", ["VerifierFeeSet"])
+    E.check(vcfg(tf)[0] == 1, "pqVF verifierFee 1 at once")
+    stale = E.transfer(pq, sd, C, alice, bob, E.ZERO32, 1, True, "pqVF op 1 built at fee 1", send=False)[1]
+    set_fee(tf, "pqVF", 0, "a decrease to 0", ["VerifierFeeSet"])
+    neg(sd.addr, tf, stale, AUTH_REJ, "pqVF op 1 built at the old fee, after the decrease")
+    paid(tf, C, 0, "op 1 at fee 0", lambda: E.transfer(pq, sd, C, alice, bob, E.ZERO32, 1, True, "pqVF op 1 at fee 0, rebuilt"))
+    set_fee(tf, "pqVF", VF, "an increase on notice 0: at once", ["VerifierFeeProposed", "VerifierFeeSet"])
+    router_op("mtxSetVerifierFee", T_FEE, [tf, VF + 1], ["address", "uint64"],
+              "pqVF mtxSetVerifierFee(vf + 1) through the router, fee 0, relayed by key 2")
+    E.check(vcfg(tf)[0] == VF + 1, "pqVF verifierFee vf + 1 by the router op")
+    set_fee(tf, "pqVF", VF, "back to vf", ["VerifierFeeSet"])
+    # Fable P1-1: a direct op 7 (M = 2, d = DEC_FEE) built at vf, then Δvf = ±M·k met by d ∓ k (the same fee word): refused
+    for k, nxt in ((1, VF + 2), (-1, VF - 2)):
+        _, (pl, proof, auth, hint, sv), _, _ = E.transfer_multi(pq, sd, C, alice, [(bob, 2), (DEC[0], 0)], E.ZERO32, False,
+                                                                f"pqVF op 7 built at vf {VF}, d {E.DEC_FEE}", send=False)
+        set_fee(tf, "pqVF", nxt, f"Δvf = {2 * k:+}", ["VerifierFeeSet"] if nxt < VF else ["VerifierFeeProposed", "VerifierFeeSet"])
+        pl = list(pl)
+        pl[6] = E.DEC_FEE - k
+        data = E.cd(E.API["transfer"], [E.MULTI_T] + E.AUTH_T + [E.SV_T], pl, proof, auth, hint, sv)
+        neg(sd.addr, tf, data, AUTH_REJ, f"pqVF direct op 7 resubmitted with d {E.DEC_FEE - k} after Δvf = {2 * k:+}")
+        set_fee(tf, "pqVF", VF, "back to vf", ["VerifierFeeSet"] if nxt > VF else ["VerifierFeeProposed", "VerifierFeeSet"])
+    paid(tf, C, VF, "op 7 at the unchanged vf and d (the control)", lambda: E.transfer_multi(
+        pq, sd, C, alice, [(bob, 2), (DEC[0], 0)], E.ZERO32, False, "pqVF op 7 at vf, d (control)"))
+    E.restore(C, "pqVF")
+
+    # kind 4 on factory 2: the 30 s notice
+    tn = create_cfg(sd, fac2, 4, "PQZ verifier fee notice", "pqVFN", [], 1 | 2 | 4, b"3t-vfn", fconf(1))
+    D.addr["pqVFN"] = tn
+    r = set_fee(tn, "pqVFN", 3, "an increase: the proposal", ["VerifierFeeProposed"])
+    c = vcfg(tn)
+    E.check(c[:3] == [1, VMAX, 3] and c[3] > 0, f"pqVFN pending 3 at eta {c[3]}, the fee still 1")
+    neg(sd.addr, tn, E.cd("setVerifierFee(uint64)", ["w"], 3), sel_hex("VerifierFeeNotReady(uint64)"), "pqVFN the confirm before eta")
+    wait_eta(r, N)
+    set_fee(tn, "pqVFN", 3, "the confirm after the notice", ["VerifierFeeSet"])
+    E.check(vcfg(tn)[:3] == [3, VMAX, 0], "pqVFN verifierFee 3, nothing pending")
+    set_fee(tn, "pqVFN", 5, "a second proposal", ["VerifierFeeProposed"])
+    set_fee(tn, "pqVFN", 3, "the current value cancels it", ["VerifierFeeSet"])
+    E.check(vcfg(tn)[:4] == [3, VMAX, 0, 0], "pqVFN the pending cancelled, the fee unmoved")
+    for nxt, err, what in ((3, "VerifierFeeSame()", "the current value, nothing pending"),
+                           (VMAX + 1, "VerifierFeeAboveMax(uint64,uint64)", "above the cap")):
+        neg(sd.addr, tn, E.cd("setVerifierFee(uint64)", ["w"], nxt), sel_hex(err), f"pqVFN setVerifierFee({nxt}): {what}")
+    neg(s3.addr, tn, E.cd("setVerifierFee(uint64)", ["w"], 0), sel_hex("NotAdmin(bytes32)"), "pqVFN setVerifierFee by a stranger")
+
+    # kind 13 with vf: a frozen verifier halts every debit, fee 0 is the relief (Fable P2-1, T31)
+    if 13 in E.SKIP_KINDS:
+        E.log("      kind 13 skipped on this chain (--skip-kind 13)")
+    else:
+        t13 = create_cfg(sd, fac, 13, "PQZ regulated wrapped verifier fee", "pqVF13", [[tusd, 1, 1]], 1 | 1 << 5, b"3t-vf13",
+                         fconf(VF, 1), [0, 0, 0, E.kc("scaas.onchain.terms"), 0], issuer=sd.addr)
+        D.addr["pqVF13"] = t13
+        C13 = E.Client(t13, "pqVF13")
+        sd.send(tusd, E.cd("approve(address,uint256)", ["w", "w"], t13, 10**12), "tUSD approve pqVF13")
+        sd.send(t13, E.cd(E.API["wrapShield"], ["w", "w", "w"], tusd, 100 * E.SCALE, alice.ua), "pqVF13 mtxWrapShield(tUSD 100, alice)")
+        C13.set_next(bal=[(alice, 100)], total=100)
+        C13.commit()
+        paid(t13, C13, VF, "unshield-unwrap", lambda: E.burn(pq, sd, C13, alice, 5, sd.addr, "pqVF13 unshield-unwrap alice 5",
+                                                              unwrap=(tusd, 5 * E.SCALE)))
+        vid, ref = E.pad(s3.addr), E.kc("scaas.onchain.3t-freeze")
+        sd.send(t13, E.cd("freeze(bytes32,bytes32,bytes32)", ["w", "w", "w"], vid, ref, 0), "pqVF13 freeze the verifier")
+        op1 = lambda what: E.transfer(pq, sd, C13, alice, bob, E.ZERO32, 7, False, what, send=False)[1]  # noqa: E731
+        frozen = sel_hex("FeeRecipientFrozen(bytes32)")
+        neg(sd.addr, t13, op1("pqVF13 op 1 with a frozen verifier"), frozen, "pqVF13 op 1 while the verifier is frozen, vf set")
+        set_fee(t13, "pqVF13", 0, "the relief, at once", ["VerifierFeeSet"])
+        paid(t13, C13, 0, "op 1 at fee 0", lambda: E.transfer(pq, sd, C13, alice, bob, E.ZERO32, 7, False,
+                                                              "pqVF13 op 1 at fee 0: lands, the frozen verifier unchecked"))
+        set_fee(t13, "pqVF13", VF, "the fee restored (notice 0)", ["VerifierFeeProposed", "VerifierFeeSet"])
+        neg(sd.addr, t13, op1("pqVF13 op 1 after the fee restored"), frozen, "pqVF13 op 1: the restored fee halts it again")
+        sd.send(t13, E.cd("unfreeze(bytes32,bytes32)", ["w", "w"], vid, ref), "pqVF13 unfreeze the verifier")
+        paid(t13, C13, VF, "op 1 after the unfreeze", lambda: E.transfer(pq, sd, C13, alice, bob, E.ZERO32, 7, False,
+                                                                         "pqVF13 op 1 after the unfreeze"))
+        E.restore(C13, "pqVF13")
+    E.VERIFIER[0] = sd
 
 
 def wait_eta(r, n):
