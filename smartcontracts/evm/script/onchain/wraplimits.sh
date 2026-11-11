@@ -29,6 +29,10 @@ trap 'rm -rf "$T"' EXIT INT TERM
 mkdir -p "$OUTD"
 : > "$L"
 rm -f "$R" "$NEXT"
+# each block 1 s after the last, whatever the wall clock: a run writes the next start as its simulation's time + the
+# notice + 300 s, and a slow broadcast (--slow, one block per transaction) on a loaded machine outran that margin
+# (stacked gate: p1 at setup + 3,900 s, the releases usable at setup + 4,282 s, VersionNotYetUsable)
+cast rpc --rpc-url "$RPC" anvil_setBlockTimestampInterval 1 > /dev/null
 rc=0 runs=
 for p in $PHASES; do
   if [ -s "$NEXT" ]; then
