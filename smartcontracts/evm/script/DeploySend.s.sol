@@ -13,7 +13,11 @@ import {Vm} from "forge-std/Vm.sol";
 /// forge adds no transaction of its own. env PRIVATE_KEY, the plan's sender.
 /// Round 3r (spec 2026-11-10-admin-not-owner.md §5.6 "Threats", T10): the factory's release deploys are open to anyone once
 /// approved, so a release whose `CREATE2` address already has code (the factory's address, salt and init code with its
-/// arguments: the approved bytes, nothing else lands there) is done, logged and not sent; a front-runner cannot fail the plan.
+/// arguments: the approved bytes, nothing else lands there) and whose registered `envVersion` is the plan's is done, logged
+/// and not sent; another `envVersion` there refuses the plan by name. The check runs again right before each send (Fable
+/// 3r3s3t P3-5). It reads this run's fork: a front-run that lands between this run and its sends fails that send, and forge
+/// stops; re-run the plan, which then skips every release already there. A non-release transaction that already landed
+/// reverts on the fork (`PlanTxNotSendable(i, "reverts on the fork")`): re-plan from the deploy script after a front-run.
 contract DeploySend is Script {
     error TxGasOverBlockLimit(uint256 index, uint256 regular, uint256 state, uint256 blockGasLimit);
     error PlanTxNotSendable(uint256 index, string why);
@@ -36,11 +40,7 @@ contract DeploySend is Script {
             }
             to[i] = vm.parseJsonAddress(j, _at(i, ".to"));
             input[i] = vm.parseJsonBytes(j, _at(i, ".input"));
-            address done = releaseAt(to[i], input[i]);
-            if (done != address(0) && done.code.length != 0) {
-                console.log(string.concat("tx gas | ", vm.toString(i), " | done: the release is at ", vm.toString(done)));
-                continue; // limit[i] = 0: not sent
-            }
+            if (_done(to[i], input[i], i)) continue; // limit[i] = 0: not sent
             vm.prank(sender, sender);
             (bool ok,) = to[i].call(input[i]);
             if (!ok) revert PlanTxNotSendable(i, "reverts on the fork");
@@ -55,7 +55,7 @@ contract DeploySend is Script {
         vm.revertToStateAndDelete(snap);
         vm.startBroadcast(pk);
         for (uint256 i; i < n; ++i) {
-            if (limit[i] == 0) continue;
+            if (limit[i] == 0 || _done(to[i], input[i], i)) continue; // per send: a release landed since (P3-5)
             (bool ok,) = to[i].call{gas: limit[i]}(input[i]);
             if (!ok) revert PlanTxNotSendable(i, "reverts at its limit");
         }
@@ -86,6 +86,37 @@ contract DeploySend is Script {
             return address(0);
         }
         return vm.computeCreate2Address(salt, keccak256(code), f);
+    }
+
+    /// @notice A release deploy whose address has code: done when the factory's record names that address with the plan's
+    ///         `envVersion` (logged), else `PlanTxNotSendable(i, …)`; false for an address without code or any other call.
+    function _done(address f, bytes memory input, uint256 i) internal view returns (bool) {
+        address at = releaseAt(f, input);
+        if (at == address(0) || at.code.length == 0) return false;
+        bytes memory a = new bytes(input.length - 4);
+        for (uint256 k; k < a.length; ++k) a[k] = input[k + 4];
+        bytes4 s = bytes4(input);
+        (address impl, uint16 env, uint16 want) = (address(0), 0, 0);
+        if (s == bytes4(keccak256("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)"))) {
+            (uint8 kind, uint64 version, uint16 e,,) = abi.decode(a, (uint8, uint64, uint16, bytes, bytes));
+            (impl, env, want) = _rel(f, abi.encodeWithSignature("releaseOf(uint8,uint64)", kind, version), e);
+        } else if (s == bytes4(keccak256("deployDexImplementation(uint64,uint16,bytes,bytes)"))) {
+            (uint64 version, uint16 e,,) = abi.decode(a, (uint64, uint16, bytes, bytes));
+            (impl, env, want) = _rel(f, abi.encodeWithSignature("dexReleaseOf(uint64)", version), e);
+        } else {
+            (ReleaseId memory id, uint16 e,,,,) = abi.decode(a, (ReleaseId, uint16, bytes4, bytes4, bytes, bytes));
+            (impl, env, want) = _rel(f, abi.encodeWithSignature("classReleaseOf((uint16,uint16,uint64))", id), e);
+        }
+        if (impl != at || env != want) revert PlanTxNotSendable(i, "the release is there, not with the plan's envVersion");
+        console.log(string.concat("tx gas | ", vm.toString(i), " | done: the release is at ", vm.toString(at)));
+        return true;
+    }
+
+    /// @dev The factory's record (`implementation`, `envVersion`: the first two words of `Release` and `ClassRelease`).
+    function _rel(address f, bytes memory call, uint16 want) internal view returns (address impl, uint16 env, uint16) {
+        (bool ok, bytes memory r) = f.staticcall(call);
+        if (ok && r.length >= 64) (impl, env) = abi.decode(r, (address, uint16));
+        return (impl, env, want);
     }
 
     struct ReleaseId {

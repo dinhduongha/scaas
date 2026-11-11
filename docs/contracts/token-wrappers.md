@@ -862,6 +862,12 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   `setTokenKindEnabled`, `setClassKindEnabled`, `setChainEntries` and the approvals are admin-only (`NotAdmin(caller)`; an
   admin that is an EIP-7702 designator gets `CallerDelegated` on the direct path, owner ruling D2, 2026-10-30), each a router
   op too (`mtx<Op>`, fee 0 allowed, spec 2026-11-10-admin-not-owner.md §5.4).
+  **Sibling replay (documented 2026-11-11, Fable review D P3-2; no code change).** `deprecateToken`, `deprecateDex`,
+  `deprecateRelease`, `setTokenKindEnabled` and `setClassKindEnabled` carry no `chainUid` word. On two chains with one chain
+  id, after `configureChain`, a native admin's direct call of one of them replays on the sibling when the admin's nonce
+  matches there (the sibling order of `configureChain` aligns the nonces); a deprecation is one-way. An admin of sibling
+  chains makes these calls through the router (`mtx<Op>`), whose domain carries `chain_uid`, or with a nonce the sibling
+  has already used.
 - **Release deploys: approve, then an open deploy** (owner, final, spec §5.6). The admin approves one release by hash
   (`approveTokenRelease`, `approveDexRelease`, `approveRelease`; the factory's own `chainUid`, address and `adminGeneration`
   bound, `until` at most 30 days ahead: `ApprovalFieldMismatch`, `ApprovalTooLong`, `ApprovalLive`), revokes an unused one

@@ -62,6 +62,7 @@ import {kindModuleNames, kindImplArgs} from "./KindModules.sol";
 import {ImplArgs} from "../src/metatx/ITokenModule.sol";
 import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../src/zether/ZetherStatements.sol";
+import {SmartKeyAccountFactory} from "../src/account/SmartKeyAccountFactory.sol";
 import {
     ZetherInnerProductVerifierBls12381,
     ZetherTransferVerifierBls12381,
@@ -129,6 +130,8 @@ abstract contract DeployBase is DeployBook {
     uint64 internal noticePeriod;
     /// @notice This chain's `GovernanceRouter` (`_deployGovRouter`), the factory's one-time `govRouter`; 0 until deployed.
     address internal govRouter;
+    /// @notice Its code hash from this build (`_builtHash`), what `configureChain` pins; 0 with no router.
+    bytes32 internal govRouterCodeHash;
     /// @notice The release list (chain-neutral spec §6.2, Fable P3-5): `RELEASES_JSON` (default `./releases.json`).
     ///         `RELEASES_WRITE=true` writes it from this deployment (the first chain's); otherwise, when the file exists, the
     ///         deploy refuses a factory, library, release or registrar whose address or code hash differs from its row.
@@ -429,17 +432,29 @@ abstract contract DeployBase is DeployBook {
 
     /// @notice `setChainEntries` of what `_deployShared` left (0 leaves an entry open), then the gate: `directory()` equals
     ///         what this run deployed (spec §13.7).
+    ///         Every expected code hash comes from this build (spec §13.7; Fable 3r3s3t P3-6), never from an address alone:
+    ///         `keccak256(runtimeCode)` for a contract without immutables, else the code at this build's CREATE2 address of
+    ///         its init code (`_builtHash`; the executor: the router's CREATE at nonce 1).
     function _writeDirectory(OpenFactory f, UARegistry reg) internal {
-        f.setChainEntries(relayFeeRouter, relayFeeRouter.codehash, relayFeeExecutor.codehash, complianceRegistry,
-            _hashOf(complianceRegistry), accountFactory, _hashOf(accountFactory), zetherStatements, _hashOf(zetherStatements));
+        require(relayFeeExecutor == vm.computeCreateAddress(relayFeeRouter, 1), "relay executor: not this build's");
+        f.setChainEntries(relayFeeRouter, _builtHash(relayFeeRouter, type(RelayFeeRouter).creationCode, RELAY_SALT),
+            relayFeeExecutor.codehash, complianceRegistry,
+            complianceRegistry == address(0) ? bytes32(0) : _complianceRegistryCodehash(), accountFactory,
+            _builtHash(accountFactory, abi.encodePacked(type(SmartKeyAccountFactory).creationCode, abi.encode(uid)), salt),
+            zetherStatements, zetherStatements == address(0) ? bytes32(0) : keccak256(type(ZetherStatements).runtimeCode));
         IOpenFactory.Directory memory d = f.directory();
         require(d.uaRegistry == address(reg) && d.govRouter == govRouter && d.relayFeeRouter == relayFeeRouter
             && d.relayFeeExecutor == relayFeeExecutor && d.complianceRegistry == complianceRegistry
             && d.smartKeyAccountFactory == accountFactory && d.zetherStatements == zetherStatements, "directory gate");
     }
 
-    function _hashOf(address a) internal view returns (bytes32) {
-        return a == address(0) ? bytes32(0) : a.codehash;
+    /// @notice The code hash of `at` only when `at` is this build's CREATE2 address of `initCode` under `s` (the init code
+    ///         fixes the runtime, immutables included); 0 for 0. Fable 3r3s3t P3-6.
+    function _builtHash(address at, bytes memory initCode, bytes32 s) internal view returns (bytes32) {
+        if (at == address(0)) return bytes32(0);
+        address d = vm.isContext(VmSafe.ForgeContext.ScriptGroup) ? CREATE2_FACTORY : address(this);
+        require(at == vm.computeCreate2Address(s, keccak256(initCode), d), "code hash: not this build's CREATE2 address");
+        return at.codehash;
     }
 
     /// @notice Plan 3c T92 (UA-7 D22, topics spec §11): `PqChat` on the factory's generic path, with no factory code: its
@@ -568,6 +583,8 @@ abstract contract DeployBase is DeployBook {
         GovernanceRouter r = new GovernanceRouter{salt: salt}(uid, reg, smartKeyAccountImpl, isHedera);
         _gate(address(r));
         govRouter = address(r);
+        govRouterCodeHash = _builtHash(govRouter, abi.encodePacked(type(GovernanceRouter).creationCode,
+            abi.encode(uid, reg, smartKeyAccountImpl, isHedera)), salt);
         vm.serializeAddress("deploy", "governance_router", govRouter);
     }
 
@@ -639,8 +656,8 @@ abstract contract DeployBase is DeployBook {
     ///         registrar's code hash the release list's.
     function _configureChain(OpenFactory f, address registrar) internal {
         uint256 ref = vm.envOr("NO_REF_BLOCK", false) || block.number < 2 ? 0 : block.number - 1;
-        // the router's code hash as it stands (T10 takes it from the build and the chain's book, spec §13.7)
-        f.configureChain(uid, noticePeriod, govRouter, govRouter == address(0) ? bytes32(0) : govRouter.codehash, ref,
+        // the router's code hash from this build (spec §13.7, Fable 3r3s3t P3-6: `_builtHash` at `_deployGovRouter`)
+        f.configureChain(uid, noticePeriod, govRouter, govRouterCodeHash, ref,
             ref == 0 ? bytes32(0) : blockhash(ref));
         _gate(address(f));
         _releaseRow("OpenFactory", 0, 0, 0, address(f), keccak256(abi.encodePacked(type(OpenFactory).creationCode,

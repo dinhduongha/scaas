@@ -272,7 +272,8 @@ interface IOpenFactory is IAdmin {
     ///         0 and `keccak256("")` pin nothing). The relay router's `EXECUTOR()` has `relayFeeExecutorCodeHash` and answers
     ///         `ROUTER()` with the relay router; the compliance registry's `govRouter()` is the factory's; the account
     ///         factory's `chainUid()` is the factory's and, with a router, its `IMPLEMENTATION()`'s clone code hash the
-    ///         router's. Every view call fails closed. `ChainEntrySet` per entry written.
+    ///         router's. Every view call fails closed. `ChainEntrySet` per entry written, the relay executor's too (`view_` =
+    ///         `relayFeeExecutor.selector`, Fable 3r3s3t P3-10).
     function setChainEntries(address relayFeeRouter_, bytes32 relayFeeRouterCodeHash, bytes32 relayFeeExecutorCodeHash,
         address complianceRegistry_, bytes32 complianceRegistryCodeHash, address smartKeyAccountFactory_,
         bytes32 smartKeyAccountFactoryCodeHash, address zetherStatements_, bytes32 zetherStatementsCodeHash) external;

@@ -162,7 +162,10 @@ local)
     { sh "$CS/copy.sh" init && sh "$CS/copy.sh" genesis0 "$CS/engine-pqz.json" && python3 -I script/onchain/copygen.py "$COPY" &&
       CP=1 && sh "$CS/copy.sh" up "${COPY_IMAGE:-scaas/nethermind-pqz:2.2.0-pqz7}" genesis.pqz0.json; } \
       >> "$LOG" 2>&1 || fail "the copy did not start (copy.sh, see the log)"
-    PQ_RPC=http://10.76.22.10:8545  # the signer (docker-compose.copy.yml): no rate limit
+    # the signer (no rate limit): its address read from docker-compose.copy.yml, the one copy (Fable D P3-6)
+    SIGNER_IP=$(awk '/^  signer:/{s=1} s && /ipv4_address:/{print $2; exit}' "$CS/docker-compose.copy.yml")
+    [ -n "$SIGNER_IP" ] || fail "no signer ipv4_address in docker-compose.copy.yml"
+    PQ_RPC=http://$SIGNER_IP:8545
     for i in $(seq 120); do
       [ "$(cast block-number --rpc-url "$PQ_RPC" 2> /dev/null || echo 0)" -ge 2 ] && break
       [ "$i" -lt 120 ] || fail "the copy produced no block"
