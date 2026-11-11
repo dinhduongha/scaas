@@ -380,8 +380,11 @@ node's, for every consumer. **UNAUDITED.**
   names it). A difference is `PQZ_FEE_MISMATCH: proved {p}, the token's fee word is {e} (txFee {a}, verifierFee {b}, M·d {c})`,
   zero sends: a 422 at the gateway, back in the queue on the lane until the deadline (a decrease may restore the word), never
   `dead` while the op may land. A simulation that reverts `AuthRejected()` or `PqzVerdictMismatch(3)` after an indexed
-  `VerifierFeeSet` of the job's token since intake (the `PQZ_KEY_ROTATED` window) is `PQZ_FEE_MISMATCH: <error> after
-  VerifierFeeSet`, back in the queue; without that event `AuthRejected` stays `dead`. **Operator note:** a job shape change for
+  `VerifierFeeSet` of the job's token since intake (the `PQZ_KEY_ROTATED` window) that moved the fee (`previous != next`; a cancel
+  `(cur, cur)` is no move) is `PQZ_FEE_MISMATCH: <error> after VerifierFeeSet`, back in the queue; without that event
+  `AuthRejected` stays `dead`; an unreadable log is `PQZ_FEE_LOG_UNREAD: <rpc error>; <error>`, back in the queue, never counted as
+  a move. A stuck debit runs the same check before each replacement: refused, its nonce is gap-filled and the job reported by
+  its class (test `a_stuck_pqz_debit_runs_the_fee_check_before_its_replacement`). **Operator note:** a job shape change for
   `OFFCHAIN` tokens: a consumer on the old shape gets `BAD_PAYLOAD: no pqz_fee`.
 - **Deadline.** The job's deadline becomes the sooner of the envelope's and the verdict's `validUntil`; a stuck replacement past
   the verdict would revert, so it is gap-filled instead.
@@ -977,7 +980,7 @@ cancels 2 rps (burst 10).
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost |
 
 Terminal reasons that are not HTTP codes: job `dead` with `error = ATTEMPTS_EXHAUSTED` (`attempt_count >
-chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_FEE_MISMATCH`, `PQZ_KEY_ROTATED`,
+chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_FEE_MISMATCH`, `PQZ_FEE_LOG_UNREAD`, `PQZ_KEY_ROTATED`,
 `PQZ_KEY_VERSION_UNKNOWN`, `PROOF_STORE_OVER_LANE_CAP` ([NODE-JOB-24](submit-lanes.md#NODE-JOB-24)); a lane stopped by
 `SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 

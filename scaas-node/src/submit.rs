@@ -757,13 +757,14 @@ impl Submitter {
         }
     }
 
-    /// Round 3t (CTR-PQZ-36, spec §10, T55's pattern): `PQZ_FEE_MISMATCH` when the job's token emitted `VerifierFeeSet` since
-    /// intake (the `ROTATION_LOOKBACK` window); an unreadable log is transient, back in the queue too.
+    /// Round 3t (CTR-PQZ-36, spec §10, T55's pattern): `PQZ_FEE_MISMATCH` when the job's token emitted a `VerifierFeeSet` that
+    /// moved the fee since intake (the `ROTATION_LOOKBACK` window; a cancel `(cur, cur)` is no move, Fable 3r3s3t P3-4); an
+    /// unreadable log is `PQZ_FEE_LOG_UNREAD`, back in the queue, never counted as a move.
     async fn fee_moved(&self, w: &Work, reason: &str) -> Option<String> {
         match guard::pqz_fee_changed(&self.chain, w, ROTATION_LOOKBACK).await {
             Ok(true) => Some(format!("PQZ_FEE_MISMATCH: {reason} after VerifierFeeSet")),
             Ok(false) => None,
-            Err(e) => Some(format!("PQZ_FEE_MISMATCH read: {e:#}; {reason}")),
+            Err(e) => Some(format!("PQZ_FEE_LOG_UNREAD: {e:#}; {reason}")),
         }
     }
 
@@ -902,17 +903,40 @@ impl Submitter {
                 }
                 continue;
             }
-            let live = s.work.as_ref().filter(|w| w.valid_until > now()).cloned();
+            let mut live = s.work.as_ref().filter(|w| w.valid_until > now()).cloned();
             let expired_job = match (&s.work, &live) {
                 (Some(w), None) => w.job_id,
                 _ => None,
             };
+            let stuck_gas = s.gas;
+            // Fable 3r3s3t P3-3 (spec 3t §10, the fee pre-check "again before every send"): a stuck PQZ debit's replacement
+            // runs the fill first (the fee word, the verdict); refused by name, the nonce is gap-filled and the job reported by
+            // its class (`PQZ_FEE_MISMATCH` back in the queue); an unreadable chain waits a round, no bump
+            let mut refused = None;
+            if let Some(w) = live.as_mut().filter(|w| crate::pqz::is_debit(w)) {
+                match self.guard.pqz_fill(&self.chain, w).await {
+                    Ok(()) => {}
+                    Err(Refusal::Transport(r)) if !r.starts_with("PQZ_") => {
+                        warn!(nonce = n, "PQZ fill: {r}; no bump this round");
+                        if let Some(s) = self.inflight.get_mut(&n) {
+                            s.at = Instant::now();
+                        }
+                        continue;
+                    }
+                    Err(e) => refused = live.take().map(|w| (w, e)),
+                }
+            }
             let (to, data, gas) = match &live {
-                Some(w) => (w.to, w.data.clone(), s.gas),
+                Some(w) => (w.to, w.data.clone(), stuck_gas),
                 None => (self.chain.address(), Bytes::new(), GAP_FILL_GAS),
             };
             if let Some(id) = expired_job {
                 self.report(id, "dead", None, None, Some("expired while stuck; nonce gap-filled".into())).await;
+            }
+            match refused {
+                Some((w, Refusal::Policy(r))) => self.fail(&w, format!("{r}; nonce gap-filled")).await,
+                Some((w, Refusal::Transport(r))) => self.requeue(&w, format!("{r}; nonce gap-filled")).await,
+                None => {}
             }
             let replaced = match self.chain.sign(n, to, data, gas, fees).await {
                 Ok((raw, h)) => match self.chain.send_raw(&raw).await {
@@ -1146,6 +1170,12 @@ pub(crate) mod tests {
         pqz_vf: u64,
         /// Round 3t: `eth_getLogs` for `VerifierFeeSet` answers one log (the token's fee changed).
         fee_set: bool,
+        /// Fable 3r3s3t P3-4: that log is a cancel `VerifierFeeSet(2, 2)` (no move).
+        fee_cancel: bool,
+        /// `eth_getLogs` answers a transport error.
+        logs_down: bool,
+        /// The statement views answer 288 bytes whose word 256 (the fee word) is this; `None`: `STATEMENT` (word 256 = 0).
+        stmt_fee: Option<u64>,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1189,6 +1219,7 @@ pub(crate) mod tests {
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
+                "eth_getLogs" if e.logs_down => Err(err(-32000, "upstream timeout", None)),
                 "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0] == json!(format!("{:#x}",
                     <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
                     "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone(), format!("{:#x}", B256::repeat_byte(1)),
@@ -1199,7 +1230,7 @@ pub(crate) mod tests {
                 "eth_getLogs" if e.fee_set && p[0]["topics"][0] == json!(format!("{:#x}",
                     <crate::abi::IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
                     "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone()],
-                    "data": format!("0x{}", alloy::hex::encode((3u64, 2u64).abi_encode())), "blockNumber": "0x9",
+                    "data": format!("0x{}", alloy::hex::encode((if e.fee_cancel { 2u64 } else { 3u64 }, 2u64).abi_encode())), "blockNumber": "0x9",
                     "blockHash": format!("{:#x}", B256::repeat_byte(9)), "transactionHash": format!("{:#x}", B256::repeat_byte(8)),
                     "transactionIndex": "0x0", "logIndex": "0x0", "removed": false}])),
                 "eth_getLogs" => Ok(json!([])),
@@ -1274,7 +1305,11 @@ pub(crate) mod tests {
                         } else if s4 == crate::abi::IPqzToken::envelopeBindingCall::SELECTOR {
                             Ok(json!(format!("{BINDING:#x}")))
                         } else {
-                            Ok(json!(format!("0x{}", alloy::hex::encode(Bytes::from(STATEMENT.to_vec()).abi_encode()))))
+                            let st = match e.stmt_fee {
+                                None => STATEMENT.to_vec(),
+                                Some(f) => [&STATEMENT[..], &[0u8; 216], &U256::from(f).to_be_bytes::<32>()].concat(),
+                            };
+                            Ok(json!(format!("0x{}", alloy::hex::encode(Bytes::from(st).abi_encode()))))
                         }
                     } else if sel == crate::abi::IPqzToken::proofStoreCall::SELECTOR {
                         e.proof_store.map(|m| word(U256::from(m))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
@@ -3310,8 +3345,45 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         }
         let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), ..offchain() }, vec![j.clone()], |_| {}).await;
         assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "{r:?}");
+        // Fable 3r3s3t P3-4: a cancel `VerifierFeeSet(cur, cur)` moves nothing (`dead`); an unreadable log is `PQZ_FEE_LOG_UNREAD`,
+        // back in the queue, never counted as a move
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), fee_set: true, fee_cancel: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "a cancel: {r:?}");
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), logs_down: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_LOG_UNREAD: "), "{r:?}");
         let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j], |_| {}).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: "), "{r:?}");
+    }
+
+    /// Fable 3r3s3t P3-3 (spec 3t §10: the fee pre-check "again before every send"): a stuck PQZ debit is re-checked before its
+    /// replacement; the token's fee word moved since the first send: the nonce is gap-filled (a 0-value self-send, never the
+    /// debit again) and the job is `PQZ_FEE_MISMATCH`, back in the queue; the control: the word unchanged, the debit is bumped.
+    #[tokio::test]
+    async fn a_stuck_pqz_debit_runs_the_fee_check_before_its_replacement() {
+        for moved in [false, true] {
+            let (url, rpc) = fake_evm(offchain()).await;
+            let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            s.poll_outbox().await;
+            assert_eq!(states(&o), ["signed", "broadcast"]);
+            if moved {
+                rpc.lock().unwrap().stmt_fee = Some(5);
+            }
+            s.track().await;
+            let me = s.address();
+            let sent = rpc.lock().unwrap().sent.clone();
+            assert_eq!(sent.len(), 2, "{moved}");
+            if moved {
+                assert!(sent[1].1 == me && sent[1].2.is_empty(), "a gap-filler, never the debit again");
+                let last = o.lock().unwrap().reports.last().cloned().unwrap();
+                assert_eq!(last["chain_state"], "queued");
+                assert!(last["error"].as_str().unwrap().starts_with("PQZ_FEE_MISMATCH: proved 0, the token's fee word is 5"), "{last}");
+            } else {
+                assert_eq!(sent[1].2, sent[0].2, "the debit bumped");
+                assert_eq!(states(&o), ["signed", "broadcast", "broadcast"]);
+            }
+        }
     }
 
     /// The node never asks for the PQZ precompile on an `OFFCHAIN` token's job (spec §3, O1: OFFCHAIN ignores whether a

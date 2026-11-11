@@ -342,8 +342,8 @@ signing. A subject that crossed the grief threshold gets a re-simulation right b
 digest and any simulation on every path (the lane, the gateway's `POST /v1/op`, the generic lane runner); a verdict the gateway
 fetched is reused by the lane. A tracked PQZ debit after a restart gets its verdict again before any replacement; without one its
 nonce is gap-filled only. **The fee pre-check** (group 3t, BUILT; [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36)) runs first in the same
-fill, before the verdict fetch, on every path and again before every send: `args.pqz_fee` against word 256 of the token's own
-statement view; `PQZ_FEE_MISMATCH` keeps the job queued (a 422 at the gateway). Liftable, back in the queue: `PQZ_FEE_MISMATCH`
+fill, before the verdict fetch, on every path and again before every send, a stuck debit's replacement included (refused: the
+nonce is gap-filled): `args.pqz_fee` against word 256 of the token's own statement view; `PQZ_FEE_MISMATCH` keeps the job queued (a 422 at the gateway). Liftable, back in the queue: `PQZ_FEE_MISMATCH`
 (also a simulation's `AuthRejected` / `PqzVerdictMismatch(3)` after an indexed `VerifierFeeSet` of the token), and the setter's
 `VerifierFeeNotReady`, `VerifierFeePending`; final: `VerifierFeeAboveMax`, `VerifierFeeSame`.
 

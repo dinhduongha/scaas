@@ -149,13 +149,20 @@ pub async fn pqz_rotated(chain: &Chain, w: &Work, lookback: u64) -> anyhow::Resu
     chain.pqz_key_current_since(registry, &parties, lookback).await
 }
 
-/// Round 3t (CTR-PQZ-36, spec §10): a PQZ job's token emitted `VerifierFeeSet` in the last `lookback` blocks (the event is
+/// Round 3t (CTR-PQZ-36, spec §10): a PQZ job's token emitted a `VerifierFeeSet` that moved the fee ([`fee_moves`]) in the last
+/// `lookback` blocks (the event is
 /// evidence of the cause of an `AuthRejected` / `PqzVerdictMismatch(3)`, not proof); `Ok(false)` for any other job.
 pub async fn pqz_fee_changed(chain: &Chain, w: &Work, lookback: u64) -> anyhow::Result<bool> {
     if w.typed.as_ref().is_none_or(|t| t.contract != "pqz") {
         return Ok(false);
     }
-    chain.event_since(w.to, <IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH, lookback).await
+    let logs = chain.logs_since(w.to, <IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH, lookback).await?;
+    Ok(fee_moves(&logs))
+}
+
+/// Fable 3r3s3t P3-4: a `VerifierFeeSet` moved the fee (`previous != next`); a cancel `(cur, cur)` moves nothing.
+fn fee_moves(logs: &[alloy::rpc::types::Log]) -> bool {
+    logs.iter().any(|l| l.log_decode::<IPqzToken::VerifierFeeSet>().is_ok_and(|e| e.inner.previous != e.inner.next))
 }
 
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
