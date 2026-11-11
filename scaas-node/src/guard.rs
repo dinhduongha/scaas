@@ -1835,7 +1835,8 @@ mod tests {
         ("WrappedZetherToken", "zether"), ("NormalPqzToken", "pqz"), ("WrappedPqzToken", "pqz"), ("SCaaSDex", "dex"),
         ("GovernanceRouter", "gov_router"), ("NormalRegulatedToken", "token"), ("WrappedRegulatedToken", "token"),
         ("NormalZetherRegulatedToken", "zether"), ("WrappedZetherRegulatedToken", "zether"), ("NormalPqzRegulatedToken", "pqz"),
-        ("WrappedPqzRegulatedToken", "pqz"), ("OpenFactory", "open_factory")];
+        ("WrappedPqzRegulatedToken", "pqz"), ("OpenFactory", "open_factory"), ("UARegistry", "registry"),
+        ("SmartKeyAccountFactory", "factory")];
     // round 3r (spec §7): `OpenFactory` under its own label: the node's contract kind `factory` is `SmartKeyAccountFactory`
     // (`deploy`); `OpenFactory` has no node row, its three open deploys `APPROVED(release)` are in `NOT_ROWS`
     /// `SIGNED` entries no job names, each with its reason: `(name, the argument list's start)`.
@@ -1888,13 +1889,19 @@ mod tests {
         let auth = crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] };
         let struct_jobs: HashSet<[u8; 4]> = [m.calldata(auth)[..4].try_into().unwrap()].into_iter().collect();
         let (mut rowed, mut exempt, mut governed) = (0, 0, 0);
-        for kind in ["token", "zether", "pqz", "dex", "gov_router", "open_factory"] {
+        // Fable E N-10: + the registry and the account factory, whose writes anyone may relay: a row there is a SIGNED entry or a
+        // PERMISSIONLESS one (`storePqzPop`, `deploy`: a proof or the address fixes what they write)
+        for kind in ["token", "zether", "pqz", "dex", "gov_router", "open_factory", "registry", "factory"] {
             let entries: Vec<&serde_json::Value> = AUDIT_KINDS.iter().filter(|(_, k)| *k == kind)
                 .flat_map(|(c, _)| audit[*c].as_array().unwrap_or_else(|| panic!("{c}"))).collect();
             let signed: HashSet<[u8; 4]> = entries.iter().filter(|r| r["class"] == "SIGNED").map(|r| sel(r["sig"].as_str().unwrap())).collect();
+            let open_rows = matches!(kind, "registry" | "factory");
+            let open: HashSet<[u8; 4]> = entries.iter().filter(|r| open_rows && r["class"].as_str().is_some_and(|c| c.starts_with("PERMISSIONLESS(")))
+                .map(|r| sel(r["sig"].as_str().unwrap())).collect();
             let ours: Vec<&typed::Row> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&kind)).collect();
             for r in &ours {
-                assert!(signed.contains(&r.selector), "{} ({}) on {kind} is no SIGNED entry of a {kind} contract", r.name, r.entry);
+                assert!(signed.contains(&r.selector) || open.contains(&r.selector),
+                    "{} ({}) on {kind} is no SIGNED entry of a {kind} contract", r.name, r.entry);
             }
             for e in entries.iter().filter(|r| r["class"] == "SIGNED") {
                 let s = e["sig"].as_str().unwrap();
@@ -1914,6 +1921,10 @@ mod tests {
             for e in entries.iter().filter(|r| r["class"] != "SIGNED") {
                 let s = e["sig"].as_str().unwrap();
                 for k in kinds {
+                    if k == kind && open.contains(&sel(s)) && row(sel(s), k).is_some() {
+                        rowed += 1; // a relayable PERMISSIONLESS write of the registry or the account factory
+                        continue;
+                    }
                     assert!(row(sel(s), k).is_none(), "{kind}: {s} ({}) is a {k} row", e["class"]);
                 }
                 let class = e["class"].as_str().unwrap();
@@ -2256,7 +2267,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // list / enable ops rowed (SIGNED); the six regulated kinds' setAllowed BIT(8), setDenied BIT(9), enableFeature ADMIN governed;
     // round 3t (CTR-PQZ-36): -> (276, 200, 296): the router's `mtxSetVerifierFee` rowed; `setVerifierFee` (ADMIN) governed on each
     // of the four PQZ kinds
-    const ROWED: usize = 276;
+    // Fable E N-10: 276 -> 286, the registry's eight SIGNED rows and the two PERMISSIONLESS ones (`storePqzPop`, `deploy`)
+    const ROWED: usize = 286;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 200;
     const GOVERNED: usize = 296;

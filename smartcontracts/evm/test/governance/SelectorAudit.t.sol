@@ -367,13 +367,14 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
     }
 
     function test_everySelectorIsClassified() public {
-        string[16] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+        // Fable review of ua-mtx-merge E N-10: + UARegistry and SmartKeyAccountFactory (the node's `registry` and `factory` kinds)
+        string[18] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
             "WrappedPqzToken", "SCaaSDex", "DexPuller", "GovernanceRouter", "NormalRegulatedToken", "WrappedRegulatedToken",
             "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken",
-            "OpenFactory"];
+            "OpenFactory", "UARegistry", "SmartKeyAccountFactory"];
         uint256 bad;
         for (uint256 i; i < all.length; ++i) bad += _classified(all[i]);
-        assertEq(bad, 0, "every non-view external of the sixteen has exactly one pinned row");
+        assertEq(bad, 0, "every non-view external of the eighteen has exactly one pinned row");
     }
 
     function test_strangerRevertsOnEveryGatedRow() public {

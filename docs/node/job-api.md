@@ -755,11 +755,14 @@ lane only relays what the role holders already signed. The rule of contract kind
 Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
 pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (a node release).
 
-*Known limits* (Fable review of ua-mtx-merge E N-10, N-11; PLANNED, open): the `registry`, `account` and `factory` rows are pinned against
-the node's own `abi.rs` bindings, one direction only (not in `selector_audit.json`), so a new state-changing entry on
-`UARegistry`, `SmartKeyAccount` or `SmartKeyAccountFactory` fails no node test (today the only registry write without a row is
-`cacheExpandedKey`, permissionless and unsigned); target: add the three to `selector_audit.json` and to
-`allow_lists_equal_the_selector_audit_both_directions`. `mtxCreateToken`, `mtxCreateDex` and `mtxCreateInstance` have no row
+The `registry` and `factory` rows are walked both directions against `UARegistry` and `SmartKeyAccountFactory` in
+`selector_audit.json` (Fable review of ua-mtx-merge E N-10; BUILT, `allow_lists_equal_the_selector_audit_both_directions` and
+forge `SelectorAudit.t.sol` `test_everySelectorIsClassified`): each row is a `SIGNED` entry, or a `PERMISSIONLESS` one whose
+proof or address fixes what it writes (`storePqzPop`, `deploy`); a new `SIGNED` write without a row fails; `cacheExpandedKey`
+(`PERMISSIONLESS`) has no row. *Known limits* (Fable review of ua-mtx-merge E N-10, N-11; PLANNED, open): `SmartKeyAccount` is not
+in the pin yet, its rows stay pinned against the node's own `abi.rs` one direction: its guardian's `initiateRecovery` fits no class
+of the audit (`NotGuardian()` is a gate's error, and no `BIT(n)` or `HOLDER_OWN` names it); a class for it is the owner's.
+`mtxCreateToken`, `mtxCreateDex` and `mtxCreateInstance` have no row
 (`guard.rs` `NOT_ROWS`) until relaying creations is decided: an open item against "every state-changing `mtx*` is relayable";
 the four release approvals are covered by the owner's ruling of 2026-11-10.
 Selector matching suffices outside the token/role set: a lane's authority is only `msg.sender` of the direct call,
