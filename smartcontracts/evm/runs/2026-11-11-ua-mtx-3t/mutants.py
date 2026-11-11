@@ -62,6 +62,12 @@ MUTANTS = {
     "M19": (PC, "o.verifierFee == 0 ? bytes32(0) : $().pqzVerifierUA);", "bytes32(0));", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
     "M20": (PS, "        if (_feeLive(s, g)) (c.verifierFeePending, c.verifierFeeEta)", "        (c.verifierFeePending, c.verifierFeeEta)",
             "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    # M21 (T10): a refresh (and a stale version's migration, the same path) exempt from vf. M16 (verifyTransferAmount pays)
+    # has no mutant: both forms are `view` functions, which cannot move a balance (solc refuses a state change there);
+    # test (6) pins that they move none.
+    "M21": (PC, "        if (s.pqzVerifyMode == OFFCHAIN) {\n            o.verifierFee = s.verifierFee;",
+            "        if (s.pqzVerifyMode == OFFCHAIN && o.opTag != OP_REFRESH) {\n            o.verifierFee = s.verifierFee;",
+            "forge", "test/pqz", "PqzVerifierFee.t.sol"),
     "M22": (PL, "        _regName(PqzCore.verifierPayee());\n        _pullShieldIn(t.shieldIn);\n        PqzCore.Paid memory f;\n        (r, f) = PqzTransferLib.transfer(e,",
             "        _pullShieldIn(t.shieldIn);\n        _regName(PqzCore.verifierPayee());\n        PqzCore.Paid memory f;\n        (r, f) = PqzTransferLib.transfer(e,",
             "forge", "test/as", "confidential/PqzVerifierFeeKinds.t.sol"),
