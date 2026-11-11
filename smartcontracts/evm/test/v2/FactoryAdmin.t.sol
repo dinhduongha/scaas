@@ -16,6 +16,7 @@ import {UACall} from "../ua/UACall.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
+import {DeploySend} from "../../script/DeploySend.s.sol";
 import {GenericKindBase, NoteKind, INoteKind, IRosterKind} from "./mocks/GenericKinds.sol";
 
 /// The factory's admin and release-approval ABI (spec 2026-11-10-admin-not-owner.md §5.1, §5.2, §5.6), written out here so
@@ -1178,6 +1179,23 @@ contract FactoryAdminTest is UARegistryBase {
         return bytes.concat(abi.encode(uint16(vm.parseJsonUint(j, string.concat(m, "contractClass"))), k), ve,
             abi.encode(bytes4(vm.parseJsonBytes(j, string.concat(m, "initSelector"))),
                 bytes4(vm.parseJsonBytes(j, string.concat(m, "interfaceId")))));
+    }
+
+    /// T10: `DeploySend.releaseAt` is the address each of the three deploys lands at (the plan's "already deployed" check).
+    function test_deploySend_releaseAtIsTheDeploysAddress() public {
+        OpenFactory f = _ready(address(trouter));
+        DeploySend ds = new DeploySend();
+        Rel[3] memory rs = _rels();
+        for (uint256 i; i < 3; ++i) {
+            address want = ds.releaseAt(address(f), _deployCd(rs[i]));
+            assertEq(want.code.length, 0);
+            vm.prank(deployer);
+            (bool ok, bytes memory ret) = address(f).call(_deployCd(rs[i]));
+            assertTrue(ok);
+            assertEq(abi.decode(ret, (address)), want);
+        }
+        assertEq(ds.releaseAt(address(f), abi.encodeCall(OpenFactory.setTokenKindEnabled,
+            (IOpenFactory.TokenKind.NORMAL, true))), address(0));
     }
 
     // ------------------------------------------------------------------ gas (§5.6 "Gas", §9)

@@ -183,3 +183,6 @@ node-test (red, before the rows' counts) | 50edc78e+T9 | 101 | 702 passed, 5 fai
 node-test | 50edc78e+T9 | 101 | 706 passed, 1 failed: adapters::soroban failing_jobs_open_the_budget_and_later_jobs_do_not_send (4, 4) vs (2, 2), a timing test under the other stream's load, untouched by T9; alone: 1 passed (below)
 node-test (the soroban test alone) | 50edc78e+T9 | 0 | 1 passed, 0 failed
 node-clippy | 50edc78e+T9 | 0 | cargo clippy --all-targets -- -D warnings clean (tests/e2e.rs's four call names follow the owner naming)
+forge-governance | 50edc78e+T10 | 0 | 594 passed, 0 failed (60 suites; GovDeploy, ReleaseList (row `admin`), CodeCeiling over the new deploy order; the router and relay pair addresses unchanged)
+t10 targeted (ZetherDeploy.t.sol, UADeploy.t.sol, RelayFeeRouter.t.sol: the other DeployHarness suites) | 50edc78e+T10 | 0 | 6 / 14 / 30 passed, 0 failed
+scripts | 50edc78e+T10+T11 | 0 | Deploy, DeploySend and the eight on-chain scripts compile (three stack-too-deep reds on the way: the directory step and the static router ops moved into helpers)

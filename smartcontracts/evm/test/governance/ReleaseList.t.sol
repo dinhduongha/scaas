@@ -42,7 +42,7 @@ contract ReleaseListTest is Test {
         assertEq(vm.parseJsonBytes32(file, ".NormalToken.codeHash"), relA.codehash);
         assertEq(vm.parseJsonAddress(file, ".SCaaSDex.address"), dexA);
         assertEq(vm.parseJsonUint(file, ".SCaaSDex.class"), 2);
-        assertEq(vm.parseJsonAddress(file, ".registrar.address"), address(h));
+        assertEq(vm.parseJsonAddress(file, ".admin.address"), address(h));
         // NET-EVM-13: the book header first (the harness's chain: DEPLOY_NAME local-testnet)
         assertEq(vm.indexOf(file, '{\n  "key": "local-testnet",\n  "name": "local-testnet",\n  "chainId": 31337,\n  "chainUid": "'), 0);
         assertEq(vm.parseJsonString(file, ".network"), "testnet");
