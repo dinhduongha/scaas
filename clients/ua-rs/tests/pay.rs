@@ -163,9 +163,11 @@ fn json_surface() {
     use scaas_ua::json::{meta_pay_id_json, pay_digest_json};
     let p = load("metatx/paymeta.json");
     for r in p.as_array().unwrap() {
-        match meta_pay_id_json(&r.to_string()) {
-            Ok(got) => assert_eq!(serde_json::from_str::<Value>(&got).unwrap()["payId"], r["payId"], "{}", r["name"]),
-            Err(_) => assert!(!r["accepted"].as_bool().unwrap(), "{}", r["name"]),
+        let got = meta_pay_id_json(&r.to_string());
+        if r["accepted"].as_bool().unwrap() {
+            assert_eq!(serde_json::from_str::<Value>(&got.unwrap()).unwrap()["payId"], r["payId"], "{}", r["name"]);
+        } else {
+            assert!(got.is_err(), "{} refused", r["name"]);
         }
     }
     assert!(p.as_array().unwrap().iter().any(|r| !r["accepted"].as_bool().unwrap()), "a refused row");

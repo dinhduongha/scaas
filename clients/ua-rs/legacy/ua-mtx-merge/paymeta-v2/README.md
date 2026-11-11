@@ -5,4 +5,6 @@ schema, body}` with a `string payNo` and its commitment `meta_pay_id_v2` (`"scaa
 payNo, uint16 schema, bytes body))`), the `payNo` text rules (`check_pay_no`, 256 bytes, no control or bidirectional character),
 tested against `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/t83/paymeta.json`. The contract moved to v3 in T83 (`bytes32
 payNo`, `bool save` committed); `src/pay.rs` now computes `meta_pay_id_v3` against `metatx/paymeta.json`. The wrappers' `metaPayId`
-exports (`ua-c`, `ua-cxx`, `ua-qt`, `ua-dart-frb`) follow. Not built.
+exports (`ua-c`, `ua-cxx`, `ua-qt`, `ua-dart-frb`) follow.
+`json.rs.v2.txt` is the v2 `json::meta_pay_id_json` (`{salt, payNo, schema, body}`, `payNo` text) from `src/json.rs` at
+ca8a4773, the function only. Not built.
