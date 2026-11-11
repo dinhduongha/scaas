@@ -258,4 +258,7 @@ chars>", "revert_data": "0x…"?}`; the legacy `"error"` keeps the code, so old 
 ([dex-venue.md#trade-orders](dex-venue.md#trade-orders)), and the
 managed-market codes above. Clients decode revert data with their own ABI and map codes (the console app maps
 `errors.node.<code>`); no logic keys on free text. The gateway and the job API keep per-listener code sets over the same checks (gateway
-`TOKEN_NOT_SERVED` and `EXPIRED` for too long a validity, job API `UNKNOWN_TOKEN` and `VALID_TOO_LONG`).
+`TOKEN_NOT_SERVED` and `EXPIRED` for too long a validity, job API `UNKNOWN_TOKEN` and `VALID_TOO_LONG`). No error text, of a
+gateway reply or of a job's `error`, carries an endpoint URL (an RPC's, a verifier's: an internal host, a key in a path): each is
+`<url>`, a verifier endpoint is named by its index (`endpoint 1`), the URL goes to the node's log only (BUILT; Fable review of
+ua-mtx-merge E N-8; tests `gateway_errors_carry_no_endpoint_url`, `a_job_error_carries_no_endpoint_url`).

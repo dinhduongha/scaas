@@ -1024,6 +1024,7 @@ Change (2026-10-30, owner ruling R-node): the gateway's `call` jobs and the one 
 
 **Why.** Wallets and apps branch on error codes; a stable contract keeps them working across releases.
 **Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 132.
+Change (2026-11-11, ua-mtx-fix-node, Fable review of ua-mtx-merge E N-8; controller call; status: BUILT): no endpoint URL in a gateway reply or a job's `error`: URLs are redacted to `<url>` at the gateway's error replies and at the one job-report sink, a PQZ verifier endpoint is named by its index, the URL is logged only ([gateway.md](node/gateway.md#NODE-GW-06)).
 
 ### NODE-GW-07 — Every SCaaS contract bound to the chain's chain_uid
 - old: — · status: current · owner: no · date: 2026-10-08 · normative: node/gateway.md#NODE-GW-07 · superseded-by: —

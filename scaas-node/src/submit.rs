@@ -1486,6 +1486,17 @@ pub(crate) mod tests {
         }
     }
 
+    /// Fable E N-8: the one sink of every runner's job report strips endpoint URLs from the error.
+    #[tokio::test]
+    async fn a_job_error_carries_no_endpoint_url() {
+        let (odoo, o) = fake_odoo(Fake::default()).await;
+        let r = Report { job_id: 7, chain_state: "queued".into(), tx_hash: None, outer_nonce: None, signer_address: None,
+            error: Some("rpc: error sending request for url (https://rpc.example/v3/KEY) after http://10.0.0.7:8545/ x".into()) };
+        odoo.relay_report(&r).await.unwrap();
+        assert_eq!(o.lock().unwrap().reports[0]["error"], "rpc: error sending request for url (<url>) after <url> x");
+        assert_eq!(crate::chain::redact_urls("no url; wss://h:1/p,ws://q"), "no url; <url>,<url>");
+    }
+
     /// Fable E N-1 (NODE-LANE-09, one rule on every chain): the generic lane runner of a Hedera chain classifies a refused
     /// simulation with the `Submitter`'s one classifier: `Frozen` is `REGULATED_REFUSED`, back in the queue, never `dead`; a spent
     /// subject nonce `consumed`; a revert of no class stays `dead`; nothing is sent.
@@ -3152,6 +3163,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
                 }
             }).await;
             assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "{why}: {r:?}");
+            // Fable E N-8: the endpoints by index, never their URLs
+            assert!(r[0].1.contains("endpoint 1: ") && r[0].1.contains("endpoint 2: ") && !r[0].1.contains("127.0.0.1"), "{why}: {r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
         }
         let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;

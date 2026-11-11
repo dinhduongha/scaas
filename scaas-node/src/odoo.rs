@@ -211,7 +211,12 @@ impl Odoo {
     }
 
     pub async fn relay_report(&self, r: &Report) -> Result<()> {
-        let _: Value = self.call("blockchain.relay.job", "relay_report", serde_json::to_value(r)?).await?;
+        let mut v = serde_json::to_value(r)?;
+        // Fable E N-8: no endpoint URL in a job's error (the one sink of every runner's report)
+        if let Some(e) = r.error.as_deref() {
+            v["error"] = json!(crate::chain::redact_urls(e));
+        }
+        let _: Value = self.call("blockchain.relay.job", "relay_report", v).await?;
         Ok(())
     }
 

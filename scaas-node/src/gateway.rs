@@ -128,8 +128,13 @@ pub struct MarketQuery {
 
 type Reply = (StatusCode, Json<Value>);
 
+/// Fable E N-8: every gateway error text is free of endpoint URLs ([`crate::chain::redact_urls`]).
 fn bad(msg: impl ToString) -> Reply {
-    (StatusCode::BAD_REQUEST, Json(json!({"error": msg.to_string()})))
+    (StatusCode::BAD_REQUEST, Json(json!({"error": crate::chain::redact_urls(&msg.to_string())})))
+}
+
+fn unavailable(msg: impl ToString) -> Reply {
+    (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": crate::chain::redact_urls(&msg.to_string())})))
 }
 
 pub fn router(state: AppState) -> Router {
@@ -172,7 +177,7 @@ fn sig_bytes(s: &str) -> Result<Bytes, Reply> {
 fn sim_reply(e: SimError) -> Reply {
     match e {
         SimError::Revert(r) => bad(format!("simulation: {r}")),
-        SimError::Transport(r) => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": format!("rpc: {r}")}))),
+        SimError::Transport(r) => unavailable(format!("rpc: {r}")),
     }
 }
 
@@ -304,7 +309,7 @@ fn venue(s: &AppState, chain: u64) -> Result<Arc<Venue>, Reply> {
 fn venue_err(e: VenueError) -> Reply {
     match e {
         VenueError::Bad(m) => bad(m),
-        VenueError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": m}))),
+        VenueError::Unavailable(m) => unavailable(m),
     }
 }
 
@@ -398,6 +403,14 @@ mod tests {
     use axum::body::Body;
     use axum::http::Request;
     use crate::abi::UAMetaTransfer;
+
+    /// Fable E N-8: a gateway error carries no endpoint URL (an RPC's host, a key in its path).
+    #[test]
+    fn gateway_errors_carry_no_endpoint_url() {
+        assert_eq!(bad("simulation: http://10.0.0.7:8545/KEY down").1 .0["error"], "simulation: <url> down");
+        assert_eq!(sim_reply(SimError::Transport("x https://h/k".into())).1 .0["error"], "rpc: x <url>");
+        assert_eq!(venue_err(VenueError::Unavailable("y (http://h)".into())).1 .0["error"], "y (<url>)");
+    }
     use crate::metatx::{Domain, UaMtx, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
     use alloy::primitives::B256;
     use alloy::signers::SignerSync;

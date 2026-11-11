@@ -38,6 +38,21 @@ pub fn is_contract(code: &[u8]) -> bool {
     !code.is_empty() && !designator
 }
 
+/// Fable E N-8: an endpoint URL (an RPC's, a verifier's: an internal host, a key in a path) never reaches a job's error or a
+/// gateway reply: each `scheme://…` up to a blank, a quote or a bracket becomes `<url>`.
+pub fn redact_urls(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = ["http://", "https://", "ws://", "wss://"].iter().filter_map(|p| rest.find(p)).min() {
+        out.push_str(&rest[..i]);
+        out.push_str("<url>");
+        let tail = &rest[i..];
+        rest = &tail[tail.find(|c: char| c.is_whitespace() || "()<>\"',;".contains(c)).unwrap_or(tail.len())..];
+    }
+    out.push_str(rest);
+    out
+}
+
 pub fn classify(e: &TransportError) -> SimError {
     match e.as_error_resp() {
         Some(resp) => match resp.as_revert_data() {

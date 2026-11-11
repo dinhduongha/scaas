@@ -215,13 +215,17 @@ impl Verifier {
         Ok(())
     }
 
-    /// The configured endpoints in order; the first decoded answer.
+    /// The configured endpoints in order; the first decoded answer. An error names the endpoint by its index only, its URL is
+    /// logged (Fable E N-8: no endpoint URL in a job's error or a gateway reply).
     async fn fetch(&self, body: &Value) -> Result<PqzVerdictArgs, String> {
         let mut errs = Vec::new();
-        for e in &self.cfg.endpoints {
+        for (i, e) in self.cfg.endpoints.iter().enumerate() {
             match self.ask(e, body).await {
                 Ok(v) => return Ok(v),
-                Err(x) => errs.push(format!("{e}: {x}")),
+                Err(x) => {
+                    tracing::warn!(endpoint = i + 1, url = %e, "pqz verifier: {x}");
+                    errs.push(format!("endpoint {}: {}", i + 1, crate::chain::redact_urls(&x)));
+                }
             }
         }
         Err(errs.join("; "))
@@ -232,7 +236,7 @@ impl Verifier {
     /// node rebuilds the rest), the signature through the bounded `UASig` decoder (two levels, 16 slots).
     async fn ask(&self, endpoint: &str, body: &Value) -> Result<PqzVerdictArgs, String> {
         let url = format!("{}{ROUTE}", endpoint.trim_end_matches('/'));
-        let mut r = self.http.post(url).json(body).send().await.map_err(|e| e.to_string())?;
+        let mut r = self.http.post(url).json(body).send().await.map_err(|e| e.without_url().to_string())?;
         if !r.status().is_success() {
             return Err(format!("HTTP {}", r.status()));
         }
@@ -242,7 +246,7 @@ impl Verifier {
             return Err(over());
         }
         let mut buf = Vec::new();
-        while let Some(c) = r.chunk().await.map_err(|e| e.to_string())? {
+        while let Some(c) = r.chunk().await.map_err(|e| e.without_url().to_string())? {
             if buf.len() + c.len() > max {
                 return Err(over());
             }
