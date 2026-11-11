@@ -12,6 +12,8 @@ import {V4PositionReader} from "../../src/dex/V4PositionReader.sol";
 import {FeeOnTransferERC20, MockERC20} from "../helpers/Mocks.sol";
 import {nid} from "../helpers/Ids.sol";
 import {LiquidityBase} from "./LiquidityBase.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MockV2LiquidityPair, MockPositionManagerV4, MockDistributor, MockShortReader, MockStickyPositions,
     MockReenter, MockFixedReader, MockSwap, MockDigestProbe} from "./LiquidityMocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
@@ -41,6 +43,23 @@ contract DexLiquidityTest is LiquidityBase {
     }
 
     /// A leftover goes back to alice, fee-free; `fee = 0` stays valid and relayable (no fee shares).
+    /// Fable D P3-4: the kind is the `setMarket` snapshot, the trust is read at use. A bad signature on a SCaaS-only plan:
+    /// before `a`'s release is deprecated the DEX skips its own verify and the token refuses; after (no `setMarket` since,
+    /// the kind still SCaaS) the DEX refuses first, `BadSignature(h)`; the good signature still settles (the control).
+    function test_deprecatedRelease_dexVerifiesItself() public {
+        ITradeToken.LiquidityOrder memory o = _addOrder(98_000);
+        ISCaaSDex.LiquidityPlan memory bad = _plan(o, 0xBAD, _u2(ADD, ADD));
+        bytes32 h = dex.liquidityOrderDigest(o);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // the token's own check
+        _run(bad, _addXs(ADD, ADD, address(dex)));
+        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, f.chainUid(), "its liquidity pull");
+        assertEq(dex.tokenKind(address(a)), 1, "the snapshot");
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
+        _run(bad, _addXs(ADD, ADD, address(dex)));
+        _run(_plan(o, ALICE_PK, _u2(ADD, ADD)), _addXs(ADD, ADD, address(dex)));
+        assertEq(dex.pulled(h), 1);
+    }
+
     function test_v2AddRefundFeeZero() public {
         ITradeToken.LiquidityOrder memory o = _addOrder(90_000);
         o.fee = 0;
