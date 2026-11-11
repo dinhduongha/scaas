@@ -2018,9 +2018,10 @@ alloy::sol! {
     function isFrozen(bytes32 account) external view returns (bool);
 }
 
-/// The deploy with the regulated releases and the canonical `ComplianceRegistry` (`DEPLOY_REGULATED`, its admin a contract: code
-/// set by `anvil_setCode`, the registry's constructor refuses an EOA), a `SmartKeyAccount` of `issuer_key` as the `issuer`
-/// (bit 5 is contract-only), and a kind-8 token with `FREEZE` whose supply is `holder`'s. No list is on: no registry read.
+/// The deploy with the regulated releases and the canonical `ComplianceRegistry` (`DEPLOY_REGULATED`, its admin a UA id since
+/// round 3r, CTR-GOV-23: `COMPLIANCE_ADMIN` the native id of a contract, code set by `anvil_setCode`), a `SmartKeyAccount` of
+/// `issuer_key` as the `issuer` (bit 5 is contract-only), and a kind-8 token with `FREEZE` whose supply is `holder`'s. No list
+/// is on: no registry read.
 async fn regulated_token(chain_id: u64, rpc: &str, issuer_key: &PrivateKeySigner, holder: Address) -> (Value, Address, Address) {
     let admin = Address::repeat_byte(0xad);
     let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
@@ -2029,7 +2030,7 @@ async fn regulated_token(chain_id: u64, rpc: &str, issuer_key: &PrivateKeySigner
     let status = Command::new("forge").current_dir(sc)
         .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--disable-code-size-limit", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER).env("DEMO_SUPPLY", "1000000000000").env("DEMO_HOLDER", format!("{holder:#x}"))
-        .env("FOUNDRY_PROFILE", "scaas-testnet").env("DEPLOY_REGULATED", "true").env("COMPLIANCE_ADMIN", format!("{admin:#x}"))
+        .env("FOUNDRY_PROFILE", "scaas-testnet").env("DEPLOY_REGULATED", "true").env("COMPLIANCE_ADMIN", format!("{:#x}", admin.into_word()))
         .env("DEPLOY_NAME", book_name(chain_id))
         .status().expect("forge in PATH");
     assert!(status.success(), "forge script failed");
