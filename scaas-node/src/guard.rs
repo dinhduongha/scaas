@@ -244,7 +244,7 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
                 Err(e) => return Verdict::Requeue(format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")),
             }
             // round 3t: field 3 (the statement) after an indexed `VerifierFeeSet`: the fee word moved
-            if reason.contains("field: 3") {
+            if verdict_field(&reason) == Some(3) {
                 if let Some(v) = fee_moved(chain, w, &reason).await {
                     return v;
                 }
@@ -270,6 +270,13 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
         },
         None => Verdict::Dead(reason),
     }
+}
+
+/// The `field` of a `decode_revert` string `PqzVerdictMismatch(PqzVerdictMismatch { field: N })`, parsed whole (Fable E N-11: never
+/// a substring, so `field: 30` is not field 3).
+fn verdict_field(reason: &str) -> Option<u8> {
+    let rest = reason.split_once("field: ")?.1;
+    rest[..rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len())].parse().ok()
 }
 
 /// Round 3t (CTR-PQZ-36, spec §10, T55's pattern): `PQZ_FEE_MISMATCH` when the job's token emitted a `VerifierFeeSet` that moved

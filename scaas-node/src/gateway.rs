@@ -133,6 +133,20 @@ fn bad(msg: impl ToString) -> Reply {
     (StatusCode::BAD_REQUEST, Json(json!({"error": crate::chain::redact_urls(&msg.to_string())})))
 }
 
+/// A PQZ fill's refusal as a reply: `PQZ_FEE_MISMATCH` is the job's own, 422 (job-api.md; Fable E N-11), though the lane keeps
+/// such a job queued (a decrease may restore the word); another rule 400, the chain 503.
+fn fill_reply(e: crate::guard::Refusal) -> Reply {
+    match e {
+        crate::guard::Refusal::Transport(r) if r.starts_with("PQZ_FEE_MISMATCH") => {
+            (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error": crate::chain::redact_urls(&r)})))
+        }
+        e => match SimError::from(e) {
+            SimError::Revert(r) => bad(r),
+            t => sim_reply(t),
+        },
+    }
+}
+
 fn unavailable(msg: impl ToString) -> Reply {
     (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": crate::chain::redact_urls(&msg.to_string())})))
 }
@@ -220,15 +234,7 @@ async fn relay(c: &GwChain, mut w: Work) -> Reply {
     // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt as on the lane (which reuses it), before the simulation; round 3t: a
     // `PQZ_FEE_MISMATCH` is the job's own (422 here), though the lane keeps such a job queued (a decrease may restore the word)
     if let Err(e) = c.guard.pqz_fill(&c.chain, &mut w).await {
-        if let crate::guard::Refusal::Transport(r) = &e {
-            if r.starts_with("PQZ_FEE_MISMATCH") {
-                return bad(r.clone());
-            }
-        }
-        return match SimError::from(e) {
-            SimError::Revert(r) => bad(r),
-            t => sim_reply(t),
-        };
+        return fill_reply(e);
     }
     if let Err(e) = c.chain.simulate(w.to, w.data.clone()).await {
         return sim_reply(e);
@@ -410,6 +416,16 @@ mod tests {
         assert_eq!(bad("simulation: http://10.0.0.7:8545/KEY down").1 .0["error"], "simulation: <url> down");
         assert_eq!(sim_reply(SimError::Transport("x https://h/k".into())).1 .0["error"], "rpc: x <url>");
         assert_eq!(venue_err(VenueError::Unavailable("y (http://h)".into())).1 .0["error"], "y (<url>)");
+    }
+
+    /// Fable E N-11: a PQZ fill's `PQZ_FEE_MISMATCH` answers 422 as job-api.md documents; another transport error 503, a rule 400.
+    #[test]
+    fn pqz_fee_mismatch_is_422() {
+        use crate::guard::Refusal;
+        let m = crate::pqz::fee_mismatch(1, alloy::primitives::U256::from(2), alloy::primitives::U256::ZERO, 2, alloy::primitives::U256::ZERO);
+        assert_eq!(fill_reply(Refusal::Transport(m)).0, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(fill_reply(Refusal::Transport("proofSystemId(): timeout".into())).0, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(fill_reply(Refusal::Policy("BAD_PAYLOAD: no pqz_fee".into())).0, StatusCode::BAD_REQUEST);
     }
     use crate::metatx::{Domain, UaMtx, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
     use alloy::primitives::B256;

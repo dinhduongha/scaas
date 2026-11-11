@@ -1264,8 +1264,9 @@ pub(crate) mod tests {
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             // group 3f: the token refuses the verdict the node rebuilt (here: field 3, the statement moved)
-                            Some("verdict_mismatch") => {
-                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::PqzVerdictMismatch { field: 3 });
+                            Some(s @ ("verdict_mismatch" | "verdict_mismatch_30")) => {
+                                let field = if s == "verdict_mismatch" { 3 } else { 30 };
+                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::PqzVerdictMismatch { field });
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             // Nethermind 2.2.0's answer for a call over 2^24 regular gas (EIP-7825 under EIP-8037)
@@ -3296,8 +3297,11 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "a cancel: {r:?}");
         let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), logs_down: true, ..offchain() }, vec![j.clone()], |_| {}).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_LOG_UNREAD: "), "{r:?}");
-        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j], |_| {}).await;
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j.clone()], |_| {}).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: "), "{r:?}");
+        // Fable E N-11: the field is parsed whole: field 30 after a `VerifierFeeSet` is no fee move
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch_30"), fee_set: true, ..offchain() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: PqzVerdictMismatch"), "{r:?}");
     }
 
     /// Fable 3r3s3t P3-3 (spec 3t §10: the fee pre-check "again before every send"): a stuck PQZ debit is re-checked before its
