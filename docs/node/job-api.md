@@ -161,7 +161,8 @@ Payload by kind:
   validUntil, relayer: <router>}, call: {entry, contract, token, envelope, args, auth | signature}, auth}`, `from` and `payee`
   as ids, on the payer's own lane (O4); `target` and `callDataHash` come from `call` (in `args` they are refused). The node
   builds the inner calldata from `call` and sends the router's `relay(target, callData, token, from, payee, value, batch,
-  nonce, validUntil, auth)` to `args.relayer`, which must be `params.relay_fee.router`; a hex call is refused; the payee is
+  nonce, validUntil, auth)` to `args.relayer`, which must be `params.relay_fee.router`; a hex call is refused; a `call` naming
+  `mtxRelayFee` is refused `BAD_PAYLOAD` by its `entry`, before its body is parsed (no nesting); the payee is
   never `pad(executor)`, open mode `payee = pad(router)`.
 - *EVM, the fee covers the quote.* After the simulation, a relay fee that reaches this lane (open mode or bound to it) must be
   worth, at `params.relay_fee.min_wei_value[token]`, at least the quote: the gas limit × the job's **fee ceiling**
