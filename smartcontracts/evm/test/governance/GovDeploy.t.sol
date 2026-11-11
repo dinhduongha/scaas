@@ -365,9 +365,9 @@ contract GovDeployTest is Test {
         // T83: 44,635 -> 45,522 B (the pay records' views and `_payRecord`, the v3 `PayMeta` tuple); T66b (the body
         // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name;
         // group 3l: 17,808 -> 19,366 B (the five wrap-limit stubs); merge3k (+ ua-mtx-liquidity's `mtxLiquidityPull` stub):
-        // 19,366 -> 19,532 B
-        h.limitCode(19_531);
-        vm.expectRevert(bytes("WrappedToken runtime 19532 B > chain code limit 19531 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // 19,366 -> 19,532 B; Fable review fixes 2026-11-11 (B P3-1, B P2-1 in the ERC-20 core): 19,532 -> 19,626 B
+        h.limitCode(19_625);
+        vm.expectRevert(bytes("WrappedToken runtime 19626 B > chain code limit 19625 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 
@@ -557,8 +557,10 @@ contract GovDeployTest is Test {
         // 0x8B56809BBf5f6595351F648a499E194292B6100C; T82 (the metadata hash: the contract's new name and file, owner
         // 2026-11-09): -> 0x6e5ADaD0b26E45d76250564dC569D2C05a082762; T83 (the metadata hash: `MetaTxLib.PayMeta` v3 and
         // `PayRecord`, owner 2026-11-09): -> 0x70ba50D63EC511e4a39bf34d8EE01F3e85D3cEaC; T66b (the metadata hash: the
-        // T66b sources it imports, the `IERC20MetaTx` comment of f0c03715 among them; its code unchanged): -> this
-        assertEq(rf, 0xd981282EC3f2F979B953BDE7c7c3c4100caDfe89, "RelayFeeRouter");
+        // T66b sources it imports, the `IERC20MetaTx` comment of f0c03715 among them; its code unchanged):
+        // 0xd981282EC3f2F979B953BDE7c7c3c4100caDfe89; Fable review fixes 2026-11-11 (the metadata hash: `MetaTxLib` loses
+        // `hashStruct` / `validateMode`, B P3-3; its code unchanged): -> this
+        assertEq(rf, 0x43E08564FE056f53014bb2c40C4f845E550Eb8Cf, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -600,8 +602,9 @@ contract GovDeployTest is Test {
         // admin ops of the factory and a compliance registry, spec §5.4; owner naming 2026-11-11): ->
         // 0x668B713392eEcF586D1BAbF16be677b94a71E8f0; round 3s T4 (CTR-GOV-24: `mtxSetAllowed`, `mtxSetDenied`,
         // `mtxEnableFeature`) and round 3t (CTR-PQZ-36: `mtxSetVerifierFee`), both in (merge 0d6bc40c; 3t alone was
-        // 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a): -> this
-        assertEq(router, 0xf6cEa6aB1eF258779F44546EE3BD596aD2576EFe, "GovernanceRouter");
+        // 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a): -> 0xf6cEa6aB1eF258779F44546EE3BD596aD2576EFe; Fable review fixes
+        // 2026-11-11 (`MtxPipelineLib._callFee`'s refusals, B P3-4; the metadata hash: `MetaTxLib`, `GovernanceLib`): -> this
+        assertEq(router, 0xc1F97DFA09Ee3D51D370542dbD2c0f5024d8C880, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
