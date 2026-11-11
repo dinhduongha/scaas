@@ -41,10 +41,13 @@ keystore's path and the environment variable holding its password, never a secre
   `binding` 0 for a direct call, the envelope's binding for a relayed one) or `verifyTransferAmount`. `args` is the entry's
   argument struct by its field names (`IPqzToken.sol`; group 3h: `ownTag` in `PqzTransferArgs`, `PqzMultiArgs`,
   `PqzBurnArgs`); a disclosure reads the leg owner from the op blob `R ‖ P(v_f) ‖ ownTag ‖ kv(8·n) ‖ u8(n)`.
-- `POST /v1/pqz-verdict/probe` `{token, chainId}`: a verdict over a fixed probe statement, for an `OFFCHAIN` token of the
-  pinned chain that names this verifier (else `NOT_OFFCHAIN`, `NOT_THIS_VERIFIER`); what the node's
-  `refuse_shield_when_unserved` asks. A verifier proposed but not yet confirmed is not named by the token, so the probe
-  refuses it.
+- `POST /v1/pqz-verdict/probe` `{token, chainId, proposal?}`: a verdict over the fixed probe statement
+  `SCAAS-PQZ-VERIFIER-PROBE-V1` and an empty proof, for an `OFFCHAIN` token of the pinned chain, registry and `chainUid`
+  that names this verifier (else `NOT_OFFCHAIN`, `NOT_THIS_VERIFIER`; what the node's `refuse_shield_when_unserved`
+  asks). With `proposal: true` (spec §4.2's typo guard, asked of the proposed `next` before `pqzSetVerifier`) the token
+  may name another verifier or none; every other refusal stays. Only the probe statement is signed on this route, and
+  no token builds it: 27 bytes, shorter than the 640-byte header of every statement a token hashes, so a real debit's
+  `_check` refuses a probe verdict `PqzVerdictMismatch(3)` (`tests/anvil.rs`).
 
 Chain reads ([ARCH-POS-15](../docs/decisions.md#ARCH-POS-15)): `rpc_urls` is a list, asked in order; every read of one
 request comes from one node at one block number (its head when the request starts); a node that does not answer sends
@@ -53,6 +56,18 @@ the whole request to the next one; a revert or a refusal is an answer. The stric
 Bounds: a per-address rate limit; the body read within 15 s (`BODY_TIMEOUT`, else 408), a body limit set from the set's
 largest statement and proof, JSON nesting at most 4 below the request object, all checked before decoding; only then a
 place in the bounded queue (a slow body never holds one); bounded verification concurrency.
+
+## Known limits
+
+- ARCH-POS-15's strict-majority agreement option is not built: failover only (no read here feeds a decryption).
+- The key ownership record (`pqzKeyHash` → `(ua, version)`) lives in memory: bounded at 2^18 keys (`KEY_RECORD_FULL`
+  when full), not persisted, lost on restart.
+- No factory lookup of "is a factory instance": a token is an EIP-1167 proxy of a configured release whose code names the
+  pinned registry and `chainUid`.
+- One registry, one generation, one chain per process: tokens naming the other generation's registry are refused
+  `FOREIGN_REGISTRY`; run a second process for them.
+- `tests/anvil.rs` stubs pqz-ffi (`…01` for every input): there is no prover in the test and no `R_REG` proof of its keys;
+  `tests/service.rs` runs pqz-ffi on the set's vector rows.
 
 ## Build and test
 

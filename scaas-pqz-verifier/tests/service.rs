@@ -637,18 +637,42 @@ async fn probe_signature() {
     assert_refused(&post(&s, "/v1/pqz-verdict/probe", req).await, "UNKNOWN_RELEASE");
 }
 
-/// Fable C-1: the probe signs only for an `OFFCHAIN` token that names this verifier (one change at a time, then back).
+/// Fable C-1: the probe signs only for an `OFFCHAIN` token that names this verifier (one change at a time, then back);
+/// a proposal probe (spec §4.2's typo guard of the proposed `next`) also while the token names another verifier or none,
+/// never for a token not `OFFCHAIN` or of another chain.
 #[tokio::test]
 async fn probe_refuses_token_not_served() {
     let s = service(world(&[], &[]), all_valid());
     let req = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
+    let proposal = json!({"token": TOKEN, "chainId": CHAIN_ID, "proposal": true}).to_string();
+    let probe = |b: &str| post(&s, "/v1/pqz-verdict/probe", b.to_string());
     s.world().mode = 0;
-    assert_refused(&post(&s, "/v1/pqz-verdict/probe", req.clone()).await, "NOT_OFFCHAIN");
+    assert_refused(&probe(&req).await, "NOT_OFFCHAIN");
+    assert_refused(&probe(&proposal).await, "NOT_OFFCHAIN");
     s.world().mode = 1;
-    s.world().verifier = C;
-    assert_refused(&post(&s, "/v1/pqz-verdict/probe", req.clone()).await, "NOT_THIS_VERIFIER");
+    for other in [C, B256::ZERO] {
+        s.world().verifier = other;
+        assert_refused(&probe(&req).await, "NOT_THIS_VERIFIER");
+        assert_signed(&probe(&proposal).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    }
+    let wrong_chain = json!({"token": TOKEN, "chainId": 1, "proposal": true}).to_string();
+    assert_refused(&probe(&wrong_chain).await, "CHAIN_MISMATCH");
     s.world().verifier = signer().address().into_word();
-    assert_signed(&post(&s, "/v1/pqz-verdict/probe", req).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    assert_signed(&probe(&req).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    assert_signed(&probe(&proposal).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+}
+
+/// The probe's `statementHash` is no real op statement's: its 27 bytes are shorter than the 640-byte header every token
+/// statement starts with (word 0 its op tag) and than every statement length of the set, and its keccak is none of the
+/// vector rows' (every form). A real debit's `_check` refuses a probe verdict on chain: `tests/anvil.rs`.
+#[test]
+fn probe_statement_is_no_op_statement() {
+    assert!(PROBE_STATEMENT.len() < stmt::HEADER_BYTES && PROBE_STATEMENT.len() < 32);
+    assert!(statement_lengths().iter().all(|&n| n >= stmt::HEADER_BYTES && n != PROBE_STATEMENT.len()));
+    let rows = json_file("n2304-kmax4096/proof_pqzl.json");
+    let ours = hex::encode(keccak256(PROBE_STATEMENT));
+    let rows = rows["rows"].as_array().unwrap();
+    assert!(rows.len() > 10 && rows.iter().all(|r| r["stmt_keccak"].as_str().unwrap() != ours));
 }
 
 /// Fable C-1 (P0): a clone-shaped contract (proxy of the configured release) whose code names a registry or a `chainUid`
@@ -663,6 +687,8 @@ async fn refuses_clone_naming_rogue_registry() {
         s.world().named = named;
         assert_refused(&verdict(&s, &req).await, error);
         assert_refused(&post(&s, "/v1/pqz-verdict/probe", probe.clone()).await, error);
+        let proposal = json!({"token": TOKEN, "chainId": CHAIN_ID, "proposal": true}).to_string();
+        assert_refused(&post(&s, "/v1/pqz-verdict/probe", proposal).await, error);
     }
     s.world().named = (REGISTRY, CHAIN_UID);
     assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));

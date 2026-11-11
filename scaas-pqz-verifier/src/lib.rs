@@ -33,8 +33,11 @@ pub use pqz_ffi::{Word, INVALID, VALID};
 /// pqz-ffi's verdict on a precompile input `u8(op) ‖ be32(len) ‖ statement ‖ proof`; in production `pqz_ffi::precompile`.
 pub type Pqz = Arc<dyn Fn(&[u8]) -> Result<Word, pqz_ffi::Error> + Send + Sync>;
 
-/// The probe's statement (spec §4.2, the typo guard before a verifier transfer): no token builds these bytes, so its
-/// verdict fits no operation.
+/// The probe's statement (spec §4.2, the typo guard before a verifier transfer). No token builds these bytes, so its
+/// verdict fits no operation: every statement a token builds and hashes into `statementHash` is one of the set's
+/// `STMT_*` lengths, at least the 640-byte header (`stmt::HEADER_BYTES`), whose word 0 is the op tag; these 27 bytes are
+/// shorter than one word. Two different preimages of keccak256, so the probe's `statementHash` equals a real one only
+/// by a collision, and a real debit's `_check` refuses the probe verdict `PqzVerdictMismatch(3)` (`tests/anvil.rs`).
 pub const PROBE_STATEMENT: &[u8] = b"SCAAS-PQZ-VERIFIER-PROBE-V1";
 /// JSON nesting allowed below the request object: `op` → `args` → `legs` → a leg.
 pub const MAX_DEPTH: usize = 4;
@@ -180,12 +183,15 @@ struct At {
     block: u64,
 }
 
-/// `POST /v1/pqz-verdict/probe`.
+/// `POST /v1/pqz-verdict/probe`. `proposal`: the typo guard before a verifier transfer (spec §4.2), asked of the proposed
+/// `next` while the token still names another verifier (or none); without it the token must name this verifier.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ProbeRequest {
     pub token: Address,
     pub chain_id: u64,
+    #[serde(default)]
+    pub proposal: bool,
 }
 
 /// The answer: the verdict and the verifier's `UASig` (a native EOA: `signature` only).
@@ -445,12 +451,18 @@ impl Service {
         Ok(Token { at })
     }
 
-    /// The token's verifier configuration: `OFFCHAIN`, naming this verifier.
-    async fn served(&self, at: At, t: &Token) -> Result<abi::PqzVerifyConfig, Refusal> {
+    /// The token's verifier configuration, `OFFCHAIN`.
+    async fn offchain(&self, at: At, t: &Token) -> Result<abi::PqzVerifyConfig, Refusal> {
         let cfg = self.read(at, t.at, IPqzToken::pqzVerifyConfigCall {}).await?;
         if cfg.pqzVerifyMode != OFFCHAIN {
             return Err(refuse("NOT_OFFCHAIN", format!("{}: pqzVerifyMode {}", t.at, cfg.pqzVerifyMode)));
         }
+        Ok(cfg)
+    }
+
+    /// The token's verifier configuration: `OFFCHAIN`, naming this verifier.
+    async fn served(&self, at: At, t: &Token) -> Result<abi::PqzVerifyConfig, Refusal> {
+        let cfg = self.offchain(at, t).await?;
         if cfg.verifier != self.ua {
             return Err(refuse("NOT_THIS_VERIFIER", format!("{}: verifier {}", t.at, cfg.verifier)));
         }
@@ -532,20 +544,23 @@ impl Service {
     }
 
     /// Spec §4.2's probe: a verdict over [`PROBE_STATEMENT`] and an empty proof at the token's current epoch, for an
-    /// `OFFCHAIN` token naming this verifier.
+    /// `OFFCHAIN` token of the pinned chain, registry and `chainUid` that names this verifier, or, with `proposal`, names
+    /// any (the typo guard of the proposed `next`). Only the fixed probe statement is ever signed here.
     pub async fn probe(&self, req: ProbeRequest) -> Result<Signed, Refusal> {
         if req.chain_id != self.chain_id {
             return Err(refuse("CHAIN_MISMATCH", format!("chain {}, not {}", req.chain_id, self.chain_id)));
         }
-        let token = req.token;
+        let (token, proposal) = (req.token, req.proposal);
         self.on_nodes(|at| async move {
             let t = self.token(at, token).await?;
-
-            let cfg = self.served(at, &t).await?;
+            let cfg = self.offchain(at, &t).await?;
+            if !proposal && cfg.verifier != self.ua {
+                return Err(refuse("NOT_THIS_VERIFIER", format!("{}: verifier {} (a proposal probe says proposal)", t.at,
+                    cfg.verifier)));
+            }
             self.sign(&t, keccak256(PROBE_STATEMENT), keccak256(b""), cfg.pqzVerifierEpoch).await
         })
         .await
-
     }
 
     async fn current(&self, at: At, ua: B256) -> Result<u64, Refusal> {

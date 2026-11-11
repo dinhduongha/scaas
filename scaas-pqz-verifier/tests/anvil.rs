@@ -23,7 +23,7 @@ use alloy::primitives::{keccak256, Address, Bytes, FixedBytes, B256, U256};
 use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
-use alloy::sol_types::{SolCall, SolEvent, SolValue};
+use alloy::sol_types::{SolCall, SolError, SolEvent, SolValue};
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::Request;
@@ -92,6 +92,7 @@ mod t {
         function mtxConfidentialTransferSingle(PqzTransferArgs t, bytes proof, UASig pqzAuth, bytes accHint,
             PqzSignedVerdict pqzVerdict) external returns (bytes32 entryRef);
         event PqzVerified(bytes32 statementHash, bytes32 proofHash, bytes32 verifier, uint32 pqzVerifierEpoch);
+        error PqzVerdictMismatch(uint8 field);
     }
 }
 
@@ -419,6 +420,19 @@ rate_per_minute = 1000
     assert!(verdict.pqzVerdict.validUntil > now());
     let auth = t::UASig { keyData: Bytes::new(), members: vec![],
         signature: from.sign(&rpc, registry, b"scaas.ua.purpose.zether-auth.v1", pqz_auth_digest(1, &stmt)).await.into() };
+    // the probe's verdict (signed, this verifier, this token's epoch) on the same debit: the token's _check refuses it at
+    // statementHash, PqzVerdictMismatch(3); the probe signs a statement no token builds
+    let probe_verdict = t::PqzSignedVerdict {
+        pqzVerdict: t::PqzVerdict { statementHash: keccak256(PROBE_STATEMENT), proofHash: keccak256(b""),
+            validUntil: r.1["pqzVerdict"]["validUntil"].as_u64().unwrap(), ..verdict.pqzVerdict.clone() },
+        sig: t::UASig { keyData: Bytes::new(), members: vec![],
+            signature: alloy::hex::decode(r.1["pqzVerdictSig"]["signature"].as_str().unwrap()).unwrap().into() } };
+    let with_probe = t::mtxConfidentialTransferSingleCall { t: args.clone(), proof: proof.clone().into(), pqzAuth: auth.clone(),
+        accHint: Bytes::new(), pqzVerdict: probe_verdict }.abi_encode();
+    let e = pr.call(TransactionRequest::default().from(deployer().address()).to(token).input(with_probe.into())).await
+        .expect_err("a probe verdict on a real debit");
+    assert_eq!(e.as_error_resp().and_then(|p| p.as_revert_data()), Some(t::PqzVerdictMismatch { field: 3 }.abi_encode().into()),
+        "the probe verdict refused at statementHash: {e}");
     let rc = send(&rpc, token, t::mtxConfidentialTransferSingleCall { t: args, proof: proof.clone().into(), pqzAuth: auth,
         accHint: Bytes::new(), pqzVerdict: verdict }.abi_encode()).await;
     let ev = rc.inner.logs().iter().find_map(|l| t::PqzVerified::decode_log_data(l.data()).ok())
