@@ -87,6 +87,21 @@ contract OtherSystemBurnVerifier {
     function proofSystemId() external pure returns (bytes32) { return keccak256("another proof system"); }
 }
 
+/// A burn verifier of the right system and inner product whose `ringSize()` answers only after burning more than a probe's
+/// 30,000 gas (Fable 3r3s3t P3-9): a costly answer must not read as "does not answer".
+contract CostlyRingSizeBurnVerifier {
+    address public immutable innerProduct;
+    bytes32 public immutable proofSystemId;
+
+    constructor(address ip, bytes32 id) { (innerProduct, proofSystemId) = (ip, id); }
+
+    function ringSize() external view returns (uint256) {
+        uint256 x;
+        for (uint256 i; i < 200; ++i) x = uint256(keccak256(abi.encode(x, gasleft())));
+        return x == 0 ? 0 : 2;
+    }
+}
+
 /// The same, with a `curveName()` that reverts: the typed error survives with an empty name (review 5g-Z2 M-1).
 contract UnsupportedNamelessVerifier is UnsupportedHereVerifier {
     constructor(address real) UnsupportedHereVerifier(real) {}
@@ -284,6 +299,32 @@ contract ZetherRevertPathsTest is ZetherFixture {
         r.features |= 1 << GovernanceBits.WRAP_DISABLEABLE;
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.WRAP_DISABLEABLE));
         factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(r), "wrap");
+    }
+
+    /// Fable 3r3s3t P3-9 (spec 3r §5.6 N3): the negative probe (the burn verifier must not answer `ringSize()`) fails closed.
+    /// Two transfer verifiers (the burn slot answers `ringSize()`): at no gas does `validateEnv` pass; a starved probe reverts
+    /// `BadInit` rather than reading as "does not answer". Positive control: the right env passes with the same sweep's top.
+    function test_validateEnv_negativeProbeFailsClosed() public {
+        IFactoryToken.Env memory e = _zenv();
+        address ip = address(ZetherVerifierBase(address(ver)).innerProduct());
+        e.deps[1] = address(new ZetherTransferVerifierBls12381(ZetherVerifierBase(address(ver)).innerProduct()));
+        bytes32 uid = factory.chainUid();
+        bytes memory bad = abi.encodeCall(normalImpl.validateEnv, (instanceEnv(e, uid, address(0))));
+        // a burn slot that answers `ringSize()` at a cost above the probe's cap
+        IFactoryToken.Env memory c = _zenv();
+        c.deps[1] = address(new CostlyRingSizeBurnVerifier(ip, IZetherVerifier(address(ver)).proofSystemId()));
+        bytes memory costly = abi.encodeCall(normalImpl.validateEnv, (instanceEnv(c, uid, address(0))));
+        vm.expectRevert(IZetherToken.BadInit.selector);
+        normalImpl.validateEnv(instanceEnv(c, uid, address(0)));
+        for (uint256 g = 20_000; g <= 400_000; g += 500) {
+            (bool ok,) = address(normalImpl).staticcall{gas: g}(bad);
+            assertFalse(ok, "two transfer verifiers never pass");
+            (ok,) = address(normalImpl).staticcall{gas: g}(costly);
+            assertFalse(ok, "a costly answer never reads as none");
+        }
+        (bool good,) = address(normalImpl).staticcall{gas: 400_000}(
+            abi.encodeCall(normalImpl.validateEnv, (instanceEnv(_zenv(), uid, address(0)))));
+        assertTrue(good, "control: the right env passes at the sweep's top");
     }
 
     /// The release's `Env.deps` (plan 5g-Z2, CTR-ZTH-20): four entries with code, a registry, the two verifiers of one
