@@ -1,0 +1,169 @@
+# release gas on anvil (chain 31337, block gas limit 60,000,000), deploy.sh evm, RELEASE_GAS_GATE=public, every option
+plan txs 111 | measured 111 | receipts 111, status 1: 111 | asked > 60 M or regular x 1.05 >= 2^24: 0 | max asked 57,553,937 (OpenFactory)
+
+## the public gate's release lines (Deploy.s.sol simulation)
+release gas | UARegistry | regular 2464256 | state 43276050 | asked 48027321 | block gas limit 60000000
+release gas | UARegistryCoreLib | regular 2214595 | state 51721650 | asked 56633057 | block gas limit 60000000
+release gas | UARegistryAuxLib | regular 1336620 | state 31077360 | asked 34034679 | block gas limit 60000000
+release gas | NormalTokenP | regular 1711112 | state 37460520 | asked 41130213 | block gas limit 60000000
+release gas | NormalTokenT | regular 1259641 | state 26940240 | asked 29609875 | block gas limit 60000000
+release gas | NormalTokenA | regular 1709031 | state 37171350 | asked 40824400 | block gas limit 60000000
+release gas | NormalToken | regular 1128569 | state 21921840 | asked 24202929 | block gas limit 60000000
+release gas | SCaaSDexGovernanceModule | regular 477370 | state 10071990 | asked 11076828 | block gas limit 60000000
+release gas | SCaaSDexLiquidityModule | regular 1288769 | state 29337750 | asked 32157844 | block gas limit 60000000
+release gas | SCaaSDex | regular 2291573 | state 50870970 | asked 55820670 | block gas limit 60000000
+release gas | WrappedTokenP | regular 1738158 | state 38115360 | asked 41846193 | block gas limit 60000000
+release gas | WrappedTokenT | regular 1349103 | state 29043990 | asked 31912747 | block gas limit 60000000
+release gas | WrappedTokenA | regular 1426082 | state 30607650 | asked 33635418 | block gas limit 60000000
+release gas | WrappedTokenW | regular 1840103 | state 40272660 | asked 44218401 | block gas limit 60000000
+release gas | WrappedToken | regular 1509302 | state 30557160 | asked 33669785 | block gas limit 60000000
+release gas | NormalRegulatedTokenP | regular 2035671 | state 44810640 | asked 49188626 | block gas limit 60000000
+release gas | NormalRegulatedTokenT | regular 1361586 | state 29112840 | asked 31998147 | block gas limit 60000000
+release gas | NormalRegulatedTokenA | regular 1840103 | state 40067640 | asked 44003130 | block gas limit 60000000
+release gas | NormalRegulatedTokenR | regular 1001658 | state 20595330 | asked 22676837 | block gas limit 60000000
+release gas | NormalRegulatedToken | regular 1428163 | state 28211670 | asked 31121824 | block gas limit 60000000
+release gas | WrappedRegulatedTokenP | regular 2062717 | state 45476190 | asked 49915852 | block gas limit 60000000
+release gas | WrappedRegulatedTokenT | regular 1457290 | state 31374180 | asked 34473043 | block gas limit 60000000
+release gas | WrappedRegulatedTokenA | regular 1555074 | state 33453450 | asked 36758950 | block gas limit 60000000
+release gas | WrappedRegulatedTokenW | regular 1931645 | state 42203520 | asked 46341923 | block gas limit 60000000
+release gas | WrappedRegulatedTokenR | regular 1016222 | state 20933460 | asked 23047166 | block gas limit 60000000
+release gas | WrappedRegulatedToken | regular 1802654 | state 36718470 | asked 40447180 | block gas limit 60000000
+release gas | PqChatTopics | regular 1097362 | state 25272540 | asked 27688397 | block gas limit 60000000
+release gas | PqChat | regular 1906679 | state 43600410 | asked 47782443 | block gas limit 60000000
+release gas | NormalZetherTokenP | regular 1775607 | state 38972160 | asked 42785155 | block gas limit 60000000
+release gas | NormalZetherTokenT | regular 1261722 | state 26931060 | asked 29602421 | block gas limit 60000000
+release gas | NormalZetherTokenA | regular 1669501 | state 36227340 | asked 39791683 | block gas limit 60000000
+release gas | NormalZetherTokenZ | regular 1567557 | state 33861960 | asked 37200992 | block gas limit 60000000
+release gas | NormalZetherToken | regular 1359506 | state 27053460 | asked 29833614 | block gas limit 60000000
+release gas | WrappedZetherTokenP | regular 1813057 | state 39809070 | asked 43703233 | block gas limit 60000000
+release gas | WrappedZetherTokenT | regular 1351184 | state 29043990 | asked 31914932 | block gas limit 60000000
+release gas | WrappedZetherTokenA | regular 1230514 | state 25997760 | asked 28589687 | block gas limit 60000000
+release gas | WrappedZetherTokenW | regular 1829701 | state 40001850 | asked 43923128 | block gas limit 60000000
+release gas | WrappedZetherTokenZ | regular 1983658 | state 43560630 | asked 47821502 | block gas limit 60000000
+release gas | WrappedZetherToken | regular 1763124 | state 36227340 | asked 39889987 | block gas limit 60000000
+release gas | NormalZetherRegulatedTokenP | regular 2102247 | state 46366650 | asked 50892341 | block gas limit 60000000
+release gas | NormalZetherRegulatedTokenT | regular 1363667 | state 29112840 | asked 32000332 | block gas limit 60000000
+release gas | NormalZetherRegulatedTokenA | regular 1802654 | state 39152700 | asked 43003121 | block gas limit 60000000
+release gas | NormalZetherRegulatedTokenZ | regular 1713192 | state 37064250 | asked 40716314 | block gas limit 60000000
+release gas | NormalZetherRegulatedTokenR | regular 1003739 | state 20595330 | asked 22679022 | block gas limit 60000000
+release gas | NormalZetherRegulatedToken | regular 1640374 | state 32916420 | asked 36284633 | block gas limit 60000000
+release gas | WrappedZetherRegulatedTokenP | regular 2137616 | state 47203560 | asked 51808234 | block gas limit 60000000
+release gas | WrappedZetherRegulatedTokenT | regular 1459370 | state 31374180 | asked 34475227 | block gas limit 60000000
+release gas | WrappedZetherRegulatedTokenA | regular 1361586 | state 28846620 | asked 31718616 | block gas limit 60000000
+release gas | WrappedZetherRegulatedTokenW | regular 1996141 | state 43718220 | asked 48000079 | block gas limit 60000000
+release gas | WrappedZetherRegulatedTokenZ | regular 2041912 | state 44763210 | asked 49145378 | block gas limit 60000000
+release gas | WrappedZetherRegulatedTokenR | regular 1018302 | state 20933460 | asked 23049350 | block gas limit 60000000
+release gas | WrappedZetherRegulatedToken | regular 2060637 | state 42443730 | asked 46729585 | block gas limit 60000000
+
+## every plan transaction (DeploySend: i | what | regular | state | asked = (regular + state) x 1.05 | limit sent | asked <= 60 M and regular x 1.05 < 2^24)
+0 | GovernanceLib | 992,426 | 23,050,980 | 25,245,576 | 25,245,576 | yes
+1 | HederaLib | 70,566 | 1,357,110 | 1,499,059 | 1,499,059 | yes
+2 | ZetherLib | 1,781,134 | 41,611,410 | 45,562,171 | 45,562,171 | yes
+3 | WrappedLib | 1,846,540 | 43,150,590 | 47,246,986 | 47,246,986 | yes
+4 | ZetherWrappedLib | 811,487 | 18,792,990 | 20,584,700 | 20,584,700 | yes
+5 | UARegistryCoreLib | 2,210,759 | 51,721,650 | 56,629,029 | 56,629,029 | yes
+6 | UARegistryAuxLib | 1,333,499 | 31,077,360 | 34,031,401 | 34,031,401 | yes
+7 | RegulatedLib | 790,227 | 18,292,680 | 20,037,052 | 20,037,052 | yes
+8 | MtxPipelineLib | 830,797 | 19,247,400 | 21,082,106 | 21,082,106 | yes
+9 | TradeLib | 340,512 | 7,709,670 | 8,452,691 | 8,452,691 | yes
+10 | SmartKeyAccountFactory | 1,529,197 | 34,659,090 | 37,997,701 | 37,997,701 | yes
+11 | RelayFeeRouter | 229,855 | 5,119,380 | 5,616,696 | 5,616,696 | yes
+12 | WebAuthnP256Verifier | 414,435 | 8,900,010 | 9,780,167 | 9,780,167 | yes
+13 | P256Verifier | 253,521 | 5,113,260 | 5,635,120 | 5,635,120 | yes
+14 | Ed25519Verifier | 1,159,647 | 27,022,860 | 29,591,632 | 29,591,632 | yes
+15 | Bip340Verifier | 114,907 | 2,437,290 | 2,679,806 | 2,679,806 | yes
+16 | Secp256k1Verifier | 76,808 | 1,540,710 | 1,698,393 | 1,698,393 | yes
+17 | SchnorrBn254Verifier | 249,945 | 5,579,910 | 6,121,347 | 6,121,347 | yes
+18 | SchnorrBls12381Verifier | 249,945 | 5,579,910 | 6,121,347 | 6,121,347 | yes
+19 | BlsMinSigBls12381Verifier | 331,410 | 7,495,470 | 8,218,224 | 8,218,224 | yes
+20 | BlsMinSigBn254Verifier | 207,294 | 4,574,700 | 5,021,093 | 5,021,093 | yes
+21 | Musig2Secp256k1Verifier | 263,793 | 5,940,990 | 6,515,022 | 6,515,022 | yes
+22 | FrostSecp256k1Verifier | 316,391 | 7,178,760 | 7,869,908 | 7,869,908 | yes
+23 | Musig2Bn254Verifier | 364,243 | 8,269,650 | 9,065,587 | 9,065,587 | yes
+24 | FrostBn254Verifier | 317,821 | 7,212,420 | 7,906,753 | 7,906,753 | yes
+25 | ZetherSchnorrBls12381Verifier | 250,595 | 5,595,210 | 6,138,095 | 6,138,095 | yes
+26 | MldsaVerifier | 912,652 | 17,757,180 | 19,603,323 | 19,603,323 | yes
+27 | MldsaVerifier | 912,652 | 17,757,180 | 19,603,323 | 19,603,323 | yes
+28 | FndsaVerifier | 487,708 | 10,859,940 | 11,915,030 | 11,915,030 | yes
+29 | SlhdsaVerifier | 166,269 | 3,645,990 | 4,002,871 | 4,002,871 | yes
+30 | FndsaVerifier | 487,708 | 10,859,940 | 11,915,030 | 11,915,030 | yes
+31 | UARegistry | 2,460,420 | 43,276,050 | 48,023,293 | 48,023,293 | yes
+32 | GovernanceRouter | 1,685,820 | 37,841,490 | 41,503,675 | 41,503,675 | yes
+33 | ComplianceRegistry | 262,363 | 5,457,510 | 6,005,866 | 6,005,866 | yes
+34 | ZetherStatements | 613,774 | 14,176,980 | 15,530,291 | 15,530,291 | yes
+35 | OpenFactory | 2,251,654 | 52,561,620 | 57,553,937 | 57,553,937 | yes
+36 | OpenFactory configureChain | 58,829 | 195,840 | 267,402 | 267,402 | yes
+37 | OpenFactory setChainEntries | 117,990 | 391,680 | 535,153 | 535,153 | yes
+38 | NormalTokenP | 1,707,536 | 37,460,520 | 41,126,458 | 41,126,458 | yes
+39 | NormalTokenT | 1,256,846 | 26,940,240 | 29,606,940 | 29,606,940 | yes
+40 | NormalTokenA | 1,704,740 | 37,171,350 | 40,819,894 | 40,819,894 | yes
+41 | OpenFactory publishTokenEnv | 283,910 | 1,762,560 | 2,148,793 | 2,148,793 | yes
+42 | release kind 0 | 1,128,569 | 21,921,840 | 24,202,929 | 24,202,929 | yes
+43 | SCaaSDexGovernanceModule | 474,835 | 10,071,990 | 11,074,166 | 11,074,166 | yes
+44 | SCaaSDexLiquidityModule | 1,286,038 | 29,337,750 | 32,154,977 | 32,154,977 | yes
+45 | OpenFactory publishDexEnv | 215,568 | 1,272,960 | 1,562,954 | 1,562,954 | yes
+46 | deployDexImplementation | 2,291,573 | 50,870,970 | 55,820,670 | 55,820,670 | yes
+47 | WrappedTokenP | 1,735,363 | 38,115,360 | 41,843,259 | 41,843,259 | yes
+48 | WrappedTokenT | 1,346,698 | 29,043,990 | 31,910,222 | 31,910,222 | yes
+49 | WrappedTokenA | 1,422,246 | 30,607,650 | 33,631,390 | 33,631,390 | yes
+50 | WrappedTokenW | 1,837,502 | 40,272,660 | 44,215,670 | 44,215,670 | yes
+51 | OpenFactory publishTokenEnv | 336,935 | 2,154,240 | 2,615,733 | 2,615,733 | yes
+52 | release kind 1 | 1,509,302 | 30,557,160 | 33,669,785 | 33,669,785 | yes
+53 | NormalRegulatedTokenP | 2,031,770 | 44,810,640 | 49,184,530 | 49,184,530 | yes
+54 | NormalRegulatedTokenT | 1,357,880 | 29,112,840 | 31,994,256 | 31,994,256 | yes
+55 | NormalRegulatedTokenA | 1,836,527 | 40,067,640 | 43,999,375 | 43,999,375 | yes
+56 | NormalRegulatedTokenR | 999,188 | 20,595,330 | 22,674,243 | 22,674,243 | yes
+57 | OpenFactory publishTokenEnv | 336,960 | 2,154,240 | 2,615,760 | 2,615,760 | yes
+58 | release kind 8 | 1,428,163 | 28,211,670 | 31,121,824 | 31,121,824 | yes
+59 | WrappedRegulatedTokenP | 2,060,052 | 45,476,190 | 49,913,054 | 49,913,054 | yes
+60 | WrappedRegulatedTokenT | 1,454,429 | 31,374,180 | 34,470,039 | 34,470,039 | yes
+61 | WrappedRegulatedTokenA | 1,552,343 | 33,453,450 | 36,756,082 | 36,756,082 | yes
+62 | WrappedRegulatedTokenW | 1,927,810 | 42,203,520 | 46,337,896 | 46,337,896 | yes
+63 | WrappedRegulatedTokenR | 1,013,556 | 20,933,460 | 23,044,366 | 23,044,366 | yes
+64 | OpenFactory publishTokenEnv | 389,972 | 2,545,920 | 3,082,686 | 3,082,686 | yes
+65 | release kind 9 | 1,802,654 | 36,718,470 | 40,447,180 | 40,447,180 | yes
+66 | OpenFactory setTokenKindEnabled | 34,973 | 0 | 36,721 | 36,721 | yes
+67 | OpenFactory setTokenKindEnabled | 34,973 | 0 | 36,721 | 36,721 | yes
+68 | PqChatTopics | 1,093,721 | 25,272,540 | 27,684,574 | 27,684,574 | yes
+69 | OpenFactory publishClassEnv | 162,407 | 881,280 | 1,095,871 | 1,095,871 | yes
+70 | deployImplementation | 1,906,679 | 43,600,410 | 47,782,443 | 47,782,443 | yes
+71 | OpenFactory setClassKindEnabled | 35,679 | 97,920 | 140,278 | 140,278 | yes
+72 | OpenFactory createInstance | 182,001 | 1,328,040 | 1,585,543 | 1,585,543 | yes
+73 | ZetherDisclosure | 351,175 | 7,997,310 | 8,765,909 | 8,765,909 | yes
+74 | ZetherInnerProductVerifierBls12381 | 7,450,409 | 40,110,480 | 49,938,933 | 49,938,933 | yes
+75 | ZetherTransferVerifierBls12381 | 905,695 | 20,050,650 | 22,004,162 | 22,004,162 | yes
+76 | ZetherBurnVerifierBls12381 | 447,463 | 9,268,740 | 10,202,013 | 10,202,013 | yes
+77 | NormalZetherTokenP | 1,773,202 | 38,972,160 | 42,782,630 | 42,782,630 | yes
+78 | NormalZetherTokenT | 1,257,886 | 26,931,060 | 29,598,393 | 29,598,393 | yes
+79 | NormalZetherTokenA | 1,666,056 | 36,227,340 | 39,788,065 | 39,788,065 | yes
+80 | NormalZetherTokenZ | 1,564,241 | 33,861,960 | 37,197,511 | 37,197,511 | yes
+81 | OpenFactory publishTokenEnv | 399,285 | 2,643,840 | 3,195,281 | 3,195,281 | yes
+82 | release kind 2 | 1,359,506 | 27,053,460 | 29,833,614 | 29,833,614 | yes
+83 | WrappedZetherTokenP | 1,808,765 | 39,809,070 | 43,698,726 | 43,698,726 | yes
+84 | WrappedZetherTokenT | 1,348,128 | 29,043,990 | 31,911,723 | 31,911,723 | yes
+85 | WrappedZetherTokenA | 1,227,784 | 25,997,760 | 28,586,821 | 28,586,821 | yes
+86 | WrappedZetherTokenW | 1,825,605 | 40,001,850 | 43,918,827 | 43,918,827 | yes
+87 | WrappedZetherTokenZ | 1,980,017 | 43,560,630 | 47,817,679 | 47,817,679 | yes
+88 | OpenFactory publishTokenEnv | 478,806 | 3,231,360 | 3,895,674 | 3,895,674 | yes
+89 | release kind 3 | 1,763,124 | 36,227,340 | 39,889,987 | 39,889,987 | yes
+90 | OpenFactory setTokenKindEnabled | 34,973 | 0 | 36,721 | 36,721 | yes
+91 | OpenFactory setTokenKindEnabled | 34,973 | 0 | 36,721 | 36,721 | yes
+92 | NormalZetherRegulatedTokenP | 2,099,581 | 46,366,650 | 50,889,542 | 50,889,542 | yes
+93 | NormalZetherRegulatedTokenT | 1,359,571 | 29,112,840 | 31,996,031 | 31,996,031 | yes
+94 | NormalZetherRegulatedTokenA | 1,799,338 | 39,152,700 | 42,999,639 | 42,999,639 | yes
+95 | NormalZetherRegulatedTokenZ | 1,709,291 | 37,064,250 | 40,712,218 | 40,712,218 | yes
+96 | NormalZetherRegulatedTokenR | 1,000,878 | 20,595,330 | 22,676,018 | 22,676,018 | yes
+97 | OpenFactory publishTokenEnv | 452,299 | 3,035,520 | 3,662,209 | 3,662,209 | yes
+98 | release kind 10 | 1,640,374 | 32,916,420 | 36,284,633 | 36,284,633 | yes
+99 | WrappedZetherRegulatedTokenP | 2,135,145 | 47,203,560 | 51,805,640 | 51,805,640 | yes
+100 | WrappedZetherRegulatedTokenT | 1,456,119 | 31,374,180 | 34,471,813 | 34,471,813 | yes
+101 | WrappedZetherRegulatedTokenA | 1,358,270 | 28,846,620 | 31,715,134 | 31,715,134 | yes
+102 | WrappedZetherRegulatedTokenW | 1,993,411 | 43,718,220 | 47,997,212 | 47,997,212 | yes
+103 | WrappedZetherRegulatedTokenZ | 2,038,727 | 44,763,210 | 49,142,033 | 49,142,033 | yes
+104 | WrappedZetherRegulatedTokenR | 1,015,247 | 20,933,460 | 23,046,142 | 23,046,142 | yes
+105 | OpenFactory publishTokenEnv | 531,807 | 3,623,040 | 4,362,589 | 4,362,589 | yes
+106 | release kind 11 | 2,060,637 | 42,443,730 | 46,729,585 | 46,729,585 | yes
+107 | OpenFactory setTokenKindEnabled | 34,973 | 0 | 36,721 | 36,721 | yes
+108 | OpenFactory setTokenKindEnabled | 34,973 | 0 | 36,721 | 36,721 | yes
+109 | OpenFactory createToken | 286,261 | 1,866,600 | 2,260,504 | 2,260,504 | yes
+110 | OpenFactory createToken | 286,310 | 1,670,760 | 2,054,923 | 2,054,923 | yes

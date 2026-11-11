@@ -1,0 +1,70 @@
+The stacked final gate of rounds 3r + 3s + 3t (branch ua-mtx-3t, tip b1db2268 at the start), before the one merge into
+ua-mtx-merge and reset 3 of the SCaaS testnet (owner 2026-11-11: each round ran its targeted tests only; every broad check
+once, here). Steps by gates.sh here (release-gas.sh for the release-gas row); full output in the git-ignored <step>.log beside
+this file (a red first run kept as <step>.red.log), progress lines in progress.log. Foundry 1.8.5, solc 0.8.37, Amsterdam,
+default PQZ set n2304-kmax4096; every heavy run through scripts/capped (CAPPED_SLOTS=3, 4 GB; the node 6 GB), one at a time.
+Local only: no RPC of the SCaaS testnet. UNAUDITED.
+
+step | commit | rc | counts
+docs (docs_check.py check) | b1db2268 | 0 | 0 errors, 6 warnings (page budgets), 16 notes
+docs-paths | b1db2268 | 0 | 0 machine paths in tracked files
+docs-test (test_docs_check.py) | b1db2268 | 0 | ok
+ci-guards (git grep '/[t]mp/', CI's pathspec) | b1db2268 | 0 | no hit
+gen (gen_faces.py --check, gen_set.py --all --check, the on-chain Python parses, test_vcheck.py) | b1db2268 | 0 | faces 27 files 0 differ; 4 sets, 84 files; test_vcheck ok
+ua-py | b1db2268 | 0 | 29 tests OK
+docs-facts (docs_check.py facts check), red first | b1db2268 | 1 | 8852 facts, 16 misses: 12 as at ua-mtx-merge 27413c75, 4 new (setAttester, attesterId, attesterEnabled, attestationOf: renamed by 3r T14, no dropped-artifacts row)
+docs-facts | 79736d57 | 1 | 12 misses, all 12 of the base 27413c75 (history specs vs current docs, none of 3r / 3s / 3t): known red, left
+forge-account | b1db2268 | 0 | 98 passed (5 suites)
+forge-as, red first | b1db2268 | 1 | 554 passed, 2 failed: RegulatedGas mtx rows +1 (97,075 / 120,472 against 97,074 / 120,471)
+forge-as | 03d2df47 | 0 | 556 passed (88 suites)
+forge-confidential | b1db2268 | 0 | 5 passed
+forge-fork | b1db2268 | 0 | 1 skipped (no SCAAS_FORK_RPC_URL)
+forge-governance, red first | b1db2268 | 1 | 591 passed, 7 failed: GovRouterAdmin 56 typed ops (57 counted); PlusZero gas of 6 rows (4 PQZ transfers, 2 router rows; slots equal)
+forge-governance | 3f26d22a | 0 | 598 passed (60 suites)
+forge-hedera | b1db2268 | 0 | 20 passed (2 suites)
+forge-liquidity | b1db2268 | 0 | 90 passed, 1 skipped (9 suites; the ML-DSA case without clientkeys, run below)
+liquidity-mldsa (CI clientkeys job's ffi case) | b1db2268 | 0 | 2 passed
+forge-merge | b1db2268 | 0 | 341 passed (29 suites)
+forge-metatx | b1db2268 | 0 | 547 passed, 1 skipped (44 suites)
+forge-modules, red first | b1db2268 | 1 | 22 passed, 13 failed: the differential's validBits() on 8-13 (bit 28) and pqzVerifyConfig() on 4, 5, 12, 13 (four words)
+forge-modules | fdd91c7d | 0 | 35 passed (12 suites: Diff*, Modules, Paths, Groups; out/t66b-legacy built by legacy_artifacts.py)
+forge-p6f | b1db2268 | 0 | 4 passed
+forge-pqchat | b1db2268 | 0 | 98 passed (9 suites)
+forge-pqz | b1db2268 | 0 | 628 passed, 4 skipped (55 suites)
+forge-pqzh | b1db2268 | 0 | 42 passed (3 suites)
+forge-research | b1db2268 | 1 | 358 passed, 1 failed, 7 skipped: PqzProofStoreGas test_debitMinGas_isTheCheapestLogDebit, set.toml debit_min_gas 7,513,388 pinned, 7,514,360 measured (+972; 3r measured +44): an owner set-parameter pin, known red, not moved
+forge-top (test/*.t.sol) | b1db2268 | 0 | 29 passed (5 suites)
+forge-ua (isolate = true in foundry.toml: UAGas, UARegistryGroups cold as CI's --isolate step) | b1db2268 | 0 | 732 passed (54 suites)
+forge-v2 (Layout, opcodes, LinkClosure, Factory sizes) | b1db2268 | 0 | 718 passed (56 suites)
+forge-wallet | b1db2268 | 0 | 181 passed (12 suites)
+forge-wrap | b1db2268 | 0 | 278 passed (29 suites)
+forge-zether | b1db2268 | 0 | 441 passed, 4 skipped (37 suites)
+size (size_gate.py --self-test; forge build src --sizes; size_gate.py) | 03d2df47 | 0 | 0 errors, 166 contracts; one notice: OpenFactory 34,106 > plain T-2 line 33,516 (since 3r T15, under the 35,286 stop line); sizes-lines.txt
+node-test (cargo test --lib, CAPPED_MEM=6G) | 03d2df47 | 0 | 716 passed (the soroban timing test failing_jobs_open_the_budget_and_later_jobs_do_not_send among them: passed, no rerun needed)
+node-clippy (--all-targets -D warnings) | 03d2df47 | 0 | clean
+node-e2e, red first (--test e2e --ignored --test-threads=1, CAPPED_MEM=6G, alone) | 03d2df47 | 101 | 19 passed, 3 failed: regulated_freeze_relayed_by_router, regulated_transfer_refused_frozen (Deploy.s.sol: COMPLIANCE_ADMIN not a bytes32), relayed_zether_proof_under_the_ua_tag (zether-cli not built in the work tree)
+zether-cross (cargo build --release zether-cli; forge --ffi ZetherProverCross) | 03d2df47 | 0 | 12 passed
+node-clippy, node-e2e | c54568aa | 0 | clippy clean; e2e 22 passed, 0 failed
+clientkeys (npm test) | c54568aa | 0 | 329 tests: 327 pass, 0 fail, 2 skipped
+ua-rs (test; clippy -D warnings; --features signers, json, pq) | c54568aa | 0 | 310 passed in 63 test binaries; clippy clean
+ua-py | b1db2268 | 0 | 29 tests OK
+ua-go (go vet; go test) | c54568aa | 0 | vet clean; ok
+ua-c (clippy; build; test; C99 smoke; test_vectors) | c54568aa | 0 | cargo 1 passed; smoke ok; 24 Python tests OK
+ua-cxx (clippy; cmake + ctest) | c54568aa | 0 | 20 of 20 ctest
+ua-cs (dotnet test; dotnet build-server shutdown after) | c54568aa | 0 | 28 passed
+ua-dart, red first | c54568aa | 3 | dart analyze: 545 issues, no package resolution in the work tree (an input: dart pub get --offline, pubspec.lock unchanged)
+ua-dart (analyze; test; test -p node; run vectors_test.dart) | c54568aa | 0 | no issues; 29 passed in each of the three runs
+ua-dart-frb (pub get --enforce-lockfile; cargo build --locked; dart test) | c54568aa | 0 | 21 passed
+ua-qt (Qt 6.12, cmake + ctest offscreen) | c54568aa | 0 | 1 of 1 ctest
+zether-prover (cargo test; wasm-smoke.sh) | c54568aa | 0 | 70 passed; wasm smoke 9 checks
+verifier, verifier-clippy (scaas-pqz-verifier) | c54568aa | 0 | 15 passed; clippy clean
+pq-build (pqz_prove, feature prove; forge build src test/helpers/Mocks.sol into out/t66b-e2e) | c54568aa | 0 | built
+e2e-self-test (EVM_OUT=out/t66b-e2e script/pqz/e2e.py --self-test; 3t's row left for this gate) | c54568aa | 0 | 0 failures
+release-probe (the 3p probe: every body module and face of the 12 kinds, its own CREATE2) | c54568aa | 0 | 70 rows (58 modules, 12 faces), every asked <= 60 M and regular x 1.05 < 2^24; largest NormalPqzRegulatedTokenQ 56,126,994; largest face WrappedPqzRegulatedToken 51,552,523 (+ the factory frame, about 0.31 M); release-probe.txt
+release-gas (release-gas.sh: anvil block gas limit 60 M, deploy.sh evm, RELEASE_GAS_GATE=public, wrapped, regulated, Zether, PqChat) | c54568aa | 0 | 111 plan transactions, 111 receipts status 1, 0 over the line; max asked 57,553,937 (OpenFactory), then UARegistryCoreLib 56,629,029, SCaaSDex 55,820,670; release-gas.txt
+matrix run 1, red (matrix.sh local; anvil 31337 + a Nethermind copy, chain 7622, its compose file's own bridge 10.76.22.0/24) | c54568aa | 1 | liquidity, zether, verifiers, views ok; tokens, dex RegulatedConfigInvalid() (3s's terms rule, the scripts' regulated tokens without termsHash); gov ComplianceRegistryGasStarved(50000, 49725) on a KYC transfer (forge's estimate x 1.30), 6 negatives its echo; misc 1 negative ran (the deny-list account cleared before coverage.py neg's end-state eth_call); pq HTTP 503 and pqoff "No route to host": the Docker daemon restarted at 07:03:41Z (every container on the host restarted; the copy, no restart policy, stayed down; not this run's doing); wraplimits VersionNotYetUsable (its broadcast outran the 300 s clock margin)
+matrix run 2 (all groups) | ef2c3ad3 + 99c0a5c6 tree | 1 | tokens 504/504 txs, 5/5 negatives; gov 147/147, 12/12; dex 101/101, 9/9; liquidity 23/23, 6/6; misc 103/103, 24/24; zether 162/162; pq 230/230, 6/6; verifiers 30/30 calls, 30/30 negatives; views 4,904 / 7,228 calls answered (as the committed T66b baseline 3,193 / 5,200: a kind's every view called with zero arguments on every address booked under its label, body modules included, which answer only their own entries); wraplimits ok; pqoff FAIL: createToken pqVF13 (kind 13) RoleNotContract(5, test key 1)
+matrix pqoff (MATRIX_GROUPS=pqoff) | b5f72e36 | 0 | 172/172 txs, 17/17 negatives: the frozen verifier refuses op 1 (FeeRecipientFrozen), fee 0 lands it (verifier paid 0), the restored fee halts it again, the unfreeze releases it
+matrix coverage (coverage.py note, onchain/note-local.txt, onchain/table-local.txt; wraplimits: onchain/wraplimits/) | b5f72e36 | 0 | 1,442 transactions, 1,442 status 1; 109 negatives, 109 refused as expected; the heaviest 54,875,783 gasUsed (pqW op 7); state-changing entries without a transaction: 108 reached inside another call, 112 a library or module entry, 30 with a notrun.json reason, 270 with none (228 on the PQZ kinds 4, 5, 12, 13; 13 PqChat, run apart below; 9 list / enable entries of 9-13 (setAllowed, setDenied, enableFeature; run on kind 8 only); 5 router ops: mtxSetAllowed, mtxSetDenied, mtxEnableFeature (3s, no step through the router) and mtxSetWrapLimits, mtxSetWrapMember (run by wraplimits, counted in its own table); setVerifierFee on 5 and 12 (run on 4 and 13); transferAdmin / acceptAdmin / renounceAdmin of the PQZ kinds)
+wraplimits (matrix run 2, its own table) | 99c0a5c6 tree | 0 | 140 transactions, 140 status 1, 60 negatives refused as expected, the largest ask 57,553,937
+pqchat (pqchat.sh: anvil, deploy.sh DEPLOY_PQCHAT=1, run.sh local PqChat --tc PqChatOnchain --ffi) | b60672b1 | 0 | 34/34 txs, 10/10 negatives, heaviest 13,425,763 gasUsed

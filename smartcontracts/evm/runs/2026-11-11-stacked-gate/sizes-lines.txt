@@ -1,0 +1,18 @@
+form | contract | runtime B | notice (T-2, 57 M) | stop (T-1, 60 M) | margin to notice
+release | SCaaSDex | 32,809 | 33,594 | 35,386 | 785
+release | WrappedPqzRegulatedToken | 30,415 | 33,594 | 35,386 | 3,179
+release | WrappedZetherRegulatedToken | 27,301 | 33,594 | 35,386 | 6,293
+release | WrappedPqzToken | 26,262 | 33,594 | 35,386 | 7,332
+module | NormalPqzRegulatedTokenQ | 33,238 | 33,780 | 35,570 | 542
+module | NormalPqzTokenQ | 31,290 | 33,780 | 35,570 | 2,490
+module | WrappedPqzRegulatedTokenP | 30,944 | 33,780 | 35,570 | 2,836
+module | WrappedZetherRegulatedTokenP | 30,668 | 33,780 | 35,570 | 3,112
+library | UARegistryCoreLib | 33,685 | 33,903 | 35,694 | 218
+library | WrappedLib | 28,083 | 33,903 | 35,694 | 5,820
+library | ZetherLib | 27,077 | 33,903 | 35,694 | 6,826
+library | PqzTransferLib | 24,731 | 33,903 | 35,694 | 9,172
+plain | OpenFactory | 34,106 | 33,516 | 35,286 | -590
+plain | UARegistry | 28,165 | 33,516 | 35,286 | 5,351
+plain | PqChat | 27,801 | 33,516 | 35,286 | 5,715
+plain | GovernanceRouter | 24,613 | 33,516 | 35,286 | 8,903
+above 64 KiB: none | ceiling 131,072 runtime, 262,144 init

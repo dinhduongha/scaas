@@ -1,0 +1,286 @@
+# Group 3l T104: group `wraplimits` of the on-chain matrix (spec 2026-11-10-wrap-limits.md §11), target local
+# (a fresh anvil, chain 31337, Amsterdam; this group's own factory, noticePeriod() 1 hour; the clock set between
+# the runs). Hybrids H1 (kind 1), H5 (kind 5), H13 (kind 13; the PQZ kinds in the OFFCHAIN verify mode). Q = 10^4 raw
+# units of the 6-decimal leg (unitExp 4). UNAUDITED.
+
+step | commit | rc | counts
+matrix.sh local (MATRIX_GROUPS=wraplimits) | c54568aa | 0 | 140 transactions (140 status 1; 5 forge library deploys), 60 negatives (60 refused as expected), the largest ask 57,553,937 gas
+
+## gas by row type: the receipts' gasUsed min / max; the largest ask (the row measured on the fork, regular + EIP-8037
+## state gas, x 1.05 for a deploy, x 1.30 + 100,000 for a call; anvil's receipt gasUsed shows the regular gas only); rows
+factory: this group's OpenFactory | 7,494,982 / 7,494,982 | 57,553,937 | 1
+factory | 33,227 / 993,710 | 6,083,928 | 6
+leg | 525,826 / 525,826 | 3,680,458 | 1
+module | 3,039,444 / 6,807,937 | 52,267,670 | 17
+release | 4,580,360 / 7,089,198 | 51,965,971 | 3
+factory createToken | 744,763 / 927,891 | 5,272,442 | 3
+fund | 21,000 / 68,391 | 410,839 | 5
+fund approve | 46,678 / 46,678 | 267,809 | 12
+setWrapLimits direct (first, at once) | 125,161 / 125,183 | 496,801 | 3
+wrap (tracked, first use) | 140,074 / 210,527 | 1,067,057 | 6
+mtxWrapLeg relayed (tracked, first use) | 195,982 / 201,596 | 751,687 | 3
+transfer | 54,742 / 58,422 | 293,488 | 6
+unwrap (tracked, no rule) | 97,980 / 100,650 | 284,161 | 3
+router mtxSetGrant | 191,910 / 192,028 | 814,975 | 3
+router mtxSetWrapLimits (unwrap tighter: proposed) | 173,906 / 173,940 | 563,304 | 3
+router mtxSetWrapLimits (unwrap tighter: confirmed) | 144,977 / 144,987 | 387,179 | 3
+wrap (tracked) | 106,318 / 109,310 | 305,107 | 3
+unwrap (tracked, net rule and decay) | 115,186 / 133,638 | 441,948 | 6
+unwrap by the redeemer (past E, its budget) | 158,455 / 161,125 | 488,285 | 3
+router mtxGrantRole | 133,708 / 133,768 | 509,856 | 3
+router mtxSetWrapLimits (wrap tighter: at once) | 133,170 / 133,204 | 290,044 | 3
+router mtxSetWrapMember | 102,500 / 102,557 | 354,415 | 3
+setWrapMember direct | 62,954 / 63,002 | 291,084 | 9
+wrap (tracked, listed) | 108,607 / 111,599 | 308,130 | 6
+router mtxSetWrapLimits (unwrap looser: at once) | 133,153 / 133,175 | 290,005 | 3
+mtxUnwrapLeg relayed (tracked) | 173,303 / 179,115 | 512,571 | 3
+router mtxSetWrapLimits (wrap looser + unwrapper list: proposed) | 174,454 / 174,476 | 564,012 | 3
+router mtxSetWrapLimits (wrap looser + unwrapper list: confirmed) | 142,713 / 142,735 | 374,696 | 3
+unwrap (tracked, listed) | 117,728 / 120,398 | 319,750 | 3
+unwrap (tracked, decay at H/2) | 116,874 / 119,544 | 318,622 | 3
+router mtxRevokeRole | 132,704 / 132,806 | 570,217 | 3
+
+## forge's library deploys (CREATE2, forge's own gas: its estimate x 1.30) (run | library | asked | gasUsed | status | hash)
+setup | PqzViewLib | 55,628,495 | 5,351,898 | 1 | 0x544903693719a2bad8e336d16b54f99e1ecf4ce93a547fc62ae68ae2a532faea
+setup | PqzTransferLib | 56,257,450 | 5,412,165 | 1 | 0x8c40c71d03d0a0682c25ce5b64ed68cdc4fae07e961298aa8c388bb2d4436673
+setup | PqzStateLib | 33,991,302 | 3,470,440 | 1 | 0xa3e380158ea740556fbb7a63e219b0fc3df042b9d80b1cf56a5fcfc96383b6e8
+setup | PqzWrappedLib | 13,110,869 | 1,279,565 | 1 | 0x46474dc3b902854d5c9b9eacc7946c33278181a26b19232bd9152e444489dbe8
+setup | PqzBurnLib | 33,587,563 | 3,429,546 | 1 | 0x73f91934ebee923ecd9f66e49ce76086b3af70ad9ead65321566863c59de7ede
+
+## read back through the views (each run's script, at its start, on the node's state; then its own rows)
+wl setup factory 0x5117847982b38ADDdf55449f2700ef39d8041d51 leg 0x5E8930DA23c9fCe42E6701eA626401CA059f69cc notice 3600
+wl p1 H1 WrappedToken 0xf218bcb3D732FC4755F378629A5f36DD6a615Faa
+wl p1 H5 WrappedPqzToken 0x22cb0c7C06BEFBBC2bF9D1edBaA8FD39cEB17E20
+wl p1 H13 WrappedPqzRegulatedToken 0x1ED3e30CFD20206983138B8b329d06ecB9889d83
+wl p1 H1 proposed, eta 1794388919
+wl p1 H5 proposed, eta 1794388919
+wl p1 H13 proposed, eta 1794388919
+wl p2 H1 read back: b(a2) 90 Q, b(a1) 100 Q, b(A5) 0, a2's long window 50 Q left, the token-wide short window over, pending live
+wl p2 H1 a4 E 1000000 zero at 1794561960
+wl p2 H5 read back: b(a2) 90 Q, b(a1) 100 Q, b(A5) 0, a2's long window 50 Q left, the token-wide short window over, pending live
+wl p2 H5 a4 E 1000000 zero at 1794561960
+wl p2 H13 read back: b(a2) 90 Q, b(a1) 100 Q, b(A5) 0, a2's long window 50 Q left, the token-wide short window over, pending live
+wl p2 H13 a4 E 1000000 zero at 1794561960
+wl p3 H1 read back: b(a4) 100 Q, a2's long window full, the merchant a redeemer
+wl p3 H1 a4 E after ~1 h 970000
+wl p3 H5 read back: b(a4) 100 Q, a2's long window full, the merchant a redeemer
+wl p3 H5 a4 E after ~1 h 970000
+wl p3 H13 read back: b(a4) 100 Q, a2's long window full, the merchant a redeemer
+wl p3 H13 a4 E after ~1 h 970000
+wl p4 H1 read back: the wrapper list on, the merchant not a wrapper, a2 a wrapper, pending live
+wl p4 H5 read back: the wrapper list on, the merchant not a wrapper, a2 a wrapper, pending live
+wl p4 H13 read back: the wrapper list on, the merchant not a wrapper, a2 a wrapper, pending live
+wl p5 H1 a4 E at H/2 500000
+wl p5 H5 a4 E at H/2 500000
+wl p5 H13 a4 E at H/2 500000
+wl p6 H1 a4 E at H 0, b 800000
+wl p6 H5 a4 E at H 0, b 800000
+wl p6 H13 a4 E at H 0, b 800000
+
+## negatives (eth_call at the end of their run, nothing sent; ok = refused with the named error: the whole revert
+## data where it is fixed, the selector where it moves with the clock; the records hold both)
+ok  | wraplimits p1 kind 1: a pure-wrap token with bit 25: WrapControlNeedsHybrid | 0x014dd095 and its arguments
+ok  | wraplimits p1 kind 1: a pure-wrap token with bit 26: WrapControlNeedsHybrid | 0x014dd095 and its arguments
+ok  | wraplimits p1 kind 1: a pure-wrap token with bit 27: WrapControlNeedsHybrid | 0x014dd095 and its arguments
+ok  | wraplimits p1 kind 5: a pure-wrap token with bit 25: WrapControlNeedsHybrid | 0x014dd095 and its arguments
+ok  | wraplimits p1 kind 5: a pure-wrap token with bit 26: WrapControlNeedsHybrid | 0x014dd095 and its arguments
+ok  | wraplimits p1 kind 5: a pure-wrap token with bit 27: WrapControlNeedsHybrid | 0x014dd095 and its arguments
+ok  | wraplimits p1 kind 13: a pure-wrap token with bit 25: WrapControlNeedsHybrid | 0x014dd095 and its arguments
+ok  | wraplimits p1 kind 13: a pure-wrap token with bit 26: WrapControlNeedsHybrid | 0x014dd095 and its arguments
+ok  | wraplimits p1 kind 13: a pure-wrap token with bit 27: WrapControlNeedsHybrid | 0x014dd095 and its arguments
+ok  | wraplimits p1 H1: a wrap over the short per-user cap: WrapLimitExceeded | 0x2ef7dc55 and its arguments
+ok  | wraplimits p1 H1: a wrap over the short token-wide cap: WrapCapExceeded | 0x04465bfb and its arguments
+ok  | wraplimits p1 H5: a wrap over the short per-user cap: WrapLimitExceeded | 0x2ef7dc55 and its arguments
+ok  | wraplimits p1 H5: a wrap over the short token-wide cap: WrapCapExceeded | 0x04465bfb and its arguments
+ok  | wraplimits p1 H13: a wrap over the short per-user cap: WrapLimitExceeded | 0x2ef7dc55 and its arguments
+ok  | wraplimits p1 H13: a wrap over the short token-wide cap: WrapCapExceeded | 0x04465bfb and its arguments
+ok  | wraplimits p1 H1: the unwrap tightening confirmed before the notice: GrantNotReady | 0x8e434eb4
+ok  | wraplimits p1 H5: the unwrap tightening confirmed before the notice: GrantNotReady | 0x8e434eb4
+ok  | wraplimits p1 H13: the unwrap tightening confirmed before the notice: GrantNotReady | 0x8e434eb4
+ok  | wraplimits p2 H1: a wrap over the long per-user cap (the short has room): WrapLimitExceeded | 0x2ef7dc55 and its arguments
+ok  | wraplimits p2 H1: an unwrap over the short per-user cap: WrapLimitExceeded | 0x2ef7dc55 and its arguments
+ok  | wraplimits p2 H1: an unwrap over the short token-wide cap: WrapCapExceeded | 0x04465bfb and its arguments
+ok  | wraplimits p2 H1: an unwrap of units received by transfer (the net rule): UnwrapAboveNetWrapped | 0x12b4f58a and its arguments
+ok  | wraplimits p2 H1: the redeemer past its budget (15 of 18 Q spent): GrantExhausted | 0x72c37367 and its arguments
+ok  | wraplimits p2 H1: disableFeature(25) with the limits on: WrapControlActive | 0xf69140ab and its arguments
+ok  | wraplimits p2 H1: disableFeature(27) with a holder: WrapControlActive | 0xf69140ab and its arguments
+ok  | wraplimits p2 H5: a wrap over the long per-user cap (the short has room): WrapLimitExceeded | 0x2ef7dc55 and its arguments
+ok  | wraplimits p2 H5: an unwrap over the short per-user cap: WrapLimitExceeded | 0x2ef7dc55 and its arguments
+ok  | wraplimits p2 H5: an unwrap over the short token-wide cap: WrapCapExceeded | 0x04465bfb and its arguments
+ok  | wraplimits p2 H5: an unwrap of units received by transfer (the net rule): UnwrapAboveNetWrapped | 0x12b4f58a and its arguments
+ok  | wraplimits p2 H5: the redeemer past its budget (15 of 18 Q spent): GrantExhausted | 0x72c37367 and its arguments
+ok  | wraplimits p2 H5: disableFeature(25) with the limits on: WrapControlActive | 0xf69140ab and its arguments
+ok  | wraplimits p2 H5: disableFeature(27) with a holder: WrapControlActive | 0xf69140ab and its arguments
+ok  | wraplimits p2 H13: a wrap over the long per-user cap (the short has room): WrapLimitExceeded | 0x2ef7dc55 and its arguments
+ok  | wraplimits p2 H13: an unwrap over the short per-user cap: WrapLimitExceeded | 0x2ef7dc55 and its arguments
+ok  | wraplimits p2 H13: an unwrap over the short token-wide cap: WrapCapExceeded | 0x04465bfb and its arguments
+ok  | wraplimits p2 H13: an unwrap of units received by transfer (the net rule): UnwrapAboveNetWrapped | 0x12b4f58a and its arguments
+ok  | wraplimits p2 H13: the redeemer past its budget (15 of 18 Q spent): GrantExhausted | 0x72c37367 and its arguments
+ok  | wraplimits p2 H13: disableFeature(25) with the limits on: WrapControlActive | 0xf69140ab and its arguments
+ok  | wraplimits p2 H13: disableFeature(27) with a holder: WrapControlActive | 0xf69140ab and its arguments
+ok  | wraplimits p3 H1: a wrap by an id not on the wrapper list: WrapperNotListed | 0x8238ebc0 and its arguments
+ok  | wraplimits p3 H1: disableFeature(26) with a list on: WrapControlActive | 0xf69140ab and its arguments
+ok  | wraplimits p3 H5: a wrap by an id not on the wrapper list: WrapperNotListed | 0x8238ebc0 and its arguments
+ok  | wraplimits p3 H5: disableFeature(26) with a list on: WrapControlActive | 0xf69140ab and its arguments
+ok  | wraplimits p3 H13: a wrap by an id not on the wrapper list: WrapperNotListed | 0x8238ebc0 and its arguments
+ok  | wraplimits p3 H13: disableFeature(26) with a list on: WrapControlActive | 0xf69140ab and its arguments
+ok  | wraplimits p3 H1: the wrap relaxation confirmed before the notice: GrantNotReady | 0x8e434eb4
+ok  | wraplimits p3 H5: the wrap relaxation confirmed before the notice: GrantNotReady | 0x8e434eb4
+ok  | wraplimits p3 H13: the wrap relaxation confirmed before the notice: GrantNotReady | 0x8e434eb4
+ok  | wraplimits p4 H1: an unwrap by an id not on the unwrapper list: UnwrapperNotListed | 0xe7891811 and its arguments
+ok  | wraplimits p4 H5: an unwrap by an id not on the unwrapper list: UnwrapperNotListed | 0xe7891811 and its arguments
+ok  | wraplimits p4 H13: an unwrap by an id not on the unwrapper list: UnwrapperNotListed | 0xe7891811 and its arguments
+ok  | wraplimits p5 H1: an unwrap above E at H/2: UnwrapAboveNetWrapped | 0x12b4f58a
+ok  | wraplimits p5 H5: an unwrap above E at H/2: UnwrapAboveNetWrapped | 0x12b4f58a
+ok  | wraplimits p5 H13: an unwrap above E at H/2: UnwrapAboveNetWrapped | 0x12b4f58a
+ok  | wraplimits p6 H1: an unwrap at H (E = 0): UnwrapAboveNetWrapped | 0x12b4f58a and its arguments
+ok  | wraplimits p6 H1: the revoked redeemer: UnwrapAboveNetWrapped | 0x12b4f58a and its arguments
+ok  | wraplimits p6 H5: an unwrap at H (E = 0): UnwrapAboveNetWrapped | 0x12b4f58a and its arguments
+ok  | wraplimits p6 H5: the revoked redeemer: UnwrapAboveNetWrapped | 0x12b4f58a and its arguments
+ok  | wraplimits p6 H13: an unwrap at H (E = 0): UnwrapAboveNetWrapped | 0x12b4f58a and its arguments
+ok  | wraplimits p6 H13: the revoked redeemer: UnwrapAboveNetWrapped | 0x12b4f58a and its arguments
+
+## every row (run | status | gasUsed | asked | hash | row)
+setup | 1 | 7,494,982 | 57,553,937 | 0x6b35953498d450618f6aa6377034d3ef8be0d43c4680ebf09b1029352b8a08fb | factory: this group's OpenFactory: 
+setup | 1 | 88,367 | 438,804 | 0x4cecded8acd2437b8bf70f9a6ffffb2bf1697816412a83a9e24704d12a0531f4 | factory: configureChain, noticePeriod 3600 s
+setup | 1 | 525,826 | 3,680,458 | 0xe7072d8af05ca5824916a9fbefffe03ff317c6ee0fe78b6becef01555b0e6830 | leg: MockERC20, 6 decimals
+setup | 1 | 5,459,714 | 41,843,259 | 0xcb2414810ec79128b5a13a294b75249cf794da930fa873f5629de1fd3c70cd8b | module: WrappedTokenP
+setup | 1 | 4,176,286 | 31,910,222 | 0x86bdb1770042f3d90cfa67267d55cab67bd614268733f39f2c8df3553beab1ff | module: WrappedTokenT
+setup | 1 | 4,392,250 | 33,631,390 | 0x921e29ad665b4292a7328472c01b338537d22eeaf12d185009968a0319606d40 | module: WrappedTokenA
+setup | 1 | 5,759,564 | 44,215,670 | 0x1a89e605fd941679878721560f13d93f8a3c08502d1da438c0ddcfb3c707f4b9 | module: WrappedTokenW
+setup | 1 | 556,271 | 3,338,527 | 0x05a063c04f31f38284a77f7cd55694d46983a044835e83ff21a44a53e5160ad8 | factory: publishTokenEnv kind 1
+setup | 1 | 4,580,360 | 33,669,785 | 0x9ccc886317ee1731d3eb432b8b1aa42515db2776a6fab7b561b87d88e4747f97 | release: WrappedToken
+setup | 1 | 5,754,205 | 44,118,888 | 0xc58a9e6641b281d3f56aef179f39ea0fc45540d0f0a4877034d19d96ff68ff60 | module: WrappedPqzTokenP
+setup | 1 | 4,187,292 | 31,993,582 | 0x0e98edb2861066ae1375b8ec6ad5c9924e4300caea79c4864b46801deb8e2b77 | module: WrappedPqzTokenT
+setup | 1 | 3,764,349 | 28,779,692 | 0x3fb9842d1cd45ddb3169e168ac382eedb736d7a6dff6fec8cec29a8e13968bc5 | module: WrappedPqzTokenA
+setup | 1 | 5,763,946 | 44,238,503 | 0xb2ac305d02dba32d9e52c9e679ef5188da8359cade752fa31a7362a5029a0f74 | module: WrappedPqzTokenW
+setup | 1 | 6,302,078 | 48,366,092 | 0x7bd4a6de69c90317a155bc6f7ddd1cc63ca1946b1c3d98840446e6af6a0e9214 | module: WrappedPqzTokenQ
+setup | 1 | 4,143,060 | 31,707,661 | 0x069daa4bfb8e65a89caa11b40bc02b20c54f8a6a429f1617682dd5f89cfd532a | module: WrappedPqzTokenS
+setup | 1 | 901,525 | 5,505,826 | 0x9f103dc085428762d84ea9bad192eb847e103d37ac091635bf9111d3766f5681 | factory: publishTokenEnv kind 5
+setup | 1 | 6,144,017 | 44,977,419 | 0x3e628b9ce163386db1f346f2c4bf96798176840219f022e73056a35fdb461dff | release: WrappedPqzToken
+setup | 1 | 33,227 | 145,464 | 0x44ec172fc25edae459c42eec1cbcd55b8c3f04fe5ad91a8614606d5e640cb8bf | factory: setTokenKindEnabled kind 5
+setup | 1 | 6,807,937 | 52,267,670 | 0x8dc8af37b6ad8e6d7f9243f1aaab04911139131d5df9dabc608fdf3f7bd35a65 | module: WrappedPqzRegulatedTokenP
+setup | 1 | 4,519,458 | 34,553,673 | 0x956d2cca95c235c78e0758c542d3c118a2745cc2de851e5b2acc6c9024a64cbc | module: WrappedPqzRegulatedTokenT
+setup | 1 | 4,168,117 | 31,892,933 | 0xda1d71504152750a042e1941266d7a258379140c752be601c87e1a75c13c7407 | module: WrappedPqzRegulatedTokenA
+setup | 1 | 6,292,067 | 48,316,888 | 0x60fa4b00e7938fdb54d68efb4e450b9ad55b80c8551262914dcef0946bab81c1 | module: WrappedPqzRegulatedTokenW
+setup | 1 | 6,575,859 | 50,469,690 | 0x93e6552dbeceb50a5846b195386d5def9f5f3586aa4e76c440a4450c18fe1d72 | module: WrappedPqzRegulatedTokenQ
+setup | 1 | 4,354,675 | 33,332,755 | 0x97742d4eefed2bedeb627022b4588acf28645504aba0efbb9ed759e07c36009d | module: WrappedPqzRegulatedTokenS
+setup | 1 | 3,039,444 | 23,128,000 | 0x6b2564a57531160fdaec89c55707fcf52e0819a8cd1f583dc0e5a96f0fcef0fe | module: WrappedPqzRegulatedTokenR
+setup | 1 | 993,710 | 6,083,928 | 0xfbe216526d64fdf00617eb06b65b844f5d4f5ce07d42983e1f43a80e6312243c | factory: publishTokenEnv kind 13
+setup | 1 | 7,089,198 | 51,965,971 | 0x57aa174c848d406224f2212d1a3d3d12aaa58556f2f95867ca230afc335a79e8 | release: WrappedPqzRegulatedToken
+setup | 1 | 33,227 | 145,464 | 0xd7d1a342ea47214c533c1fce4d70e88613b1a6312d7371498af4458ae14bdffe | factory: setTokenKindEnabled kind 13
+p1 | 1 | 744,763 | 4,386,032 | 0x97e178a1fffe4cf7965c89ad4f7dbdd50b0bdeb2edf05d0d1816cb7bbe08751c | factory createToken: H1 hybrid, bits 25-27
+p1 | 1 | 886,674 | 5,103,391 | 0x1fd7f06e990fb27f98df1ca256b88dcb1db42f9a42c4026fc34dbfc5fdbc3df8 | factory createToken: H5 hybrid, bits 25-27
+p1 | 1 | 927,891 | 5,272,442 | 0x4d60c0aa6b1bb175fbbf7b888566fda821810e0f74be6b0829536d5a60bc7eda | factory createToken: H13 hybrid, bits 25-27
+p1 | 1 | 21,000 | 127,732 | 0x1a103af82c6b62bc0fece13dd3997c3dc8c25ae73c48e427258ed8eee442500f | fund: 1 ether to the fourth key
+p1 | 1 | 68,391 | 410,839 | 0x9492cfd0aaa23a61dd35eea5ed1492479516eb273b647241512c711ad9de7f17 | fund: the leg minted
+p1 | 1 | 46,678 | 267,809 | 0x60999ae8c400aa277eebc6b2635e3d3b0880e554532cfebec911222f59579aa8 | fund approve: H1 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+p1 | 1 | 46,678 | 267,809 | 0x7e410230348814221b8b9e7840d9bf3cf0bef972a3665ed986c3fa405a1acda0 | fund approve: H5 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+p1 | 1 | 46,678 | 267,809 | 0x5ed8487dc0c38f6f48132debd4e219406a1006795e04f6b6a6e0d1cda0eb8fe8 | fund approve: H13 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+p1 | 1 | 51,279 | 283,526 | 0x65a036658f6ba0b684e465c39a2a30e22932dff3efe95577e103808b49ab4076 | fund: the leg minted
+p1 | 1 | 46,678 | 267,809 | 0x6e014a19996a6b0367a8cd8e2fbd76e967060501ce0eb97639feb27c7be44968 | fund approve: H1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+p1 | 1 | 46,678 | 267,809 | 0x6c024ddfe4a593441e8cfc5cf48829bb0271e0d25b42d52f3148e065ef56ee5c | fund approve: H5 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+p1 | 1 | 46,678 | 267,809 | 0x4cffe0253378525013dc641d601abe58091c034cb2a086bfa14319f366ad670e | fund approve: H13 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+p1 | 1 | 51,291 | 283,543 | 0x10b37fce164c50d2cb927fe50f3edd5bfecd623c80887db697d4ccea3df7947c | fund: the leg minted
+p1 | 1 | 46,678 | 267,809 | 0x5f76977fc44430ddc0e0bbd47dd0afd475156b4f0b71548790a1983bffea912b | fund approve: H1 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+p1 | 1 | 46,678 | 267,809 | 0xf7e892152c354ba2573a6e7cc3e1697beb774f0e1b060b87dbbe6e9e5f005d99 | fund approve: H5 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+p1 | 1 | 46,678 | 267,809 | 0x2daeccc0ad355ffdb1c7f345f61a5f517d01205dbb3c0e17ebd389a18b5e4b19 | fund approve: H13 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+p1 | 1 | 51,291 | 283,543 | 0xbba5c449d30f23edf3666f3c020298bd7c9fda759ec128910b7f126e23df2802 | fund: the leg minted
+p1 | 1 | 46,678 | 267,809 | 0x9872ee174a393daf03b277351a5105cf416a1c52f41a5015689f207bdbea974b | fund approve: H1 0x5aec5f8C42d277eAcfa976779e7492E106af484d
+p1 | 1 | 46,678 | 267,809 | 0xe5d95b60c78619313c4039fe402e6c747e847c6deae31f06bad872edee3f1c98 | fund approve: H5 0x5aec5f8C42d277eAcfa976779e7492E106af484d
+p1 | 1 | 46,678 | 267,809 | 0xe8f57887debd41f8e374489f411f6b632fdcf815ae4b6f9408848ccc9c5d5b0c | fund approve: H13 0x5aec5f8C42d277eAcfa976779e7492E106af484d
+p1 | 1 | 125,161 | 496,771 | 0xe85a373dd000e2346957ea97980dbd4fdaf71f7198ef9a66ad36c56e828d1aae | setWrapLimits direct (first, at once): H1 configuration 0
+p1 | 1 | 207,535 | 1,063,105 | 0x89ff8ad5d685353679a0b5d12c7cab049b382be7759f50410e93a5017bf633e2 | wrap (tracked, first use): H1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC wraps 100 Q
+p1 | 1 | 195,982 | 744,273 | 0xeda2177ae0c60e861ca0caae60955d75bfdd34479233a31d4fa0a450eddc746b | mtxWrapLeg relayed (tracked, first use): H1 signed by 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, 100 Q
+p1 | 1 | 54,969 | 288,927 | 0x211e85d934c18856fed763ef8d0382024a52190c6d27a3033905fd72d6d79dd4 | transfer: H1 40 Q to the merchant
+p1 | 1 | 54,753 | 288,643 | 0xc1b98ef0c59ccbf7ebbd4cb5bcecd6e6b7e32404ead04c257df3ae7fd9d5eb5b | transfer: H1 10 Q to A5
+p1 | 1 | 98,024 | 280,693 | 0xe5ee1417cbaecead2a15818a51ed56564e94043c29251eee317aacfbfa1f0531 | unwrap (tracked, no rule): H1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 10 Q
+p1 | 1 | 191,910 | 814,819 | 0x2d7c352ad48a38ec163408a13f984cbd805f4e02ac38b88cb8a72541af21d761 | router mtxSetGrant: H1 bit 27 0x90F79bf6EB2c4f870365E785982E1f101E93b906 budget 18 Q
+p1 | 1 | 173,918 | 563,275 | 0xdf16683e9a48fb0fdc2772f7aacfb4b65c833d43c98378a8cb0143edae5f7f65 | router mtxSetWrapLimits (unwrap tighter: proposed): H1 configuration 1
+p1 | 1 | 125,183 | 496,801 | 0xe258c8dabdcb552c6c3b6b3cf2b5dad2c02e402ed3267a7c72253dd8dbbf184f | setWrapLimits direct (first, at once): H5 configuration 0
+p1 | 1 | 207,557 | 1,063,134 | 0x38dbf3efe36cdb08b2806d7549977e75e37a27a6d83502431b3041e3d24c4b54 | wrap (tracked, first use): H5 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC wraps 100 Q
+p1 | 1 | 198,344 | 747,393 | 0x7b6ee9681ce3f3f9023c43bb152142bed9c15a025afa82e183a6d820b343fbc8 | mtxWrapLeg relayed (tracked, first use): H5 signed by 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, 100 Q
+p1 | 1 | 54,958 | 288,913 | 0x6bf542a07b3e5c4597ba33f6d29006d0cdb7b629f71119d07cbdf8e2612bcad0 | transfer: H5 40 Q to the merchant
+p1 | 1 | 54,742 | 288,628 | 0x667d18eef7493ec6f885b0c9528c69abf9189e9512686ac88301bfcf547f3fd8 | transfer: H5 10 Q to A5
+p1 | 1 | 97,980 | 280,636 | 0x37c3a842f037717a4bbdae9dfa36e8a6aec1a4055a4ad82c2038f87f249ab0c0 | unwrap (tracked, no rule): H5 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 10 Q
+p1 | 1 | 191,995 | 814,931 | 0x91b60df3acfae9a27d61d5efcb367f07bca509c6be25c7c66b90352edb782590 | router mtxSetGrant: H5 bit 27 0x90F79bf6EB2c4f870365E785982E1f101E93b906 budget 18 Q
+p1 | 1 | 173,940 | 563,304 | 0x540d6f939b86d7b261de32a13a7342930e0d5fcffa93b31a45d24930e12d639a | router mtxSetWrapLimits (unwrap tighter: proposed): H5 configuration 1
+p1 | 1 | 125,161 | 496,771 | 0x9fdc583aa4519d8eb0362794b1556ce48c9881522b13f4fa556994bcfdacf650 | setWrapLimits direct (first, at once): H13 configuration 0
+p1 | 1 | 210,527 | 1,067,057 | 0x9c4b432c052de7eae8bfca457e042e60d6a7df1053d2b3446f4d791923277423 | wrap (tracked, first use): H13 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC wraps 100 Q
+p1 | 1 | 201,596 | 751,687 | 0x671afc41c217fdfc4db90d56e4b7a4b7f61f80fb1638fe4ce2659cf5da88a904 | mtxWrapLeg relayed (tracked, first use): H13 signed by 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, 100 Q
+p1 | 1 | 58,422 | 293,488 | 0x32d5a31ee9d09bbac190ac6c6cf3f7077656eabd87bb0d300b61eac9004b4847 | transfer: H13 40 Q to the merchant
+p1 | 1 | 58,206 | 293,203 | 0x9664e907cf16f1892f647937f16891eff2acbccb725c488f34aecf90297b13e0 | transfer: H13 10 Q to A5
+p1 | 1 | 100,650 | 284,161 | 0x002102e95d750ec13e2a53c193ae171b2d0f1e98524cc4c15197aa2b98a11dd2 | unwrap (tracked, no rule): H13 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 10 Q
+p1 | 1 | 192,028 | 814,975 | 0xeeb774ab262e74bad635dd95db3271dc09cf5691f7eb4352283a1e6bf6e0d11c | router mtxSetGrant: H13 bit 27 0x90F79bf6EB2c4f870365E785982E1f101E93b906 budget 18 Q
+p1 | 1 | 173,906 | 563,260 | 0x4c56d54ccf5e3cb400540c3b594c838b09f3bda2872c69fae0bfe1e664b09200 | router mtxSetWrapLimits (unwrap tighter: proposed): H13 configuration 1
+p2 | 1 | 144,977 | 387,166 | 0x6f3465fb7a07f05dc767dc0260e2d4bcccc4f7a92f38b9ef33b38a3d95713c93 | router mtxSetWrapLimits (unwrap tighter: confirmed): H1 configuration 1
+p2 | 1 | 106,318 | 301,155 | 0x5e38d97e68fbefaf5df380199333ca1764e24acaa2a6b8ea97e35e795ad38ec5 | wrap (tracked): H1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC wraps 50 Q
+p2 | 1 | 131,012 | 438,481 | 0x578d5e66d46ae68718a4bcd48ec4956708a3cf9513f80d0325633f8221e6b749 | unwrap (tracked, net rule and decay): H1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 30 Q
+p2 | 1 | 158,499 | 484,818 | 0x439e35662d10054184487c0242b4e8af4017154737a9c112e9bb5c904ab879a2 | unwrap by the redeemer (past E, its budget): H1 0x90F79bf6EB2c4f870365E785982E1f101E93b906 unwraps 15 Q
+p2 | 1 | 140,074 | 555,161 | 0xabc27ca3dfd7fe851893b38b95e5b38bc2b238b0eeb5c0a9ddf9899111670687 | wrap (tracked, first use): H1 0x5aec5f8C42d277eAcfa976779e7492E106af484d wraps 100 Q
+p2 | 1 | 133,708 | 509,776 | 0xb2399f0f8be72b2e0f6a6259c9e6f6831f8d70d416ca19eb5d242a2a30514d28 | router mtxGrantRole: H1 bit 26 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+p2 | 1 | 144,987 | 387,179 | 0x59161fd5c5d92082cdbc79ac50a42f71efea628c47fc78c29ae794d185c84f61 | router mtxSetWrapLimits (unwrap tighter: confirmed): H5 configuration 1
+p2 | 1 | 106,340 | 301,185 | 0x1fbf66bdaba7f58bd0092eb6036784be10bff996ef1676ed1318fa3e8035ae96 | wrap (tracked): H5 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC wraps 50 Q
+p2 | 1 | 130,968 | 438,422 | 0x09e7412620f2e43c1b9d1183acc6818dc1bce4263a50abbaf33a991af5f3f022 | unwrap (tracked, net rule and decay): H5 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 30 Q
+p2 | 1 | 158,455 | 484,759 | 0x66bfd06f97d94c5eb44489d5180f722b92719b1504fe828bcb89dcb9e3dabe0c | unwrap by the redeemer (past E, its budget): H5 0x90F79bf6EB2c4f870365E785982E1f101E93b906 unwraps 15 Q
+p2 | 1 | 140,096 | 555,191 | 0x55c53f06624698d104c0a61596a5201a25c8046a827037868206954c7f76c54c | wrap (tracked, first use): H5 0x5aec5f8C42d277eAcfa976779e7492E106af484d wraps 100 Q
+p2 | 1 | 133,768 | 509,856 | 0x7069017bdd358f4c287f7f8889df1b2adce442e027229ba0062c17e606bc73b8 | router mtxGrantRole: H5 bit 26 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+p2 | 1 | 144,977 | 387,166 | 0x535c55b4fc4bab677921771c83fa12b55aba508ffd6ef306433a36a0821f2377 | router mtxSetWrapLimits (unwrap tighter: confirmed): H13 configuration 1
+p2 | 1 | 109,310 | 305,107 | 0x3645f40e7388b1195a5c793a8a70aa4937550b1ad376d422d752618c364d48fb | wrap (tracked): H13 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC wraps 50 Q
+p2 | 1 | 133,638 | 441,948 | 0x30e69754bed2804337fc3b2464f51a2028ed3fee5b24e0ee2226be3e8fd030b1 | unwrap (tracked, net rule and decay): H13 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 30 Q
+p2 | 1 | 161,125 | 488,285 | 0x4e720900941b9676748ac4e0a4474f96132a58af1a55e3f35f874f35cd0ef5e4 | unwrap by the redeemer (past E, its budget): H13 0x90F79bf6EB2c4f870365E785982E1f101E93b906 unwraps 15 Q
+p2 | 1 | 143,066 | 559,113 | 0xe962dc53f095db83d064bb1233ba4740e474645e504a3e98319474fff3bfeb31 | wrap (tracked, first use): H13 0x5aec5f8C42d277eAcfa976779e7492E106af484d wraps 100 Q
+p2 | 1 | 133,724 | 509,797 | 0xdd9f2564a58d962b6fc008b638d19bcf92ea1511b01a28865d3b651031a9fdd1 | router mtxGrantRole: H13 bit 26 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+p3 | 1 | 133,182 | 290,014 | 0x3b03db44b9ceb686018fcdd492d1fd3ed1ca50bc757c153b638b46d622075a86 | router mtxSetWrapLimits (wrap tighter: at once): H1 configuration 2
+p3 | 1 | 102,557 | 354,415 | 0x4ee8a8a4daa95970b9859e89e739d1c5106e3adcf3492e203d60f9f08dcd81ad | router mtxSetWrapMember: H1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+p3 | 1 | 63,002 | 291,084 | 0x1a64ec7b8ee428ae1f9a15ee3358bb2d3d161611ea307de680341546a4636157 | setWrapMember direct: H1 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+p3 | 1 | 62,999 | 291,080 | 0x68e51ed223b77e1a47bbc55b8c0c552bec33a14c59e34d5505aef38d6ef3eacd | setWrapMember direct: H1 0x5aec5f8C42d277eAcfa976779e7492E106af484d
+p3 | 1 | 62,999 | 291,080 | 0x7d141eabce772a7af5842b59043cbf09741876f7a0dc6e25f6de6eeb4c234c22 | setWrapMember direct: H1 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+p3 | 1 | 108,607 | 304,179 | 0x70f9d990f5918b2fd9eb2c22675b4361e9aaeb51cc2172c64911cb9d1f4c2c5c | wrap (tracked, listed): H1 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 wraps 10 Q
+p3 | 1 | 133,153 | 289,976 | 0x69ef42aa0228c4ae50fd8b38db4b1106962e64d1a72a686fe97b5330f88c9e77 | router mtxSetWrapLimits (unwrap looser: at once): H1 configuration 3
+p3 | 1 | 115,230 | 312,925 | 0x6cc6decff08e8f8e60ee43ad1e550ec0eb9c664ace6f8a3da5655cc306d84e62 | unwrap (tracked, net rule and decay): H1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 50 Q
+p3 | 1 | 173,303 | 504,896 | 0x07beba800546d2058e06e98b3fdd2815bd9c65b1771daf095edae956125bacc0 | mtxUnwrapLeg relayed (tracked): H1 signed by 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, 10 Q
+p3 | 1 | 174,454 | 563,983 | 0xb618aaad47be62bea859f67ecc438bbe6973328c388f94e8408c0bb53758633f | router mtxSetWrapLimits (wrap looser + unwrapper list: proposed): H1 configuration 4
+p3 | 1 | 133,204 | 290,044 | 0x989eebf7db9fae9c975cd6cc52b3b481f6c6d8aaff0b38db52d904e16217b417 | router mtxSetWrapLimits (wrap tighter: at once): H5 configuration 2
+p3 | 1 | 102,500 | 354,339 | 0x3b253ff46978775e055c7203d3f0a40bf74fe0a13ddc152006fa31d4b7a3df82 | router mtxSetWrapMember: H5 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+p3 | 1 | 62,957 | 291,024 | 0x5b3a3ad21ca1fc7cac32104828d29a178cd60ffe495364a4536dcd255d3cf5cf | setWrapMember direct: H5 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+p3 | 1 | 62,954 | 291,020 | 0xbd3e9c600b9667bfe99525a40a2ca9f52c2c69b72c28685d5f6ac9bccbcf6c31 | setWrapMember direct: H5 0x5aec5f8C42d277eAcfa976779e7492E106af484d
+p3 | 1 | 62,954 | 291,020 | 0xe68a6e14bb1fefa1ad020d9cd5028933d8b1219eddf5852c72bcfabda5c666d6 | setWrapMember direct: H5 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+p3 | 1 | 108,629 | 304,207 | 0x0e5a15f20568f3f02bda123fa843fed1d8d85c61de57b32f30853366fdccec8f | wrap (tracked, listed): H5 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 wraps 10 Q
+p3 | 1 | 133,175 | 290,005 | 0xfa52a463d42b0e03ef74ec13fda3c5a0be5188265fd136da38b59fe919a0e36e | router mtxSetWrapLimits (unwrap looser: at once): H5 configuration 3
+p3 | 1 | 115,186 | 312,867 | 0xb5718af9816b8f52393b7a6005fff9a8413c53d97ed904efcafe1bb514d659f8 | unwrap (tracked, net rule and decay): H5 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 50 Q
+p3 | 1 | 176,181 | 508,697 | 0x0400608dbbb355c6973139fb02f0a97036c5b024c6ee23cfdb260685562038ec | mtxUnwrapLeg relayed (tracked): H5 signed by 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, 10 Q
+p3 | 1 | 174,476 | 564,012 | 0xa96abd28ee4f573c6b83f8004b3e1180132efa96b734dc4df04a687afc677687 | router mtxSetWrapLimits (wrap looser + unwrapper list: proposed): H5 configuration 4
+p3 | 1 | 133,170 | 289,998 | 0xd654106648c2bd708144f42c4c493ad37fc4bd719c018ea1d2ef7f4848218444 | router mtxSetWrapLimits (wrap tighter: at once): H13 configuration 2
+p3 | 1 | 102,557 | 354,415 | 0xab0a53caf8e27764628205ab93702c59af20ad452e40c33543347a337264bcb7 | router mtxSetWrapMember: H13 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+p3 | 1 | 63,002 | 291,084 | 0x244d2bb8348ae7e1437fecdac4fca80007a5c959e975641fcf6fb4b9604446d4 | setWrapMember direct: H13 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+p3 | 1 | 62,999 | 291,080 | 0x20a1ec1aa49162a2e3e828ee000531e472ae2ae42481133dde73f41aee0a6c89 | setWrapMember direct: H13 0x5aec5f8C42d277eAcfa976779e7492E106af484d
+p3 | 1 | 62,999 | 291,080 | 0x107365ab9aa23f7819d7bb9fdcbfb91f26a3201e1d4c026ec8326db1cf9c3bef | setWrapMember direct: H13 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+p3 | 1 | 111,599 | 308,130 | 0x13eb5821a53f4f5217278651b9160208a45243ce950eb502bfa5d48f077bf460 | wrap (tracked, listed): H13 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 wraps 10 Q
+p3 | 1 | 133,153 | 289,976 | 0x0d448bea1778a51d56e4c10135cc4040581c24b31c875d8078bd5b0a11fb9229 | router mtxSetWrapLimits (unwrap looser: at once): H13 configuration 3
+p3 | 1 | 117,856 | 316,392 | 0xd090de66b774c0c2274dad12a3d666ccfef22ed246803319afb0f44ab3253517 | unwrap (tracked, net rule and decay): H13 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 50 Q
+p3 | 1 | 179,115 | 512,571 | 0x10c81fc2a7edeeadcf676664d45a77d933c9f9c7733403a7a7372df15bfc90c9 | mtxUnwrapLeg relayed (tracked): H13 signed by 0x70997970C51812dc3A010C7d01b50e0d17dc79C8, 10 Q
+p3 | 1 | 174,454 | 563,983 | 0x15c278f61f26b89654a4344a8cb9024882a5408094f2a2f2fa2456e406a9b293 | router mtxSetWrapLimits (wrap looser + unwrapper list: proposed): H13 configuration 4
+p4 | 1 | 142,713 | 374,667 | 0xd55adee0f13ccf3e016501fbd03c06806275074ff5aeb4a7ccd3aeaee2dd3561 | router mtxSetWrapLimits (wrap looser + unwrapper list: confirmed): H1 configuration 4
+p4 | 1 | 108,607 | 304,179 | 0x737887d613a1087f7d0e8aa53be2fbf2fcfa3815e0da481673e88f5c33bcb3d2 | wrap (tracked, listed): H1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC wraps 120 Q
+p4 | 1 | 117,772 | 316,282 | 0xd4b071b41b7601ad5bdf6499319b8d72c7d3b61f65f2cc6a5aa1069b1068cab3 | unwrap (tracked, listed): H1 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 10 Q
+p4 | 1 | 142,735 | 374,696 | 0x7b01eb0c7c4c6ea87b912a4ce3b77cc3976ab8bb5420c5b86fb37db435cd951c | router mtxSetWrapLimits (wrap looser + unwrapper list: confirmed): H5 configuration 4
+p4 | 1 | 108,629 | 304,207 | 0x9b0f2db708ff3e80a191e01aafa1db7978a012f0526e15492bef244938e4e7d7 | wrap (tracked, listed): H5 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC wraps 120 Q
+p4 | 1 | 117,728 | 316,223 | 0x5cacd9f389795d273b997ea01e6da016e812a577c6d3b8502b12e7cff91b8c9e | unwrap (tracked, listed): H5 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 10 Q
+p4 | 1 | 142,713 | 374,667 | 0xe08c05d00e1a3ae9bfb4678ae46ea1f192e3042f589aa2ff97985d3d4556a4bd | router mtxSetWrapLimits (wrap looser + unwrapper list: confirmed): H13 configuration 4
+p4 | 1 | 111,599 | 308,130 | 0x2fec85db310a1bb12fe505082fa10d308b3a6a5e8aa1f54b2bb406ce7c20fb78 | wrap (tracked, listed): H13 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC wraps 120 Q
+p4 | 1 | 120,398 | 319,750 | 0x26557ac188f1fdcbf60e69ce163a24fc8338ea0129645133c7bf92ff244e86f9 | unwrap (tracked, listed): H13 0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC unwraps 10 Q
+p5 | 1 | 116,918 | 315,155 | 0xff454a7c73464f65b5d7f40e0304a0837982cf9991190591fe941d77b094e960 | unwrap (tracked, decay at H/2): H1 0x5aec5f8C42d277eAcfa976779e7492E106af484d unwraps 10 Q
+p5 | 1 | 116,874 | 315,096 | 0xdc9b79713f9691fc64848a7adc2ad6b083c085619cb70ea1bf48ce75ac90c0cc | unwrap (tracked, decay at H/2): H5 0x5aec5f8C42d277eAcfa976779e7492E106af484d unwraps 10 Q
+p5 | 1 | 119,544 | 318,622 | 0xd33b188896f5e2ad2afdca84b1973ac19a1c5ab513ee185f6c187a1608c7b80d | unwrap (tracked, decay at H/2): H13 0x5aec5f8C42d277eAcfa976779e7492E106af484d unwraps 10 Q
+p6 | 1 | 132,776 | 570,178 | 0xe640745d47bd93e486ce47637474b6ed3044519e74e2a96fcdba4fef2d3a4e7c | router mtxRevokeRole: H1 bit 27 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+p6 | 1 | 132,704 | 570,083 | 0xf13e171ff779585ffe0cfed82b157af54df79ff715cda97664a356ad689a9da2 | router mtxRevokeRole: H5 bit 27 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+p6 | 1 | 132,806 | 570,217 | 0xf18c7f9291051099b7b3d817d6621916a493d6c15761d66699065fbceb1e1f06 | router mtxRevokeRole: H13 bit 27 0x90F79bf6EB2c4f870365E785982E1f101E93b906
+
+## coverage of the contracts touched (coverage.py table: state-changing called / reached / views reached)
+group | contract | entries | state-changing | local: state-changing called / reached / views reached
+tokens | WrappedToken | 123 | 58 | 7 / 11 / 56
+tokens | WrappedPqzToken | 178 | 83 | 7 / 11 / 77
+tokens | WrappedPqzRegulatedToken | 201 | 98 | 7 / 11 / 85
+governance | GovernanceRouter | 72 | 62 | 5 / 5 / 9
+factory | OpenFactory | 79 | 24 | 5 / 5 / 51
