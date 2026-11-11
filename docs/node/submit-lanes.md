@@ -361,9 +361,11 @@ strict-majority option stays deferred to `scaas-rpc` (decision of 2026-11-11 und
 
 **Log windows** (Fable recheck R-6; BUILT, `chain::tests::a_log_window_is_chunked_for_an_rpc_that_caps_the_range`). The
 `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` and the executed-event lookup
-span a fixed window (`ROTATION_LOOKBACK`, 10,000 blocks). An endpoint that refuses a span (an RPC that caps the `eth_getLogs`
-range) is asked again in tenths of it, contiguous up to the head, down to 10 blocks; one that refuses that too fails the read
-over to the next endpoint. *Known limit* (PLANNED, open): the window is not bounded by the job's intake block (the pull path
+span a fixed window (`ROTATION_LOOKBACK`, 10,000 blocks). An endpoint that refuses a span with an error answer (an RPC that caps
+the `eth_getLogs` range) is asked again in tenths of it, contiguous up to the head, down to a floor of 10 blocks or a twentieth of
+the window, whichever is larger; after an answer the span doubles again, below half of a span refused. One that refuses the floor
+fails the read over to the next endpoint, so a window costs at most about 25 requests; a transport error fails over at once and
+never shrinks the span (Fable recheck 2 P3-3). *Known limit* (PLANNED, open): the window is not bounded by the job's intake block (the pull path
 carries none; `ponytail:` on `ROTATION_LOOKBACK`).
 
 **A silent verifier endpoint rests** (Fable review of ua-mtx-merge E N-7; BUILT,

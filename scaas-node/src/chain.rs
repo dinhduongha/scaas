@@ -82,8 +82,10 @@ pub fn classify_sim(e: &TransportError) -> SimError {
     }
 }
 
-/// The smallest `eth_getLogs` span [`Chain::logs_back`] asks before it gives an endpoint up (R-6).
+/// The smallest `eth_getLogs` span [`Chain::logs_back`] asks before it gives an endpoint up (R-6), and at most this many spans per
+/// window (Fable recheck 2 P3-3): a window is read in at most about 25 requests, a smaller cap gives the endpoint up.
 const LOG_SPAN_MIN: u64 = 10;
+const LOG_WINDOW_SPANS: u64 = 20;
 
 /// The `latest` header's gas facts ([`Chain::block_gas`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -366,27 +368,35 @@ impl Chain {
     }
 
     /// The logs of `filter` in the last `lookback` blocks, the head and the logs from one endpoint ([`Chain::read`]). Fable recheck
-    /// R-6: an RPC that caps the `eth_getLogs` range refuses the whole window, so a refused span is asked again in tenths, down
-    /// to [`LOG_SPAN_MIN`] blocks; an endpoint that refuses that too fails the read over.
+    /// R-6: an RPC that caps the `eth_getLogs` range refuses the whole window, so a span it refuses (an error answer) is asked
+    /// again in tenths, down to a floor: [`LOG_SPAN_MIN`] blocks or a [`LOG_WINDOW_SPANS`]th of the window, whichever is larger;
+    /// an endpoint that refuses the floor fails the read over. Fable recheck 2 P3-3: a transport error never shrinks a span, it
+    /// fails the read over at once; after an answer the span grows back (doubles), staying below half of a span refused.
     async fn logs_back(&self, filter: Filter, lookback: u64) -> Result<Vec<alloy::rpc::types::Log>> {
         self.read(|p| {
             let filter = filter.clone();
             async move {
                 let latest = p.get_block_number().await.map_err(|e| classify(&e))?;
                 self.saw_block(latest);
-                let (mut from, mut span, mut out) = (latest.saturating_sub(lookback), lookback.saturating_add(1), vec![]);
+                let start = latest.saturating_sub(lookback);
+                let whole = latest - start + 1;
+                let floor = LOG_SPAN_MIN.max(whole.div_ceil(LOG_WINDOW_SPANS));
+                let (mut from, mut span, mut refused, mut out) = (start, whole, u64::MAX, vec![]);
                 while from <= latest {
                     let to = latest.min(from.saturating_add(span - 1));
                     match p.get_logs(&filter.clone().from_block(from).to_block(to)).await {
                         Ok(l) => {
                             out.extend(l);
                             from = to + 1;
+                            span = span.saturating_mul(2).min(refused / 2).max(span);
                         }
-                        Err(e) if span > LOG_SPAN_MIN => {
+                        Err(e) if e.as_error_resp().is_some() && span > floor => {
                             tracing::debug!(span, error = %redact_urls(&e.to_string()), "eth_getLogs span refused; a tenth of it");
-                            span = (span / 10).max(LOG_SPAN_MIN);
+                            refused = refused.min(span);
+                            span = (span / 10).max(floor);
                         }
-                        Err(e) => return Err(classify(&e)),
+                        // never a revert: a log read has no contract answer
+                        Err(e) => return Err(SimError::Transport(e.to_string())),
                     }
                 }
                 Ok(out)
@@ -575,14 +585,48 @@ mod tests {
         let read = |url: String| async move { chain_of(&[&url]).logs_since(Address::ZERO, B256::ZERO, 10_000).await };
         assert_eq!(spans(read(open).await.unwrap()), vec![(head - 10_000, 10_001)], "control: one request");
         let got = spans(read(capped).await.unwrap());
-        let want: Vec<(u64, u64)> = (0..11).map(|i| (head - 10_000 + i * 1_000, if i < 10 { 1_000 } else { 1 })).collect();
-        assert_eq!(got, want, "contiguous 1,000-block spans up to the head");
+        let mut at = head - 10_000;
+        for (from, len) in &got {
+            assert_eq!(*from, at, "contiguous: {got:?}");
+            assert!(*len <= 1_000, "within the cap: {got:?}");
+            at += len;
+        }
+        assert_eq!(at, head + 1, "up to the head: {got:?}");
+        assert!(got.len() <= 12, "the span grows back to the cap: {got:?}");
+        // the span grows back after a shrink below the cap: a 3,000-block cap is read in fewer, larger spans than its first tenth
+        let (wide, _) = fake_rpc(|r| capped_logs(r, 3_000)).await;
+        let got = spans(read(wide).await.unwrap());
+        assert_eq!(got.iter().map(|x| x.1).sum::<u64>(), 10_001, "{got:?}");
+        assert!(got.len() <= 8 && got.iter().any(|x| x.1 > 1_000), "grows back: {got:?}");
         assert!(read(stingy.clone()).await.is_err(), "a cap below LOG_SPAN_MIN gives the endpoint up");
         assert!(chain_of(&[&stingy]).logs_since(Address::ZERO, B256::ZERO, 50).await.is_err(),
             "a 51-block window: a tenth is 5, floored at LOG_SPAN_MIN, still refused");
         let (capped2, _) = fake_rpc(|r| capped_logs(r, 1_000)).await;
-        assert_eq!(chain_of(&[&stingy, &capped2]).logs_since(Address::ZERO, B256::ZERO, 10_000).await.unwrap().len(), 11,
+        assert!(!chain_of(&[&stingy, &capped2]).logs_since(Address::ZERO, B256::ZERO, 10_000).await.unwrap().is_empty(),
             "and the read fails over to the next endpoint");
+        // Fable recheck 2 P3-3: a cap below a twentieth of the window gives the endpoint up within a few requests
+        let (tight, tight_n) = fake_rpc(|r| capped_logs(r, 400)).await;
+        assert!(read(tight).await.is_err());
+        assert!(tight_n.load(std::sync::atomic::Ordering::SeqCst) <= 5, "head, 10,001, 1,000, 501: given up");
+        // a transport error (HTTP 500) never shrinks the span: one log request, then the next endpoint
+        let n: std::sync::Arc<std::sync::atomic::AtomicUsize> = Default::default();
+        let n2 = n.clone();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let n2 = n2.clone();
+            async move {
+                if r["method"] == "eth_getLogs" {
+                    n2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(json!({})));
+                }
+                (axum::http::StatusCode::OK, axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x3000"})))
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let down = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let (capped3, _) = fake_rpc(|r| capped_logs(r, u64::MAX)).await;
+        assert_eq!(chain_of(&[&down, &capped3]).logs_since(Address::ZERO, B256::ZERO, 10_000).await.unwrap().len(), 1);
+        assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1, "one request, then the next endpoint");
     }
 
     /// NODE-GW-07: the chain's `chain_uid` is its block 0 hash; a configured one that differs refuses the chain.
