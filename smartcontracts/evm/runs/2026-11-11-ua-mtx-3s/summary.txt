@@ -23,3 +23,4 @@ scripts (T8: the on-chain scripts build) | T8 tree | 0 | Deploy, DeploySend and 
 gas (T9: RegulatedGas.t.sol, kind 8, cold, frame gas) | 298ddc5b | 0 | transfer no control 52,867; lists (8, 9) 57,503; KYC 61,880; KYC + deny list 66,488; mtxExecuteTransfer fee 0 under the lists 97,074; with a fee 120,471 (no pin before: spec §14's estimates only)
 forge-v2 (T9 rerun) | 298ddc5b | 0 | 718 passed
 deferred to the stacked gate | - | - | forge for every test/ directory, the full size gate, the four PQZ sets, node e2e, all clients, docs_check (controller 2026-11-11)
+mutants (T10) | 2b1+M4b | - | 48 rows (M1-M34 with b / c variants, B1-B3), each alone, restored byte-equal (git diff clean after each): 47 killed, 1 survived: M4 (`_feeRecipient` drops L) against Lists.t.sol, equivalent on the public kinds (the fee's own move runs `_regMove`'s L(to)); M4b, the same mutant against the confidential suites (the beneficiary's fee off the hooked ledger), killed
