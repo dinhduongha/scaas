@@ -216,8 +216,9 @@ library GovernanceLib {
     ///         Every caller: a word the contract does not bind is refused (`scalarBits`, `scopeBits`, B-09, B-10), and a
     ///         `delegable` grant needs a finite budget (B-02), which bounds what is spent, not the number of leaves: a leaf
     ///         spends nothing until it acts, so a wallet prints "can add unlimited leaves at once, sharing a remaining budget".
-    ///         On a bit of `delayedRelax` with a `grantDelay`, terms whose `validUntil` ends before `now + grantDelay` are a
-    ///         relaxation: two calls on either path, never a narrowing (regulated-kinds spec §3.6).
+    ///         On a bit of `delayedRelax` with a `grantDelay`, terms whose `validUntil` ends before `now + grantDelay`, and
+    ///         terms that lower the holder's `max` or set a new or lower `maxUses` (Fable D P2-2, A-4), are a relaxation:
+    ///         two calls on either path, never a narrowing (regulated-kinds spec §3.6, CTR-GOV-09 "every path that relaxes").
     function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller, uint256 roleBits,
         uint256 contractOnly, uint256 scalarBits, uint256 scopeBits, address uaRegistry, uint256 delayedRelax)
         public returns (bool leaf, bytes32 parentScope)
@@ -229,12 +230,14 @@ library GovernanceLib {
     }
 
     /// @dev Whether a `setGrant` applies now: a leaf's or, with no `grantDelay`, at once; the admin's narrowing at once (spec
-    ///      §1.6); a widening, or a `validUntil` cut on a bit of `delayedRelax`, in two calls (regulated-kinds spec §3.6).
+    ///      §1.6); a widening, or a cut on a bit of `delayedRelax`, in two calls (regulated-kinds spec §3.6): a `validUntil`
+    ///      before `now + grantDelay`, a lower `max` or a new or lower `maxUses` than the holder has (D P2-2, A-4).
     function _setDue(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller, bool leaf,
         uint256 delayedRelax) private returns (bool)
     {
         GovernanceStorage storage s = $();
-        bool cut = _delayed(s, bit, delayedRelax) && t.validUntil != 0 && t.validUntil < block.timestamp + s.grantDelay;
+        bool cut = _delayed(s, bit, delayedRelax) && ((t.validUntil != 0 && t.validUntil < block.timestamp + s.grantDelay)
+            || _cuts(s, bit, holder, t));
         if (!cut && (leaf || s.grantDelay == 0)) return true;
         if (!cut && _narrowing(s, bit, holder, t)) {
             delete s.pending[bit][holder];
@@ -261,6 +264,18 @@ library GovernanceLib {
             && (!t.delegable || g.delegable);
     }
 
+    /// @dev D P2-2, A-4: `t` lowers a holder's `max` or sets a new or lower `maxUses` (a `WHOLE` holder has neither bound;
+    ///      a non-holder has nothing to lose).
+    function _cuts(GovernanceStorage storage s, uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t)
+        private view returns (bool)
+    {
+        uint8 r = s.roles[bit][holder];
+        if (r == 0) return false;
+        IGovernance.Grant storage g = s.grants[bit][holder];
+        (uint256 max, uint256 uses) = r == WHOLE ? (uint256(type(uint128).max), 0) : (uint256(g.max), uint256(g.maxUses));
+        return t.max < max || (t.maxUses != 0 && (uses == 0 || t.maxUses < uses));
+    }
+
     /// @dev A bound with 0 = none: `next` narrows `was`.
     function _within(uint256 was, uint256 next) private pure returns (bool) {
         return was == 0 || (next != 0 && next <= was);
@@ -270,12 +285,14 @@ library GovernanceLib {
     ///      confirmed by its proposer in its window, is deleted and the call applies (true); another commitment reverts
     ///      `GrantTermsMismatch`, another caller `NotProposer`, before `eta` `GrantNotReady`; with no live pending the call
     ///      proposes (false) and changes nothing else. `commit` binds the action, the key and, for `SET`, the terms.
+    ///      The admin's call proposes over a live pending of another proposer (Fable D P2-1): the admin may cancel it
+    ///      anyway, and a holder must not keep the one slot so that the admin's delayed revoke never starts.
     function _due(GovernanceStorage storage s, uint8 bit, bytes32 account, bytes32 caller, uint8 action,
         IGovernance.GrantTerms memory t) private returns (bool)
     {
         bytes32 c = keccak256(abi.encode(action, bit, account, action == SET ? keccak256(abi.encode(t)) : bytes32(0)));
         PendingGrant storage p = s.pending[bit][account];
-        if (_live(s, p)) {
+        if (_live(s, p) && (caller != s.admin || p.proposer == caller)) {
             if (p.commit != c) revert IGovernance.GrantTermsMismatch(bit, account);
             if (p.proposer != caller) revert IGovernance.NotProposer(bit, account, p.proposer);
             if (block.timestamp < p.eta) revert IGovernance.GrantNotReady(bit, account, p.eta);

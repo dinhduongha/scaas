@@ -522,8 +522,15 @@ with `grantDelay ≠ 0`, propose: `commit = keccak256(abi.encode(action, bit, ac
 3`, `RENOUNCE 4`, `DISABLE 5`); one live pending per key, another commitment there is `GrantTermsMismatch`; only the proposer
 confirms (`NotProposer`), in `[eta, eta + grantDelay]` (`GrantNotReady` before; dead after, a confirm then proposes anew) and in
 the same admin generation (`acceptAdmin` and `renounceAdmin` kill every pending); the owner or the proposer cancels
-(`cancelGrant`). Unmasked bits and `grantDelay = 0` keep one call. Tests: `test/governance/GovRelax.t.sol`
-(`test_relax*TakesTwoCalls`, `test_grantThenRevokeExclude`, `test_ownerCannotConfirmHolderRenounce`,
+(`cancelGrant`). **The admin's call proposes over a live pending of another proposer** (Change 2026-11-11, Fable review D
+P2-1; BUILT on branch `ua-mtx-fix-contracts`, UNAUDITED): a holder's `renounceRole` or a grantor's leaf proposal at the same
+key no longer blocks the admin's `revokeRole` / `grantRole` / `setGrant` (before, it reverted `GrantTermsMismatch`, so a
+compromised issuer could renounce-propose again after every `cancelGrant` and keep the slot); the reverse stays refused.
+**A cut on a masked bit is a relaxation too** (Change 2026-11-11, Fable review D P2-2 and A-4; same branch): a `setGrant`
+(admin or grantor path) that lowers the holder's `max` or sets a new or lower `maxUses` proposes like a `validUntil` cut
+(a `WHOLE` holder has neither bound; a non-holder nothing to lose). Unmasked bits and `grantDelay = 0` keep one call. Tests:
+`test/governance/GovRelax.t.sol` (`test_relax*TakesTwoCalls`, `test_grantThenRevokeExclude`, `test_ownerProposesOverHolderPending`,
+`test_holderConfirmsOwnRenounce`, `test_relaxSetGrantMaxUsesAndMaxAreCuts`,
 `test_holderCannotConfirmOwnerRevoke`, `test_acceptAdminKillsPendingRelax`, `test_confirmAfterWindowProposesAgain`,
 `test_cancelByProposer`, `test_unmaskedBitsOneCallAsToday`, `test_grantDelayZeroOneCall`), `test/governance/GovDelay.t.sol`.
 
