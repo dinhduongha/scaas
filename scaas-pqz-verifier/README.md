@@ -60,4 +60,7 @@ place in the bounded queue (a slow body never holds one); bounded verification c
 ../scripts/capped cargo test --offline --locked -j2
 ../scripts/capped cargo clippy --offline --locked --all-targets -- -D warnings
 ../scripts/capped cargo build --release --offline --locked -j2
+# opt-in, against a real OFFCHAIN token on a local anvil (needs anvil and forge in PATH, smartcontracts/evm/lib installed):
+# the repo's deploy script, the PQZ release on deps = [0], the service's verdict sent with a transfer and accepted on chain
+../scripts/capped cargo test --offline --locked -j2 --test anvil -- --ignored --nocapture
 ```
