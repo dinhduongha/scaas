@@ -1,0 +1,13 @@
+ua-mtx-3t (round 3t, owner ruling 2026-11-11 "OK, vậy đi", CTR-PQZ-36): the verifier fee. An `OFFCHAIN` PQZ token (kinds 4, 5,
+12, 13) pays its verifier UA `verifierFee` from each proof-carrying debit's fee word, `txFee + verifierFee (+ M·d)`, capped by
+the immutable `verifierFeeMax`; the admin changes it by `setVerifierFee` / `mtxSetVerifierFee` (a decrease at once, an increase
+after the stored notice). Spec docs/superpowers/specs/2026-11-11-verifier-fee.md (727eec7a, 47cf777d, 14e48735). Base: spec 3t
+merged with the final 3r build (a5dec284) at 1ac6c148; round 3s is built in parallel and merged by the controller at the end,
+when the stacked final gate runs (rows marked "stacked gate"). Owner 2026-11-11: no duplicate runs; the touched test files,
+the new tests (red first, positive controls), the spec's mutants each alone against its targeted file; sizes only for the
+contracts 3t changes; "Hỏi trước khi tách." (no split, no size lever without asking). Steps by gates.sh here; full output in
+the git-ignored <step>.log beside this file (a red first run kept as <step>.red.log). Foundry 1.8.5, solc 0.8.37, Amsterdam,
+default PQZ set n2304-kmax4096; every heavy run through scripts/capped (CAPPED_SLOTS=3, 4 GB; the node 6 GB), one at a time.
+UNAUDITED.
+
+step | commit | rc | counts
