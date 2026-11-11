@@ -33,17 +33,18 @@ import {ChainEnvCode} from "../../src/factory/ChainEnvCode.sol";
 contract IxHolder {}
 
 /// An unregistered implementation for the index's negatives (factory index spec §7): answers what the factory reads, its
-/// `admin()` whatever the test set (a claim), optionally reverting, and its `initialize` optionally creating a nested token.
+/// `admin()` whatever the test set (a claim the factory never reads, 3r R1), optionally reverting, and its `initialize`
+/// optionally creating a nested token.
 contract IndexImpl {
     address immutable F;
     bytes32 immutable U;
-    bytes32 public ownerClaim;
-    bool public ownerReverts;
+    bytes32 public adminClaim;
+    bool public adminReverts;
     address public nestedImpl; // when set, `initialize` creates one unregistered token of it first
 
     constructor(address f_, bytes32 u_) { (F, U) = (f_, u_); }
 
-    function set(bytes32 o, bool r, address nested) external { (ownerClaim, ownerReverts, nestedImpl) = (o, r, nested); }
+    function set(bytes32 a, bool r, address nested) external { (adminClaim, adminReverts, nestedImpl) = (a, r, nested); }
 
     function kind() external pure returns (uint8) { return 0; }
     function factory() external view returns (address) { return F; }
@@ -56,8 +57,8 @@ contract IndexImpl {
 
     /// Read through the implementation: a clone has no storage of its own for these.
     function admin() external view returns (bytes32) {
-        if (IndexImpl(_impl()).ownerReverts()) revert("owner reverts");
-        return IndexImpl(_impl()).ownerClaim();
+        if (IndexImpl(_impl()).adminReverts()) revert("admin reverts");
+        return IndexImpl(_impl()).adminClaim();
     }
 
     function initialize(bytes32, uint64, bytes calldata) external {
@@ -73,15 +74,16 @@ contract IndexImpl {
     }
 }
 
-/// The checks every index test shares: `infoOf` field by field, and `t` the last entry of the class's three lists.
+/// The checks every index test shares: `infoOf` field by field (seven words, no owner: round 3r R1), and `t` the last
+/// entry of the class's two lists.
 abstract contract IndexAsserts is Test {
-    function _assertIndexed(OpenFactory f, address t, bytes32 creatorId, bytes32 ownerUA, uint16 cls, uint16 kind,
-        uint64 version) internal view
+    function _assertIndexed(OpenFactory f, address t, bytes32 creatorId, uint16 cls, uint16 kind, uint64 version)
+        internal view
     {
+        assertEq(_rawInfo(f, t).length, 7 * 32, "Created: seven words, no owner (3r R1)");
         IOpenFactory.Created memory c = f.infoOf(t);
         assertEq(c.addr, t, "addr");
         assertEq(c.creatorId, creatorId, "creatorId");
-        assertEq(c.ownerUA, ownerUA, "ownerUA");
         assertEq(c.contractClass, cls, "class");
         assertEq(c.kind, kind, "kind");
         assertEq(c.version, version, "version");
@@ -93,10 +95,13 @@ abstract contract IndexAsserts is Test {
         (p, total) = f.contractsOfCreator(creatorId, cls, 0, f.MAX_PAGE());
         assertEq(p[p.length - 1].addr, t, "by creator: last");
         assertEq(keccak256(abi.encode(p[p.length - 1])), keccak256(abi.encode(c)), "by creator: the record");
-        if (ownerUA != 0) {
-            (p,) = f.contractsOfOwner(ownerUA, cls, 0, f.MAX_PAGE());
-            assertEq(p[p.length - 1].addr, t, "by owner: last");
-        }
+    }
+
+    /// `infoOf(t)`'s return data as the factory answers it, whatever its shape.
+    function _rawInfo(OpenFactory f, address t) internal view returns (bytes memory ret) {
+        bool ok;
+        (ok, ret) = address(f).staticcall(abi.encodeCall(IOpenFactory.infoOf, (t)));
+        assertTrue(ok, "infoOf");
     }
 
     /// The old views (factory index spec §2.1): their answers exactly as before the record.
@@ -130,7 +135,8 @@ abstract contract IndexAsserts is Test {
 }
 
 /// Plan T67 (factory index spec §2, §7): the record, the per-class lists, the paged views, on the plain kinds 0, 1, 8, 9 and
-/// the DEX; the old views keep their answers; the lists' meaning (creator authenticated, owner a claim at creation).
+/// the DEX; the old views keep their answers; the creator authenticated. Round 3r R1 (spec 2026-11-10-admin-not-owner.md
+/// §3, CTR-GOV-23): the factory keeps no owner information and reads no admin of what it creates.
 contract FactoryIndexTest is IndexAsserts {
     OpenFactory f;
     address registrar = address(0xF00D);
@@ -161,8 +167,8 @@ contract FactoryIndexTest is IndexAsserts {
             plainEnv(address(f), address(0), UID_, address(ureg), false), type(WrappedRegulatedToken).creationCode, regArgs());
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         vm.startPrank(registrar);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
         vm.stopPrank();
         usd = new MockERC20("USD", "USD", 6);
         (issuer, compliance) = (address(new IxHolder()), address(new IxHolder()));
@@ -170,16 +176,16 @@ contract FactoryIndexTest is IndexAsserts {
 
     // ------------------------------------------------------------------ configs
 
-    function _normal(bytes32 owner) internal view returns (IFactoryToken.TokenConfig memory c) {
+    function _normal(bytes32 admin_) internal view returns (IFactoryToken.TokenConfig memory c) {
         c = normalInit("N", "N", 0, 1000, alice, address(0));
-        c.admin = owner;
+        c.admin = admin_;
     }
 
-    function _wrapped(bytes32 owner) internal view returns (IFactoryToken.TokenConfig memory c) {
+    function _wrapped(bytes32 admin_) internal view returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol, c.decimals) = ("W", "W", 6);
         c.features = 1 << GovernanceBits.PAYABLE;
-        c.admin = owner;
-        if (owner == 0) c.lockedFeatures = c.features;
+        c.admin = admin_;
+        if (admin_ == 0) c.lockedFeatures = c.features;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
     }
@@ -193,8 +199,8 @@ contract FactoryIndexTest is IndexAsserts {
         return c;
     }
 
-    function _dexCfg(bytes32 owner) internal pure returns (bytes memory) {
-        return abi.encode(ISCaaSDex.DexConfig(owner, 0, address(0xD7), false, 0, address(0)));
+    function _dexCfg(bytes32 admin_) internal pure returns (bytes memory) {
+        return abi.encode(ISCaaSDex.DexConfig(admin_, 0, address(0xD7), false, 0, address(0)));
     }
 
     function _token(address creator, IOpenFactory.TokenKind k, IFactoryToken.TokenConfig memory c, bytes32 salt)
@@ -212,33 +218,33 @@ contract FactoryIndexTest is IndexAsserts {
 
     function test_index_everyKind_0() public {
         address t = _token(bob, NORMAL, _normal(nid(alice)), "k0");
-        _assertIndexed(f, t, nid(bob), nid(alice), TOKEN, 0, 1);
+        _assertIndexed(f, t, nid(bob), TOKEN, 0, 1);
         _assertOldViews(f, t, bob, 0, 1);
     }
 
     function test_index_everyKind_1() public {
         address t = _token(bob, WRAPPED, _wrapped(nid(alice)), "k1");
-        _assertIndexed(f, t, nid(bob), nid(alice), TOKEN, 1, 1);
+        _assertIndexed(f, t, nid(bob), TOKEN, 1, 1);
         _assertOldViews(f, t, bob, 1, 1);
         assertEq(f.getWrapper(nid(bob), address(usd)), t, "the leg index (by creatorId since T71)");
     }
 
     function test_index_everyKind_8() public {
         address t = _token(bob, IOpenFactory.TokenKind.NORMAL_REGULATED, _regulated(_normal(nid(alice))), "k8");
-        _assertIndexed(f, t, nid(bob), nid(alice), TOKEN, 8, 1);
+        _assertIndexed(f, t, nid(bob), TOKEN, 8, 1);
         _assertOldViews(f, t, bob, 8, 1);
     }
 
     function test_index_everyKind_9() public {
         address t = _token(bob, IOpenFactory.TokenKind.WRAPPED_REGULATED, _regulated(_wrapped(nid(alice))), "k9");
-        _assertIndexed(f, t, nid(bob), nid(alice), TOKEN, 9, 1);
+        _assertIndexed(f, t, nid(bob), TOKEN, 9, 1);
         _assertOldViews(f, t, bob, 9, 1);
     }
 
     function test_index_dex() public {
         vm.prank(bob);
         address d = f.createDex(1, _dexCfg(nid(alice)), "d");
-        _assertIndexed(f, d, nid(bob), nid(alice), DEX, 0, 1);
+        _assertIndexed(f, d, nid(bob), DEX, 0, 1);
         assertTrue(f.isDex(d));
         assertEq(f.dexVersionOf(d), 1);
         assertFalse(f.isToken(d), "a DEX is not a token");
@@ -256,7 +262,7 @@ contract FactoryIndexTest is IndexAsserts {
         impl.set(nid(alice), false, address(0));
         vm.prank(bob);
         address t = f.createTokenUnregistered(NORMAL, address(impl), "", "u");
-        _assertIndexed(f, t, nid(bob), nid(alice), TOKEN, 0, 0);
+        _assertIndexed(f, t, nid(bob), TOKEN, 0, 0);
         _assertOldViews(f, t, bob, 0, 0);
     }
 
@@ -278,72 +284,84 @@ contract FactoryIndexTest is IndexAsserts {
         assertEq(c.creatorId, 0);
     }
 
-    // ------------------------------------------------------------------ creator and owner
+    // ------------------------------------------------------------------ the creator; no admin (3r R1)
 
-    function test_index_relayerCreatorNotOwner() public {
+    function test_index_relayerIsTheCreator() public {
         address t = _token(relayer, NORMAL, _normal(nid(alice)), "r");
         assertEq(f.infoOf(t).creatorId, nid(relayer), "the submitter is the creator");
-        (IOpenFactory.Created[] memory p, uint256 n) = f.contractsOfOwner(nid(alice), TOKEN, 0, 10);
-        assertEq(n, 1);
-        assertEq(p[0].addr, t, "listed under the owner it names");
-        (p, n) = f.contractsOfCreator(nid(relayer), TOKEN, 0, 10);
+        (IOpenFactory.Created[] memory p, uint256 n) = f.contractsOfCreator(nid(relayer), TOKEN, 0, 10);
         assertEq(n, 1);
         assertEq(p[0].addr, t, "listed under the relayer");
         (, n) = f.contractsOfCreator(nid(alice), TOKEN, 0, 10);
-        assertEq(n, 0, "the owner did not create it");
-        (, n) = f.contractsOfOwner(nid(relayer), TOKEN, 0, 10);
-        assertEq(n, 0, "the relayer does not own it");
+        assertEq(n, 0, "the admin it names did not create it");
+        assertEq(IGovernance(t).admin(), nid(alice), "the admin is the contract's own answer");
     }
 
-    /// A contract caller naming a derived UA (a non-native id) as the owner.
-    function test_index_derivedOwnerUA() public {
-        address caller = address(new IxHolder());
-        address t = _token(caller, NORMAL, _normal(DERIVED), "dv");
-        _assertIndexed(f, t, nid(caller), DERIVED, TOKEN, 0, 1);
-        (, uint256 n) = f.contractsOfOwner(DERIVED, TOKEN, 0, 0);
-        assertEq(n, 1);
+    /// `contractsOfOwner` is gone: its selector reverts with no data; `contractsOfCreator` answers (positive control).
+    function test_index_noContractsOfOwner() public {
+        _token(bob, NORMAL, _normal(nid(alice)), "no");
+        bytes4 sel = bytes4(keccak256("contractsOfOwner(bytes32,uint16,uint256,uint256)"));
+        assertEq(sel, bytes4(0x9fbde75c));
+        (bool ok, bytes memory ret) = address(f).staticcall(abi.encodeWithSelector(sel, nid(alice), TOKEN, 0, 10));
+        assertFalse(ok, "contractsOfOwner answers");
+        assertEq(ret.length, 0, "no data");
+        (ok,) = address(f).staticcall(abi.encodeCall(IOpenFactory.contractsOfCreator, (nid(bob), TOKEN, 0, 10)));
+        assertTrue(ok, "contractsOfCreator");
     }
 
-    function test_index_ownerZeroNotListed() public {
-        address t0 = _token(bob, NORMAL, _normal(0), "z");
-        _assertIndexed(f, t0, nid(bob), 0, TOKEN, 0, 1);
-        (, uint256 n) = f.contractsOfOwner(0, TOKEN, 0, 0);
-        assertEq(n, 0, "ownerUA 0 is nobody's list");
-        address t1 = _token(bob, NORMAL, _normal(nid(alice)), "z1"); // positive control
-        (, n) = f.contractsOfOwner(nid(alice), TOKEN, 0, 0);
-        assertEq(n, 1);
-        assertEq(f.infoOf(t1).ownerUA, nid(alice));
-        (, n) = f.contractsPage(TOKEN, 0, 0);
-        assertEq(n, 2, "both in the class list");
+    /// The record names no admin: tokens of one creator in one block naming admin 0, a native id or a derived UA (a
+    /// non-native id) have equal records but for `addr`, and every one is in the class list.
+    function test_index_recordNamesNoAdmin() public {
+        bytes32[3] memory admins = [bytes32(0), nid(alice), DERIVED];
+        address[3] memory ts;
+        for (uint256 i; i < 3; ++i) {
+            ts[i] = _token(bob, NORMAL, _normal(admins[i]), bytes32(i + 1));
+            _assertIndexed(f, ts[i], nid(bob), TOKEN, 0, 1);
+            assertEq(IGovernance(ts[i]).admin(), admins[i], "the admin is the contract's own answer");
+        }
+        bytes32 h0 = _noAddr(_rawInfo(f, ts[0]));
+        for (uint256 i = 1; i < 3; ++i) assertEq(_noAddr(_rawInfo(f, ts[i])), h0, "the same record but for addr");
+        (, uint256 n) = f.contractsPage(TOKEN, 0, 0);
+        assertEq(n, 3, "all three in the class list");
     }
 
-    function test_index_ownerMovedKeepsCreationOwner() public {
+    function _noAddr(bytes memory ret) internal pure returns (bytes32) {
+        assembly ("memory-safe") {
+            mstore(add(ret, 32), 0)
+        }
+        return keccak256(ret);
+    }
+
+    /// The admin moves in the contract; the record does not change (it holds no admin).
+    function test_index_adminMovedRecordUnchanged() public {
         address t = _token(bob, NORMAL, _normal(nid(alice)), "m");
+        bytes32 before = keccak256(_rawInfo(f, t));
         vm.prank(alice);
         IGovernance(t).transferAdmin(nid(bob));
         vm.prank(bob);
         IGovernance(t).acceptAdmin();
-        assertEq(IGovernance(t).admin(), nid(bob), "the contract's own owner moved");
-        assertEq(f.infoOf(t).ownerUA, nid(alice), "the index keeps the creation owner");
-        (, uint256 n) = f.contractsOfOwner(nid(alice), TOKEN, 0, 0);
-        assertEq(n, 1);
-        (, n) = f.contractsOfOwner(nid(bob), TOKEN, 0, 0);
-        assertEq(n, 0, "handed over later: not in the new owner's list");
+        assertEq(IGovernance(t).admin(), nid(bob), "the contract's own admin moved");
+        assertEq(keccak256(_rawInfo(f, t)), before, "the record unchanged");
     }
 
-    /// An unregistered implementation claiming a victim's UA as owner is listed there, flagged by version 0 and its creator.
-    function test_index_spamClaimListedWithCreator() public {
+    /// An unregistered implementation claiming a victim's UA as admin is listed under its creator only, flagged by
+    /// version 0; nothing is listed under the UA it claims.
+    function test_index_spamClaimListedUnderItsCreatorOnly() public {
         IndexImpl impl = _impl();
         impl.set(nid(alice), false, address(0));
         address spammer = address(0x5BA4);
         vm.prank(spammer);
         address t = f.createTokenUnregistered(NORMAL, address(impl), "", "spam");
         address real = _token(bob, NORMAL, _normal(nid(alice)), "real");
-        (IOpenFactory.Created[] memory p, uint256 n) = f.contractsOfOwner(nid(alice), TOKEN, 0, 10);
-        assertEq(n, 2);
+        (IOpenFactory.Created[] memory p, uint256 n) = f.contractsOfCreator(nid(spammer), TOKEN, 0, 10);
+        assertEq(n, 1);
         assertEq(p[0].addr, t);
         assertEq(p[0].version, 0);
-        assertEq(p[0].creatorId, nid(spammer));
+        (, n) = f.contractsOfCreator(nid(alice), TOKEN, 0, 10);
+        assertEq(n, 0, "nothing under the claimed UA");
+        (p, n) = f.contractsPage(TOKEN, 0, 10);
+        assertEq(n, 2);
+        assertEq(p[0].addr, t);
         assertEq(p[1].addr, real);
         assertEq(p[1].version, 1);
         assertEq(p[1].creatorId, nid(bob));
@@ -362,22 +380,20 @@ contract FactoryIndexTest is IndexAsserts {
         address nested = p[0].addr;
         assertEq(p[1].addr, t, "the outer one last");
         assertEq(p[0].creatorId, nid(t), "the nested creation's creator is the outer clone");
-        assertEq(p[0].ownerUA, nid(bob));
         assertEq(p[1].creatorId, nid(relayer));
-        assertEq(p[1].ownerUA, nid(alice));
         assertEq(f.creatorOf(nested), t);
         assertEq(f.creatorOf(t), relayer);
     }
 
-    /// `admin()` reverting reverts the creation (as before the index).
-    function test_index_ownerRevertRevertsCreation() public {
+    /// The factory reads no admin of what it creates (3r R1, M6): an implementation whose `admin()` reverts is still
+    /// created and indexed; its `admin()` still reverts after (positive control: the factory never asked).
+    function test_index_adminRevertStillCreates() public {
         IndexImpl impl = _impl();
         impl.set(nid(alice), true, address(0));
-        vm.expectRevert(bytes("owner reverts"));
-        f.createTokenUnregistered(NORMAL, address(impl), "", "rv");
-        impl.set(nid(alice), false, address(0)); // positive control
         address t = f.createTokenUnregistered(NORMAL, address(impl), "", "rv");
-        assertEq(f.infoOf(t).ownerUA, nid(alice));
+        _assertIndexed(f, t, nid(address(this)), TOKEN, 0, 0);
+        vm.expectRevert(bytes("admin reverts"));
+        IGovernance(t).admin();
     }
 
     // ------------------------------------------------------------------ paging
@@ -393,9 +409,6 @@ contract FactoryIndexTest is IndexAsserts {
         (IOpenFactory.Created[] memory p, uint256 n) = f.contractsPage(TOKEN, 0, 0);
         assertEq(p.length, 0);
         assertEq(n, 3, "n = 0 is the count");
-        (p, n) = f.contractsOfOwner(nid(alice), TOKEN, 1, 0);
-        assertEq(p.length, 0);
-        assertEq(n, 3);
         (p, n) = f.contractsOfCreator(nid(bob), TOKEN, 2, 0);
         assertEq(p.length, 0);
         assertEq(n, 3);
@@ -408,20 +421,16 @@ contract FactoryIndexTest is IndexAsserts {
         assertEq(n, 101);
         assertEq(p.length, 100);
         for (uint256 i; i < 100; ++i) assertEq(p[i].addr, ts[i], "creation order, oldest first");
-        (p, n) = f.contractsOfOwner(nid(alice), TOKEN, 1, 100);
-        assertEq(p.length, 100);
-        assertEq(p[99].addr, ts[100]);
         (p, n) = f.contractsOfCreator(nid(bob), TOKEN, 1, 100);
         assertEq(p.length, 100);
         assertEq(p[0].addr, ts[1]);
+        assertEq(p[99].addr, ts[100]);
     }
 
     function test_index_page_overMax() public {
         _many(1);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.PageTooLarge.selector, 101));
         f.contractsPage(TOKEN, 0, 101);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.PageTooLarge.selector, 101));
-        f.contractsOfOwner(nid(alice), TOKEN, 0, 101);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.PageTooLarge.selector, type(uint256).max));
         f.contractsOfCreator(nid(bob), TOKEN, 0, type(uint256).max);
         f.contractsPage(TOKEN, 0, 100); // positive control
@@ -437,7 +446,7 @@ contract FactoryIndexTest is IndexAsserts {
         (p,) = f.contractsPage(TOKEN, n - 2, 2); // the newest page: from = total - n
         assertEq(p[0].addr, ts[3]);
         assertEq(p[1].addr, ts[4]);
-        (p,) = f.contractsOfOwner(nid(alice), TOKEN, 4, 3);
+        (p,) = f.contractsOfCreator(nid(bob), TOKEN, 4, 3);
         assertEq(p.length, 1);
         assertEq(p[0].addr, ts[4]);
     }
@@ -459,7 +468,7 @@ contract FactoryIndexTest is IndexAsserts {
         (IOpenFactory.Created[] memory p, uint256 n) = f.contractsPage(TOKEN, 3, 10);
         assertEq(p.length, 0);
         assertEq(n, 2);
-        (p, n) = f.contractsOfOwner(nid(alice), TOKEN, type(uint256).max, 100);
+        (p, n) = f.contractsOfCreator(nid(bob), TOKEN, type(uint256).max, 100);
         assertEq(p.length, 0);
         assertEq(n, 2);
     }
@@ -467,8 +476,6 @@ contract FactoryIndexTest is IndexAsserts {
     function test_index_classUnknown_0() public {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassUnknown.selector, 0));
         f.contractsPage(0, 0, 1);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassUnknown.selector, 0));
-        f.contractsOfOwner(nid(alice), 0, 0, 1);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassUnknown.selector, 0));
         f.contractsOfCreator(nid(bob), 0, 0, 1);
         f.contractsPage(TOKEN, 0, 1); // positive controls: both built classes answer, even empty
@@ -479,29 +486,24 @@ contract FactoryIndexTest is IndexAsserts {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassUnknown.selector, 3));
         f.contractsPage(3, 0, 1);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassUnknown.selector, 3));
-        f.contractsOfOwner(nid(alice), 3, 0, 1);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassUnknown.selector, 3));
         f.contractsOfCreator(nid(bob), 3, 0, 1);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassUnknown.selector, type(uint16).max));
         f.contractsPage(type(uint16).max, 0, 1);
     }
 
-    /// One owner and creator with a token and a DEX: each list answers only the class asked.
+    /// One creator with a token and a DEX: each list answers only the class asked.
     function test_index_classFilter() public {
         address t = _token(bob, NORMAL, _normal(nid(alice)), "cf");
         vm.prank(bob);
         address d = f.createDex(1, _dexCfg(nid(alice)), "cf");
-        (IOpenFactory.Created[] memory p, uint256 n) = f.contractsOfOwner(nid(alice), TOKEN, 0, 10);
+        (IOpenFactory.Created[] memory p, uint256 n) = f.contractsOfCreator(nid(bob), TOKEN, 0, 10);
         assertEq(n, 1);
         assertEq(p[0].addr, t);
         assertEq(p[0].contractClass, TOKEN);
-        (p, n) = f.contractsOfOwner(nid(alice), DEX, 0, 10);
-        assertEq(n, 1);
-        assertEq(p[0].addr, d);
-        assertEq(p[0].contractClass, DEX);
         (p, n) = f.contractsOfCreator(nid(bob), DEX, 0, 10);
         assertEq(n, 1);
         assertEq(p[0].addr, d);
+        assertEq(p[0].contractClass, DEX);
         (p, n) = f.contractsPage(TOKEN, 0, 10);
         assertEq(n, 1);
         assertEq(p[0].addr, t);
@@ -522,23 +524,23 @@ contract FactoryIndexTest is IndexAsserts {
         assertEq(n, 2, "nothing recorded twice");
     }
 
-    // ------------------------------------------------------------------ slots (spec §3: +5 steady, +7 first; old 1)
+    // ------------------------------------------------------------------ slots (3r R1: +4 steady, +5 first; T67 +6, +8)
 
     function test_index_slotCount_first() public {
         _token(relayer, NORMAL, _normal(nid(bob)), "seed"); // the class list exists: its length is not new
         vm.startStateDiffRecording();
         _token(bob, NORMAL, _normal(nid(alice)), "first");
-        assertEq(_newSlots(address(f)), 8, "record 3, three elements, two first list lengths");
+        assertEq(_newSlots(address(f)), 5, "record 2, two elements, the creator list's first length");
     }
 
     function test_index_slotCount_steady() public {
         _token(bob, NORMAL, _normal(nid(alice)), "a");
         vm.startStateDiffRecording();
         _token(bob, NORMAL, _normal(nid(alice)), "b");
-        assertEq(_newSlots(address(f)), 6, "record 3, three elements");
+        assertEq(_newSlots(address(f)), 4, "record 2, two elements");
         vm.startStateDiffRecording();
         _token(bob, NORMAL, _normal(0), "c");
-        assertEq(_newSlots(address(f)), 4, "owner 0: no owner element, and the record's owner word stays 0");
+        assertEq(_newSlots(address(f)), 4, "admin 0: the same four (the record names no admin)");
     }
 }
 
@@ -556,8 +558,8 @@ contract FactoryIndexZetherTest is ZetherFixture, IndexAsserts {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
             type(WrappedZetherRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
         vm.stopPrank();
         (issuerZ, complianceZ) = (address(new IxHolder()), address(new IxHolder()));
         usdZ = new MockERC20("USD", "USD", 6);
@@ -584,7 +586,7 @@ contract FactoryIndexZetherTest is ZetherFixture, IndexAsserts {
     function _kind(uint8 k, bool wrapped, bool regulated) internal {
         vm.prank(address(0xB0B));
         address t = factory.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(_z(wrapped, regulated)), bytes32(uint256(k)));
-        _assertIndexed(factory, t, nid(address(0xB0B)), nid(address(0x0A11)), 1, k, 1);
+        _assertIndexed(factory, t, nid(address(0xB0B)), 1, k, 1);
         _assertOldViews(factory, t, address(0xB0B), k, 1);
     }
 
@@ -609,8 +611,8 @@ contract FactoryIndexPqzTest is PqzFixture, IndexAsserts {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e,
             type(WrappedPqzRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
         vm.stopPrank();
         (issuerP, complianceP) = (address(new IxHolder()), address(new IxHolder()));
         usdP = new MockERC20("USD", "USD", 6);
@@ -637,7 +639,7 @@ contract FactoryIndexPqzTest is PqzFixture, IndexAsserts {
     function _kind(uint8 k, bool wrapped, bool regulated) internal {
         vm.prank(address(0xB0B));
         address t = factory.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(_p(wrapped, regulated)), bytes32(uint256(k)));
-        _assertIndexed(factory, t, nid(address(0xB0B)), nid(address(0x0A11)), 1, k, 1);
+        _assertIndexed(factory, t, nid(address(0xB0B)), 1, k, 1);
         _assertOldViews(factory, t, address(0xB0B), k, 1);
     }
 

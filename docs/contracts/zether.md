@@ -7,7 +7,7 @@
 `ZetherTranscript` and the Rust prover `zether-prover` exist with tests (P3;
 `smartcontracts/evm/src/zether/**`); the accounts are UAs of the UA registry's Zether kinds (UA-3,
 [registry](#registry)). Classical Zether is open on every chain with the BLS12-381 precompiles (no chain-id allowlist,
-owner ruling 2026-10-31), and the factory's kind gate starts off for kinds 2–3 (`setKindEnabled`, [safety
+owner ruling 2026-10-31), and the factory's kind gate starts off for kinds 2–3 (`setTokenKindEnabled`, [safety
 gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zero-knowledge.md](pq-zero-knowledge.md)). Relaying is
 the generic self-call ([relaying](#envelope)), `chainUid` is in every chain-bound digest; the built `ZetherToken` with its
 `ZetherMetaTx` envelope is backed up, not built, in `smartcontracts/evm/legacy/p3/`. **Built (P3b):** the storage and auditor modes, the salted `s` and the sender memo ([CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-48](#CTR-ZTH-48)–[CTR-ZTH-50](#CTR-ZTH-50), [CTR-ZTH-30](#CTR-ZTH-30)).
@@ -1334,7 +1334,7 @@ refuse a point outside the subgroup ([§9.1](#merged-check)). Never on Hedera (`
 Hedera env; `DEPLOY_ZETHER` refuses a Hedera deploy; the Hedera registry gets no `zether-bls12381`; regression test
 `test/zether/ZetherNoEip2537.t.sol`).
 
-- `OpenFactory.kindEnabled(NORMAL_ZETHER / WRAPPED_ZETHER)` starts `false`; `setKindEnabled` (registrar) is the
+- `OpenFactory.tokenKindEnabled(NORMAL_ZETHER / WRAPPED_ZETHER)` starts `false`; `setTokenKindEnabled` (registrar) is the
   generic gate of every kind (plan 5g-Z2): enabling the Zether kinds is an admin act per chain; creating a `*_ZETHER`
   token reverts when the kind is off (`KindDisabled`).
 - The release's verifiers stay pinned ([CTR-ZTH-20](#CTR-ZTH-20)).
@@ -1383,14 +1383,14 @@ could carry a fake verifier (`true` for every proof ⇒ `mtxUnshield` drains the
   the trust root for code — a multisig / UA msig before mainnet (a timelock is an option, not built).
 - **Clients and the gateway** accept a Zether token only when the chain's published `OpenFactory` answers
   `isRegisteredToken(token)` and `registry()` equals the chain's canonical registry; the factory is the published source of
-  the verifier addresses (`releaseOf(kind, version)` → `envOf(kind, envVersion).deps`). The built `clients/clientkeys/src/zether.js` does not check this yet. Tests: the client
+  the verifier addresses (`releaseOf(kind, version)` → `tokenEnvOf(kind, envVersion).deps`). The built `clients/clientkeys/src/zether.js` does not check this yet. Tests: the client
   refuses an unregistered token or a foreign `registry()`; the gateway errors when relaying a Zether op of one. The gateway
   half is [NODE-GW-01](../node/gateway.md#NODE-GW-01)'s door; the client half
   [CLI-SGN-10](../clients/signers-clientkeys.md#CLI-SGN-10). Status: contracts **BUILT** (5g-Z1, 5g-Z2), clients and gateway
   **SPECIFIED**.
 
 Open work (owner/operator; none of it is a deploy gate, owner ruling 2026-10-31): there is no dev gate to lift — the
-kind is open on every chain with EIP-2537 once `setKindEnabled` turns it on ([CTR-ZTH-52](#CTR-ZTH-52)); an independent
+kind is open on every chain with EIP-2537 once `setTokenKindEnabled` turns it on ([CTR-ZTH-52](#CTR-ZTH-52)); an independent
 cryptographic audit (Σ-Bulletproofs, transcript, inner-product argument, registry PoP) is still wanted, and until one is
 recorded the label stays **UNAUDITED** and client screens show the warning
 ([README](README.md#production-gates-unaudited)); the curve is decided, BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32)), the

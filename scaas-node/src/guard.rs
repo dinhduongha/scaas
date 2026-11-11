@@ -1327,13 +1327,15 @@ mod tests {
         // -> (110, 3, 110), UAPayWithTax's three domains and the router's two tax ops
         // group 3f T46 / T47: -> (113, 3, 113), the router's three verifier ops' vector rows
         // group 3h T61: -> (114, 3, 114), the router's `UASetProofStore`; group 3l: -> (116, 3, 116), the router's two wrap-limit ops
-        assert_eq!((sent, relayed, refused), (116, 3, 116), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // round 3r (CTR-GOV-23): -> (127, 3, 127), the router's eleven admin rows
+        assert_eq!((sent, relayed, refused), (127, 3, 127), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
         // T93: 104 -> 116, `PqChat`'s twelve plain rows; group 3l: -> 118, the router's two wrap-limit ops; UA-7 P48:
         // -> 119, `remove`; ua-mtx-liquidity L6 (79c3501e, moved at L6d): -> 120, `mtxLiquidity`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 120, "table rows: 88 typed with an entry, 32 plain");
+        // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 131, "table rows: 99 typed with an entry, 32 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1361,7 +1363,7 @@ mod tests {
             "mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)", "mtxRevoke(address,uint64,uint256,bytes)",
             "mtxExecuteAsOwnerRaw(bytes,uint256,uint256,bytes)",
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-            "transferOwnership(bytes32)", "setListedOnly(bool)"] {
+            "transferAdmin(bytes32)", "setListedOnly(bool)"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
                 let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
@@ -1644,7 +1646,9 @@ mod tests {
         ("WrappedZetherToken", "zether"), ("NormalPqzToken", "pqz"), ("WrappedPqzToken", "pqz"), ("SCaaSDex", "dex"),
         ("GovernanceRouter", "gov_router"), ("NormalRegulatedToken", "token"), ("WrappedRegulatedToken", "token"),
         ("NormalZetherRegulatedToken", "zether"), ("WrappedZetherRegulatedToken", "zether"), ("NormalPqzRegulatedToken", "pqz"),
-        ("WrappedPqzRegulatedToken", "pqz")];
+        ("WrappedPqzRegulatedToken", "pqz"), ("OpenFactory", "open_factory")];
+    // round 3r (spec §7): `OpenFactory` under its own label: the node's contract kind `factory` is `SmartKeyAccountFactory`
+    // (`deploy`); `OpenFactory` has no node row, its three open deploys `APPROVED(release)` are in `NOT_ROWS`
     /// `SIGNED` entries no job names, each with its reason: `(name, the argument list's start)`.
     const NOT_ROWS: &[(&str, &str, &str)] = &[
         ("executeMetaTransaction", "((address,bytes,", "the EIP-1776 alias (R3): its address MetaTransaction is no job shape"),
@@ -1661,7 +1665,16 @@ mod tests {
         ("mtxCreateToken", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
         ("mtxCreateDex", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
         ("mtxCreateInstance", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
+        ("mtxApproveTokenRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
+        ("mtxApproveDexRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
+        ("mtxApproveRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
+        ("mtxRevokeApproval", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
+        ("deployTokenImplementation", "(uint8,", RELEASE_NOT_A_JOB),
+        ("deployDexImplementation", "(uint64,", RELEASE_NOT_A_JOB),
+        ("deployImplementation", "((uint16,", RELEASE_NOT_A_JOB),
     ];
+    /// Round 3r (spec 2026-11-10-admin-not-owner.md §5.6, Q3): the four approval ops and the three open deploys.
+    const RELEASE_NOT_A_JOB: &str = "release management is not a node job (owner 2026-11-10)";
     const ENV_UA: &str = "((bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
     const ENV_ADDR: &str = "((address,uint256,uint256,uint256,uint32,address,uint256,address)";
 
@@ -1670,7 +1683,7 @@ mod tests {
     /// through the router); every `SIGNED` entry of those contracts is a row of the kind, a `ua_metatx` struct job's entry
     /// (`mtxExecuteTransfer`, `mtxPayMeta`, the calldata [`crate::metatx::UaMtx`] builds), the inner operation an envelope row of the
     /// same name self-calls (also the holder's direct call), or named in `NOT_ROWS` with its reason. The router's generic entries
-    /// (`PERMISSIONLESS(refuses every call)`) are no row; no `BIT`, `OWNER` or `HOLDER_OWN` entry of a governed contract is a row of any
+    /// (`PERMISSIONLESS(refuses every call)`) are no row; no `BIT`, `ADMIN` or `HOLDER_OWN` entry of a governed contract is a row of any
     /// kind, so no governance op is relayable on it.
     #[test]
     fn allow_lists_equal_the_selector_audit_both_directions() {
@@ -1686,7 +1699,7 @@ mod tests {
         let auth = crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] };
         let struct_jobs: HashSet<[u8; 4]> = [m.calldata(auth)[..4].try_into().unwrap()].into_iter().collect();
         let (mut rowed, mut exempt, mut governed) = (0, 0, 0);
-        for kind in ["token", "zether", "pqz", "dex", "gov_router"] {
+        for kind in ["token", "zether", "pqz", "dex", "gov_router", "open_factory"] {
             let entries: Vec<&serde_json::Value> = AUDIT_KINDS.iter().filter(|(_, k)| *k == kind)
                 .flat_map(|(c, _)| audit[*c].as_array().unwrap_or_else(|| panic!("{c}"))).collect();
             let signed: HashSet<[u8; 4]> = entries.iter().filter(|r| r["class"] == "SIGNED").map(|r| sel(r["sig"].as_str().unwrap())).collect();
@@ -1715,15 +1728,22 @@ mod tests {
                     assert!(row(sel(s), k).is_none(), "{kind}: {s} ({}) is a {k} row", e["class"]);
                 }
                 let class = e["class"].as_str().unwrap();
-                governed += usize::from(class.starts_with("BIT") || class == "OWNER" || class == "HOLDER_OWN");
+                if class.starts_with("APPROVED") {
+                    // round 3r: the factory's open deploys (an approved release), each named with its reason
+                    let (name, args) = s.split_at(s.find('(').unwrap());
+                    assert!(NOT_ROWS.iter().any(|(n, a, _)| *n == name && args.starts_with(a)), "{kind}: {s} ({class}) not in NOT_ROWS");
+                    exempt += 1;
+                }
+                governed += usize::from(class.starts_with("BIT") || class == "ADMIN" || class == "HOLDER_OWN");
             }
         }
-        let creation = |s: &str| s.starts_with("mtxCreateToken(") || s.starts_with("mtxCreateDex(") || s.starts_with("mtxCreateInstance(");
+        let not_row = |s: &str| NOT_ROWS.iter().any(|(n, a, _)| s.strip_prefix(n).is_some_and(|x| x.starts_with(a)));
         let router: HashSet<[u8; 4]> = audit["GovernanceRouter"].as_array().unwrap().iter().filter(|r| r["class"] == "SIGNED")
-            .map(|r| r["sig"].as_str().unwrap()).filter(|s| !creation(s)).map(sel).collect();
+            .map(|r| r["sig"].as_str().unwrap()).filter(|s| !not_row(s)).map(sel).collect();
         // group 3f T45 / T47: 30 -> 33, the three verifier ops; group 3h T61: -> 34, `mtxSetProofStore` (bit 24); group 3l: -> 36,
         // `mtxSetWrapLimits`, `mtxSetWrapMember`
-        assert_eq!(router.len(), 36, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l); the three creations (T76) in NOT_ROWS");
+        // round 3r: -> 47, the eleven admin ops of the factory and the compliance registry (the four approvals in NOT_ROWS)
+        assert_eq!(router.len(), 47, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r); the three creations (T76) and the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -2030,13 +2050,16 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // group 3h T61: (257, 181, 241) -> (258, 181, 245): the router's `mtxSetProofStore` rowed; `setProofStore` governed (bit 24) on
     // each of the four PQZ kinds
     // group 3l: (258, 181, 245) -> (260, 181, 257): the router's `mtxSetWrapLimits`, `mtxSetWrapMember` rowed; the tokens'
-    // `setWrapLimits` (OWNER) and `setWrapMember` (BIT(26)) governed on each of the six wrapped kinds
+    // `setWrapLimits` (ADMIN) and `setWrapMember` (BIT(26)) governed on each of the six wrapped kinds
     // ua-mtx-liquidity L6: ROWED -> 261 (the DEX's `mtxLiquidity`), EXEMPT 181 -> 193 (`mtxLiquidityPull` on the twelve
     // kinds, NOT_ROWS)
-    const ROWED: usize = 261;
+    // round 3r (CTR-GOV-23): (261, 193, 257) -> (272, 200, 274), measured and counted from selector_audit.json: the router's
+    // eleven admin ops rowed; its four release approvals and `OpenFactory`'s three open deploys in NOT_ROWS; `OpenFactory`'s
+    // 17 `ADMIN` / `HOLDER_OWN` entries governed
+    const ROWED: usize = 272;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
-    const EXEMPT: usize = 193;
-    const GOVERNED: usize = 257;
+    const EXEMPT: usize = 200;
+    const GOVERNED: usize = 274;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {
@@ -2463,7 +2486,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                         let c = IOpenFactory::infoOfCall::abi_decode(&input).unwrap().c;
                         let (class, version) = listed(c);
                         Some(IOpenFactory::infoOfCall::abi_encode_returns(&IOpenFactory::Created { addr: if class == 0 { Address::ZERO } else { c },
-                            creatorId: B256::ZERO, ownerUA: B256::ZERO, contractClass: class, kind: 0, version, createdBlock: 1, createdAt: 1 }))
+                            creatorId: B256::ZERO, contractClass: class, kind: 0, version, createdBlock: 1, createdAt: 1 }))
                     }
                     "eth_call" if listed(to).0 != 0 => Some(vec![]),
                     "eth_call" => Some(uid.to_vec()),

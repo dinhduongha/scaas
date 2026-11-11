@@ -527,7 +527,7 @@ contract PqChatOnchain is OnchainBase {
 
     function _topic() internal {
         IPqChat.PqTopic memory t;
-        (t.owner, t.nonce, t.homeChain, t.homeChatContract, t.name, t.about, t.openReplies) =
+        (t.admin, t.nonce, t.homeChain, t.homeChatContract, t.name, t.about, t.openReplies) =
             (uas[0], uint64(uint256(_salt("topic")) >> 200), uid, address(chat), "onchain", bytes("matrix"), true);
         IUARegistry.UASig memory sg = _sigOf(0, h.topic(t));
         vm.broadcast(k2);

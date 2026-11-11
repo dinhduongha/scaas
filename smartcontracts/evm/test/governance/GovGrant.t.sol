@@ -12,6 +12,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
@@ -301,16 +302,16 @@ contract GovGrantTest is Test {
 
     function test_onlyDelegableGrants_andOnlyItsOwnLeaves() public {
         vm.prank(OFFICER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, OFFICER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, OFFICER));
         t.setGrant(MINT, nid(OFFICER2), _leafTerms(1));
         IGovernance.GrantTerms memory g = _open();
         _set(OFFICER, g); // limited, not delegable
         vm.prank(OFFICER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, OFFICER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, OFFICER));
         t.setGrant(MINT, nid(OFFICER2), _leafTerms(1));
         _manager(100);
         vm.prank(MANAGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, MANAGER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, MANAGER));
         t.setGrant(MINT, nid(OFFICER), _leafTerms(1)); // not its leaf
     }
 
@@ -331,7 +332,7 @@ contract GovGrantTest is Test {
         vm.prank(MANAGER);
         t.setGrant(MINT, nid(OFFICER), _leafTerms(60));
         vm.prank(OFFICER2);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, OFFICER2));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, OFFICER2));
         t.revokeRole(MINT, nid(OFFICER));
         vm.prank(MANAGER);
         t.revokeRole(MINT, nid(OFFICER));

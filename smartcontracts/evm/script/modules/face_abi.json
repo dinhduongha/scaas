@@ -1372,7 +1372,7 @@
      "inputs": [
       {
        "internalType": "address",
-       "name": "registry",
+       "name": "complianceRegistry",
        "type": "address"
       },
       {
@@ -1381,7 +1381,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "RegistryCodeMismatch",
+     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {
@@ -7117,7 +7117,7 @@
      "inputs": [
       {
        "internalType": "address",
-       "name": "registry",
+       "name": "complianceRegistry",
        "type": "address"
       },
       {
@@ -7126,7 +7126,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "RegistryCodeMismatch",
+     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {
@@ -11546,7 +11546,7 @@
      "inputs": [
       {
        "internalType": "address",
-       "name": "registry",
+       "name": "complianceRegistry",
        "type": "address"
       },
       {
@@ -11555,7 +11555,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "RegistryCodeMismatch",
+     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {
@@ -17305,7 +17305,7 @@
      "inputs": [
       {
        "internalType": "address",
-       "name": "registry",
+       "name": "complianceRegistry",
        "type": "address"
       },
       {
@@ -17314,7 +17314,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "RegistryCodeMismatch",
+     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {
@@ -24394,7 +24394,7 @@
      "inputs": [
       {
        "internalType": "address",
-       "name": "registry",
+       "name": "complianceRegistry",
        "type": "address"
       },
       {
@@ -24403,7 +24403,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "RegistryCodeMismatch",
+     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {
@@ -30167,7 +30167,7 @@
      "inputs": [
       {
        "internalType": "address",
-       "name": "registry",
+       "name": "complianceRegistry",
        "type": "address"
       },
       {
@@ -30176,7 +30176,7 @@
        "type": "bytes32"
       }
      ],
-     "name": "RegistryCodeMismatch",
+     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {

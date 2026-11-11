@@ -15,6 +15,7 @@ import {PqzSet, PQZ_ACC_WORDS} from "./PqzSet.sol";
 import {PqzVerifierRevoked} from "./IPqzToken.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
+import {IAdmin} from "../governance/IAdmin.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 
 /// @title init, shield, rollover, prepare-acc and the state views (the account state; D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
@@ -182,7 +183,7 @@ library PqzStateLib {
     /// @dev The admin first (a stranger learns nothing of the configuration), then an `OFFCHAIN` token with a transferable
     ///      verifier.
     function _admin(bytes32 caller, GovernanceLib.GovernanceStorage storage g) private view {
-        if (caller == 0 || caller != g.admin) revert IGovernance.NotAdmin(caller);
+        if (caller == 0 || caller != g.admin) revert IAdmin.NotAdmin(caller);
     }
 
     function _transferable(PqzCore.PqzStorage storage s) private view {

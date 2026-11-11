@@ -17,7 +17,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///        and holds the checks `F`, `P`, `R` as internal functions; each control is a thin stub that `DELEGATECALL`s
 ///        `RegulatedLib` with `_govSubject()` as a word. Each kind lists its base kind first and this second.
 /// @notice **UNAUDITED.** Plan T28: `F`, `P`, the pause-open set, the mirror sync, the views and FREEZE, RECORD, FORCE,
-///         PAUSE in `RegulatedLib`. Plan T29: `R` through the bounded `hasFlags` call, `canReceive`, `REGISTRY_CODEHASH`.
+///         PAUSE in `RegulatedLib`. Plan T29: `R` through the bounded `hasFlags` call, `canReceive`, `COMPLIANCE_REGISTRY_CODEHASH`.
 ///         Plan T32: `operatorTransfer` (bit 22, CTR-GOV-20). Bit 21 `MODERATE` has no body (owner 2026-11-05).
 abstract contract RegulatedBase is MetaTokenBase {
     /// @dev The bits the regulated kinds add to their base kind's `_validBits()` (spec §2.1, bit 22 CTR-GOV-20): 5-10, 21,
@@ -40,19 +40,21 @@ abstract contract RegulatedBase is MetaTokenBase {
     /// @dev The registry flag that satisfies any `requiredFlags`, never `deniedFlags` (CTR-AS-16).
     uint256 private constant ELIGIBLE_CONTRACT = 8;
 
-    /// @dev The registry call's gas cap (spec §5, Codex 4): at least twice the canonical `hasFlags` measured cold, pinned
-    ///      (`RegistryFailure.t.sol`). The margin covers the call's own cost (a cold account) before the 63/64 forward.
-    uint256 internal constant REGISTRY_GAS = 50_000;
-    uint256 internal constant REGISTRY_GAS_MARGIN = 5_000;
+    /// @dev The compliance registry call's gas cap (spec §5, Codex 4): at least twice the canonical `hasFlags` measured
+    ///      cold, pinned (`RegistryFailure.t.sol`). The margin covers the call's own cost (a cold account) before the 63/64
+    ///      forward.
+    uint256 internal constant COMPLIANCE_REGISTRY_GAS = 50_000;
+    uint256 internal constant COMPLIANCE_REGISTRY_GAS_MARGIN = 5_000;
 
     /// @notice The canonical `ComplianceRegistry` runtime's `extcodehash` (F-11), from the release's `implArgs`
-    ///         (`abi.encode(bytes32)`, not 0): `initialize` refuses a registry of any other code (`RegistryCodeMismatch`).
-    bytes32 public immutable REGISTRY_CODEHASH;
+    ///         (`abi.encode(bytes32)`, not 0): `initialize` refuses a registry of any other code
+    ///         (`ComplianceRegistryCodeMismatch`).
+    bytes32 public immutable COMPLIANCE_REGISTRY_CODEHASH;
 
     constructor(bytes memory implArgs) {
         bytes32 h = abi.decode(implArgs, (bytes32));
         if (h == 0) revert IRegulatedToken.RegulatedConfigInvalid();
-        REGISTRY_CODEHASH = h;
+        COMPLIANCE_REGISTRY_CODEHASH = h;
     }
 
     /// @dev Base | 6, 21, 22: each power passes the amount it acts on (B-09).
@@ -67,9 +69,10 @@ abstract contract RegulatedBase is MetaTokenBase {
         return GovernanceBits.ISSUER_BITS & ~((uint256(1) << GovernanceBits.TAX) | (uint256(1) << GovernanceBits.PQZ_PROOF));
     }
 
-    /// @dev `RegulatedLib.init` (spec §2.4) before the kind's own init, so before any mint.
+    /// @dev `RegulatedLib.init` (spec §2.4) before the kind's own init, so before any mint; with this clone's router, which
+    ///      the compliance registry's `govRouter()` must be 0 or equal to (round 3r, spec §5.3).
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        RegulatedLib.init(initArgs, _validBits(), REGISTRY_CODEHASH, _registry());
+        RegulatedLib.init(initArgs, _validBits(), COMPLIANCE_REGISTRY_CODEHASH, _registry(), _govRouter());
         bytes32 r = RegulatedLib.$().taxRecipient;
         if (r != 0) _eligible(r); // `R` at creation too (pay-meta-tax spec §6.2, B-5)
         super._initRaw(initArgs);
@@ -200,17 +203,17 @@ abstract contract RegulatedBase is MetaTokenBase {
     }
     function _isFrozenBody(bytes32 account) internal view returns (bool) { return RegulatedLib.frozen(account); }
 
-    /// @notice `R(account)` with its reason (spec §3.1): 1 not attested or flags missing, 2 expired, 3 attester disabled,
-    ///         4 denied; (true, 0) when it may receive, and with both lists off, without a call. Two bounded calls
-    ///         (`attestationOf`, `attesterEnabled`); `ok` equals `hasFlags` on the same masks.
+    /// @notice `R(account)` with its reason (spec §3.1): 1 not attested or flags missing, 2 expired, 3 KYC provider
+    ///         disabled, 4 denied; (true, 0) when it may receive, and with both lists off, without a call. Two bounded calls
+    ///         (`complianceOf`, `kycProviderEnabled`); `ok` equals `hasFlags` on the same masks.
     function _canReceiveBody(bytes32 account) internal view returns (bool ok, uint8 reason) {
         RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
         uint8 c = r.controls;
         if (c & RegulatedLib.C_LISTS == 0) return (true, 0);
         address reg = r.complianceRegistry;
-        uint256[3] memory a = _regCall(reg, abi.encodeCall(IComplianceRegistry.attestationOf, (account)), 96);
-        uint256 on = _regCall(reg, abi.encodeCall(IComplianceRegistry.attesterEnabled, (uint32(a[2]))), 32)[0];
-        if (on > 1) revert IRegulatedToken.RegistryUnavailable(reg);
+        uint256[3] memory a = _regCall(reg, abi.encodeCall(IComplianceRegistry.complianceOf, (account)), 96);
+        uint256 on = _regCall(reg, abi.encodeCall(IComplianceRegistry.kycProviderEnabled, (uint32(a[2]))), 32)[0];
+        if (on > 1) revert IRegulatedToken.ComplianceRegistryUnavailable(reg);
         bool active = on == 1 && a[1] >= block.timestamp;
         uint256 req = c & RegulatedLib.C_ALLOW != 0 ? r.requiredFlags : 0;
         if (req != 0 && !(active && (a[0] & req == req || a[0] & ELIGIBLE_CONTRACT != 0))) {
@@ -286,24 +289,27 @@ abstract contract RegulatedBase is MetaTokenBase {
         address reg = r.complianceRegistry;
         uint256 w = _regCall(reg, abi.encodeCall(IComplianceRegistry.hasFlags, (a,
             c & RegulatedLib.C_ALLOW != 0 ? r.requiredFlags : 0, c & RegulatedLib.C_DENY != 0 ? r.deniedFlags : 0)), 32)[0];
-        if (w > 1) revert IRegulatedToken.RegistryUnavailable(reg);
+        if (w > 1) revert IRegulatedToken.ComplianceRegistryUnavailable(reg);
         if (w == 0) revert IRegulatedToken.NotEligible(a, 0);
     }
 
     /// @dev The bounded call (spec §5, Codex 4, F-11): never through a Solidity interface. With less than
-    ///      `REGISTRY_GAS x 64/63 + margin` left the call is not made (`RegistryGasStarved`: a relayer cannot starve it into
-    ///      a failure); a `STATICCALL` with gas `REGISTRY_GAS` into a fixed buffer of `len` bytes; success iff the call
-    ///      succeeded and returned exactly `len` bytes, else `RegistryUnavailable`. A failure never means eligible.
+    ///      `COMPLIANCE_REGISTRY_GAS x 64/63 + margin` left the call is not made (`ComplianceRegistryGasStarved`: a relayer
+    ///      cannot starve it into a failure); a `STATICCALL` with gas `COMPLIANCE_REGISTRY_GAS` into a fixed buffer of `len`
+    ///      bytes; success iff the call succeeded and returned exactly `len` bytes, else `ComplianceRegistryUnavailable`. A
+    ///      failure never means eligible.
     function _regCall(address reg, bytes memory cd, uint256 len) private view returns (uint256[3] memory out) {
         uint256 left = gasleft();
-        if (left < REGISTRY_GAS * 64 / 63 + REGISTRY_GAS_MARGIN) revert IRegulatedToken.RegistryGasStarved(REGISTRY_GAS, left);
+        if (left < COMPLIANCE_REGISTRY_GAS * 64 / 63 + COMPLIANCE_REGISTRY_GAS_MARGIN) {
+            revert IRegulatedToken.ComplianceRegistryGasStarved(COMPLIANCE_REGISTRY_GAS, left);
+        }
         bool ok;
         uint256 size;
         assembly ("memory-safe") {
-            ok := staticcall(REGISTRY_GAS, reg, add(cd, 0x20), mload(cd), out, len)
+            ok := staticcall(COMPLIANCE_REGISTRY_GAS, reg, add(cd, 0x20), mload(cd), out, len)
             size := returndatasize()
         }
-        if (!ok || size != len) revert IRegulatedToken.RegistryUnavailable(reg);
+        if (!ok || size != len) revert IRegulatedToken.ComplianceRegistryUnavailable(reg);
     }
 
     /// @dev Clears `bit` in the mirror when it is one of 5-10, once the disable applied (Codex 3, I12).

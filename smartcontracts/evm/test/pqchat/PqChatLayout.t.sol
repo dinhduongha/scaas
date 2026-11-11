@@ -4,11 +4,11 @@ pragma solidity ^0.8.24;
 import {stdJson} from "forge-std/StdJson.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {PqChatTypes} from "../../src/pqchat/PqChatTypes.sol";
-import {PqChatBase} from "./PqChatBase.sol";
+import {PqTopicsBase} from "./PqTopicsBase.sol";
 
 /// Plan 3c T85: `PqChat`'s storage is the ERC-7201 namespace `scaas.pqchat` only (no plain slot: `test/v2/layout/PqChat.json`
 /// is empty), each field at its pinned slot inside it, read with `vm.load` after a write through the entries.
-contract PqChatLayoutTest is PqChatBase {
+contract PqChatLayoutTest is PqTopicsBase {
     using stdJson for string;
 
     function _root() internal pure returns (uint256) {
@@ -69,5 +69,16 @@ contract PqChatLayoutTest is PqChatBase {
         assertEq(_at(e + 2), 3 | 1 << 32 | 1 << 40, "landed 3, home, removed 1");
         assertEq(_at(_map(ids[2], e + 6)), 1, "removedOf");
         assertEq(_at(_map(sid, r + 21)), 1, "removals: one record");
+    }
+
+    /// Round 3r R3 (spec 2026-11-10-admin-not-owner.md §4.4): the topic's `admin` at +0 of `topics[tid]` (+7) and the
+    /// list `topicsByAdmin` at +14, the slots of `owner` and `topicsByOwner` before the rename (labels only).
+    function test_topicAdminFieldsArePinned() public {
+        uint256 r = _root();
+        bytes32 tid = _newTopic(true);
+        assertEq(bytes32(_at(_map(tid, r + 7))), ids[0], "Topic.admin at +0");
+        uint256 l = _map(ids[0], r + 14);
+        assertEq(_at(l), 1, "topicsByAdmin[admin]: one topic");
+        assertEq(bytes32(_at(uint256(keccak256(abi.encode(l))))), tid, "topicsByAdmin[admin][0]");
     }
 }

@@ -83,15 +83,15 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
             type(WrappedZetherRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
         vm.stopPrank();
         issuer = address(new Holder());
         compliance = address(new Holder());
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(cadmin);
+        creg = new ComplianceRegistry(nid(cadmin), address(0));
         vm.prank(cadmin);
-        creg.setAttester(attester, true);
+        creg.setKycProvider(nid(attester), true);
         usd = new MockERC20("USD", "USD", 6);
         _users();
         dave = _user(0xDA7E, address(0xD4));
@@ -161,7 +161,7 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         uint64[] memory vu = new uint64[](1);
         (as_[0], fl[0], vu[0]) = (a, SANCTIONED, type(uint64).max);
         vm.prank(attester);
-        creg.attest(as_, fl, vu);
+        creg.setCompliance(as_, fl, vu);
     }
 
     /// `alice` holds `b` shielded units in `acc`.

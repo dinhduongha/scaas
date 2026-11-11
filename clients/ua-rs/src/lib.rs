@@ -498,3 +498,5 @@ pub fn encode_msig(threshold: u16, members: &[(u16, [u8; 32], u16)]) -> Vec<u8> 
 pub mod regulated;
 pub mod pay;
 pub mod wraplimit;
+/// Round 3r: the router's 18 admin ops and the factory's release approval keys (CTR-GOV-23).
+pub mod admin;

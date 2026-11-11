@@ -109,6 +109,8 @@ const NESTED: &[(&str, &str)] = &[
     // group 3l (wrap limits spec 2026-11-10 §6, §9): a leg's limits, the router's `UASetWrapLimits` takes an array of them
     ("WrapLimit", "uint24 perUser,uint64 tokenWide,uint32 period"),
     ("WrapLegLimits", "address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong"),
+    // round 3r (spec 2026-11-10-admin-not-owner.md §5.4): a release env, the router's three publishes take one (bounded below)
+    ("Env", "address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes"),
     // `IPqChat`'s records (UA-7 spec §4.1, topics spec §2), by the contract's field names; `Wrap` here is a member's key wrap, not
     // the op of that name
     ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
@@ -118,7 +120,7 @@ const NESTED: &[(&str, &str)] = &[
     ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
     ("PqChatRemove", "bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
     ("PqChatMessage", "bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext"),
-    ("PqTopic", "bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies"),
+    ("PqTopic", "bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies"),
     ("PqTopicUpdate", "bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies"),
     ("PqTopicWriter", "bytes32 topicId,bytes32 writer,bool granted,uint64 seq"),
     ("EntryRef", "bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash"),
@@ -204,9 +206,9 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
     ("UACancelGrant", "mtxCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
     ("UADisableFeature", "mtxDisableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
-    ("UATransferOwnership", "mtxTransferOwnership", GR, "bytes32 from,address target,bytes32 newOwner,E", ""),
-    ("UAAcceptOwnership", "mtxAcceptOwnership", GR, "bytes32 from,address target,E", ""),
-    ("UARenounceOwnership", "mtxRenounceOwnership", GR, "bytes32 from,address target,E", ""),
+    ("UATransferAdmin", "mtxTransferAdmin", GR, "bytes32 from,address target,bytes32 newAdmin,E", ""),
+    ("UAAcceptAdmin", "mtxAcceptAdmin", GR, "bytes32 from,address target,E", ""),
+    ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,E", ""),
     ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
     ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
     ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),
@@ -241,6 +243,20 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds and bit 26's membership
     ("UASetWrapLimits", "mtxSetWrapLimits", GR, "bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,E", ""),
     ("UASetWrapMember", "mtxSetWrapMember", GR, "bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,E", ""),
+    // round 3r (CTR-GOV-23, spec §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its envs, deprecations, kind
+    // switches, directory) and of a `ComplianceRegistry` (its KYC providers, the rows); the four release approvals are no row
+    // (release management is not a node job, owner 2026-11-10)
+    ("UAPublishTokenEnv", "mtxPublishTokenEnv", GR, "bytes32 from,address target,uint8 kind,uint16 envVersion,Env env,E", ""),
+    ("UAPublishDexEnv", "mtxPublishDexEnv", GR, "bytes32 from,address target,uint16 envVersion,Env env,E", ""),
+    ("UAPublishClassEnv", "mtxPublishClassEnv", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint16 envVersion,Env env,E", ""),
+    ("UADeprecateToken", "mtxDeprecateToken", GR, "bytes32 from,address target,uint8 kind,uint64 version,string reason,E", ""),
+    ("UADeprecateDex", "mtxDeprecateDex", GR, "bytes32 from,address target,uint64 version,string reason,E", ""),
+    ("UADeprecateRelease", "mtxDeprecateRelease", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,string reason,E", ""),
+    ("UASetTokenKindEnabled", "mtxSetTokenKindEnabled", GR, "bytes32 from,address target,uint8 kind,bool on,E", ""),
+    ("UASetClassKindEnabled", "mtxSetClassKindEnabled", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,E", ""),
+    ("UASetKycProvider", "mtxSetKycProvider", GR, "bytes32 from,address target,bytes32 provider,bool enabled,E", ""),
+    ("UASetCompliance", "mtxSetCompliance", GR, "bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,E", ""),
+    ("UASetChainEntries", "mtxSetChainEntries", GR, "bytes32 from,address target,address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
     ("UAInvalidateNonces", "mtxInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -539,6 +555,7 @@ fn word(ty: &str, v: &Val) -> B256 {
     }
     match v {
         Val::Bytes(b) => keccak256(b),
+        Val::String(t) => keccak256(t.as_bytes()), // EIP-712: a string by its bytes' keccak (round 3r's `reason`)
         other => B256::from_slice(&other.abi_encode()),
     }
 }
@@ -569,6 +586,42 @@ fn hash_tuple(name: &str, fields: &[(String, String)], vals: &[Val]) -> B256 {
 const MSIG_MAX_SLOTS: usize = 16;
 /// C9 (spec 2026-11-10-dex-liquidity.md §4.1, §11): at most eight inputs, eight outputs and eight extra tokens per liquidity plan.
 const LIQUIDITY_MAX: usize = 8;
+/// Round 3r (spec §5.4, Fable P3): an `Env`'s bounds, the factory's (`ChainEnvCode.MAX_DEPS`, `MAX_PARAMS`, `MAX_LIBS`), and a
+/// `UASetCompliance`'s rows (the registry's `TooManyRows`, spec §5.3.1), so the node and the contract refuse the same.
+const ENV_MAX_DEPS: usize = 4;
+const ENV_MAX_PARAMS: usize = 2;
+const ENV_MAX_LIBS: usize = 32;
+const COMPLIANCE_MAX_ROWS: usize = 256;
+
+fn arr_len(v: &Val) -> usize {
+    match v {
+        Val::Array(a) => a.len(),
+        _ => usize::MAX,
+    }
+}
+
+/// An `Env` (fields in declaration order: `registry, smartKeyAccountImpl, hedera, deps, params, libs, libCodeHashes`).
+fn env_bounds(t: &[Val], path: &str) -> Result<()> {
+    if arr_len(&t[3]) > ENV_MAX_DEPS {
+        bail!("BAD_PAYLOAD: {path}.deps: more than {ENV_MAX_DEPS}");
+    }
+    if arr_len(&t[4]) > ENV_MAX_PARAMS {
+        bail!("BAD_PAYLOAD: {path}.params: more than {ENV_MAX_PARAMS}");
+    }
+    if arr_len(&t[5]) > ENV_MAX_LIBS || arr_len(&t[5]) != arr_len(&t[6]) {
+        bail!("BAD_PAYLOAD: {path}.libs: at most {ENV_MAX_LIBS}, one libCodeHashes each");
+    }
+    Ok(())
+}
+
+/// A `UASetCompliance`'s three arrays: one length, at most 256.
+fn compliance_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let n: Vec<usize> = ["accounts", "flags", "until"].iter().map(|k| pos(fields, k).map_or(usize::MAX, |i| arr_len(&vals[i]))).collect();
+    if n[0] > COMPLIANCE_MAX_ROWS || n.iter().any(|x| *x != n[0]) {
+        bail!("BAD_PAYLOAD: args.accounts: at most {COMPLIANCE_MAX_ROWS} rows, one flags and one until each");
+    }
+    Ok(())
+}
 
 fn fixed(v: &[u8]) -> Val {
     let mut w = B256::ZERO;
@@ -602,6 +655,9 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
         let t = take(f, o, path)?;
         if ty == "LiquidityPlan" {
             liquidity_plan(&t, path)?;
+        }
+        if ty == "Env" {
+            env_bounds(&t, path)?;
         }
         return Ok(Val::Tuple(t));
     }
@@ -933,6 +989,9 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
         let (src, p) = if in_env(n) { (e.get(n), "envelope") } else { (a.get(n), "args") };
         let p = format!("{p}.{n}");
         vals.push(parse(ty, src.ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?);
+    }
+    if row.name == "UASetCompliance" {
+        compliance_bounds(&row.fields, &vals)?;
     }
     if row.typed {
         normalize(&row.fields, &mut vals, fee_recipient)?;
@@ -1417,7 +1476,9 @@ pub mod testkit {
     /// ua-mtx-merge T76: the router's three creations have vector rows and no node row (chain-neutral spec §6.3: only when
     /// relaying creations is decided, index spec §8.11 Q11; the guard test names them in `NOT_ROWS`). Every walker over the
     /// vector sees the rows the node builds; the three must be in the file.
-    pub const NO_NODE_ROW: [&str; 3] = ["UACreateToken", "UACreateDex", "UACreateInstance"];
+    /// Round 3r (spec §5.6, Q3): the four release approvals too (release management is not a node job, owner 2026-11-10).
+    pub const NO_NODE_ROW: [&str; 7] = ["UACreateToken", "UACreateDex", "UACreateInstance", "UAApproveTokenRelease",
+        "UAApproveDexRelease", "UAApproveRelease", "UARevokeApproval"];
 
     /// Group 3f: the six PQZ debit rows, each taking the node-built `PqzSignedVerdict` last (spec §5.3).
     pub const PQZ_DEBITS: [&str; 6] = ["UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact",
@@ -1627,14 +1688,16 @@ mod tests {
         // group 3g T54 / T55: -> (80, 114, 113), the rollover's two domains on two rows (`UARollOver` Zether, `UAPqzRollOver` PQZ)
         // group 3f T46 / T47: -> (83, 117, 116), the router's three verifier ops (`UAPqz{Set,Cancel,Revoke}Verifier`)
         // group 3h T61: -> (84, 118, 117), the router's `UASetProofStore` (bit 24); group 3l: -> (86, 120, 119), the router's
-        // `UASetWrapLimits`, `UASetWrapMember`
-        assert_eq!((structs, domains, calldata), (86, 120, 119), "every row was walked (the three creations left out by vectors())");
+        // `UASetWrapLimits`, `UASetWrapMember`; round 3r (CTR-GOV-23): -> (97, 131, 130), the router's eleven admin rows (the
+        // four release approvals, like the creations, left out by vectors())
+        assert_eq!((structs, domains, calldata), (97, 131, 130), "every row was walked (the creations and approvals left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
         // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`; group 3l: -> 89, the
         // router's `UASetWrapLimits`, `UASetWrapMember`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 89, "86 vector rows, mtxPay, the two invalidations (DEX, token)");
+        // round 3r (CTR-GOV-23): -> 100, the router's eleven admin rows
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 100, "97 vector rows, mtxPay, the two invalidations (DEX, token)");
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 32, "the wallet's three flat builders are gone (MD-11 (a))");
@@ -1834,6 +1897,44 @@ mod tests {
         assert_eq!(row_of("UAOperatorTransfer", "gov_router").fields[2], ("bytes32".into(), "account".into()));
     }
 
+    /// Round 3r (spec §5.4, Fable P3): the node refuses what the factory and the registry refuse: an `Env` of more than 4 deps,
+    /// 2 params or 32 libs, or libs and code hashes of two lengths; `UASetCompliance` arrays of two lengths or over 256.
+    #[test]
+    fn admin_decode_bounds() {
+        let a = |n: usize| Value::Array((0..n).map(|i| json!(format!("0x{:040x}", i + 1))).collect());
+        let h = |n: usize| Value::Array((0..n).map(|i| json!(format!("0x{:064x}", i + 1))).collect());
+        let env = |d: usize, p: usize, l: usize, c: usize| json!({"registry": format!("0x{:040x}", 0), "smartKeyAccountImpl":
+            format!("0x{:040x}", 0), "hedera": false, "deps": a(d), "params": h(p), "libs": a(l), "libCodeHashes": h(c)});
+        assert!(parse("Env", &env(4, 2, 32, 32), "env").is_ok(), "the bounds themselves pass");
+        for (bad, what) in [(env(5, 2, 1, 1), "deps"), (env(1, 3, 1, 1), "params"), (env(1, 1, 33, 33), "libs"), (env(1, 1, 2, 1), "libs")] {
+            let e = parse("Env", &bad, "env").unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD") && e.contains(what), "{e}");
+        }
+        let f: Vec<(String, String)> = [("bytes32[]", "accounts"), ("uint64[]", "flags"), ("uint64[]", "until")].iter()
+            .map(|(t, n)| (t.to_string(), n.to_string())).collect();
+        let arr = |n: usize| Val::Array(vec![Val::Uint(U256::ZERO, 64); n]);
+        assert!(compliance_bounds(&f, &[arr(256), arr(256), arr(256)]).is_ok());
+        assert!(compliance_bounds(&f, &[arr(257), arr(257), arr(257)]).is_err());
+        assert!(compliance_bounds(&f, &[arr(2), arr(1), arr(2)]).is_err());
+    }
+
+    /// Round 3r (spec §5.4, §7): the router's admin rows are the ops `scaas_ua::admin` signs, each way: the same type string,
+    /// the entry `mtx<Op>` on `gov_router` alone; the four release approvals are `scaas_ua::admin` ops and no row.
+    #[test]
+    fn router_admin_rows() {
+        use scaas_ua::admin::{type_string as ua_type, ADMIN_OPS};
+        for (op, _) in ADMIN_OPS {
+            if NO_NODE_ROW.contains(&op) {
+                assert!(rows().iter().all(|r| r.name != op), "{op}: release management is not a node job");
+                continue;
+            }
+            let r = row_of(op, "gov_router");
+            assert_eq!(r.type_string(), ua_type(op).unwrap(), "{op}");
+            assert_eq!(r.entry, format!("mtx{}", &op[2..]), "{op}");
+            assert_eq!(r.contracts, ["gov_router"], "{op}: the router's alone");
+        }
+    }
+
     /// The selectors a list of `MandateWallet.sol` names, read from its source (T66b: `mtxSelectors` answers from its body
     /// `_mtxSelectorsBody`, which the wallet overrides): `X.selector` (its last segment) and the `_REVOKE_*`
     /// constants, in the body of `function <f>` (to its closing brace at four spaces).
@@ -1937,6 +2038,7 @@ mod tests {
                     json!(c.into_iter().collect::<String>())
                 }
                 Value::String(s) if s == "0x" => json!("0x00"),
+                Value::String(s) if uint(s).is_err() => json!(format!("{s}.")), // a `string` (round 3r's `reason`)
                 Value::String(s) => json!(uint(s).unwrap().saturating_add(U256::from(1)).to_string()),
                 x => x.clone(),
             }
@@ -2540,6 +2642,6 @@ mod tests {
         }
         assert_eq!(n, 14);
         assert_eq!(format!("{:#x}", keccak256(th("PqChatSession"))), "0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d");
-        assert_eq!(format!("{:#x}", keccak256(th("PqTopic"))), "0x75bed97bd08d9acabb9129fcd4953224878dd1dcfd40b822cb4dc8df462e1623");
+        assert_eq!(format!("{:#x}", keccak256(th("PqTopic"))), "0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e"); // 3r: `admin`
     }
 }

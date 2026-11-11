@@ -40,7 +40,9 @@ contract ChainNeutralKindsTest is Test {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         ureg = new StubUARegistry(UID_);
-        router = new GovernanceRouter(UID_, address(ureg), address(0), false);
+        // the router and its registry name one SmartKeyAccount implementation, 0xBEEF, the DEX env's (spec §13.4)
+        ureg.setSmartKeyCloneHash(EnvKit.cloneHash(address(0xBEEF)));
+        router = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false);
         f = EnvKit.factory(registrar, UID_, 0, address(router));
         impl = NormalToken(Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg),
             address(0), false));

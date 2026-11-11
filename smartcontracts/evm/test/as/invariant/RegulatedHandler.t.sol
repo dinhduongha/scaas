@@ -17,6 +17,7 @@ import {PqzRegFixture} from "../confidential/PqzRegFixture.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IGovernance} from "../../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../../src/governance/IAdmin.sol";
 import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
 import {MetaTokenBase} from "../../../src/metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../../../src/metatx/ERC20MetaTx.sol";
@@ -65,7 +66,7 @@ abstract contract RegCore is Test {
     bytes32 internal constant SHP = bytes32(uint256(uint160(MetaTxLib.SHIELD_POOL)));
     // keccak256(abi.encode(uint256(keccak256("scaas.governance")) - 1)) & ~bytes32(uint256(0xff)) (GovernanceLib._STORAGE)
     uint256 internal constant GOV_SLOT = 0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700;
-    uint256 internal constant REG_GAS = 50_000; // RegulatedBase.REGISTRY_GAS
+    uint256 internal constant REG_GAS = 50_000; // RegulatedBase.COMPLIANCE_REGISTRY_GAS
     bytes32 internal constant CREF = bytes32(uint256(0xC0FFEE));
 
     address internal cT;
@@ -272,7 +273,7 @@ abstract contract RegCore is Test {
                 gPauseEnd = until;
             } else if (s == IRegulatedToken.Unpaused.selector) {
                 gPauseEnd = uint64(block.timestamp);
-            } else if (s == IGovernance.AdminTransferred.selector) {
+            } else if (s == IAdmin.AdminTransferred.selector) {
                 ++cGen;
             } else if (s == IGovernance.RelaxProposed.selector) {
                 (uint8 action, bytes32 proposer, uint64 eta) = abi.decode(l.data, (uint8, bytes32, uint64));
@@ -551,8 +552,8 @@ abstract contract RegCore is Test {
     /// The owner hands over to the other owner (`acceptAdmin` kills every pending, Codex 2).
     function handover() external {
         address next = cGov[1 - cOwner];
-        _op(K_GOV, _owner(), abi.encodeCall(IGovernance.transferAdmin, (nid(next))));
-        if (_op(K_GOV, next, abi.encodeCall(IGovernance.acceptAdmin, ()))) cOwner = 1 - cOwner;
+        _op(K_GOV, _owner(), abi.encodeCall(IAdmin.transferAdmin, (nid(next))));
+        if (_op(K_GOV, next, abi.encodeCall(IAdmin.acceptAdmin, ()))) cOwner = 1 - cOwner;
     }
 
     function attest(uint256 i, uint256 how) external {
@@ -566,7 +567,7 @@ abstract contract RegCore is Test {
         (as_[0], f_[0], v_[0]) = (a, fl, vu);
         _pre();
         vm.prank(how == 3 ? cAdmin : cAttester); // ELIGIBLE_CONTRACT: the admin's, a contract's only (CTR-AS-16)
-        (bool ok, bytes memory ret) = address(cReg).call(abi.encodeCall(ComplianceRegistry.attest, (as_, f_, v_)));
+        (bool ok, bytes memory ret) = address(cReg).call(abi.encodeCall(ComplianceRegistry.setCompliance, (as_, f_, v_)));
         _post(K_REG, ok, ret, 0);
     }
 

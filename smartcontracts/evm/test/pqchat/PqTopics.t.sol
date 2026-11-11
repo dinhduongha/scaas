@@ -16,9 +16,9 @@ contract PqTopicsTest is PqTopicsBase {
     function test_topics_writersPost() public {
         bytes32 t = _newTopic(true);
         (IPqChat.PqTopic memory got, uint64 seq) = chat.topicOf(t);
-        assertEq(got.owner, ids[0]);
+        assertEq(got.admin, ids[0]);
         assertEq(seq, 0);
-        bytes32 p0 = _post(chat, t, ids[0], 1, 0); // the owner
+        bytes32 p0 = _post(chat, t, ids[0], 1, 0); // the admin
         _refusedPost(chat, _entryRec(t, ids[1], 1, 0, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[1]));
         _grant(chat, t, ids[0], ids[1], true, 1);
         bytes32 p1 = _post(chat, t, ids[1], 1, 0); // a granted writer
@@ -32,7 +32,7 @@ contract PqTopicsTest is PqTopicsBase {
     }
 
     // 2. writer records
-    function test_topics_writerSeqAndOwner() public {
+    function test_topics_writerSeqAndAdmin() public {
         bytes32 t = _newTopic(true);
         IPqChat.PqTopicWriter memory w = IPqChat.PqTopicWriter(t, ids[1], true, 2);
         IUARegistry.UASig memory sig = _sig(ids[0], h.topicWriter(w));
@@ -40,8 +40,8 @@ contract PqTopicsTest is PqTopicsBase {
         chat.setTopicWriter(w, sig); // skipped
         w.seq = 1;
         sig = _sig(ids[1], h.topicWriter(w));
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqTopicNotOwner.selector, ids[0]));
-        chat.setTopicWriter(w, sig); // not the owner's signature
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqTopicNotAdmin.selector, ids[0]));
+        chat.setTopicWriter(w, sig); // not the admin's signature
         _grant(chat, t, ids[0], ids[1], true, 1);
         sig = _sig(ids[0], h.topicWriter(w));
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqTopicSeq.selector, uint64(2), uint64(1)));
@@ -53,7 +53,7 @@ contract PqTopicsTest is PqTopicsBase {
         assertEq(s, 3);
         (, uint256 n) = chat.writersOf(t, 0, 0);
         assertEq(n, 1, "listed at its first record only");
-        // the owner as a writer
+        // the admin as a writer
         w = IPqChat.PqTopicWriter(t, ids[0], true, 1);
         sig = _sig(ids[0], h.topicWriter(w));
         vm.expectRevert(IPqChat.PqTopicShape.selector);
@@ -61,12 +61,12 @@ contract PqTopicsTest is PqTopicsBase {
     }
 
     /// The instance's owner UA has no power over a topic (Q2).
-    function test_topics_instanceOwnerIsNoTopicOwner() public {
+    function test_topics_instanceOwnerIsNoTopicAdmin() public {
         PqChat c = _instance("owned", ids[4]);
         bytes32 t = _createTopic(c, _topicRec(ids[0], 1, true));
         IPqChat.PqTopicWriter memory w = IPqChat.PqTopicWriter(t, ids[1], true, 1);
         IUARegistry.UASig memory sig = _sig(ids[4], h.topicWriter(w));
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqTopicNotOwner.selector, ids[0]));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqTopicNotAdmin.selector, ids[0]));
         c.setTopicWriter(w, sig);
         _refusedPost(c, _entryRec(t, ids[4], 1, 0, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[4]));
     }
@@ -124,7 +124,7 @@ contract PqTopicsTest is PqTopicsBase {
         (, bytes memory b2,) = chat.versionAt(r, 2);
         assertEq(b1, bytes("a *post*"));
         assertEq(b2, abi.encodePacked("edit ", uint8(2)));
-        IPqChat.PqTopicEdit memory d = _editRec(r, ids[0], 1, 4); // the topic owner, not the author
+        IPqChat.PqTopicEdit memory d = _editRec(r, ids[0], 1, 4); // the topic admin, not the author
         IUARegistry.UASig memory sig = _sig(ids[0], h.edit(d));
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqTopicNotAuthor.selector, ids[0]));
         chat.editEntry(d, sig);
@@ -244,7 +244,7 @@ contract PqTopicsTest is PqTopicsBase {
         bytes32 a = _post(chat, t1, ids[0], 1, 0);
         bytes32 b = _post(chat, t2, ids[0], 1, 0);
         bytes32 c = _post(chat, t3, ids[1], 1, 0);
-        _post(chat, t3, ids[0], 2, c); // a reply by ids[0] in another owner's topic
+        _post(chat, t3, ids[0], 2, c); // a reply by ids[0] in another admin's topic
         (bytes32[] memory l, uint256 n) = chat.topics(0, 10);
         assertEq(n, 3);
         assertEq(l.length, 3);
@@ -257,7 +257,7 @@ contract PqTopicsTest is PqTopicsBase {
         assertEq(n, 3);
         (l,) = chat.topics(9, 5);
         assertEq(l.length, 0, "start past the end");
-        (l, n) = chat.topicsByOwner(ids[0], 0, 10);
+        (l, n) = chat.topicsByAdmin(ids[0], 0, 10);
         assertEq(n, 2);
         assertEq(l[1], t2);
         (l, n) = chat.byAuthor(ids[0], 0, 10);
@@ -284,8 +284,8 @@ contract PqTopicsTest is PqTopicsBase {
         assertEq(_postRec(chatB, re), r);
     }
 
-    // 10. msig owner, type separation
-    function test_topics_msigOwnerAndTypeSeparation() public {
+    // 10. msig admin, type separation
+    function test_topics_msigAdminAndTypeSeparation() public {
         _register(p, 0x0101, _key(0x0101));
         _register(p, 0x0102, _key(0x0102));
         (uint16 lo, uint16 hi) = UAKinds.uaOf(0x0101, _key(0x0101)) < UAKinds.uaOf(0x0102, _key(0x0102))

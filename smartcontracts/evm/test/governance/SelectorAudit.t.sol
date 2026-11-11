@@ -31,11 +31,12 @@ import {WrappedRegulatedToken} from "../../src/regulated/WrappedRegulatedToken.s
 import {regArgs} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 
 /// governance T13, the selector audit (spec §10.1; CTR-GOV-11; GD-6). Every external that writes state on the six kinds,
 /// `SCaaSDex`, `DexPuller` and `GovernanceRouter`, read from its ABI in `FOUNDRY_OUT` (else `./out`), is a row of
 /// `test/vectors/selector_audit.json` with one class: `BIT(n)`, `ADMIN`, `HOLDER_OWN`, `OWN_BALANCE`, `SIGNED`, `FACTORY`,
-/// `PERMISSIONLESS(reason)`. An unclassified or moved selector fails. The sentence it pins: no entry point moves, freezes or
+/// `PERMISSIONLESS(reason)`, `APPROVED(reason)` (round 3r: `OpenFactory`'s release deploys). An unclassified or moved selector fails. The sentence it pins: no entry point moves, freezes or
 /// pauses a balance its caller does not own unless gated by a feature bit. Each class is checked by behaviour, a stranger
 /// calling every row with zero arguments on a live instance (features on, owner and holders set, the stranger none of
 /// them): a `BIT`, `ADMIN`, `HOLDER_OWN` or `FACTORY` row reverts with its named error, the refused subject the stranger's
@@ -153,6 +154,8 @@ abstract contract SelectorAuditRows is Test {
 
     function _known(string memory c) internal pure returns (bool) {
         if (_named(c) || _eq(c, "OWN_BALANCE") || _eq(c, "SIGNED")) return true;
+        // round 3r (spec 2026-11-10-admin-not-owner.md §5.6, §7): `APPROVED(reason)`, anyone against the admin's approval
+        if (_starts(c, "APPROVED(")) return bytes(c).length > 10 && bytes(c)[bytes(c).length - 1] == ")";
         return _starts(c, "PERMISSIONLESS(") && bytes(c).length > 16 && bytes(c)[bytes(c).length - 1] == ")";
     }
 
@@ -319,6 +322,7 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
     SCaaSDex internal dex;
     NormalRegulatedToken internal nr;
     WrappedRegulatedToken internal wr;
+    OpenFactory internal fac; // round 3r: the test its admin, configured (no router)
 
     /// The test is the factory of every clone and registered no token.
     function isToken(address) external pure returns (bool) { return false; }
@@ -345,6 +349,9 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         _regulate(w);
         wr = WrappedRegulatedToken(payable(EnvKit.clone(address(new WrappedRegulatedToken(address(this), kindArgs(9, address(this), regArgs()))), e)));
         wr.initialize(nid(address(this)), 1, abi.encode(w));
+        fac = new OpenFactory(nid(address(this)));
+        EnvKit.genesis(chainUidA);
+        fac.configureChain(chainUidA, 0, address(0), bytes32(0), 0, bytes32(0));
     }
 
     /// The regulated controls on (5, 6, 7, 10, 22, 23): the issuer the test, the compliance holder another contract; bit 22
@@ -360,12 +367,13 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
     }
 
     function test_everySelectorIsClassified() public {
-        string[15] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+        string[16] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
             "WrappedPqzToken", "SCaaSDex", "DexPuller", "GovernanceRouter", "NormalRegulatedToken", "WrappedRegulatedToken",
-            "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
+            "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken",
+            "OpenFactory"];
         uint256 bad;
         for (uint256 i; i < all.length; ++i) bad += _classified(all[i]);
-        assertEq(bad, 0, "every non-view external of the fifteen has exactly one pinned row");
+        assertEq(bad, 0, "every non-view external of the sixteen has exactly one pinned row");
     }
 
     function test_strangerRevertsOnEveryGatedRow() public {
@@ -376,6 +384,7 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         _stranger("GovernanceRouter", address(router));
         _stranger("NormalRegulatedToken", address(nr));
         _stranger("WrappedRegulatedToken", address(wr));
+        _stranger("OpenFactory", address(fac));
     }
 
     function test_noGovernanceSelectorIsRelayable() public {

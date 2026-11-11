@@ -12,6 +12,7 @@ import {IUALedger} from "./IUALedger.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
+import {IAdmin} from "../governance/IAdmin.sol";
 import {IRescuable} from "../governance/IRescuable.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -852,7 +853,7 @@ library WrappedLib {
         private view returns (bool has25)
     {
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
-        if (caller == 0 || caller != g.admin) revert IGovernance.NotAdmin(caller);
+        if (caller == 0 || caller != g.admin) revert IAdmin.NotAdmin(caller);
         if (n != $().legCount) revert IWrappedToken.WrapLegMismatch(n, address(0));
         has25 = g.features & (uint256(1) << GovernanceBits.WRAP_LIMIT) != 0;
         if (netUnwrap && !has25) revert IGovernance.FeatureNotSet(GovernanceBits.WRAP_LIMIT);

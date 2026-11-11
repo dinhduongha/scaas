@@ -70,9 +70,9 @@ contract RegulatedSkeletonTest is PqzFixture {
         w5 = WrappedPqzToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, pqz,
             type(WrappedPqzToken).creationCode)));
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
         vm.stopPrank();
     }
 
@@ -154,13 +154,13 @@ contract RegulatedSkeletonTest is PqzFixture {
 
         // plan T29: DENYLIST (9) on kind 13 with the canonical registry creates; another code is refused at init
         c = _wrappedCfg();
-        ComplianceRegistry creg = new ComplianceRegistry(address(new SkeletonIssuer()));
+        ComplianceRegistry creg = new ComplianceRegistry(bytes32(uint256(uint160(address(new SkeletonIssuer())))), address(0));
         c.features |= 1 << 9;
         (c.reg.deniedFlags, c.reg.complianceRegistry, c.reg.termsHash) = (4, address(creg), keccak256("terms"));
         address t13 = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13c");
         assertEq(IRegulatedToken(t13).regulatedConfig().complianceRegistry, address(creg));
         c.reg.complianceRegistry = address(factory);
-        vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.RegistryCodeMismatch.selector, address(factory),
+        vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryCodeMismatch.selector, address(factory),
             address(factory).codehash));
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13d");
     }

@@ -46,7 +46,7 @@ export const TYPE_STRINGS = Object.freeze({
   PqChatRemove: 'PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)',
   PqChatMessage: 'PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,'
     + 'bytes ciphertext)',
-  PqTopic: 'PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)',
+  PqTopic: 'PqTopic(bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)',
   PqTopicUpdate: 'PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)',
   PqTopicWriter: 'PqTopicWriter(bytes32 topicId,bytes32 writer,bool granted,uint64 seq)',
   PqTopicEntry: 'PqTopicEntry(bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body)'
@@ -91,14 +91,14 @@ export const sessionId = (creator, nonce) => idOf('session', ['bytes32', 'uint64
 export const epochId = (session, author, nonce) => idOf('epoch', ['bytes32', 'bytes32', 'uint64'], [session, author, nonce]);
 export const leaveId = (l) => typed('PqChatLeave', l);
 export const messageId = (m) => typed('PqChatMessage', m);
-export const topicId = (owner, nonce) => idOf('topic', ['bytes32', 'uint64'], [owner, nonce]);
+export const topicId = (admin, nonce) => idOf('topic', ['bytes32', 'uint64'], [admin, nonce]);
 export const entryId = (topic, author, nonce) => idOf('entry', ['bytes32', 'bytes32', 'uint64'], [topic, author, nonce]);
 export const scopeSession = (creator) => idOf('scope/session', ['bytes32'], [creator]);
 /** Epochs, leaves and an admin's removals (P48). */
 export const scopeEpoch = (session, author) => idOf('scope/epoch', ['bytes32', 'bytes32'], [session, author]);
 /** Messages; the nonce is `counter`. */
 export const scopeMessage = (epoch, sender, device) => idOf('scope/message', ['bytes32', 'bytes32', 'bytes16'], [epoch, sender, device]);
-export const scopeTopic = (owner) => idOf('scope/topic', ['bytes32'], [owner]);
+export const scopeTopic = (admin) => idOf('scope/topic', ['bytes32'], [admin]);
 /** Entries and their edits (the original's `topicId`). */
 export const scopeEntry = (topic, author) => idOf('scope/entry', ['bytes32', 'bytes32'], [topic, author]);
 

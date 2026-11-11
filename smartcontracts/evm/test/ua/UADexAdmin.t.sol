@@ -5,6 +5,7 @@ import {deployDexModules} from "../../script/KindModules.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {SCaaSDexGovernanceModule} from "../../src/dex/SCaaSDexAdmin.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {ImplArgs, ITokenModule} from "../../src/metatx/ITokenModule.sol";
 import {nid} from "../helpers/Ids.sol";
@@ -32,14 +33,14 @@ contract UADexAdminTest is UADexBase {
         assertEq(dex.modules().length, 2);
         assertEq(ITokenModule(d).moduleGroup(), 10);
         assertEq(ITokenModule(d).factory(), address(f));
-        vm.expectCall(d, abi.encodeCall(IGovernance.admin, ()));
+        vm.expectCall(d, abi.encodeCall(IAdmin.admin, ()));
         assertEq(dex.admin(), nid(address(this)));
         assertEq(dex.validBits(), GovernanceBits.DEX_BITS);
         assertTrue(dex.hasRole(GovernanceBits.LISTING, nid(address(this))));
-        vm.expectCall(d, abi.encodeCall(IGovernance.transferAdmin, (nid(dave))));
+        vm.expectCall(d, abi.encodeCall(IAdmin.transferAdmin, (nid(dave))));
         dex.transferAdmin(nid(dave));
         assertEq(dex.pendingAdmin(), nid(dave));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, nid(dave)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(dave)));
         vm.prank(dave);
         dex.renounceAdmin(); // D's revert data, verbatim through the stub
     }

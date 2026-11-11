@@ -18,6 +18,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IRescuable} from "../../src/governance/IRescuable.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -94,6 +95,7 @@ contract Gov is OnchainBase {
         _setup();
         _registerDerived();
         _compliance();
+        _complianceRouter();
         _plain();
         _wrapped();
         _regulatedDirect();
@@ -208,23 +210,25 @@ contract Gov is OnchainBase {
 
     // ------------------------------------------------------------------ the own ComplianceRegistry (admin `iss`)
 
+    /// The own registry: its admin the native id of the SmartKeyAccount `iss`, its router the chain's (round 3r, spec §5.3;
+    /// T11 adds the router steps), one KYC provider `a2` (its native id).
     function _compliance() internal {
         vm.broadcast(k1);
-        cr = new ComplianceRegistry(iss);
+        cr = new ComplianceRegistry(_pad(iss), address(gr));
         _book(address(cr), "ComplianceRegistry");
         require(address(cr).codehash == _dep("compliance_registry").codehash, "compliance code");
-        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setAttester, (a2, true)));
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a2), true)));
         bytes32[] memory who = new bytes32[](2);
         uint64[] memory fl = new uint64[](2);
         uint64[] memory until = new uint64[](2);
         (who[0], who[1], fl[0], fl[1], until[0], until[1]) = (_pad(a1), _pad(a3), 1, 1, type(uint64).max, type(uint64).max);
-        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.attest, (who, fl, until)));
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setCompliance, (who, fl, until)));
         bytes32[] memory w2 = new bytes32[](1);
         uint64[] memory f2 = new uint64[](1);
         uint64[] memory u2_ = new uint64[](1);
         (w2[0], f2[0], u2_[0]) = (_pad(a2), 1, uint64(vu + 30 days));
         vm.broadcast(k2);
-        cr.attest(w2, f2, u2_); // an attester's row
+        cr.setCompliance(w2, f2, u2_); // a KYC provider's row
         IFactoryToken.TokenConfig memory c = _cfg("oGC8", 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.ALLOWLIST);
         (c.initialSupply, c.initialHolder) = (1_000_000, a1);
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.termsHash) = (address(cr), 1, keccak256("onchain terms"));
@@ -232,7 +236,30 @@ contract Gov is OnchainBase {
         vm.broadcast(k1);
         IERC20(tc).transfer(a3, 10); // to an attested holder
         vm.broadcast(k1);
-        IERC20(tc).transfer(a2, 10); // to the attester's own row
+        IERC20(tc).transfer(a2, 10); // to the KYC provider's own row
+    }
+
+    /// Round 3r (CTR-GOV-23, spec §7 "Matrix"): the registry's admin moves from `iss` to the derived secp256k1 UA (the
+    /// two-step transfer, its signed `mtxAcceptAdmin`); then its admin ops are that UA's router ops, sent by key 2 at fee 0: a
+    /// KYC provider (key 3's native id) enabled and an admin row written.
+    function _complianceRouter() internal {
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(IAdmin.transferAdmin, (uaD)));
+        Sg memory d = Sg(uaD, kD, 2);
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(d, _ty("UAAcceptAdmin", ""), address(cr), "");
+        vm.broadcast(k2);
+        gr.mtxAcceptAdmin(e, address(cr), s);
+        require(cr.admin() == uaD && cr.pendingAdmin() == bytes32(0), "registry: the derived UA is the admin");
+        (e, s) = _auth(d, _ty("UASetKycProvider", "bytes32 provider,bool enabled"), address(cr), abi.encode(_pad(a3), true));
+        vm.broadcast(k2);
+        gr.mtxSetKycProvider(e, address(cr), _pad(a3), true, s);
+        bytes32[] memory who = new bytes32[](1);
+        uint64[] memory fl = new uint64[](1);
+        uint64[] memory until = new uint64[](1);
+        (who[0], fl[0], until[0]) = (_pad(a1), 3, type(uint64).max); // an admin row over the earlier admin row
+        (e, s) = _auth(d, _ty("UASetCompliance", "bytes32[] accounts,uint64[] flags,uint64[] until"), address(cr),
+            abi.encode(keccak256(abi.encodePacked(who)), keccak256(abi.encodePacked(fl)), keccak256(abi.encodePacked(until))));
+        vm.broadcast(k2);
+        gr.mtxSetCompliance(e, address(cr), who, fl, until, s);
     }
 
     // ------------------------------------------------------------------ kind 0 through the router
@@ -748,7 +775,7 @@ contract Gov is OnchainBase {
         _neg(a1, tc, abi.encodeCall(IERC20.transfer, (address(0xdEaD), 1)), IRegulatedToken.NotEligible.selector,
             "transfer to an account the ComplianceRegistry does not attest (kind 8, ALLOWLIST)");
         // the guard: a governed entry by a non-owner
-        _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3))), IGovernance.NotAdmin.selector,
+        _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3))), IAdmin.NotAdmin.selector,
             "grantRole by a non-owner (kind 8)");
         // a router op signed by another key than its `from`
         MetaTxLib.UAEnvelope memory e = _env(a1, 0, gr.mtxNonce(_pad(a1), 0));
@@ -788,9 +815,9 @@ contract Gov is OnchainBase {
             "completeRecovery before RECOVERY_DELAY");
         _neg(a2, acct, abi.encodeCall(SmartKeyAccount.initialize, (kr, address(0))), SmartKeyAccount.NotFactory.selector,
             "initialize by another caller than the factory");
-        // compliance: a non-admin, non-attester
-        _neg(a3, address(cr), abi.encodeCall(ComplianceRegistry.setAttester, (a3, true)), bytes4(keccak256("NotAdmin()")),
-            "setAttester by a non-admin");
+        // compliance: a non-admin, non-provider
+        _neg(a3, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a3), true)), IAdmin.NotAdmin.selector,
+            "setKycProvider by a non-admin");
     }
 }
 

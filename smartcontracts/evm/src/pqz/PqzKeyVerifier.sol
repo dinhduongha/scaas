@@ -57,7 +57,7 @@ contract PqzKeyVerifier is IUAPopVerifier {
     }
 
     /// @notice The precompile's self-test now, on any chain id (a view for off-chain callers; the on-chain gate is
-    ///         `PqzStateLib.init`: `requirePqz`; `OpenFactory.setKindEnabled` has no chain gate since 5g-Z2, P6g plan D2;
+    ///         `PqzStateLib.init`: `requirePqz`; `OpenFactory.setTokenKindEnabled` has no chain gate since 5g-Z2, P6g plan D2;
     ///         no chain allowlist since the owner ruling of 2026-10-31).
     function isSupportedOnThisChain() external view returns (bool) {
         return PqzSafety.selfTest(PRECOMPILE);

@@ -31,46 +31,46 @@ contract PqChatTopics is PqChatCore {
         (IUARegistry reg, uint256 limit,) = _env();
         uint256 nl = bytes(t.name).length;
         if (nl == 0 || nl > NAME_MAX || t.homeChain == 0 || t.homeChatContract == address(0)) revert IPqChat.PqTopicShape();
-        _auth(reg, t.owner, PqChatTypes.hashTopic(t), sig);
-        _useNonce(PqChatTypes.scopeTopic(t.owner), t.nonce);
-        tid = PqChatTypes.topicId(t.owner, t.nonce);
+        _auth(reg, t.admin, PqChatTypes.hashTopic(t), sig);
+        _useNonce(PqChatTypes.scopeTopic(t.admin), t.nonce);
+        tid = PqChatTypes.topicId(t.admin, t.nonce);
         S storage s = _s();
         Topic storage tp = s.topics[tid];
-        (tp.owner, tp.openReplies) = (t.owner, t.openReplies);
+        (tp.admin, tp.openReplies) = (t.admin, t.openReplies);
         tp.record = _put(abi.encode(t, keccak256(abi.encode(sig))), limit);
         s.allTopics.push(tid);
-        s.topicsByOwner[t.owner].push(tid);
-        emit IPqChat.PqTopicCreated(tid, t.owner);
+        s.topicsByAdmin[t.admin].push(tid);
+        emit IPqChat.PqTopicCreated(tid, t.admin);
     }
 
-    /// @notice P41: by the topic's owner, `seq == stored + 1` (P36); `name` 1-512 B.
+    /// @notice P41: by the topic's admin, `seq == stored + 1` (P36); `name` 1-512 B.
     function updateTopic(IPqChat.PqTopicUpdate calldata u, IUARegistry.UASig calldata sig) external {
         (IUARegistry reg, uint256 limit,) = _env();
         Topic storage tp = _topic(u.topicId);
         if (u.seq != tp.seq + 1) revert IPqChat.PqTopicSeq(tp.seq + 1, u.seq);
         uint256 nl = bytes(u.name).length;
         if (nl == 0 || nl > NAME_MAX) revert IPqChat.PqTopicShape();
-        _ownerAuth(reg, tp.owner, PqChatTypes.hashTopicUpdate(u), sig);
+        _adminAuth(reg, tp.admin, PqChatTypes.hashTopicUpdate(u), sig);
         (tp.seq, tp.openReplies) = (u.seq, u.openReplies);
         tp.latest = _put(abi.encode(u, keccak256(abi.encode(sig))), limit);
         emit IPqChat.PqTopicUpdated(u.topicId, u.seq);
     }
 
-    /// @notice P41: by the topic's owner, `seq == stored + 1` per `(topicId, writer)`, the writer not the owner.
+    /// @notice P41: by the topic's admin, `seq == stored + 1` per `(topicId, writer)`, the writer not the admin.
     function setTopicWriter(IPqChat.PqTopicWriter calldata w, IUARegistry.UASig calldata sig) external {
         (IUARegistry reg,,) = _env();
         Topic storage tp = _topic(w.topicId);
-        if (w.writer == tp.owner || w.writer == 0) revert IPqChat.PqTopicShape();
+        if (w.writer == tp.admin || w.writer == 0) revert IPqChat.PqTopicShape();
         Writer storage wr = _s().writers[w.topicId][w.writer];
         if (w.seq != wr.seq + 1) revert IPqChat.PqTopicSeq(wr.seq + 1, w.seq);
-        _ownerAuth(reg, tp.owner, PqChatTypes.hashTopicWriter(w), sig);
+        _adminAuth(reg, tp.admin, PqChatTypes.hashTopicWriter(w), sig);
         if (wr.seq == 0) _s().writersOf[w.topicId].push(w.writer); // its first record only
         (wr.granted, wr.seq) = (w.granted, w.seq);
         emit IPqChat.PqTopicWriterSet(w.topicId, w.writer, w.granted, w.seq);
     }
 
-    /// @notice P37, P41: a post by the owner or a writer; a reply to an entry of the same topic here, by anyone while
-    ///         `openReplies`, else by the owner or a writer; `ref` all zero or `chainUid`, `pqchat`, `entryId` set.
+    /// @notice P37, P41: a post by the admin or a writer; a reply to an entry of the same topic here, by anyone while
+    ///         `openReplies`, else by the admin or a writer; `ref` all zero or `chainUid`, `pqchat`, `entryId` set.
     function postEntry(IPqChat.PqTopicEntry calldata e, IUARegistry.UASig calldata sig) external returns (bytes32 eid) {
         (IUARegistry reg, uint256 limit,) = _env();
         uint32 depth = _entryRights(e);
@@ -94,7 +94,7 @@ contract PqChatTopics is PqChatCore {
             depth = pe.depth + 1;
             if (tp.openReplies) return depth;
         }
-        if (e.author != tp.owner && !_s().writers[e.topicId][e.author].granted) revert IPqChat.PqTopicNotWriter(e.author);
+        if (e.author != tp.admin && !_s().writers[e.topicId][e.author].granted) revert IPqChat.PqTopicNotWriter(e.author);
     }
 
     function _entryShape(IPqChat.EntryRef calldata r, string calldata mediaType, bytes calldata body) internal pure {
@@ -196,8 +196,8 @@ contract PqChatTopics is PqChatCore {
         return _page(_s().allTopics, start, count);
     }
 
-    function topicsByOwner(bytes32 owner_, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
-        return _page(_s().topicsByOwner[owner_], start, count);
+    function topicsByAdmin(bytes32 admin_, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
+        return _page(_s().topicsByAdmin[admin_], start, count);
     }
 
     function writersOf(bytes32 topicId, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
@@ -216,8 +216,8 @@ contract PqChatTopics is PqChatCore {
         return _page(_s().byAuthor[author], start, count);
     }
 
-    function topicNonceUsed(bytes32 owner_, uint64 nonce) external view returns (bool) {
-        return _nonceUsed(PqChatTypes.scopeTopic(owner_), nonce);
+    function topicNonceUsed(bytes32 admin_, uint64 nonce) external view returns (bool) {
+        return _nonceUsed(PqChatTypes.scopeTopic(admin_), nonce);
     }
 
     function entryNonceUsed(bytes32 topicId, bytes32 author, uint64 nonce) external view returns (bool) {
@@ -237,15 +237,15 @@ contract PqChatTopics is PqChatCore {
 
     function _topic(bytes32 topicId) internal view returns (Topic storage tp) {
         tp = _s().topics[topicId];
-        if (tp.owner == 0) revert IPqChat.PqTopicUnknown(topicId);
+        if (tp.admin == 0) revert IPqChat.PqTopicUnknown(topicId);
     }
 
-    /// @dev A record a topic's owner signs without naming itself (`PqTopicUpdate`, `PqTopicWriter`): any other signer's
-    ///      refusal by the registry is `PqTopicNotOwner` (P41); every other revert (a starved verifier) bubbles.
-    function _ownerAuth(IUARegistry reg, bytes32 owner_, bytes32 structHash, IUARegistry.UASig calldata sig) internal view {
-        try reg.requirePortable(owner_, UAKinds.PURPOSE_PQCHAT, PqChatTypes.typed(structHash), sig) {}
+    /// @dev A record a topic's admin signs without naming itself (`PqTopicUpdate`, `PqTopicWriter`): any other signer's
+    ///      refusal by the registry is `PqTopicNotAdmin` (P41); every other revert (a starved verifier) bubbles.
+    function _adminAuth(IUARegistry reg, bytes32 admin_, bytes32 structHash, IUARegistry.UASig calldata sig) internal view {
+        try reg.requirePortable(admin_, UAKinds.PURPOSE_PQCHAT, PqChatTypes.typed(structHash), sig) {}
         catch (bytes memory err) {
-            if (bytes4(err) == IUARegistry.UAUnauthorized.selector) revert IPqChat.PqTopicNotOwner(owner_);
+            if (bytes4(err) == IUARegistry.UAUnauthorized.selector) revert IPqChat.PqTopicNotAdmin(admin_);
             assembly ("memory-safe") {
                 revert(add(err, 32), mload(err))
             }

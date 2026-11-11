@@ -9,6 +9,8 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IPqzToken} from "../pqz/IPqzToken.sol";
+import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IComplianceRegistry} from "../regulated/IComplianceRegistry.sol";
 
 /// @title One per chain, CREATE2 at a predictable address (CTR-GOV-15 Change, owner 2026-11-04; spec
 ///        `2026-11-04-governance-ua-identity.md` §3): the closed table of governance spec §3.2 over every governed contract
@@ -238,5 +240,151 @@ contract GovernanceRouter is GovernanceRouterBase {
         _uaCall(T.UA_CREATE_INSTANCE, e, target, abi.encode(contractClass, kind, version, keccak256(initCall), salt),
             abi.encodeCall(IOpenFactory.createInstance, (IOpenFactory.ReleaseId(contractClass, kind, version), salt,
                 initCall)), auth);
+    }
+
+    // ------------------------------------------------------------------ the factory's admin (round 3r, spec §5.4, §5.6, §13.3)
+
+    /// @notice Round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4): the factory admin's ops, `target` the chain's
+    ///         `OpenFactory`, which reads `subject()` as its admin (`UAAdmin`); the direct entry's parameters, the ids flat;
+    ///         `Env` hashed as EIP-712 (`_envHash`), a `reason` as `keccak256(bytes(reason))`. Fee mode `NONE`.
+    function mtxPublishTokenEnv(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, uint16 envVersion,
+        IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_PUBLISH_TOKEN_ENV, e, target, abi.encode(kind, envVersion, _envHash(env)),
+            abi.encodeCall(IOpenFactory.publishTokenEnv, (kind, envVersion, env)), auth);
+    }
+
+    function mtxPublishDexEnv(MetaTxLib.UAEnvelope calldata e, address target, uint16 envVersion,
+        IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_PUBLISH_DEX_ENV, e, target, abi.encode(envVersion, _envHash(env)),
+            abi.encodeCall(IOpenFactory.publishDexEnv, (envVersion, env)), auth);
+    }
+
+    function mtxPublishClassEnv(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
+        uint16 envVersion, IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_PUBLISH_CLASS_ENV, e, target, abi.encode(contractClass, kind, envVersion, _envHash(env)),
+            abi.encodeCall(IOpenFactory.publishClassEnv, (contractClass, kind, envVersion, env)), auth);
+    }
+
+    /// @notice Spec §5.6 item 1: one release approved by hash; the deploy goes to the factory, open to anyone.
+    function mtxApproveTokenRelease(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind,
+        uint64 version, uint16 envVersion, bytes32 initcodeHash, bytes32 implArgsHash, bytes32 chainUid, address factory,
+        uint32 adminGeneration, uint64 until, IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_APPROVE_TOKEN_RELEASE, e, target, IOpenFactory.approveTokenRelease.selector, abi.encode(kind, version,
+            envVersion, initcodeHash, implArgsHash, chainUid, factory, adminGeneration, until), auth);
+    }
+
+    function mtxApproveDexRelease(MetaTxLib.UAEnvelope calldata e, address target, uint64 version, uint16 envVersion,
+        bytes32 initcodeHash, bytes32 implArgsHash, bytes32 chainUid, address factory, uint32 adminGeneration, uint64 until,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_APPROVE_DEX_RELEASE, e, target, IOpenFactory.approveDexRelease.selector, abi.encode(version, envVersion,
+            initcodeHash, implArgsHash, chainUid, factory, adminGeneration, until), auth);
+    }
+
+    /// @notice The class release's approval: the words of `UAApproveRelease` after `target`, flat and in order (the ids
+    ///         flat, as `UACreateInstance`). A static struct, so the calldata is the fifteen flat parameters' bytes; fifteen
+    ///         top-level parameters leave the legacy code generator no stack to decode them. Its ABI encoding is the
+    ///         factory's `approveRelease(ReleaseId, …)` arguments (`ReleaseId` inline).
+    struct ReleaseApproval {
+        uint16 contractClass;
+        uint16 kind;
+        uint64 version;
+        uint16 envVersion;
+        bytes4 initSelector;
+        bytes4 interfaceId;
+        bytes32 initcodeHash;
+        bytes32 implArgsHash;
+        bytes32 chainUid;
+        address factory;
+        uint32 adminGeneration;
+        uint64 until;
+    }
+
+    function mtxApproveRelease(MetaTxLib.UAEnvelope calldata e, address target, ReleaseApproval calldata approval,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_APPROVE_RELEASE, e, target, IOpenFactory.approveRelease.selector, abi.encode(approval), auth);
+    }
+
+    function mtxRevokeApproval(MetaTxLib.UAEnvelope calldata e, address target, bytes32 key, IUARegistry.UASig calldata auth)
+        external
+    {
+        _ua(T.UA_REVOKE_APPROVAL, e, target, IOpenFactory.revokeApproval.selector, abi.encode(key), auth);
+    }
+
+    function mtxDeprecateToken(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, uint64 version,
+        string calldata reason, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_DEPRECATE_TOKEN, e, target, abi.encode(kind, version, keccak256(bytes(reason))),
+            abi.encodeCall(IOpenFactory.deprecateToken, (kind, version, reason)), auth);
+    }
+
+    function mtxDeprecateDex(MetaTxLib.UAEnvelope calldata e, address target, uint64 version, string calldata reason,
+        IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_DEPRECATE_DEX, e, target, abi.encode(version, keccak256(bytes(reason))),
+            abi.encodeCall(IOpenFactory.deprecateDex, (version, reason)), auth);
+    }
+
+    function mtxDeprecateRelease(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
+        uint64 version, string calldata reason, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_DEPRECATE_RELEASE, e, target, abi.encode(contractClass, kind, version, keccak256(bytes(reason))),
+            abi.encodeCall(IOpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(contractClass, kind, version), reason)),
+            auth);
+    }
+
+    function mtxSetTokenKindEnabled(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, bool on,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_SET_TOKEN_KIND_ENABLED, e, target, IOpenFactory.setTokenKindEnabled.selector, abi.encode(kind, on), auth);
+    }
+
+    function mtxSetClassKindEnabled(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
+        bool on, IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_SET_CLASS_KIND_ENABLED, e, target, IOpenFactory.setClassKindEnabled.selector,
+            abi.encode(contractClass, kind, on), auth);
+    }
+
+    /// @notice Spec §13.3: the chain's write-once directory entries.
+    function mtxSetChainEntries(MetaTxLib.UAEnvelope calldata e, address target, address relayFeeRouter,
+        bytes32 relayFeeRouterCodeHash, bytes32 relayFeeExecutorCodeHash, address complianceRegistry,
+        bytes32 complianceRegistryCodeHash, address smartKeyAccountFactory, bytes32 smartKeyAccountFactoryCodeHash,
+        address zetherStatements, bytes32 zetherStatementsCodeHash, IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_SET_CHAIN_ENTRIES, e, target, IOpenFactory.setChainEntries.selector, abi.encode(relayFeeRouter,
+            relayFeeRouterCodeHash, relayFeeExecutorCodeHash, complianceRegistry, complianceRegistryCodeHash,
+            smartKeyAccountFactory, smartKeyAccountFactoryCodeHash, zetherStatements, zetherStatementsCodeHash), auth);
+    }
+
+    // ------------------------------------------------------------------ a compliance registry (round 3r, spec §5.3.1)
+
+    /// @notice `target` a `ComplianceRegistry` whose router this is: its admin enables or disables a KYC provider (a UA id).
+    function mtxSetKycProvider(MetaTxLib.UAEnvelope calldata e, address target, bytes32 provider, bool enabled,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_SET_KYC_PROVIDER, e, target, IComplianceRegistry.setKycProvider.selector, abi.encode(provider, enabled), auth);
+    }
+
+    /// @notice The registry's admin (id 0) or an enabled KYC provider (its id) writes rows; each array is signed as the
+    ///         `keccak256` of its 32-byte words; `until` each row's `validUntil` (E has its own).
+    function mtxSetCompliance(MetaTxLib.UAEnvelope calldata e, address target, bytes32[] calldata accounts,
+        uint64[] calldata flags, uint64[] calldata until, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_SET_COMPLIANCE, e, target, abi.encode(keccak256(abi.encodePacked(accounts)),
+            keccak256(abi.encodePacked(flags)), keccak256(abi.encodePacked(until))),
+            abi.encodeCall(IComplianceRegistry.setCompliance, (accounts, flags, until)), auth);
+    }
+
+    /// @dev EIP-712 `Env`: the three scalars, each array the `keccak256` of its 32-byte words.
+    function _envHash(IFactoryToken.Env calldata v) private pure returns (bytes32) {
+        return keccak256(abi.encode(T.ENV, v.registry, v.smartKeyAccountImpl, v.hedera, keccak256(abi.encodePacked(v.deps)),
+            keccak256(abi.encodePacked(v.params)), keccak256(abi.encodePacked(v.libs)),
+            keccak256(abi.encodePacked(v.libCodeHashes))));
     }
 }

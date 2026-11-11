@@ -174,13 +174,14 @@ contract ProofPathInvariantsTest is PqzFixture {
     /// 142,389 / 142,468; T66b (the body modules) -> 83,689 / 83,667 / 69,104 / 69,104 / 46,440 / 46,462 / 139,389 / 139,446;
     /// group 3l (7ba002dc, the faces' selector dispatch) mtxTransfer_wrappedZether 83,667 -> 83,645; merge3k (the merged faces'
     /// dispatch, 1bb15eac) uaExecuteTransfer_normalZether 139,389 -> 139,434, uaExecuteTransfer_wrappedZether 139,446 ->
-    /// 139,424. The test keeps P7's claim as: these rows are the pins.
+    /// 139,424; round 3r T2 (the admin names in each face's dispatch) mtxTransfer_normalZether 83,689 -> 83,711,
+    /// mtxTransfer_wrappedZether 83,645 -> 83,667. The test keeps P7's claim as: these rows are the pins.
     function test_P7_zetherPinsUnchanged() public view {
         string memory j = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/plus_zero_gas.json"));
         string[8] memory k = ["mtxTransfer_normalZether", "mtxTransfer_wrappedZether", "transferToUA_normalZether",
             "transferToUA_wrappedZether", "transfer_normalZether", "transfer_wrappedZether", "uaExecuteTransfer_normalZether",
             "uaExecuteTransfer_wrappedZether"];
-        uint256[8] memory at7558 = [uint256(83689), 83645, 69104, 69104, 46440, 46462, 139434, 139424]; // merge3k
+        uint256[8] memory at7558 = [uint256(83711), 83667, 69104, 69104, 46440, 46462, 139434, 139424]; // merge3k, round 3r T2
         for (uint256 i; i < 8; ++i) assertEq(vm.parseJsonUint(j, string.concat(".", k[i])), at7558[i], k[i]);
     }
 }

@@ -348,7 +348,7 @@ impl Venue {
     }
 
     /// `R(who)` on a regulated leg as its `canReceive` answers it (`scaas_ua::regulated::can_receive` over the registry's
-    /// `attestationOf` and `attesterEnabled`), with the attestation's `validUntil`; both lists off: `(true, 0, u64::MAX)`.
+    /// `complianceOf` and `kycProviderEnabled`), with the row's `validUntil`; both lists off: `(true, 0, u64::MAX)`.
     /// The leg's registry must be the configured one: `REGISTRY_NOT_CONFIGURED`, `REGISTRY_MISMATCH` otherwise.
     async fn leg_receivable(&self, token: Address, c: &IRegulatedToken::RegulatedConfig, who: B256, at: u64)
         -> std::result::Result<(bool, u8, u64), VenueError>
@@ -366,8 +366,8 @@ impl Venue {
             }
             Some(r) => r,
         };
-        let a = view(&self.chain, reg, IComplianceRegistry::attestationOfCall { account: who }).await.map_err(down)?;
-        let on = view(&self.chain, reg, IComplianceRegistry::attesterEnabledCall { id: a.attesterId }).await.map_err(down)?;
+        let a = view(&self.chain, reg, IComplianceRegistry::complianceOfCall { account: who }).await.map_err(down)?;
+        let on = view(&self.chain, reg, IComplianceRegistry::kycProviderEnabledCall { id: a.providerId }).await.map_err(down)?;
         let att = scaas_ua::regulated::Attestation { flags: a.flags, valid_until: a.validUntil, attester_enabled: on };
         let (ok, reason) = scaas_ua::regulated::can_receive(req, den, &att, at);
         Ok((ok, reason, a.validUntil))
@@ -1612,7 +1612,7 @@ mod tests {
         reg: HashMap<Address, (u8, u64, u64, u64)>,
         /// `isFrozen` on every regulated token.
         frozen: HashSet<B256>,
-        /// `REG_REGISTRY.attestationOf`: `(flags, validUntil)`, attester 0 (enabled); absent: `(0, 0)`.
+        /// `REG_REGISTRY.complianceOf`: `(flags, validUntil)`, provider 0 (the admin, enabled); absent: `(0, 0)`.
         attest: HashMap<B256, (u64, u64)>,
         /// The leg on this token reverts `TokenPaused(until)`, in a settlement and in its own `mtxTrade` (a pause that lands after
         /// the intake read).
@@ -1745,12 +1745,12 @@ mod tests {
                         assert!(w.reg.contains_key(&to));
                         let a = IRegulatedToken::isFrozenCall::abi_decode(&input).unwrap().account;
                         Ok(hexs(&w.frozen.contains(&a).abi_encode()))
-                    } else if sel == IComplianceRegistry::attestationOfCall::SELECTOR {
+                    } else if sel == IComplianceRegistry::complianceOfCall::SELECTOR {
                         assert_eq!(to, REG_REGISTRY);
-                        let a = IComplianceRegistry::attestationOfCall::abi_decode(&input).unwrap().account;
+                        let a = IComplianceRegistry::complianceOfCall::abi_decode(&input).unwrap().account;
                         let (f, v) = w.attest.get(&a).copied().unwrap_or_default();
                         Ok(hexs(&(f, v, 0u32).abi_encode()))
-                    } else if sel == IComplianceRegistry::attesterEnabledCall::SELECTOR {
+                    } else if sel == IComplianceRegistry::kycProviderEnabledCall::SELECTOR {
                         Ok(hexs(&true.abi_encode()))
                     } else {
                         panic!("unexpected eth_call {}", alloy::hex::encode(sel))

@@ -31,7 +31,7 @@ const SPEC = {
   PqChatLeave: 'PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)',
   PqChatRemove: 'PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce)',
   PqChatMessage: 'PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext)',
-  PqTopic: 'PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)',
+  PqTopic: 'PqTopic(bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)',
   PqTopicUpdate: 'PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)',
   PqTopicWriter: 'PqTopicWriter(bytes32 topicId,bytes32 writer,bool granted,uint64 seq)',
   PqTopicEntry: 'PqTopicEntry(bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body)EntryRef(bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash)',
@@ -171,8 +171,8 @@ test('topic records: digests, ids, scopes, signatures, blobs', () => {
     assert.ok(T[n].uaSig, n);
   }
   const t = T.topic.record;
-  assert.equal(T.topic.id, h(pc.topicId(t.owner, t.nonce)));
-  assert.equal(T.topic.scope, h(pc.scopeTopic(t.owner)));
+  assert.equal(T.topic.id, h(pc.topicId(t.admin, t.nonce)));
+  assert.equal(T.topic.scope, h(pc.scopeTopic(t.admin)));
   for (const n of ['post', 'reply']) {
     const e = T[n].record;
     assert.equal(e.topicId, T.topic.id);

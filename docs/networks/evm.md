@@ -200,12 +200,12 @@ owner decides at the 22776 launch.
 
 **Change (2026-11-07, owner; chain-neutral releases, [CTR-TOK-29](../contracts/token-wrappers.md#CTR-TOK-29),
 [NET-ALL-22](README.md#NET-ALL-22)):** the deterministic deployer is a requirement of every chain (the SCaaS mainnet's genesis
-alloc included). The factory (constructor `(registrar)` only; `configureChain` writes its `chain_uid` once), its libraries,
+alloc included). The factory (constructor `(bytes32 admin)` only, the first admin's native id; `configureChain` writes its `chain_uid` once), its libraries,
 the body modules and the releases are chain-neutral and land at the same address on every chain; only contracts with a
 `chain_uid` constructor (the UA registry, the governance router, `SmartKeyAccountFactory`, mandate wallets) differ per chain.
 The release list `releases.json` (`RELEASES_JSON`; `RELEASES_WRITE=true` writes it from the first chain) pins every factory,
-library, module, release and the registrar by address and code hash: a later chain's deploy refuses any row that differs,
-and on a chain id that `chain-uids.json` lists more than once the registrar's run stops after `configureChain` until the
+library, module, release and the first admin (row `admin`) by address and code hash: a later chain's deploy refuses any row that differs,
+and on a chain id that `chain-uids.json` lists more than once the admin's run stops after `configureChain` until the
 siblings are configured. Status: **BUILT** on branch `ua-mtx-merge` (T71–T74, `test/v2/ChainNeutral.t.sol`,
 `ChainNeutralFactory.t.sol`; `DeployBase` writes and checks the list).
 
@@ -306,7 +306,7 @@ dev chains, so 22776, Hedera 295 and an unknown chain too — defaults to and ma
 minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`
 needs 0), first the `GovernanceRouter` (CREATE2, after the UA registry and before every release, JSON `governance_router`;
 every release's `Env.govRouter` names it, [CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)), and, when
-the deployer is the registrar, publishes env 1 of `NORMAL` and of the DEX (the factory, `chain_uid`, the UA registry, the
+the deployer is the factory's first admin (`REGISTRAR`, default the deployer), publishes env 1 of `NORMAL` and of the DEX (the factory, `chain_uid`, the UA registry, the
 `SmartKeyAccount` implementation, Hedera, the linked libraries with their code hashes) and has the factory deploy
 (plan 5g-Z2, [CTR-TOK-03](../contracts/token-wrappers.md#release-env)) `NormalToken` as
 version 1 of `NORMAL` on the UA registry (since UA-4 every token implementation carries the UA ledger and is over
@@ -331,6 +331,20 @@ It writes
 `deployments/<key>.json` ([NET-EVM-13](#NET-EVM-13): its header first; `token_factory`, `implementation_normal`, `implementation_wrapped` (with `DEPLOY_WRAPPED`), `dex_implementation`, `ua_registry`, `governance_router`, `chain_uid`, `smart_key_account_factory`,
 `smart_key_account_implementation`, `demo_token`, `demo_token_2`; `factory`, `implementation`, `dex`, `scaas_dex` are gone with v1),
 which seeds the client and the node configuration. forge writes it during the simulation, before the broadcast; `deploy.sh` puts the previous file back (or removes the new one) when the broadcast fails.
+**Deploy order and the factory admin ([CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract), NET-EVM-05). BUILT (T10).**
+`SmartKeyAccountFactory` → the relay pair (`RelayFeeRouter` and its executor) under the constant `RELAY_SALT =
+keccak256("scaas.deploy.v1")`, reused when its code is there (one address on every chain and stack; `DEPLOY_SALT` moves only
+the rest) → the UA registry → the router → `ComplianceRegistry(COMPLIANCE_ADMIN, router)` with `DEPLOY_REGULATED`
+(`COMPLIANCE_ADMIN` a UA id, `bytes32`, required) → `ZetherStatements` with `DEPLOY_ZETHER` → `OpenFactory(pad(admin))`, whose
+address depends on none of them → `configureChain` → `setChainEntries` (the relay pair, the registry, the account factory,
+`ZetherStatements`; 0 leaves an entry open), then the gate compares `directory()` with what the run deployed → envs and
+releases (the admin's own deploys: its own approval) → `transferAdmin(FACTORY_ADMIN_NEXT)` when set (optional `bytes32`;
+`FACTORY_ADMIN_NEXT` accepts by its own signed `mtxAcceptAdmin`, a separate step). The book gains `factory_admin` and
+`factory_pending_admin`; the gate reads `admin()` and `pendingAdmin()` against them. The sending run (`DeploySend.s.sol`)
+counts a release deploy whose `CREATE2` address already has code as done and sends nothing for it (the release deploys are
+open to anyone once approved, so a front-runner cannot fail the plan). Each release transaction stays at most 60 M asked
+(NET-EVM-11).
+
 Zether (built, P3; UNAUDITED; any chain with EIP-2537, owner ruling 2026-10-31): opt in with `DEPLOY_ZETHER=1` (default off; on Hedera, or where the precompile probe finds no EIP-2537, the script refuses before deploying anything). It deploys `ZetherStatements`, `ZetherDisclosure` and per curve the inner-product, transfer and burn verifiers; when the deployer is the registrar it publishes per curve an env of `NORMAL_ZETHER` and `WRAPPED_ZETHER` (the UA registry, whose Zether kinds it enables there; `deps` = transfer, burn, inner-product verifier, disclosure, [CTR-ZTH-20](../contracts/zether.md#CTR-ZTH-20); env 1, BLS12-381), has the factory deploy the two confidential implementations on it (BLS12-381 as version 1 of each kind; the curve is the release's `curve()`) and enables both kinds, with the keys `zether_registry` (= `ua_registry`), `zether_disclosure`, `zether_statements`, `zether_inner_product_verifier_<curve>`, `zether_verifier_<curve>` (transfer), `zether_burn_verifier_<curve>`, `implementation_normal_zether_<curve>`, `implementation_wrapped_zether_<curve>` (`<curve>` = `bls12381`; plan 5g-Z1). The implementations exceed 24,576 B and the BLS inner-product verifier's deploy (the generators) uses ~14 M gas, so each of its transactions carries an explicit gas limit ([NET-EVM-11](#NET-EVM-11); forge's default estimate ×1.30 exceeded the Osaka per-transaction cap of 16,777,216, EIP-7825; the largest implementation, `WrappedPqzToken`, 13,467,833 gas measured through `deployTokenImplementation` (plan 5g-Z2; 63,975 B of init code with the env), is deployed by `script/pqz/e2e.py`, which sets its own limit; at 72,160 B it needs `CHAIN_CODE_LIMIT=131072` and a chain without EIP-7954) and the anvil needs `--code-size-limit 131072` (`scripts/e2e-zether.sh`); `ZetherDeploy.t` checks each deploy fits. `scripts/e2e-zether.sh` runs the
 e2e (UA-3, rewritten for UA-8; the full lifecycle since 2026-10-31): by default a fresh anvil 31337 (200 M gas: the
 `WRAPPED_ZETHER` release asks about 105 M) and this deploy, or with `RPC` + `PRIVATE_KEY` a chain already deployed (the SCaaS

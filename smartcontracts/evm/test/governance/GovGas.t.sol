@@ -130,8 +130,8 @@ contract GovGasNormal is GovRows {
     }
 }
 
-/// Factory index spec §3 (plan T67): `createDex` beside `createToken`, steady state (the creator and the owner each have a
-/// DEX already, so the row pays the record and the list elements, not a first list length).
+/// Factory index spec §3 (plan T67): `createDex` beside `createToken`, steady state (the creator has a DEX already, so the
+/// row pays the record and the list elements, not a first list length; no owner word or list since round 3r R1).
 contract GovGasDex is GovRows {
     bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     OpenFactory f;
@@ -153,7 +153,7 @@ contract GovGasDex is GovRows {
 }
 
 /// Factory index spec §8.7 (plan T70): `createInstance` of the test kind `NoteKind` (class 4, kind 0), steady state (the
-/// creator and the owner each have an instance already), beside `createDex`.
+/// creator has an instance already), beside `createDex`.
 contract GovGasInstance is GovRows {
     bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     OpenFactory f;

@@ -28,7 +28,7 @@ test('recordId = keccak256(abi.encode(orderId, subject, beneficiary)): every row
 });
 
 test('the R truth table: canReceive (ok, reason) of every row; both lists, ELIGIBLE_CONTRACT on each side, lapsed, ' +
-  'validUntil == now, a disabled attester', () => {
+  'validUntil == now, a disabled KYC provider', () => {
   let n = 0;
   const seen = new Set();
   for (const r of V.receiver) {
@@ -43,7 +43,7 @@ test('the R truth table: canReceive (ok, reason) of every row; both lists, ELIGI
   assert.ok(has((r) => r.allowlist && (BigInt(r.flags) & 8n) && r.ok), 'ELIGIBLE_CONTRACT satisfies requiredFlags');
   assert.ok(has((r) => r.denylist && (BigInt(r.flags) & 8n) && !r.ok && r.reason === 4), 'ELIGIBLE_CONTRACT never deniedFlags');
   assert.ok(has((r) => r.validUntil === r.now && r.ok && r.allowlist), 'validUntil == now passes');
-  assert.ok(has((r) => !r.attesterEnabled && r.reason === 3), 'a disabled attester');
+  assert.ok(has((r) => !r.kycProviderEnabled && r.reason === 3), 'a disabled KYC provider');
   assert.ok(has((r) => r.reason === 2), 'lapsed');
 });
 

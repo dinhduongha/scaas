@@ -1568,8 +1568,8 @@ alloy::sol! {
     // class's chain values
     struct FactoryEnv { address registry; address smartKeyAccountImpl; bool hedera; address[] deps; bytes32[] params;
         address[] libs; bytes32[] libCodeHashes; }
-    function envOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
-    function publishEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
+    function tokenEnvOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
+    function publishTokenEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
     function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs) external returns (address);
     function createToken(uint8 kind, uint64 version, bytes initArgs, bytes32 salt) external returns (address);
     function registry() external view returns (address);
@@ -1608,10 +1608,10 @@ fn linked(chain_id: u64, file: &str, name: &str) -> Vec<u8> {
 async fn registry_zero_token(rpc: &str, chain_id: u64, dep: &Value, holder: Address, supply: u64) -> Address {
     let deployer = key(DEPLOYER);
     let f: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
-    let mut env = view(rpc, f, envOfCall { kind: 0, envVersion: 1 }).await;
+    let mut env = view(rpc, f, tokenEnvOfCall { kind: 0, envVersion: 1 }).await;
     assert_ne!(env.registry, Address::ZERO, "the deploy's NORMAL release is on the registry");
     env.registry = Address::ZERO;
-    send(rpc, &deployer, f, publishEnvCall { kind: 0, envVersion: 2, env }.abi_encode()).await;
+    send(rpc, &deployer, f, publishTokenEnvCall { kind: 0, envVersion: 2, env }.abi_encode()).await;
     let code = linked(chain_id, "NormalToken.sol", "NormalToken");
     // T66b §4.5: version 2 names version 1's body modules (pinned in env 1, so in env 2)
     let v1 = view(rpc, f, implementationOfCall { kind: 0, version: 1 }).await;
@@ -2234,8 +2234,8 @@ mod pqz3f {
             bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
         function transferSingleStatement(PqzTransferArgs t, bytes32 binding) external view returns (bytes);
         function pqzRevokeVerifier() external;
-        function setKindEnabled(uint8 kind, bool on) external;
-        function latestEnvVersion(uint8 kind) external view returns (uint16);
+        function setTokenKindEnabled(uint8 kind, bool on) external;
+        function latestTokenEnvVersion(uint8 kind) external view returns (uint16);
         function latestVersion(uint8 kind) external view returns (uint64);
         function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
         function mtxShield(bytes32 toUA, uint256 amount) external;
@@ -2423,14 +2423,14 @@ async fn offchain_stack(chain_id: u64) -> OffchainStack {
     for l in &libs {
         hashes.push(keccak256(pr.get_code_at(*l).await.unwrap()));
     }
-    let mut env = view(&rpc, factory, envOfCall { kind: 0, envVersion: 1 }).await;
+    let mut env = view(&rpc, factory, tokenEnvOfCall { kind: 0, envVersion: 1 }).await;
     (env.deps, env.libs, env.libCodeHashes) = (vec![Address::ZERO], libs, hashes);
-    let ev = view(&rpc, factory, pqz3f::latestEnvVersionCall { kind: 4 }).await + 1;
-    send(&rpc, &deployer, factory, publishEnvCall { kind: 4, envVersion: ev, env }.abi_encode()).await;
+    let ev = view(&rpc, factory, pqz3f::latestTokenEnvVersionCall { kind: 4 }).await + 1;
+    send(&rpc, &deployer, factory, publishTokenEnvCall { kind: 4, envVersion: ev, env }.abi_encode()).await;
     let ver = view(&rpc, factory, pqz3f::latestVersionCall { kind: 4 }).await + 1;
     send(&rpc, &deployer, factory, deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
         implArgs: ImplArgs { modules: ms }.abi_encode().into() }.abi_encode()).await;
-    send(&rpc, &deployer, factory, pqz3f::setKindEnabledCall { kind: 4, on: true }.abi_encode()).await;
+    send(&rpc, &deployer, factory, pqz3f::setTokenKindEnabledCall { kind: 4, on: true }.abi_encode()).await;
     let verifier = small_key(0x3f47);
     let c = TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         owner: deployer.address().into_word(), initialSupply: U256::from(1_000_000u64), initialHolder: deployer.address(),

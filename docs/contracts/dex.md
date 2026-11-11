@@ -491,7 +491,7 @@ their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Apto
 
 <a id="admin"></a>
 <a id="CTR-DEX-03"></a>**CTR-DEX-03** — The DEX is on `GovernanceBase` ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)): one `owner`, a UA id (`bytes32`), set at
-creation ([CTR-DEX-24](#CTR-DEX-24)), with a two-step `transferOwnership` / `acceptOwnership` and a `renounceOwnership`; in
+creation ([CTR-DEX-24](#CTR-DEX-24)), with a two-step `transferAdmin` / `acceptAdmin` and a `renounceAdmin`; in
 production a Safe, a multisig, or a derived UA (a PQ key, an `msig`) acting through the chain's `GovernanceRouter`
 ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). Every governance check and every power reads
 `_govSubject()`: the native id of `msg.sender`, or the router's authenticated subject when `msg.sender` is the release's
@@ -524,7 +524,7 @@ function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) extern
 
 - **Clone.** `CREATE3` of an EIP-1167 clone with its `ChainEnv` appended to its code and `initialize(creatorId, version, initArgs)` in the same call, as for tokens
   ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)); the implementation locks its own `initialize`. `initialize` writes the owner
-  and gives it `LISTING` and `FEE_ROUTING`; it moves by `transferOwnership` ([CTR-DEX-03](#CTR-DEX-03)); `grantDelay` (≤ 30
+  and gives it `LISTING` and `FEE_ROUTING`; it moves by `transferAdmin` ([CTR-DEX-03](#CTR-DEX-03)); `grantDelay` (≤ 30
   days) and `rescueTo` are immutable after it; the `DexPuller` is deployed by `initialize` with `rescueTo`; the EIP-712 `verifyingContract` is the clone.
 - **Registry.** The factory keeps `isDex(addr)` and `dexVersionOf(addr)` (`versionOf` is the token one), both read from
   the DEX's record in the factory index (class 2, kind 0, [CTR-TOK-27](token-wrappers.md#CTR-TOK-27)). Clients and
@@ -550,7 +550,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 
 | Item | Rule |
 |---|---|
-| Classification | at `setMarket` the DEX records each token's kind: **SCaaS** iff the chain's `OpenFactory` reports it was made from a registered, non-deprecated implementation (`versionOf`, as [CTR-TND-07](tender.md#CTR-TND-07)), else **outside** — a snapshot at `setMarket`: re-list after a deprecation (not re-checked per leg, controller proposal, review W-Q, 2026-10-19: `deprecate` only marks a version, its tokens keep working ([CTR-TOK-18](token-wrappers.md#CTR-TOK-18)), and a per-leg check would add two factory calls to every leg; turning a listed token outside also voids every order signed in its token domain, a decision for a holder of `LISTING`, who re-lists). Never taken from the leg: a submitter-chosen kind could send a fallback-only "token" down the `mtxTrade` path |
+| Classification | at `setMarket` the DEX records each token's kind: **SCaaS** iff the chain's `OpenFactory` reports it was made from a registered, non-deprecated implementation (`versionOf`, as [CTR-TND-07](tender.md#CTR-TND-07)), else **outside** — a snapshot at `setMarket`: re-list after a deprecation (not re-checked per leg, controller proposal, review W-Q, 2026-10-19: `deprecateToken` only marks a version, its tokens keep working ([CTR-TOK-18](token-wrappers.md#CTR-TOK-18)), and a per-leg check would add two factory calls to every leg; turning a listed token outside also voids every order signed in its token domain, a decision for a holder of `LISTING`, who re-lists). Never taken from the leg: a submitter-chosen kind could send a fallback-only "token" down the `mtxTrade` path |
 | Signed struct | the same `TradeOrder`, signed in the **DEX's** domain `("SCaaS Dex","1", chainId, DEX, chain_uid)` as `DexOrder(address sellToken,TradeOrder order)TradeOrder(…)`; `o.dex == address(this)` is required (the domain already binds the DEX; a different `dex` field would be a second, conflicting truth) |
 | Fill state | on the DEX: `pulled[h]` and `minNonce[from][batch]`, `h` = the `DexOrder` digest |
 | Checks | the full [CTR-DEX-15](#CTR-DEX-15) list, enforced by the DEX: relayer binding, expiry, nonce, flags, zero amounts, `minFill ≤ amount`, fee cap, signature (`SigCheck.isValid` with the ERC-1271 cap, [CTR-DEX-08](#CTR-DEX-08)), `p < amount`, `sellFill > 0`, overfill, the signer's minimum fill, price, fee bound |

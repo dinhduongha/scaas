@@ -9,6 +9,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBase} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
@@ -121,18 +122,18 @@ contract GovIdentityTest is Test {
         assertFalse(t.hasRole(MINT, MINTER));
         // ownership moves to a native account, then back to another derived UA
         bytes32 alice = bytes32(uint256(uint160(ALICE)));
-        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.transferAdmin, (alice)));
+        router.run(ISSUER, address(t), abi.encodeCall(IAdmin.transferAdmin, (alice)));
         assertEq(t.pendingAdmin(), alice);
         vm.prank(ALICE);
         t.acceptAdmin();
         assertEq(t.admin(), alice);
         vm.prank(ALICE);
         t.transferAdmin(MINTER);
-        router.run(MINTER, address(t), abi.encodeCall(IGovernance.acceptAdmin, ()));
+        router.run(MINTER, address(t), abi.encodeCall(IAdmin.acceptAdmin, ()));
         assertEq(t.admin(), MINTER);
         // nobody reaches the derived owner's power directly: no address is its id
         vm.prank(address(uint160(uint256(MINTER))));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, bytes32(uint256(uint160(uint256(MINTER))))));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(uint256(uint160(uint256(MINTER))))));
         t.grantRole(MINT, ISSUER);
     }
 
@@ -175,11 +176,11 @@ contract GovIdentityTest is Test {
         vm.prank(ALICE);
         t.transferAdmin(shadow);
         vm.prank(ALICE);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingAdmin.selector, bytes32(uint256(uint160(ALICE)))));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, bytes32(uint256(uint160(ALICE)))));
         t.acceptAdmin();
         // the transaction's origin is nobody's subject
         vm.prank(BOB, ALICE);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, bytes32(uint256(uint160(BOB)))));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(uint256(uint160(BOB)))));
         t.grantRole(MINT, bytes32(uint256(uint160(BOB))));
     }
 
@@ -190,11 +191,11 @@ contract GovIdentityTest is Test {
         router.set(ISSUER); // left set, as a router outside a live call never would be
         bytes32 alice = bytes32(uint256(uint160(ALICE)));
         vm.startPrank(ALICE);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, alice));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, alice));
         t.grantRole(MINT, alice);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, alice));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, alice));
         t.transferAdmin(alice);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, alice));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, alice));
         t.disableFeature(MINT);
         router.set(MINTER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, alice));
@@ -208,15 +209,15 @@ contract GovIdentityTest is Test {
         NormalToken t = _normal(ISSUER, MINTER);
         router.set(0);
         vm.startPrank(address(router));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, bytes32(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
         t.grantRole(MINT, ISSUER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, bytes32(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
         t.revokeRole(MINT, MINTER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, bytes32(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
         t.setGrant(MINT, ISSUER, _limited(1));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, bytes32(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
         t.transferAdmin(ISSUER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingAdmin.selector, bytes32(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, bytes32(0)));
         t.acceptAdmin();
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, bytes32(0)));
         t.renounceRole(MINT);
@@ -261,7 +262,7 @@ contract GovIdentityTest is Test {
             n.initialize(nid(address(this)), 1, abi.encode(c));
             NormalToken t = _normal(ISSUER, 0);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, pools[i]));
-            router.run(ISSUER, address(t), abi.encodeCall(IGovernance.transferAdmin, (pools[i])));
+            router.run(ISSUER, address(t), abi.encodeCall(IAdmin.transferAdmin, (pools[i])));
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, pools[i]));
             router.run(ISSUER, address(t), abi.encodeCall(IGovernance.grantRole, (MINT, pools[i])));
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, pools[i]));

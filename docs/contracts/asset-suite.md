@@ -49,7 +49,7 @@ flowchart LR
 
 | Component | Role |
 |---|---|
-| `ComplianceRegistry` | address-keyed attestations (flags, `validUntil`, attester); no personal data |
+| `ComplianceRegistry` | UA-keyed compliance rows (flags, `validUntil`, KYC provider); no personal data |
 | `AssetFactory` | CREATE2 clones of the three action contracts, counterfactual funding |
 | `VestingGrant` | one per grant: linear + cliff + interval, or tranches/milestones |
 | `Distribution` | one per dividend/coupon: Merkle root over a node-indexed snapshot |
@@ -146,9 +146,9 @@ transfer. There is no automatic reopening (an earlier draft would "reopen redeem
 everyone.
 
 <a id="compliance-registry"></a>
-<a id="CTR-AS-07"></a>**CTR-AS-07** — **Receiver check through a separate `ComplianceRegistry`: two feature bits, both off by default** (owner, [CTR-GOV-18](../decisions.md#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default)). (`bytes32` account → `{uint64 flags, uint64 validUntil, uint32 attesterId}` in one slot; an immutable `admin` contract manages attesters; disabling an attester voids its attestations at once; no personal data.) The UA registry is **not** extended (it is monotonic and
+<a id="CTR-AS-07"></a>**CTR-AS-07** — **Receiver check through a separate `ComplianceRegistry`: two feature bits, both off by default** (owner, [CTR-GOV-18](../decisions.md#ctr-gov-18--receiver-check-two-feature-bits-allowlist-and-denylist-off-by-default)). (`bytes32` account → `{uint64 flags, uint64 validUntil, uint32 providerId}` in one slot; its admin (a UA id, CTR-GOV-23) manages the KYC providers; disabling an attester voids its attestations at once; no personal data.) The UA registry is **not** extended (it is monotonic and
 admin-free by design, [CTR-UA-15](accounts.md#CTR-UA-15)); compliance flags live only here (an earlier
-`attributes(UA)` registry extension was withdrawn and its flag bits reused below). `ALLOWLIST`, bit 8, reads `requiredFlags`; `DENYLIST`, bit 9, reads `deniedFlags`; a regulated token pins one `complianceRegistry` and its masks at creation: `R(a) = (!ALLOWLIST || (flags(a) & requiredFlags) == requiredFlags) && (!DENYLIST || (flags(a) & deniedFlags) == 0)`, where `flags(a)` is the attestation's word while its attester is enabled and `validUntil` has not passed, else 0. Both off, nobody is stopped, and a token with both off adds no read. Both on means known, and not denied. Each bit is disabled and locked on its own. **Features only lose bits after creation, so a token created with a bit off never gets it: the issuer chooses at creation.** Money for general use turns on `DENYLIST`; a security needing known holders turns on `ALLOWLIST`. **Only receivers of this token are checked** (`to` of a transfer or mint, fee recipient): a denied account can still send, burn and unwrap, and a holder whose attestation lapsed can still send to an eligible party. A sanctioned account takes `FREEZE` as well, which stops a sender and expires. The owner may `disableFeature` either bit one-way when it is not locked ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), so a dead registry never locks a token that left it disableable. A sender-side check would trap holders when an attester is slow. BUILT (T29 `7411a468`; `test/as/Registry.t.sol`, `Receiver.t.sol`, `RegistryFailure.t.sol`): bit 8 on kinds 8 and 9, bit 9
+`attributes(UA)` registry extension was withdrawn and its flag bits reused below). `ALLOWLIST`, bit 8, reads `requiredFlags`; `DENYLIST`, bit 9, reads `deniedFlags`; a regulated token pins one `complianceRegistry` and its masks at creation: `R(a) = (!ALLOWLIST || (flags(a) & requiredFlags) == requiredFlags) && (!DENYLIST || (flags(a) & deniedFlags) == 0)`, where `flags(a)` is the compliance row's word while its KYC provider is enabled and `validUntil` has not passed, else 0. Both off, nobody is stopped, and a token with both off adds no read. Both on means known, and not denied. Each bit is disabled and locked on its own. **Features only lose bits after creation, so a token created with a bit off never gets it: the issuer chooses at creation.** Money for general use turns on `DENYLIST`; a security needing known holders turns on `ALLOWLIST`. **Only receivers of this token are checked** (`to` of a transfer or mint, fee recipient): a denied account can still send, burn and unwrap, and a holder whose attestation lapsed can still send to an eligible party. A sanctioned account takes `FREEZE` as well, which stops a sender and expires. The owner may `disableFeature` either bit one-way when it is not locked ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), so a dead registry never locks a token that left it disableable. A sender-side check would trap holders when a KYC provider is slow. BUILT (T29 `7411a468`; `test/as/Registry.t.sol`, `Receiver.t.sol`, `RegistryFailure.t.sol`): bit 8 on kinds 8 and 9, bit 9
 on 8–13; the call is bounded ([CTR-AS-28](#CTR-AS-28)). **Universal Accounts** (owner 2026-10-13,
 [CTR-UA-27](accounts.md#CTR-UA-27); built so): the registry keys accounts by `bytes32` (a native address zero-padded), the
 freeze set likewise, and the per-transfer checks hook the UA ledger's `_uaMove` too, the UA → UA branch included
@@ -188,7 +188,7 @@ for their controller. Otherwise one attestation would be a master key across eve
 | 2 | A forced transfer needs a live compliance **order record** `{subject, beneficiary, maxAmount, freezeUntil}` (`orderId` = keccak256 of the authority's canonical order identifier, the document off chain), moves only from the frozen subject to the recorded beneficiary, cumulatively ≤ `maxAmount`. There is **no court-ordered burn** |
 | 3 | A frozen account cannot send, be a meta-tx `from` or receive a relayer fee; it can still receive. Issuer-only freezes last ≤ 30 days (≤ 60 days per episode); longer ones need a compliance record |
 | 4 | `pause(ref, until)`: `until ≤ now + 7 days`, no extension, 7-day cooldown; a fee-less unwrap, holder burn and forced transfer are never paused |
-| 5 | Receiver check through a separate `ComplianceRegistry` (account → flags, `validUntil`, attester; no personal data): `ALLOWLIST` (`requiredFlags`) and `DENYLIST` (`deniedFlags`), both off by default; only **receivers** are checked; checks run at the pipeline's shape step |
+| 5 | Receiver check through a separate `ComplianceRegistry` (account → flags, `validUntil`, KYC provider; no personal data): `ALLOWLIST` (`requiredFlags`) and `DENYLIST` (`deniedFlags`), both off by default; only **receivers** are checked; checks run at the pipeline's shape step |
 | 6 | Confidential tokens: a confidential balance can be frozen (stuck) but not seized on public chains; the regulated confidential kinds 10–13 follow [CTR-GOV-17](../decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules) (built) |
 
 ### 2.1 Shape
@@ -279,7 +279,7 @@ holder arrives through the `GovernanceRouter`, which carries one merged entry pe
 `recordId = keccak256(abi.encode(orderId, subject, beneficiary))`. Views: `regulatedConfig()` (one struct: `complianceRegistry`,
 `controls`, `requiredFlags`, `deniedFlags`, `termsHash`, `pausedUntil`, `pauseCooldownUntil`), `freezeOf(bytes32)`,
 `isFrozen(bytes32)` (`F`), `canReceive(bytes32) returns (bool ok, uint8 reason)` (1 not attested or flags missing, 2 expired,
-3 attester disabled, 4 denied), `order(bytes32)`; `registry()` stays the UA registry. Errors: `Frozen`, `TokenPaused`,
+3 KYC provider disabled, 4 denied), `order(bytes32)`; `registry()` stays the UA registry. Errors: `Frozen`, `TokenPaused`,
 `NotEligible(bytes32 account, uint8 reason)` (0 refused by `hasFlags` on the hot path), `FeeRecipientFrozen`, `RefRequired`,
 `RegulatedConfigInvalid`, `RegistryCodeMismatch`, `RegistryUnavailable`, `RegistryGasStarved`, `OrderExists`, `OrderUnknown`,
 `OrderInactive`, `SubjectNotFrozen`, `OrderExceeded`, `FreezeTooLong`, `FreezeCooldown`, `NotFrozen`, `AlreadyRecordFrozen`,
@@ -358,39 +358,47 @@ Expiry is passive. Integrators read `pausedUntil()`.
 ### 2.6 `ComplianceRegistry`
 
 ```solidity
-interface IComplianceRegistry {   // smartcontracts/evm/src/regulated/IComplianceRegistry.sol
-    event AttesterSet(address indexed attester, uint32 indexed attesterId, bool enabled);
-    event Attested(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed attesterId);
-    error NotAdmin(); error NotAttester(); error AdminNotContract(address a); error LengthMismatch();
+interface IComplianceRegistry is IAdmin {   // smartcontracts/evm/src/regulated/IComplianceRegistry.sol (CTR-GOV-23)
+    event KycProviderSet(bytes32 indexed provider, uint32 indexed providerId, bool enabled);
+    event ComplianceSet(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed providerId);
+    error AdminZero(); error AdminUnreachable(bytes32 admin); error RouterNotContract(address govRouter);
+    error NotKycProvider(); error KycProviderZero(); error TooManyRows(uint256 n); error LengthMismatch();
     error EligibleContractAdminOnly(); error AdminWrittenSlot(bytes32 account);
 
-    function admin() external view returns (address);                 // a contract, written once by the constructor
-    function setAttester(address attester, bool enabled) external;     // admin; ids assigned once, never reused
-    function attesterId(address attester) external view returns (uint32);
-    function attesterEnabled(uint32 id) external view returns (bool);  // id 0 (the admin) always
-    function attest(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata validUntil) external;
-        // enabled attester, or admin (id 0); flags 0 = revoke; ELIGIBLE_CONTRACT only by admin, validUntil = max;
-        // a slot with attesterId == 0 && flags != 0 only the admin overwrites or revokes (AdminWrittenSlot)
-    function attestationOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 attesterId);
+    // IAdmin: admin(), pendingAdmin() (UA ids, bytes32), transferAdmin(bytes32), acceptAdmin(); no renounceAdmin (Q2)
+    function govRouter() external view returns (address);              // written once by the constructor; 0 = none
+    function setKycProvider(bytes32 provider, bool enabled) external;  // admin; ids assigned once, never reused
+    function kycProviderId(bytes32 provider) external view returns (uint32);
+    function kycProviderEnabled(uint32 id) external view returns (bool); // id 0 (the admin) always
+    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until) external;
+        // the subject (pad(msg.sender) or the router's subject()): the admin (id 0) or an enabled KYC provider; at most
+        // 256 rows; flags 0 = revoke; ELIGIBLE_CONTRACT only by the admin, until = max; a slot with providerId == 0 &&
+        // flags != 0 only the admin overwrites or revokes (AdminWrittenSlot)
+    function complianceOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 providerId);
     function hasFlags(bytes32 account, uint64 required, uint64 denied) external view returns (bool);
         // (required == 0 || (active && ((flags & required) == required || flags & ELIGIBLE_CONTRACT != 0)))
-        //   && !(active && flags & denied != 0), with active = attesterEnabled(id) && validUntil ≥ now
+        //   && !(active && flags & denied != 0), with active = kycProviderEnabled(id) && validUntil ≥ now
 }
 ```
 
 A token never calls it through a Solidity interface: it makes the bounded `STATICCALL` of [CTR-AS-28](#CTR-AS-28) and pins the
-canonical runtime by `extcodehash`. The admin lives in storage, written once by the constructor (owner 2026-11-05). BUILT
-(T29 `7411a468`; `test/as/Registry.t.sol`); deployed with the regulated releases (T33).
+canonical runtime by `extcodehash`. The admin is a UA id in storage ([CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)):
+its first value the constructor's `(bytes32 admin, address govRouter)`, a derived admin only with a router; it moves by the
+two-step `transferAdmin` / `acceptAdmin` and is never renounced (Q2); a derived admin and each derived KYC provider act
+through the router's `mtxSetKycProvider` / `mtxSetCompliance`, the provider the subject of its own call (spec
+2026-11-10-admin-not-owner.md §5.3.1). A regulated token takes only a registry whose `govRouter()` is 0 or its own
+(`ComplianceRegistryRouterMismatch`). BUILT (T29 `7411a468`; CTR-GOV-23; `test/as/Registry.t.sol`,
+`test/as/RegistryAdmin.t.sol`); deployed with the regulated releases (T33), `COMPLIANCE_ADMIN` a UA id.
 
-Change (owner 2026-11-06): a slot the admin (id 0) wrote can be overwritten or revoked only by the admin; another
-attester gets `AdminWrittenSlot(account)`. An empty slot also reads `attesterId == 0`, so a slot is admin-held when
-`attesterId == 0 && flags != 0`; an admin row of flags 0 is a revoke and stays open to attesters, since nothing is left to
-protect. Attesters still overwrite their own and each other's rows. Status: BUILT (branch `ua-mtx-merge`).
+Change (owner 2026-11-06): a slot the admin (id 0) wrote can be overwritten or revoked only by the admin; a KYC
+provider gets `AdminWrittenSlot(account)`. An empty slot also reads `providerId == 0`, so a slot is admin-held when
+`providerId == 0 && flags != 0`; an admin row of flags 0 is a revoke and stays open to KYC providers, since nothing is left
+to protect. KYC providers still overwrite their own and each other's rows. Status: BUILT (branch `ua-mtx-merge`).
 
 Flag bits (meaning set by the issuer's policy, market-neutral): `KYC_DONE = 1`, `ACCREDITED = 2`,
 `SANCTIONS_CLEAR = 4`, `ELIGIBLE_CONTRACT = 8` ([CTR-AS-16](#CTR-AS-16)); bits 16–63 issuer-defined. One registry may
-serve many tokens; anyone may deploy one (a plain deployment). Disabling an attester voids every attestation it made in
-the same block (one extra SLOAD per check, `attesterEnabled`). The registry holds no personal data: the client system
+serve many tokens; anyone may deploy one (a plain deployment). Disabling a KYC provider voids every row it wrote in
+the same block (one extra SLOAD per check, `kycProviderEnabled`). The registry holds no personal data: the client system
 is the system of record for identity evidence and pushes only flags. The node alerts 30 days before any protocol
 clone's attestation would expire (it should not: [CTR-AS-16](#CTR-AS-16) mandates `type(uint64).max`). Credentials
 from the optional verifiable-credential layer reach contracts only as these flags
@@ -427,7 +435,7 @@ these statements, kept to the enabled bits:
   Unwrapping is never paused, and frozen accounts cannot unwrap."* Kind `NORMAL`: *"The issuer can pause transfers for up to
   7 days at a time, with at least 7 days between pauses. Redemption, buyback and exchange offers are paused too; only
   burning stays open."*
-- *"Receiving requires an attestation from the registry above; its admin chooses the attesters. The owner can switch
+- *"Receiving requires an attestation from the registry above; its admin chooses the KYC providers. The owner can switch
   this check off for good, unless the token locked it; never on."*
 - *"The issuer cannot mint outside the minter rules, change rates beyond the rate rules, or touch the reserve."*
 
@@ -457,7 +465,7 @@ Invariants (each an invariant test):
 | A4 | Subject front-runs a freeze | moves funds first. Mitigation: private submission (as for the guardian, [token-wrappers.md](token-wrappers.md#CTR-TOK-07)); moot on private chains |
 | A5 | Replay / over-execution of an order | cumulative `executed ≤ maxAmount`; records immutable; revocation stops it |
 | A6 | Wrong beneficiary | impossible without a new record by `compliance` |
-| A7 | Registry admin compromised | attests anyone (allowlist bypass), clears a denial, or voids attesters (receives fail); no fund movement; the owner can `disableFeature(ALLOWLIST)` or `disableFeature(DENYLIST)` unless the token locked it. Disclosed; registry pinned at creation |
+| A7 | Registry admin compromised | attests anyone (allowlist bypass), clears a denial, or voids KYC providers (receives fail); no fund movement; the owner can `disableFeature(ALLOWLIST)` or `disableFeature(DENYLIST)` unless the token locked it. Disclosed; registry pinned at creation |
 | A8 | Attestation lapse | receivers fail; holders still send to eligible parties, burn and unwrap |
 | A9 | Fee griefing with a frozen/ineligible fee recipient | fails at the shape step (cheap) |
 | A10 | Unwrap to a frozen accomplice | out of scope: the underlying is a different asset; the holder itself must be unfrozen to unwrap |
@@ -469,7 +477,7 @@ Invariants (each an invariant test):
 
 Gas (estimates; measured numbers replace them in `test/as/RegulatedGas.t.sol`): per transfer on top of the tier row:
 hot-slot SLOAD (2 100 cold) + `FreezeState(from)` slot a (2 100 cold) ≈ **+4.3 k** without allowlist; with allowlist,
-per checked receiver a registry call (cold account 2 600 + attestation slot 2 100 + `attesterEnabled` 2 100 + call
+per checked receiver a registry call (cold account 2 600 + compliance slot 2 100 + `kycProviderEnabled` 2 100 + call
 overhead) ≈ **+8 k**; a meta-tx with a fee checks two receivers ≈ +16 k. The `_update` re-check on the meta-tx path is
 warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold). Unregulated kinds: **0**. `recordOrder`
 ≈ 95 k (4 new slots), `forceTransfer` ≈ 60 k, `freeze` ≈ 27–50 k.
@@ -513,10 +521,10 @@ derived UA is refused; `RATE_ADJUSTABLE` keeps "a native id with code". One id h
 with `grantDelay ≠ 0`, propose: `commit = keccak256(abi.encode(action, bit, account, argsHash))` (`GRANT 1`, `SET 2`, `REVOKE
 3`, `RENOUNCE 4`, `DISABLE 5`); one live pending per key, another commitment there is `GrantTermsMismatch`; only the proposer
 confirms (`NotProposer`), in `[eta, eta + grantDelay]` (`GrantNotReady` before; dead after, a confirm then proposes anew) and in
-the same owner generation (`acceptOwnership` and `renounceOwnership` kill every pending); the owner or the proposer cancels
+the same admin generation (`acceptAdmin` and `renounceAdmin` kill every pending); the owner or the proposer cancels
 (`cancelGrant`). Unmasked bits and `grantDelay = 0` keep one call. Tests: `test/governance/GovRelax.t.sol`
 (`test_relax*TakesTwoCalls`, `test_grantThenRevokeExclude`, `test_ownerCannotConfirmHolderRenounce`,
-`test_holderCannotConfirmOwnerRevoke`, `test_acceptOwnershipKillsPendingRelax`, `test_confirmAfterWindowProposesAgain`,
+`test_holderCannotConfirmOwnerRevoke`, `test_acceptAdminKillsPendingRelax`, `test_confirmAfterWindowProposesAgain`,
 `test_cancelByProposer`, `test_unmaskedBitsOneCallAsToday`, `test_grantDelayZeroOneCall`), `test/governance/GovDelay.t.sol`.
 
 <a id="CTR-AS-22"></a>**CTR-AS-22** — **A relaxation proposal changes nothing** (RK-3): `barred`, `_clear`, `features` and the

@@ -8,6 +8,7 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -617,7 +618,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, WLIST, _pad(OWNER)));
         vm.prank(OWNER);
         w.setWrapMember(_pad(bob), true, true); // no holder of bit 26 can exist without it
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotAdmin.selector, _pad(bob)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, _pad(bob)));
         vm.prank(bob);
         w.setWrapLimits(a, false, false, false);
     }

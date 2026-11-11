@@ -610,7 +610,7 @@ RELEASES = ((0, "NormalToken"), (4, "NormalPqzToken"), (5, "WrappedPqzToken"), (
             (13, "WrappedPqzRegulatedToken"))
 
 
-def registry_codehash():
+def compliance_registry_codehash():
     """The canonical `ComplianceRegistry` runtime's code hash (regulated-kinds spec §5, F-11), from out/."""
     j = json.load(open(os.path.join(EVM, OUT_DIR, "ComplianceRegistry.sol", "ComplianceRegistry.json")))
     return keccak256(bytes.fromhex(j["deployedBytecode"]["object"].removeprefix("0x")))
@@ -618,8 +618,8 @@ def registry_codehash():
 
 def core_args(kind):
     """A kind's own constructor arguments, which each of its body modules takes too (T66b M1): on 8-13
-    `abi.encode(REGISTRY_CODEHASH)`, 32 bytes; else none."""
-    return registry_codehash() if kind >= 8 else b""
+    `abi.encode(COMPLIANCE_REGISTRY_CODEHASH)`, 32 bytes; else none."""
+    return compliance_registry_codehash() if kind >= 8 else b""
 
 
 def kind_modules(kind):
@@ -632,9 +632,9 @@ def kind_modules(kind):
 
 def impl_args(kind, modules):
     """A release's `implArgs` (T66b §4.5, one named struct): `abi.encode(ImplArgs(modules))` on 0-5,
-    `abi.encode(RegulatedImplArgs(REGISTRY_CODEHASH, modules))` on 8-13."""
+    `abi.encode(RegulatedImplArgs(COMPLIANCE_REGISTRY_CODEHASH, modules))` on 8-13."""
     if kind >= 8:
-        return encs([("t", ["w", ("a", "w")])], [[registry_codehash(), modules]])
+        return encs([("t", ["w", ("a", "w")])], [[compliance_registry_codehash(), modules]])
     return encs([("t", [("a", "w")])], [[modules]])
 
 
@@ -1118,8 +1118,8 @@ def release_rows():
     them: `RegulatedLib` linked in each regulated one's init code (so in its env's link closure) and in no base kind's, and
     each regulated release's `implArgs` the `ComplianceRegistry` runtime's code hash, the pin of test/as/Registry.t.sol."""
     check([k for k, _ in RELEASES] == [0, 4, 5, 12, 13], f"releases: kinds {[k for k, _ in RELEASES]}")
-    pin = re.search(r"REGISTRY_CODEHASH = (0x[0-9a-f]{64});", open(os.path.join(EVM, "test/as/Registry.t.sol")).read())
-    check(pin is not None and registry_codehash() == hb(pin.group(1)), "ComplianceRegistry runtime hash = Registry.t.sol's pin")
+    pin = re.search(r"COMPLIANCE_REGISTRY_CODEHASH = (0x[0-9a-f]{64});", open(os.path.join(EVM, "test/as/Registry.t.sol")).read())
+    check(pin is not None and compliance_registry_codehash() == hb(pin.group(1)), "ComplianceRegistry runtime hash = Registry.t.sol's pin")
     for kind, name in RELEASES:
         mods = kind_modules(kind)
         closure = release_closure(kind, name)
@@ -1133,7 +1133,7 @@ def release_rows():
         w = [a[i:i + 32] for i in range(0, len(a), 32)]
         check(len(core_args(kind)) == (32 if kind >= 8 else 0) and len(w) == 3 + head + len(ms) - 1
               and int.from_bytes(w[head + 1], "big") == len(ms) and [x.hex()[24:] for x in w[head + 2:]] == [m[2:] for m in ms]
-              and (kind < 8 or w[1] == registry_codehash()), f"{name} (kind {kind}): implArgs {len(a)} B, the module list")
+              and (kind < 8 or w[1] == compliance_registry_codehash()), f"{name} (kind {kind}): implArgs {len(a)} B, the module list")
 
 
 def self_test():
@@ -1314,10 +1314,12 @@ def run(kd, kr, ke):
     fac = D.deploy("OpenFactory", encs(["w"], [sd.addr]))
     ref = int(rpc("eth_blockNumber", []), 16) - 1
     ref_hash = bytes.fromhex(rpc("eth_getBlockByNumber", [hex(ref), False])["hash"][2:])
-    sd.send(fac, cd("configureChain(bytes32,uint64,address,uint256,bytes32)", ["w"] * 5, uid, 0, router, ref, ref_hash),
+    router_h = keccak256(bytes.fromhex(rpc("eth_getCode", [router, "latest"])[2:]))  # spec §13.3: the router's code hash
+    sd.send(fac, cd("configureChain(bytes32,uint64,address,bytes32,uint256,bytes32)", ["w"] * 6, uid, 0, router, router_h, ref,
+                    ref_hash),
             "configureChain")
     # ua-mtx-merge T31 (regulated-kinds spec §6.1): the regulated PQZ kinds 12, 13 too, each on its base kind's env with
-    # `RegulatedLib` in the link closure (D.linked finds it), `implArgs` = abi.encode(REGISTRY_CODEHASH), the canonical
+    # `RegulatedLib` in the link closure (D.linked finds it), `implArgs` = abi.encode(COMPLIANCE_REGISTRY_CODEHASH), the canonical
     # `ComplianceRegistry` runtime's code hash (F-11); this run creates no regulated token (the regulated rows are the forge
     # suites test/as/confidential/Pqz*: a token naming a registry needs one deployed with COMPLIANCE_ADMIN, plan T33)
     for kind, name in RELEASES:
@@ -1339,14 +1341,14 @@ def run(kd, kr, ke):
         # group 3f (spec §3 C6): --zero-dep publishes the PQZ kinds on deps = [0x0], where only an OFFCHAIN token can be
         # created (a PRECOMPILE one reverts SelfTestFailed(address(0)))
         env = [reg, 0, 0, ([0] if ZERO_DEP else [pqv]) if kind else [], [], libs, hashes]
-        sd.send(fac, cd(f"publishEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishEnv(kind {kind}, 1)")
+        sd.send(fac, cd(f"publishTokenEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishTokenEnv(kind {kind}, 1)")
         r = sd.send(fac, cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
                                kind, 1, 1, code, impl_args(kind, ms)),
                     f"deployTokenImplementation(kind {kind}, 1) {name}")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower() and len(x["topics"]) == 4)
         log(f"      {name} release at 0x{lg['topics'][3][-40:]} ({int(r['gasUsed'], 16):,} gas)")
     for kind in [k for k, _ in RELEASES if k and k not in SKIP_KINDS]:
-        sd.send(fac, cd("setKindEnabled(uint8,bool)", ["w", "w"], kind, 1), f"setKindEnabled({kind}, true)")
+        sd.send(fac, cd("setTokenKindEnabled(uint8,bool)", ["w", "w"], kind, 1), f"setTokenKindEnabled({kind}, true)")
 
     # -------------------------------------------------------------- 2. UAs
     log("\n## 2. UAs: ML-DSA UAs and PQZ holders (ML-DSA UA + pqz-mlwe key attribute, real R_REG proofs)")

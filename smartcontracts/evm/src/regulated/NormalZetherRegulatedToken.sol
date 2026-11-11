@@ -172,7 +172,7 @@ interface INormalZetherRegulatedTokenAbi {
     error ReceiverFeeShape();
     error RecordFreezeShorter(uint64 until);
     error RefRequired();
-    error RegistryCodeMismatch(address registry, bytes32 codehash);
+    error ComplianceRegistryCodeMismatch(address complianceRegistry, bytes32 codehash);
     error RescueAssetInvalid(address asset);
     error RescueConfigInvalid();
     error RescueTouchedLeg(address leg);
@@ -208,6 +208,7 @@ interface INormalZetherRegulatedTokenAbi {
     error ZeroAmount(bytes32 orderHash);
     error ZeroFill(bytes32 orderHash);
     error ZeroRecipient();
+    error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
 }
 
 /// @title NormalZetherRegulatedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -234,7 +235,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     function _coreArgs(bytes memory implArgs) private pure returns (bytes memory) {
         RegulatedImplArgs memory a = abi.decode(implArgs, (RegulatedImplArgs));
         a;
-        return abi.encode(a.registryCodehash);
+        return abi.encode(a.complianceRegistryCodehash);
     }
 
     /// Module `i` of the list, checked (§4.5): code, this kind, its group, this factory, the registry code hash.
@@ -244,7 +245,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         if (ITokenModule(m).kind() != uint8(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED) || ITokenModule(m).moduleGroup() != group || ITokenModule(m).factory() != FACTORY) {
             revert ModuleMismatch(i);
         }
-        if (ITokenModule(m).REGISTRY_CODEHASH() != REGISTRY_CODEHASH) revert ModuleMismatch(i);
+        if (ITokenModule(m).COMPLIANCE_REGISTRY_CODEHASH() != COMPLIANCE_REGISTRY_CODEHASH) revert ModuleMismatch(i);
     }
 
     /// The module of group `g` inside a `pure` stub (S2): an immutable read is not `pure`, so the reader is cast, as the stubs are.

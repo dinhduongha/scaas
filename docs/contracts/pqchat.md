@@ -92,8 +92,8 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
   with a well-formed env (`EnvMissing`). `ownerUA` may be 0, is fixed and has no transfer.
 - **The owner UA names the instance and nothing more** (Q2): `owner()` returns it; it has no power over sessions, epochs,
   messages, topics, entries or votes, and no entry reads it. The instance has no pause, no admin and no upgrade.
-- **Introspection**: `factoryInfo()` returns `(factory, chainUid, contractClass = 3, kind = 0, version, ownerUA,
-  initialized)`; `supportsInterface` answers ERC-165 (`0x01ffc9a7`) and `type(IPqChat).interfaceId`.
+- **Introspection**: `factoryInfo()` returns `(factory, chainUid, contractClass = 3, kind = 0, version,
+  initialized)` (CTR-GOV-23: no owner in it; the instance's `owner()` answers its owner UA); `supportsInterface` answers ERC-165 (`0x01ffc9a7`) and `type(IPqChat).interfaceId`.
 - **The body module** ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30), applied by 3C-D2 when the release passed the
   33,594 B line at 34,223 B): `PqChatTopics` holds the bodies of the public topics and votes (§9: the six writes and
   fourteen views). The release keeps every entry of `IPqChat` (one ABI, one `interfaceId`) and the bodies of the 1:1
@@ -125,7 +125,7 @@ a `UASig` over `uaMessage(kind, PURPOSE_PQCHAT, typed(record))` and checked by t
   over two levels by its quorum (`UASig.members`; [CTR-UA-07](accounts.md#CTR-UA-07), [CTR-UA-37](accounts.md#CTR-UA-37),
   [CTR-UA-38](accounts.md#CTR-UA-38)). Native ids and unregistered UAs are refused by the registry (`UAUnauthorized`),
   as is a verifier left too little gas (`UAVerifyGas`); those reverts bubble unchanged, except where
-  [CTR-CHAT-15](#CTR-CHAT-15) names them `PqTopicNotOwner`. A `PqChat` release deploys only against a registry that has
+  [CTR-CHAT-15](#CTR-CHAT-15) names them `PqTopicNotAdmin`. A `PqChat` release deploys only against a registry that has
   `requirePortable`.
 - **No fee, no deadline, no submitter** in any record ([CTR-CHAT-19](#CTR-CHAT-19)).
 - **The type strings**, exactly as `PqChatTypes.sol` hashes them, pinned by `*TypehashIsPinned` against the vectors. Each
@@ -139,9 +139,9 @@ a `UASig` over `uaMessage(kind, PURPOSE_PQCHAT, typed(record))` and checked by t
 | `PqChatEpoch` | `PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` | `author` |
 | `PqChatLeave` | `PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)` | `member` |
 | `PqChatMessage` | `PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext)` | `sender` |
-| `PqTopic` | `PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)` | `owner` |
-| `PqTopicUpdate` | `PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)` | the topic's owner |
-| `PqTopicWriter` | `PqTopicWriter(bytes32 topicId,bytes32 writer,bool granted,uint64 seq)` | the topic's owner |
+| `PqTopic` | `PqTopic(bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)` | `admin` |
+| `PqTopicUpdate` | `PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)` | the topic's admin |
+| `PqTopicWriter` | `PqTopicWriter(bytes32 topicId,bytes32 writer,bool granted,uint64 seq)` | the topic's admin |
 | `EntryRef` | `EntryRef(bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash)` | (inside `PqTopicEntry`) |
 | `PqTopicEntry` | `PqTopicEntry(bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body)EntryRef(bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash)` | `author` |
 | `PqTopicEdit` | `PqTopicEdit(bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body)` | the entry's author |
@@ -202,7 +202,7 @@ calls, owner may override).
   copy the record elsewhere; every other event carries no signature: `PqChatSessionCreated(sessionId, creator,
   homeChain)`, `PqChatEpochAdded(sessionId, epochId, parentEpochId, epoch, author)`, `PqChatWraps(epochId, first, count)`,
   `PqChatEpochComplete(epochId)`, `PqChatLeft(sessionId, epochId, member)`, `PqChatStored(hint, index)`,
-  `PqTopicCreated(topicId, owner)`, `PqTopicUpdated(topicId, seq)`, `PqTopicWriterSet(topicId, writer, granted, seq)`,
+  `PqTopicCreated(topicId, admin)`, `PqTopicUpdated(topicId, seq)`, `PqTopicWriterSet(topicId, writer, granted, seq)`,
   `PqTopicVoted(entryId, voter, value, seq)`. No view reads a log and no reader needs one ([CTR-CHAT-14](#CTR-CHAT-14)).
 - Ciphertexts (`mlkemCt`, `sealedKey`, `sealedInfo`, a message's `ciphertext`, a stored `env`) stay in state, never only
   a hash with the bytes in calldata or an event.
@@ -457,17 +457,17 @@ P41).
 
 - `createTopic(PqTopic t, UASig sig) returns (bytes32 topicId)`: `name` 1–512 B (owner 2026-11-10; was 1–128 B),
   `homeChain ≠ 0`, `homeChatContract ≠ 0` (`PqTopicShape`; no other rule reads the home), signed by `owner`, `(owner, nonce)` unused in the topic scope. `about`
-  is Markdown bytes; `openReplies` is the reply flag (clients create topics with `true`, D19). The owner is fixed for the
-  topic's life; an `msig` owner gives shared ownership.
+  is Markdown bytes; `openReplies` is the reply flag (clients create topics with `true`, D19). The admin is fixed for the
+  topic's life; an `msig` admin gives shared administration (CTR-GOV-23: the topic's former `owner` is its `admin`).
 - `updateTopic(PqTopicUpdate u, UASig sig)`: the topic exists (`PqTopicUnknown`), `seq == stored + 1` (`PqTopicSeq`),
-  `name` 1–512 B (`PqTopicShape`), signed by the topic's owner. It replaces `name`, `about` and `openReplies`;
+  `name` 1–512 B (`PqTopicShape`), signed by the topic's admin. It replaces `name`, `about` and `openReplies`;
   `topicOf(topicId)` returns the create record with the latest values and `seq`. A topic record is stored as every record
   (`_put`): one SSTORE2 blob while it fits the chain's limit, else a chain of blobs; `about` has no bound of its own.
-- `setTopicWriter(PqTopicWriter w, UASig sig)`: the topic exists, `writer` is neither 0 nor the owner (`PqTopicShape`),
-  `seq == stored + 1` per `(topicId, writer)`, signed by the topic's owner. `writerOf(topicId, ua)` returns `(granted,
+- `setTopicWriter(PqTopicWriter w, UASig sig)`: the topic exists, `writer` is neither 0 nor the admin (`PqTopicShape`),
+  `seq == stored + 1` per `(topicId, writer)`, signed by the topic's admin. `writerOf(topicId, ua)` returns `(granted,
   seq)`; `writersOf` lists the writer from its first record.
 - The update and writer records name no signer, so a signature the registry refuses as `UAUnauthorized` is reported as
-  `PqTopicNotOwner(owner)`; any other registry revert bubbles.
+  `PqTopicNotAdmin(admin)`; any other registry revert bubbles.
 - **No hide flag, no moderator role, no ban list** (D18); the instance's owner UA has no right here
   ([CTR-CHAT-02](#CTR-CHAT-02)). A client may filter locally. Rights are read from this instance's state at submission.
 
@@ -487,7 +487,7 @@ checked** (owner D19, D20 and Q1 of 2026-11-07; topics spec P33, P35, P38).
 - **`ref`**: `(chainUid, pqchat, entryId, contentHash)`, `contentHash` zero or the `typed` digest of the referenced
   version. No bridge, no proof, no read across chains: the target may not exist. A reader resolves it on that chain.
 - `editEntry(PqTopicEdit d, UASig sig)`: the original exists (`PqTopicUnknown(entryId)`), `author` is the original's
-  (`PqTopicNotAuthor`; the topic owner included), `version == count + 1` with the first edit 2 (`PqTopicVersion(expected,
+  (`PqTopicNotAuthor`; the topic admin included), `version == count + 1` with the first edit 2 (`PqTopicVersion(expected,
   got)`), `mediaType` and `body` as above, signed by `author`, nonce in the original's topic scope. An edit keeps the
   original's topic, parent, reference, votes and place in every list; replies and votes attach to the original id.
   `entryOf(entryId)` returns the place and the latest version (`versionCount` included), `versionAt(entryId, version)`
@@ -505,7 +505,7 @@ UAs, not people; a client may weigh or filter voters on its own.
 <a id="CTR-CHAT-18"></a>**CTR-CHAT-18** — **Every topic list lives in state, append-only, and answers a page as `(ids,
 total)`** (owner 2026-11-07, topics spec P42; the shape 3C-D8 is a controller call, owner may override).
 
-`topics(start, count)`, `topicsByOwner(owner, start, count)`, `writersOf(topicId, start, count)`, `posts(topicId, start,
+`topics(start, count)`, `topicsByAdmin(admin, start, count)`, `writersOf(topicId, start, count)`, `posts(topicId, start,
 count)`, `replies(parentId, start, count)` and `byAuthor(author, start, count)` (originals only, every topic) return at
 most `count` ids from `start`, fewer at the end, empty past it, and the list's length; `count = 0` is the count view. No
 clamp: the call's gas bounds a page. The node's indexer may mirror them; the state is the answer.
@@ -528,8 +528,8 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 | `postMessage(m, sig)` | anyone submits; `m.sender` signs | epoch of that session, complete, at home no complete child, sender a member, signature, nonce, one blob | `PqChatUnknown`, `PqChatIncomplete`, `PqChatEpochTaken`, `PqChatNotMember`, registry, `PqChatNonceUsed`, `PqChatShape` |
 | `storeMessage(v, hint, env)` | anyone, unsigned | `v == 1`, one blob | `PqChatShape` |
 | `createTopic(t, sig)` | anyone submits; `t.owner` signs | name length, home named, signature, nonce | `PqTopicShape`, registry, `PqChatNonceUsed` |
-| `updateTopic(u, sig)` | anyone submits; the topic's owner signs | topic known, `seq`, name length, owner's signature | `PqTopicUnknown`, `PqTopicSeq`, `PqTopicShape`, `PqTopicNotOwner` |
-| `setTopicWriter(w, sig)` | anyone submits; the topic's owner signs | topic known, writer not 0 or the owner, `seq`, owner's signature | `PqTopicUnknown`, `PqTopicShape`, `PqTopicSeq`, `PqTopicNotOwner` |
+| `updateTopic(u, sig)` | anyone submits; the topic's admin signs | topic known, `seq`, name length, admin's signature | `PqTopicUnknown`, `PqTopicSeq`, `PqTopicShape`, `PqTopicNotAdmin` |
+| `setTopicWriter(w, sig)` | anyone submits; the topic's admin signs | topic known, writer not 0 or the admin, `seq`, admin's signature | `PqTopicUnknown`, `PqTopicShape`, `PqTopicSeq`, `PqTopicNotAdmin` |
 | `postEntry(e, sig)` | anyone submits; `e.author` signs | topic known, parent in the topic, rights, lengths, `ref` shape, signature, nonce | `PqTopicUnknown`, `PqTopicParent`, `PqTopicNotWriter`, `PqTopicShape`, `PqTopicRef`, registry, `PqChatNonceUsed` |
 | `editEntry(d, sig)` | anyone submits; the original's author signs | original known, author, version, lengths, signature, nonce | `PqTopicUnknown`, `PqTopicNotAuthor`, `PqTopicVersion`, `PqTopicShape`, registry, `PqChatNonceUsed` |
 | `voteEntry(v, sig)` | anyone submits; `v.voter` signs | entry known, value, `seq`, signature | `PqTopicUnknown`, `PqTopicVoteValue`, `PqTopicSeq`, registry |
@@ -544,7 +544,7 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 | `topicOf(topicId)`, `entryOf(entryId)` | view | known id | `PqTopicUnknown` |
 | `versionAt(entryId, version)` | view | known id, `1 ≤ version ≤ count` | `PqTopicUnknown`, `PqTopicVersion` |
 | `writerOf`, `scoreOf`, `voteOf`, `topicNonceUsed`, `entryNonceUsed` | view | — | none: zero when unknown |
-| `topics`, `topicsByOwner`, `writersOf`, `posts`, `replies`, `byAuthor` | view | `(ids, total)`, no clamp | none |
+| `topics`, `topicsByAdmin`, `writersOf`, `posts`, `replies`, `byAuthor` | view | `(ids, total)`, no clamp | none |
 
 ## 11. Relaying
 

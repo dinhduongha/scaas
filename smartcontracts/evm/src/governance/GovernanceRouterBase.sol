@@ -7,6 +7,7 @@ import {IUALedger} from "../metatx/IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IGovernance} from "./IGovernance.sol";
+import {IAdmin} from "./IAdmin.sol";
 import {IGovernanceRouter} from "./IGovernanceRouter.sol";
 
 /// @title The typed structs of `GovernanceRouter` (spec `2026-11-04-governance-ua-identity.md` §3; governance spec §3.2): one
@@ -119,6 +120,46 @@ library GovernanceRouterTypes {
         "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
     bytes32 internal constant UA_SET_WRAP_MEMBER = keccak256(
         "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+
+    // ---- round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §13.3): the admin ops of `OpenFactory` and
+    //      of a `ComplianceRegistry` (its KYC provider's `setCompliance` too); `target` the factory or the registry, then the
+    //      direct entry's parameters, the ids flat. `Env` hashes as EIP-712 does (each array the `keccak256` of its 32-byte
+    //      words), a `string reason` as `keccak256(bytes(reason))`; the approval's expiry is `until` (`validUntil` is E's).
+    bytes32 internal constant ENV = keccak256(
+        "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)");
+    bytes32 internal constant UA_PUBLISH_TOKEN_ENV = keccak256(
+        "UAPublishTokenEnv(bytes32 from,address target,uint8 kind,uint16 envVersion,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)");
+    bytes32 internal constant UA_PUBLISH_DEX_ENV = keccak256(
+        "UAPublishDexEnv(bytes32 from,address target,uint16 envVersion,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)");
+    bytes32 internal constant UA_PUBLISH_CLASS_ENV = keccak256(
+        "UAPublishClassEnv(bytes32 from,address target,uint16 contractClass,uint16 kind,uint16 envVersion,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)");
+    bytes32 internal constant UA_APPROVE_TOKEN_RELEASE = keccak256(
+        "UAApproveTokenRelease(bytes32 from,address target,uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_APPROVE_DEX_RELEASE = keccak256(
+        "UAApproveDexRelease(bytes32 from,address target,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_APPROVE_RELEASE = keccak256(
+        "UAApproveRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_REVOKE_APPROVAL = keccak256(
+        "UARevokeApproval(bytes32 from,address target,bytes32 key,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_DEPRECATE_TOKEN = keccak256(
+        "UADeprecateToken(bytes32 from,address target,uint8 kind,uint64 version,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_DEPRECATE_DEX = keccak256(
+        "UADeprecateDex(bytes32 from,address target,uint64 version,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_DEPRECATE_RELEASE = keccak256(
+        "UADeprecateRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_TOKEN_KIND_ENABLED = keccak256(
+        "UASetTokenKindEnabled(bytes32 from,address target,uint8 kind,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_CLASS_KIND_ENABLED = keccak256(
+        "UASetClassKindEnabled(bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_KYC_PROVIDER = keccak256(
+        "UASetKycProvider(bytes32 from,address target,bytes32 provider,bool enabled,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_COMPLIANCE = keccak256(
+        "UASetCompliance(bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_CHAIN_ENTRIES = keccak256(
+        "UASetChainEntries(bytes32 from,address target,address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 }
 
 /// @title What every governance router of a chain shares (CTR-GOV-15 Change, owner 2026-11-04): the flow and the owner's and
@@ -152,6 +193,12 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         address t;
         assembly ("memory-safe") { t := tload(_TARGET) }
         if (msg.sender == t) assembly ("memory-safe") { s := tload(_SUBJECT) }
+    }
+
+    /// @notice The EIP-1167 clone code hash of the chain's `SmartKeyAccount` implementation (0 = none), as the UA registry's
+    ///         `smartKeyCloneHash()`: `OpenFactory.configureChain` requires the two equal (spec 2026-11-10-admin-not-owner.md §13.4).
+    function smartKeyCloneHash() external view returns (bytes32) {
+        return _mtxCtx().skaCloneCodehash;
     }
 
     // ------------------------------------------------------------------ the admin and a holder (IGovernance)
@@ -190,12 +237,12 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     function mtxTransferAdmin(MetaTxLib.UAEnvelope calldata e, address target, bytes32 newAdmin,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_TRANSFER_ADMIN, e, target, IGovernance.transferAdmin.selector,
+        _ua(GovernanceRouterTypes.UA_TRANSFER_ADMIN, e, target, IAdmin.transferAdmin.selector,
             abi.encode(newAdmin), auth);
     }
 
     function mtxAcceptAdmin(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
-        _ua(GovernanceRouterTypes.UA_ACCEPT_ADMIN, e, target, IGovernance.acceptAdmin.selector, "", auth);
+        _ua(GovernanceRouterTypes.UA_ACCEPT_ADMIN, e, target, IAdmin.acceptAdmin.selector, "", auth);
     }
 
     function mtxRenounceAdmin(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth)

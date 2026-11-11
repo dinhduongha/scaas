@@ -18,7 +18,7 @@ interface IRosterKind {
 
 /// The generic surface every test kind shares (factory index spec §8.8, chain-neutral spec §2.1): constructor
 /// `(ReleaseId, factory_, implArgs)`, the release id as immutables, the chain values from the clone's code, `factoryInfo()`
-/// (224 B), ERC-165, `validateEnv` (nothing), `chainEnv()`; `initialize` once, by the factory, on a clone with its env.
+/// (192 B), ERC-165, `validateEnv` (nothing), `chainEnv()`; `initialize` once, by the factory, on a clone with its env.
 /// Test-only (no `src/` kind). **UNAUDITED.**
 abstract contract GenericKindBase {
     address public immutable FACTORY;
@@ -48,7 +48,7 @@ abstract contract GenericKindBase {
     }
 
     function factoryInfo() external view virtual returns (IOpenFactory.FactoryInfo memory) {
-        return IOpenFactory.FactoryInfo(FACTORY, ChainEnvCode.chainUid(), CLASS, KIND, VERSION, owner, _initialized);
+        return IOpenFactory.FactoryInfo(FACTORY, ChainEnvCode.chainUid(), CLASS, KIND, VERSION, _initialized);
     }
 
     function supportsInterface(bytes4 id) external view virtual returns (bool) {
@@ -109,8 +109,8 @@ contract BadKind is GenericKindBase, INoteKind {
     uint8 internal constant OTHER_KIND = 3;
     uint8 internal constant OTHER_VERSION = 4;
     uint8 internal constant NOT_INITIALIZED = 5;
-    uint8 internal constant OWNER_SET = 6;
-    uint8 internal constant SHORT_192 = 7;
+    uint8 internal constant SEVEN_WORDS = 6; // the answer before round 3r R1 (an owner word, 0, before `initialized`)
+    uint8 internal constant SHORT_160 = 7;
     uint8 internal constant LONG_256 = 8;
     uint8 internal constant NO_INFO = 9;
     uint8 internal constant NO_INTERFACE = 10;
@@ -134,7 +134,6 @@ contract BadKind is GenericKindBase, INoteKind {
     constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs) GenericKindBase(id, factory_) {
         MODE = abi.decode(implArgs, (uint8));
         if (MODE == NOT_INITIALIZED) _initialized = false;
-        if (MODE == OWNER_SET) owner = bytes32(uint256(1));
     }
 
     function _interfaceId() internal pure override returns (bytes4) { return type(INoteKind).interfaceId; }
@@ -154,16 +153,18 @@ contract BadKind is GenericKindBase, INoteKind {
 
     function factoryInfo() external view override returns (IOpenFactory.FactoryInfo memory i) {
         i = IOpenFactory.FactoryInfo(MODE == OTHER_FACTORY ? OTHER : FACTORY, ChainEnvCode.chainUid(), CLASS, KIND, VERSION,
-            owner, _initialized);
+            _initialized);
         bool isClone = ChainEnvCode.isClone();
         if (MODE == OTHER_CLASS || (MODE == OTHER_CLASS_AFTER_INIT && isClone)) i.contractClass = CLASS + 1;
         if (MODE == OTHER_KIND) i.kind = KIND + 1;
         if (MODE == OTHER_VERSION || (MODE == OTHER_VERSION_AFTER_INIT && isClone)) i.version = VERSION + 1;
         if (MODE == OTHER_CHAIN_AFTER_INIT && isClone) i.chainUid = keccak256("another chain");
         if (MODE == NO_INFO) revert();
-        if (MODE == SHORT_192 || MODE == LONG_256) {
-            bytes memory b = abi.encode(i);
-            uint256 n = MODE == SHORT_192 ? 192 : 256;
+        if (MODE == SEVEN_WORDS || MODE == SHORT_160 || MODE == LONG_256) {
+            bytes memory b = MODE == SEVEN_WORDS
+                ? abi.encode(i.factory, i.chainUid, i.contractClass, i.kind, i.version, bytes32(0), i.initialized)
+                : abi.encode(i);
+            uint256 n = MODE == SEVEN_WORDS ? 224 : MODE == SHORT_160 ? 160 : 256;
             bytes memory r = new bytes(n);
             for (uint256 k; k < n && k < b.length; ++k) r[k] = b[k];
             assembly ("memory-safe") {

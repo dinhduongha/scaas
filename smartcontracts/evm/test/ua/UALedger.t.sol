@@ -523,9 +523,9 @@ contract UALedgerTest is UALedgerBase {
         bytes32 other = keccak256("other genesis");
         OpenFactory g = EnvKit.factory(address(this), other, 0);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, other, chainUidA));
-        g.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(g), address(0), other, REG_L, false));
+        g.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(g), address(0), other, REG_L, false));
         OpenFactory h = EnvKit.factory(address(this), chainUidA, 0); // positive control: this chain's factory
-        h.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(h), address(0), chainUidA, REG_L, false));
+        h.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(h), address(0), chainUidA, REG_L, false));
     }
 
     function test_uaDigest_domainAndTypehash() public view {

@@ -17,6 +17,7 @@ import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedD
 } from '../src/evm.js';
 import { confPublic, g1 } from '../src/zether.js';
 import { recordId } from '../src/regulated.js';
+import { releaseApprovalKey } from '../src/factory.js';
 import { ecdsa, nativeSk, nativeAddr, nativeUa, be } from './ua-signers.mjs';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/', import.meta.url));
@@ -154,6 +155,18 @@ ROW.UACreateDex = { version: 1, initHash: hex(keccak_256(fromHex(INIT_ARGS))), s
 ROW.UACreateInstance = { contractClass: 4, kind: 0, version: 1, initHash: hex(keccak_256(fromHex(INIT_CALL))),
   salt: hex(hash('create.instance.salt')) };
 
+// Round 3r (spec 2026-11-10-admin-not-owner.md §5.4): the admin ops of the factory and a compliance registry. The token kinds
+// are `NORMAL` (an enum on the entry: a filler would not decode); `UAApproveTokenRelease` leaves the relayer and the fee
+// recipient unbound at fee 0 (mode 0): 0 in the message, as `MetaTxLib.canon` hashes them, and test/typed-ops.test.js signs it
+// again with a non-zero value in both. Every other field is a filler (the router signs and forwards; the target checks).
+const REASON = 'a release found bad';
+ROW.UAPublishTokenEnv = { kind: 0 };
+ROW.UAApproveTokenRelease = { kind: 0, mode: 0, fee: 0 };
+ROW.UADeprecateToken = { kind: 0, reason: REASON };
+ROW.UADeprecateDex = { reason: REASON };
+ROW.UADeprecateRelease = { reason: REASON };
+ROW.UASetTokenKindEnabled = { kind: 1, on: true };
+
 function sample(name, op) {
   const own = {};
   for (const f of op.fields) own[f.name] = fill(f.type, `${name}.${f.name}`, op.types);
@@ -218,6 +231,9 @@ for (const [name, op] of Object.entries(TYPED_OPS)) {
       routerCalldata: hex(plan.calldata(signature)) });
     row.domains[kind] = d;
   }
+  // round 3r (spec §5.6): the factory's key of the approved release, checked on the factory by FactoryAdmin.t.sol
+  const domain = { UAApproveTokenRelease: 'token', UAApproveDexRelease: 'dex', UAApproveRelease: 'class' }[name];
+  if (domain) row.approvalKey = releaseApprovalKey(domain, row.message);
   ops[name] = row;
 }
 

@@ -41,15 +41,15 @@ export function relaxCommit(action, bit, account, terms) {
 }
 
 /** `R(account)` as `canReceive` answers it (spec §3.1, §5): `{ok, reason}`, reason 1 not attested or flags missing,
- *  2 expired, 3 attester disabled, 4 denied; `ok` is `hasFlags(account, ALLOWLIST ? required : 0, DENYLIST ? denied : 0)`,
- *  both lists off `(true, 0)` with no call. */
-export function canReceive({ controls, requiredFlags, deniedFlags, flags, validUntil, attesterEnabled, now }) {
+ *  2 expired, 3 KYC provider disabled, 4 denied (`kycProviderEnabled`: the registry's answer for the row's provider);
+ *  `ok` is `hasFlags(account, ALLOWLIST ? required : 0, DENYLIST ? denied : 0)`, both lists off `(true, 0)` with no call. */
+export function canReceive({ controls, requiredFlags, deniedFlags, flags, validUntil, kycProviderEnabled, now }) {
   if (!(controls & (C_ALLOW | C_DENY))) return { ok: true, reason: 0 };
   const [f, until, t] = [BigInt(flags), BigInt(validUntil), BigInt(now)];
-  const active = attesterEnabled && until >= t;
+  const active = kycProviderEnabled && until >= t;
   const req = controls & C_ALLOW ? BigInt(requiredFlags) : 0n;
   if (req !== 0n && !(active && ((f & req) === req || (f & ELIGIBLE_CONTRACT) !== 0n))) {
-    return { ok: false, reason: until === 0n ? 1 : !attesterEnabled ? 3 : !active ? 2 : 1 };
+    return { ok: false, reason: until === 0n ? 1 : !kycProviderEnabled ? 3 : !active ? 2 : 1 };
   }
   if (controls & C_DENY && active && (f & BigInt(deniedFlags)) !== 0n) return { ok: false, reason: 4 };
   return { ok: true, reason: 0 };

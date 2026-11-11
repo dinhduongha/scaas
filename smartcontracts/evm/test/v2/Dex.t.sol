@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
@@ -562,7 +563,7 @@ contract DexTest is Test {
 
     function test_classification_deprecatedAndUnregisteredAreOutside() public {
         address impl = address(new NormalToken(address(f), Catalogue.argsOn(f, IOpenFactory.TokenKind.NORMAL,
-            f.latestEnvVersion(IOpenFactory.TokenKind.NORMAL), ""))); // the env's pinned modules
+            f.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL), ""))); // the env's pinned modules
         address u = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(normalInit("C", "C", 0, 1e6, alice, address(0))), "c");
         vm.startPrank(admin);
         dex.setMarket(address(a), u, true);
@@ -570,7 +571,7 @@ contract DexTest is Test {
         assertEq(dex.tokenKind(address(a)), 1);
         vm.stopPrank();
         vm.prank(registrar);
-        f.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "x");
+        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, "x");
         assertEq(dex.tokenKind(address(a)), 1); // a snapshot: unchanged until the market is listed again
         vm.prank(admin);
         dex.setMarket(address(a), address(b), true);
@@ -655,7 +656,7 @@ contract DexTest is Test {
     /// through the puller (EOAs cannot approve a SCaaS token, CTR-TOK-01, so it fails on the allowance).
     function test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller() public {
         vm.prank(registrar);
-        f.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "x");
+        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, "x");
         vm.prank(admin);
         dex.setMarket(address(a), address(b), true);
         DexLegs.Settlement memory s = _book();
@@ -757,7 +758,7 @@ contract DexTest is Test {
     /// `deprecateDex` is registrar-only and immediate: `createDex` refuses that version (owner 2026-10-20), an existing
     /// DEX of it keeps its record.
     function test_deprecateDex_refusesNewDexOfThatVersion() public {
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.deprecateDex(1, "x");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 9));
@@ -787,7 +788,7 @@ contract DexTest is Test {
     function test_createDex_emitsDexCreated() public {
         address creator = address(0xA1);
         vm.expectEmit(false, true, false, true, address(f)); // the clone address is derived, not asserted
-        emit IOpenFactory.DexCreated(address(0), nid(creator), 1, address(dexImpl), nid(address(0xADD)));
+        emit IOpenFactory.DexCreated(address(0), nid(creator), 1, address(dexImpl)); // no owner (3r R1)
         vm.prank(creator);
         address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(0xADD)), 0, treasury, false, 0, address(0))), "ev");
         assertEq(SCaaSDex(d).admin(), nid(address(0xADD)));
@@ -805,7 +806,7 @@ contract DexTest is Test {
     /// release hashes in the event; a notice period applies.
     function test_deployDexImplementation() public {
         bytes memory code = type(SCaaSDex).creationCode;
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
         f.deployDexImplementation(3, 1, code, "");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionAlreadyRegistered.selector, 1, address(dexImpl)));
@@ -824,7 +825,7 @@ contract DexTest is Test {
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, empty));
         f.deployDexImplementation(3, 1, "", ""); // an empty init code makes an account without code
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.publishDexEnv(2, plainEnv(address(f), address(0xBEEF), UID_, address(0), false));
         vm.recordLogs();
         address v3 = Catalogue.dex(f, 3, code, address(0xBEEF));

@@ -151,11 +151,11 @@ contract LinkClosureTest is Test {
         address ska = new SmartKeyAccountFactory(ZUID).IMPLEMENTATION();
         DeployHarness h = new DeployHarness();
         (OpenFactory f,) = h.deploy(ZUID, true, ska);
-        _assertEnvIsClosure("DeployBase NONE", "NormalToken", _mods(NORMAL), _modulesOf(f, NORMAL), f.envOf(NORMAL, 1));
+        _assertEnvIsClosure("DeployBase NONE", "NormalToken", _mods(NORMAL), _modulesOf(f, NORMAL), f.tokenEnvOf(NORMAL, 1));
         IOpenFactory.TokenKind z = IOpenFactory.TokenKind.NORMAL_ZETHER;
-        _assertEnvIsClosure("DeployBase NORMAL_ZETHER", "NormalZetherToken", _mods(z), _modulesOf(f, z), f.envOf(z, 1));
+        _assertEnvIsClosure("DeployBase NORMAL_ZETHER", "NormalZetherToken", _mods(z), _modulesOf(f, z), f.tokenEnvOf(z, 1));
         z = IOpenFactory.TokenKind.WRAPPED_ZETHER;
-        _assertEnvIsClosure("DeployBase WRAPPED_ZETHER", "WrappedZetherToken", _mods(z), _modulesOf(f, z), f.envOf(z, 1));
+        _assertEnvIsClosure("DeployBase WRAPPED_ZETHER", "WrappedZetherToken", _mods(z), _modulesOf(f, z), f.tokenEnvOf(z, 1));
         _assertEnvIsClosure("DeployBase DEX", "SCaaSDex", _dexMods(), ITokenModules(f.dexImplementationOf(1)).modules(),
             f.dexEnvOf(1));
 
@@ -187,7 +187,7 @@ contract LinkClosureTest is Test {
             IOpenFactory.TokenKind k = IOpenFactory.TokenKind(8 + i);
             IFactoryToken.Env memory e;
             address[] memory ms;
-            if (i < 4) (e, ms) = (f.envOf(k, 1), _modulesOf(f, k));
+            if (i < 4) (e, ms) = (f.tokenEnvOf(k, 1), _modulesOf(f, k));
             else (e.libs, e.libCodeHashes) = (closureLibs(k), _pins(closureLibs(k)));
             _assertEnvIsClosure(impls[i], impls[i], _mods(k), ms, e);
             bool lib;

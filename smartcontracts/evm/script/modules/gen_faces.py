@@ -128,6 +128,8 @@ W3L_ERRORS = [f'    error {e};' for e in [
     'WrapperNotListed(bytes32 account)', 'UnwrapperNotListed(bytes32 account)', 'WrapLimitInvalid(address underlying, uint8 limit)',
     'WrapLegMismatch(uint256 index, address underlying)', 'WrapUnitInvalid(address underlying, uint8 unitExp)',
     'WrapControlNeedsHybrid(uint8 bit)', 'WrapControlActive(uint8 bit)', 'WrapSubjectZero()']]
+# Round 3r (spec 2026-11-10-admin-not-owner.md §5.3, Fable P1-1): what `RegulatedLib.init` raises since, on 8-13
+REG3R_ERRORS = ['    error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);']
 
 
 def abi_iface(k):
@@ -142,6 +144,8 @@ def abi_iface(k):
     if k.startswith('Wrapped'):  # group 3l (wrap limits spec §7): what `WrappedLib` raises and emits since the split
         ev += W3L_EVENTS
         er += W3L_ERRORS
+    if REG(k):
+        er += REG3R_ERRORS
     return f'''
 /// @notice The events and errors of `{k}` before the split (d142b57c) that its core does not declare: the face's ABI lists them
 ///         as before (metatx-split R4: a client decodes an error a library or a module raises), declarations only, no code.
@@ -154,12 +158,12 @@ def face(k):
     path = f'{KFILE[k]}/{k}.sol'
     imm = '\n'.join(f'    address private immutable _M{g};' for g in gs)
     args = 'RegulatedImplArgs' if REG(k) else 'ImplArgs'
-    core_args = 'abi.encode(a.registryCodehash)' if REG(k) else '""'
+    core_args = 'abi.encode(a.complianceRegistryCodehash)' if REG(k) else '""'
     sets = '\n'.join(f'        _M{g} = _module(a.modules, {i}, {GROUP_ID[g]});' for i, g in enumerate(gs))
     lst = ', '.join(f'_M{g}' for g in gs)
     checks = ''
     if REG(k):
-        checks += '\n        if (ITokenModule(m).REGISTRY_CODEHASH() != REGISTRY_CODEHASH) revert ModuleMismatch(i);'
+        checks += '\n        if (ITokenModule(m).COMPLIANCE_REGISTRY_CODEHASH() != COMPLIANCE_REGISTRY_CODEHASH) revert ModuleMismatch(i);'
     if PQZ(k):
         checks += '\n        if (ITokenModule(m).pqzSet() != PqzSet.SELFTEST) revert ModuleMismatch(i);'
     stubs = []
@@ -249,7 +253,7 @@ def modules(k):
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
 ///        storage only its core's (M6). UNAUDITED.
 contract {k}{g} is {k}Core {{
-    /// @param args the kind's own constructor argument (`""`, or `abi.encode(registryCodehash)` on a regulated kind; M1).
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
     constructor(address factory_, bytes memory args) {k}Core(factory_, args) {{}}
 
     function moduleGroup() external pure returns (uint8) {{
