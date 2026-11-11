@@ -838,7 +838,7 @@ Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE
 [pqz_verifier]
 endpoints = ["https://pqz-verifier.example.org"]   # asked in order; URLs only, no secret
 refuse_shield_when_unserved = false                # opt-in
-# timeout_ms = 5000            # one endpoint's whole request
+# timeout_ms = 5000            # one endpoint's whole request; one that does not answer rests 10 s (submit-lanes.md)
 # max_response_bytes = 262144  # read in chunks, a longer answer is no answer
 # valid_margin_secs = 30       # a verdict expiring sooner is re-fetched
 ```
