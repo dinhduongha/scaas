@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {kindArgs} from "../../script/KindModules.sol";
 
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
@@ -136,7 +137,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             string memory r = string.concat(".call[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransaction memory m = _call(r);
             bytes32 digest = vm.parseJsonBytes32(vj, string.concat(r, "digest"));
-            assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(MtxHash.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
             assertEq(tok.mtxDigest(m), digest);
             _authorized(m.from, digest, vm.parseJsonBytes(vj, string.concat(r, "auth")));
             ++n;
@@ -151,7 +152,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             string memory r = string.concat(".transfer[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransfer memory t = _transfer(r);
             bytes32 digest = vm.parseJsonBytes32(vj, string.concat(r, "digest"));
-            assertEq(MetaTxLib.hashStruct(t), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(MtxHash.hashStruct(t), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
             assertEq(tok.mtxTransferDigest(t), digest);
             bytes memory auth = vm.parseJsonBytes(vj, string.concat(r, "auth"));
             _fund(t.from, t.value + t.fee);
@@ -175,7 +176,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         for (uint256 i; vm.keyExistsJson(vj, string.concat(".burn[", vm.toString(i), "]")); ++i) {
             string memory r = string.concat(".burn[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransaction memory m = _call(r);
-            assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(MtxHash.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
             assertEq(tok.mtxDigest(m), vm.parseJsonBytes32(vj, string.concat(r, "digest")));
             _fund(m.from, 1_005_000);
             uint256 supply = tok.totalSupply();
@@ -202,7 +203,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             MetaTxLib.UAMetaTransaction memory m = _call(r);
             bytes32 digest = vm.parseJsonBytes32(vj, string.concat(r, "digest"));
             assertEq(bytes4(m.data), bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)")));
-            assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(MtxHash.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
             assertEq(tok.mtxDigest(m), digest);
             _authorized(m.from, digest, vm.parseJsonBytes(vj, string.concat(r, "auth")));
             ++n;

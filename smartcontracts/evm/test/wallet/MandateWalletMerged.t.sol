@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
@@ -504,7 +505,7 @@ contract MandateWalletMergedTest is MergeBase {
         _ok(address(w), _genericCd(w, _pad(alice), data, 1, 0), "positive control: the merged generic entry");
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice, data: data, batch: 1, nonce: 1,
             validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
-        bytes memory sig = _sig(ALICE_PK, _dig(address(w), MetaTxLib.hashStruct(m))).signature;
+        bytes memory sig = _sig(ALICE_PK, _dig(address(w), MtxHash.hashStruct(m))).signature;
         _refused(address(w), abi.encodeCall(IMandateMerged.executeMetaTransaction, (m, sig)),
             abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(data)), "EIP-1776 alias");
         assertEq(w.mtxNonce(_pad(alice), 1), 1);
@@ -544,7 +545,7 @@ contract MandateWalletMergedTest is MergeBase {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: bob, data: abi.encodeWithSignature(
             "payUnderMandate(address,address,uint256,bytes32,uint64)", address(tok), NPP, 10, bytes32("o"), uint64(1)),
             batch: 7, nonce: 0, validUntil: oe.validUntil, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
-        bytes memory mSig = _sig(BOB_PK, _dig(address(w), MetaTxLib.hashStruct(m))).signature;
+        bytes memory mSig = _sig(BOB_PK, _dig(address(w), MtxHash.hashStruct(m))).signature;
         _refused(address(w), abi.encodeWithSignature(
             "mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, mSig), "",
             "the old generic entry");

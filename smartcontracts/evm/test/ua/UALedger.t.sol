@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {kindArgs} from "../../script/KindModules.sol";
 
 import {OrderJson} from "../helpers/OrderJson.sol";
@@ -281,6 +282,35 @@ contract UALedgerTest is UALedgerBase {
         }
     }
 
+    /// Fable B P3-4 (CTR-MTX-17, cheap checks first): a self-call fee to the token itself or to `SHIELD_POOL` is refused
+    /// before the self-call runs. The inner `unwrap` here would fail on its own (more than the balance), yet the fee
+    /// recipient's refusal comes first. Control: with a valid recipient the inner call's own failure surfaces.
+    function test_feeRecipientRefusedBeforeTheSelfCall() public {
+        _wrapFor(alice, 10_000);
+        vm.prank(alice);
+        wrp.transferToUA(uaP, 5_000);
+        bytes memory data =
+            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 1e30, bob, 1e30);
+        address[3] memory to = [address(wrp), MetaTxLib.SHIELD_POOL, bob];
+        bytes4 self = IERC20MetaTx.TransferToSelf.selector;
+        bytes4 shield = IUALedger.ShieldPoolNotPayable.selector;
+        for (uint256 i; i < 3; ++i) {
+            MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
+            (m.mode, m.fee, m.feeRecipient) = (RR | RF | FIX, 1, to[i]);
+            IUARegistry.UASig memory auth = UACall.auth(m.from, _authM(address(wrp), m));
+            bytes4 got;
+            vm.prank(RELAYER);
+            try wrp.mtxExecute(m, auth) {
+                revert("must fail");
+            } catch (bytes memory r) {
+                got = bytes4(r);
+            }
+            if (i == 0) assertEq(got, self, "the token: refused up front");
+            else if (i == 1) assertEq(got, shield, "SHIELD_POOL: refused up front");
+            else assertTrue(got != self && got != shield, "control: the inner call's own failure");
+        }
+    }
+
     // ----- T-V3-3b: Zether receivers, UA_POOL, native cancel -----
 
     /// UA-6 U8 (CTR-UA-30 (2)): the Zether UA (`zether-bls12381`) is a SIGNING UA: it receives by `transferToUA` and
@@ -533,9 +563,9 @@ contract UALedgerTest is UALedgerBase {
         bytes32 domain = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
             keccak256("SCaaS MetaToken"), keccak256("1"), block.chainid, address(tok), chainUidA));
-        assertEq(tok.mtxTransferDigest(t), keccak256(abi.encodePacked(hex"1901", domain, MetaTxLib.hashStruct(t))));
+        assertEq(tok.mtxTransferDigest(t), keccak256(abi.encodePacked(hex"1901", domain, MtxHash.hashStruct(t))));
         MetaTxLib.UAMetaTransaction memory m = _m(address(tok), uaP, hex"01020304");
-        assertEq(tok.mtxDigest(m), keccak256(abi.encodePacked(hex"1901", domain, MetaTxLib.hashStruct(m))));
+        assertEq(tok.mtxDigest(m), keccak256(abi.encodePacked(hex"1901", domain, MtxHash.hashStruct(m))));
     }
 
     // ----- helpers -----

@@ -25,6 +25,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {RefServiceEscrow} from "../../test/metatx/helpers/RefServiceEscrow.sol";
 import {NoteKind, INoteKind} from "../../test/v2/mocks/GenericKinds.sol";
 import {UACall} from "../../test/ua/UACall.sol";
+import {MtxHash} from "../../test/helpers/MtxHash.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {console2} from "forge-std/console2.sol";
 import {VmSafe} from "forge-std/Vm.sol";
@@ -725,7 +726,7 @@ contract Misc is OnchainBase {
         MetaTxLib.MetaTransaction memory m;
         (m.from, m.data, m.batch, m.nonce, m.validUntil) =
             (a1, abi.encodeCall(MandateWallet.setPayee, (t0, _pad(a3), true)), lane + 6, 0, vu);
-        bytes memory sig = _ecdsa(k1, _digest(address(w), MetaTxLib.hashStruct(m)));
+        bytes memory sig = _ecdsa(k1, _digest(address(w), MtxHash.hashStruct(m)));
         _neg(a3, address(w), abi.encodeCall(IMetaTx.executeMetaTransaction, (m, sig)),
             bytes4(keccak256("MtxSelectorNotAllowed(bytes4)")), "wallet: an address meta-transaction (none is taken)");
     }

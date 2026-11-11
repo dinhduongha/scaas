@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../../helpers/MtxHash.sol";
 import {NormalToken} from "../../../src/metatx/NormalToken.sol";
 
 import {Test, Vm} from "forge-std/Test.sol";
@@ -139,7 +140,7 @@ contract PayTaxHandler is Test {
         (MetaTxLib.PayMeta memory m, bytes32 ref) = _meta();
         MetaTxLib.UAMetaTransfer memory x = _x(i, j, v, ref, 9);
         IUARegistry.UASig memory s =
-            _sign(i, MtxDigest.typed(t, keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), mode, tax))));
+            _sign(i, MtxDigest.typed(t, keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax))));
         bytes32 r = IRegulatedToken(t).taxConfig().taxRecipient;
         uint256[3] memory b0 = [_bal(x.from), _bal(x.to), _bal(r)];
         vm.recordLogs();

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {kindArgs} from "../../script/KindModules.sol";
 
 import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
@@ -742,7 +743,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         bytes32 ds = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
             keccak256("SCaaS SmartKeyAccount"), keccak256("1"), uint256(7622), address(acct), UID_));
-        assertEq(acct.mtxDigest(m), keccak256(abi.encodePacked(hex"1901", ds, MetaTxLib.hashStruct(m))));
+        assertEq(acct.mtxDigest(m), keccak256(abi.encodePacked(hex"1901", ds, MtxHash.hashStruct(m))));
     }
 
     // ------------------------------------------------------------------ recovery (CTR-ACC-03)

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {kindArgs} from "../../script/KindModules.sol";
 
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
@@ -26,7 +27,9 @@ import {nid} from "../helpers/Ids.sol";
 /// TokenKatTest` rewrites them.
 contract TokenKatTest is Test {
     using MetaTxLib for MetaTxLib.UAMetaTransaction;
+    using MtxHash for MetaTxLib.UAMetaTransaction;
     using MetaTxLib for MetaTxLib.UAMetaTransfer;
+    using MtxHash for MetaTxLib.UAMetaTransfer;
 
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     uint256 internal constant ALICE_PK = 0xA11CE;

@@ -80,7 +80,7 @@ library MetaTxLib {
 
     /// @notice Chuẩn hoá hai trường do relayer điền, trước khi băm.
     /// @dev Đây là quy tắc PHẢI giống hệt nhau ở ba nơi: verifier Solidity, SDK client,
-    ///      và builder phía Odoo. Lệch một chỗ thì mọi chữ ký fail — fail-closed nên
+    ///      và builder phía node. Lệch một chỗ thì mọi chữ ký fail — fail-closed nên
     ///      không mất tiền, nhưng là một nguy cơ tích hợp phải nhớ mãi.
     ///
     ///      Chọn "băm với address(0)" chứ KHÔNG phải "bỏ trường khỏi struct". Lý do
@@ -94,12 +94,9 @@ library MetaTxLib {
         f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
     }
 
-    function hashStruct(MetaTransaction memory m) internal pure returns (bytes32) {
-        (address r, address f) = canon(m);
-        return keccak256(abi.encode(
-            METATX_TYPEHASH, m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f
-        ));
-    }
+    // `hashStruct(MetaTransaction)`, `hashStruct(UAMetaTransaction)`, `hashStruct(UAMetaTransfer)` and `validateMode` are in
+    // legacy/ua-mtx-fix-contracts/src/common/MetaTxLibHash.sol (Fable B P3-3): no contract called them; every contract hashes
+    // through `MtxPipelineLib._structHash` / `_namedHash` and checks the mode in `_checkEnvelope`. `canon` stays (Zether, PQZ).
 
     // The address `MetaTransfer`, its typehash and `hashStruct` are in legacy/ua-mtx-merge/src/common/MetaTxLib.sol
     // (ua-mtx-merge R46): no EVM entry takes it; a token's typed transfer is the `UAMetaTransfer` below.
@@ -182,21 +179,6 @@ library MetaTxLib {
         uint64  blockNumber;
     }
 
-    function hashStruct(UAMetaTransaction memory m) internal pure returns (bytes32) {
-        address r = (m.mode & MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
-        address f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
-        return keccak256(abi.encode(
-            UAMETATX_TYPEHASH, m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f
-        ));
-    }
-
-    function hashStruct(UAMetaTransfer memory t) internal pure returns (bytes32) {
-        address r = (t.mode & MODE_RESTRICT_RELAYER) != 0 ? t.relayer : address(0);
-        address f = (t.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? t.feeRecipient : address(0);
-        return keccak256(abi.encode(
-            UAMETATRANSFER_TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, r, t.fee, f
-        ));
-    }
 
     /// @notice TS-D14: the signed fields of a named entry around the op's own explicit parameters, in the struct
     ///         `<Op>(address from,<op params>,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)`. The lanes of `MetaTransaction`.
@@ -245,15 +227,5 @@ library MetaTxLib {
         if (v == 1) return FeeMode.PERCENT;
         if (v == 2) return FeeMode.FIXED;
         revert ModeFeeInvalid(mode);
-    }
-
-    /// @notice Từ chối mọi bit không hiểu. Gọi ở bước 3 của §04.6.1, TRƯỚC verify chữ ký.
-    /// @dev Hai kiểm tra khác nhau, vì hai nửa byte có bản chất khác nhau:
-    ///      nửa đầu là cờ nên chỉ cần bit lạ = 0; nửa sau là giá trị liệt kê nên
-    ///      `0x30`–`0xF0` là bit hợp lệ nhưng giá trị vô nghĩa, và phải revert.
-    ///      Chấp nhận bit/giá trị không hiểu nghĩa là khoá chết ngữ nghĩa tương lai.
-    function validateMode(uint32 mode) internal pure {
-        if (mode & ~MODE_KNOWN_MASK != 0) revert ModeUnknownBits(mode);
-        feeModeOf(mode);  // revert ModeFeeInvalid nếu nửa byte sau > 2
     }
 }

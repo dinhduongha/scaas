@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture, Holder} from "./helpers/RegFixture.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -250,7 +251,7 @@ contract TaxTest is RegFixture {
     }
 
     function _taxDigest(address t, MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax) internal view returns (bytes32) {
-        return MtxDigest.typed(t, keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), mode, tax)));
+        return MtxDigest.typed(t, keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax)));
     }
 
     function _taxSig(address t, MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax)
@@ -416,7 +417,7 @@ contract TaxTest is RegFixture {
         (z.relayer, z.feeRecipient) = (address(0), address(0));
         bytes32 raw = keccak256(abi.encode(MetaTxLib.UAMETATRANSFER_TYPEHASH, x.from, x.to, x.value, x.entryRef, x.batch,
             x.nonce, x.validUntil, x.mode, address(0), x.fee, address(0)));
-        assertEq(MetaTxLib.hashStruct(x), raw, "zeroed");
+        assertEq(MtxHash.hashStruct(x), raw, "zeroed");
         IUARegistry.UASig memory s = _taxSig(t8t, z, 2, 1); // signed over the zeroed form
         vm.prank(address(0xF00));
         IRegulatedToken(t8t).mtxPayWithTax(x, 2, 1, s, PayMetaKit.meta("ph"));
@@ -563,9 +564,9 @@ contract TaxTest is RegFixture {
 
     /// The `UAPayWithTax` digest row: non-zero `relayer` / `feeRecipient` in the input, unbound (mode 0), so zeroed.
     function _digestRowJson(MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax) internal view returns (string memory) {
-        bytes32 sh = keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), mode, tax));
+        bytes32 sh = keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax));
         string memory d = string.concat(',"typehash":"', vm.toString(UA_PAY_WITH_TAX), '","paymentHash":"',
-            vm.toString(MetaTxLib.hashStruct(x)), '","structHash":"', vm.toString(sh), '","digest":"',
+            vm.toString(MtxHash.hashStruct(x)), '","structHash":"', vm.toString(sh), '","digest":"',
             vm.toString(_vecDigest(sh)), '"}');
         return string.concat('  {"name":"digest_unbound_relayer_fee_recipient",', _payJson(x), ',"taxMode":',
             vm.toString(mode), ',"tax":"', vm.toString(tax), '",', _domainJson(), d);
@@ -640,10 +641,10 @@ contract TaxTest is RegFixture {
         }
         string memory q = string.concat("[", vm.toString(rows.length), "]");
         MetaTxLib.UAMetaTransfer memory x = _digestInput();
-        bytes32 sh = keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), uint8(2), uint256(50)));
+        bytes32 sh = keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), uint8(2), uint256(50)));
         assertEq(vm.parseJsonBytes32(f, string.concat(q, ".structHash")), sh, "UAPayWithTax struct hash");
         assertEq(vm.parseJsonBytes32(f, string.concat(q, ".digest")), _vecDigest(sh), "UAPayWithTax digest");
-        assertEq(vm.parseJsonBytes32(f, string.concat(q, ".paymentHash")), MetaTxLib.hashStruct(x), "canonical payment");
+        assertEq(vm.parseJsonBytes32(f, string.concat(q, ".paymentHash")), MtxHash.hashStruct(x), "canonical payment");
     }
 
     // ---- typed_ops.json's `UAPayWithTax` row (clientkeys, pay-meta-tax T41)
@@ -677,7 +678,7 @@ contract TaxTest is RegFixture {
         MetaTxLib.UAMetaTransfer memory x = _rowPayment(j, ".ops.UAPayWithTax.message.payment.");
         uint8 mode = uint8(vm.parseJsonUint(j, ".ops.UAPayWithTax.message.taxMode"));
         uint256 tax = vm.parseJsonUint(j, ".ops.UAPayWithTax.message.tax");
-        assertEq(keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), mode, tax)),
+        assertEq(keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax)),
             vm.parseJsonBytes32(j, ".ops.UAPayWithTax.structHash"), "struct hash");
         assertEq(vm.parseJsonBytes32(j, ".ops.UAPayWithTax.typehash"), keccak256(bytes(vm.parseJsonString(j, ".ops.UAPayWithTax.typeString"))));
         assertEq(vm.parseJsonBytes32(j, ".ops.UAPayWithTax.typehash"), UA_PAY_WITH_TAX, "UAPayWithTax typehash");

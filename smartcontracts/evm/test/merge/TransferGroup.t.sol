@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {kindArgs} from "../../script/KindModules.sol";
 
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
@@ -266,7 +267,7 @@ contract TransferGroupTest is Test {
 
     /// The signer's `UAMetaTransfer` digest in `t`'s domain, from the type string (not read from the token).
     function _d(address t, MetaTxLib.UAMetaTransfer memory x) internal view returns (bytes32) {
-        return MtxDigest.typed(t, MetaTxLib.hashStruct(x));
+        return MtxDigest.typed(t, MtxHash.hashStruct(x));
     }
 
     /// The signer's `UASig` over `x`. Read before a cheatcode that targets the next call: the domain is an external
@@ -385,7 +386,7 @@ contract TransferGroupTest is Test {
         internal view returns (IUARegistry.UASig memory)
     {
         return _sig(PAYEE_PK, MtxDigest.typed(t,
-            keccak256(abi.encode(UA_RECEIVER_FEE_TYPEHASH, MetaTxLib.hashStruct(x), fee, FEE_TO, vu))));
+            keccak256(abi.encode(UA_RECEIVER_FEE_TYPEHASH, MtxHash.hashStruct(x), fee, FEE_TO, vu))));
     }
 
     function _receiverFeeWith(address t, MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory a, uint256 fee,

@@ -387,3 +387,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `src/governance/{GovernanceBase,GovernanceRouterBase}.sol`, the shared bases' other users `src/{dex/SCaaSDex,
   wallet/MandateWallet,account/SmartKeyAccount}.sol`, and `src/factory/{OpenFactory,IFactoryToken}.sol` (the release checks).
   Not built.
+- `ua-mtx-fix-contracts/`: `src/common/MetaTxLibHash.sol`, the three `MetaTxLib.hashStruct` overloads (`MetaTransaction`,
+  `UAMetaTransaction`, `UAMetaTransfer`) and `MetaTxLib.validateMode`, as they stood before the Fable review fix B P3-3
+  (2026-11-11): no contract called them; every contract hashes through `MtxPipelineLib._structHash` / `_namedHash` and
+  checks the mode in `_checkEnvelope`, and the tests now reproduce digests through those (`test/helpers/MtxHash.sol`).
+  `MetaTxLib.canon` stays in `src/` (Zether and PQZ use it). Not built.
