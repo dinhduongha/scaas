@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! pay-meta-tax T41: `scaas_ua::pay` against the files forge and clientkeys write: `metatx/paymeta.json` (v2 commitments, the
-//! 257-byte refusal), `metatx/paytax.json` (the PERCENT floor, the `UAPayWithTax` digest row with a non-zero unbound
+//! pay-meta-tax T41 / T83: `scaas_ua::pay` against the files forge and clientkeys write: `metatx/paymeta.json` (v3 commitments,
+//! `save` committed, `save` without a `payNo` refused), `metatx/paytax.json` (the PERCENT floor, the `UAPayWithTax` digest row with a non-zero unbound
 //! `relayer` / `feeRecipient`) and `typed/typed_ops.json`'s `UAPayWithTax` and `UARelayFee` rows (struct hash, digest).
 use scaas_ua::pay::{
-    check_pay_no, meta_pay_id_v2, pay_with_tax_hash, percent_tax, relay_fee_hash, token_domain_separator, transfer_hash,
+    meta_pay_id_v3, pay_with_tax_hash, percent_tax, relay_fee_hash, token_domain_separator, transfer_hash,
     typed_digest, PayError, PayMeta, RelayFee, UAMetaTransfer,
 };
 use serde_json::Value;
@@ -55,33 +55,45 @@ fn transfer(m: &Value) -> UAMetaTransfer {
     }
 }
 
-#[test]
-fn paymeta_v2_rows() {
-    let rows = load("metatx/legacy/ua-mtx-merge/t83/paymeta.json");
-    assert_eq!(rows.as_array().unwrap().len(), 9);
-    for r in rows.as_array().unwrap() {
-        let m = PayMeta { salt: b32(&r["salt"]), pay_no: r["payNo"].as_str().unwrap().into(),
-            schema: r["schema"].as_u64().unwrap() as u16, body: bytes(&r["body"]) };
-        if r["accepted"].as_bool().unwrap() {
-            assert_eq!(meta_pay_id_v2(&m).unwrap(), b32(&r["payId"]), "{}", r["name"]);
-        } else {
-            assert_eq!(meta_pay_id_v2(&m), Err(PayError::PayNoTooLong), "{}", r["name"]);
-        }
-    }
+fn pay_meta(r: &Value) -> PayMeta {
+    PayMeta { salt: b32(&r["salt"]), pay_no: b32(&r["payNo"]), save: r["save"].as_bool().unwrap(),
+        schema: r["schema"].as_u64().unwrap() as u16, body: bytes(&r["body"]) }
 }
 
 #[test]
-fn pay_meta_shape_and_pay_no_text() {
-    let m = |salt: u8, schema: u16, body: &[u8]| PayMeta { salt: [salt; 32], pay_no: String::new(), schema, body: body.to_vec() };
-    assert_eq!(meta_pay_id_v2(&m(0, 0, b"")), Err(PayError::Shape));
-    assert_eq!(meta_pay_id_v2(&m(1, 0, b"x")), Err(PayError::Shape));
-    assert_eq!(meta_pay_id_v2(&m(1, 1, b"")), Err(PayError::Shape));
-    assert!(meta_pay_id_v2(&m(1, 1, b"x")).is_ok());
-    assert_eq!(check_pay_no(&"A".repeat(256)), Ok(()));
-    assert_eq!(check_pay_no(&"A".repeat(257)), Err(PayError::PayNoTooLong));
-    for bad in ["INV\u{202e}1", "INV\u{2066}x\u{2069}", "INV\n1", "INV\u{85}", "a\u{200f}b", "x\u{61c}"] {
-        assert_eq!(check_pay_no(bad), Err(PayError::PayNoText), "{bad:?}");
+fn paymeta_v3_rows() {
+    let rows = load("metatx/paymeta.json");
+    assert_eq!(rows.as_array().unwrap().len(), 9);
+    let (mut v2_tag, mut save_off) = (0, 0);
+    for r in rows.as_array().unwrap() {
+        let m = pay_meta(r);
+        if r["accepted"].as_bool().unwrap() {
+            assert_eq!(meta_pay_id_v3(&m).unwrap(), b32(&r["payId"]), "{}", r["name"]);
+        } else {
+            assert_eq!(meta_pay_id_v3(&m), Err(PayError::Shape), "{}", r["name"]);
+        }
+        if let Some(off) = r.get("saveOffPayId") {
+            assert_eq!(meta_pay_id_v3(&PayMeta { save: false, ..m.clone() }).unwrap(), b32(off), "save is committed");
+            save_off += 1;
+        }
+        if let Some(old) = r.get("v2TagPayId") {
+            assert_ne!(meta_pay_id_v3(&m).unwrap(), b32(old), "the v3 tag");
+            v2_tag += 1;
+        }
     }
+    assert_eq!((v2_tag, save_off), (1, 1));
+}
+
+#[test]
+fn pay_meta_shape() {
+    let m = |salt: u8, pay_no: u8, save: bool, schema: u16, body: &[u8]| PayMeta { salt: [salt; 32], pay_no: [pay_no; 32], save,
+        schema, body: body.to_vec() };
+    assert_eq!(meta_pay_id_v3(&m(0, 0, false, 0, b"")), Err(PayError::Shape));
+    assert_eq!(meta_pay_id_v3(&m(1, 0, false, 0, b"x")), Err(PayError::Shape));
+    assert_eq!(meta_pay_id_v3(&m(1, 0, false, 1, b"")), Err(PayError::Shape));
+    assert_eq!(meta_pay_id_v3(&m(1, 0, true, 0, b"")), Err(PayError::Shape), "save without a payNo");
+    assert!(meta_pay_id_v3(&m(1, 0, false, 1, b"x")).is_ok());
+    assert!(meta_pay_id_v3(&m(1, 2, true, 0, b"")).is_ok());
 }
 
 #[test]
@@ -149,11 +161,14 @@ fn typed_ops_relay_fee_row() {
 #[test]
 fn json_surface() {
     use scaas_ua::json::{meta_pay_id_json, pay_digest_json};
-    let p = load("metatx/legacy/ua-mtx-merge/t83/paymeta.json");
-    let r = &p[1];
-    let got: Value = serde_json::from_str(&meta_pay_id_json(&r.to_string()).unwrap()).unwrap();
-    assert_eq!(got["payId"], r["payId"]);
-    assert!(meta_pay_id_json(&p[3].to_string()).is_err(), "257 bytes refused");
+    let p = load("metatx/paymeta.json");
+    for r in p.as_array().unwrap() {
+        match meta_pay_id_json(&r.to_string()) {
+            Ok(got) => assert_eq!(serde_json::from_str::<Value>(&got).unwrap()["payId"], r["payId"], "{}", r["name"]),
+            Err(_) => assert!(!r["accepted"].as_bool().unwrap(), "{}", r["name"]),
+        }
+    }
+    assert!(p.as_array().unwrap().iter().any(|r| !r["accepted"].as_bool().unwrap()), "a refused row");
     let v = load("metatx/paytax.json");
     let r = v.as_array().unwrap().iter().find(|r| r["name"] == "digest_unbound_relayer_fee_recipient").unwrap();
     let mut payment = r.clone();

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! The EVM pay entries off chain (pay-meta-tax spec §3-§5, ua-mtx-merge T41): `PayMeta` v2 and its commitment
-//! `metaPayId`, the `payNo` text rules, and the digests a payer signs: `UAMetaTransfer` (`mtxPay`), `UAPayWithTax`
-//! (`mtxPayWithTax`, kinds 8-13) and `UARelayFee` with `batch` / `nonce` (`RelayFeeRouter.relay`). An unbound `relayer` /
-//! `feeRecipient` is hashed as 0 (`MetaTxLib.canon`). Pinned by `smartcontracts/vectors/metatx/{paymeta,paytax}.json`
-//! (forge) and `typed/typed_ops.json` (clientkeys). The contract decides; nothing here is a check of record. UNAUDITED.
+//! The EVM pay entries off chain (pay-meta-tax spec §3-§5, ua-mtx-merge T41 / T83): `PayMeta` v3 and its commitment
+//! `metaPayId`, and the digests a payer signs: `UAMetaTransfer` (`mtxPay`), `UAPayWithTax` (`mtxPayWithTax`, kinds 8-13) and
+//! `UARelayFee` with `batch` / `nonce` (`RelayFeeRouter.relay`). An unbound `relayer` / `feeRecipient` is hashed as 0
+//! (`MetaTxLib.canon`). Pinned by `smartcontracts/vectors/metatx/{paymeta,paytax}.json` (forge) and `typed/typed_ops.json`
+//! (clientkeys). The v2 commitment (a `string payNo`, no `save`) is kept in `legacy/ua-mtx-merge/paymeta-v2/`, not built. The
+//! contract decides; nothing here is a check of record. UNAUDITED.
 use crate::{address_word, keccak, keccak256, word, DOMAIN_TYPE};
 
-pub const PAY_NO_MAX: usize = 256;
 pub const UA_METATRANSFER_TYPE: &str = "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,\
 uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
 pub const UA_PAY_WITH_TAX_TYPE: &str = "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,\
@@ -17,60 +17,37 @@ uint256 batch,uint256 nonce,uint256 validUntil,address relayer)";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PayError {
-    /// `salt == 0`, or `schema == 0` and a body, or a schema above 0 and none (`PayMetaShape`).
+    /// `salt == 0`, or `schema == 0` and a body, or a schema above 0 and none, or `save` without a `payNo` (`PayMetaShape`).
     Shape,
-    /// `payNo` over 256 bytes (`PayNoTooLong`).
-    PayNoTooLong,
-    /// A control character or a bidirectional mark, embedding, override or isolate in `payNo` (display spoofing).
-    PayNoText,
     /// `taxMode` not 1 (PERCENT) or 2 (AMOUNT), or `tax > value`.
     Tax,
 }
 
-/// `PayMeta {salt, payNo, schema, body}`, the last parameter of every pay entry (spec §3.1).
+/// `PayMeta {salt, payNo, save, schema, body}`, the last parameter of every pay entry (spec §3.1, plan T83): `payNo` a
+/// `bytes32` (0 = none; recommended a right-aligned UUIDv7), `save` the payer's choice to store the record under `payNo`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PayMeta {
     pub salt: [u8; 32],
-    pub pay_no: String,
+    pub pay_no: [u8; 32],
+    pub save: bool,
     pub schema: u16,
     pub body: Vec<u8>,
 }
 
-/// A `payNo` a wallet signs (spec §3.1): at most 256 bytes of UTF-8 (a Rust `str` is valid UTF-8), no C0 / C1 control
-/// or DEL, no bidirectional mark, embedding, override or isolate (U+061C, U+200E, U+200F, U+202A-202E, U+2066-2069).
-pub fn check_pay_no(pay_no: &str) -> Result<(), PayError> {
-    if pay_no.len() > PAY_NO_MAX {
-        return Err(PayError::PayNoTooLong);
-    }
-    let bad = |c: char| c.is_control()
-        || matches!(c, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}');
-    if pay_no.chars().any(bad) {
-        return Err(PayError::PayNoText);
-    }
-    Ok(())
-}
-
-fn padded(b: &[u8]) -> Vec<u8> {
-    let mut v = word(b.len() as u64).to_vec();
-    v.extend_from_slice(b);
-    v.resize(32 + b.len().div_ceil(32) * 32, 0);
-    v
-}
-
-/// `metaPayId(m) = keccak256("scaas.pay.meta.v2" ‖ salt ‖ keccak256(abi.encode(string payNo, uint16 schema, bytes body)))`
-/// (CTR-MTX-26 Change), after the shape and `payNo` checks of `_payMeta` and the wallet rules.
-pub fn meta_pay_id_v2(m: &PayMeta) -> Result<[u8; 32], PayError> {
-    if m.salt == [0; 32] || (m.schema == 0) != m.body.is_empty() {
+/// `metaPayId(m) = keccak256("scaas.pay.meta.v3" ‖ salt ‖ keccak256(abi.encode(bytes32 payNo, bool save, uint16 schema,
+/// bytes body)))` (CTR-MTX-26, `MtxPipelineLib._metaPayId`), after the shape checks of `_payMeta`.
+pub fn meta_pay_id_v3(m: &PayMeta) -> Result<[u8; 32], PayError> {
+    if m.salt == [0; 32] || (m.schema == 0) != m.body.is_empty() || (m.save && m.pay_no == [0; 32]) {
         return Err(PayError::Shape);
     }
-    check_pay_no(&m.pay_no)?;
-    let (no, body) = (padded(m.pay_no.as_bytes()), padded(&m.body));
-    let mut enc = word(0x60).to_vec();
+    let mut enc = m.pay_no.to_vec();
+    enc.extend_from_slice(&word(m.save as u64));
     enc.extend_from_slice(&word(m.schema as u64));
-    enc.extend_from_slice(&word(0x60 + no.len() as u64));
-    enc.extend(no);
-    enc.extend(body);
-    Ok(keccak(&[b"scaas.pay.meta.v2", &m.salt, &keccak256(&enc)]))
+    enc.extend_from_slice(&word(0x80));
+    enc.extend_from_slice(&word(m.body.len() as u64));
+    enc.extend_from_slice(&m.body);
+    enc.resize(5 * 32 + m.body.len().div_ceil(32) * 32, 0);
+    Ok(keccak(&[b"scaas.pay.meta.v3", &m.salt, &keccak256(&enc)]))
 }
 
 /// `MetaTxLib.UAMetaTransfer`, uint256 fields as big-endian words.

@@ -165,8 +165,8 @@ std::string setPqzKeyArgs(const std::string& input);
 // What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
 // `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
 std::string payDigest(const std::string& input);
-// `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
-// `payNo` is `UAArgument`.
+// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41 / T83): in `{salt, payNo, save, schema, body}` (`payNo` 32 bytes hex),
+// out `{payId}`; a refused shape (`save` without a `payNo` too) is `UAArgument`.
 std::string metaPayId(const std::string& input);
 
 }  // namespace scaas::ua

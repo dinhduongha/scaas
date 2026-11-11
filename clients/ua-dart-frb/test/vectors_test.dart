@@ -818,12 +818,12 @@ void main() {
     }
   });
 
-  // pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row
+  // pay-meta-tax T41 / T83: paymeta.json v3 rows (save without a payNo refused) and paytax.json's UAPayWithTax digest row
   test('pay rows', () {
-    // plan T83: the v2 rows (`payNo` text) in legacy/ua-mtx-merge/t83/ until ua-rs takes PayMeta v3 (ua-rs-sign sync)
-    final pm = jsonDecode(File('$vectors/../metatx/legacy/ua-mtx-merge/t83/paymeta.json').readAsStringSync()) as List;
+    final pm = jsonDecode(File('$vectors/../metatx/paymeta.json').readAsStringSync()) as List;
+    expect(pm.any((r) => !(r['accepted'] as bool)), isTrue, reason: 'a refused row');
     for (final r in pm) {
-      final i = jsonEncode({'salt': r['salt'], 'payNo': r['payNo'], 'schema': r['schema'], 'body': r['body']});
+      final i = jsonEncode({'salt': r['salt'], 'payNo': r['payNo'], 'save': r['save'], 'schema': r['schema'], 'body': r['body']});
       if (r['accepted'] as bool) {
         expect((jsonDecode(metaPayId(input: i)) as Map)['payId'], r['payId'], reason: r['name'] as String);
       } else {
