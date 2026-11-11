@@ -43,7 +43,11 @@ pub struct Work {
     pub job_id: Option<i64>,
     pub to: Address,
     pub data: Bytes,
+    /// The deadline the work is sent under: the op's own, or for a PQZ debit the sooner of it and its verdict's `validUntil`.
     pub valid_until: u64,
+    /// The op's own deadline (its envelope's), never narrowed by a verdict: a renewed verdict extends `valid_until` up to it
+    /// (Fable recheck R-1, E N-3).
+    pub envelope_until: u64,
     /// `None` cho job `call`.
     pub meta: Option<MetaRef>,
     /// A named entry ([`crate::typed::Op`]): the guard reads its row; else a transfer struct (`meta`).
@@ -281,7 +285,7 @@ fn work_of_op_with(job_id: Option<i64>, op: &serde_json::Value, fee_recipient: O
     // a service pull's nonce and its `UAMetaTransactionExecuted` are the pulled token's (spec §8), its target the service
     let token = if p.typed.contract == "service" { p.typed.domain_of } else { p.to };
     let meta = p.lane.map(|(from, batch, nonce)| MetaRef { token, from, batch, nonce, digest: None, ua, addr_nonce });
-    Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
+    Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, envelope_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
 }
 
 /// A `ua_metatx` struct job (job-api.md, CTR-UA-26, CTR-MTX-30): `{token, m, auth}`, relayed as `mtxExecuteTransfer` of the
@@ -312,7 +316,8 @@ fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     }
     let data = m.calldata(auth);
     let meta = Some(MetaRef::of_ua(token, &m, None));
-    Ok(Work { job_id: Some(job.id), to: token, data, valid_until: m.valid_until().saturating_to(), meta, entry: false, typed })
+    let until = m.valid_until().saturating_to();
+    Ok(Work { job_id: Some(job.id), to: token, data, valid_until: until, envelope_until: until, meta, entry: false, typed })
 }
 
 /// The relayer of a landed meta-transaction is this lane's, or, for a service pull (its token not the target), the
@@ -597,6 +602,10 @@ impl Submitter {
     /// `guard` theo `w` vào `Sent` khi tx được gửi; mọi lối ra khác thả nó (nhả digest).
     async fn send(&mut self, w: Work, guard: Option<InflightGuard>) {
         if w.valid_until <= now() {
+            // E N-3: past a PQZ verdict's life only, the envelope may still land with a fresh verdict: back in the queue
+            if w.envelope_until > now() {
+                return self.requeue(&w, "PQZ_VERDICT_EXPIRED: the verdict ran out before the send; the envelope is live".into()).await;
+            }
             if let Some(id) = w.job_id {
                 self.report(id, "dead", None, None, Some("expired before submit".into())).await;
             }
@@ -806,15 +815,18 @@ impl Submitter {
                 }
                 continue;
             }
-            let mut live = s.work.as_ref().filter(|w| w.valid_until > now()).cloned();
+            // a PQZ debit lives to its envelope's deadline: past its verdict's alone, the fill below renews the verdict or the
+            // job goes back to the queue, never `dead` (Fable recheck R-1, E N-3)
+            let mut live = s.work.as_ref().filter(|w| w.valid_until > now() || (crate::pqz::is_debit(w) && w.envelope_until > now())).cloned();
             let expired_job = match (&s.work, &live) {
                 (Some(w), None) => w.job_id,
                 _ => None,
             };
             let stuck_gas = s.gas;
             // Fable 3r3s3t P3-3 (spec 3t §10, the fee pre-check "again before every send"): a stuck PQZ debit's replacement
-            // runs the fill first (the fee word, the verdict); refused by name, the nonce is gap-filled and the job reported by
-            // its class (`PQZ_FEE_MISMATCH` back in the queue); an unreadable chain waits a round, no bump
+            // runs the fill first (the fee word, the verdict; a renewed verdict extends the work's deadline, R-1); refused by
+            // name, the nonce is gap-filled and the job back in the queue, never `dead`: the first transaction may still land
+            // (recheck R-2); an unreadable chain waits a round, no bump
             let mut refused = None;
             if let Some(w) = live.as_mut().filter(|w| crate::pqz::is_debit(w)) {
                 match self.guard.pqz_fill(&self.chain, w).await {
@@ -836,10 +848,8 @@ impl Submitter {
             if let Some(id) = expired_job {
                 self.report(id, "dead", None, None, Some("expired while stuck; nonce gap-filled".into())).await;
             }
-            match refused {
-                Some((w, Refusal::Policy(r))) => self.fail(&w, format!("{r}; nonce gap-filled")).await,
-                Some((w, Refusal::Transport(r))) => self.requeue(&w, format!("{r}; nonce gap-filled")).await,
-                None => {}
+            if let Some((w, Refusal::Policy(r) | Refusal::Transport(r))) = refused {
+                self.requeue(&w, format!("{r}; nonce gap-filled")).await;
             }
             let replaced = match self.chain.sign(n, to, data, gas, fees).await {
                 Ok((raw, h)) => match self.chain.send_raw(&raw).await {
@@ -3333,6 +3343,50 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
                 assert_eq!(states(&o), ["signed", "broadcast", "broadcast"]);
             }
         }
+    }
+
+    /// Fable recheck R-1 (and E N-3): a stuck PQZ debit whose verdict ran out while its envelope lives is re-filled with a renewed
+    /// verdict and re-sent, and the work's deadline follows the renewed verdict (up to the envelope's): never reported `dead`
+    /// while that replacement may land.
+    #[tokio::test]
+    async fn a_stuck_pqz_debit_with_an_expired_verdict_is_renewed_never_dead() {
+        let v2 = now() + 600;
+        let (ver, _) = fake_verifier(answer_json(2, v2, 0x7f)).await;
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+            endpoints(vec![ver])(c);
+            c.pqz_verifier.valid_margin_secs = 0;
+        }).await.unwrap();
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        tokio::time::sleep(Duration::from_secs(3)).await; // the job's own verdict has run out; its envelope lives
+        s.track().await;
+        assert_eq!(states(&o), ["signed", "broadcast", "broadcast"], "re-sent with a renewed verdict, never dead");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].2 != sent[0].2 && sent_verdict("UAPqzTransferSingle", &sent[1].2).pqzVerdict.validUntil == v2);
+        let w = s.inflight.values().next().and_then(|x| x.work.clone()).expect("still tracked");
+        assert_eq!(w.valid_until, w.envelope_until.min(v2), "the deadline follows the renewed verdict");
+    }
+
+    /// Fable recheck R-2: a re-fill refused by a rule (here: the verdict at an old epoch, no endpoint to renew it) gap-fills the
+    /// nonce and puts the job back in the queue, never `dead`: the first transaction may still land.
+    #[tokio::test]
+    async fn a_refused_re_fill_requeues_never_dead() {
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        rpc.lock().unwrap().pqz_cfg = Some((1, VERIFIER, 3));
+        s.track().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "queued", "{last}");
+        assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_MISSING"), "{last}");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].1 == s.address() && sent[1].2.is_empty(), "a gap-filler");
     }
 
     /// The node never asks for the PQZ precompile on an `OFFCHAIN` token's job (spec §3, O1: OFFCHAIN ignores whether a

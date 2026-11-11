@@ -1522,7 +1522,7 @@ mod tests {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
                 let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
-                let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
+                let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) };
                 let e = g.check(&chain, &w).await.unwrap_err();
                 assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("CALL_TARGET_REFUSED")), "{s} on {kind}: {e:?}");
             }
@@ -1565,7 +1565,7 @@ mod tests {
             validUntil: alloy::primitives::U256::from(4_000_000_000u64), mode: 0, relayer: Address::ZERO, fee: alloy::primitives::U256::ZERO, feeRecipient: Address::ZERO };
         let m = UaMtx::Transfer(t);
         let auth = |sig: &[u8]| crate::abi::UASig { keyData: Bytes::new(), signature: sig.to_vec().into(), members: vec![] };
-        let work = |sig: Vec<u8>| Work { job_id: Some(1), to: token, data: m.calldata(auth(&sig)), valid_until: 4_000_000_000,
+        let work = |sig: Vec<u8>| Work { job_id: Some(1), to: token, data: m.calldata(auth(&sig)), valid_until: 4_000_000_000, envelope_until: 4_000_000_000,
             meta: Some(crate::submit::MetaRef::of_ua(token, &m, None)), entry: false,
             typed: Some(crate::submit::transfer_typed(None, token, m.struct_hash(), Some((from, sig.into()))).unwrap()) };
         g.check(&chain, &work(vec![0xab; 64])).await.unwrap();
@@ -1580,7 +1580,7 @@ mod tests {
         let cfg = ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
         let chain = Chain::with_signer(&cfg, signer()).unwrap();
         let g = Guard::new(&cfg, Default::default()).unwrap();
-        let w = |data: Vec<u8>, entry: bool| Work { job_id: Some(1), to: Address::repeat_byte(1), data: data.into(), valid_until: 0, meta: None, entry, typed: None };
+        let w = |data: Vec<u8>, entry: bool| Work { job_id: Some(1), to: Address::repeat_byte(1), data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry, typed: None };
         let transfer = IToken::transferCall { to: Address::repeat_byte(2), value: alloy::primitives::U256::from(1) }.abi_encode();
         assert!(matches!(g.check(&chain, &w(transfer.clone(), true)).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
         assert!(matches!(g.check(&chain, &w(transfer, false)).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
@@ -2389,7 +2389,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
             let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                 derived_signer: false, derived_side: false };
-            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
+            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) }
         };
         let g = |routers: Vec<Address>| Guard::new(&ChainCfg { params: params.clone(), governance_routers: routers, ..cfg.clone() },
             Arc::new(RwLock::new(vec![token]))).unwrap();
@@ -2719,7 +2719,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                     "gov_router" => ChainCfg { governance_routers: vec![to], ..cfg.clone() },
                     _ => cfg.clone(),
                 };
-                (Guard::new(&c, Default::default()).unwrap(), Work { job_id: Some(1), to, data: r.sent.to_vec().into(), valid_until: 0,
+                (Guard::new(&c, Default::default()).unwrap(), Work { job_id: Some(1), to, data: r.sent.to_vec().into(), valid_until: 0, envelope_until: 0,
                     meta: None, entry: true, typed: Some(t) })
             };
             let (g, w) = on(other);
@@ -2766,7 +2766,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
             let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "token", domain_of: token,
                 struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false };
-            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
+            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) }
         };
         for entry in ["storeMessage", "addWraps", "postMessage"] {
             paid.check(&chain, &relayed(chat, work(entry).data)).await.unwrap_or_else(|e| panic!("{entry} as a relay fee's call: {e:?}"));

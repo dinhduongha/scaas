@@ -207,8 +207,9 @@ impl Verifier {
             validUntil: v.valid_until }, sig: v.auth.clone() };
         vals[slot] = typed::value_of("PqzSignedVerdict", &sv.abi_encode()).map_err(bad)?;
         w.data = typed::call_data(row, vals).into();
-        // a replacement past the verdict's life would revert: the work's deadline is the sooner one
-        w.valid_until = w.valid_until.min(v.valid_until);
+        // a replacement past the verdict's life would revert: the work's deadline is the sooner one, of the op's own deadline
+        // (never of an earlier verdict's: a renewed verdict extends it, Fable recheck R-1)
+        w.valid_until = w.envelope_until.min(v.valid_until);
         if let Some(t) = w.typed.as_mut() {
             t.pqz_verdict = Some(v); // the lane reuses what the gateway fetched
         }

@@ -390,12 +390,14 @@ node's, for every consumer. **UNAUDITED.**
   a move. A stuck debit runs the same check before each replacement: refused, its nonce is gap-filled and the job reported by
   its class (test `a_stuck_pqz_debit_runs_the_fee_check_before_its_replacement`). **Operator note:** a job shape change for
   `OFFCHAIN` tokens: a consumer on the old shape gets `BAD_PAYLOAD: no pqz_fee`.
-- **Deadline.** The job's deadline becomes the sooner of the envelope's and the verdict's `validUntil`; a stuck replacement past
-  the verdict would revert, so it is gap-filled instead.
-  *Known limit* (Fable review of ua-mtx-merge E N-3; fix SPECIFIED, not built): past the verdict's `validUntil` only, a stuck job is gap-filled and
-  reported `dead` ("expired while stuck"), a job waiting to be sent `dead` ("expired before submit"), though its envelope may
-  still land with a fresh verdict. Target: keep both deadlines; past the verdict's alone, gap-fill and report `queued`
-  (`PQZ_VERDICT_EXPIRED`).
+- **Deadline.** A PQZ debit keeps two deadlines: its envelope's, and the one it is sent under, the sooner of the envelope's and
+  its verdict's `validUntil`. A renewed verdict (a stuck replacement re-runs the fill) moves the second up to the envelope's, so
+  the tracked work always ends with the transaction it sent. Past the verdict's alone the job is never `dead`: a stuck
+  transaction is re-filled with a fresh verdict and re-sent, or its nonce is gap-filled and the job is back in the queue; a job
+  waiting to be sent is requeued `PQZ_VERDICT_EXPIRED`. Only the envelope's deadline ends it (Fable review of ua-mtx-merge E N-3,
+  recheck R-1, R-2; tests `a_stuck_pqz_debit_with_an_expired_verdict_is_renewed_never_dead`,
+  `a_refused_re_fill_requeues_never_dead`). A re-fill refused by any rule gap-fills the nonce and requeues, never `dead`: the
+  first transaction may still land.
 - **Pre-checks**, before any simulation: `pqzVerifyConfig()` (mode, verifier, epoch; verifier 0 = revoked), the epoch equal, the
   `validUntil` at least `valid_margin_secs` ahead; then the simulation of the whole entry (signature, shape, hashes). A verdict
   at another epoch, or expiring, is re-fetched once.
@@ -997,7 +999,7 @@ cancels 2 rps (burst 10).
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost |
 
 Terminal reasons that are not HTTP codes: job `dead` with `error = ATTEMPTS_EXHAUSTED` (`attempt_count >
-chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_FEE_MISMATCH`, `PQZ_FEE_LOG_UNREAD`, `PQZ_VERIFIER_PROBE_UNREAD`, `PQZ_KEY_ROTATED`,
+chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_VERDICT_EXPIRED`, `PQZ_FEE_MISMATCH`, `PQZ_FEE_LOG_UNREAD`, `PQZ_VERIFIER_PROBE_UNREAD`, `PQZ_KEY_ROTATED`,
 `PQZ_KEY_VERSION_UNKNOWN`, `PROOF_STORE_OVER_LANE_CAP` ([NODE-JOB-24](submit-lanes.md#NODE-JOB-24)); a lane stopped by
 `SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 
