@@ -211,8 +211,8 @@ pub struct Venue {
     /// The regulated legs (kinds 8-13: ERC-165 at start) and the `pausedUntil` last seen of each (regulated-kinds spec §7,
     /// NODE-DEX-11): a market with a regulated leg halts while it is in the future.
     regulated: std::sync::Mutex<HashMap<Address, u64>>,
-    /// Round 3s (spec 2026-11-10-token-lists.md §9, Fable R-7): the regulated legs whose list blocks the DEX or its puller
-    /// (a `DeniedSet(on)` / `AllowedSet(off)` naming one while the bit is on): their markets halt until the reverse event.
+    /// Round 3s (spec 2026-11-10-token-lists.md §9, Fable R-7, P2-1): the regulated legs whose live list refuses the DEX or its
+    /// puller ([`venue_halts`], computed at start and on each list event naming one or `FeatureEnabled(8 | 9)`): their markets halt.
     list_halted: std::sync::Mutex<HashSet<Address>>,
     /// The chain's `compliance_registry`, its code hash checked when the chain was loaded (fail closed); `None`: a regulated
     /// leg with a list on is refused `REGISTRY_NOT_CONFIGURED`.
@@ -323,17 +323,37 @@ impl Venue {
             }
             let c = view(&self.chain, t, IRegulatedToken::regulatedConfigCall {}).await?;
             self.set_paused(t, c.pausedUntil);
-            for (who, name) in [(self.dex, "venue"), (self.puller, "puller")] {
-                match self.leg_receivable(t, &c, who.into_word(), now()).await {
-                    Ok((true, ..)) => {}
-                    Ok((false, reason, _)) => warn!(chain = self.chain.number, token = %t, %who, reason, alert = "VENUE_NOT_ELIGIBLE",
-                        "the {name} is not eligible on a regulated leg: the registry admin attests [venue, venue.puller()] as \
-                         ELIGIBLE_CONTRACT (8, validUntil 2^64-1); until then orders on it are refused"),
-                    Err(e) => warn!(chain = self.chain.number, token = %t, %who, alert = "VENUE_NOT_ELIGIBLE", "{name}: {e}"),
-                }
-            }
+            // Fable P2-1 (c): the list halt from live reads at start too, never only from events seen since
+            self.set_list_halt(t, self.venue_halted(t, c.controls).await?);
+            self.alert_eligibility(t, &c).await;
         }
         Ok(())
+    }
+
+    /// The venue's own eligibility on regulated leg `t`, alerted by name (`VENUE_NOT_ELIGIBLE`), never assumed: at start and on
+    /// the leg's `FeatureEnabled(KYC)` (spec 2026-11-10-token-lists.md §9, Fable P3-2).
+    async fn alert_eligibility(&self, t: Address, c: &IRegulatedToken::RegulatedConfig) {
+        for (who, name) in [(self.dex, "venue"), (self.puller, "puller")] {
+            match self.leg_receivable(t, c, who.into_word(), now()).await {
+                Ok((true, ..)) => {}
+                Ok((false, reason, _)) => warn!(chain = self.chain.number, token = %t, %who, reason, alert = "VENUE_NOT_ELIGIBLE",
+                    "the {name} is not eligible on a regulated leg: the registry admin attests [venue, venue.puller()] as \
+                     ELIGIBLE_CONTRACT (8, validUntil 2^64-1); until then orders on it are refused"),
+                Err(e) => warn!(chain = self.chain.number, token = %t, %who, alert = "VENUE_NOT_ELIGIBLE", "{name}: {e}"),
+            }
+        }
+    }
+
+    /// Fable P2-1: leg `t`'s list halt, computed from its live `controls` and the DEX's and the puller's live flags
+    /// ([`venue_halts`]), never toggled by one event; both lists off, no read. A transport error is an error (fail closed).
+    async fn venue_halted(&self, t: Address, controls: u8) -> Result<bool> {
+        if controls & (C_ALLOW | C_DENY) == 0 {
+            return Ok(false);
+        }
+        let flags = |v: Address| view(&self.chain, t, IRegulatedToken::listFlagsOfCall { account: v.into_word() });
+        let (d, p) = (flags(self.dex).await.context("LIST_UNREAD: listFlagsOf(DEX)")?,
+            flags(self.puller).await.context("LIST_UNREAD: listFlagsOf(puller)")?);
+        Ok(venue_halts(controls, d, p))
     }
 
     fn set_paused(&self, token: Address, until: u64) {
@@ -1050,51 +1070,64 @@ impl Venue {
         frozen_out
     }
 
-    /// Round 3s (spec §9; NODE-DEX-11): the lists' events of each regulated leg against its live `controls` ([`list_effect`]):
-    /// the orders a list now refuses leave the book (for the client store, as an `AccountFrozen`'s), the venue named halts or
-    /// reopens the leg's markets; `FeatureEnabled(8 | 9)` reads every maker and receiver of the leg's orders, the DEX and its
-    /// puller again. An unreadable leg drops nothing (the token is the arbiter regardless) and is alerted.
-    async fn apply_lists(&self, book: &mut Book, events: &[Value]) -> Vec<Resting> {
-        let mut out = vec![];
+    /// Round 3s (spec §9; NODE-DEX-11; Fable P2-1, P2-2, P3-1, P3-2): what the lists' events of one round do, read live BEFORE the
+    /// cursor moves and before the book lock: one `regulatedConfig` per leg; a leg whose event names the DEX or its puller, or
+    /// `FeatureEnabled(8 | 9)`, gets its halt recomputed ([`Venue::venue_halted`]); an account a list event refuses, and on
+    /// `FeatureEnabled(8 | 9)` every maker and receiver of the leg's orders, is dropped only if its live flag refuses it;
+    /// `FeatureEnabled(28)` reruns the venue's eligibility alert. A transport error fails the round: the range is read again.
+    async fn read_lists(&self, events: &[Value]) -> Result<ListPlan> {
         let venue = [self.dex.into_word(), self.puller.into_word()];
+        let mut legs: std::collections::BTreeMap<Address, Vec<&Value>> = Default::default();
         for e in events.iter().filter(|e| matches!(e["event"].as_str(), Some("AllowedSet" | "DeniedSet" | "FeatureEnabled"))) {
-            let Ok(t) = e["contract"].as_str().unwrap_or_default().parse::<Address>() else { continue };
-            let c = match view(&self.chain, t, IRegulatedToken::regulatedConfigCall {}).await {
-                Ok(c) => c,
-                Err(err) => {
-                    warn!(chain = self.chain.number, token = %t, alert = "LIST_UNREAD", "a list event's leg: {err}");
-                    continue;
-                }
-            };
-            let receiver = |r: &Resting| if r.order.destination.is_zero() { r.order.from } else { r.order.destination };
-            let mut drop_of = |book: &mut Book, a: B256| {
-                let gone: Vec<B256> = book.all().filter(|r| (r.sell == t && r.order.from == a)
-                    || (r.order.receiveToken == t && receiver(r) == a)).map(|r| r.hash).collect();
-                out.extend(gone.into_iter().filter_map(|h| book.remove(h)));
-            };
-            match list_effect(e, c.controls, venue) {
-                ListEffect::Drop(a) => drop_of(book, a),
-                ListEffect::Halt(on) => self.set_list_halt(t, on),
-                ListEffect::None => {}
-                ListEffect::Recheck => {
-                    let mut who: Vec<B256> = book.all().filter(|r| r.sell == t).map(|r| r.order.from)
-                        .chain(book.all().filter(|r| r.order.receiveToken == t).map(receiver)).collect();
-                    who.sort();
-                    who.dedup();
-                    for v in venue {
-                        if let Ok(f) = view(&self.chain, t, IRegulatedToken::listFlagsOfCall { account: v }).await {
-                            self.set_list_halt(t, !list_admits(c.controls, f));
-                        }
-                    }
-                    for a in who {
-                        if let Ok(f) = view(&self.chain, t, IRegulatedToken::listFlagsOfCall { account: a }).await {
-                            if !list_admits(c.controls, f) {
-                                drop_of(book, a);
-                            }
-                        }
-                    }
+            if let Ok(t) = e["contract"].as_str().unwrap_or_default().parse::<Address>() {
+                legs.entry(t).or_default().push(e);
+            }
+        }
+        let mut plan = ListPlan::default();
+        for (t, evs) in legs {
+            let c = view(&self.chain, t, IRegulatedToken::regulatedConfigCall {}).await
+                .with_context(|| format!("LIST_UNREAD: regulatedConfig of {t:#x}"))?;
+            let (mut halt, mut recheck, mut who) = (false, false, std::collections::BTreeSet::new());
+            for e in evs {
+                match list_effect(e, c.controls, venue) {
+                    ListEffect::Drop(a) => _ = who.insert(a),
+                    ListEffect::Venue => halt = true,
+                    ListEffect::Recheck => (halt, recheck) = (true, true),
+                    ListEffect::Kyc => self.alert_eligibility(t, &c).await,
+                    ListEffect::None => {}
                 }
             }
+            if halt {
+                plan.halts.push((t, self.venue_halted(t, c.controls).await?));
+            }
+            if recheck {
+                // the accounts under a short lock, their flags read after it (Fable P2-2: no RPC under the book)
+                let book = self.book.lock().await;
+                who.extend(book.all().filter(|r| r.sell == t).map(|r| r.order.from)
+                    .chain(book.all().filter(|r| r.order.receiveToken == t).map(receiver_of)));
+            }
+            for a in who {
+                let f = view(&self.chain, t, IRegulatedToken::listFlagsOfCall { account: a }).await
+                    .with_context(|| format!("LIST_UNREAD: listFlagsOf({a:#x}) on {t:#x}"))?;
+                if !list_admits(c.controls, f) {
+                    plan.drops.push((t, a));
+                }
+            }
+        }
+        Ok(plan)
+    }
+
+    /// Apply a round's [`ListPlan`] under the book lock: the halts, then the refused accounts' orders of that leg, both sides,
+    /// leave the book (for the client store, as an `AccountFrozen`'s).
+    fn apply_lists(&self, book: &mut Book, plan: &ListPlan) -> Vec<Resting> {
+        for &(t, on) in &plan.halts {
+            self.set_list_halt(t, on);
+        }
+        let mut out = vec![];
+        for &(t, a) in &plan.drops {
+            let gone: Vec<B256> = book.all().filter(|r| (r.sell == t && r.order.from == a)
+                || (r.order.receiveToken == t && receiver_of(r) == a)).map(|r| r.hash).collect();
+            out.extend(gone.into_iter().filter_map(|h| book.remove(h)));
         }
         out
     }
@@ -1138,6 +1171,8 @@ impl Venue {
         ]);
         let logs = self.chain.primary().get_logs(&f).await?;
         let events = self.accepted(&logs);
+        // Fable P2-2: the lists read before the cursor moves and before the book lock; unreadable, the round fails and is retried
+        let lists = self.read_lists(&events).await?;
         // the regulated legs' events are the venue's own (the halt, the frozen makers): the client gets the orders' states
         let fills: Vec<&Value> = events.iter().filter(|e| !matches!(e["event"].as_str(),
             Some("Paused" | "Unpaused" | "AccountFrozen" | "AllowedSet" | "DeniedSet" | "FeatureEnabled"))).collect();
@@ -1152,7 +1187,7 @@ impl Venue {
         // The client closed the orders; the book in memory follows (review D13).
         let mut book = self.book.lock().await;
         let mut frozen = self.apply_events(&mut book, &events);
-        frozen.extend(self.apply_lists(&mut book, &events).await);
+        frozen.extend(self.apply_lists(&mut book, &lists));
         if !frozen.is_empty() {
             let mut commit = Commit::default();
             for r in &frozen {
@@ -1505,36 +1540,57 @@ fn list_admits(controls: u8, flags: u8) -> bool {
     !(controls & C_ALLOW != 0 && flags & 1 == 0) && !(controls & C_DENY != 0 && flags & 2 != 0)
 }
 
-/// Round 3s (spec §9, Fable P2-1, R-1, R-7): what one list event does to the book of its leg, against the leg's live
-/// `controls`: `Drop(account)` (every order of that token, both sides, of an account the list now refuses), `Halt(on)` (the
-/// DEX or its puller named: the leg's markets halt or reopen), `Recheck` (`FeatureEnabled(8 | 9)`: every maker and receiver
-/// of the leg read again), or nothing (a dormant list, a relaxing edit of another account, another bit).
+/// Fable P2-1: a leg's markets halt while its live list refuses the DEX or its puller (`L`, spec §4.2, on both).
+fn venue_halts(controls: u8, dex: u8, puller: u8) -> bool {
+    !list_admits(controls, dex) || !list_admits(controls, puller)
+}
+
+/// The account an order pays out to: its `destination`, else its maker.
+fn receiver_of(r: &Resting) -> B256 {
+    if r.order.destination.is_zero() { r.order.from } else { r.order.destination }
+}
+
+/// Fable P2-2: a round's list reads, made before the cursor moves and before the book lock ([`Venue::read_lists`]).
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ListPlan {
+    /// Each leg's halt, recomputed from live reads.
+    halts: Vec<(Address, bool)>,
+    /// (leg, account): the account's live flag refuses it; its orders on that leg leave the book.
+    drops: Vec<(Address, B256)>,
+}
+
+/// Round 3s (spec §9, Fable P2-1, P3-1, P3-2, R-1, R-7): what one list event asks of its leg, against the leg's live
+/// `controls`: `Drop(account)` (a refusing edit of an account while its list is on: the account's live flag is read, its orders
+/// leave if it refuses), `Venue` (the DEX or its puller named: the leg's halt is recomputed), `Recheck` (`FeatureEnabled(8 | 9)`:
+/// the halt and every maker and receiver of the leg read again), `Kyc` (`FeatureEnabled(28)`: the venue's eligibility alert
+/// reruns), or nothing (a dormant list, a relaxing edit of another account, another bit).
 #[derive(Debug, PartialEq, Eq)]
 enum ListEffect {
     Drop(B256),
-    Halt(bool),
+    Venue,
     Recheck,
+    Kyc,
     None,
 }
 
 fn list_effect(e: &Value, controls: u8, venue: [B256; 2]) -> ListEffect {
     let (ev, on) = (e["event"].as_str().unwrap_or_default(), e["on"].as_bool().unwrap_or(false));
     if ev == "FeatureEnabled" {
-        return if matches!(e["bit"].as_u64(), Some(8 | 9)) { ListEffect::Recheck } else { ListEffect::None };
+        return match e["bit"].as_u64() {
+            Some(8 | 9) => ListEffect::Recheck,
+            Some(28) => ListEffect::Kyc,
+            _ => ListEffect::None,
+        };
     }
     let bit = match ev { "DeniedSet" => C_DENY, "AllowedSet" => C_ALLOW, _ => return ListEffect::None };
+    let Ok(a) = e["account"].as_str().unwrap_or_default().parse::<B256>() else { return ListEffect::None };
+    if venue.contains(&a) {
+        return ListEffect::Venue; // recomputed from both flags, whatever this one event says (P2-1)
+    }
     if controls & bit == 0 {
         return ListEffect::None; // R-1: a dormant list changes nothing on chain, nothing here
     }
-    let Ok(a) = e["account"].as_str().unwrap_or_default().parse::<B256>() else { return ListEffect::None };
-    let blocks = (ev == "DeniedSet") == on; // DeniedSet(on) or AllowedSet(off)
-    if venue.contains(&a) {
-        ListEffect::Halt(blocks)
-    } else if blocks {
-        ListEffect::Drop(a)
-    } else {
-        ListEffect::None
-    }
+    if (ev == "DeniedSet") == on { ListEffect::Drop(a) } else { ListEffect::None } // DeniedSet(on) or AllowedSet(off)
 }
 
 #[cfg(test)]
@@ -1556,13 +1612,21 @@ mod tests {
         assert_eq!(list_effect(&ev("AllowedSet", a, false), C_ALLOW, v), ListEffect::Drop(a));
         assert_eq!(list_effect(&ev("AllowedSet", a, false), C_DENY, v), ListEffect::None, "R-1: the allow list dormant");
         assert_eq!(list_effect(&ev("AllowedSet", a, true), C_ALLOW, v), ListEffect::None);
+        // Fable P2-1: an event naming the venue's contracts never sets the halt itself; it is recomputed from both live flags
         for who in v {
-            assert_eq!(list_effect(&ev("DeniedSet", who, true), C_DENY, v), ListEffect::Halt(true), "R-7: the venue's contract");
-            assert_eq!(list_effect(&ev("DeniedSet", who, false), C_DENY, v), ListEffect::Halt(false), "the reverse event");
-            assert_eq!(list_effect(&ev("AllowedSet", who, false), C_ALLOW, v), ListEffect::Halt(true));
+            for (name, on, controls) in [("DeniedSet", true, C_DENY), ("DeniedSet", false, C_DENY), ("AllowedSet", true, C_ALLOW),
+                ("AllowedSet", false, C_ALLOW), ("DeniedSet", true, C_ALLOW)] {
+                assert_eq!(list_effect(&ev(name, who, on), controls, v), ListEffect::Venue, "R-7: {name}({on})");
+            }
         }
         assert_eq!(list_effect(&json!({"event": "FeatureEnabled", "bit": 9}), 0, v), ListEffect::Recheck);
-        assert_eq!(list_effect(&json!({"event": "FeatureEnabled", "bit": 28}), 0, v), ListEffect::None);
+        assert_eq!(list_effect(&json!({"event": "FeatureEnabled", "bit": 8}), 0, v), ListEffect::Recheck);
+        assert_eq!(list_effect(&json!({"event": "FeatureEnabled", "bit": 28}), 0, v), ListEffect::Kyc, "Fable P3-2");
+        assert_eq!(list_effect(&json!({"event": "FeatureEnabled", "bit": 27}), 0, v), ListEffect::None);
+        // the halt: either contract refused halts the leg (P2-1 (b): never the last one read)
+        use super::venue_halts;
+        assert!(!venue_halts(C_DENY, 0, 0) && venue_halts(C_DENY, 2, 0) && venue_halts(C_DENY, 0, 2));
+        assert!(!venue_halts(C_ALLOW | C_DENY, 1, 1) && venue_halts(C_ALLOW | C_DENY, 3, 1) && venue_halts(C_ALLOW, 1, 0));
         assert!(list_admits(0, 0) && list_admits(C_ALLOW, 1) && !list_admits(C_ALLOW, 0) && !list_admits(C_DENY, 2));
         assert!(list_admits(C_DENY, 1) && !list_admits(C_ALLOW | C_DENY, 3));
     }
@@ -1795,6 +1859,8 @@ mod tests {
         /// The leg on this token reverts `TokenPaused(until)`, in a settlement and in its own `mtxTrade` (a pause that lands after
         /// the intake read).
         trade_paused: HashMap<Address, u64>,
+        /// Fable P2-2: `regulatedConfig` and `listFlagsOf` answer a transport error (an RPC blip).
+        lists_down: bool,
     }
     const REG_REGISTRY: Address = Address::repeat_byte(0xc0);
     type W = Arc<std::sync::Mutex<World>>;
@@ -1914,6 +1980,11 @@ mod tests {
                         } else {
                             Ok(hexs(&[]))
                         }
+                    } else if sel == IERC165::supportsInterfaceCall::SELECTOR {
+                        Ok(hexs(&w.reg.contains_key(&to).abi_encode()))
+                    } else if w.lists_down && (sel == IRegulatedToken::regulatedConfigCall::SELECTOR
+                        || sel == IRegulatedToken::listFlagsOfCall::SELECTOR) {
+                        Err(json!({"code": -32603, "message": "upstream unavailable"}))
                     } else if sel == IRegulatedToken::regulatedConfigCall::SELECTOR {
                         let (controls, required, denied, paused) = w.reg[&to];
                         Ok(hexs(&IRegulatedToken::regulatedConfigCall::abi_encode_returns(&IRegulatedToken::RegulatedConfig {
@@ -2122,6 +2193,72 @@ mod tests {
         let all = [t.address(), DEX, v.puller].iter().map(|a| (a.into_word(), 1u8)).collect();
         let (v, _) = regulated_venue(World { lists: all, ..ok_world() }, 8, 0, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
         assert_eq!(take(&v, &t, 30, 10, 1).await.unwrap().status, "filled");
+    }
+
+    /// Fable P2-1, P2-2, P3-1 (spec 2026-11-10-token-lists.md §9): the list halt is computed from live reads, never toggled by one
+    /// event: (a) with both lists on, `AllowedSet(dex, true)` keeps the halt while the DEX is still denied; (b) the puller
+    /// relaxed keeps it while the DEX is refused; it reopens once both are admitted; (c) a restart reads it. A refusing edit of
+    /// a maker drops its orders only if its live flag refuses it (undone at the next block: it stays).
+    #[tokio::test]
+    async fn list_halt_is_computed_from_live_reads() {
+        let m = PrivateKeySigner::random();
+        let ask = order(m.address(), QUOTE, 10, 30, 1);
+        let (dex, a) = (DEX.into_word(), m.address().into_word());
+        let both = C_ALLOW | C_DENY;
+        let w = World { lists: [(dex, 3), (Address::repeat_byte(0x9).into_word(), 1)].into_iter().collect(), ..Default::default() };
+        let (v, world) = regulated_venue(w, both, 0, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let v = &v;
+        let list = |name: &str, who: B256, on: bool| {
+            let d = if name == "AllowedSet" { IRegulatedToken::AllowedSet { account: who, by: B256::ZERO, on }.encode_log_data() }
+                    else { IRegulatedToken::DeniedSet { account: who, by: B256::ZERO, on }.encode_log_data() };
+            v.accepted(&[log_at(BASE, d)])
+        };
+        let round = |events: Vec<Value>| async move {
+            let plan = v.read_lists(&events).await.unwrap();
+            v.apply_lists(&mut *v.book.lock().await, &plan);
+        };
+        // (c) at start
+        v.load_regulated().await.unwrap();
+        assert_eq!(v.halted(BASE, now()), Some(u64::MAX), "a restart while the DEX is denied keeps the halt");
+        // (a) the allow edit of a denied DEX
+        round(list("AllowedSet", dex, true)).await;
+        assert_eq!(v.halted(BASE, now()), Some(u64::MAX), "(a) still denied");
+        // (b) the puller relaxed, the DEX still refused
+        round(list("DeniedSet", Address::repeat_byte(0x9).into_word(), false)).await;
+        assert_eq!(v.halted(BASE, now()), Some(u64::MAX), "(b) the DEX still refused");
+        world.lock().unwrap().lists.insert(dex, 1);
+        round(list("DeniedSet", dex, false)).await;
+        assert_eq!(v.halted(BASE, now()), None, "both admitted: reopens");
+        // P3-1: a maker's refusing edit undone by the live state stays; refused live, it leaves
+        world.lock().unwrap().lists.insert(a, 1);
+        round(list("DeniedSet", a, true)).await;
+        assert!(in_book(&v.rows().await, &ask), "the live flag admits it");
+        world.lock().unwrap().lists.insert(a, 3);
+        round(list("DeniedSet", a, true)).await;
+        assert!(!in_book(&v.rows().await, &ask), "the live flag refuses it");
+    }
+
+    /// Fable P2-2: a list event whose leg cannot be read fails the watcher round BEFORE the client ingests the range (the cursor
+    /// does not move; the same range is read again), never skipped; read, the round goes through.
+    #[tokio::test]
+    async fn an_unreadable_list_fails_the_round_before_the_cursor() {
+        let m = PrivateKeySigner::random();
+        let ask = order(m.address(), QUOTE, 10, 30, 1);
+        let (v, world) = regulated_venue(World { lists_down: true, ..Default::default() }, C_DENY, 0, 0,
+            vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let ev = IRegulatedToken::DeniedSet { account: m.address().into_word(), by: B256::ZERO, on: true }.encode_log_data();
+        world.lock().unwrap().logs.push(serde_json::to_value(log_at(BASE, ev)).unwrap());
+        let (idx, o) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
+        let v = Venue { indexer: Some(idx), ..v };
+        let e = v.watch_once().await.unwrap_err();
+        assert!(format!("{e:#}").contains("LIST_UNREAD"), "{e:#}");
+        assert_eq!(o.lock().unwrap().ingests, 1, "dex_cursor only: dex_fill_ingest never ran");
+        assert!(in_book(&v.rows().await, &ask));
+        world.lock().unwrap().lists_down = false;
+        world.lock().unwrap().lists.insert(m.address().into_word(), 2);
+        assert!(v.watch_once().await.unwrap());
+        assert_eq!(o.lock().unwrap().ingests, 3, "the same range, ingested once read");
+        assert!(!in_book(&v.rows().await, &ask), "the denied maker left");
     }
 
     /// Spec §7: an `AccountFrozen` of a regulated leg drops that account's orders selling it (a frozen account cannot send);

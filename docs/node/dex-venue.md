@@ -527,9 +527,15 @@ eligibility at intake.** A licensed operator runs its own `SCaaSDex` instance wi
 (forced), `gossip = 0` (default), `eligibility_tokens` (the regulated legs, read from `versionOf(token).kind`). Group 3s
 ([CTR-AS-31](../contracts/asset-suite.md#CTR-AS-31); BUILT, UNAUDITED): the registry check runs under `KYC` (controls bit 6, both
 masks); under a list that is on, intake reads `listFlagsOf` of the seller, the DEX, its puller and the receiver (`NOT_ALLOWED`,
-`DENIED`); `DeniedSet(on)` / `AllowedSet(off)` drop that account's orders of the leg, both sides, and `FeatureEnabled(8 | 9)`
-re-reads every maker and receiver, only while the bit is on in the leg's live `controls`; naming the DEX or its puller halts the
-leg's markets until the reverse event (test `list_effects_follow_the_live_bit`).
+`DENIED`). The watcher reads the lists live, once per leg and round (one `regulatedConfig`), **before** the client ingests the range
+and before the book lock; a transport error fails the round, so the same range is read again (fail closed, never skipped).
+`DeniedSet(on)` / `AllowedSet(off)` of an account, while its bit is on in the leg's live `controls`, drops that account's orders of
+the leg, both sides, only if its live `listFlagsOf` refuses it; `FeatureEnabled(8 | 9)` re-reads every maker and receiver the same
+way. The leg's list halt is computed, never toggled: `halt = !L(DEX) || !L(puller)` from the live `controls` and both live flags,
+at start (and so after a restart), on every list event naming the DEX or its puller and on `FeatureEnabled(8 | 9)`.
+`FeatureEnabled(28)` reruns the venue's `VENUE_NOT_ELIGIBLE` alert (tests `list_effects_follow_the_live_bit`,
+`list_halt_is_computed_from_live_reads`, `an_unreadable_list_fails_the_round_before_the_cursor`; Fable review of ua-mtx-merge,
+venue P2-1, P2-2, P3-1, P3-2).
 
 | Point | Check | Refusal |
 |---|---|---|
