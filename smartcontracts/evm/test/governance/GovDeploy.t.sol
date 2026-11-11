@@ -599,8 +599,9 @@ contract GovDeployTest is Test {
         // metadata hash: `IOpenFactory`'s directory, spec §13): -> 0x27D74283541a0bEfd3281ADa6609dfC3221d1836; round 3r T7 (the fifteen
         // admin ops of the factory and a compliance registry, spec §5.4; owner naming 2026-11-11): ->
         // 0x668B713392eEcF586D1BAbF16be677b94a71E8f0; round 3s T4 (CTR-GOV-24: `mtxSetAllowed`, `mtxSetDenied`,
-        // `mtxEnableFeature`) and round 3t (CTR-PQZ-36: `mtxSetVerifierFee`): -> this (RE-PIN after the 3s merge)
-        assertEq(router, 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a, "GovernanceRouter");
+        // `mtxEnableFeature`) and round 3t (CTR-PQZ-36: `mtxSetVerifierFee`), both in (merge 0d6bc40c; 3t alone was
+        // 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a): -> this
+        assertEq(router, 0xf6cEa6aB1eF258779F44546EE3BD596aD2576EFe, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

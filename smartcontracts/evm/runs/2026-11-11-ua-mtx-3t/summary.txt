@@ -38,3 +38,15 @@ t9 size (forge build src --sizes, scripts/size_gate.py) | T6 | 0 | 0 errors, 166
 t9 t-merge@PqzPairs.t.sol, t-governance@GovDeploy.t.sol | T6 | 0 | 10 passed; 19 passed (pins moved: IPqzToken interfaceId 0x3fef18ca -> 0xd87fe345; GovernanceRouter 0x668B7133... -> 0xA978FEFC...)
 t9 t-pqz@{PqzStateGas,MtxSplitOverhead}.t.sol | T6 | 0 | 77 passed, 2 skipped (no gas pin moved: their bounds hold)
 t11 docs (scripts/docs_check.py check) | T6 | 0 | 0 errors, 6 warnings (the budget warnings as before)
+t7 verifier (scaas-pqz-verifier cargo test) | f526d9ad | 0 | service 15 passed (refuses_stale_fee_word new)
+t7 verifier-clippy | f526d9ad | 0 | clean
+merge 3s ea4c5756 -> 0d6bc40c (the controller's): the counts verified by running the tests below | 0d6bc40c+fix | |
+m size (the combined tree, n2304-kmax4096) | 0d6bc40c+fix | 0 | 0 errors, 166 contracts after: NormalPqzRegulatedToken 23,011 -> 23,235, NormalPqzRegulatedTokenA 28,344 -> 28,476, NormalPqzRegulatedTokenQ 33,077 -> 33,238 (notice 33,780: 542 B under), NormalRegulatedTokenA 25,918 -> 26,004, WrappedPqzRegulatedToken 30,164 -> 30,415, WrappedPqzRegulatedTokenQ 29,710 -> 29,871 (Q(13), 3,909 under); + GovernanceRouter 24,613 (plain; was over EIP-170 without a row; controller decision: a ratchet row, no split); every other row equal
+m clientkeys | 0d6bc40c+fix | 0 | 329 tests, 327 pass, 0 fail (typed_ops.json regenerated: byte-equal to the merged file)
+m zether-prover --test typed_ops | 0d6bc40c+fix | 0 | 6 passed (NOT_ZETHER: 80 entries, 80 unique)
+m node-test (CAPPED_MEM=6G, alone) | 0d6bc40c+fix | 0 | 715 passed, 0 failed (typed (101, 135, 134) / 104, guard (131, 3, 131) / 135 / 51 / ROWED 276 / GOVERNED 296, submit 131)
+m t-governance@{GovDeploy,SelectorAudit,GovRouterTypehash}.t.sol | 0d6bc40c+fix | 0 | 89 passed (GovernanceRouter re-pinned 0xA978FEFC... -> 0xf6cEa6aB1eF258779F44546EE3BD596aD2576EFe)
+m t-modules@Groups.t.sol; gen_faces.py --check | 0d6bc40c+fix | 0 | 3 passed; 27 files, 0 differ
+m t-pqz@{PqzVerifierFee,PqzVerifierFeeVectors,PqzOffchainEntries,PqzStateVectors}.t.sol | 0d6bc40c+fix | 0 | 67 passed
+m t-as@confidential/{PqzVerifierFeeKinds,PqzVerdictKinds}.t.sol | 0d6bc40c+fix | 0 | 12 passed
+m t-pqz/invariant@PqzFeeInvariants.t.sol | 0d6bc40c+fix | 0 | 2 passed (runs 64, depth 128)
