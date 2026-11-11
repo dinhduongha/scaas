@@ -710,8 +710,9 @@ async fn fails_over_one_node_one_block() {
 
 /// Fable C-4: a client that sends its headers and then no body holds no queue place: with every place's worth of such
 /// clients connected, a whole request is still served; each slow one is refused `BODY_TIMEOUT` (408) after `BODY_TIMEOUT`.
-/// The test clock is paused, so the timeout passes at once when nothing else runs.
-#[tokio::test(start_paused = true)]
+/// The clock runs while the slow clients reach their handlers, then is paused, so the timeout passes at once when nothing
+/// else runs.
+#[tokio::test]
 async fn slow_body_holds_no_queue_place() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let s = service(world(&[], &[]), all_valid());
@@ -726,7 +727,9 @@ async fn slow_body_holds_no_queue_place() {
             .await.unwrap();
         slow.push(c);
     }
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    // real time for the server to accept them and enter each handler (reading its body), then the paused clock
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    tokio::time::pause();
     let probe = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
     assert_signed(&post(&s, "/v1/pqz-verdict/probe", probe).await, keccak256(PROBE_STATEMENT), keccak256(b""));
     let start = tokio::time::Instant::now();
@@ -736,7 +739,7 @@ async fn slow_body_holds_no_queue_place() {
         let answer = String::from_utf8_lossy(&b[..n]);
         assert!(answer.starts_with("HTTP/1.1 408") && answer.contains("BODY_TIMEOUT"), "{answer}");
     }
-    assert!(start.elapsed() + std::time::Duration::from_millis(50) >= http::BODY_TIMEOUT);
+    assert!(start.elapsed() + std::time::Duration::from_secs(1) >= http::BODY_TIMEOUT);
 }
 
 /// A JSON-RPC endpoint that answers `eth_chainId` with `chain_id`.
