@@ -5040,6 +5040,7 @@ Change (owner 2026-11-08, all as recommended; plan T66a part 1; status: BUILT on
 **Why.** Anyone runs a chat or community service on the same reviewed code, as with tokens and DEXes; one bytecode at one address on every chain.
 **Cost if wrong.** An owner with powers could censor sessions and topics; a code-size limit under EIP-170's would leave no room for a wrap blob (1,689 B).
 **Source.** owner 2026-11-07; UA-7 spec §2.1 P32, topics spec §11, factory index spec §8; plan `superpowers/plans/2026-11-04-ua-mtx-merge.md` group 3c (3C-D1), T85. Status: BUILT on branch `ua-mtx-merge` (EVM, `e5cb6d2c`; the deploy script's registration `879502df`, T92), UNAUDITED.
+Change (2026-11-11, Fable review D P3-1; controller call under the owner's leave; status: BUILT on branch `ua-mtx-fix-contracts`, UNAUDITED): `initialize(ownerUA)` accepts 0 or the creator only (`IOpenFactory.creating()`, else `PqChatOwnerNotCreator(ownerUA)`): before, a creator could name any well-known UA as `owner()` of an instance it made, a forged label for a client that shows it. The owner still has no power. Test: `test/pqchat/PqChat.t.sol` `test_initialize_ownerIsTheCreator`; `PqChatBase._instance` creates as the owner.
 
 ### CTR-CHAT-03 — `PqChat` records are typed EIP-712 structs in the portable domain `DS_C`, signed under `PURPOSE_PQCHAT` and checked by `requirePortable`
 - old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/pqchat.md#CTR-CHAT-03 · superseded-by: —

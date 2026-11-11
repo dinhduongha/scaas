@@ -176,6 +176,8 @@ interface IPqChat {
 
     /// @notice A shape the contract checks (3C-D6): lengths, order, counts, a blob over the code-size limit, `v != 1`.
     error PqChatShape();
+    /// @notice `initialize`'s owner is neither 0 nor the factory's `creating()` (Fable D P3-1).
+    error PqChatOwnerNotCreator(bytes32 ownerUA);
     error PqChatNonceUsed(bytes32 scope, uint64 nonce);
     /// @notice The member holds no KEM key of version `keyId` in this chain's registry (P3, P9).
     error PqChatKemKey(bytes32 member, uint64 keyId);
