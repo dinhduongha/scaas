@@ -350,6 +350,9 @@ mod tests {
             "eth_getCode" => ok(json!("0x")),
             "eth_call" => {
                 let input = b["params"][0]["input"].as_str().or(b["params"][0]["data"].as_str()).unwrap_or_default().to_string();
+                if let Some(d) = crate::typed::testkit::domain_answer(&input, b["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default()) {
+                    return axum::Json(json!({"jsonrpc": "2.0", "id": id, "result": d}));
+                }
                 match &n.invalidate_revert {
                     Some(d) if input.starts_with(&format!("0x{}", alloy::hex::encode(guard::SEL_TOKEN_INVALIDATE_NONCES))) => json!(
                         {"jsonrpc": "2.0", "id": id, "error": {"code": 3, "message": "execution reverted", "data": format!("0x{}", alloy::hex::encode(d))}}),

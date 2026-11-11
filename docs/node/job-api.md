@@ -280,7 +280,7 @@ JSON; the struct names are the vector file's keys.
 | Key | Rule |
 |---|---|
 | `entry` | The contract function: `mtxUnwrap`, `mtxUnshield`, … |
-| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`, `gov_router`, `pqchat`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind. *Known limit* (Fable review of ua-mtx-merge E N-6; PLANNED, open): on a `token` / `zether` / `pqz` row the name is not checked against the token's `eip712Domain().name` (the venue and the service path read it, the job path does not): a wrong one only picks the node's digest domain, so an EOA signer is refused `BAD_SIGNATURE` and a derived signer's landed job is labelled `superseded`; target: read the name once per token (immutable) and refuse a mismatch by name |
+| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`, `gov_router`, `pqchat`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind. On a `token` / `zether` / `pqz` row the name must be the token's own kind: the guard reads the token's `eip712Domain().name` once (an immutable of its kind, kept) and refuses another `CONTRACT_KIND_MISMATCH` (`dead`, zero sends; unreadable: back in the queue), so the node's digest domain is always the token's (Fable review of ua-mtx-merge E N-6; BUILT, `guard::tests::the_op_contract_is_the_token_domain_kind`) |
 | `struct` | Only when an entry has two rows on a kind (`ENTRY_AMBIGUOUS`): `CancelUAOrder` / `CancelUAWrapOrder`, `UARollOverSigned` / `ZetherRollOver`, `UASetRollOverMode` / `ZetherSetRollOverMode`, `CancelDexOrder` / `mtxCancelOrders` |
 | `token` | The call's target; a `UARelayFee`'s fee token; a wrap order's wrapper |
 | `envelope` | `from` + `batch`, `nonce`, `validUntil`, `mode`, `relayer`, `fee`, `feeRecipient`, on every entry whose struct ends with them (`UAEnvelope`, `from` an id; `Envelope`, `from` an address, on the address entries); exactly these keys |
@@ -342,6 +342,7 @@ Gateway: `POST /v1/op {chain, op}` takes the same object, for a token's entry on
 | `BAD_PAYLOAD` | a field missing, unknown, or not its type (the path is named) |
 | `MANDATE_LANE` | above |
 | `BAD_SIGNATURE` | above |
+| `CONTRACT_KIND_MISMATCH` | `contract` names a token kind (`token`, `zether`, `pqz`) whose domain is not the token's `eip712Domain().name` |
 | `CALL_TARGET_REFUSED` / `TOKEN_NOT_SERVED` | the target does not meet the kind's rule ([call table](#call-table)); `TOKEN_NOT_SERVED` also a Soroban mandate job's `token` ([NET-SOR-29](../networks/soroban.md#NET-SOR-29)) |
 | `UNSIGNED_WRITE_NOT_PAID` | an unsigned `PqChat` write, neither a relay fee's call nor under `relay_unsigned_pqchat` ([call table](#pqchat-calls)) |
 | `HEX_ARGS_REFUSED` | a struct sent as hex where the entry names its fields: a `PqChat` job's `args`, record, list or `sig` ([call table](#pqchat-calls)), a pay's `meta.body`, a PQZ verdict |

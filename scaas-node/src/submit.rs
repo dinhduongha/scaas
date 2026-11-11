@@ -1096,6 +1096,8 @@ pub(crate) mod tests {
         pqz_rotated: bool,
         /// Group 3f: `pqzVerifyConfig()` answers `(mode, verifier, epoch)`; `None`: it reverts (a token without the view).
         pqz_cfg: Option<(u8, B256, u32)>,
+        /// Fable E N-6: the token's `eip712Domain().name` (default: the first job's kind through `outcomes`, else `SCaaS MetaToken`).
+        domain: Option<&'static str>,
         /// Group 3f: the input of every `eth_call` to a PQZ view (`pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the
         /// statement views), in order.
         views: Vec<Vec<u8>>,
@@ -1205,6 +1207,11 @@ pub(crate) mod tests {
                         Ok(json!(format!("0x{}", alloy::hex::encode(out))))
                     } else if sel == IToken::supportedModesCall::SELECTOR {
                         Ok(word(U256::from(0xF3)))
+                    } else if sel == IToken::eip712DomainCall::SELECTOR {
+                        let name = e.domain.unwrap_or("SCaaS MetaToken");
+                        Ok(json!(format!("0x{}", alloy::hex::encode(IToken::eip712DomainCall::abi_encode_returns(&IToken::eip712DomainReturn {
+                            fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(7622),
+                            verifyingContract: TOKEN, salt: B256::ZERO, extensions: vec![] })))))
                     } else if sel == IToken::chainUidCall::SELECTOR {
                         match e.uid_err {
                             Some("revert") => Err(err(3, "execution reverted", Some("0x".into()))),
@@ -1736,7 +1743,9 @@ pub(crate) mod tests {
     }
 
     /// Every report of one poll on a lane built with `tweak`, and the fake chain.
-    async fn outcomes(e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+    async fn outcomes(mut e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+        // Fable E N-6: the token answers the domain of the kind its first job names, unless the test sets one
+        e.domain = e.domain.or_else(|| jobs.first().and_then(|j| j["op"]["contract"].as_str()).and_then(crate::typed::domain_name));
         let (url, rpc) = fake_evm(e).await;
         let (odoo, o) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
         lane_cfg(&url, odoo, 1, InflightSet::default(), tweak).await.unwrap().poll_outbox().await;
@@ -3054,7 +3063,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     /// The fake token's verifier UA (a native id) and an `OFFCHAIN` token at epoch 2.
     const VERIFIER: B256 = B256::repeat_byte(0x0e);
     fn offchain() -> Evm {
-        Evm { mtx_nonce: Some(0), pqz_cfg: Some((1, VERIFIER, 2)), ..Default::default() }
+        Evm { mtx_nonce: Some(0), pqz_cfg: Some((1, VERIFIER, 2)), domain: Some("SCaaS PqzToken"), ..Default::default() }
     }
 
     /// A verifier's `UASig` (a native id's 65 bytes), `tag` its first byte.

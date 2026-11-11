@@ -1519,6 +1519,20 @@ pub fn hex_refused(what: &str) -> anyhow::Error {
 pub mod testkit {
     use super::*;
 
+    /// Fable E N-6: a fake RPC's answer to `eip712Domain()` (`input`, `0x` hex) on `to`: the vector's token kinds by address
+    /// (`0x…a1` token, `a2` zether, `a3` pqz), any other address `SCaaS MetaToken`; `None` for another call.
+    pub fn domain_answer(input: &str, to: Address) -> Option<String> {
+        let sel = format!("0x{}", alloy::hex::encode(crate::abi::IToken::eip712DomainCall::SELECTOR));
+        if !input.starts_with(&sel) {
+            return None;
+        }
+        let kind = match to.0[19] { 0xa2 if to.0[0] == 0x5c => "zether", 0xa3 if to.0[0] == 0x5c => "pqz", _ => "token" };
+        let r = crate::abi::IToken::eip712DomainReturn { fields: alloy::primitives::FixedBytes([0x1f]),
+            name: domain_name(kind).expect("a token kind").into(), version: "1".into(), chainId: U256::ZERO, verifyingContract: to,
+            salt: B256::ZERO, extensions: vec![] };
+        Some(format!("0x{}", alloy::hex::encode(crate::abi::IToken::eip712DomainCall::abi_encode_returns(&r))))
+    }
+
     /// ua-mtx-merge T76: the router's three creations have vector rows and no node row (chain-neutral spec §6.3: only when
     /// relaying creations is decided, index spec §8.11 Q11; the guard test names them in `NOT_ROWS`). Every walker over the
     /// vector sees the rows the node builds; the three must be in the file.

@@ -785,6 +785,8 @@ pub struct Guard {
     relay_unsigned_pqchat: bool,
     /// Tokens whose UA ledger is on (`registry() ≠ 0`).
     ua_ledger: Mutex<HashSet<Address>>,
+    /// A token's `eip712Domain().name` (an immutable of its kind), read once ([`Guard::require_kind`]).
+    domain_names: Mutex<HashMap<Address, String>>,
     /// `params.l1_fee = "op-stack"`: relay-fee quotes add `GasPriceOracle.getL1Fee`.
     op_stack: bool,
     /// Group 3f: the PQZ verifier mode's verdict fill and shield switch (`[pqz_verifier]`), one rule on every path.
@@ -816,6 +818,7 @@ impl Guard {
                     at the lane's gas), not {v}"),
             },
             ua_ledger: Default::default(),
+            domain_names: Default::default(),
             op_stack: match cfg.params.get("l1_fee") {
                 None => false,
                 Some(v) if v.as_str() == Some("op-stack") => true,
@@ -1014,6 +1017,7 @@ impl Guard {
                 return Err(Self::not_served(w.to));
             }
             self.require_bound(chain, w.to).await?;
+            self.require_kind(chain, w.to, contract).await?;
             // R44 (step 7a): only a derived `from` or `to` needs the UA ledger; an all-native merged entry runs at `registry() == 0`
             if w.typed.as_ref().is_some_and(|t| t.derived_side) {
                 self.require_ua_ledger(chain, w.to).await?;
@@ -1171,6 +1175,33 @@ impl Guard {
             m.insert(to, (c.contractClass, c.version));
         }
         Ok(Some((c.contractClass, c.version)))
+    }
+
+    /// Fable E N-6: the op's `contract` (`token`, `zether`, `pqz`) picks the node's digest domain, so it must be the token's own:
+    /// `eip712Domain().name` equal to that kind's, else `CONTRACT_KIND_MISMATCH` (`dead`). The name is an immutable of the
+    /// implementation: read once per token and kept.
+    async fn require_kind(&self, chain: &Chain, to: Address, contract: &str) -> Result<(), Refusal> {
+        let cached = self.domain_names.lock().ok().and_then(|m| m.get(&to).cloned());
+        let name = match cached {
+            Some(n) => n,
+            None => {
+                let n = match chain.call_view(to, IToken::eip712DomainCall {}).await {
+                    Ok(d) => d.name,
+                    Err(SimError::Revert(e)) => return Err(Refusal::Policy(format!(
+                        "CONTRACT_KIND_MISMATCH: {to:#x} answers no eip712Domain(): {e}"))),
+                    Err(SimError::Transport(e)) => return Err(Refusal::Transport(format!("eip712Domain(): {e}"))),
+                };
+                if let Ok(mut m) = self.domain_names.lock() {
+                    m.insert(to, n.clone());
+                }
+                n
+            }
+        };
+        match typed::domain_name(contract) {
+            Some(want) if want == name => Ok(()),
+            want => Err(Refusal::Policy(format!(
+                "CONTRACT_KIND_MISMATCH: contract {contract:?} signs in {want:?}, {to:#x}'s domain is {name:?}"))),
+        }
     }
 
     async fn require_bound(&self, chain: &Chain, to: Address) -> Result<(), Refusal> {
@@ -1413,7 +1444,10 @@ mod tests {
             async move {
                 let m = r["method"].as_str().unwrap().to_string();
                 s2.lock().unwrap().push(m.clone());
+                let p = &r["params"][0];
+                let (input, to) = (p["input"].as_str().or(p["data"].as_str()).unwrap_or("0x"), p["to"].as_str().unwrap_or_default().parse().unwrap_or_default());
                 let result = match m.as_str() {
+                    "eth_call" if typed::testkit::domain_answer(input, to).is_some() => serde_json::json!(typed::testkit::domain_answer(input, to)),
                     "eth_call" => serde_json::json!(format!("{uid:#x}")),
                     "eth_getCode" => serde_json::json!("0x"),
                     _ => serde_json::Value::Null,
@@ -2232,8 +2266,10 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<serde_json::Value>| async move {
             let input = r["params"][0]["input"].as_str().or(r["params"][0]["data"].as_str()).unwrap_or("0x").to_string();
             let reg = format!("0x{}", alloy::hex::encode(IUALedger::registryCall::SELECTOR));
+            let to: Address = r["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default();
             let result = match r["method"].as_str().unwrap() {
                 "eth_call" if input.starts_with(&reg) => serde_json::json!(format!("{:#x}", registry.into_word())),
+                "eth_call" if typed::testkit::domain_answer(&input, to).is_some() => serde_json::json!(typed::testkit::domain_answer(&input, to)),
                 "eth_call" => serde_json::json!(format!("{uid:#x}")),
                 "eth_getCode" => serde_json::json!("0x"),
                 _ => serde_json::Value::Null,
@@ -2279,6 +2315,38 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         w.typed.as_mut().unwrap().signer = None;
         let g = Guard::new(&ChainCfg::default(), Arc::new(RwLock::new(vec![w.to]))).unwrap();
         g.check(&chain, &w).await.unwrap_or_else(|e| panic!("an EOA to an EOA: {e:?}"));
+    }
+
+    /// Fable E N-6: the op's `contract` picks the digest's domain, so on a token it must be the token's own kind: a `UAUnwrap`
+    /// named `pqz` on a `SCaaS MetaToken` is `CONTRACT_KIND_MISMATCH` (`Policy`, `dead`), before any simulation; named `token` it
+    /// passes (the control). The name is read once per token; an unreachable RPC is `Transport`, nothing cached.
+    #[tokio::test]
+    async fn the_op_contract_is_the_token_domain_kind() {
+        use crate::typed::testkit::{op_of, vectors};
+        let v = vectors();
+        let (chain, _) = at_registry_zero(&v).await;
+        let (w, _) = crate::submit::work_of_op(Some(1), &op_of("UAUnwrap", "token", &v).unwrap(), None).unwrap();
+        let g = Guard::new(&ChainCfg::default(), Arc::new(RwLock::new(vec![w.to]))).unwrap();
+        g.check(&chain, &w).await.unwrap_or_else(|e| panic!("control: {e:?}"));
+        assert_eq!(g.domain_names.lock().unwrap().get(&w.to).map(String::as_str), Some("SCaaS MetaToken"), "read once, kept");
+        for kind in ["pqz", "zether"] {
+            let mut x = w.clone();
+            x.typed.as_mut().unwrap().contract = kind;
+            match g.check(&chain, &x).await {
+                Err(Refusal::Policy(e)) => assert!(e.starts_with("CONTRACT_KIND_MISMATCH: contract") && e.contains("SCaaS MetaToken"), "{kind}: {e}"),
+                r => panic!("{kind}: {r:?}"),
+            }
+        }
+        let down = Chain::with_signer(&ChainCfg { evm_chain_number: 31337, rpc_urls: vec!["http://127.0.0.1:9".into()],
+            chain_uid: chain_uid_of(&v), ..Default::default() }, signer()).unwrap();
+        let g2 = Guard::new(&ChainCfg::default(), Arc::new(RwLock::new(vec![w.to]))).unwrap();
+        g2.bound.lock().unwrap().insert(w.to);
+        assert!(matches!(g2.require_kind(&down, w.to, "token").await, Err(Refusal::Transport(_))));
+        assert!(g2.domain_names.lock().unwrap().is_empty(), "an unread name is not kept");
+    }
+
+    fn chain_uid_of(v: &serde_json::Value) -> Option<B256> {
+        v["ops"]["UAUnwrap"]["domains"]["token"]["domain"]["salt"].as_str().unwrap().parse().ok()
     }
 
     /// R44: a derived `from` or `to` needs the UA ledger: at `registry() == 0` it is refused by name (`FEATURE_UNSUPPORTED`)

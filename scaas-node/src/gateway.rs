@@ -597,6 +597,9 @@ mod tests {
                 Json(match m.as_str() {
                     "eth_getBlockByNumber" => json!({"jsonrpc": "2.0", "id": r["id"], "result": null}),
                     "eth_call" if input.starts_with(&reg) => json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("{:#x}", B256::ZERO)}),
+                    "eth_call" if crate::typed::testkit::domain_answer(&input, r["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default()).is_some() =>
+                        json!({"jsonrpc": "2.0", "id": r["id"], "result": crate::typed::testkit::domain_answer(&input,
+                            r["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default())}),
                     "eth_call" => json!({"jsonrpc": "2.0", "id": r["id"], "result": uid}),
                     "eth_getCode" => json!({"jsonrpc": "2.0", "id": r["id"], "result": code}),
                     "eth_estimateGas" => json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x5208"}),
@@ -866,15 +869,15 @@ mod tests {
         assert!(body.contains("BAD_SIGNATURE"), "{body}");
         assert!(rx.try_recv().is_err(), "nothing queued");
         let calls = |m: &str| log.lock().unwrap().iter().filter(|x| *x == m).count();
-        assert_eq!((calls("eth_estimateGas"), calls("eth_call")), (0, 1), "nothing simulated: the one eth_call is the guard's chainUid()");
+        assert_eq!((calls("eth_estimateGas"), calls("eth_call")), (0, 2), "nothing simulated: the two eth_calls are the guard's chainUid() and eip712Domain()");
         let (app, mut rx, _) = gateway("0x60", vec![token]).await;
         let (st, body) = post_op_body(app, chain, &bad_op).await;
         assert_eq!(st, StatusCode::ACCEPTED, "a contract signer: {body}");
         assert!(rx.try_recv().is_ok());
-        // a wrong kind claim changes the digest: the same refusal
+        // a wrong kind claim would change the digest: refused by name before the signature (Fable E N-6)
         let mut lie = op.clone();
         lie["contract"] = json!("zether");
         let (app, _, _) = gateway("0x", vec![token]).await;
-        assert!(post_op_body(app, chain, &lie).await.1.contains("BAD_SIGNATURE"));
+        assert!(post_op_body(app, chain, &lie).await.1.contains("CONTRACT_KIND_MISMATCH"));
     }
 }
