@@ -1,0 +1,67 @@
+group | contract | entries | state-changing | local: state-changing called / reached / views reached
+tokens | NormalToken | 89 | 38 | 31 / 38 / 48
+tokens | WrappedToken | 123 | 58 | 46 / 54 / 56
+tokens | NormalZetherToken | 125 | 56 | 49 / 55 / 64
+tokens | WrappedZetherToken | 163 | 80 | 68 / 76 / 73
+tokens | NormalPqzToken | 138 | 59 | 28 / 28 / 0
+tokens | WrappedPqzToken | 178 | 83 | 20 / 20 / 0
+tokens | NormalRegulatedToken | 112 | 53 | 39 / 52 / 55
+tokens | WrappedRegulatedToken | 146 | 73 | 53 / 69 / 64
+tokens | NormalZetherRegulatedToken | 148 | 71 | 56 / 69 / 72
+tokens | WrappedZetherRegulatedToken | 186 | 95 | 75 / 90 / 81
+tokens | NormalPqzRegulatedToken | 161 | 74 | 24 / 24 / 0
+tokens | WrappedPqzRegulatedToken | 201 | 98 | 16 / 16 / 0
+dex | SCaaSDex | 61 | 25 | 22 / 25 / 35
+dex | SCaaSDexGovernanceModule | 24 | 9 | 0 / 9 / 3 | via SCaaSDex
+dex | SCaaSDexLiquidityModule | 8 | 3 | 0 / 3 / 3 | via SCaaSDex
+relay | RelayFeeRouter | 3 | 1 | 1 / 1 / 1
+relay | RelayFeeExecutor | 2 | 1 | 0 / 1 / 1
+governance | GovernanceRouter | 72 | 62 | 55 / 55 / 9
+registry | UARegistry | 64 | 10 | 10 / 10 / 45
+registry | UARegistryCoreLib | 15 | 13 | 0 / 7 / 0 | via UARegistry
+registry | UARegistryAuxLib | 17 | 12 | 0 / 1 / 5 | via UARegistry
+factory | OpenFactory | 79 | 24 | 15 / 23 / 51
+accounts | SmartKeyAccountFactory | 5 | 1 | 1 / 1 / 4
+accounts | SmartKeyAccount | 39 | 21 | 13 / 20 / 17
+wallets | MandateWallet | 33 | 17 | 16 / 16 / 14
+wallets | HederaMandateWallet | 33 | 17 | 0 / 0 / 0 | needs Hedera
+compliance | ComplianceRegistry | 11 | 4 | 1 / 4 / 7
+reference | RefServiceEscrow | 13 | 3 | 3 / 3 / 9
+verifiers | Secp256k1Verifier | 2 | 0 | 0 / 0 / 2
+verifiers | Ed25519Verifier | 3 | 0 | 0 / 0 / 2
+verifiers | Bip340Verifier | 2 | 0 | 0 / 0 / 2
+verifiers | P256Verifier | 3 | 0 | 0 / 0 / 3
+verifiers | WebAuthnP256Verifier | 3 | 0 | 0 / 0 / 3
+verifiers | SchnorrBn254Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | SchnorrBls12381Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | BlsMinSigBls12381Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | BlsMinSigBn254Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | ZetherSchnorrBls12381Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | Musig2Secp256k1Verifier | 2 | 0 | 0 / 0 / 1
+verifiers | FrostSecp256k1Verifier | 2 | 0 | 0 / 0 / 1
+verifiers | Musig2Bn254Verifier | 5 | 0 | 0 / 0 / 4
+verifiers | FrostBn254Verifier | 2 | 0 | 0 / 0 / 1
+verifiers | MldsaVerifier | 10 | 0 | 0 / 0 / 9
+verifiers | FndsaVerifier | 3 | 0 | 0 / 0 / 3
+verifiers | SlhdsaVerifier | 3 | 0 | 0 / 0 / 3
+verifiers | PqzKeyVerifier | 5 | 0 | 0 / 0 / 0
+zether | ZetherStatements | 5 | 0 | 0 / 0 / 1
+zether | ZetherDisclosure | 2 | 0 | 0 / 0 / 0
+zether | ZetherTransferVerifierBls12381 | 19 | 0 | 0 / 0 / 16
+zether | ZetherBurnVerifierBls12381 | 10 | 0 | 0 / 0 / 10
+zether | ZetherInnerProductVerifierBls12381 | 10 | 0 | 0 / 0 / 9
+libraries | GovernanceLib | 15 | 14 | 0 / 14 / 1 | via GovernanceRouter, tokens
+libraries | HederaLib | 1 | 0 | 0 / 0 / 0 | needs Hedera | via tokens
+libraries | ZetherLib | 16 | 11 | 0 / 11 / 4 | via NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherWrappedLib | 4 | 2 | 0 / 2 / 2 | via WrappedZetherToken, WrappedZetherRegulatedToken
+libraries | WrappedLib | 26 | 16 | 0 / 11 / 5 | via WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | 15 | 14 | 0 / 14 / 1 | via NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | MtxPipelineLib | 16 | 7 | 0 / 3 / 2 | via tokens
+libraries | TradeLib | 6 | 4 | 0 / 1 / 1 | via tokens, SCaaSDex
+libraries | PqzStateLib | 13 | 9 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzViewLib | 11 | 0 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzWrappedLib | 2 | 1 | 0 / 0 / 0 | via WrappedPqzToken, WrappedPqzRegulatedToken
+libraries | PqzBurnLib | 1 | 1 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzTransferLib | 2 | 2 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+pqchat | PqChat | 59 | 14 | 0 / 0 / 0
+pqchat | PqChatTopics | 21 | 6 | 0 / 0 / 0 | via PqChat

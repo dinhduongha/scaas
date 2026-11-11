@@ -1,0 +1,63 @@
+The short final gate of ua-mtx-merge at 7c85c2a3 (merge of the whole-branch review fix rounds: clients 52359c51, verifier
+508e4488, node 69139209, contracts 6b4e03ab, research note 87a9b8bd), owner 2026-11-11 "chạy bản rút gọn". Steps by
+runs/2026-11-12-ua-mtx-merge-final-gate/gates.sh (a copy of runs/2026-11-11-stacked-gate/gates.sh: forge at -j 1, this run dir,
+GATE_LOCK for a second lane); full output in the git-ignored <step>.log there, progress lines in progress.log. Foundry 1.8.5,
+solc 0.8.37, Amsterdam, default PQZ set n2304-kmax4096; every heavy run through scripts/capped (CAPPED_SLOTS=3, 4 GB; the node
+6 GB); the clients lane beside forge, the node steps and the matrix alone. Local only: no RPC of the SCaaS testnet. Tree
+unchanged during the gate (every row at 7c85c2a3). UNAUDITED.
+
+step | commit | rc | counts
+docs (docs_check.py check) | 7c85c2a3 | 0 | 0 errors, 6 warnings (page budgets), 16 notes
+docs-test (test_docs_check.py) | 7c85c2a3 | 0 | ok
+--- 1. EVM, default set n2304-kmax4096 (FOUNDRY_TEST=test/<dir>, forge test -j 1) ---
+forge-account | 7c85c2a3 | 0 | 98 passed (5 suites)
+forge-as | 7c85c2a3 | 0 | 559 passed (88 suites)
+forge-confidential | 7c85c2a3 | 0 | 5 passed
+forge-fork | 7c85c2a3 | 0 | 0 passed, 1 skipped (no fork RPC)
+forge-governance | 7c85c2a3 | 0 | 601 passed (60 suites)
+forge-hedera | 7c85c2a3 | 0 | 20 passed
+forge-liquidity | 7c85c2a3 | 0 | 90 passed, 1 skipped (9 suites)
+forge-merge | 7c85c2a3 | 0 | 341 passed (29 suites)
+forge-metatx | 7c85c2a3 | 0 | 547 passed, 1 skipped (44 suites)
+forge-modules (Diff*, Modules, Paths, Groups; out/t66b-legacy at the default set) | 7c85c2a3 | 0 | 35 passed (12 suites)
+forge-p6f | 7c85c2a3 | 0 | 4 passed
+forge-pqchat | 7c85c2a3 | 0 | 99 passed (9 suites)
+forge-pqz | 7c85c2a3 | 0 | 628 passed, 4 skipped (55 suites)
+forge-pqzh | 7c85c2a3 | 0 | 42 passed (3 suites)
+forge-research | 7c85c2a3 | 0 | 359 passed, 7 skipped (29 suites)
+forge-top (test/*.t.sol) | 7c85c2a3 | 0 | 29 passed (5 suites)
+forge-ua | 7c85c2a3 | 0 | 733 passed (54 suites)
+forge-v2 | 7c85c2a3 | 0 | 721 passed (56 suites)
+forge-vectors | 7c85c2a3 | 0 | no tests (data files only, read by the other directories)
+forge-wallet | 7c85c2a3 | 0 | 181 passed (12 suites)
+forge-wrap | 7c85c2a3 | 0 | 278 passed (29 suites)
+forge-zether | 7c85c2a3 | 0 | 442 passed, 4 skipped (37 suites)
+default set, all directories | 7c85c2a3 | 0 | 5,812 passed, 0 failed, 18 skipped (= the n2304 row of step 2: at-set.sh would copy the same file)
+--- 2. EVM, the other three PQZ sets (script/pqz/at-set.sh; modules after legacy-at-set.sh <set>) ---
+n2048-kmax1024: pqz / research / modules | 7c85c2a3 | 0 / 0 / 0 | 629 passed 3 skipped / 362 passed 4 skipped / 35 passed
+n2560-kmax16384: pqz / research / modules | 7c85c2a3 | 0 / 0 / 0 | 624 passed 8 skipped / 359 passed 7 skipped / 35 passed
+n2816-kmax65536: pqz / research / modules | 7c85c2a3 | 0 / 0 / 0 | 619 passed 13 skipped / 350 passed 16 skipped / 35 passed
+src/pqz/PqzSet.sol after the runs | 7c85c2a3 | 0 | git diff --quiet (checked after each set step and at the end)
+legacy-default (out/t66b-legacy back at the default set) | 7c85c2a3 | 0 | the harness skipped it (its log of the first step ended rc=0); run by hand after
+--- 3. size ---
+size (size_gate.py --self-test; forge build src --sizes --json; size_gate.py) | 7c85c2a3 | 0 | 0 errors, 166 contracts; one notice: OpenFactory 34,184 > plain T-2 line 33,516 (under the 35,286 stop line; accepted)
+--- 4. node (CAPPED_MEM=6G) ---
+node-test (cargo test --lib) | 7c85c2a3 | 0 | 728 passed
+node-clippy (--all-targets -D warnings) | 7c85c2a3 | 0 | clean
+node-e2e (--test e2e --ignored --test-threads=1, alone) | 7c85c2a3 | 0 | 22 passed, 0 failed
+--- 5. clients touched since bc9f27e9, and the verifier (the CI header's commands) ---
+clientkeys (npm test) | 7c85c2a3 | 0 | 330 tests: 328 pass, 0 fail, 2 skipped
+ua-rs (test; clippy -D warnings; --features signers, json, pq) | 7c85c2a3 | 0 | 310 passed in 63 test binaries; clippy clean
+ua-c (clippy; build; test; C99 smoke; test_vectors) | 7c85c2a3 | 0 | cargo 1 passed; smoke ok; 24 Python tests OK
+ua-cxx (clippy; cmake + ctest) | 7c85c2a3 | 0 | 20 of 20 ctest
+ua-dart-frb (pub get --enforce-lockfile; cargo build --locked; dart test) | 7c85c2a3 | 0 | 21 passed
+ua-qt (Qt 6.12, cmake + ctest offscreen) | 7c85c2a3 | 0 | 1 of 1 ctest
+zether-prover (cargo test; wasm-smoke.sh) | 7c85c2a3 | 0 | 71 passed; wasm smoke 9 checks
+verifier, verifier-clippy (scaas-pqz-verifier) | 7c85c2a3 | 0 | 27 passed, 1 ignored; clippy clean
+--- 6. docs: the first two rows ---
+--- 7. local matrix (matrix.sh local: anvil 31337 + a local Nethermind copy under scratchpad/; MATRIX_OUT the run dir) ---
+pq-build, e2e-self-test (pqz_prove; out/t66b-e2e; e2e.py --self-test) | 7c85c2a3 | 0 | built; 0 failures
+matrix (all groups) | 7c85c2a3 | 0 | deploy 106 txs; tokens 504/504 txs, 5/5 negatives; gov 163/163, 17/17; dex 101/101, 9/9; liquidity 23/23, 6/6; misc 103/103, 24/24; zether 162/162; pq 236/236, 10/10; pqoff 178/178, 17/17; verifiers 30/30 calls, 30/30 negatives; views 4,968 / 7,298 calls answered (zero-argument calls on every booked address); wraplimits ok
+matrix coverage (coverage.py note --net local: note-local.txt, table-local.txt) | 7c85c2a3 | 0 | 1,470 transactions, 1,470 status 1; 118 negatives refused as expected; the heaviest 54,876,708 gasUsed (pqW op 7)
+wraplimits (its own table: wraplimits/) | 7c85c2a3 | 0 | 140 transactions, 140 status 1, 60 negatives refused as expected, the largest ask 57,684,569
+after the matrix | 7c85c2a3 | 0 | no anvil, no copy container left
