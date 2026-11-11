@@ -13,13 +13,15 @@ import {nid} from "../helpers/Ids.sol";
 /// no control on, the two lists, `KYC` (one bounded registry call), `KYC` with a list; `mtxTransfer` at fee 0 and with a
 /// fee under the lists. Each figure is pinned (`PIN_*`): a pin moves only with old → new in the commit.
 contract RegulatedGasTest is ListFixture {
-    uint256 constant PIN_PLAIN = 0;
-    uint256 constant PIN_LISTS = 0;
-    uint256 constant PIN_KYC = 0;
-    uint256 constant PIN_KYC_LIST = 0;
-    uint256 constant PIN_MTX_LISTS = 0;
-    uint256 constant PIN_MTX_FEE_LISTS = 0;
-    bool constant PINNED = false; // T9 pins the figures measured at the build
+    uint256 constant PIN_PLAIN = 52_867;
+    uint256 constant PIN_LISTS = 57_503;
+    uint256 constant PIN_KYC = 61_880;
+    uint256 constant PIN_KYC_LIST = 66_488;
+    uint256 constant PIN_MTX_LISTS = 97_074;
+    uint256 constant PIN_MTX_FEE_LISTS = 120_471;
+    /// T9 (no regulated transfer pin existed before; spec §14's estimates: lists +4.6 k over no control, measured; KYC +9.0 k,
+    /// KYC with a list +13.6 k): measured at 298ddc5b, Foundry 1.8.5, the token's frame gas.
+    bool constant PINNED = true;
 
     uint256 nonce;
 
