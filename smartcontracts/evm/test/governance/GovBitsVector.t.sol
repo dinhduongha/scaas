@@ -23,16 +23,17 @@ contract GovBitsVectorTest is Test {
 
     /// The bits that have holders on some kind of this release (`_roleBits()` of `NORMAL*`, `WRAPPED*`, `SCaaSDex`).
     uint256 constant ROLES = B.NORMAL_ROLES | B.WRAPPED_ROLES | B.DEX_BITS | B.REGULATED_ROLES | (1 << B.OPERATOR_TRANSFER)
-        | (1 << B.TAX) | (1 << B.PQZ_PROOF);
+        | (1 << B.TAX) | (1 << B.PQZ_PROOF) | (1 << B.ALLOWLIST) | (1 << B.DENYLIST);
     /// The last row (CTR-GOV-20).
-    uint256 constant LAST = B.REDEEMER; // group 3l (wrap limits spec §2; was B.PQZ_PROOF, group 3h T61)
+    uint256 constant LAST = B.KYC; // round 3s (CTR-GOV-24; was B.REDEEMER, group 3l; B.PQZ_PROOF, group 3h T61)
     /// `RegulatedBase`'s masks (internal there), composed from the same constants: the bits 8-13 add, without `ALLOWLIST` on
     /// 10-13 (CTR-GOV-17); the contract-only ones (an `msig` UA counts, RK-1); bit 22 any holder. Kind 8's `validBits()` is
     /// held to `REG` below, kinds 9 and 13 in `RegulatedSkeleton.test_masks`.
     uint256 constant REG = B.REGULATED | (1 << B.RECORD) | (1 << B.MODERATE) | (1 << B.OPERATOR_TRANSFER) | (1 << B.TAX);
     uint256 constant REG_CONFIDENTIAL = REG & ~(uint256(1) << B.ALLOWLIST);
     uint256 constant REG_CONTRACT_ONLY = B.REGULATED_ROLES;
-    uint256 constant REG_ROLES = B.REGULATED_ROLES | (1 << B.OPERATOR_TRANSFER) | (1 << B.TAX);
+    uint256 constant REG_ROLES =
+        B.REGULATED_ROLES | (1 << B.ALLOWLIST) | (1 << B.DENYLIST) | (1 << B.OPERATOR_TRANSFER) | (1 << B.TAX);
 
     uint256 private _next;
 
@@ -87,7 +88,7 @@ contract GovBitsVectorTest is Test {
             " masks; never edit by hand. Spec 2026-11-02-governance 1.2, 1.8, 4.3, 5.5. A wallet prints one sentence per set bit of features()",
             " (sentences.all, or the one its class selects: bit 1 plain or hybrid on maxSupply() != 0, bit 5 public or confidential by kind).",
             " type: capability (no holder), power (has holders), unused, reserved. kinds: the token kinds a regulated bit, bit 24 or bits 25-27 (hybrids only) is valid on;",
-            " holder: contractOrMsig (a native id with code or a threshold msig UA, sentences.msig) or any. Bits 28-127 are free; bits 128-255 are the application",
+            " holder: contractOrMsig (a native id with code or a threshold msig UA, sentences.msig) or any. Bits 29-127 are free; bits 128-255 are the application",
             " contract's own, the word is bitLabel(bit), never a row here (CTR-GOV-10 Change, owner 2026-11-04). {x} is a value the wallet",
             ' reads on chain.",\n',
             '  "version": 1,\n',
@@ -192,10 +193,17 @@ contract GovBitsVectorTest is Test {
             _row(
                 B.ALLOWLIST,
                 "ALLOWLIST",
-                "capability",
-                _one(
-                    "all",
-                    "No holder, parameters complianceRegistry() and requiredFlags(): a receiver of a public balance must hold requiredFlags in that ComplianceRegistry, pinned at creation. Read complianceRegistry(), never registry(), which is the UA registry."
+                "power",
+                string.concat(
+                    _one(
+                        "on",
+                        "Only listed accounts may hold and move this token's public balance: an unlisted account can neither send, receive, burn nor unwrap, contracts such as the DEX included; a holder of this power lists or unlists an account at once. Once on, this check is never switched off."
+                    ),
+                    ", ",
+                    _one(
+                        "enableable",
+                        "The admin can switch on an allow list at any time, at once, with no notice but the event; it is never switched off."
+                    )
                 )
             )
         );
@@ -204,10 +212,22 @@ contract GovBitsVectorTest is Test {
             _row(
                 B.DENYLIST,
                 "DENYLIST",
-                "capability",
-                _one(
-                    "all",
-                    "No holder, parameters complianceRegistry() and deniedFlags(): a receiver of a public balance must hold none of deniedFlags in that ComplianceRegistry, pinned at creation. Read complianceRegistry(), never registry(), which is the UA registry."
+                "power",
+                string.concat(
+                    _one(
+                        "on",
+                        "An account on the deny list can neither send, receive, burn nor unwrap this token's public balance, contracts such as the DEX included; a holder of this power denies or clears an account at once. Unlike a freeze it has no end date and no record behind it, and a single key may hold this power. Once on, this check is never switched off."
+                    ),
+                    ", ",
+                    _one(
+                        "confidential",
+                        "On a confidential kind a denied account still receives shielded credits and each leg's decoyFee; its public balance, its sends and its unshields are stopped."
+                    ),
+                    ", ",
+                    _one(
+                        "enableable",
+                        "The admin can switch on a deny list at any time, at once, with no notice but the event; it is never switched off."
+                    )
                 )
             )
         );
@@ -354,16 +374,36 @@ contract GovBitsVectorTest is Test {
         );
         j = string.concat(
             j,
+            _row(
+                B.KYC,
+                "KYC",
+                "capability",
+                string.concat(
+                    _one(
+                        "all",
+                        "No holder, parameters complianceRegistry(), requiredFlags() and deniedFlags(): a receiver of a public balance must hold requiredFlags and none of deniedFlags in that ComplianceRegistry, pinned at creation. The admin can switch it on at once, and off after grantDelay. Read complianceRegistry(), never registry(), which is the UA registry."
+                    ),
+                    ", ",
+                    _one(
+                        "enableable",
+                        "The admin can switch on the compliance registry check at any time, at once, with no notice but the event."
+                    )
+                )
+            )
+        );
+        j = string.concat(
+            j,
             "  ],\n",
             '  "sentences": {\n',
             '    "delegable": "Can add unlimited leaves at once, sharing a remaining budget of {N}.",\n',
             '    "leg": "Its issuer can stop unwraps of this leg.",\n',
-            '    "legWhen": "Per leg of underlyings() that is a registered token with bit 5, 7, 8 or 9 set (spec 1.8 step 6).",\n',
+            '    "legWhen": "Per leg of underlyings() that is a registered token with bit 5, 7, 8, 9 or 28 set, or one of 8, 9, 28 enableable on it (spec 1.8 step 6; round 3s: read the leg\'s features() and lockedFeatures() live).",\n',
+            '    "enableableWhen": "Bit 8, 9 or 28 is enableable when it is valid for the kind, not set, not locked (off), admin() is not 0, and for 28 complianceRegistry() is not 0 (round 3s, CTR-GOV-24). A wallet prints the bit\'s enableable sentence then, and never for a bit locked off.",\n',
             '    "grantDelay": "grantDelay delays an address, never who controls it.",\n',
             '    "grantDelayWhen": "Once, for every holder that is a contract (CTR-GOV-15).",\n',
             '    "msig": "On a regulated kind a holder of bit 5, 6, 7, 10 or 21 is a contract: a native id with code or a threshold (msig) UA; a single-key UA is refused (RK-1).",\n',
             '    "decoyFee": "A multi-recipient shielded transfer pays each leg its decoyFee unchecked: a frozen or denied account named as a leg still receives it, bounded only by minDecoyFee <= d < 2^64, and one leg is enough to reach a denied account\'s public balance.",\n',
-            '    "decoyFeeWhen": "On kinds 10-13 with bit 5 or 9 set (CTR-GOV-17)."\n',
+            '    "decoyFeeWhen": "On kinds 10-13 with bit 5, 9 or 28 set (CTR-GOV-17; round 3s: denied by the token\'s list or by the registry)."\n',
             "  }\n",
             "}\n"
         );
@@ -373,7 +413,7 @@ contract GovBitsVectorTest is Test {
     /// order; a type against the masks fails its row; an edit of the file fails the comparison.
     function test_bitsVectorEqualsTheConstants() public {
         string memory j = _build();
-        assertEq(_next, LAST + 1, "rows 0-27");
+        assertEq(_next, LAST + 1, "rows 0-28");
         if (vm.envOr("WRITE_BITS", false)) vm.writeFile(OUT, j);
         assertEq(
             vm.readFile(OUT),

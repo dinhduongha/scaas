@@ -11,11 +11,16 @@ const poolOf = (tag) => pad(hex(keccak_256(utf8ToBytes(tag)).subarray(12)));
 export const UA_POOL_ID = poolOf('scaas.ua.pool.v1');
 export const SHIELD_POOL_ID = poolOf('scaas.shield.pool.v1');
 export const ELIGIBLE_CONTRACT = 8n;
-/** `RegulatedLib`'s `controls` bits (bits 5-10 of `features`, shifted down by 5) and spans (spec §3.5). */
+/** `RegulatedLib`'s `controls` bits (bits 5-10 of `features`, shifted down by 5; bit 28 `KYC` in byte bit 6, round 3s)
+ *  and spans (spec §3.5). */
 export const C_FREEZE = 1;
 export const C_ALLOW = 1 << 3;
 export const C_DENY = 1 << 4;
 export const C_RECORD = 1 << 5;
+export const C_KYC = 1 << 6;
+/** Round 3s (spec 2026-11-10-token-lists.md §4.1): an account's `listFlagsOf` byte. */
+export const ALLOWED = 1;
+export const DENIED = 2;
 const DAY = 86400n;
 export const FREEZE_SPAN = 30n * DAY;
 export const EPISODE_SPAN = 60n * DAY;
@@ -40,19 +45,39 @@ export function relaxCommit(action, bit, account, terms) {
   return hex(keccak_256(abiEncode(['uint8', 'uint8', 'bytes32', 'bytes32'], [action, bit, account, args])));
 }
 
-/** `R(account)` as `canReceive` answers it (spec §3.1, §5): `{ok, reason}`, reason 1 not attested or flags missing,
- *  2 expired, 3 KYC provider disabled, 4 denied (`kycProviderEnabled`: the registry's answer for the row's provider);
- *  `ok` is `hasFlags(account, ALLOWLIST ? required : 0, DENYLIST ? denied : 0)`, both lists off `(true, 0)` with no call. */
+/** `R(account)` as `canReceive` answers it under `KYC` (spec §3.1, §5; round 3s §3): `{ok, reason}`, reason 1 not attested or
+ *  flags missing, 2 expired, 3 KYC provider disabled, 4 denied (`kycProviderEnabled`: the registry's answer for the row's
+ *  provider); `ok` is `hasFlags(account, requiredFlags, deniedFlags)` (a zero mask constrains nothing), `KYC` off `(true, 0)`
+ *  with no call. The lists come first on chain: `listed`. */
 export function canReceive({ controls, requiredFlags, deniedFlags, flags, validUntil, kycProviderEnabled, now }) {
-  if (!(controls & (C_ALLOW | C_DENY))) return { ok: true, reason: 0 };
+  if (!(controls & C_KYC)) return { ok: true, reason: 0 };
   const [f, until, t] = [BigInt(flags), BigInt(validUntil), BigInt(now)];
   const active = kycProviderEnabled && until >= t;
-  const req = controls & C_ALLOW ? BigInt(requiredFlags) : 0n;
+  const req = BigInt(requiredFlags);
   if (req !== 0n && !(active && ((f & req) === req || (f & ELIGIBLE_CONTRACT) !== 0n))) {
     return { ok: false, reason: until === 0n ? 1 : !kycProviderEnabled ? 3 : !active ? 2 : 1 };
   }
-  if (controls & C_DENY && active && (f & BigInt(deniedFlags)) !== 0n) return { ok: false, reason: 4 };
+  if (active && (f & BigInt(deniedFlags)) !== 0n) return { ok: false, reason: 4 };
   return { ok: true, reason: 0 };
+}
+
+/** `L(account)` as `canReceive` answers it first (round 3s, spec §4.2, §4.3): under `ALLOWLIST` not `ALLOWED` reason 5,
+ *  under `DENYLIST` `DENIED` reason 6, else `(true, 0)`. `listFlags` is `listFlagsOf(account)`. */
+export function listed(controls, listFlags) {
+  if (controls & C_ALLOW && !(listFlags & ALLOWED)) return { ok: false, reason: 5 };
+  if (controls & C_DENY && listFlags & DENIED) return { ok: false, reason: 6 };
+  return { ok: true, reason: 0 };
+}
+
+const ENABLEABLE = (1n << 8n) | (1n << 9n) | (1n << 28n);
+/** Spec §5.5 (round 3s): the bits of 8, 9, 28 that can still be switched on (`enableFeature`): valid for the kind, not set,
+ *  not locked (off), the admin not 0, and for 28 a compliance registry. A wallet prints a bit's `enableable` sentence of
+ *  governance_bits.json only then, and never for a bit locked off. */
+export function enableable({ features, lockedFeatures, valid, admin, registry }) {
+  if (!admin) return 0n;
+  let e = ENABLEABLE & BigInt(valid) & ~BigInt(features) & ~BigInt(lockedFeatures);
+  if (!registry) e &= ~(1n << 28n);
+  return e;
 }
 
 const refused = (sig, ...args) => ({ error: { sig, args: args.map(String) } });

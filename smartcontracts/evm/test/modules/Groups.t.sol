@@ -15,9 +15,11 @@ contract GroupsTest is Test {
     string[14] internal faces = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
         "WrappedPqzToken", "", "", "NormalRegulatedToken", "WrappedRegulatedToken", "NormalZetherRegulatedToken",
         "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
-    /// R on 8-13: the regulated layer's entries (`RegulatedBase` and the kind's `disableFeature`), the same on every kind.
-    string[14] internal rNames = ["canReceive", "disableFeature", "forceTransfer", "freeze", "freezeOf", "isFrozen",
-        "operatorTransfer", "order", "pause", "recordOrder", "regulatedConfig", "revokeOrder", "unfreeze", "unpause"];
+    /// R on 8-13: the regulated layer's entries (`RegulatedBase` and the kind's `disableFeature`), the same on every kind;
+    /// round 3s (spec 2026-11-10-token-lists.md §6.1): 14 -> 18, + `enableFeature`, `listFlagsOf`, `setAllowed`, `setDenied`.
+    string[18] internal rNames = ["canReceive", "disableFeature", "enableFeature", "forceTransfer", "freeze", "freezeOf",
+        "isFrozen", "listFlagsOf", "operatorTransfer", "order", "pause", "recordOrder", "regulatedConfig", "revokeOrder",
+        "setAllowed", "setDenied", "unfreeze", "unpause"];
     /// S on 5 and 13: the PQZ state, the four setters and the views but `verifyTransferAmount`; on 13 without `underlyings`
     /// (kind 13 restates it from the wrapped layer: its W holds it).
     // round 3t: + setVerifierFee (gen_faces.py S_SETTERS)

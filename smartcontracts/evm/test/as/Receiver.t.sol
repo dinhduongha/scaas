@@ -227,13 +227,13 @@ contract ReceiverTest is RegFixture {
         }
     }
 
-    /// `mtxWrapOrder` with a fee (kind 9 over a kind-0 underlying, `ALLOWLIST` on): three calls (the destination's mint, the
+    /// `mtxWrapOrder` with a fee (kind 9 over a kind-0 underlying, `KYC` on): three calls (the destination's mint, the
     /// submitter at the seat and at its mint).
     function test_callBudgetWrapOrder() public {
         address u = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("U", "U", 0, SUPPLY, alice,
             address(0))), "u");
         IFactoryToken.TokenConfig memory c = _cfg9();
-        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.FREEZE) | (1 << GovernanceBits.ALLOWLIST);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.FREEZE) | (1 << GovernanceBits.KYC);
         (c.roles.compliance, c.reg.complianceRegistry, c.reg.requiredFlags) = (0, address(creg), KYC);
         c.legs[0] = IFactoryToken.Leg(u, 3, 1);
         address w = f.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "w");

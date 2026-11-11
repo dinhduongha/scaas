@@ -12,6 +12,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {ImplArgs, ITokenModules} from "../../src/metatx/ITokenModule.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {NormalTokenP, NormalTokenT, NormalTokenA} from "../../src/metatx/NormalTokenModules.sol";
@@ -733,17 +734,38 @@ contract Misc is OnchainBase {
 
     function _token8() internal returns (address t) {
         IFactoryToken.TokenConfig memory c = _cfg0("Onchain misc reg", "oM8");
-        c.features |= 1 << GovernanceBits.DENYLIST;
+        c.features |= 1 << GovernanceBits.KYC; // round 3s: the registry check is bit 28
         c.reg.complianceRegistry = _dep("compliance_registry");
-        c.reg.deniedFlags = 1 << 16; // an issuer flag nobody holds here: the list runs and refuses nobody
+        c.reg.deniedFlags = 1 << 16; // an issuer flag nobody holds here: the check runs and refuses nobody
         c.reg.termsHash = keccak256("onchain matrix terms");
+        c.roles.issuer = _pad(a1); // group 3s: the list bits 8, 9 (off, enableable), any holder
         vm.broadcast(k1);
         t = f5.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), _salt("t8"));
+        _denyList(t);
         _book(t, "NormalRegulatedToken");
         address impl = f5.implementationOf(IOpenFactory.TokenKind.NORMAL_REGULATED, 1);
         _book(impl, "NormalRegulatedToken");
         address[] memory m5 = ITokenModules(impl).modules();
         for (uint256 i; i < m5.length; ++i) _book(m5[i], "NormalRegulatedToken");
+    }
+
+    /// Group 3s (spec 2026-11-10-token-lists.md §5.2, §6, §15 T8): a deny list written while off by a1's issuer seat, switched
+    /// on at once (`FeatureEnabled(9)`): a transfer to the denied account refused `Denied` (a negative), then the account
+    /// cleared, at once, and the same transfer passes.
+    function _denyList(address t) internal {
+        address denied = address(0xDE41ED);
+        bytes32[] memory one = new bytes32[](1);
+        one[0] = _pad(denied);
+        vm.startBroadcast(k1);
+        IRegulatedToken(t).setDenied(one, true);
+        IRegulatedToken(t).enableFeature(GovernanceBits.DENYLIST);
+        vm.stopBroadcast();
+        _neg(a1, t, abi.encodeCall(IERC20.transfer, (denied, 1)), IRegulatedToken.Denied.selector,
+            "transfer to an account on the deny list (kind 8, DENYLIST switched on at once)");
+        vm.startBroadcast(k1);
+        IRegulatedToken(t).setDenied(one, false);
+        IERC20(t).transfer(denied, 1);
+        vm.stopBroadcast();
     }
 
     function _pull(address t, address s, uint256 v, bytes32 ref) internal view returns (MetaTxLib.UAMetaTransfer memory x) {

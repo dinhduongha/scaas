@@ -123,6 +123,13 @@ library GovernanceRouterTypes {
         "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
     bytes32 internal constant UA_SET_WRAP_MEMBER = keccak256(
         "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §5.3, §6.2): the lists and `enableFeature` of kinds 8-13
+    bytes32 internal constant UA_SET_ALLOWED = keccak256(
+        "UASetAllowed(bytes32 from,address target,bytes32[] accounts,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_DENIED = keccak256(
+        "UASetDenied(bytes32 from,address target,bytes32[] accounts,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_ENABLE_FEATURE = keccak256(
+        "UAEnableFeature(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 
     // ---- round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §13.3): the admin ops of `OpenFactory` and
     //      of a `ComplianceRegistry` (its KYC provider's `setCompliance` too); `target` the factory or the registry, then the

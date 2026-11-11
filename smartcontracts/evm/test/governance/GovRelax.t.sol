@@ -23,12 +23,13 @@ contract Holder {}
 
 /// The regulated masks a kind 8-13 passes (regulated-kinds spec §2.1, §3.6): roles 1, 3, 5, 6, 7, 10, 21; contract-only 3,
 /// 5, 6, 7, 10, 21 (3 a native id only, RK-1); 22 `OPERATOR_TRANSFER` any holder (CTR-GOV-20); scalar 1, 6, 21, 22;
-/// relaxation of 5, 6, 7 delayed. Through `GovernanceBase`'s own
+/// relaxation of 5, 6, 7 delayed. Round 3s (CTR-GOV-24): 8 and 9 are the lists, roles any holder (the issuer seat takes
+/// them while they can be enabled). Through `GovernanceBase`'s own
 /// wrappers, so the masks and the registry reach the library as a token passes them.
 contract RelaxApp is GovernanceBase {
     uint256 internal constant ROLES =
-        (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10) | (1 << 21) | (1 << 22);
-    uint256 internal constant VALID = ROLES | (1 << 8) | (1 << 9);
+        (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 21) | (1 << 22);
+    uint256 internal constant VALID = ROLES;
     uint256 internal constant ONLY = (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10) | (1 << 21);
     uint256 internal constant SCALAR = (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22);
     uint256 internal constant DELAYED = (1 << 5) | (1 << 6) | (1 << 7);
@@ -139,15 +140,18 @@ contract GovRelaxTest is Test {
         assertEq(a.holderCount(FREEZE), 1);
     }
 
-    /// Positive control beside it: the issuer takes only the set bits of 5-7.
+    /// Positive control beside it: the issuer takes only the set bits of 5-7 (round 3s: and the list bits 8, 9 while they can
+    /// be enabled, spec §6.3).
     function test_initIssuerTakesOnlySetBits() public {
         RelaxApp x = _app(D, _roles(nid(issuer), 0), (1 << 5) | (1 << 7));
         assertTrue(x.hasRole(FREEZE, nid(issuer)));
         assertTrue(x.hasRole(PAUSE, nid(issuer)));
         assertFalse(x.hasRole(FORCE, nid(issuer)));
+        assertTrue(x.hasRole(8, nid(issuer)) && x.hasRole(9, nid(issuer)), "round 3s: the list bits, off and enableable");
         x = new RelaxApp(address(reg));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, FREEZE));
-        x.init(1 << 1, nid(OWNER), D, _roles(nid(issuer), 0));
+        x.init(1 << 1, nid(OWNER), D, _roles(nid(issuer), 0)); // round 3s: a seat of the list bits alone (was RoleWithoutFeature)
+        assertFalse(x.hasRole(FREEZE, nid(issuer)));
+        assertTrue(x.hasRole(8, nid(issuer)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, RECORD));
         x.init(1 << 5, nid(OWNER), D, _roles(0, nid(compliance)));
     }

@@ -1,0 +1,48 @@
+M1 | test_contractParties, test_exit_holderChecked_unwrapRecipientNot, test_transfer_bothParties | 1
+M2 | test_contractParties, test_mint_receiver, test_multiRecipientPayout_revertsAsAWhole, test_transfer_bothParties | 1
+M3 | test_pre_blockedFromBeforeSignature | 1
+M4 | none | 0
+M5 | test_deniedSender, test_deniedSenderAndShieldInPayer | 1
+M6 | test_deniedUnshieldRecipientRefused | 1
+M7 | test_forceTransfer_subjectNever_beneficiaryChecked | 1
+M8 | test_forceTransfer_subjectNever_beneficiaryChecked | 1
+M9 | test_listFlagsOf_noRegistryCall | 1
+M9b | test_canReceive_reasons, test_contractParties, test_exit_holderChecked_unwrapRecipientNot, test_feeLeg_relayerChecked, test_forceTransfer_subjectNever_beneficiaryChecked, test_listFlagsOf_noRegistryCall, test_mint_receiver, test_multiRecipientPayout_revertsAsAWhole, test_pre_blockedFromBeforeSignature, test_transfer_bothParties | 1
+M10 | test_ops_eventsAndOtherFlag | 1
+M11 | test_ops_strangerAndEditWhileOff, test_renounce_listFinal | 1
+M11b | test_holders_grantWhileOff_revokeAtOnce, test_ops_bounds, test_ops_eventsAndOtherFlag, test_ops_strangerAndEditWhileOff, test_renounce_listFinal | 1
+M12 | test_ops_bounds | 1
+M12b | test_ops_bounds | 1
+M13 | test_ops_bounds | 1
+M14 | test_canReceive_reasons, test_contractParties, test_disabledKycStopsChecking, test_eachListAlone, test_exit_holderChecked_unwrapRecipientNot, test_feeLeg_relayerChecked, test_forceTransfer_subjectNever_beneficiaryChecked, test_initialSupplyRecipientChecked, test_kycProviderDisableVoids, test_listFlagsOf_noRegistryCall, test_mint_receiver, test_multiRecipientPayout_revertsAsAWhole, test_pre_blockedFromBeforeSignature, test_receiverTruthTableThroughToken, test_transfer_bothParties | 1
+M15 | test_disable_kycDelayedThenEnabledAgain, test_disabledKycStopsChecking, test_eachListAlone, test_initialSupplyRecipientChecked, test_kycProviderDisableVoids, test_receiverTruthTableThroughToken, test_registryCodehashPinned | 1
+M16 | test_enable_otherBitsAndStranger | 1
+M17 | test_locks_onAndOff | 1
+M18 | test_enable_kyc | 1
+M19 | test_disable_listsRefused | 1
+M20 | test_disable_kycDelayedThenEnabledAgain, test_disabledKycStopsChecking | 1
+M21 | test_holders_grantWhileOff_revokeAtOnce | 1
+M22 | test_holders_grantWhileOff_revokeAtOnce, test_holders_issuerSeatAndHolderMissing, test_init_lockOff, test_init_termsPredicate, test_locks_onAndOff | 1
+M22b | test_init_lockOff | 1
+M23 | test_holders_grantWhileOff_revokeAtOnce | 1
+M23b | setUp | 1
+M24 | test_disable_kycDelayedThenEnabledAgain, test_enable_kyc, test_enable_listsAtOnce, test_ops_strangerAndEditWhileOff | 1
+M25 | test_canReceive_reasons | 1
+M26 | test_holders_issuerSeatAndHolderMissing, test_init_lockOff, test_init_termsPredicate | 1
+M27 | test_exit_holderChecked_unwrapRecipientNot | 1
+M28 | test_deniedAndFrozenLegsReceive | 1
+M29 | test_holders_issuerSeatAndHolderMissing | 1
+M30 | test_enable_listsAtOnce, test_enable_otherBitsAndStranger, test_holders_issuerSeatAndHolderMissing, test_ops_bounds, test_ops_eventsAndOtherFlag, test_ops_strangerAndEditWhileOff, test_renounce_listFinal | 1
+M30b | test_holders_grantWhileOff_revokeAtOnce, test_holders_issuerSeatAndHolderMissing, test_init_lockOff, test_locks_onAndOff | 1
+M31 | test_disable_listsRefused, test_init_listsInitialHolder, test_locks_onAndOff | 1
+M31b | test_init_listsInitialHolder | 1
+M31c | test_init_listsInitialHolder | 1
+M33 | test_init_termsPredicate | 1
+M33b | test_holders_issuerSeatAndHolderMissing, test_init_termsPredicate | 1
+B1 | test_binding_SetAllowed | 1
+B2 | test_binding_SetDenied, test_router_endToEnd | 1
+B3 | test_binding_EnableFeature, test_router_endToEnd | 1
+M32 | dex::venue::tests::list_effects_follow_the_live_bit | 101
+M32b | dex::venue::tests::list_effects_follow_the_live_bit | 101
+M34 | dex::venue::tests::list_effects_follow_the_live_bit | 101
+M4b | test_deniedBeneficiaryRefused, test_frozenAndDeniedDecoysReceive | 1

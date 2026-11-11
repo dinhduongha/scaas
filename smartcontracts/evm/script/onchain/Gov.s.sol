@@ -229,7 +229,7 @@ contract Gov is OnchainBase {
         (w2[0], f2[0], u2_[0]) = (_pad(a2), 1, uint64(vu + 30 days));
         vm.broadcast(k2);
         cr.setCompliance(w2, f2, u2_); // a KYC provider's row
-        IFactoryToken.TokenConfig memory c = _cfg("oGC8", 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.ALLOWLIST);
+        IFactoryToken.TokenConfig memory c = _cfg("oGC8", 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.KYC); // round 3s
         (c.initialSupply, c.initialHolder) = (1_000_000, a1);
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.termsHash) = (address(cr), 1, keccak256("onchain terms"));
         tc = _create(IOpenFactory.TokenKind.NORMAL_REGULATED, c, "NormalRegulatedToken");
@@ -237,6 +237,13 @@ contract Gov is OnchainBase {
         IERC20(tc).transfer(a3, 10); // to an attested holder
         vm.broadcast(k1);
         IERC20(tc).transfer(a2, 10); // to the KYC provider's own row
+        // group 3s (CTR-GOV-24, spec §5.2, §15 T8): KYC off (grantDelay 0: at once; a1 the admin) and on again, at once; the
+        // attested receiver still receives
+        vm.startBroadcast(k1);
+        IGovernance(tc).disableFeature(GovernanceBits.KYC);
+        IRegulatedToken(tc).enableFeature(GovernanceBits.KYC);
+        IERC20(tc).transfer(a3, 1);
+        vm.stopBroadcast();
     }
 
     /// Round 3r (CTR-GOV-23, spec §7 "Matrix"): the registry's admin moves from `iss` to the derived secp256k1 UA (the
@@ -773,7 +780,7 @@ contract Gov is OnchainBase {
         _neg(a1, t9, abi.encodeCall(IERC20.transfer, (a3, 1)), IRegulatedToken.Frozen.selector, "transfer from a frozen account (kind 9)");
         // not attested on the allow-listed token
         _neg(a1, tc, abi.encodeCall(IERC20.transfer, (address(0xdEaD), 1)), IRegulatedToken.NotEligible.selector,
-            "transfer to an account the ComplianceRegistry does not attest (kind 8, ALLOWLIST)");
+            "transfer to an account the ComplianceRegistry does not attest (kind 8, KYC)");
         // the guard: a governed entry by a non-owner
         _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3))), IAdmin.NotAdmin.selector,
             "grantRole by a non-owner (kind 8)");

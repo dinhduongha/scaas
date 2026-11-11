@@ -76,6 +76,16 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     /// `DENYLIST` on the token `setUp` creates.
     function _denylist() internal pure virtual returns (bool) { return false; }
 
+    /// Round 3s (spec 2026-11-10-token-lists.md §4.3): `DENYLIST` as the token's own list (`setDenied` by the issuer seat)
+    /// instead of the registry; `_attestDenied` writes the list and `_deniedErr` is `Denied(a)`.
+    function _lists() internal pure virtual returns (bool) { return false; }
+
+    /// The refusal of a denied account at a checked site: the list's `Denied(a)` or the registry's `NotEligible(a, 0)`.
+    function _deniedErr(bytes32 a) internal pure returns (bytes memory) {
+        return _lists() ? abi.encodeWithSelector(bytes4(keccak256("Denied(bytes32)")), a)
+            : abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, a, uint8(0));
+    }
+
     function setUp() public virtual {
         _stack();
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1, _zenv(),
@@ -110,8 +120,10 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         c.features |= REG_FEATURES;
         (c.roles.issuer, c.roles.compliance) = (nid(issuer), nid(compliance));
         c.reg.termsHash = keccak256("terms");
-        if (_denylist()) {
-            c.features |= 1 << GovernanceBits.DENYLIST;
+        if (_lists()) {
+            c.features |= 1 << GovernanceBits.DENYLIST; // round 3s: the token's own deny list, no registry
+        } else if (_denylist()) {
+            c.features |= 1 << GovernanceBits.KYC; // round 3s: the registry's deny mask is under bit 28
             (c.reg.complianceRegistry, c.reg.deniedFlags) = (address(creg), SANCTIONED);
         }
         if (_isWrapped()) {
@@ -156,6 +168,14 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     }
 
     function _attestDenied(bytes32 a) internal {
+        if (_lists()) {
+            bytes32[] memory one = new bytes32[](1);
+            one[0] = a;
+            vm.prank(issuer);
+            (bool ok,) = address(tok).call(abi.encodeWithSignature("setDenied(bytes32[],bool)", one, true));
+            require(ok, "setDenied");
+            return;
+        }
         bytes32[] memory as_ = new bytes32[](1);
         uint64[] memory fl = new uint64[](1);
         uint64[] memory vu = new uint64[](1);

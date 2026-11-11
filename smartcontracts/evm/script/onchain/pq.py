@@ -168,15 +168,15 @@ def create_cfg(sd, fac, kind, name, sym, legs, feat, salt, conf=None, reg=None, 
 def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
     """Sections 8 and 9: the regulated PQZ kinds, then the public layer of every kind signed by an ML-DSA-65 UA."""
     alice, bob = U["alice"], U["bob"]
-    E.log("\n## 8. (T66b Step 5b) the regulated PQZ kinds 12 and 13 (DENYLIST on a ComplianceRegistry, no account denied)")
+    E.log("\n## 8. (T66b Step 5b) the regulated PQZ kinds 12 and 13 (KYC on a ComplianceRegistry, no account denied)")
     # round 3r: (bytes32 admin, address govRouter): the deployer contract's native id, no router
     cr = D.deploy("ComplianceRegistry", E.encs(["w", "w"], [E.CREATE2_DEPLOYER, 0]), label="ComplianceRegistry")
 
     def create_reg(kind, name, sym, legs, dmode, amode, feat, salt):
         conf = [aud.ua if amode else b"", E.SCALE, E.MAXS, E.FEE, dmode, amode, E.MIN_DECOY, 0, 0, 0, 0, 0, 0]
-        # RegulatedLib: a registry iff ALLOWLIST or DENYLIST, DENYLIST iff deniedFlags != 0 (flag 1: no account has it),
-        # DENYLIST a terms bit (a termsHash)
-        t = create_cfg(sd, fac, kind, name, sym, legs, feat | 1 << 9, salt, conf, [cr, 0, 1, E.kc("scaas.onchain.terms"), 0])
+        # RegulatedLib (round 3s): KYC (bit 28) needs a registry, a registry iff a mask (deniedFlags 1: no account has it),
+        # KYC a terms bit (a termsHash)
+        t = create_cfg(sd, fac, kind, name, sym, legs, feat | 1 << 28, salt, conf, [cr, 0, 1, E.kc("scaas.onchain.terms"), 0])
         D.addr[sym] = t
         return t
 

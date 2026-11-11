@@ -258,9 +258,10 @@ contract LinkClosureTest is Test {
             bytes32 h = keccak256(bytes(name));
             // WrappedLib: `GovernanceLib.init` and, since B-26, `GovernanceUse.use`'s one call to `useLimited` (1 -> 2).
             // RegulatedLib: plan T28's bodies inline `GovernanceUse.use`, whose one call to `GovernanceLib.useLimited` is
-            // its only DELEGATECALL (0 -> 1; its link reference, already in every regulated kind's closure)
+            // its only DELEGATECALL (0 -> 1; its link reference, already in every regulated kind's closure); round 3s:
+            // `setList` checks the role as `use` does without its feature test, its own `useLimited` call (1 -> 2)
             uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib")
-                || h == keccak256("WrappedLib") ? 2 : h == keccak256("RegulatedLib") || h == keccak256("UARegistryAuxLib") ? 1 : 0;
+                || h == keccak256("WrappedLib") || h == keccak256("RegulatedLib") ? 2 : h == keccak256("UARegistryAuxLib") ? 1 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }

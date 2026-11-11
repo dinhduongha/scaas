@@ -142,9 +142,10 @@ pub struct Attestation {
 
 const ELIGIBLE_CONTRACT: u64 = 8;
 
-/// `R(account)` as `canReceive` answers it (spec §3.1, §5): `required` is `Some(requiredFlags)` with `ALLOWLIST` on,
-/// `denied` `Some(deniedFlags)` with `DENYLIST` on; `(ok, reason)`, reason 1 not attested or flags missing, 2 expired,
-/// 3 attester disabled, 4 denied. `ELIGIBLE_CONTRACT` satisfies `required`, never `denied`.
+/// `R(account)` as `canReceive` answers it under `KYC` (spec §3.1, §5; round 3s §3): `required` and `denied` are
+/// `Some(requiredFlags)`, `Some(deniedFlags)` with bit 28 `KYC` on (both masks; a zero mask constrains nothing), `None` with
+/// it off; `(ok, reason)`, reason 1 not attested or flags missing, 2 expired, 3 attester disabled, 4 denied.
+/// `ELIGIBLE_CONTRACT` satisfies `required`, never `denied`. The lists come first on chain: `listed`.
 pub fn can_receive(required: Option<u64>, denied: Option<u64>, a: &Attestation, now: u64) -> (bool, u8) {
     if required.is_none() && denied.is_none() {
         return (true, 0);
@@ -158,4 +159,55 @@ pub fn can_receive(required: Option<u64>, denied: Option<u64>, a: &Attestation, 
         return (false, 4);
     }
     (true, 0)
+}
+
+// ------------------------------------------------------------------ round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md)
+
+/// `RegulatedLib`'s `controls` bits of the lists and of `KYC` (bit 28 in byte bit 6), and an account's `listFlagsOf` byte.
+pub const C_ALLOW: u8 = 1 << 3;
+pub const C_DENY: u8 = 1 << 4;
+pub const C_KYC: u8 = 1 << 6;
+pub const ALLOWED: u8 = 1;
+pub const DENIED: u8 = 2;
+
+/// `L(account)` as `canReceive` answers it first (spec §4.2, §4.3): under `ALLOWLIST` not `ALLOWED` reason 5, under
+/// `DENYLIST` `DENIED` reason 6, else `(true, 0)`.
+pub fn listed(controls: u8, list_flags: u8) -> (bool, u8) {
+    if controls & C_ALLOW != 0 && list_flags & ALLOWED == 0 {
+        return (false, 5);
+    }
+    if controls & C_DENY != 0 && list_flags & DENIED != 0 {
+        return (false, 6);
+    }
+    (true, 0)
+}
+
+/// Spec §5.5: the bits of 8, 9, 28 that can still be switched on: valid for the kind, not set, not locked (off), the admin
+/// not 0, and for 28 a compliance registry. A wallet prints a bit's `enableable` sentence only then, never for a bit locked off.
+pub fn enableable(features: u64, locked: u64, valid: u64, admin: bool, registry: bool) -> u64 {
+    if !admin {
+        return 0;
+    }
+    let e = ((1 << 8) | (1 << 9) | (1 << 28)) & valid & !features & !locked;
+    if registry { e } else { e & !(1 << 28) }
+}
+
+/// `UASetAllowed` (`allow`) or `UASetDenied`: bit 8's or bit 9's holder, 1-256 accounts, at once.
+pub fn set_list_type(allow: bool) -> String {
+    format!("{}(bytes32 from,address target,bytes32[] accounts,bool on,{ENVELOPE})", if allow { "UASetAllowed" } else { "UASetDenied" })
+}
+
+/// `hashStruct(UASetAllowed | UASetDenied)`: `accounts` as EIP-712 hashes an array (`keccak256` of its words).
+pub fn set_list_struct_hash(allow: bool, e: &Envelope, target: &[u8; 20], accounts: &[[u8; 32]], on: bool) -> [u8; 32] {
+    let words = keccak(&accounts.iter().map(|a| &a[..]).collect::<Vec<_>>());
+    crate::wraplimit::struct_hash(keccak256(set_list_type(allow).as_bytes()), e, target, &[words, crate::wraplimit::bool_word(on)])
+}
+
+/// `UAEnableFeature`: the admin switches on 8, 9 or 28.
+pub fn enable_feature_type() -> String {
+    format!("UAEnableFeature(bytes32 from,address target,uint8 bit,{ENVELOPE})")
+}
+
+pub fn enable_feature_struct_hash(e: &Envelope, target: &[u8; 20], bit: u8) -> [u8; 32] {
+    crate::wraplimit::struct_hash(keccak256(enable_feature_type().as_bytes()), e, target, &[word(bit as u64)])
 }

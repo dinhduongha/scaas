@@ -273,7 +273,8 @@
       "taxRecipient",
       "taxRate.ratePpm",
       "taxRate.pendingPpm",
-      "taxRate.eta"
+      "taxRate.eta",
+      "listFlags[A]"
     ],
     "slots": [
       0,
@@ -297,7 +298,8 @@
       5,
       6,
       6,
-      6
+      6,
+      7
     ],
     "inner": [
       0,
@@ -318,6 +320,7 @@
       2,
       3,
       4,
+      0,
       0,
       0,
       0,
@@ -345,7 +348,8 @@
       0,
       0,
       4,
-      8
+      8,
+      0
     ]
   },
   "pqz": {

@@ -323,15 +323,19 @@ pub fn pqz_health(state: &mut PqzHealth, rows: &mut [Value]) {
 
 /// The events an alert goes out on (regulated-kinds spec §7, M-08; asset-suite A2: a compromised `compliance` records fake
 /// orders, so every record is shown).
-pub const ALERTS: [&str; 4] = ["OrderRecorded", "RelaxProposed", "AccountFrozen", "Paused"];
+/// Round 3s (spec 2026-11-10-token-lists.md §5.4): + `FeatureEnabled` and the restricting list edits (`DeniedSet` with `on`,
+/// `AllowedSet` without), alerted in [`regulated_event`].
+pub const ALERTS: [&str; 5] = ["OrderRecorded", "RelaxProposed", "AccountFrozen", "Paused", "FeatureEnabled"];
 
 /// The topics of [`regulated_event`]: the regulated kinds' §3.1 events and the governance events the indexer derives from.
-pub const REGULATED_TOPICS: [B256; 11] = [
+pub const REGULATED_TOPICS: [B256; 14] = [
     IRegulatedToken::AccountFrozen::SIGNATURE_HASH, IRegulatedToken::AccountUnfrozen::SIGNATURE_HASH,
     IRegulatedToken::ForcedTransfer::SIGNATURE_HASH, IRegulatedToken::Paused::SIGNATURE_HASH, IRegulatedToken::Unpaused::SIGNATURE_HASH,
     IRegulatedToken::OrderRecorded::SIGNATURE_HASH, IRegulatedToken::OrderRevoked::SIGNATURE_HASH,
     IRegulatedToken::OperatorTransfer::SIGNATURE_HASH, IGovernance::RelaxProposed::SIGNATURE_HASH,
     IGovernance::FeatureDisabled::SIGNATURE_HASH, IGovernance::RoleRevoked::SIGNATURE_HASH,
+    // round 3s (CTR-GOV-24): the lists and the enable
+    IGovernance::FeatureEnabled::SIGNATURE_HASH, IRegulatedToken::AllowedSet::SIGNATURE_HASH, IRegulatedToken::DeniedSet::SIGNATURE_HASH,
 ];
 
 /// A regulated kind's event (spec §3.1) or a governance one into `v`, ids as `bytes32` hex but `from` / `to`, which the client's
@@ -390,7 +394,31 @@ fn regulated_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         match e.bit {
             5 => v["derived"] = json!("every_freeze_ended"),
             10 => v["derived"] = json!("every_record_backed_freeze_ended"),
+            28 => v["derived"] = json!("kyc_off"),
             _ => {}
+        }
+    } else if topic0 == IGovernance::FeatureEnabled::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<IGovernance::FeatureEnabled>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["bit"], v["by"]) = (json!("FeatureEnabled"), json!(e.bit), h(e.by));
+        match e.bit {
+            8 => v["derived"] = json!("allow_list_on"),
+            9 => v["derived"] = json!("deny_list_on"),
+            28 => v["derived"] = json!("kyc_on"),
+            _ => {}
+        }
+    } else if topic0 == R::AllowedSet::SIGNATURE_HASH || topic0 == R::DeniedSet::SIGNATURE_HASH {
+        let allow = topic0 == R::AllowedSet::SIGNATURE_HASH;
+        let (account, by, on) = if allow {
+            let Ok(e) = log.log_decode::<R::AllowedSet>() else { return false };
+            (e.inner.data.account, e.inner.data.by, e.inner.data.on)
+        } else {
+            let Ok(e) = log.log_decode::<R::DeniedSet>() else { return false };
+            (e.inner.data.account, e.inner.data.by, e.inner.data.on)
+        };
+        (v["event"], v["account"], v["by"], v["on"]) = (json!(if allow { "AllowedSet" } else { "DeniedSet" }), h(account), h(by), json!(on));
+        if on != allow {
+            v["alert"] = json!(true); // a restricting edit: denied, or taken off the allow list
         }
     } else if topic0 == IGovernance::RoleRevoked::SIGNATURE_HASH {
         let Ok(e) = log.log_decode::<IGovernance::RoleRevoked>() else { return false };
@@ -706,6 +734,30 @@ mod tests {
         assert!(encode_event(&pending).is_none());
         let foreign = log_of(LogData::new_unchecked(vec![B256::repeat_byte(7)], Default::default()));
         assert!(encode_event(&foreign).is_none());
+    }
+
+    /// Round 3s (spec 2026-11-10-token-lists.md §5.4): `FeatureEnabled` alerts and names the bit's derived state (8
+    /// `allow_list_on`, 9 `deny_list_on`, 28 `kyc_on`), `FeatureDisabled(28)` `kyc_off`; a restricting list edit
+    /// (`DeniedSet` on, `AllowedSet` off) alerts, the reverse edits do not.
+    #[test]
+    fn lists_and_enable_rows() {
+        use crate::abi::{IGovernance as G, IRegulatedToken as R};
+        let (a, r) = (B256::repeat_byte(0xa1), B256::repeat_byte(0x7e));
+        let enc = |d: LogData| pay_events(&[log_of(d)], None).pop().unwrap_or_else(|| panic!("not read"));
+        for (bit, d) in [(8u8, "allow_list_on"), (9, "deny_list_on"), (28, "kyc_on")] {
+            let v = enc(G::FeatureEnabled { bit, by: r }.encode_log_data());
+            assert_eq!((v["event"].as_str(), v["alert"].as_bool(), v["derived"].as_str()), (Some("FeatureEnabled"), Some(true), Some(d)));
+        }
+        let v = enc(G::FeatureDisabled { bit: 28, by: r }.encode_log_data());
+        assert_eq!(v["derived"].as_str(), Some("kyc_off"));
+        let alert = |d: LogData| enc(d)["alert"].as_bool();
+        assert_eq!(alert(R::DeniedSet { account: a, by: r, on: true }.encode_log_data()), Some(true));
+        assert_eq!(alert(R::AllowedSet { account: a, by: r, on: false }.encode_log_data()), Some(true));
+        assert_eq!(alert(R::DeniedSet { account: a, by: r, on: false }.encode_log_data()), None);
+        assert_eq!(alert(R::AllowedSet { account: a, by: r, on: true }.encode_log_data()), None);
+        let v = enc(R::DeniedSet { account: a, by: r, on: true }.encode_log_data());
+        assert_eq!((v["event"].as_str(), v["account"].as_str(), v["on"].as_bool()), (Some("DeniedSet"), Some(format!("{a:#x}").as_str()), Some(true)));
+        assert!(REGULATED_TOPICS.contains(&R::DeniedSet::SIGNATURE_HASH) && REGULATED_TOPICS.contains(&G::FeatureEnabled::SIGNATURE_HASH));
     }
 
     /// Regulated-kinds spec §7 (M-08): the §3.1 events and `RelaxProposed` are rows of the range with ids as `bytes32` hex; an

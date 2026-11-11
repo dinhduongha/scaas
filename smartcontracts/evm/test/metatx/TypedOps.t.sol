@@ -1822,6 +1822,36 @@ contract TypedOpsRouterTest is UALedgerBase {
     address internal regImpl;
     address internal regOther;
 
+    /// Round 3s (spec 2026-11-10-token-lists.md §6.2): the key's issuer seat holds 8 and 9 (both off, enableable) and writes
+    /// the row's two accounts; `UAEnableFeature` by the key once it is the admin, the bit at once.
+    function test_routerRow_SetAllowed() public {
+        _listRow("UASetAllowed", 1);
+    }
+
+    function test_routerRow_SetDenied() public {
+        _listRow("UASetDenied", 2);
+    }
+
+    function _listRow(string memory op, uint8 flag) internal {
+        NormalRegulatedToken t = _regAt(op, true);
+        _row(op);
+        bytes32[] memory as_ = vm.parseJsonBytes32Array(j, msgField(op, "accounts"));
+        assertEq(as_.length, 2, op);
+        for (uint256 i; i < as_.length; ++i) assertEq(t.listFlagsOf(as_[i]), flag, op);
+    }
+
+    function test_routerRow_EnableFeature() public {
+        string memory op = "UAEnableFeature";
+        NormalRegulatedToken t = _regAt(op, true);
+        t.transferAdmin(me);
+        vm.prank(signer);
+        t.acceptAdmin();
+        uint8 bit = uint8(_uint(op, "bit"));
+        assertEq(t.features() & (uint256(1) << bit), 0);
+        _row(op);
+        assertEq(t.features() & (uint256(1) << bit), uint256(1) << bit, op);
+    }
+
     function _regAt(string memory op, bool keyIsIssuer) internal returns (NormalRegulatedToken t) {
         vm.warp(REG_NOW);
         if (regImpl == address(0)) {

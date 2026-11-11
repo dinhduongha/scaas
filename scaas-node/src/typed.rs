@@ -245,6 +245,11 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds and bit 26's membership
     ("UASetWrapLimits", "mtxSetWrapLimits", GR, "bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,E", ""),
     ("UASetWrapMember", "mtxSetWrapMember", GR, "bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,E", ""),
+    // round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §6.2, §9): the lists of the regulated kinds 8-13 (bit 8's holder,
+    // bit 9's; 1-256 accounts) and the admin's enableFeature of 8, 9 or 28; no token row (governance entries are direct)
+    ("UASetAllowed", "mtxSetAllowed", GR, "bytes32 from,address target,bytes32[] accounts,bool on,E", ""),
+    ("UASetDenied", "mtxSetDenied", GR, "bytes32 from,address target,bytes32[] accounts,bool on,E", ""),
+    ("UAEnableFeature", "mtxEnableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
     // round 3r (CTR-GOV-23, spec §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its envs, deprecations, kind
     // switches, directory) and of a `ComplianceRegistry` (its KYC providers, the rows); the four release approvals are no row
     // (release management is not a node job, owner 2026-11-10)
@@ -612,6 +617,18 @@ fn env_bounds(t: &[Val], path: &str) -> Result<()> {
     }
     if arr_len(&t[5]) > ENV_MAX_LIBS || arr_len(&t[5]) != arr_len(&t[6]) {
         bail!("BAD_PAYLOAD: {path}.libs: at most {ENV_MAX_LIBS}, one libCodeHashes each");
+    }
+    Ok(())
+}
+
+/// Round 3s (spec 2026-11-10-token-lists.md §6.1, §9): a list edit's `accounts`, flat, `1 ≤ length ≤ 256`, refused by name
+/// before any simulation as the token refuses it (`ListBatchInvalid`).
+const LIST_MAX_BATCH: usize = 256;
+
+fn list_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let n = pos(fields, "accounts").map_or(usize::MAX, |i| arr_len(&vals[i]));
+    if n == 0 || n > LIST_MAX_BATCH {
+        bail!("BAD_PAYLOAD: args.accounts: 1 to {LIST_MAX_BATCH} accounts (ListBatchInvalid)");
     }
     Ok(())
 }
@@ -994,6 +1011,9 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
     }
     if row.name == "UASetCompliance" {
         compliance_bounds(&row.fields, &vals)?;
+    }
+    if row.name == "UASetAllowed" || row.name == "UASetDenied" {
+        list_bounds(&row.fields, &vals)?;
     }
     if row.typed {
         normalize(&row.fields, &mut vals, fee_recipient)?;
@@ -1705,17 +1725,17 @@ mod tests {
         // group 3f T46 / T47: -> (83, 117, 116), the router's three verifier ops (`UAPqz{Set,Cancel,Revoke}Verifier`)
         // group 3h T61: -> (84, 118, 117), the router's `UASetProofStore` (bit 24); group 3l: -> (86, 120, 119), the router's
         // `UASetWrapLimits`, `UASetWrapMember`; round 3r (CTR-GOV-23): -> (97, 131, 130), the router's eleven admin rows (the
-        // four release approvals, like the creations, left out by vectors())
-        // round 3t: -> (98, 132, 131), the router's `UASetVerifierFee`
-        assert_eq!((structs, domains, calldata), (98, 132, 131), "every row was walked (the creations and approvals left out by vectors())");
+        // four release approvals, like the creations, left out by vectors()); round 3s (CTR-GOV-24): -> (100, 134, 133), the
+        // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: -> (101, 135, 134), the router's `UASetVerifierFee`
+        assert_eq!((structs, domains, calldata), (101, 135, 134), "every row was walked (the creations and approvals left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
         // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`; group 3l: -> 89, the
         // router's `UASetWrapLimits`, `UASetWrapMember`
-        // round 3r (CTR-GOV-23): -> 100, the router's eleven admin rows
-        // round 3t: -> 101, `UASetVerifierFee`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 101, "98 vector rows, mtxPay, the two invalidations (DEX, token)");
+        // round 3r (CTR-GOV-23): -> 100, the router's eleven admin rows; round 3s: -> 103, the router's three list / enable rows
+        // round 3t: -> 104, `UASetVerifierFee`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 104, "101 vector rows, mtxPay, the two invalidations (DEX, token)");
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 32, "the wallet's three flat builders are gone (MD-11 (a))");
@@ -1962,6 +1982,22 @@ mod tests {
         assert!(compliance_bounds(&f, &[arr(256), arr(256), arr(256)]).is_ok());
         assert!(compliance_bounds(&f, &[arr(257), arr(257), arr(257)]).is_err());
         assert!(compliance_bounds(&f, &[arr(2), arr(1), arr(2)]).is_err());
+        // round 3s (spec 2026-11-10-token-lists.md §9): a list edit's accounts, 1 to 256, as the token refuses
+        let l: Vec<(String, String)> = [("bytes32[]", "accounts"), ("bool", "on")].iter().map(|(t, n)| (t.to_string(), n.to_string())).collect();
+        let on = Val::Bool(true);
+        assert!(list_bounds(&l, &[arr(256), on.clone()]).is_ok() && list_bounds(&l, &[arr(1), on.clone()]).is_ok());
+        for n in [0, 257] {
+            let e = list_bounds(&l, &[arr(n), on.clone()]).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("ListBatchInvalid"), "{n}: {e}");
+        }
+        // and the three rows are the router's alone, each with the type string `scaas_ua::regulated` signs
+        for op in ["UASetAllowed", "UASetDenied", "UAEnableFeature"] {
+            let r = row_of(op, "gov_router");
+            assert_eq!(r.contracts, ["gov_router"], "{op}");
+            let ua = if op == "UAEnableFeature" { scaas_ua::regulated::enable_feature_type() }
+                else { scaas_ua::regulated::set_list_type(op == "UASetAllowed") };
+            assert_eq!(r.type_string(), ua, "{op}");
+        }
     }
 
     /// Round 3r (spec §5.4, §7): the router's admin rows are the ops `scaas_ua::admin` signs, each way: the same type string,

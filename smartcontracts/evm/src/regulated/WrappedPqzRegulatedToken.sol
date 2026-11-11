@@ -91,6 +91,8 @@ interface IWrappedPqzRegulatedTokenAbi {
     event WrapLimitsSet(bytes32 indexed by, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
     event WrapLimitsProposed(bytes32 indexed by, uint64 eta, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
     event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
+    event AllowedSet(bytes32 indexed account, bytes32 indexed by, bool on);
+    event DeniedSet(bytes32 indexed account, bytes32 indexed by, bool on);
     error AccNotPrepared(bytes32 ua);
     error AccountNotRegistered(bytes32 ua);
     error AdminAccountPool(bytes32 account);
@@ -301,6 +303,12 @@ interface IWrappedPqzRegulatedTokenAbi {
     error WrapControlActive(uint8 bit);
     error WrapSubjectZero();
     error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
+    error NotAllowed(bytes32 account);
+    error Denied(bytes32 account);
+    error ListBatchInvalid(uint256 length);
+    error ListAccountZero();
+    error ComplianceRegistryNotSet();
+    error ListHolderMissing(uint8 bit);
 }
 
 /// @title WrappedPqzRegulatedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -458,6 +466,10 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
         _forwardView(_MA);
     }
 
+    function enableFeature(uint8) external {
+        _forward(_MR);
+    }
+
     function envelopeBinding(MetaTxLib.UAMetaTransaction calldata) external view returns (bytes32 _p0) {
         _forwardView(_MS);
     }
@@ -524,6 +536,10 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
 
     function legOf(address) external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled) {
         _forwardView(_MW);
+    }
+
+    function listFlagsOf(bytes32) external view returns (uint8 _p0) {
+        _forwardView(_MR);
     }
 
     function lockedFeatures() external view returns (uint256 _p0) {
@@ -912,6 +928,14 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
 
     function revokeRole(uint8, bytes32) external {
         _forward(_MA);
+    }
+
+    function setAllowed(bytes32[] calldata, bool) external {
+        _forward(_MR);
+    }
+
+    function setDenied(bytes32[] calldata, bool) external {
+        _forward(_MR);
     }
 
     function setGrant(uint8, bytes32, IGovernance.GrantTerms calldata) external {

@@ -109,8 +109,9 @@ fn regulated_kat_receiver_table() {
             valid_until: num(&r["validUntil"]) as u64,
             attester_enabled: r["kycProviderEnabled"].as_bool().unwrap(),
         };
-        let req = r["allowlist"].as_bool().unwrap().then(|| num(&r["requiredFlags"]) as u64);
-        let den = r["denylist"].as_bool().unwrap().then(|| num(&r["deniedFlags"]) as u64);
+        let kyc = r["kyc"].as_bool().unwrap(); // round 3s: both masks under bit 28
+        let req = kyc.then(|| num(&r["requiredFlags"]) as u64);
+        let den = kyc.then(|| num(&r["deniedFlags"]) as u64);
         let got = can_receive(req, den, &a, num(&r["now"]) as u64);
         assert_eq!(got, (r["ok"].as_bool().unwrap(), r["reason"].as_u64().unwrap() as u8), "{}", r["name"]);
     }
@@ -143,4 +144,23 @@ fn regulated_kat_commits() {
     assert_eq!(actions, [1, 2, 3, 4, 5]);
     assert_eq!(relax_commit(2, 5, &[0; 32], None), None, "SET needs its terms");
     assert_eq!(relax_commit(6, 5, &[0; 32], None), None, "no action 6");
+}
+
+/// Round 3s (spec 2026-11-10-token-lists.md §4.3, §5.5): the list rows and the predicate rows of `regulated_kat.json`.
+#[test]
+fn regulated_kat_lists_and_enableable() {
+    let k = load("governance/regulated_kat.json");
+    let rows = k["lists"].as_array().unwrap();
+    assert_eq!(rows.len(), 16);
+    for r in rows {
+        let got = scaas_ua::regulated::listed(num(&r["controls"]) as u8, num(&r["listFlags"]) as u8);
+        assert_eq!(got, (r["ok"].as_bool().unwrap(), r["reason"].as_u64().unwrap() as u8), "{}", r["name"]);
+    }
+    let rows = k["enableable"].as_array().unwrap();
+    assert!(rows.len() >= 9);
+    for r in rows {
+        let got = scaas_ua::regulated::enableable(num(&r["features"]) as u64, num(&r["lockedFeatures"]) as u64,
+            num(&r["valid"]) as u64, r["admin"].as_bool().unwrap(), r["registry"].as_bool().unwrap());
+        assert_eq!(got, num(&r["enableable"]) as u64, "{}", r["name"]);
+    }
 }

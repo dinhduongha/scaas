@@ -38,12 +38,12 @@ contract OperatorTransferTest is RegFixture {
         for (uint256 i; i < 2; ++i) _grant(ts[i], nid(clerk));
     }
 
-    /// Kind 8 (`i == 0`) or 9 as the fixture's, with bit 22 and, when `denied != 0`, `DENYLIST` on `creg`.
+    /// Kind 8 (`i == 0`) or 9 as the fixture's, with bit 22 and, when `denied != 0`, `KYC` (round 3s) on `creg`.
     function _opToken(uint256 i, uint64 denied, bytes32 salt) internal returns (address t) {
         IFactoryToken.TokenConfig memory c = i == 0 ? _cfg8() : _cfg9();
         c.features |= uint256(1) << OP;
         if (denied != 0) {
-            c.features |= uint256(1) << GovernanceBits.DENYLIST;
+            c.features |= uint256(1) << GovernanceBits.KYC;
             (c.reg.complianceRegistry, c.reg.deniedFlags) = (address(creg), denied);
         }
         t = f.createToken(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
@@ -190,7 +190,7 @@ contract OperatorTransferTest is RegFixture {
         }
     }
 
-    /// `R(to)` (CTR-GOV-18) with `DENYLIST`: a denied receiver is refused, an unlisted one passes; a denied `from` still sends.
+    /// `R(to)` (CTR-GOV-18) with `KYC`'s deny mask: a denied receiver is refused, an unlisted one passes; a denied `from` still sends.
     function test_receiverCheckApplies() public {
         for (uint256 i; i < 2; ++i) {
             address t = _opToken(i, SANCTIONED, bytes32(uint256(100 + i)));

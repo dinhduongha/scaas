@@ -123,6 +123,7 @@ contract GovProofBitTest is PqzOffchainBase {
             c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
         }
         if (withBit) c.features |= uint256(1) << BIT;
+        if (k >= 12) c.lockedFeatures = uint256(1) << GovernanceBits.DENYLIST; // round 3s: no deny list, no terms, a seat of 24 alone
         c.roles.issuer = issuer;
         t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(c), keccak256(abi.encode(k, issuer, withBit, delay))));
     }

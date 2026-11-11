@@ -49,7 +49,7 @@ abstract contract NormalZetherRegulatedTokenCore is NormalZetherTokenCore, Regul
     }
 
     function _roleBits() internal pure override returns (uint256) {
-        return GovernanceBits.NORMAL_ROLES | REG_ROLES;
+        return GovernanceBits.NORMAL_ROLES | REG_ROLES_CONFIDENTIAL;
     }
 
     function _contractOnlyBits() internal pure override returns (uint256) {

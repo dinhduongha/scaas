@@ -414,6 +414,11 @@ const OPS = {
   // or tightens the unwrap side) and bit 26's membership
   UASetWrapLimits: { fields: 'address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList', on: ROUTER },
   UASetWrapMember: { fields: 'address target,bytes32 account,bool canWrap,bool canUnwrap', on: ROUTER },
+  // round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §5.3, §6.2): the lists of the regulated kinds 8-13 (bit 8's holder, bit
+  // 9's; 1-256 accounts, signed as the keccak256 of their words) and the admin's enableFeature of 8, 9 or 28
+  UASetAllowed: { fields: 'address target,bytes32[] accounts,bool on', on: ROUTER },
+  UASetDenied: { fields: 'address target,bytes32[] accounts,bool on', on: ROUTER },
+  UAEnableFeature: { fields: 'address target,uint8 bit', on: ROUTER },
   // round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its
   // envs, the release approvals of §5.6, the revoke, the deprecations, the kind switches, the directory of §13.3) and of a
   // `ComplianceRegistry` (its KYC providers; the rows by the admin or a provider); `target` the factory or the registry, the
@@ -1608,17 +1613,19 @@ export function bidMinBase(minFill, amount, receiveAmount) {
   return (uint(minFill, 'minFill') * uint(receiveAmount, 'the price') + a - 1n) / a;
 }
 
-// The governance bits 0-27 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5; bits 25-27 wrap limits §2): name and type. The disclosure sentences are the file's,
+// The governance bits 0-28 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5; bits 25-27 wrap limits §2; bits 8, 9 the token's lists and 28 KYC, CTR-GOV-24): name and type. The disclosure sentences are the file's,
 // smartcontracts/vectors/governance/governance_bits.json, which the app reads; test/governance-bits.test.js holds this table to it.
-// Bits 28-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
+// Bits 29-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
 export const GOVERNANCE_BITS = Object.freeze([
   ['PAYABLE', 'capability'], ['MINTABLE', 'power'], ['BURNABLE', 'capability'], ['RATE_ADJUSTABLE', 'power'],
-  ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'capability'],
-  ['DENYLIST', 'capability'], ['RECORD', 'power'], ['LISTING', 'power'], ['FEE_ROUTING', 'power'], ['', 'unused'], ['', 'unused'],
+  ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'power'],
+  ['DENYLIST', 'power'], ['RECORD', 'power'], ['LISTING', 'power'], ['FEE_ROUTING', 'power'], ['', 'unused'], ['', 'unused'],
   ['ARBITRATE', 'reserved'], ['CORRECT', 'reserved'], ['RESCUABLE', 'capability'], ['PUBLISH', 'power'], ['DEPRECATE', 'power'],
   ['ENABLE_KIND', 'power'], ['MODERATE', 'power'], ['OPERATOR_TRANSFER', 'power'], ['TAX', 'power'], ['PQZ_PROOF', 'power'],
   // group 3l (wrap limits spec §2): the hybrids' wrap controls
   ['WRAP_LIMIT', 'capability'], ['WRAP_LIST', 'power'], ['REDEEMER', 'power'],
+  // round 3s (CTR-GOV-24): the compliance registry check
+  ['KYC', 'capability'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));
 
 // ------------------------------------------------------------------ liquidity orders (CTR-DEX-30, -31; CLI-SGN-49 proposed)

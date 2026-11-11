@@ -502,7 +502,16 @@ sol! {
         event TaxRecipientSet(bytes32 indexed taxRecipient);
         event PaymentTaxed(bytes32 indexed entryRef, bytes32 indexed payee, bytes32 indexed taxRecipient, bytes32 from,
             uint8 taxMode, uint256 tax, bytes32 digest);
+        /// Round 3s (spec 2026-11-10-token-lists.md §6.1, CTR-GOV-24): one event per account of a list edit.
+        event AllowedSet(bytes32 indexed account, bytes32 indexed by, bool on);
+        event DeniedSet(bytes32 indexed account, bytes32 indexed by, bool on);
         error Frozen(bytes32 account);
+        error NotAllowed(bytes32 account);
+        error Denied(bytes32 account);
+        error ListBatchInvalid(uint256 length);
+        error ListAccountZero();
+        error ComplianceRegistryNotSet();
+        error ListHolderMissing(uint8 bit);
         error TokenPaused(uint64 until);
         error NotEligible(bytes32 account, uint8 reason);
         error FeeRecipientFrozen(bytes32 account);
@@ -550,6 +559,10 @@ sol! {
         function mtxPayWithTax(UAMetaTransfer t, uint8 taxMode, uint256 tax, UASig auth, PayMeta meta) external returns (bool);
         function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef, PayMeta meta)
             external returns (bool);
+        function setAllowed(bytes32[] accounts, bool on) external;
+        function setDenied(bytes32[] accounts, bool on) external;
+        function listFlagsOf(bytes32 account) external view returns (uint8);
+        function enableFeature(uint8 bit) external;
         function regulatedConfig() external view returns (RegulatedConfig);
         function freezeOf(bytes32 account) external view returns (FreezeState);
         function isFrozen(bytes32 account) external view returns (bool);
@@ -625,6 +638,7 @@ sol! {
     interface IGovernance {
         event RoleRevoked(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender);
         event FeatureDisabled(uint8 indexed bit, bytes32 indexed by);
+        event FeatureEnabled(uint8 indexed bit, bytes32 indexed by);
         event RelaxProposed(uint8 indexed bit, bytes32 indexed account, uint8 action, bytes32 proposer, uint64 eta);
         error MissingRole(uint8 bit, bytes32 account);
         error RoleNotContract(uint8 bit, bytes32 account);
@@ -635,6 +649,9 @@ sol! {
         error FeatureInvalidForKind(uint8 bit);
         error FeatureLocked(uint8 bit);
         error FeatureNotSet(uint8 bit);
+        error FeatureNotEnableable(uint8 bit);
+        error FeatureNotDisableable(uint8 bit);
+        error FeatureAlreadySet(uint8 bit);
         error GrantExhausted(uint8 field);
         error GrantExpired(uint8 bit, bytes32 holder);
         error GrantBarred(uint8 bit, bytes32 account);
@@ -648,15 +665,33 @@ pub fn regulated_interface_id() -> [u8; 4] {
 }
 
 /// A regulated token's refusal that a later block may lift (regulated-kinds spec §7): the account is frozen, the token
-/// paused, the receiver not eligible, the fee recipient frozen, or the registry unreadable. The node names it and never
+/// paused, the receiver not eligible, the fee recipient frozen, the registry unreadable, or (round 3s) a party off the allow
+/// list or on the deny list, which a list edit lifts. The node names it and never
 /// reports the job `dead` for it while its payload may still land (another relayer, after an unfreeze, an unpause or an
 /// attestation); it is never counted against the subject's or a maker's grief score (asset-suite §2.7, F-16). `reason`
 /// is a `decode_revert` string.
 pub fn regulated_refusal(reason: &str) -> Option<&'static str> {
-    const LIFTABLE: [&str; 6] =
-        ["Frozen", "TokenPaused", "NotEligible", "FeeRecipientFrozen", "ComplianceRegistryUnavailable", "ComplianceRegistryGasStarved"];
+    const LIFTABLE: [&str; 8] = ["Frozen", "TokenPaused", "NotEligible", "FeeRecipientFrozen", "ComplianceRegistryUnavailable",
+        "ComplianceRegistryGasStarved", "NotAllowed", "Denied"];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
     LIFTABLE.into_iter().find(|n| *n == name)
+}
+
+/// Round 3s (spec 2026-11-10-token-lists.md §9, Fable P3-8): a list refusal of the job's own subject (`Denied(subject)`,
+/// `NotAllowed(subject)`, the token's answer at simulation, so a dormant list refuses nothing): refused by name (`DENIED`,
+/// `NOT_ALLOWED`), zero sends, never back in the queue with no grief score; another party's list refusal stays liftable
+/// ([`regulated_refusal`]).
+pub fn own_list_refusal(reason: &str, subject: alloy::primitives::B256) -> Option<&'static str> {
+    let (name, rest) = reason.split_once('(')?;
+    let code = match name {
+        "Denied" => "DENIED",
+        "NotAllowed" => "NOT_ALLOWED",
+        _ => return None,
+    };
+    // `decode_revert`'s form: `Denied(Denied { account: 0x… })`
+    let i = rest.find("0x")?;
+    let a: alloy::primitives::B256 = rest.get(i..i + 66)?.parse().ok()?;
+    (a == subject).then_some(code)
 }
 
 /// Group 3l (wrap limits spec §9, NODE-LANE-09's class): a wrap or an unwrap a wrap limit refuses at simulation. A window ends,
@@ -775,10 +810,24 @@ mod tests {
 
     /// `type(IRegulatedToken).interfaceId`: the XOR of its eighteen selectors (pay-meta-tax T39 / T40: + setTaxRate,
     /// setTaxRecipient, taxConfig, mtxPayWithTax, payWithTax; 0xf35dd87a -> 0xaf5683ea, the forge artifact's methodIdentifiers;
-    /// plan T83, `PayMeta` v3 in the two tax entries' tuples: 0xaf5683ea -> 0x01a22b62).
+    /// plan T83, `PayMeta` v3 in the two tax entries' tuples: 0xaf5683ea -> 0x01a22b62; round 3s, spec 2026-11-10-token-lists.md
+    /// §7, + setAllowed, setDenied, listFlagsOf, enableFeature: 0x01a22b62 -> 0x789ed7c4).
+    #[test]
+    fn own_list_refusal_names_the_subject_only() {
+        let (s, o) = (alloy::primitives::B256::repeat_byte(0xa1), alloy::primitives::B256::repeat_byte(0xb2));
+        let r = decode_revert(&IRegulatedToken::Denied { account: s }.abi_encode());
+        assert_eq!(own_list_refusal(&r, s), Some("DENIED"), "{r}");
+        assert_eq!(own_list_refusal(&r, o), None, "another party's: liftable");
+        assert_eq!(regulated_refusal(&r), Some("Denied"));
+        let r = decode_revert(&IRegulatedToken::NotAllowed { account: s }.abi_encode());
+        assert_eq!(own_list_refusal(&r, s), Some("NOT_ALLOWED"), "{r}");
+        assert_eq!(regulated_refusal(&r), Some("NotAllowed"));
+        assert_eq!(own_list_refusal(&decode_revert(&IRegulatedToken::Frozen { account: s }.abi_encode()), s), None);
+    }
+
     #[test]
     fn regulated_interface_id_is_the_xor_of_its_functions() {
-        assert_eq!(regulated_interface_id(), [0x01, 0xa2, 0x2b, 0x62]);
+        assert_eq!(regulated_interface_id(), [0x78, 0x9e, 0xd7, 0xc4]);
     }
 
     /// Group 3g (spec §7.3): the PQZ key-version reverts decode by name and classify; another revert is none of them.
@@ -918,7 +967,8 @@ mod tests {
         let rows = v["receiver"].as_array().unwrap();
         for r in rows {
             let a = Attestation { flags: n(&r["flags"]), valid_until: n(&r["validUntil"]), attester_enabled: r["kycProviderEnabled"].as_bool().unwrap() };
-            let (req, den) = (r["allowlist"].as_bool().unwrap().then(|| n(&r["requiredFlags"])), r["denylist"].as_bool().unwrap().then(|| n(&r["deniedFlags"])));
+            let kyc = r["kyc"].as_bool().unwrap(); // round 3s: both masks under bit 28
+            let (req, den) = (kyc.then(|| n(&r["requiredFlags"])), kyc.then(|| n(&r["deniedFlags"])));
             let got = can_receive(req, den, &a, n(&r["now"]));
             assert_eq!(got, (r["ok"].as_bool().unwrap(), r["reason"].as_u64().unwrap() as u8), "{}", r["name"]);
         }

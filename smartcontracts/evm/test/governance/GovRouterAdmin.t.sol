@@ -930,9 +930,9 @@ contract GovRouterAdminTest is UARegistryBase {
 
     // ------------------------------------------------------------------ the router's table (§5.4)
 
-    /// The router's typed entries go from 38 to 53: every `mtx` entry of its ABI but the ordered cancel and the two generic
-    /// refusals.
-    function test_routerHas53TypedOps() public view {
+    /// The router's typed entries go from 38 to 53 (round 3r), 53 to 56 (round 3s: `mtxSetAllowed`, `mtxSetDenied`,
+    /// `mtxEnableFeature`): every `mtx` entry of its ABI but the ordered cancel and the two generic refusals.
+    function test_routerHas56TypedOps() public view {
         string memory a = vm.readFile(string.concat(vm.envOr("FOUNDRY_OUT", string("out")),
             "/GovernanceRouter.sol/GovernanceRouter.json"));
         string[] memory sigs = vm.parseJsonKeys(a, ".methodIdentifiers");
@@ -944,7 +944,7 @@ contract GovRouterAdminTest is UARegistryBase {
             if (_starts(s, "mtxNonce(") || _starts(s, "mtxDigest(") || _starts(s, "mtxSelectors(")) continue; // the views
             ++n;
         }
-        assertEq(n, 53);
+        assertEq(n, 56);
     }
 
     function _starts(bytes memory s, string memory p) internal pure returns (bool) {

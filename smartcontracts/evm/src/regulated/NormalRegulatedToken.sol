@@ -63,6 +63,8 @@ interface INormalRegulatedTokenAbi {
     event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
     event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
     event Unpaused(bytes32 indexed ref);
+    event AllowedSet(bytes32 indexed account, bytes32 indexed by, bool on);
+    event DeniedSet(bytes32 indexed account, bytes32 indexed by, bool on);
     error AdminAccountPool(bytes32 account);
     error AdminHasHolders(uint8 bit);
     error AlreadyRecordFrozen(bytes32 account);
@@ -175,6 +177,12 @@ interface INormalRegulatedTokenAbi {
     error ZeroAmount(bytes32 orderHash);
     error ZeroFill(bytes32 orderHash);
     error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
+    error NotAllowed(bytes32 account);
+    error Denied(bytes32 account);
+    error ListBatchInvalid(uint256 length);
+    error ListAccountZero();
+    error ComplianceRegistryNotSet();
+    error ListHolderMissing(uint8 bit);
 }
 
 /// @title NormalRegulatedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -286,6 +294,10 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
         _forwardView(_MA);
     }
 
+    function enableFeature(uint8) external {
+        _forward(_MR);
+    }
+
     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata, bytes calldata) external returns (bool _p0) {
         _forward(_MP);
     }
@@ -340,6 +352,10 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
 
     function lastProposedAt() external view returns (uint64 _p0) {
         _forwardView(_MA);
+    }
+
+    function listFlagsOf(bytes32) external view returns (uint8 _p0) {
+        _forwardView(_MR);
     }
 
     function lockedFeatures() external view returns (uint256 _p0) {
@@ -528,6 +544,14 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
 
     function revokeRole(uint8, bytes32) external {
         _forward(_MA);
+    }
+
+    function setAllowed(bytes32[] calldata, bool) external {
+        _forward(_MR);
+    }
+
+    function setDenied(bytes32[] calldata, bool) external {
+        _forward(_MR);
     }
 
     function setGrant(uint8, bytes32, IGovernance.GrantTerms calldata) external {

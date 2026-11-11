@@ -492,6 +492,10 @@ contract NormalRegulatedTokenR is NormalRegulatedTokenCore {
         _disableFeatureBody(bit);
     }
 
+    function enableFeature(uint8 bit) external onlyDelegated {
+        _enableFeatureBody(bit);
+    }
+
     function forceTransfer(bytes32 recordId, uint256 amount) external onlyDelegated {
         _forceTransferBody(recordId, amount);
     }
@@ -506,6 +510,10 @@ contract NormalRegulatedTokenR is NormalRegulatedTokenCore {
 
     function isFrozen(bytes32 account) external view onlyDelegated returns (bool _p0) {
         return _isFrozenBody(account);
+    }
+
+    function listFlagsOf(bytes32 account) external view onlyDelegated returns (uint8 _p0) {
+        return _listFlagsOfBody(account);
     }
 
     function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external onlyDelegated {
@@ -530,6 +538,14 @@ contract NormalRegulatedTokenR is NormalRegulatedTokenCore {
 
     function revokeOrder(bytes32 recordId, bytes32 reasonRef) external onlyDelegated {
         _revokeOrderBody(recordId, reasonRef);
+    }
+
+    function setAllowed(bytes32[] calldata accounts, bool on) external onlyDelegated {
+        _setAllowedBody(accounts, on);
+    }
+
+    function setDenied(bytes32[] calldata accounts, bool on) external onlyDelegated {
+        _setDeniedBody(accounts, on);
     }
 
     function unfreeze(bytes32 account, bytes32 ref) external onlyDelegated {

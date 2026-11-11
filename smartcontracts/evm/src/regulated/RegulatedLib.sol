@@ -23,19 +23,27 @@ import {IComplianceRegistry} from "./IComplianceRegistry.sol";
 /// @notice **UNAUDITED.** In the release's link closure of every regulated kind 8-13 (`Env.libs`, `libCodeHashes`); it
 ///         links `GovernanceLib` (`GovernanceUse.use`'s `useLimited`).
 library RegulatedLib {
-    /// @dev `controls` holds bits 5-10 of `features`, shifted down by 5 (I12).
+    /// @dev `controls` holds bits 5-10 of `features`, shifted down by 5, and bit 28 `KYC` in byte bit 6 (I12, round 3s):
+    ///      `controls == ((features >> 5) & 0x3F) | (((features >> 28) & 1) << 6)`.
     uint8 internal constant C_FREEZE = 1;
     uint8 internal constant C_PAUSE = 1 << 2;
     uint8 internal constant C_ALLOW = 1 << 3;
     uint8 internal constant C_DENY = 1 << 4;
     uint8 internal constant C_LISTS = C_ALLOW | C_DENY;
     uint8 internal constant C_RECORD = 1 << 5;
+    uint8 internal constant C_KYC = 1 << 6;
+    /// @dev Round 3s (spec §4.1): an account's byte in `listFlags`, both lists in one slot.
+    uint8 internal constant ALLOWED = 1;
+    uint8 internal constant DENIED = 2;
+    /// @dev The longest `setAllowed` / `setDenied` batch (spec §6.1): 3r's row bound, the node's decode bound.
+    uint256 internal constant MAX_LIST_BATCH = 256;
     /// @dev CTR-AS-05, CTR-AS-06 (spec §3.5).
     uint64 internal constant FREEZE_SPAN = 30 days;
     uint64 internal constant EPISODE_SPAN = 60 days;
     uint64 internal constant FREEZE_COOLDOWN = 30 days;
     uint64 internal constant PAUSE_SPAN = 7 days;
-    /// @dev The bits whose token carries `termsHash` (spec §2.4): 5-9, 10, 21.
+    /// @dev The bits whose token carries `termsHash` (spec §2.4): 5-9, 10, 21, 28; and each of 8, 9, 28 that can still be
+    ///      enabled (round 3s, spec §5.5).
     uint256 internal constant TERMS_BITS =
         GovernanceBits.REGULATED | (1 << GovernanceBits.RECORD) | (1 << GovernanceBits.MODERATE);
 
@@ -53,6 +61,7 @@ library RegulatedLib {
         mapping(bytes32 recordId => IRegulatedToken.OrderRecord) orders;  // +4
         bytes32 taxRecipient;                                             // +5 (pay-meta-tax spec §6.2)
         IRegulatedToken.TaxRate taxRate;                                  // +6
+        mapping(bytes32 account => uint8) listFlags;                      // +7 (round 3s, spec §4.1): ALLOWED | DENIED
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.regulated")) - 1)) & ~bytes32(uint256(0xff))
@@ -87,7 +96,7 @@ library RegulatedLib {
 
     // ------------------------------------------------------------------ init (spec §2.4)
 
-    /// @notice The checks of spec §2.4 on the factory's raw `initArgs`, before the kind's own init and any mint, and the
+    /// @notice The checks of spec §2.4 (round 3s: §3's rows) on the factory's raw `initArgs`, before the kind's own init and any mint, and the
     ///         namespace written from them. `valid` is the kind's `_validBits()`: a bit outside it is refused first, as
     ///         `GovernanceLib.init` would (bit 8 on 10-13). The roles' holder rules, `RoleConflict` and the owner-0 rule are
     ///         `GovernanceLib.init`'s; the initial-supply recipient's `R` is the mint's own `_regMove`. A compliance
@@ -108,18 +117,22 @@ library RegulatedLib {
             revert IGovernance.FeatureInvalidForKind(b);
         }
         IFactoryToken.RegulatedParams memory p = cfg.reg;
+        address reg = p.complianceRegistry;
         bool freeze_ = f & (1 << GovernanceBits.FREEZE) != 0;
         bool record = f & (1 << GovernanceBits.RECORD) != 0;
-        bool allow = f & (1 << GovernanceBits.ALLOWLIST) != 0;
-        bool deny = f & (1 << GovernanceBits.DENYLIST) != 0;
+        // round 3s (spec §3): `KYC ⇒ registry`; `registry ⇔ masks` (the registry may be set while `KYC` is off, to enable
+        // later); no required mask where bit 8 is not valid (10-13: a shielded receiver cannot be checked, I9); `termsHash`
+        // for each bit of `TERMS_BITS` set or of 8, 9, 28 that can still be enabled (§5.5)
         if ((f & (1 << GovernanceBits.FORCE) != 0 && !record) || (record && !freeze_)
-            || allow != (p.requiredFlags != 0) || deny != (p.deniedFlags != 0)
-            || (p.complianceRegistry != address(0)) != (allow || deny) || (p.termsHash != 0) != (f & TERMS_BITS != 0)
+            || (f & (1 << GovernanceBits.KYC) != 0 && reg == address(0))
+            || (reg != address(0)) != ((p.requiredFlags | p.deniedFlags) != 0)
+            || (valid & (1 << GovernanceBits.ALLOWLIST) == 0 && p.requiredFlags != 0)
+            || (p.termsHash != 0) != (f & TERMS_BITS != 0
+                || GovernanceBits.enableable(f, cfg.lockedFeatures, valid, cfg.admin, reg != address(0)) != 0)
             || (p.taxRecipient != 0) != (f & (1 << GovernanceBits.TAX) != 0))
         {
             revert IRegulatedToken.RegulatedConfigInvalid();
         }
-        address reg = p.complianceRegistry;
         if (reg != address(0)) {
             if (reg.codehash != complianceRegistryCodehash) {
                 revert IRegulatedToken.ComplianceRegistryCodeMismatch(reg, reg.codehash);
@@ -128,9 +141,43 @@ library RegulatedLib {
             if (got != address(0) && got != govRouter) revert IRegulatedToken.ComplianceRegistryRouterMismatch(reg, got);
         }
         RegulatedStorage storage s = $();
-        (s.complianceRegistry, s.controls) = (reg, uint8(f >> GovernanceBits.FREEZE) & 0x3F);
+        (s.complianceRegistry, s.controls) = (reg, mirror(f));
         (s.requiredFlags, s.deniedFlags, s.termsHash) = (p.requiredFlags, p.deniedFlags, p.termsHash);
         if (p.taxRecipient != 0) _taxRecipient(s, p.taxRecipient, uaRegistry); // the rate starts at 0
+        // round 3s (spec §3, §6.3, Fable P1-2): under `ALLOWLIST` the initial supply's holder is listed before its mint
+        if (f & (1 << GovernanceBits.ALLOWLIST) != 0 && cfg.initialSupply != 0) {
+            bytes32 h = MetaTxLib.pad(cfg.initialHolder);
+            s.listFlags[h] = ALLOWED;
+            emit IRegulatedToken.AllowedSet(h, 0, true);
+        }
+    }
+
+    /// @notice I12: the `controls` byte of `features` (bits 5-10 shifted down by 5, `KYC` in byte bit 6).
+    function mirror(uint256 f) internal pure returns (uint8) {
+        return uint8(f >> GovernanceBits.FREEZE) & 0x3F | uint8((f >> GovernanceBits.KYC) & 1) << 6;
+    }
+
+    // ------------------------------------------------------------------ the lists (round 3s, spec §6.1, §6.3)
+
+    /// @notice `setAllowed` (`bit` 8, `flag` `ALLOWED`) and `setDenied` (9, `DENIED`), at once both ways: the role as
+    ///         `GovernanceUse.use` checks it, without its feature test (a holder writes a dormant list, §6.3), then `1 ≤
+    ///         length ≤ MAX_LIST_BATCH`, each account not 0; the other flag never touched; one event per account, `by` the
+    ///         subject.
+    function setList(uint8 bit, uint8 flag, bytes32[] calldata accounts, bool on, bytes32 subject) public {
+        uint8 role = GovernanceLib.$().roles[bit][subject];
+        if (role == 0) revert IGovernance.MissingRole(bit, subject);
+        if (role == GovernanceLib.LIMITED) GovernanceLib.useLimited(bit, subject, 0);
+        uint256 n = accounts.length;
+        if (n == 0 || n > MAX_LIST_BATCH) revert IRegulatedToken.ListBatchInvalid(n);
+        mapping(bytes32 => uint8) storage m = $().listFlags;
+        for (uint256 i; i < n; ++i) {
+            bytes32 a = accounts[i];
+            if (a == 0) revert IRegulatedToken.ListAccountZero();
+            uint8 fl = m[a];
+            m[a] = on ? fl | flag : fl & ~flag;
+            if (flag == ALLOWED) emit IRegulatedToken.AllowedSet(a, subject, on);
+            else emit IRegulatedToken.DeniedSet(a, subject, on);
+        }
     }
 
     // ------------------------------------------------------------------ TAX (pay-meta-tax spec §6, bit 23)

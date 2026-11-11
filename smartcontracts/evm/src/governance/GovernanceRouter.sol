@@ -125,6 +125,31 @@ contract GovernanceRouter is GovernanceRouterBase {
         _ua(T.UA_SET_TAX_RECIPIENT, e, target, IRegulatedToken.setTaxRecipient.selector, abi.encode(taxRecipient), auth);
     }
 
+    // ------------------------------------------------------------------ the lists (round 3s, spec 2026-11-10-token-lists.md §6.2)
+
+    /// @notice Bit 8's holder: `accounts` on (or off) the allow list, at once; the array signed as the `keccak256` of its words.
+    function mtxSetAllowed(MetaTxLib.UAEnvelope calldata e, address target, bytes32[] calldata accounts, bool on,
+        IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_SET_ALLOWED, e, target, abi.encode(keccak256(abi.encodePacked(accounts)), on),
+            abi.encodeCall(IRegulatedToken.setAllowed, (accounts, on)), auth);
+    }
+
+    /// @notice Bit 9's holder: `accounts` on (or off) the deny list, at once.
+    function mtxSetDenied(MetaTxLib.UAEnvelope calldata e, address target, bytes32[] calldata accounts, bool on,
+        IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_SET_DENIED, e, target, abi.encode(keccak256(abi.encodePacked(accounts)), on),
+            abi.encodeCall(IRegulatedToken.setDenied, (accounts, on)), auth);
+    }
+
+    /// @notice The admin switches on 8, 9 or 28 at once (spec §5.3).
+    function mtxEnableFeature(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)
+        external
+    {
+        _ua(T.UA_ENABLE_FEATURE, e, target, IRegulatedToken.enableFeature.selector, abi.encode(bit), auth);
+    }
+
     // ------------------------------------------------------------------ the PQZ verifier UA (group 3f, spec §4.2, §4.3)
 
     /// @notice The admin proposes, then confirms after the notice period, `next` as a transferable `OFFCHAIN` token's

@@ -205,7 +205,10 @@ Further events, same object, same filters (decoders for a new kind ship before t
   governance events `RelaxProposed`, `FeatureDisabled`, `RoleRevoked`, ids as `bytes32` hex but `from` / `to` in the address
   form above (`UA_POOL` and `<k>_ua` for a derived id); `alert: true` on every `OrderRecorded`, `RelaxProposed`,
   `AccountFrozen` and `Paused` (and a `warn` log line naming it); `derived` = `every_freeze_ended` on `FeatureDisabled(5)`,
-  `every_record_backed_freeze_ended` on `FeatureDisabled(10)`, `holder_lost_bit` on `RoleRevoked`. Test:
+  `every_record_backed_freeze_ended` on `FeatureDisabled(10)`, `holder_lost_bit` on `RoleRevoked`; group 3s (CTR-GOV-24): the
+  topics gain `FeatureEnabled`, `AllowedSet`, `DeniedSet` (11 -> 14), `derived` `allow_list_on` / `deny_list_on` / `kyc_on` on
+  `FeatureEnabled(8 / 9 / 28)` and `kyc_off` on `FeatureDisabled(28)`, `alert` on `FeatureEnabled` and on a restricting edit
+  (`DeniedSet` on, `AllowedSet` off; test `lists_and_enable_rows`). Test:
   `indexer::tests::alert_on_relax_proposed`;
 - planned asset suite: `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`, `ForcedTransfer`, `Paused`,
   `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `Attested`, `AttesterSet`, `GrantCreated`, `Released`, `Revoked`,

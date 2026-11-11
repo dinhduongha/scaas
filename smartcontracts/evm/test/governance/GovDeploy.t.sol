@@ -276,7 +276,7 @@ contract GovDeployTest is Test {
     /// `ComplianceRegistry` by CREATE2, its admin the native id of `COMPLIANCE_ADMIN` (any account, round 3r; none refused by
     /// the registry's constructor, `AdminZero`) and its router this deploy's (spec §5.3), its code the regulated releases' pin
     /// whatever the admin and router; JSON `compliance_registry`, `compliance_registry_codehash`. The
-    /// admin's `ELIGIBLE_CONTRACT` rows for a DEX venue (`createDex`) and its `DexPuller` let an `ALLOWLIST` token reach the
+    /// admin's `ELIGIBLE_CONTRACT` rows for a DEX venue (`createDex`) and its `DexPuller` let a `KYC` token (round 3s) reach the
     /// venue, which it refuses before them.
     function test_registryDeployedAndDexAttested() public {
         DeployHarness h = new DeployHarness();
@@ -299,7 +299,7 @@ contract GovDeployTest is Test {
         _attest(r, nid(alice), 1, type(uint64).max);
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.admin) = ("Reg", "REG", nid(address(0x0A11)));
-        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.ALLOWLIST);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.KYC); // round 3s: the registry check is bit 28
         (c.initialSupply, c.initialHolder) = (1000, alice);
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.termsHash) = (address(r), 1, keccak256("terms"));
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "t");
@@ -598,7 +598,8 @@ contract GovDeployTest is Test {
         // 0xcA8b1b01BB32b807Fc7848CE3a28EfA727A28BBf; round 3r T15 (the router's view `smartKeyCloneHash()`, +52 B; the
         // metadata hash: `IOpenFactory`'s directory, spec §13): -> 0x27D74283541a0bEfd3281ADa6609dfC3221d1836; round 3r T7 (the fifteen
         // admin ops of the factory and a compliance registry, spec §5.4; owner naming 2026-11-11): ->
-        // 0x668B713392eEcF586D1BAbF16be677b94a71E8f0; round 3t (CTR-PQZ-36: `mtxSetVerifierFee`, its typehash): -> this
+        // 0x668B713392eEcF586D1BAbF16be677b94a71E8f0; round 3s T4 (CTR-GOV-24: `mtxSetAllowed`, `mtxSetDenied`,
+        // `mtxEnableFeature`) and round 3t (CTR-PQZ-36: `mtxSetVerifierFee`): -> this (RE-PIN after the 3s merge)
         assertEq(router, 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a, "GovernanceRouter");
     }
 

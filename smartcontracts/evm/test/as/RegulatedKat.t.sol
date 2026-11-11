@@ -9,6 +9,8 @@ import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {nid} from "../helpers/Ids.sol";
 
 /// @notice ua-mtx-merge T34 (regulated-kinds spec §3.1, §3.3, §3.6, §5, §7): `smartcontracts/vectors/governance/regulated_kat.json`,
@@ -86,8 +88,10 @@ contract RegulatedKatTest is RegFixture {
             _c("DISABLE", vm.toString(GovernanceLib.DISABLE)), "}");
         string memory c = string.concat("{", _kv("freeze", vm.toString(RegulatedLib.C_FREEZE)),
             _c("allowlist", vm.toString(RegulatedLib.C_ALLOW)), _c("denylist", vm.toString(RegulatedLib.C_DENY)),
-            _c("record", vm.toString(RegulatedLib.C_RECORD)), "}");
-        j = string.concat(j, ",\n    ", _kv("actions", a), _c("controls", c), "},\n");
+            _c("record", vm.toString(RegulatedLib.C_RECORD)), _c("kyc", vm.toString(RegulatedLib.C_KYC)), "}");
+        string memory l = string.concat("{", _kv("allowed", vm.toString(RegulatedLib.ALLOWED)),
+            _c("denied", vm.toString(RegulatedLib.DENIED)), _c("maxBatch", vm.toString(RegulatedLib.MAX_LIST_BATCH)), "}");
+        j = string.concat(j, ",\n    ", _kv("actions", a), _c("controls", c), _c("listFlags", l), "},\n");
     }
 
     // ------------------------------------------------------------------ recordId (spec §3.1)
@@ -126,29 +130,30 @@ contract RegulatedKatTest is RegFixture {
         uint8 reason;
     }
 
-    /// The account's compliance row and the token's answer; with a list on, `ok` is the registry's `hasFlags` on its masks.
-    function _rx(address t, bool allow, bool deny, Acct memory a) internal view returns (Rx memory x) {
+    /// The account's compliance row and the token's answer; with `KYC` on (round 3s, both masks), `ok` is the registry's
+    /// `hasFlags` on its masks (a zero mask constrains nothing).
+    function _rx(address t, uint64 req, uint64 den, Acct memory a) internal view returns (Rx memory x) {
         uint32 id;
         (x.flags, x.until, id) = creg.complianceOf(a.id);
         x.enabled = creg.kycProviderEnabled(id);
         (x.ok, x.reason) = _r(t).canReceive(a.id);
-        if (allow || deny) {
-            assertEq(x.ok, creg.hasFlags(a.id, allow ? KYC : 0, deny ? SANCTIONED : 0), a.name);
+        if (req | den != 0) {
+            assertEq(x.ok, creg.hasFlags(a.id, req, den), a.name);
         } else {
             assertTrue(x.ok && x.reason == 0, a.name);
         }
     }
 
-    /// Config `c`: 0 no list, 1 `ALLOWLIST`, 2 `DENYLIST`, 3 both.
+    /// Config `c`: 0 `KYC` off, 1 `KYC` with `requiredFlags` only, 2 with `deniedFlags` only, 3 both masks.
     function _receiverRow(uint256 c, address t, Acct memory a, bool last) internal view returns (string memory) {
-        (bool allow, bool deny) = (c == 1 || c == 3, c >= 2);
-        return string.concat(_rxHead(c, a.name), _rxTail(_rx(t, allow, deny, a)), _end(last));
+        (uint64 req, uint64 den) = (c == 1 || c == 3 ? KYC : 0, c >= 2 ? SANCTIONED : 0);
+        return string.concat(_rxHead(c, a.name, req, den), _rxTail(_rx(t, req, den, a)), _end(last));
     }
 
-    function _rxHead(uint256 c, string memory name) internal view returns (string memory j) {
-        string[4] memory names = ["no list", "ALLOWLIST", "DENYLIST", "both lists"];
-        j = string.concat("    {", _kv("name", _q(string.concat(names[c], ": ", name))), _c("allowlist", _b(c == 1 || c == 3)));
-        j = string.concat(j, _c("denylist", _b(c >= 2)), _c("requiredFlags", _u(KYC)), _c("deniedFlags", _u(SANCTIONED)));
+    function _rxHead(uint256 c, string memory name, uint64 req, uint64 den) internal view returns (string memory j) {
+        string[4] memory names = ["KYC off", "KYC, requiredFlags", "KYC, deniedFlags", "KYC, both masks"];
+        j = string.concat("    {", _kv("name", _q(string.concat(names[c], ": ", name))), _c("kyc", _b(c != 0)));
+        j = string.concat(j, _c("requiredFlags", _u(req)), _c("deniedFlags", _u(den)));
     }
 
     function _rxTail(Rx memory x) internal view returns (string memory j) {
@@ -190,6 +195,72 @@ contract RegulatedKatTest is RegFixture {
         }
         j = string.concat(j, "  ],\n");
         _back(s);
+    }
+
+    // ------------------------------------------------------------------ the lists (round 3s, spec §4.2, §4.3)
+
+    /// `canReceive` of a token with `ALLOWLIST` / `DENYLIST` on or off (no `KYC`: no call) for each `listFlagsOf` byte:
+    /// reason 5 not on the allow list, 6 on the deny list, the allow list first.
+    function _lists() internal returns (string memory j) {
+        uint256 s = vm.snapshotState();
+        address[4] memory ts;
+        string[4] memory names = ["no list", "ALLOWLIST", "DENYLIST", "both lists"];
+        j = '  "lists": [\n';
+        for (uint256 c; c < 4; ++c) {
+            IFactoryToken.TokenConfig memory cfg = _cfg8();
+            cfg.features |= (c & 1) << GovernanceBits.ALLOWLIST | (c >> 1) << GovernanceBits.DENYLIST;
+            ts[c] = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(cfg), bytes32(c + 1));
+            for (uint8 fl; fl < 4; ++fl) {
+                bytes32 a = nid(address(uint160(0xC0 + fl)));
+                bytes32[] memory one = new bytes32[](1);
+                one[0] = a;
+                vm.startPrank(issuer);
+                if (fl & 1 != 0) IRegulatedToken(ts[c]).setAllowed(one, true);
+                if (fl & 2 != 0) IRegulatedToken(ts[c]).setDenied(one, true);
+                vm.stopPrank();
+                assertEq(IRegulatedToken(ts[c]).listFlagsOf(a), fl);
+                j = string.concat(j, _listRow(string.concat(names[c], ": listFlags ", vm.toString(fl)), ts[c], a, fl,
+                    c == 3 && fl == 3));
+            }
+        }
+        j = string.concat(j, "  ],\n");
+        _back(s);
+    }
+
+    /// Spec §5.5 (Fable P2-2): `GovernanceBits.enableable` on kind 8's and kind 12's masks, one row per term failing alone
+    /// (the base row: nothing set, nothing locked, an admin, a registry).
+    function _enableable() internal pure returns (string memory j) {
+        uint256 v8 = GovernanceBits.NORMAL_BITS | (GovernanceBits.REGULATED | (1 << GovernanceBits.RECORD)
+            | (1 << GovernanceBits.MODERATE) | (1 << GovernanceBits.OPERATOR_TRANSFER) | (1 << GovernanceBits.TAX));
+        uint256 v12 = v8 & ~uint256(1 << GovernanceBits.ALLOWLIST) | GovernanceBits.PQZ_KIND_BITS;
+        uint256 v0 = GovernanceBits.NORMAL_BITS;
+        j = '  "enableable": [\n';
+        j = string.concat(j, _enRow("kind 8, the base", 0, 0, v8, true, true, false),
+            _enRow("kind 8, 8 set", 1 << 8, 0, v8, true, true, false),
+            _enRow("kind 8, 9 locked off", 0, 1 << 9, v8, true, true, false),
+            _enRow("kind 8, 28 locked off", 0, 1 << 28, v8, true, true, false),
+            _enRow("kind 8, no registry", 0, 0, v8, true, false, false));
+        j = string.concat(j, _enRow("kind 8, admin 0", 0, 0, v8, false, true, false),
+            _enRow("kind 12 (no bit 8)", 0, 0, v12, true, true, false),
+            _enRow("kind 0 (no regulated bit)", 0, 0, v0, true, true, false),
+            _enRow("kind 8, all set", (1 << 8) | (1 << 9) | (1 << 28), 0, v8, true, true, true));
+        j = string.concat(j, "  ],\n");
+    }
+
+    function _listRow(string memory name, address t, bytes32 a, uint8 fl, bool last) internal view returns (string memory) {
+        (bool ok, uint8 why) = _r(t).canReceive(a);
+        string memory h = string.concat("    {", _kv("name", _q(name)), _c("controls", vm.toString(_r(t).regulatedConfig().controls)));
+        return string.concat(h, _c("listFlags", vm.toString(fl)), _c("ok", _b(ok)), _c("reason", vm.toString(why)), _end(last));
+    }
+
+    function _enRow(string memory name, uint256 f, uint256 l, uint256 v, bool admin, bool reg, bool last)
+        internal pure returns (string memory)
+    {
+        uint256 e = GovernanceBits.enableable(f, l, v, admin ? bytes32(uint256(1)) : bytes32(0), reg);
+        string memory h = string.concat("    {", _kv("name", _q(name)), _c("features", vm.toString(f)),
+            _c("lockedFeatures", vm.toString(l)));
+        return string.concat(h, _c("valid", vm.toString(v)), _c("admin", _b(admin)), _c("registry", _b(reg)),
+            _c("enableable", vm.toString(e)), _end(last));
     }
 
     // ------------------------------------------------------------------ the freeze transitions T1-T9 (spec §3.3)
@@ -554,9 +625,11 @@ contract RegulatedKatTest is RegFixture {
             '  "note": "Generated by smartcontracts/evm/test/as/RegulatedKat.t.sol (WRITE_REGULATED_KAT=true) from a real kind-8 token',
             " and the canonical ComplianceRegistry; never edit by hand. Regulated-kinds spec 3.1, 3.3, 3.6, 5, 7. recordId:",
             " keccak256(abi.encode(orderId, subject, beneficiary)), the key the token stores the order under. receiver: canReceive(account)",
-            " (ok, reason) of a token with ALLOWLIST (requiredFlags) and DENYLIST (deniedFlags) on or off; ok equals hasFlags(account,",
-            " ALLOWLIST ? requiredFlags : 0, DENYLIST ? deniedFlags : 0), both off true with no call; reason 1 not attested or flags",
-            " missing, 2 expired, 3 KYC provider disabled, 4 denied. freeze: one row per transition of spec 3.3 on freezeOf(account), the",
+            " (ok, reason) of a token with KYC (bit 28, round 3s) on or off and its masks (0 = none); ok equals hasFlags(account,",
+            " requiredFlags, deniedFlags), KYC off true with no call; reason 1 not attested or flags missing, 2 expired, 3 KYC provider",
+            " disabled, 4 denied. lists: canReceive of a token with ALLOWLIST / DENYLIST on or off (no KYC) for each listFlagsOf byte",
+            " (ALLOWED 1, DENIED 2): reason 5 not on the allow list, 6 on the deny list. enableable: GovernanceBits.enableable(features,",
+            " lockedFeatures, valid, admin != 0, registry), the bits of 8, 9, 28 that can still be switched on (spec 5.5). freeze: one row per transition of spec 3.3 on freezeOf(account), the",
             " state before (record: the order the call names, read before it) and after, F after (isFrozen), or the revert (sig, args,",
             " data); a row with call null is time or a feature going, the state unchanged. commit: pendingGrant(bit, account).commit",
             " after the proposal, keccak256(abi.encode(uint8 action, uint8 bit, bytes32 account, argsHash)), argsHash",
@@ -570,6 +643,8 @@ contract RegulatedKatTest is RegFixture {
         j = string.concat(j, _recordIds());
         vm.warp(N);
         j = string.concat(j, _receivers());
+        vm.warp(N);
+        j = string.concat(j, _lists(), _enableable());
         vm.warp(N);
         j = string.concat(j, _freezes());
         vm.warp(N);

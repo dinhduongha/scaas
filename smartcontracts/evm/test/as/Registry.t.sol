@@ -214,7 +214,7 @@ contract RegistryTest is RegFixture {
 
     // ------------------------------------------------------------------ R through the token (kinds 8, 9)
 
-    /// `ALLOWLIST` and `DENYLIST` on the receiver of a transfer (spec §3.2): unattested refused `NotEligible(to, 0)`;
+    /// `KYC` (round 3s, both masks) on the receiver of a transfer (spec §3.2): unattested refused `NotEligible(to, 0)`;
     /// attested passes; lapsed refused; `validUntil == now` passes; denied refused; `ELIGIBLE_CONTRACT` passes required,
     /// never denied. A denied or lapsed holder still sends (only receivers are checked).
     function test_receiverTruthTableThroughToken() public {
@@ -249,7 +249,8 @@ contract RegistryTest is RegFixture {
         }
     }
 
-    /// One list at a time: `DENYLIST` alone lets an unattested receiver through; `ALLOWLIST` alone ignores denied flags.
+    /// One mask at a time (round 3s: a zero mask constrains nothing): a deny mask alone lets an unattested receiver through; a
+    /// required mask alone ignores denied flags.
     function test_eachListAlone() public {
         for (uint256 i; i < 2; ++i) {
             _clearBob();
@@ -266,29 +267,33 @@ contract RegistryTest is RegFixture {
         }
     }
 
-    /// A disabled list stops its check (the mirror, Codex 3): after `disableFeature(ALLOWLIST)` an unattested receiver
-    /// passes (its `requiredFlags` are no longer read) and `DENYLIST` still refuses; after `(DENYLIST)` (one call each: not
-    /// delayed bits) the token makes no registry call.
-    function test_disabledListStopsChecking() public {
+    /// A disabled `KYC` stops the check (the mirror, Codex 3; round 3s, spec §5.2): `disableFeature(KYC)` is delayed (the
+    /// proposal changes nothing, RK-3), its confirm after `grantDelay` ends every registry call; `enableFeature(KYC)` again
+    /// at once brings it back.
+    function test_disabledKycStopsChecking() public {
         for (uint256 i; i < 2; ++i) {
             _clearBob();
             address t = _listed(i, KYC, SANCTIONED, bytes32(i));
             bytes memory ne = abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0));
             vm.prank(alice);
             vm.expectRevert(ne);
-            IERC20(t).transfer(bob, 1); // the control: unattested, refused by ALLOWLIST
-            _disable(t, GovernanceBits.ALLOWLIST);
+            IERC20(t).transfer(bob, 1); // the control: unattested, refused by KYC
+            _disable(t, GovernanceBits.KYC);
             vm.prank(alice);
-            IERC20(t).transfer(bob, 1); // ALLOWLIST off: requiredFlags no longer read
-            _attest(nid(bob), SANCTIONED, MAX);
-            vm.prank(alice);
-            vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0)));
-            IERC20(t).transfer(bob, 1);
-            _disable(t, GovernanceBits.DENYLIST);
+            vm.expectRevert(ne);
+            IERC20(t).transfer(bob, 1); // proposed only: still checked
+            vm.warp(block.timestamp + GD);
+            _disable(t, GovernanceBits.KYC);
             _countStart();
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);
             assertEq(_countEnd(0), 0, "no registry call");
+            vm.prank(ownerA);
+            IRegulatedToken(t).enableFeature(GovernanceBits.KYC);
+            vm.prank(alice);
+            vm.expectRevert(ne);
+            IERC20(t).transfer(bob, 1);
+            vm.warp(1_800_000_000);
         }
     }
 
@@ -296,7 +301,7 @@ contract RegistryTest is RegFixture {
     /// holder is refused `NotEligible`.
     function test_initialSupplyRecipientChecked() public {
         IFactoryToken.TokenConfig memory c = _cfg8();
-        c.features |= 1 << GovernanceBits.ALLOWLIST;
+        c.features |= 1 << GovernanceBits.KYC;
         (c.reg.complianceRegistry, c.reg.requiredFlags) = (address(creg), KYC);
         c.initialHolder = bob;
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0)));
@@ -328,7 +333,7 @@ contract RegistryTest is RegFixture {
         for (uint256 i; i < 2; ++i) {
             IOpenFactory.TokenKind k = i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED;
             IFactoryToken.TokenConfig memory c = i == 0 ? _cfg8() : _cfg9();
-            c.features |= 1 << GovernanceBits.DENYLIST;
+            c.features |= 1 << GovernanceBits.KYC;
             c.reg.deniedFlags = SANCTIONED;
             address other = address(new Holder());
             address[3] memory bad = [other, bob, address(0xDEAD0)];
@@ -343,7 +348,7 @@ contract RegistryTest is RegFixture {
             IRegulatedToken.RegulatedConfig memory rc = IRegulatedToken(t).regulatedConfig();
             assertEq(rc.complianceRegistry, address(creg));
             assertEq(rc.deniedFlags, SANCTIONED);
-            assertEq(rc.controls & 0x18, 0x10, "DENYLIST in the mirror");
+            assertEq(rc.controls & 0x58, 0x40, "KYC in the mirror, no list");
         }
     }
 

@@ -19208,6 +19208,28 @@
     "group": "A"
    },
    {
+    "sel": "68c0006d",
+    "sig": "enableFeature(uint8)",
+    "name": "enableFeature",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint8 bit"
+    ],
+    "names": [
+     "bit"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "47aea5b5",
     "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
     "name": "executeMetaTransaction",
@@ -19576,6 +19598,28 @@
     "vis": "external",
     "domain": "governance",
     "group": "A"
+   },
+   {
+    "sel": "42f2e200",
+    "sig": "listFlagsOf(bytes32)",
+    "name": "listFlagsOf",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account"
+    ],
+    "names": [
+     "account"
+    ],
+    "returns": "uint8 _p0",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
    },
    {
     "sel": "e47528cf",
@@ -20809,6 +20853,54 @@
     "group": "A"
    },
    {
+    "sel": "8817535c",
+    "sig": "setAllowed(bytes32[],bool)",
+    "name": "setAllowed",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
+    "sel": "db194d97",
+    "sig": "setDenied(bytes32[],bool)",
+    "name": "setDenied",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "e0a44abe",
     "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
     "name": "setGrant",
@@ -21749,6 +21841,28 @@
     "group": "A"
    },
    {
+    "sel": "68c0006d",
+    "sig": "enableFeature(uint8)",
+    "name": "enableFeature",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint8 bit"
+    ],
+    "names": [
+     "bit"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "47aea5b5",
     "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
     "name": "executeMetaTransaction",
@@ -22156,6 +22270,28 @@
     ],
     "vis": "external",
     "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "42f2e200",
+    "sig": "listFlagsOf(bytes32)",
+    "name": "listFlagsOf",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account"
+    ],
+    "names": [
+     "account"
+    ],
+    "returns": "uint8 _p0",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
     "group": "W"
    },
    {
@@ -23762,6 +23898,54 @@
     "group": "A"
    },
    {
+    "sel": "8817535c",
+    "sig": "setAllowed(bytes32[],bool)",
+    "name": "setAllowed",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
+    "sel": "db194d97",
+    "sig": "setDenied(bytes32[],bool)",
+    "name": "setDenied",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "e0a44abe",
     "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
     "name": "setGrant",
@@ -25085,6 +25269,28 @@
     "group": "A"
    },
    {
+    "sel": "68c0006d",
+    "sig": "enableFeature(uint8)",
+    "name": "enableFeature",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint8 bit"
+    ],
+    "names": [
+     "bit"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "35ad08aa",
     "sig": "envelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address))",
     "name": "envelopeBinding",
@@ -25475,6 +25681,28 @@
     "vis": "external",
     "domain": "governance",
     "group": "A"
+   },
+   {
+    "sel": "42f2e200",
+    "sig": "listFlagsOf(bytes32)",
+    "name": "listFlagsOf",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account"
+    ],
+    "names": [
+     "account"
+    ],
+    "returns": "uint8 _p0",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
    },
    {
     "sel": "e47528cf",
@@ -27259,6 +27487,54 @@
     "group": "Z"
    },
    {
+    "sel": "8817535c",
+    "sig": "setAllowed(bytes32[],bool)",
+    "name": "setAllowed",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
+    "sel": "db194d97",
+    "sig": "setDenied(bytes32[],bool)",
+    "name": "setDenied",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "e0a44abe",
     "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
     "name": "setGrant",
@@ -28445,6 +28721,28 @@
     "group": "A"
    },
    {
+    "sel": "68c0006d",
+    "sig": "enableFeature(uint8)",
+    "name": "enableFeature",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint8 bit"
+    ],
+    "names": [
+     "bit"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "35ad08aa",
     "sig": "envelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address))",
     "name": "envelopeBinding",
@@ -28874,6 +29172,28 @@
     ],
     "vis": "external",
     "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "42f2e200",
+    "sig": "listFlagsOf(bytes32)",
+    "name": "listFlagsOf",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account"
+    ],
+    "names": [
+     "account"
+    ],
+    "returns": "uint8 _p0",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
     "group": "W"
    },
    {
@@ -31140,6 +31460,54 @@
     "group": "Z"
    },
    {
+    "sel": "8817535c",
+    "sig": "setAllowed(bytes32[],bool)",
+    "name": "setAllowed",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
+    "sel": "db194d97",
+    "sig": "setDenied(bytes32[],bool)",
+    "name": "setDenied",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "e0a44abe",
     "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
     "name": "setGrant",
@@ -32537,6 +32905,28 @@
     "group": "A"
    },
    {
+    "sel": "68c0006d",
+    "sig": "enableFeature(uint8)",
+    "name": "enableFeature",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint8 bit"
+    ],
+    "names": [
+     "bit"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "35ad08aa",
     "sig": "envelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address))",
     "name": "envelopeBinding",
@@ -32927,6 +33317,28 @@
     "vis": "external",
     "domain": "governance",
     "group": "A"
+   },
+   {
+    "sel": "42f2e200",
+    "sig": "listFlagsOf(bytes32)",
+    "name": "listFlagsOf",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account"
+    ],
+    "names": [
+     "account"
+    ],
+    "returns": "uint8 _p0",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
    },
    {
     "sel": "e47528cf",
@@ -34941,6 +35353,54 @@
     "group": "A"
    },
    {
+    "sel": "8817535c",
+    "sig": "setAllowed(bytes32[],bool)",
+    "name": "setAllowed",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
+    "sel": "db194d97",
+    "sig": "setDenied(bytes32[],bool)",
+    "name": "setDenied",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "e0a44abe",
     "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
     "name": "setGrant",
@@ -36251,6 +36711,28 @@
     "group": "A"
    },
    {
+    "sel": "68c0006d",
+    "sig": "enableFeature(uint8)",
+    "name": "enableFeature",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint8 bit"
+    ],
+    "names": [
+     "bit"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
     "sel": "35ad08aa",
     "sig": "envelopeBinding((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address))",
     "name": "envelopeBinding",
@@ -36680,6 +37162,28 @@
     ],
     "vis": "external",
     "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "42f2e200",
+    "sig": "listFlagsOf(bytes32)",
+    "name": "listFlagsOf",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 account"
+    ],
+    "names": [
+     "account"
+    ],
+    "returns": "uint8 _p0",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
     "group": "W"
    },
    {
@@ -39186,6 +39690,54 @@
     "vis": "external",
     "domain": "governance",
     "group": "A"
+   },
+   {
+    "sel": "8817535c",
+    "sig": "setAllowed(bytes32[],bool)",
+    "name": "setAllowed",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
+   },
+   {
+    "sel": "db194d97",
+    "sig": "setDenied(bytes32[],bool)",
+    "name": "setDenied",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32[] calldata accounts",
+     "bool on"
+    ],
+    "names": [
+     "accounts",
+     "on"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "regulated",
+    "group": "W"
    },
    {
     "sel": "e0a44abe",
