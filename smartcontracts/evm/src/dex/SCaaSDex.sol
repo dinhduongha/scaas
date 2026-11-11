@@ -602,8 +602,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     ///      surplus: B has one receiver); A at least `base` = snapshot + the makers' receive + the taker's Path B
     ///      refund, the rest the route's `leftover`, at most `outsideSell` (`ConservationBroken(A)`). DX7: a leftover
     ///      is refunded to the taker fee-free if its sold part still satisfies its order (`_takerSoldCheck`), then
-    ///      restored to the order's capacity (not an IOC one: it stays closed); the makers paid as in `mtxSettle`, the
-    ///      taker as on the exchange path; conservation over every token.
+    ///      restored to the order's capacity (not an IOC one: it stays closed); a SCaaS leg's restore moves the leftover
+    ///      itself (Fable B P2-1), so the DEX pays it only for an outside or IOC leg; the makers paid as in `mtxSettle`,
+    ///      the taker as on the exchange path; conservation over every token.
     function _hybridOut(HybridPlan calldata p, Tok[] memory t, Calc memory taker, Calc[] memory makers,
         address submitter) private
     {
@@ -614,14 +615,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         if (bal < base) revert ConservationBroken(a.token);
         uint256 leftover = bal - base;
         if (leftover > p.outsideSell) revert ConservationBroken(a.token);
+        bool restore = leftover != 0 && taker.o.flags & TradeLib.IOC == 0;
         if (leftover != 0) {
             _takerSoldCheck(taker, leftover);
             taker.sold -= leftover;
-            taker.refund += leftover;
+            if (!(restore && taker.ua)) taker.refund += leftover; // a SCaaS leg's restore is its refund (B P2-1)
         }
         for (uint256 i; i < makers.length; ++i) _pay(p.ref, t[1].token, makers[i], submitter);
         _payExchange(p.ref, a.token, taker, t[1].excess, submitter);
-        if (leftover != 0 && taker.o.flags & TradeLib.IOC == 0) _restorePulled(a.token, taker, leftover);
+        if (restore) _restorePulled(a.token, taker, leftover);
         _conserve(t);
     }
 
@@ -637,8 +639,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         if (TradeLib.mulGt(sold, o.receiveAmount, taker.recv, o.amount)) revert PriceLimit(taker.h);
     }
 
-    /// @dev DX7: the refunded leftover is fillable again — the SCaaS token's `restorePulled`, or this DEX's own
-    ///      `TradeLib` state for an outside token.
+    /// @dev DX7: the refunded leftover is fillable again — the SCaaS token's `restorePulled` (which moves it from this
+    ///      DEX to the taker's `from`, B P2-1), or this DEX's own `TradeLib` state for an outside token.
     function _restorePulled(address tokenA, Calc memory c, uint256 amount) private {
         if (c.ua) ITradeToken(tokenA).restorePulled(c.o, amount);
         else TradeLib.restore(c.o, c.h, amount, address(this));

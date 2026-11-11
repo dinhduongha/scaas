@@ -167,9 +167,12 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
     }
 
     /// @notice DX7: only `o.dex`, at most what it pulled for the order in this transaction (`TradeLib.restore`); a
-    ///         direct read of the caller, never allowlisted.
+    ///         direct read of the caller, never allowlisted. The restore is the refund (Fable B P2-1, CTR-DEX-27 Change):
+    ///         `amount` moves from `o.dex` back to `o.from` with the capacity, so a dex looping pull, restore, pull takes
+    ///         at most the signed `amount` (CTR-DEX-19).
     function _restorePulledBody(ITradeToken.UATradeOrder calldata o, uint256 amount) internal {
         TradeLib._restore(o, _tradeOrderDigestBody(o), amount, msg.sender);
+        _uaMove(TradeLib.pad(o.dex), o.from, amount);
     }
 
     /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one. A native id needs no registry (C).

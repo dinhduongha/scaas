@@ -230,8 +230,9 @@ function cancelOrderDigest(UATradeOrder calldata o) external view returns (bytes
 `mtxInvalidateNonces(bytes32 from, …)` since the merge).
 The token has exactly one recipient, `o.dex`; it splits nothing and pays no fee itself. Besides `mtxTrade` the DEX may call the
 token's `restorePulled(o, amount)` (a `UATradeOrder`; `msg.sender == o.dex`, at most this
-transaction's pull for the order hash, `RestoreExceedsPull`, event `PullRestored`) to give a refunded hybrid taker's
-unsold remainder back as capacity ([CTR-DEX-27](#CTR-DEX-27)); it is on no allowlist and forbidden in every interaction. With `sellFill > 0` and
+transaction's pull for the order hash, `RestoreExceedsPull`, event `PullRestored`) to give a hybrid taker's unsold
+remainder back: the restore moves `amount` from `o.dex` to `o.from` and gives the capacity back with it
+([CTR-DEX-27](#CTR-DEX-27)); it is on no allowlist and forbidden in every interaction. With `sellFill > 0` and
 `receiveAmount > 0` the price and received-side checks force `receiveFill > 0`. `mtxTrade` is not in any allowlist
 (`msg.sender` must be a contract other than the token) and stays a direct read of `msg.sender`
 ([CTR-MTX-18](metatx.md#CTR-MTX-18)); a wrapper calls it to wrap by signature (`mtxWrapOrder`, [CTR-TOK-20](token-wrappers.md#CTR-TOK-20)).
@@ -691,20 +692,27 @@ function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata da
 6. **Pay.** Makers as `mtxSettle` (`recv − dexFee` to the destination, fee split, Path B refund, `LegSettled` /
    `UALegSettled`). The taker receives `floor − dexFee + (out − outsideFloor)`: **all output above `outsideFloor` goes to
    the taker** (B has one receiver, so [CTR-DEX-21](#CTR-DEX-21) gives it the whole excess), the surplus carries no fee;
-   the leftover of A goes back to the taker's `from`, fee-free. The taker's event is the existing `ExchangeLegSettled` /
+   the leftover of A goes back to the taker's `from`, fee-free (for a SCaaS taker that is not IOC, by the token's
+   `restorePulled` in step 7, not by the DEX). The taker's event is the existing `ExchangeLegSettled` /
    `UAExchangeLegSettled` with `sold = taker.fill − leftover`, `receivedFloor = Σ maker sold + outsideFloor`, `surplus =
-   out − outsideFloor`, `refund` including the leftover, `limitReceive = ⌈sold · receiveAmount / amount⌉`: no new event,
+   out − outsideFloor`, `refund` = what the DEX paid back (the leftover included, except a SCaaS taker's restored
+   leftover, which the token's `PullRestored(h, amount)` reports), `limitReceive = ⌈sold · receiveAmount / amount⌉`: no new event,
    the makers' `LegSettled` / `UALegSettled` are read by the watcher and indexer today; the taker's `ExchangeLegSettled`
    / `UAExchangeLegSettled` come with P7 / the `OrderRouter` ([NODE-DEX-04](../node/dex-venue.md#NODE-DEX-04),
    SPECIFIED). The relayer
    share of every fee goes to `msg.sender` ([CTR-DEX-17](#CTR-DEX-17)).
 7. **Restore capacity** (owner 2026-10-30, follow-up: the refunded part is fillable again under the same signed order).
-   Right after paying the refund the DEX calls the sell token's `restorePulled(TradeOrder o, uint256 amount)` (the
-   `UATradeOrder` overload for a UA taker; on the DEX's own state for an outside-token taker; skipped for an IOC taker,
-   which stays closed, and Path B is always IOC). The token requires `msg.sender == o.dex` (`NotDex`) and `amount ≤` the
-   amount this DEX pulled for the order hash **in this transaction** (a transient EIP-1153 counter that `TradeLib` bumps
-   on every pull, `RestoreExceedsPull(h)`), then lowers `pulled[h]` and the counter alike and emits `PullRestored(h,
-   amount)`. A cancel clears the counter (even a no-op cancel), so a cancel in the same transaction can never be undone.
+   After paying the taker the DEX calls the sell token's `restorePulled(UATradeOrder o, uint256 amount)` (on the DEX's
+   own state, with the DEX's own refund, for an outside-token taker; skipped for an IOC taker, which stays closed and
+   is refunded by the DEX, and Path B is always IOC). The token requires `msg.sender == o.dex` (`NotDex`) and `amount ≤`
+   the amount this DEX pulled for the order hash **in this transaction** (a transient EIP-1153 counter that `TradeLib`
+   bumps on every pull, `RestoreExceedsPull(h)`), then lowers `pulled[h]` and the counter alike, **moves `amount` from
+   `o.dex` back to `o.from`** (the restore is the refund) and emits `PullRestored(h, amount)`.
+   Change (2026-11-11, Fable review B P2-1; controller call under the owner's leave; status: BUILT on branch
+   `ua-mtx-fix-contracts`, UNAUDITED): until now the restore moved no token and the DEX paid the leftover itself; a
+   hostile `o.dex` could loop pull, restore, pull in one transaction and take more than the signed `amount`
+   ([CTR-DEX-19](#CTR-DEX-19)). Capacity and tokens now move together, and `SCaaSDex` no longer pays a SCaaS taker's
+   restored leftover (test `test_restorePulled_hostileLoopBounded`). A cancel clears the counter (even a no-op cancel), so a cancel in the same transaction can never be undone.
    A remainder below `minFill` stays closable by the remainder clause ([CTR-DEX-14](#CTR-DEX-14)). **Both `restorePulled`
    selectors are `ForbiddenSelector` in every interaction** (`0x58c18f87` for the `TradeOrder` form, `0x8c4a5df6` for the
    `UATradeOrder` form; controller security ruling at the T4 review, the same reason as `mtxTrade` in
@@ -905,6 +913,8 @@ or sign**, a `TradeOrder` whose `dex` is not on the chain profile's DEX list (fo
 that underlying); the wallet's EIP-712 view shows `dex`; the node routes orders only to DEXes on the chain profile's
 DEX list and never for an unlisted `dex` ([node/dex-venue.md](../node/dex-venue.md)). A contract is not proof of
 honesty; the rule only guarantees that an EOA can never be granted a pull ([CTR-TOK-01](token-wrappers.md#CTR-TOK-01)).
+The bound "the signed `amount`" holds against every entry the dex may call: `restorePulled` gives capacity back only
+with the tokens ([CTR-DEX-27](#CTR-DEX-27) step 7, Change 2026-11-11, Fable review B P2-1).
 `isDex` ([CTR-DEX-24](#CTR-DEX-24)) feeds the client and node checks; tokens do not consult it, so the factory admin gains no power over trades (owner).
 
 ## 9. Signature checks
