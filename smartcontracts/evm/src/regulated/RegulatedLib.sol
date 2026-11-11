@@ -11,6 +11,7 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IComplianceRegistry} from "./IComplianceRegistry.sol";
@@ -400,7 +401,8 @@ library RegulatedLib {
     // ------------------------------------------------------------------ OPERATOR_TRANSFER (spec §3.4, CTR-GOV-20)
 
     /// @notice Bit 22 by `use` with the amount (any holder; `LIMITED` debits its window), then the refusals of CTR-GOV-08:
-    ///         `amount` 0, `ref` 0, `from == to`, 0, either pool or the token on either side, a native `from` with code, an
+    ///         `amount` 0, `ref` 0, `from == to`, 0, either pool or the token on either side, a native `from` with code
+    ///         (`SigCheck.isContract`: an EIP-7702 designator account is an EOA, CTR-UA-24; Fable A-2), an
     ///         unregistered or non-SIGNING derived `to` (`_checkTo`). The token then moves on `_uaMove` (hooked: `P`,
     ///         `F(from)`, `R(to)`): public balances only (CTR-GOV-13), never a confidential slot.
     function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 subject, address uaRegistry)
@@ -410,7 +412,7 @@ library RegulatedLib {
         if (amount == 0) revert IRegulatedToken.AmountZero();
         if (ref == 0) revert IRegulatedToken.RefRequired();
         if (from == 0 || from == to || _pool(from)
-            || (UAKinds.inNativeSpace(from) && address(uint160(uint256(from))).code.length != 0))
+            || (UAKinds.inNativeSpace(from) && SigCheck.isContract(address(uint160(uint256(from))))))
         {
             revert IRegulatedToken.OperatorTargetRefused(from);
         }

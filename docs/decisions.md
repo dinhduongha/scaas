@@ -2016,6 +2016,7 @@ Change (owner 2026-11-07, as specified 2026-11-09 in the T66b spec §2; status: 
 **Why.** Loyalty: each sales clerk (an EOA at the point of sale) moves a buyer's points or gives the store's points within a daily limit; a store manager grants the clerks. The transfer power of the draft's `moderatedTransfer` was contract-only on bit 21, which a clerk's key is not.
 **Cost if wrong.** A single key moves balances within its grant: bounded by the grant terms and the owner's revoke; a `WHOLE` holder is unbounded by design. A loyalty program on a plain kind must use a regulated kind for it.
 **Source.** Owner 2026-11-05 (relayed by the controller); `superpowers/specs/2026-11-05-regulated-kinds.md` §3.4; `research/governance/bit-table.md` row 22.
+Change (2026-11-11, Fable review A-2; controller call under the owner's leave; status: BUILT on branch `ua-mtx-fix-contracts`, UNAUDITED): the "native `from` with code" refusal of `operatorTransfer` reads `SigCheck.isContract`, as the rest of the tree does: an EIP-7702 designator account is an EOA ([CTR-UA-24](#ctr-ua-24--eip-7702-eoas-are-native-classify-by-code)) and stays within the operator's reach. Before, one 7702 authorization put any EOA holder out of it while it kept transacting by signature. Test: `test/as/OperatorTransfer.t.sol` `test_designatorFromIsAnEoa`.
 
 <a id="CTR-GOV-21"></a>
 ### CTR-GOV-21 — TAX: bit 23, the regulated kinds, any holder, granted with the issuer seat, not delay-relaxed
