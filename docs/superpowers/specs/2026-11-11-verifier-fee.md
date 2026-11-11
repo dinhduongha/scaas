@@ -5,7 +5,9 @@
 `NotAdmin`; spec `2026-11-10-admin-not-owner.md` §4.1); the build comes after 3s. PQZ kinds 4, 5, 12, 13 in `OFFCHAIN` mode only;
 `PRECOMPILE` tokens and every Zether kind keep today's behaviour (Zether ≠ PQZ). Recorded in `decisions.md` as
 [CTR-PQZ-36](../../decisions.md#CTR-PQZ-36) (owner: yes) with Change lines on the rules it moves (§14). The component docs move
-with the build (T11).
+with the build (T11). **Controller calls 2026-11-11** on `727eec7a`, under the owner's leave of 2026-11-10: the three open
+questions take their defaults and the `MetaTxLib.sol` comment leaves 3t; each is applied below, tagged (controller call 1 …), and
+listed in §18.
 
 ## 1. The ruling (owner, 2026-11-11, in chat)
 
@@ -29,7 +31,9 @@ The owner's words, on the controller's proposal of the same day: **"OK, vậy đ
 - **R4. Off chain.** The statement builders and prover (`pqz-core`, `clients/clientkeys`, `ua-rs`), `scaas-pqz-verifier` (checks
   the fee word against the token's current `verifierFee`), the node (job fields, simulation, a pre-check of `fee`), wallets (the
   fee, the cap, a pending increase), the vectors from their generators, the matrix.
-- **R5.** The Vietnamese comment on `MODE_OPEN` in `smartcontracts/evm/src/common/MetaTxLib.sol:44` becomes English.
+- **R5.** The Vietnamese comment on `MODE_OPEN` in `smartcontracts/evm/src/common/MetaTxLib.sol:44` becomes English. **Moved out of
+  3t** (controller call 4): Vietnamese comments sit in hundreds of lines across `smartcontracts/evm/src` and `scaas-node/src`, so
+  the controller makes them one separate cleanup item in TODO; 3t changes no comment, no task and no pin for it.
 
 **The controller's additions** (2026-11-11, after the owner asked whether `SHIELD_POOL` can be drained by continuous confidential
 transfers): **A1** state that `verifierFee` is part of the `fee` the relation subtracts from the sender's hidden balance (the new
@@ -61,7 +65,6 @@ parameters, every state-changing `mtx*` relayable at fee 0, one rule on every ch
 | View | `IPqzToken.sol:105-113`; `PqzStateLib.sol:175-180` | `pqzVerifyConfig()` → `PqzVerifyConfig {pqzVerifyMode, verifier, fixed_, pqzVerifierEpoch, pending, eta, noticePeriod}` |
 | `PqzAuth` | `PqzCore.sol:186-188` | the 20 header words verbatim, `fee` among them: the holder's signature binds the fee word |
 | Interface id | `test/merge/PqzPairs.t.sol:476` | `type(IPqzToken).interfaceId == 0x3fef18ca` |
-| R5's comment | `src/common/MetaTxLib.sol:44` | `// không bit nào` on `MODE_OPEN`; the file has other Vietnamese comments (`:7-39`, `:51`, `:84-88`, `:241-254`), outside R5 and this round |
 
 ## 3. Config
 
@@ -78,7 +81,8 @@ uint64 verifierFeeMax;
 
 **Unit.** The fee word's unit, the shielded unit of `confidentialFee` and `decoyFee`: R2 adds `verifierFee` to the word itself.
 The payout is `verifierFee · shieldScale` public units, as `_fromPool` pays `txFee`; at `shieldScale = 1` the two numbers are equal
-(the ruling's "public units" reading is open question 1, §18).
+(controller call 1: this restates the ruling's "public units" precisely and does not change it: the fee is counted in shielded
+units, like `confidentialFee` and the fee word, and paid as `verifierFee · shieldScale` public units).
 
 ### 3.2 The encoding and who reads it
 
@@ -105,7 +109,7 @@ kind (`conf` is in every `TokenConfig`, empty or not); all chains are test-only,
 | `confidentialFee + verifierFeeMax + 8·minDecoyFee ≥ 2^64` or `≥ maxShielded` (today's row, extended) | `BadInit()` (today's error for today's row) |
 | written | `s.verifierFee`, `s.verifierFeeMax` (§4) |
 
-**The cap in the range row** (default of open question 2). The ruling writes the row with `verifierFee`. Checking it with
+**The cap in the range row** (controller call 2). The ruling writes the row with `verifierFee`. Checking it with
 `verifierFeeMax` makes the ruled row hold for every value `setVerifierFee` can write (each is `≤ verifierFeeMax`), so the setter
 needs no range check of its own and op 1 and the burn keep `fee < 2^64` with no runtime check (op 7 keeps its own). The ruled row
 at init follows from it, since `verifierFee ≤ verifierFeeMax` is checked first.
@@ -310,8 +314,9 @@ function _setFee(PqzCore.PqzStorage storage s, uint64 previous, uint64 next) pri
 - **Reused, not copied:** `_admin` (`PqzStateLib.sol:184`), the stored `noticePeriod` (slot 15), `adminGeneration`, `NotProposer`,
   `NotAdmin`, `PqzVerifyConfigInvalid`. Own state (§4), because a verifier transfer and a fee increase may be pending at once.
 - **An admin change or a passed window** leaves the pending dead (`_feeLive` false); the next increase proposes afresh.
-- **No cancel entry** (one entry point, R3): a pending increase dies unconfirmed, or by a decrease (open question 3 for the
-  decrease's effect).
+- **No cancel entry** (one entry point, R3): a pending increase dies unconfirmed, or by a decrease. **A decrease during a pending
+  increase cancels it** (controller call 3): the `VerifierFeeProposed` is superseded, `_setFee` deletes the pending and emits
+  `VerifierFeeSet(previous, next)`; no event of its own, and a later increase gives a new notice.
 - **A fixed verifier** (`pqzVerifierFixed`) fixes the verifier, not its fee: the admin changes the fee on both (R3 names no
   exception). **Admin 0** (no administration): the fee stays at its init value for ever (disclosed at creation, §12).
 - **Order of refusals:** `NotProposer` (a live pending, the same `next`, another caller), `NotAdmin`, `PqzVerifyConfigInvalid`
@@ -465,7 +470,8 @@ by the admin, passes):
 4. **Setter**: a decrease at once (`VerifierFeeSet`), to 0; an increase proposes (`VerifierFeeProposed`, `eta`); a confirm before
    `eta` `VerifierFeeNotReady`, inside the window applies, after `eta + noticePeriod` is a new proposal; after an admin change the
    pending is dead; another caller's confirm `NotProposer`; `> verifierFeeMax` `VerifierFeeAboveMax`; the current value
-   `VerifierFeeSame`; another increase while one is live `VerifierFeePending`; a decrease while one is live drops it; notice 0 applies
+   `VerifierFeeSame`; another increase while one is live `VerifierFeePending`; a decrease while one is live cancels it and emits only `VerifierFeeSet`,
+   the old `eta` no longer confirms; notice 0 applies
    at once with both events; a fixed verifier's fee changes; `PRECOMPILE` `PqzVerifyConfigInvalid`; a stranger `NotAdmin`; through
    the router at fee 0 by a stranger relayer; `verifierFeeMax` never moves (I-V1); the view's four fields, a dead pending as 0.
 5. **A built op after a change**: refuses `AuthRejected`, and with a re-signed `pqzAuth` `PqzVerdictMismatch(3)`; the same op at
@@ -524,7 +530,7 @@ by the admin, passes):
 | N1–N3 | the node skips the pre-check, leaves `vf` out of `expected`, or reports `AuthRejected` after a fee change `dead` | (10) |
 | V1 | the verifier service skips `FEE_WORD_MISMATCH` (only `STATEMENT_MISMATCH` left) | (11), by name |
 
-Gates: every `forge` directory and the node e2e (shared changes: the `TokenConfig` encoding of every kind, `MetaTxLib.sol`),
+Gates: every `forge` directory and the node e2e (shared change: the `TokenConfig` encoding of every kind),
 `script/pqz/at-set.sh <set> test` at the four sets, the size gate, layout, ABI, gas pins (old → new in the commit), `cargo test` +
 `clippy -D warnings` for the node and the verifier service, clientkeys, ua-rs and zether-prover tests, `pqz-core/ffi` tests (not
 the full gate), the local matrix run.
@@ -555,8 +561,9 @@ KB under the notice line**; Q(4) 30,641 → ≈ 31.2–31.5 KB. On 5 and 13 the 
 and Q gets the payout only (28,405 / 29,490 B, +≈ 0.3 KB). `PqzStateLib` +≈ 0.6–0.9 KB (the rows, the setter, the view), each of
 `PqzTransferLib` (24,456 B), `PqzBurnLib` (15,404 B), `PqzViewLib` +≈ 0.1–0.2 KB (`_common`, `Paid`), `GovernanceRouter` +≈ 0.1 KB
 (3f's three router ops measured +304 B), every kind's A +≈ 40–80 B (the `TokenConfig` decoder, `_requireUnused`), `ZetherLib` +≈ 30
-B; the libraries' lines are 33,903 / 35,694 B. The `MetaTxLib.sol` comment changes no byte but each artifact's metadata hash
-(`bytecode_hash` is the default), so every code-hash pin and link-closure row moves, old → new in T9.
+B; the libraries' lines are 33,903 / 35,694 B. Code-hash pins move only for the contracts 3t changes: every token kind (its
+`TokenConfig` decoder), the PQZ libraries and the router, old → new in T9; with the `MetaTxLib.sol` comment out of 3t (controller
+call 4) no other artifact's metadata hash moves.
 
 **Lever.** None of `docs/research/evm-size-levers.md`'s levers is needed [estimate]: they answer the old 64 KiB token limit, and
 Q(12) stays under its notice line. If T9's measurement after 3s passes 33,780 B at any set, the ruled split applies
@@ -569,7 +576,7 @@ its reason.
 |---|---|---|
 | T0 | The round's gate script (per-step logs, resume, progress lines), mutant harness, summary header | 0.25 d |
 | T1 | Red tests §15 (1)–(7), the typehash pin, the layout rows, `PqzFeeHandler` skeleton | 0.75 d |
-| T2 | Contracts: `IFactoryToken` fields; `PqzStateLib` (init rows, `setVerifierFee`, `_feeLive`, `_setFee`, the view); `PqzCore` (storage, `Op.verifierFee`, `_common`, `Paid`, `_paid`, `verifierPayee`); `PqzLayer` (`_single`, `_multi`, `_burn`); `MetaTokenBase`, `ZetherLib`; `IPqzToken` (entry, struct, errors, events); the module stubs (`entries.json`, `gen_faces.py`, Q on 4, 12, S on 5, 13); the router op; the `MetaTxLib.sol:44` comment ("no bit set") | 1.5 d |
+| T2 | Contracts: `IFactoryToken` fields; `PqzStateLib` (init rows, `setVerifierFee`, `_feeLive`, `_setFee`, the view); `PqzCore` (storage, `Op.verifierFee`, `_common`, `Paid`, `_paid`, `verifierPayee`); `PqzLayer` (`_single`, `_multi`, `_burn`); `MetaTokenBase`, `ZetherLib`; `IPqzToken` (entry, struct, errors, events); the module stubs (`entries.json`, `gen_faces.py`, Q on 4, 12, S on 5, 13); the router op | 1.5 d |
 | T3 | §15 (1)–(7) green, the router's binding matrix, B1 | 0.75 d |
 | T4 | §15 (8) invariants F1–F6, §15 (9) `pqz-core/ffi/tests/fee_word.rs` | 1 d |
 | T5 | Vectors and clients: `verifier_fee.json` and its writer, `typed_ops.json`, `selector_audit.json` by hand, the two `state.json`; clientkeys, ua-rs (`pqzfee.rs`), zether-prover; `e2e.py`, `pqz_kat.py`; the 19 `ConfidentialConfig` sites and the scripts; generated and pinned files (`face_abi.json`, `test/v2/module-opcodes.json`, `test/modules/Groups.t.sol`, `Modules.t.sol`, the link-closure rows) | 1 d |
@@ -581,15 +588,17 @@ its reason.
 | T11 | Docs: `pq-zero-knowledge.md` (CTR-PQZ-36's text, §9.5, the fee bullet, CTR-PQZ-17, §7, §12, §14), `integration.md`, `clients/*.md`, the node docs, `token-wrappers.md`'s module table; `docs_check` | 0.5 d |
 |  | **Total** | **≈ 9.5 d** |
 
-## 18. Open questions (each blocks the build; the default applies unless the owner overrides)
+## 18. Controller calls (2026-11-11, on `727eec7a`, under the owner's leave of 2026-11-10)
 
-1. **The unit of `verifierFee`.** The ruling says "public units"; it also adds `verifierFee` to the fee word, which counts shielded
-   units (`confidentialFee`, `decoyFee`). Default: the fee word's unit, paid as `verifierFee · shieldScale` public units (§3.1); the
-   same number at `shieldScale = 1`. The other reading (public units, converted) would need `verifierFee` a multiple of
-   `shieldScale` and a conversion in the token and every client.
-2. **The range row at init uses the cap.** The ruling writes `confidentialFee + verifierFee + 8·minDecoyFee`. Default: the row with
-   `verifierFeeMax`, so it holds for every value the admin can set and the setter needs no range check (§3.3). The literal reading:
-   the row with `verifierFee` at init and again on every `setVerifierFee` (a second error there).
-3. **A decrease while an increase is pending drops the pending** (as `pqzRevokeVerifier` drops a pending verifier, §7.1). Default:
-   dropped, so a wallet shows one state and a later increase gives a new notice. The other reading: the pending stays confirmable
-   after the decrease.
+No open question is left. The controller decided the three the spec raised, and one scope change; each is applied where named.
+
+| # | Call | Applied in |
+|---|---|---|
+| 1 | **Unit.** `verifierFee` and `verifierFeeMax` are in shielded units, like `confidentialFee` and the fee word; the payout is `verifierFee · shieldScale` public units. This restates the ruling's "public units" precisely and does not change it | §3.1, `decisions.md` |
+| 2 | **Init range.** `confidentialFee + verifierFeeMax + 8·minDecoyFee < 2^64` and `< maxShielded`, with the cap, so the setter checks only `next ≤ verifierFeeMax` | §3.3, test (1), M7 |
+| 3 | **A decrease during a pending increase** cancels the pending: `VerifierFeeProposed` is superseded, `VerifierFeeSet(previous, next)` is emitted | §7.1, test (4), M13 |
+| 4 | **The `MetaTxLib.sol` comment fix leaves 3t**: a separate one-pass cleanup of the Vietnamese comments in `smartcontracts/evm/src` and `scaas-node/src`, put in TODO by the controller | §1 R5, §15, §16, §17 |
+
+Kept as written (controller, the same day): `AuthRejected` comes before `PqzVerdictMismatch(3)` on a built op after a fee change,
+mapped to the node's `PQZ_FEE_MISMATCH` and the verifier service's `FEE_WORD_MISMATCH` (§5.3, §10, §11); a fixed verifier's fee
+can still change, and admin 0 freezes the fee (§7.1).
