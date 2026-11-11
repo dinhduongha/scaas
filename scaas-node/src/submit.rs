@@ -712,6 +712,12 @@ impl Submitter {
             Ok(false) if crate::abi::pqz_verdict_refusal(&reason).is_some() => self.pqz_refused(w, reason).await,
             // group 3g (spec §7.3): the PQZ key-version reverts by name; a stale debit or two equal keys never land, a version
             // above current may become current, a proof built before a party's rotation is `PQZ_KEY_ROTATED`, never `dead`
+            // round 3t (CTR-PQZ-36, spec §10): a PQZ debit's `AuthRejected` after an indexed `VerifierFeeSet` of its token is
+            // `PQZ_FEE_MISMATCH`, back in the queue (a decrease may restore the word), never `dead`; without the event `dead`
+            Ok(false) if reason.starts_with("AuthRejected") => match self.fee_moved(w, &reason).await {
+                Some(r) => self.requeue(w, r).await,
+                None => self.fail(w, reason).await,
+            },
             Ok(false) => match crate::abi::pqz_refusal(&reason) {
                 Some(PqzRefusal::Stale) => self.fail(w, format!("PQZ_KEY_STALE: {reason}")).await,
                 Some(PqzRefusal::Reused) => self.fail(w, format!("PQZ_KEY_REUSED: {reason}")).await,
@@ -737,11 +743,27 @@ impl Submitter {
                 Ok(false) => {}
                 Err(e) => return self.requeue(w, format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")).await,
             }
+            // round 3t: field 3 (the statement) after an indexed `VerifierFeeSet`: the fee word moved
+            if reason.contains("field: 3") {
+                if let Some(r) = self.fee_moved(w, &reason).await {
+                    return self.requeue(w, r).await;
+                }
+            }
         }
         if liftable {
             self.requeue(w, format!("PQZ_VERDICT_REFUSED: {reason}")).await
         } else {
             self.fail(w, reason).await
+        }
+    }
+
+    /// Round 3t (CTR-PQZ-36, spec §10, T55's pattern): `PQZ_FEE_MISMATCH` when the job's token emitted `VerifierFeeSet` since
+    /// intake (the `ROTATION_LOOKBACK` window); an unreadable log is transient, back in the queue too.
+    async fn fee_moved(&self, w: &Work, reason: &str) -> Option<String> {
+        match guard::pqz_fee_changed(&self.chain, w, ROTATION_LOOKBACK).await {
+            Ok(true) => Some(format!("PQZ_FEE_MISMATCH: {reason} after VerifierFeeSet")),
+            Ok(false) => None,
+            Err(e) => Some(format!("PQZ_FEE_MISMATCH read: {e:#}; {reason}")),
         }
     }
 
@@ -1120,6 +1142,10 @@ pub(crate) mod tests {
         code_asked: Vec<Address>,
         /// Group 3h: `proofStore()` answers this (0 `NONE`, 1 `LOG`); `None`: it reverts (a release before 3h).
         proof_store: Option<u8>,
+        /// Round 3t: `pqzVerifyConfig().verifierFee`.
+        pqz_vf: u64,
+        /// Round 3t: `eth_getLogs` for `VerifierFeeSet` answers one log (the token's fee changed).
+        fee_set: bool,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1170,6 +1196,12 @@ pub(crate) mod tests {
                     "data": "0x", "blockNumber": "0x9", "blockHash": format!("{:#x}", B256::repeat_byte(9)),
                     "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0", "logIndex": "0x0",
                     "removed": false}])),
+                "eth_getLogs" if e.fee_set && p[0]["topics"][0] == json!(format!("{:#x}",
+                    <crate::abi::IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
+                    "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone()],
+                    "data": format!("0x{}", alloy::hex::encode((3u64, 2u64).abi_encode())), "blockNumber": "0x9",
+                    "blockHash": format!("{:#x}", B256::repeat_byte(9)), "transactionHash": format!("{:#x}", B256::repeat_byte(8)),
+                    "transactionIndex": "0x0", "logIndex": "0x0", "removed": false}])),
                 "eth_getLogs" => Ok(json!([])),
                 "eth_getBalance" => Ok(json!("0xde0b6b3a7640000")),
                 "eth_getBlockByNumber" if p[0] == "latest" => {
@@ -1235,7 +1267,7 @@ pub(crate) mod tests {
                                 Some((mode, verifier, epoch)) => Ok(json!(format!("0x{}", alloy::hex::encode(
                                     crate::abi::IPqzToken::pqzVerifyConfigCall::abi_encode_returns(&crate::abi::IPqzToken::PqzVerifyConfig {
                                         pqzVerifyMode: mode, verifier, fixed_: false, pqzVerifierEpoch: epoch, pending: B256::ZERO, eta: 0,
-                                        noticePeriod: 0, verifierFee: 0, verifierFeeMax: 0, verifierFeePending: 0, verifierFeeEta: 0 }))))),
+                                        noticePeriod: 0, verifierFee: e.pqz_vf, verifierFeeMax: 0, verifierFeePending: 0, verifierFeeEta: 0 }))))),
                             }
                         } else if s4 == crate::abi::IPqzToken::proofSystemIdCall::SELECTOR {
                             Ok(json!(format!("{PSID:#x}")))
@@ -1286,6 +1318,11 @@ pub(crate) mod tests {
                                     "reused" => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::KeyReused { ua }),
                                     _ => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::KeyVersionUnknown { ua, keyVersion: 2 }),
                                 };
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            // round 3t: `PqzAuth` refused (the fee word the holder signed moved)
+                            Some("auth_rejected") => {
+                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::AuthRejected {});
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             // group 3f: the token refuses the verdict the node rebuilt (here: field 3, the statement moved)
@@ -3199,8 +3236,9 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert!(rpc.lock().unwrap().sent.is_empty());
         let mut wrong = pqz_job(7);
         wrong["op"]["args"]["pqz_fee"] = json!("1");
-        let (r, rpc) = outcomes(offchain(), vec![wrong.clone()], endpoints(vec![url.clone()])).await;
+        let (r, rpc) = outcomes(Evm { pqz_vf: 2, ..offchain() }, vec![wrong.clone()], endpoints(vec![url.clone()])).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH: proved 1, the token's fee word is 0"), "{r:?}");
+        assert!(r[0].1.contains("verifierFee 2,"), "the term in force (N2): {r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         assert!(ver.lock().unwrap().reqs.is_empty(), "the pre-check runs before the verdict fetch");
         let precompile = || Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
@@ -3256,6 +3294,24 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         let (r, rpc) = outcomes(revoked, vec![pqz_job(7)], endpoints(vec![url])).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.contains("PqzVerifierRevoked"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty() && ver.lock().unwrap().reqs.is_empty());
+    }
+
+    /// Round 3t (CTR-PQZ-36, spec §10; N3): a PQZ debit's simulation reverting `AuthRejected()` or `PqzVerdictMismatch(3)` after
+    /// an indexed `VerifierFeeSet` of its token is `PQZ_FEE_MISMATCH`, back in the queue, never `dead`, zero sends; the controls:
+    /// `AuthRejected` without the event is `dead`, `PqzVerdictMismatch` without it the plain `PQZ_VERDICT_REFUSED`.
+    #[tokio::test]
+    async fn auth_rejected_after_fee_set_not_dead() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        for sim in ["auth_rejected", "verdict_mismatch"] {
+            let (r, rpc) = outcomes(Evm { sim: Some(sim), fee_set: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH: ") && r[0].1.ends_with("after VerifierFeeSet"),
+                "{sim}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{sim}");
+        }
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "{r:?}");
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: "), "{r:?}");
     }
 
     /// The node never asks for the PQZ precompile on an `OFFCHAIN` token's job (spec §3, O1: OFFCHAIN ignores whether a

@@ -81,6 +81,12 @@ MUTANTS = {
     # T6 (spec §15 (10)): the node skips the pre-check / leaves vf out (the fee word's one source)
     "N1": ("scaas-node/src/pqz.rs", "        fee_check(chain, w.to, p, &statement, c.verifierFee).await?;\n", "        let _ = p;\n", "cargo", "scaas-node",
            "pqz_fee_precheck"),
+    # N2: the reported terms leave vf out (the word itself has one source, the view's word 256, Fable P3-4: the formula only
+    # fills the message, so "vf out of expected" is the message's verifierFee term)
+    "N2": ("scaas-node/src/pqz.rs", "&statement, c.verifierFee).await?;", "&statement, 0).await?;", "cargo", "scaas-node", "pqz_fee_precheck"),
+    # N3: `AuthRejected` / `PqzVerdictMismatch(3)` after an indexed `VerifierFeeSet` not mapped: `AuthRejected` reported `dead`
+    "N3": ("scaas-node/src/submit.rs", "            Ok(true) => Some(format!(\"PQZ_FEE_MISMATCH: {reason} after VerifierFeeSet\")),",
+           "            Ok(true) => None,", "cargo", "scaas-node", "auth_rejected_after_fee_set_not_dead"),
 }
 
 

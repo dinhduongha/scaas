@@ -149,6 +149,15 @@ pub async fn pqz_rotated(chain: &Chain, w: &Work, lookback: u64) -> anyhow::Resu
     chain.pqz_key_current_since(registry, &parties, lookback).await
 }
 
+/// Round 3t (CTR-PQZ-36, spec §10): a PQZ job's token emitted `VerifierFeeSet` in the last `lookback` blocks (the event is
+/// evidence of the cause of an `AuthRejected` / `PqzVerdictMismatch(3)`, not proof); `Ok(false)` for any other job.
+pub async fn pqz_fee_changed(chain: &Chain, w: &Work, lookback: u64) -> anyhow::Result<bool> {
+    if w.typed.as_ref().is_none_or(|t| t.contract != "pqz") {
+        return Ok(false);
+    }
+    chain.event_since(w.to, <IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH, lookback).await
+}
+
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
 /// per-transaction cap ([`total_cap`]: `max_gas_per_tx`, the block gas limit) or that the chain's estimate refuses for
 /// gas: the client splits it into `register` without `pqzPop`, then `storePqzPop` (ruling R-node).

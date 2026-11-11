@@ -50,3 +50,6 @@ m t-modules@Groups.t.sol; gen_faces.py --check | 0d6bc40c+fix | 0 | 3 passed; 27
 m t-pqz@{PqzVerifierFee,PqzVerifierFeeVectors,PqzOffchainEntries,PqzStateVectors}.t.sol | 0d6bc40c+fix | 0 | 67 passed
 m t-as@confidential/{PqzVerifierFeeKinds,PqzVerdictKinds}.t.sol | 0d6bc40c+fix | 0 | 12 passed
 m t-pqz/invariant@PqzFeeInvariants.t.sol | 0d6bc40c+fix | 0 | 2 passed (runs 64, depth 128)
+t6 node-clippy (T6 rest: submit.rs mapping, the health stamp) | 0780e857+T6 | 0 | clean
+t6 node-test (CAPPED_MEM=6G, alone) | 0780e857+T6 | 0 | 716 passed, 0 failed (new: auth_rejected_after_fee_set_not_dead; pqz_fee_precheck asserts the verifierFee term, verifier_fee_rows the pqz_verifier_fee stamp)
+t6 node-e2e pqz_offchain_transfer_on_anvil (alone, --exact) | 0780e857+T6 | 0 | 1 passed: verifierFee 3, a shield of 100 first, two op 1 jobs with pqz_fee 3 mined, the verifier EOA +6, totalShielded 94

@@ -283,6 +283,13 @@ impl Chain {
         Ok(!self.primary().get_logs(&filter).await?.is_empty())
     }
 
+    /// Round 3t (CTR-PQZ-36, spec §10): an event `topic0` of `address` in the last `lookback` blocks (a token's `VerifierFeeSet`).
+    pub async fn event_since(&self, address: Address, topic0: B256, lookback: u64) -> Result<bool> {
+        let latest = self.primary().get_block_number().await?;
+        let filter = Filter::new().address(address).event_signature(topic0).from_block(latest.saturating_sub(lookback)).to_block(latest);
+        Ok(!self.primary().get_logs(&filter).await?.is_empty())
+    }
+
     /// Ký EIP-1559; trả bytes thô và hash — hash biết TRƯỚC khi gửi (journal, review F5).
     pub async fn sign(&self, nonce: u64, to: Address, data: Bytes, gas: u64, fees: (u128, u128)) -> Result<(Bytes, B256)> {
         let tx = TransactionRequest::default()

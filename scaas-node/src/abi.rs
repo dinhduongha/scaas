@@ -444,6 +444,8 @@ sol! {
         error VerifierFeePending(uint64 pending);
         error VerifierFeeSame();
         error VerifierFeeNotReady(uint64 eta);
+        /// `PqzAuth` refused (the holder's signature over the 20 header words): after a fee change, the fee word moved
+        error AuthRejected();
     }
 
     /// `IPqzToken.sol`'s file-level event (the error of the same name is `IPqzToken`'s) and the confidential op events

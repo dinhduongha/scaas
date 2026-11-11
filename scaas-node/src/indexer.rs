@@ -299,20 +299,24 @@ pub type PqzHealth = std::collections::HashMap<String, Value>;
 
 /// Group 3f (spec §11.1, C8): the health signal. Per token, from its rows in order: `pqz_last_verdict_at` (the block of the last
 /// joined `PqzVerified`), `pqz_verifier_epoch` (the last verdict's, a transfer's or a revocation's) and `pqz_verifier_revoked`;
+/// round 3t (CTR-PQZ-36, spec §10): `pqz_verifier_fee`, the fee the last `VerifierFeeSet` wrote (`null` until one is seen);
 /// stamped on the token's verified op rows and verifier rows, kept in `state` for the next range.
 pub fn pqz_health(state: &mut PqzHealth, rows: &mut [Value]) {
-    const KEYS: [&str; 3] = ["pqz_last_verdict_at", "pqz_verifier_epoch", "pqz_verifier_revoked"];
+    const KEYS: [&str; 4] = ["pqz_last_verdict_at", "pqz_verifier_epoch", "pqz_verifier_revoked", "pqz_verifier_fee"];
     for r in rows.iter_mut() {
         let ev = r["event"].as_str().unwrap_or_default().to_string();
         let verified = !r["pqz_verified"].is_null();
-        let (Some(c), true) = (r["contract"].as_str().map(str::to_string), verified || ev.starts_with("PqzVerifier")) else { continue };
-        let s = state.entry(c).or_insert_with(|| json!({"pqz_last_verdict_at": null, "pqz_verifier_epoch": null, "pqz_verifier_revoked": false}));
+        let (Some(c), true) = (r["contract"].as_str().map(str::to_string), verified || ev.starts_with("PqzVerifier") || ev.starts_with("VerifierFee"))
+        else { continue };
+        let s = state.entry(c).or_insert_with(|| json!({"pqz_last_verdict_at": null, "pqz_verifier_epoch": null, "pqz_verifier_revoked": false,
+            "pqz_verifier_fee": null}));
         if verified {
             (s["pqz_last_verdict_at"], s["pqz_verifier_epoch"]) = (r["block_number"].clone(), r["pqz_verified"]["pqz_verifier_epoch"].clone());
         }
         match ev.as_str() {
             "PqzVerifierRevoked" => (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) = (json!(true), r["pqz_verifier_epoch"].clone()),
             "PqzVerifierSet" => (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) = (json!(false), r["pqz_verifier_epoch"].clone()),
+            "VerifierFeeSet" => s["pqz_verifier_fee"] = r["next"].clone(),
             _ => {}
         }
         for k in KEYS {
@@ -1094,6 +1098,14 @@ mod tests {
             (Some("VerifierFeeSet"), Some(2), Some(2), None), "{}", rows[1]);
         assert!(PQZ_VERIFIER_TOPICS.contains(&P::VerifierFeeProposed::SIGNATURE_HASH));
         assert!(PQZ_VERIFIER_TOPICS.contains(&P::VerifierFeeSet::SIGNATURE_HASH));
+        // the health stamp `pqz_verifier_fee`: unknown before the first `VerifierFeeSet`, its `next` after, kept across ranges
+        let (mut rows, mut state) = (rows, PqzHealth::default());
+        pqz_health(&mut state, &mut rows);
+        assert_eq!((rows[0]["pqz_verifier_fee"].is_null(), rows[1]["pqz_verifier_fee"].as_u64()), (true, Some(2)), "{rows:?}");
+        let mut later = pay_events(&[log_at(t, 3, 0, P::VerifierFeeSet { previous: 2, next: 0 }.encode_log_data()),
+            log_at(t, 4, 0, P::VerifierFeeProposed { current: 0, next: 4, eta: 1 }.encode_log_data())], None);
+        pqz_health(&mut state, &mut later);
+        assert_eq!((later[0]["pqz_verifier_fee"].as_u64(), later[1]["pqz_verifier_fee"].as_u64()), (Some(0), Some(0)), "{later:?}");
     }
 
     /// Group 3f (spec §11.1, Codex #10): a `PqzVerified` joins the op event after it of the same token and transaction

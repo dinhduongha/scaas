@@ -2240,6 +2240,7 @@ mod pqz3f {
         function latestVersion(uint8 kind) external view returns (uint64);
         function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
         function mtxShield(bytes32 toUA, uint256 amount) external;
+        function totalShielded() external view returns (uint256);
         function keyHashOf(uint16 kind, bytes keyData) external pure returns (bytes32);
         // group 3h (T58, T63): the debit record's view
         struct DebitRecordView { address prevBlob; uint64 p; uint16 deltaP; uint8 proofStore; uint64 shieldIn; uint64 keyVersion;
@@ -2404,6 +2405,11 @@ struct OffchainStack {
 }
 
 async fn offchain_stack(chain_id: u64) -> OffchainStack {
+    offchain_stack_vf(chain_id, 0).await
+}
+
+/// Round 3t (CTR-PQZ-36): the stack with `verifierFee = verifierFeeMax = vf`.
+async fn offchain_stack_vf(chain_id: u64, vf: u64) -> OffchainStack {
     let deployer = key(DEPLOYER);
     let (anvil, rpc) = start_anvil(chain_id, chain_id as u16).await;
     let dep = deploy(&rpc, chain_id, deployer.address());
@@ -2436,7 +2442,8 @@ async fn offchain_stack(chain_id: u64) -> OffchainStack {
     let c = TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         owner: deployer.address().into_word(), initialSupply: U256::from(1_000_000u64), initialHolder: deployer.address(),
         conf: ConfidentialConfig { shieldScale: U256::from(1u8), maxShielded: U256::from(1u64 << 40), pqzVerifyMode: 1,
-            pqzVerifierUA: verifier.address().into_word(), pqzVerifierFixed: false, ..Default::default() }, ..Default::default() };
+            pqzVerifierUA: verifier.address().into_word(), pqzVerifierFixed: false, verifierFee: vf, verifierFeeMax: vf, ..Default::default() },
+        ..Default::default() };
     let token = create(&rpc, &deployer, factory, createTokenCall { kind: 4, version: ver, initArgs: c.abi_encode().into(),
         salt: B256::repeat_byte(0x3f) }.abi_encode()).await;
     let cfg = view(&rpc, token, scaas_node::abi::IPqzToken::pqzVerifyConfigCall {}).await;
@@ -2589,15 +2596,24 @@ async fn fake_pqz_verifier(stack: &OffchainStack) -> (String, Arc<Mutex<Vec<Valu
 /// configured endpoint, whose request carries the statement and proof the node rebuilt. The node rebuilds each `PqzVerdict`, the
 /// token accepts it (`PqzVerified` over exactly `keccak256(statement)`, `keccak256(proof)`), and the indexer joins it to the
 /// `ConfidentialTransfer` of the same transaction with its position. The node signs nothing and never reads the precompile.
-/// UNAUDITED.
+/// Round 3t (CTR-PQZ-36, spec §15 (10)): the token charges `verifierFee = 3`, so the holder shields first (the fee leaves
+/// `totalShielded`: at 0 the debit underflows); each job names `pqz_fee` = word 256 = 3 (no beneficiary), the verifier EOA's
+/// ERC-20 balance grows by 3 per op and `totalShielded` falls by 3. UNAUDITED.
 #[tokio::test]
 #[ignore]
 async fn pqz_offchain_transfer_on_anvil() {
-    let st = offchain_stack(31947).await;
+    const VF: u64 = 3;
+    let st = offchain_stack_vf(31947, VF).await;
+    let deployer = key(DEPLOYER);
+    send(&st.rpc, &deployer, st.token, pqz3f::mtxShieldCall { toUA: st.from.ua, amount: U256::from(100u8) }.abi_encode()).await;
+    let shielded = || async { view(&st.rpc, st.token, pqz3f::totalShieldedCall {}).await };
+    let paid = || async { balance(&st.rpc, st.token, st.verifier.address()).await };
+    assert_eq!((shielded().await, paid().await), (U256::from(100u8), U256::ZERO), "shielded first");
     let (url, seen) = fake_pqz_verifier(&st).await;
     let (state, mut s) = st.lane(scaas_node::config::PqzVerifierCfg { endpoints: vec![url], ..Default::default() }).await;
     let last = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap_or_default();
     let (mut j1, stmt1, proof1) = st.transfer_job(1, 0).await;
+    assert_eq!(U256::from_be_slice(&stmt1[256..288]), U256::from(VF), "the fee word: vf alone, no beneficiary");
     j1["op"]["args"]["pqz_verdict"] = st.verdict(&stmt1, &proof1).await;
     state.lock().unwrap().jobs.push(j1);
     run_outbox(&mut s).await;
@@ -2625,6 +2641,7 @@ async fn pqz_offchain_transfer_on_anvil() {
         assert_eq!(row["pqz_last_verdict_at"].as_u64(), rc.block_number, "job {id}: the health signal");
     }
     assert!(rows.iter().all(|r| r["event"] != "PqzVerified"), "joined, never a row of its own");
+    assert_eq!((shielded().await, paid().await), (U256::from(100 - 2 * VF), U256::from(2 * VF)), "the verifier paid vf per op");
     let chain = Chain::with_signer(&chain_cfg(st.chain_id, &st.rpc, None), key(RELAYER)).unwrap();
     let pqz: Address = "0x000000000000000000000000000000005caa0f01".parse().unwrap();
     assert!(!chain.is_contract_at(pqz).await.unwrap(), "no PQZ precompile on this chain");
