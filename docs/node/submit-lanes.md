@@ -375,10 +375,13 @@ carries none; `ponytail:` on `ROTATION_LOOKBACK`).
 **A silent verifier endpoint rests** (Fable review of ua-mtx-merge E N-7; BUILT,
 `pqz::tests::a_silent_verifier_endpoint_rests_for_the_backoff_window`). The verifier fetch and the shield probe run inside the
 lane's single loop (at intake, and again in `track` when a stuck debit's replacement re-runs the fill), `timeout_ms` (5 s) per
-endpoint. An endpoint that did not answer (a timeout, a refused connection, a 5xx) is not asked again for 10 s, by the fetch or
-the probe: inside that window it counts as not answering (`PQZ_VERDICT_MISSING`, `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue)
-and the next endpoint is asked. So one silent endpoint costs the loop one `timeout_ms` per 10 s, not one per job. A refusal (a
-4xx, a malformed answer) is an answer: that endpoint is asked again at once.
+endpoint. An endpoint that did not answer (a timeout, a refused connection, a 5xx), or answered slower than four fifths of
+`timeout_ms` (the answer is used), is not asked again for `max(10 s, 4 × timeout_ms)`, by the fetch or the probe: inside that
+window it counts as not answering (`PQZ_VERDICT_MISSING`, `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue) and the next endpoint is
+asked. So a silent or slow endpoint costs the loop at most one `timeout_ms` per window, a quarter of the loop's time at worst, not
+one per job (Fable recheck 2 P3-6). A refusal (a 4xx, a malformed answer) is an answer: that endpoint is asked again at once.
+*Residual* (open): answers just under four fifths of `timeout_ms` still cost that much per job; a fetch budget per poll round is
+not built.
 
 <a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
 P2; **BUILT**, T63 `39fa296c`, `a6040f9a`, node mutants N1–N3 killed). A PQZ debit whose simulation is over the lane's cap (`gas …
