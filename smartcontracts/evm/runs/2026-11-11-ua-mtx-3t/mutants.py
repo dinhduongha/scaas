@@ -97,7 +97,7 @@ MUTANTS = {
 
 
 def red_tests(log):
-    forge = re.findall(r"\[FAIL[^\]]*\] (\w+)\(", log)
+    forge = re.findall(r"\[FAIL[^\]]*\] (\w+)", log)  # `name(` for a test, a bare `invariant_…` name for an invariant
     cargo = re.findall(r"^test (\S+) \.\.\. FAILED", log, re.M)
     node = re.findall(r"^not ok \d+ - (.+)$", log, re.M) + re.findall(r"^\s*✖ (.+?)(?: \(\d|$)", log, re.M)
     return sorted(set(forge + cargo + node))
