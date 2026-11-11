@@ -24,6 +24,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+# the paused clock of the slow-body test (Fable C-4)
+tokio = { version = "1", features = ["full", "test-util"] }
 
 # the PQZL verifier is slow unoptimised; the tests verify real proofs
 [profile.dev.package.pqzl]

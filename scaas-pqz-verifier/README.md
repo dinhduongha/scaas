@@ -50,8 +50,9 @@ Chain reads ([ARCH-POS-15](../docs/decisions.md#ARCH-POS-15)): `rpc_urls` is a l
 request comes from one node at one block number (its head when the request starts); a node that does not answer sends
 the whole request to the next one; a revert or a refusal is an answer. The strict-majority agreement option is not built.
 
-Bounds: a body limit set from the set's largest statement and proof, JSON nesting at most 4 below the request object,
-both checked before decoding; a per-address rate limit, a bounded queue, bounded verification concurrency.
+Bounds: a per-address rate limit; the body read within 15 s (`BODY_TIMEOUT`, else 408), a body limit set from the set's
+largest statement and proof, JSON nesting at most 4 below the request object, all checked before decoding; only then a
+place in the bounded queue (a slow body never holds one); bounded verification concurrency.
 
 ## Build and test
 

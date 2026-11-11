@@ -708,6 +708,37 @@ async fn fails_over_one_node_one_block() {
         "RPC_UNAVAILABLE");
 }
 
+/// Fable C-4: a client that sends its headers and then no body holds no queue place: with every place's worth of such
+/// clients connected, a whole request is still served; each slow one is refused `BODY_TIMEOUT` (408) after `BODY_TIMEOUT`.
+/// The test clock is paused, so the timeout passes at once when nothing else runs.
+#[tokio::test(start_paused = true)]
+async fn slow_body_holds_no_queue_place() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let s = service(world(&[], &[]), all_valid());
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let at = l.local_addr().unwrap();
+    let app = s.app.clone().into_make_service_with_connect_info::<SocketAddr>();
+    tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+    let mut slow = Vec::new();
+    for _ in 0..Config::parse(CONFIG).unwrap().queue {
+        let mut c = tokio::net::TcpStream::connect(at).await.unwrap();
+        c.write_all(b"POST /v1/pqz-verdict/probe HTTP/1.1\r\nhost: v\r\ncontent-type: application/json\r\ncontent-length: 64\r\n\r\n{")
+            .await.unwrap();
+        slow.push(c);
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let probe = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
+    assert_signed(&post(&s, "/v1/pqz-verdict/probe", probe).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    let start = tokio::time::Instant::now();
+    for mut c in slow {
+        let mut b = vec![0; 4096];
+        let n = c.read(&mut b).await.unwrap();
+        let answer = String::from_utf8_lossy(&b[..n]);
+        assert!(answer.starts_with("HTTP/1.1 408") && answer.contains("BODY_TIMEOUT"), "{answer}");
+    }
+    assert!(start.elapsed() + std::time::Duration::from_millis(50) >= http::BODY_TIMEOUT);
+}
+
 /// A JSON-RPC endpoint that answers `eth_chainId` with `chain_id`.
 async fn rpc_answering(chain_id: u64) -> String {
     let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| async move {

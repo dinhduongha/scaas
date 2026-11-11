@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! The HTTP door (spec §11.2): `POST /v1/pqz-verdict`, `POST /v1/pqz-verdict/probe`. Per client address a rate limit,
-//! then a place in a bounded queue; the body bounded by length and depth before it is decoded; named fields only. A
-//! refusal is a named JSON error, never a signature.
+//! The HTTP door (spec §11.2): `POST /v1/pqz-verdict`, `POST /v1/pqz-verdict/probe`. Per client address a rate limit;
+//! the body read within `BODY_TIMEOUT`, bounded by length and depth before it is decoded; only then a place in a bounded
+//! queue (Fable C-4: a slow body never holds one); named fields only. A refusal is a named JSON error, never a signature.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
@@ -17,6 +17,9 @@ use axum::{Json, Router};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::{body_limit, refuse, Config, Refusal, Service, Signed, MAX_DEPTH};
+
+/// The time a client has to send its whole body, before it may take a queue place (Fable C-4).
+pub const BODY_TIMEOUT: Duration = Duration::from_secs(15);
 
 struct App {
     svc: Arc<Service>,
@@ -42,6 +45,7 @@ impl IntoResponse for Refusal {
     fn into_response(self) -> Response {
         let status = match self.error {
             "BODY_TOO_LARGE" => StatusCode::PAYLOAD_TOO_LARGE,
+            "BODY_TIMEOUT" => StatusCode::REQUEST_TIMEOUT,
             "RATE_LIMITED" => StatusCode::TOO_MANY_REQUESTS,
             "BUSY" | "RPC_UNAVAILABLE" | "VERIFIER_FAULT" | "SIGNER_FAULT" => StatusCode::SERVICE_UNAVAILABLE,
             "JSON_TOO_DEEP" | "BAD_REQUEST" | "UNKNOWN_ENTRY" => StatusCode::BAD_REQUEST,
@@ -52,8 +56,8 @@ impl IntoResponse for Refusal {
 }
 
 impl App {
-    /// A fixed one-minute window per client address, then a place in the queue (`BUSY` when full).
-    fn admit(&self, ip: IpAddr) -> Result<OwnedSemaphorePermit, Refusal> {
+    /// A fixed one-minute window per client address.
+    fn rate(&self, ip: IpAddr) -> Result<(), Refusal> {
         {
             let mut r = self.rate.lock().unwrap();
             if r.0.elapsed() >= Duration::from_secs(60) {
@@ -65,6 +69,11 @@ impl App {
             }
             *n += 1;
         }
+        Ok(())
+    }
+
+    /// A place in the queue (`BUSY` when full), taken once the body is read.
+    fn slot(&self) -> Result<OwnedSemaphorePermit, Refusal> {
         self.queue.clone().try_acquire_owned().map_err(|_| refuse("BUSY", "the queue is full"))
     }
 }
@@ -97,10 +106,13 @@ fn depth_ok(b: &[u8]) -> bool {
     true
 }
 
-/// The body within `body_limit()` and `MAX_DEPTH`, both checked before any decoding; then the named fields.
+/// The body within `BODY_TIMEOUT`, `body_limit()` and `MAX_DEPTH`, all checked before any decoding; then the named fields.
 async fn decode<T: serde::de::DeserializeOwned>(b: Body) -> Result<T, Refusal> {
     let limit = body_limit();
-    let bytes = axum::body::to_bytes(b, limit).await.map_err(|_| refuse("BODY_TOO_LARGE", format!("over {limit} B")))?;
+    let bytes = tokio::time::timeout(BODY_TIMEOUT, axum::body::to_bytes(b, limit))
+        .await
+        .map_err(|_| refuse("BODY_TIMEOUT", format!("the body took over {} s", BODY_TIMEOUT.as_secs())))?
+        .map_err(|_| refuse("BODY_TOO_LARGE", format!("over {limit} B")))?;
     if !depth_ok(&bytes) {
         return Err(refuse("JSON_TOO_DEEP", format!("nested over {MAX_DEPTH} below the request object")));
     }
@@ -110,13 +122,17 @@ async fn decode<T: serde::de::DeserializeOwned>(b: Body) -> Result<T, Refusal> {
 async fn verdict(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, b: Body)
     -> Result<Json<Signed>, Refusal>
 {
-    let _slot = app.admit(peer.ip())?;
-    Ok(Json(app.svc.verdict(decode(b).await?).await?))
+    app.rate(peer.ip())?;
+    let req = decode(b).await?;
+    let _slot = app.slot()?;
+    Ok(Json(app.svc.verdict(req).await?))
 }
 
 async fn probe(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, b: Body)
     -> Result<Json<Signed>, Refusal>
 {
-    let _slot = app.admit(peer.ip())?;
-    Ok(Json(app.svc.probe(decode(b).await?).await?))
+    app.rate(peer.ip())?;
+    let req = decode(b).await?;
+    let _slot = app.slot()?;
+    Ok(Json(app.svc.probe(req).await?))
 }
