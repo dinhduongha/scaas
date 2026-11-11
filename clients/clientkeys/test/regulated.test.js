@@ -65,6 +65,16 @@ test('enableable (spec 5.5): every row, one term failing at a time', () => {
     assert.equal(reg.enableable(r), BigInt(r.enableable), r.name);
   }
   assert.ok(V.enableable.length >= 9);
+  // 3r3s3t P3-7: the on-chain views give ids, not booleans; a zero id is no admin / no registry, a non-zero id is one
+  const id = (on, n) => (on ? '0x' + '00'.repeat(n - 1) + '01' : '0x' + '00'.repeat(n));
+  for (const r of V.enableable) {
+    const ids = { ...r, admin: id(r.admin, 32), registry: id(r.registry, 20) };
+    assert.equal(reg.enableable(ids), BigInt(r.enableable), `${r.name} as ids`);
+  }
+  const live = V.enableable.find((r) => r.admin && r.registry && BigInt(r.enableable) & (1n << 28n));
+  assert.ok(live, 'a row with bit 28 enableable');
+  assert.equal(reg.enableable({ ...live, admin: '0x' + '00'.repeat(32) }), 0n, 'a renounced admin');
+  assert.equal(reg.enableable({ ...live, registry: '0x' + '00'.repeat(20) }) & (1n << 28n), 0n, 'no registry');
 });
 
 test('the freeze transitions T1-T9: every row reproduced, its state after or its error, and F after', () => {
