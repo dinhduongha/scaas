@@ -1,0 +1,10 @@
+ua-mtx-3s (round 3s, owner rulings 2026-11-10, CTR-GOV-24): bit 28 `KYC` takes over the compliance registry check; bits 8
+`ALLOWLIST` and 9 `DENYLIST` become lists held in the token (`listFlags`, `setAllowed` / `setDenied`, `listFlagsOf`), both parties
+checked; `enableFeature(8|9|28)` at once, 8 and 9 never disabled, `KYC` disabled after `grantDelay`; `lockedFeatures` locks the
+creation state on or off. Spec docs/superpowers/specs/2026-11-10-token-lists.md. Base ua-mtx-3s at 4bad0ad6 (ua-mtx-3r merged at
+7f52aac9). Steps by gates.sh here; full output in the git-ignored <step>.log beside this file (a red first run kept as
+<step>.red.log). Foundry 1.8.5, solc 0.8.37, Amsterdam, default PQZ set n2304-kmax4096; every heavy run through scripts/capped
+(4 GB; the node 6 GB), one at a time, beside round 3r's stream. The four PQZ sets and the node e2e: deferred to the stacked gate
+(owner). Mutants: mutants.py here, one per run, restored byte-equal, rows in mutants.txt. UNAUDITED.
+
+step | commit | rc | counts
