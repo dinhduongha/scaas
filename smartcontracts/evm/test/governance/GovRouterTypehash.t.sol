@@ -415,6 +415,25 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_SET_COMPLIANCE, 0x0c697df193b5723555deb0270f8f1ef84c57975443e12cbb327dcef4ed923455);
     }
 
+    /// Round 3s (spec 2026-11-10-token-lists.md §7): the lists and `enableFeature`.
+    function test_uaSetAllowedTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_ALLOWED, keccak256(
+                "UASetAllowed(bytes32 from,address target,bytes32[] accounts,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_ALLOWED, 0xa96171fcd5e3202f58eeb220838f1277c4d57b19b0cbea4dc7f324970253d232);
+    }
+
+    function test_uaSetDeniedTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_DENIED, keccak256(
+                "UASetDenied(bytes32 from,address target,bytes32[] accounts,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_DENIED, 0x11df43474f648318e52abedb4d7a998e8e0ba0957b93b4d2ac967bc412355094);
+    }
+
+    function test_uaEnableFeatureTypehashIsPinned() public pure {
+        assertEq(T.UA_ENABLE_FEATURE, keccak256(
+                "UAEnableFeature(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_ENABLE_FEATURE, 0x4cbb50807ee9d23bb7eaedea39a2a3df6eca4b6ad9b5f9dab35fcb03d1347114);
+    }
+
     function test_uaSetChainEntriesTypehashIsPinned() public pure {
         assertEq(T.UA_SET_CHAIN_ENTRIES, keccak256(
                 "UASetChainEntries(bytes32 from,address target,address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));

@@ -1,6 +1,6 @@
 {
-  "mtxCancelNonce_router": 72648,
-  "mtxMint_router": 103620,
+  "mtxCancelNonce_router": 72670,
+  "mtxMint_router": 103564,
   "mtxTransfer_normal": 83690,
   "mtxTransfer_normalPqz": 83711,
   "mtxTransfer_normalZether": 83711,

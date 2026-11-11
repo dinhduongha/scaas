@@ -111,6 +111,19 @@ MUTANTS = {
              "forge", "test/as", "ListGovernance.t.sol"),
     "M33": (GB, "        if (!registry) e &= ~(uint256(1) << KYC);\n", "", "forge", "test/as", "ListGovernance.t.sol"),
     "M33b": (GB, "        if (admin == 0) return 0;\n", "", "forge", "test/as", "ListGovernance.t.sol"),
+    # T4 (spec §6.2, B1-B3): a word dropped from each router struct (the binding matrix's control fails)
+    "B1": ("smartcontracts/evm/src/governance/GovernanceRouter.sol",
+           "_uaCall(T.UA_SET_ALLOWED, e, target, abi.encode(keccak256(abi.encodePacked(accounts)), on),",
+           "_uaCall(T.UA_SET_ALLOWED, e, target, abi.encode(keccak256(abi.encodePacked(accounts))),",
+           "forge", "test/as", "ListRouter.t.sol"),
+    "B2": ("smartcontracts/evm/src/governance/GovernanceRouter.sol",
+           "_uaCall(T.UA_SET_DENIED, e, target, abi.encode(keccak256(abi.encodePacked(accounts)), on),",
+           "_uaCall(T.UA_SET_DENIED, e, target, abi.encode(on),",
+           "forge", "test/as", "ListRouter.t.sol"),
+    "B3": ("smartcontracts/evm/src/governance/GovernanceRouter.sol",
+           "_ua(T.UA_ENABLE_FEATURE, e, target, IRegulatedToken.enableFeature.selector, abi.encode(bit), auth);",
+           "_uaCall(T.UA_ENABLE_FEATURE, e, target, \"\", abi.encodeCall(IRegulatedToken.enableFeature, (bit)), auth);",
+           "forge", "test/as", "ListRouter.t.sol"),
 }
 
 
