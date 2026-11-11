@@ -232,12 +232,20 @@ fn single_toks(payload: &[u8], beneficiary: &[u8; 32]) -> Vec<Tok> {
     toks
 }
 
+/// The leg count `M` and the end of the legs of a packed multi `payload`, `None` when `M` does not fit, the arithmetic
+/// overflows, or the length is not `legs_end` or at least `legs_end + 16` (a sealed memo after its salt). Checked before any
+/// slice, so a corrupted `M` is refused instead of wrapping or panicking.
+pub(crate) fn multi_legs(payload: &[u8]) -> Option<(usize, usize)> {
+    let m = usize::try_from(abi::word_u64(payload, 112)?).ok()?;
+    let legs_end = m.checked_mul(4 * POINT)?.checked_add(176 + 3 * POINT)?;
+    (payload.len() == legs_end || payload.len() >= legs_end.checked_add(16)?).then_some((m, legs_end))
+}
+
 /// `ZetherMulti` from the packed `payload` (`head ‖ salt16 ‖ be32(M) ‖ be32(decoyFee) ‖ 3 points ‖ M · 4 points [‖ salt16 ‖
 /// sealed]`); a dynamic struct, one tuple token.
 fn multi_tok(payload: &[u8], beneficiary: &[u8; 32]) -> Tok {
-    let m = abi::word_u64(payload, 112).expect("payload: M") as usize;
+    let (m, legs_end) = multi_legs(payload).expect("a multi payload (the caller's own, or checked by `multi_legs`)");
     let pts = 176 + 3 * POINT;
-    let legs_end = pts + 4 * POINT * m;
     let sealed = if payload.len() > legs_end { payload[legs_end + 16..].to_vec() } else { Vec::new() };
     let mut t = abi::words(&payload[..P_HEAD]);
     t.push(salt_word(&payload[P_HEAD..P_HEAD + 16]));

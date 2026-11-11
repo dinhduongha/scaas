@@ -233,11 +233,8 @@ fn single_args(p: &[u8], ben: &[u8; 32]) -> R<Value> {
 /// `ZetherMulti` from the packed `payload` of `proveTransferMulti`.
 fn multi_args(p: &[u8], ben: &[u8; 32]) -> R<Value> {
     let bad = || "`payload` is not a multi transfer's";
-    let m = abi::word_u64(p, 112).ok_or_else(bad)? as usize;
-    let (pts, legs_end) = (176 + 3 * 128, 176 + 3 * 128 + 4 * 128 * m);
-    if p.len() < legs_end || (p.len() > legs_end && p.len() < legs_end + 16) {
-        return Err(bad().into());
-    }
+    let (m, legs_end) = envelope::multi_legs(p).ok_or_else(bad)?;
+    let pts = 176 + 3 * 128;
     let decoy = abi::word_u64(p, 144).ok_or_else(bad)?;
     let legs: Vec<Value> = (0..m)
         .map(|j| {
