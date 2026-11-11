@@ -44,6 +44,8 @@ const HEADER: usize = stmt::HEADER_BYTES;
 const PK: usize = stmt::PK_BYTES;
 /// The verified-key cache's bound; full, it starts over (the ownership record is kept).
 const CACHE_MAX: usize = 1 << 16;
+/// The ownership record's bound (`pqzKeyHash` → `(ua, version)`, about 100 B an entry); full, a new key is refused.
+const OWNER_MAX: usize = 1 << 18;
 /// The 45-byte EIP-1167 proxy around the release address that heads every factory instance's code (`ChainEnvCode`).
 const PROXY_HEAD: [u8; 10] = hex!("363d3d373d3d3d363d73");
 const PROXY_TAIL: [u8; 15] = hex!("5af43d82803e903d91602b57fd5bf3");
@@ -311,6 +313,26 @@ struct Keys {
     ok: HashSet<(B256, u64, B256)>,
     /// `pqzKeyHash` → the one `(ua, version)` this verifier accepted it for (single ownership across UAs and versions)
     owner: HashMap<B256, (B256, u64)>,
+}
+
+impl Keys {
+    /// `(ua, version, h)` passed: cached, and `h` recorded as `(ua, version)`'s. The cache starts over when full; the
+    /// ownership record is bounded by `OWNER_MAX` and, full, refuses a new key (`KEY_RECORD_FULL`) rather than forget
+    /// one (Fable C-5).
+    // ponytail: the ownership record lives in memory and is lost on restart; persist it if one verifier must keep
+    // refusing a key reused across UAs after a restart, or past OWNER_MAX keys
+    fn record(&mut self, ua: B256, version: u64, h: B256) -> Result<(), Refusal> {
+        Service::elsewhere(self, ua, version, h)?;
+        if !self.owner.contains_key(&h) && self.owner.len() >= OWNER_MAX {
+            return Err(refuse("KEY_RECORD_FULL", format!("{OWNER_MAX} keys recorded; restart to start over")));
+        }
+        if self.ok.len() >= CACHE_MAX {
+            self.ok.clear();
+        }
+        self.ok.insert((ua, version, h));
+        self.owner.insert(h, (ua, version));
+        Ok(())
+    }
 }
 
 pub struct Service {
@@ -615,16 +637,7 @@ impl Service {
     }
 
     fn remember(&self, ua: B256, version: u64, h: B256) -> Result<(), Refusal> {
-        let mut k = self.keys.lock().unwrap();
-        Self::elsewhere(&k, ua, version, h)?;
-        // ponytail: the ownership record lives in memory and is lost on restart; persist it if one verifier must keep
-        // refusing a key reused across UAs after a restart
-        if k.ok.len() >= CACHE_MAX {
-            k.ok.clear();
-        }
-        k.ok.insert((ua, version, h));
-        k.owner.insert(h, (ua, version));
-        Ok(())
+        self.keys.lock().unwrap().record(ua, version, h)
     }
 
     /// The `R_REG` message of `(ua, version)`, as `storePqzPop` checks it, by the registry's own digest views: v ≥ 1 over
@@ -673,5 +686,23 @@ impl Service {
             pqz_verdict: v,
             pqz_verdict_sig: WireSig { key_data: Bytes::new(), signature: sig.as_bytes().to_vec().into(), members: vec![] },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Fable C-5: the ownership record is bounded; full, a new key is refused by name and a recorded one still passes.
+    #[test]
+    fn ownership_record_bounded() {
+        let mut k = Keys::default();
+        let ua = B256::repeat_byte(1);
+        k.owner.extend((0..OWNER_MAX as u64).map(|i| (B256::from(U256::from(i)), (ua, 0))));
+        let h = B256::repeat_byte(0xee);
+        assert_eq!(k.record(ua, 0, h).unwrap_err().error, "KEY_RECORD_FULL");
+        assert!(!k.owner.contains_key(&h) && k.ok.is_empty());
+        assert!(k.record(ua, 0, B256::from(U256::from(7u8))).is_ok(), "a recorded key");
+        assert_eq!(k.owner.len(), OWNER_MAX);
     }
 }

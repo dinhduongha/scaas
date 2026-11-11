@@ -47,7 +47,7 @@ impl IntoResponse for Refusal {
             "BODY_TOO_LARGE" => StatusCode::PAYLOAD_TOO_LARGE,
             "BODY_TIMEOUT" => StatusCode::REQUEST_TIMEOUT,
             "RATE_LIMITED" => StatusCode::TOO_MANY_REQUESTS,
-            "BUSY" | "RPC_UNAVAILABLE" | "VERIFIER_FAULT" | "SIGNER_FAULT" => StatusCode::SERVICE_UNAVAILABLE,
+            "BUSY" | "RPC_UNAVAILABLE" | "VERIFIER_FAULT" | "SIGNER_FAULT" | "KEY_RECORD_FULL" => StatusCode::SERVICE_UNAVAILABLE,
             "JSON_TOO_DEEP" | "BAD_REQUEST" | "UNKNOWN_ENTRY" => StatusCode::BAD_REQUEST,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
