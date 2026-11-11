@@ -1,0 +1,7 @@
+Fable review C-1..C-6 fixes, scaas-pqz-verifier gates (2026-11-11, branch ua-mtx-fix-verifier); full outputs in git-ignored
+runs/*.log; all heavy runs through scripts/capped (CAPPED_SLOTS=3), -j2, foreground
+step | commit | rc | counts
+cargo test --offline --locked | 7f596889 | 0 | 23 passed (22 tests/service.rs + 1 unit), 0 failed, 1 ignored target (anvil)
+cargo clippy --offline --locked --all-targets -- -D warnings | 7f596889 | 0 | 0 in the crate (path dep pqzl: 2 deprecation warnings, not this crate's)
+cargo test --test anvil -- --ignored (opt-in; local anvil, repo deploy script) | 7f596889 | 0 | 1 passed: the service's verdict accepted on chain (PqzVerified over the statement and proof)
+mutants (runs/2026-11-11-ua-mtx-fix-verifier-mutants.py) | 7f596889 | 0 | 13 of 13 killed, 0 survivors, tree clean after each (a first run left C-4's survivor; its test fixed in 7f596889, then all 13 rerun)

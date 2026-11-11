@@ -1,0 +1,14 @@
+mutant | tests that went red | rc
+C-1 local digest: sign the registry's uaAuthDigest answer | probe_signature, probe_refuses_token_not_served, ignores_forged_rpc_digest, refuses_stale_fee_word, cache_keyed_by_ua_and_keyhash, disclosure_names_the_leg_owner, refuses_key_owned_by_other_ua, refuses_key_without_stored_pop, refuses_clone_naming_rogue_registry, fails_over_one_node_one_block, refuses_tampered_statement, refuses_token_config_mismatch, refuses_wrong_set_length, refuses_oversized_and_deep_body, signs_valid_statement, rreg_message_per_path_real_vector, slow_body_holds_no_queue_place | 101
+C-1 local digest: another registry generation in the domain | ignores_forged_rpc_digest, probe_refuses_token_not_served, probe_signature, disclosure_names_the_leg_owner, refuses_stale_fee_word, fails_over_one_node_one_block, refuses_key_owned_by_other_ua, refuses_clone_naming_rogue_registry, refuses_key_without_stored_pop, cache_keyed_by_ua_and_keyhash, refuses_tampered_statement, refuses_wrong_set_length, refuses_token_config_mismatch, refuses_oversized_and_deep_body, signs_valid_statement, rreg_message_per_path_real_vector, slow_body_holds_no_queue_place | 101
+C-1 registry pin skipped | refuses_clone_naming_rogue_registry | 101
+C-1 chainUid pin skipped | refuses_clone_naming_rogue_registry | 101
+C-6 chain id at start not compared | start_pins_chain_id | 101
+C-1 probe: the mode unchecked (verdict keeps it) | probe_refuses_token_not_served | 101
+C-1 served: OFFCHAIN mode unchecked | probe_refuses_token_not_served, refuses_token_config_mismatch | 101
+C-1 served: this verifier unchecked | probe_refuses_token_not_served, refuses_token_config_mismatch | 101
+C-2 blob tail not stripped | disclosure_names_the_leg_owner | 101
+C-3 no failover (node 0 only) | fails_over_one_node_one_block | 101
+C-4 queue place before the body | slow_body_holds_no_queue_place | 101
+C-5 ownership record unbounded | tests::ownership_record_bounded | 101
+C-1 on anvil: another registry generation in the domain | verdict_lands_on_anvil | 101
