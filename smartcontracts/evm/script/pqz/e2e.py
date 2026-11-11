@@ -1204,7 +1204,9 @@ def self_test():
 def main():
     global RPC, SPLIT, ZERO_DEP, PROOF_STORE, PROOF_PATH_ONLY
     ap = argparse.ArgumentParser()
-    ap.add_argument("--rpc", default="http://127.0.0.1:8545")
+    # no default (stacked gate, controller 2026-11-11): 127.0.0.1:8545 is the SCaaS testnet's RPC on the owner's host, so
+    # the node is always named (the local copy's signer, or the testnet on purpose)
+    ap.add_argument("--rpc", help="the PQZ node's JSON-RPC URL (required but for --self-test)")
     ap.add_argument("--log", default=os.path.join(EVM, "runs/2026-10-16-p6g-7622.txt"))
     ap.add_argument("--keys", default="1,2,3")
     ap.add_argument("--split", action="store_true", help="always register without the proof, then storePqzPop")
@@ -1217,6 +1219,8 @@ def main():
     ap.add_argument("--skip-kind", type=int, action="append", default=[],
                     help="a token kind whose release is not deployed here (logged as skipped; this run creates no token of it)")
     a = ap.parse_args()
+    if not a.self_test and not a.rpc:
+        ap.error("--rpc is required (no default)")
     if a.self_test:
         try:
             self_test()

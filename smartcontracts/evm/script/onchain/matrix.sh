@@ -166,7 +166,7 @@ local)
   fi
   MATRIX_DEPLOY=1 ;;
 scaas-testnet)
-  RPC=${RPC_7622:-http://127.0.0.1:8545}
+  RPC=${RPC_7622:?the scaas-testnet target needs RPC_7622, named explicitly (no default)}
   # the genesis-funded test keys 0x…01-0x…03 (the PQ group's e2e takes them by number)
   ONCHAIN_K1=$(printf '0x%064x' 1) ONCHAIN_K2=$(printf '0x%064x' 2) ONCHAIN_K3=$(printf '0x%064x' 3)
   export ONCHAIN_K1 ONCHAIN_K2 ONCHAIN_K3 PRIVATE_KEY=$ONCHAIN_K1
