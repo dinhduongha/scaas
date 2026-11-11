@@ -156,7 +156,11 @@ impl ChainAdapter for EvmAdapter {
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let hash: B256 = tx_id.parse()?;
-        Ok(match self.chains[0].primary().get_transaction_receipt(hash).await? {
+        let rc = self.chains[0].primary().get_transaction_receipt(hash).await?;
+        if let Some(n) = rc.as_ref().and_then(|r| r.block_number) {
+            self.chains[0].saw_block(n); // Fable recheck 2 P2-1
+        }
+        Ok(match rc {
             Some(rc) if rc.status() => TxStatus::Mined { height: rc.block_number.unwrap_or_default(), tx_hash: None },
             Some(_) => TxStatus::Reverted { reason: "execution reverted".into() },
             None => match self.chains[0].primary().get_transaction_by_hash(hash).await? {

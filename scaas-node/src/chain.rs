@@ -103,6 +103,9 @@ pub struct Chain {
     uid: tokio::sync::OnceCell<B256>,
     /// `compliance_registry` and its pinned code hash (regulated-kinds spec §5, F-11).
     compliance: Option<(Address, B256)>,
+    /// Fable recheck 2 P2-1: the highest block this chain has seen (a receipt's, an endpoint's head); a failover endpoint below it
+    /// answers no read.
+    head: std::sync::atomic::AtomicU64,
 }
 
 impl Chain {
@@ -129,6 +132,7 @@ impl Chain {
             pinned_uid: cfg.chain_uid,
             uid: Default::default(),
             compliance: cfg.compliance_registry.zip(cfg.compliance_registry_codehash),
+            head: Default::default(),
         })
     }
 
@@ -147,15 +151,35 @@ impl Chain {
     /// ARCH-POS-15, failover (the default; the strict-majority option is deferred to `scaas-rpc`): one read, answered completely
     /// by one endpoint, `rpc_urls` in the order given, never mixing answers of two endpoints. A transport error (the endpoint
     /// down, an error answer that is no revert) moves the whole read to the next endpoint; a revert is the contract's answer and
-    /// is final. Every chain read of the node's checks goes through it; the lane's own sends, nonces, fees and receipts stay on
-    /// the first endpoint, and the indexers keep their quorum over all of them.
+    /// is final. A failover endpoint (not the first) answers only when its head is at or above the highest block this chain has
+    /// seen ([`Chain::saw_block`]; Fable recheck 2 P2-1): a stale one could revert a job that lands at the head, so it is a
+    /// transport error. The lane's own sends, nonces, fees and receipts stay on the first endpoint, and the indexers keep their
+    /// quorum over all of them.
     pub async fn read<T, F, Fut>(&self, f: F) -> std::result::Result<T, SimError>
     where
         F: Fn(DynProvider) -> Fut,
         Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
     {
+        use std::sync::atomic::Ordering::Relaxed;
         let mut last = String::new();
         for (i, p) in self.providers.iter().enumerate() {
+            let fresh = match i {
+                0 => Ok(()),
+                _ => match p.get_block_number().await {
+                    Ok(n) if n >= self.head.load(Relaxed) => {
+                        self.saw_block(n);
+                        Ok(())
+                    }
+                    Ok(n) => Err(SimError::Transport(format!("endpoint {i} at block {n}, behind {}", self.head.load(Relaxed)))),
+                    Err(e) => Err(classify(&e)),
+                },
+            };
+            if let Err(e) = fresh {
+                let e = e.to_string();
+                tracing::warn!(chain = self.number, endpoint = i, error = %redact_urls(&e), "chain read: endpoint not used; next");
+                last = e;
+                continue;
+            }
             match f(p.clone()).await {
                 Err(SimError::Transport(e)) => {
                     tracing::warn!(chain = self.number, endpoint = i, error = %redact_urls(&e), "chain read failed; next endpoint");
@@ -165,6 +189,11 @@ impl Chain {
             }
         }
         Err(SimError::Transport(last))
+    }
+
+    /// A block this chain has seen (a receipt's, an endpoint's head): failover endpoints below it answer no read.
+    pub fn saw_block(&self, n: u64) {
+        self.head.fetch_max(n, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// [`Chain::read`] of one `eth_call` from `from` (with `gas` when given), classified by [`classify`].
@@ -344,6 +373,7 @@ impl Chain {
             let filter = filter.clone();
             async move {
                 let latest = p.get_block_number().await.map_err(|e| classify(&e))?;
+                self.saw_block(latest);
                 let (mut from, mut span, mut out) = (latest.saturating_sub(lookback), lookback.saturating_add(1), vec![]);
                 while from <= latest {
                     let to = latest.min(from.saturating_add(span - 1));
@@ -484,11 +514,30 @@ mod tests {
         assert!(matches!(call(chain_of(&[&rev, &good])).await, Err(SimError::Revert(_))), "a revert is final");
         assert_eq!((rev_n.load(SeqCst), good_n.load(SeqCst)), (1, before), "the next endpoint is never asked after a revert");
         assert!(matches!(call(chain_of(&["http://127.0.0.1:9", &busy])).await, Err(SimError::Transport(_))), "all down");
+        // Fable recheck 2 P2-1: a failover endpoint behind the highest block seen answers nothing (its revert could kill a job that
+        // lands at the head); at or above it, its revert is final (the control)
+        let (stale, stale_n) = fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x10"}),
+            _ => json!({"error": {"code": 3, "message": "execution reverted", "data": "0xdeadbeef"}}),
+        }).await;
+        let behind = chain_of(&["http://127.0.0.1:9", &stale]);
+        behind.saw_block(0x11);
+        assert!(matches!(call(behind).await, Err(SimError::Transport(e)) if e.contains("behind")), "stale: requeue, never final");
+        assert_eq!(stale_n.load(SeqCst), 1, "only its head was read");
+        let level = chain_of(&["http://127.0.0.1:9", &stale]);
+        level.saw_block(0x10);
+        assert!(matches!(call(level).await, Err(SimError::Revert(_))), "control: at the head, its revert is the contract's");
+        let (headless, _) = fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"error": {"code": -32000, "message": "header not found"}}),
+            _ => json!({"error": {"code": 3, "message": "execution reverted", "data": "0xdeadbeef"}}),
+        }).await;
+        assert!(matches!(call(chain_of(&["http://127.0.0.1:9", &headless])).await, Err(SimError::Transport(_))),
+            "a failover endpoint whose head is unread answers nothing");
         // a window of logs: the busy endpoint refuses the head, the good one answers the head and the logs
         let c = chain_of(&[&busy, &good]);
         let before = good_n.load(SeqCst);
         assert!(c.logs_since(Address::ZERO, B256::ZERO, 10).await.unwrap().is_empty());
-        assert_eq!(good_n.load(SeqCst) - before, 2, "eth_blockNumber and eth_getLogs, both on the good endpoint");
+        assert_eq!(good_n.load(SeqCst) - before, 3, "its head check, eth_blockNumber and eth_getLogs, all on the good endpoint");
         assert_eq!(c.subject_nonce(&MetaRef { token: Address::ZERO, from: B256::ZERO, batch: U256::ZERO, nonce: U256::ZERO,
             digest: None, ua: true, addr_nonce: false }).await.unwrap(), U256::from(5), "the subject nonce view fails over too");
     }

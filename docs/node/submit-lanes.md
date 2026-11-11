@@ -352,7 +352,10 @@ Fable review of ua-mtx-merge E N-11). Every chain read behind the node's checks 
 and the statement views, the service and registry reads, `eip712Domain()`, the subject nonce, code reads, and the
 `VerifierFeeSet`, `UAPqzKeyCurrent` and executed-event logs) goes through one read helper (`Chain::read`): one endpoint answers
 the whole read (a log window's head and logs alike), `rpc_urls` in the order given; a transport error (the endpoint down, an
-error answer that is no revert) moves the read to the next endpoint, a revert is the contract's answer and is final. The lane's
+error answer that is no revert) moves the read to the next endpoint, a revert is the contract's answer and is final. A failover
+endpoint (not the first) answers only when its `eth_blockNumber` is at or above the highest block the chain has seen (a receipt's,
+an endpoint's head): a stale one could revert a job that lands at the head, so it counts as a transport error and the job is back
+in the queue, never `dead` (Fable recheck 2 P2-1). The lane's
 own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The
 strict-majority option stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15).
 

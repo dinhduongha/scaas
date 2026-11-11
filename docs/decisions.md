@@ -298,6 +298,8 @@ dishonest or broken node cannot change.
 
 Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable review of ua-mtx-merge E N-11 "ARCH-POS-15 in the node"; the owner asked on 2026-11-12 to fix it now; status: BUILT, UNAUDITED): the node's chain reads take the failover default: one helper (`Chain::read`) asks `rpc_urls` in order, one endpoint answers a whole read, a transport error moves to the next endpoint and a revert is final. It covers the simulation, `chainUid()`, the PQZ views, the service, registry and token reads, code reads and the log windows; the lane's own sends, nonces, fees and receipts stay on the first endpoint, the indexers keep their quorum ([submit-lanes.md](node/submit-lanes.md#rpc-failover)). The strict-majority option stays deferred to `scaas-rpc` (Change of 2026-11-11).
 
+Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck 2 P2-1; status: BUILT, UNAUDITED): a failover endpoint answers a node read only when its `eth_blockNumber` is at or above the highest block the chain has seen (receipts, endpoint heads); a stale or headless one is a transport error, so its answer never makes a job `dead` that would land at the head ([submit-lanes.md](node/submit-lanes.md#rpc-failover)).
+
 <a id="audit-rounds"></a>
 
 | Round | Scope | Reviewers (as run) | Target | Status |

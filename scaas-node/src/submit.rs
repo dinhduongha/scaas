@@ -909,6 +909,7 @@ impl Submitter {
     async fn receipt_of(&self, hashes: Vec<B256>) -> Result<Option<(B256, TransactionReceipt)>> {
         for h in hashes.into_iter().rev() {
             if let Some(rc) = self.chain.primary().get_transaction_receipt(h).await? {
+                self.chain.saw_block(rc.block_number.unwrap_or_default()); // Fable recheck 2 P2-1
                 return Ok(Some((h, rc)));
             }
         }
