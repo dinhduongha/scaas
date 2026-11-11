@@ -31,7 +31,9 @@ test('ownTag: the KAT rows, recomputed here with HKDF-SHA256 then HMAC-SHA256 (l
     const msg = concatBytes(fromHex(r.chainUid), fromHex(r.token), fromHex(r.fromUA), be32, fromHex(r.ctHash));
     assert.equal(msg.length, 32 + 20 + 32 + 4 + 32);
     assert.deepEqual([r.key, r.message, r.ownTag], [hex(key), hex(msg), hex(hmac(sha256, key, msg))], `v${r.version} c${r.sendCounter}`);
-    assert.deepEqual(pqzOwnTag(r), { key: r.key, message: r.message, ownTag: r.ownTag });
+    const t = pqzOwnTag(r);
+    assert.ok(t.key instanceof Uint8Array, 'the secret key as bytes the caller can wipe, not an immutable hex string');
+    assert.deepEqual({ ...t, key: hex(t.key) }, { key: r.key, message: r.message, ownTag: r.ownTag });
   }
   // the key is counter-free (one per seed version); the counter and the ciphertext are in the message
   assert.equal(KAT.ownTag[0].key, KAT.ownTag[1].key);

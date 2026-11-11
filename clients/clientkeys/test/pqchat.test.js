@@ -322,6 +322,33 @@ test('sender chains, padding, the message ciphertext', () => {
   assert.throws(() => pc.decryptMessage(M.message.K, { ...msg, device: other })); // the device is in the chain and the aad
 });
 
+test('a peer counter is bounded: a safe integer, at most MAX_SKIP steps, a receiver chain with skipped keys (review E C-4)', () => {
+  const msg = R.message.record;
+  const K = M.message.K;
+  const at = (counter, pt = M.message.pt) => { const m = { ...msg, counter }; return { ...m, ciphertext: pc.encryptMessage(K, m, pt) }; };
+  const isCounter = (e) => e.code === 'counter';
+  for (const c of ['5', 1.5, -1, 2 ** 53, 10n]) assert.throws(() => pc.decryptMessage(K, { ...msg, counter: c }), isCounter, String(c));
+  assert.equal(h(pc.decryptMessage(K, at(pc.MAX_SKIP))), M.message.pt, 'stateless at the bound');
+  assert.throws(() => pc.decryptMessage(K, { ...msg, counter: pc.MAX_SKIP + 1 }), isCounter, 'stateless past the bound');
+  assert.throws(() => pc.decryptMessage(K, { ...msg, counter: 2 ** 40 }), isCounter, 'no 2^40 walk');
+  const chain = () => pc.receiverChain(K, msg.sessionId, msg.epochId, msg.sender, msg.device);
+  const ch = chain();
+  assert.equal(h(pc.decryptMessage(K, msg, ch)), M.message.pt, 'the vector message through a chain');
+  assert.throws(() => pc.decryptMessage(K, msg, ch), isCounter, 'used');
+  const n = msg.counter + 1;
+  assert.equal(h(pc.decryptMessage(K, at(n + 3), ch)), M.message.pt);
+  assert.deepEqual([ch.i, [...ch.skipped.keys()]], [n + 4, [...Array(msg.counter).keys(), n, n + 1, n + 2]]);
+  assert.equal(h(pc.decryptMessage(K, at(n + 1), ch)), M.message.pt, 'a skipped key');
+  assert.throws(() => pc.decryptMessage(K, at(n + 1), ch), isCounter, 'a skipped key is used once');
+  const before = { i: ch.i, ck: h(ch.ck), size: ch.skipped.size };
+  assert.throws(() => pc.decryptMessage(K, { ...at(n + 10), ciphertext: at(n + 9).ciphertext }, ch));
+  assert.deepEqual({ i: ch.i, ck: h(ch.ck), size: ch.skipped.size }, before, 'a message that does not open changes nothing');
+  assert.throws(() => pc.decryptMessage(K, at(ch.i + pc.MAX_SKIP + 1), ch), isCounter, 'past the skip bound');
+  assert.equal(h(pc.decryptMessage(K, at(ch.i + pc.MAX_SKIP), ch)), M.message.pt, 'at the skip bound');
+  assert.equal(ch.skipped.size, pc.MAX_SKIP, 'the oldest skipped keys are dropped');
+  assert.throws(() => pc.decryptMessage(K, at(n), ch), isCounter, 'a dropped key');
+});
+
 test('envelope, payload, Matrix event: they open to the signed message of records.json', () => {
   const e = M.envelope;
   const msg = R.message.record;

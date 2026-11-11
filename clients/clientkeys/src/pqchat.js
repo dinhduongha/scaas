@@ -220,12 +220,24 @@ export function chainKeys(K, session, epoch, sender, device, steps) {
   const ck0 = ck;
   const out = [];
   for (let i = 0; i < steps; i++) {
-    const mk = hmac(sha256, ck, Uint8Array.of(1));
-    const n = hmac(sha256, ck, Uint8Array.of(3)).subarray(0, 12);
-    ck = hmac(sha256, ck, Uint8Array.of(2));
-    out.push({ i, mk, n, ck });
+    const s = chainStep(ck);
+    ck = s.ck;
+    out.push({ i, ...s });
   }
   return { ck0, steps: out };
+}
+/** One step from `ck_i`: `{mk, n, ck: ck_{i+1}}`. */
+const chainStep = (ck) => ({ mk: hmac(sha256, ck, Uint8Array.of(1)), n: hmac(sha256, ck, Uint8Array.of(3)).subarray(0, 12),
+  ck: hmac(sha256, ck, Uint8Array.of(2)) });
+
+/** §6.3 (O6): a receiver keeps skipped message keys for at most 2,000 messages per chain, and no message moves a chain further
+ *  than that in one go. `counter` comes from a peer: it costs one HMAC triple per step, so it is bounded before any work. */
+export const MAX_SKIP = 2000;
+
+/** A receiver's state for one sender chain `(session, epoch, sender, device)`: the next counter `i`, `ck_i`, and the skipped
+ *  message keys by counter (at most `MAX_SKIP`, the oldest dropped first). Keep one per chain and pass it to `decryptMessage`. */
+export function receiverChain(K, session, epoch, sender, device) {
+  return { i: 0, ck: chainKeys(K, session, epoch, sender, device, 0).ck0, skipped: new Map() };
 }
 
 const BUCKETS = [256, 1024, 4096, 16384];
@@ -256,15 +268,50 @@ export const parentsHash = (parents) => keccak_256(abiEncode(['bytes32[]'], [par
 export const messageAad = (m) => abiEncode(['bytes32', 'bytes32', 'bytes32', 'bytes16', 'uint64', 'bytes32'],
   [m.sessionId, m.epochId, m.sender, m.device, m.counter, parentsHash(m.parents)]);
 
-const messageKey = (K, m) => chainKeys(K, m.sessionId, m.epochId, m.sender, m.device, m.counter + 1).steps[m.counter];
+/** `counter` as a non-negative safe integer (a string or a fraction would walk the wrong step, `'5' + 1` is `'51'`). */
+function counterOf(m) {
+  if (!Number.isSafeInteger(m.counter) || m.counter < 0) throw new PqChatError('counter');
+  return m.counter;
+}
+const messageKey = (K, m) => chainKeys(K, m.sessionId, m.epochId, m.sender, m.device, counterOf(m) + 1).steps[m.counter];
 /** `ciphertext = AES-256-GCM-SIV(mk_counter, n_counter, pt, aad)` for the header `m` (its `ciphertext` unused). */
 export function encryptMessage(K, m, pt) {
   const { mk, n } = messageKey(K, m);
   return gcmsiv(mk, n, messageAad(m)).encrypt(bytes(pt));
 }
-export function decryptMessage(K, m) {
-  const { mk, n } = messageKey(K, m);
-  return gcmsiv(mk, n, messageAad(m)).decrypt(bytes(m.ciphertext));
+/** Opens `m`. With `chain` (`receiverChain` of `m`'s sender chain): from a skipped key, or by walking at most `MAX_SKIP` steps
+ *  past the chain's next counter, keeping the keys skipped; the state changes only when the message opens; a counter already
+ *  used or dropped is refused. Without `chain`, stateless from `ck_0`: `counter` at most `MAX_SKIP`. Refusals are
+ *  `PqChatError('counter')`. */
+export function decryptMessage(K, m, chain) {
+  const c = counterOf(m);
+  const open = ({ mk, n }) => gcmsiv(mk, n, messageAad(m)).decrypt(bytes(m.ciphertext));
+  if (!chain) {
+    if (c > MAX_SKIP) throw new PqChatError('counter');
+    return open(messageKey(K, m));
+  }
+  if (chain.skipped.has(c)) {
+    const pt = open(chain.skipped.get(c));
+    chain.skipped.delete(c);
+    return pt;
+  }
+  if (c < chain.i || c - chain.i > MAX_SKIP) throw new PqChatError('counter');
+  let ck = chain.ck;
+  const skipped = [];
+  for (let j = chain.i; j < c; j++) {
+    const s = chainStep(ck);
+    skipped.push([j, s]);
+    ck = s.ck;
+  }
+  const s = chainStep(ck);
+  const pt = open(s);
+  Object.assign(chain, { i: c + 1, ck: s.ck });
+  for (const [j, k] of skipped) chain.skipped.set(j, { mk: k.mk, n: k.n });
+  for (const j of chain.skipped.keys()) {
+    if (chain.skipped.size <= MAX_SKIP) break;
+    chain.skipped.delete(j);
+  }
+  return pt;
 }
 
 // ------------------------------------------------------------------ envelope, payload, sealedInfo (P15, P25, P29, §4.2)
