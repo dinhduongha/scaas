@@ -8,3 +8,4 @@ creation state on or off. Spec docs/superpowers/specs/2026-11-10-token-lists.md.
 (owner). Mutants: mutants.py here, one per run, restored byte-equal, rows in mutants.txt. UNAUDITED.
 
 step | commit | rc | counts
+t1-lists (red first) | 93ffd525+T1 | 1 | 0 passed, 37 failed (8 suites: Lists 10, ListGovernance 16, ListRouter 1 setUp, RegulatedGas 6, Zether/PqzLists 4 setUp); every failure the absent build (RegulatedConfigInvalid, FeatureInvalidForKind(28), LockedNotSubset, NoSuchRole(8), no enableFeature)

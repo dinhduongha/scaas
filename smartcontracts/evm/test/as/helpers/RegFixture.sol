@@ -63,10 +63,13 @@ abstract contract RegFixture is Test {
 
     function _hedera() internal view virtual returns (bool) { return false; }
 
+    /// The chain's governance router the factory names (round 3s's router suite deploys one); 0 = none.
+    function _router() internal virtual returns (address) { return address(0); }
+
     function setUp() public virtual {
         vm.warp(1_800_000_000);
-        f = EnvKit.factory(address(this), UID, 0);
-        ureg = new StubUARegistry(UID);
+        f = EnvKit.factory(address(this), UID, 0, _router());
+        if (address(ureg) == address(0)) ureg = new StubUARegistry(UID); // a router's suite made it first (its registry)
         bool h = _hedera();
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0), h);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(ureg), address(0), h);
