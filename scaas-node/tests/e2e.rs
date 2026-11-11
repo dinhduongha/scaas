@@ -1541,6 +1541,74 @@ async fn router_op_signed_by_an_eoa() {
     assert_eq!(view(&rpc, router, lane).await, U256::from(1u64), "the router's nonce, on the target's lane");
 }
 
+alloy::sol! {
+    function predictAddress(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt) external view returns (address);
+    function isDex(address dex) external view returns (bool);
+    function isToken(address token) external view returns (bool);
+}
+
+/// Owner 2026-11-12 (every state-changing `mtx*` relayable, fee 0 too): an EOA with no gas signs `mtxCreateDex` and `mtxCreateToken`
+/// on the chain's `GovernanceRouter`, the config as named JSON; the node encodes it as the factory's `initArgs` and relays both at
+/// fee 0: the factory records a DEX and a token at the creator's predicted addresses. The negative: the same creation with a job
+/// `initHash` is `dead` `BAD_PAYLOAD`, nothing sent (the lane's nonce does not move).
+#[tokio::test]
+#[ignore]
+async fn router_creations_signed_by_an_eoa() {
+    let chain_id = 31918;
+    let (_anvil, rpc) = start_anvil(chain_id, 31918).await;
+    let owner = small_key(0x61F); // never funded
+    let dep = deploy(&rpc, chain_id, owner.address());
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
+    let factory: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
+    let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    let lane = U256::from_be_slice(factory.as_slice());
+    let z = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+    let a = |b: u8| format!("{:#x}", Address::repeat_byte(b));
+    let me = format!("{:#x}", owner.address().into_word());
+    let dex_op = signed_op(&owner, json!({"entry": "mtxCreateDex", "contract": "gov_router", "token": format!("{router:#x}"),
+        "args": {"target": format!("{factory:#x}"), "version": "1", "salt": z(0x61),
+            "config": {"admin": me, "relayerSharePpm": 0, "treasury": a(0x7a), "listedOnly": true, "grantDelay": "0", "rescueTo": a(0)}},
+        "envelope": envelope(owner.address(), lane, 0)}), chain_id, uid);
+    let token_op = signed_op(&owner, json!({"entry": "mtxCreateToken", "contract": "gov_router", "token": format!("{router:#x}"),
+        "args": {"target": format!("{factory:#x}"), "kind": 0, "version": "1", "salt": z(0x62),
+            "config": {"name": "Relayed", "symbol": "RLY", "decimals": 6, "features": "1", "lockedFeatures": "0", "admin": me,
+                "roles": {"minter": z(0), "rateAdmin": z(0), "guardian": z(0), "issuer": z(0), "compliance": z(0)},
+                "initialSupply": "1000", "initialHolder": format!("{:#x}", owner.address()), "legs": [], "rate": {"rateDelay": 0, "maxRateStepBps": 0},
+                "conf": {"auditorKey": "0x", "shieldScale": "0", "maxShielded": "0", "confidentialFee": "0", "disclosureMode": 0, "auditorMode": 0,
+                    "minDecoyFee": "0", "pqzVerifyMode": 0, "pqzVerifierUA": z(0), "pqzVerifierFixed": false, "proofStore": 0, "verifierFee": "0",
+                    "verifierFeeMax": "0"},
+                "grantDelay": "0", "rescueTo": a(0), "maxSupply": "0",
+                "reg": {"complianceRegistry": a(0), "requiredFlags": "0", "deniedFlags": "0", "termsHash": z(0), "taxRecipient": z(0)}}},
+        "envelope": envelope(owner.address(), lane, 1)}), chain_id, uid);
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let report = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
+    let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-create".into(),
+        Default::default()).await.unwrap();
+    let mut forged = dex_op.clone();
+    forged["args"]["initHash"] = json!(z(1));
+    state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "ua_metatx", "op": forged}));
+    run_outbox(&mut s).await;
+    assert_eq!(report(1)["chain_state"], "dead", "{}", report(1));
+    assert!(report(1)["error"].as_str().unwrap().contains("BAD_PAYLOAD: args.initHash"), "{}", report(1));
+    let nonce = IMtxIds::mtxNonceCall { from: owner.address().into_word(), batch: lane };
+    assert_eq!(view(&rpc, router, nonce.clone()).await, U256::ZERO, "nothing sent");
+    for (id, op) in [(2, dex_op), (3, token_op)] {
+        state.lock().unwrap().jobs.push(json!({"id": id, "kind": "ua_metatx", "op": op}));
+        run_outbox(&mut s).await;
+        assert_eq!(report(id)["chain_state"], "mined", "{}", report(id));
+    }
+    let dex = view(&rpc, factory, predictAddressCall { creatorId: owner.address().into_word(), contractClass: 2, kind: 0,
+        salt: B256::repeat_byte(0x61) }).await;
+    let tok = view(&rpc, factory, predictAddressCall { creatorId: owner.address().into_word(), contractClass: 1, kind: 0,
+        salt: B256::repeat_byte(0x62) }).await;
+    assert!(view(&rpc, factory, isDexCall { dex }).await && view(&rpc, dex, listedOnlyCall {}).await, "the DEX, its named config");
+    assert!(view(&rpc, factory, isTokenCall { token: tok }).await, "the token");
+    assert_eq!(view(&rpc, router, nonce).await, U256::from(2u64), "two creations on the factory's lane");
+}
+
 // ------------------------------------------------------------------ the merged entries on anvil (ua-mtx-merge T18)
 
 alloy::sol! {

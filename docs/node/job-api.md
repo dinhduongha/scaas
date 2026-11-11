@@ -762,9 +762,10 @@ proof or address fixes what it writes (`storePqzPop`, `deploy`); a new `SIGNED` 
 (`PERMISSIONLESS`) has no row. *Known limits* (Fable review of ua-mtx-merge E N-10, N-11; PLANNED, open): `SmartKeyAccount` is not
 in the pin yet, its rows stay pinned against the node's own `abi.rs` one direction: its guardian's `initiateRecovery` fits no class
 of the audit (`NotGuardian()` is a gate's error, and no `BIT(n)` or `HOLDER_OWN` names it); a class for it is the owner's.
-`mtxCreateToken`, `mtxCreateDex` and `mtxCreateInstance` have no row
-(`guard.rs` `NOT_ROWS`) until relaying creations is decided: an open item against "every state-changing `mtx*` is relayable";
-the four release approvals are covered by the owner's ruling of 2026-11-10.
+`mtxCreateToken` and `mtxCreateDex` are rows ([NODE-JOB-26](#NODE-JOB-26));
+`mtxCreateInstance` has none (`guard.rs` `NOT_ROWS`): its `initCall` is a class's own initializer call, which the node cannot name
+from fields, so how it is relayed is the owner's call (PLANNED, open); the four release approvals are covered by the owner's ruling
+of 2026-11-10.
 Selector matching suffices outside the token/role set: a lane's authority is only `msg.sender` of the direct call,
 never of calls the target makes. One operator session (or a stolen one) could otherwise turn a lane that holds fee
 income into an arbitrary transaction. The client side keeps its outbox rows
@@ -844,7 +845,7 @@ is `422 HEX_ARGS_REFUSED`.
 | `VestingGrant.release`; `Distribution.claim`, `claimMany` | runtime code = EIP-1167 clone of the registered asset-suite implementation (codehash checked at lease, cached) | client asset-suite flows ([contracts/asset-suite.md](../contracts/asset-suite.md)) |
 | `ExchangeOffer.exchange(MetaTransaction,bytes)` | EIP-1167 clone of the registered `ExchangeOffer` implementation (like `SCaaSDex.mtxSettle`: the leg carries the holder's own signature) | client corporate actions |
 | `Safe.execTransaction` | a registered role-holder contract (`chain_contract.kind = role_holder`); the owners' signatures are inside the calldata | issuer / compliance / buyer role holders |
-| `GovernanceRouter.mtx<Op>` (the `typed.rs` rows of contract kind `gov_router`, 35 at `26586d2e`; group 3f adds `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` ([NODE-JOB-22](#NODE-JOB-22)), group 3h `mtxSetProofStore`, group 3l `mtxSetWrapLimits`, `mtxSetWrapMember`; CTR-GOV-23 adds the eleven admin ops of `OpenFactory` and a `ComplianceRegistry`, `mtxPublishTokenEnv`, `mtxPublishDexEnv`, `mtxPublishClassEnv`, `mtxDeprecateToken`, `mtxDeprecateDex`, `mtxDeprecateRelease`, `mtxSetTokenKindEnabled`, `mtxSetClassKindEnabled`, `mtxSetKycProvider`, `mtxSetCompliance`, `mtxSetChainEntries`, an `Env` at most 4 deps, 2 params and 32 libs with one code hash each, the compliance arrays of one length at most 256; the four release approvals and the three open deploys are no row: release management is not a node job, owner 2026-11-10) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | admins and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0. The first call of a delayed `mtxSetWrapLimits` lands and changes nothing (`WrapLimitsProposed`, its `eta`): an operator reads `landed` as proposed, not applied; naming it in the job's result is SPECIFIED, not built |
+| `GovernanceRouter.mtx<Op>` (the `typed.rs` rows of contract kind `gov_router`, 35 at `26586d2e`; group 3f adds `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` ([NODE-JOB-22](#NODE-JOB-22)), group 3h `mtxSetProofStore`, group 3l `mtxSetWrapLimits`, `mtxSetWrapMember`; CTR-GOV-23 adds the eleven admin ops of `OpenFactory` and a `ComplianceRegistry`, `mtxPublishTokenEnv`, `mtxPublishDexEnv`, `mtxPublishClassEnv`, `mtxDeprecateToken`, `mtxDeprecateDex`, `mtxDeprecateRelease`, `mtxSetTokenKindEnabled`, `mtxSetClassKindEnabled`, `mtxSetKycProvider`, `mtxSetCompliance`, `mtxSetChainEntries`, an `Env` at most 4 deps, 2 params and 32 libs with one code hash each, the compliance arrays of one length at most 256; the four release approvals and the three open deploys are no row: release management is not a node job, owner 2026-11-10; owner 2026-11-12 adds the creations `mtxCreateToken`, `mtxCreateDex`, [NODE-JOB-26](#NODE-JOB-26)) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | admins and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0. The first call of a delayed `mtxSetWrapLimits` lands and changes nothing (`WrapLimitsProposed`, its `eta`): an operator reads `landed` as proposed, not applied; naming it in the job's result is SPECIFIED, not built |
 | `PqChat` writes (12, `typed.rs` contract kind `pqchat`, [above](#pqchat-calls)) | `Rule::FactoryClass(3)`: `token_factory`'s `infoOf` lists it as class 3, `version ≠ 0` (unset ⇒ refused); `storeMessage` / `addWraps` only paid or under `relay_unsigned_pqchat` | PqChat clients (sessions, messages, public topics), any relayer |
 | A configured service's declared entries `<op>(<Op>, UAMetaTransfer, UASig)` (contract kind `service`, [NODE-JOB-25](#NODE-JOB-25)) | `[[chains.services]]` of this chain, equal to its `servicePullEntries()` both directions; one kind per address | payers of a service pull, any relayer |
 
@@ -883,7 +884,26 @@ guard's service rule, config), EVM only. **UNAUDITED.**
 
 **Factory classes** (PLANNED; factory index spec §8.6, [CTR-TOK-27](../contracts/token-wrappers.md#CTR-TOK-27)): the guard rule
 `factory_class(class)` generalizes `Rule::FactoryClass(3)`: `infoOf(target).contractClass == class` and `version ≠ 0` on the chain's
-`token_factory`, cacheable for ever; no node row relays a factory creation until relaying creations is decided.
+`token_factory`, cacheable for ever. A token's or a DEX's creation is relayed through the router ([NODE-JOB-26](#NODE-JOB-26)); a
+class instance's is not yet.
+
+<a id="NODE-JOB-26"></a>**NODE-JOB-26** — **The factory's creations of a token and a DEX are relayable: the config is named, the node
+encodes `initArgs` and fills `initHash`** (owner 2026-11-12: every state-changing `mtx*` is relayable, fee 0 too). Status: **BUILT**
+(branch `ua-mtx-fix2-node`; tests `typed::tests::creation_rows_encode_the_named_config`, e2e `router_creations_signed_by_an_eoa`).
+**UNAUDITED.** A `ua_metatx` job on the chain's `GovernanceRouter` (`contract: "gov_router"`), the creator's `UAEnvelope` (its own
+lane, `batch` usually the factory's address) and `UASig`:
+`{entry: "mtxCreateToken", args: {target: <OpenFactory>, kind, version, salt, config: {TokenConfig}}}` or
+`{entry: "mtxCreateDex", args: {target, version, salt, config: {DexConfig}}}`. `config` is `IFactoryToken.TokenConfig`
+(`name, symbol, decimals, features, lockedFeatures, admin, roles{minter, rateAdmin, guardian, issuer, compliance}, initialSupply,
+initialHolder, legs[{underlying, num, den}] (at most 8), rate{rateDelay, maxRateStepBps}, conf{…13 fields}, grantDelay, rescueTo,
+maxSupply, reg{complianceRegistry, requiredFlags, deniedFlags, termsHash, taxRecipient}`) or `ISCaaSDex.DexConfig` (`admin,
+relayerSharePpm, treasury, listedOnly, grantDelay, rescueTo`), every field named, a missing one `BAD_PAYLOAD`, a hex config
+`BAD_PAYLOAD: … not an object`. The node sends `abi.encode(config)` as `initArgs` and builds the signed `UACreateToken` /
+`UACreateDex` with `initHash = keccak256(initArgs)`; a job's own `initHash` is refused `BAD_PAYLOAD: args.initHash: the node hashes
+args.config`. The rule is `Rule::GovRouter`; the factory checks the release and the config itself. The gas is the simulation's,
+under the same caps as every job (the estimate, regular + state, within `max_gas_per_tx` and the block gas limit). Clients sign the
+same struct (`clientkeys` `UACreateToken` with `extra.initArgs`): what a client signs over its `initArgs` is what the node rebuilds
+from the named config when that config encodes to those bytes. `mtxCreateInstance` stays no row (above).
 
 `pqz_call` jobs are not `call` jobs: their own selector list is in the kinds table above.
 

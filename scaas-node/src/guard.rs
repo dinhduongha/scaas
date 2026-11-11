@@ -1523,8 +1523,9 @@ mod tests {
         // T93: 104 -> 116, `PqChat`'s twelve plain rows; group 3l: -> 118, the router's two wrap-limit ops; UA-7 P48:
         // -> 119, `remove`; ua-mtx-liquidity L6 (79c3501e, moved at L6d): -> 120, `mtxLiquidity`
         // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows; round 3s (CTR-GOV-24): -> 134, the router's three list /
-        // enable rows; round 3t: -> 135, `UASetVerifierFee`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 135, "table rows: 103 typed with an entry, 32 plain");
+        // enable rows; round 3t: -> 135, `UASetVerifierFee`; owner 2026-11-12: -> 137, `UACreateToken`, `UACreateDex` (no vector
+        // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`)
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 137, "table rows: 105 typed with an entry, 32 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1852,9 +1853,8 @@ mod tests {
         ("mtxLiquidityPull", "((bytes32,(address,uint256)[],", "the DEX's liquidity pull (NotLiquidityDex, and no valid digest for any other caller): reached only through the relayed mtxLiquidity (spec 2026-11-10-dex-liquidity.md §11)"),
         ("exchangeOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
         ("settleOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
-        ("mtxCreateToken", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
-        ("mtxCreateDex", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
-        ("mtxCreateInstance", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
+        // owner 2026-11-12: `mtxCreateToken` and `mtxCreateDex` are rows (their configs named); the instance's `initCall` is a class's own call
+        ("mtxCreateInstance", "((bytes32,uint256,", "a class's own initializer call (initCall), which the node cannot name: the owner's call (2026-11-12)"),
         ("mtxApproveTokenRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
         ("mtxApproveDexRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
         ("mtxApproveRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
@@ -1944,7 +1944,8 @@ mod tests {
         // `mtxSetWrapLimits`, `mtxSetWrapMember`
         // round 3r: -> 47, the eleven admin ops of the factory and the compliance registry (the four approvals in NOT_ROWS)
         // round 3s (CTR-GOV-24): -> 50, `mtxSetAllowed`, `mtxSetDenied`, `mtxEnableFeature`; round 3t: -> 51, `mtxSetVerifierFee`
-        assert_eq!(router.len(), 51, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r); the three creations (T76) and the four release approvals (3r) in NOT_ROWS");
+        // owner 2026-11-12: -> 53, `mtxCreateToken`, `mtxCreateDex`
+        assert_eq!(router.len(), 53, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the two creations of a token and a DEX; `mtxCreateInstance` and the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -2268,9 +2269,10 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // round 3t (CTR-PQZ-36): -> (276, 200, 296): the router's `mtxSetVerifierFee` rowed; `setVerifierFee` (ADMIN) governed on each
     // of the four PQZ kinds
     // Fable E N-10: 276 -> 286, the registry's eight SIGNED rows and the two PERMISSIONLESS ones (`storePqzPop`, `deploy`)
-    const ROWED: usize = 286;
+    // owner 2026-11-12: -> 288, the router's `mtxCreateToken`, `mtxCreateDex`; EXEMPT 200 -> 198
+    const ROWED: usize = 288;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
-    const EXEMPT: usize = 200;
+    const EXEMPT: usize = 198;
     const GOVERNED: usize = 296;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).

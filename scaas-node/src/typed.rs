@@ -109,6 +109,15 @@ const NESTED: &[(&str, &str)] = &[
     // group 3l (wrap limits spec 2026-11-10 §6, §9): a leg's limits, the router's `UASetWrapLimits` takes an array of them
     ("WrapLimit", "uint24 perUser,uint64 tokenWide,uint32 period"),
     ("WrapLegLimits", "address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong"),
+    // owner 2026-11-12 (creations relayable): `IFactoryToken.TokenConfig` (CTR-TOK-25) and `ISCaaSDex.DexConfig` by their field names, read
+    // from named JSON; the node ABI-encodes them as the factory's `initArgs` and signs `initHash = keccak256(initArgs)` (`init!`)
+    ("TokenRoles", "bytes32 minter,bytes32 rateAdmin,bytes32 guardian,bytes32 issuer,bytes32 compliance"),
+    ("TokenLeg", "address underlying,uint256 num,uint256 den"),
+    ("TokenRate", "uint32 rateDelay,uint16 maxRateStepBps"),
+    ("ConfidentialConfig", "bytes auditorKey,uint256 shieldScale,uint256 maxShielded,uint256 confidentialFee,uint8 disclosureMode,uint8 auditorMode,uint256 minDecoyFee,uint8 pqzVerifyMode,bytes32 pqzVerifierUA,bool pqzVerifierFixed,uint8 proofStore,uint64 verifierFee,uint64 verifierFeeMax"),
+    ("RegulatedParams", "address complianceRegistry,uint64 requiredFlags,uint64 deniedFlags,bytes32 termsHash,bytes32 taxRecipient"),
+    ("TokenConfig", "string name,string symbol,uint8 decimals,uint256 features,uint256 lockedFeatures,bytes32 admin,TokenRoles roles,uint256 initialSupply,address initialHolder,TokenLeg[] legs,TokenRate rate,ConfidentialConfig conf,uint64 grantDelay,address rescueTo,uint256 maxSupply,RegulatedParams reg"),
+    ("DexConfig", "bytes32 admin,uint32 relayerSharePpm,address treasury,bool listedOnly,uint64 grantDelay,address rescueTo"),
     // round 3r (spec 2026-11-10-admin-not-owner.md §5.4): a release env, the router's three publishes take one (bounded below)
     ("Env", "address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes"),
     // `IPqChat`'s records (UA-7 spec §4.1, topics spec §2), by the contract's field names; `Wrap` here is a member's key wrap, not
@@ -263,6 +272,13 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UASetClassKindEnabled", "mtxSetClassKindEnabled", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,E", ""),
     ("UASetKycProvider", "mtxSetKycProvider", GR, "bytes32 from,address target,bytes32 provider,bool enabled,E", ""),
     ("UASetCompliance", "mtxSetCompliance", GR, "bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,E", ""),
+    // owner 2026-11-12: the factory's creations through the router (chain-neutral spec §4.4, S3), relayable at fee 0 like every
+    // `mtx*`; the config is named JSON (`args.config`), the node encodes it as `initArgs` and fills the signed `initHash`.
+    // `mtxCreateInstance` stays no row: its `initCall` is a class's own initializer call, which the node cannot name (owner's call)
+    ("UACreateToken", "mtxCreateToken", GR, "bytes32 from,address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt,E",
+        "E target kind version init!config:TokenConfig salt @"),
+    ("UACreateDex", "mtxCreateDex", GR, "bytes32 from,address target,uint64 version,bytes32 initHash,bytes32 salt,E",
+        "E target version init!config:DexConfig salt @"),
     ("UASetChainEntries", "mtxSetChainEntries", GR, "bytes32 from,address target,address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -336,6 +352,9 @@ enum Tok {
     Sign(Sig),
     /// Group 3f: the `PqzSignedVerdict` the node builds (empty until `crate::pqz` fills it).
     Verdict,
+    /// `init!name:Struct` (owner 2026-11-12, the creations): the named struct `args.name`, sent ABI-encoded as `bytes`; the
+    /// row's `initHash` field is its keccak, filled by the node.
+    Init(String, String),
 }
 
 #[derive(Debug)]
@@ -402,6 +421,9 @@ fn tok(t: &str, sig: Sig) -> Tok {
     if let Some(n) = t.strip_prefix("wrap!") {
         return Tok::WrapAsTrade(n.into());
     }
+    if let Some((n, ty)) = t.strip_prefix("init!").and_then(|x| x.split_once(':')) {
+        return Tok::Init(n.into(), ty.into());
+    }
     if let Some(l) = t.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
         return Tok::List(Box::new(tok(l, sig)));
     }
@@ -453,6 +475,7 @@ fn tok_abi(t: &Tok, fields: &[(String, String)]) -> String {
         Tok::WrapAsTrade(n) => abi_type(if of(n).starts_with("(bytes32") { "UATradeOrder" } else { "TradeOrder" }),
         Tok::Sign(s) => abi_type(sig_type(*s)),
         Tok::Verdict => abi_type("PqzSignedVerdict"),
+        Tok::Init(..) => "bytes".into(),
     }
 }
 
@@ -665,6 +688,10 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
         // CTR-DEX-30 (C9): a liquidity order's inputs and outputs and its plan's extra tokens, at most eight each
         if el == "LiquidityToken" && a.len() > LIQUIDITY_MAX {
             return Err(bad(&format!("more than {LIQUIDITY_MAX}")));
+        }
+        // CTR-TOK-25: a wrapped kind's legs, 1..8 (the token refuses more; bounded here before any read)
+        if el == "TokenLeg" && a.len() > 8 {
+            return Err(bad("more than 8 legs"));
         }
         let v: Result<Vec<Val>> = a.iter().enumerate().map(|(i, x)| parse(el, x, &format!("{path}[{i}]"))).collect();
         return Ok(Val::Array(v?));
@@ -962,6 +989,7 @@ fn emit(t: &Tok, row: &Row, a: &Assembled) -> Result<Val> {
         }
         Tok::Sign(_) => a.sig.clone().ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
         Tok::Verdict => empty_verdict(),
+        Tok::Init(n, _) => Val::Bytes(get(n)?.abi_encode()),
     })
 }
 
@@ -977,7 +1005,7 @@ fn empty_verdict() -> Val {
 
 fn extras(row: &Row) -> Vec<(&str, &str)> {
     row.plan.iter().filter_map(|t| match t {
-        Tok::Extra(n, ty) => Some((n.as_str(), ty.as_str())),
+        Tok::Extra(n, ty) | Tok::Init(n, ty) => Some((n.as_str(), ty.as_str())),
         _ => None,
     }).collect()
 }
@@ -1003,9 +1031,25 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
         }
         bail!("BAD_PAYLOAD: args.{k}: unknown field");
     }
+    // owner 2026-11-12 (the creations): `initHash` is the keccak of the encoded named struct, never the job's
+    let init_hash = match row.plan.iter().find_map(|t| match t { Tok::Init(n, ty) => Some((n, ty)), _ => None }) {
+        Some((n, ty)) => {
+            if a.contains_key("initHash") {
+                bail!("BAD_PAYLOAD: args.initHash: the node hashes args.{n}");
+            }
+            let p = format!("args.{n}");
+            let v = parse(ty, a.get(n.as_str()).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?;
+            Some(json!(format!("{:#x}", keccak256(v.abi_encode()))))
+        }
+        None => None,
+    };
     let mut vals: Vec<Val> = Vec::new();
     for (ty, n) in &row.fields {
-        let (src, p) = if in_env(n) { (e.get(n), "envelope") } else { (a.get(n), "args") };
+        let (src, p) = match &init_hash {
+            Some(h) if n == "initHash" => (Some(h), "args"),
+            _ if in_env(n) => (e.get(n), "envelope"),
+            _ => (a.get(n), "args"),
+        };
         let p = format!("{p}.{n}");
         vals.push(parse(ty, src.ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?);
     }
@@ -1533,9 +1577,10 @@ pub mod testkit {
         Some(format!("0x{}", alloy::hex::encode(crate::abi::IToken::eip712DomainCall::abi_encode_returns(&r))))
     }
 
-    /// ua-mtx-merge T76: the router's three creations have vector rows and no node row (chain-neutral spec §6.3: only when
-    /// relaying creations is decided, index spec §8.11 Q11; the guard test names them in `NOT_ROWS`). Every walker over the
-    /// vector sees the rows the node builds; the three must be in the file.
+    /// ua-mtx-merge T76: the router's three creations have vector rows; owner 2026-11-12: `UACreateToken` and `UACreateDex` are node
+    /// rows taking a named config, which the vector's filler `initArgs` is not, so the walkers over the vector leave them out
+    /// (`creation_rows_encode_the_named_config` pins them); `UACreateInstance` has no node row (`NOT_ROWS`). The three must be in the
+    /// file.
     /// Round 3r (spec §5.6, Q3): the four release approvals too (release management is not a node job, owner 2026-11-10).
     pub const NO_NODE_ROW: [&str; 7] = ["UACreateToken", "UACreateDex", "UACreateInstance", "UAApproveTokenRelease",
         "UAApproveDexRelease", "UAApproveRelease", "UARevokeApproval"];
@@ -1641,6 +1686,11 @@ pub mod testkit {
                 }
                 Tok::Field(n) => { args.insert(n.clone(), to_json(&ty_of(n), x)); }
                 Tok::Extra(n, ty) => { args.insert(n.clone(), to_json(ty, x)); }
+                Tok::Init(n, ty) => {
+                    let v = DynSolType::parse(&abi_type(ty)).unwrap().abi_decode(x.as_bytes().unwrap()).unwrap();
+                    args.insert(n.clone(), to_json(ty, &v));
+                    args.remove("initHash");
+                }
                 Tok::Group(g) => for (n, y) in g.iter().zip(x.as_tuple().unwrap()) {
                     args.insert(n.clone(), to_json(&ty_of(n), y));
                 },
@@ -1758,8 +1808,9 @@ mod tests {
         // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`; group 3l: -> 89, the
         // router's `UASetWrapLimits`, `UASetWrapMember`
         // round 3r (CTR-GOV-23): -> 100, the router's eleven admin rows; round 3s: -> 103, the router's three list / enable rows
-        // round 3t: -> 104, `UASetVerifierFee`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 104, "101 vector rows, mtxPay, the two invalidations (DEX, token)");
+        // round 3t: -> 104, `UASetVerifierFee`; owner 2026-11-12: -> 106, `UACreateToken`, `UACreateDex` (their vector rows stay out
+        // of the walk: filler `initArgs`, `creation_rows_encode_the_named_config`)
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 106, "101 vector rows, mtxPay, the two invalidations (DEX, token), the two creations");
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 32, "the wallet's three flat builders are gone (MD-11 (a))");
@@ -2552,6 +2603,106 @@ mod tests {
         assert_ne!(p.typed.lane_digest_on(chain, uid), p.typed.digest_on(chain, uid), "the in-flight key stays the outer op");
         let plain = Op::parse(&op_of("UAUnwrap", "token", &v).unwrap(), FEE).unwrap();
         assert_eq!(plain.typed.lane_digest_on(chain, uid), plain.typed.digest_on(chain, uid));
+    }
+
+    alloy::sol! {
+        // `IFactoryToken.TokenConfig` / `ISCaaSDex.DexConfig` as the contracts declare them (and `tests/e2e.rs` creates tokens with)
+        struct TRoles { bytes32 minter; bytes32 rateAdmin; bytes32 guardian; bytes32 issuer; bytes32 compliance; }
+        struct TLeg { address underlying; uint256 num; uint256 den; }
+        struct TRate { uint32 rateDelay; uint16 maxRateStepBps; }
+        struct TConf { bytes auditorKey; uint256 shieldScale; uint256 maxShielded; uint256 confidentialFee; uint8 disclosureMode;
+            uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; uint8 proofStore;
+            uint64 verifierFee; uint64 verifierFeeMax; }
+        struct TReg { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash; bytes32 taxRecipient; }
+        struct TConfig { string name; string symbol; uint8 decimals; uint256 features; uint256 lockedFeatures; bytes32 admin; TRoles roles;
+            uint256 initialSupply; address initialHolder; TLeg[] legs; TRate rate; TConf conf; uint64 grantDelay; address rescueTo;
+            uint256 maxSupply; TReg reg; }
+        struct TDex { bytes32 admin; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; }
+    }
+
+    /// Owner 2026-11-12 (every state-changing `mtx*` relayable): `mtxCreateToken` / `mtxCreateDex` take the config as named JSON
+    /// (`args.config`); the node sends it ABI-encoded as the factory's `initArgs` and signs `initHash = keccak256(initArgs)`, the
+    /// vector's type string and selector. Refused by name: a job's own `initHash`, a missing field, a hex config, nine legs.
+    #[test]
+    fn creation_rows_encode_the_named_config() {
+        use alloy::sol_types::SolValue;
+        let raw: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap();
+        let z = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+        let a = |b: u8| format!("{:#x}", Address::repeat_byte(b));
+        let token = json!({"name": "Named", "symbol": "NMD", "decimals": 6, "features": "1", "lockedFeatures": "0", "admin": z(0xad),
+            "roles": {"minter": z(1), "rateAdmin": z(0), "guardian": z(0), "issuer": z(0), "compliance": z(0)},
+            "initialSupply": "1000", "initialHolder": a(0x40), "legs": [{"underlying": a(0x11), "num": "1", "den": "2"}],
+            "rate": {"rateDelay": 0, "maxRateStepBps": 0},
+            "conf": {"auditorKey": "0x0102", "shieldScale": "0", "maxShielded": "0", "confidentialFee": "0", "disclosureMode": 0,
+                "auditorMode": 0, "minDecoyFee": "0", "pqzVerifyMode": 0, "pqzVerifierUA": z(0), "pqzVerifierFixed": false,
+                "proofStore": 0, "verifierFee": "0", "verifierFeeMax": "0"},
+            "grantDelay": "0", "rescueTo": a(0), "maxSupply": "0",
+            "reg": {"complianceRegistry": a(0), "requiredFlags": "0", "deniedFlags": "0", "termsHash": z(0), "taxRecipient": z(0)}});
+        let want_token = TConfig { name: "Named".into(), symbol: "NMD".into(), decimals: 6, features: U256::from(1), lockedFeatures: U256::ZERO,
+            admin: B256::repeat_byte(0xad), roles: TRoles { minter: B256::repeat_byte(1), rateAdmin: B256::ZERO, guardian: B256::ZERO,
+            issuer: B256::ZERO, compliance: B256::ZERO }, initialSupply: U256::from(1000), initialHolder: Address::repeat_byte(0x40),
+            legs: vec![TLeg { underlying: Address::repeat_byte(0x11), num: U256::from(1), den: U256::from(2) }],
+            rate: TRate { rateDelay: 0, maxRateStepBps: 0 }, conf: TConf { auditorKey: vec![1, 2].into(), shieldScale: U256::ZERO,
+            maxShielded: U256::ZERO, confidentialFee: U256::ZERO, disclosureMode: 0, auditorMode: 0, minDecoyFee: U256::ZERO, pqzVerifyMode: 0,
+            pqzVerifierUA: B256::ZERO, pqzVerifierFixed: false, proofStore: 0, verifierFee: 0, verifierFeeMax: 0 }, grantDelay: 0,
+            rescueTo: Address::ZERO, maxSupply: U256::ZERO, reg: TReg { complianceRegistry: Address::ZERO, requiredFlags: 0, deniedFlags: 0,
+            termsHash: B256::ZERO, taxRecipient: B256::ZERO } }.abi_encode();
+        let dex = json!({"admin": z(0xad), "relayerSharePpm": 1000, "treasury": a(0x7e), "listedOnly": true, "grantDelay": "0", "rescueTo": a(0)});
+        let want_dex = TDex { admin: B256::repeat_byte(0xad), relayerSharePpm: 1000, treasury: Address::repeat_byte(0x7e), listedOnly: true,
+            grantDelay: 0, rescueTo: Address::ZERO }.abi_encode();
+        for (name, config, want, init_at) in [("UACreateToken", token, want_token, 4usize), ("UACreateDex", dex, want_dex, 3)] {
+            let o = &raw["ops"][name];
+            let d = &o["domains"]["gov_router"];
+            let row = row_of(name, "gov_router");
+            assert_eq!(row.type_string(), o["typeString"].as_str().unwrap(), "{name}");
+            assert_eq!(format!("0x{}", alloy::hex::encode(row.selector)), d["selector"].as_str().unwrap(), "{name}: {}", d["abi"]);
+            let mut args = o["message"].as_object().unwrap().clone();
+            let mut env = Map::new();
+            for k in ["from"].into_iter().chain(ENV) {
+                env.insert(k.to_string(), args.remove(k).unwrap());
+            }
+            args.remove("initHash");
+            args.insert("config".into(), config.clone());
+            let sig = json!({"keyData": "0x", "signature": d["signature"], "members": []});
+            let (env, args) = (Value::Object(env), Value::Object(args));
+            let built = assemble(row, Some(&env), &args, Some(&sig), FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
+            // the struct hash, by hand: the vector's typehash over the message's words with `initHash = keccak256(initArgs)`
+            let m = &o["message"];
+            let word = |k: &str| -> [u8; 32] {
+                let v = &m[k];
+                match v.as_str() {
+                    Some(x) if x.starts_with("0x") => { let b = alloy::hex::decode(&x[2..]).unwrap(); let mut w = [0u8; 32]; w[32 - b.len()..].copy_from_slice(&b); w }
+                    Some(x) => U256::from_str_radix(x, 10).unwrap().to_be_bytes(),
+                    None => U256::from(v.as_u64().unwrap()).to_be_bytes(),
+                }
+            };
+            let mut enc = alloy::hex::decode(&o["typehash"].as_str().unwrap()[2..]).unwrap();
+            for (_, k) in &row.fields {
+                enc.extend_from_slice(&if k == "initHash" { keccak256(&want).0 } else { word(k) });
+            }
+            assert_eq!(built.struct_hash, Some(keccak256(&enc)), "{name}: initHash is the keccak of the encoded named config");
+            let tys: Vec<String> = row.plan.iter().map(|t| tok_abi(t, &row.fields)).collect();
+            let call = DynSolType::parse(&format!("({})", tys.join(","))).unwrap().abi_decode_sequence(&built.data[4..]).unwrap();
+            assert_eq!(call.as_tuple().unwrap()[init_at].as_bytes(), Some(&want[..]), "{name}: initArgs = abi.encode(config)");
+            let (_, back, _) = op_from_calldata(row, &built.data);
+            assert_eq!(back["config"], config, "{name}: the calldata reads back to the named config");
+            // refused by name
+            let refused = |mutate: &dyn Fn(&mut Value)| {
+                let mut x = args.clone();
+                mutate(&mut x);
+                assemble(row, Some(&env), &x, Some(&sig), FEE).unwrap_err().to_string()
+            };
+            assert!(refused(&|x| x["initHash"] = json!(z(1))).starts_with("BAD_PAYLOAD: args.initHash: the node hashes args.config"), "{name}");
+            assert!(refused(&|x| { x["config"].as_object_mut().unwrap().remove("admin"); }).contains("args.config.admin: missing"), "{name}");
+            assert!(refused(&|x| x["config"] = json!(format!("0x{}", alloy::hex::encode(&want)))).contains("args.config: not an object"), "{name}");
+            if name == "UACreateToken" {
+                let nine = refused(&|x| x["config"]["legs"] = json!(vec![config["legs"][0].clone(); 9]));
+                assert!(nine.contains("more than 8 legs"), "{nine}");
+                let mut eight = args.clone();
+                eight["config"]["legs"] = json!(vec![config["legs"][0].clone(); 8]);
+                assemble(row, Some(&env), &eight, Some(&sig), FEE).expect("control: eight legs");
+            }
+        }
     }
 
     /// CTR-MTX-27: `call` is a named op, not hex: the router's calldata carries its bytes, `callDataHash` their hash, and the

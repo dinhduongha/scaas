@@ -750,6 +750,19 @@ Change (2026-11-11, ua-mtx-fix-node, Fable re-check 2 S-1..S-3; controller call;
 
 **Source.** Owner 2026-11-09 (Q1–Q5 as recommended); spec `superpowers/specs/2026-11-09-service-pull.md` §8, §13; contract rule CTR-MTX-32.
 
+### NODE-JOB-26 — The factory's token and DEX creations are relayable node rows; the config is named, the node encodes initArgs
+- old: — · status: current · owner: yes · date: 2026-11-12 · normative: node/job-api.md#NODE-JOB-26 · superseded-by: —
+
+**Rule.** The router's `mtxCreateToken` and `mtxCreateDex` are node rows of kind `gov_router`, relayable at fee 0 like every state-changing `mtx*`. The job names the creation's config field by field (`args.config`: `IFactoryToken.TokenConfig` or `ISCaaSDex.DexConfig`, a wrapped kind's legs at most 8); the node ABI-encodes it as the factory's `initArgs` and fills the signed `initHash = keccak256(initArgs)`, refusing a job's own `initHash` (`BAD_PAYLOAD`). `mtxCreateInstance` stays no row: its `initCall` is a class's own initializer call, which the node cannot build from named fields; how it is relayed is open (owner's). **UNAUDITED.**
+
+**Status.** BUILT (branch `ua-mtx-fix2-node`: `typed.rs` rows and the `init!` plan token, `guard.rs` `NOT_ROWS`; tests `typed::tests::creation_rows_encode_the_named_config`, `guard::tests::allow_lists_equal_the_selector_audit_both_directions` (router allow-list 51 -> 53), e2e `router_creations_signed_by_an_eoa`; 5 node mutants killed).
+
+**Why.** Every state-changing `mtx*` is relayable; the explicit-parameters rule keeps a packed config out of node JSON, so the node rebuilds the bytes the factory takes from named fields.
+
+**Cost if wrong.** Without the rows a creator with no gas could not create; with a hex `initArgs` the node would relay a bundle it cannot read.
+
+**Source.** Owner 2026-11-12 (chat, relayed by the controller): the three creations without a node row, "làm" (do it); rule "every state-changing `mtx*` is relayable, fee 0 too".
+
 ### NODE-JOB-80 — Node talks to ERP only over json/2
 - old: R6 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: ARCH-POS-05, NODE-JOB-06, INT-ERP-16, INT-ERP-18
 
