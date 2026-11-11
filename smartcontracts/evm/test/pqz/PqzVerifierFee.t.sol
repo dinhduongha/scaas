@@ -256,7 +256,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     /// Runs form `op` directly on `t` (the verifier's verdict on an `OFFCHAIN` token), reverting with the op's own data.
     function _run(uint8 op, NormalPqzToken t, bytes32 ben) internal returns (bytes memory st) {
         st = _stmt(op, t, ben);
-        bool offchain = _cfgOf(address(t)).pqzVerifyMode == PqzCore.OFFCHAIN;
+        bool offchain = address(t) != address(tok) && address(t) != address(w); // no view call: the access test reads none
         (bool ok, bytes memory ret) = address(t).call(_call(op, t, ben, offchain ? _sv(t, st) : noVerdict()));
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
     }
@@ -311,6 +311,9 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         assertEq(PqzCore.TAG_DIRECT_MODE, keccak256("SCAAS-PQZ-DIRECT-MODE-V1"), "control: today's tag");
     }
 
+    uint8 internal constant HASH_ = uint8(ZetherTypes.TransferMode.HASH); // 0
+    uint8 internal constant BUNDLE_ = uint8(ZetherTypes.TransferMode.BUNDLE); // 1
+
     function _vfBinding(uint8 mode, uint256 vf) internal pure returns (bytes32) {
         return keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE_VF, mode, vf));
     }
@@ -319,20 +322,23 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     /// both modes; the burn, refresh and unwrap words and the relayed word unchanged; `PRECOMPILE` keeps today's (M24).
     function test_bindingWord_direct() public {
         uint64[3] memory fees = [uint64(0), 1, CAP];
+        NormalPqzToken ow = NormalPqzToken(address(offW));
+        uint256 unwrap0 = _wd(_stmt(UNWRAP, ow, 0), 544); // the unwrap binding (TAG_UNWRAP over the leg), at vf = F
         for (uint256 i; i < 3; ++i) {
             _fee(address(off), fees[i]);
+            _fee(address(offW), fees[i]);
+            assertEq(_wd(_stmt(UNWRAP, ow, 0), 544), unwrap0, "unwrap direct: unchanged");
             uint256 vf = fees[i];
-            assertEq(bytes32(_wd(_stmt(SINGLE, off, 0), 544)), _vfBinding(0, vf), "op 1 BUNDLE");
-            assertEq(bytes32(_wd(_stmt(SINGLE_COMPACT, off, 0), 544)), _vfBinding(1, vf), "op 1 HASH");
-            assertEq(bytes32(_wd(_stmt(MULTI, off, 0), 544)), _vfBinding(0, vf), "op 7 BUNDLE");
-            assertEq(bytes32(_wd(_stmt(COMPACT, off, 0), 544)), _vfBinding(1, vf), "op 7 HASH");
+            assertEq(bytes32(_wd(_stmt(SINGLE, off, 0), 544)), _vfBinding(BUNDLE_, vf), "op 1 BUNDLE");
+            assertEq(bytes32(_wd(_stmt(SINGLE_COMPACT, off, 0), 544)), _vfBinding(HASH_, vf), "op 1 HASH");
+            assertEq(bytes32(_wd(_stmt(MULTI, off, 0), 544)), _vfBinding(BUNDLE_, vf), "op 7 BUNDLE");
+            assertEq(bytes32(_wd(_stmt(COMPACT, off, 0), 544)), _vfBinding(HASH_, vf), "op 7 HASH");
             assertEq(_wd(_stmt(UNSHIELD, off, 0), 544), 0, "burn: unchanged");
             assertEq(_wd(_stmt(REFRESH, off, 0), 544), 0, "refresh: unchanged");
             bytes32 env = keccak256("an envelope binding");
             assertEq(bytes32(_wd(off.transferSingleStatement(_singleA(off, false, 0), env), 544)),
-                keccak256(abi.encode(env, uint8(0))), "relayed: unchanged");
+                keccak256(abi.encode(env, BUNDLE_)), "relayed: unchanged");
         }
-        assertEq(_wd(_stmt(UNWRAP, NormalPqzToken(address(offW)), 0), 544), 0, "unwrap direct: unchanged");
         assertEq(bytes32(_wd(_stmt(SINGLE, tok, 0), 544)), _direct(ZetherTypes.TransferMode.BUNDLE), "PRECOMPILE op 1: TAG_DIRECT_MODE");
         assertEq(bytes32(_wd(_stmt(COMPACT, tok, 0), 544)), _direct(ZetherTypes.TransferMode.HASH), "PRECOMPILE op 7: TAG_DIRECT_MODE");
     }

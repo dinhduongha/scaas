@@ -14099,6 +14099,28 @@
     "group": "Q"
    },
    {
+    "sel": "e790fb8f",
+    "sig": "setVerifierFee(uint64)",
+    "name": "setVerifierFee",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint64 next"
+    ],
+    "names": [
+     "next"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
     "sel": "5f64c53c",
     "sig": "shieldScale()",
     "name": "shieldScale",
@@ -17862,6 +17884,28 @@
     "guard": "nonReentrant",
     "params": [
      "uint8 next"
+    ],
+    "names": [
+     "next"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "e790fb8f",
+    "sig": "setVerifierFee(uint64)",
+    "name": "setVerifierFee",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint64 next"
     ],
     "names": [
      "next"
@@ -34989,6 +35033,28 @@
     "group": "P"
    },
    {
+    "sel": "e790fb8f",
+    "sig": "setVerifierFee(uint64)",
+    "name": "setVerifierFee",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint64 next"
+    ],
+    "names": [
+     "next"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
     "sel": "5f64c53c",
     "sig": "shieldScale()",
     "name": "shieldScale",
@@ -39212,6 +39278,28 @@
     "vis": "external",
     "domain": "pay",
     "group": "P"
+   },
+   {
+    "sel": "e790fb8f",
+    "sig": "setVerifierFee(uint64)",
+    "name": "setVerifierFee",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint64 next"
+    ],
+    "names": [
+     "next"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
    },
    {
     "sel": "8c274876",

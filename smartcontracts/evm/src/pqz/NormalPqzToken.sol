@@ -665,6 +665,10 @@ contract NormalPqzToken is NormalPqzTokenCore, INormalPqzTokenAbi {
         _forward(_MQ);
     }
 
+    function setVerifierFee(uint64) external {
+        _forward(_MQ);
+    }
+
     function shieldScale() external view returns (uint256 _p0) {
         _forwardView(_MQ);
     }

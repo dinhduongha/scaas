@@ -247,8 +247,10 @@ library ZetherLib {
     ///         one (CTR-ZTH-49).
     function init(IFactoryToken.ConfidentialConfig memory c, IZetherVerifier v) public {
         // group 3f (PQZ verifier mode spec §3, §9): the PQZ verifier fields are another kind's (Zether ≠ PQZ); group 3h (pqz-proof-path
-        // spec §4.1, C8): `proofStore` too, in the same check (no Zether body moves)
-        if (c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0) {
+        // spec §4.1, C8): `proofStore` too, in the same check (no Zether body moves); round 3t (CTR-PQZ-36): the verifier fee
+        // and its cap too
+        if (c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0 || c.verifierFee != 0
+            || c.verifierFeeMax != 0) {
             revert IFactoryToken.ConfigFieldForOtherKind(4);
         }
         // the release's verifier must run here (an absent precompile answers success with empty output; moved from the

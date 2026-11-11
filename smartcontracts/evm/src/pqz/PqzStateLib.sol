@@ -43,12 +43,17 @@ library PqzStateLib {
     ///         `OFFCHAIN`: a verifier UA of spec §4.1 (`verifierShape` strict), its shape, fixed or transferable, the
     ///         factory's `noticePeriod()` stored (nothing later shortens it); `psid` the build's PQZL id; nothing read
     ///         from the release verifier, the precompile never called. The auditor's key passes the mode's check.
+    ///         Round 3t (CTR-PQZ-36, verifier fee spec §3.3), in this order: the range row with the cap,
+    ///         `confidentialFee + verifierFeeMax + 8 · minDecoyFee` `< 2^64` and `< cap` (`BadInit`; controller call 2: every
+    ///         fee the setter can write keeps it); `PRECOMPILE` with a fee or a cap `PqzVerifyConfigInvalid`; `OFFCHAIN` with
+    ///         `verifierFee > verifierFeeMax` `VerifierFeeAboveMax`; both written on `OFFCHAIN`.
     function init(IFactoryToken.ConfidentialConfig memory c, address registry, address verifier, address factory) public {
         bytes memory aud = c.auditorKey;
         if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > PqzCore.MAX_TOTAL_SHIELDED
             || c.confidentialFee >= PqzCore.VALUE_BOUND || c.confidentialFee >= c.maxShielded
-            || c.minDecoyFee >= PqzCore.VALUE_BOUND || c.confidentialFee + 8 * c.minDecoyFee >= PqzCore.VALUE_BOUND
-            || c.confidentialFee + 8 * c.minDecoyFee >= c.maxShielded
+            || c.minDecoyFee >= PqzCore.VALUE_BOUND
+            || c.confidentialFee + c.verifierFeeMax + 8 * c.minDecoyFee >= PqzCore.VALUE_BOUND
+            || c.confidentialFee + c.verifierFeeMax + 8 * c.minDecoyFee >= c.maxShielded
             || (aud.length != 0 && aud.length != 32) || c.maxShielded > type(uint256).max / c.shieldScale) {
             revert IPqzToken.BadInit();
         }
@@ -61,9 +66,11 @@ library PqzStateLib {
         uint8 m = c.pqzVerifyMode;
         if (m > PqzCore.OFFCHAIN) revert IPqzToken.PqzVerifyModeInvalid(m);
         bool off = m == PqzCore.OFFCHAIN;
-        if (off ? c.pqzVerifierUA == 0 : (c.pqzVerifierUA != 0 || c.pqzVerifierFixed)) {
+        if (off ? c.pqzVerifierUA == 0
+                : (c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.verifierFee != 0 || c.verifierFeeMax != 0)) {
             revert IPqzToken.PqzVerifyConfigInvalid();
         }
+        if (c.verifierFee > c.verifierFeeMax) revert IPqzToken.VerifierFeeAboveMax(c.verifierFee, c.verifierFeeMax);
         if (!off && verifier == address(0)) revert PqzSafety.SelfTestFailed(address(0));
         PqzCore.PqzStorage storage s = PqzCore.$();
         s.pqzVerifyMode = m;
@@ -79,6 +86,7 @@ library PqzStateLib {
             s.pqzVerifierShape = PqzCore.verifierShape(registry, c.pqzVerifierUA, true);
             s.pqzVerifierFixed = c.pqzVerifierFixed;
             s.noticePeriod = IOpenFactory(factory).noticePeriod();
+            (s.verifierFee, s.verifierFeeMax) = (c.verifierFee, c.verifierFeeMax);
         } else {
             PqzKeyVerifier v = PqzKeyVerifier(verifier);
             s.pqz = v.PRECOMPILE();
@@ -159,6 +167,68 @@ library PqzStateLib {
         emit PqzVerifierRevoked(previous, e);
     }
 
+    // ------------------------------------------------------------------ the verifier fee (round 3t, CTR-PQZ-36, spec §7.1)
+
+    /// @notice The admin's verifier fee of an `OFFCHAIN` token within `[0, verifierFeeMax]` (no bit; `pqzSetVerifier`'s
+    ///         pattern, its own state because a verifier transfer and a fee increase may be pending at once): a decrease, to
+    ///         0 included, at once (a live pending increase dropped, controller call 3); an increase proposed by the first
+    ///         call (`VerifierFeeProposed`, `eta = now + noticePeriod`; notice 0: at once) and confirmed by the same call of
+    ///         the same proposer, still the admin, in the same admin generation, within `[eta, eta + noticePeriod]`
+    ///         (`VerifierFeeNotReady` before `eta`); the current value cancels a live pending (`VerifierFeeSet(cur, cur)`,
+    ///         Fable P3-1), else `VerifierFeeSame`. Refusals in order: `NotProposer`, `NotAdmin`, `PqzVerifyConfigInvalid`
+    ///         (`PRECOMPILE`), `VerifierFeeNotReady`, `VerifierFeeAboveMax`, `VerifierFeeSame`, `VerifierFeePending`.
+    ///         `verifierFeeMax` is never written here (I-V1).
+    function setVerifierFee(uint64 next, bytes32 caller) public {
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
+        bool live = _feeLive(s, g);
+        bool confirm = live && next == s.verifierFeePending;
+        if (confirm && caller != s.verifierFeeProposer) {
+            revert IGovernance.NotProposer(0, bytes32(uint256(next)), s.verifierFeeProposer);
+        }
+        _admin(caller, g);
+        if (s.pqzVerifyMode != PqzCore.OFFCHAIN) revert IPqzToken.PqzVerifyConfigInvalid();
+        uint64 cur = s.verifierFee;
+        if (confirm) {
+            if (block.timestamp < s.verifierFeeEta) revert IPqzToken.VerifierFeeNotReady(s.verifierFeeEta);
+            _setFee(s, cur, next);
+            return;
+        }
+        if (next > s.verifierFeeMax) revert IPqzToken.VerifierFeeAboveMax(next, s.verifierFeeMax);
+        if (next == cur) {
+            if (!live) revert IPqzToken.VerifierFeeSame();
+            _setFee(s, cur, cur);
+            return;
+        }
+        if (next < cur) {
+            _setFee(s, cur, next);
+            return;
+        }
+        if (live) revert IPqzToken.VerifierFeePending(s.verifierFeePending);
+        uint64 eta = uint64(block.timestamp) + s.noticePeriod;
+        emit IPqzToken.VerifierFeeProposed(cur, next, eta);
+        if (s.noticePeriod == 0) {
+            _setFee(s, cur, next);
+            return;
+        }
+        (s.verifierFeePending, s.verifierFeeEta, s.verifierFeeProposer, s.verifierFeeProposerGeneration) =
+            (next, eta, caller, g.adminGeneration);
+    }
+
+    /// @dev A pending increase still confirmable: proposed in this admin generation, `[eta, eta + noticePeriod]` not passed.
+    ///      An increase is `> verifierFee ≥ 0`, so `verifierFeePending ≠ 0` marks one.
+    function _feeLive(PqzCore.PqzStorage storage s, GovernanceLib.GovernanceStorage storage g) private view returns (bool) {
+        return s.verifierFeePending != 0 && s.verifierFeeProposerGeneration == g.adminGeneration
+            && block.timestamp <= uint256(s.verifierFeeEta) + s.noticePeriod;
+    }
+
+    /// @dev Writes the fee, drops any pending increase, `VerifierFeeSet(previous, next)`.
+    function _setFee(PqzCore.PqzStorage storage s, uint64 previous, uint64 next) private {
+        s.verifierFee = next;
+        (s.verifierFeePending, s.verifierFeeEta, s.verifierFeeProposer, s.verifierFeeProposerGeneration) = (0, 0, 0, 0);
+        emit IPqzToken.VerifierFeeSet(previous, next);
+    }
+
     /// @notice Group 3h (PQZ proof path spec §5, O10): the body of bit 24's power, after the token's `use(24)` (in
     ///         `PqzLayer`, so this library makes no DELEGATECALL into `GovernanceLib`): `next` 0 `NONE` or 1 `LOG`
     ///         (`ProofStoreInvalid` otherwise), slot 0 byte 23, read by the next debit in either direction; the current value
@@ -172,13 +242,16 @@ library PqzStateLib {
         emit IPqzToken.ProofStoreSet(previous, next);
     }
 
-    /// @notice `pqzVerifyConfig()` (spec §4.4): a dead pending reads as none.
+    /// @notice `pqzVerifyConfig()` (spec §4.4): a dead pending reads as none. Round 3t (CTR-PQZ-36, spec §7.3): the fee, the
+    ///         cap and a live pending increase with its `eta` (a dead one 0, 0; `PRECOMPILE` 0 for the four).
     function verifyConfig() public view returns (IPqzToken.PqzVerifyConfig memory c) {
         PqzCore.PqzStorage storage s = PqzCore.$();
-        bool live = _live(s, GovernanceLib.$());
+        GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
         (c.pqzVerifyMode, c.verifier, c.fixed_, c.pqzVerifierEpoch, c.noticePeriod) =
             (s.pqzVerifyMode, s.pqzVerifierUA, s.pqzVerifierFixed, s.pqzVerifierEpoch, s.noticePeriod);
-        if (live) (c.pending, c.eta) = (s.pqzPendingVerifier, s.eta);
+        if (_live(s, g)) (c.pending, c.eta) = (s.pqzPendingVerifier, s.eta);
+        (c.verifierFee, c.verifierFeeMax) = (s.verifierFee, s.verifierFeeMax);
+        if (_feeLive(s, g)) (c.verifierFeePending, c.verifierFeeEta) = (s.verifierFeePending, s.verifierFeeEta);
     }
 
     /// @dev The admin first (a stranger learns nothing of the configuration), then an `OFFCHAIN` token with a transferable

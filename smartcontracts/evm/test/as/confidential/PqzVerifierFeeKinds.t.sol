@@ -58,18 +58,19 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
     }
 
     /// The kind's debit at the current fee (12: op 1 to `bob`; 13: the unshield-unwrap of 5 to `0xD00D`), `shieldIn` from this
-    /// test, with the verifier's verdict (or the empty one).
+    /// test, with the verifier's verdict (or the empty one; empty too with a `shieldIn`, whose statement view refuses the
+    /// order test's amount above the cap's room).
     function _debit(uint256 shieldIn, bool verdict) internal view returns (bytes memory) {
         if (!_isWrapped()) {
             IPqzToken.PqzTransferArgs memory t = _single(false, bob, bytes32(0), shieldIn, 80);
-            IPqzToken.PqzSignedVerdict memory sv = verdict ? _sv(tok.transferSingleStatement(t, 0)) : noVerdict();
+            IPqzToken.PqzSignedVerdict memory sv = verdict && shieldIn == 0 ? _sv(tok.transferSingleStatement(t, 0)) : noVerdict();
             return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (t, PROOF, _pqAuth(), "", sv));
         }
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 5, 5 * SCALE);
         IPqzToken.PqzBurnArgs memory b = _burnArgs(bytes32(0), shieldIn, 81);
         IPqzToken.PqzSignedVerdict memory sv2 =
-            verdict ? _sv(WrappedPqzTokenLike(address(tok)).unshieldUnwrapStatement(b, x, 0)) : noVerdict();
+            verdict && shieldIn == 0 ? _sv(WrappedPqzTokenLike(address(tok)).unshieldUnwrapStatement(b, x, 0)) : noVerdict();
         return abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (b, x, PROOF, _pqAuth(), "", sv2));
     }
 

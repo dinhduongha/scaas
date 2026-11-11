@@ -258,6 +258,12 @@ abstract contract PqzLayer is MetaTokenBase {
         PqzStateLib.revokeVerifier(_govSubject());
     }
 
+    /// @notice Round 3t (CTR-PQZ-36, spec §7.1): the admin's verifier fee (`PqzStateLib.setVerifierFee`), a decrease at once,
+    ///         an increase after the notice period; through the router as `mtxSetVerifierFee`.
+    function _setVerifierFeeBody(uint64 next) internal {
+        PqzStateLib.setVerifierFee(next, _govSubject());
+    }
+
     /// @notice Group 3h (spec §5): bit 24 `PQZ_PROOF`'s power, `use(24)` (no scalar; disabling the bit freezes the value:
     ///         `FeatureNotSet`), then `PqzStateLib.setProofStore`; through the router as `mtxSetProofStore`.
     function _setProofStoreBody(uint8 next) internal {
@@ -370,31 +376,34 @@ abstract contract PqzLayer is MetaTokenBase {
         return _ref(ret);
     }
 
-    /// @dev Op 1 in the form of `e.mode`; the token pays what the library moved.
+    /// @dev Op 1 in the form of `e.mode`; the token pays what the library moved. Round 3t (CTR-PQZ-36, spec §6.1): the
+    ///      verifier fee's payee checked with the beneficiary before effects (CTR-AS-25), paid after txFee.
     function _single(PqzCore.Env memory e, IPqzToken.PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
         bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) private returns (bytes32 r)
     {
         _regSender(t.fromUA);
         if (t.shieldIn != 0) _regPayer();
         _regName(t.beneficiaryUA);
+        _regName(PqzCore.verifierPayee());
         _pullShieldIn(t.shieldIn);
         PqzCore.Paid memory f;
         (r, f) = PqzTransferLib.transfer(e, t, accHint, proof, pqzAuth, pqzVerdict);
-        _fromPool(f.ben, f.fee);
+        _payFees(f, f.fee - f.verifierFee);
     }
 
-    /// @dev Op 7 in the form of `e.mode`: txFee to the beneficiary, then `decoyFee` to EVERY leg (the real recipient too;
-    ///      owner 2026-10-20).
+    /// @dev Op 7 in the form of `e.mode`: txFee to the beneficiary, the verifier fee to the verifier (round 3t), then
+    ///      `decoyFee` to EVERY leg (the real recipient too; owner 2026-10-20).
     function _multi(PqzCore.Env memory e, IPqzToken.PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
         bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) private returns (bytes32 r)
     {
         _regSender(t.fromUA);
         if (t.shieldIn != 0) _regPayer();
         _regName(t.beneficiaryUA);
+        _regName(PqzCore.verifierPayee());
         _pullShieldIn(t.shieldIn);
         PqzCore.Paid memory f;
         (r, f) = PqzTransferLib.transferMulti(e, t, accHint, proof, pqzAuth, pqzVerdict);
-        _fromPool(f.ben, f.fee - f.legs * f.decoyFee);
+        _payFees(f, f.fee - f.verifierFee - f.legs * f.decoyFee);
         if (f.decoyFee != 0) {
             for (uint256 j; j < f.legs; ++j) _fromPool(t.legs[j].ua, f.decoyFee);
         }
@@ -467,9 +476,17 @@ abstract contract PqzLayer is MetaTokenBase {
         if (e.amount != 0) _regSender(b.fromUA); // a refresh (amount 0) names no sender (spec §4.2)
         if (b.shieldIn != 0) _regPayer();
         _regName(b.beneficiaryUA);
+        _regName(PqzCore.verifierPayee());
         _pullShieldIn(b.shieldIn);
         PqzCore.Paid memory f = PqzBurnLib.unshield(e, b, accHint, proof, pqzAuth, pqzVerdict);
-        _fromPool(f.ben, f.fee);
+        _payFees(f, f.fee - f.verifierFee);
+    }
+
+    /// @dev `txFee` (`units` of the word) to the beneficiary, then the verifier fee to the verifier (round 3t, spec §6.1
+    ///      steps 4, 5); a zero leg moves nothing.
+    function _payFees(PqzCore.Paid memory f, uint256 units) private {
+        _fromPool(f.ben, units);
+        _fromPool(f.verifier, f.verifierFee);
     }
 
     // ------------------------------------------------------------------ rollover (§7.6, plan 5h D8)

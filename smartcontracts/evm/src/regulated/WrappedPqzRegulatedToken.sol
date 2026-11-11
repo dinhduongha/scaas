@@ -930,6 +930,10 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
         _forward(_MP);
     }
 
+    function setVerifierFee(uint64) external {
+        _forward(_MS);
+    }
+
     function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata, bool, bool, bool) external {
         _forward(_MW);
     }

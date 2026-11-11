@@ -21,7 +21,7 @@ from post3 import HOOKS, hook  # the pipeline hooks of rule 4
 E = json.load(open('script/modules/entries.json'))
 # §4.2's splitting rule, applied where the build measured a module above 33,780 B (≈ 57 M asked; summary.txt): Q splits into
 # the PQZ ops and their verdict entries (Q) and the PQZ state, setters and views (S; Q2 until owner 2026-11-10).
-S_SETTERS = {'pqzSetVerifier', 'pqzCancelVerifier', 'pqzRevokeVerifier', 'setProofStore'}
+S_SETTERS = {'pqzSetVerifier', 'pqzCancelVerifier', 'pqzRevokeVerifier', 'setProofStore', 'setVerifierFee'}  # 3t: + setVerifierFee
 S_VERDICTS = {'verifyTransferAmount'}
 SPLITS = {'WrappedPqzToken': {'Q'}, 'WrappedPqzRegulatedToken': {'Q'}}
 # Owner 2026-11-10 (CTR-TOK-30's Change, the body modules by function): W holds the wrap entries only and R the regulated

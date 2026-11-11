@@ -641,6 +641,10 @@ contract NormalPqzRegulatedTokenQ is NormalPqzRegulatedTokenCore {
         _setProofStoreBody(next);
     }
 
+    function setVerifierFee(uint64 next) external onlyDelegated {
+        _setVerifierFeeBody(next);
+    }
+
     function shieldScale() external view onlyDelegated returns (uint256 _p0) {
         return _shieldScaleBody();
     }

@@ -154,6 +154,7 @@ library PqzCore {
         bytes32[] rec; // op 7: the legs' UAs
         uint256 legs; // op 7: M
         uint256 decoyFee; // op 7: the sender's per-leg fee `d`
+        uint256 verifierFee; // round 3t (CTR-PQZ-36): the `OFFCHAIN` verifier fee in this op's fee word (0 on `PRECOMPILE`)
         uint256 groups; // op 7: G = ⌈M / S_AUD⌉ with the auditor, ⌈M / 4⌉ without (`_groups`, R0-1)
         uint256 outLen;
         uint256 stLen;
@@ -165,17 +166,29 @@ library PqzCore {
 
     /// @dev What a settled debit moved through `totalShielded`, for the token to move through `SHIELD_POOL` exactly
     ///      (D19; the library decides, the token pays — as Zether's returned fee): `shieldIn` in, then `fee` out:
-    ///      `decoyFee` to each of the `legs` leg UAs (op 7), the rest (txFee) to `ben`.
+    ///      `decoyFee` to each of the `legs` leg UAs (op 7), `verifierFee` to `verifier` (round 3t, CTR-PQZ-36), the rest
+    ///      (txFee) to `ben`.
     struct Paid {
         uint256 shieldIn;
         bytes32 ben;
         uint256 fee;
         uint256 decoyFee;
         uint256 legs;
+        uint256 verifierFee;
+        bytes32 verifier;
     }
 
-    function _paid(Op memory o) internal pure returns (Paid memory) {
-        return Paid(o.shieldIn, o.ben, o.fee, o.decoyFee, o.legs);
+    /// @dev After `_check` passed: `verifier` the UA whose verdict was accepted (its epoch matched), never 0 with a fee (I-V3).
+    function _paid(Op memory o) internal view returns (Paid memory) {
+        return Paid(o.shieldIn, o.ben, o.fee, o.decoyFee, o.legs, o.verifierFee,
+            o.verifierFee == 0 ? bytes32(0) : $().pqzVerifierUA);
+    }
+
+    /// @notice Round 3t (CTR-PQZ-36, spec §6.1, §6.4): the verifier fee's payee before effects, for the fee-recipient check
+    ///         (CTR-AS-25): the current verifier UA on an `OFFCHAIN` token whose fee is not 0, else 0 (nothing checked).
+    function verifierPayee() internal view returns (bytes32) {
+        PqzStorage storage s = $();
+        return s.pqzVerifyMode == OFFCHAIN && s.verifierFee != 0 ? s.pqzVerifierUA : bytes32(0);
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.pqz")) - 1)) & ~bytes32(uint256(0xff))
@@ -273,9 +286,13 @@ library PqzCore {
         buf = _transferBuffer(o, e, t, hint, proofLen);
     }
 
-    /// @dev The mode folded into the binding: direct (binding 0, W-A) and relayed (the envelope's, D15).
-    function _bindMode(Env memory e) internal pure {
-        e.binding = keccak256(abi.encode(e.binding == 0 ? TAG_DIRECT_MODE : e.binding, uint8(e.mode)));
+    /// @dev The mode folded into the binding: direct (binding 0, W-A) and relayed (the envelope's, D15). Round 3t (Fable
+    ///      P1-1): direct on an `OFFCHAIN` token, the fee in force too (`TAG_DIRECT_MODE_VF`), so `d` is unique on both forms.
+    function _bindMode(Env memory e) internal view {
+        PqzStorage storage s = $();
+        e.binding = e.binding == 0 && s.pqzVerifyMode == OFFCHAIN
+            ? keccak256(abi.encode(TAG_DIRECT_MODE_VF, uint8(e.mode), uint256(s.verifierFee)))
+            : keccak256(abi.encode(e.binding == 0 ? TAG_DIRECT_MODE : e.binding, uint8(e.mode)));
     }
 
     /// @dev Not the sender, except the migration (KV-9: `to == from` from a stale version, the credit in `(from, current)`);
@@ -481,7 +498,8 @@ library PqzCore {
         _bindMode(e);
         o = _parseMulti(t, e.mode);
         _common(o, e);
-        // the header's public fee `txFee + M · decoyFee` (owner 2026-10-20): the proof binds the sender's `decoyFee`
+        // the header's public fee `txFee + verifierFee + M · decoyFee` (owner 2026-10-20; round 3t): the proof binds the
+        // sender's `decoyFee` with the envelope's signature relayed and the binding word's `verifierFee` direct (Fable P1-1)
         uint256 d = t.decoyFee;
         uint256 dMin = $().minDecoyFee;
         if (d < dMin || d >= VALUE_BOUND) revert IPqzToken.DecoyFeeOutOfRange(d, dMin);
@@ -885,7 +903,7 @@ library PqzCore {
     // ------------------------------------------------------------------ shared steps
 
     /// @dev Expiry, `shieldIn` within the cap, the sender registered (its key), the beneficiary registered or 0 and the
-    ///      fee, the counter.
+    ///      fee, the verifier fee on `OFFCHAIN` (round 3t), the counter.
     function _common(Op memory o, Env memory e) internal view {
         PqzStorage storage s = $();
         if (block.number > o.validUntil) revert IPqzToken.Expired(o.validUntil);
@@ -899,6 +917,12 @@ library PqzCore {
             // C0-7 (owner option (1)): any registered UA-ledger receiver; the fee is a public credit, no PQZ key needed
             if (IUARegistry(e.registry).kindOf(o.ben) == 0) revert IPqzToken.AccountNotRegistered(o.ben);
             o.fee = s.confidentialFee;
+        }
+        // round 3t (CTR-PQZ-36, spec §5.1): the verifier fee in the word, once per op; slot 20 on this branch only (I-V2).
+        // `< 2^64` with `txFee` by the init row (the cap); op 7 keeps its own check after `M · d`.
+        if (s.pqzVerifyMode == OFFCHAIN) {
+            o.verifierFee = s.verifierFee;
+            o.fee += o.verifierFee;
         }
         o.sendCounter = s.sendCounter[o.from];
     }

@@ -767,6 +767,10 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forward(_MP);
     }
 
+    function setVerifierFee(uint64) external {
+        _forward(_MQ);
+    }
+
     function shieldScale() external view returns (uint256 _p0) {
         _forwardView(_MQ);
     }

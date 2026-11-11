@@ -828,6 +828,10 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forward(_MS);
     }
 
+    function setVerifierFee(uint64) external {
+        _forward(_MS);
+    }
+
     function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata, bool, bool, bool) external {
         _forward(_MW);
     }
