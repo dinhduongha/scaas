@@ -473,8 +473,7 @@ impl Venue {
     // ------------------------------------------------------------------------------ chain reads
 
     async fn call(&self, from: Address, to: Address, data: Vec<u8>) -> std::result::Result<Bytes, SimError> {
-        let tx = TransactionRequest::default().from(from).to(to).input(data.into());
-        self.chain.primary().call(tx).await.map_err(|e| classify(&e))
+        self.chain.call_tx(TransactionRequest::default().from(from).to(to).input(data.into())).await
     }
 
     /// The order's hash where it is checked: the sell token (`UATradeOrder`) or the DEX (`DexOrder`).
@@ -1312,8 +1311,7 @@ fn clone_code(implementation: Address) -> Vec<u8> {
 }
 
 async fn view<C: SolCall>(chain: &Chain, to: Address, call: C) -> Result<C::Return> {
-    let tx = TransactionRequest::default().to(to).input(call.abi_encode().into());
-    Ok(C::abi_decode_returns(&chain.primary().call(tx).await?)?)
+    chain.call_view(to, call).await.map_err(|e| anyhow!("{e}"))
 }
 
 /// The market as the DEX lists it: `Some((kind of base, kind of quote))` when listed and both classified.

@@ -141,6 +141,38 @@ impl Chain {
         self.address
     }
 
+    /// ARCH-POS-15, failover (the default; the strict-majority option is deferred to `scaas-rpc`): one read, answered completely
+    /// by one endpoint, `rpc_urls` in the order given, never mixing answers of two endpoints. A transport error (the endpoint
+    /// down, an error answer that is no revert) moves the whole read to the next endpoint; a revert is the contract's answer and
+    /// is final. Every chain read of the node's checks goes through it; the lane's own sends, nonces, fees and receipts stay on
+    /// the first endpoint, and the indexers keep their quorum over all of them.
+    pub async fn read<T, F, Fut>(&self, f: F) -> std::result::Result<T, SimError>
+    where
+        F: Fn(DynProvider) -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
+    {
+        let mut last = String::new();
+        for (i, p) in self.providers.iter().enumerate() {
+            match f(p.clone()).await {
+                Err(SimError::Transport(e)) => {
+                    tracing::warn!(chain = self.number, endpoint = i, error = %redact_urls(&e), "chain read failed; next endpoint");
+                    last = e;
+                }
+                r => return r,
+            }
+        }
+        Err(SimError::Transport(last))
+    }
+
+    /// [`Chain::read`] of one `eth_call` from `from` (with `gas` when given), classified by [`classify`].
+    pub async fn call_tx(&self, tx: TransactionRequest) -> std::result::Result<Bytes, SimError> {
+        self.read(|p| {
+            let tx = tx.clone();
+            async move { p.call(tx).await.map_err(|e| classify(&e)) }
+        })
+        .await
+    }
+
     /// `eth_call` + `eth_estimateGas` từ địa chỉ relayer.
     pub async fn simulate(&self, to: Address, data: Bytes) -> std::result::Result<u64, SimError> {
         self.simulate_from(self.address, to, data).await
@@ -150,8 +182,14 @@ impl Chain {
     /// transaction needs, regular + state (EIP-8037); no gas field, so both calls run at the RPC's gas cap.
     pub async fn simulate_from(&self, from: Address, to: Address, data: Bytes) -> std::result::Result<u64, SimError> {
         let tx = TransactionRequest::default().with_from(from).with_to(to).with_input(data);
-        self.primary().call(tx.clone()).await.map_err(|e| classify_sim(&e))?;
-        self.primary().estimate_gas(tx).await.map_err(|e| classify_sim(&e))
+        self.read(|p| {
+            let tx = tx.clone();
+            async move {
+                p.call(tx.clone()).await.map_err(|e| classify_sim(&e))?;
+                p.estimate_gas(tx).await.map_err(|e| classify_sim(&e))
+            }
+        })
+        .await
     }
 
     /// The `latest` header's gas facts: its `gasLimit` (EIP-8037 includes a transaction only when its gas limit fits
@@ -179,8 +217,8 @@ impl Chain {
         self.uid
             .get_or_try_init(|| async {
                 // an RPC error is not "no block 0": nothing is cached, the next call asks again (review T4 m3)
-                let genesis = self.primary().get_block_by_number(BlockNumberOrTag::Number(0)).await
-                    .map_err(|e| anyhow!("chain {}: block 0: {e}", self.number))?.map(|b| b.header.hash);
+                let genesis = self.read(|p| async move { p.get_block_by_number(BlockNumberOrTag::Number(0)).await.map_err(|e| classify(&e)) })
+                    .await.map_err(|e| anyhow!("chain {}: block 0: {e}", self.number))?.map(|b| b.header.hash);
                 match (self.pinned_uid, genesis) {
                     (Some(p), Some(g)) if p != g => Err(anyhow!("chain {}: RPC block 0 {g:#x} is not chain_uid {p:#x}", self.number)),
                     (Some(p), _) | (None, Some(p)) => Ok(p),
@@ -196,7 +234,7 @@ impl Chain {
     /// an unreadable one is an error: the caller does not start (fail closed).
     pub async fn compliance_registry(&self) -> Result<Option<Address>> {
         let Some((a, pin)) = self.compliance else { return Ok(None) };
-        let code = self.primary().get_code_at(a).await.map_err(|e| anyhow!("chain {}: compliance_registry code: {e}", self.number))?;
+        let code = self.code_at(a).await.map_err(|e| anyhow!("chain {}: compliance_registry code: {e}", self.number))?;
         let got = alloy::primitives::keccak256(&code);
         if code.is_empty() || got != pin {
             return Err(anyhow!("chain {}: compliance_registry {a:#x} code hash {got:#x} is not compliance_registry_codehash {pin:#x}",
@@ -207,27 +245,29 @@ impl Chain {
 
     /// A view call; a revert is the contract's answer (`SimError::Revert`), anything else the transport's.
     pub async fn call_view<C: SolCall>(&self, to: Address, call: C) -> std::result::Result<C::Return, SimError> {
-        let tx = TransactionRequest::default().with_to(to).with_input(call.abi_encode());
-        let out = self.primary().call(tx).await.map_err(|e| classify(&e))?;
+        let out = self.call_tx(TransactionRequest::default().with_to(to).with_input(call.abi_encode())).await?;
         C::abi_decode_returns(&out).map_err(|e| SimError::Revert(format!("decode: {e}")))
     }
 
     /// `eth_call` of calldata built by ABI type (group 3f: a PQZ token's statement views, `crate::pqz`).
     pub async fn call_raw(&self, to: Address, data: Bytes) -> std::result::Result<Bytes, SimError> {
-        let tx = TransactionRequest::default().with_to(to).with_input(data);
-        self.primary().call(tx).await.map_err(|e| classify(&e))
+        self.call_tx(TransactionRequest::default().with_to(to).with_input(data)).await
     }
 
     /// `eth_call` from the lane with exactly `gas` (sizing `mtxSettle`, `guard::settle_gas`).
     pub async fn call_with_gas(&self, to: Address, data: Bytes, gas: u64) -> std::result::Result<Bytes, SimError> {
-        let tx = TransactionRequest::default().with_from(self.address).with_to(to).with_input(data).with_gas_limit(gas);
-        self.primary().call(tx).await.map_err(|e| classify(&e))
+        self.call_tx(TransactionRequest::default().with_from(self.address).with_to(to).with_input(data).with_gas_limit(gas)).await
     }
 
     /// `who` is a contract signer (ERC-1271, `guard::erc1271_floor`): `is_contract` of its code, so an EIP-7702
     /// designator (an EOA, ECDSA only) is not.
     pub async fn is_contract_at(&self, who: Address) -> Result<bool> {
-        Ok(is_contract(&self.primary().get_code_at(who).await?))
+        Ok(is_contract(&self.code_at(who).await.map_err(|e| anyhow!("{e}"))?))
+    }
+
+    /// `who`'s runtime code, through [`Chain::read`].
+    pub async fn code_at(&self, who: Address) -> std::result::Result<Bytes, SimError> {
+        self.read(|p| async move { p.get_code_at(who).await.map_err(|e| classify(&e)) }).await
     }
 
     pub async fn fees(&self) -> Result<(u128, u128)> {
@@ -245,8 +285,7 @@ impl Chain {
     }
 
     async fn view<C: SolCall>(&self, to: Address, call: C) -> Result<C::Return> {
-        let tx = TransactionRequest::default().with_to(to).with_input(call.abi_encode());
-        Ok(C::abi_decode_returns(&self.primary().call(tx).await?)?)
+        self.call_view(to, call).await.map_err(|e| anyhow!("{e}"))
     }
 
     /// The subject's next nonce on its lane (R80), by the contract's kind (ua-mtx-merge plan T14): `mtxNonce(bytes32 id, batch)`
@@ -262,15 +301,8 @@ impl Chain {
     /// `MetaTransactionExecuted` (a UA subject: `UAMetaTransactionExecuted`) of `(from, batch, nonce)` trong `lookback`
     /// khối gần nhất ⇒ `(digest, relayer)` (§8.5). Both events index `from`, `relayer`, `batch` alike.
     pub async fn meta_executed(&self, m: &MetaRef, lookback: u64) -> Result<Option<(B256, Address)>> {
-        let latest = self.primary().get_block_number().await?;
-        let filter = Filter::new()
-            .address(m.token)
-            .event_signature(executed_events(m))
-            .topic1(m.from)
-            .topic3(B256::from(m.batch))
-            .from_block(latest.saturating_sub(lookback))
-            .to_block(latest);
-        for log in self.primary().get_logs(&filter).await? {
+        let filter = Filter::new().address(m.token).event_signature(executed_events(m)).topic1(m.from).topic3(B256::from(m.batch));
+        for log in self.logs_back(filter, lookback).await? {
             let e = match log.topic0() == Some(&IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH) {
                 true => log.log_decode::<IUALedger::UAMetaTransactionExecuted>().ok().map(|l| (l.inner.data.nonce, l.inner.data.digest, l.inner.data.relayer)),
                 false => log.log_decode::<IToken::MetaTransactionExecuted>().ok().map(|l| (l.inner.data.nonce, l.inner.data.digest, l.inner.data.relayer)),
@@ -284,26 +316,34 @@ impl Chain {
 
     /// The byte length of `a`'s code (a PQZ key's SSTORE2 pointer: its key length plus the STOP byte).
     pub async fn code_len(&self, a: Address) -> std::result::Result<usize, SimError> {
-        self.primary().get_code_at(a).await.map(|c| c.len()).map_err(|e| classify(&e))
+        self.code_at(a).await.map(|c| c.len())
     }
 
     /// Group 3g (spec §7.3): a `UAPqzKeyCurrent` of one of `uas` on `registry` in the last `lookback` blocks.
     pub async fn pqz_key_current_since(&self, registry: Address, uas: &[B256], lookback: u64) -> Result<bool> {
-        let latest = self.primary().get_block_number().await?;
         let filter = Filter::new()
             .address(registry)
             .event_signature(crate::abi::IUARegistry::UAPqzKeyCurrent::SIGNATURE_HASH)
-            .topic1(uas.to_vec())
-            .from_block(latest.saturating_sub(lookback))
-            .to_block(latest);
-        Ok(!self.primary().get_logs(&filter).await?.is_empty())
+            .topic1(uas.to_vec());
+        Ok(!self.logs_back(filter, lookback).await?.is_empty())
     }
 
     /// Round 3t (CTR-PQZ-36, spec §10): the logs `topic0` of `address` in the last `lookback` blocks (a token's `VerifierFeeSet`).
     pub async fn logs_since(&self, address: Address, topic0: B256, lookback: u64) -> Result<Vec<alloy::rpc::types::Log>> {
-        let latest = self.primary().get_block_number().await?;
-        let filter = Filter::new().address(address).event_signature(topic0).from_block(latest.saturating_sub(lookback)).to_block(latest);
-        Ok(self.primary().get_logs(&filter).await?)
+        self.logs_back(Filter::new().address(address).event_signature(topic0), lookback).await
+    }
+
+    /// The logs of `filter` in the last `lookback` blocks, the head and the logs from one endpoint ([`Chain::read`]).
+    async fn logs_back(&self, filter: Filter, lookback: u64) -> Result<Vec<alloy::rpc::types::Log>> {
+        self.read(|p| {
+            let filter = filter.clone();
+            async move {
+                let latest = p.get_block_number().await.map_err(|e| classify(&e))?;
+                p.get_logs(&filter.from_block(latest.saturating_sub(lookback)).to_block(latest)).await.map_err(|e| classify(&e))
+            }
+        })
+        .await
+        .map_err(|e| anyhow!("{e}"))
     }
 
     /// Ký EIP-1559; trả bytes thô và hash — hash biết TRƯỚC khi gửi (journal, review F5).
@@ -375,6 +415,62 @@ mod tests {
     fn chain(url: &str, pin: Option<B256>) -> Chain {
         let cfg = ChainCfg { evm_chain_number: 296, rpc_urls: vec![url.into()], chain_uid: pin, ..Default::default() };
         Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()
+    }
+
+    /// A fake RPC answering each request with `f(request)` (a `result` or an `error` member), counting the requests.
+    async fn fake_rpc(f: fn(&Value) -> Value) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        let n: std::sync::Arc<std::sync::atomic::AtomicUsize> = Default::default();
+        let n2 = n.clone();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            n2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let mut a = f(&r);
+            async move {
+                a["jsonrpc"] = json!("2.0");
+                a["id"] = r["id"].clone();
+                axum::Json(a)
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, n)
+    }
+
+    fn chain_of(urls: &[&str]) -> Chain {
+        let cfg = ChainCfg { evm_chain_number: 296, rpc_urls: urls.iter().map(|u| u.to_string()).collect(), ..Default::default() };
+        Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()
+    }
+
+    /// ARCH-POS-15 (failover): a chain read moves to the next `rpc_urls` endpoint on a transport error (the endpoint down, an
+    /// error answer that is no revert) and never on a revert, the contract's answer; one endpoint answers a whole read (the
+    /// head and the logs of a window alike). Positive control: the good endpoint alone answers.
+    #[tokio::test]
+    async fn chain_reads_fail_over_on_transport_errors_never_on_a_revert() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let (good, good_n) = fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x64"}),
+            Some("eth_getLogs") => json!({"result": []}),
+            _ => json!({"result": format!("0x{:064x}", 5)}),
+        }).await;
+        let (busy, busy_n) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "header not found"}})).await;
+        let (rev, rev_n) = fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted", "data": "0xdeadbeef"}})).await;
+        let five = Bytes::from(U256::from(5).to_be_bytes::<32>().to_vec());
+        let call = |c: Chain| async move { c.call_raw(Address::ZERO, Bytes::new()).await };
+        assert_eq!(call(chain_of(&[&good])).await.unwrap(), five, "control");
+        assert_eq!(call(chain_of(&["http://127.0.0.1:9", &good])).await.unwrap(), five, "the first endpoint down");
+        assert_eq!(call(chain_of(&[&busy, &good])).await.unwrap(), five, "an error answer that is no revert");
+        assert_eq!(busy_n.load(SeqCst), 1);
+        let before = good_n.load(SeqCst);
+        assert!(matches!(call(chain_of(&[&rev, &good])).await, Err(SimError::Revert(_))), "a revert is final");
+        assert_eq!((rev_n.load(SeqCst), good_n.load(SeqCst)), (1, before), "the next endpoint is never asked after a revert");
+        assert!(matches!(call(chain_of(&["http://127.0.0.1:9", &busy])).await, Err(SimError::Transport(_))), "all down");
+        // a window of logs: the busy endpoint refuses the head, the good one answers the head and the logs
+        let c = chain_of(&[&busy, &good]);
+        let before = good_n.load(SeqCst);
+        assert!(c.logs_since(Address::ZERO, B256::ZERO, 10).await.unwrap().is_empty());
+        assert_eq!(good_n.load(SeqCst) - before, 2, "eth_blockNumber and eth_getLogs, both on the good endpoint");
+        assert_eq!(c.subject_nonce(&MetaRef { token: Address::ZERO, from: B256::ZERO, batch: U256::ZERO, nonce: U256::ZERO,
+            digest: None, ua: true, addr_nonce: false }).await.unwrap(), U256::from(5), "the subject nonce view fails over too");
     }
 
     /// NODE-GW-07: the chain's `chain_uid` is its block 0 hash; a configured one that differs refuses the chain.

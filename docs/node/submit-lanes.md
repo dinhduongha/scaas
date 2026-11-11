@@ -347,15 +347,21 @@ nonce is gap-filled): `args.pqz_fee` against word 256 of the token's own stateme
 (also a simulation's `AuthRejected` / `PqzVerdictMismatch(3)` after an indexed `VerifierFeeSet` of the token), and the setter's
 `VerifierFeeNotReady`, `VerifierFeePending`; final: `VerifierFeeAboveMax`, `VerifierFeeSame`.
 
-*Known limits* (Fable review of ua-mtx-merge E N-7, N-11, recheck R-6; PLANNED, open). The verifier fetch and the shield probe run inside the
+<a id="rpc-failover"></a>**Chain reads fail over** ([ARCH-POS-15](../decisions.md#ARCH-POS-15), failover; BUILT, `chain::tests::chain_reads_fail_over_on_transport_errors_never_on_a_revert`;
+Fable review of ua-mtx-merge E N-11). Every chain read behind the node's checks (the simulation, `chainUid()`, `pqzVerifyConfig`
+and the statement views, the service and registry reads, `eip712Domain()`, the subject nonce, code reads, and the
+`VerifierFeeSet`, `UAPqzKeyCurrent` and executed-event logs) goes through one read helper (`Chain::read`): one endpoint answers
+the whole read (a log window's head and logs alike), `rpc_urls` in the order given; a transport error (the endpoint down, an
+error answer that is no revert) moves the read to the next endpoint, a revert is the contract's answer and is final. The lane's
+own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The
+strict-majority option stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15).
+
+*Known limits* (Fable review of ua-mtx-merge E N-7, recheck R-6; PLANNED, open). The verifier fetch and the shield probe run inside the
 lane's single loop (at intake, and again in `track` when a stuck debit's replacement re-runs the fill), `timeout_ms` (5 s) per
 endpoint and up to two fetches per job: two slow endpoints and ten PQZ jobs in one poll stall
 receipts and replacements for up to 200 s; target: bound the fetch time per round, or remember a failed endpoint for a few
-seconds. Every chain read added for PQZ, the services and the registry (`pqzVerifyConfig`, the statement views, the
-`VerifierFeeSet` and `UAPqzKeyCurrent` logs) goes to the first `rpc_urls` entry only, with no failover:
-[ARCH-POS-15](../decisions.md#ARCH-POS-15) (an RPC list in every consumer) is built in the reference readers first, not yet in
-the node. The `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` span a fixed
-10,000-block window (`ROTATION_LOOKBACK`, not the job's intake block) on that one RPC: an RPC that caps `eth_getLogs` below it
+seconds. The `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` span a fixed
+10,000-block window (`ROTATION_LOOKBACK`, not the job's intake block): an RPC that caps `eth_getLogs` below it
 keeps every such job queued until its `validUntil` (never `dead` wrongly); target: chunk the range, bound it by the intake block.
 
 <a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
