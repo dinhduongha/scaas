@@ -95,6 +95,7 @@ contract Gov is OnchainBase {
         _setup();
         _registerDerived();
         _compliance();
+        _complianceRouter();
         _plain();
         _wrapped();
         _regulatedDirect();
@@ -236,6 +237,29 @@ contract Gov is OnchainBase {
         IERC20(tc).transfer(a3, 10); // to an attested holder
         vm.broadcast(k1);
         IERC20(tc).transfer(a2, 10); // to the KYC provider's own row
+    }
+
+    /// Round 3r (CTR-GOV-23, spec §7 "Matrix"): the registry's admin moves from `iss` to the derived secp256k1 UA (the
+    /// two-step transfer, its signed `mtxAcceptAdmin`); then its admin ops are that UA's router ops, sent by key 2 at fee 0: a
+    /// KYC provider (key 3's native id) enabled and an admin row written.
+    function _complianceRouter() internal {
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(IAdmin.transferAdmin, (uaD)));
+        Sg memory d = Sg(uaD, kD, 2);
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(d, _ty("UAAcceptAdmin", ""), address(cr), "");
+        vm.broadcast(k2);
+        gr.mtxAcceptAdmin(e, address(cr), s);
+        require(cr.admin() == uaD && cr.pendingAdmin() == bytes32(0), "registry: the derived UA is the admin");
+        (e, s) = _auth(d, _ty("UASetKycProvider", "bytes32 provider,bool enabled"), address(cr), abi.encode(_pad(a3), true));
+        vm.broadcast(k2);
+        gr.mtxSetKycProvider(e, address(cr), _pad(a3), true, s);
+        bytes32[] memory who = new bytes32[](1);
+        uint64[] memory fl = new uint64[](1);
+        uint64[] memory until = new uint64[](1);
+        (who[0], fl[0], until[0]) = (_pad(a1), 3, type(uint64).max); // an admin row over the earlier admin row
+        (e, s) = _auth(d, _ty("UASetCompliance", "bytes32[] accounts,uint64[] flags,uint64[] until"), address(cr),
+            abi.encode(keccak256(abi.encodePacked(who)), keccak256(abi.encodePacked(fl)), keccak256(abi.encodePacked(until))));
+        vm.broadcast(k2);
+        gr.mtxSetCompliance(e, address(cr), who, fl, until, s);
     }
 
     // ------------------------------------------------------------------ kind 0 through the router

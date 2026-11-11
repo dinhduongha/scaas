@@ -13,6 +13,9 @@
   "SmartKeyAccount": {
     "completeRecovery(*": "waits RECOVERY_DELAY (2 days) after initiateRecovery; a real chain cannot skip time: its negative runs (gov)"
   },
+  "OpenFactory": {
+    "renounceAdmin()": "ends the factory's administration for ever (CTR-GOV-23 Q1: no env, release or deprecation after it), so no matrix factory renounces; its refusals (before configureChain, a non-admin) and its effect are forge's (test/v2/FactoryAdmin.t.sol)"
+  },
   "*": {
     "initialize(*": "the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)",
     "executeRate()": "waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)"
