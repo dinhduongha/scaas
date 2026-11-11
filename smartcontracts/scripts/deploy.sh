@@ -20,7 +20,7 @@
 #                            GD-4); the SCaaS testnet after the reset of pqz-core/nethermind/chain/RUNBOOK.md ("Code size
 #                            128 KiB"): 131072. DEPLOY_WRAPPED=1 adds the WRAPPED release (GD-12); DEPLOY_REGULATED=1 the regulated releases 8, 9, enabled (10, 11 come with
 #                            DEPLOY_ZETHER, 12, 13 with script/pqz/e2e.py) and the canonical ComplianceRegistry by CREATE2, its
-#                            admin the native id of COMPLIANCE_ADMIN (any address, none refused AdminZero), its router the
+#                            admin COMPLIANCE_ADMIN (a UA id, bytes32, required; 0 refused AdminZero), its router the
 #                            chain's: JSON compliance_registry, compliance_registry_codehash (every regulated release's
 #                            COMPLIANCE_REGISTRY_CODEHASH). The admin then writes each DEX venue (createDex) and its puller()
 #                            ELIGIBLE_CONTRACT (setCompliance), validUntil

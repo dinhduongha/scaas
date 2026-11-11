@@ -12191,7 +12191,8 @@
         "fee": "0",
         "feeRecipient": "0x0000000000000000000000000000000000000000"
       },
-      "structHash": "0x483949a97f83c3409b50a2235d07a9c237a569fb7e99f56b0a47c481182297ee"
+      "structHash": "0x483949a97f83c3409b50a2235d07a9c237a569fb7e99f56b0a47c481182297ee",
+      "approvalKey": "0x4857dccb30a52dc3f7f7df27a91a3d3e431b1c67dd7f7b1137d77f3209681a1a"
     },
     "UAApproveDexRelease": {
       "typeString": "UAApproveDexRelease(bytes32 from,address target,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
@@ -12329,7 +12330,8 @@
         "fee": "0",
         "feeRecipient": "0x0000000000000000000000000000000000000000"
       },
-      "structHash": "0x01fd567c87aacc2568b679e819c9da7962e2fde1c44c28654d53d702aeb86095"
+      "structHash": "0x01fd567c87aacc2568b679e819c9da7962e2fde1c44c28654d53d702aeb86095",
+      "approvalKey": "0x21bb6d63f7a015d31bcaa849d7831055bc8d3fc9c93a9d7a0eae493115251ea8"
     },
     "UAApproveRelease": {
       "typeString": "UAApproveRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
@@ -12487,7 +12489,8 @@
         "fee": "0",
         "feeRecipient": "0x0000000000000000000000000000000000000000"
       },
-      "structHash": "0x9d266ed50205e50739d3dc9b6ed1763557aafceab9b7100a9cd9a65e9de8057b"
+      "structHash": "0x9d266ed50205e50739d3dc9b6ed1763557aafceab9b7100a9cd9a65e9de8057b",
+      "approvalKey": "0x7a6f56b61692e5d0908b2f51fcfba13f18b4b000d76d71489054529a0d4a6bc5"
     },
     "UARevokeApproval": {
       "typeString": "UARevokeApproval(bytes32 from,address target,bytes32 key,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",

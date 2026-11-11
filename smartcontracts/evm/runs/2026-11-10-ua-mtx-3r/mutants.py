@@ -258,6 +258,17 @@ MUTANTS = {
         ('B15', '        _ua(T.UA_SET_CHAIN_ENTRIES, e, target, IOpenFactory.setChainEntries.selector, abi.encode(relayFeeRouter,\n            relayFeeRouterCodeHash, relayFeeExecutorCodeHash, complianceRegistry, complianceRegistryCodeHash,\n            smartKeyAccountFactory, smartKeyAccountFactoryCodeHash, zetherStatements, zetherStatementsCodeHash), auth);\n',
          '        bytes memory w = abi.encode(relayFeeRouter,\n            relayFeeRouterCodeHash, relayFeeExecutorCodeHash, complianceRegistry, complianceRegistryCodeHash,\n            smartKeyAccountFactory, smartKeyAccountFactoryCodeHash, zetherStatements, zetherStatementsCodeHash);\n        bytes memory d = bytes.concat(IOpenFactory.setChainEntries.selector, w);\n        assembly ("memory-safe") { mstore(w, sub(mload(w), 32)) } // the last word out of the hash, the call keeps it\n        _uaCall(T.UA_SET_CHAIN_ENTRIES, e, target, w, d, auth);\n'),
     ]},
+    # T9 / T13 (spec §8 M15, §5.6 Q3): a node row for a release deploy (`OpenFactory`'s open deploy as a plain row), and one for
+    # a release approval (the router's); each caught by the guard test (`NOT_ROWS`, `APPROVED`, the router's allow-list)
+    "M15-deploy": ("scaas-node/src/typed.rs", '    ("deploy", FACT, "SubjectKey firstKey,address guardian"),\n',
+                   '    ("deploy", FACT, "SubjectKey firstKey,address guardian"),\n'
+                   '    ("deployTokenImplementation", FACT, "uint8 kind,uint64 version,uint16 envVersion,bytes initcode,bytes implArgs"),\n',
+                   "cargo", "scaas-node", "allow_lists_equal_the_selector_audit_both_directions"),
+    "M15-approve": ("scaas-node/src/typed.rs",
+                    '    ("UASetKycProvider", "mtxSetKycProvider", GR, "bytes32 from,address target,bytes32 provider,bool enabled,E", ""),\n',
+                    '    ("UASetKycProvider", "mtxSetKycProvider", GR, "bytes32 from,address target,bytes32 provider,bool enabled,E", ""),\n'
+                    '    ("UARevokeApproval", "mtxRevokeApproval", GR, "bytes32 from,address target,bytes32 key,E", ""),\n',
+                    "cargo", "scaas-node", "allow_lists_equal_the_selector_audit_both_directions"),
 }
 
 

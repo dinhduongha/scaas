@@ -82,3 +82,5 @@ B12 | test_binding_SetClassKindEnabled, test_everyOp_mldsa65, test_everyOp_msig,
 B13 | test_anotherSignerNotAdmin, test_binding_SetKycProvider, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_kycProvider_derivedWritesThroughRouter, test_replay_otherChainRefused, test_rows_runOnTheRouter | 1
 B14 | test_binding_SetCompliance, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_kycProvider_derivedWritesThroughRouter, test_rows_runOnTheRouter | 1
 B15 | test_binding_SetChainEntries, test_directory_derivedAdminWritesThroughRouter, test_everyOp_mldsa65, test_everyOp_msig, test_everyOp_secp256k1, test_everyOp_webauthn, test_gas_everyOp, test_rows_runOnTheRouter | 1
+M15-deploy | guard::tests::allow_lists_equal_the_selector_audit_both_directions | 101
+M15-approve | guard::tests::allow_lists_equal_the_selector_audit_both_directions | 101

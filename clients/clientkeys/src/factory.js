@@ -4,7 +4,7 @@
 // env appended to every clone's code. Against smartcontracts/vectors/factory/create3_kat.json (written by forge,
 // Create3Kat.t.sol). The address says nothing about the version, the code or the configuration on a chain: read
 // `infoOf(addr)` and the instance per chain (spec §4.3). UNAUDITED.
-import { hex, fromHex, keccak_256, concatBytes, abiEncode } from './bytes.js';
+import { hex, fromHex, keccak_256, concatBytes, abiEncode, utf8ToBytes } from './bytes.js';
 
 /** `PUSH8 363d3d37363d34f0 RETURNDATASIZE MSTORE PUSH1 8 PUSH1 24 RETURN`: deposits the proxy's runtime. */
 export const PROXY_INITCODE = '0x67363d3d37363d34f03d5260086018f3';
@@ -59,4 +59,23 @@ export function cloneRuntime(implementation, envBytes) {
 export function cloneInitCode(implementation, envBytes) {
   const rt = cloneRuntime(implementation, envBytes);
   return concatBytes(Uint8Array.of(0x61, rt.length >> 8, rt.length & 0xff, 0x3d, 0x81, 0x60, 0x0a, 0x3d, 0x39, 0xf3), rt);
+}
+
+const RELEASE_KEY = {
+  token: ['scaas.factory.release.token', ['uint8 kind', 'uint64 version', 'uint16 envVersion']],
+  dex: ['scaas.factory.release.dex', ['uint64 version', 'uint16 envVersion']],
+  class: ['scaas.factory.release.class', ['uint16 contractClass', 'uint16 kind', 'uint64 version', 'uint16 envVersion',
+    'bytes4 initSelector', 'bytes4 interfaceId']],
+};
+
+/** Round 3r (spec 2026-11-10-admin-not-owner.md §5.6 table): the factory's release approval key, what `approvalOf` and
+ *  `revokeApproval` take: `keccak256(abi.encode(keccak256(tag), chainUid, factory, <the deploy's fields>, initcodeHash,
+ *  implArgsHash))`, `domain` one of `token`, `dex`, `class`; the fields by their names in the approval op's message. */
+export function releaseApprovalKey(domain, m) {
+  const [tag, fields] = RELEASE_KEY[domain] ?? (() => { throw new Error(`no release domain ${domain}`); })();
+  const ts = ['bytes32', 'bytes32', 'address', ...fields.map((f) => f.split(' ')[0]), 'bytes32', 'bytes32'];
+  const vs = [hex(keccak_256(utf8ToBytes(tag))), hex(b32(m.chainUid, 'chainUid')), m.factory,
+    ...fields.map((f) => { const [t, n] = f.split(' '); return t.startsWith('uint') ? BigInt(m[n]) : m[n]; }),
+    hex(b32(m.initcodeHash, 'initcodeHash')), hex(b32(m.implArgsHash, 'implArgsHash'))];
+  return hex(keccak_256(abiEncode(ts, vs)));
 }

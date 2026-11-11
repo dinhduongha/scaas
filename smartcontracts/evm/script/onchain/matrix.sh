@@ -234,7 +234,7 @@ if [ "${MATRIX_DEPLOY:-0}" = 1 ] && { [ "$tgt" = local ] || [ ! -f "$DEPLOY_JSON
   step "" "$RPC" "$ADDRS" env FOUNDRY_OUT=out/onchain-deploy FOUNDRY_CACHE_PATH=cache/onchain-deploy RELEASE_GAS_GATE=public \
     CHAIN_CODE_LIMIT="${CHAIN_CODE_LIMIT:-131072}" RELEASES_WRITE=true \
     DEPLOY_WRAPPED=1 DEPLOY_REGULATED=1 DEPLOY_ZETHER=1 NOTICE_PERIOD=0 DEMO_SUPPLY=1000000000000 VERIFY_TARGET="$tgt" \
-    DEPLOY_SALT="$(cast keccak "scaas.deploy.onchain.$tgt")" COMPLIANCE_ADMIN=0x4e59b44847b379578588920cA78FbF26c0B4956C \
+    DEPLOY_SALT="$(cast keccak "scaas.deploy.onchain.$tgt")" COMPLIANCE_ADMIN=0x0000000000000000000000004e59b44847b379578588920ca78fbf26c0b4956c \
     ../scripts/deploy.sh evm "$RPC" || fail "deploy.sh: $(grep -E 'Error|refus' "$LOG" | tail -1 | cut -c1-140)"
   say "" "deploy ok $NTX txs (${SECS}s): $DEPLOY_JSON"
 fi

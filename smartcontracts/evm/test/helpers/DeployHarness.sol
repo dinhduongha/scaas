@@ -55,7 +55,10 @@ contract DeployHarness is DeployBase {
     function setNotice(uint64 n) external { noticePeriod = n; }
 
     /// `COMPLIANCE_ADMIN` for the next `deploy` (plan T33).
-    function setComplianceAdmin(address a) external { complianceAdmin = a; }
+    function setComplianceAdmin(address a) external { complianceAdmin = bytes32(uint256(uint160(a))); }
+    function setComplianceAdminId(bytes32 a) external { complianceAdmin = a; }
+    function setFactoryAdminNext(bytes32 n) external { factoryAdminNext = n; }
+    function setAccountFactory(address a) external { accountFactory = a; }
 
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);

@@ -104,10 +104,24 @@ abstract contract DeployBase is DeployBook {
     /// @notice `DEPLOY_PQCHAT` env (default false): also register `PqChat` (UA-7, D22: class 3, kind 0 on the generic path) and,
     ///         when the chain's notice period is 0, create one instance (`_deployPqChat`, plan 3c T92).
     bool internal deployPqChat;
-    /// @notice `COMPLIANCE_ADMIN` env (read with `DEPLOY_REGULATED`): the canonical `ComplianceRegistry`'s first admin, the
-    ///         native id of the address the operator names (CTR-AS-07, regulated-kinds spec §6.1, F-21); the registry's
-    ///         constructor refuses 0 (`AdminZero`). Round 3r keeps the address here; a UA id is T10 (spec §6).
-    address internal complianceAdmin;
+    /// @notice `COMPLIANCE_ADMIN` env, a UA id (`bytes32`), required with `DEPLOY_REGULATED`, no default (round 3r, spec §6):
+    ///         the canonical `ComplianceRegistry`'s first admin, native or derived (the router is its constructor argument;
+    ///         CTR-AS-07, regulated-kinds spec §6.1, F-21); the registry's constructor refuses 0 (`AdminZero`).
+    bytes32 internal complianceAdmin;
+    /// @notice `FACTORY_ADMIN_NEXT` env (optional `bytes32`, round 3r spec §6): the run's last transaction is the factory's
+    ///         `transferAdmin(next)`; `next` accepts by its own signed `mtxAcceptAdmin`, a separate step. JSON `factory_admin`,
+    ///         `factory_pending_admin`.
+    bytes32 internal factoryAdminNext;
+    /// @notice The chain's `SmartKeyAccountFactory` (`Deploy.s.sol` sets it first), the directory's entry; 0 leaves it open.
+    address internal accountFactory;
+    /// @notice The relay pair's salt on every stack (spec §13.2, Fable P2-2): one address on every chain, reused when there;
+    ///         `DEPLOY_SALT` moves only the rest.
+    bytes32 internal constant RELAY_SALT = keccak256("scaas.deploy.v1");
+    /// @notice The directory's entries this run deployed or reused (`_deployShared`), written by `_writeDirectory`.
+    address internal relayFeeRouter;
+    address internal relayFeeExecutor;
+    address internal complianceRegistry;
+    address internal zetherStatements;
     /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
     ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
     ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
@@ -292,7 +306,9 @@ abstract contract DeployBase is DeployBook {
         deployWrapped = vm.envOr("DEPLOY_WRAPPED", false);
         deployRegulated = vm.envOr("DEPLOY_REGULATED", false);
         deployPqChat = vm.envOr("DEPLOY_PQCHAT", false);
-        complianceAdmin = vm.envOr("COMPLIANCE_ADMIN", address(0));
+        complianceAdmin = vm.envOr("COMPLIANCE_ADMIN", bytes32(0));
+        require(!deployRegulated || complianceAdmin != bytes32(0), "COMPLIANCE_ADMIN: a UA id (bytes32), required with DEPLOY_REGULATED");
+        factoryAdminNext = vm.envOr("FACTORY_ADMIN_NEXT", bytes32(0));
         noticePeriod = _checkedNotice(block.chainid, vm.envOr("NOTICE_PERIOD", _defaultNotice(block.chainid)));
         uid = _chainUid();
         releasesPath = vm.envOr("RELEASES_JSON", string("./releases.json"));
@@ -348,16 +364,15 @@ abstract contract DeployBase is DeployBook {
             (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
             require(bls, "DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
         }
-        // chain-neutral releases (plan T71, T72): the registrar's native id is the factory's only constructor argument, its
-        // first admin (round 3r, spec §5.2; the order and FACTORY_ADMIN_NEXT are T10); this chain's values are its one-time
-        // `configureChain`, after the router it names (T73: the deterministic deployer, the reference block and the dry
-        // run). The admin deploys the releases itself: its own deploy is its own approval (spec §5.6).
+        // round 3r (spec §6, §13.10): the relay pair under RELAY_SALT (reused when there), the UA registry, the router, the
+        // compliance registry and ZetherStatements, then the factory: the registrar's native id is its only constructor
+        // argument, its first admin, and its address depends on none of them; this chain's values are its one-time
+        // `configureChain`, then the directory (`setChainEntries`). The admin deploys the releases itself: its own deploy is
+        // its own approval (spec §5.6).
+        UARegistry reg = _deployShared(smartKeyAccountImpl, isHedera);
         f = new OpenFactory{salt: salt}(MetaTxLib.pad(registrar));
-        UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
-        _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera); // before every release: its address is in the env
-        _deployRelayFeeRouter();
-        if (deployRegulated) _deployComplianceRegistry();
         if (register) _configureChain(f, registrar);
+        if (register && !configureOnly) _writeDirectory(f, reg);
         vm.serializeAddress("deploy", "token_factory", address(f));
         if (register && !configureOnly) {
             // the link closure of NormalToken's release (task 6; T66b §4.5: its body modules' link references): MtxPipelineLib,
@@ -391,7 +406,40 @@ abstract contract DeployBase is DeployBook {
         if (deployRegulated && register && !configureOnly) _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployPqChat && register && !configureOnly) _deployPqChat(f, address(reg));
         if (deployZether && !configureOnly) _deployZether(f, register, smartKeyAccountImpl, address(reg));
+        if (register && !configureOnly && factoryAdminNext != bytes32(0)) f.transferAdmin(factoryAdminNext);
+        if (register) {
+            require(f.admin() == MetaTxLib.pad(registrar) && f.pendingAdmin() == (configureOnly ? bytes32(0) : factoryAdminNext),
+                "factory admin gate (admin, pendingAdmin)");
+        }
+        vm.serializeBytes32("deploy", "factory_admin", f.admin());
+        vm.serializeBytes32("deploy", "factory_pending_admin", f.pendingAdmin());
         vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
+    /// @notice The shared contracts before the factory (spec §13.10): the relay pair under `RELAY_SALT` (reused when there),
+    ///         the UA registry, the router (before every release: its address is in the env), the `ComplianceRegistry` with
+    ///         `DEPLOY_REGULATED`, `ZetherStatements` with `DEPLOY_ZETHER`.
+    function _deployShared(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
+        (relayFeeRouter, relayFeeExecutor) = _deployRelayFeeRouter();
+        reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
+        _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera);
+        if (deployRegulated) complianceRegistry = _deployComplianceRegistry();
+        if (deployZether) zetherStatements = address(new ZetherStatements{salt: salt}());
+    }
+
+    /// @notice `setChainEntries` of what `_deployShared` left (0 leaves an entry open), then the gate: `directory()` equals
+    ///         what this run deployed (spec §13.7).
+    function _writeDirectory(OpenFactory f, UARegistry reg) internal {
+        f.setChainEntries(relayFeeRouter, relayFeeRouter.codehash, relayFeeExecutor.codehash, complianceRegistry,
+            _hashOf(complianceRegistry), accountFactory, _hashOf(accountFactory), zetherStatements, _hashOf(zetherStatements));
+        IOpenFactory.Directory memory d = f.directory();
+        require(d.uaRegistry == address(reg) && d.govRouter == govRouter && d.relayFeeRouter == relayFeeRouter
+            && d.relayFeeExecutor == relayFeeExecutor && d.complianceRegistry == complianceRegistry
+            && d.smartKeyAccountFactory == accountFactory && d.zetherStatements == zetherStatements, "directory gate");
+    }
+
+    function _hashOf(address a) internal view returns (bytes32) {
+        return a == address(0) ? bytes32(0) : a.codehash;
     }
 
     /// @notice Plan 3c T92 (UA-7 D22, topics spec §11): `PqChat` on the factory's generic path, with no factory code: its
@@ -485,12 +533,13 @@ abstract contract DeployBase is DeployBook {
     ///         `compliance_registry_codehash`. Not a release: no factory, no `chainUid()`; the code pin is its gate. The
     ///         `ELIGIBLE_CONTRACT` rows of a DEX venue (`createDex`, after this deploy) and of its `puller()` are the admin's
     ///         own `setCompliance` call: this script holds no key of the admin.
-    function _deployComplianceRegistry() internal {
-        ComplianceRegistry r = new ComplianceRegistry{salt: salt}(MetaTxLib.pad(complianceAdmin), govRouter);
+    function _deployComplianceRegistry() internal returns (address) {
+        ComplianceRegistry r = new ComplianceRegistry{salt: salt}(complianceAdmin, govRouter);
         require(address(r).codehash == _complianceRegistryCodehash(),
             "ComplianceRegistry: code differs from COMPLIANCE_REGISTRY_CODEHASH (F-11)");
         vm.serializeAddress("deploy", "compliance_registry", address(r));
         vm.serializeBytes32("deploy", "compliance_registry_codehash", address(r).codehash);
+        return address(r);
     }
 
     /// @notice The canonical `ComplianceRegistry` runtime's code hash, every regulated release's `implArgs` (spec §5, F-11).
@@ -498,15 +547,18 @@ abstract contract DeployBase is DeployBook {
         return keccak256(type(ComplianceRegistry).runtimeCode);
     }
 
-    /// @notice `RelayFeeRouter` (CTR-MTX-27) by CREATE2, the same address on every chain (no constructor argument, no
-    ///         `chainUid()`: it is stateless); its executor is its CREATE at nonce 1. JSON `relay_fee_router`,
-    ///         `relay_fee_executor`.
-    function _deployRelayFeeRouter() internal {
-        RelayFeeRouter rf = new RelayFeeRouter{salt: salt}();
-        address ex = rf.EXECUTOR();
+    /// @notice `RelayFeeRouter` (CTR-MTX-27) by CREATE2 under `RELAY_SALT`, the same address on every chain and stack (no
+    ///         constructor argument, no `chainUid()`: it is stateless), reused when its code is there (spec §13.2); its
+    ///         executor is its CREATE at nonce 1. JSON `relay_fee_router`, `relay_fee_executor`.
+    function _deployRelayFeeRouter() internal returns (address, address ex) {
+        address d = vm.isContext(VmSafe.ForgeContext.ScriptGroup) ? CREATE2_FACTORY : address(this);
+        address p = vm.computeCreate2Address(RELAY_SALT, keccak256(type(RelayFeeRouter).creationCode), d);
+        RelayFeeRouter rf = p.code.length != 0 ? RelayFeeRouter(p) : new RelayFeeRouter{salt: RELAY_SALT}();
+        ex = rf.EXECUTOR();
         require(ex.code.length != 0 && RelayFeeExecutor(ex).ROUTER() == address(rf), "RelayFeeRouter executor");
         vm.serializeAddress("deploy", "relay_fee_router", address(rf));
         vm.serializeAddress("deploy", "relay_fee_executor", ex);
+        return (address(rf), ex);
     }
 
     /// @notice The chain's `GovernanceRouter` (CTR-GOV-15 Change, owner 2026-11-04; plan T11) by CREATE2: no owner, no
@@ -593,7 +645,7 @@ abstract contract DeployBase is DeployBook {
         _gate(address(f));
         _releaseRow("OpenFactory", 0, 0, 0, address(f), keccak256(abi.encodePacked(type(OpenFactory).creationCode,
             abi.encode(MetaTxLib.pad(registrar)))), keccak256(abi.encode(MetaTxLib.pad(registrar))));
-        _releaseRow("registrar", 0, 0, 0, registrar, bytes32(0), bytes32(0));
+        _releaseRow("admin", 0, 0, 0, registrar, bytes32(0), bytes32(0)); // the factory's first admin (round 3r, spec §6)
         if (chainSiblings > 1 && !vm.envOr("SIBLINGS_CONFIGURED", false)) {
             configureOnly = true;
             console.log("chain id shared by siblings (chain-uids.json): configure every one, then SIBLINGS_CONFIGURED=true");
@@ -846,7 +898,6 @@ abstract contract DeployBase is DeployBook {
     ///         `--code-size-limit 65536`, forge script `--disable-code-size-limit` (deploy.sh passes it; each transaction's
     ///         gas limit is explicit, NET-EVM-11; docs/networks/evm.md). Each release is checked against `CHAIN_CODE_LIMIT` first (`_checkCodeFits`).
     function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl, address reg) internal {
-        ZetherStatements stm = new ZetherStatements{salt: salt}();
         address dis = address(new ZetherDisclosure{salt: salt}());
         IZetherInnerProductVerifier ip = new ZetherInnerProductVerifierBls12381{salt: salt}();
         address tv = address(new ZetherTransferVerifierBls12381{salt: salt}(ip));
@@ -864,7 +915,7 @@ abstract contract DeployBase is DeployBook {
         }
         vm.serializeAddress("deploy", "zether_disclosure", dis);
         vm.serializeAddress("deploy", "zether_registry", reg); // = ua_registry
-        vm.serializeAddress("deploy", "zether_statements", address(stm));
+        vm.serializeAddress("deploy", "zether_statements", zetherStatements);
     }
 
     /// @notice `_deployZether`'s two releases (`NORMAL_ZETHER`, `WRAPPED_ZETHER`) on `deps`, each with its body modules.

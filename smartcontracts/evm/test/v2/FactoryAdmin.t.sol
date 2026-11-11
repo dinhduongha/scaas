@@ -16,6 +16,7 @@ import {UACall} from "../ua/UACall.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
+import {DeploySend} from "../../script/DeploySend.s.sol";
 import {GenericKindBase, NoteKind, INoteKind, IRosterKind} from "./mocks/GenericKinds.sol";
 
 /// The factory's admin and release-approval ABI (spec 2026-11-10-admin-not-owner.md §5.1, §5.2, §5.6), written out here so
@@ -1126,6 +1127,75 @@ contract FactoryAdminTest is UARegistryBase {
             }
         }
         assertTrue(seen, "ProbeGasLow below the floor");
+    }
+
+    // ------------------------------------------------------------------ the approval keys of typed_ops.json (T8)
+
+    /// The three approval rows' `approvalKey` (clientkeys' `releaseApprovalKey`, reproduced by ua-rs) is the factory's own: a
+    /// factory at the row's `factory`, configured with the row's `chainUid`, approves the row's release directly and
+    /// `approvalOf` answers LIVE under that key (none before).
+    function test_approvalKeys_equalTypedOpsRows() public {
+        string memory j = vm.readFile("../vectors/typed/typed_ops.json");
+        string[3] memory ops = ["UAApproveTokenRelease", "UAApproveDexRelease", "UAApproveRelease"];
+        for (uint256 i; i < 3; ++i) {
+            string memory m = string.concat(".ops.", ops[i], ".message.");
+            bytes32 uid = vm.parseJsonBytes32(j, string.concat(m, "chainUid"));
+            address fac = vm.parseJsonAddress(j, string.concat(m, "factory"));
+            bytes32 key = vm.parseJsonBytes32(j, string.concat(".ops.", ops[i], ".approvalKey"));
+            deployCodeTo("OpenFactory.sol:OpenFactory", abi.encode(nid(deployer)), fac);
+            EnvKit.genesis(uid);
+            vm.prank(deployer);
+            OpenFactory(fac).configureChain(uid, 0, address(0), bytes32(0), 0, bytes32(0));
+            (uint8 st,,) = _a(OpenFactory(fac)).approvalOf(key);
+            assertEq(st, NONE, ops[i]);
+            bytes memory cd = _approveRowCd(j, m, i, uid, fac, _a(OpenFactory(fac)).adminGeneration());
+            vm.prank(deployer);
+            (bool ok,) = fac.call(cd);
+            assertTrue(ok, ops[i]);
+            (st,,) = _a(OpenFactory(fac)).approvalOf(key);
+            assertEq(st, LIVE, ops[i]);
+        }
+    }
+
+    /// Row `i` of the three approval rows of `typed_ops.json` (`m` its message path) as the factory's direct approve call:
+    /// every argument is static, so the call is the selector and the words in order.
+    function _approveRowCd(string memory j, string memory m, uint256 i, bytes32 uid, address fac, uint32 gen)
+        internal view returns (bytes memory)
+    {
+        bytes4[3] memory sel = [IFactoryAdmin.approveTokenRelease.selector, IFactoryAdmin.approveDexRelease.selector,
+            IFactoryAdmin.approveRelease.selector];
+        return bytes.concat(sel[i], _rowHead(j, m, i), abi.encode(vm.parseJsonBytes32(j, string.concat(m, "initcodeHash")),
+            vm.parseJsonBytes32(j, string.concat(m, "implArgsHash"))), abi.encode(uid, fac, gen, _until()));
+    }
+
+    /// The domain's own words before the two hashes: token `kind, version, envVersion`; DEX `version, envVersion`; class
+    /// `contractClass, kind, version, envVersion, initSelector, interfaceId`.
+    function _rowHead(string memory j, string memory m, uint256 i) internal pure returns (bytes memory) {
+        bytes memory ve = abi.encode(uint64(vm.parseJsonUint(j, string.concat(m, "version"))),
+            uint16(vm.parseJsonUint(j, string.concat(m, "envVersion"))));
+        if (i == 1) return ve;
+        uint16 k = uint16(vm.parseJsonUint(j, string.concat(m, "kind")));
+        if (i == 0) return bytes.concat(abi.encode(uint8(k)), ve);
+        return bytes.concat(abi.encode(uint16(vm.parseJsonUint(j, string.concat(m, "contractClass"))), k), ve,
+            abi.encode(bytes4(vm.parseJsonBytes(j, string.concat(m, "initSelector"))),
+                bytes4(vm.parseJsonBytes(j, string.concat(m, "interfaceId")))));
+    }
+
+    /// T10: `DeploySend.releaseAt` is the address each of the three deploys lands at (the plan's "already deployed" check).
+    function test_deploySend_releaseAtIsTheDeploysAddress() public {
+        OpenFactory f = _ready(address(trouter));
+        DeploySend ds = new DeploySend();
+        Rel[3] memory rs = _rels();
+        for (uint256 i; i < 3; ++i) {
+            address want = ds.releaseAt(address(f), _deployCd(rs[i]));
+            assertEq(want.code.length, 0);
+            vm.prank(deployer);
+            (bool ok, bytes memory ret) = address(f).call(_deployCd(rs[i]));
+            assertTrue(ok);
+            assertEq(abi.decode(ret, (address)), want);
+        }
+        assertEq(ds.releaseAt(address(f), abi.encodeCall(OpenFactory.setTokenKindEnabled,
+            (IOpenFactory.TokenKind.NORMAL, true))), address(0));
     }
 
     // ------------------------------------------------------------------ gas (§5.6 "Gas", §9)
