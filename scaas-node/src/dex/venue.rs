@@ -365,7 +365,7 @@ impl Venue {
     /// `Some(pausedUntil)` while a regulated `token` is paused at `at` (a market with it halts); reopens at `pausedUntil`.
     fn halted(&self, token: Address, at: u64) -> Option<u64> {
         if self.list_halted.lock().is_ok_and(|h| h.contains(&token)) {
-            return Some(u64::MAX); // round 3s: until the reverse list event
+            return Some(u64::MAX); // round 3s: until a live read admits the DEX and its puller again (Fable P2-1)
         }
         self.regulated.lock().ok()?.get(&token).copied().filter(|u| *u > at)
     }

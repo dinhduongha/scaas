@@ -163,7 +163,7 @@ Payload by kind:
   builds the inner calldata from `call` and sends the router's `relay(target, callData, token, from, payee, value, batch,
   nonce, validUntil, auth)` to `args.relayer`, which must be `params.relay_fee.router`; a hex call is refused; a `call` naming
   `mtxRelayFee` is refused `BAD_PAYLOAD` by its `entry`, before its body is parsed (no nesting); the payee is
-  never `pad(executor)`, open mode `payee = pad(router)`. *Known limit* (Fable review of ua-mtx-merge E N-4; SPECIFIED, not built): a PQZ debit
+  never `pad(executor)`, open mode `payee = pad(router)`. *Known limit* (Fable review of ua-mtx-merge E N-4; PLANNED, open): a PQZ debit
   as `call` is built with the empty verdict; its `pqz_verdict` and `pqz_fee` are parsed and ignored (the fill reads the outer
   entry), so on an `OFFCHAIN` token the job reverts `PqzVerdictRequired` at simulation and is `dead` with no hint, and on a
   `PRECOMPILE` token the `pqz_fee` pre-check is skipped. Target: refuse by name at parse an inner row with a verdict slot.
@@ -280,7 +280,7 @@ JSON; the struct names are the vector file's keys.
 | Key | Rule |
 |---|---|
 | `entry` | The contract function: `mtxUnwrap`, `mtxUnshield`, … |
-| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`, `gov_router`, `pqchat`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind. *Known limit* (Fable review of ua-mtx-merge E N-6; SPECIFIED, not built): on a `token` / `zether` / `pqz` row the name is not checked against the token's `eip712Domain().name` (the venue and the service path read it, the job path does not): a wrong one only picks the node's digest domain, so an EOA signer is refused `BAD_SIGNATURE` and a derived signer's landed job is labelled `superseded`; target: read the name once per token (immutable) and refuse a mismatch by name |
+| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`, `gov_router`, `pqchat`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind. *Known limit* (Fable review of ua-mtx-merge E N-6; PLANNED, open): on a `token` / `zether` / `pqz` row the name is not checked against the token's `eip712Domain().name` (the venue and the service path read it, the job path does not): a wrong one only picks the node's digest domain, so an EOA signer is refused `BAD_SIGNATURE` and a derived signer's landed job is labelled `superseded`; target: read the name once per token (immutable) and refuse a mismatch by name |
 | `struct` | Only when an entry has two rows on a kind (`ENTRY_AMBIGUOUS`): `CancelUAOrder` / `CancelUAWrapOrder`, `UARollOverSigned` / `ZetherRollOver`, `UASetRollOverMode` / `ZetherSetRollOverMode`, `CancelDexOrder` / `mtxCancelOrders` |
 | `token` | The call's target; a `UARelayFee`'s fee token; a wrap order's wrapper |
 | `envelope` | `from` + `batch`, `nonce`, `validUntil`, `mode`, `relayer`, `fee`, `feeRecipient`, on every entry whose struct ends with them (`UAEnvelope`, `from` an id; `Envelope`, `from` an address, on the address entries); exactly these keys |
@@ -749,7 +749,7 @@ lane only relays what the role holders already signed. The rule of contract kind
 Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
 pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (a node release).
 
-*Known limits* (Fable review of ua-mtx-merge E N-10, N-11; SPECIFIED, not built): the `registry`, `account` and `factory` rows are pinned against
+*Known limits* (Fable review of ua-mtx-merge E N-10, N-11; PLANNED, open): the `registry`, `account` and `factory` rows are pinned against
 the node's own `abi.rs` bindings, one direction only (not in `selector_audit.json`), so a new state-changing entry on
 `UARegistry`, `SmartKeyAccount` or `SmartKeyAccountFactory` fails no node test (today the only registry write without a row is
 `cacheExpandedKey`, permissionless and unsigned); target: add the three to `selector_audit.json` and to

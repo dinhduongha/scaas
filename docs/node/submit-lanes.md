@@ -347,13 +347,16 @@ nonce is gap-filled): `args.pqz_fee` against word 256 of the token's own stateme
 (also a simulation's `AuthRejected` / `PqzVerdictMismatch(3)` after an indexed `VerifierFeeSet` of the token), and the setter's
 `VerifierFeeNotReady`, `VerifierFeePending`; final: `VerifierFeeAboveMax`, `VerifierFeeSame`.
 
-*Known limits* (Fable review of ua-mtx-merge E N-7, N-11; SPECIFIED, not built). The verifier fetch and the shield probe run inside the lane's single
-loop, `timeout_ms` (5 s) per endpoint and up to two fetches per job: two slow endpoints and ten PQZ jobs in one poll stall
+*Known limits* (Fable review of ua-mtx-merge E N-7, N-11, recheck R-6; PLANNED, open). The verifier fetch and the shield probe run inside the
+lane's single loop (at intake, and again in `track` when a stuck debit's replacement re-runs the fill), `timeout_ms` (5 s) per
+endpoint and up to two fetches per job: two slow endpoints and ten PQZ jobs in one poll stall
 receipts and replacements for up to 200 s; target: bound the fetch time per round, or remember a failed endpoint for a few
 seconds. Every chain read added for PQZ, the services and the registry (`pqzVerifyConfig`, the statement views, the
 `VerifierFeeSet` and `UAPqzKeyCurrent` logs) goes to the first `rpc_urls` entry only, with no failover:
 [ARCH-POS-15](../decisions.md#ARCH-POS-15) (an RPC list in every consumer) is built in the reference readers first, not yet in
-the node.
+the node. The `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` span a fixed
+10,000-block window (`ROTATION_LOOKBACK`, not the job's intake block) on that one RPC: an RPC that caps `eth_getLogs` below it
+keeps every such job queued until its `validUntil` (never `dead` wrongly); target: chunk the range, bound it by the intake block.
 
 <a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
 P2; **BUILT**, T63 `39fa296c`, `a6040f9a`, node mutants N1–N3 killed). A PQZ debit whose simulation is over the lane's cap (`gas …
