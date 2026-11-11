@@ -50,6 +50,8 @@ interface IGovernance is IAdmin {
     event RoleGranted(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender);
     event RoleRevoked(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender);
     event FeatureDisabled(uint8 indexed bit, bytes32 indexed by);
+    /// @notice Round 3s (CTR-GOV-24): `enableFeature` of 8, 9 or 28 on a regulated kind, at once.
+    event FeatureEnabled(uint8 indexed bit, bytes32 indexed by);
     event GrantSet(uint8 indexed bit, bytes32 indexed holder, bytes32 indexed grantor);
     event GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar);
     /// @notice The first of the admin's two calls (spec §1.6): `terms` for a wallet to compare with the pending's
@@ -71,6 +73,11 @@ interface IGovernance is IAdmin {
     error NoSuchRole(uint8 bit);
     error FeatureLocked(uint8 bit);
     error FeatureNotSet(uint8 bit);
+    /// @notice Round 3s (CTR-GOV-24): `enableFeature` of a bit outside 8, 9, 28; `disableFeature` of 8 or 9 (once on, never
+    ///         off); `enableFeature` of a bit already set.
+    error FeatureNotEnableable(uint8 bit);
+    error FeatureNotDisableable(uint8 bit);
+    error FeatureAlreadySet(uint8 bit);
     error MissingRole(uint8 bit, bytes32 account);
     /// @notice No band is refused since CTR-GOV-10's Change (owner 2026-11-04): bits 0-127 are SCaaS's, 128-255 each
     ///         application's, and a `uint8` bit and the `uint256` word hold no other. No path raises it; the declaration stays.

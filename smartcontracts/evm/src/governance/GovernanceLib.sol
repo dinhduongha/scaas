@@ -17,7 +17,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///        `scaas.governance`.
 /// @notice External library: the contract keeps one-line wrappers (`GovernanceBase`), the logic is linked at deploy
 ///         (CTR-TOK-24). `features`/`lockedFeatures` are written once by `init`; a flag can later only be cleared, once, by
-///         the admin and only when not locked. One `admin` (0 = no administration ever) grants and revokes the role of a
+///         the admin and only when not locked; on the regulated kinds 8, 9 and 28 can also be switched on (`enableFeature`,
+///         round 3s, CTR-GOV-24), 8 and 9 are never cleared, and a lock may hold one of them off. One `admin` (0 = no administration ever) grants and revokes the role of a
 ///         set flag, disables disableable flags, transfers (two-step) or renounces the admin role. The renounce is refused while
 ///         a set bit that is not locked has holders (CTR-GOV-02, spec §1.7); a locked bit's holders survive it, since a lock
 ///         promises the power is permanent. A holder may renounce its own role. A power runs through `GovernanceUse.use`
@@ -41,8 +42,8 @@ library GovernanceLib {
         bytes32 minter;      // MINTABLE
         bytes32 rateAdmin;   // RATE_ADJUSTABLE, contract only: a native id with code
         bytes32 guardian;    // WRAP_DISABLEABLE
-        bytes32 issuer;      // each set bit of FREEZE / FORCE / PAUSE (5-7); contract only, an `msig` UA too (RK-1)
-        bytes32 compliance;  // RECORD (bit 10), contract only, an `msig` UA too: bits 8 and 9 have no holder (spec §1.2)
+        bytes32 issuer;      // each set bit of FREEZE / FORCE / PAUSE (5-7), contract only, an `msig` UA too (RK-1); 8, 9 (any holder)
+        bytes32 compliance;  // RECORD (bit 10), contract only, an `msig` UA too
     }
 
     /// @notice A bit's holders, leaves included, and its live roots (`grantor == 0`): `holderCount` is `holders`, the
@@ -66,7 +67,7 @@ library GovernanceLib {
     /// @dev Spec §1.4. Every identity is a UA id (`bytes32`, CTR-GOV-01 Change, owner 2026-11-04): a native account's id
     ///      is its padded address, a derived UA its registered id. `rescueTo` is a payout address and stays one.
     struct GovernanceStorage {
-        uint256 features;                                                       // +0, written by init, cleared one-way
+        uint256 features;                                                       // +0, written by init, cleared one-way (8, 9, 28: enableFeature)
         uint256 lockedFeatures;                                                 // +1, no writer after init
         bytes32 admin;                                                          // +2
         bytes32 pendingAdmin;                                                   // +3
@@ -104,7 +105,8 @@ library GovernanceLib {
         if (bad != 0) revert IGovernance.FeatureInvalidForKind(_lowest(bad));
         if ((features & _bit(GovernanceBits.RESCUABLE) != 0) != (rescueTo != address(0)) || rescueTo == address(this)
             || rescueTo == MetaTxLib.UA_POOL || rescueTo == MetaTxLib.SHIELD_POOL) revert IRescuable.RescueConfigInvalid();
-        if (locked & ~features != 0) revert IGovernance.LockedNotSubset();
+        // a lock holds a set bit on; only 8, 9, 28, where valid, may be locked off (round 3s, spec §5.3)
+        if (locked & ~(features | (GovernanceBits.ENABLEABLE & valid)) != 0) revert IGovernance.LockedNotSubset();
         GovernanceStorage storage s = $();
         s.features = features;
         s.lockedFeatures = locked | (features & GovernanceBits.ALWAYS_LOCKED);
@@ -118,7 +120,8 @@ library GovernanceLib {
             _grant(s, GovernanceBits.WRAP_DISABLEABLE, roles.guardian, 0, roleBits, contractOnly, uaRegistry);
         }
         if (roles.issuer != 0) {
-            uint256 iss = features & GovernanceBits.ISSUER_BITS;
+            // the set issuer bits, and each list bit 8, 9 that can still be enabled (round 3s, spec §6.3, §5.5, R-7)
+            uint256 iss = (features | GovernanceBits.enableable(features, locked, valid, admin, false)) & GovernanceBits.ISSUER_BITS;
             if (iss == 0) revert IGovernance.RoleWithoutFeature(GovernanceBits.FREEZE);
             for (; iss != 0; iss &= iss - 1) _grant(s, _lowest(iss), roles.issuer, 0, roleBits, contractOnly, uaRegistry);
         }
@@ -370,6 +373,7 @@ library GovernanceLib {
         GovernanceStorage storage s = _onlyAdmin(caller);
         uint256 m = _bit(bit);
         if ((s.lockedFeatures | GovernanceBits.ALWAYS_LOCKED) & m != 0) revert IGovernance.FeatureLocked(bit);
+        if (GovernanceBits.NOT_DISABLEABLE & m != 0) revert IGovernance.FeatureNotDisableable(bit); // 8, 9: once on, never off
         if (s.features & m == 0) revert IGovernance.FeatureNotSet(bit);
         if (_delayed(s, bit, delayedRelax)) {
             IGovernance.GrantTerms memory none;
@@ -378,6 +382,21 @@ library GovernanceLib {
         s.features &= ~m;
         emit IGovernance.FeatureDisabled(bit, caller);
         return true;
+    }
+
+    /// @notice Round 3s (spec §5.2, §5.3, CTR-GOV-24): the admin switches on 8, 9 or 28 at once, one call, no proposal and no
+    ///         `grantDelay`; `valid` is the kind's mask (bit 8 is not valid on 10-13). Locked (on or off) `FeatureLocked`.
+    ///         The regulated token checks its preconditions after it, in the same call (`ListHolderMissing`,
+    ///         `ComplianceRegistryNotSet`), and sets its mirror.
+    function enableFeature(uint8 bit, bytes32 caller, uint256 valid) public {
+        GovernanceStorage storage s = _onlyAdmin(caller);
+        uint256 m = _bit(bit);
+        if (GovernanceBits.ENABLEABLE & m == 0) revert IGovernance.FeatureNotEnableable(bit);
+        if (valid & m == 0) revert IGovernance.FeatureInvalidForKind(bit);
+        if (s.lockedFeatures & m != 0) revert IGovernance.FeatureLocked(bit);
+        if (s.features & m != 0) revert IGovernance.FeatureAlreadySet(bit);
+        s.features |= m;
+        emit IGovernance.FeatureEnabled(bit, caller);
     }
 
     function transferAdmin(bytes32 newAdmin, bytes32 caller) public {
@@ -488,7 +507,10 @@ library GovernanceLib {
         if (account == 0) revert IGovernance.RoleAccountZero(bit);
         if (_isPool(account)) revert IGovernance.RoleAccountPool(bit, account);
         if (roleBits & _bit(bit) == 0) revert IGovernance.NoSuchRole(bit);
-        if (s.features & _bit(bit) == 0) revert IGovernance.RoleWithoutFeature(bit);
+        // a set bit, or (round 3s, spec §6.3) an enableable one not locked off: its holders write a dormant list
+        if (s.features & _bit(bit) == 0 && GovernanceBits.ENABLEABLE & ~s.lockedFeatures & _bit(bit) == 0) {
+            revert IGovernance.RoleWithoutFeature(bit);
+        }
         // contract-only: a native id (top 96 bits 0) whose address has code; on a regulated bit also a threshold (`msig`)
         // UA, its kind read from the registry here, at the grant, never at a use (RK-1)
         if (contractOnly & _bit(bit) != 0 && (uint256(account) >> 160 == 0
