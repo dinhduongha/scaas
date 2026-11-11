@@ -1187,7 +1187,7 @@ impl Guard {
 
     /// Fable E N-6: the op's `contract` (`token`, `zether`, `pqz`) picks the node's digest domain, so it must be the token's own:
     /// `eip712Domain().name` equal to that kind's, else `CONTRACT_KIND_MISMATCH` (`dead`). The name is an immutable of the
-    /// implementation: read once per token and kept.
+    /// implementation: kept once it matched a kind asked for, a mismatching answer is read again next time (Fable recheck 2 P3-2).
     async fn require_kind(&self, chain: &Chain, to: Address, contract: &str) -> Result<(), Refusal> {
         let cached = self.domain_names.lock().ok().and_then(|m| m.get(&to).cloned());
         let name = match cached {
@@ -1199,14 +1199,16 @@ impl Guard {
                         "CONTRACT_KIND_MISMATCH: {to:#x} answers no eip712Domain(): {e}"))),
                     Err(SimError::Transport(e)) => return Err(Refusal::Transport(format!("eip712Domain(): {e}"))),
                 };
-                if let Ok(mut m) = self.domain_names.lock() {
-                    m.insert(to, n.clone());
-                }
                 n
             }
         };
         match typed::domain_name(contract) {
-            Some(want) if want == name => Ok(()),
+            Some(want) if want == name => {
+                if let Ok(mut m) = self.domain_names.lock() {
+                    m.insert(to, name);
+                }
+                Ok(())
+            }
             want => Err(Refusal::Policy(format!(
                 "CONTRACT_KIND_MISMATCH: contract {contract:?} signs in {want:?}, {to:#x}'s domain is {name:?}"))),
         }
@@ -2365,6 +2367,14 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         g2.bound.lock().unwrap().insert(w.to);
         assert!(matches!(g2.require_kind(&down, w.to, "token").await, Err(Refusal::Transport(_))));
         assert!(g2.domain_names.lock().unwrap().is_empty(), "an unread name is not kept");
+        // Fable recheck 2 P3-2: a name that matched no kind asked for is not kept (one wrong answer never sticks)
+        let g3 = Guard::new(&ChainCfg::default(), Arc::new(RwLock::new(vec![w.to]))).unwrap();
+        let mut x = w.clone();
+        x.typed.as_mut().unwrap().contract = "pqz";
+        assert!(g3.check(&chain, &x).await.is_err());
+        assert!(g3.domain_names.lock().unwrap().is_empty(), "a mismatching answer is read again next time");
+        g3.check(&chain, &w).await.unwrap();
+        assert!(g3.domain_names.lock().unwrap().contains_key(&w.to), "control: a match is kept");
     }
 
     fn chain_uid_of(v: &serde_json::Value) -> Option<B256> {

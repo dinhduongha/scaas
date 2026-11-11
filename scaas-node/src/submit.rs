@@ -564,6 +564,14 @@ impl Submitter {
                 }
                 return;
             }
+            // Fable recheck 2 P3-2: a wrong `contract` delivered again after its op landed (a derived signer's) is `consumed`
+            Err(Refusal::Policy(reason)) if reason.starts_with("CONTRACT_KIND_MISMATCH") => {
+                return match self.consumed(&w).await {
+                    Ok(true) => self.report_consumed(&w).await,
+                    Ok(false) => self.fail(&w, reason).await,
+                    Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+                };
+            }
             Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
             Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
         }
@@ -2671,6 +2679,13 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             let (r, _) = outcomes(ok(None), vec![j], |c| relay_params(c, &[])).await;
             assert!(r.iter().all(|x| !x.1.contains("CONTRACT_KIND_MISMATCH")), "{what} control: {r:?}");
         }
+        // Fable recheck 2 P3-2: the same mismatch after the op's nonce was spent is `consumed`, never `dead`
+        let (r, _) = outcomes(Evm { mtx_nonce: Some(1), domain: Some("SCaaS PqzToken"), ..Default::default() }, vec![ua_job(7, &ua_meta(7))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["consumed"], "{r:?}");
+        let (r, _) = outcomes(Evm { mtx_nonce: None, domain: Some("SCaaS PqzToken"), ..Default::default() }, vec![ua_job(7, &ua_meta(7))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["queued"], "an unreadable nonce decides nothing: {r:?}");
     }
 
     /// CTR-MTX-27 on the lane: the whole `relay` is simulated and sent only when the fee reaches this lane (open mode,
