@@ -1847,7 +1847,7 @@ mod tests {
         ("GovernanceRouter", "gov_router"), ("NormalRegulatedToken", "token"), ("WrappedRegulatedToken", "token"),
         ("NormalZetherRegulatedToken", "zether"), ("WrappedZetherRegulatedToken", "zether"), ("NormalPqzRegulatedToken", "pqz"),
         ("WrappedPqzRegulatedToken", "pqz"), ("OpenFactory", "open_factory"), ("UARegistry", "registry"),
-        ("SmartKeyAccountFactory", "factory")];
+        ("SmartKeyAccountFactory", "factory"), ("SmartKeyAccount", "account")];
     // round 3r (spec §7): `OpenFactory` under its own label: the node's contract kind `factory` is `SmartKeyAccountFactory`
     // (`deploy`); `OpenFactory` has no node row, its three open deploys `APPROVED(release)` are in `NOT_ROWS`
     /// `SIGNED` entries no job names, each with its reason: `(name, the argument list's start)`.
@@ -1855,6 +1855,9 @@ mod tests {
         ("executeMetaTransaction", "((address,bytes,", "the EIP-1776 alias (R3): its address MetaTransaction is no job shape"),
         ("mtxExecute", "((bytes32,bytes,", "the generic UAMetaTransaction: a job names its operation (HEX_DATA_REFUSED on struct = call)"),
         ("mtxBatch", "((bytes32,bytes,", "the generic batch: as mtxExecute"),
+        // owner 2026-11-12: `SmartKeyAccount`'s generic entries on its address `MetaTransaction`
+        ("mtxExecute", "((address,bytes,", "the account's generic MetaTransaction: a job names its operation (mtxExecuteAsOwner, the account's named rows)"),
+        ("mtxBatch", "((address,bytes,", "the account's generic batch: as its mtxExecute"),
         ("mtxBatchTransfer", "((bytes32,bytes32,", "a transfer relays as one mtxExecuteTransfer (ua_metatx struct job)"),
         ("mtxTransfer", "(bytes32,bytes32,", "the flat transfer: the same UAMetaTransfer as mtxExecuteTransfer"),
         ("mtxTransferWithFee", "(bytes32,bytes32,", "the flat transfer with a fee: as mtxTransfer"),
@@ -1873,6 +1876,12 @@ mod tests {
         ("deployDexImplementation", "(uint64,", RELEASE_NOT_A_JOB),
         ("deployImplementation", "((uint16,", RELEASE_NOT_A_JOB),
     ];
+    /// `addKey` -> `mtxAddKey`: the envelope entry that self-calls an operation.
+    fn mtx_of(name: &str) -> String {
+        let mut c = name.chars();
+        c.next().map_or(String::new(), |f| format!("mtx{}{}", f.to_ascii_uppercase(), c.as_str()))
+    }
+
     /// Round 3r (spec 2026-11-10-admin-not-owner.md §5.6, Q3): the four approval ops and the three open deploys.
     const RELEASE_NOT_A_JOB: &str = "release management is not a node job (owner 2026-11-10)";
     const ENV_UA: &str = "((bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
@@ -1901,7 +1910,8 @@ mod tests {
         let (mut rowed, mut exempt, mut governed) = (0, 0, 0);
         // Fable E N-10: + the registry and the account factory, whose writes anyone may relay: a row there is a SIGNED entry or a
         // PERMISSIONLESS one (`storePqzPop`, `deploy`: a proof or the address fixes what they write)
-        for kind in ["token", "zether", "pqz", "dex", "gov_router", "open_factory", "registry", "factory"] {
+        // owner 2026-11-12: + the account (`SmartKeyAccount`; its guardian's `initiateRecovery` is class GUARDIAN, no row)
+        for kind in ["token", "zether", "pqz", "dex", "gov_router", "open_factory", "registry", "factory", "account"] {
             let entries: Vec<&serde_json::Value> = AUDIT_KINDS.iter().filter(|(_, k)| *k == kind)
                 .flat_map(|(c, _)| audit[*c].as_array().unwrap_or_else(|| panic!("{c}"))).collect();
             let signed: HashSet<[u8; 4]> = entries.iter().filter(|r| r["class"] == "SIGNED").map(|r| sel(r["sig"].as_str().unwrap())).collect();
@@ -1921,8 +1931,8 @@ mod tests {
                 } else if kind != "dex" && kind != "gov_router" && struct_jobs.contains(&sel(s)) {
                     exempt += 1;
                 } else if !args.starts_with(ENV_UA) && !args.starts_with(ENV_ADDR)
-                    && ours.iter().any(|r| r.entry == name && r.enveloped) {
-                    exempt += 1; // the inner operation its envelope row self-calls
+                    && ours.iter().any(|r| r.enveloped && (r.entry == name || r.entry == mtx_of(name))) {
+                    exempt += 1; // the inner operation its envelope row self-calls (the account's `addKey` behind `mtxAddKey`)
                 } else {
                     assert!(NOT_ROWS.iter().any(|(n, a, _)| *n == name && args.starts_with(a)), "{kind}: SIGNED {s} has no row and no reason");
                     exempt += 1;
@@ -1944,7 +1954,7 @@ mod tests {
                     assert!(NOT_ROWS.iter().any(|(n, a, _)| *n == name && args.starts_with(a)), "{kind}: {s} ({class}) not in NOT_ROWS");
                     exempt += 1;
                 }
-                governed += usize::from(class.starts_with("BIT") || class == "ADMIN" || class == "HOLDER_OWN");
+                governed += usize::from(class.starts_with("BIT") || class == "ADMIN" || class == "HOLDER_OWN" || class == "GUARDIAN");
             }
         }
         let not_row = |s: &str| NOT_ROWS.iter().any(|(n, a, _)| s.strip_prefix(n).is_some_and(|x| x.starts_with(a)));
@@ -2280,10 +2290,12 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // of the four PQZ kinds
     // Fable E N-10: 276 -> 286, the registry's eight SIGNED rows and the two PERMISSIONLESS ones (`storePqzPop`, `deploy`)
     // owner 2026-11-12: -> 288, the router's `mtxCreateToken`, `mtxCreateDex`; EXEMPT 200 -> 198
-    const ROWED: usize = 288;
+    // owner 2026-11-12 (GUARDIAN): -> 296, the account's eight rows; EXEMPT -> 207, its six self-called operations and its three
+    // generic entries; GOVERNED -> 297, its guardian's `initiateRecovery`
+    const ROWED: usize = 296;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
-    const EXEMPT: usize = 198;
-    const GOVERNED: usize = 296;
+    const EXEMPT: usize = 207;
+    const GOVERNED: usize = 297;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {

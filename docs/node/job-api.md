@@ -755,13 +755,14 @@ lane only relays what the role holders already signed. The rule of contract kind
 Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
 pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (a node release).
 
-The `registry` and `factory` rows are walked both directions against `UARegistry` and `SmartKeyAccountFactory` in
+The `registry`, `factory` and `account` rows are walked both directions against `UARegistry`, `SmartKeyAccountFactory` and `SmartKeyAccount` in
 `selector_audit.json` (Fable review of ua-mtx-merge E N-10; BUILT, `allow_lists_equal_the_selector_audit_both_directions` and
 forge `SelectorAudit.t.sol` `test_everySelectorIsClassified`): each row is a `SIGNED` entry, or a `PERMISSIONLESS` one whose
 proof or address fixes what it writes (`storePqzPop`, `deploy`); a new `SIGNED` write without a row fails; `cacheExpandedKey`
-(`PERMISSIONLESS`) has no row. *Known limits* (Fable review of ua-mtx-merge E N-10, N-11; PLANNED, open): `SmartKeyAccount` is not
-in the pin yet, its rows stay pinned against the node's own `abi.rs` one direction: its guardian's `initiateRecovery` fits no class
-of the audit (`NotGuardian()` is a gate's error, and no `BIT(n)` or `HOLDER_OWN` names it); a class for it is the owner's.
+(`PERMISSIONLESS`) has no row. On the account (owner 2026-11-12; BUILT) the guardian's `initiateRecovery` is the audit class
+`GUARDIAN` (a stranger is refused `NotGuardian()`), no row; its self-only operations (`addKey`, `setGuardian`, `execute`, …) are
+reached through its signed `mtx*` rows; its generic `mtxExecute` / `mtxBatch` on an address `MetaTransaction` are no row (a job
+names its operation).
 `mtxCreateToken` and `mtxCreateDex` are rows ([NODE-JOB-26](#NODE-JOB-26));
 `mtxCreateInstance` has none (`guard.rs` `NOT_ROWS`): its `initCall` is a class's own initializer call, which the node cannot name
 from fields, so how it is relayed is the owner's call (PLANNED, open); the four release approvals are covered by the owner's ruling
