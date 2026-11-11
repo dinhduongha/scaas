@@ -132,6 +132,10 @@ MUTANTS = {
              "    } else if blocks {\n        ListEffect::None\n", "cargo", "scaas-node", "list_effects_follow_the_live_bit"),
     "M34": ("scaas-node/src/dex/venue.rs", "    if venue.contains(&a) {\n        ListEffect::Halt(blocks)\n    } else if blocks {",
             "    if blocks {", "cargo", "scaas-node", "list_effects_follow_the_live_bit"),
+    # M4 on the public kinds is equivalent (the fee's own move runs `_regMove`'s L(to)); the fee legs that move off the hooked
+    # ledger are the confidential kinds' (`_fromPool`, the beneficiary's fee through `_regName` -> `_feeRecipient`)
+    "M4b": (RB, "revert IRegulatedToken.FeeRecipientFrozen(a);\n        _listed(a);\n",
+            "revert IRegulatedToken.FeeRecipientFrozen(a);\n", "forge", "test/as", "confidential/*Receiver.t.sol"),
 }
 
 
