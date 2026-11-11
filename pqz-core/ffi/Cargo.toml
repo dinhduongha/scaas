@@ -92,6 +92,11 @@ required-features = ["prove", "test-hooks"]
 name = "recover_versions"
 required-features = ["prove"]
 
+# round 3t (verifier fee spec §15 (9)): real proofs at fee = txFee + verifierFee, fee +- 1, the over-spend
+[[test]]
+name = "fee_word"
+required-features = ["prove"]
+
 [profile.release]
 debug = 1
 panic = "unwind"

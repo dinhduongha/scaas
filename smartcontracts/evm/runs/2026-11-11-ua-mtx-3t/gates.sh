@@ -78,7 +78,7 @@ step() {
     node-e2e) (cd scaas-node && CAPPED_MEM=6G "$C" cargo test -j 2 --test e2e -- --ignored --test-threads=1) ;; # as CI: one at a time (22 tests in parallel were OOM-killed at 6 GB)
     verifier) (cd scaas-pqz-verifier && "$C" cargo test -j 2) ;;
     verifier-clippy) (cd scaas-pqz-verifier && "$C" cargo clippy -j 2 --all-targets -- -D warnings) ;;
-    fee-word) (cd pqz-core/ffi && "$C" cargo test -j 2 --release --test fee_word -- --nocapture) ;;
+    fee-word) (cd pqz-core/ffi && "$C" cargo test -j 2 --release --features prove --test fee_word -- --nocapture) ;;
     clientkeys) (cd clients/clientkeys && "$C" npm test) ;;
     ua-rs) (cd clients/ua-rs && "$C" cargo test -j 2 && "$C" cargo clippy -j 2 --all-targets -- -D warnings \
         && "$C" cargo test -j 2 --features signers && "$C" cargo test -j 2 --features json && "$C" cargo test -j 2 --features pq) ;;

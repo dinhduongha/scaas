@@ -23,3 +23,5 @@ t3 t-pqz@{PqzOffchainCore,PqzOffchainEntries,PqzVerifier,PqzVerdictVectors,PqzPr
 t3 t-pqz/invariant@PqzVerdictInvariants.t.sol | 64af432d | 0 | 2 passed (I1-I6 with the fee 0 tokens)
 t3 t-as@confidential/PqzVerdictKinds.t.sol | 64af432d | 0 | 6 passed
 t3 t-governance@{GovProofBit,SelectorAudit,AdminNames}.t.sol | 64af432d | 1 | 39 passed, 1 failed: test_everySelectorIsClassified (5 unpinned: setVerifierFee on kinds 4, 5, 12, 13 and mtxSetVerifierFee; selector_audit.json by hand in T5)
+t4 t-pqz/invariant@PqzFeeInvariants.t.sol (F1-F6, I-V1..I-V3) | T4 | 0 | 2 passed: 7 invariants (runs 64, calls 8,192, reverts 0; depth 128) and the handler control (debits of every kind on the three tokens, a decrease, a proposal confirmed after the 1-day notice, a held op 7 refused after the change, d shifted too)
+t4 fee-word (pqz-core/ffi tests/fee_word.rs, --release --features prove; ffi/src untouched) | T4 | 0 | 2 passed: PQZL and PQZH, op 1, op 7 M=2, burn, refresh proved at fee = txFee 3 + vf 2 verify 01, at 6 / 4 / 3 verify 00; the over-spend witnesses refused by both provers (PQZL error 3, PQZH "carry out"), the exact spend 01
