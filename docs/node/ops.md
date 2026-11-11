@@ -870,7 +870,8 @@ refuse_shield_when_unserved = false                # opt-in
     chainId}` (a fixed probe statement, also the check before a verifier transfer is proposed); one probe per shield job. With
     `refuse_shield_when_unserved = true`, shield and wrap-shield jobs (`UAShield`, `WrapShield` on a PQZ token) into an `OFFCHAIN`
     token whose verifier is revoked (`pqzVerifyConfig().verifier == 0`) or that no endpoint serves (none configured counts as
-    unreachable) are refused `PQZ_VERIFIER_UNREACHABLE`, for every consumer.
+    unserved) are refused `PQZ_VERIFIER_UNREACHABLE`, for every consumer; a probe that does not get through while none serves
+    is `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue.
 - **`OFFCHAIN` token health** (BUILT, T47; the token view SPECIFIED): per `OFFCHAIN` token the indexer keeps
   `pqz_last_verdict_at`, the epoch, the revoked state and (group 3t) `pqz_verifier_fee` ([indexer-feeds.md](indexer-feeds.md#pqz-verifier-rows)). Alerts:
   `PqzVerifierProposed` (with `eta`), `PqzVerifierRevoked` and `VerifierFeeProposed` (with `eta`) are feed rows with `alert: true`;

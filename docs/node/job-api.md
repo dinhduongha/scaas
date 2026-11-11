@@ -399,9 +399,10 @@ node's, for every consumer. **UNAUDITED.**
 `VerifierFeeNotReady(eta)` and `VerifierFeePending(pending)` liftable, `VerifierFeeAboveMax(fee, max)` and `VerifierFeeSame` final. A `PqzVerdictMismatch` after an indexed
   `UAPqzKeyCurrent` of a party is `PQZ_KEY_ROTATED` ([NODE-JOB-23](#NODE-JOB-23)).
 - **Shield refusal** (opt-in, `[pqz_verifier] refuse_shield_when_unserved = true`, default `false`): shield and wrap-shield jobs
-  into an `OFFCHAIN` token whose verifier is revoked or which none of the endpoints serves (their probe) are refused
-  `PQZ_VERIFIER_UNREACHABLE` (`dead`), the same rule for every consumer, so no relayer of the node adds value to a pool nobody
-  serves. `PRECOMPILE` tokens are never affected.
+  into an `OFFCHAIN` token whose verifier is revoked or which none of the endpoints serves (their probe answers, none 2xx, or no
+  endpoint is configured) are refused `PQZ_VERIFIER_UNREACHABLE` (`dead`), the same rule for every consumer, so no relayer of the
+  node adds value to a pool nobody serves. A probe that does not get through (a timeout, a refused connection) while no endpoint
+  serves is no answer: `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue (Fable review of ua-mtx-merge E N-2). `PRECOMPILE` tokens are never affected.
 - **Rows:** `typed.rs` / `guard.rs` carry the entries with the verdict and the router's `mtxPqzSetVerifier`,
   `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` and (group 3t) `mtxSetVerifierFee` over `UASetVerifierFee` (selector
   `0xf0d8cbbf`) ([call table](#call-table)), equal both directions with the contract's
@@ -980,7 +981,7 @@ cancels 2 rps (burst 10).
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost |
 
 Terminal reasons that are not HTTP codes: job `dead` with `error = ATTEMPTS_EXHAUSTED` (`attempt_count >
-chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_FEE_MISMATCH`, `PQZ_FEE_LOG_UNREAD`, `PQZ_KEY_ROTATED`,
+chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_FEE_MISMATCH`, `PQZ_FEE_LOG_UNREAD`, `PQZ_VERIFIER_PROBE_UNREAD`, `PQZ_KEY_ROTATED`,
 `PQZ_KEY_VERSION_UNKNOWN`, `PROOF_STORE_OVER_LANE_CAP` ([NODE-JOB-24](submit-lanes.md#NODE-JOB-24)); a lane stopped by
 `SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 

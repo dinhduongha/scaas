@@ -3362,11 +3362,17 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             c.pqz_verifier.refuse_shield_when_unserved = true;
         };
         let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
-        for (e, urls, why) in [(revoked, vec![url.clone()], "revoked"), (offchain(), vec![DEAD.to_string()], "unreachable"),
-            (offchain(), vec![refusing.clone()], "probe refused"), (offchain(), vec![], "no endpoint")] {
+        for (e, urls, why) in [(revoked, vec![url.clone()], "revoked"), (offchain(), vec![refusing.clone()], "probe refused"),
+            (offchain(), vec![], "no endpoint")] {
             let (r, rpc) = outcomes(e, shield_jobs(), on(urls)).await;
             assert!(r.len() == 2 && r.iter().all(|x| x.0 == "dead" && x.1.starts_with("PQZ_VERIFIER_UNREACHABLE")), "{why}: {r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
+        }
+        // Fable E N-2: a probe with a transport error (nothing listens) is no answer: back in the queue, never `dead`
+        for urls in [vec![DEAD.to_string()], vec![refusing.clone(), DEAD.to_string()]] {
+            let (r, rpc) = outcomes(offchain(), shield_jobs(), on(urls)).await;
+            assert!(r.len() == 2 && r.iter().all(|x| x.0 == "queued" && x.1.starts_with("PQZ_VERIFIER_PROBE_UNREAD")), "{r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
         }
         let precompile = Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
         for (e, urls) in [(offchain(), vec![DEAD.to_string(), refusing, url.clone()]), (precompile, vec![])] {

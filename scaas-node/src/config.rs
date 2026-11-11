@@ -50,8 +50,8 @@ pub struct PqzVerifierCfg {
     /// Base URLs of PQZ verifiers (off-chain), asked in order; empty: a job without `pqz_verdict` is `PQZ_VERDICT_MISSING`.
     #[serde(default)]
     pub endpoints: Vec<String>,
-    /// Refuse shield and wrap-shield jobs into an `OFFCHAIN` token whose verifier is revoked or whose endpoints none answers
-    /// (`PQZ_VERIFIER_UNREACHABLE`). Off by default.
+    /// Refuse shield and wrap-shield jobs into an `OFFCHAIN` token whose verifier is revoked or that no endpoint serves
+    /// (`PQZ_VERIFIER_UNREACHABLE`; a probe transport error requeues). Off by default.
     #[serde(default)]
     pub refuse_shield_when_unserved: bool,
     /// One endpoint's whole request (connect, send, answer).

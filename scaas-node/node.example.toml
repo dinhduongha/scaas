@@ -87,7 +87,7 @@ mnemonic = { keystore = "/etc/scaas/mnemonic.json", passphrase_env = "SCAAS_KEYS
 # (e.g. scaas-pqz-verifier), never this node. URLs only, no secret.
 [pqz_verifier]
 endpoints = []                                   # e.g. ["https://pqz-verifier.example.org"]
-refuse_shield_when_unserved = false              # true: refuse shields into an OFFCHAIN token whose verifier is revoked or unreachable
+refuse_shield_when_unserved = false              # true: refuse shields into an OFFCHAIN token whose verifier is revoked or unserved
 # timeout_ms = 5000                              # one endpoint's whole request
 # max_response_bytes = 262144                    # a longer answer is no answer
 # valid_margin_secs = 30                         # a verdict expiring sooner than this is not sent
