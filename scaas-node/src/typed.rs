@@ -2605,51 +2605,22 @@ mod tests {
         assert_eq!(plain.typed.lane_digest_on(chain, uid), plain.typed.digest_on(chain, uid));
     }
 
-    alloy::sol! {
-        // `IFactoryToken.TokenConfig` / `ISCaaSDex.DexConfig` as the contracts declare them (and `tests/e2e.rs` creates tokens with)
-        struct TRoles { bytes32 minter; bytes32 rateAdmin; bytes32 guardian; bytes32 issuer; bytes32 compliance; }
-        struct TLeg { address underlying; uint256 num; uint256 den; }
-        struct TRate { uint32 rateDelay; uint16 maxRateStepBps; }
-        struct TConf { bytes auditorKey; uint256 shieldScale; uint256 maxShielded; uint256 confidentialFee; uint8 disclosureMode;
-            uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; uint8 proofStore;
-            uint64 verifierFee; uint64 verifierFeeMax; }
-        struct TReg { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash; bytes32 taxRecipient; }
-        struct TConfig { string name; string symbol; uint8 decimals; uint256 features; uint256 lockedFeatures; bytes32 admin; TRoles roles;
-            uint256 initialSupply; address initialHolder; TLeg[] legs; TRate rate; TConf conf; uint64 grantDelay; address rescueTo;
-            uint256 maxSupply; TReg reg; }
-        struct TDex { bytes32 admin; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; }
-    }
-
     /// Owner 2026-11-12 (every state-changing `mtx*` relayable): `mtxCreateToken` / `mtxCreateDex` take the config as named JSON
     /// (`args.config`); the node sends it ABI-encoded as the factory's `initArgs` and signs `initHash = keccak256(initArgs)`, the
-    /// vector's type string and selector. Refused by name: a job's own `initHash`, a missing field, a hex config, nine legs.
+    /// vector's type string and selector; the named config's encoding is the forge-checked `create_config.json`. Refused by name: a
+    /// job's own `initHash`, a missing field, a hex config, nine legs.
     #[test]
     fn creation_rows_encode_the_named_config() {
-        use alloy::sol_types::SolValue;
         let raw: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap();
         let z = |b: u8| format!("{:#x}", B256::repeat_byte(b));
-        let a = |b: u8| format!("{:#x}", Address::repeat_byte(b));
-        let token = json!({"name": "Named", "symbol": "NMD", "decimals": 6, "features": "1", "lockedFeatures": "0", "admin": z(0xad),
-            "roles": {"minter": z(1), "rateAdmin": z(0), "guardian": z(0), "issuer": z(0), "compliance": z(0)},
-            "initialSupply": "1000", "initialHolder": a(0x40), "legs": [{"underlying": a(0x11), "num": "1", "den": "2"}],
-            "rate": {"rateDelay": 0, "maxRateStepBps": 0},
-            "conf": {"auditorKey": "0x0102", "shieldScale": "0", "maxShielded": "0", "confidentialFee": "0", "disclosureMode": 0,
-                "auditorMode": 0, "minDecoyFee": "0", "pqzVerifyMode": 0, "pqzVerifierUA": z(0), "pqzVerifierFixed": false,
-                "proofStore": 0, "verifierFee": "0", "verifierFeeMax": "0"},
-            "grantDelay": "0", "rescueTo": a(0), "maxSupply": "0",
-            "reg": {"complianceRegistry": a(0), "requiredFlags": "0", "deniedFlags": "0", "termsHash": z(0), "taxRecipient": z(0)}});
-        let want_token = TConfig { name: "Named".into(), symbol: "NMD".into(), decimals: 6, features: U256::from(1), lockedFeatures: U256::ZERO,
-            admin: B256::repeat_byte(0xad), roles: TRoles { minter: B256::repeat_byte(1), rateAdmin: B256::ZERO, guardian: B256::ZERO,
-            issuer: B256::ZERO, compliance: B256::ZERO }, initialSupply: U256::from(1000), initialHolder: Address::repeat_byte(0x40),
-            legs: vec![TLeg { underlying: Address::repeat_byte(0x11), num: U256::from(1), den: U256::from(2) }],
-            rate: TRate { rateDelay: 0, maxRateStepBps: 0 }, conf: TConf { auditorKey: vec![1, 2].into(), shieldScale: U256::ZERO,
-            maxShielded: U256::ZERO, confidentialFee: U256::ZERO, disclosureMode: 0, auditorMode: 0, minDecoyFee: U256::ZERO, pqzVerifyMode: 0,
-            pqzVerifierUA: B256::ZERO, pqzVerifierFixed: false, proofStore: 0, verifierFee: 0, verifierFeeMax: 0 }, grantDelay: 0,
-            rescueTo: Address::ZERO, maxSupply: U256::ZERO, reg: TReg { complianceRegistry: Address::ZERO, requiredFlags: 0, deniedFlags: 0,
-            termsHash: B256::ZERO, taxRecipient: B256::ZERO } }.abi_encode();
-        let dex = json!({"admin": z(0xad), "relayerSharePpm": 1000, "treasury": a(0x7e), "listedOnly": true, "grantDelay": "0", "rescueTo": a(0)});
-        let want_dex = TDex { admin: B256::repeat_byte(0xad), relayerSharePpm: 1000, treasury: Address::repeat_byte(0x7e), listedOnly: true,
-            grantDelay: 0, rescueTo: Address::ZERO }.abi_encode();
+        // Fable recheck 2 P3-7: the named configs and their `initArgs` are `smartcontracts/vectors/factory/create_config.json`, which
+        // forge's `CreateConfigKat.t.sol` checks against the contracts' structs field by field
+        let kat: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/factory/create_config.json")).unwrap();
+        let bytes_of = |k: &str| alloy::hex::decode(&kat[k]["initArgs"].as_str().unwrap()[2..]).unwrap();
+        let (token, want_token, dex, want_dex) = (kat["token"]["config"].clone(), bytes_of("token"), kat["dex"]["config"].clone(), bytes_of("dex"));
+        for k in ["token", "dex"] {
+            assert_eq!(format!("{:#x}", keccak256(bytes_of(k))), kat[k]["initHash"].as_str().unwrap(), "{k}: the vector's initHash");
+        }
         for (name, config, want, init_at) in [("UACreateToken", token, want_token, 4usize), ("UACreateDex", dex, want_dex, 3)] {
             let o = &raw["ops"][name];
             let d = &o["domains"]["gov_router"];

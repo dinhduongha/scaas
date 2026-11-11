@@ -864,3 +864,20 @@ test('the router creations: initHash binds the extra bytes', () => {
     assert.throws(() => op.call(td, d.signature, {}), new RegExp(`needs extra.${field}`), name);
   }
 });
+
+// Fable recheck 2 P3-7 (NODE-JOB-26): a creation's named config and its `initArgs` (smartcontracts/vectors/factory/create_config.json,
+// checked against the Solidity structs by forge `CreateConfigKat.t.sol`, read by the node too): the bytes a client sends in
+// `extra.initArgs` are the ones the node rebuilds from the named config, and they bind the signed `initHash`.
+test('the router creations: the named config vector binds initHash', () => {
+  const K = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/factory/create_config.json', import.meta.url)));
+  for (const [name, key] of [['UACreateToken', 'token'], ['UACreateDex', 'dex']]) {
+    const op = TYPED_OPS[name];
+    const d = V.ops[name].domains.gov_router;
+    const { initArgs, initHash } = K[key];
+    assert.equal(hex(keccak_256(fromHex(initArgs))), initHash, name);
+    const td = { types: op.types, primaryType: op.primary, domain: d.domain, message: { ...V.ops[name].message, initHash } };
+    const data = hex(op.call(td, d.signature, { initArgs }).data);
+    assert.ok(data.includes(initArgs.slice(2)), `${name}: the calldata carries initArgs`);
+    assert.throws(() => op.call(td, d.signature, { initArgs: d.extra.initArgs }), /not the signed initHash/, name);
+  }
+});

@@ -889,7 +889,10 @@ class instance's is not yet.
 
 <a id="NODE-JOB-26"></a>**NODE-JOB-26** — **The factory's creations of a token and a DEX are relayable: the config is named, the node
 encodes `initArgs` and fills `initHash`** (owner 2026-11-12: every state-changing `mtx*` is relayable, fee 0 too). Status: **BUILT**
-(branch `ua-mtx-fix2-node`; tests `typed::tests::creation_rows_encode_the_named_config`, e2e `router_creations_signed_by_an_eoa`).
+(branch `ua-mtx-fix2-node`; tests `typed::tests::creation_rows_encode_the_named_config`, e2e `router_creations_signed_by_an_eoa`;
+the named config and its `initArgs` are the known answer `smartcontracts/vectors/factory/create_config.json`, checked against the
+Solidity structs field by field by forge `test/factory/CreateConfigKat.t.sol` and read by the node and `clientkeys`, Fable recheck 2
+P3-7).
 **UNAUDITED.** A `ua_metatx` job on the chain's `GovernanceRouter` (`contract: "gov_router"`), the creator's `UAEnvelope` (its own
 lane, `batch` usually the factory's address) and `UASig`:
 `{entry: "mtxCreateToken", args: {target: <OpenFactory>, kind, version, salt, config: {TokenConfig}}}` or
