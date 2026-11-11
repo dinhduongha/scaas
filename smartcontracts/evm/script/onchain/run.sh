@@ -20,7 +20,8 @@ net=$1
 g=$2
 shift 2
 RPC_7622=${RPC_7622:-http://127.0.0.1:8545}
-OUTD=runs/2026-11-10-ua-mtx-merge-t66b-step5b
+OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix} # matrix.sh's run dir (MATRIX_OUT), else today's
+mkdir -p "$OUTD"
 lg=$(echo "$g" | tr 'A-Z' 'a-z')
 T=$(mktemp -d)
 A=

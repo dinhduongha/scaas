@@ -27,11 +27,13 @@ import glob
 import json
 import os
 import sys
+import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.abspath(os.path.join(HERE, "../.."))
-OUT = os.path.join(EVM, "runs/2026-11-10-ua-mtx-merge-t66b-step5b")
+# matrix.sh's run dir (MATRIX_OUT), else today's; never an earlier round's committed run note
+OUT = os.path.join(EVM, os.environ.get("MATRIX_OUT") or time.strftime("runs/%Y-%m-%d-matrix"))
 BUILD = os.path.join(EVM, os.environ.get("ONCHAIN_OUT", "out/onchain"))  # the build the scripts ran from (src unchanged since the deploy)
 
 

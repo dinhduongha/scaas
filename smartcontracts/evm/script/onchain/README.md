@@ -127,7 +127,10 @@ down, `[target] deploy …` / `deploy ok N txs`, `[target/group] start`, then `o
 addresses, tx hashes), never a key or a mnemonic; forge's and every step's full output go to the git-ignored
 `runs/…/matrix-<target>.log` and `<group>-<target>.log`.
 
-Named by target: `runs/2026-11-10-ua-mtx-merge-t66b-step5b/records-<target>-<group>.jsonl` (one line per transaction:
+Every output goes to the run's own directory, `MATRIX_OUT` (default `runs/<today>-matrix`; never an earlier round's
+committed run note: the stacked gate 2026-11-11 found the old fixed directory overwritten), seeded with the committed
+coverage list `runs/2026-11-10-ua-mtx-merge-t66b-step5b/coverage.json`; wraplimits under `$MATRIX_OUT/wraplimits/`.
+Named by target: `$MATRIX_OUT/records-<target>-<group>.jsonl` (one line per transaction:
 contract, selector, tx hash, gasUsed, status; a negative with the error expected and got), `table-<target>.txt`,
 `coverage.json`; books `deployments/onchain-<target>-<group>.json` (git-ignored). Logs are git-ignored `.log`. No key,
 no machine path. `python3 -I script/onchain/coverage.py note --net <target>` prints the runs note's body: the table,

@@ -8,7 +8,7 @@
 # target only: the windows, the notice and the decay need a clock the run moves (another target: listed as not run).
 # From smartcontracts/evm, through scripts/capped, in the foreground (matrix.sh sets the environment):
 #   NET=local RPC=<url> DEPLOY_JSON=deployments/<key>.json ONCHAIN_K1=… ONCHAIN_K2=… ONCHAIN_K3=… sh script/onchain/wraplimits.sh
-# Output: runs/2026-11-10-ua-mtx-merge-3l-onchain/ (summary.txt, records-<net>-wraplimits.jsonl, coverage.json,
+# Output: $MATRIX_OUT/wraplimits/ (default runs/<today>-matrix/wraplimits; summary.txt, records-<net>-wraplimits.jsonl, coverage.json,
 # table-<net>.txt; the log git-ignored). Keys are never printed.
 set -eu
 : "${NET:?}" "${RPC:?}" "${ONCHAIN_K1:?}"
@@ -16,7 +16,7 @@ if [ "$NET" != local ]; then
   echo "not run: wraplimits on $NET (its windows, notice and decay need a clock the run moves: local only)"
   exit 0
 fi
-OUTD=runs/2026-11-10-ua-mtx-merge-3l-onchain
+OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix}/wraplimits # its own coverage list and table, under matrix.sh's run dir (MATRIX_OUT), else today's
 CHAIN=$(cast chain-id --rpc-url "$RPC")
 B=broadcast/WrapLimits.s.sol/$CHAIN
 R=$OUTD/records-$NET-wraplimits.jsonl

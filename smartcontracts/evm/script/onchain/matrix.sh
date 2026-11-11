@@ -56,7 +56,13 @@ if [ "${1:-}" != --one ]; then
   exit $rc
 fi
 tgt=${2:?target}
-OUTD=runs/2026-11-10-ua-mtx-merge-t66b-step5b
+# this run's dir (MATRIX_OUT, default runs/<today>-matrix), never an earlier round's committed run note; every step
+# writes there (run.sh, zether.sh, wraplimits.sh, pq.py, verifiers.py, coverage.py); the committed coverage list (coverage.py
+# gen at the build) seeds it, and the run's table updates that copy
+OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix}
+export MATRIX_OUT=$OUTD
+mkdir -p "$OUTD"
+[ -f "$OUTD/coverage.json" ] || cp runs/2026-11-10-ua-mtx-merge-t66b-step5b/coverage.json "$OUTD/coverage.json"
 LOG=$OUTD/matrix-$tgt.log
 GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers views wraplimits}
 T=$(mktemp -d)

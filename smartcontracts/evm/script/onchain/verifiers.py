@@ -10,12 +10,13 @@ MuSig2 / FROST have no row in these vectors (their keys are aggregates): not ask
 import json
 import os
 import sys
+import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.abspath(os.path.join(HERE, "../.."))
 VEC = os.path.join(EVM, "../vectors/ua")
-OUTD = os.path.join(EVM, "runs/2026-11-10-ua-mtx-merge-t66b-step5b")
+OUTD = os.path.join(EVM, os.environ.get("MATRIX_OUT") or time.strftime("runs/%Y-%m-%d-matrix"))  # matrix.sh's run dir
 VERIFY, VERIFY_POP = "024ad318", "53e5293f"
 BY_NAME = {"webauthn-p256": "WebAuthnP256Verifier", "p256": "P256Verifier", "bip340": "Bip340Verifier",
            "schnorr-bn254": "SchnorrBn254Verifier", "schnorr-bls12381": "SchnorrBls12381Verifier",

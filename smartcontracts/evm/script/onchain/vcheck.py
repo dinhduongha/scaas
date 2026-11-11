@@ -662,7 +662,7 @@ def main():
         except SystemExit as e:
             say(f"ABORT {e}")
             rc = 2
-    out = os.path.join(EVM, f"runs/2026-11-10-ua-mtx-merge-t66b-step5b/verify-{NET}.txt")
+    out = os.path.join(EVM, os.environ.get("MATRIX_OUT") or time.strftime("runs/%Y-%m-%d-matrix"), f"verify-{NET}.txt")  # matrix.sh's run dir
     c = cnt()
     with open(out, "w") as f:
         f.write(f"# NET-EVM-09: every contract on chain {chain} ({NET}, head {head}), discovered from a block scan, the books,"

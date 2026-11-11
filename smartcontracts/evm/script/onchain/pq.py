@@ -26,7 +26,7 @@ EVM = os.path.abspath(os.path.join(HERE, "../.."))
 sys.path.insert(0, os.path.join(EVM, "script/pqz"))
 import e2e as E  # noqa: E402
 
-OUTD = os.path.join(EVM, "runs/2026-11-10-ua-mtx-merge-t66b-step5b")
+OUTD = os.path.join(EVM, os.environ.get("MATRIX_OUT") or time.strftime("runs/%Y-%m-%d-matrix"))  # matrix.sh's run dir
 REC, LAST, DEP = [], {}, []
 RUN = str(time.time_ns()).encode()  # this run's salt part: a rerun on the same factory (--extra-only) creates fresh clones
 LABEL_KIND = {0: "NormalToken", 4: "NormalPqzToken", 5: "WrappedPqzToken", 12: "NormalPqzRegulatedToken",

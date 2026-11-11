@@ -14,7 +14,8 @@ set -eu
 command -v anvil > /dev/null || PATH=$HOME/.foundry/bin:$PATH
 : "${RPC:?}" "${NET:?}" "${PRIVATE_KEY:?}"
 export FOUNDRY_OUT=out/onchain-zether FOUNDRY_CACHE_PATH=cache/onchain-zether
-OUTD=runs/2026-11-10-ua-mtx-merge-t66b-step5b
+OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix} # matrix.sh's run dir (MATRIX_OUT), else today's
+mkdir -p "$OUTD"
 CHAIN=$(cast chain-id --rpc-url "$RPC")
 GENESIS=$(cast block 0 --field hash --rpc-url "$RPC")
 python3 -I script/deploybook.py path "$CHAIN" "$GENESIS" > /dev/null  # NET-EVM-13: DEPLOY_NAME_REQUIRED, BOOK_OLD_NAME first
