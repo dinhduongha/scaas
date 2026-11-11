@@ -2588,6 +2588,22 @@ refuses lands (shields carry no proof) and stays undebitable until the key passe
 ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). Open (owner): who assembles the k member signatures of an `msig` verifier's one
 verdict within its `validUntil` (the node and the reference service take one complete `UASig` from one endpoint). **UNAUDITED.**
 
+**The reference verifier `scaas-pqz-verifier`** (BUILT, T48; Fable review C-1…C-6 fixed on branch `ua-mtx-fix-verifier`,
+`64e95c0d`…`81a60931`, controller calls under the owner's leave; [decisions.md](../decisions.md) CTR-PQZ-28, CTR-PQZ-29
+Changes). One process serves one chain, pinned in its configuration: `chain_id` (every RPC endpoint must answer it at
+start), `chain_uid`, the UA `registry` and its `registry_generation`. It signs only the `UAAuth` digest of a `PqzVerdict`
+(`UAKinds.uaAuthDigest` in the registry's domain: `"SCaaS UARegistry"`, the generation, the chain id, the registry, salt
+`chainUid`), built locally from those pinned values; a hash an RPC or a contract returns is never signed. A token is served
+only if it is an EIP-1167 proxy of a configured release whose code names the pinned registry and `chainUid` (else
+`FOREIGN_REGISTRY`, `FOREIGN_CHAIN_UID`), is `OFFCHAIN`, names this verifier and is at the request's epoch; then the statement
+length and word 32, the token's own view rebuilds the same bytes, `pqz-ffi` answers `…01`, and every named key passes
+[CTR-PQZ-30](#CTR-PQZ-30). The probe signs only the fixed 27-byte probe statement (shorter than the 640-byte header of every
+statement a token hashes, so a real debit refuses it `PqzVerdictMismatch(3)`), for an `OFFCHAIN` token naming this verifier,
+or, as a `proposal` probe (§4.2's typo guard of `next`), naming another verifier or none. Reads follow
+[ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover (one node, one block per request; the strict-majority option not
+built). Known limits: the key ownership record is in memory (bounded, `KEY_RECORD_FULL`), no factory lookup, one registry
+generation per process ([README](../../scaas-pqz-verifier/README.md)). **UNAUDITED.**
+
 <a id="CTR-PQZ-36"></a>**CTR-PQZ-36** — **The verifier fee: an `OFFCHAIN` token pays its verifier UA from the fee word, capped,
 raised only with notice** (owner 2026-11-11; group 3t; register entry and rulings
 [decisions.md](../decisions.md) (CTR-PQZ-36); design [spec 3t](../superpowers/specs/2026-11-11-verifier-fee.md)). Status: **BUILT**

@@ -2,7 +2,7 @@
 """Fable review fixes C-1..C-6 (ua-mtx-fix-verifier): one mutant at a time on a clean tree, applied to its file, the test
 suite run through scripts/capped, the file restored in the same run, then `git diff --exit-code`. Every new check has a
 mutant that must be killed: the locally built digest, the registry pin, the chainUid pin, the chain id at start, the probe's
-mode and verifier; then C-2's blob tail, C-3's failover, C-4's body-before-slot, C-5's bound, and one mutant through the
+mode and verifier, the proposal probe's gate and its constant statement; then C-2's blob tail, C-3's failover, C-4's body-before-slot, C-5's bound, and one mutant through the
 opt-in anvil run (PATH must hold anvil and forge). Writes `mutant | tests that went red | rc` to the -mutants.txt beside
 this file; full outputs to git-ignored .log files. Run from scaas-pqz-verifier/:
 python3 runs/2026-11-11-ua-mtx-fix-verifier-mutants.py"""
@@ -29,8 +29,12 @@ MUTANTS = [
     ("C-1 chainUid pin skipped", "src/lib.rs", "if chain_uid != self.chain_uid {", "if false && chain_uid != self.chain_uid {", ALL),
     ("C-6 chain id at start not compared", "src/chain.rs", "anyhow::ensure!(id == chain_id,", "anyhow::ensure!(id == id,", ALL),
     ("C-1 probe: the mode unchecked (verdict keeps it)", "src/lib.rs",
-     "            let cfg = self.served(at, &t).await?;\n            self.sign(",
-     "            let cfg = self.read(at, t.at, IPqzToken::pqzVerifyConfigCall {}).await?;\n            self.sign(", ALL),
+     "            let cfg = self.offchain(at, &t).await?;\n            if !proposal",
+     "            let cfg = self.read(at, t.at, IPqzToken::pqzVerifyConfigCall {}).await?;\n            if !proposal", ALL),
+    ("probe: the proposal gate ignored (any verifier without proposal)", "src/lib.rs",
+     "if !proposal && cfg.verifier != self.ua {", "if false && !proposal && cfg.verifier != self.ua {", ALL),
+    ("probe: the probe statement as long as a statement header", "src/lib.rs",
+     'pub const PROBE_STATEMENT: &[u8] = b"SCAAS-PQZ-VERIFIER-PROBE-V1";', "pub const PROBE_STATEMENT: &[u8] = &[0u8; 640];", ALL),
     ("C-1 served: OFFCHAIN mode unchecked", "src/lib.rs", "if cfg.pqzVerifyMode != OFFCHAIN {",
      "if false && cfg.pqzVerifyMode != OFFCHAIN {", ALL),
     ("C-1 served: this verifier unchecked", "src/lib.rs", "if cfg.verifier != self.ua {", "if false && cfg.verifier != self.ua {", ALL),
@@ -47,7 +51,7 @@ MUTANTS = [
 
 
 def main():
-    if subprocess.run(["git", "diff", "--quiet", "--exit-code", "--", "."]).returncode:
+    if subprocess.run(["git", "diff", "--quiet", "--exit-code", "--", "src", "tests"]).returncode:
         sys.exit("the crate is not clean")
     only = set(sys.argv[1:])
     rows = []
@@ -64,7 +68,7 @@ def main():
                 rc = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, env={**os.environ, "CAPPED_SLOTS": "3"}).returncode
         finally:
             open(path, "w").write(orig)
-        assert subprocess.run(["git", "diff", "--exit-code", "--", "."]).returncode == 0, f"{name}: not restored"
+        assert subprocess.run(["git", "diff", "--exit-code", "--", "src", "tests"]).returncode == 0, f"{name}: not restored"
         text = open(log).read()
         red = re.findall(r"^test (\S+) \.\.\. FAILED$", text, re.M)
         built = "error[" not in text and "could not compile" not in text

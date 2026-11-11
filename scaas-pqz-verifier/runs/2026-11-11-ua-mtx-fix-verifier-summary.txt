@@ -5,3 +5,6 @@ cargo test --offline --locked | 7f596889 | 0 | 23 passed (22 tests/service.rs + 
 cargo clippy --offline --locked --all-targets -- -D warnings | 7f596889 | 0 | 0 in the crate (path dep pqzl: 2 deprecation warnings, not this crate's)
 cargo test --test anvil -- --ignored (opt-in; local anvil, repo deploy script) | 7f596889 | 0 | 1 passed: the service's verdict accepted on chain (PqzVerified over the statement and proof)
 mutants (runs/2026-11-11-ua-mtx-fix-verifier-mutants.py) | 7f596889 | 0 | 13 of 13 killed, 0 survivors, tree clean after each (a first run left C-4's survivor; its test fixed in 7f596889, then all 13 rerun)
+proposal probe (controller call) | 81a60931 | 0 | cargo test 24 passed; clippy clean; anvil 1 passed (a probe verdict on the real debit refused PqzVerdictMismatch(3), then the real verdict lands)
+mutants rerun with the probe's two new (proposal gate, probe statement length) | 81a60931 | 0 | 15 of 15 killed, 0 survivors, tree clean after each
+docs_check check + test_docs_check (pq-zero-knowledge §9.5, ops.md, decisions.md CTR-PQZ-28/-29 Changes) | after 81a60931 | 0 | 0 errors, 6 warnings (line budgets, as before)
