@@ -16,8 +16,9 @@ test('regulated_kat.json: the constants are this module\'s', () => {
   assert.deepEqual([c.freezeSpan, c.episodeSpan, c.freezeCooldown].map(BigInt), [reg.FREEZE_SPAN, reg.EPISODE_SPAN, reg.FREEZE_COOLDOWN]);
   assert.equal(BigInt(c.eligibleContract), reg.ELIGIBLE_CONTRACT);
   assert.deepEqual(c.actions, { ...reg.ACTION });
-  assert.deepEqual([c.controls.freeze, c.controls.allowlist, c.controls.denylist, c.controls.record],
-    [reg.C_FREEZE, reg.C_ALLOW, reg.C_DENY, reg.C_RECORD]);
+  assert.deepEqual([c.controls.freeze, c.controls.allowlist, c.controls.denylist, c.controls.record, c.controls.kyc],
+    [reg.C_FREEZE, reg.C_ALLOW, reg.C_DENY, reg.C_RECORD, reg.C_KYC]);
+  assert.deepEqual([c.listFlags.allowed, c.listFlags.denied], [reg.ALLOWED, reg.DENIED]);
 });
 
 test('recordId = keccak256(abi.encode(orderId, subject, beneficiary)): every row, and none binds fewer than the three', () => {
@@ -27,24 +28,43 @@ test('recordId = keccak256(abi.encode(orderId, subject, beneficiary)): every row
   assert.equal(ids.size, V.recordId.length, 'distinct inputs, distinct ids');
 });
 
-test('the R truth table: canReceive (ok, reason) of every row; both lists, ELIGIBLE_CONTRACT on each side, lapsed, ' +
-  'validUntil == now, a disabled KYC provider', () => {
+test('the R truth table: canReceive (ok, reason) of every row under KYC (round 3s, both masks); each mask alone, ' +
+  'ELIGIBLE_CONTRACT on each side, lapsed, validUntil == now, a disabled KYC provider', () => {
   let n = 0;
   const seen = new Set();
   for (const r of V.receiver) {
-    const controls = (r.allowlist ? reg.C_ALLOW : 0) | (r.denylist ? reg.C_DENY : 0);
+    const controls = r.kyc ? reg.C_KYC : 0;
     assert.deepEqual(reg.canReceive({ ...r, controls }), { ok: r.ok, reason: r.reason }, r.name);
-    seen.add(`${r.allowlist}/${r.denylist}`);
+    seen.add(`${r.kyc}/${r.requiredFlags !== '0'}/${r.deniedFlags !== '0'}`);
     n++;
   }
   assert.equal(n, V.receiver.length);
-  assert.deepEqual([...seen].sort(), ['false/false', 'false/true', 'true/false', 'true/true']);
+  assert.deepEqual([...seen].sort(), ['false/false/false', 'true/false/true', 'true/true/false', 'true/true/true']);
   const has = (f) => V.receiver.some(f);
-  assert.ok(has((r) => r.allowlist && (BigInt(r.flags) & 8n) && r.ok), 'ELIGIBLE_CONTRACT satisfies requiredFlags');
-  assert.ok(has((r) => r.denylist && (BigInt(r.flags) & 8n) && !r.ok && r.reason === 4), 'ELIGIBLE_CONTRACT never deniedFlags');
-  assert.ok(has((r) => r.validUntil === r.now && r.ok && r.allowlist), 'validUntil == now passes');
+  const req = (r) => r.kyc && r.requiredFlags !== '0';
+  const den = (r) => r.kyc && r.deniedFlags !== '0';
+  assert.ok(has((r) => req(r) && (BigInt(r.flags) & 8n) && r.ok), 'ELIGIBLE_CONTRACT satisfies requiredFlags');
+  assert.ok(has((r) => den(r) && (BigInt(r.flags) & 8n) && !r.ok && r.reason === 4), 'ELIGIBLE_CONTRACT never deniedFlags');
+  assert.ok(has((r) => r.validUntil === r.now && r.ok && req(r)), 'validUntil == now passes');
   assert.ok(has((r) => !r.kycProviderEnabled && r.reason === 3), 'a disabled KYC provider');
   assert.ok(has((r) => r.reason === 2), 'lapsed');
+});
+
+test('the lists (round 3s): listed(controls, listFlags) of every row, reasons 5 and 6, the allow list first', () => {
+  const reasons = new Set();
+  for (const r of V.lists) {
+    assert.deepEqual(reg.listed(r.controls, r.listFlags), { ok: r.ok, reason: r.reason }, r.name);
+    reasons.add(r.reason);
+  }
+  assert.equal(V.lists.length, 16);
+  assert.deepEqual([...reasons].sort(), [0, 5, 6]);
+});
+
+test('enableable (spec 5.5): every row, one term failing at a time', () => {
+  for (const r of V.enableable) {
+    assert.equal(reg.enableable(r), BigInt(r.enableable), r.name);
+  }
+  assert.ok(V.enableable.length >= 9);
 });
 
 test('the freeze transitions T1-T9: every row reproduced, its state after or its error, and F after', () => {

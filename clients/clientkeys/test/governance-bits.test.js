@@ -26,8 +26,9 @@ test('governance_bits.json: every row equals GOVERNANCE_BITS, none missing, each
 test('governance_bits.json: the regulated rows carry their kinds and holder rule; bit 22; the decoy-fee sentence', () => {
   const v = JSON.parse(readFileSync(FILE, 'utf8'));
   const all = [8, 9, 10, 11, 12, 13];
-  const want = { 5: [all, 'contractOrMsig'], 6: [all, 'contractOrMsig'], 7: [all, 'contractOrMsig'], 8: [[8, 9], undefined],
-    9: [all, undefined], 10: [all, 'contractOrMsig'], 21: [all, 'contractOrMsig'], 22: [all, 'any'], 23: [all, 'any'],
+  // round 3s (CTR-GOV-24): 8 and 9 the token's lists, any holder; 28 `KYC` a capability on 8-13
+  const want = { 5: [all, 'contractOrMsig'], 6: [all, 'contractOrMsig'], 7: [all, 'contractOrMsig'], 8: [[8, 9], 'any'],
+    9: [all, 'any'], 10: [all, 'contractOrMsig'], 28: [all, undefined], 21: [all, 'contractOrMsig'], 22: [all, 'any'], 23: [all, 'any'],
     24: [[4, 5, 12, 13], 'any'], 25: [[1, 3, 5, 9, 11, 13], undefined], 26: [[1, 3, 5, 9, 11, 13], 'any'],
     27: [[1, 3, 5, 9, 11, 13], 'any'] };
   for (const row of v.bits) {
@@ -36,8 +37,10 @@ test('governance_bits.json: the regulated rows carry their kinds and holder rule
   }
   // group 3h T61: bit 24 `PQZ_PROOF` (PQZ proof path spec §5: the PQZ kinds 4, 5, 12, 13, any holder); group 3l: bits 25-27
   // (the hybrids of the wrapped kinds; 25 a capability, 26 and 27 any holder), 27 the last row
-  assert.equal(v.bits.at(-1).bit, 27, 'bit 27 REDEEMER is the last row');
-  assert.deepEqual(v.bits.slice(25).map((r) => r.name), ['WRAP_LIMIT', 'WRAP_LIST', 'REDEEMER']);
+  assert.equal(v.bits.at(-1).bit, 28, 'bit 28 KYC is the last row (round 3s)');
+  assert.deepEqual(v.bits.slice(25).map((r) => r.name), ['WRAP_LIMIT', 'WRAP_LIST', 'REDEEMER', 'KYC']);
+  for (const b of [8, 9]) assert.deepEqual([v.bits[b].type, Object.keys(v.bits[b].sentences).includes('enableable')], ['power', true]);
+  assert.ok(v.sentences.enableableWhen, 'enableableWhen');
   assert.equal(v.bits[24].name, 'PQZ_PROOF');
   assert.equal(v.bits[22].name, 'OPERATOR_TRANSFER');
   assert.equal(v.bits[23].name, 'TAX');

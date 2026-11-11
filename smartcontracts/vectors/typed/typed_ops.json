@@ -11561,6 +11561,331 @@
       },
       "structHash": "0x698bf015c339c29eed39dc729d4554f4e31945cbd9b9effeea1ca5c4ad414e14"
     },
+    "UASetAllowed": {
+      "typeString": "UASetAllowed(bytes32 from,address target,bytes32[] accounts,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+      "typehash": "0xa96171fcd5e3202f58eeb220838f1277c4d57b19b0cbea4dc7f324970253d232",
+      "on": [
+        "GovernanceRouter"
+      ],
+      "types": {
+        "EIP712Domain": [
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "type": "string"
+          },
+          {
+            "name": "chainId",
+            "type": "uint256"
+          },
+          {
+            "name": "verifyingContract",
+            "type": "address"
+          },
+          {
+            "name": "salt",
+            "type": "bytes32"
+          }
+        ],
+        "UASetAllowed": [
+          {
+            "name": "from",
+            "type": "bytes32"
+          },
+          {
+            "name": "target",
+            "type": "address"
+          },
+          {
+            "name": "accounts",
+            "type": "bytes32[]"
+          },
+          {
+            "name": "on",
+            "type": "bool"
+          },
+          {
+            "name": "batch",
+            "type": "uint256"
+          },
+          {
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "name": "validUntil",
+            "type": "uint256"
+          },
+          {
+            "name": "mode",
+            "type": "uint32"
+          },
+          {
+            "name": "relayer",
+            "type": "address"
+          },
+          {
+            "name": "fee",
+            "type": "uint256"
+          },
+          {
+            "name": "feeRecipient",
+            "type": "address"
+          }
+        ]
+      },
+      "domains": {
+        "gov_router": {
+          "domain": {
+            "name": "SCaaS GovernanceRouter",
+            "version": "1",
+            "chainId": "31337",
+            "verifyingContract": "0x5ca00000000000000000000000000000000000a7",
+            "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+          },
+          "domainSeparator": "0x1180e86bbe4e0d524335f0b21dcc1c2cdcc6de5f45c9b148c495e441398f3285",
+          "digest": "0x7c0d312c5c8281852876c6e56371367a3931f79dd70e41c33cab7e79e6246f99",
+          "signature": "0x54c5e46eed9fdae38347e814150e9cb6a3d93b0ec9fb3eb0f245d56a1a35331b074814967595e5b9b842d44335837c5862792956e53885d7e26bcfccad2d960c1c",
+          "abi": "mtxSetAllowed((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32[],bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+          "selector": "0x06b98e72",
+          "calldata": "0x06b98e72000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f900000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006b49d32c0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000beef0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000012b6513c37bd497212faa902300555099f7fd3eb0000000000000000000000000000000000000000000000000000000000000180000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000001e0000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000007a100000000000000000000000000000000000000000000000000000000000007a20000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004154c5e46eed9fdae38347e814150e9cb6a3d93b0ec9fb3eb0f245d56a1a35331b074814967595e5b9b842d44335837c5862792956e53885d7e26bcfccad2d960c1c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "message": {
+        "from": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+        "target": "0x12b6513c37bd497212faa902300555099f7fd3eb",
+        "accounts": [
+          "0x00000000000000000000000000000000000000000000000000000000000007a1",
+          "0x00000000000000000000000000000000000000000000000000000000000007a2"
+        ],
+        "on": true,
+        "batch": "7",
+        "nonce": "0",
+        "validUntil": "1800000300",
+        "mode": 1,
+        "relayer": "0x000000000000000000000000000000000000beef",
+        "fee": "0",
+        "feeRecipient": "0x0000000000000000000000000000000000000000"
+      },
+      "structHash": "0x8b7066ff044908082d88e0c8478ea54c528e17a23b8dbc8120f5e02b00551151"
+    },
+    "UASetDenied": {
+      "typeString": "UASetDenied(bytes32 from,address target,bytes32[] accounts,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+      "typehash": "0x11df43474f648318e52abedb4d7a998e8e0ba0957b93b4d2ac967bc412355094",
+      "on": [
+        "GovernanceRouter"
+      ],
+      "types": {
+        "EIP712Domain": [
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "type": "string"
+          },
+          {
+            "name": "chainId",
+            "type": "uint256"
+          },
+          {
+            "name": "verifyingContract",
+            "type": "address"
+          },
+          {
+            "name": "salt",
+            "type": "bytes32"
+          }
+        ],
+        "UASetDenied": [
+          {
+            "name": "from",
+            "type": "bytes32"
+          },
+          {
+            "name": "target",
+            "type": "address"
+          },
+          {
+            "name": "accounts",
+            "type": "bytes32[]"
+          },
+          {
+            "name": "on",
+            "type": "bool"
+          },
+          {
+            "name": "batch",
+            "type": "uint256"
+          },
+          {
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "name": "validUntil",
+            "type": "uint256"
+          },
+          {
+            "name": "mode",
+            "type": "uint32"
+          },
+          {
+            "name": "relayer",
+            "type": "address"
+          },
+          {
+            "name": "fee",
+            "type": "uint256"
+          },
+          {
+            "name": "feeRecipient",
+            "type": "address"
+          }
+        ]
+      },
+      "domains": {
+        "gov_router": {
+          "domain": {
+            "name": "SCaaS GovernanceRouter",
+            "version": "1",
+            "chainId": "31337",
+            "verifyingContract": "0x5ca00000000000000000000000000000000000a7",
+            "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+          },
+          "domainSeparator": "0x1180e86bbe4e0d524335f0b21dcc1c2cdcc6de5f45c9b148c495e441398f3285",
+          "digest": "0x01204653736c0f67dc49ee2d94dbafc13808272df7c3ca5f1b44876fceaeb254",
+          "signature": "0x0b365ad2b958b96f64cebe012e3b24518fc11608235d955de743145d345bd4c32cf0335a75b408edfd1660916e71e03af8e0e7ff961a73237d1ec88935c49aa11c",
+          "abi": "mtxSetDenied((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32[],bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+          "selector": "0x1d288fdc",
+          "calldata": "0x1d288fdc000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f900000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006b49d32c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e013432a04f0eac7ee5023ef0b942994079e5f0000000000000000000000000000000000000000000000000000000000000180000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000001e0000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000007a100000000000000000000000000000000000000000000000000000000000007a2000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000410b365ad2b958b96f64cebe012e3b24518fc11608235d955de743145d345bd4c32cf0335a75b408edfd1660916e71e03af8e0e7ff961a73237d1ec88935c49aa11c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "message": {
+        "from": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+        "target": "0x00e013432a04f0eac7ee5023ef0b942994079e5f",
+        "accounts": [
+          "0x00000000000000000000000000000000000000000000000000000000000007a1",
+          "0x00000000000000000000000000000000000000000000000000000000000007a2"
+        ],
+        "on": true,
+        "batch": "7",
+        "nonce": "0",
+        "validUntil": "1800000300",
+        "mode": 0,
+        "relayer": "0x0000000000000000000000000000000000000000",
+        "fee": "0",
+        "feeRecipient": "0x0000000000000000000000000000000000000000"
+      },
+      "structHash": "0x66c57a3356c389a95b85682272845c42ab5a8350c6b06f0b2cabff6dad47a7c4"
+    },
+    "UAEnableFeature": {
+      "typeString": "UAEnableFeature(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+      "typehash": "0x4cbb50807ee9d23bb7eaedea39a2a3df6eca4b6ad9b5f9dab35fcb03d1347114",
+      "on": [
+        "GovernanceRouter"
+      ],
+      "types": {
+        "EIP712Domain": [
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "type": "string"
+          },
+          {
+            "name": "chainId",
+            "type": "uint256"
+          },
+          {
+            "name": "verifyingContract",
+            "type": "address"
+          },
+          {
+            "name": "salt",
+            "type": "bytes32"
+          }
+        ],
+        "UAEnableFeature": [
+          {
+            "name": "from",
+            "type": "bytes32"
+          },
+          {
+            "name": "target",
+            "type": "address"
+          },
+          {
+            "name": "bit",
+            "type": "uint8"
+          },
+          {
+            "name": "batch",
+            "type": "uint256"
+          },
+          {
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "name": "validUntil",
+            "type": "uint256"
+          },
+          {
+            "name": "mode",
+            "type": "uint32"
+          },
+          {
+            "name": "relayer",
+            "type": "address"
+          },
+          {
+            "name": "fee",
+            "type": "uint256"
+          },
+          {
+            "name": "feeRecipient",
+            "type": "address"
+          }
+        ]
+      },
+      "domains": {
+        "gov_router": {
+          "domain": {
+            "name": "SCaaS GovernanceRouter",
+            "version": "1",
+            "chainId": "31337",
+            "verifyingContract": "0x5ca00000000000000000000000000000000000a7",
+            "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+          },
+          "domainSeparator": "0x1180e86bbe4e0d524335f0b21dcc1c2cdcc6de5f45c9b148c495e441398f3285",
+          "digest": "0x82965ad3a82d4377c31b8596db56d983a3728341a57dd5e1722be739bd698847",
+          "signature": "0xfb09beaefe2604b67e1a82b4e40d558960ee02ef9771f6c6b820a7d15fb912712d14477c70842dc46920398692df6152d7aec7adde1cbd306471ae7b691a83e11b",
+          "abi": "mtxEnableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+          "selector": "0x2eb8c708",
+          "calldata": "0x2eb8c708000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f900000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006b49d32c0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000beef000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000bea1294a16ded1b7e6b914d39e66a4fe7b464f00000000000000000000000000000000000000000000000000000000000000009000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041fb09beaefe2604b67e1a82b4e40d558960ee02ef9771f6c6b820a7d15fb912712d14477c70842dc46920398692df6152d7aec7adde1cbd306471ae7b691a83e11b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "message": {
+        "from": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+        "target": "0x0bea1294a16ded1b7e6b914d39e66a4fe7b464f0",
+        "bit": 9,
+        "batch": "7",
+        "nonce": "0",
+        "validUntil": "1800000300",
+        "mode": 1,
+        "relayer": "0x000000000000000000000000000000000000beef",
+        "fee": "0",
+        "feeRecipient": "0x0000000000000000000000000000000000000000"
+      },
+      "structHash": "0xe41d03ef84ab50b44f8aeab9edb19e64b323fd9be397f1180f536dcaf258b4f4"
+    },
     "UAPublishTokenEnv": {
       "typeString": "UAPublishTokenEnv(bytes32 from,address target,uint8 kind,uint16 envVersion,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)",
       "typehash": "0xd739c124313a7e6faf3cda213ec65bbbb0083682bd92c65f30828f91a5834534",

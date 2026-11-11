@@ -101,3 +101,32 @@ fn wraplimits_rows() {
         }
     }
 }
+
+/// Round 3s (spec 2026-11-10-token-lists.md §6.2, §10): the router's list ops and `UAEnableFeature`, struct hash and digest
+/// of each `typed_ops.json` row (ua-rs signs every kind), an unbound `feeRecipient` hashing as 0.
+#[test]
+fn typed_ops_list_rows() {
+    use scaas_ua::regulated::{enable_feature_struct_hash, enable_feature_type, set_list_struct_hash, set_list_type};
+    let v = load("typed/typed_ops.json");
+    for op in ["UASetAllowed", "UASetDenied", "UAEnableFeature"] {
+        let r = &v["ops"][op];
+        let ty = if op == "UAEnableFeature" { enable_feature_type() } else { set_list_type(op == "UASetAllowed") };
+        assert_eq!(ty, r["typeString"].as_str().unwrap(), "{op}");
+        let m = &r["message"];
+        let d = &r["domains"]["gov_router"];
+        let dom = &d["domain"];
+        let ds = router_domain_separator(num(&dom["chainId"]) as u64, &b20(&dom["verifyingContract"]), &b32(&dom["salt"]));
+        let (e, target) = (envelope(m), b20(&m["target"]));
+        let sh = |e: &Envelope| if op == "UAEnableFeature" {
+            enable_feature_struct_hash(e, &target, num(&m["bit"]) as u8)
+        } else {
+            let accounts: Vec<[u8; 32]> = m["accounts"].as_array().unwrap().iter().map(b32).collect();
+            set_list_struct_hash(op == "UASetAllowed", e, &target, &accounts, m["on"].as_bool().unwrap())
+        };
+        assert_eq!(sh(&e), b32(&r["structHash"]), "{op}");
+        assert_eq!(digest(&ds, &sh(&e)), b32(&d["digest"]), "{op}");
+        let relayer = if e.mode & 1 == 0 { [0xbb; 20] } else { e.relayer };
+        let unbound = Envelope { fee_recipient: [0xba; 20], relayer, ..e };
+        assert_eq!(digest(&ds, &sh(&unbound)), b32(&d["digest"]), "{op}: an unbound relayer and feeRecipient hash as 0");
+    }
+}

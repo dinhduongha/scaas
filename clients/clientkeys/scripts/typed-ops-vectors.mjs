@@ -166,6 +166,13 @@ ROW.UADeprecateToken = { kind: 0, reason: REASON };
 ROW.UADeprecateDex = { reason: REASON };
 ROW.UADeprecateRelease = { reason: REASON };
 ROW.UASetTokenKindEnabled = { kind: 1, on: true };
+// Round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §6.2, §10): two accounts on a list (the order and the length are signed),
+// bit 9 switched on. `UASetDenied` leaves the relayer and the fee recipient unbound at fee 0 (mode 0): 0 in the message, as
+// `MetaTxLib.canon` hashes them, and test/typed-ops.test.js and ua-rs sign it again with a non-zero value in both.
+const LISTED = [padId('0x00000000000000000000000000000000000007a1'), padId('0x00000000000000000000000000000000000007a2')];
+ROW.UASetAllowed = { accounts: LISTED, on: true };
+ROW.UASetDenied = { accounts: LISTED, on: true, mode: 0, fee: 0 };
+ROW.UAEnableFeature = { bit: 9 };
 
 function sample(name, op) {
   const own = {};

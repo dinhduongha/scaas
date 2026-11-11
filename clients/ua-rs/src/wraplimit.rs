@@ -59,7 +59,7 @@ pub fn legs_hash(legs: &[WrapLegLimits]) -> [u8; 32] {
     keccak(&hs.iter().map(|h| &h[..]).collect::<Vec<_>>())
 }
 
-fn struct_hash(typehash: [u8; 32], e: &Envelope, target: &[u8; 20], words: &[[u8; 32]]) -> [u8; 32] {
+pub(crate) fn struct_hash(typehash: [u8; 32], e: &Envelope, target: &[u8; 20], words: &[[u8; 32]]) -> [u8; 32] {
     let canon = |bound: bool, a: &[u8; 20]| if bound { address_word(a) } else { [0; 32] };
     let mut w: Vec<[u8; 32]> = vec![typehash, e.from, address_word(target)];
     w.extend_from_slice(words);
@@ -68,7 +68,7 @@ fn struct_hash(typehash: [u8; 32], e: &Envelope, target: &[u8; 20], words: &[[u8
     keccak(&w.iter().map(|x| &x[..]).collect::<Vec<_>>())
 }
 
-fn bool_word(b: bool) -> [u8; 32] {
+pub(crate) fn bool_word(b: bool) -> [u8; 32] {
     word(b as u64)
 }
 

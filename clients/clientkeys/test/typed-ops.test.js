@@ -188,8 +188,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // group 3h T61: + the router's `UASetProofStore` (bit 24): 87, 77
   // group 3l: + the router's `UASetWrapLimits`, `UASetWrapMember`: 89, 79
   // round 3r: + the router's fifteen admin ops of the factory and a compliance registry: 104, 94
-  assert.equal(Object.keys(TYPED_OPS).length, 104);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 94);
+  // round 3s: + the router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`: 107, 97
+  assert.equal(Object.keys(TYPED_OPS).length, 107);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 97);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -312,7 +313,7 @@ test('the cancel row is ordered and native-capable: UACancelNonce(bytes32 from,u
 // governance T12 (spec §3.2): the router's rows read from the contract's own pin, test/governance/GovRouterTypehash.t.sol
 // (literal strings and `cast keccak` hashes), apart from the table in src/evm.js: a mismatch is a stop-and-report.
 // ua-mtx-merge T7 / T11 (R14): 19 `UA<Op>` rows on the `mtx<Op>` entries; the 19 address rows retired.
-test('GovernanceRouter: 50 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
+test('GovernanceRouter: 53 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
   const sol = readFileSync(new URL('../../../smartcontracts/evm/test/governance/GovRouterTypehash.t.sol', import.meta.url), 'utf8');
   const pins = [...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\);\s*assertEq\(T\.\w+, (0x[0-9a-f]{64})\)/g)]
     .map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(''), hash]);
@@ -327,8 +328,9 @@ test('GovernanceRouter: 50 rows equal GovRouterTypehash.t.sol, target the first 
   const pqzPinned = rows.filter(([s]) => s.startsWith('UAPqz')).length;
   assert.ok(pqzPinned === 0 || pqzPinned === 3, `${pqzPinned} PQZ verifier pins`);
   // group 3h T61: + `UASetProofStore` (bit 24); group 3l: + `UASetWrapLimits`, `UASetWrapMember` and the two struct pins
-  assert.equal(pins.length - pqzPinned, 54);
-  assert.equal(rows.length - pqzPinned, 50);
+  // round 3s: + `UASetAllowed`, `UASetDenied`, `UAEnableFeature`
+  assert.equal(pins.length - pqzPinned, 57);
+  assert.equal(rows.length - pqzPinned, 53);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -342,12 +344,34 @@ test('GovernanceRouter: 50 rows equal GovRouterTypehash.t.sol, target the first 
     const r = V.ops[name];
     assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
-    // fee mode NONE; round 3r's `UAApproveTokenRelease` leaves the relayer unbound too (mode 0, the canonical-zero row)
-    assert.deepEqual([r.message.mode, r.message.fee], [name === 'UAApproveTokenRelease' ? 0 : 1, '0'], `${name}: fee mode NONE`);
+    // fee mode NONE; round 3r's `UAApproveTokenRelease` and round 3s's `UASetDenied` leave the relayer unbound too (mode 0,
+    // the canonical-zero rows)
+    const open = name === 'UAApproveTokenRelease' || name === 'UASetDenied';
+    assert.deepEqual([r.message.mode, r.message.fee], [open ? 0 : 1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 54); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 57); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15; 3s: + 3
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
+});
+
+// Round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §6.2): the lists and `enableFeature`: the struct words after `target`,
+// `accounts` hashed as the keccak256 of its words (the order and the length signed); `UASetDenied` at mode 0 with a non-zero
+// relayer and fee recipient signs both as 0.
+test('round 3s: UASetAllowed, UASetDenied, UAEnableFeature', () => {
+  const JUNK = '0x' + 'ba'.repeat(20);
+  for (const [name, params] of [['UASetAllowed', 'accounts,on'], ['UASetDenied', 'accounts,on'], ['UAEnableFeature', 'bit']]) {
+    assert.deepEqual(TYPED_OPS[name].fields.map((f) => f.name).slice(0, -7), ['from', 'target', ...params.split(',')], name);
+  }
+  const r = V.ops.UASetDenied;
+  assert.equal(r.message.accounts.length, 2);
+  const d = r.domains.gov_router;
+  const build = (m) => builders[`${bld('UASetDenied')}TypedData`]({ ...domainOf(r, d), message: m });
+  const open = build({ ...r.message, relayer: JUNK, feeRecipient: JUNK });
+  assert.deepEqual([open.message.relayer, open.message.feeRecipient], [ZERO, ZERO]);
+  assert.equal(hex(hashTypedData(open)), d.digest, 'an unbound relayer and fee recipient sign as 0');
+  const swapped = build({ ...r.message, accounts: [...r.message.accounts].reverse() });
+  assert.notEqual(hex(hashTypedData(swapped)), d.digest, 'the order of accounts is signed');
+  assert.equal(V.ops.UAEnableFeature.message.bit, 9);
 });
 
 // ua-mtx-merge T34 (regulated-kinds spec §3.1, §7; CTR-GOV-20 Change, owner 2026-11-06): the router's eight regulated controls.
@@ -560,7 +584,7 @@ test('an unbound relayer or feeRecipient is signed as 0 and shown as unbound: ev
   assert.equal(open3h, 6, 'the six 3h rows');
   // round 3r: `UAApproveTokenRelease` leaves both open too (mode 0), given a non-zero relayer and fee recipient above
   assert.equal(TYPED_OPS.UAApproveTokenRelease && V.ops.UAApproveTokenRelease.message.mode, 0);
-  assert.equal(relayerOpen, open3h + 1, 'the 3h rows and UAApproveTokenRelease leave the relayer open');
+  assert.equal(relayerOpen, open3h + 2, 'the 3h rows, UAApproveTokenRelease and UASetDenied (round 3s) leave the relayer open');
 });
 
 test('the builder refuses a field off the struct, a value out of range, a domain the op does not live in', () => {
