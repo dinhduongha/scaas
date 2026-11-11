@@ -191,11 +191,13 @@ fn pqz_key_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
 
 /// Group 3f (spec §11.1): the topics of [`pqz_verifier_event`]: the PQZ verifier mode's events and the op events a `PqzVerified`
 /// joins; group 3h: `ProofStoreSet` (never `PqzDebitProof`).
-pub const PQZ_VERIFIER_TOPICS: [B256; 9] = [
+pub const PQZ_VERIFIER_TOPICS: [B256; 11] = [
     IPqzToken::PqzVerified::SIGNATURE_HASH, IPqzToken::PqzVerifierProposed::SIGNATURE_HASH, IPqzToken::PqzVerifierSet::SIGNATURE_HASH,
     IPqzToken::PqzVerifierCancelled::SIGNATURE_HASH, IPqzEvents::PqzVerifierRevoked::SIGNATURE_HASH,
     IPqzEvents::ConfidentialTransfer::SIGNATURE_HASH, IPqzEvents::ConfidentialTransferMulti::SIGNATURE_HASH,
     IPqzEvents::Unshielded::SIGNATURE_HASH, IPqzToken::ProofStoreSet::SIGNATURE_HASH,
+    // round 3t (CTR-PQZ-36): the verifier fee's proposal (an alert: the hostage notice, T29) and its change
+    IPqzToken::VerifierFeeProposed::SIGNATURE_HASH, IPqzToken::VerifierFeeSet::SIGNATURE_HASH,
 ];
 
 /// Group 3f: a PQZ verifier mode event or a confidential op event into `v`, ids as `bytes32` hex (never `from` / `to`, which the
@@ -222,6 +224,16 @@ fn pqz_verifier_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         // group 3h (spec §10): bit 24's change of what each later debit leaves in history; an alert (no PqzDebitProof is indexed)
         let Ok(e) = log.log_decode::<P::ProofStoreSet>() else { return false };
         (v["event"], v["previous"], v["next"]) = (json!("ProofStoreSet"), json!(e.inner.data.previous), json!(e.inner.data.next));
+    } else if topic0 == P::VerifierFeeProposed::SIGNATURE_HASH {
+        // round 3t (spec §10, T29): an increase proposed, confirmable from `eta`: an alert
+        let Ok(e) = log.log_decode::<P::VerifierFeeProposed>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["current"], v["next"], v["eta"]) = (json!("VerifierFeeProposed"), json!(e.current), json!(e.next), json!(e.eta));
+    } else if topic0 == P::VerifierFeeSet::SIGNATURE_HASH {
+        // round 3t: the fee written; `previous == next` is the cancel of a pending increase (spec §7.1). Operator note (Fable
+        // P3-6): a `ConfidentialTransfer*.fee` is the whole word, three payees; the split is in the pool moves of the transaction
+        let Ok(e) = log.log_decode::<P::VerifierFeeSet>() else { return false };
+        (v["event"], v["previous"], v["next"]) = (json!("VerifierFeeSet"), json!(e.inner.data.previous), json!(e.inner.data.next));
     } else if topic0 == P::PqzVerifierCancelled::SIGNATURE_HASH {
         let Ok(e) = log.log_decode::<P::PqzVerifierCancelled>() else { return false };
         (v["event"], v["next"]) = (json!("PqzVerifierCancelled"), h(e.inner.data.next));
@@ -251,7 +263,7 @@ fn pqz_verifier_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         return false;
     }
     v["tx_index"] = json!(log.transaction_index);
-    if matches!(v["event"].as_str(), Some("PqzVerifierProposed" | "PqzVerifierRevoked" | "ProofStoreSet")) {
+    if matches!(v["event"].as_str(), Some("PqzVerifierProposed" | "PqzVerifierRevoked" | "ProofStoreSet" | "VerifierFeeProposed")) {
         v["alert"] = json!(true);
     }
     true
@@ -1011,6 +1023,25 @@ mod tests {
             (Some("ProofStoreSet"), Some(0), Some(1), Some(true)), "{}", rows[0]);
         assert!(PQZ_VERIFIER_TOPICS.contains(&P::ProofStoreSet::SIGNATURE_HASH));
         assert!(!PQZ_VERIFIER_TOPICS.contains(&P::PqzDebitProof::SIGNATURE_HASH), "no PqzDebitProof data indexed");
+    }
+
+    /// Round 3t (spec §10): `VerifierFeeProposed` a row with `alert` (the hostage notice, T29), `VerifierFeeSet` a row without
+    /// (`previous == next`: a cancel); both topics followed.
+    #[test]
+    fn verifier_fee_rows() {
+        use crate::abi::IPqzToken as P;
+        let t = Address::repeat_byte(0x7a);
+        let logs = vec![log_at(t, 1, 0, P::VerifierFeeProposed { current: 2, next: 5, eta: 1_800_000_000 }.encode_log_data()),
+            log_at(t, 2, 0, P::VerifierFeeSet { previous: 2, next: 2 }.encode_log_data())];
+        let rows = pay_events(&logs, None);
+        assert!(rows.iter().all(client_ingest_accepts));
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        assert_eq!((rows[0]["event"].as_str(), rows[0]["next"].as_u64(), rows[0]["eta"].as_u64(), rows[0]["alert"].as_bool()),
+            (Some("VerifierFeeProposed"), Some(5), Some(1_800_000_000), Some(true)), "{}", rows[0]);
+        assert_eq!((rows[1]["event"].as_str(), rows[1]["previous"].as_u64(), rows[1]["next"].as_u64(), rows[1]["alert"].as_bool()),
+            (Some("VerifierFeeSet"), Some(2), Some(2), None), "{}", rows[1]);
+        assert!(PQZ_VERIFIER_TOPICS.contains(&P::VerifierFeeProposed::SIGNATURE_HASH));
+        assert!(PQZ_VERIFIER_TOPICS.contains(&P::VerifierFeeSet::SIGNATURE_HASH));
     }
 
     /// Group 3f (spec §11.1, Codex #10): a `PqzVerified` joins the op event after it of the same token and transaction

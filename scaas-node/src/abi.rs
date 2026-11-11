@@ -407,8 +407,9 @@ sol! {
             uint32 pqzVerifierEpoch; uint64 validUntil; }
         #[derive(PartialEq, Eq)]
         struct PqzSignedVerdict { PqzVerdict pqzVerdict; UASig sig; }
+        // round 3t (CTR-PQZ-36): + the verifier fee, its immutable cap, a live pending increase and its `eta`
         struct PqzVerifyConfig { uint8 pqzVerifyMode; bytes32 verifier; bool fixed_; uint32 pqzVerifierEpoch; bytes32 pending;
-            uint64 eta; uint64 noticePeriod; }
+            uint64 eta; uint64 noticePeriod; uint64 verifierFee; uint64 verifierFeeMax; uint64 verifierFeePending; uint64 verifierFeeEta; }
         function pqzVerifyConfig() external view returns (PqzVerifyConfig memory);
         function proofSystemId() external view returns (bytes32);
         /// The relayed op's binding (`TAG_UA_ENVELOPE`, every envelope field but `data`): the `binding` of the statement views.
@@ -434,6 +435,15 @@ sol! {
         error PqzVerdictRequired();
         error PqzVerdictRejected();
         error PqzVerdictMismatch(uint8 field);
+        // ---- round 3t (CTR-PQZ-36, verifier fee spec §7, §10): the admin's setter, its events and refusals
+        function setVerifierFee(uint64 next) external;
+        function confidentialFee() external view returns (uint256);
+        event VerifierFeeProposed(uint64 current, uint64 next, uint64 eta);
+        event VerifierFeeSet(uint64 previous, uint64 next);
+        error VerifierFeeAboveMax(uint64 fee, uint64 max);
+        error VerifierFeePending(uint64 pending);
+        error VerifierFeeSame();
+        error VerifierFeeNotReady(uint64 eta);
     }
 
     /// `IPqzToken.sol`'s file-level event (the error of the same name is `IPqzToken`'s) and the confidential op events
@@ -683,10 +693,12 @@ pub const PROOF_STORE_LOG: u8 = 1;
 /// verifier's next epoch, an `eta` reached, a registration: back in the queue, never `dead`) or never (`false`: the op's own
 /// shape, a fixed verifier, the wrong mode). `reason` is a `decode_revert` string.
 pub fn pqz_verdict_refusal(reason: &str) -> Option<(&'static str, bool)> {
-    const LIFTABLE: [&str; 7] = ["PqzVerdictMismatch", "PqzVerdictRejected", "PqzVerifierRevoked", "PqzVerifierChanged",
-        "PqzVerifierNotReady", "PqzVerifierPending", "PqzVerifierUnregistered"];
-    const FINAL: [&str; 6] = ["PqzVerifierFixed", "PqzVerifierSame", "PqzVerifierKind", "PqzVerdictRequired", "PqzVerifyModeInvalid",
-        "PqzVerifyConfigInvalid"];
+    // round 3t (CTR-PQZ-36): the fee setter's `VerifierFeeNotReady` / `VerifierFeePending` liftable, `VerifierFeeAboveMax` /
+    // `VerifierFeeSame` final
+    const LIFTABLE: [&str; 9] = ["PqzVerdictMismatch", "PqzVerdictRejected", "PqzVerifierRevoked", "PqzVerifierChanged",
+        "PqzVerifierNotReady", "PqzVerifierPending", "PqzVerifierUnregistered", "VerifierFeeNotReady", "VerifierFeePending"];
+    const FINAL: [&str; 8] = ["PqzVerifierFixed", "PqzVerifierSame", "PqzVerifierKind", "PqzVerdictRequired", "PqzVerifyModeInvalid",
+        "PqzVerifyConfigInvalid", "VerifierFeeAboveMax", "VerifierFeeSame"];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
     LIFTABLE.into_iter().find(|n| *n == name).map(|n| (n, true)).or_else(|| FINAL.into_iter().find(|n| *n == name).map(|n| (n, false)))
 }

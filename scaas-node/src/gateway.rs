@@ -212,8 +212,14 @@ async fn relay(c: &GwChain, mut w: Work) -> Reply {
             t => sim_reply(t),
         };
     }
-    // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt as on the lane (which reuses it), before the simulation
+    // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt as on the lane (which reuses it), before the simulation; round 3t: a
+    // `PQZ_FEE_MISMATCH` is the job's own (422 here), though the lane keeps such a job queued (a decrease may restore the word)
     if let Err(e) = c.guard.pqz_fill(&c.chain, &mut w).await {
+        if let crate::guard::Refusal::Transport(r) = &e {
+            if r.starts_with("PQZ_FEE_MISMATCH") {
+                return bad(r.clone());
+            }
+        }
         return match SimError::from(e) {
             SimError::Revert(r) => bad(r),
             t => sim_reply(t),

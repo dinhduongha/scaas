@@ -1555,7 +1555,8 @@ alloy::sol! {
     // group 3f (spec §3, AV-2): `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` appended (0, 0, false for every other kind);
     // group 3h T60 (pqz-proof-path spec §4.1): `proofStore` (0 NONE, 1 LOG; 0 for every other kind)
     struct ConfidentialConfig { bytes auditorKey; uint256 shieldScale; uint256 maxShielded; uint256 confidentialFee; uint8 disclosureMode;
-        uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; uint8 proofStore; }
+        uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; uint8 proofStore;
+        uint64 verifierFee; uint64 verifierFeeMax; } // round 3t (CTR-PQZ-36): the verifier fee and its cap (0 off)
     /// Regulated-kinds spec §2.4 (plan T25): the regulated kinds' (8-13) only; a plain kind refuses any set field.
     #[derive(Default)]
     struct RegulatedParams { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash;
@@ -2489,7 +2490,9 @@ impl OffchainStack {
         let envelope = json!({"from": format!("{:#x}", self.from.ua), "batch": "0", "nonce": nonce.to_string(), "validUntil": until.to_string(),
             "mode": 0, "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
         let mut op = json!({"entry": "mtxConfidentialTransferSingle", "contract": "pqz", "token": format!("{:#x}", self.token),
-            "envelope": envelope, "args": {"args": args, "proof": h(&proof), "pqzAuth": pqz_auth, "accHint": "0x"},
+            // round 3t (CTR-PQZ-36): an OFFCHAIN debit names its proved fee word, word 256 of the statement the token built
+            "envelope": envelope, "args": {"args": args, "proof": h(&proof), "pqzAuth": pqz_auth, "accHint": "0x",
+                "pqz_fee": U256::from_be_slice(&stmt[256..288]).to_string()},
             "auth": {"keyData": "0x", "signature": "0x", "members": []}});
         let (w, _) = scaas_node::submit::work_of_op(Some(id), &op, None).unwrap();
         let digest = w.typed.unwrap().digest_on(self.chain_id, self.uid).unwrap();

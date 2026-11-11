@@ -406,6 +406,13 @@ impl Service {
             e => chain_refusal("statement view", e),
         })?;
         let rebuilt = Bytes::abi_decode(&out).map_err(|e| refuse("CHAIN_READ_FAILED", format!("statement view: {e}")))?;
+        // round 3t (CTR-PQZ-36, Fable P3-4: one source): the fee word the proof was built over (word 256) against the view's,
+        // by name before the byte compare; the fee is the token's, not this service's policy
+        if rebuilt.get(256..288) != st.get(256..288) {
+            let w = |b: &[u8]| b.get(256..288).map(alloy::primitives::U256::from_be_slice).unwrap_or_default();
+            return Err(refuse("FEE_WORD_MISMATCH", format!("the statement's fee word is {}, the token's is {} (its verifier fee {}): \
+                rebuild the statement from the token's view and prove again", w(st), w(&rebuilt), cfg.verifierFee)));
+        }
         if rebuilt[..] != *st {
             return Err(refuse("STATEMENT_MISMATCH", "the token's view builds other bytes at the current state"));
         }

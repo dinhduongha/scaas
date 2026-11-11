@@ -597,8 +597,9 @@ contract GovDeployTest is Test {
         // registry errors renamed and `ComplianceRegistryRouterMismatch`, its code unchanged): ->
         // 0xcA8b1b01BB32b807Fc7848CE3a28EfA727A28BBf; round 3r T15 (the router's view `smartKeyCloneHash()`, +52 B; the
         // metadata hash: `IOpenFactory`'s directory, spec §13): -> 0x27D74283541a0bEfd3281ADa6609dfC3221d1836; round 3r T7 (the fifteen
-        // admin ops of the factory and a compliance registry, spec §5.4; owner naming 2026-11-11): -> this
-        assertEq(router, 0x668B713392eEcF586D1BAbF16be677b94a71E8f0, "GovernanceRouter");
+        // admin ops of the factory and a compliance registry, spec §5.4; owner naming 2026-11-11): ->
+        // 0x668B713392eEcF586D1BAbF16be677b94a71E8f0; round 3t (CTR-PQZ-36: `mtxSetVerifierFee`, its typehash): -> this
+        assertEq(router, 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

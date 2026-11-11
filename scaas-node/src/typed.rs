@@ -240,6 +240,8 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,E", ""),
     // group 3h (PQZ proof path spec §5): bit 24 `PQZ_PROOF`, a holder's `NONE` / `LOG` from the next debit
     ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,E", ""),
+    // round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit
+    ("UASetVerifierFee", "mtxSetVerifierFee", GR, "bytes32 from,address target,uint64 next,E", ""),
     // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds and bit 26's membership
     ("UASetWrapLimits", "mtxSetWrapLimits", GR, "bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,E", ""),
     ("UASetWrapMember", "mtxSetWrapMember", GR, "bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,E", ""),
@@ -1066,6 +1068,10 @@ pub struct Typed {
     /// Group 3f (spec §11.1): a PQZ debit's verdict as the job named it (`args.pqz_verdict`) or as fetched; the `PqzVerdict` it
     /// signs is rebuilt by the node ([`crate::pqz`]), never taken from the job.
     pub pqz_verdict: Option<PqzVerdictArgs>,
+    /// Round 3t (CTR-PQZ-36, NODE-JOB-22's Change): a PQZ debit's proved fee word as the job named it (`args.pqz_fee`, a
+    /// `uint64` decimal string): required on an `OFFCHAIN` token, optional on a `PRECOMPILE` one; [`crate::pqz`] checks it
+    /// against word 256 of the statement the token's own view builds (`PQZ_FEE_MISMATCH`), never sends it.
+    pub pqz_fee: Option<u64>,
 }
 
 /// Group 3f: a job's named `pqz_verdict: {pqzVerifierEpoch, validUntil, auth}` (or a PQZ verifier's answer of that shape): the
@@ -1232,6 +1238,16 @@ impl Op {
                     node rebuilds the PqzVerdict it signs");
             }
         }
+        // round 3t: `args.pqz_fee` on a debit, a decimal string `< 2^64`, read into `Typed`, never into the bytes
+        let pqz_fee = match (verdict_slot(row), args.as_object_mut().and_then(|a| a.remove("pqz_fee"))) {
+            (_, None | Some(Value::Null)) => None,
+            (None, Some(_)) => bail!("BAD_PAYLOAD: args.pqz_fee: {entry} is no PQZ debit"),
+            (Some(_), Some(Value::String(x))) if x.starts_with("0x") || x.starts_with("0X") =>
+                bail!("HEX_ARGS_REFUSED: args.pqz_fee: the proved fee word as a decimal string"),
+            (Some(_), Some(Value::String(x))) => Some(x.parse::<u64>().map_err(|_| anyhow!("BAD_PAYLOAD: args.pqz_fee: a uint64 \
+                decimal string (below 2^64), got {x:?}"))?),
+            (Some(_), Some(x)) => bail!("BAD_PAYLOAD: args.pqz_fee: a uint64 decimal string, got {x}"),
+        };
         let pqz_verdict = match verdict_slot(row) {
             Some(_) => match args.as_object_mut().and_then(|a| a.remove("pqz_verdict")) {
                 None | Some(Value::Null) => None,
@@ -1326,7 +1342,7 @@ impl Op {
         let pay_meta_len = a.vals.get("meta").and_then(pay_meta_of).map_or(0, |m| m.body.len());
         let (pqz_parties, pqz_auditor) = pqz_parties(row, &a.vals);
         let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None, derived_signer, derived_side,
-            pay_meta_len, pqz_parties, pqz_auditor, pqz_verdict };
+            pay_meta_len, pqz_parties, pqz_auditor, pqz_verdict, pqz_fee };
         Ok(Op { row, to, data: data.into(), typed, lane, valid_until })
     }
 }
@@ -1650,7 +1666,7 @@ mod tests {
     }
 
     fn typed(contract: &'static str, domain_of: Address, h: B256) -> Typed {
-        Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
+        Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
     }
 
     /// Every row and domain of `typed_ops.json`: encodeType, struct hash, digest, entry selector, calldata; the signature
@@ -1690,14 +1706,16 @@ mod tests {
         // group 3h T61: -> (84, 118, 117), the router's `UASetProofStore` (bit 24); group 3l: -> (86, 120, 119), the router's
         // `UASetWrapLimits`, `UASetWrapMember`; round 3r (CTR-GOV-23): -> (97, 131, 130), the router's eleven admin rows (the
         // four release approvals, like the creations, left out by vectors())
-        assert_eq!((structs, domains, calldata), (97, 131, 130), "every row was walked (the creations and approvals left out by vectors())");
+        // round 3t: -> (98, 132, 131), the router's `UASetVerifierFee`
+        assert_eq!((structs, domains, calldata), (98, 132, 131), "every row was walked (the creations and approvals left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
         // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`; group 3l: -> 89, the
         // router's `UASetWrapLimits`, `UASetWrapMember`
         // round 3r (CTR-GOV-23): -> 100, the router's eleven admin rows
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 100, "97 vector rows, mtxPay, the two invalidations (DEX, token)");
+        // round 3t: -> 101, `UASetVerifierFee`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 101, "98 vector rows, mtxPay, the two invalidations (DEX, token)");
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 32, "the wallet's three flat builders are gone (MD-11 (a))");
@@ -1780,6 +1798,34 @@ mod tests {
         let mut o = good;
         o["args"]["data"] = json!("0x1234");
         assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"));
+    }
+
+    /// Round 3t (CTR-PQZ-36, NODE-JOB-22's Change): a PQZ debit's proved fee word is `args.pqz_fee`, a `uint64` decimal string,
+    /// read into `Typed` and never into the bytes; hex `HEX_ARGS_REFUSED`, `2^64` or a number `BAD_PAYLOAD`; no other row takes it.
+    #[test]
+    fn pqz_fee_named() {
+        let v = vectors();
+        for name in PQZ_DEBITS {
+            let good = op_of(name, "pqz", &v).unwrap();
+            let plain = Op::parse(&good, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
+            assert_eq!(plain.typed.pqz_fee, None, "{name}: optional at the parse (pqz.rs requires it on OFFCHAIN)");
+            let with = |x: Value| { let mut o = good.clone(); o["args"]["pqz_fee"] = x; Op::parse(&o, FEE) };
+            let p = with(json!("7")).unwrap();
+            assert_eq!(p.typed.pqz_fee, Some(7), "{name}");
+            assert_eq!((p.data, p.typed.struct_hash), (plain.data.clone(), plain.typed.struct_hash), "{name}: not in the bytes");
+            assert_eq!(with(json!(u64::MAX.to_string())).unwrap().typed.pqz_fee, Some(u64::MAX));
+            let e = with(json!("0x07")).unwrap_err().to_string();
+            assert!(e.starts_with("HEX_ARGS_REFUSED"), "{name}: {e}");
+            let e = with(json!("18446744073709551616")).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("pqz_fee"), "{name}: 2^64: {e}");
+            let e = with(json!(7)).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD"), "{name}: a number: {e}");
+        }
+        for (name, kind) in [("UAShield", "pqz"), ("UAPqzRollOver", "pqz"), ("UAZetherTransferSingle", "zether")] {
+            let mut o = op_of(name, kind, &v).unwrap();
+            o["args"]["pqz_fee"] = json!("7");
+            assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("BAD_PAYLOAD"), "{name} takes no pqz_fee");
+        }
     }
 
     /// Group 3f (spec §11.1): a PQZ debit's verdict is the named sub-object `pqz_verdict: {pqzVerifierEpoch, validUntil, auth}`,

@@ -1100,7 +1100,7 @@ async fn pull_digest(chain: &Chain, token: Address, struct_hash: B256) -> Result
     let uid = chain.uid().await.map_err(|e| Refusal::Transport(format!("chain_uid: {e:#}")))?;
     let t = typed::Typed { contract: "service", domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer: None,
         payee: None, digest: None, derived_signer: false, derived_side: false, pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false,
-        pqz_verdict: None };
+        pqz_verdict: None, pqz_fee: None };
     Ok(t.digest_in(name, chain.number, uid).expect("a struct hash"))
 }
 
@@ -1328,14 +1328,16 @@ mod tests {
         // group 3f T46 / T47: -> (113, 3, 113), the router's three verifier ops' vector rows
         // group 3h T61: -> (114, 3, 114), the router's `UASetProofStore`; group 3l: -> (116, 3, 116), the router's two wrap-limit ops
         // round 3r (CTR-GOV-23): -> (127, 3, 127), the router's eleven admin rows
-        assert_eq!((sent, relayed, refused), (127, 3, 127), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // round 3t: -> (128, 3, 128), the router's `UASetVerifierFee`
+        assert_eq!((sent, relayed, refused), (128, 3, 128), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
         // T93: 104 -> 116, `PqChat`'s twelve plain rows; group 3l: -> 118, the router's two wrap-limit ops; UA-7 P48:
         // -> 119, `remove`; ua-mtx-liquidity L6 (79c3501e, moved at L6d): -> 120, `mtxLiquidity`
         // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 131, "table rows: 99 typed with an entry, 32 plain");
+        // round 3t: -> 132, `UASetVerifierFee`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 132, "table rows: 100 typed with an entry, 32 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1365,7 +1367,7 @@ mod tests {
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
             "transferAdmin(bytes32)", "setListedOnly(bool)"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
-                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
                 let e = g.check(&chain, &w).await.unwrap_err();
@@ -1743,7 +1745,8 @@ mod tests {
         // group 3f T45 / T47: 30 -> 33, the three verifier ops; group 3h T61: -> 34, `mtxSetProofStore` (bit 24); group 3l: -> 36,
         // `mtxSetWrapLimits`, `mtxSetWrapMember`
         // round 3r: -> 47, the eleven admin ops of the factory and the compliance registry (the four approvals in NOT_ROWS)
-        assert_eq!(router.len(), 47, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r); the three creations (T76) and the four release approvals (3r) in NOT_ROWS");
+        // round 3t: -> 48, `mtxSetVerifierFee`
+        assert_eq!(router.len(), 48, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r); the three creations (T76) and the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -1954,6 +1957,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             // group 3h T61 (PQZ proof path spec §5): bit 24's op, the same router row shape
             ("UASetProofStore", "mtxSetProofStore", "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
                 format!("mtxSetProofStore{env}address,uint8,{UASIG_ABI})"), [0xa6, 0x3e, 0x58, 0x86]),
+            // round 3t (CTR-PQZ-36): the admin's verifier fee, the same router row shape
+            ("UASetVerifierFee", "mtxSetVerifierFee", "UASetVerifierFee(bytes32 from,address target,uint64 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxSetVerifierFee{env}address,uint64,{UASIG_ABI})"), [0xf0, 0xd8, 0xcb, 0xbf]),
         ];
         let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
         let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
@@ -2056,10 +2062,12 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // round 3r (CTR-GOV-23): (261, 193, 257) -> (272, 200, 274), measured and counted from selector_audit.json: the router's
     // eleven admin ops rowed; its four release approvals and `OpenFactory`'s three open deploys in NOT_ROWS; `OpenFactory`'s
     // 17 `ADMIN` / `HOLDER_OWN` entries governed
-    const ROWED: usize = 272;
+    // round 3t (CTR-PQZ-36): (272, 200, 274) -> (273, 200, 278): the router's `mtxSetVerifierFee` rowed; `setVerifierFee`
+    // (ADMIN) governed on each of the four PQZ kinds
+    const ROWED: usize = 273;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 200;
-    const GOVERNED: usize = 274;
+    const GOVERNED: usize = 278;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {
@@ -2221,7 +2229,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
                 validUntil: alloy::primitives::U256::from(4_000_000_000u64),
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
-            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                 derived_signer: false, derived_side: false };
             Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
         };
@@ -2544,7 +2552,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         for kind in ["wallet", "account", "dex", "registry", "factory", "gov_router"] {
             let r = typed::rows().iter().find(|r| !r.entry.is_empty() && r.contracts.contains(&kind)).unwrap();
             let on = |to: Address| {
-                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: kind, domain_of: to,
+                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: to,
                     struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false };
                 let c = match kind {
                     "dex" => ChainCfg { dex: Some(to), ..cfg.clone() },
@@ -2598,7 +2606,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
                 validUntil: alloy::primitives::U256::from(4_000_000_000u64),
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
-            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: "token", domain_of: token,
+            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "token", domain_of: token,
                 struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false };
             Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
         };

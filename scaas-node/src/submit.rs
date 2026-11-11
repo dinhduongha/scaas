@@ -254,7 +254,7 @@ pub fn transfer_typed(contract: Option<&str>, token: Address, struct_hash: B256,
         "pqz" => "pqz",
         c => anyhow::bail!("BAD_PAYLOAD: contract {c:?} (token | zether | pqz)"),
     };
-    Ok(Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
+    Ok(Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
         derived_signer: false, derived_side: false })
 }
 
@@ -1229,7 +1229,7 @@ pub(crate) mod tests {
                                 Some((mode, verifier, epoch)) => Ok(json!(format!("0x{}", alloy::hex::encode(
                                     crate::abi::IPqzToken::pqzVerifyConfigCall::abi_encode_returns(&crate::abi::IPqzToken::PqzVerifyConfig {
                                         pqzVerifyMode: mode, verifier, fixed_: false, pqzVerifierEpoch: epoch, pending: B256::ZERO, eta: 0,
-                                        noticePeriod: 0 }))))),
+                                        noticePeriod: 0, verifierFee: 0, verifierFeeMax: 0, verifierFeePending: 0, verifierFeeEta: 0 }))))),
                             }
                         } else if s4 == crate::abi::IPqzToken::proofSystemIdCall::SELECTOR {
                             Ok(json!(format!("{PSID:#x}")))
@@ -1822,7 +1822,8 @@ pub(crate) mod tests {
         // (UAPayWithTax's three domains, the router's two tax ops); group 3f T46 / T47: -> 113, the router's three verifier ops
         // group 3h T61: -> 114, the router's `UASetProofStore`; group 3l: -> 116, the router's two wrap-limit ops
         // round 3r (CTR-GOV-23): -> 127, the router's eleven admin rows
-        assert_eq!(n, 127, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // round 3t: -> 128, the router's `UASetVerifierFee`
+        assert_eq!(n, 128, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
@@ -2388,9 +2389,11 @@ pub(crate) mod tests {
     fn pqz_job(id: i64) -> Value {
         let v = crate::typed::testkit::vectors();
         let row = crate::typed::testkit::row_of("UAPqzTransferSingle", "pqz");
-        let (env, args, sig) = crate::typed::testkit::split(row, "UAPqzTransferSingle", "pqz", &v);
+        let (env, mut args, sig) = crate::typed::testkit::split(row, "UAPqzTransferSingle", "pqz", &v);
         let mut env = env.unwrap();
         env["from"] = json!(format!("{:#x}", B256::repeat_byte(0xab)));
+        // round 3t: the proved fee word, the fake statement's word 256 (it is 40 bytes: 0)
+        args["pqz_fee"] = json!("0");
         json!({"id": id, "kind": "ua_metatx", "op": {"entry": row.entry, "contract": "pqz", "token": format!("{TOKEN:#x}"),
             "envelope": env, "args": args, "auth": sig.unwrap()}})
     }
@@ -3174,6 +3177,33 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             assert_eq!(v, empty, "the empty verdict");
         }
         assert!(ver.lock().unwrap().reqs.is_empty(), "no endpoint asked for a PRECOMPILE token");
+    }
+
+    /// Round 3t (CTR-PQZ-36, spec §10; N1): the fee pre-check before the verdict fetch, one source (the statement view's word
+    /// 256): an `OFFCHAIN` job without `pqz_fee` is `dead` `BAD_PAYLOAD: no pqz_fee`; a wrong one `PQZ_FEE_MISMATCH`, back in the
+    /// queue, never `dead` (a decrease may restore the word), zero sends and no endpoint asked; on a `PRECOMPILE` token a named
+    /// wrong one is the same, an absent one passes (the control: the right word is sent).
+    #[tokio::test]
+    async fn pqz_fee_precheck() {
+        let (url, ver) = fake_verifier(answer_json(2, now() + 600, 0x7f)).await;
+        let mut none = pqz_job(7);
+        none["op"]["args"].as_object_mut().unwrap().remove("pqz_fee");
+        let (r, rpc) = outcomes(offchain(), vec![none.clone()], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("BAD_PAYLOAD: no pqz_fee"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let mut wrong = pqz_job(7);
+        wrong["op"]["args"]["pqz_fee"] = json!("1");
+        let (r, rpc) = outcomes(offchain(), vec![wrong.clone()], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH: proved 1, the token's fee word is 0"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert!(ver.lock().unwrap().reqs.is_empty(), "the pre-check runs before the verdict fetch");
+        let precompile = || Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
+        let (r, _) = outcomes(precompile(), vec![wrong], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH"), "PRECOMPILE, named: {r:?}");
+        let (r, _) = outcomes(precompile(), vec![none], endpoints(vec![url.clone()])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "PRECOMPILE, absent: {r:?}");
+        let (r, _) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![url])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "the control: {r:?}");
     }
 
     /// Spec §11.1: a verdict at another epoch than the token's is re-fetched once: the job's stale one ⇒ one request; the

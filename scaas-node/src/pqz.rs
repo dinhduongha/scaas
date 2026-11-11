@@ -78,6 +78,63 @@ fn hex(b: &[u8]) -> String {
     format!("0x{}", alloy::hex::encode(b))
 }
 
+/// The statement the token's own view builds for debit `row`'s named arguments and its envelope's binding, and `op` as the
+/// reference verifier reads it (scaas-pqz-verifier `Op`: `args`, `amount` / `recipient` or `unwrap`, `binding`; the sol types'
+/// serde form, small uints as numbers). `None`: the view refused the op (its own refusal; the entry's simulation names it).
+async fn statement_of(chain: &Chain, token: alloy::primitives::Address, row: &'static Row, vals: &[Val])
+    -> Result<Option<(Bytes, Map<String, Value>)>, Refusal>
+{
+    let arg = |n: &str| typed::arg_of(row, vals, n).ok_or_else(|| Refusal::Policy(format!("BAD_PAYLOAD: no {n}")));
+    let (word, num, at) = (|v: Val| v.as_fixed_bytes().map(|x| B256::from_slice(x.0)).unwrap_or_default(),
+        |v: Val| v.as_uint().map(|x| x.0).unwrap_or_default(), |v: Val| v.as_address().unwrap_or_default());
+    let m = UAMetaTransaction { from: word(arg("from")?.1), data: Bytes::new(), batch: num(arg("batch")?.1),
+        nonce: num(arg("nonce")?.1), validUntil: num(arg("validUntil")?.1), mode: num(arg("mode")?.1).saturating_to(),
+        relayer: at(arg("relayer")?.1), fee: num(arg("fee")?.1), feeRecipient: at(arg("feeRecipient")?.1) };
+    let binding = chain.call_view(token, IPqzToken::envelopeBindingCall { m }).await.map_err(|e| match e {
+        SimError::Transport(e) => Refusal::Transport(format!("envelopeBinding(): {e}")),
+        SimError::Revert(e) => Refusal::Policy(format!("envelopeBinding(): {e}")),
+    })?;
+    let (sig, names) = view_of(row.name).expect("a debit row has a statement view");
+    let (mut params, mut op) = (Vec::new(), Map::new());
+    op.insert("entry".into(), json!(row.entry));
+    for n in names {
+        let (ty, v) = arg(n)?;
+        op.insert(n.to_string(), typed::to_serde_json(&ty, &v));
+        params.push(v);
+    }
+    op.insert("binding".into(), json!(format!("{binding:#x}")));
+    params.push(Val::FixedBytes(binding, 32));
+    let call = [&keccak256(sig.as_bytes())[..4], &Val::Tuple(params).abi_encode_sequence().unwrap_or_default()].concat();
+    match chain.call_raw(token, call.into()).await {
+        Ok(out) => Ok(Some((<Bytes as SolValue>::abi_decode(&out).map_err(|e| Refusal::Policy(format!("{sig}: decode: {e}")))?, op))),
+        Err(SimError::Revert(_)) => Ok(None),
+        Err(SimError::Transport(e)) => Err(Refusal::Transport(format!("{sig}: {e}"))),
+    }
+}
+
+/// Round 3t (CTR-PQZ-36, Fable P3-4: one source): the job's proved fee word `p` against word 256 of `statement` (the token's
+/// view). A mismatch is `PQZ_FEE_MISMATCH` with the word's three terms (`txFee` by the header's beneficiary word 224 and the
+/// token's `confidentialFee()`, the verifier fee `vf` in force, `M·d` the rest), zero sends; `Transport`, so the lane keeps the
+/// job in the queue until its deadline (a decrease may restore the word) and never reports it `dead`; the gateway answers 422.
+pub async fn fee_check(chain: &Chain, token: alloy::primitives::Address, p: u64, statement: &[u8], vf: u64) -> Result<(), Refusal> {
+    let w = |o: usize| statement.get(o..o + 32).map(U256::from_be_slice).unwrap_or_default();
+    let e = w(256);
+    if e == U256::from(p) {
+        return Ok(());
+    }
+    let tx = if w(224).is_zero() { U256::ZERO } else {
+        chain.call_view(token, IPqzToken::confidentialFeeCall {}).await.unwrap_or_default()
+    };
+    let md = e.saturating_sub(tx).saturating_sub(U256::from(vf));
+    Err(Refusal::Transport(fee_mismatch(p, e, tx, vf, md)))
+}
+
+/// The `PQZ_FEE_MISMATCH` reason (spec §10): what was proved, the token's word and its three terms.
+pub fn fee_mismatch(p: u64, e: U256, tx: U256, vf: u64, md: U256) -> String {
+    format!("PQZ_FEE_MISMATCH: proved {p}, the token's fee word is {e} (txFee {tx}, verifierFee {vf}, M·d {md}); rebuild the \
+        statement from the token's view and prove again")
+}
+
 impl Verifier {
     pub fn new(cfg: &PqzVerifierCfg) -> anyhow::Result<Self> {
         let http = reqwest::Client::builder().timeout(Duration::from_millis(cfg.timeout_ms)).build()?;
@@ -85,17 +142,25 @@ impl Verifier {
     }
 
     /// The trailing `PqzSignedVerdict` of a PQZ debit, rebuilt into `w.data` (module doc); any other work unchanged. `Policy`:
-    /// never sendable as named (`dead`); `Transport`: may be later (back in the queue).
+    /// never sendable as named (`dead`); `Transport`: may be later (back in the queue). Round 3t (CTR-PQZ-36, NODE-JOB-22's
+    /// Change): first the fee pre-check, `args.pqz_fee` against word 256 of the statement the token's view builds
+    /// ([`fee_check`]): required on an `OFFCHAIN` token, on a `PRECOMPILE` one checked when named (one view call).
     pub async fn fill(&self, chain: &Chain, w: &mut Work) -> Result<(), Refusal> {
         let Some(row) = debit_row(w) else { return Ok(()) };
         let slot = typed::verdict_slot(row).expect("a debit row");
         let bad = |e: anyhow::Error| Refusal::Policy(format!("{e:#}"));
         let mut vals = typed::call_values(row, &w.data).map_err(bad)?;
         let job = w.typed.as_ref().and_then(|t| t.pqz_verdict.clone());
+        let pqz_fee = w.typed.as_ref().and_then(|t| t.pqz_fee);
         let Some(c) = offchain_config(chain, w.to).await? else {
             if job.is_some() {
                 return Err(Refusal::Policy(format!("PQZ_VERDICT_NOT_EXPECTED: {:#x} is a PRECOMPILE token: it takes the empty verdict and \
                     never reads one; send the job without pqz_verdict", w.to)));
+            }
+            if let Some(p) = pqz_fee {
+                if let Some((st, _)) = statement_of(chain, w.to, row, &vals).await? {
+                    fee_check(chain, w.to, p, &st, 0).await?;
+                }
             }
             return Ok(()); // the empty verdict of the parse
         };
@@ -103,37 +168,18 @@ impl Verifier {
             return Err(Refusal::Transport(format!("PQZ_VERDICT_REFUSED: PqzVerifierRevoked: {:#x}'s verifier is revoked (epoch {}); \
                 its proofs wait for a new verifier through a transfer", w.to, c.pqzVerifierEpoch)));
         }
-        let read = |what: &'static str| move |e: SimError| match e {
-            SimError::Transport(e) => Refusal::Transport(format!("{what}: {e}")),
-            SimError::Revert(e) => Refusal::Policy(format!("{what}: {e}")),
+        let psid = chain.call_view(w.to, IPqzToken::proofSystemIdCall {}).await.map_err(|e| match e {
+            SimError::Transport(e) => Refusal::Transport(format!("proofSystemId(): {e}")),
+            SimError::Revert(e) => Refusal::Policy(format!("proofSystemId(): {e}")),
+        })?;
+        // the op's own refusal (expired, malformed, a stale key version): the entry's simulation names it, never with a verdict
+        let Some((statement, op)) = statement_of(chain, w.to, row, &vals).await? else { return Ok(()) };
+        let Some(p) = pqz_fee else {
+            return Err(Refusal::Policy(format!("BAD_PAYLOAD: no pqz_fee: a debit of the OFFCHAIN token {:#x} names its proved fee \
+                word (args.pqz_fee, a decimal string; its verifier fee is {})", w.to, c.verifierFee)));
         };
+        fee_check(chain, w.to, p, &statement, c.verifierFee).await?;
         let arg = |n: &str| typed::arg_of(row, &vals, n).ok_or_else(|| Refusal::Policy(format!("BAD_PAYLOAD: no {n}")));
-        let (word, num, at) = (|v: Val| v.as_fixed_bytes().map(|x| B256::from_slice(x.0)).unwrap_or_default(),
-            |v: Val| v.as_uint().map(|x| x.0).unwrap_or_default(), |v: Val| v.as_address().unwrap_or_default());
-        let m = UAMetaTransaction { from: word(arg("from")?.1), data: Bytes::new(), batch: num(arg("batch")?.1),
-            nonce: num(arg("nonce")?.1), validUntil: num(arg("validUntil")?.1), mode: num(arg("mode")?.1).saturating_to(),
-            relayer: at(arg("relayer")?.1), fee: num(arg("fee")?.1), feeRecipient: at(arg("feeRecipient")?.1) };
-        let psid = chain.call_view(w.to, IPqzToken::proofSystemIdCall {}).await.map_err(read("proofSystemId()"))?;
-        let binding = chain.call_view(w.to, IPqzToken::envelopeBindingCall { m }).await.map_err(read("envelopeBinding()"))?;
-        let (sig, names) = view_of(row.name).expect("a debit row has a statement view");
-        // `op` as the reference verifier reads it (scaas-pqz-verifier `Op`): `args` the struct, `amount` / `recipient` or
-        // `unwrap` beside it, `binding`; the sol types' serde form (small uints as numbers)
-        let (mut params, mut op) = (Vec::new(), Map::new());
-        op.insert("entry".into(), json!(row.entry));
-        for n in names {
-            let (ty, v) = arg(n)?;
-            op.insert(n.to_string(), typed::to_serde_json(&ty, &v));
-            params.push(v);
-        }
-        op.insert("binding".into(), json!(format!("{binding:#x}")));
-        params.push(Val::FixedBytes(binding, 32));
-        let call = [&keccak256(sig.as_bytes())[..4], &Val::Tuple(params).abi_encode_sequence().unwrap_or_default()].concat();
-        let statement = match chain.call_raw(w.to, call.into()).await {
-            Ok(out) => <Bytes as SolValue>::abi_decode(&out).map_err(|e| Refusal::Policy(format!("{sig}: decode: {e}")))?,
-            // the op's own refusal (expired, malformed, a stale key version): the entry's simulation names it, never with a verdict
-            Err(SimError::Revert(_)) => return Ok(()),
-            Err(SimError::Transport(e)) => return Err(Refusal::Transport(format!("{sig}: {e}"))),
-        };
         let proof = arg("proof")?.1.as_bytes().unwrap_or_default().to_vec();
         let req = json!({"token": format!("{:#x}", w.to), "chainId": chain.number, "op": Value::Object(op),
             "statement": hex(&statement), "proof": hex(&proof), "pqzVerifierEpoch": c.pqzVerifierEpoch});
@@ -270,6 +316,23 @@ mod tests {
             assert_eq!(keccak256(v.as_bytes())[..4], sel, "{row}: {v}");
         }
         assert_eq!(statement_view("UAShield"), None);
+    }
+
+    /// Round 3t (spec §10, §12): the node's fee word parity against `smartcontracts/vectors/pqz/verifier_fee.json` (written from
+    /// real token ops): every row's word is `txFee + vf + M·d`, and a mismatch names the three terms.
+    #[test]
+    fn verifier_fee_vectors_and_the_mismatch() {
+        let p = format!("{}/../smartcontracts/vectors/pqz/verifier_fee.json", env!("CARGO_MANIFEST_DIR"));
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let rows = v["rows"].as_array().unwrap();
+        assert_eq!(rows.len() as u64, v["rowCount"].as_u64().unwrap());
+        for r in rows {
+            let n = |k: &str| r[k].as_u64().unwrap();
+            let tx = if r["beneficiary"].as_bool().unwrap() { n("confidentialFee") } else { 0 };
+            assert_eq!(tx + n("verifierFee") + n("legs") * n("decoyFee"), n("feeWord"), "{}", r["form"]);
+        }
+        let m = fee_mismatch(5, U256::from(7u8), U256::from(3u8), 2, U256::from(2u8));
+        assert!(m.starts_with("PQZ_FEE_MISMATCH: proved 5, the token's fee word is 7 (txFee 3, verifierFee 2, M·d 2)"), "{m}");
     }
 
     /// `smartcontracts/vectors/pqz/verdict.json` read by the node (spec §11.3): the node's `PqzVerdict` type is the contract's

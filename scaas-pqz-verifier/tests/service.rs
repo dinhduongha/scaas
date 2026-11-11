@@ -184,7 +184,8 @@ impl Chain for Fake {
                 T::auditorUACall => |_| w.auditor,
                 T::pqzEntryBlobCall => |_| Bytes::from(w.blob.clone()),
                 T::pqzVerifyConfigCall => |_| PqzVerifyConfig { pqzVerifyMode: w.mode, verifier: w.verifier, fixed_: false,
-                    pqzVerifierEpoch: w.epoch, pending: B256::ZERO, eta: 0, noticePeriod: 0 },
+                    pqzVerifierEpoch: w.epoch, pending: B256::ZERO, eta: 0, noticePeriod: 0, verifierFee: 0, verifierFeeMax: 0,
+                    verifierFeePending: 0, verifierFeeEta: 0 },
             }
         }
         if to == REGISTRY {
@@ -360,6 +361,18 @@ async fn refuses_tampered_statement() {
     let mut bad = st.clone();
     *bad.last_mut().unwrap() ^= 1;
     assert_refused(&verdict(&s, &request(single(A, 0, B), &bad, &proof)).await, "STATEMENT_MISMATCH");
+}
+
+/// Round 3t (CTR-PQZ-36, V1): a statement proved at another fee word than the token's (a fee change since) is refused by name,
+/// `FEE_WORD_MISMATCH`, before the byte compare; the control at the token's word is signed (`refuses_tampered_statement`).
+#[tokio::test]
+async fn refuses_stale_fee_word() {
+    let (st, proof) = vector("TRANSFER", None);
+    let s = service(world(&st, &[A, B, AUD]), all_valid());
+    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    let mut stale = st.clone();
+    stale[256 + 31] ^= 1;
+    assert_refused(&verdict(&s, &request(single(A, 0, B), &stale, &proof)).await, "FEE_WORD_MISMATCH");
 }
 
 #[tokio::test]

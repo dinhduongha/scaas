@@ -28,6 +28,59 @@ PC = "smartcontracts/evm/src/pqz/PqzCore.sol"
 PS = "smartcontracts/evm/src/pqz/PqzStateLib.sol"
 PL = "smartcontracts/evm/src/pqz/PqzLayer.sol"
 MUTANTS = {
+    # T2 / T3 (spec §15): each against its targeted file; F = test/pqz PqzVerifierFee.t.sol, K = the kinds file, I = invariants
+    "M1": (PC, "            o.fee += o.verifierFee;\n", "", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M2": (PC, "        if (s.pqzVerifyMode == OFFCHAIN) {\n            o.verifierFee = s.verifierFee;",
+           "        o.verifierFee = s.verifierFee;\n        if (s.pqzVerifyMode == OFFCHAIN) {\n            o.verifierFee = s.verifierFee;",
+           "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M3": (PC, "        o.fee += o.legs * d;\n", "        o.fee += o.legs * d + (o.legs - 1) * o.verifierFee;\n", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M4": (PL, "        _payFees(f, f.fee - f.verifierFee - f.legs * f.decoyFee);", "        _payFees(f, f.fee - f.legs * f.decoyFee);",
+           "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M5": (PL, "        _fromPool(f.verifier, f.verifierFee);\n", "", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M6": (PC, "o.verifierFee == 0 ? bytes32(0) : $().pqzVerifierUA);", "o.verifierFee == 0 ? bytes32(0) : $().pqzPendingVerifier);",
+           "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M7": (PS, "            || c.confidentialFee + c.verifierFeeMax + 8 * c.minDecoyFee >= c.maxShielded\n",
+           "            || c.confidentialFee + c.verifierFee + 8 * c.minDecoyFee >= c.maxShielded\n", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M8": (PS, "        if (c.verifierFee > c.verifierFeeMax) revert", "        if (false) revert", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M9": (PS, "|| c.verifierFee != 0 || c.verifierFeeMax != 0)) {", ")) {", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M10": ("smartcontracts/evm/src/zether/ZetherLib.sol", "|| c.verifierFee != 0\n            || c.verifierFeeMax != 0) {", ") {",
+            "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M11": (PS, "        if (next < cur) {\n            _setFee(s, cur, next);", "        if (next < cur && s.noticePeriod == 0) {\n            _setFee(s, cur, next);",
+            "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M12": (PS, "        return s.verifierFeePending != 0 && s.verifierFeeProposerGeneration == g.adminGeneration\n",
+            "        return s.verifierFeePending != 0\n", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M13": (PS, "        (s.verifierFeePending, s.verifierFeeEta, s.verifierFeeProposer, s.verifierFeeProposerGeneration) = (0, 0, 0, 0);\n        emit IPqzToken.VerifierFeeSet",
+            "        emit IPqzToken.VerifierFeeSet", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M14": (PS, "        if (next > s.verifierFeeMax) revert IPqzToken.VerifierFeeAboveMax(next, s.verifierFeeMax);\n", "",
+            "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M15": (PS, "        if (s.pqzVerifyMode != PqzCore.OFFCHAIN) revert IPqzToken.PqzVerifyConfigInvalid();\n        uint64 cur = s.verifierFee;",
+            "        if (s.pqzVerifyMode != PqzCore.OFFCHAIN || s.pqzVerifierFixed) revert IPqzToken.PqzVerifyConfigInvalid();\n        uint64 cur = s.verifierFee;",
+            "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M17": (PC, "        return s.pqzVerifyMode == OFFCHAIN && s.verifierFee != 0 ? s.pqzVerifierUA : bytes32(0);",
+            "        return s.pqzVerifyMode == OFFCHAIN ? s.pqzVerifierUA : bytes32(0);", "forge", "test/as", "confidential/PqzVerifierFeeKinds.t.sol"),
+    "M18": (PS, "        s.verifierFee = next;\n", "        (s.verifierFee, s.verifierFeeMax) = (next, next);\n", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M19": (PC, "o.verifierFee == 0 ? bytes32(0) : $().pqzVerifierUA);", "bytes32(0));", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M20": (PS, "        if (_feeLive(s, g)) (c.verifierFeePending, c.verifierFeeEta)", "        (c.verifierFeePending, c.verifierFeeEta)",
+            "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M22": (PL, "        _regName(PqzCore.verifierPayee());\n        _pullShieldIn(t.shieldIn);\n        PqzCore.Paid memory f;\n        (r, f) = PqzTransferLib.transfer(e,",
+            "        _pullShieldIn(t.shieldIn);\n        _regName(PqzCore.verifierPayee());\n        PqzCore.Paid memory f;\n        (r, f) = PqzTransferLib.transfer(e,",
+            "forge", "test/as", "confidential/PqzVerifierFeeKinds.t.sol"),
+    "M23": (PC, "        e.binding = e.binding == 0 && s.pqzVerifyMode == OFFCHAIN\n", "        e.binding = false\n",
+            "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M24": (PC, "        e.binding = e.binding == 0 && s.pqzVerifyMode == OFFCHAIN\n", "        e.binding = e.binding == 0\n",
+            "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "M25": (PS, "            if (!live) revert IPqzToken.VerifierFeeSame();\n            _setFee(s, cur, cur);", "            revert IPqzToken.VerifierFeeSame();\n            _setFee(s, cur, cur);",
+            "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "B1": ("smartcontracts/evm/src/governance/GovernanceRouter.sol", "IPqzToken.setVerifierFee.selector, abi.encode(next), auth);",
+           "IPqzToken.setVerifierFee.selector, abi.encode(next + 1), auth);", "forge", "test/pqz", "PqzVerifierFee.t.sol"),
+    "F5": (PL, "        _fromPool(f.verifier, f.verifierFee);\n", "        _fromPool(f.verifier, f.verifierFee + 1);\n", "forge", "test/pqz/invariant",
+           "PqzFeeInvariants.t.sol"),
+    # T7 (spec §15 (11)): the service skips FEE_WORD_MISMATCH (only STATEMENT_MISMATCH left)
+    "V1": ("scaas-pqz-verifier/src/lib.rs", "        if rebuilt.get(256..288) != st.get(256..288) {", "        if false {", "cargo-v", "scaas-pqz-verifier",
+           "refuses_stale_fee_word"),
+    # T6 (spec §15 (10)): the node skips the pre-check / leaves vf out (the fee word's one source)
+    "N1": ("scaas-node/src/pqz.rs", "        fee_check(chain, w.to, p, &statement, c.verifierFee).await?;\n", "        let _ = p;\n", "cargo", "scaas-node",
+           "pqz_fee_precheck"),
 }
 
 
@@ -45,6 +98,8 @@ def command(kind, where, match):
         return os.path.join(ROOT, "smartcontracts", "evm"), env, [FORGE, "test", "-j", "2", "--match-path", f"{where}/{match}"]
     if kind == "cargo":
         return os.path.join(ROOT, where), {"CAPPED_MEM": "6G"}, ["cargo", "test", "-j", "2", "--lib", match]
+    if kind == "cargo-v":  # the verifier service: its integration tests by name
+        return os.path.join(ROOT, where), {}, ["cargo", "test", "-j", "2", "--test", "service", match]
     if kind == "npm":
         return os.path.join(ROOT, where), {}, ["npm", "test"]
     raise SystemExit(f"unknown kind {kind}")

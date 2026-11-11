@@ -89,6 +89,11 @@ alloy::sol! {
         bytes32 pending;
         uint64 eta;
         uint64 noticePeriod;
+        // round 3t (CTR-PQZ-36): the verifier fee, its cap, a live pending increase and its `eta`
+        uint64 verifierFee;
+        uint64 verifierFeeMax;
+        uint64 verifierFeePending;
+        uint64 verifierFeeEta;
     }
 
     #[derive(Debug)]
