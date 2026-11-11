@@ -19,3 +19,4 @@ forge-metatx (targeted: TypedOps' three router rows) | T6 tree | 0 | 547 passed,
 clientkeys | T6 tree | 0 | npm test green (first run 2 red: the router pin counts 54 / 50 -> 57 / 53 and the open-relayer rows +1, fixed)
 ua-rs, ua-py, ua-go, ua-c, ua-cxx, ua-cs, ua-dart, ua-dart-frb, ua-qt, zether-prover (typed_ops) | T6 tree | 0 | each green (ua-dart after dart pub get --offline: the work tree had no package resolution)
 node-test, node-clippy (T7) | T7 tree | 0 | cargo test --lib 711 passed (first runs: the venue mock's controls 8 -> 64 for KYC, the count pins +3 router rows, GOVERNED 274 -> 292); clippy -D warnings clean
+scripts (T8: the on-chain scripts build) | T8 tree | 0 | Deploy, DeploySend and the on-chain scripts compile with the KYC migration; pq.py, zether_reg.py parse; the local matrix run and the new list steps not done (see the report)

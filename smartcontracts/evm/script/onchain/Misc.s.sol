@@ -733,9 +733,9 @@ contract Misc is OnchainBase {
 
     function _token8() internal returns (address t) {
         IFactoryToken.TokenConfig memory c = _cfg0("Onchain misc reg", "oM8");
-        c.features |= 1 << GovernanceBits.DENYLIST;
+        c.features |= 1 << GovernanceBits.KYC; // round 3s: the registry check is bit 28
         c.reg.complianceRegistry = _dep("compliance_registry");
-        c.reg.deniedFlags = 1 << 16; // an issuer flag nobody holds here: the list runs and refuses nobody
+        c.reg.deniedFlags = 1 << 16; // an issuer flag nobody holds here: the check runs and refuses nobody
         c.reg.termsHash = keccak256("onchain matrix terms");
         vm.broadcast(k1);
         t = f5.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), _salt("t8"));

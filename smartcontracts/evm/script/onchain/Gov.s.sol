@@ -229,7 +229,7 @@ contract Gov is OnchainBase {
         (w2[0], f2[0], u2_[0]) = (_pad(a2), 1, uint64(vu + 30 days));
         vm.broadcast(k2);
         cr.setCompliance(w2, f2, u2_); // a KYC provider's row
-        IFactoryToken.TokenConfig memory c = _cfg("oGC8", 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.ALLOWLIST);
+        IFactoryToken.TokenConfig memory c = _cfg("oGC8", 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.KYC); // round 3s
         (c.initialSupply, c.initialHolder) = (1_000_000, a1);
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.termsHash) = (address(cr), 1, keccak256("onchain terms"));
         tc = _create(IOpenFactory.TokenKind.NORMAL_REGULATED, c, "NormalRegulatedToken");
@@ -773,7 +773,7 @@ contract Gov is OnchainBase {
         _neg(a1, t9, abi.encodeCall(IERC20.transfer, (a3, 1)), IRegulatedToken.Frozen.selector, "transfer from a frozen account (kind 9)");
         // not attested on the allow-listed token
         _neg(a1, tc, abi.encodeCall(IERC20.transfer, (address(0xdEaD), 1)), IRegulatedToken.NotEligible.selector,
-            "transfer to an account the ComplianceRegistry does not attest (kind 8, ALLOWLIST)");
+            "transfer to an account the ComplianceRegistry does not attest (kind 8, KYC)");
         // the guard: a governed entry by a non-owner
         _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3))), IAdmin.NotAdmin.selector,
             "grantRole by a non-owner (kind 8)");

@@ -29,7 +29,7 @@ import {OnchainForwarder} from "./OnchainForwarder.sol";
 ///         `OpenFactory.createToken` (release 1), then its public entries direct and relayed (signed by test key 1's native
 ///         id, sent by test key 2), fee 0 and with a fee. A wrapped kind gets two tokens: W1, one MockERC20 leg (the sole-leg
 ///         entries, the common entries, the hybrid mint), W2, two legs (a MockERC20 and the kind-0 token, a SCaaS ledger leg:
-///         the per-leg and `…ToUA` entries, the rate and the guardian). The regulated kinds 8-11 carry `DENYLIST` on the Step 5
+///         the per-leg and `…ToUA` entries, the rate and the guardian). The regulated kinds 8-11 carry `KYC` on the Step 5
 ///         ComplianceRegistry and `TAX`. A secp256k1 UA registered on the Step 5 registry receives the `…ToUA` entries; an
 ///         ML-DSA-65 UA (keys by script/pqz/mldsa.mjs through `vm.ffi`: run with `--ffi`) signs a relayed `mtxTransfer` and
 ///         an `mtxTransferWithFee` on every kind.
@@ -215,10 +215,10 @@ contract Tokens is OnchainBase {
         if (_zether(kind)) c.conf = IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 2, 0, 0, 0, 0, 0, false, 0);
     }
 
-    /// @dev `DENYLIST` (the Step 5 ComplianceRegistry, flag 1 denied: nobody attested, so everyone passes) and `TAX` (the
+    /// @dev `KYC` (round 3s, bit 28: the Step 5 ComplianceRegistry, flag 1 denied: nobody attested, so everyone passes) and `TAX` (the
     ///      issuer test key 1, the recipient test key 3).
     function _reg(IFactoryToken.TokenConfig memory c) internal view {
-        c.features |= 1 << GovernanceBits.DENYLIST | 1 << GovernanceBits.TAX;
+        c.features |= 1 << GovernanceBits.KYC | 1 << GovernanceBits.TAX;
         c.reg = IFactoryToken.RegulatedParams(compliance, 0, 1, keccak256("scaas.onchain.terms"), _pad(a3));
         c.roles.issuer = _pad(a1);
     }
@@ -653,8 +653,9 @@ contract Tokens is OnchainBase {
     function _govEnd(NormalToken n) internal {
         vm.startBroadcast(k1);
         if (_regulated(k)) {
-            // MINTABLE stays (the MissingRole negative on kind 8); DENYLIST off (`_regDisabled`), the holders revoked
-            n.disableFeature(GovernanceBits.DENYLIST);
+            // MINTABLE stays (the MissingRole negative on kind 8); KYC off (`_regDisabled`; grantDelay 0: at once), the holders
+            // revoked
+            n.disableFeature(GovernanceBits.KYC);
             n.revokeRole(GovernanceBits.MINTABLE, _pad(a1));
             n.revokeRole(GovernanceBits.MINTABLE, _pad(a3));
             n.revokeRole(GovernanceBits.TAX, _pad(a1));

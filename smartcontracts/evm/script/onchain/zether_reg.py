@@ -4,8 +4,8 @@
   zether_reg.py gen               script/ZetherE2E.s.sol -> script/onchain/build/ZetherRegE2E.s.sol (git-ignored), and
                                   script/onchain/ZetherMore.s.sol -> build/ZetherRegMore.s.sol (on ZetherRegE2E): the
                                   regulated Zether kinds 10 and 11 in place of 2 and 3, each config naming the Step 5
-                                  ComplianceRegistry with DENYLIST (denied flag 1, which no account has: RegulatedLib
-                                  takes a registry only with ALLOWLIST or DENYLIST, a terms bit: a termsHash), its own deployments/<key>-zether-reg-e2e.json; every other
+                                  ComplianceRegistry with KYC (round 3s, bit 28; denied flag 1, which no account has: RegulatedLib
+                                  takes a registry only with a mask, KYC a terms bit: a termsHash), its own deployments/<key>-zether-reg-e2e.json; every other
                                   line as ZetherE2E (so the e2e stays one script; the twin is rebuilt from it every run)
   zether_reg.py book <net> <Script>  deployments/onchain-<net>-<script>.json from the e2e's books (coverage.py; CHAIN and
                                   GENESIS: the target chain, its books deployments/<key>*.json, NET-EVM-13)"""
@@ -26,9 +26,9 @@ SUBS = [  # (old, new, count)
     ("IOpenFactory.TokenKind.WRAPPED_ZETHER,", "IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED,", 1),
     ("(c.initialSupply, c.initialHolder, c.conf) = (1_000_000, me, _conf());",
      "(c.initialSupply, c.initialHolder, c.conf) = (1_000_000, me, _conf());\n"
-     '        c.reg.complianceRegistry = dep.readAddress(".compliance_registry"); // T66b Step 5b: kind 10, DENYLIST\n'
-     "        (c.features, c.reg.deniedFlags) = (c.features | 1 << GovernanceBits.DENYLIST, 1); // no account is denied\n"
-     '        c.reg.termsHash = keccak256("scaas.onchain.terms"); // DENYLIST is a terms bit (RegulatedLib.TERMS_BITS)', 1),
+     '        c.reg.complianceRegistry = dep.readAddress(".compliance_registry"); // T66b Step 5b: kind 10, KYC\n'
+     "        (c.features, c.reg.deniedFlags) = (c.features | 1 << GovernanceBits.KYC, 1); // no account is denied\n"
+     '        c.reg.termsHash = keccak256("scaas.onchain.terms"); // KYC is a terms bit (RegulatedLib.TERMS_BITS)', 1),
     ('"-zether-e2e.json"', '"-zether-reg-e2e.json"', 2),
 ]
 
@@ -51,8 +51,8 @@ def gen():
     w = "w.conf) = (\"Zether wrapped E2E USD\""
     i = s.index(w)
     j = s.index("\n", i)
-    s = s[:j + 1] + ('        w.reg.complianceRegistry = dep.readAddress(".compliance_registry"); // T66b Step 5b: kind 11, DENYLIST\n'
-                     "        (w.features, w.reg.deniedFlags) = (w.features | 1 << GovernanceBits.DENYLIST, 1);\n"
+    s = s[:j + 1] + ('        w.reg.complianceRegistry = dep.readAddress(".compliance_registry"); // T66b Step 5b: kind 11, KYC\n'
+                     "        (w.features, w.reg.deniedFlags) = (w.features | 1 << GovernanceBits.KYC, 1);\n"
                      '        w.reg.termsHash = keccak256("scaas.onchain.terms");\n') + s[j + 1:]
     os.makedirs(os.path.join(HERE, "build"), exist_ok=True)
     open(os.path.join(HERE, "build/ZetherRegE2E.s.sol"), "w").write(
