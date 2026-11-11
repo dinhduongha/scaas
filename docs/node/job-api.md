@@ -163,10 +163,10 @@ Payload by kind:
   builds the inner calldata from `call` and sends the router's `relay(target, callData, token, from, payee, value, batch,
   nonce, validUntil, auth)` to `args.relayer`, which must be `params.relay_fee.router`; a hex call is refused; a `call` naming
   `mtxRelayFee` is refused `BAD_PAYLOAD` by its `entry`, before its body is parsed (no nesting); the payee is
-  never `pad(executor)`, open mode `payee = pad(router)`. *Known limit* (Fable review of ua-mtx-merge E N-4; PLANNED, open): a PQZ debit
-  as `call` is built with the empty verdict; its `pqz_verdict` and `pqz_fee` are parsed and ignored (the fill reads the outer
-  entry), so on an `OFFCHAIN` token the job reverts `PqzVerdictRequired` at simulation and is `dead` with no hint, and on a
-  `PRECOMPILE` token the `pqz_fee` pre-check is skipped. Target: refuse by name at parse an inner row with a verdict slot.
+  never `pad(executor)`, open mode `payee = pad(router)`. A PQZ debit (a row taking the verdict last) as `call` is refused
+  `BAD_PAYLOAD: a PQZ debit (<entry>) is no relay fee's call` at parse, zero sends: the node rebuilds its verdict after the payer
+  hashed the call (`callDataHash`), so the combination is not supported; the debit is its own job (Fable review of ua-mtx-merge
+  E N-4; BUILT, `typed::tests::relay_fee_call_object`).
 - *EVM, the fee covers the quote.* After the simulation, a relay fee that reaches this lane (open mode or bound to it) must be
   worth, at `params.relay_fee.min_wei_value[token]`, at least the quote: the gas limit × the job's **fee ceiling**
   (`FEE_HEADROOM` = 2 × the max fee per gas of its first send) + 2 × the L1 data fee on an OP-stack chain

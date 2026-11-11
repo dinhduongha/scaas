@@ -1294,6 +1294,12 @@ impl Op {
                 if c.row.relay_fee() {
                     bail!("BAD_PAYLOAD: a relay fee does not relay a relay fee");
                 }
+                // Fable E N-4: a PQZ debit takes its verdict last, which the payer's `callDataHash` would have to cover before the
+                // node could fetch or rebuild it; the combination is not supported, refused by name
+                if verdict_slot(c.row).is_some() {
+                    bail!("BAD_PAYLOAD: a PQZ debit ({}) is no relay fee's call: its verdict is rebuilt by the node, after the payer \
+                        hashed the call; send it as its own job", c.row.entry);
+                }
                 args["target"] = json!(format!("{:#x}", c.to));
                 args["callDataHash"] = json!(format!("{:#x}", keccak256(&c.data)));
                 Some(c)
@@ -2595,6 +2601,14 @@ mod tests {
             // Fable E N-5: a nested relay fee is refused by name before its body is parsed (its own fields need not be valid)
             bad["call"] = json!({"entry": row.entry, "call": {"entry": row.entry}});
             assert_eq!(Op::parse(&bad, FEE).unwrap_err().to_string(), "BAD_PAYLOAD: a relay fee does not relay a relay fee");
+            // Fable E N-4: a PQZ debit (a verdict slot) is no relay fee's call, refused by name; the control: the debit alone parses
+            for debit in ["UAPqzTransferSingle", "UAPqzUnshield"] {
+                let d = op_of(debit, "pqz", &v).unwrap_or_else(|| panic!("{debit}"));
+                Op::parse(&d, FEE).unwrap_or_else(|e| panic!("{debit} alone: {e:#}"));
+                bad["call"] = d;
+                let e = Op::parse(&bad, FEE).unwrap_err().to_string();
+                assert!(e.starts_with("BAD_PAYLOAD: a PQZ debit") && e.contains("is no relay fee's call"), "{debit}: {e}");
+            }
         }
     }
 
