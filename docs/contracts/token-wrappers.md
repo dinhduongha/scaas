@@ -1105,7 +1105,10 @@ confidential entries in Z on the Zether kinds and in Q on the PQZ kinds. On 5 an
   their verdicts (Q) and the state, setters and views (S, Q2 until 2026-11-10), built on 5 and 13; P into the pipeline and named transfers (P)
   and pay with the relay fee (P2), on no kind today (the largest P 30,783 B); A into A and G, the governance entries, when
   A passes the line; the DEX's D the same. A later governance version grows `GovernanceLib` first (14,513 B; lines 33,903 B
-  and 35,694 B). The byte lines are fitted estimates; the asked gas decides.
+  and 35,694 B). The byte lines are fitted estimates; the asked gas decides. **Ask first** (owner 2026-11-11,
+  [CTR-TOK-30's Change](../decisions.md#ctr-tok-30--body-modules-every-body-but-the-erc-20-core-runs-in-a-delegatecall-module-of-its-kind)): no module is split and no size lever applied without asking the owner; a
+  module or library past its notice line stops the work, its measured sizes are reported, and the owner chooses the split above
+  or another way.
 - **Pay stays in P, one per kind (§11 (g), kept as specified).** The T66b 4.4 comparison on the final tree (every kind's P split, a comparison build only): the twelve pay modules would be 15,336–15,407 B on 0–5 and 19,883–19,962 B on 8–13, and they all differ with immutables, link references and metadata zeroed (first difference at byte 22–23, the dispatcher's jump targets; the nearest pairs, kinds 0 / 2 and 8 / 10, at bytes 72 and 515): each kind's hooks (`_mtxRule`, `_uaAllowed`, `_update`, the regulated hooks) are compiled into its pay bodies. A shared pay module (one regulated module for 10–13,
   or one per family) is recorded for a later switch: it needs those hooks as data, a cross-kind check, one storage layout for
   the pay namespaces and its own review; a switch is a new release of the kinds.
