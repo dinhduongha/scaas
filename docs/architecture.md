@@ -358,7 +358,7 @@ anyone writing a class for it.
 **Why the owner can only give things up.** There is no upgrade key, so the flags a token is born with are the most it
 can ever do: an optional `owner` grants and revokes the roles of those flags (adding or widening a holder takes two
 calls within `[eta, eta + grantDelay]`), may clear a flag that was not locked, and may renounce, after which nobody
-administers the token (`renounceOwnership` reverts while a bit that is not locked has a live root, so the owner revokes
+administers the token (`renounceAdmin` reverts while a bit that is not locked has a live root, so the admin revokes
 them first; a locked bit's holders survive it); a role holder exercises only its flag, within its `Grant` if limited
 ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)).
 Wallets read `features()`, `lockedFeatures()`, `owner()`, the role holders and `grantOf`, so a holder can see the whole power set before

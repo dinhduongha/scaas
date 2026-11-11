@@ -2489,7 +2489,7 @@ derived keys held by separate parties (for example 2-of-3 `secp256k1` / `p256`, 
   stranger learns the proposer). It writes the verifier, its shape and `pqzVerifierEpoch + 1` (`PqzVerifierSet(previous, next,
   pqzVerifierEpoch)`). With `noticePeriod = 0` the proposal applies at once. An owner change or a passed window leaves the pending
   dead. `pqzCancelVerifier()` deletes a live pending (`PqzVerifierCancelled(next)`; none live: nothing happens). Other refusals, in
-  order: a caller who is not the owner `IGovernance.NotOwner(bytes32)`, then a `PRECOMPILE` token `PqzVerifyConfigInvalid()`, then
+  order: a caller who is not the admin `IGovernance.NotAdmin(bytes32)`, then a `PRECOMPILE` token `PqzVerifyConfigInvalid()`, then
   a fixed verifier `PqzVerifierFixed()`.
 - **The period** is the factory's `noticePeriod()` (set once by `configureChain`, [CTR-TOK-29](token-wrappers.md#CTR-TOK-29)),
   stored at init, so nothing later shortens it; never the creator's `grantDelay`. It may be 0 on a test chain; wallets show the

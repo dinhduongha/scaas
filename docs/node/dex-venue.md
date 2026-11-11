@@ -541,7 +541,7 @@ regulated leg — `PAUSED` (`regulatedConfig().pausedUntil`; the market halts), 
 it sells), `VENUE_NOT_ELIGIBLE` (the DEX's own `R` on the leg), `NOT_ELIGIBLE` (the receiver, `destination` or else `from`,
 on the token it buys, with `canReceive`'s reason 1–4), `ATTESTATION_SHORTER` (an order's `validUntil` past the receiver's
 attestation, with `ALLOWLIST` on); `R` is computed with `scaas_ua::regulated::can_receive` over the registry's
-`attestationOf` and `attesterEnabled`, on the chain's `compliance_registry` only (`REGISTRY_NOT_CONFIGURED`,
+`complianceOf` and `kycProviderEnabled`, on the chain's `compliance_registry` only (`REGISTRY_NOT_CONFIGURED`,
 `REGISTRY_MISMATCH` otherwise; its code hash checked when the venue loads, which fails closed). Events: `AccountFrozen`
 drops the account's orders selling that token (`invalid` to the client store; its orders buying it stay), `Paused` halts
 the market until `pausedUntil`, `Unpaused` reopens it, and it reopens at `pausedUntil` with no event; a failed trade on a

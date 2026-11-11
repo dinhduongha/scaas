@@ -192,6 +192,7 @@ set-n2048-kmax1024, set-n2304-kmax4096, set-n2560-kmax16384, set-n2816-kmax65536
 node-test, node-clippy | b97c30e1 | 0 | T9's rows above (node code changed only in T9); the full run again at the stacked gate
 node-e2e (cargo test --test e2e -- --ignored, CAPPED_MEM=6G, --test-threads=1) | — | stacked gate | deferred to the stacked final gate; tests/e2e.rs compiles (clippy --all-targets clean at b97c30e1)
 clients | 50edc78e | 0 | clientkeys, ua-rs, zether-prover (T8 rows above: the clients this round changed); every other ua-* reads no router or topic row (spec §7): stacked gate
-docs (docs_check check / paths / test_docs_check, git grep /tmp/) | — | stacked gate | T14 ran check and paths on its edits (its row); the full set again at the stacked gate
+docs (docs_check check / paths / test_docs_check, the temp-path guard) | — | stacked gate | T14 ran check and paths on its edits (its row); the full set again at the stacked gate
 release gas (each release deploy at most 60 M asked, NET-EVM-11) | — | stacked gate | measured by the local matrix deploy (DeployBase._requireReleaseGas under RELEASE_GAS_GATE=public): stacked gate; known: the router 40,082,643 asked (T7), SCaaSDex 55,820,670 at the SCaaS testnet reset 2 (no release's code grows in T8-T14)
 matrix local run (matrix.sh, anvil) | — | stacked gate | over 15 minutes (the deploy and eight groups): deferred to the stacked gate (controller 2026-11-11); T11's scripts compile (its row)
+docs (T14's edits) | 86de70ae+T14 | 0 | docs_check check 0 errors (6 warnings, as before), paths 0 machine paths, test_docs_check ok, the temp-path guard clean (C9 refuses round names in current docs: the rows name CTR-GOV-23; C7: one dropped-artifacts row for the registry's former immutable admin)
