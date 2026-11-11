@@ -17,6 +17,7 @@ import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedD
 } from '../src/evm.js';
 import { confPublic, g1 } from '../src/zether.js';
 import { recordId } from '../src/regulated.js';
+import { releaseApprovalKey } from '../src/factory.js';
 import { ecdsa, nativeSk, nativeAddr, nativeUa, be } from './ua-signers.mjs';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/', import.meta.url));
@@ -230,6 +231,9 @@ for (const [name, op] of Object.entries(TYPED_OPS)) {
       routerCalldata: hex(plan.calldata(signature)) });
     row.domains[kind] = d;
   }
+  // round 3r (spec §5.6): the factory's key of the approved release, checked on the factory by FactoryAdmin.t.sol
+  const domain = { UAApproveTokenRelease: 'token', UAApproveDexRelease: 'dex', UAApproveRelease: 'class' }[name];
+  if (domain) row.approvalKey = releaseApprovalKey(domain, row.message);
   ops[name] = row;
 }
 
