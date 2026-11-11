@@ -93,7 +93,7 @@ contract MergeInvariantsTest is MergeBase {
         MetaTxLib.UAMetaTransaction memory m = _burn(_pad(alice), 0);
         (m.mode, m.fee) = (MODE_FIX, 10);
         m.feeRecipient = FEE_TO;
-        bytes32 d = _callDigest(address(tok), m); // `MetaTxLib.hashStruct` zeroes both unbound fields
+        bytes32 d = _callDigest(address(tok), m); // `MtxPipelineLib._structHash` zeroes both unbound fields
         MetaTxLib.UAMetaTransaction memory canonical = _copy(m);
         (canonical.relayer, canonical.feeRecipient) = (address(0), address(0));
         assertEq(d, _callDigest(address(tok), canonical), "both unbound");

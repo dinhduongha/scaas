@@ -165,7 +165,8 @@ interface ITradeToken {
 
     /// @notice DX7 (owner 2026-10-30): only `o.dex`, at most what it pulled for the order in THIS transaction (a
     ///         transient counter kept on every pull, EIP-1153); lowers `pulled[h]` by `amount` (the refunded part is
-    ///         fillable again). An IOC order stays closed (`OrderClosed`); a cancel in the same transaction clears the
+    ///         fillable again) and moves `amount` from `o.dex` back to `o.from`: the restore is the refund (Fable B P2-1;
+    ///         a dex that no longer holds it reverts). An IOC order stays closed (`OrderClosed`); a cancel in the same transaction clears the
     ///         counter.
     function restorePulled(UATradeOrder calldata o, uint256 amount) external;
 

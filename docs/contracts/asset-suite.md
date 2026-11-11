@@ -526,11 +526,15 @@ the same admin generation (`acceptAdmin` and `renounceAdmin` kill every pending)
 P2-1; BUILT on branch `ua-mtx-fix-contracts`, UNAUDITED): a holder's `renounceRole` or a grantor's leaf proposal at the same
 key no longer blocks the admin's `revokeRole` / `grantRole` / `setGrant` (before, it reverted `GrantTermsMismatch`, so a
 compromised issuer could renounce-propose again after every `cancelGrant` and keep the slot); the reverse stays refused.
+The overwrite emits no `GrantCancelled`: the new `GrantProposed` / `RelaxProposed` at the same key is the only signal, so
+an indexer keeps one pending per `(bit, account)` and replaces it on each proposal.
 **A cut on a masked bit is a relaxation too** (Change 2026-11-11, Fable review D P2-2 and A-4; same branch): a `setGrant`
-(admin or grantor path) that lowers the holder's `max` or sets a new or lower `maxUses` proposes like a `validUntil` cut
-(a `WHOLE` holder has neither bound; a non-holder nothing to lose). Unmasked bits and `grantDelay = 0` keep one call. Tests:
+(admin or grantor path) that narrows the holder in any word proposes like a `validUntil` cut: on a `WHOLE` holder any
+bound (`min`, a finite `max`, `total`, `perWindow`, `maxUses`); on a `LIMITED` one a raised `min`, a lower `max`, a new or
+lower `total`, `perWindow` or `maxUses`, or `delegable` dropped (its leaves would die at once); a non-holder has nothing to
+lose (re-check C1, C2). Unmasked bits and `grantDelay = 0` keep one call. Tests:
 `test/governance/GovRelax.t.sol` (`test_relax*TakesTwoCalls`, `test_grantThenRevokeExclude`, `test_ownerProposesOverHolderPending`,
-`test_holderConfirmsOwnRenounce`, `test_relaxSetGrantMaxUsesAndMaxAreCuts`,
+`test_holderConfirmsOwnRenounce`, `test_relaxSetGrantMaxUsesAndMaxAreCuts`, `test_relaxSetGrantEveryNarrowingIsACut`,
 `test_holderCannotConfirmOwnerRevoke`, `test_acceptAdminKillsPendingRelax`, `test_confirmAfterWindowProposesAgain`,
 `test_cancelByProposer`, `test_unmaskedBitsOneCallAsToday`, `test_grantDelayZeroOneCall`), `test/governance/GovDelay.t.sol`.
 
@@ -574,8 +578,12 @@ the regulated override, so the plain kinds' empty hooks cost nothing. Tests: the
 (`test/governance/PlusZero.t.sol`, `test/vectors/plus_zero_gas.json`, T26 `f55f43c0`), the hook seats
 (`test/as/RegulatedSkeleton.t.sol` `test_hookSeatsWired`).
 
-<a id="CTR-AS-30"></a>**CTR-AS-30** — **A PQZ refresh (`amount = 0`) is open under `FREEZE` and `PAUSE`** (RK-11); its `shieldIn`
-payer and beneficiary are still checked. Test: `test/as/confidential/PqzRefresh.t.sol`.
+<a id="CTR-AS-30"></a>**CTR-AS-30** — **A PQZ refresh (`amount = 0`) is open under `FREEZE` and `PAUSE`** (RK-11) **when the
+burn's fee word is 0**; its `shieldIn` payer and beneficiary are still checked. With a fee (`confidentialFee ≠ 0` and a
+beneficiary, or the `OFFCHAIN` verifier fee) the refresh moves value out, so the sender is checked too (`Frozen`,
+`TokenPaused`, the lists; Change 2026-11-11, Fable review A-1, BUILT on branch `ua-mtx-fix-contracts`). Consequence: on an
+`OFFCHAIN` token with a verifier fee no refresh is open to a frozen or paused sender. Test:
+`test/as/confidential/PqzRefresh.t.sol` (`test_refreshWithFeeChecksTheSender`).
 
 <a id="CTR-AS-31"></a>**CTR-AS-31** — **The allow list and the deny list held in the token** (group 3s, [CTR-GOV-24](../decisions.md#CTR-GOV-24); BUILT, UNAUDITED). `scaas.regulated` +7 `listFlags[bytes32]`: `ALLOWED` 1, `DENIED` 2, one slot per account, written by `setAllowed` / `setDenied` (1–256 accounts, `ListBatchInvalid`, `ListAccountZero`; one `AllowedSet` / `DeniedSet` per account; at once both ways; a holder of bit 8 / 9, any holder, `MissingRole` else, the feature on or off) and by init's row for `initialHolder` under `ALLOWLIST` with an initial supply; `listFlagsOf(account)`. `L(a)`, one `SLOAD` for both lists, refuses `NotAllowed(a)` / `Denied(a)` on every account `F` or `R` checks (senders, payers, meta-tx `from` in `_regPre`, receivers, fee recipients, beneficiaries, a forced transfer's beneficiary, an unshield recipient) and on no other: never a forced transfer's subject, the unwrap recipient, a shielded receiver, a ring member, a leg or its `decoyFee` (I9); order `P`, `F`, `L`, `R`. Contracts are listed like anyone else (the DEX and its puller, wrappers, escrows, `RelayFeeRouter`, fee recipients). `canReceive` answers 5 / 6 first. `enableFeature(8 | 9 | 28)` by the admin, at once (`ListHolderMissing` with no holder root, `ComplianceRegistryNotSet`); 8 and 9 are never disabled (`FeatureNotDisableable`), `KYC` after `grantDelay`; a lock holds 8, 9, 28 on or off; the issuer seat holds each list bit that can still be enabled; `termsHash` is required while one can (the `enableable` predicate). `ALLOWLIST` is outside 10–13. The per-path table, the threats A16–A21 and the invariants I14, I15: spec `superpowers/specs/2026-11-10-token-lists.md` §4.3, §12, §4.5.
 

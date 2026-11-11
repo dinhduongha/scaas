@@ -374,6 +374,47 @@ contract GovRelaxTest is Test {
         assertFalse(a.barred(FREEZE, nid(issuer)));
     }
 
+    /// Fable re-check C1, C2: every word that narrows a delayed bit's holder is a cut. FORCE (scalar) rows: a `total`, a
+    /// `perWindow` and a raised `min` on the `WHOLE` issuer only propose (the issuer keeps forcing); a `LIMITED` root whose
+    /// `delegable` is dropped (its leaves would die at once) only proposes. Control: the same terms confirm after the delay.
+    function test_relaxSetGrantEveryNarrowingIsACut() public {
+        IGovernance.GrantTerms[3] memory f;
+        (f[0].max, f[0].total) = (NONE, 1);
+        (f[1].max, f[1].perWindow, f[1].window) = (NONE, 1, 1 days);
+        (f[2].max, f[2].min) = (NONE, 5);
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(OWNER);
+            a.setGrant(FORCE, nid(issuer), f[i]);
+            assertTrue(_live(FORCE, nid(issuer)), "FORCE narrowing: proposed");
+            assertTrue(a.hasRole(FORCE, nid(issuer)));
+            vm.prank(issuer);
+            a.act(FORCE, 10); // still WHOLE: 10 > total 1, perWindow 1, and below min 5 would fail if written
+            vm.prank(OWNER);
+            a.cancelGrant(FORCE, nid(issuer));
+        }
+        vm.prank(OWNER);
+        a.setGrant(FORCE, nid(issuer), f[0]);
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(FORCE, nid(issuer), f[0]);
+        assertEq(a.grantOf(FORCE, nid(issuer)).total, 1, "control: confirmed after the delay");
+
+        // C2: a LIMITED delegable root on FREEZE; dropping `delegable` is a cut
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true));
+        vm.prank(issuer);
+        a.setGrant(FREEZE, nid(other), _t(uint64(block.timestamp + D + 1), 1, false)); // a leaf, at once
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, false));
+        assertTrue(a.grantOf(FREEZE, nid(issuer)).delegable, "delegable dropped: proposed only");
+        assertTrue(_live(FREEZE, nid(issuer)));
+        vm.prank(other);
+        a.act(FREEZE, 0); // the leaf lives until the confirm
+    }
+
     /// Fable D P2-2, A-4: on a delayed bit a new or lower `maxUses`, or a lower `max`, is a cut like a `validUntil` cut: the
     /// owner's call only proposes, the holder keeps acting until the confirm; the grantor's on its leaf likewise. Positive
     /// controls: the same terms apply at once on an unmasked bit, and a delayed-bit narrowing of neither word applies at once.

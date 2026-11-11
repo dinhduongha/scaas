@@ -217,8 +217,8 @@ library GovernanceLib {
     ///         `delegable` grant needs a finite budget (B-02), which bounds what is spent, not the number of leaves: a leaf
     ///         spends nothing until it acts, so a wallet prints "can add unlimited leaves at once, sharing a remaining budget".
     ///         On a bit of `delayedRelax` with a `grantDelay`, terms whose `validUntil` ends before `now + grantDelay`, and
-    ///         terms that lower the holder's `max` or set a new or lower `maxUses` (Fable D P2-2, A-4), are a relaxation:
-    ///         two calls on either path, never a narrowing (regulated-kinds spec §3.6, CTR-GOV-09 "every path that relaxes").
+    ///         terms that narrow the holder in any other word (`_cuts`; Fable D P2-2, A-4, re-check C1, C2), are a
+    ///         relaxation: two calls on either path (regulated-kinds spec §3.6, CTR-GOV-09 "every path that relaxes").
     function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller, uint256 roleBits,
         uint256 contractOnly, uint256 scalarBits, uint256 scopeBits, address uaRegistry, uint256 delayedRelax)
         public returns (bool leaf, bytes32 parentScope)
@@ -231,7 +231,7 @@ library GovernanceLib {
 
     /// @dev Whether a `setGrant` applies now: a leaf's or, with no `grantDelay`, at once; the admin's narrowing at once (spec
     ///      §1.6); a widening, or a cut on a bit of `delayedRelax`, in two calls (regulated-kinds spec §3.6): a `validUntil`
-    ///      before `now + grantDelay`, a lower `max` or a new or lower `maxUses` than the holder has (D P2-2, A-4).
+    ///      before `now + grantDelay`, or any other word that narrows the holder (`_cuts`; D P2-2, A-4, re-check C1, C2).
     function _setDue(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller, bool leaf,
         uint256 delayedRelax) private returns (bool)
     {
@@ -264,16 +264,26 @@ library GovernanceLib {
             && (!t.delegable || g.delegable);
     }
 
-    /// @dev D P2-2, A-4: `t` lowers a holder's `max` or sets a new or lower `maxUses` (a `WHOLE` holder has neither bound;
-    ///      a non-holder has nothing to lose).
+    /// @dev D P2-2, A-4, re-check C1, C2: `t` narrows the holder in any word: on a `WHOLE` holder any bound at all (a `min`,
+    ///      a finite `max`, `total`, `perWindow` or `maxUses`); on a `LIMITED` one a raised `min`, a lower `max`, a new or lower
+    ///      `total`, `perWindow` or `maxUses`, or `delegable` dropped (its leaves die at once by the epoch bump). `validUntil`
+    ///      is `_setDue`'s own test. A non-holder has nothing to lose.
     function _cuts(GovernanceStorage storage s, uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t)
         private view returns (bool)
     {
         uint8 r = s.roles[bit][holder];
         if (r == 0) return false;
+        if (r == WHOLE) {
+            return t.min != 0 || t.max != type(uint128).max || t.total != 0 || t.perWindow != 0 || t.maxUses != 0;
+        }
         IGovernance.Grant storage g = s.grants[bit][holder];
-        (uint256 max, uint256 uses) = r == WHOLE ? (uint256(type(uint128).max), 0) : (uint256(g.max), uint256(g.maxUses));
-        return t.max < max || (t.maxUses != 0 && (uses == 0 || t.maxUses < uses));
+        return t.min > g.min || t.max < g.max || _lower(g.total, t.total) || _lower(g.perWindow, t.perWindow)
+            || _lower(g.maxUses, t.maxUses) || (g.delegable && !t.delegable);
+    }
+
+    /// @dev A bound with 0 = none: `next` is new or lower than `was`.
+    function _lower(uint256 was, uint256 next) private pure returns (bool) {
+        return next != 0 && (was == 0 || next < was);
     }
 
     /// @dev A bound with 0 = none: `next` narrows `was`.

@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-// Backup, not built (Fable review B P3-3, branch ua-mtx-fix-contracts): the four functions of `src/common/MetaTxLib.sol`
+// Backup, not built (Fable review B P3-3, branch ua-mtx-fix-contracts): the four functions and the error `ModeUnknownBits` of `src/common/MetaTxLib.sol`
 // that no contract called. Every contract hashes through `MtxPipelineLib._structHash` / `_namedHash` and checks the mode in
 // `MtxPipelineLib._checkEnvelope`; two copies of one byte rule drift apart silently. As they stood in `library MetaTxLib`, names qualified.
 
 import {MetaTxLib} from "../../../../src/common/MetaTxLib.sol";
 
 library MetaTxLibHash {
+    error ModeUnknownBits(uint32 mode); // was `MetaTxLib.ModeUnknownBits`
+
     function hashStruct(MetaTxLib.MetaTransaction memory m) internal pure returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);
         return keccak256(abi.encode(
@@ -37,7 +39,7 @@ library MetaTxLibHash {
     ///      `0x30`–`0xF0` là bit hợp lệ nhưng giá trị vô nghĩa, và phải revert.
     ///      Chấp nhận bit/giá trị không hiểu nghĩa là khoá chết ngữ nghĩa tương lai.
     function validateMode(uint32 mode) internal pure {
-        if (mode & ~MetaTxLib.MODE_KNOWN_MASK != 0) revert MetaTxLib.ModeUnknownBits(mode);
+        if (mode & ~MetaTxLib.MODE_KNOWN_MASK != 0) revert ModeUnknownBits(mode);
         MetaTxLib.feeModeOf(mode);  // revert ModeFeeInvalid nếu nửa byte sau > 2
     }
 }

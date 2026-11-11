@@ -58,7 +58,7 @@ library MetaTxLib {
     uint32 internal constant MODE_KNOWN_MASK             = 0x0000_00F3;
 
     error ModeFeeInvalid(uint32 mode);
-    error ModeUnknownBits(uint32 mode);
+    // `ModeUnknownBits(uint32)` moved with `validateMode` to legacy/ua-mtx-fix-contracts/ (re-check C6): nothing raises it.
 
     /// @notice v3 (CTR-MTX-15): the signed call of one of THIS contract's allowlisted functions.
     struct MetaTransaction {
