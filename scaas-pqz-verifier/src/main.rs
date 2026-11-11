@@ -18,10 +18,10 @@ async fn main() -> anyhow::Result<()> {
     let password = std::env::var(&cfg.keystore_password_env)
         .with_context(|| format!("the keystore password: env {}", cfg.keystore_password_env))?;
     let signer = PrivateKeySigner::decrypt_keystore(&cfg.keystore, password).context("the keystore")?;
-    let rpc = Rpc::connect(&cfg.rpc_url)?;
-    let chain_id = rpc.chain_id().await.context("the RPC's chain id")?;
-    anyhow::ensure!(chain_id == cfg.chain_id, "the RPC answers chain {chain_id}, the config pins {}", cfg.chain_id);
-    let svc = Arc::new(Service::new(Arc::new(rpc), Arc::new(pqz_ffi::precompile), signer, &cfg));
+    let rpc = Rpc::connect(&cfg.rpc_urls, cfg.chain_id).await?;
+    let chain_id = cfg.chain_id;
+    let svc
+ = Arc::new(Service::new(Arc::new(rpc), Arc::new(pqz_ffi::precompile), signer, &cfg));
     tracing::info!(verifier = %svc.ua(), set = pqz_ffi::stmt::SET, chain_id, registry = %cfg.registry, bind = %cfg.bind,
         "scaas-pqz-verifier");
 

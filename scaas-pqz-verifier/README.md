@@ -46,6 +46,9 @@ keystore's path and the environment variable holding its password, never a secre
   `refuse_shield_when_unserved` asks. A verifier proposed but not yet confirmed is not named by the token, so the probe
   refuses it.
 
+Chain reads ([ARCH-POS-15](../docs/decisions.md#ARCH-POS-15)): `rpc_urls` is a list, asked in order; every read of one
+request comes from one node at one block number (its head when the request starts); a node that does not answer sends
+the whole request to the next one; a revert or a refusal is an answer. The strict-majority agreement option is not built.
 
 Bounds: a body limit set from the set's largest statement and proof, JSON nesting at most 4 below the request object,
 both checked before decoding; a per-address rate limit, a bounded queue, bounded verification concurrency.

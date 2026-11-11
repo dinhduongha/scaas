@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! The chain behind a small trait: `eth_call` and `eth_getCode` at the latest state. The service reads everything it
-//! checks through it; the tests answer it with fixed views.
+//! The chain behind a small trait: a list of nodes ([ARCH-POS-15](../../docs/decisions.md#ARCH-POS-15)), each read by
+//! `eth_call` and `eth_getCode` at a block the caller names. The service reads one request from one node at one block and
+//! fails over in the configured order; the tests answer it with fixed views.
 
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, Bytes};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
-use alloy::rpc::types::TransactionRequest;
+use alloy::rpc::types::{BlockId, TransactionRequest};
 use alloy::transports::TransportError;
+use anyhow::Context;
 use async_trait::async_trait;
 
 #[derive(Debug)]
@@ -19,20 +21,28 @@ pub enum ChainError {
 
 #[async_trait]
 pub trait Chain: Send + Sync {
-    async fn call(&self, to: Address, data: Bytes) -> Result<Bytes, ChainError>;
-    async fn code(&self, at: Address) -> Result<Bytes, ChainError>;
+    /// How many nodes, asked in order `0..nodes()`.
+    fn nodes(&self) -> usize;
+    /// Node `node`'s latest block number.
+    async fn head(&self, node: usize) -> Result<u64, ChainError>;
+    async fn call(&self, node: usize, block: u64, to: Address, data: Bytes) -> Result<Bytes, ChainError>;
+    async fn code(&self, node: usize, block: u64, at: Address) -> Result<Bytes, ChainError>;
 }
 
-/// The operator's JSON-RPC endpoint.
-pub struct Rpc(DynProvider);
+/// The operator's JSON-RPC endpoints (`rpc_urls`), in order.
+pub struct Rpc(Vec<DynProvider>);
 
 impl Rpc {
-    pub fn connect(url: &str) -> anyhow::Result<Self> {
-        Ok(Self(ProviderBuilder::new().disable_recommended_fillers().connect_http(url.parse()?).erased()))
-    }
-
-    pub async fn chain_id(&self) -> anyhow::Result<u64> {
-        Ok(self.0.get_chain_id().await?)
+    /// Every endpoint must answer `chain_id` (`eth_chainId`) now, or the service does not start (Fable C-6).
+    pub async fn connect(urls: &[String], chain_id: u64) -> anyhow::Result<Self> {
+        let mut nodes = Vec::new();
+        for (i, u) in urls.iter().enumerate() {
+            let p = ProviderBuilder::new().disable_recommended_fillers().connect_http(u.parse()?).erased();
+            let id = p.get_chain_id().await.with_context(|| format!("rpc_urls[{i}]: eth_chainId"))?;
+            anyhow::ensure!(id == chain_id, "rpc_urls[{i}] answers chain {id}, the config pins {chain_id}");
+            nodes.push(p);
+        }
+        Ok(Self(nodes))
     }
 }
 
@@ -46,11 +56,20 @@ fn classify(e: TransportError) -> ChainError {
 
 #[async_trait]
 impl Chain for Rpc {
-    async fn call(&self, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
-        self.0.call(TransactionRequest::default().with_to(to).with_input(data)).await.map_err(classify)
+    fn nodes(&self) -> usize {
+        self.0.len()
     }
 
-    async fn code(&self, at: Address) -> Result<Bytes, ChainError> {
-        self.0.get_code_at(at).await.map_err(|e| ChainError::Rpc(e.to_string()))
+    async fn head(&self, node: usize) -> Result<u64, ChainError> {
+        self.0[node].get_block_number().await.map_err(|e| ChainError::Rpc(e.to_string()))
+    }
+
+    async fn call(&self, node: usize, block: u64, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
+        let tx = TransactionRequest::default().with_to(to).with_input(data);
+        self.0[node].call(tx).block(BlockId::number(block)).await.map_err(classify)
+    }
+
+    async fn code(&self, node: usize, block: u64, at: Address) -> Result<Bytes, ChainError> {
+        self.0[node].get_code_at(at).block_id(BlockId::number(block)).await.map_err(|e| ChainError::Rpc(e.to_string()))
     }
 }

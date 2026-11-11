@@ -56,7 +56,7 @@ const EPOCH: u32 = 3;
 const TAG: B256 = B256::repeat_byte(0x7a);
 const CONFIG: &str = r#"
 bind = "127.0.0.1:0"
-rpc_url = "http://127.0.0.1:1"
+rpc_urls = ["http://127.0.0.1:1"]
 chain_id = 7622
 chain_uid = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"
 registry = "0x5CA5000000000000000000000000000000000001"
@@ -134,6 +134,12 @@ struct World {
     message: HashMap<(B256, B256), B256>,
     /// what `pqzEntryBlob` answers
     blob: Vec<u8>,
+    /// how many nodes the chain has (at least one); node `n` is at block `100 + n`
+    nodes: usize,
+    /// node → how many reads it answers before it stops answering (0: down, its head too)
+    down: HashMap<usize, usize>,
+    /// every read as `(node, block)`, in order
+    seen: Vec<(usize, u64)>,
 }
 
 struct Fake(Mutex<World>);
@@ -167,9 +173,34 @@ macro_rules! answer {
     };
 }
 
+impl Fake {
+    /// One read by `node` at `block`: recorded, then refused when the node has stopped answering.
+    fn reach(&self, node: usize, block: u64) -> Result<(), ChainError> {
+        let mut w = self.0.lock().unwrap();
+        let before = w.seen.iter().filter(|s| s.0 == node).count();
+        w.seen.push((node, block));
+        match w.down.get(&node) {
+            Some(&n) if before >= n => Err(ChainError::Rpc(format!("node {node} down"))),
+            _ => Ok(()),
+        }
+    }
+}
+
 #[async_trait]
 impl Chain for Fake {
-    async fn code(&self, at: Address) -> Result<Bytes, ChainError> {
+    fn nodes(&self) -> usize {
+        self.0.lock().unwrap().nodes.max(1)
+    }
+
+    async fn head(&self, node: usize) -> Result<u64, ChainError> {
+        match self.0.lock().unwrap().down.get(&node) {
+            Some(0) => Err(ChainError::Rpc(format!("node {node} down"))),
+            _ => Ok(100 + node as u64),
+        }
+    }
+
+    async fn code(&self, node: usize, block: u64, at: Address) -> Result<Bytes, ChainError> {
+        self.reach(node, block)?;
         let w = self.0.lock().unwrap();
         if at == TOKEN {
             // ChainEnvCode: proxy(release) ‖ chainUid ‖ registry ‖ govRouter ‖ ska ‖ hedera ‖ counts
@@ -185,7 +216,8 @@ impl Chain for Fake {
         Ok(k.map(|(_, k)| [&[0u8][..], &k.pk].concat().into()).unwrap_or_default())
     }
 
-    async fn call(&self, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
+    async fn call(&self, node: usize, block: u64, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
+        self.reach(node, block)?;
         let w = self.0.lock().unwrap();
         let sel: [u8; 4] = data[..4].try_into().unwrap();
         let st = || Bytes::from(w.statement.clone());
@@ -648,6 +680,34 @@ async fn ignores_forged_rpc_digest() {
     assert_ne!(sig.recover_address_from_prehash(&FORGED).ok(), Some(signer().address()));
 }
 
+/// Fable C-3 (ARCH-POS-15): a list of nodes, failover per request, one node and one block for every read of a request.
+#[tokio::test]
+async fn fails_over_one_node_one_block() {
+    let (st, proof) = vector("TRANSFER", None);
+    let s = service(world(&st, &[A, B, AUD]), all_valid());
+    let req = request(single(A, 0, B), &st, &proof);
+    // node 0 down from the start: node 1 answers every read, at its block 101
+    (s.world().nodes, s.world().down) = (3, HashMap::from([(0, 0)]));
+    assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
+    assert!(s.world().seen.iter().all(|&r| r == (1, 101)), "{:?}", s.world().seen);
+    // node 0 answers four reads, then stops: the request starts over on node 1, never mixing its answers with node 0's
+    (s.world().down, s.world().seen) = (HashMap::from([(0, 4)]), vec![]);
+    assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
+    let seen = s.world().seen.clone();
+    assert_eq!(seen[..5], [(0, 100); 5], "four answered, the fifth refused");
+    assert!(seen[5..].iter().all(|&r| r == (1, 101)) && seen.len() > 5, "{seen:?}");
+    // a refusal on what node 0 answered is final: no failover (only an RPC that does not answer moves on)
+    (s.world().down, s.world().seen, s.world().epoch) = (HashMap::new(), vec![], EPOCH + 1);
+    assert_refused(&verdict(&s, &req).await, "EPOCH_MISMATCH");
+    assert!(s.world().seen.iter().all(|r| r.0 == 0));
+    s.world().epoch = EPOCH;
+    // every node down
+    s.world().down = HashMap::from([(0, 0), (1, 0), (2, 0)]);
+    assert_refused(&verdict(&s, &req).await, "RPC_UNAVAILABLE");
+    assert_refused(&post(&s, "/v1/pqz-verdict/probe", json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string()).await,
+        "RPC_UNAVAILABLE");
+}
+
 /// Fable C-2: the views the service calls are the contract's after group 3h (`ownTag` in the three args tuples): the
 /// selectors of the forge artifact `out/IPqzToken.sol/IPqzToken.json` (`methodIdentifiers`, the same pins as the node's
 /// `views_are_the_contracts`); the opt-in anvil test reads the artifact itself.
@@ -695,7 +755,6 @@ fn verdict_vectors() {
         let mine = registry_domain(g["version"].as_str().unwrap().parse().unwrap(), uint(&g["chainId"]),
             g["verifyingContract"].as_str().unwrap().parse().unwrap(), word(&g["salt"]));
         assert_eq!(verdict_auth_digest(&mine, k.address().into_word(), digest), auth, "{r}");
-
         assert_eq!(k.sign_hash_sync(&auth).unwrap().as_bytes().to_vec(), bytes(&r["signature"]), "{r}");
     }
 }
