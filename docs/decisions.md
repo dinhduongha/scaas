@@ -4454,6 +4454,7 @@ Change (2026-10-20): controller proposal (owner may override) — UA-6 (U1, U6):
 **Why.** Derived-UA balances live in a separate `bytes32` ledger, shown to ERC-20 tools as the `UA_POOL` sub-ledger, keeping `Transfer` replay equal to `balanceOf`; the ledger lives in the one base, so every tier has it.
 **Cost if wrong.** Naive indexers see one large `UA_POOL` holder.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:243`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-9.
+Change (2026-11-11, Fable review B P3-1; controller call under the owner's leave; status: BUILT on branch `ua-mtx-fix-contracts`, UNAUDITED): `transferToUA` and `payWithFeeToUA` take the payer as `_subject()` (the ticket's UA under a self-call), and `_poolMove` refuses a native `UA_POOL` side (`UAPoolNotPayable`): such a move credited or debited the pool's slot without the ledger. Not reachable before (neither selector is on a `_uaAllowed` list); now refused by the move itself.
 
 ### CTR-UA-19 — UAMetaTransaction has its own typehash in the token domain
 - old: R309, UA:Q11 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/accounts.md#CTR-UA-19 · superseded-by: —

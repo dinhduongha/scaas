@@ -489,7 +489,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(entryRef, meta);
         _requireDerivedReceiver(to);
-        bytes32 payer = MetaTxLib.pad(_msgSender());
+        bytes32 payer = _subject(); // the ticket's UA under a self-call, never `pad(UA_POOL)` (Fable B P3-1)
         uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
         FeePolicy.validateRecipient(feeMode, feeRecipient);
         _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);

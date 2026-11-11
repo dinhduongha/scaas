@@ -269,7 +269,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
     /// @notice Native `msg.sender` → a registered SIGNING UA: `Transfer(sender, UA_POOL)` and `UATransfer`.
     function transferToUA(bytes32 to, uint256 amount) external nonReentrant returns (bool) {
         _requireDerivedReceiver(to);
-        _uaMove(MetaTxLib.pad(_msgSender()), to, amount);
+        _uaMove(_subject(), to, amount); // the ticket's UA under a self-call, never `pad(UA_POOL)` (Fable B P3-1)
         return true;
     }
 
@@ -357,6 +357,9 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
     function _poolMove(bytes32 from, bytes32 to, uint256 value) internal {
         bool fromUA = !UAKinds.inNativeSpace(from);
         bool toUA = !UAKinds.inNativeSpace(to);
+        // a native `UA_POOL` side would credit or debit the pool's slot without the ledger (Fable B P3-1, CTR-UA-18)
+        bytes32 pool = MetaTxLib.pad(MetaTxLib.UA_POOL);
+        if (from == pool || to == pool) revert IUALedger.UAPoolNotPayable();
         if (!toUA && address(uint160(uint256(to))) == address(this)) revert IERC20MetaTx.TransferToSelf(); // CTR-MTX-18
         if (fromUA) _uaDebit(from, value);
         if (toUA) _ua().balance[to] += value;
