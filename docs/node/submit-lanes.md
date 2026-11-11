@@ -482,7 +482,10 @@ check, a simulation revert that a later block may lift on a regulated token (`Fr
 redeemer is granted, a later wrap raises the entitlement) is the same class: `queued` with `WRAP_LIMIT_REFUSED: <error>`,
 never `dead` (BUILT, branch `ua-mtx-wraplimit`, group 3l; wrap limits spec 2026-11-10 §9; [CTR-TOK-31](../contracts/token-wrappers.md#CTR-TOK-31));
 `WrapControlNeedsHybrid`, a creation refusal, is not in it. Such a refusal is no billed failure, so it never counts in the grief
-score ([NODE-LANE-15](#NODE-LANE-15), not built).
+score ([NODE-LANE-15](#NODE-LANE-15), not built). One classifier holds every class of this section and the PQZ ones
+(`guard::revert_verdict`: `consumed`, back in the queue by name, or `dead`), used by the EVM `Submitter` and by the generic lane
+runner for every EVM-contract family (Hedera), so one rule on every chain (BUILT, Fable review of ua-mtx-merge E N-1; test
+`lane_runner_requeues_a_liftable_refusal_on_hedera`). Other families keep the adapter's own replay check (`op_consumed`).
 
 **Classification after consumption:**
 

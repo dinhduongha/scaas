@@ -178,6 +178,11 @@ impl ChainAdapter for HederaAdapter {
         self.inner.already_done(job, reason)
     }
 
+    /// Fable E N-1: the EVM contracts' one classifier, as the `Submitter` (one rule on every chain).
+    async fn revert_verdict(&self, job: &Job, reason: String) -> crate::guard::Verdict {
+        self.inner.revert_verdict(job, reason).await
+    }
+
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let w = work_from_job(job, self.inner.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         if now() > w.valid_until {

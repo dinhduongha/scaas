@@ -96,6 +96,14 @@ impl ChainAdapter for EvmAdapter {
         self.guard.work(job, self.fee_recipient).is_ok_and(|w| guard::already_invalidated(&w.data, reason))
     }
 
+    /// Fable E N-1: the `Submitter`'s classifier ([`guard::revert_verdict`]); a job that does not parse is `dead` as built.
+    async fn revert_verdict(&self, job: &Job, reason: String) -> guard::Verdict {
+        let (Ok(w), Ok(chain)) = (self.guard.work(job, self.fee_recipient), self.lane(0)) else {
+            return guard::Verdict::Dead(format!("simulation: {reason}"));
+        };
+        guard::revert_verdict(chain, &w, reason).await
+    }
+
     fn call_key(&self, job: &Job) -> Option<B256> {
         let w = self.guard.work(job, self.fee_recipient).ok()?;
         w.typed.as_ref()?.struct_hash.map(|_| w.call_key())

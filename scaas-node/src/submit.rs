@@ -16,7 +16,6 @@ use anyhow::Result;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
-use crate::abi::PqzRefusal;
 use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
@@ -34,10 +33,6 @@ const SAMPLE_EVERY: Duration = Duration::from_secs(15);
 /// §8.5: số khối gần nhất tìm `MetaTransactionExecuted` khi phân loại một meta-tx đã bị tiêu thụ.
 /// ponytail: cửa sổ cố định; ghi khối lúc claim vào `Sent` nếu tx kẹt lâu hay ra `unknown`.
 const CLASSIFY_LOOKBACK: u64 = 1_000;
-/// Group 3g: how far back a party's `UAPqzKeyCurrent` counts as "since intake" for `PQZ_KEY_ROTATED`.
-// ponytail: a fixed window, not the job's own intake block (the pull path carries none); a job older than this window that
-// meets a rotation is reported `dead` with `ProofRejected`; use the job's claim block once the node's own queue carries it
-const ROTATION_LOOKBACK: u64 = 10_000;
 
 /// `scaas_submit_bump_skipped_consumed_total`: lần `track()` KHÔNG bump vì meta-tx đã bị tiêu thụ (R80).
 pub static BUMP_SKIPPED_CONSUMED: AtomicU64 = AtomicU64::new(0);
@@ -609,13 +604,6 @@ impl Submitter {
         }
         let gas = match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
             Ok(g) => g,
-            Err(SimError::Revert(reason)) if guard::over_cap(&reason) && crate::pqz::is_debit(&w) => {
-                return self.over_cap(&w, reason).await;
-            }
-            // re-check P3 (spec §11): a starved T7 on a DEX the guard found marked is gas, not a wrong DEX
-            Err(SimError::Revert(reason)) if guard::liquidity_starved(&w.data, &reason) => {
-                return self.requeue(&w, format!("simulate: {reason}: the tokens' capability check starved, retry")).await;
-            }
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
@@ -669,110 +657,25 @@ impl Submitter {
         self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling });
     }
 
-    /// NODE-JOB-24 (group 3h, pqz-proof-path spec §10): a PQZ debit whose estimate (regular + state, under the token's current
-    /// `proofStore()`) is above the lane's cap. Under `LOG` a holder of bit 24 may switch the token to `NONE` and the job may land:
-    /// `PROOF_STORE_OVER_LANE_CAP`, back in the queue, never `dead` (it ends `dead` only at its `validUntil`). Under `NONE`, or on a
-    /// release without the view, nothing makes it cheaper: the plain refusal.
-    async fn over_cap(&self, w: &Work, reason: String) {
-        match self.chain.call_view(w.to, crate::abi::IPqzToken::proofStoreCall {}).await {
-            Ok(m) if m == crate::abi::PROOF_STORE_LOG => self.requeue(w, format!("PROOF_STORE_OVER_LANE_CAP: {reason}")).await,
-            Ok(_) | Err(SimError::Revert(_)) => self.refused(w, reason).await,
-            Err(SimError::Transport(e)) => self.requeue(w, format!("proofStore(): {e}; {reason}")).await,
-        }
-    }
-
-    /// Mô phỏng revert. Meta-tx mà nonce chủ thể đã qua ⇒ `consumed` (R80: relayer khác có thể đã đưa nó lên chain),
-    /// không `dead`; không đọc được nonce ⇒ tạm thời. An invalidation already in force is done, never dead (MT-8).
+    /// A refused simulation, classified by [`guard::revert_verdict`] (the one classifier of every EVM runner, Fable E N-1):
+    /// done on chain (`consumed`), back in the queue by name, or `dead`.
     async fn refused(&self, w: &Work, reason: String) {
-        if guard::already_invalidated(&w.data, &reason) {
-            if let Some(id) = w.job_id {
-                self.report(id, "consumed", None, None, Some("already_invalidated".into())).await;
-            }
-            return;
-        }
-        match self.consumed(w).await {
-            Ok(true) => self.report_consumed(w).await,
-            // round 3s (spec 2026-11-10-token-lists.md §9, Fable P3-8): the job's own subject off the allow list or on the deny
-            // list: refused by name, not waiting as a liftable refusal
-            Ok(false) if w.meta.as_ref().and_then(|m| crate::abi::own_list_refusal(&reason, m.from)).is_some() => {
-                let code = w.meta.as_ref().and_then(|m| crate::abi::own_list_refusal(&reason, m.from)).unwrap_or_default();
-                self.fail(w, format!("{code}: {reason}")).await
-            }
-            // regulated-kinds spec §7: a freeze, a pause, an eligibility or the registry may lift and the payload may still
-            // land (here later, or by another relayer): a named refusal, back in the queue, never `dead`
-            Ok(false) if crate::abi::regulated_refusal(&reason).is_some() => {
-                self.requeue(w, format!("REGULATED_REFUSED: {reason}")).await
-            }
-            // group 3l (wrap limits spec §9): a window ends, a member is added, a redeemer is granted, a later wrap raises the
-            // entitlement: a named refusal, back in the queue, never `dead`
-            Ok(false) if crate::abi::wrap_limit_refusal(&reason).is_some() => {
-                self.requeue(w, format!("WRAP_LIMIT_REFUSED: {reason}")).await
-            }
-            // group 3f (spec §11.1): a PQZ verifier mode refusal by name, never `dead` while the op may land with another verdict
-            Ok(false) if crate::abi::pqz_verdict_refusal(&reason).is_some() => self.pqz_refused(w, reason).await,
-            // group 3g (spec §7.3): the PQZ key-version reverts by name; a stale debit or two equal keys never land, a version
-            // above current may become current, a proof built before a party's rotation is `PQZ_KEY_ROTATED`, never `dead`
-            // round 3t (CTR-PQZ-36, spec §10): a PQZ debit's `AuthRejected` after an indexed `VerifierFeeSet` of its token is
-            // `PQZ_FEE_MISMATCH`, back in the queue (a decrease may restore the word), never `dead`; without the event `dead`
-            Ok(false) if reason.starts_with("AuthRejected") => match self.fee_moved(w, &reason).await {
-                Some(r) => self.requeue(w, r).await,
-                None => self.fail(w, reason).await,
-            },
-            Ok(false) => match crate::abi::pqz_refusal(&reason) {
-                Some(PqzRefusal::Stale) => self.fail(w, format!("PQZ_KEY_STALE: {reason}")).await,
-                Some(PqzRefusal::Reused) => self.fail(w, format!("PQZ_KEY_REUSED: {reason}")).await,
-                Some(PqzRefusal::Unknown) => self.requeue(w, format!("PQZ_KEY_VERSION_UNKNOWN: {reason}")).await,
-                Some(PqzRefusal::ProofRejected) => match guard::pqz_rotated(&self.chain, w, ROTATION_LOOKBACK).await {
-                    Ok(true) => self.requeue(w, format!("PQZ_KEY_ROTATED: {reason}")).await,
-                    Ok(false) => self.fail(w, reason).await,
-                    Err(e) => self.requeue(w, format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")).await,
-                },
-                None => self.fail(w, reason).await,
-            },
-            Err(e) => self.requeue(w, format!("mtxNonce: {e:#}")).await,
-        }
-    }
-
-    /// Group 3f (spec §11.1): a verdict, epoch, `eta` or registration may lift it: back in the queue (`PQZ_KEY_ROTATED` for a
-    /// `PqzVerdictMismatch` after a party's indexed `UAPqzKeyCurrent`, T55); the op's own shape never lands: `dead`.
-    async fn pqz_refused(&self, w: &Work, reason: String) {
-        let Some((name, liftable)) = crate::abi::pqz_verdict_refusal(&reason) else { return self.fail(w, reason).await };
-        if name == "PqzVerdictMismatch" {
-            match guard::pqz_rotated(&self.chain, w, ROTATION_LOOKBACK).await {
-                Ok(true) => return self.requeue(w, format!("PQZ_KEY_ROTATED: {reason}")).await,
-                Ok(false) => {}
-                Err(e) => return self.requeue(w, format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")).await,
-            }
-            // round 3t: field 3 (the statement) after an indexed `VerifierFeeSet`: the fee word moved
-            if reason.contains("field: 3") {
-                if let Some(r) = self.fee_moved(w, &reason).await {
-                    return self.requeue(w, r).await;
+        match guard::revert_verdict(&self.chain, w, reason).await {
+            guard::Verdict::Consumed(None) => self.report_consumed(w).await,
+            guard::Verdict::Consumed(Some(label)) => {
+                if let Some(id) = w.job_id {
+                    self.report(id, "consumed", None, None, Some(label)).await;
                 }
             }
-        }
-        if liftable {
-            self.requeue(w, format!("PQZ_VERDICT_REFUSED: {reason}")).await
-        } else {
-            self.fail(w, reason).await
-        }
-    }
-
-    /// Round 3t (CTR-PQZ-36, spec §10, T55's pattern): `PQZ_FEE_MISMATCH` when the job's token emitted a `VerifierFeeSet` that
-    /// moved the fee since intake (the `ROTATION_LOOKBACK` window; a cancel `(cur, cur)` is no move, Fable 3r3s3t P3-4); an
-    /// unreadable log is `PQZ_FEE_LOG_UNREAD`, back in the queue, never counted as a move.
-    async fn fee_moved(&self, w: &Work, reason: &str) -> Option<String> {
-        match guard::pqz_fee_changed(&self.chain, w, ROTATION_LOOKBACK).await {
-            Ok(true) => Some(format!("PQZ_FEE_MISMATCH: {reason} after VerifierFeeSet")),
-            Ok(false) => None,
-            Err(e) => Some(format!("PQZ_FEE_LOG_UNREAD: {e:#}; {reason}")),
+            guard::Verdict::Requeue(r) => self.requeue(w, r).await,
+            guard::Verdict::Dead(r) => self.fail(w, r).await,
         }
     }
 
     /// R80: `mtxNonce(from, batch) > nonce` ⇔ nonce chủ thể của meta-tx đã bị dùng (bởi ai thì `classify`).
     /// `Ok(false)` cho job `call`. Lỗi RPC ⇒ `Err`: người gọi không bump, không kết luận (fail closed).
     async fn consumed(&self, w: &Work) -> Result<bool> {
-        let Some(m) = &w.meta else { return Ok(false) };
-        Ok(self.chain.subject_nonce(m).await? > m.nonce)
+        guard::consumed(&self.chain, w).await
     }
 
     /// §8.5 — chỉ là nhãn cho `last_error` ở Odoo; `landed_elsewhere` do indexer quyết khi `final`.
@@ -1580,6 +1483,35 @@ pub(crate) mod tests {
                 let err = o.lock().unwrap().reports[0]["error"].as_str().unwrap().to_string();
                 assert!(err.starts_with("REGULATED_REFUSED: Frozen("), "{err}");
             }
+        }
+    }
+
+    /// Fable E N-1 (NODE-LANE-09, one rule on every chain): the generic lane runner of a Hedera chain classifies a refused
+    /// simulation with the `Submitter`'s one classifier: `Frozen` is `REGULATED_REFUSED`, back in the queue, never `dead`; a spent
+    /// subject nonce `consumed`; a revert of no class stays `dead`; nothing is sent.
+    #[tokio::test]
+    async fn lane_runner_requeues_a_liftable_refusal_on_hedera() {
+        for (sim, nonce, state, prefix) in [("frozen", 0, "queued", "REGULATED_REFUSED: Frozen("), ("frozen", 1, "consumed", "unknown"),
+            ("revert", 0, "dead", "MetaTxBadNonce(")] {
+            let (url, rpc) = fake_evm(Evm { sim: Some(sim), mtx_nonce: Some(nonce), ..Default::default() }).await;
+            let mut cfg = test_cfg(&url);
+            (cfg.family, cfg.evm_chain_number) = ("hedera".into(), 296);
+            let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap();
+            let a = crate::adapters::hedera::HederaAdapter::new(&cfg, vec![Chain::with_signer(&cfg, signer).unwrap()]).unwrap();
+            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "instant", "finality_depth": 0,
+                "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
+            crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
+            // the payer signs over Hedera's chain id
+            let mut j = job(7);
+            let w = work_from_job(&serde_json::from_value::<Job>(j.clone()).unwrap(), None).unwrap();
+            let d = w.typed.as_ref().unwrap().digest_on(296, B256::from(U256::from(UID))).unwrap();
+            j["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(payer_key().sign_hash_sync(&d).unwrap().as_bytes())));
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{sim} {nonce}: {last}");
+            assert!(last["error"].as_str().unwrap().starts_with(prefix), "{sim} {nonce}: {last}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
         }
     }
 
