@@ -130,6 +130,18 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         _;
     }
 
+    /// @dev The deprecations and kind switches (Fable D P3-2): `configured` and the caller's `chainUid_` this factory's, so a
+    ///      native admin's direct call is void on a sibling with the same chain id (the approvals bind it the same way).
+    modifier onChain(bytes32 chainUid_) {
+        _requireOnChain(chainUid_);
+        _;
+    }
+
+    function _requireOnChain(bytes32 chainUid_) private view {
+        if (chainUid == bytes32(0)) revert ChainNotConfigured();
+        if (chainUid_ != chainUid) revert ChainUidMismatch(chainUid, chainUid_);
+    }
+
     // ------------------------------------------------------------------ the chain (chain-neutral spec §3.1)
 
     /// @notice Admin only (direct: before it there is no router), once. `chainUid_` must equal the genesis hash whenever the EVM can prove it
@@ -408,13 +420,17 @@ contract OpenFactory is IOpenFactory, UAAdmin {
             implementation.codehash, r.usableFrom);
     }
 
-    function deprecateToken(TokenKind kind, uint64 version, string calldata reason) external onlyAdmin {
+    function deprecateToken(TokenKind kind, uint64 version, bytes32 chainUid_, string calldata reason)
+        external
+        onlyAdmin
+        onChain(chainUid_)
+    {
         if (_releases[kind][version].implementation == address(0)) revert VersionUnknown(kind, version);
         _releases[kind][version].deprecated = true;
         emit TokenImplementationDeprecated(kind, version, reason);
     }
 
-    function setTokenKindEnabled(TokenKind kind, bool on) external onlyAdmin {
+    function setTokenKindEnabled(TokenKind kind, bool on, bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {
         uint256 bit = 1 << uint8(kind);
         _enabled = on ? _enabled | bit : _enabled & ~bit;
         emit TokenKindEnabled(kind, on);
@@ -540,7 +556,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         return _dexReleases[version].implementation;
     }
 
-    function deprecateDex(uint64 version, string calldata reason) external onlyAdmin {
+    function deprecateDex(uint64 version, bytes32 chainUid_, string calldata reason) external onlyAdmin onChain(chainUid_) {
         if (_dexReleases[version].implementation == address(0)) revert DexVersionUnknown(version);
         _dexReleases[version].deprecated = true;
         emit DexImplementationDeprecated(version, reason);
@@ -636,14 +652,22 @@ contract OpenFactory is IOpenFactory, UAAdmin {
             initcodeHash, r.implementation.codehash, initSelector, interfaceId, r.usableFrom);
     }
 
-    function deprecateRelease(ReleaseId calldata id, string calldata reason) external onlyAdmin {
+    function deprecateRelease(ReleaseId calldata id, bytes32 chainUid_, string calldata reason)
+        external
+        onlyAdmin
+        onChain(chainUid_)
+    {
         ClassRelease storage r = _classReleases[_domain(id.contractClass, id.kind)][id.version];
         if (r.implementation == address(0)) revert ReleaseUnknown(id.contractClass, id.kind, id.version);
         r.deprecated = true;
         emit ReleaseDeprecated(id.contractClass, id.kind, id.version, reason);
     }
 
-    function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on) external onlyAdmin {
+    function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on, bytes32 chainUid_)
+        external
+        onlyAdmin
+        onChain(chainUid_)
+    {
         _classKindOn[_domain(contractClass, kind)] = on;
         emit ClassKindEnabled(contractClass, kind, on);
     }

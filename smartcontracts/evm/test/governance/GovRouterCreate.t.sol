@@ -66,11 +66,11 @@ contract GovRouterCreateTest is GovRouterFixture {
         f.publishClassEnv(4, 0, 1, plainEnv(address(f), address(0), chainUidA, address(0), false));
         f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
             type(NoteKind).creationCode, "");
-        f.setClassKindEnabled(4, 0, true);
+        f.setClassKindEnabled(4, 0, true, EnvKit.uidOf(address(f)));
         f.publishClassEnv(4, 1, 1, plainEnv(address(f), address(0), chainUidA, address(0), false));
         f.deployImplementation(IOpenFactory.ReleaseId(4, 1, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
             type(BadKind).creationCode, abi.encode(uint8(16))); // NESTED: its initialize creates a (4, 0, 1) instance
-        f.setClassKindEnabled(4, 1, true);
+        f.setClassKindEnabled(4, 1, true, EnvKit.uidOf(address(f)));
         vm.stopPrank();
     }
 

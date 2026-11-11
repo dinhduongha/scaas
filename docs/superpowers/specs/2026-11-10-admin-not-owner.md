@@ -318,11 +318,11 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
 | `UAApproveDexRelease` | `uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveDexRelease` |
 | `UAApproveRelease` | `uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveRelease` |
 | `UARevokeApproval` | `bytes32 key` | `revokeApproval` |
-| `UADeprecateToken` | `uint8 kind,uint64 version,string reason` | `deprecateToken` |
-| `UADeprecateDex` | `uint64 version,string reason` | `deprecateDex` |
-| `UADeprecateRelease` | `uint16 contractClass,uint16 kind,uint64 version,string reason` | `deprecateRelease` |
-| `UASetTokenKindEnabled` | `uint8 kind,bool on` | `setTokenKindEnabled` |
-| `UASetClassKindEnabled` | `uint16 contractClass,uint16 kind,bool on` | `setClassKindEnabled` |
+| `UADeprecateToken` | `uint8 kind,uint64 version,bytes32 chainUid,string reason` | `deprecateToken` |
+| `UADeprecateDex` | `uint64 version,bytes32 chainUid,string reason` | `deprecateDex` |
+| `UADeprecateRelease` | `uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason` | `deprecateRelease` |
+| `UASetTokenKindEnabled` | `uint8 kind,bool on,bytes32 chainUid` | `setTokenKindEnabled` |
+| `UASetClassKindEnabled` | `uint16 contractClass,uint16 kind,bool on,bytes32 chainUid` | `setClassKindEnabled` |
 | `UASetKycProvider` | `bytes32 provider,bool enabled` | `ComplianceRegistry.setKycProvider` |
 | `UASetCompliance` | `bytes32[] accounts,uint64[] flags,uint64[] until` | `ComplianceRegistry.setCompliance` (the admin or a KYC provider, §5.3.1) |
 | `UASetChainEntries` | `address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash` | `OpenFactory.setChainEntries` (§13.3) |
@@ -330,6 +330,8 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
 - `Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[]
   libCodeHashes)` is appended to the three publish types and hashed as EIP-712 does (each array `keccak256` of its 32-byte
   words), so every field of the env is signed by name.
+- The five deprecations and kind switches sign the factory's `chainUid` as their direct entries take it (fix2 2026-11-12,
+  Fable D P3-2): a native admin's direct call is void on a sibling with the same chain id.
 - No release deploy is a router op (§5.6); the approvals sign the release's hashes as `UACreateToken` signs `initHash` (S3). A
   `string reason` is signed as `keccak256(bytes(reason))`, as EIP-712 hashes a string (Fable P1-3). The ids flat, as
   `UACreateInstance` (`:234-241`). `UASetCompliance` names its third array `until` because `validUntil` is an envelope word (the

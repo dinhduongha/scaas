@@ -571,7 +571,7 @@ contract DexTest is Test {
         assertEq(dex.tokenKind(address(a)), 1);
         vm.stopPrank();
         vm.prank(registrar);
-        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, "x");
+        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)), "x");
         assertEq(dex.tokenKind(address(a)), 1); // a snapshot: unchanged until the market is listed again
         vm.prank(admin);
         dex.setMarket(address(a), address(b), true);
@@ -656,7 +656,7 @@ contract DexTest is Test {
     /// through the puller (EOAs cannot approve a SCaaS token, CTR-TOK-01, so it fails on the allowance).
     function test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller() public {
         vm.prank(registrar);
-        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, "x");
+        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)), "x");
         vm.prank(admin);
         dex.setMarket(address(a), address(b), true);
         DexLegs.Settlement memory s = _book();
@@ -759,14 +759,14 @@ contract DexTest is Test {
     /// DEX of it keeps its record.
     function test_deprecateDex_refusesNewDexOfThatVersion() public {
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        f.deprecateDex(1, "x");
+        f.deprecateDex(1, EnvKit.uidOf(address(f)), "x");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 9));
-        f.deprecateDex(9, "x");
+        f.deprecateDex(9, EnvKit.uidOf(address(f)), "x");
         vm.prank(registrar);
         vm.expectEmit(true, false, false, true, address(f));
         emit IOpenFactory.DexImplementationDeprecated(1, "bug");
-        f.deprecateDex(1, "bug");
+        f.deprecateDex(1, EnvKit.uidOf(address(f)), "bug");
         assertTrue(f.isDexDeprecated(1));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionDeprecated.selector, 1));
         f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "after");

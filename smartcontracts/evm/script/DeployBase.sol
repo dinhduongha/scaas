@@ -468,7 +468,7 @@ abstract contract DeployBase is DeployBook {
         address topics = _module("PqChatTopics.sol:PqChatTopics", abi.encode(address(f)), 3, 0);
         f.publishClassEnv(3, 0, 1, _pqchatEnv(reg, topics));
         address impl = _pqchatRelease(f, abi.encode(topics));
-        f.setClassKindEnabled(3, 0, true);
+        f.setClassKindEnabled(3, 0, true, f.chainUid());
         vm.serializeAddress("deploy", "pqchat_topics", topics);
         vm.serializeAddress("deploy", "pqchat_implementation", impl);
         IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
@@ -536,8 +536,8 @@ abstract contract DeployBase is DeployBook {
         address w = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, "WrappedRegulatedToken",
             type(WrappedRegulatedToken).creationCode, coreArgs, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         vm.serializeAddress("deploy", "implementation_wrapped_regulated", w);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, f.chainUid());
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true, f.chainUid());
     }
 
     /// @notice Regulated-kinds spec §6.1 (F-21, plan T33), under `DEPLOY_REGULATED`: the canonical `ComplianceRegistry` by
@@ -926,8 +926,8 @@ abstract contract DeployBase is DeployBook {
             address[] memory deps = new address[](4);
             (deps[0], deps[1], deps[2], deps[3]) = (tv, bv, address(ip), dis);
             _zetherReleases(f, reg, smartKeyAccountImpl, deps);
-            f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
-            f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
+            f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true, f.chainUid());
+            f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true, f.chainUid());
             _deployZetherRegulated(f, reg, smartKeyAccountImpl, deps);
         }
         vm.serializeAddress("deploy", "zether_disclosure", dis);
@@ -960,8 +960,8 @@ abstract contract DeployBase is DeployBook {
             _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(true))));
         vm.serializeAddress("deploy", "implementation_normal_zether_regulated_bls12381", n);
         vm.serializeAddress("deploy", "implementation_wrapped_zether_regulated_bls12381", w);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, f.chainUid());
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, f.chainUid());
     }
 
     /// @notice `libs` and `RegulatedLib` last: a regulated kind's closure (it links only `GovernanceLib`, already in `libs`).

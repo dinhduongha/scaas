@@ -61,7 +61,7 @@ contract FactoryGenericKindTest is Test {
 
     function _enable(uint16 c, uint16 k, bool on) internal {
         vm.prank(registrar);
-        f.setClassKindEnabled(c, k, on);
+        f.setClassKindEnabled(c, k, on, EnvKit.uidOf(address(f)));
     }
 
     function _noteCall(bytes32 owner_, string memory note) internal pure returns (bytes memory) {
@@ -135,7 +135,7 @@ contract FactoryGenericKindTest is Test {
         vm.prank(registrar);
         vm.expectEmit(true, true, true, true, address(f));
         emit IOpenFactory.ReleaseDeprecated(4, 0, 1, "bug");
-        f.deprecateRelease(_id(4, 0, 1), "bug");
+        f.deprecateRelease(_id(4, 0, 1), EnvKit.uidOf(address(f)), "bug");
         assertTrue(f.classReleaseOf(_id(4, 0, 1)).deprecated);
         assertEq(NoteKind(a).note(), "hi", "the old instance answers");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ReleaseIsDeprecated.selector, 4, 0, 1));
@@ -164,9 +164,9 @@ contract FactoryGenericKindTest is Test {
             f.deployImplementation(_id(c, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
                 type(NoteKind).creationCode, "");
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassReserved.selector, c));
-            f.deprecateRelease(_id(c, 0, 1), "x");
+            f.deprecateRelease(_id(c, 0, 1), EnvKit.uidOf(address(f)), "x");
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassReserved.selector, c));
-            f.setClassKindEnabled(c, 0, true);
+            f.setClassKindEnabled(c, 0, true, EnvKit.uidOf(address(f)));
             vm.stopPrank();
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassReserved.selector, c));
             f.createInstance(_id(c, 0, 1), "x", _noteCall(0, ""));
@@ -321,9 +321,9 @@ contract FactoryGenericKindTest is Test {
         vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
         f.deployImplementation(_id(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, "", "");
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        f.deprecateRelease(_id(4, 0, 1), "x");
+        f.deprecateRelease(_id(4, 0, 1), EnvKit.uidOf(address(f)), "x");
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        f.setClassKindEnabled(4, 0, true);
+        f.setClassKindEnabled(4, 0, true, EnvKit.uidOf(address(f)));
         vm.etch(registrar, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, registrar));

@@ -4420,17 +4420,17 @@
    "error": ""
   },
   {
-   "sig": "mtxDeprecateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxDeprecateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,bytes32,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxDeprecateRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxDeprecateRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,bytes32,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxDeprecateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxDeprecateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,bytes32,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4570,7 +4570,7 @@
    "error": ""
   },
   {
-   "sig": "mtxSetClassKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetClassKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4630,7 +4630,7 @@
    "error": ""
   },
   {
-   "sig": "mtxSetTokenKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetTokenKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4727,17 +4727,17 @@
    "error": "ReleaseNotApproved(bytes32)"
   },
   {
-   "sig": "deprecateDex(uint64,string)",
+   "sig": "deprecateDex(uint64,bytes32,string)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "deprecateRelease((uint16,uint16,uint64),string)",
+   "sig": "deprecateRelease((uint16,uint16,uint64),bytes32,string)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "deprecateToken(uint8,uint64,string)",
+   "sig": "deprecateToken(uint8,uint64,bytes32,string)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -4772,12 +4772,12 @@
    "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setClassKindEnabled(uint16,uint16,bool)",
+   "sig": "setClassKindEnabled(uint16,uint16,bool,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setTokenKindEnabled(uint8,bool)",
+   "sig": "setTokenKindEnabled(uint8,bool,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },

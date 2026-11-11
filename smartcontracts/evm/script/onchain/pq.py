@@ -491,7 +491,8 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
             "factory 2 publishTokenEnv(kind 4, 1), deps [0x0]")
     sd.send(fac2, E.cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"], 4, 1, 1, code,
                        E.impl_args(4, ms)), "factory 2 deployTokenImplementation(kind 4, 1)")
-    sd.send(fac2, E.cd("setTokenKindEnabled(uint8,bool)", ["w", "w"], 4, 1), "factory 2 setTokenKindEnabled(4, true)")
+    sd.send(fac2, E.cd("setTokenKindEnabled(uint8,bool,bytes32)", ["w"] * 3, 4, 1, E.CTX[1]),
+            "factory 2 setTokenKindEnabled(4, true)")
     # a release on a factory with a notice period is usable only after it (VersionNotYetUsable)
     t0 = int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16)
     while int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16) <= t0 + N + 1:

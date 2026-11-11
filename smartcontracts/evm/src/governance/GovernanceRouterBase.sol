@@ -155,15 +155,15 @@ library GovernanceRouterTypes {
     bytes32 internal constant UA_REVOKE_APPROVAL = keccak256(
         "UARevokeApproval(bytes32 from,address target,bytes32 key,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_DEPRECATE_TOKEN = keccak256(
-        "UADeprecateToken(bytes32 from,address target,uint8 kind,uint64 version,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UADeprecateToken(bytes32 from,address target,uint8 kind,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_DEPRECATE_DEX = keccak256(
-        "UADeprecateDex(bytes32 from,address target,uint64 version,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UADeprecateDex(bytes32 from,address target,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_DEPRECATE_RELEASE = keccak256(
-        "UADeprecateRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UADeprecateRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_TOKEN_KIND_ENABLED = keccak256(
-        "UASetTokenKindEnabled(bytes32 from,address target,uint8 kind,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UASetTokenKindEnabled(bytes32 from,address target,uint8 kind,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_CLASS_KIND_ENABLED = keccak256(
-        "UASetClassKindEnabled(bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UASetClassKindEnabled(bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_KYC_PROVIDER = keccak256(
         "UASetKycProvider(bytes32 from,address target,bytes32 provider,bool enabled,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_COMPLIANCE = keccak256(

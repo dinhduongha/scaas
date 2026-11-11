@@ -541,7 +541,7 @@ DEX env it names — the `SmartKeyAccount` implementation, `hedera`, the linked 
 `latestDexVersion`, `createDex`, `isDex`, `dexVersionOf`, `DexImplementationDeployed` (env version and hash, init-code
 and code hashes), `DexCreated` (controller ruling, pending the owner); the scripts deploy the implementation
 (`dex_implementation`), no clone. The constructor is `(uint16 envVersion, Env env, bytes implArgs)`.
-`deprecateDex(version, reason)` (registrar, immediate, `DexImplementationDeprecated`) makes `createDex` refuse that version
+`deprecateDex(version, chainUid_, reason)` (registrar, chain-bound as [token-wrappers.md](token-wrappers.md#factory) says, immediate, `DexImplementationDeprecated`) makes `createDex` refuse that version
 (`DexVersionDeprecated`); DEXes already made keep working (owner 2026-10-20, plan 5g-Z1; `isDexDeprecated`).
 
 ## 6. Outside-token legs

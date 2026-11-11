@@ -44,7 +44,7 @@ contract PqzGuardsTest is PqzFixture {
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(factory)));
         return _newToken(salt_);
     }
 
@@ -61,7 +61,7 @@ contract PqzGuardsTest is PqzFixture {
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(factory)));
         vm.expectRevert(IPqzToken.PqzhValueUnsupported.selector);
         factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "pqzh");
     }

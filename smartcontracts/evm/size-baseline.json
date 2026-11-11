@@ -54,7 +54,7 @@
     "ZetherLib": "library"
   },
   "GovernanceLib": 15574,
-  "GovernanceRouter": 24613,
+  "GovernanceRouter": 24679,
   "NormalPqzRegulatedToken": 23304,
   "NormalPqzRegulatedTokenA": 28553,
   "NormalPqzRegulatedTokenP": 30457,
@@ -72,7 +72,7 @@
   "NormalZetherRegulatedTokenP": 30240,
   "NormalZetherToken": 17336,
   "NormalZetherTokenP": 25443,
-  "OpenFactory": 34184,
+  "OpenFactory": 34298,
   "PqChat": 27999,
   "PqzBurnLib": 15584,
   "PqzTransferLib": 24731,

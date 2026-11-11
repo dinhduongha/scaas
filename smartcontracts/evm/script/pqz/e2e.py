@@ -1353,7 +1353,8 @@ def run(kd, kr, ke):
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower() and len(x["topics"]) == 4)
         log(f"      {name} release at 0x{lg['topics'][3][-40:]} ({int(r['gasUsed'], 16):,} gas)")
     for kind in [k for k, _ in RELEASES if k and k not in SKIP_KINDS]:
-        sd.send(fac, cd("setTokenKindEnabled(uint8,bool)", ["w", "w"], kind, 1), f"setTokenKindEnabled({kind}, true)")
+        sd.send(fac, cd("setTokenKindEnabled(uint8,bool,bytes32)", ["w"] * 3, kind, 1, uid),
+                f"setTokenKindEnabled({kind}, true)")
 
     # -------------------------------------------------------------- 2. UAs
     log("\n## 2. UAs: ML-DSA UAs and PQZ holders (ML-DSA UA + pqz-mlwe key attribute, real R_REG proofs)")

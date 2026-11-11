@@ -382,32 +382,32 @@ contract GovRouterTypehashTest is Test {
 
     function test_uaDeprecateTokenTypehashIsPinned() public pure {
         assertEq(T.UA_DEPRECATE_TOKEN, keccak256(
-                "UADeprecateToken(bytes32 from,address target,uint8 kind,uint64 version,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_DEPRECATE_TOKEN, 0x3cfe7f54cafee9da62136a07963dc0b1e3443877d380246b8db34cfacac18dcc);
+                "UADeprecateToken(bytes32 from,address target,uint8 kind,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_DEPRECATE_TOKEN, 0x4717d0debde9ab7256162ee9ef333bc4c854b87e28aab7c09a8203a0ffc6e24d);
     }
 
     function test_uaDeprecateDexTypehashIsPinned() public pure {
         assertEq(T.UA_DEPRECATE_DEX, keccak256(
-                "UADeprecateDex(bytes32 from,address target,uint64 version,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_DEPRECATE_DEX, 0xb9e5b63214e9f0361f00239aebffecf99acd332b0b884aa0e26a9fdaed5a78ce);
+                "UADeprecateDex(bytes32 from,address target,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_DEPRECATE_DEX, 0xddedb8bd4876a053b7b63869d41250bc738d656f2bfd024a1ae1fcc264681ffe);
     }
 
     function test_uaDeprecateReleaseTypehashIsPinned() public pure {
         assertEq(T.UA_DEPRECATE_RELEASE, keccak256(
-                "UADeprecateRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_DEPRECATE_RELEASE, 0xc22c57ff1612c114ac47317ffc673b985723781f2dd9bce1a31d69ccd4b6a53f);
+                "UADeprecateRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_DEPRECATE_RELEASE, 0xa50986bc6297955147dca7b40ce67bdda5703257c934f3cf640e56c1712234c0);
     }
 
     function test_uaSetTokenKindEnabledTypehashIsPinned() public pure {
         assertEq(T.UA_SET_TOKEN_KIND_ENABLED, keccak256(
-                "UASetTokenKindEnabled(bytes32 from,address target,uint8 kind,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_SET_TOKEN_KIND_ENABLED, 0x4d86cf4aa63933d4fbed41675d4357d54c8161d4999a6510ed13bc88d3faa9f9);
+                "UASetTokenKindEnabled(bytes32 from,address target,uint8 kind,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_TOKEN_KIND_ENABLED, 0x81c105dd11bbd05cfae8418dc92cd640f688d28bfa4c728beaee94a1686661e6);
     }
 
     function test_uaSetClassKindEnabledTypehashIsPinned() public pure {
         assertEq(T.UA_SET_CLASS_KIND_ENABLED, keccak256(
-                "UASetClassKindEnabled(bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_SET_CLASS_KIND_ENABLED, 0xfc2bc7c98688e7c207f353dd969d43335aeb6964ff2518f75d7c3b5a343085ba);
+                "UASetClassKindEnabled(bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_CLASS_KIND_ENABLED, 0x41909ea9441e19515ea7b41c682a2a99396ffed2471eb871bfadd2c59301f4ef);
     }
 
     function test_uaSetKycProviderTypehashIsPinned() public pure {

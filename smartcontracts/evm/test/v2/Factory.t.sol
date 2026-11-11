@@ -311,10 +311,10 @@ contract FactoryTest is Test {
         vm.etch(registrar, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, registrar));
-        f.setTokenKindEnabled(NORMAL, false);
+        f.setTokenKindEnabled(NORMAL, false, EnvKit.uidOf(address(f)));
         vm.etch(registrar, "");
         vm.prank(registrar);
-        f.setTokenKindEnabled(NORMAL, false);
+        f.setTokenKindEnabled(NORMAL, false, EnvKit.uidOf(address(f)));
     }
 
     /// Owner ruling 2026-10-30 (D5): an EIP-7702 designator is not an implementation (it could redelegate under every
@@ -332,20 +332,59 @@ contract FactoryTest is Test {
         assertTrue(f.tokenKindEnabled(WRAPPED));
         for (uint8 k = 2; k <= 13; ++k) assertFalse(f.tokenKindEnabled(IOpenFactory.TokenKind(k)));
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        f.setTokenKindEnabled(NORMAL, false);
+        f.setTokenKindEnabled(NORMAL, false, EnvKit.uidOf(address(f)));
         vm.prank(registrar);
         vm.expectEmit(true, false, false, true, address(f));
         emit IOpenFactory.TokenKindEnabled(NORMAL, false);
-        f.setTokenKindEnabled(NORMAL, false);
+        f.setTokenKindEnabled(NORMAL, false, EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NORMAL));
         f.createToken(NORMAL, 1, abi.encode(_normal(alice)), "off");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NORMAL));
         f.createTokenUnregistered(NORMAL, address(normalImpl), abi.encode(_normal(alice)), "off");
         vm.prank(registrar);
-        _kindOutOfRange(abi.encodeWithSelector(f.setTokenKindEnabled.selector, uint8(14), true));
+        _kindOutOfRange(abi.encodeWithSelector(f.setTokenKindEnabled.selector, uint8(14), true, UID_));
     }
 
     /// @dev Past the last member (13) the ABI decoder reverts with no data, as the registrar.
+    /// Fable D P3-2: the deprecations and kind switches carry the factory's `chainUid` word, so a native admin's direct
+    /// transaction made for a sibling with the same chain id (another genesis, the same nonce) is void here: each of the five
+    /// with the sibling's word is refused by name, nothing written; the same calls with this factory's word pass (the
+    /// control); before `configureChain` nothing passes, not even with a zero word (its `chainUid` is still 0).
+    function test_siblingReplay_chainBound() public {
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        bytes[5] memory cds = _chainBoundOps(sib);
+        for (uint256 i; i < 5; ++i) {
+            vm.prank(registrar);
+            (bool ok, bytes memory ret) = address(f).call(cds[i]);
+            assertFalse(ok, "a sibling's word accepted");
+            assertEq(ret, abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, sib));
+        }
+        assertTrue(f.tokenKindEnabled(WRAPPED) && !f.isTokenDeprecated(NORMAL, 1), "nothing written");
+        vm.startPrank(registrar);
+        f.setTokenKindEnabled(WRAPPED, false, UID_); // the control: this factory's own word
+        f.deprecateToken(NORMAL, 1, UID_, "bug");
+        f.setClassKindEnabled(4, 0, true, UID_);
+        vm.stopPrank();
+        assertTrue(!f.tokenKindEnabled(WRAPPED) && f.isTokenDeprecated(NORMAL, 1) && f.classKindEnabled(4, 0));
+        OpenFactory g = new OpenFactory(nid(registrar));
+        cds = _chainBoundOps(bytes32(0));
+        for (uint256 i; i < 5; ++i) {
+            vm.prank(registrar);
+            (bool ok, bytes memory ret) = address(g).call(cds[i]);
+            assertFalse(ok, "an unconfigured factory accepted");
+            assertEq(ret, abi.encodeWithSelector(IOpenFactory.ChainNotConfigured.selector));
+        }
+        assertEq(EnvKit.uidOf(address(f)), f.chainUid(), "EnvKit.uidOf reads the chainUid slot");
+    }
+
+    function _chainBoundOps(bytes32 u) internal pure returns (bytes[5] memory c) {
+        c[0] = abi.encodeCall(OpenFactory.deprecateToken, (NORMAL, 1, u, "bug"));
+        c[1] = abi.encodeCall(OpenFactory.deprecateDex, (1, u, "bug"));
+        c[2] = abi.encodeCall(OpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(4, 0, 1), u, "bug"));
+        c[3] = abi.encodeCall(OpenFactory.setTokenKindEnabled, (WRAPPED, false, u));
+        c[4] = abi.encodeCall(OpenFactory.setClassKindEnabled, (4, 0, true, u));
+    }
+
     function _kindOutOfRange(bytes memory callData) internal {
         (bool ok, bytes memory ret) = address(f).call(callData);
         assertFalse(ok, "kind past 13 accepted");
@@ -381,7 +420,7 @@ contract FactoryTest is Test {
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindRetired.selector, kind));
             f.deployTokenImplementation(kind, 1, 1, code, "");
             vm.prank(registrar);
-            f.setTokenKindEnabled(kind, true);
+            f.setTokenKindEnabled(kind, true, EnvKit.uidOf(address(f)));
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, kind, 1));
             f.createToken(kind, 1, abi.encode(_normal(alice)), "r");
         }
@@ -413,14 +452,14 @@ contract FactoryTest is Test {
     function test_deprecate_refusesNewTokensOfThatVersion() public {
         vm.prank(alice);
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        f.deprecateToken(NORMAL, 1, "x");
+        f.deprecateToken(NORMAL, 1, EnvKit.uidOf(address(f)), "x");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NORMAL, 9));
-        f.deprecateToken(NORMAL, 9, "x");
+        f.deprecateToken(NORMAL, 9, EnvKit.uidOf(address(f)), "x");
         vm.prank(alice);
         address before = f.createToken(NORMAL, 1, abi.encode(_normal(alice)), "before");
         vm.prank(registrar);
-        f.deprecateToken(NORMAL, 1, "bug");
+        f.deprecateToken(NORMAL, 1, EnvKit.uidOf(address(f)), "bug");
         assertTrue(f.isTokenDeprecated(NORMAL, 1));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionDeprecated.selector, NORMAL, 1));

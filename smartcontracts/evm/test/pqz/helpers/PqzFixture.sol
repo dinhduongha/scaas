@@ -76,8 +76,8 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         normalImpl = NormalPqzToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode));
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         for (uint8 op = 1; op <= 5; ++op) if (op != 3) _mockOp(op, 1);
         txStmt = _vecHex("statement_transfer.json", ".rows[0].stmt");

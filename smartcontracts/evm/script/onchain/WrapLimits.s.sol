@@ -418,7 +418,7 @@ contract WrapLimitsSetup is WrapLimitsKit {
         _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.deployTokenImplementation, (kind, 1, 1, vm.getCode(face),
             kindImplArgs(k, ms, core))), true, string.concat("release | ", _label(i)));
         if (k != 1) {
-            _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.setTokenKindEnabled, (kind, true)), false,
+            _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.setTokenKindEnabled, (kind, true, fw.chainUid())), false,
                 string.concat("factory | setTokenKindEnabled kind ", vm.toString(k)));
         }
     }

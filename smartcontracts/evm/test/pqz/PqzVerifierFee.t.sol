@@ -81,7 +81,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(fN)));
         vm.warp(block.timestamp + NOTICE); // the release usable
     }
 
@@ -592,7 +592,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
         IFactoryToken.TokenConfig memory c = _offCfg(F, CAP);
         c.admin = nId;
         t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "f-router"));

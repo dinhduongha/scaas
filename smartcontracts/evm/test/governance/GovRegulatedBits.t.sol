@@ -217,7 +217,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         f.deployTokenImplementation(k8, 1, ev, type(MockNormalRegulated).creationCode, implArgs);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, k8));
         f.createToken(k8, 1, args, "r");
-        f.setTokenKindEnabled(k8, true);
+        f.setTokenKindEnabled(k8, true, EnvKit.uidOf(address(f)));
         address t = f.createToken(k8, 1, args, "r");
         assertTrue(f.isRegisteredToken(t));
         assertEq(NormalToken(t).kind(), 8);

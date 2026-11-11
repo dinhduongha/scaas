@@ -167,8 +167,8 @@ contract FactoryIndexTest is IndexAsserts {
             plainEnv(address(f), address(0), UID_, address(ureg), false), type(WrappedRegulatedToken).creationCode, regArgs());
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         vm.startPrank(registrar);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true, EnvKit.uidOf(address(f)));
         vm.stopPrank();
         usd = new MockERC20("USD", "USD", 6);
         (issuer, compliance) = (address(new IxHolder()), address(new IxHolder()));
@@ -558,8 +558,8 @@ contract FactoryIndexZetherTest is ZetherFixture, IndexAsserts {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
             type(WrappedZetherRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         (issuerZ, complianceZ) = (address(new IxHolder()), address(new IxHolder()));
         usdZ = new MockERC20("USD", "USD", 6);
@@ -611,8 +611,8 @@ contract FactoryIndexPqzTest is PqzFixture, IndexAsserts {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e,
             type(WrappedPqzRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         (issuerP, complianceP) = (address(new IxHolder()), address(new IxHolder()));
         usdP = new MockERC20("USD", "USD", 6);

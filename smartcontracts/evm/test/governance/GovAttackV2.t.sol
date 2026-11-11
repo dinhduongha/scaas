@@ -213,7 +213,7 @@ contract GovAttackV2Test is Test {
         (ok, ret) = address(f).call(abi.encodeWithSelector(f.createToken.selector, uint8(8), uint64(1), cfg, bytes32("b")));
         assertFalse(ok);
         assertEq(ret, abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, uint8(8), uint64(1)));
-        (ok,) = address(f).call(abi.encodeWithSelector(f.setTokenKindEnabled.selector, uint8(8), true));
+        (ok,) = address(f).call(abi.encodeWithSelector(f.setTokenKindEnabled.selector, uint8(8), true, EnvKit.uidOf(address(f))));
         assertTrue(ok);
         assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED));
     }

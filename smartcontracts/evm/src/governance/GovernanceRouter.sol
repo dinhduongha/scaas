@@ -350,39 +350,43 @@ contract GovernanceRouter is GovernanceRouterBase {
         _ua(T.UA_REVOKE_APPROVAL, e, target, IOpenFactory.revokeApproval.selector, abi.encode(key), auth);
     }
 
+    /// @notice The deprecations and kind switches carry the factory's `chainUid` word as their direct entries do (Fable
+    ///         D P3-2): after the op's static fields, before a `reason`.
     function mtxDeprecateToken(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, uint64 version,
-        string calldata reason, IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, string calldata reason, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_DEPRECATE_TOKEN, e, target, abi.encode(kind, version, keccak256(bytes(reason))),
-            abi.encodeCall(IOpenFactory.deprecateToken, (kind, version, reason)), auth);
+        _uaCall(T.UA_DEPRECATE_TOKEN, e, target, abi.encode(kind, version, chainUid, keccak256(bytes(reason))),
+            abi.encodeCall(IOpenFactory.deprecateToken, (kind, version, chainUid, reason)), auth);
     }
 
-    function mtxDeprecateDex(MetaTxLib.UAEnvelope calldata e, address target, uint64 version, string calldata reason,
-        IUARegistry.UASig calldata auth) external
+    function mtxDeprecateDex(MetaTxLib.UAEnvelope calldata e, address target, uint64 version, bytes32 chainUid,
+        string calldata reason, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_DEPRECATE_DEX, e, target, abi.encode(version, keccak256(bytes(reason))),
-            abi.encodeCall(IOpenFactory.deprecateDex, (version, reason)), auth);
+        _uaCall(T.UA_DEPRECATE_DEX, e, target, abi.encode(version, chainUid, keccak256(bytes(reason))),
+            abi.encodeCall(IOpenFactory.deprecateDex, (version, chainUid, reason)), auth);
     }
 
     function mtxDeprecateRelease(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
-        uint64 version, string calldata reason, IUARegistry.UASig calldata auth) external
+        uint64 version, bytes32 chainUid, string calldata reason, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_DEPRECATE_RELEASE, e, target, abi.encode(contractClass, kind, version, keccak256(bytes(reason))),
-            abi.encodeCall(IOpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(contractClass, kind, version), reason)),
-            auth);
+        _uaCall(T.UA_DEPRECATE_RELEASE, e, target,
+            abi.encode(contractClass, kind, version, chainUid, keccak256(bytes(reason))), abi.encodeCall(
+                IOpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(contractClass, kind, version), chainUid, reason)
+            ), auth);
     }
 
     function mtxSetTokenKindEnabled(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, bool on,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_TOKEN_KIND_ENABLED, e, target, IOpenFactory.setTokenKindEnabled.selector, abi.encode(kind, on), auth);
+        _ua(T.UA_SET_TOKEN_KIND_ENABLED, e, target, IOpenFactory.setTokenKindEnabled.selector,
+            abi.encode(kind, on, chainUid), auth);
     }
 
     function mtxSetClassKindEnabled(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
-        bool on, IUARegistry.UASig calldata auth) external
+        bool on, bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
         _ua(T.UA_SET_CLASS_KIND_ENABLED, e, target, IOpenFactory.setClassKindEnabled.selector,
-            abi.encode(contractClass, kind, on), auth);
+            abi.encode(contractClass, kind, on, chainUid), auth);
     }
 
     /// @notice Spec §13.3: the chain's write-once directory entries.

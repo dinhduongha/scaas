@@ -22,6 +22,7 @@ import {IRegulatedToken} from "../../../src/regulated/IRegulatedToken.sol";
 import {NormalZetherRegulatedToken} from "../../../src/regulated/NormalZetherRegulatedToken.sol";
 import {WrappedZetherRegulatedToken} from "../../../src/regulated/WrappedZetherRegulatedToken.sol";
 import {ComplianceRegistry} from "../../../src/regulated/ComplianceRegistry.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// The signed transfer entries alone (no overload), so `abi.encodeCall` can name each.
 interface IZetherSigned {
@@ -93,8 +94,8 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
             type(WrappedZetherRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         issuer = address(new Holder());
         compliance = address(new Holder());

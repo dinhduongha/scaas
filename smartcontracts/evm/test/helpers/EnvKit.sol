@@ -61,6 +61,13 @@ library EnvKit {
         f.configureChain(uid, notice, router, codeHashOf(router), 0, bytes32(0));
     }
 
+    /// @dev `OpenFactory.chainUid` read from its storage slot, not by a call: the `chainUid_` argument of a deprecation or a
+    ///      kind switch right after a `vm.prank` or `vm.expectRevert`, which a view call would consume (Fable D P3-2).
+    ///      `test_siblingReplay_chainBound` (Factory.t.sol) pins the slot.
+    function uidOf(address f) internal view returns (bytes32) {
+        return vm.load(f, bytes32(uint256(13)));
+    }
+
     /// @dev `configureChain`'s router code hash argument: 0 for no router (spec §13.3).
     function codeHashOf(address router) internal view returns (bytes32) {
         return router == address(0) ? bytes32(0) : router.codehash;

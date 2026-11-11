@@ -66,7 +66,7 @@ abstract contract GovLegRows is Test {
             vm.prank(address(uint160(uint256(f.admin()))));
             f.deployTokenImplementation(k8, 1, v, type(FlagLeg).creationCode, "");
             vm.prank(address(uint160(uint256(f.admin()))));
-            f.setTokenKindEnabled(k8, true);
+            f.setTokenKindEnabled(k8, true, EnvKit.uidOf(address(f)));
         }
         return f.createToken(k8, 1, abi.encode(features), salt);
     }

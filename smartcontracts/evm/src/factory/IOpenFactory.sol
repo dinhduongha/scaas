@@ -319,9 +319,11 @@ interface IOpenFactory is IAdmin {
         bytes calldata initcode,
         bytes calldata implArgs
     ) external returns (address implementation);
-    function deprecateToken(TokenKind kind, uint64 version, string calldata reason) external;
-    /// @notice Admin only; a confidential kind starts off.
-    function setTokenKindEnabled(TokenKind kind, bool on) external;
+    /// @notice Admin only, after `configureChain`; `chainUid_` this factory's (`ChainUidMismatch`): a native admin's direct
+    ///         call is void on a sibling with the same chain id (Fable D P3-2). The same word on every deprecation and switch.
+    function deprecateToken(TokenKind kind, uint64 version, bytes32 chainUid_, string calldata reason) external;
+    /// @notice Admin only; a confidential kind starts off. `chainUid_` as `deprecateToken`.
+    function setTokenKindEnabled(TokenKind kind, bool on, bytes32 chainUid_) external;
     function tokenKindEnabled(TokenKind kind) external view returns (bool);
     function releaseOf(TokenKind kind, uint64 version) external view returns (Release memory);
     function implementationOf(TokenKind kind, uint64 version) external view returns (address);
@@ -363,7 +365,8 @@ interface IOpenFactory is IAdmin {
     function dexReleaseOf(uint64 version) external view returns (Release memory);
     function dexImplementationOf(uint64 version) external view returns (address);
     /// @notice Admin only: marks a DEX version deprecated; `createDex` then refuses it (existing DEXes untouched).
-    function deprecateDex(uint64 version, string calldata reason) external;
+    ///         `chainUid_` as `deprecateToken`.
+    function deprecateDex(uint64 version, bytes32 chainUid_, string calldata reason) external;
     function isDexDeprecated(uint64 version) external view returns (bool);
     function latestDexVersion() external view returns (uint64);
     /// @notice An `SCaaSDex` clone of a usable, non-deprecated DEX release, `initialize(initArgs)` in the same call
@@ -459,10 +462,10 @@ interface IOpenFactory is IAdmin {
     ///         `classes()`, the first of a kind in `kindsOf`. Usable after `noticePeriod`; a new `(class, kind)` starts off.
     function deployImplementation(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
         bytes calldata initcode, bytes calldata implArgs) external returns (address implementation);
-    /// @notice Admin only: immediate, never undone; existing instances untouched.
-    function deprecateRelease(ReleaseId calldata id, string calldata reason) external;
-    /// @notice Admin only: the reversible stop of every version of a `(class, kind)`.
-    function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on) external;
+    /// @notice Admin only: immediate, never undone; existing instances untouched. `chainUid_` as `deprecateToken`.
+    function deprecateRelease(ReleaseId calldata id, bytes32 chainUid_, string calldata reason) external;
+    /// @notice Admin only: the reversible stop of every version of a `(class, kind)`. `chainUid_` as `deprecateToken`.
+    function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on, bytes32 chainUid_) external;
     function classEnvOf(uint16 contractClass, uint16 kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
     function latestClassEnvVersion(uint16 contractClass, uint16 kind) external view returns (uint16);
     function classReleaseOf(ReleaseId calldata id) external view returns (ClassRelease memory);

@@ -728,7 +728,7 @@ contract RegistryRouterCheckTest is RegFixture, RegistryCalls {
         OpenFactory g = EnvKit.factory(address(this), UID, 0, address(own));
         Catalogue.release(g, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(g), address(0), UID, address(ureg),
             false), type(NormalRegulatedToken).creationCode, regArgs());
-        g.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
+        g.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(g)));
         address r0 = address(_reg(nid(cadmin), address(0)));
         address ro = address(_reg(nid(cadmin), address(own)));
         address rx = address(_reg(nid(cadmin), address(other)));

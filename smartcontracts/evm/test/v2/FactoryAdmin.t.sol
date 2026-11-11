@@ -369,14 +369,15 @@ contract FactoryAdminTest is UARegistryBase {
         c[0] = abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, 9, e));
         c[1] = abi.encodeCall(OpenFactory.publishDexEnv, (9, e));
         c[2] = abi.encodeCall(OpenFactory.publishClassEnv, (CLS, 0, 9, e));
-        c[3] = abi.encodeCall(OpenFactory.setTokenKindEnabled, (IOpenFactory.TokenKind.WRAPPED, true));
-        c[4] = abi.encodeCall(OpenFactory.setClassKindEnabled, (CLS, 0, true));
+        bytes32 u = EnvKit.uidOf(address(f));
+        c[3] = abi.encodeCall(OpenFactory.setTokenKindEnabled, (IOpenFactory.TokenKind.WRAPPED, true, u));
+        c[4] = abi.encodeCall(OpenFactory.setClassKindEnabled, (CLS, 0, true, u));
         c[5] = _approveCd(f, t, _until());
         c[6] = _approveCd(f, _dex(), _until());
         c[7] = _approveCd(f, _cls(), _until());
-        c[8] = abi.encodeCall(OpenFactory.deprecateToken, (IOpenFactory.TokenKind.NORMAL, 1, "x"));
-        c[9] = abi.encodeCall(OpenFactory.deprecateDex, (1, "x"));
-        c[10] = abi.encodeCall(OpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(CLS, 0, 1), "x"));
+        c[8] = abi.encodeCall(OpenFactory.deprecateToken, (IOpenFactory.TokenKind.NORMAL, 1, u, "x"));
+        c[9] = abi.encodeCall(OpenFactory.deprecateDex, (1, u, "x"));
+        c[10] = abi.encodeCall(OpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(CLS, 0, 1), u, "x"));
     }
 
     // ------------------------------------------------------------------ the real router: signing
@@ -1195,7 +1196,7 @@ contract FactoryAdminTest is UARegistryBase {
             assertEq(abi.decode(ret, (address)), want);
         }
         assertEq(ds.releaseAt(address(f), abi.encodeCall(OpenFactory.setTokenKindEnabled,
-            (IOpenFactory.TokenKind.NORMAL, true))), address(0));
+            (IOpenFactory.TokenKind.NORMAL, true, EnvKit.uidOf(address(f))))), address(0));
     }
 
     // ------------------------------------------------------------------ gas (§5.6 "Gas", §9)

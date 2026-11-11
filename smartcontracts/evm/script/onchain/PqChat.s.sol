@@ -168,7 +168,7 @@ contract PqChatOnchain is OnchainBase {
                 f.publishClassEnv(3, 0, 1, e);
                 impl = f.deployImplementation{gas: RELEASE_GAS}(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId,
                     vm.getCode("PqChat.sol:PqChat"), abi.encode(topics));
-                f.setClassKindEnabled(3, 0, true);
+                f.setClassKindEnabled(3, 0, true, f.chainUid());
                 vm.stopBroadcast();
             }
             vm.broadcast(k1);

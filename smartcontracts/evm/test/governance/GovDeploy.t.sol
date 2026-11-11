@@ -47,6 +47,7 @@ import {
     ZetherTransferVerifierBls12381,
     ZetherBurnVerifierBls12381
 } from "../../src/zether/ZetherVerifier.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// @notice Plan T16 (CTR-GOV-19, GD-12; spec S0, S8, §12.10): every kind has a deploy path, the chain's `GovernanceRouter` is
 ///         deployed before the releases and gated, and every kind's release fits a 200 M block (the SCaaS testnet's,
@@ -247,7 +248,7 @@ contract GovDeployTest is Test {
             vm.startPrank(address(h));
             f.publishTokenEnv(k, 1, withModules(e, ms));
             w = f.deployTokenImplementation(k, 1, 1, code, args);
-            f.setTokenKindEnabled(k, true);
+            f.setTokenKindEnabled(k, true, EnvKit.uidOf(address(f)));
             vm.stopPrank();
         }
         assertEq(NormalRegulatedToken(w).kind(), uint8(k), "the release's kind");
@@ -606,8 +607,9 @@ contract GovDeployTest is Test {
         // 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a): -> 0xf6cEa6aB1eF258779F44546EE3BD596aD2576EFe; Fable review fixes
         // 2026-11-11 (`MtxPipelineLib._callFee`'s refusals, B P3-4; the metadata hash: `MetaTxLib`, `GovernanceLib`):
         // 0xc1F97DFA09Ee3D51D370542dbD2c0f5024d8C880; re-check C1, C2, C4, C6 (the metadata hash: `GovernanceLib._cuts`,
-        // `ITradeToken`, `MetaTxLib`): -> this
-        assertEq(router, 0xD05a7FF11D301Cd9112Ea2eAb6174f3E84bA7c3A, "GovernanceRouter");
+        // `ITradeToken`, `MetaTxLib`): 0xD05a7FF11D301Cd9112Ea2eAb6174f3E84bA7c3A; fix2 D P3-2 (the deprecations and kind
+        // switches carry `chainUid`, their typehashes): -> this
+        assertEq(router, 0x34C0c8173824aE118c6Ec0E183290280C21530b9, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

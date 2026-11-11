@@ -24,6 +24,7 @@ import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {kindArgs} from "../../script/KindModules.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Test only: the five masks of a regulated kind, as `GovernanceLib` receives them.
 contract WrappedRegulatedMasks is WrappedRegulatedToken {
@@ -72,9 +73,9 @@ contract RegulatedSkeletonTest is PqzFixture {
         w5 = WrappedPqzToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, pqz,
             type(WrappedPqzToken).creationCode)));
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED, true);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
     }
 

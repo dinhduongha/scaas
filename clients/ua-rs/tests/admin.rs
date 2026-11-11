@@ -145,16 +145,16 @@ fn admin_struct_hash_refusals() {
     let p = params(&o);
     let h = struct_hash("UADeprecateToken", &e, &t, &p).unwrap();
     let mut q = p.clone();
-    q[2] = Param::Text("another reason");
+    q[3] = Param::Text("another reason");
     assert_ne!(struct_hash("UADeprecateToken", &e, &t, &q).unwrap(), h);
-    assert_eq!(struct_hash("UADeprecateToken", &e, &t, &p[..2]), Err(RouterOpError::Params));
+    assert_eq!(struct_hash("UADeprecateToken", &e, &t, &p[..3]), Err(RouterOpError::Params));
     let mut big = [0u8; 32];
     big[30] = 1; // 256 in a uint8
     let mut q = p.clone();
     q[0] = Param::Word(big);
     assert_eq!(struct_hash("UADeprecateToken", &e, &t, &q), Err(RouterOpError::Range));
     let mut q = p.clone();
-    q[2] = Param::Word([0; 32]);
+    q[3] = Param::Word([0; 32]);
     assert_eq!(struct_hash("UADeprecateToken", &e, &t, &q), Err(RouterOpError::Params));
     assert_eq!(struct_hash("UAOwnerOp", &e, &t, &[]), Err(RouterOpError::UnknownOp));
     let m = &v["ops"]["UASetCompliance"]["message"];

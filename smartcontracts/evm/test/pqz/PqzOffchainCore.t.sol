@@ -255,7 +255,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(0)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
     }
 
     /// PRECOMPILE on it: `SelfTestFailed(address(0))` before any call (the auditor's key is not even read).

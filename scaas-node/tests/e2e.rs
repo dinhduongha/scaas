@@ -2236,7 +2236,7 @@ mod pqz3f {
             bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
         function transferSingleStatement(PqzTransferArgs t, bytes32 binding) external view returns (bytes);
         function pqzRevokeVerifier() external;
-        function setTokenKindEnabled(uint8 kind, bool on) external;
+        function setTokenKindEnabled(uint8 kind, bool on, bytes32 chainUid) external;
         function latestTokenEnvVersion(uint8 kind) external view returns (uint16);
         function latestVersion(uint8 kind) external view returns (uint64);
         function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
@@ -2438,7 +2438,8 @@ async fn offchain_stack_vf(chain_id: u64, vf: u64) -> OffchainStack {
     let ver = view(&rpc, factory, pqz3f::latestVersionCall { kind: 4 }).await + 1;
     send(&rpc, &deployer, factory, deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
         implArgs: ImplArgs { modules: ms }.abi_encode().into() }.abi_encode()).await;
-    send(&rpc, &deployer, factory, pqz3f::setTokenKindEnabledCall { kind: 4, on: true }.abi_encode()).await;
+    let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    send(&rpc, &deployer, factory, pqz3f::setTokenKindEnabledCall { kind: 4, on: true, chainUid: chain_uid }.abi_encode()).await;
     let verifier = small_key(0x3f47);
     let c = TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         owner: deployer.address().into_word(), initialSupply: U256::from(1_000_000u64), initialHolder: deployer.address(),

@@ -650,7 +650,7 @@ empty output — with no symptom until someone has deposited funds.
   creator's address; [CTR-TOK-29](#CTR-TOK-29); the CREATE2 salt `keccak256(abi.encode(msg.sender, salt))` before T72);
   `initialize` runs in the same call and requires `msg.sender == FACTORY`;
   implementations lock themselves in the constructor.
-- **Kind gate**: `setTokenKindEnabled(kind, on)` (registrar); the plain kinds start on, the confidential kinds off (owner
+- **Kind gate**: `setTokenKindEnabled(kind, on, chainUid_)` (registrar; the word [chain-bound](#factory)); the plain kinds start on, the confidential kinds off (owner
   2026-10-20, plan 5g-Z2; it replaces `setZetherEnabled` / `setPqzEnabled`). The chain gates are the implementations':
   a Zether `initialize` reverts when the release's transfer verifier does not run on the chain (no chain-id
   allowlist, [CTR-ZTH-52](zether.md#CTR-ZTH-52)); a PQZ `initialize` runs `PqzSafety` (the
@@ -808,7 +808,7 @@ version}` for a class ≥ 3 (0–2 `ClassReserved`: tokens and the DEX keep thei
 implArgs)` (was `deployRelease`, renamed by the owner 2026-11-10), which checks code, `factoryInfo()` (224 B naming this
 factory and the release's own id, owner 0, initialized: `ReleaseInfoMismatch`), ERC-165 (`0x01ffc9a7`, `interfaceId`, not
 `0xffffffff`: `InterfaceNotSupported`), `validateEnv` and the modules ([CTR-TOK-30](#CTR-TOK-30)); `deprecateRelease(id,
-reason)` (immediate, `ReleaseIsDeprecated` on creation: an error cannot share the event's name); `setClassKindEnabled`
+chainUid_, reason)` (immediate, `ReleaseIsDeprecated` on creation: an error cannot share the event's name); `setClassKindEnabled`
 (a new `(class, kind)` starts off, Q7; `ClassKindDisabled`). Anyone: `createInstance(id, salt, initCall)` — a usable,
 non-deprecated release of an enabled pair, `initCall` the catalogued initializer only (`InitSelectorMismatch`), value 0,
 to the fresh clone only, then its `factoryInfo()` and `chainUid()` checked (`InstanceInfoMismatch`), the record and the
@@ -862,12 +862,16 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   `setTokenKindEnabled`, `setClassKindEnabled`, `setChainEntries` and the approvals are admin-only (`NotAdmin(caller)`; an
   admin that is an EIP-7702 designator gets `CallerDelegated` on the direct path, owner ruling D2, 2026-10-30), each a router
   op too (`mtx<Op>`, fee 0 allowed, spec 2026-11-10-admin-not-owner.md §5.4).
-  **Sibling replay (documented 2026-11-11, Fable review D P3-2; no code change).** `deprecateToken`, `deprecateDex`,
-  `deprecateRelease`, `setTokenKindEnabled` and `setClassKindEnabled` carry no `chainUid` word. On two chains with one chain
-  id, after `configureChain`, a native admin's direct call of one of them replays on the sibling when the admin's nonce
-  matches there (the sibling order of `configureChain` aligns the nonces); a deprecation is one-way. An admin of sibling
-  chains makes these calls through the router (`mtx<Op>`), whose domain carries `chain_uid`, or with a nonce the sibling
-  has already used.
+  **Chain-bound deprecations and switches** (fix2 2026-11-12, Fable review D P3-2; was a documented limit).
+  `deprecateToken(kind, version, chainUid_, reason)`, `deprecateDex(version, chainUid_, reason)`,
+  `deprecateRelease(id, chainUid_, reason)`, `setTokenKindEnabled(kind, on, chainUid_)` and
+  `setClassKindEnabled(class, kind, on, chainUid_)` take the factory's `chainUid` word, checked as the approvals check
+  theirs: only after `configureChain` (`ChainNotConfigured`) and equal to this factory's (`ChainUidMismatch(expected,
+  got)`), before anything is written. On two chains with one chain id a native admin's direct transaction made for one
+  is void on the sibling, whatever the nonces. Their router ops sign the same word after the op's static fields
+  (`UADeprecateToken(…,uint64 version,bytes32 chainUid,string reason,…)`, `UASetTokenKindEnabled(…,bool on,bytes32
+  chainUid,…)`), as the approvals sign theirs. Test `test_siblingReplay_chainBound` (`test/v2/Factory.t.sol`); the
+  router's binding matrix covers the word (`GovRouterAdmin.t.sol`). Status **BUILT** (branch `ua-mtx-fix2-contracts`).
 - **Release deploys: approve, then an open deploy** (owner, final, spec §5.6). The admin approves one release by hash
   (`approveTokenRelease`, `approveDexRelease`, `approveRelease`; the factory's own `chainUid`, address and `adminGeneration`
   bound, `until` at most 30 days ahead: `ApprovalFieldMismatch`, `ApprovalTooLong`, `ApprovalLive`), revokes an unused one
