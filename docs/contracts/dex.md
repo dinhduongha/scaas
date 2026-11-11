@@ -600,6 +600,10 @@ the DEX outside a running settlement or plan (a mistaken transfer, a fee an inte
 submitter fee minted to the DEX) belongs to nobody: the plan tokens' end balances must equal their snapshots, so a
 plan cannot take it in those tokens, but an interaction may move any other token the DEX holds, so the next
 exchange-path submitter can sweep it. Clients and the node never send tokens to a DEX; no on-chain accounting is kept.
+The liquidity path ([CTR-DEX-30](#CTR-DEX-30)) is one such plan too: its tokens need no listing, conservation covers only
+the plan's named tokens, and any submitter's one-unit plan can move a stray of another token out by a `transfer`
+interaction (documented 2026-11-11, Fable review D P3-5; no code change: strays are anyone's, the DEX has no `rescue`;
+only the puller's `rescue` exists, [CTR-DEX-22](#CTR-DEX-22)).
 Not to be confused with
 `ExchangeOffer.exchange` ([CTR-AS-13](asset-suite.md#CTR-AS-13)), another contract. EVM only. Status **BUILT** (P2c; Transitional after [CTR-DEX-23](#CTR-DEX-23)). Independent plans can share one transaction
 ([CTR-DEX-28](#CTR-DEX-28)), and a taker can take the book and a route in one call ([CTR-DEX-27](#CTR-DEX-27)).
@@ -893,6 +897,11 @@ input token's) or expiry. Status **BUILT** on EVM: `src/dex/SCaaSDexLiquidityMod
 signs through `vm.ffi` and runs with `--ffi` and `MLDSA_CLIENTKEYS`: 12,143,505 regular gas within 2^24). Size (owner 2026-11-10, spec §9.3's lever (b)): the
 DEX-domain cancels `mtxCancelOrders`, `mtxInvalidateNonces` and their digest views run in the liquidity module too, behind
 typed stubs (the same rules, [CTR-DEX-18](#CTR-DEX-18)); `SCaaSDex` 32,809 B (its margin 33,594 B), the module 19,055 B.
+**The kind is the `setMarket` snapshot** (documented 2026-11-11, Fable review D P3-4; no code change): a SCaaS input skips
+the DEX's own verify of `h` and trusts its token's `mtxLiquidityPull`. A token whose release is deprecated after its listing
+stays `KIND_SCAAS` until a `LISTING` holder calls `setMarket` again ([CTR-DEX-18](#CTR-DEX-18)), so the operator follows a
+`deprecateToken` with `setMarket` on every DEX that lists a token of that release (the deprecation's reason may be that
+very check).
 
 <a id="CTR-DEX-31"></a>**CTR-DEX-31** — **A received position is bound by a signed, listed, read-only reader** (owner
 2026-11-10, Q1 = A). `IPositionReader { manager(); position(id) → (poolId, tickLower, tickUpper, liquidity, encumbered) }`, one
