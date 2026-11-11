@@ -153,5 +153,7 @@ alloy::sol! {
         function pqzKeyDigest(bytes32 ua, bytes32 pqzKeyHash) external pure returns (bytes32);
         function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32);
         function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
+        function generation() external view returns (uint8);
+        function chainUid() external view returns (bytes32);
     }
 }

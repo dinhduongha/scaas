@@ -35,8 +35,8 @@ pub type Pqz = Arc<dyn Fn(&[u8]) -> Result<Word, pqz_ffi::Error> + Send + Sync>;
 
 /// The probe's statement (spec §4.2, the typo guard before a verifier transfer). No token builds these bytes, so its
 /// verdict fits no operation: every statement a token builds and hashes into `statementHash` is one of the set's
-/// `STMT_*` lengths, at least the 640-byte header (`stmt::HEADER_BYTES`), whose word 0 is the op tag; these 27 bytes are
-/// shorter than one word. Two different preimages of keccak256, so the probe's `statementHash` equals a real one only
+/// `STMT_*` lengths, every one at least 640 bytes (a debit's header alone is 640, a disclosure's 9-word head is followed
+/// by a key); these 27 bytes are shorter than one word. Two different preimages of keccak256, so the probe's `statementHash` equals a real one only
 /// by a collision, and a real debit's `_check` refuses the probe verdict `PqzVerdictMismatch(3)` (`tests/anvil.rs`).
 pub const PROBE_STATEMENT: &[u8] = b"SCAAS-PQZ-VERIFIER-PROBE-V1";
 /// JSON nesting allowed below the request object: `op` → `args` → `legs` → a leg.
@@ -125,6 +125,27 @@ impl Config {
         anyhow::ensure!(c.rate_per_minute >= 1, "rate_per_minute: at least 1");
         Ok(c)
     }
+}
+
+/// At start, beside `eth_chainId` ([`chain::Rpc::connect`]): every node's pinned registry answers the configured
+/// `registry_generation` and `chain_uid` (Fable R-4). A wrong value would fail closed anyway (every verdict refused on
+/// chain); this says so at start. The digest signed never reads them from the chain.
+pub async fn check_pins(chain: &dyn Chain, cfg: &Config) -> anyhow::Result<()> {
+    async fn read<C: SolCall>(chain: &dyn Chain, node: usize, block: u64, to: Address, c: C) -> anyhow::Result<C::Return> {
+        let out = chain.call(node, block, to, c.abi_encode().into()).await
+            .map_err(|e| anyhow::anyhow!("rpc_urls[{node}]: {}: {e:?}", C::SIGNATURE))?;
+        Ok(C::abi_decode_returns(&out)?)
+    }
+    for node in 0..chain.nodes() {
+        let block = chain.head(node).await.map_err(|e| anyhow::anyhow!("rpc_urls[{node}]: eth_blockNumber: {e:?}"))?;
+        let g = read(chain, node, block, cfg.registry, IUARegistry::generationCall {}).await?;
+        anyhow::ensure!(g == cfg.registry_generation, "rpc_urls[{node}]: registry {} is generation {g}, the config pins {}",
+            cfg.registry, cfg.registry_generation);
+        let uid = read(chain, node, block, cfg.registry, IUARegistry::chainUidCall {}).await?;
+        anyhow::ensure!(uid == cfg.chain_uid, "rpc_urls[{node}]: registry {} has chainUid {uid}, the config pins {}",
+            cfg.registry, cfg.chain_uid);
+    }
+    Ok(())
 }
 
 /// A named refusal (the HTTP status follows from `error`, `http.rs`).

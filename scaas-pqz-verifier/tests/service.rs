@@ -24,8 +24,8 @@ use tower::ServiceExt;
 use scaas_pqz_verifier::abi::{IPqzToken as T, IUARegistry as R, KemKey, PqzVerdict, PqzVerifyConfig, UAAttrs};
 use scaas_pqz_verifier::chain::{Chain, ChainError, Rpc};
 use scaas_pqz_verifier::{
-    body_limit, http, pqz_key_hash, purpose_pqz_verdict, registry_domain, statement_lengths, verdict_auth_digest,
-    verdict_digest, Config, Pqz, Service, PROBE_STATEMENT, VALID,
+    body_limit, check_pins, http, pqz_key_hash, purpose_pqz_verdict, registry_domain, statement_lengths, verdict_auth_digest,
+    verdict_digest, Config, Pqz, ProbeRequest, Service, PROBE_STATEMENT, VALID,
 };
 
 alloy::sol! {
@@ -121,6 +121,8 @@ struct World {
     release: Address,
     /// the registry and `chainUid` the token's code names
     named: (Address, B256),
+    /// what the registry answers for `generation()` and `chainUid()`
+    pins: (u8, B256),
     mode: u8,
     verifier: B256,
     epoch: u32,
@@ -240,6 +242,8 @@ impl Chain for Fake {
         if to == REGISTRY || to == ROGUE {
             answer! { sel, data;
                 uaAuthDigestCall => |_| FORGED,
+                R::generationCall => |_| w.pins.0,
+                R::chainUidCall => |_| w.pins.1,
                 R::pqzKeyOfCall => |c| {
                     let v = w.current.get(&c.ua).copied().unwrap_or(0);
                     R::pqzKeyOfReturn { version: v, ptr: ptr(c.ua, v), pqzPopHash: at(c.ua, v).pop_hash, proven: false }
@@ -277,7 +281,7 @@ fn signer() -> PrivateKeySigner {
 /// An OFFCHAIN token naming this verifier at `EPOCH`; `uas[i]` holds the statement's key `i` (at `640 + i·PK`) as
 /// version 0 with stored proof bytes `[i + 1; 8]`.
 fn world(st: &[u8], uas: &[B256]) -> World {
-    let mut w = World { release: RELEASE, named: (REGISTRY, CHAIN_UID), mode: 1, verifier: signer().address().into_word(), epoch: EPOCH, auditor: AUD,
+    let mut w = World { release: RELEASE, named: (REGISTRY, CHAIN_UID), pins: (1, CHAIN_UID), mode: 1, verifier: signer().address().into_word(), epoch: EPOCH, auditor: AUD,
         statement: st.to_vec(), ..Default::default() };
     for (i, &u) in uas.iter().enumerate() {
         w.keys.insert((u, 0), key(&st[640 + i * PK..640 + (i + 1) * PK], &[i as u8 + 1; 8]));
@@ -662,8 +666,8 @@ async fn probe_refuses_token_not_served() {
     assert_signed(&probe(&proposal).await, keccak256(PROBE_STATEMENT), keccak256(b""));
 }
 
-/// The probe's `statementHash` is no real op statement's: its 27 bytes are shorter than the 640-byte header every token
-/// statement starts with (word 0 its op tag) and than every statement length of the set, and its keccak is none of the
+/// The probe's `statementHash` is no real op statement's: its 27 bytes are shorter than every statement length of the
+/// set, each at least 640 bytes, and its keccak is none of the
 /// vector rows' (every form). A real debit's `_check` refuses a probe verdict on chain: `tests/anvil.rs`.
 #[test]
 fn probe_statement_is_no_op_statement() {
@@ -768,15 +772,86 @@ async fn slow_body_holds_no_queue_place() {
     assert!(start.elapsed() + std::time::Duration::from_secs(1) >= http::BODY_TIMEOUT);
 }
 
-/// A JSON-RPC endpoint that answers `eth_chainId` with `chain_id`.
-async fn rpc_answering(chain_id: u64) -> String {
-    let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| async move {
-        axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("{chain_id:#x}")}))
+/// A JSON-RPC endpoint: `answer(request)` is the response's `result` or `error` member; `None` accepts and never answers.
+type Answer = Arc<dyn Fn(&Value) -> Option<Value> + Send + Sync>;
+
+async fn rpc_server(answer: Answer) -> String {
+    let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+        let answer = answer.clone();
+        async move {
+            let Some(mut a) = answer(&r) else { return std::future::pending().await };
+            (a["jsonrpc"], a["id"]) = (json!("2.0"), r["id"].clone());
+            axum::Json(a)
+        }
     }));
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", l.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
     url
+}
+
+/// A JSON-RPC endpoint that answers `eth_chainId` with `chain_id` (and nothing else).
+async fn rpc_answering(chain_id: u64) -> String {
+    rpc_server(Arc::new(move |r| (r["method"] == "eth_chainId").then(|| json!({"result": format!("{chain_id:#x}")})))).await
+}
+
+/// Fable R-1: a node that accepts and never answers times out (`ChainError::Rpc`) and the request fails over: node 0 silent
+/// after `eth_chainId`, node 1 answering (the token has no code there), the probe comes back refused by what node 1 said.
+#[tokio::test]
+async fn silent_node_times_out_and_fails_over() {
+    let chain_id = json!({"result": format!("{CHAIN_ID:#x}")});
+    let c = chain_id.clone();
+    let silent = rpc_server(Arc::new(move |r| (r["method"] == "eth_chainId").then(|| c.clone()))).await;
+    let serving = rpc_server(Arc::new(move |r| Some(match r["method"].as_str().unwrap() {
+        "eth_chainId" => chain_id.clone(),
+        "eth_blockNumber" => json!({"result": "0x65"}),
+        "eth_getCode" => json!({"result": "0x"}),
+        _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+    }))).await;
+    let rpc = Rpc::connect_within(&[silent, serving], CHAIN_ID, std::time::Duration::from_millis(300)).await.unwrap();
+    // the outer bound turns a hang into this test's failure
+    let bound = std::time::Duration::from_secs(5);
+    let head = tokio::time::timeout(bound, rpc.head(0)).await.expect("a silent node times out");
+    assert!(matches!(head, Err(ChainError::Rpc(_))), "{head:?}");
+    let svc = Service::new(Arc::new(rpc), all_valid(), signer(), &Config::parse(CONFIG).unwrap());
+    let r = tokio::time::timeout(bound, svc.probe(ProbeRequest { token: TOKEN, chain_id: CHAIN_ID, proposal: false })).await
+        .expect("the request fails over, never hangs");
+    assert_eq!(r.unwrap_err().error, "NOT_A_TOKEN", "node 1's answer");
+}
+
+/// Fable R-2: an `eth_call` error is a revert only with revert data or an `execution reverted` message; `header not found`
+/// or a rate limit is the node's (`ChainError::Rpc`, so the request fails over).
+#[tokio::test]
+async fn only_a_revert_is_a_revert() {
+    let node = rpc_server(Arc::new(|r| Some(match r["method"].as_str().unwrap() {
+        "eth_chainId" => json!({"result": format!("{CHAIN_ID:#x}")}),
+        _ => match r["params"][0]["to"].as_str().unwrap().chars().last().unwrap() {
+            '1' => json!({"error": {"code": 3, "message": "execution reverted: no", "data": "0x08c379a0"}}),
+            '2' => json!({"error": {"code": -32000, "message": "execution reverted"}}),
+            '3' => json!({"error": {"code": -32000, "message": "header not found"}}),
+            _ => json!({"error": {"code": -32005, "message": "rate limit exceeded"}}),
+        },
+    }))).await;
+    let rpc = Rpc::connect(&[node], CHAIN_ID).await.unwrap();
+    let call = |n: u8| rpc.call(0, 1, Address::with_last_byte(n), Bytes::from_static(b"\x01\x02\x03\x04"));
+    assert!(matches!(call(1).await, Err(ChainError::Revert(d)) if d[..] == [0x08, 0xc3, 0x79, 0xa0]));
+    assert!(matches!(call(2).await, Err(ChainError::Revert(d)) if d.is_empty()));
+    assert!(matches!(call(3).await, Err(ChainError::Rpc(_))));
+    assert!(matches!(call(4).await, Err(ChainError::Rpc(_))));
+}
+
+/// Fable R-4: at start, the registry's `generation()` and `chainUid()` on every node equal the configured ones.
+#[tokio::test]
+async fn start_pins_generation_and_chain_uid() {
+    let s = service(world(&[], &[]), all_valid());
+    let cfg = Config::parse(CONFIG).unwrap();
+    check_pins(&*s.fake, &cfg).await.unwrap();
+    s.world().pins.0 = 2;
+    let e = check_pins(&*s.fake, &cfg).await.unwrap_err().to_string();
+    assert!(e.contains("is generation 2, the config pins 1"), "{e}");
+    s.world().pins = (1, B256::repeat_byte(7));
+    let e = check_pins(&*s.fake, &cfg).await.unwrap_err().to_string();
+    assert!(e.contains("has chainUid"), "{e}");
 }
 
 /// Fable C-6: the configured `chain_id` is compared with every endpoint's `eth_chainId` at start; one other chain, or one

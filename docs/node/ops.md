@@ -864,9 +864,10 @@ refuse_shield_when_unserved = false                # opt-in
   - **The reference service's configuration and refusals** (`scaas-pqz-verifier`, Fable C-1…C-6 on branch
     `ua-mtx-fix-verifier`; [pqz-verifier.example.toml](../../scaas-pqz-verifier/pqz-verifier.example.toml), names and paths
     only, no secret): `rpc_urls` (one or more, asked in order; one request's reads from one node at one block, the next node
-    only when one does not answer, [ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover), `chain_id` (required; every
-    endpoint must answer it at start or the service does not start), `chain_uid`, `registry` and `registry_generation` (1 or
-    2): the one chain and registry it serves, and the only inputs of the `UAAuth` digest it signs (never a hash read from the
+    only when one does not answer within 10 s or answers an error that is not a revert,
+    [ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover), `chain_id` (required; every endpoint must answer it at start or
+    the service does not start), `chain_uid`, `registry` and `registry_generation` (1 or 2; at start the registry's
+    `chainUid()` and `generation()` on every endpoint must equal them): the one chain and registry it serves, and the only inputs of the `UAAuth` digest it signs (never a hash read from the
     chain). New refusals: `FOREIGN_REGISTRY` and `FOREIGN_CHAIN_UID` (the token's code names another registry or `chainUid`),
     `BODY_TIMEOUT` (408: the body not read within 15 s; read before a queue place is taken), `KEY_RECORD_FULL` (503: the
     in-memory key ownership record holds 2^18 keys; a restart empties it).

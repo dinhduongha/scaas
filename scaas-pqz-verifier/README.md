@@ -46,12 +46,15 @@ keystore's path and the environment variable holding its password, never a secre
   that names this verifier (else `NOT_OFFCHAIN`, `NOT_THIS_VERIFIER`; what the node's `refuse_shield_when_unserved`
   asks). With `proposal: true` (spec §4.2's typo guard, asked of the proposed `next` before `pqzSetVerifier`) the token
   may name another verifier or none; every other refusal stays. Only the probe statement is signed on this route, and
-  no token builds it: 27 bytes, shorter than the 640-byte header of every statement a token hashes, so a real debit's
+  no token builds it: 27 bytes, while every statement a token hashes is at least 640 bytes, so a real debit's
   `_check` refuses a probe verdict `PqzVerdictMismatch(3)` (`tests/anvil.rs`).
 
 Chain reads ([ARCH-POS-15](../docs/decisions.md#ARCH-POS-15)): `rpc_urls` is a list, asked in order; every read of one
-request comes from one node at one block number (its head when the request starts); a node that does not answer sends
-the whole request to the next one; a revert or a refusal is an answer. The strict-majority agreement option is not built.
+request comes from one node at one block number (its head when the request starts); a node that does not answer within
+10 s (`RPC_TIMEOUT`), or answers with an error that is not a revert (`header not found`, a rate limit), sends the whole
+request to the next one; a revert (revert data, or `execution reverted`) or a refusal is an answer. At start every
+endpoint must answer the pinned `chain_id`, and the pinned registry its `registry_generation` and `chain_uid`, or the
+service does not start. The strict-majority agreement option is not built.
 
 Bounds: a per-address rate limit; the body read within 15 s (`BODY_TIMEOUT`, else 408), a body limit set from the set's
 largest statement and proof, JSON nesting at most 4 below the request object, all checked before decoding; only then a
@@ -59,7 +62,9 @@ place in the bounded queue (a slow body never holds one); bounded verification c
 
 ## Known limits
 
-- ARCH-POS-15's strict-majority agreement option is not built: failover only (no read here feeds a decryption).
+- ARCH-POS-15's strict-majority agreement option is not built: failover only (no read here feeds a decryption). The block
+  is pinned by number, not by hash (EIP-1898): a reorg at that height between two reads of one request mixes two blocks;
+  the token recomputes `statementHash`, so only the off-chain key checks could see it. Both are the owner's call.
 - The key ownership record (`pqzKeyHash` → `(ua, version)`) lives in memory: bounded at 2^18 keys (`KEY_RECORD_FULL`
   when full), not persisted, lost on restart.
 - No factory lookup of "is a factory instance": a token is an EIP-1167 proxy of a configured release whose code names the

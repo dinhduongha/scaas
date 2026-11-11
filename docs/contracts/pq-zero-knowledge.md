@@ -2597,8 +2597,8 @@ start), `chain_uid`, the UA `registry` and its `registry_generation`. It signs o
 only if it is an EIP-1167 proxy of a configured release whose code names the pinned registry and `chainUid` (else
 `FOREIGN_REGISTRY`, `FOREIGN_CHAIN_UID`), is `OFFCHAIN`, names this verifier and is at the request's epoch; then the statement
 length and word 32, the token's own view rebuilds the same bytes, `pqz-ffi` answers `…01`, and every named key passes
-[CTR-PQZ-30](#CTR-PQZ-30). The probe signs only the fixed 27-byte probe statement (shorter than the 640-byte header of every
-statement a token hashes, so a real debit refuses it `PqzVerdictMismatch(3)`), for an `OFFCHAIN` token naming this verifier,
+[CTR-PQZ-30](#CTR-PQZ-30). The probe signs only the fixed 27-byte probe statement (every statement a token
+hashes is at least 640 bytes, so a real debit refuses it `PqzVerdictMismatch(3)`), for an `OFFCHAIN` token naming this verifier,
 or, as a `proposal` probe (§4.2's typo guard of `next`), naming another verifier or none. Reads follow
 [ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover (one node, one block per request; the strict-majority option not
 built). Known limits: the key ownership record is in memory (bounded, `KEY_RECORD_FULL`), no factory lookup, one registry

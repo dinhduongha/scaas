@@ -8,3 +8,5 @@ mutants (runs/2026-11-11-ua-mtx-fix-verifier-mutants.py) | 7f596889 | 0 | 13 of 
 proposal probe (controller call) | 81a60931 | 0 | cargo test 24 passed; clippy clean; anvil 1 passed (a probe verdict on the real debit refused PqzVerdictMismatch(3), then the real verdict lands)
 mutants rerun with the probe's two new (proposal gate, probe statement length) | 81a60931 | 0 | 15 of 15 killed, 0 survivors, tree clean after each
 docs_check check + test_docs_check (pq-zero-knowledge §9.5, ops.md, decisions.md CTR-PQZ-28/-29 Changes) | after 81a60931 | 0 | 0 errors, 6 warnings (line budgets, as before)
+Fable re-check R-1..R-4 (RPC timeout, revert classification, 640-byte wording, start pins) | this commit | 0 | cargo test 27 passed (26 + 1 unit); clippy clean; anvil 1 passed (check_pins against the real registry too); docs_check 0 errors
+mutants rerun with R-1, R-2, R-4 x2 | this commit (src as committed) | 0 | 19 of 19 killed, 0 survivors, tree clean after each

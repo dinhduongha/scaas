@@ -31,7 +31,7 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 
 use scaas_pqz_verifier::abi::{self, IPqzToken, IUARegistry, KemKey};
-use scaas_pqz_verifier::{chain::Rpc, http, pqz_key_hash, Config, Pqz, Service, PROBE_STATEMENT, VALID};
+use scaas_pqz_verifier::{check_pins, chain::Rpc, http, pqz_key_hash, Config, Pqz, Service, PROBE_STATEMENT, VALID};
 
 const CHAIN_ID: u64 = 31961;
 /// anvil's first test account (its well-known key): the deployer, owner and the transfer's sender.
@@ -365,7 +365,9 @@ rate_per_minute = 1000
 "#, set = pqz_ffi::stmt::SET)).unwrap();
     // no prover and no R_REG proof of these keys here: pqz-ffi answers …01 (tests/service.rs runs it real)
     let pqz: Pqz = Arc::new(|_: &[u8]| Ok(VALID));
-    let svc = Arc::new(Service::new(Arc::new(Rpc::connect(&cfg.rpc_urls, CHAIN_ID).await.unwrap()), pqz, signer.clone(), &cfg));
+    let rpc_nodes = Rpc::connect(&cfg.rpc_urls, CHAIN_ID).await.unwrap();
+    check_pins(&rpc_nodes, &cfg).await.expect("the registry's generation() and chainUid() are the pinned ones (Fable R-4)");
+    let svc = Arc::new(Service::new(Arc::new(rpc_nodes), pqz, signer.clone(), &cfg));
     let app = http::router(svc.clone(), &cfg);
 
     // the OFFCHAIN token naming the service's UA

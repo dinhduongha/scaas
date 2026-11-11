@@ -2,7 +2,7 @@
 """Fable review fixes C-1..C-6 (ua-mtx-fix-verifier): one mutant at a time on a clean tree, applied to its file, the test
 suite run through scripts/capped, the file restored in the same run, then `git diff --exit-code`. Every new check has a
 mutant that must be killed: the locally built digest, the registry pin, the chainUid pin, the chain id at start, the probe's
-mode and verifier, the proposal probe's gate and its constant statement; then C-2's blob tail, C-3's failover, C-4's body-before-slot, C-5's bound, and one mutant through the
+mode and verifier, the proposal probe's gate and its constant statement; then C-2's blob tail, the re-check's RPC timeout, revert classification and start pins,, C-3's failover, C-4's body-before-slot, C-5's bound, and one mutant through the
 opt-in anvil run (PATH must hold anvil and forge). Writes `mutant | tests that went red | rc` to the -mutants.txt beside
 this file; full outputs to git-ignored .log files. Run from scaas-pqz-verifier/:
 python3 runs/2026-11-11-ua-mtx-fix-verifier-mutants.py"""
@@ -44,6 +44,15 @@ MUTANTS = [
      "    let req = decode(b).await?;\n    let _slot = app.slot()?;\n    Ok(Json(app.svc.probe(req).await?))",
      "    let _slot = app.slot()?;\n    let req = decode(b).await?;\n    Ok(Json(app.svc.probe(req).await?))", ALL),
     ("C-5 ownership record unbounded", "src/lib.rs", "&& self.owner.len() >= OWNER_MAX {", "&& self.owner.len() >= usize::MAX {", ALL),
+    ("R-1 no RPC timeout (a silent node hangs the request)", "src/chain.rs",
+     "tokio::time::timeout(t, f)", "tokio::time::timeout(t * 1000, f)", ALL),
+    ("R-2 every error answer read as a revert", "src/chain.rs",
+     "            None => ChainError::Rpc(e.to_string()),\n        },", "            None => ChainError::Revert(Bytes::new()),\n        },",
+     ALL),
+    ("R-4 registry generation not compared at start", "src/lib.rs",
+     "anyhow::ensure!(g == cfg.registry_generation,", "anyhow::ensure!(g == g,", ALL),
+    ("R-4 registry chainUid not compared at start", "src/lib.rs",
+     "anyhow::ensure!(uid == cfg.chain_uid,", "anyhow::ensure!(uid == uid,", ALL),
     ("C-1 on anvil: another registry generation in the domain", "src/lib.rs",
      "registry_domain: registry_domain(cfg.registry_generation,", "registry_domain: registry_domain(cfg.registry_generation + 1,",
      ANVIL),
