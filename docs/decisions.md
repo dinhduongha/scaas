@@ -3665,6 +3665,7 @@ Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](contracts/pq-zero-knowledge.md#
 **Why.** Fable F-23: the refresh (`mtxUnshield` with `amount = 0`) moves no value, and refusing it would leave a frozen account's ciphertext unrefreshable.
 **Cost if wrong.** A frozen holder's confidential balance cannot be refreshed, or a refresh carries a public payer past the check.
 **Source.** `superpowers/specs/2026-11-05-regulated-kinds.md` §13 RK-11, §4.2.
+Change (2026-11-11, Fable review A-1; controller call under the owner's leave; status: BUILT on branch `ua-mtx-fix-contracts`, UNAUDITED): a refresh that pays a fee is not "nothing out": when the burn's fee word is not 0 (a beneficiary with `confidentialFee ≠ 0`, or the `OFFCHAIN` verifier fee), `PqzLayer._burn` runs `_regSender(fromUA)` after the library returns, so a frozen or paused sender cannot pay fees out to a beneficiary it names. A refresh with no fee stays open under `FREEZE` and `PAUSE`. Test: `test_refreshWithFeeChecksTheSender` (kinds 12, 13).
 
 ### CTR-AS-31 — The allow list and the deny list held in the token
 - old: — · status: current · owner: no · date: 2026-11-11 · normative: contracts/asset-suite.md#CTR-AS-31 · superseded-by: —

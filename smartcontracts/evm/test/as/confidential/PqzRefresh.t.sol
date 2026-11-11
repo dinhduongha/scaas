@@ -9,7 +9,8 @@ import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 
 /// Plan T31 (regulated-kinds spec §4.2 the refresh row, F-23, M-09; U1, U2): a refresh (`mtxUnshield` with `amount = 0`,
 /// `recipient = 0`) moves nothing out, so it names no sender and stays open under `FREEZE` and `PAUSE`, as roll-over; a
-/// `shieldIn ≠ 0` still takes `_regPayer()` and is refused under `P` and for a frozen payer.
+/// `shieldIn ≠ 0` still takes `_regPayer()` and is refused under `P` and for a frozen payer; a fee (a beneficiary) takes the
+/// sender's check (Fable A-1).
 abstract contract PqzRefreshSuite is PqzRegFixture {
     function setUp() public override {
         super.setUp();
@@ -34,6 +35,29 @@ abstract contract PqzRefreshSuite is PqzRegFixture {
         (bool ok,) = address(tok).call(_refresh(0, 90));
         assertTrue(ok, "the refresh is open under F and P");
         assertTrue(keccak256(tok.pqzAcc(alice, 0)) != keccak256(before), "the refresh's debit is written");
+    }
+
+    /// Fable A-1: a refresh that pays the fee (a beneficiary, `confidentialFee ≠ 0`) moves value out of the sender's shielded
+    /// balance, so it runs the sender's check: a frozen `alice` is refused `Frozen`, a paused token `TokenPaused`. Controls:
+    /// unfrozen and unpaused it passes; with no beneficiary (no fee) the refresh stays open (the test above).
+    function test_refreshWithFeeChecksTheSender() public {
+        assertTrue(tok.confidentialFee() != 0, "the fixture's fee");
+        bytes memory cd = abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(bob, 0, 92), 0, bytes32(0), PROOF,
+            _pqAuth(), bytes(""), noVerdict());
+        uint256 snap = vm.snapshotState();
+        (bool ok,) = address(tok).call(cd);
+        assertTrue(ok, "control: a refresh with a fee");
+        vm.revertToState(snap);
+        _freeze(alice);
+        (bool ok2, bytes memory r2) = address(tok).call(cd);
+        assertFalse(ok2);
+        assertEq(r2, abi.encodeWithSelector(IRegulatedToken.Frozen.selector, alice));
+        vm.revertToState(snap);
+        uint64 until = _pause();
+        (bool ok3, bytes memory r3) = address(tok).call(cd);
+        assertFalse(ok3);
+        assertEq(r3, abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
+        vm.revertToState(snap);
     }
 
     /// `shieldIn ≠ 0` on a refresh: `_regPayer()` (the caller) under `P` refused `TokenPaused`, frozen refused `Frozen`;
