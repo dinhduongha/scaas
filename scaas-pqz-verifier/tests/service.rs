@@ -22,7 +22,7 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 
 use scaas_pqz_verifier::abi::{IPqzToken as T, IUARegistry as R, KemKey, PqzVerdict, PqzVerifyConfig, UAAttrs};
-use scaas_pqz_verifier::chain::{Chain, ChainError};
+use scaas_pqz_verifier::chain::{Chain, ChainError, Rpc};
 use scaas_pqz_verifier::{
     body_limit, http, pqz_key_hash, purpose_pqz_verdict, registry_domain, statement_lengths, verdict_auth_digest,
     verdict_digest, Config, Pqz, Service, PROBE_STATEMENT, VALID,
@@ -706,6 +706,29 @@ async fn fails_over_one_node_one_block() {
     assert_refused(&verdict(&s, &req).await, "RPC_UNAVAILABLE");
     assert_refused(&post(&s, "/v1/pqz-verdict/probe", json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string()).await,
         "RPC_UNAVAILABLE");
+}
+
+/// A JSON-RPC endpoint that answers `eth_chainId` with `chain_id`.
+async fn rpc_answering(chain_id: u64) -> String {
+    let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| async move {
+        axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("{chain_id:#x}")}))
+    }));
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", l.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+    url
+}
+
+/// Fable C-6: the configured `chain_id` is compared with every endpoint's `eth_chainId` at start; one other chain, or one
+/// endpoint that does not answer, and the service does not start.
+#[tokio::test]
+async fn start_pins_chain_id() {
+    let (ours, other) = (rpc_answering(CHAIN_ID).await, rpc_answering(1).await);
+    assert_eq!(Rpc::connect(std::slice::from_ref(&ours), CHAIN_ID).await.unwrap().nodes(), 1);
+    let e = Rpc::connect(&[ours.clone(), other], CHAIN_ID).await.err().expect("another chain");
+    assert!(e.to_string().contains("rpc_urls[1] answers chain 1, the config pins 7622"), "{e}");
+    assert!(Rpc::connect(&[ours, "http://127.0.0.1:1".into()], CHAIN_ID).await.is_err(), "an endpoint that does not answer");
+    assert!(Config::parse(&CONFIG.replace("chain_id = 7622\n", "")).is_err(), "chain_id is required");
 }
 
 /// Fable C-2: the views the service calls are the contract's after group 3h (`ownTag` in the three args tuples): the
