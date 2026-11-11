@@ -30,6 +30,7 @@ import {MockERC20} from "../../test/helpers/Mocks.sol";
 /// @notice T66b Step 5b, group `gov`: every GovernanceRouter entry by UA signature (a native id's ECDSA, a SmartKeyAccount's
 ///         ERC-1271), relayed by k2, on tokens of kinds 0, 1, 8, 9 and a DEX made here with the Step 5 factory; the regulated
 ///         powers on kinds 8 (direct, the issuer and compliance roles held by SmartKeyAccounts) and 9 (through the router);
+///         the lists and `enableFeature` of round 3s on kinds 9-11 direct, and through the router signed by a UA admin (kind 9);
 ///         SmartKeyAccountFactory and every SmartKeyAccount entry (secp256k1 and WebAuthn P-256 keys); an own
 ///         ComplianceRegistry (admin a SmartKeyAccount) with an allow-listed kind-8 token. Not here: the router's PQZ setters
 ///         (no PQZ kind on the Step 5 factory; the e2e.py factory's PQZ tokens), `mtxCreateInstance` with a class release
@@ -76,6 +77,7 @@ contract Gov is OnchainBase {
     address t8;
     address t9;
     address tc;
+    address tl; // kind 9, admin and list holder the UA uaD (`_listsRouter`)
     address dex;
     ComplianceRegistry cr;
     uint256 nref;
@@ -100,6 +102,8 @@ contract Gov is OnchainBase {
         _wrapped();
         _regulatedDirect();
         _regulatedRouter();
+        _lists(t9, true, "kind 9");
+        _listsRouter();
         _dexAndCreations();
         _relayFee();
         _account();
@@ -405,8 +409,36 @@ contract Gov is OnchainBase {
     ///      RegulatedLib entries through each release's own dispatch; BLS12-381 version 1, no auditor, as ZetherE2E).
     function _regulatedDirect() internal {
         t8 = _regulatedDirect(IOpenFactory.TokenKind.NORMAL_REGULATED, "oG8", false, false, "NormalRegulatedToken");
-        _regulatedDirect(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, "oG10", false, true, "NormalZetherRegulatedToken");
-        _regulatedDirect(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, "oG11", true, true, "WrappedZetherRegulatedToken");
+        _lists(_regulatedDirect(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, "oG10", false, true, "NormalZetherRegulatedToken"),
+            false, "kind 10");
+        _lists(_regulatedDirect(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, "oG11", true, true, "WrappedZetherRegulatedToken"),
+            false, "kind 11");
+    }
+
+    /// Group 3s (spec 2026-11-10-token-lists.md §5.3, §6): the lists and `enableFeature` direct, the admin a1 its own list
+    /// holder (`grantRole`, grantDelay 0: at once): the deny list written and switched on; on 9 the allow list written
+    /// (dormant, left off); on 10-13 bit 8 is outside the mask, so `setAllowed` is `MissingRole` (no holder can exist) and
+    /// `enableFeature(8)` `FeatureInvalidForKind` (negatives).
+    function _lists(address t, bool allow, string memory what) internal {
+        bytes32[] memory d = new bytes32[](1);
+        d[0] = _pad(address(0xDE41ED));
+        bytes32[] memory l = new bytes32[](2);
+        (l[0], l[1]) = (_pad(a2), _pad(a3));
+        vm.startBroadcast(k1);
+        IGovernance(t).grantRole(GovernanceBits.DENYLIST, _pad(a1));
+        IRegulatedToken(t).setDenied(d, true);
+        if (allow) {
+            IGovernance(t).grantRole(GovernanceBits.ALLOWLIST, _pad(a1));
+            IRegulatedToken(t).setAllowed(l, true);
+        }
+        IRegulatedToken(t).enableFeature(GovernanceBits.DENYLIST);
+        vm.stopBroadcast();
+        if (!allow) {
+            _neg(a1, t, abi.encodeCall(IRegulatedToken.setAllowed, (l, true)), IGovernance.MissingRole.selector,
+                string.concat("setAllowed on ", what, " (bit 8 outside the mask: no holder)"));
+            _neg(a1, t, abi.encodeCall(IRegulatedToken.enableFeature, (GovernanceBits.ALLOWLIST)),
+                IGovernance.FeatureInvalidForKind.selector, string.concat("enableFeature(ALLOWLIST) on ", what));
+        }
     }
 
     function _regulatedDirect(IOpenFactory.TokenKind kind, string memory sym, bool wrapped, bool zether, string memory label)
@@ -506,6 +538,47 @@ contract Gov is OnchainBase {
         (e, s) = _auth(is_, _ty("UAFreeze", "bytes32 account,bytes32 ref,bytes32 recordId"), t9, abi.encode(_pad(a1), r3, bytes32(0)));
         vm.broadcast(k2);
         gr.mtxFreeze{gas: SKA_SIG_GAS}(e, t9, _pad(a1), r3, 0, s);
+    }
+
+    /// Group 3s (CTR-GOV-24, spec §5.3, §6.2): the router ops of the lists, signed by a UA admin: a kind-9 token whose admin
+    /// and issuer seat (the list bits 8, 9) are the registered secp256k1 UA `uaD`, relayed by k2 at fee 0: `mtxSetAllowed`,
+    /// `mtxSetDenied` (written while off), then `mtxEnableFeature` of both lists, at once.
+    function _listsRouter() internal {
+        IFactoryToken.TokenConfig memory c = _cfg("oGL9", 1 << GovernanceBits.PAYABLE);
+        (c.admin, c.roles.issuer, c.reg.termsHash) = (uaD, uaD, keccak256("onchain terms"));
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(address(u), 1, 1);
+        tl = _create(IOpenFactory.TokenKind.WRAPPED_REGULATED, c, "WrappedRegulatedToken");
+        Sg memory du = Sg(uaD, kD, 2);
+        bytes32[] memory l = new bytes32[](2);
+        (l[0], l[1]) = (_pad(a1), _pad(a2));
+        bytes32[] memory d = new bytes32[](1);
+        d[0] = _pad(address(0xDE41ED));
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(du, _ty("UASetAllowed", "bytes32[] accounts,bool on"),
+            tl, abi.encode(keccak256(abi.encodePacked(l)), true));
+        vm.broadcast(k2);
+        gr.mtxSetAllowed(e, tl, l, true, s);
+        (e, s) = _auth(du, _ty("UASetDenied", "bytes32[] accounts,bool on"), tl, abi.encode(keccak256(abi.encodePacked(d)), true));
+        vm.broadcast(k2);
+        gr.mtxSetDenied(e, tl, d, true, s);
+        (e, s) = _auth(du, _ty("UAEnableFeature", "uint8 bit"), tl, abi.encode(GovernanceBits.DENYLIST));
+        vm.broadcast(k2);
+        gr.mtxEnableFeature(e, tl, GovernanceBits.DENYLIST, s);
+        (e, s) = _auth(du, _ty("UAEnableFeature", "uint8 bit"), tl, abi.encode(GovernanceBits.ALLOWLIST));
+        vm.broadcast(k2);
+        gr.mtxEnableFeature(e, tl, GovernanceBits.ALLOWLIST, s);
+        uint256 both = (1 << GovernanceBits.ALLOWLIST) | (1 << GovernanceBits.DENYLIST);
+        require(IGovernance(tl).features() & both == both, "router: both lists on");
+    }
+
+    /// Group 3s: a list op through the router by a UA that holds no list bit there (its own frame: the stack).
+    function _negListsRouter() internal {
+        bytes32[] memory l = new bytes32[](1);
+        l[0] = _pad(a3);
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(_eoa(k1),
+            _ty("UASetAllowed", "bytes32[] accounts,bool on"), tl, abi.encode(keccak256(abi.encodePacked(l)), true));
+        _neg(a2, address(gr), abi.encodeCall(GovernanceRouter.mtxSetAllowed, (e, tl, l, true, s)), IGovernance.MissingRole.selector,
+            "mtxSetAllowed by a UA without bit 8 (kind 9)");
     }
 
     function _routerOrder(Sg memory cm, Sg memory is_) internal {
@@ -825,6 +898,7 @@ contract Gov is OnchainBase {
             "completeRecovery before RECOVERY_DELAY");
         _neg(a2, acct, abi.encodeCall(SmartKeyAccount.initialize, (kr, address(0))), SmartKeyAccount.NotFactory.selector,
             "initialize by another caller than the factory");
+        _negListsRouter();
         // compliance: a non-admin, non-provider
         _neg(a3, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a3), true)), IAdmin.NotAdmin.selector,
             "setKycProvider by a non-admin");

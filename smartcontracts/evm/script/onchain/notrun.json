@@ -16,6 +16,18 @@
   "OpenFactory": {
     "renounceAdmin()": "ends the factory's administration for ever (CTR-GOV-23 Q1: no env, release or deprecation after it), so no matrix factory renounces; its refusals (before configureChain, a non-admin) and its effect are forge's (test/v2/FactoryAdmin.t.sol)"
   },
+  "NormalZetherRegulatedToken": {
+    "setAllowed(*": "refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (gov), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind"
+  },
+  "WrappedZetherRegulatedToken": {
+    "setAllowed(*": "refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (gov), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind"
+  },
+  "NormalPqzRegulatedToken": {
+    "setAllowed(*": "refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (pq), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind"
+  },
+  "WrappedPqzRegulatedToken": {
+    "setAllowed(*": "refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (pq), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind"
+  },
   "*": {
     "initialize(*": "the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)",
     "executeRate()": "waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)"

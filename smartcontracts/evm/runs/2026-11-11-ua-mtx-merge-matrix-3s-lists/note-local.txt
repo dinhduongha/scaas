@@ -1,0 +1,1103 @@
+## Coverage per contract (state-changing called = a transaction of this net called the entry and succeeded;
+## reached = it also ran inside another call, by the trace (local only); views reached = answered an eth_call)
+group | contract | entries | state-changing | local: state-changing called / reached / views reached
+tokens | NormalToken | 89 | 38 | 10 / 21 / 4
+tokens | WrappedToken | 123 | 58 | 0 / 5 / 4
+tokens | NormalZetherToken | 125 | 56 | 0 / 0 / 0
+tokens | WrappedZetherToken | 163 | 80 | 0 / 0 / 0
+tokens | NormalPqzToken | 138 | 59 | 28 / 28 / 0
+tokens | WrappedPqzToken | 178 | 83 | 20 / 20 / 0
+tokens | NormalRegulatedToken | 112 | 53 | 6 / 17 / 4
+tokens | WrappedRegulatedToken | 146 | 73 | 7 / 19 / 4
+tokens | NormalZetherRegulatedToken | 148 | 71 | 7 / 17 / 4
+tokens | WrappedZetherRegulatedToken | 186 | 95 | 8 / 18 / 4
+tokens | NormalPqzRegulatedToken | 161 | 74 | 24 / 24 / 0
+tokens | WrappedPqzRegulatedToken | 201 | 98 | 16 / 16 / 0
+dex | SCaaSDex | 61 | 25 | 0 / 5 / 1
+dex | SCaaSDexGovernanceModule | 24 | 9 | 0 / 0 / 0 | via SCaaSDex
+dex | SCaaSDexLiquidityModule | 8 | 3 | 0 / 0 / 0 | via SCaaSDex
+relay | RelayFeeRouter | 3 | 1 | 1 / 1 / 0
+relay | RelayFeeExecutor | 2 | 1 | 0 / 1 / 0
+governance | GovernanceRouter | 72 | 62 | 42 / 42 / 1
+registry | UARegistry | 64 | 10 | 5 / 5 / 4
+registry | UARegistryCoreLib | 15 | 13 | 0 / 1 / 0 | via UARegistry
+registry | UARegistryAuxLib | 17 | 12 | 0 / 0 / 0 | via UARegistry
+factory | OpenFactory | 79 | 24 | 6 / 6 / 5
+accounts | SmartKeyAccountFactory | 5 | 1 | 1 / 1 / 0
+accounts | SmartKeyAccount | 39 | 21 | 13 / 20 / 1
+wallets | MandateWallet | 33 | 17 | 0 / 0 / 0
+wallets | HederaMandateWallet | 33 | 17 | 0 / 0 / 0 | needs Hedera
+compliance | ComplianceRegistry | 11 | 4 | 1 / 4 / 2
+reference | RefServiceEscrow | 13 | 3 | 0 / 0 / 0
+verifiers | Secp256k1Verifier | 2 | 0 | 0 / 0 / 2
+verifiers | Ed25519Verifier | 3 | 0 | 0 / 0 / 0
+verifiers | Bip340Verifier | 2 | 0 | 0 / 0 / 0
+verifiers | P256Verifier | 3 | 0 | 0 / 0 / 0
+verifiers | WebAuthnP256Verifier | 3 | 0 | 0 / 0 / 0
+verifiers | SchnorrBn254Verifier | 4 | 0 | 0 / 0 / 0
+verifiers | SchnorrBls12381Verifier | 4 | 0 | 0 / 0 / 0
+verifiers | BlsMinSigBls12381Verifier | 4 | 0 | 0 / 0 / 0
+verifiers | BlsMinSigBn254Verifier | 4 | 0 | 0 / 0 / 0
+verifiers | ZetherSchnorrBls12381Verifier | 4 | 0 | 0 / 0 / 0
+verifiers | Musig2Secp256k1Verifier | 2 | 0 | 0 / 0 / 0
+verifiers | FrostSecp256k1Verifier | 2 | 0 | 0 / 0 / 0
+verifiers | Musig2Bn254Verifier | 5 | 0 | 0 / 0 / 0
+verifiers | FrostBn254Verifier | 2 | 0 | 0 / 0 / 0
+verifiers | MldsaVerifier | 10 | 0 | 0 / 0 / 0
+verifiers | FndsaVerifier | 3 | 0 | 0 / 0 / 0
+verifiers | SlhdsaVerifier | 3 | 0 | 0 / 0 / 0
+verifiers | PqzKeyVerifier | 5 | 0 | 0 / 0 / 0
+zether | ZetherStatements | 5 | 0 | 0 / 0 / 0
+zether | ZetherDisclosure | 2 | 0 | 0 / 0 / 0
+zether | ZetherTransferVerifierBls12381 | 19 | 0 | 0 / 0 / 3
+zether | ZetherBurnVerifierBls12381 | 10 | 0 | 0 / 0 / 0
+zether | ZetherInnerProductVerifierBls12381 | 10 | 0 | 0 / 0 / 0
+libraries | GovernanceLib | 15 | 14 | 0 / 13 / 0 | via GovernanceRouter, tokens
+libraries | HederaLib | 1 | 0 | 0 / 0 / 0 | needs Hedera | via tokens
+libraries | ZetherLib | 16 | 11 | 0 / 3 / 0 | via NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherWrappedLib | 4 | 2 | 0 / 1 / 0 | via WrappedZetherToken, WrappedZetherRegulatedToken
+libraries | WrappedLib | 26 | 16 | 0 / 6 / 1 | via WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | 15 | 14 | 0 / 12 / 0 | via NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | MtxPipelineLib | 16 | 7 | 0 / 1 / 0 | via tokens
+libraries | TradeLib | 6 | 4 | 0 / 0 / 0 | via tokens, SCaaSDex
+libraries | PqzStateLib | 13 | 9 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzViewLib | 11 | 0 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzWrappedLib | 2 | 1 | 0 / 0 / 0 | via WrappedPqzToken, WrappedPqzRegulatedToken
+libraries | PqzBurnLib | 1 | 1 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzTransferLib | 2 | 2 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+pqchat | PqChat | 59 | 14 | 0 / 0 / 0
+pqchat | PqChatTopics | 21 | 6 | 0 / 0 / 0 | via PqChat
+
+## local: per record file (txs, status 1, the heaviest gasUsed; eth_calls answered; negatives refused as expected)
+records | txs | status 1 | max gasUsed | calls ok | negatives
+gov | 163 | 163 | 1,426,177 | 0 / 0 | 17 / 17
+pq | 236 | 236 | 54,877,104 | 0 / 0 | 10 / 10
+pqoff | 178 | 178 | 53,177,065 | 0 / 0 | 17 / 17
+
+## local: state-changing entries not called by a transaction, with the reason
+tokens | NormalToken | acceptAdmin() | reached inside another call (trace)
+tokens | NormalToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalToken | burn(uint256) | NO REASON RECORDED
+tokens | NormalToken | cancelGrant(uint8,bytes32) | reached inside another call (trace)
+tokens | NormalToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | NormalToken | disableFeature(uint8) | reached inside another call (trace)
+tokens | NormalToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | NormalToken | grantRole(uint8,bytes32) | reached inside another call (trace)
+tokens | NormalToken | initialize(bytes32,uint64,bytes) | reached inside another call (trace)
+tokens | NormalToken | mint(address,uint256) | reached inside another call (trace)
+tokens | NormalToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | NormalToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalToken | renounceAdmin() | reached inside another call (trace)
+tokens | NormalToken | renounceRole(uint8) | reached inside another call (trace)
+tokens | NormalToken | rescue(address) | NO REASON RECORDED
+tokens | NormalToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalToken | revokeRole(uint8,bytes32) | reached inside another call (trace)
+tokens | NormalToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | reached inside another call (trace)
+tokens | NormalToken | transfer(address,uint256) | NO REASON RECORDED
+tokens | NormalToken | transferAdmin(bytes32) | reached inside another call (trace)
+tokens | NormalToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedToken | acceptAdmin() | NO REASON RECORDED
+tokens | WrappedToken | addReserve(address,uint256) | NO REASON RECORDED
+tokens | WrappedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | WrappedToken | cancelRate() | reached inside another call (trace)
+tokens | WrappedToken | disableFeature(uint8) | NO REASON RECORDED
+tokens | WrappedToken | disableWrap(address,bytes32) | reached inside another call (trace)
+tokens | WrappedToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | WrappedToken | executeRate() | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedToken | grantRole(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedToken | initialize(bytes32,uint64,bytes) | reached inside another call (trace)
+tokens | WrappedToken | mint(address,uint256) | reached inside another call (trace)
+tokens | WrappedToken | mintToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedToken | mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedToken | mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedToken | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedToken | mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedToken | mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes) | NO REASON RECORDED
+tokens | WrappedToken | mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedToken | mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedToken | proposeRate(address,uint96,uint96) | reached inside another call (trace)
+tokens | WrappedToken | renounceAdmin() | NO REASON RECORDED
+tokens | WrappedToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | WrappedToken | rescue(address) | NO REASON RECORDED
+tokens | WrappedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | WrappedToken | setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool) | NO REASON RECORDED
+tokens | WrappedToken | setWrapMember(bytes32,bool,bool) | NO REASON RECORDED
+tokens | WrappedToken | transfer(address,uint256) | NO REASON RECORDED
+tokens | WrappedToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | WrappedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedToken | unwrap(address,uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedToken | unwrap(uint256,address) | NO REASON RECORDED
+tokens | WrappedToken | unwrap(uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedToken | unwrapToUA(address,uint256,bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedToken | wrap(address,uint256) | NO REASON RECORDED
+tokens | WrappedToken | wrap(uint256) | NO REASON RECORDED
+tokens | WrappedToken | wrapToUA(address,uint256,bytes32) | NO REASON RECORDED
+tokens | NormalZetherToken | acceptAdmin() | NO REASON RECORDED
+tokens | NormalZetherToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | burn(uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalZetherToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | disableFeature(uint8) | NO REASON RECORDED
+tokens | NormalZetherToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | NormalZetherToken | grantRole(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalZetherToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | NormalZetherToken | mint(address,uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | mintToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxConfidentialTransfer((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxConfidentialTransferCompact((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxConfidentialTransferSingle((uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxRollOver(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxRollOverBatch((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxRollOverBatch(bytes32[]) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxRollOverSigned((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxRollOverSigned(bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxSetRollOverMode((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxSetRollOverMode(bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxShield(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxUnshield((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | NormalZetherToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherToken | renounceAdmin() | NO REASON RECORDED
+tokens | NormalZetherToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | NormalZetherToken | rescue(address) | NO REASON RECORDED
+tokens | NormalZetherToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalZetherToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | NormalZetherToken | transfer(address,uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | NormalZetherToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | acceptAdmin() | NO REASON RECORDED
+tokens | WrappedZetherToken | addReserve(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | cancelRate() | NO REASON RECORDED
+tokens | WrappedZetherToken | disableFeature(uint8) | NO REASON RECORDED
+tokens | WrappedZetherToken | disableWrap(address,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | executeRate() | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedZetherToken | grantRole(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | WrappedZetherToken | mint(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | mintToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxConfidentialTransfer((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxConfidentialTransferCompact((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxConfidentialTransferSingle((uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxRollOver(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxRollOverBatch((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxRollOverBatch(bytes32[]) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxRollOverSigned((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxRollOverSigned(bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxSetRollOverMode((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxSetRollOverMode(bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxShield(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxUnshield((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxUnshieldUnwrap((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),(address,bytes32,uint256,uint256),bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxWrapShield((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxWrapShield(address,uint256,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedZetherToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherToken | proposeRate(address,uint96,uint96) | NO REASON RECORDED
+tokens | WrappedZetherToken | renounceAdmin() | NO REASON RECORDED
+tokens | WrappedZetherToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | WrappedZetherToken | rescue(address) | NO REASON RECORDED
+tokens | WrappedZetherToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | WrappedZetherToken | setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool) | NO REASON RECORDED
+tokens | WrappedZetherToken | setWrapMember(bytes32,bool,bool) | NO REASON RECORDED
+tokens | WrappedZetherToken | transfer(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | WrappedZetherToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | unwrap(address,uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | unwrap(uint256,address) | NO REASON RECORDED
+tokens | WrappedZetherToken | unwrap(uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | unwrapToUA(address,uint256,bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | wrap(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | wrap(uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | wrapToUA(address,uint256,bytes32) | NO REASON RECORDED
+tokens | NormalPqzToken | acceptAdmin() | NO REASON RECORDED
+tokens | NormalPqzToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalPqzToken | burn(uint256) | NO REASON RECORDED
+tokens | NormalPqzToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalPqzToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | NormalPqzToken | disableFeature(uint8) | NO REASON RECORDED
+tokens | NormalPqzToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | NormalPqzToken | grantRole(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalPqzToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | NormalPqzToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalPqzToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalPqzToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalPqzToken | renounceAdmin() | NO REASON RECORDED
+tokens | NormalPqzToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | NormalPqzToken | rescue(address) | NO REASON RECORDED
+tokens | NormalPqzToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalPqzToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalPqzToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | NormalPqzToken | transfer(address,uint256) | NO REASON RECORDED
+tokens | NormalPqzToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | NormalPqzToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalPqzToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | acceptAdmin() | NO REASON RECORDED
+tokens | WrappedPqzToken | addReserve(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | cancelRate() | NO REASON RECORDED
+tokens | WrappedPqzToken | disableFeature(uint8) | NO REASON RECORDED
+tokens | WrappedPqzToken | disableWrap(address,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | WrappedPqzToken | executeRate() | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedPqzToken | grantRole(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | WrappedPqzToken | mint(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | mintToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxShield(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedPqzToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedPqzToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedPqzToken | pqzCancelVerifier() | NO REASON RECORDED
+tokens | WrappedPqzToken | pqzRevokeVerifier() | NO REASON RECORDED
+tokens | WrappedPqzToken | pqzSetVerifier(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | proposeRate(address,uint96,uint96) | NO REASON RECORDED
+tokens | WrappedPqzToken | renounceAdmin() | NO REASON RECORDED
+tokens | WrappedPqzToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | WrappedPqzToken | rescue(address) | NO REASON RECORDED
+tokens | WrappedPqzToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | WrappedPqzToken | setProofStore(uint8) | NO REASON RECORDED
+tokens | WrappedPqzToken | setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool) | NO REASON RECORDED
+tokens | WrappedPqzToken | setWrapMember(bytes32,bool,bool) | NO REASON RECORDED
+tokens | WrappedPqzToken | transfer(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | unwrap(address,uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | unwrap(uint256,address) | NO REASON RECORDED
+tokens | WrappedPqzToken | unwrap(uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | unwrapToUA(address,uint256,bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | wrap(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | wrap(uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | acceptAdmin() | NO REASON RECORDED
+tokens | NormalRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | burn(uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalRegulatedToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | NormalRegulatedToken | forceTransfer(bytes32,uint256) | reached inside another call (trace)
+tokens | NormalRegulatedToken | freeze(bytes32,bytes32,bytes32) | reached inside another call (trace)
+tokens | NormalRegulatedToken | initialize(bytes32,uint64,bytes) | reached inside another call (trace)
+tokens | NormalRegulatedToken | mint(address,uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mintToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | reached inside another call (trace)
+tokens | NormalRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalRegulatedToken | pause(bytes32,uint64) | reached inside another call (trace)
+tokens | NormalRegulatedToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalRegulatedToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalRegulatedToken | payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64) | reached inside another call (trace)
+tokens | NormalRegulatedToken | renounceAdmin() | NO REASON RECORDED
+tokens | NormalRegulatedToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | NormalRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | revokeOrder(bytes32,bytes32) | reached inside another call (trace)
+tokens | NormalRegulatedToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalRegulatedToken | setAllowed(bytes32[],bool) | NO REASON RECORDED
+tokens | NormalRegulatedToken | setDenied(bytes32[],bool) | NO REASON RECORDED
+tokens | NormalRegulatedToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | NormalRegulatedToken | setTaxRate(uint32) | reached inside another call (trace)
+tokens | NormalRegulatedToken | setTaxRecipient(bytes32) | reached inside another call (trace)
+tokens | NormalRegulatedToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | NormalRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | unfreeze(bytes32,bytes32) | reached inside another call (trace)
+tokens | NormalRegulatedToken | unpause(bytes32) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | acceptAdmin() | NO REASON RECORDED
+tokens | WrappedRegulatedToken | addReserve(address,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | cancelRate() | NO REASON RECORDED
+tokens | WrappedRegulatedToken | disableFeature(uint8) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | disableWrap(address,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | executeRate() | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedRegulatedToken | forceTransfer(bytes32,uint256) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | freeze(bytes32,bytes32,bytes32) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | initialize(bytes32,uint64,bytes) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | mint(address,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mintToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | operatorTransfer(bytes32,bytes32,uint256,bytes32) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | pause(bytes32,uint64) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | proposeRate(address,uint96,uint96) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | renounceAdmin() | NO REASON RECORDED
+tokens | WrappedRegulatedToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | revokeOrder(bytes32,bytes32) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | setTaxRate(uint32) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | setTaxRecipient(bytes32) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | setWrapMember(bytes32,bool,bool) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | unfreeze(bytes32,bytes32) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | unpause(bytes32) | reached inside another call (trace)
+tokens | WrappedRegulatedToken | unwrap(address,uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | unwrap(uint256,address) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | unwrap(uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | unwrapToUA(address,uint256,bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | wrap(address,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | wrapToUA(address,uint256,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | acceptAdmin() | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | burn(uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | forceTransfer(bytes32,uint256) | reached inside another call (trace)
+tokens | NormalZetherRegulatedToken | freeze(bytes32,bytes32,bytes32) | reached inside another call (trace)
+tokens | NormalZetherRegulatedToken | initialize(bytes32,uint64,bytes) | reached inside another call (trace)
+tokens | NormalZetherRegulatedToken | mint(address,uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mintToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxConfidentialTransfer((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxConfidentialTransferCompact((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxConfidentialTransferSingle((uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxRollOver(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxRollOverBatch((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxRollOverBatch(bytes32[]) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxRollOverSigned((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxRollOverSigned(bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxSetRollOverMode((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxSetRollOverMode(bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxShield(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxUnshield((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | pause(bytes32,uint64) | reached inside another call (trace)
+tokens | NormalZetherRegulatedToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64) | reached inside another call (trace)
+tokens | NormalZetherRegulatedToken | renounceAdmin() | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | revokeOrder(bytes32,bytes32) | reached inside another call (trace)
+tokens | NormalZetherRegulatedToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | setAllowed(bytes32[],bool) | refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (gov), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind
+tokens | NormalZetherRegulatedToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | setTaxRate(uint32) | reached inside another call (trace)
+tokens | NormalZetherRegulatedToken | setTaxRecipient(bytes32) | reached inside another call (trace)
+tokens | NormalZetherRegulatedToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | unfreeze(bytes32,bytes32) | reached inside another call (trace)
+tokens | NormalZetherRegulatedToken | unpause(bytes32) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | acceptAdmin() | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | addReserve(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | cancelRate() | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | disableWrap(address,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | executeRate() | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedZetherRegulatedToken | forceTransfer(bytes32,uint256) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | freeze(bytes32,bytes32,bytes32) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | initialize(bytes32,uint64,bytes) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | mint(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mintToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxConfidentialTransfer((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxConfidentialTransferCompact((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxConfidentialTransferSingle((uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxRollOver(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxRollOverBatch((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxRollOverBatch(bytes32[]) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxRollOverSigned((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxRollOverSigned(bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxSetRollOverMode((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxSetRollOverMode(bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxShield(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxUnshield((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxUnshieldUnwrap((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),(address,bytes32,uint256,uint256),bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxWrapShield((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxWrapShield(address,uint256,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | pause(bytes32,uint64) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | proposeRate(address,uint96,uint96) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | renounceAdmin() | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | revokeOrder(bytes32,bytes32) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | setAllowed(bytes32[],bool) | refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (gov), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind
+tokens | WrappedZetherRegulatedToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | setTaxRate(uint32) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | setTaxRecipient(bytes32) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | setWrapMember(bytes32,bool,bool) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | unfreeze(bytes32,bytes32) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | unpause(bytes32) | reached inside another call (trace)
+tokens | WrappedZetherRegulatedToken | unwrap(address,uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | unwrap(uint256,address) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | unwrap(uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | unwrapToUA(address,uint256,bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | wrap(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | wrapToUA(address,uint256,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | acceptAdmin() | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | burn(uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | disableFeature(uint8) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | forceTransfer(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | freeze(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | NormalPqzRegulatedToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | operatorTransfer(bytes32,bytes32,uint256,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | pause(bytes32,uint64) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | pqzCancelVerifier() | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | pqzRevokeVerifier() | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | pqzSetVerifier(bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | renounceAdmin() | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | rescue(address) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | revokeOrder(bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | setAllowed(bytes32[],bool) | refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (pq), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind
+tokens | NormalPqzRegulatedToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | setProofStore(uint8) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | setTaxRate(uint32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | setTaxRecipient(bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | transfer(address,uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | unfreeze(bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | unpause(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | acceptAdmin() | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | addReserve(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | cancelNonce(uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | cancelRate() | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | disableFeature(uint8) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | disableWrap(address,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | executeRate() | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedPqzRegulatedToken | forceTransfer(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | freeze(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | WrappedPqzRegulatedToken | mint(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mintToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxPrepareAcc(bytes32,uint64,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxRollOver(bytes32,uint64,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxShield(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxWrapShield((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | operatorTransfer(bytes32,bytes32,uint256,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | pause(bytes32,uint64) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | pqzCancelVerifier() | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | pqzRevokeVerifier() | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | pqzSetVerifier(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | proposeRate(address,uint96,uint96) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | renounceAdmin() | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | renounceRole(uint8) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | rescue(address) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | revokeOrder(bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | revokeRole(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | setAllowed(bytes32[],bool) | refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (pq), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind
+tokens | WrappedPqzRegulatedToken | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | setProofStore(uint8) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | setTaxRate(uint32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | setTaxRecipient(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | setWrapMember(bytes32,bool,bool) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | transfer(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | transferAdmin(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | transferToUA(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | unfreeze(bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | unpause(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | unwrap(address,uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | unwrap(uint256,address) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | unwrap(uint256,address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | unwrapToUA(address,uint256,bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | wrap(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | wrap(uint256) | NO REASON RECORDED
+dex | SCaaSDex | acceptAdmin() | NO REASON RECORDED
+dex | SCaaSDex | cancelGrant(uint8,bytes32) | NO REASON RECORDED
+dex | SCaaSDex | disableFeature(uint8) | NO REASON RECORDED
+dex | SCaaSDex | exchangeOne((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[]),(address,bytes)[],address) | NO REASON RECORDED
+dex | SCaaSDex | grantRole(uint8,bytes32) | NO REASON RECORDED
+dex | SCaaSDex | initialize(bytes32,uint64,bytes) | reached inside another call (trace)
+dex | SCaaSDex | mtxCancelOrders((address,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256))[],bytes[]) | NO REASON RECORDED
+dex | SCaaSDex | mtxExchange((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[]),(address,bytes)[]) | NO REASON RECORDED
+dex | SCaaSDex | mtxExchangeBatch((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[])[],(address,bytes)[][]) | NO REASON RECORDED
+dex | SCaaSDex | mtxExchangeVia((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[]),address,bytes) | NO REASON RECORDED
+dex | SCaaSDex | mtxHybrid((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[],uint256,uint256,address[]),(address,bytes)[]) | NO REASON RECORDED
+dex | SCaaSDex | mtxHybridVia((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[],uint256,uint256,address[]),address,bytes) | NO REASON RECORDED
+dex | SCaaSDex | mtxInvalidateNonces(address,uint256,uint256,bytes) | NO REASON RECORDED
+dex | SCaaSDex | mtxLiquidity((bytes32,(bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256[],uint256,address[]),(address,bytes)[]) | NO REASON RECORDED
+dex | SCaaSDex | mtxSettle((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[])[]) | NO REASON RECORDED
+dex | SCaaSDex | renounceAdmin() | NO REASON RECORDED
+dex | SCaaSDex | renounceRole(uint8) | NO REASON RECORDED
+dex | SCaaSDex | revokeRole(uint8,bytes32) | NO REASON RECORDED
+dex | SCaaSDex | setExchangeTarget(address,bool) | reached inside another call (trace)
+dex | SCaaSDex | setFeeSplit(uint32,address) | reached inside another call (trace)
+dex | SCaaSDex | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | NO REASON RECORDED
+dex | SCaaSDex | setListedOnly(bool) | reached inside another call (trace)
+dex | SCaaSDex | setMarket(address,address,bool) | reached inside another call (trace)
+dex | SCaaSDex | settleOne((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[]),address) | NO REASON RECORDED
+dex | SCaaSDex | transferAdmin(bytes32) | NO REASON RECORDED
+dex | SCaaSDexGovernanceModule | acceptAdmin() | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | cancelGrant(uint8,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | disableFeature(uint8) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | grantRole(uint8,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | renounceAdmin() | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | renounceRole(uint8) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | revokeRole(uint8,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | transferAdmin(bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexLiquidityModule | mtxCancelOrders((address,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256))[],bytes[]) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexLiquidityModule | mtxInvalidateNonces(address,uint256,uint256,bytes) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexLiquidityModule | mtxLiquidity((bytes32,(bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256[],uint256,address[]),(address,bytes)[]) | a library / module entry: runs only through SCaaSDex
+relay | RelayFeeExecutor | exec(address,bytes) | reached inside another call (trace)
+governance | GovernanceRouter | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)
+governance | GovernanceRouter | mtxApproveDexRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxApproveRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(uint16,uint16,uint64,uint16,bytes4,bytes4,bytes32,bytes32,bytes32,address,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxApproveTokenRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)
+governance | GovernanceRouter | mtxCreateInstance((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs a class release on the deploy's factory, and deploy.sh publishes none (misc's own factory runs createInstance directly); through the router: its negative ReleaseUnknown runs (gov)
+governance | GovernanceRouter | mtxDeprecateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxDeprecateRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxDeprecateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)
+governance | GovernanceRouter | mtxExecuteRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | waits the token's rate delay (2 days) after mtxProposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (gov)
+governance | GovernanceRouter | mtxPublishClassEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxPublishDexEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxPublishTokenEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxRevokeApproval((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxSetChainEntries((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxSetClassKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxSetTokenKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxSetWrapLimits((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+governance | GovernanceRouter | mtxSetWrapMember((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+registry | UARegistry | acceptMembership(bytes32,(uint16,(uint16,bytes)[],bytes)) | NO REASON RECORDED
+registry | UARegistry | cacheExpandedKey(uint16,bytes,uint256) | NO REASON RECORDED
+registry | UARegistry | registerFrost(uint16,(bytes,uint16,(bytes[],bytes,bytes32)[]),(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes) | NO REASON RECORDED
+registry | UARegistry | registerMuSig2(uint16,(bytes,bytes[]),(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes) | NO REASON RECORDED
+registry | UARegistry | registerWebAuthn((bytes32,bytes32,bytes32),(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes) | NO REASON RECORDED
+registry | UARegistryCoreLib | acceptMembership(bytes32,IUARegistry.MemberSig) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | keyUa(uint16,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | portableOk(uint16,bytes,bytes32,bytes32,bytes32,IUARegistry.UASig) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | pqzHolder(uint16,bytes,bytes32,bool) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | pqzProof(bytes32,uint64,bytes,bytes,bytes32,bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | register(uint16,bytes,IUARegistry.UAAttrs,bytes,bytes) | a library / module entry, reached by its callers
+registry | UARegistryCoreLib | registerFrost(uint16,IUARegistry.FrostKey,IUARegistry.UAAttrs,bytes,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | registerMsig(IUARegistry.MsigStructure,IUARegistry.UAAttrs,IUARegistry.MemberSig[],bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | registerMuSig2(uint16,IUARegistry.MuSig2Key,IUARegistry.UAAttrs,bytes,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | registerWebAuthn(IUARegistry.WebAuthnKey,IUARegistry.UAAttrs,bytes,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | registrationOf(bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | requirePortable(bytes32,bytes32,bytes32,IUARegistry.UASig) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | uaCount(uint16) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | cacheExpandedKey(uint16,bytes,uint256) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | popOf(bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | popSlotsOf(bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | pqzKeySigOf(bytes32,uint64) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | pqzPopOf(bytes32,uint64) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | setKemKey(bytes32,uint64,IUARegistry.KemKey,IUARegistry.UASig) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | setPqzKey(bytes32,uint64,bytes,bytes32,IUARegistry.UASig) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | storePqzPop(bytes32,uint64,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | uaAt(uint16,uint256) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | uaIndex(bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | uaPage(uint16,uint256,uint256) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | webAuthnKeyOf(bytes32) | a library / module entry: runs only through UARegistry
+factory | OpenFactory | acceptAdmin() | NO REASON RECORDED
+factory | OpenFactory | approveDexRelease(uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64) | NO REASON RECORDED
+factory | OpenFactory | approveRelease((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes32,bytes32,bytes32,address,uint32,uint64) | NO REASON RECORDED
+factory | OpenFactory | approveTokenRelease(uint8,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64) | NO REASON RECORDED
+factory | OpenFactory | createInstance((uint16,uint16,uint64),bytes32,bytes) | NO REASON RECORDED
+factory | OpenFactory | createTokenUnregistered(uint8,address,bytes,bytes32) | NO REASON RECORDED
+factory | OpenFactory | deployDexImplementation(uint64,uint16,bytes,bytes) | NO REASON RECORDED
+factory | OpenFactory | deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes) | NO REASON RECORDED
+factory | OpenFactory | deprecateDex(uint64,string) | NO REASON RECORDED
+factory | OpenFactory | deprecateRelease((uint16,uint16,uint64),string) | NO REASON RECORDED
+factory | OpenFactory | deprecateToken(uint8,uint64,string) | NO REASON RECORDED
+factory | OpenFactory | publishClassEnv(uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[])) | NO REASON RECORDED
+factory | OpenFactory | publishDexEnv(uint16,(address,address,bool,address[],bytes32[],address[],bytes32[])) | NO REASON RECORDED
+factory | OpenFactory | renounceAdmin() | ends the factory's administration for ever (CTR-GOV-23 Q1: no env, release or deprecation after it), so no matrix factory renounces; its refusals (before configureChain, a non-admin) and its effect are forge's (test/v2/FactoryAdmin.t.sol)
+factory | OpenFactory | revokeApproval(bytes32) | NO REASON RECORDED
+factory | OpenFactory | setChainEntries(address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32) | NO REASON RECORDED
+factory | OpenFactory | setClassKindEnabled(uint16,uint16,bool) | NO REASON RECORDED
+factory | OpenFactory | transferAdmin(bytes32) | NO REASON RECORDED
+accounts | SmartKeyAccount | addKey((uint8,bytes32,bytes32,bytes32,bytes32)) | reached inside another call (trace)
+accounts | SmartKeyAccount | cancelRecovery() | reached inside another call (trace)
+accounts | SmartKeyAccount | completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32)) | waits RECOVERY_DELAY (2 days) after initiateRecovery; a real chain cannot skip time: its negative runs (gov)
+accounts | SmartKeyAccount | execute(address,uint256,bytes) | reached inside another call (trace)
+accounts | SmartKeyAccount | initialize((uint8,bytes32,bytes32,bytes32,bytes32),address) | reached inside another call (trace)
+accounts | SmartKeyAccount | removeKey(uint256) | reached inside another call (trace)
+accounts | SmartKeyAccount | rotateKey(uint256,(uint8,bytes32,bytes32,bytes32,bytes32)) | reached inside another call (trace)
+accounts | SmartKeyAccount | setGuardian(address) | reached inside another call (trace)
+wallets | MandateWallet | cancelNonce(uint256) | NO REASON RECORDED
+wallets | MandateWallet | execute(address,uint256,bytes) | NO REASON RECORDED
+wallets | MandateWallet | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | refused by design (an address meta-transaction: none is taken); its negative runs (misc)
+wallets | MandateWallet | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | NO REASON RECORDED
+wallets | MandateWallet | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+wallets | MandateWallet | mtxDelegateRevoke((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+wallets | MandateWallet | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+wallets | MandateWallet | mtxExecute((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+wallets | MandateWallet | mtxPayUnderMandate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint256,bytes32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+wallets | MandateWallet | mtxRevokeMandate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+wallets | MandateWallet | mtxSetMandate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint128,uint128,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+wallets | MandateWallet | mtxSetPayee((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+wallets | MandateWallet | payUnderMandate(address,bytes32,uint256,bytes32,uint64,(bytes32,bytes32,bool,uint16,bytes)) | NO REASON RECORDED
+wallets | MandateWallet | revoke(address) | NO REASON RECORDED
+wallets | MandateWallet | revoke(address,uint64) | NO REASON RECORDED
+wallets | MandateWallet | setMandate(address,bytes32,uint128,uint128,uint64,uint64) | NO REASON RECORDED
+wallets | MandateWallet | setPayee(address,bytes32,bool) | NO REASON RECORDED
+wallets | HederaMandateWallet | cancelNonce(uint256) | needs Hedera
+wallets | HederaMandateWallet | execute(address,uint256,bytes) | needs Hedera
+wallets | HederaMandateWallet | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | needs Hedera
+wallets | HederaMandateWallet | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | needs Hedera
+wallets | HederaMandateWallet | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxDelegateRevoke((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxExecute((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxPayUnderMandate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint256,bytes32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | needs Hedera
+wallets | HederaMandateWallet | mtxRevokeMandate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxSetMandate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint128,uint128,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxSetPayee((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | payUnderMandate(address,bytes32,uint256,bytes32,uint64,(bytes32,bytes32,bool,uint16,bytes)) | needs Hedera
+wallets | HederaMandateWallet | revoke(address) | needs Hedera
+wallets | HederaMandateWallet | revoke(address,uint64) | needs Hedera
+wallets | HederaMandateWallet | setMandate(address,bytes32,uint128,uint128,uint64,uint64) | needs Hedera
+wallets | HederaMandateWallet | setPayee(address,bytes32,bool) | needs Hedera
+compliance | ComplianceRegistry | acceptAdmin() | reached inside another call (trace)
+compliance | ComplianceRegistry | setKycProvider(bytes32,bool) | reached inside another call (trace)
+compliance | ComplianceRegistry | transferAdmin(bytes32) | reached inside another call (trace)
+reference | RefServiceEscrow | deposit((bytes32,uint256,uint64,bytes32),(bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+reference | RefServiceEscrow | note((bytes32,uint256,string,bytes,bytes32),(bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+reference | RefServiceEscrow | release(bytes32) | NO REASON RECORDED
+libraries | GovernanceLib | acceptAdmin(bytes32) | a library / module entry, reached by its callers
+libraries | GovernanceLib | cancelGrant(uint8,bytes32,bytes32) | a library / module entry, reached by its callers
+libraries | GovernanceLib | disableFeature(uint8,bytes32,uint256) | a library / module entry, reached by its callers
+libraries | GovernanceLib | enableFeature(uint8,bytes32,uint256) | a library / module entry, reached by its callers
+libraries | GovernanceLib | grantRole(uint8,bytes32,bytes32,uint256,uint256,address) | a library / module entry, reached by its callers
+libraries | GovernanceLib | init(uint256,uint256,bytes32,uint64,address,GovernanceLib.Roles,uint256,uint256,uint256,address) | a library / module entry, reached by its callers
+libraries | GovernanceLib | initHolder(uint8,bytes32,uint256,uint256,address) | a library / module entry, reached by its callers
+libraries | GovernanceLib | renounceAdmin(bytes32,uint256) | a library / module entry, reached by its callers
+libraries | GovernanceLib | renounceRole(uint8,bytes32,uint256) | a library / module entry, reached by its callers
+libraries | GovernanceLib | rescue(address) | a library / module entry, reached by its callers
+libraries | GovernanceLib | revokeRole(uint8,bytes32,bytes32,uint256) | a library / module entry, reached by its callers
+libraries | GovernanceLib | setGrant(uint8,bytes32,IGovernance.GrantTerms,bytes32,uint256,uint256,uint256,uint256,address,uint256) | a library / module entry, reached by its callers
+libraries | GovernanceLib | transferAdmin(bytes32,bytes32) | a library / module entry, reached by its callers
+libraries | GovernanceLib | useLimited(uint8,bytes32,uint256) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | ZetherLib | init(IFactoryToken.ConfidentialConfig,IZetherVerifier) | a library / module entry, reached by its callers
+libraries | ZetherLib | initNormal(bytes,uint8) | a library / module entry, reached by its callers
+libraries | ZetherLib | initNormalConf(bytes,IZetherVerifier) | a library / module entry, reached by its callers
+libraries | ZetherLib | rollOver(bytes32) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | rollOverBatch(bytes32[]) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | rollOverSigned(bytes32,uint64,uint64,IUARegistry.UASig,ZetherLib.Env) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | setRollOverMode(bytes32,ZetherTypes.RollOverMode,uint64,IUARegistry.UASig,ZetherLib.Env) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | shield(bytes32,uint256,address,address) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | transferMulti(IZetherToken.ZetherMulti,bytes) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | transferSingle(IZetherToken.ZetherSingle,bytes) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | unshield(IZetherToken.ZetherBurn,uint256,bytes32,bytes) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherWrappedLib | init(bytes,IZetherVerifier,address,uint8,uint256,uint256,uint256) | a library / module entry, reached by its callers
+libraries | ZetherWrappedLib | unshieldUnwrap(IZetherToken.ZetherBurn,IConfidentialWrappedToken.Unwrap,bytes) | a library / module entry: runs only through WrappedZetherToken, WrappedZetherRegulatedToken
+libraries | WrappedLib | addReserve(uint256,uint256,address,uint256) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | cancelRate(bytes32) | a library / module entry, reached by its callers
+libraries | WrappedLib | controlsOff(uint8) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | disableWrap(address,bytes32,bytes32) | a library / module entry, reached by its callers
+libraries | WrappedLib | dropPending() | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | executeRate(bytes32,uint256) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | initToken(IFactoryToken.TokenConfig,bool,uint8,uint256,uint256,uint256,address) | a library / module entry, reached by its callers
+libraries | WrappedLib | payOut(uint256,address,uint256,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | payOutTo(uint256,bytes32,uint256,uint256,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | payOutToUA(uint256,bytes32,uint256,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | proposeRate(address,uint96,uint96,bytes32) | a library / module entry, reached by its callers
+libraries | WrappedLib | rescue(address) | a library / module entry, reached by its callers
+libraries | WrappedLib | setWrapLimits(IWrappedToken.WrapLegLimits[],bool,bool,bool,bytes32,address) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | setWrapMember(bytes32,bool,bool,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | wrap(uint256,uint256,address,uint256,uint256,bytes32) | a library / module entry, reached by its callers
+libraries | WrappedLib | wrapBySigUA(address,ITradeToken.UAWrapOrder,IUARegistry.UASig,address,uint256) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | directTaxed(bytes32,bytes32,bytes32,bytes32,uint256,uint8,uint256) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | forceTransfer(bytes32,uint256,bytes32) | a library / module entry, reached by its callers
+libraries | RegulatedLib | freeze(bytes32,bytes32,bytes32,bytes32) | a library / module entry, reached by its callers
+libraries | RegulatedLib | init(bytes,uint256,bytes32,address,address) | a library / module entry, reached by its callers
+libraries | RegulatedLib | operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32,address) | a library / module entry, reached by its callers
+libraries | RegulatedLib | pause(bytes32,uint64,bytes32) | a library / module entry, reached by its callers
+libraries | RegulatedLib | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32) | a library / module entry, reached by its callers
+libraries | RegulatedLib | revokeOrder(bytes32,bytes32,bytes32) | a library / module entry, reached by its callers
+libraries | RegulatedLib | setList(uint8,uint8,bytes32[],bool,bytes32) | a library / module entry, reached by its callers
+libraries | RegulatedLib | setTaxRate(uint32,address,bytes32) | a library / module entry, reached by its callers
+libraries | RegulatedLib | setTaxRecipient(bytes32,bytes32,address) | a library / module entry, reached by its callers
+libraries | RegulatedLib | taxed(bytes32,bytes32,bytes32,bytes32,uint8,uint256,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | unfreeze(bytes32,bytes32,bytes32) | a library / module entry, reached by its callers
+libraries | RegulatedLib | unpause(bytes32,bytes32) | a library / module entry, reached by its callers
+libraries | MtxPipelineLib | payMeta(bytes32,MetaTxLib.PayMeta) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | payRecord(bytes32,bytes32,uint256) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | preCall(MtxPipelineLib.Ctx,MtxPipelineLib.Envelope,MtxPipelineLib.CallFacts,bytes) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | preCallUA(MtxPipelineLib.Ctx,MtxPipelineLib.Envelope,MtxPipelineLib.CallFacts,IUARegistry.UASig) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | preNamed(MtxPipelineLib.Ctx,bytes32,MtxPipelineLib.Envelope,bytes,MtxPipelineLib.CallFacts,bytes) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | preNamedUA(MtxPipelineLib.Ctx,bytes32,MtxPipelineLib.Envelope,bytes,MtxPipelineLib.CallFacts,IUARegistry.UASig) | a library / module entry, reached by its callers
+libraries | MtxPipelineLib | preTransferUA(MtxPipelineLib.Ctx,MetaTxLib.UAMetaTransfer,bytes32,uint256,IUARegistry.UASig) | a library / module entry: runs only through tokens
+libraries | TradeLib | cancel(bytes32,uint256,bytes32,bool) | a library / module entry: runs only through tokens, SCaaSDex
+libraries | TradeLib | invalidate(bytes32,uint256,uint256,bool) | a library / module entry: runs only through tokens, SCaaSDex
+libraries | TradeLib | record(ITradeToken.UATradeOrder,ITradeToken.TradeFill,bytes32,bool) | a library / module entry: runs only through tokens, SCaaSDex
+libraries | TradeLib | restore(ITradeToken.UATradeOrder,bytes32,uint256,address) | a library / module entry: runs only through tokens, SCaaSDex
+libraries | PqzStateLib | cancelVerifier(bytes32) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | init(IFactoryToken.ConfidentialConfig,address,address,address) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | prepareAcc(bytes32,uint64,uint256,address) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | revokeVerifier(bytes32) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | rollOver(bytes32,uint64,uint256) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | setProofStore(uint8) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | setVerifier(bytes32,bytes32,address) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | setVerifierFee(uint64,bytes32) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | shield(bytes32,uint256,address,address) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzWrappedLib | init(bytes,address,address,address,uint8,uint256,uint256,uint256) | a library / module entry: runs only through WrappedPqzToken, WrappedPqzRegulatedToken
+libraries | PqzBurnLib | unshield(PqzCore.Env,IPqzToken.PqzBurnArgs,bytes,bytes,IUARegistry.UASig,IPqzToken.PqzSignedVerdict) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzTransferLib | transfer(PqzCore.Env,IPqzToken.PqzTransferArgs,bytes,bytes,IUARegistry.UASig,IPqzToken.PqzSignedVerdict) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzTransferLib | transferMulti(PqzCore.Env,IPqzToken.PqzMultiArgs,bytes,bytes,IUARegistry.UASig,IPqzToken.PqzSignedVerdict) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+pqchat | PqChat | addWraps(bytes32,uint32,(bytes32,uint64,bytes,bytes32,bytes)[]) | NO REASON RECORDED
+pqchat | PqChat | createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | initialize(bytes32) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+pqchat | PqChat | leave((bytes32,bytes32,bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | postMessage((bytes32,bytes32,bytes32,bytes16,uint64,bytes32[],bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | remove((bytes32,bytes32,uint64,bytes32[],bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | storeMessage(uint8,bytes8,bytes) | NO REASON RECORDED
+pqchat | PqChat | updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChat | voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+pqchat | PqChatTopics | createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+(726 without a reason)
+
+## local: negatives (44; refused as expected = status 2)
+ok  | NormalZetherRegulatedToken | negative: setAllowed on kind 10 (bit 8 outside the mask: no holder) | expected 0x8aed6512 got 0x8aed6512
+ok  | NormalZetherRegulatedToken | negative: enableFeature(ALLOWLIST) on kind 10 | expected 0x63c2d1a5 got 0x63c2d1a5
+ok  | WrappedZetherRegulatedToken | negative: setAllowed on kind 11 (bit 8 outside the mask: no holder) | expected 0x8aed6512 got 0x8aed6512
+ok  | WrappedZetherRegulatedToken | negative: enableFeature(ALLOWLIST) on kind 11 | expected 0x63c2d1a5 got 0x63c2d1a5
+ok  | WrappedRegulatedToken | negative: transfer from a frozen account (kind 9) | expected 0xc1c3af34 got 0xc1c3af34
+ok  | NormalRegulatedToken | negative: transfer to an account the ComplianceRegistry does not attest (kind 8, KYC) | expected 0xd29f84a7 got 0xd29f84a7
+ok  | NormalRegulatedToken | negative: grantRole by a non-owner (kind 8) | expected 0xba963c12 got 0xba963c12
+ok  | GovernanceRouter | negative: router op whose signature is not its from's | expected 0x0bdf5a6b got 0x0bdf5a6b
+ok  | GovernanceRouter | negative: mtxExecuteRate before the eta 1794573962 | expected 0x272aa3ae got 0x272aa3ae
+ok  | GovernanceRouter | negative: mtxCreateInstance with no class release on this factory | expected 0x917d36d3 got 0x917d36d3
+ok  | GovernanceRouter | negative: router mtxExecute (no generic path) | expected 0x80bec470 got 0x80bec470
+ok  | GovernanceRouter | negative: router mtxBatch (no generic path) | expected 0x80bec470 got 0x80bec470
+ok  | GovernanceRouter | negative: router executeMetaTransaction (no generic path) | expected 0x80bec470 got 0x80bec470
+ok  | SmartKeyAccount | negative: completeRecovery before RECOVERY_DELAY | expected 0xf1c34de9 got 0xf1c34de9
+ok  | SmartKeyAccount | negative: initialize by another caller than the factory | expected 0x32cc7236 got 0x32cc7236
+ok  | GovernanceRouter | negative: mtxSetAllowed by a UA without bit 8 (kind 9) | expected 0x8aed6512 got 0x8aed6512
+ok  | ComplianceRegistry | negative: setKycProvider by a non-admin | expected 0xba963c12 got 0xba963c12
+ok  | NormalPqzToken | negative: pqUSD (PRECOMPILE) setVerifierFee(1) | expected 0xbb2bf818 got 
+ok  | NormalPqzRegulatedToken | negative: pqR12 setAllowed (bit 8 outside the mask: no holder) | expected 0x8aed6512 got 
+ok  | NormalPqzRegulatedToken | negative: pqR12 enableFeature(ALLOWLIST) | expected 0x63c2d1a5 got 
+ok  | WrappedPqzRegulatedToken | negative: pqR13 setAllowed (bit 8 outside the mask: no holder) | expected 0x8aed6512 got 
+ok  | WrappedPqzRegulatedToken | negative: pqR13 enableFeature(ALLOWLIST) | expected 0x63c2d1a5 got 
+ok  | NormalToken | negative: pqN0 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | NormalPqzToken | negative: pqUSD mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | WrappedPqzToken | negative: pqW mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | NormalPqzRegulatedToken | negative: pqR12 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | WrappedPqzRegulatedToken | negative: pqR13 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | NormalPqzToken | negative: pqOF op 1 without a verdict | expected 0x331c66f6 got 
+ok  | NormalPqzToken | negative: pqOF op 1 with a verdict over another statement | expected 0x331c66f6 got 
+ok  | NormalPqzToken | negative: pqOF op 1 with a verdict signed by a non-verifier (key 3) | expected 0x3a949c7b got 
+ok  | NormalPqzToken | negative: pqOF the five-argument verifyTransferAmount on an OFFCHAIN token | expected 0xa153caa8 got 
+ok  | NormalPqzToken | negative: pqOF pqzSetVerifier on a fixed verifier | expected 0x8fe682a6 got 
+ok  | GovernanceRouter | negative: pqOT the confirm before the notice ends | expected 0x6bcebc14 got 
+ok  | NormalPqzToken | negative: pqOT a verdict by the replaced verifier | expected 0x3a949c7b got 
+ok  | NormalPqzToken | negative: pqOT op 1 after the revocation (every OFFCHAIN proof refused) | expected 0xb00d6ffb got 
+ok  | NormalPqzToken | negative: pqVF op 1 built at the old fee, after the decrease | expected 0x735babb3 got 
+ok  | NormalPqzToken | negative: pqVF direct op 7 resubmitted with d 1 after Δvf = +2 | expected 0x735babb3 got 
+ok  | NormalPqzToken | negative: pqVF direct op 7 resubmitted with d 3 after Δvf = -2 | expected 0x735babb3 got 
+ok  | NormalPqzToken | negative: pqVFN the confirm before eta | expected 0x7c735c30 got 
+ok  | NormalPqzToken | negative: pqVFN setVerifierFee(3): the current value, nothing pending | expected 0xd24bcb0e got 
+ok  | NormalPqzToken | negative: pqVFN setVerifierFee(7): above the cap | expected 0xd6a6babf got 
+ok  | NormalPqzToken | negative: pqVFN setVerifierFee by a stranger | expected 0xba963c12 got 
+ok  | WrappedPqzRegulatedToken | negative: pqVF13 op 1 while the verifier is frozen, vf set | expected 0x8b739212 got 
+ok  | WrappedPqzRegulatedToken | negative: pqVF13 op 1: the restored fee halts it again | expected 0x8b739212 got 
+
+## local: transactions 577, status 1: 577; the heaviest ten
+54,877,104 | 0x4f7d68f6dc9108e2fb8be8fdd6e856fbafd08583c254aa42623037a98161af9c | WrappedPqzToken | pqW mtxConfidentialTransfer (op 7) alice→M = 8 (bob 30, seven decoys), auditor off, commit-reveal (two groups)
+53,177,065 | 0x76825bf0d45b1553c1057d51e47cb2042debaa627960a72a134abbf929e148fe |  | deploy OpenFactory
+53,177,065 | 0x9856cb1a378720c003cb4b8a03c90c6d9cd7760597ef2caf0fe851c12f9e31a6 |  | deploy OpenFactory
+53,177,065 | 0xd5ef10cae1e4dea5b4917c6b650aa1e50b9a1f05e6e5b6e7dadd9bbefaa8b669 |  | OpenFactory#notice
+52,299,751 | 0x279e16def9d88caca8991670f6c0ee6e93f4035d2ba35adb08bc8f4d5e0940c6 |  | library UARegistryCoreLib
+52,299,751 | 0x997daea4f3bde8bfc7f2446843d965d24e60b33b4be3387188b0065bbf6a738f |  | library UARegistryCoreLib
+51,757,683 | 0xa4eddbe51d6f5bb69cbac71f88ecde20da508e278808d94f460db47fbf856122 |  | deploy NormalPqzRegulatedTokenQ (CREATE2)
+51,757,671 | 0x4806eb44af474a36dc4e8783837416940900937cd0591804504525081674cc79 |  | deploy NormalPqzRegulatedTokenQ (CREATE2)
+51,754,608 | 0x3c6d7148511d9a931508910b56348f072ee61e2072a1b4b110c67f72d271771e | NormalPqzToken | pqUSD mtxConfidentialTransfer (op 7) alice→[carol 0, bob 40, decoy0 0, decoy1 0], txFee 3 to carol, decoyFee 2 per leg
+50,251,742 | 0x6f7322d8a40a17fc0c43eda5f613f1b94bf7b85d36b1b50e759cd820266147eb | UARegistry | storePqzPop alice

@@ -7,6 +7,7 @@ and 5 life cycles, relayed and named entries signed by EOAs, ML-DSA-65 and msig 
 runs as it is; its section 7 (the proof path, run in Step 5) is replaced by `extra`, unless PQ_SECTION7=1:
   - kinds 12 and 13 (no token of them on chain before): created on e2e's factory with a ComplianceRegistry; shield, op 1,
     op 7, rollover, burn, refresh, named relayed entries signed by an ML-DSA-65 UA, wrap-shield and unshield-unwrap (13);
+    the deny list written and switched on, the allow list's refusals (round 3s, `lists`);
   - the classical entries of a kind-0 token (and kind 12's public layer) signed by an ML-DSA-65 UA (alice) and relayed:
     mtxTransfer (fee 0), mtxTransferWithFee, mtxPay (save true, false; paymentCount / paymentsOf), mtxExecuteTransfer,
     mtxBatchTransfer, mtxExecute, mtxBurn and mtxCancelNonce (named UA envelopes), mtxInvalidateNonces;
@@ -207,6 +208,7 @@ def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
     E.burn(pq, sd, C, alice, 3, sd.addr, "pqR12 named mtxUnshield alice 3, ML-DSA-65", signed=sg(alice))
     E.check_public(C, "pqR12 after its ops")
     E.restore(C, "pqR12")
+    lists(sd, t12, "pqR12")
 
     # kind 13: COMPACT, auditor OPTIONAL, one 1:1 leg (tUSD)
     t13 = create_reg(13, "PQZ regulated wrapped", "pqR13", [[tusd, 1, 1]], 1, 2, 1, b"t66b-5b-k13")
@@ -219,11 +221,25 @@ def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
     E.burn(pq, sd, C13, alice, 20, sd.addr, "pqR13 unshield-unwrap alice 20 → deployer in tUSD", unwrap=(tusd, 20 * E.SCALE))
     E.check_public(C13, "pqR13 after its ops")
     E.restore(C13, "pqR13")
+    lists(sd, t13, "pqR13")
 
     D.addr["pqN0"] = create_cfg(sd, fac, 0, "PQ signer plain", "pqN0", [], 1 | 2 | 4, b"t66b-5b-k0")
     router = D.deploy("RelayFeeRouter", b"", label="RelayFeeRouter")
     toks = [(D.addr[x], x) for x in ("pqN0", "pqUSD", "pqW", "pqR12", "pqR13") if x in D.addr]
     public(pq, sd, sr, alice, bob, toks, tusd, router)
+
+
+def lists(sd, t, nm):
+    """Group 3s (spec 2026-11-10-token-lists.md §5.3, §6) on a regulated PQZ kind, its admin the deployer: its own deny-list
+    holder (`grantRole(9)`, grantDelay 0: at once), an account denied, the deny list switched on; bit 8 is outside the
+    masks of 10-13, so `setAllowed` is `MissingRole` (no holder can exist) and `enableFeature(8)` `FeatureInvalidForKind`."""
+    d = [E.pad("0x" + "00" * 17 + "de41ed")]
+    sd.send(t, E.cd("grantRole(uint8,bytes32)", ["w", "w"], 9, E.pad(sd.addr)), f"{nm} grantRole(DENYLIST, deployer)")
+    sd.send(t, E.cd("setDenied(bytes32[],bool)", [("a", "w"), "w"], d, 1), f"{nm} setDenied([0xde41ed], true)")
+    sd.send(t, E.cd("enableFeature(uint8)", ["w"], 9), f"{nm} enableFeature(DENYLIST), at once")
+    neg(sd.addr, t, E.cd("setAllowed(bytes32[],bool)", [("a", "w"), "w"], d, 1), sel_hex("MissingRole(uint8,bytes32)"),
+        f"{nm} setAllowed (bit 8 outside the mask: no holder)")
+    neg(sd.addr, t, E.cd("enableFeature(uint8)", ["w"], 8), sel_hex("FeatureInvalidForKind(uint8)"), f"{nm} enableFeature(ALLOWLIST)")
 
 
 def public(pq, sd, sr, alice, bob, toks, tusd, router):
@@ -518,7 +534,8 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
     factory (op 1, op 7, unshield, refresh each pay VF; a decrease at once; an op built at the old fee refused `AuthRejected`;
     an increase at once with both events; the router op at fee 0 by a stranger relayer; the direct op 7 rebuilt with
     `d ∓ k` after `Δvf = M·k` refused, both signs, Fable P1-1), kind 4 on factory 2 (30 s notice: the proposal, a confirm
-    before `eta` refused, the confirm, a cancel by the current value, the setter's refusals), and kind 13 (a frozen verifier
+    before `eta` refused, the confirm, a cancel by the current value, the setter's refusals), kinds 5 and 12 (the setter: a
+    decrease and an increase, at once on notice 0), and kind 13 (a frozen verifier
     halts the debit `FeeRecipientFrozen`, `setVerifierFee(0)` the relief, the fee restored halts it again, the unfreeze).
     The `PRECOMPILE` setter's refusal is group pq's (`mine`: no `PRECOMPILE` token on zero-dep releases)."""
     E.log("\n## 10b. (round 3t) the verifier fee: payouts per form, the setter, the router op, stale and split ops, a frozen verifier")
@@ -607,6 +624,15 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
                            (VMAX + 1, "VerifierFeeAboveMax(uint64,uint64)", "above the cap")):
         neg(sd.addr, tn, E.cd("setVerifierFee(uint64)", ["w"], nxt), sel_hex(err), f"pqVFN setVerifierFee({nxt}): {what}")
     neg(s3.addr, tn, E.cd("setVerifierFee(uint64)", ["w"], 0), sel_hex("NotAdmin(bytes32)"), "pqVFN setVerifierFee by a stranger")
+
+    # the setter on kinds 5 and 12 (notice-0 factory): a decrease at once, an increase at once with both events
+    for kind, nm, legs, feat, rg in ((5, "pqVF5", [[tusd, 1, 1]], 1, None),
+                                     (12, "pqVF12", [], 1 | 2 | 4, [0, 0, 0, E.kc("scaas.onchain.terms"), 0])):
+        t = create_cfg(sd, fac, kind, f"PQZ verifier fee kind {kind}", nm, legs, feat, nm.encode(), fconf(VF), rg)
+        D.addr[nm] = t
+        set_fee(t, nm, VF - 1, "a decrease, at once", ["VerifierFeeSet"])
+        set_fee(t, nm, VF, "an increase on notice 0: at once", ["VerifierFeeProposed", "VerifierFeeSet"])
+        E.check(vcfg(t) == [VF, VMAX, 0, 0], f"{nm} verifierFee {VF}, nothing pending")
 
     # kind 13 with vf: a frozen verifier halts every debit, fee 0 is the relief (Fable P2-1, T31)
     if 13 in E.SKIP_KINDS:
