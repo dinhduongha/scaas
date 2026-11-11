@@ -161,8 +161,12 @@ Payload by kind:
   validUntil, relayer: <router>}, call: {entry, contract, token, envelope, args, auth | signature}, auth}`, `from` and `payee`
   as ids, on the payer's own lane (O4); `target` and `callDataHash` come from `call` (in `args` they are refused). The node
   builds the inner calldata from `call` and sends the router's `relay(target, callData, token, from, payee, value, batch,
-  nonce, validUntil, auth)` to `args.relayer`, which must be `params.relay_fee.router`; a hex call is refused; the payee is
-  never `pad(executor)`, open mode `payee = pad(router)`.
+  nonce, validUntil, auth)` to `args.relayer`, which must be `params.relay_fee.router`; a hex call is refused; a `call` naming
+  `mtxRelayFee` is refused `BAD_PAYLOAD` by its `entry`, before its body is parsed (no nesting); the payee is
+  never `pad(executor)`, open mode `payee = pad(router)`. *Known limit* (Fable review of ua-mtx-merge E N-4; PLANNED, open): a PQZ debit
+  as `call` is built with the empty verdict; its `pqz_verdict` and `pqz_fee` are parsed and ignored (the fill reads the outer
+  entry), so on an `OFFCHAIN` token the job reverts `PqzVerdictRequired` at simulation and is `dead` with no hint, and on a
+  `PRECOMPILE` token the `pqz_fee` pre-check is skipped. Target: refuse by name at parse an inner row with a verdict slot.
 - *EVM, the fee covers the quote.* After the simulation, a relay fee that reaches this lane (open mode or bound to it) must be
   worth, at `params.relay_fee.min_wei_value[token]`, at least the quote: the gas limit × the job's **fee ceiling**
   (`FEE_HEADROOM` = 2 × the max fee per gas of its first send) + 2 × the L1 data fee on an OP-stack chain
@@ -276,7 +280,7 @@ JSON; the struct names are the vector file's keys.
 | Key | Rule |
 |---|---|
 | `entry` | The contract function: `mtxUnwrap`, `mtxUnshield`, … |
-| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`, `gov_router`, `pqchat`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind |
+| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`, `gov_router`, `pqchat`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind. *Known limit* (Fable review of ua-mtx-merge E N-6; PLANNED, open): on a `token` / `zether` / `pqz` row the name is not checked against the token's `eip712Domain().name` (the venue and the service path read it, the job path does not): a wrong one only picks the node's digest domain, so an EOA signer is refused `BAD_SIGNATURE` and a derived signer's landed job is labelled `superseded`; target: read the name once per token (immutable) and refuse a mismatch by name |
 | `struct` | Only when an entry has two rows on a kind (`ENTRY_AMBIGUOUS`): `CancelUAOrder` / `CancelUAWrapOrder`, `UARollOverSigned` / `ZetherRollOver`, `UASetRollOverMode` / `ZetherSetRollOverMode`, `CancelDexOrder` / `mtxCancelOrders` |
 | `token` | The call's target; a `UARelayFee`'s fee token; a wrap order's wrapper |
 | `envelope` | `from` + `batch`, `nonce`, `validUntil`, `mode`, `relayer`, `fee`, `feeRecipient`, on every entry whose struct ends with them (`UAEnvelope`, `from` an id; `Envelope`, `from` an address, on the address entries); exactly these keys |
@@ -380,11 +384,25 @@ node's, for every consumer. **UNAUDITED.**
   names it). A difference is `PQZ_FEE_MISMATCH: proved {p}, the token's fee word is {e} (txFee {a}, verifierFee {b}, M·d {c})`,
   zero sends: a 422 at the gateway, back in the queue on the lane until the deadline (a decrease may restore the word), never
   `dead` while the op may land. A simulation that reverts `AuthRejected()` or `PqzVerdictMismatch(3)` after an indexed
-  `VerifierFeeSet` of the job's token since intake (the `PQZ_KEY_ROTATED` window) is `PQZ_FEE_MISMATCH: <error> after
-  VerifierFeeSet`, back in the queue; without that event `AuthRejected` stays `dead`. **Operator note:** a job shape change for
+  `VerifierFeeSet` of the job's token since intake (the `PQZ_KEY_ROTATED` window) that moved the fee (`previous != next`; a cancel
+  `(cur, cur)` is no move) is `PQZ_FEE_MISMATCH: <error> after VerifierFeeSet`, back in the queue; without that event
+  `AuthRejected` stays `dead`; an unreadable log is `PQZ_FEE_LOG_UNREAD: <rpc error>; <error>`, back in the queue, never counted as
+  a move. A stuck debit runs the same check before each replacement: refused, its nonce is gap-filled and the job reported by
+  its class (test `a_stuck_pqz_debit_runs_the_fee_check_before_its_replacement`). **Operator note:** a job shape change for
   `OFFCHAIN` tokens: a consumer on the old shape gets `BAD_PAYLOAD: no pqz_fee`.
-- **Deadline.** The job's deadline becomes the sooner of the envelope's and the verdict's `validUntil`; a stuck replacement past
-  the verdict would revert, so it is gap-filled instead.
+- **Deadline.** A PQZ debit keeps two deadlines: its envelope's, and the one it is sent under, the sooner of the envelope's and
+  its verdict's `validUntil`. A renewed verdict (a stuck replacement re-runs the fill) moves the second up to the envelope's, so
+  the tracked work always ends with the transaction it sent. While a transaction of the job may still land, the job is never
+  `dead` for its verdict: a stuck transaction past its verdict is re-filled with a fresh verdict and re-sent, or (the re-fill
+  refused by any rule, or renewing nothing) its nonce is gap-filled and the job is back in the queue; a job waiting to be sent is
+  requeued `PQZ_VERDICT_EXPIRED`. At intake a fill refusal is reported only after the subject nonce is read: a debit that
+  landed (its first transaction won over the gap-filler, another relayer) is `consumed`. With nothing in flight, the next
+  intake may end the job by name: on a node without endpoints a job whose own verdict ran out is `PQZ_VERDICT_MISSING`
+  (`dead`). Past the envelope's deadline the job is `dead` "expired before submit" before the fill (`consumed` if it landed)
+  (Fable review of ua-mtx-merge E N-3, rechecks R-1, R-2, S-1..S-3; tests
+  `a_stuck_pqz_debit_with_an_expired_verdict_is_renewed_never_dead`, `a_refused_re_fill_requeues_never_dead`,
+  `a_retry_past_its_verdict_only_requeues`, `a_job_past_its_envelope_is_dead_before_the_fill`,
+  `a_re_fill_that_renews_nothing_gap_fills`).
 - **Pre-checks**, before any simulation: `pqzVerifyConfig()` (mode, verifier, epoch; verifier 0 = revoked), the epoch equal, the
   `validUntil` at least `valid_margin_secs` ahead; then the simulation of the whole entry (signature, shape, hashes). A verdict
   at another epoch, or expiring, is re-fetched once.
@@ -396,9 +414,11 @@ node's, for every consumer. **UNAUDITED.**
 `VerifierFeeNotReady(eta)` and `VerifierFeePending(pending)` liftable, `VerifierFeeAboveMax(fee, max)` and `VerifierFeeSame` final. A `PqzVerdictMismatch` after an indexed
   `UAPqzKeyCurrent` of a party is `PQZ_KEY_ROTATED` ([NODE-JOB-23](#NODE-JOB-23)).
 - **Shield refusal** (opt-in, `[pqz_verifier] refuse_shield_when_unserved = true`, default `false`): shield and wrap-shield jobs
-  into an `OFFCHAIN` token whose verifier is revoked or which none of the endpoints serves (their probe) are refused
-  `PQZ_VERIFIER_UNREACHABLE` (`dead`), the same rule for every consumer, so no relayer of the node adds value to a pool nobody
-  serves. `PRECOMPILE` tokens are never affected.
+  into an `OFFCHAIN` token whose verifier is revoked or which none of the endpoints serves (their probe answers, none 2xx, or no
+  endpoint is configured) are refused `PQZ_VERIFIER_UNREACHABLE` (`dead`), the same rule for every consumer, so no relayer of the
+  node adds value to a pool nobody serves. A probe that does not get through (a timeout, a refused connection) or answers 5xx
+  (a restart behind a proxy) while no endpoint serves is no answer: `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue (Fable review
+  of ua-mtx-merge E N-2, recheck R-5). `PRECOMPILE` tokens are never affected.
 - **Rows:** `typed.rs` / `guard.rs` carry the entries with the verdict and the router's `mtxPqzSetVerifier`,
   `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` and (group 3t) `mtxSetVerifierFee` over `UASetVerifierFee` (selector
   `0xf0d8cbbf`) ([call table](#call-table)), equal both directions with the contract's
@@ -733,6 +753,14 @@ lane only relays what the role holders already signed. The rule of contract kind
 
 Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
 pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (a node release).
+
+*Known limits* (Fable review of ua-mtx-merge E N-10, N-11; PLANNED, open): the `registry`, `account` and `factory` rows are pinned against
+the node's own `abi.rs` bindings, one direction only (not in `selector_audit.json`), so a new state-changing entry on
+`UARegistry`, `SmartKeyAccount` or `SmartKeyAccountFactory` fails no node test (today the only registry write without a row is
+`cacheExpandedKey`, permissionless and unsigned); target: add the three to `selector_audit.json` and to
+`allow_lists_equal_the_selector_audit_both_directions`. `mtxCreateToken`, `mtxCreateDex` and `mtxCreateInstance` have no row
+(`guard.rs` `NOT_ROWS`) until relaying creations is decided: an open item against "every state-changing `mtx*` is relayable";
+the four release approvals are covered by the owner's ruling of 2026-11-10.
 Selector matching suffices outside the token/role set: a lane's authority is only `msg.sender` of the direct call,
 never of calls the target makes. One operator session (or a stolen one) could otherwise turn a lane that holds fee
 income into an arbitrary transaction. The client side keeps its outbox rows
@@ -977,7 +1005,7 @@ cancels 2 rps (burst 10).
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost |
 
 Terminal reasons that are not HTTP codes: job `dead` with `error = ATTEMPTS_EXHAUSTED` (`attempt_count >
-chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_FEE_MISMATCH`, `PQZ_KEY_ROTATED`,
+chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_VERDICT_EXPIRED`, `PQZ_FEE_MISMATCH`, `PQZ_FEE_LOG_UNREAD`, `PQZ_VERIFIER_PROBE_UNREAD`, `PQZ_KEY_ROTATED`,
 `PQZ_KEY_VERSION_UNKNOWN`, `PROOF_STORE_OVER_LANE_CAP` ([NODE-JOB-24](submit-lanes.md#NODE-JOB-24)); a lane stopped by
 `SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 

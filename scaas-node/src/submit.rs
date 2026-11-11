@@ -16,7 +16,6 @@ use anyhow::Result;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
-use crate::abi::PqzRefusal;
 use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
@@ -34,10 +33,6 @@ const SAMPLE_EVERY: Duration = Duration::from_secs(15);
 /// §8.5: số khối gần nhất tìm `MetaTransactionExecuted` khi phân loại một meta-tx đã bị tiêu thụ.
 /// ponytail: cửa sổ cố định; ghi khối lúc claim vào `Sent` nếu tx kẹt lâu hay ra `unknown`.
 const CLASSIFY_LOOKBACK: u64 = 1_000;
-/// Group 3g: how far back a party's `UAPqzKeyCurrent` counts as "since intake" for `PQZ_KEY_ROTATED`.
-// ponytail: a fixed window, not the job's own intake block (the pull path carries none); a job older than this window that
-// meets a rotation is reported `dead` with `ProofRejected`; use the job's claim block once the node's own queue carries it
-const ROTATION_LOOKBACK: u64 = 10_000;
 
 /// `scaas_submit_bump_skipped_consumed_total`: lần `track()` KHÔNG bump vì meta-tx đã bị tiêu thụ (R80).
 pub static BUMP_SKIPPED_CONSUMED: AtomicU64 = AtomicU64::new(0);
@@ -48,7 +43,11 @@ pub struct Work {
     pub job_id: Option<i64>,
     pub to: Address,
     pub data: Bytes,
+    /// The deadline the work is sent under: the op's own, or for a PQZ debit the sooner of it and its verdict's `validUntil`.
     pub valid_until: u64,
+    /// The op's own deadline (its envelope's), never narrowed by a verdict: a renewed verdict extends `valid_until` up to it
+    /// (Fable recheck R-1, E N-3).
+    pub envelope_until: u64,
     /// `None` cho job `call`.
     pub meta: Option<MetaRef>,
     /// A named entry ([`crate::typed::Op`]): the guard reads its row; else a transfer struct (`meta`).
@@ -286,7 +285,7 @@ fn work_of_op_with(job_id: Option<i64>, op: &serde_json::Value, fee_recipient: O
     // a service pull's nonce and its `UAMetaTransactionExecuted` are the pulled token's (spec §8), its target the service
     let token = if p.typed.contract == "service" { p.typed.domain_of } else { p.to };
     let meta = p.lane.map(|(from, batch, nonce)| MetaRef { token, from, batch, nonce, digest: None, ua, addr_nonce });
-    Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
+    Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, envelope_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
 }
 
 /// A `ua_metatx` struct job (job-api.md, CTR-UA-26, CTR-MTX-30): `{token, m, auth}`, relayed as `mtxExecuteTransfer` of the
@@ -317,7 +316,8 @@ fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     }
     let data = m.calldata(auth);
     let meta = Some(MetaRef::of_ua(token, &m, None));
-    Ok(Work { job_id: Some(job.id), to: token, data, valid_until: m.valid_until().saturating_to(), meta, entry: false, typed })
+    let until = m.valid_until().saturating_to();
+    Ok(Work { job_id: Some(job.id), to: token, data, valid_until: until, envelope_until: until, meta, entry: false, typed })
 }
 
 /// The relayer of a landed meta-transaction is this lane's, or, for a service pull (its token not the target), the
@@ -568,11 +568,28 @@ impl Submitter {
             Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
         }
         let mut w = w;
+        // Fable recheck S-2: past the op's own deadline nothing can land: `dead` before the fill, whose refusals would requeue
+        // without end (after the guard, so a pulled liquidity order stays `consumed`); a landed op is `consumed`, never `dead`
+        if w.envelope_until <= now() {
+            return match self.consumed(&w).await {
+                Ok(true) => self.report_consumed(&w).await,
+                Ok(false) => self.fail(&w, "expired before submit".into()).await,
+                Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+            };
+        }
         // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt by the node, before the digest and any simulation
-        match self.guard.pqz_fill(&self.chain, &mut w).await {
-            Ok(()) => {}
-            Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
-            Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
+        if let Err(refusal) = self.guard.pqz_fill(&self.chain, &mut w).await {
+            // Fable recheck S-1: the fill runs before any simulation, so a debit that already landed (a first transaction
+            // mined after a gap-filled re-fill, another relayer) is `consumed` first, never refused by its stale verdict
+            match self.consumed(&w).await {
+                Ok(true) => return self.report_consumed(&w).await,
+                Ok(false) => {}
+                Err(e) => return self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+            }
+            return match refusal {
+                Refusal::Policy(reason) => self.fail(&w, reason).await,
+                Refusal::Transport(reason) => self.requeue(&w, reason).await,
+            };
         }
         match guard::fill_digest(&self.chain, &mut w).await {
             Ok(()) => {}
@@ -602,6 +619,10 @@ impl Submitter {
     /// `guard` theo `w` vào `Sent` khi tx được gửi; mọi lối ra khác thả nó (nhả digest).
     async fn send(&mut self, w: Work, guard: Option<InflightGuard>) {
         if w.valid_until <= now() {
+            // E N-3: past a PQZ verdict's life only, the envelope may still land with a fresh verdict: back in the queue
+            if w.envelope_until > now() {
+                return self.requeue(&w, "PQZ_VERDICT_EXPIRED: the verdict ran out before the send; the envelope is live".into()).await;
+            }
             if let Some(id) = w.job_id {
                 self.report(id, "dead", None, None, Some("expired before submit".into())).await;
             }
@@ -609,13 +630,6 @@ impl Submitter {
         }
         let gas = match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
             Ok(g) => g,
-            Err(SimError::Revert(reason)) if guard::over_cap(&reason) && crate::pqz::is_debit(&w) => {
-                return self.over_cap(&w, reason).await;
-            }
-            // re-check P3 (spec §11): a starved T7 on a DEX the guard found marked is gas, not a wrong DEX
-            Err(SimError::Revert(reason)) if guard::liquidity_starved(&w.data, &reason) => {
-                return self.requeue(&w, format!("simulate: {reason}: the tokens' capability check starved, retry")).await;
-            }
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
@@ -669,109 +683,25 @@ impl Submitter {
         self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling });
     }
 
-    /// NODE-JOB-24 (group 3h, pqz-proof-path spec §10): a PQZ debit whose estimate (regular + state, under the token's current
-    /// `proofStore()`) is above the lane's cap. Under `LOG` a holder of bit 24 may switch the token to `NONE` and the job may land:
-    /// `PROOF_STORE_OVER_LANE_CAP`, back in the queue, never `dead` (it ends `dead` only at its `validUntil`). Under `NONE`, or on a
-    /// release without the view, nothing makes it cheaper: the plain refusal.
-    async fn over_cap(&self, w: &Work, reason: String) {
-        match self.chain.call_view(w.to, crate::abi::IPqzToken::proofStoreCall {}).await {
-            Ok(m) if m == crate::abi::PROOF_STORE_LOG => self.requeue(w, format!("PROOF_STORE_OVER_LANE_CAP: {reason}")).await,
-            Ok(_) | Err(SimError::Revert(_)) => self.refused(w, reason).await,
-            Err(SimError::Transport(e)) => self.requeue(w, format!("proofStore(): {e}; {reason}")).await,
-        }
-    }
-
-    /// Mô phỏng revert. Meta-tx mà nonce chủ thể đã qua ⇒ `consumed` (R80: relayer khác có thể đã đưa nó lên chain),
-    /// không `dead`; không đọc được nonce ⇒ tạm thời. An invalidation already in force is done, never dead (MT-8).
+    /// A refused simulation, classified by [`guard::revert_verdict`] (the one classifier of every EVM runner, Fable E N-1):
+    /// done on chain (`consumed`), back in the queue by name, or `dead`.
     async fn refused(&self, w: &Work, reason: String) {
-        if guard::already_invalidated(&w.data, &reason) {
-            if let Some(id) = w.job_id {
-                self.report(id, "consumed", None, None, Some("already_invalidated".into())).await;
-            }
-            return;
-        }
-        match self.consumed(w).await {
-            Ok(true) => self.report_consumed(w).await,
-            // round 3s (spec 2026-11-10-token-lists.md §9, Fable P3-8): the job's own subject off the allow list or on the deny
-            // list: refused by name, not waiting as a liftable refusal
-            Ok(false) if w.meta.as_ref().and_then(|m| crate::abi::own_list_refusal(&reason, m.from)).is_some() => {
-                let code = w.meta.as_ref().and_then(|m| crate::abi::own_list_refusal(&reason, m.from)).unwrap_or_default();
-                self.fail(w, format!("{code}: {reason}")).await
-            }
-            // regulated-kinds spec §7: a freeze, a pause, an eligibility or the registry may lift and the payload may still
-            // land (here later, or by another relayer): a named refusal, back in the queue, never `dead`
-            Ok(false) if crate::abi::regulated_refusal(&reason).is_some() => {
-                self.requeue(w, format!("REGULATED_REFUSED: {reason}")).await
-            }
-            // group 3l (wrap limits spec §9): a window ends, a member is added, a redeemer is granted, a later wrap raises the
-            // entitlement: a named refusal, back in the queue, never `dead`
-            Ok(false) if crate::abi::wrap_limit_refusal(&reason).is_some() => {
-                self.requeue(w, format!("WRAP_LIMIT_REFUSED: {reason}")).await
-            }
-            // group 3f (spec §11.1): a PQZ verifier mode refusal by name, never `dead` while the op may land with another verdict
-            Ok(false) if crate::abi::pqz_verdict_refusal(&reason).is_some() => self.pqz_refused(w, reason).await,
-            // group 3g (spec §7.3): the PQZ key-version reverts by name; a stale debit or two equal keys never land, a version
-            // above current may become current, a proof built before a party's rotation is `PQZ_KEY_ROTATED`, never `dead`
-            // round 3t (CTR-PQZ-36, spec §10): a PQZ debit's `AuthRejected` after an indexed `VerifierFeeSet` of its token is
-            // `PQZ_FEE_MISMATCH`, back in the queue (a decrease may restore the word), never `dead`; without the event `dead`
-            Ok(false) if reason.starts_with("AuthRejected") => match self.fee_moved(w, &reason).await {
-                Some(r) => self.requeue(w, r).await,
-                None => self.fail(w, reason).await,
-            },
-            Ok(false) => match crate::abi::pqz_refusal(&reason) {
-                Some(PqzRefusal::Stale) => self.fail(w, format!("PQZ_KEY_STALE: {reason}")).await,
-                Some(PqzRefusal::Reused) => self.fail(w, format!("PQZ_KEY_REUSED: {reason}")).await,
-                Some(PqzRefusal::Unknown) => self.requeue(w, format!("PQZ_KEY_VERSION_UNKNOWN: {reason}")).await,
-                Some(PqzRefusal::ProofRejected) => match guard::pqz_rotated(&self.chain, w, ROTATION_LOOKBACK).await {
-                    Ok(true) => self.requeue(w, format!("PQZ_KEY_ROTATED: {reason}")).await,
-                    Ok(false) => self.fail(w, reason).await,
-                    Err(e) => self.requeue(w, format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")).await,
-                },
-                None => self.fail(w, reason).await,
-            },
-            Err(e) => self.requeue(w, format!("mtxNonce: {e:#}")).await,
-        }
-    }
-
-    /// Group 3f (spec §11.1): a verdict, epoch, `eta` or registration may lift it: back in the queue (`PQZ_KEY_ROTATED` for a
-    /// `PqzVerdictMismatch` after a party's indexed `UAPqzKeyCurrent`, T55); the op's own shape never lands: `dead`.
-    async fn pqz_refused(&self, w: &Work, reason: String) {
-        let Some((name, liftable)) = crate::abi::pqz_verdict_refusal(&reason) else { return self.fail(w, reason).await };
-        if name == "PqzVerdictMismatch" {
-            match guard::pqz_rotated(&self.chain, w, ROTATION_LOOKBACK).await {
-                Ok(true) => return self.requeue(w, format!("PQZ_KEY_ROTATED: {reason}")).await,
-                Ok(false) => {}
-                Err(e) => return self.requeue(w, format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")).await,
-            }
-            // round 3t: field 3 (the statement) after an indexed `VerifierFeeSet`: the fee word moved
-            if reason.contains("field: 3") {
-                if let Some(r) = self.fee_moved(w, &reason).await {
-                    return self.requeue(w, r).await;
+        match guard::revert_verdict(&self.chain, w, reason).await {
+            guard::Verdict::Consumed(None) => self.report_consumed(w).await,
+            guard::Verdict::Consumed(Some(label)) => {
+                if let Some(id) = w.job_id {
+                    self.report(id, "consumed", None, None, Some(label)).await;
                 }
             }
-        }
-        if liftable {
-            self.requeue(w, format!("PQZ_VERDICT_REFUSED: {reason}")).await
-        } else {
-            self.fail(w, reason).await
-        }
-    }
-
-    /// Round 3t (CTR-PQZ-36, spec §10, T55's pattern): `PQZ_FEE_MISMATCH` when the job's token emitted `VerifierFeeSet` since
-    /// intake (the `ROTATION_LOOKBACK` window); an unreadable log is transient, back in the queue too.
-    async fn fee_moved(&self, w: &Work, reason: &str) -> Option<String> {
-        match guard::pqz_fee_changed(&self.chain, w, ROTATION_LOOKBACK).await {
-            Ok(true) => Some(format!("PQZ_FEE_MISMATCH: {reason} after VerifierFeeSet")),
-            Ok(false) => None,
-            Err(e) => Some(format!("PQZ_FEE_MISMATCH read: {e:#}; {reason}")),
+            guard::Verdict::Requeue(r) => self.requeue(w, r).await,
+            guard::Verdict::Dead(r) => self.fail(w, r).await,
         }
     }
 
     /// R80: `mtxNonce(from, batch) > nonce` ⇔ nonce chủ thể của meta-tx đã bị dùng (bởi ai thì `classify`).
     /// `Ok(false)` cho job `call`. Lỗi RPC ⇒ `Err`: người gọi không bump, không kết luận (fail closed).
     async fn consumed(&self, w: &Work) -> Result<bool> {
-        let Some(m) = &w.meta else { return Ok(false) };
-        Ok(self.chain.subject_nonce(m).await? > m.nonce)
+        guard::consumed(&self.chain, w).await
     }
 
     /// §8.5 — chỉ là nhãn cho `last_error` ở Odoo; `landed_elsewhere` do indexer quyết khi `final`.
@@ -902,17 +832,48 @@ impl Submitter {
                 }
                 continue;
             }
-            let live = s.work.as_ref().filter(|w| w.valid_until > now()).cloned();
+            // a PQZ debit lives to its envelope's deadline: past its verdict's alone, the fill below renews the verdict or the
+            // job goes back to the queue, never `dead` (Fable recheck R-1, E N-3)
+            let mut live = s.work.as_ref().filter(|w| w.valid_until > now() || (crate::pqz::is_debit(w) && w.envelope_until > now())).cloned();
             let expired_job = match (&s.work, &live) {
                 (Some(w), None) => w.job_id,
                 _ => None,
             };
+            let stuck_gas = s.gas;
+            // Fable 3r3s3t P3-3 (spec 3t §10, the fee pre-check "again before every send"): a stuck PQZ debit's replacement
+            // runs the fill first (the fee word, the verdict; a renewed verdict extends the work's deadline, R-1); refused by
+            // name, the nonce is gap-filled and the job back in the queue, never `dead`: the first transaction may still land
+            // (recheck R-2); an unreadable chain waits a round, no bump
+            let mut refused = None;
+            if let Some(w) = live.as_mut().filter(|w| crate::pqz::is_debit(w)) {
+                let filled = match self.guard.pqz_fill(&self.chain, w).await {
+                    // Fable recheck S-3: a fill that renewed nothing (the view refused the op) leaves an expired verdict: never
+                    // re-sent as it is
+                    Ok(()) if w.valid_until <= now() => Err(Refusal::Transport("PQZ_VERDICT_EXPIRED: the re-fill renewed no \
+                        verdict".into())),
+                    r => r,
+                };
+                match filled {
+                    Ok(()) => {}
+                    Err(Refusal::Transport(r)) if !r.starts_with("PQZ_") => {
+                        warn!(nonce = n, "PQZ fill: {r}; no bump this round");
+                        if let Some(s) = self.inflight.get_mut(&n) {
+                            s.at = Instant::now();
+                        }
+                        continue;
+                    }
+                    Err(e) => refused = live.take().map(|w| (w, e)),
+                }
+            }
             let (to, data, gas) = match &live {
-                Some(w) => (w.to, w.data.clone(), s.gas),
+                Some(w) => (w.to, w.data.clone(), stuck_gas),
                 None => (self.chain.address(), Bytes::new(), GAP_FILL_GAS),
             };
             if let Some(id) = expired_job {
                 self.report(id, "dead", None, None, Some("expired while stuck; nonce gap-filled".into())).await;
+            }
+            if let Some((w, Refusal::Policy(r) | Refusal::Transport(r))) = refused {
+                self.requeue(&w, format!("{r}; nonce gap-filled")).await;
             }
             let replaced = match self.chain.sign(n, to, data, gas, fees).await {
                 Ok((raw, h)) => match self.chain.send_raw(&raw).await {
@@ -1146,6 +1107,14 @@ pub(crate) mod tests {
         pqz_vf: u64,
         /// Round 3t: `eth_getLogs` for `VerifierFeeSet` answers one log (the token's fee changed).
         fee_set: bool,
+        /// Fable 3r3s3t P3-4: that log is a cancel `VerifierFeeSet(2, 2)` (no move).
+        fee_cancel: bool,
+        /// `eth_getLogs` answers a transport error.
+        logs_down: bool,
+        /// The statement views answer 288 bytes whose word 256 (the fee word) is this; `None`: `STATEMENT` (word 256 = 0).
+        stmt_fee: Option<u64>,
+        /// The statement views revert (the token refuses the op).
+        stmt_revert: bool,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1189,6 +1158,7 @@ pub(crate) mod tests {
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
+                "eth_getLogs" if e.logs_down => Err(err(-32000, "upstream timeout", None)),
                 "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0] == json!(format!("{:#x}",
                     <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
                     "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone(), format!("{:#x}", B256::repeat_byte(1)),
@@ -1199,7 +1169,7 @@ pub(crate) mod tests {
                 "eth_getLogs" if e.fee_set && p[0]["topics"][0] == json!(format!("{:#x}",
                     <crate::abi::IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
                     "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone()],
-                    "data": format!("0x{}", alloy::hex::encode((3u64, 2u64).abi_encode())), "blockNumber": "0x9",
+                    "data": format!("0x{}", alloy::hex::encode((if e.fee_cancel { 2u64 } else { 3u64 }, 2u64).abi_encode())), "blockNumber": "0x9",
                     "blockHash": format!("{:#x}", B256::repeat_byte(9)), "transactionHash": format!("{:#x}", B256::repeat_byte(8)),
                     "transactionIndex": "0x0", "logIndex": "0x0", "removed": false}])),
                 "eth_getLogs" => Ok(json!([])),
@@ -1273,8 +1243,14 @@ pub(crate) mod tests {
                             Ok(json!(format!("{PSID:#x}")))
                         } else if s4 == crate::abi::IPqzToken::envelopeBindingCall::SELECTOR {
                             Ok(json!(format!("{BINDING:#x}")))
+                        } else if e.stmt_revert {
+                            Err(err(3, "execution reverted", Some("0x".into())))
                         } else {
-                            Ok(json!(format!("0x{}", alloy::hex::encode(Bytes::from(STATEMENT.to_vec()).abi_encode()))))
+                            let st = match e.stmt_fee {
+                                None => STATEMENT.to_vec(),
+                                Some(f) => [&STATEMENT[..], &[0u8; 216], &U256::from(f).to_be_bytes::<32>()].concat(),
+                            };
+                            Ok(json!(format!("0x{}", alloy::hex::encode(Bytes::from(st).abi_encode()))))
                         }
                     } else if sel == crate::abi::IPqzToken::proofStoreCall::SELECTOR {
                         e.proof_store.map(|m| word(U256::from(m))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
@@ -1326,8 +1302,9 @@ pub(crate) mod tests {
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             // group 3f: the token refuses the verdict the node rebuilt (here: field 3, the statement moved)
-                            Some("verdict_mismatch") => {
-                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::PqzVerdictMismatch { field: 3 });
+                            Some(s @ ("verdict_mismatch" | "verdict_mismatch_30")) => {
+                                let field = if s == "verdict_mismatch" { 3 } else { 30 };
+                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::PqzVerdictMismatch { field });
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             // Nethermind 2.2.0's answer for a call over 2^24 regular gas (EIP-7825 under EIP-8037)
@@ -1545,6 +1522,47 @@ pub(crate) mod tests {
                 let err = o.lock().unwrap().reports[0]["error"].as_str().unwrap().to_string();
                 assert!(err.starts_with("REGULATED_REFUSED: Frozen("), "{err}");
             }
+        }
+    }
+
+    /// Fable E N-8: the one sink of every runner's job report strips endpoint URLs from the error.
+    #[tokio::test]
+    async fn a_job_error_carries_no_endpoint_url() {
+        let (odoo, o) = fake_odoo(Fake::default()).await;
+        let r = Report { job_id: 7, chain_state: "queued".into(), tx_hash: None, outer_nonce: None, signer_address: None,
+            error: Some("rpc: error sending request for url (https://rpc.example/v3/KEY) after http://10.0.0.7:8545/ x".into()) };
+        odoo.relay_report(&r).await.unwrap();
+        assert_eq!(o.lock().unwrap().reports[0]["error"], "rpc: error sending request for url (<url>) after <url> x");
+        assert_eq!(crate::chain::redact_urls("no url; wss://h:1/p,ws://q"), "no url; <url>");
+        assert_eq!(crate::chain::redact_urls("x http://h/p?a=1;key=SECRET,b=2 y"), "x <url> y", "recheck R-7: a key after ; or ,");
+    }
+
+    /// Fable E N-1 (NODE-LANE-09, one rule on every chain): the generic lane runner of a Hedera chain classifies a refused
+    /// simulation with the `Submitter`'s one classifier: `Frozen` is `REGULATED_REFUSED`, back in the queue, never `dead`; a spent
+    /// subject nonce `consumed`; a revert of no class stays `dead`; nothing is sent.
+    #[tokio::test]
+    async fn lane_runner_requeues_a_liftable_refusal_on_hedera() {
+        for (sim, nonce, state, prefix) in [("frozen", 0, "queued", "REGULATED_REFUSED: Frozen("), ("frozen", 1, "consumed", "unknown"),
+            ("revert", 0, "dead", "MetaTxBadNonce(")] {
+            let (url, rpc) = fake_evm(Evm { sim: Some(sim), mtx_nonce: Some(nonce), ..Default::default() }).await;
+            let mut cfg = test_cfg(&url);
+            (cfg.family, cfg.evm_chain_number) = ("hedera".into(), 296);
+            let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap();
+            let a = crate::adapters::hedera::HederaAdapter::new(&cfg, vec![Chain::with_signer(&cfg, signer).unwrap()]).unwrap();
+            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "instant", "finality_depth": 0,
+                "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
+            crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
+            // the payer signs over Hedera's chain id
+            let mut j = job(7);
+            let w = work_from_job(&serde_json::from_value::<Job>(j.clone()).unwrap(), None).unwrap();
+            let d = w.typed.as_ref().unwrap().digest_on(296, B256::from(U256::from(UID))).unwrap();
+            j["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(payer_key().sign_hash_sync(&d).unwrap().as_bytes())));
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{sim} {nonce}: {last}");
+            assert!(last["error"].as_str().unwrap().starts_with(prefix), "{sim} {nonce}: {last}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
         }
     }
 
@@ -3185,6 +3203,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
                 }
             }).await;
             assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "{why}: {r:?}");
+            // Fable E N-8: the endpoints by index, never their URLs
+            assert!(r[0].1.contains("endpoint 1: ") && r[0].1.contains("endpoint 2: ") && !r[0].1.contains("127.0.0.1"), "{why}: {r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
         }
         let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
@@ -3310,8 +3330,163 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         }
         let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), ..offchain() }, vec![j.clone()], |_| {}).await;
         assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "{r:?}");
-        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j], |_| {}).await;
+        // Fable 3r3s3t P3-4: a cancel `VerifierFeeSet(cur, cur)` moves nothing (`dead`); an unreadable log is `PQZ_FEE_LOG_UNREAD`,
+        // back in the queue, never counted as a move
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), fee_set: true, fee_cancel: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "a cancel: {r:?}");
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), logs_down: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_LOG_UNREAD: "), "{r:?}");
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j.clone()], |_| {}).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: "), "{r:?}");
+        // Fable E N-11: the field is parsed whole: field 30 after a `VerifierFeeSet` is no fee move
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch_30"), fee_set: true, ..offchain() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: PqzVerdictMismatch"), "{r:?}");
+    }
+
+    /// Fable 3r3s3t P3-3 (spec 3t §10: the fee pre-check "again before every send"): a stuck PQZ debit is re-checked before its
+    /// replacement; the token's fee word moved since the first send: the nonce is gap-filled (a 0-value self-send, never the
+    /// debit again) and the job is `PQZ_FEE_MISMATCH`, back in the queue; the control: the word unchanged, the debit is bumped.
+    #[tokio::test]
+    async fn a_stuck_pqz_debit_runs_the_fee_check_before_its_replacement() {
+        for moved in [false, true] {
+            let (url, rpc) = fake_evm(offchain()).await;
+            let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            s.poll_outbox().await;
+            assert_eq!(states(&o), ["signed", "broadcast"]);
+            if moved {
+                rpc.lock().unwrap().stmt_fee = Some(5);
+            }
+            s.track().await;
+            let me = s.address();
+            let sent = rpc.lock().unwrap().sent.clone();
+            assert_eq!(sent.len(), 2, "{moved}");
+            if moved {
+                assert!(sent[1].1 == me && sent[1].2.is_empty(), "a gap-filler, never the debit again");
+                let last = o.lock().unwrap().reports.last().cloned().unwrap();
+                assert_eq!(last["chain_state"], "queued");
+                assert!(last["error"].as_str().unwrap().starts_with("PQZ_FEE_MISMATCH: proved 0, the token's fee word is 5"), "{last}");
+            } else {
+                assert_eq!(sent[1].2, sent[0].2, "the debit bumped");
+                assert_eq!(states(&o), ["signed", "broadcast", "broadcast"]);
+            }
+        }
+    }
+
+    /// Fable recheck R-1 (and E N-3): a stuck PQZ debit whose verdict ran out while its envelope lives is re-filled with a renewed
+    /// verdict and re-sent, and the work's deadline follows the renewed verdict (up to the envelope's): never reported `dead`
+    /// while that replacement may land.
+    #[tokio::test]
+    async fn a_stuck_pqz_debit_with_an_expired_verdict_is_renewed_never_dead() {
+        let v2 = now() + 600;
+        let (ver, _) = fake_verifier(answer_json(2, v2, 0x7f)).await;
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+            endpoints(vec![ver])(c);
+            c.pqz_verifier.valid_margin_secs = 0;
+        }).await.unwrap();
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        tokio::time::sleep(Duration::from_secs(3)).await; // the job's own verdict has run out; its envelope lives
+        s.track().await;
+        assert_eq!(states(&o), ["signed", "broadcast", "broadcast"], "re-sent with a renewed verdict, never dead");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].2 != sent[0].2 && sent_verdict("UAPqzTransferSingle", &sent[1].2).pqzVerdict.validUntil == v2);
+        let w = s.inflight.values().next().and_then(|x| x.work.clone()).expect("still tracked");
+        assert_eq!(w.valid_until, w.envelope_until.min(v2), "the deadline follows the renewed verdict");
+    }
+
+    /// Fable E N-3 (recheck): a job awaiting retry whose verdict, not its envelope, ran out is back in the queue
+    /// (`PQZ_VERDICT_EXPIRED`), never `dead`, nothing sent; the control: the envelope expired too, `dead`.
+    #[tokio::test]
+    async fn a_retry_past_its_verdict_only_requeues() {
+        for (envelope_live, state) in [(true, "queued"), (false, "dead")] {
+            let (url, rpc) = fake_evm(offchain()).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (mut w, _) = work_of_op(Some(7), &pqz_job(7)["op"], None).unwrap();
+            (w.valid_until, w.envelope_until) = (now() - 1, if envelope_live { now() + 600 } else { now() - 1 });
+            s.retry.push_back((w, None));
+            s.drain_retry().await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{last}");
+            if envelope_live {
+                assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_EXPIRED"), "{last}");
+            }
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// Fable recheck R-2: a re-fill refused by a rule (here: the verdict at an old epoch, no endpoint to renew it) gap-fills the
+    /// nonce and puts the job back in the queue, never `dead`: the first transaction may still land.
+    #[tokio::test]
+    async fn a_refused_re_fill_requeues_never_dead() {
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        rpc.lock().unwrap().pqz_cfg = Some((1, VERIFIER, 3));
+        s.track().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "queued", "{last}");
+        assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_MISSING"), "{last}");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].1 == s.address() && sent[1].2.is_empty(), "a gap-filler");
+        // recheck S-1: the first transaction wins the nonce (the debit landed); the job polled again is `consumed`, never `dead`
+        rpc.lock().unwrap().receipts.insert(sent[0].0, true);
+        rpc.lock().unwrap().mtx_nonce = Some(u64::MAX);
+        s.track().await;
+        assert_eq!(s.inflight_count(), 0);
+        o.lock().unwrap().jobs.push(with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e)));
+        s.poll_outbox().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "consumed", "{last}");
+    }
+
+    /// Fable recheck S-2: a PQZ job past its envelope is `dead` before the fill (whose refusal, here a fee mismatch, would requeue
+    /// it on every poll), nothing sent; the control: the envelope live, the same job is `PQZ_FEE_MISMATCH`, queued.
+    #[tokio::test]
+    async fn a_job_past_its_envelope_is_dead_before_the_fill() {
+        for (expired, state) in [(true, "dead"), (false, "queued")] {
+            let (url, rpc) = fake_evm(Evm { stmt_fee: Some(5), ..offchain() }).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (mut w, _) = work_of_op(Some(7), &with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e))["op"], None).unwrap();
+            if expired {
+                (w.valid_until, w.envelope_until) = (now() - 1, now() - 1);
+            }
+            s.submit(w).await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{last}");
+            let want = if expired { "expired before submit" } else { "PQZ_FEE_MISMATCH" };
+            assert!(last["error"].as_str().unwrap().starts_with(want), "{last}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// Fable recheck S-3: a stuck debit past its verdict whose re-fill renews nothing (the token's view refuses the op) is never
+    /// re-sent as it is: its nonce is gap-filled and the job back in the queue.
+    #[tokio::test]
+    async fn a_re_fill_that_renews_nothing_gap_fills() {
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.pqz_verifier.valid_margin_secs = 0).await.unwrap();
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        rpc.lock().unwrap().stmt_revert = true;
+        s.track().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "queued", "{last}");
+        assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_EXPIRED"), "{last}");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].1 == s.address() && sent[1].2.is_empty(), "a gap-filler, never the stale debit");
     }
 
     /// The node never asks for the PQZ precompile on an `OFFCHAIN` token's job (spec §3, O1: OFFCHAIN ignores whether a
@@ -3358,11 +3533,20 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             c.pqz_verifier.refuse_shield_when_unserved = true;
         };
         let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
-        for (e, urls, why) in [(revoked, vec![url.clone()], "revoked"), (offchain(), vec![DEAD.to_string()], "unreachable"),
-            (offchain(), vec![refusing.clone()], "probe refused"), (offchain(), vec![], "no endpoint")] {
+        for (e, urls, why) in [(revoked, vec![url.clone()], "revoked"), (offchain(), vec![refusing.clone()], "probe refused"),
+            (offchain(), vec![], "no endpoint")] {
             let (r, rpc) = outcomes(e, shield_jobs(), on(urls)).await;
             assert!(r.len() == 2 && r.iter().all(|x| x.0 == "dead" && x.1.starts_with("PQZ_VERIFIER_UNREACHABLE")), "{why}: {r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
+        }
+        // Fable E N-2: a probe with a transport error (nothing listens) or a 5xx (recheck R-5) is no answer: back in the queue,
+        // never `dead`
+        let (busy, b) = fake_verifier(json!({"error": "upstream"})).await;
+        b.lock().unwrap().status = 503;
+        for urls in [vec![DEAD.to_string()], vec![refusing.clone(), DEAD.to_string()], vec![busy]] {
+            let (r, rpc) = outcomes(offchain(), shield_jobs(), on(urls)).await;
+            assert!(r.len() == 2 && r.iter().all(|x| x.0 == "queued" && x.1.starts_with("PQZ_VERIFIER_PROBE_UNREAD")), "{r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
         }
         let precompile = Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
         for (e, urls) in [(offchain(), vec![DEAD.to_string(), refusing, url.clone()]), (precompile, vec![])] {

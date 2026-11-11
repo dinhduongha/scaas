@@ -342,10 +342,21 @@ signing. A subject that crossed the grief threshold gets a re-simulation right b
 digest and any simulation on every path (the lane, the gateway's `POST /v1/op`, the generic lane runner); a verdict the gateway
 fetched is reused by the lane. A tracked PQZ debit after a restart gets its verdict again before any replacement; without one its
 nonce is gap-filled only. **The fee pre-check** (group 3t, BUILT; [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36)) runs first in the same
-fill, before the verdict fetch, on every path and again before every send: `args.pqz_fee` against word 256 of the token's own
-statement view; `PQZ_FEE_MISMATCH` keeps the job queued (a 422 at the gateway). Liftable, back in the queue: `PQZ_FEE_MISMATCH`
+fill, before the verdict fetch, on every path and again before every send, a stuck debit's replacement included (refused: the
+nonce is gap-filled): `args.pqz_fee` against word 256 of the token's own statement view; `PQZ_FEE_MISMATCH` keeps the job queued (a 422 at the gateway). Liftable, back in the queue: `PQZ_FEE_MISMATCH`
 (also a simulation's `AuthRejected` / `PqzVerdictMismatch(3)` after an indexed `VerifierFeeSet` of the token), and the setter's
 `VerifierFeeNotReady`, `VerifierFeePending`; final: `VerifierFeeAboveMax`, `VerifierFeeSame`.
+
+*Known limits* (Fable review of ua-mtx-merge E N-7, N-11, recheck R-6; PLANNED, open). The verifier fetch and the shield probe run inside the
+lane's single loop (at intake, and again in `track` when a stuck debit's replacement re-runs the fill), `timeout_ms` (5 s) per
+endpoint and up to two fetches per job: two slow endpoints and ten PQZ jobs in one poll stall
+receipts and replacements for up to 200 s; target: bound the fetch time per round, or remember a failed endpoint for a few
+seconds. Every chain read added for PQZ, the services and the registry (`pqzVerifyConfig`, the statement views, the
+`VerifierFeeSet` and `UAPqzKeyCurrent` logs) goes to the first `rpc_urls` entry only, with no failover:
+[ARCH-POS-15](../decisions.md#ARCH-POS-15) (an RPC list in every consumer) is built in the reference readers first, not yet in
+the node. The `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` span a fixed
+10,000-block window (`ROTATION_LOOKBACK`, not the job's intake block) on that one RPC: an RPC that caps `eth_getLogs` below it
+keeps every such job queued until its `validUntil` (never `dead` wrongly); target: chunk the range, bound it by the intake block.
 
 <a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
 P2; **BUILT**, T63 `39fa296c`, `a6040f9a`, node mutants N1–N3 killed). A PQZ debit whose simulation is over the lane's cap (`gas …
@@ -482,7 +493,10 @@ check, a simulation revert that a later block may lift on a regulated token (`Fr
 redeemer is granted, a later wrap raises the entitlement) is the same class: `queued` with `WRAP_LIMIT_REFUSED: <error>`,
 never `dead` (BUILT, branch `ua-mtx-wraplimit`, group 3l; wrap limits spec 2026-11-10 §9; [CTR-TOK-31](../contracts/token-wrappers.md#CTR-TOK-31));
 `WrapControlNeedsHybrid`, a creation refusal, is not in it. Such a refusal is no billed failure, so it never counts in the grief
-score ([NODE-LANE-15](#NODE-LANE-15), not built).
+score ([NODE-LANE-15](#NODE-LANE-15), not built). One classifier holds every class of this section and the PQZ ones
+(`guard::revert_verdict`: `consumed`, back in the queue by name, or `dead`), used by the EVM `Submitter` and by the generic lane
+runner for every EVM-contract family (Hedera), so one rule on every chain (BUILT, Fable review of ua-mtx-merge E N-1; test
+`lane_runner_requeues_a_liftable_refusal_on_hedera`). Other families keep the adapter's own replay check (`op_consumed`).
 
 **Classification after consumption:**
 

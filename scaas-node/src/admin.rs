@@ -83,10 +83,10 @@ pub fn render(readings: &[Reading]) -> Snapshot {
     for r in readings {
         let c = esc(&r.key);
         if let Err(e) = &r.head {
-            reasons.push(format!("{}: rpc: {e}", r.key));
+            reasons.push(crate::chain::redact_urls(&format!("{}: rpc: {e}", r.key)));
         }
         match &r.stats {
-            Err(e) => reasons.push(format!("{}: odoo: {e}", r.key)),
+            Err(e) => reasons.push(crate::chain::redact_urls(&format!("{}: odoo: {e}", r.key))),
             Ok(s) => {
                 for (state, n) in &s.jobs {
                     jobs.push((format!("chain=\"{c}\",state=\"{}\"", esc(state)), n.to_string()));
@@ -229,9 +229,9 @@ mod tests {
         assert!(render(&[ok_reading()]).ready);
         assert!(!render(&[]).ready, "nothing probed yet");
         let mut r = ok_reading();
-        r.head = Err("timeout".into());
+        r.head = Err("timeout for url (http://10.0.0.7:8545/KEY)".into());
         let s = render(&[r]);
-        assert!(!s.ready && s.reasons[0].contains("rpc"));
+        assert!(!s.ready && s.reasons[0].contains("rpc") && !s.reasons[0].contains("KEY"), "recheck R-7: no URL in /readyz");
         let mut r = ok_reading();
         r.stats = Err("HTTP 500".into());
         let s = render(&[r]);

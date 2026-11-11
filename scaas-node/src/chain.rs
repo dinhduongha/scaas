@@ -38,6 +38,22 @@ pub fn is_contract(code: &[u8]) -> bool {
     !code.is_empty() && !designator
 }
 
+/// Fable E N-8: an endpoint URL (an RPC's, a verifier's: an internal host, a key in a path) never reaches a job's error or a
+/// gateway reply: each `scheme://…` up to a blank, a quote or a bracket becomes `<url>` (never ending at `,` or `;`: a key after
+/// one in a path or query is part of the URL; Fable recheck R-7).
+pub fn redact_urls(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = ["http://", "https://", "ws://", "wss://"].iter().filter_map(|p| rest.find(p)).min() {
+        out.push_str(&rest[..i]);
+        out.push_str("<url>");
+        let tail = &rest[i..];
+        rest = &tail[tail.find(|c: char| c.is_whitespace() || "()<>\"'".contains(c)).unwrap_or(tail.len())..];
+    }
+    out.push_str(rest);
+    out
+}
+
 pub fn classify(e: &TransportError) -> SimError {
     match e.as_error_resp() {
         Some(resp) => match resp.as_revert_data() {
@@ -283,11 +299,11 @@ impl Chain {
         Ok(!self.primary().get_logs(&filter).await?.is_empty())
     }
 
-    /// Round 3t (CTR-PQZ-36, spec §10): an event `topic0` of `address` in the last `lookback` blocks (a token's `VerifierFeeSet`).
-    pub async fn event_since(&self, address: Address, topic0: B256, lookback: u64) -> Result<bool> {
+    /// Round 3t (CTR-PQZ-36, spec §10): the logs `topic0` of `address` in the last `lookback` blocks (a token's `VerifierFeeSet`).
+    pub async fn logs_since(&self, address: Address, topic0: B256, lookback: u64) -> Result<Vec<alloy::rpc::types::Log>> {
         let latest = self.primary().get_block_number().await?;
         let filter = Filter::new().address(address).event_signature(topic0).from_block(latest.saturating_sub(lookback)).to_block(latest);
-        Ok(!self.primary().get_logs(&filter).await?.is_empty())
+        Ok(self.primary().get_logs(&filter).await?)
     }
 
     /// Ký EIP-1559; trả bytes thô và hash — hash biết TRƯỚC khi gửi (journal, review F5).

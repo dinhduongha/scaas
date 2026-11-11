@@ -1286,6 +1286,10 @@ impl Op {
                 }
                 // no `fee_recipient`: the payer hashed these bytes (`callDataHash`), the lane must not rewrite them; an unbound
                 // `relayer` / `feeRecipient` of the inner call goes as 0, which is what the client hashes (job-api.md §5.3)
+                // Fable E N-5: a nested relay fee is refused by name before the recursion, never bounded by depth alone
+                if c.get("entry").and_then(Value::as_str).is_some_and(|e| rows().iter().any(|r| r.relay_fee() && r.entry == e)) {
+                    bail!("BAD_PAYLOAD: a relay fee does not relay a relay fee");
+                }
                 let c = Op::parse_with(c, None, services)?;
                 if c.row.relay_fee() {
                     bail!("BAD_PAYLOAD: a relay fee does not relay a relay fee");
@@ -2588,6 +2592,9 @@ mod tests {
             assert!(Op::parse(&bad, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"));
             bad["call"] = json!("0x1234");
             assert!(Op::parse(&bad, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "op.call as hex");
+            // Fable E N-5: a nested relay fee is refused by name before its body is parsed (its own fields need not be valid)
+            bad["call"] = json!({"entry": row.entry, "call": {"entry": row.entry}});
+            assert_eq!(Op::parse(&bad, FEE).unwrap_err().to_string(), "BAD_PAYLOAD: a relay fee does not relay a relay fee");
         }
     }
 

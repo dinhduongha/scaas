@@ -149,13 +149,145 @@ pub async fn pqz_rotated(chain: &Chain, w: &Work, lookback: u64) -> anyhow::Resu
     chain.pqz_key_current_since(registry, &parties, lookback).await
 }
 
-/// Round 3t (CTR-PQZ-36, spec §10): a PQZ job's token emitted `VerifierFeeSet` in the last `lookback` blocks (the event is
+/// Round 3t (CTR-PQZ-36, spec §10): a PQZ job's token emitted a `VerifierFeeSet` that moved the fee ([`fee_moves`]) in the last
+/// `lookback` blocks (the event is
 /// evidence of the cause of an `AuthRejected` / `PqzVerdictMismatch(3)`, not proof); `Ok(false)` for any other job.
 pub async fn pqz_fee_changed(chain: &Chain, w: &Work, lookback: u64) -> anyhow::Result<bool> {
     if w.typed.as_ref().is_none_or(|t| t.contract != "pqz") {
         return Ok(false);
     }
-    chain.event_since(w.to, <IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH, lookback).await
+    let logs = chain.logs_since(w.to, <IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH, lookback).await?;
+    Ok(fee_moves(&logs))
+}
+
+/// Fable 3r3s3t P3-4: a `VerifierFeeSet` moved the fee (`previous != next`); a cancel `(cur, cur)` moves nothing.
+fn fee_moves(logs: &[alloy::rpc::types::Log]) -> bool {
+    logs.iter().any(|l| l.log_decode::<IPqzToken::VerifierFeeSet>().is_ok_and(|e| e.inner.previous != e.inner.next))
+}
+
+/// Group 3g: how far back a party's `UAPqzKeyCurrent` (and round 3t a token's `VerifierFeeSet`) counts as "since intake".
+// ponytail: a fixed window, not the job's own intake block (the pull path carries none); a job older than this window that
+// meets a rotation is reported `dead` with `ProofRejected`; use the job's claim block once the node's own queue carries it
+pub const ROTATION_LOOKBACK: u64 = 10_000;
+
+/// What a refused simulation of an EVM job means (NODE-LANE-09; Fable E N-1: one classifier for every runner of the EVM
+/// contracts, the pipelined `Submitter` and the generic `lane_runner` (Hedera), so one rule on every chain).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Verdict {
+    /// Done on chain: `Some(label)` is the job's error (`already_invalidated`, `LIQUIDITY_ORDER_CLOSED: …`); `None`: the subject's
+    /// nonce is used, the runner labels by whom.
+    Consumed(Option<String>),
+    /// A refusal a later block may lift, by name: back in the queue, never `dead` while the op may still land.
+    Requeue(String),
+    /// Never sendable as named.
+    Dead(String),
+}
+
+/// R80: `mtxNonce(from, batch) > nonce`: the meta-tx's subject nonce is used (by whom: `classify`). `Ok(false)` for a job without
+/// an envelope. An RPC error is `Err`: no conclusion (fail closed).
+pub async fn consumed(chain: &Chain, w: &Work) -> anyhow::Result<bool> {
+    let Some(m) = &w.meta else { return Ok(false) };
+    Ok(chain.subject_nonce(m).await? > m.nonce)
+}
+
+/// [`Verdict`] of a simulation (or the guard's build step) that refused `w` with `reason` (a `decode_revert` string or a named
+/// refusal): a liquidity order already pulled, an invalidation in force or a used subject nonce are `consumed` (G6, MT-8, R80); a
+/// PQZ debit over the lane's cap on a `LOG` token, a starved capability check, a regulated refusal (spec §7), a wrap limit
+/// (group 3l), a liftable PQZ verdict refusal (group 3f), a fee word moved (round 3t), a rotated or unknown key version
+/// (group 3g) are back in the queue by name; the job's own subject off a list, and anything else, `dead`.
+pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict {
+    use crate::abi::PqzRefusal;
+    if reason.starts_with(LIQUIDITY_ORDER_CLOSED) {
+        return Verdict::Consumed(Some(reason));
+    }
+    // NODE-JOB-24 (group 3h, pqz-proof-path spec §10): under `LOG` a holder of bit 24 may switch the token to `NONE` and the job
+    // may land: `PROOF_STORE_OVER_LANE_CAP`, back in the queue; under `NONE`, or without the view, the plain refusal
+    if over_cap(&reason) && crate::pqz::is_debit(w) {
+        match chain.call_view(w.to, IPqzToken::proofStoreCall {}).await {
+            Ok(m) if m == crate::abi::PROOF_STORE_LOG => return Verdict::Requeue(format!("PROOF_STORE_OVER_LANE_CAP: {reason}")),
+            Ok(_) | Err(SimError::Revert(_)) => {}
+            Err(SimError::Transport(e)) => return Verdict::Requeue(format!("proofStore(): {e}; {reason}")),
+        }
+    }
+    // re-check P3 (spec §11): a starved T7 on a DEX the guard found marked is gas, not a wrong DEX
+    if liquidity_starved(&w.data, &reason) {
+        return Verdict::Requeue(format!("simulate: {reason}: the tokens' capability check starved, retry"));
+    }
+    if already_invalidated(&w.data, &reason) {
+        return Verdict::Consumed(Some("already_invalidated".into()));
+    }
+    match consumed(chain, w).await {
+        Ok(true) => return Verdict::Consumed(None),
+        Ok(false) => {}
+        Err(e) => return Verdict::Requeue(format!("mtxNonce: {e:#}")),
+    }
+    // round 3s (spec 2026-11-10-token-lists.md §9, Fable P3-8): the job's own subject off the allow list or on the deny list:
+    // refused by name, not waiting as a liftable refusal
+    if let Some(code) = w.meta.as_ref().and_then(|m| crate::abi::own_list_refusal(&reason, m.from)) {
+        return Verdict::Dead(format!("{code}: {reason}"));
+    }
+    // regulated-kinds spec §7: a freeze, a pause, an eligibility or the registry may lift and the payload may still land
+    if crate::abi::regulated_refusal(&reason).is_some() {
+        return Verdict::Requeue(format!("REGULATED_REFUSED: {reason}"));
+    }
+    // group 3l (wrap limits spec §9): a window ends, a member is added, a redeemer is granted, a later wrap raises the entitlement
+    if crate::abi::wrap_limit_refusal(&reason).is_some() {
+        return Verdict::Requeue(format!("WRAP_LIMIT_REFUSED: {reason}"));
+    }
+    // group 3f (spec §11.1): a PQZ verifier mode refusal by name, never `dead` while the op may land with another verdict; a
+    // `PqzVerdictMismatch` after a party's indexed `UAPqzKeyCurrent` is `PQZ_KEY_ROTATED` (T55)
+    if let Some((name, liftable)) = crate::abi::pqz_verdict_refusal(&reason) {
+        if name == "PqzVerdictMismatch" {
+            match pqz_rotated(chain, w, ROTATION_LOOKBACK).await {
+                Ok(true) => return Verdict::Requeue(format!("PQZ_KEY_ROTATED: {reason}")),
+                Ok(false) => {}
+                Err(e) => return Verdict::Requeue(format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")),
+            }
+            // round 3t: field 3 (the statement) after an indexed `VerifierFeeSet`: the fee word moved
+            if verdict_field(&reason) == Some(3) {
+                if let Some(v) = fee_moved(chain, w, &reason).await {
+                    return v;
+                }
+            }
+        }
+        return if liftable { Verdict::Requeue(format!("PQZ_VERDICT_REFUSED: {reason}")) } else { Verdict::Dead(reason) };
+    }
+    // round 3t (CTR-PQZ-36, spec §10): `AuthRejected` after an indexed `VerifierFeeSet` of its token is `PQZ_FEE_MISMATCH`, back
+    // in the queue (a decrease may restore the word), never `dead`; without the event `dead`
+    if reason.starts_with("AuthRejected") {
+        return fee_moved(chain, w, &reason).await.unwrap_or(Verdict::Dead(reason));
+    }
+    // group 3g (spec §7.3): a stale debit or two equal keys never land, a version above current may become current, a proof
+    // built before a party's rotation is `PQZ_KEY_ROTATED`
+    match crate::abi::pqz_refusal(&reason) {
+        Some(PqzRefusal::Stale) => Verdict::Dead(format!("PQZ_KEY_STALE: {reason}")),
+        Some(PqzRefusal::Reused) => Verdict::Dead(format!("PQZ_KEY_REUSED: {reason}")),
+        Some(PqzRefusal::Unknown) => Verdict::Requeue(format!("PQZ_KEY_VERSION_UNKNOWN: {reason}")),
+        Some(PqzRefusal::ProofRejected) => match pqz_rotated(chain, w, ROTATION_LOOKBACK).await {
+            Ok(true) => Verdict::Requeue(format!("PQZ_KEY_ROTATED: {reason}")),
+            Ok(false) => Verdict::Dead(reason),
+            Err(e) => Verdict::Requeue(format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")),
+        },
+        None => Verdict::Dead(reason),
+    }
+}
+
+/// The `field` of a `decode_revert` string `PqzVerdictMismatch(PqzVerdictMismatch { field: N })`, parsed whole (Fable E N-11: never
+/// a substring, so `field: 30` is not field 3).
+fn verdict_field(reason: &str) -> Option<u8> {
+    let rest = reason.split_once("field: ")?.1;
+    rest[..rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len())].parse().ok()
+}
+
+/// Round 3t (CTR-PQZ-36, spec §10, T55's pattern): `PQZ_FEE_MISMATCH` when the job's token emitted a `VerifierFeeSet` that moved
+/// the fee since intake (the `ROTATION_LOOKBACK` window; a cancel `(cur, cur)` is no move, Fable 3r3s3t P3-4); an unreadable log
+/// is `PQZ_FEE_LOG_UNREAD`, back in the queue, never counted as a move.
+async fn fee_moved(chain: &Chain, w: &Work, reason: &str) -> Option<Verdict> {
+    match pqz_fee_changed(chain, w, ROTATION_LOOKBACK).await {
+        Ok(true) => Some(Verdict::Requeue(format!("PQZ_FEE_MISMATCH: {reason} after VerifierFeeSet"))),
+        Ok(false) => None,
+        Err(e) => Some(Verdict::Requeue(format!("PQZ_FEE_LOG_UNREAD: {e:#}; {reason}"))),
+    }
 }
 
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
@@ -1390,7 +1522,7 @@ mod tests {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
                 let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
-                let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
+                let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) };
                 let e = g.check(&chain, &w).await.unwrap_err();
                 assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("CALL_TARGET_REFUSED")), "{s} on {kind}: {e:?}");
             }
@@ -1433,7 +1565,7 @@ mod tests {
             validUntil: alloy::primitives::U256::from(4_000_000_000u64), mode: 0, relayer: Address::ZERO, fee: alloy::primitives::U256::ZERO, feeRecipient: Address::ZERO };
         let m = UaMtx::Transfer(t);
         let auth = |sig: &[u8]| crate::abi::UASig { keyData: Bytes::new(), signature: sig.to_vec().into(), members: vec![] };
-        let work = |sig: Vec<u8>| Work { job_id: Some(1), to: token, data: m.calldata(auth(&sig)), valid_until: 4_000_000_000,
+        let work = |sig: Vec<u8>| Work { job_id: Some(1), to: token, data: m.calldata(auth(&sig)), valid_until: 4_000_000_000, envelope_until: 4_000_000_000,
             meta: Some(crate::submit::MetaRef::of_ua(token, &m, None)), entry: false,
             typed: Some(crate::submit::transfer_typed(None, token, m.struct_hash(), Some((from, sig.into()))).unwrap()) };
         g.check(&chain, &work(vec![0xab; 64])).await.unwrap();
@@ -1448,7 +1580,7 @@ mod tests {
         let cfg = ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
         let chain = Chain::with_signer(&cfg, signer()).unwrap();
         let g = Guard::new(&cfg, Default::default()).unwrap();
-        let w = |data: Vec<u8>, entry: bool| Work { job_id: Some(1), to: Address::repeat_byte(1), data: data.into(), valid_until: 0, meta: None, entry, typed: None };
+        let w = |data: Vec<u8>, entry: bool| Work { job_id: Some(1), to: Address::repeat_byte(1), data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry, typed: None };
         let transfer = IToken::transferCall { to: Address::repeat_byte(2), value: alloy::primitives::U256::from(1) }.abi_encode();
         assert!(matches!(g.check(&chain, &w(transfer.clone(), true)).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
         assert!(matches!(g.check(&chain, &w(transfer, false)).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
@@ -2257,7 +2389,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
             let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                 derived_signer: false, derived_side: false };
-            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
+            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) }
         };
         let g = |routers: Vec<Address>| Guard::new(&ChainCfg { params: params.clone(), governance_routers: routers, ..cfg.clone() },
             Arc::new(RwLock::new(vec![token]))).unwrap();
@@ -2587,7 +2719,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                     "gov_router" => ChainCfg { governance_routers: vec![to], ..cfg.clone() },
                     _ => cfg.clone(),
                 };
-                (Guard::new(&c, Default::default()).unwrap(), Work { job_id: Some(1), to, data: r.sent.to_vec().into(), valid_until: 0,
+                (Guard::new(&c, Default::default()).unwrap(), Work { job_id: Some(1), to, data: r.sent.to_vec().into(), valid_until: 0, envelope_until: 0,
                     meta: None, entry: true, typed: Some(t) })
             };
             let (g, w) = on(other);
@@ -2634,7 +2766,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
             let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "token", domain_of: token,
                 struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false };
-            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
+            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) }
         };
         for entry in ["storeMessage", "addWraps", "postMessage"] {
             paid.check(&chain, &relayed(chat, work(entry).data)).await.unwrap_or_else(|e| panic!("{entry} as a relay fee's call: {e:?}"));

@@ -10,7 +10,7 @@
 //! time, bytes and `UASig` shape). A verdict at another epoch than `pqzVerifyConfig()`'s, or expiring within the margin, is
 //! re-fetched once; none ⇒ `PQZ_VERDICT_MISSING`, zero sends. The precompile is never asked for (spec §3: OFFCHAIN ignores
 //! whether one exists). With `refuse_shield_when_unserved`, a shield into an `OFFCHAIN` token whose verifier is revoked or
-//! unreachable is `PQZ_VERIFIER_UNREACHABLE`. **UNAUDITED.**
+//! that no endpoint serves is `PQZ_VERIFIER_UNREACHABLE`. **UNAUDITED.**
 use std::time::Duration;
 
 use alloy::dyn_abi::DynSolValue as Val;
@@ -207,21 +207,26 @@ impl Verifier {
             validUntil: v.valid_until }, sig: v.auth.clone() };
         vals[slot] = typed::value_of("PqzSignedVerdict", &sv.abi_encode()).map_err(bad)?;
         w.data = typed::call_data(row, vals).into();
-        // a replacement past the verdict's life would revert: the work's deadline is the sooner one
-        w.valid_until = w.valid_until.min(v.valid_until);
+        // a replacement past the verdict's life would revert: the work's deadline is the sooner one, of the op's own deadline
+        // (never of an earlier verdict's: a renewed verdict extends it, Fable recheck R-1)
+        w.valid_until = w.envelope_until.min(v.valid_until);
         if let Some(t) = w.typed.as_mut() {
             t.pqz_verdict = Some(v); // the lane reuses what the gateway fetched
         }
         Ok(())
     }
 
-    /// The configured endpoints in order; the first decoded answer.
+    /// The configured endpoints in order; the first decoded answer. An error names the endpoint by its index only, its URL is
+    /// logged (Fable E N-8: no endpoint URL in a job's error or a gateway reply).
     async fn fetch(&self, body: &Value) -> Result<PqzVerdictArgs, String> {
         let mut errs = Vec::new();
-        for e in &self.cfg.endpoints {
+        for (i, e) in self.cfg.endpoints.iter().enumerate() {
             match self.ask(e, body).await {
                 Ok(v) => return Ok(v),
-                Err(x) => errs.push(format!("{e}: {x}")),
+                Err(x) => {
+                    tracing::warn!(endpoint = i + 1, url = %e, "pqz verifier: {x}");
+                    errs.push(format!("endpoint {}: {}", i + 1, crate::chain::redact_urls(&x)));
+                }
             }
         }
         Err(errs.join("; "))
@@ -232,7 +237,7 @@ impl Verifier {
     /// node rebuilds the rest), the signature through the bounded `UASig` decoder (two levels, 16 slots).
     async fn ask(&self, endpoint: &str, body: &Value) -> Result<PqzVerdictArgs, String> {
         let url = format!("{}{ROUTE}", endpoint.trim_end_matches('/'));
-        let mut r = self.http.post(url).json(body).send().await.map_err(|e| e.to_string())?;
+        let mut r = self.http.post(url).json(body).send().await.map_err(|e| e.without_url().to_string())?;
         if !r.status().is_success() {
             return Err(format!("HTTP {}", r.status()));
         }
@@ -242,7 +247,7 @@ impl Verifier {
             return Err(over());
         }
         let mut buf = Vec::new();
-        while let Some(c) = r.chunk().await.map_err(|e| e.to_string())? {
+        while let Some(c) = r.chunk().await.map_err(|e| e.without_url().to_string())? {
             if buf.len() + c.len() > max {
                 return Err(over());
             }
@@ -256,7 +261,8 @@ impl Verifier {
     }
 
     /// `refuse_shield_when_unserved` (spec §11.1, C8): a shield or wrap-shield into an `OFFCHAIN` token whose verifier is revoked
-    /// or whose endpoints none answers is refused `PQZ_VERIFIER_UNREACHABLE`, for every consumer; off by default.
+    /// or that no endpoint serves is refused `PQZ_VERIFIER_UNREACHABLE`, for every consumer; a probe that did not get through is
+    /// `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue (Fable E N-2); off by default.
     pub async fn check_shield(&self, chain: &Chain, w: &Work) -> Result<(), Refusal> {
         if !self.cfg.refuse_shield_when_unserved || w.typed.as_ref().is_none_or(|t| t.contract != "pqz") {
             return Ok(());
@@ -272,24 +278,39 @@ impl Verifier {
         if c.verifier == B256::ZERO {
             return unserved(format!("its verifier is revoked (epoch {})", c.pqzVerifierEpoch));
         }
-        if !self.serves(chain, w.to).await {
-            return unserved("no [pqz_verifier] endpoint serves it (its probe)".into());
+        match self.serves(chain, w.to).await {
+            Some(true) => Ok(()),
+            Some(false) => unserved("no [pqz_verifier] endpoint serves it (its probe)".into()),
+            // Fable E N-2: a probe that did not get through says nothing about the pool: back in the queue, never `dead`
+            None => Err(Refusal::Transport(format!("PQZ_VERIFIER_PROBE_UNREAD: {:#x}: no [pqz_verifier] endpoint serves it and \
+                one did not answer its probe (transport); retried", w.to))),
         }
-        Ok(())
     }
 
     /// Some configured endpoint serves `token`: its probe (`POST /v1/pqz-verdict/probe {token, chainId}`, spec §4.2, §11.2: a
-    /// verdict over the fixed probe statement) answers 2xx.
+    /// verdict over the fixed probe statement) answers 2xx: `Some(true)`; every endpoint answered, none 2xx (or none configured):
+    /// `Some(false)`; none served and one had a transport error (a timeout, a refused connection) or a 5xx: `None`, unknown.
     // ponytail: one probe per shield job; keep each endpoint's last outcome if shields come often
-    async fn serves(&self, chain: &Chain, token: alloy::primitives::Address) -> bool {
+    async fn serves(&self, chain: &Chain, token: alloy::primitives::Address) -> Option<bool> {
         let body = json!({"token": format!("{token:#x}"), "chainId": chain.number});
-        for e in &self.cfg.endpoints {
+        let mut known = true;
+        for (i, e) in self.cfg.endpoints.iter().enumerate() {
             let url = format!("{}{ROUTE}/probe", e.trim_end_matches('/'));
-            if self.http.post(url).json(&body).send().await.is_ok_and(|r| r.status().is_success()) {
-                return true;
+            match self.http.post(url).json(&body).send().await {
+                Ok(r) if r.status().is_success() => return Some(true),
+                // Fable recheck R-5: a 5xx (a restart behind a proxy) says nothing about the pool either
+                Ok(r) if r.status().is_server_error() => {
+                    tracing::warn!(endpoint = i + 1, "pqz verifier probe: HTTP {}", r.status());
+                    known = false;
+                }
+                Ok(_) => {}
+                Err(x) => {
+                    tracing::warn!(endpoint = i + 1, "pqz verifier probe: {x}");
+                    known = false;
+                }
             }
         }
-        false
+        known.then_some(false)
     }
 }
 

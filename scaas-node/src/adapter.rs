@@ -12,6 +12,7 @@ use tracing::{info, warn};
 
 use crate::breaker::Breaker;
 use crate::chain::SimError;
+use crate::guard::Verdict;
 use crate::finality::next_range;
 use crate::odoo::{Job, Odoo, Report};
 use crate::submit::{job_digest, now, InflightSet};
@@ -166,6 +167,20 @@ pub trait ChainAdapter: Send + Sync {
     /// MT-8): done, never dead. Default: no such job.
     fn already_done(&self, _job: &Job, _reason: &str) -> bool {
         false
+    }
+    /// NODE-LANE-09: what a refused build (the guard, the simulation) means for the job. Default: done ([`Self::already_done`]),
+    /// or the op's replay guard used ⇒ `consumed`, else `dead`; an unreadable guard ⇒ back in the queue. An EVM family (`evm`,
+    /// Hedera) answers the `Submitter`'s one classifier, [`crate::guard::revert_verdict`] (Fable E N-1).
+    async fn revert_verdict(&self, job: &Job, reason: String) -> crate::guard::Verdict {
+        use crate::guard::Verdict;
+        if self.already_done(job, &reason) {
+            return Verdict::Consumed(Some("already_invalidated".into()));
+        }
+        match self.op_consumed(job).await {
+            Ok(Some(true)) => Verdict::Consumed(None),
+            Ok(_) => Verdict::Dead(format!("simulation: {reason}")),
+            Err(e) => Verdict::Requeue(format!("op_consumed: {e:#}")),
+        }
     }
 }
 
@@ -589,18 +604,14 @@ pub(crate) async fn step_once(
     let _guard = inflight.with_hold(_guard, hold);
     let built = match adapter.build(&job, lane).await {
         Ok(b) => b,
-        Err(SimError::Revert(r)) if adapter.already_done(&job, &r) => {
-            report(odoo, Report { error: Some("already_invalidated".into()), ..rep(job.id, "consumed") }).await;
-            return Ok(Step::Done);
-        }
+        // R80, NODE-LANE-09: done on chain ⇒ `consumed`; a liftable refusal by name ⇒ back in the queue; else `dead`
         Err(SimError::Revert(r)) => {
-            // R80: op đã bị tiêu thụ (relayer khác đưa lên trước) ⇒ `consumed`, không `dead`.
-            let (state, error) = match adapter.op_consumed(&job).await {
-                Ok(Some(true)) => ("consumed", "unknown".to_string()),
-                Ok(_) => ("dead", format!("simulation: {r}")),
-                Err(e) => {
-                    report(odoo, Report { error: Some(format!("op_consumed: {e:#}")), ..rep(job.id, "queued") }).await;
-                    return Ok(Step::Retry(format!("op_consumed: {e:#}")));
+            let (state, error) = match adapter.revert_verdict(&job, r).await {
+                Verdict::Consumed(label) => ("consumed", label.unwrap_or_else(|| "unknown".into())),
+                Verdict::Dead(e) => ("dead", e),
+                Verdict::Requeue(e) => {
+                    report(odoo, Report { error: Some(e.clone()), ..rep(job.id, "queued") }).await;
+                    return Ok(Step::Retry(e));
                 }
             };
             report(odoo, Report { error: Some(error), ..rep(job.id, state) }).await;

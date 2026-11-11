@@ -237,7 +237,9 @@ stays 1.2): EVM body `evm.ua_meta_tx = m` (the wire `UAMetaTransfer`, or `UAMeta
 [CTR-UA-03](../contracts/accounts.md#CTR-UA-03)). `intent_id` = the UA digest (`mtxTransferDigest` / `mtxDigest` of `m`).
 Since the `ua*` / `mtx*` merge this is the body of every token and mandate-wallet intent ([CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30));
 an address body naming a token, or an address `MetaTransfer`, is refused `OP_KIND_MISMATCH`, and a `ua_meta_tx` under 1.2
-`BAD_ENVELOPE` (case 15d). **BUILT** (`src/mesh/digest.rs`, `tests/mesh_vectors.rs`) for a native `from` only: `sig_kind`
+`BAD_ENVELOPE` (case 15d). *Known limit* (Fable review of ua-mtx-merge E N-11; open): `mesh/digest.rs` accepts a `struct = call` body (hex `data`)
+as submittable while the job path refuses `struct = call` (`HEX_DATA_REFUSED`); `Evm::submit_wire` has no caller outside
+tests, so nothing breaks today; the rule is decided before the mesh is wired to a lane. **BUILT** (`src/mesh/digest.rs`, `tests/mesh_vectors.rs`) for a native `from` only: `sig_kind`
 `eoa` or `erc1271`, `auth` the native signature alone (a `keyData` or member set is `BAD_SIGNATURE`, case 06c); a derived
 `from` is refused `DERIVED_FROM_UNSUPPORTED` (MD-10, case 06b). **SPECIFIED:** the `ua` sig kind of a derived `from`
 and the record read below. No `from_kind`: the kind comes from `recordOf` (an unsigned JSON field would be a second source
