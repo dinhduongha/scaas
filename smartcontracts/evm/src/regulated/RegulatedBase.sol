@@ -18,16 +18,20 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///        `RegulatedLib` with `_govSubject()` as a word. Each kind lists its base kind first and this second.
 /// @notice **UNAUDITED.** Plan T28: `F`, `P`, the pause-open set, the mirror sync, the views and FREEZE, RECORD, FORCE,
 ///         PAUSE in `RegulatedLib`. Plan T29: `R` through the bounded `hasFlags` call, `canReceive`, `COMPLIANCE_REGISTRY_CODEHASH`.
-///         Plan T32: `operatorTransfer` (bit 22, CTR-GOV-20). Bit 21 `MODERATE` has no body (owner 2026-11-05).
+///         Plan T32: `operatorTransfer` (bit 22, CTR-GOV-20). Bit 21 `MODERATE` has no body (owner 2026-11-05). Round 3s
+///         (spec 2026-11-10-token-lists.md, CTR-GOV-24): `R` under bit 28 `KYC`; bits 8, 9 the token's own lists, checked
+///         by `L` (`_listed`) on both parties of every hooked path; `setAllowed`, `setDenied`, `listFlagsOf`, `enableFeature`.
 abstract contract RegulatedBase is MetaTokenBase {
     /// @dev The bits the regulated kinds add to their base kind's `_validBits()` (spec §2.1, bit 22 CTR-GOV-20): 5-10, 21,
-    ///      22 on 8 and 9; without `ALLOWLIST` (8) on the confidential kinds 10-13 (CTR-GOV-17).
+    ///      22, 23, 28 on 8 and 9; without `ALLOWLIST` (8) on the confidential kinds 10-13 (CTR-GOV-17).
     uint256 internal constant REG_BITS = GovernanceBits.REGULATED | (1 << GovernanceBits.RECORD)
         | (1 << GovernanceBits.MODERATE) | (1 << GovernanceBits.OPERATOR_TRANSFER) | (1 << GovernanceBits.TAX);
     uint256 internal constant REG_BITS_CONFIDENTIAL = REG_BITS & ~(uint256(1) << GovernanceBits.ALLOWLIST);
-    /// @dev Added to `_roleBits()`: 5, 6, 7, 10, 21 (contract-only, an `msig` UA counts, RK-1) and 22, 23 (any holder).
-    uint256 internal constant REG_ROLES = GovernanceBits.REGULATED_ROLES | (1 << GovernanceBits.OPERATOR_TRANSFER)
-        | (1 << GovernanceBits.TAX);
+    /// @dev Added to `_roleBits()`: 5, 6, 7, 10, 21 (contract-only, an `msig` UA counts, RK-1) and 8, 9, 22, 23 (any holder;
+    ///      8 and 9 the lists, round 3s); without 8 on the confidential kinds 10-13 (their mask has no bit 8).
+    uint256 internal constant REG_ROLES = GovernanceBits.REGULATED_ROLES | (1 << GovernanceBits.ALLOWLIST)
+        | (1 << GovernanceBits.DENYLIST) | (1 << GovernanceBits.OPERATOR_TRANSFER) | (1 << GovernanceBits.TAX);
+    uint256 internal constant REG_ROLES_CONFIDENTIAL = REG_ROLES & ~(uint256(1) << GovernanceBits.ALLOWLIST);
     /// @dev Added to `_contractOnlyBits()`: 5, 6, 7, 10, 21; never 22 or 23.
     uint256 internal constant REG_CONTRACT_ONLY = GovernanceBits.REGULATED_ROLES;
     /// @dev The pause-open set (spec §3.2, RK-7), by the inner selector: `unwrap(uint256,address,uint256)`,
@@ -63,10 +67,12 @@ abstract contract RegulatedBase is MetaTokenBase {
             | (1 << GovernanceBits.OPERATOR_TRANSFER);
     }
 
-    /// @dev 5, 6, 7: losing them relaxes only after `grantDelay` (spec §3.6); never 23 (pay-meta-tax Q5: the owner's
-    ///      revoke of a compromised single-key holder is immediate) or 24 (PQZ proof path spec §5: disabling it freezes).
+    /// @dev 5, 6, 7, 28: losing them relaxes only after `grantDelay` (spec §3.6; 28, round 3s spec §5.3: its disable); never
+    ///      23 (pay-meta-tax Q5: the owner's revoke of a compromised single-key holder is immediate), 24 (PQZ proof path spec
+    ///      §5: disabling it freezes), 8 or 9 (a list holder's revoke is at once, R4; their disable is refused).
     function _delayedRelaxBits() internal pure virtual override returns (uint256) {
-        return GovernanceBits.ISSUER_BITS & ~((uint256(1) << GovernanceBits.TAX) | (uint256(1) << GovernanceBits.PQZ_PROOF));
+        return GovernanceBits.ISSUER_BITS & ~((uint256(1) << GovernanceBits.TAX) | (uint256(1) << GovernanceBits.PQZ_PROOF)
+            | GovernanceBits.NOT_DISABLEABLE) | (uint256(1) << GovernanceBits.KYC);
     }
 
     /// @dev `RegulatedLib.init` (spec §2.4) before the kind's own init, so before any mint; with this clone's router, which
@@ -88,6 +94,33 @@ abstract contract RegulatedBase is MetaTokenBase {
         if (GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) _regDisabled(bit);
     }
 
+    /// @notice Round 3s (spec §5.3): `GovernanceLib.enableFeature`, then the preconditions, the whole call reverting: 28 needs
+    ///         the registry (`ComplianceRegistryNotSet`), 8 and 9 a holder root (`ListHolderMissing`, Fable P1-1: an enabled
+    ///         list nobody can write stops every unlisted party for at least `grantDelay`); then the mirror.
+    function _enableFeatureBody(uint8 bit) internal {
+        GovernanceLib.enableFeature(bit, _govSubject(), _validBits());
+        if (bit == GovernanceBits.KYC) {
+            if (RegulatedLib.$().complianceRegistry == address(0)) revert IRegulatedToken.ComplianceRegistryNotSet();
+        } else if (GovernanceLib.$().counts[bit].roots == 0) {
+            revert IRegulatedToken.ListHolderMissing(bit);
+        }
+        _regEnabled(bit);
+    }
+
+    // ------------------------------------------------------------------ the lists (round 3s, spec §6)
+
+    function _setAllowedBody(bytes32[] calldata accounts, bool on) internal {
+        RegulatedLib.setList(GovernanceBits.ALLOWLIST, RegulatedLib.ALLOWED, accounts, on, _govSubject());
+    }
+
+    function _setDeniedBody(bytes32[] calldata accounts, bool on) internal {
+        RegulatedLib.setList(GovernanceBits.DENYLIST, RegulatedLib.DENIED, accounts, on, _govSubject());
+    }
+
+    function _listFlagsOfBody(bytes32 account) internal view returns (uint8) {
+        return RegulatedLib.$().listFlags[account];
+    }
+
     // ------------------------------------------------------------------ the controls (spec §3.1): thin stubs
 
     function _freezeBody(bytes32 account, bytes32 ref, bytes32 recordId) internal {
@@ -103,6 +136,7 @@ abstract contract RegulatedBase is MetaTokenBase {
     ///         CTR-GOV-08 Change).
     function _forceTransferBody(bytes32 recordId, uint256 amount) internal {
         (bytes32 from, bytes32 to) = RegulatedLib.forceTransfer(recordId, amount, _govSubject());
+        _listed(to); // never `L(from)`: the remedy reaches a blocked subject (round 3s, spec §4.3)
         _eligible(to);
         MtxPipelineLib._checkTo(_registry(), to);
         _poolMove(from, to, amount);
@@ -203,23 +237,29 @@ abstract contract RegulatedBase is MetaTokenBase {
     }
     function _isFrozenBody(bytes32 account) internal view returns (bool) { return RegulatedLib.frozen(account); }
 
-    /// @notice `R(account)` with its reason (spec §3.1): 1 not attested or flags missing, 2 expired, 3 KYC provider
-    ///         disabled, 4 denied; (true, 0) when it may receive, and with both lists off, without a call. Two bounded calls
+    /// @notice A receiver's `L(account)`, then `R(account)`, with its reason (spec §3.1; round 3s §4.3): 5 not on the allow
+    ///         list, 6 on the deny list; 1 not attested or flags missing, 2 expired, 3 KYC provider disabled, 4 denied by the
+    ///         registry; (true, 0) when it may receive, and with `KYC` off without a call. Two bounded calls
     ///         (`complianceOf`, `kycProviderEnabled`); `ok` equals `hasFlags` on the same masks.
     function _canReceiveBody(bytes32 account) internal view returns (bool ok, uint8 reason) {
         RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
         uint8 c = r.controls;
-        if (c & RegulatedLib.C_LISTS == 0) return (true, 0);
+        if (c & RegulatedLib.C_LISTS != 0) {
+            uint8 fl = r.listFlags[account];
+            if (c & RegulatedLib.C_ALLOW != 0 && fl & RegulatedLib.ALLOWED == 0) return (false, 5);
+            if (c & RegulatedLib.C_DENY != 0 && fl & RegulatedLib.DENIED != 0) return (false, 6);
+        }
+        if (c & RegulatedLib.C_KYC == 0) return (true, 0);
         address reg = r.complianceRegistry;
         uint256[3] memory a = _regCall(reg, abi.encodeCall(IComplianceRegistry.complianceOf, (account)), 96);
         uint256 on = _regCall(reg, abi.encodeCall(IComplianceRegistry.kycProviderEnabled, (uint32(a[2]))), 32)[0];
         if (on > 1) revert IRegulatedToken.ComplianceRegistryUnavailable(reg);
         bool active = on == 1 && a[1] >= block.timestamp;
-        uint256 req = c & RegulatedLib.C_ALLOW != 0 ? r.requiredFlags : 0;
+        uint256 req = r.requiredFlags;
         if (req != 0 && !(active && (a[0] & req == req || a[0] & ELIGIBLE_CONTRACT != 0))) {
             return (false, a[1] == 0 ? 1 : on == 0 ? 3 : !active ? 2 : 1);
         }
-        if (c & RegulatedLib.C_DENY != 0 && active && a[0] & r.deniedFlags != 0) return (false, 4);
+        if (active && a[0] & r.deniedFlags != 0) return (false, 4);
         return (true, 0);
     }
     function _orderBody(bytes32 recordId) internal view returns (IRegulatedToken.OrderRecord memory) { return RegulatedLib.$().orders[recordId]; }
@@ -227,24 +267,33 @@ abstract contract RegulatedBase is MetaTokenBase {
     // ------------------------------------------------------------------ the hooks (spec §2.2, the rows of §3.2)
 
     /// @dev The pre row of the public kinds 8, 9, before `pre*` and any signature check (F-09, RK-8): `P` unless the inner
-    ///      selector is in the pause-open set and the envelope is not fee-bearing (RK-7); `F(from)`. The confidential kinds
-    ///      override it (fee-bearing only, no open set).
+    ///      selector is in the pause-open set and the envelope is not fee-bearing (RK-7); `F(from)`, `L(from)` (round 3s: a
+    ///      list refusal costs no verify). The confidential kinds override it (fee-bearing only, no open set).
     function _regPre(bytes32 from, bytes4 sel, uint32 mode) internal view virtual override {
         if (mode & MetaTxLib.MODE_FEE_MASK != MetaTxLib.MODE_FEE_NONE
             || (sel != SEL_UNWRAP_MIN && sel != SEL_UNWRAP_LEG && sel != SEL_UNWRAP_TO_UA && sel != SEL_BURN)) _notPaused();
         _notFrozen(from);
+        _listed(from);
     }
 
-    /// @dev The fee leg of an envelope and of the pay entries: `fee != 0` ⇒ `F(feeTo)` refused `FeeRecipientFrozen`, `R(feeTo)`.
+    /// @dev The fee leg of an envelope and of the pay entries: `fee != 0` ⇒ `F(feeTo)` refused `FeeRecipientFrozen`,
+    ///      `L(feeTo)`, `R(feeTo)`.
     function _regFeeTo(bytes32 feeTo, uint256 fee) internal view virtual override {
         if (fee != 0) _feeRecipient(feeTo);
     }
 
-    /// @dev The ledger rows: a mint (`from` 0) `P`, `R(to)`; a burn (`to` 0) `F(from)`, never `P`; a move `P`, `F(from)`, `R(to)`.
+    /// @dev The ledger rows: a mint (`from` 0) `P`, `L(to)`, `R(to)`; a burn (`to` 0) `F(from)`, `L(from)`, never `P`; a move
+    ///      `P`, `F(from)`, `L(from)`, `L(to)`, `R(to)` (round 3s: `L` two-sided, before `R`, so a list refusal costs no call).
     function _regMove(bytes32 from, bytes32 to, uint256) internal view virtual override {
         if (to != 0) _notPaused();
-        if (from != 0) _notFrozen(from);
-        if (to != 0) _eligible(to);
+        if (from != 0) {
+            _notFrozen(from);
+            _listed(from);
+        }
+        if (to != 0) {
+            _listed(to);
+            _eligible(to);
+        }
     }
 
     /// @dev The payer the moved balance's own call does not name: `_subject()` (a derived signer's ticket, else the caller).
@@ -255,6 +304,7 @@ abstract contract RegulatedBase is MetaTokenBase {
     function _regSender(bytes32 a) internal view virtual override {
         _notPaused();
         _notFrozen(a);
+        _listed(a);
     }
 
     function _regName(bytes32 beneficiary) internal view virtual override {
@@ -262,6 +312,7 @@ abstract contract RegulatedBase is MetaTokenBase {
     }
 
     function _regReceiver(bytes32 recipient) internal view virtual override {
+        _listed(recipient);
         _eligible(recipient);
     }
 
@@ -277,18 +328,30 @@ abstract contract RegulatedBase is MetaTokenBase {
 
     function _feeRecipient(bytes32 a) internal view {
         if (RegulatedLib.frozen(a)) revert IRegulatedToken.FeeRecipientFrozen(a);
+        _listed(a);
         _eligible(a);
     }
 
-    /// @dev `R(a)` (CTR-GOV-18), refused `NotEligible(a, 0)`: both lists off, no call; else the bounded `hasFlags(a,
-    ///      ALLOWLIST ? requiredFlags : 0, DENYLIST ? deniedFlags : 0)`.
-    function _eligible(bytes32 a) internal view {
+    /// @dev `L(a)` (round 3s, spec §4.2): both lists off, no read; else one `SLOAD` for both: under `ALLOWLIST` not
+    ///      `ALLOWED` ⇒ `NotAllowed(a)`, under `DENYLIST` `DENIED` ⇒ `Denied(a)`. On every account `F` or `R` checks, but a
+    ///      forced transfer's subject and the unwrap recipient.
+    function _listed(bytes32 a) internal view {
         RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
         uint8 c = r.controls;
         if (c & RegulatedLib.C_LISTS == 0) return;
+        uint8 fl = r.listFlags[a];
+        if (c & RegulatedLib.C_ALLOW != 0 && fl & RegulatedLib.ALLOWED == 0) revert IRegulatedToken.NotAllowed(a);
+        if (c & RegulatedLib.C_DENY != 0 && fl & RegulatedLib.DENIED != 0) revert IRegulatedToken.Denied(a);
+    }
+
+    /// @dev `R(a)` (CTR-GOV-18, round 3s: under `KYC`), refused `NotEligible(a, 0)`: `KYC` off, no call; else the bounded
+    ///      `hasFlags(a, requiredFlags, deniedFlags)` (a zero mask constrains nothing).
+    function _eligible(bytes32 a) internal view {
+        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+        uint8 c = r.controls;
+        if (c & RegulatedLib.C_KYC == 0) return;
         address reg = r.complianceRegistry;
-        uint256 w = _regCall(reg, abi.encodeCall(IComplianceRegistry.hasFlags, (a,
-            c & RegulatedLib.C_ALLOW != 0 ? r.requiredFlags : 0, c & RegulatedLib.C_DENY != 0 ? r.deniedFlags : 0)), 32)[0];
+        uint256 w = _regCall(reg, abi.encodeCall(IComplianceRegistry.hasFlags, (a, r.requiredFlags, r.deniedFlags)), 32)[0];
         if (w > 1) revert IRegulatedToken.ComplianceRegistryUnavailable(reg);
         if (w == 0) revert IRegulatedToken.NotEligible(a, 0);
     }
@@ -312,10 +375,17 @@ abstract contract RegulatedBase is MetaTokenBase {
         if (!ok || size != len) revert IRegulatedToken.ComplianceRegistryUnavailable(reg);
     }
 
-    /// @dev Clears `bit` in the mirror when it is one of 5-10, once the disable applied (Codex 3, I12).
+    /// @dev Clears `bit` in the mirror when it is one of 5-10 or 28, once the disable applied (Codex 3, I12).
     function _regDisabled(uint8 bit) internal {
         if (bit >= GovernanceBits.FREEZE && bit <= GovernanceBits.RECORD) {
             RegulatedLib.$().controls &= ~uint8(1 << (bit - GovernanceBits.FREEZE));
+        } else if (bit == GovernanceBits.KYC) {
+            RegulatedLib.$().controls &= ~RegulatedLib.C_KYC;
         }
+    }
+
+    /// @dev Round 3s: sets `bit` (8, 9 or 28, the only enableable ones) in the mirror once the enable applied (I12).
+    function _regEnabled(uint8 bit) internal {
+        RegulatedLib.$().controls |= bit == GovernanceBits.KYC ? RegulatedLib.C_KYC : uint8(1 << (bit - GovernanceBits.FREEZE));
     }
 }

@@ -12,7 +12,7 @@ interface IRegulatedToken {
     /// @notice `regulatedConfig()`: the hot slot, the flags and the terms in one struct (fewer selectors, spec §3.1).
     struct RegulatedConfig {
         address complianceRegistry;
-        uint8 controls; // bits 5-10 of `features`, shifted (I12)
+        uint8 controls; // bits 5-10 of `features`, shifted; byte bit 6 = bit 28 `KYC` (I12, round 3s)
         uint64 requiredFlags;
         uint64 deniedFlags;
         bytes32 termsHash;
@@ -74,7 +74,22 @@ interface IRegulatedToken {
     event PaymentTaxed(bytes32 indexed entryRef, bytes32 indexed payee, bytes32 indexed taxRecipient, bytes32 from,
         uint8 taxMode, uint256 tax, bytes32 digest);
 
+    /// @notice Round 3s (spec 2026-11-10-token-lists.md §6.1, CTR-GOV-24): one event per account of `setAllowed` /
+    ///         `setDenied`, `by` the subject (0 for init's row of the initial holder).
+    event AllowedSet(bytes32 indexed account, bytes32 indexed by, bool on);
+    event DeniedSet(bytes32 indexed account, bytes32 indexed by, bool on);
+
     error Frozen(bytes32 account);
+    /// @notice Round 3s (spec §4.2): `L(account)`, under `ALLOWLIST` not `ALLOWED`, under `DENYLIST` `DENIED`.
+    error NotAllowed(bytes32 account);
+    error Denied(bytes32 account);
+    /// @notice A list batch of 0 or more than 256 accounts; an account 0 in it.
+    error ListBatchInvalid(uint256 length);
+    error ListAccountZero();
+    /// @notice `enableFeature(28)` with no compliance registry (it is set at creation only).
+    error ComplianceRegistryNotSet();
+    /// @notice `enableFeature(8 | 9)` while the bit has no holder root (Fable P1-1).
+    error ListHolderMissing(uint8 bit);
     error TaxRateInvalid(uint32 ratePpm);
     error TaxRecipientInvalid(bytes32 taxRecipient);
     error TaxModeInvalid(uint8 taxMode);
@@ -82,7 +97,7 @@ interface IRegulatedToken {
     error TaxMismatch(uint256 expected, uint256 got);
     error TaxRecipientIsPayee();
     error TokenPaused(uint64 until);
-    /// @notice `reason` 0: refused by `hasFlags` on the hot path; 1-4 from `canReceive`.
+    /// @notice `reason` 0: refused by `hasFlags` on the hot path (under `KYC`); 1-4 from `canReceive`.
     error NotEligible(bytes32 account, uint8 reason);
     error FeeRecipientFrozen(bytes32 account);
     error RefRequired();
@@ -145,11 +160,22 @@ interface IRegulatedToken {
     function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef,
         MetaTxLib.PayMeta calldata meta) external returns (bool);
 
+    /// @notice Round 3s (spec §6.1): bit 8's holder writes the allow list, bit 9's the deny list, 1-256 accounts, at once both
+    ///         ways; a dormant list (its bit off) too. On 10-13 `setAllowed` exists and always reverts `MissingRole` (bit 8
+    ///         is not valid there, so no holder can exist).
+    function setAllowed(bytes32[] calldata accounts, bool on) external;
+    function setDenied(bytes32[] calldata accounts, bool on) external;
+    /// @notice `ALLOWED` (1) | `DENIED` (2).
+    function listFlagsOf(bytes32 account) external view returns (uint8);
+    /// @notice Round 3s (spec §5.2): the admin switches on 8, 9 or 28 at once; 8 and 9 never go off again.
+    function enableFeature(uint8 bit) external;
+
     function regulatedConfig() external view returns (RegulatedConfig memory);
     function freezeOf(bytes32 account) external view returns (FreezeState memory);
     /// @notice `F(account)` of spec §3.2.
     function isFrozen(bytes32 account) external view returns (bool);
-    /// @notice `reason` 1-4 from the registry's `complianceOf` and `kycProviderEnabled`.
+    /// @notice The lists first (round 3s): 5 not on the allow list, 6 on the deny list; then, under `KYC`, 1-4 from the
+    ///         registry's `complianceOf` and `kycProviderEnabled`.
     function canReceive(bytes32 account) external view returns (bool ok, uint8 reason);
     function order(bytes32 recordId) external view returns (OrderRecord memory);
 }
