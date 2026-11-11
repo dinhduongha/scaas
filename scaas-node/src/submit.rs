@@ -3371,6 +3371,27 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert_eq!(w.valid_until, w.envelope_until.min(v2), "the deadline follows the renewed verdict");
     }
 
+    /// Fable E N-3 (recheck): a job awaiting retry whose verdict, not its envelope, ran out is back in the queue
+    /// (`PQZ_VERDICT_EXPIRED`), never `dead`, nothing sent; the control: the envelope expired too, `dead`.
+    #[tokio::test]
+    async fn a_retry_past_its_verdict_only_requeues() {
+        for (envelope_live, state) in [(true, "queued"), (false, "dead")] {
+            let (url, rpc) = fake_evm(offchain()).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (mut w, _) = work_of_op(Some(7), &pqz_job(7)["op"], None).unwrap();
+            (w.valid_until, w.envelope_until) = (now() - 1, if envelope_live { now() + 600 } else { now() - 1 });
+            s.retry.push_back((w, None));
+            s.drain_retry().await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{last}");
+            if envelope_live {
+                assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_EXPIRED"), "{last}");
+            }
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
     /// Fable recheck R-2: a re-fill refused by a rule (here: the verdict at an old epoch, no endpoint to renew it) gap-fills the
     /// nonce and puts the job back in the queue, never `dead`: the first transaction may still land.
     #[tokio::test]

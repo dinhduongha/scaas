@@ -396,7 +396,7 @@ node's, for every consumer. **UNAUDITED.**
   transaction is re-filled with a fresh verdict and re-sent, or its nonce is gap-filled and the job is back in the queue; a job
   waiting to be sent is requeued `PQZ_VERDICT_EXPIRED`. Only the envelope's deadline ends it (Fable review of ua-mtx-merge E N-3,
   recheck R-1, R-2; tests `a_stuck_pqz_debit_with_an_expired_verdict_is_renewed_never_dead`,
-  `a_refused_re_fill_requeues_never_dead`). A re-fill refused by any rule gap-fills the nonce and requeues, never `dead`: the
+  `a_refused_re_fill_requeues_never_dead`, `a_retry_past_its_verdict_only_requeues`). A re-fill refused by any rule gap-fills the nonce and requeues, never `dead`: the
   first transaction may still land.
 - **Pre-checks**, before any simulation: `pqzVerifyConfig()` (mode, verifier, epoch; verifier 0 = revoked), the epoch equal, the
   `validUntil` at least `valid_margin_secs` ahead; then the simulation of the whole entry (signature, shape, hashes). A verdict
