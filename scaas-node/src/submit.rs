@@ -2659,6 +2659,20 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert!(r[0].0 == "dead" && r[0].1.contains("no params.relay_fee.router"), "{r:?}");
     }
 
+    /// Fable recheck 2 P3-1: a transfer struct job (its `contract` defaults to `token`) and a relay fee (signed in the fee token's
+    /// domain) on a token of another kind are `CONTRACT_KIND_MISMATCH`, nothing sent; the control: the token's own kind.
+    #[tokio::test]
+    async fn a_transfer_and_a_relay_fee_name_the_token_kind() {
+        let ok = |d: Option<&'static str>| Evm { mtx_nonce: Some(0), domain: d, ..Default::default() };
+        for (what, j) in [("transfer", job(7)), ("relay fee", call_job(9, ROUTER, relay_data(ROUTER, 100)))] {
+            let (r, rpc) = outcomes(ok(Some("SCaaS PqzToken")), vec![j.clone()], |c| relay_params(c, &[])).await;
+            assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("CONTRACT_KIND_MISMATCH"), "{what}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{what}: nothing sent");
+            let (r, _) = outcomes(ok(None), vec![j], |c| relay_params(c, &[])).await;
+            assert!(r.iter().all(|x| !x.1.contains("CONTRACT_KIND_MISMATCH")), "{what} control: {r:?}");
+        }
+    }
+
     /// CTR-MTX-27 on the lane: the whole `relay` is simulated and sent only when the fee reaches this lane (open mode,
     /// or bound to it) and is at least `min_amount` (the operator's price of the gas: no token price feed, no gas
     /// price or block limit assumed); a fee bound elsewhere only with `relay_bound_payee` (sponsored); the inner

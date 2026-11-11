@@ -946,6 +946,10 @@ impl Guard {
         }
         self.check_payee(payee)?;
         self.require_bound(chain, w.to).await?;
+        // Fable recheck 2 P3-1: the struct's `contract` (default `token`) picks its digest domain, as on a named row
+        if let Some(t) = &w.typed {
+            self.require_kind(chain, w.to, t.contract).await?;
+        }
         if ua && w.typed.as_ref().is_some_and(|t| t.derived_side) {
             // no published UA allowlist to read: the UA path's fee class and kind are the simulation's
             return self.require_ua_ledger(chain, w.to).await;
@@ -978,6 +982,10 @@ impl Guard {
             };
             let target = relay_call_ok(rf, chain.address(), w.to, &w.data, |a| self.registered(a)).map_err(Refusal::Policy)?;
             relay_inner_ok(&self.gov_routers, &w.data).map_err(Refusal::Policy)?;
+            // Fable recheck 2 P3-1: the payer signs in the fee token's domain, named by the op's `contract`
+            if let Some(t) = &w.typed {
+                self.require_kind(chain, t.domain_of, t.contract).await?;
+            }
             // proposed NODE-JOB-25 on the inner call: a service runs its entries only, under the service rule
             if self.is_service(target) {
                 let c = relay_call(&w.data).ok_or_else(|| refused("not a relay call".into()))?;
@@ -2737,6 +2745,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                             creatorId: B256::ZERO, contractClass: class, kind: 0, version, createdBlock: 1, createdAt: 1 }))
                     }
                     "eth_call" if listed(to).0 != 0 => Some(vec![]),
+                    "eth_call" if typed::testkit::domain_answer(&format!("0x{}", alloy::hex::encode(&input)), to).is_some() =>
+                        typed::testkit::domain_answer(&format!("0x{}", alloy::hex::encode(&input)), to).map(|h| alloy::hex::decode(&h[2..]).unwrap()),
                     "eth_call" => Some(uid.to_vec()),
                     "eth_getCode" => Some(vec![]),
                     _ => None,
