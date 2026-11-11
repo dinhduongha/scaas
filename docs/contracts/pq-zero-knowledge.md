@@ -2600,8 +2600,10 @@ length and word 32, the token's own view rebuilds the same bytes, `pqz-ffi` answ
 [CTR-PQZ-30](#CTR-PQZ-30). The probe signs only the fixed 27-byte probe statement (every statement a token
 hashes is at least 640 bytes, so a real debit refuses it `PqzVerdictMismatch(3)`), for an `OFFCHAIN` token naming this verifier,
 or, as a `proposal` probe (§4.2's typo guard of `next`), naming another verifier or none. Reads follow
-[ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover (one node, one block per request; the strict-majority option not
-built). Known limits: the key ownership record is in memory (bounded, `KEY_RECORD_FULL`), no factory lookup, one registry
+[ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover (one node, one block per request, the block by number). **Operator
+rule (owner 2026-11-11): every `rpc_urls` endpoint must be a node the verifier's operator trusts, until the strict-majority
+option exists (`scaas-rpc`)**: the option is deferred to the shared `scaas-rpc` crate (TODO 8b), and a lying RPC could pass a key check (§6, CTR-PQZ-30: the key record, its stored `pqzPop` bytes, `keyOwner`) that `OFFCHAIN` tokens trust the verifier for. Known
+limits: the key ownership record is in memory (bounded, `KEY_RECORD_FULL`), no factory lookup, one registry
 generation per process ([README](../../scaas-pqz-verifier/README.md)). **UNAUDITED.**
 
 <a id="CTR-PQZ-36"></a>**CTR-PQZ-36** — **The verifier fee: an `OFFCHAIN` token pays its verifier UA from the fee word, capped,

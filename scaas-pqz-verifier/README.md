@@ -33,6 +33,14 @@ stays keyless and only carries or fetches verdicts. The key is an encrypted JSON
 keystore's path and the environment variable holding its password, never a secret
 ([`pqz-verifier.example.toml`](pqz-verifier.example.toml)).
 
+## Operator rule: trusted nodes only
+
+**Every `rpc_urls` endpoint must be a node the verifier's operator trusts, until the strict-majority option exists
+(`scaas-rpc`)** (owner ruling 2026-11-11). The service reads one node per request and fails over; it does not compare
+nodes (ARCH-POS-15's strict-majority option is deferred to the shared `scaas-rpc` crate, TODO 8b). The signed digest never
+depends on an RPC answer, but the key checks do: a lying RPC could pass a key check (§6, CTR-PQZ-30: the key record, its stored `pqzPop` bytes, `keyOwner`) that `OFFCHAIN` tokens trust the verifier for, and the token does not repeat them. The block of a
+request is pinned by number, not by hash (R-6, deferred with it).
+
 ## Interface
 
 - `POST /v1/pqz-verdict` `{token, chainId, op: {entry, args, binding, amount?, recipient?, unwrap?}, statement, proof,
@@ -54,7 +62,7 @@ request comes from one node at one block number (its head when the request start
 10 s (`RPC_TIMEOUT`), or answers with an error that is not a revert (`header not found`, a rate limit), sends the whole
 request to the next one; a revert (revert data, or `execution reverted`) or a refusal is an answer. At start every
 endpoint must answer the pinned `chain_id`, and the pinned registry its `registry_generation` and `chain_uid`, or the
-service does not start. The strict-majority agreement option is not built.
+service does not start. The strict-majority agreement option is not built: trusted nodes only (the operator rule above).
 
 Bounds: a per-address rate limit; the body read within 15 s (`BODY_TIMEOUT`, else 408), a body limit set from the set's
 largest statement and proof, JSON nesting at most 4 below the request object, all checked before decoding; only then a
@@ -62,9 +70,12 @@ place in the bounded queue (a slow body never holds one); bounded verification c
 
 ## Known limits
 
-- ARCH-POS-15's strict-majority agreement option is not built: failover only (no read here feeds a decryption). The block
-  is pinned by number, not by hash (EIP-1898): a reorg at that height between two reads of one request mixes two blocks;
-  the token recomputes `statementHash`, so only the off-chain key checks could see it. Both are the owner's call.
+- ARCH-POS-15's strict-majority agreement option is not built: failover only. Deferred by the owner (2026-11-11) to the
+  shared `scaas-rpc` crate (TODO 8b); until it exists every endpoint must be a node the operator trusts (the operator rule
+  above).
+- The block is pinned by number, not by hash (EIP-1898; R-6, deferred with the majority option): a reorg at that height
+  between two reads of one request mixes two blocks; the token recomputes `statementHash`, so only the off-chain key
+  checks could see it.
 - The key ownership record (`pqzKeyHash` → `(ua, version)`) lives in memory: bounded at 2^18 keys (`KEY_RECORD_FULL`
   when full), not persisted, lost on restart.
 - No factory lookup of "is a factory instance": a token is an EIP-1167 proxy of a configured release whose code names the
