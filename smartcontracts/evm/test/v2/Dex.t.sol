@@ -742,7 +742,7 @@ contract DexTest is Test {
         bytes memory code = type(SCaaSDex).creationCode;
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 0));
-        f.deployDexImplementation(0, 1, code, "");
+        f.deployDexImplementation(0, 1, code, "", EnvKit.uidOf(address(f)));
         address v5 = Catalogue.dex(f, 5, code, address(0));
         assertEq(f.latestDexVersion(), 5);
         address v2 = Catalogue.dex(f, 2, code, address(0)); // an older version does not lower it
@@ -807,24 +807,24 @@ contract DexTest is Test {
     function test_deployDexImplementation() public {
         bytes memory code = type(SCaaSDex).creationCode;
         vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
-        f.deployDexImplementation(3, 1, code, "");
+        f.deployDexImplementation(3, 1, code, "", EnvKit.uidOf(address(f)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionAlreadyRegistered.selector, 1, address(dexImpl)));
-        f.deployDexImplementation(1, 1, code, "");
+        f.deployDexImplementation(1, 1, code, "", EnvKit.uidOf(address(f)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvRefused.selector, _predictDex(3, type(OtherChainDex).creationCode)));
-        f.deployDexImplementation(3, 1, type(OtherChainDex).creationCode, "");
+        f.deployDexImplementation(3, 1, type(OtherChainDex).creationCode, "", EnvKit.uidOf(address(f)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 255, 9)); // the env is named, explicit
-        f.deployDexImplementation(3, 9, code, "");
+        f.deployDexImplementation(3, 9, code, "", EnvKit.uidOf(address(f)));
         address muted = _predictDex(3, type(MutedDex).creationCode);
         address empty = _predictDex(3, "");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector, muted));
-        f.deployDexImplementation(3, 1, type(MutedDex).creationCode, ""); // no factory()
+        f.deployDexImplementation(3, 1, type(MutedDex).creationCode, "", EnvKit.uidOf(address(f))); // no factory()
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, empty));
-        f.deployDexImplementation(3, 1, "", ""); // an empty init code makes an account without code
+        f.deployDexImplementation(3, 1, "", "", EnvKit.uidOf(address(f))); // an empty init code makes an account without code
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.publishDexEnv(2, plainEnv(address(f), address(0xBEEF), UID_, address(0), false));
         vm.recordLogs();

@@ -60,10 +60,15 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_ACCEPT_ADMIN, 0x996ac68d825579b63a05d8de5e842540e3941eb831a15f6c822bfdff810048e8);
     }
 
+    /// Fable recheck-2 P3-1: the target's chain word signed (was 0x4be88ff950da1b2063111810c97fc341fb457a71d9719475cf513a9f09dde5ba,
+    /// without `bytes32 chainUid`; its legacy pin below).
     function test_uaRenounceAdminTypehashIsPinned() public pure {
         assertEq(T.UA_RENOUNCE_ADMIN, keccak256(
-                "UARenounceAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_RENOUNCE_ADMIN, 0x4be88ff950da1b2063111810c97fc341fb457a71d9719475cf513a9f09dde5ba);
+                "UARenounceAdmin(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_RENOUNCE_ADMIN, 0x3284850e6f597dfa1e39dfc3ea0ed14eddef8ca3053aac324b16ce608cce7086);
+        assertEq(keccak256(
+                "UARenounceAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x4be88ff950da1b2063111810c97fc341fb457a71d9719475cf513a9f09dde5ba);
     }
 
     /// Round 3r R3 (§4.3): the three ownership ops the admin ops replaced, legacy pins of a retired form: a client or node

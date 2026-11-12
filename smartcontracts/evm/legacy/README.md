@@ -400,3 +400,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `clients/clientkeys/legacy/ua-mtx-fix2-contracts/`. Not built.
   `src/dex/DexPuller.sol` as it stood at `829006be`: `DexConfig.rescueTo` 0 meant no rescue (`RescueOff()`); superseded
   by CTR-GOV-25 (owner 2026-11-12: 0 is the constant dev address `SCAAS_DEV_RESCUE`). Not built.
+  The admin entries without the chain word (Fable recheck-2 P3-1, owner 2026-11-12, CTR-GOV-27), as they stood at
+  `a18e9464`: `src/governance/AdminEntriesV1.sol` (`renounceAdmin()`, the three release deploys without the last `chainUid_`,
+  `mtxRenounceAdmin` and its `UARenounceAdmin` typehash without `chainUid`), the selector-audit rows they had
+  (`test/vectors/selector_audit.json`); the old typed row in `smartcontracts/vectors/typed/legacy/ua-mtx-fix2-contracts/`,
+  clientkeys' and ua-rs's old table rows in `clients/{clientkeys,ua-rs}/legacy/ua-mtx-fix2-contracts/`. Not built.

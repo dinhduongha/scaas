@@ -1,0 +1,123 @@
+{
+ "note": "The rows of test/vectors/selector_audit.json as they stood at a18e9464 that Fable recheck-2 P3-1 (owner 2026-11-12, CTR-GOV-27) moved in place: renounceAdmin() on the twelve kinds, the DEX and OpenFactory, the router's mtxRenounceAdmin without bytes32 chainUid, the three release deploys without the last bytes32 chainUid_. Reference only.",
+ "NormalToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalZetherToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedZetherToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalPqzToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedPqzToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalZetherRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedZetherRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalPqzRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedPqzRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "SCaaSDex": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "GovernanceRouter": [
+  {
+   "sig": "mtxRenounceAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  }
+ ],
+ "OpenFactory": [
+  {
+   "sig": "deployDexImplementation(uint64,uint16,bytes,bytes)",
+   "class": "APPROVED(release)",
+   "error": "ReleaseNotApproved(bytes32)"
+  },
+  {
+   "sig": "deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes)",
+   "class": "APPROVED(release)",
+   "error": "ReleaseNotApproved(bytes32)"
+  },
+  {
+   "sig": "deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)",
+   "class": "APPROVED(release)",
+   "error": "ReleaseNotApproved(bytes32)"
+  },
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ]
+}

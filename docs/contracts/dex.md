@@ -492,7 +492,9 @@ their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Apto
 
 <a id="admin"></a>
 <a id="CTR-DEX-03"></a>**CTR-DEX-03** — The DEX is on `GovernanceBase` ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)): one `owner`, a UA id (`bytes32`), set at
-creation ([CTR-DEX-24](#CTR-DEX-24)), with a two-step `transferAdmin` / `acceptAdmin` and a `renounceAdmin`; in
+creation ([CTR-DEX-24](#CTR-DEX-24)), with a two-step `transferAdmin` / `acceptAdmin` and a `renounceAdmin(chainUid_)`
+(the DEX's own chain word after the admin check, `ChainUidMismatch`: chain-bound as a token's, [token-wrappers.md](token-wrappers.md#factory),
+owner 2026-11-12, Fable recheck-2 P3-1); in
 production a Safe, a multisig, or a derived UA (a PQ key, an `msig`) acting through the chain's `GovernanceRouter`
 ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). Every governance check and every power reads
 `_govSubject()`: the native id of `msg.sender`, or the router's authenticated subject when `msg.sender` is the release's
@@ -534,7 +536,7 @@ function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) extern
   release takes `(factory_, implArgs)` only ([CTR-TOK-29](token-wrappers.md#CTR-TOK-29); BUILT, T71–T72).
 
 **Transitional (BUILT, P2b-1; 5g-Z2).** Built: `publishDexEnv(envVersion, Env)` and
-`deployDexImplementation(version, envVersion, initcode, implArgs)` (registrar; the factory deploys the release on the
+`deployDexImplementation(version, envVersion, initcode, implArgs, chainUid_)` (registrar; the word chain-bound, [token-wrappers.md](token-wrappers.md#factory); the factory deploys the release on the
 DEX env it names — the `SmartKeyAccount` implementation, `hedera`, the linked `TradeLib` by code hash; the factory and
 `chainUid` reach the clone through its appended `ChainEnv` since T71 — as for tokens, [CTR-TOK-03](token-wrappers.md#release-env); append-only; the release answers `factory()` and
 `chainUid()`; usable after the notice period: `DexVersionNotYetUsable`), `dexReleaseOf`, `dexImplementationOf`,

@@ -131,8 +131,9 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         _;
     }
 
-    /// @dev The deprecations and kind switches (Fable D P3-2): `configured` and the caller's `chainUid_` this factory's, so a
-    ///      native admin's direct call is void on a sibling with the same chain id (the approvals bind it the same way).
+    /// @dev The deprecations and kind switches (Fable D P3-2), the deploys and `renounceAdmin` (Fable recheck-2 P3-1):
+    ///      `configured` and the caller's `chainUid_` this factory's, so a native admin's direct call is void on a sibling
+    ///      with the same chain id (the approvals bind it the same way).
     modifier onChain(bytes32 chainUid_) {
         _requireOnChain(chainUid_);
         _;
@@ -281,7 +282,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         super.transferAdmin(newAdmin);
     }
 
-    function renounceAdmin() external configured {
+    function renounceAdmin(bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {
         _renounceAdmin();
     }
 
@@ -409,8 +410,9 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         uint64 version,
         uint16 envVersion,
         bytes calldata initcode,
-        bytes calldata implArgs
-    ) external configured returns (address implementation) {
+        bytes calldata implArgs,
+        bytes32 chainUid_
+    ) external onChain(chainUid_) returns (address implementation) {
         _useApproval(_tokenKey(kind, version, envVersion, keccak256(initcode), keccak256(implArgs)));
         if (kind == TokenKind.RETIRED_6 || kind == TokenKind.RETIRED_7) revert KindRetired(kind);
         if (version == 0) revert VersionUnknown(kind, 0);
@@ -536,8 +538,8 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     // ------------------------------------------------------------------ DEX (CTR-DEX-24)
 
-    function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs)
-        external configured returns (address implementation)
+    function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs,
+        bytes32 chainUid_) external onChain(chainUid_) returns (address implementation)
     {
         _useApproval(_dexKey(version, envVersion, keccak256(initcode), keccak256(implArgs)));
         if (version == 0) revert DexVersionUnknown(0);
@@ -615,7 +617,8 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     }
 
     function deployImplementation(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
-        bytes calldata initcode, bytes calldata implArgs) external configured returns (address implementation)
+        bytes calldata initcode, bytes calldata implArgs, bytes32 chainUid_) external onChain(chainUid_)
+        returns (address implementation)
     {
         _useApproval(_classKey(id, envVersion, initSelector, interfaceId, keccak256(initcode), keccak256(implArgs)));
         uint32 d = _domain(id.contractClass, id.kind);

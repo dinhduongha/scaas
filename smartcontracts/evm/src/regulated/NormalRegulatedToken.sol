@@ -176,6 +176,7 @@ interface INormalRegulatedTokenAbi {
     error WrongRelayer(bytes32 orderHash, address submitter);
     error ZeroAmount(bytes32 orderHash);
     error ZeroFill(bytes32 orderHash);
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
     error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
     error NotAllowed(bytes32 account);
     error Denied(bytes32 account);
@@ -518,7 +519,7 @@ contract NormalRegulatedToken is NormalRegulatedTokenCore, INormalRegulatedToken
         _forwardView(_MR);
     }
 
-    function renounceAdmin() external {
+    function renounceAdmin(bytes32) external {
         _forward(_MA);
     }
 

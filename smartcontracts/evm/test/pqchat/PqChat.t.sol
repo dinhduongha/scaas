@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -110,12 +111,12 @@ contract PqChatTest is PqChatBase {
         vm.prank(REGISTRAR);
         vm.expectRevert(IPqChat.PqChatEnv.selector);
         f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args());
+            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, _classEnv(address(p), 24_576));
         vm.prank(REGISTRAR);
         f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args());
+            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
     }
 
     function test_constructor_refusesOtherIds() public {
@@ -141,12 +142,12 @@ contract PqChatTest is PqChatBase {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.LibraryCodeHashMismatch.selector, address(topics),
             keccak256("another code"), address(topics).codehash));
         f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args());
+            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
         f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args());
+            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
     }
 
     /// CTR-TOK-30 (owner 2026-11-10): the factory refuses a release whose `modules()` names a module its env does not pin
@@ -159,12 +160,12 @@ contract PqChatTest is PqChatBase {
         vm.prank(REGISTRAR);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, address(topics)));
         f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args());
+            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
         f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args());
+            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
     }
 
     /// CTR-TOK-30 (owner 2026-11-10): the factory reads `modules()` once, at the release, so the answer is fixed by code
@@ -261,7 +262,7 @@ contract PqChatTest is PqChatBase {
         f.publishClassEnv(3, 0, 2, _classEnv(address(p), 24_576));
         vm.prank(REGISTRAR);
         f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args());
+            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
         PqChat small = PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 2), "s", abi.encodeCall(IPqChat.initialize, (0))));
         for (uint8 i = 6; i <= 16; ++i) _member(i); // 16 members
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(16, 1, address(small));

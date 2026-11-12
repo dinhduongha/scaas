@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "./EnvKit.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -155,8 +156,16 @@ library Catalogue {
     {
         (address[] memory ms, bytes memory implArgs) = deployKindModules(uint8(kind), address(f), coreArgs);
         uint16 v = env(f, kind, withModules(e.libs.length == 0 ? pinned(e, kind) : e, ms));
+        return _deployRelease(f, kind, version, v, code, implArgs);
+    }
+
+    /// @dev The admin's own deploy (its own approval) with the factory's chain word (Fable recheck-2 P3-1).
+    function _deployRelease(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, uint16 v, bytes memory code,
+        bytes memory implArgs) private returns (address)
+    {
+        bytes32 u = EnvKit.uidOf(address(f));
         vm.prank(address(uint160(uint256(f.admin()))));
-        return f.deployTokenImplementation(kind, version, v, code, implArgs);
+        return f.deployTokenImplementation(kind, version, v, code, implArgs, u);
     }
 
     /// @dev A plain release on `plainEnv(f, ska, f.chainUid(), registry, hedera)`.
@@ -182,7 +191,7 @@ library Catalogue {
             f.publishDexEnv(++v, e);
         }
         vm.prank(address(uint160(uint256(f.admin()))));
-        return f.deployDexImplementation(version, v, code, implArgs);
+        return f.deployDexImplementation(version, v, code, implArgs, EnvKit.uidOf(address(f)));
     }
 
     /// @dev The D of the latest DEX env when it serves `f` (so one env serves every release of a test), else a new one.

@@ -64,8 +64,8 @@ mod t {
         struct ImplArgs { address[] modules; }
         function tokenEnvOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
         function publishTokenEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
-        function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs)
-            external returns (address);
+        function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs,
+            bytes32 chainUid) external returns (address);
         function createToken(uint8 kind, uint64 version, bytes initArgs, bytes32 salt) external returns (address);
         function setTokenKindEnabled(uint8 kind, bool on, bytes32 chainUid) external;
         function latestTokenEnvVersion(uint8 kind) external view returns (uint16);
@@ -338,9 +338,9 @@ async fn verdict_lands_on_anvil() {
     let ev = view(&rpc, factory, t::latestTokenEnvVersionCall { kind: 4 }).await + 1;
     send(&rpc, factory, t::publishTokenEnvCall { kind: 4, envVersion: ev, env }.abi_encode()).await;
     let ver = view(&rpc, factory, t::latestVersionCall { kind: 4 }).await + 1;
-    send(&rpc, factory, t::deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
-        implArgs: t::ImplArgs { modules }.abi_encode().into() }.abi_encode()).await;
     let genesis = pr.get_block_by_number(0.into()).await.unwrap().unwrap().header.hash; // the factory's chainUid
+    send(&rpc, factory, t::deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
+        implArgs: t::ImplArgs { modules }.abi_encode().into(), chainUid: genesis }.abi_encode()).await;
     send(&rpc, factory, t::setTokenKindEnabledCall { kind: 4, on: true, chainUid: genesis }.abi_encode()).await;
 
     // the service: its own key, the chain pinned (an operator reads chainUid and the registry's generation once)

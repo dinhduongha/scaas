@@ -35,6 +35,8 @@ contract DelayApp is GovernanceBase {
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _validBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _roleBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
@@ -343,7 +345,7 @@ contract GovDelayTest is Test {
         _grant(MANAGER);
         assertTrue(_live(MANAGER));
         vm.prank(OWNER);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertFalse(_live(MANAGER));
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);

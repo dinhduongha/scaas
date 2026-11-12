@@ -310,9 +310,12 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         return abi.encodeCall(router.mtxTransferAdmin, (e, target, to, a));
     }
 
+    /// @dev The registry has no chain word (and no renounce): the op signs 0 (Fable recheck-2 P3-1 gave the op the word).
     function _renounceCd(bytes32 by, address target) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _env(router, by);
-        return abi.encodeCall(router.mtxRenounceAdmin, (e, target, _auth(by, _digest(router, "RenounceAdmin", "", e, target, ""))));
+        IUARegistry.UASig memory a =
+            _auth(by, _digest(router, "RenounceAdmin", ",bytes32 chainUid", e, target, abi.encode(bytes32(0))));
+        return abi.encodeCall(router.mtxRenounceAdmin, (e, target, bytes32(0), a));
     }
 
     // ------------------------------------------------------------------ the ABI (§4.2, §4.3)
@@ -559,11 +562,14 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         assertEq(c.admin(), nid(next));
     }
 
-    /// M14 (owner, Q2): the registry has no `renounceAdmin`, its selector reverts with no data; the admin stays.
+    /// M14 (owner, Q2): the registry has no `renounceAdmin`, its selector reverts with no data; the admin stays. Both
+    /// forms: `renounceAdmin()` and, since Fable recheck-2 P3-1, `renounceAdmin(bytes32)`.
     function test_noRenounce() public {
         IRegistryAdmin c = _reg(nid(admin), address(trouter));
         _refused(admin, address(c), abi.encodeWithSelector(bytes4(0x8bad0c0a)), "");
         _viaRefused(trouter, nid(admin), c, abi.encodeWithSelector(bytes4(0x8bad0c0a)), "");
+        _refused(admin, address(c), abi.encodeWithSelector(bytes4(0x4fa3ed14), bytes32(0)), "");
+        _viaRefused(trouter, nid(admin), c, abi.encodeWithSelector(bytes4(0x4fa3ed14), bytes32(0)), "");
         assertEq(c.admin(), nid(admin));
     }
 

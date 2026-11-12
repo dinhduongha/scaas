@@ -39,6 +39,8 @@ abstract contract SCaaSDexGovernance is ReentrancyGuardTransient, GovernanceBase
     function _scopeBits() internal pure override returns (uint256) { return 0; }
 
     function _govRouter() internal view override returns (address) { return ChainEnvCode.govRouter(); }
+
+    function _govChainUid() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
 }
 
 /// @title SCaaSDexGovernanceModule: the DEX's governance module (named D until owner ruling R7, 2026-11-10; T66b, spec §4.2,
@@ -106,5 +108,5 @@ contract SCaaSDexGovernanceModule is SCaaSDexGovernance {
     function disableFeature(uint8 bit) external onlyDelegated { _disableFeatureBody(bit); }
     function transferAdmin(bytes32 newAdmin) external onlyDelegated { _transferAdminBody(newAdmin); }
     function acceptAdmin() external onlyDelegated { _acceptAdminBody(); }
-    function renounceAdmin() external onlyDelegated { _renounceAdminBody(); }
+    function renounceAdmin(bytes32 chainUid_) external onlyDelegated { _renounceAdminBody(chainUid_); }
 }

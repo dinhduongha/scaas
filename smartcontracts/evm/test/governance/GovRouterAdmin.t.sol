@@ -257,10 +257,10 @@ contract GovRouterAdminTest is UARegistryBase {
         f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, e);
         f.publishDexEnv(1, e);
         f.publishClassEnv(CLS, 0, 1, e);
-        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(RouterOpsRelease).creationCode, hex"01");
-        f.deployDexImplementation(1, 1, type(RouterOpsRelease).creationCode, hex"02");
+        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(RouterOpsRelease).creationCode, hex"01", EnvKit.uidOf(address(f)));
+        f.deployDexImplementation(1, 1, type(RouterOpsRelease).creationCode, hex"02", EnvKit.uidOf(address(f)));
         f.deployImplementation(IOpenFactory.ReleaseId(CLS, 0, 1), 1, INoteKind.initialize.selector,
-            type(INoteKind).interfaceId, type(NoteKind).creationCode, hex"03");
+            type(INoteKind).interfaceId, type(NoteKind).creationCode, hex"03", EnvKit.uidOf(address(f)));
         if (admin_ != nid(deployer)) f.transferAdmin(admin_);
         vm.stopPrank();
         if (admin_ != nid(deployer)) _acceptVia(admin_, address(f));
@@ -630,10 +630,10 @@ contract GovRouterAdminTest is UARegistryBase {
     /// Another account deploys the release `p` approved; the approval is consumed.
     function _deployApproved(OpenFactory f, P memory p) internal {
         vm.prank(STRANGER);
-        if (p.op == APPROVE_DEX) f.deployDexImplementation(2, 1, _code(p.op), _args(p.op));
+        if (p.op == APPROVE_DEX) f.deployDexImplementation(2, 1, _code(p.op), _args(p.op), EnvKit.uidOf(address(f)));
         else {
             f.deployImplementation(IOpenFactory.ReleaseId(CLS, 0, 2), 1, INoteKind.initialize.selector,
-                type(INoteKind).interfaceId, _code(p.op), _args(p.op));
+                type(INoteKind).interfaceId, _code(p.op), _args(p.op), EnvKit.uidOf(address(f)));
         }
         assertEq(uint8(f.approvalOf(_key(f, p)).state), uint8(IOpenFactory.ApprovalState.CONSUMED));
     }

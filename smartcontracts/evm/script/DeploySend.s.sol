@@ -71,16 +71,17 @@ contract DeploySend is Script {
         for (uint256 k; k < a.length; ++k) a[k] = input[k + 4];
         bytes32 salt;
         bytes memory code;
-        if (s == bytes4(keccak256("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)"))) {
-            (uint8 kind, uint64 version,, bytes memory initcode, bytes memory implArgs) =
-                abi.decode(a, (uint8, uint64, uint16, bytes, bytes));
+        if (s == bytes4(keccak256("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)"))) {
+            (uint8 kind, uint64 version,, bytes memory initcode, bytes memory implArgs,) =
+                abi.decode(a, (uint8, uint64, uint16, bytes, bytes, bytes32));
             (salt, code) = (keccak256(abi.encode(kind, version)), bytes.concat(initcode, abi.encode(f, implArgs)));
-        } else if (s == bytes4(keccak256("deployDexImplementation(uint64,uint16,bytes,bytes)"))) {
-            (uint64 version,, bytes memory initcode, bytes memory implArgs) = abi.decode(a, (uint64, uint16, bytes, bytes));
+        } else if (s == bytes4(keccak256("deployDexImplementation(uint64,uint16,bytes,bytes,bytes32)"))) {
+            (uint64 version,, bytes memory initcode, bytes memory implArgs,) =
+                abi.decode(a, (uint64, uint16, bytes, bytes, bytes32));
             (salt, code) = (keccak256(abi.encode("dex", version)), bytes.concat(initcode, abi.encode(f, implArgs)));
-        } else if (s == bytes4(keccak256("deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes)"))) {
-            (ReleaseId memory id,,,, bytes memory initcode, bytes memory implArgs) =
-                abi.decode(a, (ReleaseId, uint16, bytes4, bytes4, bytes, bytes));
+        } else if (s == bytes4(keccak256("deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes,bytes32)"))) {
+            (ReleaseId memory id,,,, bytes memory initcode, bytes memory implArgs,) =
+                abi.decode(a, (ReleaseId, uint16, bytes4, bytes4, bytes, bytes, bytes32));
             (salt, code) = (keccak256(abi.encode("release", id)), bytes.concat(initcode, abi.encode(id, f, implArgs)));
         } else {
             return address(0);
@@ -97,14 +98,14 @@ contract DeploySend is Script {
         for (uint256 k; k < a.length; ++k) a[k] = input[k + 4];
         bytes4 s = bytes4(input);
         (address impl, uint16 env, uint16 want) = (address(0), 0, 0);
-        if (s == bytes4(keccak256("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)"))) {
-            (uint8 kind, uint64 version, uint16 e,,) = abi.decode(a, (uint8, uint64, uint16, bytes, bytes));
+        if (s == bytes4(keccak256("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)"))) {
+            (uint8 kind, uint64 version, uint16 e,,,) = abi.decode(a, (uint8, uint64, uint16, bytes, bytes, bytes32));
             (impl, env, want) = _rel(f, abi.encodeWithSignature("releaseOf(uint8,uint64)", kind, version), e);
-        } else if (s == bytes4(keccak256("deployDexImplementation(uint64,uint16,bytes,bytes)"))) {
-            (uint64 version, uint16 e,,) = abi.decode(a, (uint64, uint16, bytes, bytes));
+        } else if (s == bytes4(keccak256("deployDexImplementation(uint64,uint16,bytes,bytes,bytes32)"))) {
+            (uint64 version, uint16 e,,,) = abi.decode(a, (uint64, uint16, bytes, bytes, bytes32));
             (impl, env, want) = _rel(f, abi.encodeWithSignature("dexReleaseOf(uint64)", version), e);
         } else {
-            (ReleaseId memory id, uint16 e,,,,) = abi.decode(a, (ReleaseId, uint16, bytes4, bytes4, bytes, bytes));
+            (ReleaseId memory id, uint16 e,,,,,) = abi.decode(a, (ReleaseId, uint16, bytes4, bytes4, bytes, bytes, bytes32));
             (impl, env, want) = _rel(f, abi.encodeWithSignature("classReleaseOf((uint16,uint16,uint64))", id), e);
         }
         if (impl != at || env != want) revert PlanTxNotSendable(i, "the release is there, not with the plan's envVersion");

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 
 import {noVerdict} from "./helpers/PqzVerdicts.sol";
@@ -134,7 +135,7 @@ contract PqzWrappedTest is PqzFixture {
         bytes memory code = type(WrappedPqzToken).creationCode;
         bytes memory args = Catalogue.argsOn(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, ""); // T66b: env 1's modules
         vm.prank(registrar);
-        address a = factory.deployTokenImplementation(IOpenFactory.TokenKind.WRAPPED_PQZ, 2, 1, code, args);
+        address a = factory.deployTokenImplementation(IOpenFactory.TokenKind.WRAPPED_PQZ, 2, 1, code, args, EnvKit.uidOf(address(factory)));
         // F185: the call is its own transaction (`isolate`); under Amsterdam EIP-7825's 2^24 caps the REGULAR gas, which
         // `lastCallGas` reports with the intrinsic and the calldata (or the EIP-7976 floor), and EIP-8037 state gas (the
         // 64 KiB of code, the new slots) comes apart: it needs a limit above 2^24, which a transaction may have.

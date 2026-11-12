@@ -393,8 +393,8 @@ contract WrappedTokenA is WrappedTokenCore {
         return _pendingGrantBody(bit, account);
     }
 
-    function renounceAdmin() external onlyDelegated {
-        _renounceAdminBody();
+    function renounceAdmin(bytes32 chainUid_) external onlyDelegated {
+        _renounceAdminBody(chainUid_);
     }
 
     function renounceRole(uint8 bit) external onlyDelegated {

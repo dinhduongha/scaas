@@ -191,8 +191,9 @@ interface IOpenFactory is IAdmin {
     error ProbeGasLow(uint256 gasLeft);
 
     /// @notice Admin only, after `configureChain` (spec §5.2; `transferAdmin` likewise): the admin becomes 0 for good, the pending with it; every
-    ///         admin op ends on this factory, deprecation included (owner, Q1).
-    function renounceAdmin() external;
+    ///         admin op ends on this factory, deprecation included (owner, Q1). `chainUid_` this factory's
+    ///         (`ChainUidMismatch`, Fable recheck-2 P3-1): a native admin's direct call is void on a sibling with the same chain id.
+    function renounceAdmin(bytes32 chainUid_) external;
     /// @notice Completed changes of admin (accepts and the renounce): an approval lives only in the term that made it.
     function adminGeneration() external view returns (uint32);
     /// @notice Admin only, after `configureChain`: approves the release `deployTokenImplementation(kind, version,
@@ -311,13 +312,15 @@ interface IOpenFactory is IAdmin {
     ///         `factory()`, the release's `validateEnv` of the instance env and its body modules (`modules()`, each in the
     ///         env's `libs`: `ModuleNotPinned`, CTR-TOK-30), records the release with its env version
     ///         and hash (usable after `noticePeriod`). Append-only, version 0 refused; the same init code may be deployed
-    ///         again as a later version on another env.
+    ///         again as a later version on another env. `chainUid_` as `deprecateToken` (the native admin's own call
+    ///         carries no approval key, Fable recheck-2 P3-1), on every deploy.
     function deployTokenImplementation(
         TokenKind kind,
         uint64 version,
         uint16 envVersion,
         bytes calldata initcode,
-        bytes calldata implArgs
+        bytes calldata implArgs,
+        bytes32 chainUid_
     ) external returns (address implementation);
     /// @notice Admin only, after `configureChain`; `chainUid_` this factory's (`ChainUidMismatch`): a native admin's direct
     ///         call is void on a sibling with the same chain id (Fable D P3-2). The same word on every deprecation and switch.
@@ -359,9 +362,9 @@ interface IOpenFactory is IAdmin {
     function deployedFor(address underlying, uint256 index) external view returns (address);
 
     /// @notice As `deployTokenImplementation` for the DEX (approved by `approveDexRelease`) (salt `keccak256(abi.encode("dex", version))`, DEX
-    ///         env `envVersion`); the release must answer `factory()` and accept the env (`validateEnv`).
-    function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs)
-        external returns (address implementation);
+    ///         env `envVersion`); the release must answer `factory()` and accept the env (`validateEnv`). `chainUid_` as there.
+    function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs,
+        bytes32 chainUid_) external returns (address implementation);
     function dexReleaseOf(uint64 version) external view returns (Release memory);
     function dexImplementationOf(uint64 version) external view returns (address);
     /// @notice Admin only: marks a DEX version deprecated; `createDex` then refuses it (existing DEXes untouched).
@@ -460,8 +463,9 @@ interface IOpenFactory is IAdmin {
     ///         ERC-165 (`0x01ffc9a7`, `interfaceId`, not `0xffffffff`), `validateEnv`, its body modules (`modules()`, each
     ///         in the env's `libs`: `ModuleNotPinned`, CTR-TOK-30; owner 2026-11-10). The first release of a class lists it in
     ///         `classes()`, the first of a kind in `kindsOf`. Usable after `noticePeriod`; a new `(class, kind)` starts off.
+    ///         `chainUid_` as `deployTokenImplementation`.
     function deployImplementation(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
-        bytes calldata initcode, bytes calldata implArgs) external returns (address implementation);
+        bytes calldata initcode, bytes calldata implArgs, bytes32 chainUid_) external returns (address implementation);
     /// @notice Admin only: immediate, never undone; existing instances untouched. `chainUid_` as `deprecateToken`.
     function deprecateRelease(ReleaseId calldata id, bytes32 chainUid_, string calldata reason) external;
     /// @notice Admin only: the reversible stop of every version of a `(class, kind)`. `chainUid_` as `deprecateToken`.

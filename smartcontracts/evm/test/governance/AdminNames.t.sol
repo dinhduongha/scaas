@@ -25,7 +25,11 @@ contract AdminNamesTest is Test {
     bytes4 internal constant PENDING_ADMIN = 0x26782247; // pendingAdmin()
     bytes4 internal constant TRANSFER_ADMIN = 0xe923bc3d; // transferAdmin(bytes32)
     bytes4 internal constant ACCEPT_ADMIN = 0x0e18b681; // acceptAdmin()
-    bytes4 internal constant RENOUNCE_ADMIN = 0x8bad0c0a; // renounceAdmin()
+    bytes4 internal constant RENOUNCE_ADMIN = 0x4fa3ed14; // renounceAdmin(bytes32) (Fable recheck-2 P3-1; was 0x8bad0c0a, renounceAdmin())
+    bytes4 internal constant RENOUNCE_ADMIN_OLD = 0x8bad0c0a; // renounceAdmin(): no entry since recheck-2 P3-1
+    bytes4 internal constant CHAIN_UID_MISMATCH = 0x14767f45; // ChainUidMismatch(bytes32,bytes32)
+    bytes32 internal constant UID = bytes32(uint256(0x3A)); // the clones' chain word (`_clone`)
+    bytes32 internal constant SIB = bytes32(uint256(0x3B)); // a sibling's, the same chain id
     bytes4 internal constant NOT_ADMIN = 0xba963c12; // NotAdmin(bytes32)
     bytes4 internal constant NOT_PENDING_ADMIN = 0x16600d0b; // NotPendingAdmin(bytes32)
 
@@ -39,7 +43,9 @@ contract AdminNamesTest is Test {
         assertEq(PENDING_ADMIN, bytes4(keccak256("pendingAdmin()")));
         assertEq(TRANSFER_ADMIN, bytes4(keccak256("transferAdmin(bytes32)")));
         assertEq(ACCEPT_ADMIN, bytes4(keccak256("acceptAdmin()")));
-        assertEq(RENOUNCE_ADMIN, bytes4(keccak256("renounceAdmin()")));
+        assertEq(RENOUNCE_ADMIN, bytes4(keccak256("renounceAdmin(bytes32)")));
+        assertEq(RENOUNCE_ADMIN_OLD, bytes4(keccak256("renounceAdmin()")));
+        assertEq(CHAIN_UID_MISMATCH, bytes4(keccak256("ChainUidMismatch(bytes32,bytes32)")));
         assertEq(NOT_ADMIN, bytes4(keccak256("NotAdmin(bytes32)")));
         assertEq(NOT_PENDING_ADMIN, bytes4(keccak256("NotPendingAdmin(bytes32)")));
         bytes4[5] memory o = _old();
@@ -53,7 +59,7 @@ contract AdminNamesTest is Test {
     // ------------------------------------------------------------------ fixtures
 
     function _clone(address impl) internal returns (address) {
-        return EnvKit.clone(impl, EnvKit.env(bytes32(uint256(0x3A)), address(0x5Ca0000000000000000000000000000000000003),
+        return EnvKit.clone(impl, EnvKit.env(UID, address(0x5Ca0000000000000000000000000000000000003),
             address(0), false, address(0)));
     }
 
@@ -91,7 +97,7 @@ contract AdminNamesTest is Test {
         assertEq(_word(t, PENDING_ADMIN), 0, string.concat(name, ": pendingAdmin()"));
         _refused(name, t, abi.encodeWithSelector(TRANSFER_ADMIN, nid(A2)), NOT_ADMIN);
         _refused(name, t, abi.encodePacked(ACCEPT_ADMIN), NOT_PENDING_ADMIN);
-        _refused(name, t, abi.encodePacked(RENOUNCE_ADMIN), NOT_ADMIN);
+        _refused(name, t, abi.encodeWithSelector(RENOUNCE_ADMIN, UID), NOT_ADMIN);
         (bool ok1,) = _call(t, A1, abi.encodeWithSelector(TRANSFER_ADMIN, nid(A2)));
         assertTrue(ok1, string.concat(name, ": transferAdmin"));
         assertEq(_word(t, PENDING_ADMIN), nid(A2), string.concat(name, ": pending after transferAdmin"));
@@ -100,7 +106,16 @@ contract AdminNamesTest is Test {
         assertTrue(ok2, string.concat(name, ": acceptAdmin"));
         assertEq(_word(t, ADMIN), nid(A2), string.concat(name, ": admin after acceptAdmin"));
         assertEq(_word(t, PENDING_ADMIN), 0, string.concat(name, ": pending cleared"));
-        (bool ok3,) = _call(t, A2, abi.encodePacked(RENOUNCE_ADMIN));
+        // Fable recheck-2 P3-1: the admin's renounce made for a sibling (another chain word) is refused by name, nothing
+        // written; the old selector has no entry; the same call with the clone's own word is the control.
+        (bool okS, bytes memory retS) = _call(t, A2, abi.encodeWithSelector(RENOUNCE_ADMIN, SIB));
+        assertFalse(okS, string.concat(name, ": a sibling's word renounced"));
+        assertEq(retS, abi.encodeWithSelector(CHAIN_UID_MISMATCH, UID, SIB), string.concat(name, ": ChainUidMismatch"));
+        assertEq(EnvKit.codeUidOf(t), UID, string.concat(name, ": EnvKit.codeUidOf reads the clone's word"));
+        (bool okO, bytes memory retO) = _call(t, A2, abi.encodePacked(RENOUNCE_ADMIN_OLD));
+        assertTrue(!okO && retO.length == 0, string.concat(name, ": renounceAdmin() has no entry"));
+        assertEq(_word(t, ADMIN), nid(A2), string.concat(name, ": admin kept"));
+        (bool ok3,) = _call(t, A2, abi.encodeWithSelector(RENOUNCE_ADMIN, UID));
         assertTrue(ok3, string.concat(name, ": renounceAdmin"));
         assertEq(_word(t, ADMIN), 0, string.concat(name, ": admin after renounceAdmin"));
     }

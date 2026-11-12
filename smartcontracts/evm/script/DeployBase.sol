@@ -398,12 +398,7 @@ abstract contract DeployBase is DeployBook {
             bytes memory dexArgs = abi.encode(ImplArgs(dexModules));
             f.publishDexEnv(1, _withModules(_env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs),
                 dexModules));
-            bytes memory dexCode = type(SCaaSDex).creationCode;
-            _requireReleaseGas("SCaaSDex", address(f), abi.encodeCall(f.deployDexImplementation, (1, 1, dexCode, dexArgs)));
-            address dexImpl = f.deployDexImplementation(1, 1, dexCode, dexArgs);
-            _releaseRow("SCaaSDex", 2, 0, 1, dexImpl, keccak256(abi.encodePacked(dexCode, abi.encode(address(f), dexArgs))),
-                keccak256(dexArgs));
-            vm.serializeAddress("deploy", "dex_implementation", dexImpl);
+            vm.serializeAddress("deploy", "dex_implementation", _dexRelease(f, dexArgs));
         }
         if (deployWrapped && register && !configureOnly) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployRegulated && register && !configureOnly) _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
@@ -490,13 +485,23 @@ abstract contract DeployBase is DeployBook {
         e.libCodeHashes[0] = topics.codehash;
     }
 
+    /// @notice DEX release 1 on env 1 after its gate, with the factory's chain word (Fable recheck-2 P3-1); its release row.
+    function _dexRelease(OpenFactory f, bytes memory dexArgs) internal returns (address dexImpl) {
+        bytes memory dexCode = type(SCaaSDex).creationCode;
+        bytes32 u = f.chainUid();
+        _requireReleaseGas("SCaaSDex", address(f), abi.encodeCall(f.deployDexImplementation, (1, 1, dexCode, dexArgs, u)));
+        dexImpl = f.deployDexImplementation(1, 1, dexCode, dexArgs, u);
+        _releaseRow("SCaaSDex", 2, 0, 1, dexImpl, keccak256(abi.encodePacked(dexCode, abi.encode(address(f), dexArgs))),
+            keccak256(dexArgs));
+    }
+
     /// @notice Release 1 of `(3, 0)` after its gate, `implArgs` naming the module; its row in the release list.
     function _pqchatRelease(OpenFactory f, bytes memory args) internal returns (address impl) {
         IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
         bytes memory code = type(PqChat).creationCode;
         _requireReleaseGas("PqChat", address(f), abi.encodeCall(f.deployImplementation,
-            (id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args)));
-        impl = f.deployImplementation(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args);
+            (id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args, f.chainUid())));
+        impl = f.deployImplementation(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args, f.chainUid());
         _releaseRow("PqChat", 3, 0, 1, impl, keccak256(abi.encodePacked(code, abi.encode(id, address(f), args))),
             keccak256(args));
     }
@@ -593,8 +598,9 @@ abstract contract DeployBase is DeployBook {
     function _release(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
         bytes memory implArgs) internal returns (address)
     {
-        _requireReleaseGas(name, address(f), abi.encodeCall(f.deployTokenImplementation, (kind, 1, 1, code, implArgs)));
-        address at = f.deployTokenImplementation(kind, 1, 1, code, implArgs);
+        _requireReleaseGas(name, address(f),
+            abi.encodeCall(f.deployTokenImplementation, (kind, 1, 1, code, implArgs, f.chainUid())));
+        address at = f.deployTokenImplementation(kind, 1, 1, code, implArgs, f.chainUid());
         _releaseRow(name, 1, uint8(kind), 1, at, keccak256(abi.encodePacked(code, abi.encode(address(f), implArgs))),
             keccak256(implArgs));
         return at;

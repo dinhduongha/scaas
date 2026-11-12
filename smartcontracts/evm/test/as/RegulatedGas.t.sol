@@ -17,14 +17,16 @@ contract RegulatedGasTest is ListFixture {
     uint256 constant PIN_LISTS = 57_503;
     uint256 constant PIN_KYC = 61_880;
     uint256 constant PIN_KYC_LIST = 66_488;
-    uint256 constant PIN_MTX_LISTS = 97_189;
-    uint256 constant PIN_MTX_FEE_LISTS = 120_674;
+    uint256 constant PIN_MTX_LISTS = 97_144;
+    uint256 constant PIN_MTX_FEE_LISTS = 120_629;
     /// T9 (no regulated transfer pin existed before; spec §14's estimates: lists +4.6 k over no control, measured; KYC +9.0 k,
     /// KYC with a list +13.6 k): measured at 298ddc5b, Foundry 1.8.5, the token's frame gas. Stacked gate (3r + 3s + 3t): the
     /// two `mtxExecuteTransfer` rows 97,074 -> 97,075 and 120,471 -> 120,472, from round 3t's two `ConfidentialConfig` fields
     /// (`verifierFee`, `verifierFeeMax`) alone (the 3s tip with only that struct change measures the same +1).
     /// Fable review fixes (2026-11-11, B P3-1: `_poolMove` refuses a native `UA_POOL` side, one check per move): 97,075 ->
-    /// 97,189 and 120,472 -> 120,674 (two moves); the plain transfer rows unchanged.
+    /// 97,189 and 120,472 -> 120,674 (two moves); the plain transfer rows unchanged. Fable recheck-2 P3-1 (CTR-GOV-27: the
+    /// face's `renounceAdmin(bytes32)` selector moves its dispatch tree, nothing in the transfer path): 97,189 -> 97,144 and
+    /// 120,674 -> 120,629.
     bool constant PINNED = true;
 
     uint256 nonce;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {deployDexModules} from "../../script/KindModules.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {SCaaSDexGovernanceModule} from "../../src/dex/SCaaSDexAdmin.sol";
@@ -42,7 +43,7 @@ contract UADexAdminTest is UADexBase {
         assertEq(dex.pendingAdmin(), nid(dave));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(dave)));
         vm.prank(dave);
-        dex.renounceAdmin(); // D's revert data, verbatim through the stub
+        dex.renounceAdmin(EnvKit.codeUidOf(address(dex))); // D's revert data, verbatim through the stub
     }
 
     /// M2: D's entries answer only under DELEGATECALL; `validBits` is `pure` and reads nothing.

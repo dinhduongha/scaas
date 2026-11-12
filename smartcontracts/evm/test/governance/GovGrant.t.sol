@@ -52,6 +52,8 @@ contract TopBandApp is GovernanceBase {
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _validBits() internal pure override returns (uint256) { return BITS; }
     function _roleBits() internal pure override returns (uint256) { return BITS; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
@@ -100,7 +102,7 @@ contract GovDexForwardHolder {
         try dex.revokeRole(GovernanceBits.LISTING, bytes32(uint256(uint160(address(this))))) { errs.push(0); }
         catch (bytes memory r) { errs.push(bytes4(r)); }
         try dex.transferAdmin(other) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.renounceAdmin() { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.renounceAdmin(EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
     }
 }
 
@@ -357,9 +359,9 @@ contract GovGrantTest is Test {
         vm.startPrank(OWNER);
         t.grantRole(MINT, nid(MANAGER));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, MINT));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         t.revokeRole(MINT, nid(MANAGER));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(t.admin(), bytes32(0));
     }
@@ -368,7 +370,7 @@ contract GovGrantTest is Test {
         NormalToken l = _token("l", 1 << MINT);
         vm.startPrank(OWNER);
         l.grantRole(MINT, nid(MANAGER));
-        l.renounceAdmin();
+        l.renounceAdmin(EnvKit.codeUidOf(address(l)));
         vm.stopPrank();
         assertEq(l.admin(), bytes32(0));
         vm.prank(MANAGER);
@@ -379,7 +381,7 @@ contract GovGrantTest is Test {
         vm.startPrank(OWNER);
         t.grantRole(MINT, nid(MANAGER));
         t.disableFeature(MINT);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(t.admin(), bytes32(0));
     }
@@ -752,12 +754,12 @@ contract GovGrantTest is Test {
     function _renounceRefused() internal {
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, MINT));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
     }
 
     function _renounce() internal {
         vm.prank(OWNER);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
     }
 

@@ -68,6 +68,17 @@ library EnvKit {
         return vm.load(f, bytes32(uint256(13)));
     }
 
+    /// @dev A factory-made instance's `chainUid` from its clone code (`ChainEnvCode` offset 45), not by a call: the
+    ///      `renounceAdmin(chainUid_)` argument of a token or a DEX right after a `vm.prank` (Fable recheck-2 P3-1); 0 for code
+    ///      that is no clone (its `chainUid()` answers 0 too).
+    function codeUidOf(address t) internal view returns (bytes32 u) {
+        bytes memory c = t.code;
+        if (c.length < ChainEnvCode.HEAD) return bytes32(0);
+        assembly ("memory-safe") {
+            if eq(shr(176, mload(add(c, 32))), 0x363d3d373d3d3d363d73) { u := mload(add(c, 77)) } // 32 (length) + 45
+        }
+    }
+
     /// @dev `configureChain`'s router code hash argument: 0 for no router (spec §13.3).
     function codeHashOf(address router) internal view returns (bytes32) {
         return router == address(0) ? bytes32(0) : router.codehash;

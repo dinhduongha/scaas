@@ -35,6 +35,8 @@ contract BranchApp is GovernanceBase {
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _validBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _roleBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
@@ -309,14 +311,14 @@ contract GovAttackV2Test is Test {
         _mint(OFFICER, 1);
         vm.prank(OWNER); // positive control: a live root blocks it
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, MINT));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         vm.prank(OWNER);
         t.revokeRole(MINT, nid(MANAGER));
         _refused(OFFICER, 1, _ex(7)); // dead
         assertTrue(t.hasRole(MINT, nid(OFFICER))); // and reported as a holder
         assertEq(t.holderCount(MINT), 1);
         vm.prank(OWNER);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
     }
 
@@ -328,7 +330,7 @@ contract GovAttackV2Test is Test {
         vm.prank(MANAGER); // positive control: with an owner, the leaf is added
         t.setGrant(MINT, nid(OFFICER2), _leafTerms(10));
         vm.prank(OWNER);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
         assertEq(t.holderCount(MINT), 2);
         vm.prank(MANAGER);

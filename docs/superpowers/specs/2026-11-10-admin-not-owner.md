@@ -241,7 +241,8 @@ no expiry, as in `GovernanceLib`: a forgotten pending can accept years later; th
   native first admin, and the transfer after `configureChain` (§6).
 - `transferAdmin`, `acceptAdmin`, `renounceAdmin` (owner, Q1); `admin()`, `pendingAdmin()` replace `registrar()`. `transferAdmin`
   and `renounceAdmin` carry `configured` (Fable P2-4): a slip, or a sibling's replayed direct transaction, cannot end an
-  unconfigured factory, whose address is the same on every chain. `admin()` shares its selector with the proxy admins of
+  unconfigured factory, whose address is the same on every chain. `renounceAdmin(chainUid_)` also names the factory's word
+  after the admin check (fix2 2026-11-12, Fable recheck-2 P3-1): void on a configured sibling too. `admin()` shares its selector with the proxy admins of
   ERC-1967 tooling; an explorer may label it so, harmlessly (Fable P3).
 - **Renounce ends every admin op for good, deprecation included:** no env, no release, no deprecation, no kind switch on that
   chain's factory; a release found bad after a renounce can no longer be stopped there (owner, Q1: stated consequence).
@@ -332,6 +333,13 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
   words), so every field of the env is signed by name.
 - The five deprecations and kind switches sign the factory's `chainUid` as their direct entries take it (fix2 2026-11-12,
   Fable D P3-2): a native admin's direct call is void on a sibling with the same chain id.
+- `renounceAdmin(bytes32 chainUid_)` on the factory, every token kind and the DEX, and the three deploys with a last
+  `chainUid_` (fix2 2026-11-12, owner: Fable recheck-2 P3-1 option (a)): the router's `UARenounceAdmin(bytes32 from,address
+  target,bytes32 chainUid,E)` (`0x3284850e…`, was `0x4be88ff9…` of §4.3) signs the target's word and forwards it; the
+  selectors `renounceAdmin(bytes32)` `0x4fa3ed14` (was `renounceAdmin()` `0x8bad0c0a` of §4.2), `mtxRenounceAdmin`
+  `0xfcdfdb9a` (was `0xfeedac3d`). Not changed, stopped for the owner: `transferAdmin(bytes32)` (shared `IAdmin`;
+  `ComplianceRegistry` has no chain word) and `setChainEntries` / `UASetChainEntries` (a 13th router parameter is too deep
+  for the ABI decoder) ([token-wrappers.md](../../contracts/token-wrappers.md#factory)).
 - No release deploy is a router op (§5.6); the approvals sign the release's hashes as `UACreateToken` signs `initHash` (S3). A
   `string reason` is signed as `keccak256(bytes(reason))`, as EIP-712 hashes a string (Fable P1-3). The ids flat, as
   `UACreateInstance` (`:234-241`). `UASetCompliance` names its third array `until` because `validUntil` is an envelope word (the
@@ -417,7 +425,8 @@ no other path; split, the signed part is small and the large transaction verifie
 2. **Revoke.** `revokeApproval(bytes32 key)`, `onlyAdmin configured`, deletes any stored entry not consumed, live or not
    (`ApprovalNotRevocable(key)` for an unknown or consumed one), and emits `ReleaseApprovalRevoked(key)`; through the router
    `UARevokeApproval`.
-3. **Deploy.** `deployTokenImplementation`, `deployDexImplementation`, `deployImplementation` keep their names and ABI, carry no
+3. **Deploy.** `deployTokenImplementation`, `deployDexImplementation`, `deployImplementation` keep their names (their ABI gains a
+   last `bytes32 chainUid_`, checked first: fix2 2026-11-12, Fable recheck-2 P3-1), carry no
    signature and go **straight to the factory, open to anyone**. The factory rebuilds `key` from the call (the table above: every
    stored caller field, the hashes of `initcode` and `implArgs` computed from the bytes) and accepts the deploy only against a
    live approval of it (else `ReleaseNotApproved(key)`, checked before the version); it marks the approval consumed (each is used

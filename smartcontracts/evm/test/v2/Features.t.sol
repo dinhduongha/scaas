@@ -209,7 +209,7 @@ contract FeaturesTest is Test {
         t.acceptAdmin();
         assertEq(t.admin(), nid(address(0x0B)));
         vm.prank(address(0x0B));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
         vm.prank(minter);
         t.mint(alice, 1);                                     // holders keep their role after the owner renounces

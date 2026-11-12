@@ -247,7 +247,7 @@ contract GovDeployTest is Test {
             (address[] memory ms, bytes memory args) = deployKindModules(uint8(k), address(f), regArgs()); // T66b
             vm.startPrank(address(h));
             f.publishTokenEnv(k, 1, withModules(e, ms));
-            w = f.deployTokenImplementation(k, 1, 1, code, args);
+            w = f.deployTokenImplementation(k, 1, 1, code, args, EnvKit.uidOf(address(f)));
             f.setTokenKindEnabled(k, true, EnvKit.uidOf(address(f)));
             vm.stopPrank();
         }
@@ -612,8 +612,10 @@ contract GovDeployTest is Test {
         // switches carry `chainUid`, their typehashes): 0x34C0c8173824aE118c6Ec0E183290280C21530b9; fix2 D P3-5 (the metadata
         // hash: `ISCaaSDex.rescue`, `SCaaSDex`'s comments): 0xF35EF840Db3c7FD9F63e8cd86e88e2dE9CB46C29; fix2 CTR-GOV-25 (the
         // metadata hash: `RescueLib`, `GovernanceLib.init`, `DexPuller`): 0x3B3B1Cda834b39B4541d0861226E7bE4712302AF; fix2
-        // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): -> this
-        assertEq(router, 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a, "GovernanceRouter");
+        // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a; fix2
+        // recheck-2 P3-1 (CTR-GOV-27: `mtxRenounceAdmin` and `UARenounceAdmin` carry `chainUid`; the metadata hash:
+        // `IGovernance`, `IOpenFactory`): -> this
+        assertEq(router, 0x60B276496DA55AA0dAD11DcbDaf6Eb00e1E2e51B, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

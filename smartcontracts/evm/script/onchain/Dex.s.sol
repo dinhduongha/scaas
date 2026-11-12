@@ -497,7 +497,7 @@ contract Dex is OnchainBase {
         g2.cancelGrant{gas: G}(GovernanceBits.LISTING, _pad(a3));
         g2.disableFeature{gas: G}(GovernanceBits.LISTING);
         g2.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING);
-        g2.renounceAdmin{gas: G}();
+        g2.renounceAdmin{gas: G}(dex2.chainUid());
         vm.stopBroadcast();
     }
 

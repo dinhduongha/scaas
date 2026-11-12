@@ -210,6 +210,7 @@ interface INormalZetherRegulatedTokenAbi {
     error ZeroAmount(bytes32 orderHash);
     error ZeroFill(bytes32 orderHash);
     error ZeroRecipient();
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
     error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
     error NotAllowed(bytes32 account);
     error Denied(bytes32 account);
@@ -675,7 +676,7 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forwardView(_MR);
     }
 
-    function renounceAdmin() external {
+    function renounceAdmin(bytes32) external {
         _forward(_MA);
     }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {Vm} from "forge-std/Test.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
@@ -35,7 +36,7 @@ contract RouterPairsTest is GovRouterFixture {
     function _types(uint256 op) internal pure returns (string memory) {
         string[19] memory t = ["uint8,bytes32", "uint8,bytes32",
             "uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)", "uint8,bytes32", "uint8",
-            "bytes32", "", "", "uint8", "address,uint256", "bytes32,uint256", "address,bytes32", "address,uint96,uint96", "",
+            "bytes32", "", "bytes32", "uint8", "address,uint256", "bytes32,uint256", "address,bytes32", "address,uint96,uint96", "",
             "", "address,address,bool", "address,bool", "bool", "uint32,address"];
         return t[op];
     }
@@ -139,7 +140,7 @@ contract RouterPairsTest is GovRouterFixture {
             assertEq(t.admin(), s, "AcceptAdmin");
         } else if (op == RENOUNCE_ADMIN) {
             NormalToken t = _normal(s, 0, 0);
-            _m(op, s, address(t), "");
+            _m(op, s, address(t), abi.encode(EnvKit.codeUidOf(address(t))));
             assertEq(t.admin(), bytes32(0), "RenounceAdmin");
         } else if (op == RENOUNCE_ROLE) {
             NormalToken t = _normal(s, s, 0);
@@ -376,6 +377,7 @@ contract RouterPairsTest is GovRouterFixture {
         if (op == GRANT_ROLE || op == REVOKE_ROLE || op == CANCEL_GRANT) return abi.encode(MINT, next);
         if (op == DISABLE_FEATURE || op == RENOUNCE_ROLE) return abi.encode(MINT);
         if (op == TRANSFER_ADMIN) return abi.encode(next);
+        if (op == RENOUNCE_ADMIN) return abi.encode(keccak256("a chain word"));
         if (op == OP_MINT) return abi.encode(BOB, uint256(1));
         if (op == MINT_TO_UA) return abi.encode(pq, uint256(1));
         if (op == DISABLE_WRAP) return abi.encode(address(usd), bytes32("r"));

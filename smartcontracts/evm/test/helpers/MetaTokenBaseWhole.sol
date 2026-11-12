@@ -221,8 +221,8 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _receiverFeeDigestBody(t, fee, feeRecipient, validUntil);
     }
 
-    function renounceAdmin() external governed {
-        _renounceAdminBody();
+    function renounceAdmin(bytes32 chainUid_) external governed {
+        _renounceAdminBody(chainUid_);
     }
 
     function renounceRole(uint8 bit) external governed {

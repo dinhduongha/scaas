@@ -137,6 +137,7 @@ interface INormalTokenAbi {
     error WrongRelayer(bytes32 orderHash, address submitter);
     error ZeroAmount(bytes32 orderHash);
     error ZeroFill(bytes32 orderHash);
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
 }
 
 /// @title NormalToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -412,7 +413,7 @@ contract NormalToken is NormalTokenCore, INormalTokenAbi {
         _forwardView(_MP);
     }
 
-    function renounceAdmin() external {
+    function renounceAdmin(bytes32) external {
         _forward(_MA);
     }
 

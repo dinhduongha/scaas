@@ -237,6 +237,7 @@ interface IWrappedRegulatedTokenAbi {
     error WrapControlNeedsHybrid(uint8 bit);
     error WrapControlActive(uint8 bit);
     error WrapSubjectZero();
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
     error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
     error NotAllowed(bytes32 account);
     error Denied(bytes32 account);
@@ -662,7 +663,7 @@ contract WrappedRegulatedToken is WrappedRegulatedTokenCore, IWrappedRegulatedTo
         _forwardView(_MR);
     }
 
-    function renounceAdmin() external {
+    function renounceAdmin(bytes32) external {
         _forward(_MA);
     }
 

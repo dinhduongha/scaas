@@ -403,7 +403,8 @@ contract PqzNormalTest is PqzFixture {
     function test_factoryGate() public {
         bytes memory code = type(NormalPqzToken).creationCode;
         vm.prank(registrar);
-        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployTokenImplementation.selector, uint8(6), 1, 1, code, ""));
+        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployTokenImplementation.selector, uint8(6), 1, 1, code, "",
+            EnvKit.uidOf(address(factory))));
         assertFalse(ok, "kind 6 (dropped, D21) fails ABI decoding");
         // an unregistered PQZ implementation cannot be cloned at all (owner 2026-10-19)
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
@@ -473,7 +474,7 @@ contract PqzNormalTest is PqzFixture {
                 withModules(pinned(bad[i], IOpenFactory.TokenKind.NORMAL_PQZ), ms));
             vm.prank(registrar);
             vm.expectRevert(IPqzToken.BadInit.selector);
-            factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args);
+            factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args, EnvKit.uidOf(address(factory)));
         }
     }
 

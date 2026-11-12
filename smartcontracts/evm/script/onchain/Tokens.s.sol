@@ -273,7 +273,7 @@ contract Tokens is OnchainBase {
         (uint64 eta,,,) = NormalToken(x).pendingGrant(GovernanceBits.MINTABLE, _pad(a2));
         require(eta != 0, "pending grant");
         NormalToken(x).cancelGrant(GovernanceBits.MINTABLE, _pad(a2));
-        NormalToken(x).renounceAdmin();
+        NormalToken(x).renounceAdmin(NormalToken(x).chainUid());
         vm.stopBroadcast();
         require(NormalToken(x).admin() == 0, "renounced");
     }
@@ -664,7 +664,7 @@ contract Tokens is OnchainBase {
         } else {
             n.disableFeature(GovernanceBits.MINTABLE);
         }
-        n.renounceAdmin();
+        n.renounceAdmin(n.chainUid());
         vm.stopBroadcast();
         require(n.admin() == 0, "renounced");
     }

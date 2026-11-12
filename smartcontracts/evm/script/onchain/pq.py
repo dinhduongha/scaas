@@ -489,8 +489,8 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     hashes = [E.keccak256(E.hb(_rpc0("eth_getCode", [x, "latest"]))) for x in libs]
     sd.send(fac2, E.cd(f"publishTokenEnv(uint8,uint16,{E.ENV_S})", ["w", "w", E.ENV], 4, 1, [reg, 0, 0, [0], [], libs, hashes]),
             "factory 2 publishTokenEnv(kind 4, 1), deps [0x0]")
-    sd.send(fac2, E.cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"], 4, 1, 1, code,
-                       E.impl_args(4, ms)), "factory 2 deployTokenImplementation(kind 4, 1)")
+    sd.send(fac2, E.cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)", ["w", "w", "w", "b", "b", "w"], 4, 1,
+                       1, code, E.impl_args(4, ms), E.CTX[1]), "factory 2 deployTokenImplementation(kind 4, 1)")
     sd.send(fac2, E.cd("setTokenKindEnabled(uint8,bool,bytes32)", ["w"] * 3, 4, 1, E.CTX[1]),
             "factory 2 setTokenKindEnabled(4, true)")
     # a release on a factory with a notice period is usable only after it (VersionNotYetUsable)

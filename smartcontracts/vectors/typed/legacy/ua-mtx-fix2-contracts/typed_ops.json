@@ -1,0 +1,110 @@
+{
+  "note": "The UARenounceAdmin row of vectors/typed/typed_ops.json as it stood at a18e9464, before Fable recheck-2 P3-1 (owner 2026-11-12, CTR-GOV-27) gave UARenounceAdmin a `bytes32 chainUid` field; generated then by clients/clientkeys/scripts/typed-ops-vectors.mjs with the table row of clients/clientkeys/legacy/ua-mtx-fix2-contracts/src/renounce-admin-v1.js. Reference only: its entry has no function now.",
+  "version": 1,
+  "context": "A",
+  "key": {
+    "private": "0x696a0d703dbf9a0f07b38696e6d8f2bf99cda74c79125199a02e550da80c27f9",
+    "address": "0xfc7e9498d8035077f1705eb85be95d66f31a89f9",
+    "ua": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9"
+  },
+  "ops": {
+    "UARenounceAdmin": {
+      "typeString": "UARenounceAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+      "typehash": "0x4be88ff950da1b2063111810c97fc341fb457a71d9719475cf513a9f09dde5ba",
+      "on": [
+        "GovernanceRouter"
+      ],
+      "types": {
+        "EIP712Domain": [
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "type": "string"
+          },
+          {
+            "name": "chainId",
+            "type": "uint256"
+          },
+          {
+            "name": "verifyingContract",
+            "type": "address"
+          },
+          {
+            "name": "salt",
+            "type": "bytes32"
+          }
+        ],
+        "UARenounceAdmin": [
+          {
+            "name": "from",
+            "type": "bytes32"
+          },
+          {
+            "name": "target",
+            "type": "address"
+          },
+          {
+            "name": "batch",
+            "type": "uint256"
+          },
+          {
+            "name": "nonce",
+            "type": "uint256"
+          },
+          {
+            "name": "validUntil",
+            "type": "uint256"
+          },
+          {
+            "name": "mode",
+            "type": "uint32"
+          },
+          {
+            "name": "relayer",
+            "type": "address"
+          },
+          {
+            "name": "fee",
+            "type": "uint256"
+          },
+          {
+            "name": "feeRecipient",
+            "type": "address"
+          }
+        ]
+      },
+      "domains": {
+        "gov_router": {
+          "domain": {
+            "name": "SCaaS GovernanceRouter",
+            "version": "1",
+            "chainId": "31337",
+            "verifyingContract": "0x5ca00000000000000000000000000000000000a7",
+            "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+          },
+          "domainSeparator": "0x1180e86bbe4e0d524335f0b21dcc1c2cdcc6de5f45c9b148c495e441398f3285",
+          "digest": "0x5fc348a6499a5e5d7f007842b0ac2cc531eca052d76ab1d981c99194ba7e7222",
+          "signature": "0x078eea31c2479a9586e24e6f6723627ded76f9369b618d410f23f7e9e84d95944a2a46dc431cfbb97dd3d848220a3982fd24f517d12f0ec5658386daa781cdb51c",
+          "abi": "mtxRenounceAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+          "selector": "0xfeedac3d",
+          "calldata": "0xfeedac3d000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f900000000000000000000000000000000000000000000000000000000000000070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006b49d32c0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000beef000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006be40c007f25d684976fedbd0c445233c8ba1f06000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000080000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041078eea31c2479a9586e24e6f6723627ded76f9369b618d410f23f7e9e84d95944a2a46dc431cfbb97dd3d848220a3982fd24f517d12f0ec5658386daa781cdb51c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "message": {
+        "from": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+        "target": "0x6be40c007f25d684976fedbd0c445233c8ba1f06",
+        "batch": "7",
+        "nonce": "0",
+        "validUntil": "1800000300",
+        "mode": 1,
+        "relayer": "0x000000000000000000000000000000000000beef",
+        "fee": "0",
+        "feeRecipient": "0x0000000000000000000000000000000000000000"
+      },
+      "structHash": "0x78b7c93aeee6a146d10a414e603803f925f9747237c0b95b04ece10848460428"
+    }
+  }
+}

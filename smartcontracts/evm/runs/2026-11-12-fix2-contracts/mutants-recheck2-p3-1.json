@@ -1,0 +1,62 @@
+[
+ {
+  "id": "P31-1 factory renounceAdmin unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_deploysAndRenounce() (gas: 3624495)"
+ },
+ {
+  "id": "P31-2 deployTokenImplementation unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_deploysAndRenounce() (gas: 1240996)"
+ },
+ {
+  "id": "P31-3 deployDexImplementation unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x4e98e78100000000000000000000000000000000000000000000000000000000000000ff0000000000000000000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "P31-4 deployImplementation unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x4e98e78100000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "P31-5 factory renounce: chain before admin",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: OpenFactory.renounceAdmin(bytes32) ADMIN: not its named error: 0x14767f4500000000000000000000000000000000000000000000000000000000 != 0xba963c120000000000"
+ },
+ {
+  "id": "P31-6 token/DEX renounce: chain check removed",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SCaaSDex: a sibling's word renounced] test_dex_SCaaSDex() (gas: 579442)"
+ },
+ {
+  "id": "P31-7 token/DEX renounce: admin pre-check removed (chain first)",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NormalPqzToken.renounceAdmin(bytes32) ADMIN: not its named error: 0x14767f4500000000000000000000000000000000000000000000000000000000 != 0xba963c120000000"
+ },
+ {
+  "id": "P31-8 token: the wrong word (0)",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NormalToken: ChainUidMismatch: 0x14767f450000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "P31-9 DEX: the wrong word (the router)",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SCaaSDex: ChainUidMismatch: 0x14767f450000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "P31-10 router: another word forwarded",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: MetaTxBadSignature()] test_eachOpByNative() (gas: 4080106)"
+ }
+]

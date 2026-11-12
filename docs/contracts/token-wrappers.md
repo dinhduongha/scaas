@@ -540,7 +540,7 @@ immutable: see the administration bullet below.
 
 The bits are the one table of [CTR-GOV-10](../decisions.md#ctr-gov-10--bit-bands-0-127-one-meaning-128-255-per-application-none-refused): bits 0–127 belong to SCaaS, with the same meaning on every SCaaS contract (bits 11 `LISTING` and 12 `FEE_ROUTING` are the DEX's, [CTR-DEX-03](dex.md#CTR-DEX-03)); bits 128–255 belong to an application, labelled by its `bitLabel(bit)`; no band is refused, and a contract's `_validBits()` is the only check. `smartcontracts/vectors/governance/governance_bits.json` holds each SCaaS bit's name, type and disclosure sentence, read by every client (BUILT on branch `governance`, T14, `7887a712`).
 
-- **Administration: one `admin`, in `GovernanceBase`** ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)). Each token has one `admin` (the former `owner`, [CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)), a UA id (`bytes32`: a native account's padded address, or a derived UA's registered id); 0 at creation means no administration ever, and `initialize` refuses a holder on an unlocked bit in that case. The admin can: `grantRole(bit, account)` and `setGrant(bit, holder, terms)`, in two calls within `[eta, eta + grantDelay]` when they add a holder or widen anything (the pending binds a `termsHash` the confirm must match), at once when `grantDelay` is 0 or they narrow ([CTR-GOV-04](../decisions.md#ctr-gov-04--two-call-grantdelay-and-holdercount)); `cancelGrant(bit, account)`, which deletes a pending; `revokeRole(bit, account)`, at once, which deletes one too; `disableFeature(bit)`, one-way, only for a flag not in `lockedFeatures` (reverts `FeatureLocked(bit)`; `FeatureNotSet(bit)` when already clear); two-step `transferAdmin(bytes32)`, not delayed; `renounceAdmin()`, after which the admin is 0 for ever. **`renounceAdmin` reverts while a bit that is not locked has a live root** (`OwnerHasHolders(bit)`): revoke them first, an expired root included ([CTR-GOV-02](../decisions.md#ctr-gov-02--the-grant-record-in-the-contract-subject-to-measuring)). A locked bit's holders survive it, and can add nobody. A holder performs the flag's actions, within its `Grant` if limited, and may `renounceRole(bit)`. The admin only administers: it acts on a flag only if it holds the role. `PAYABLE`, `BURNABLE` and `RESCUABLE` have no holder and are always locked. `hasRole` means listed, not able to act. Events: `RoleGranted` / `RoleRevoked`, `GrantProposed`, `GrantCancelled`, `GrantSet`, `GrantUsed`, `FeatureDisabled(bit, by)`, the admin events, every identity a `bytes32`. **Who is calling:** the token reads `_govSubject()`: the native id of `msg.sender`, or, when `msg.sender` is the chain's `GovernanceRouter` (the release's `GOV_ROUTER` immutable), the UA the router authenticated for that call. No governance operation has an `mtx*` or `ua*` entry on the token; a derived UA, a PQ key or an `msig`, or a gas-less admin, signs it at the router, relayed at fee 0 ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). In production the admin or a holder is a Safe, a multisig, or a UA through the router. BUILT on branch `governance` (T3 `7825361b`, T5 `7d0c6a86`, T6 `ead16677`, T7 `c2525e28`, T10b `ac29de05`, T11 `ea9f4e9d`).
+- **Administration: one `admin`, in `GovernanceBase`** ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)). Each token has one `admin` (the former `owner`, [CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)), a UA id (`bytes32`: a native account's padded address, or a derived UA's registered id); 0 at creation means no administration ever, and `initialize` refuses a holder on an unlocked bit in that case. The admin can: `grantRole(bit, account)` and `setGrant(bit, holder, terms)`, in two calls within `[eta, eta + grantDelay]` when they add a holder or widen anything (the pending binds a `termsHash` the confirm must match), at once when `grantDelay` is 0 or they narrow ([CTR-GOV-04](../decisions.md#ctr-gov-04--two-call-grantdelay-and-holdercount)); `cancelGrant(bit, account)`, which deletes a pending; `revokeRole(bit, account)`, at once, which deletes one too; `disableFeature(bit)`, one-way, only for a flag not in `lockedFeatures` (reverts `FeatureLocked(bit)`; `FeatureNotSet(bit)` when already clear); two-step `transferAdmin(bytes32)`, not delayed; `renounceAdmin(chainUid_)`, after which the admin is 0 for ever (the admin first, `NotAdmin`, then `chainUid_` the token's own chain word, `ChainUidMismatch(expected, got)`: a native admin's direct renounce made for a sibling with the same chain id is void; owner 2026-11-12, Fable recheck-2 P3-1; its router op `mtxRenounceAdmin` signs and forwards the word). **`renounceAdmin` reverts while a bit that is not locked has a live root** (`OwnerHasHolders(bit)`): revoke them first, an expired root included ([CTR-GOV-02](../decisions.md#ctr-gov-02--the-grant-record-in-the-contract-subject-to-measuring)). A locked bit's holders survive it, and can add nobody. A holder performs the flag's actions, within its `Grant` if limited, and may `renounceRole(bit)`. The admin only administers: it acts on a flag only if it holds the role. `PAYABLE`, `BURNABLE` and `RESCUABLE` have no holder and are always locked. `hasRole` means listed, not able to act. Events: `RoleGranted` / `RoleRevoked`, `GrantProposed`, `GrantCancelled`, `GrantSet`, `GrantUsed`, `FeatureDisabled(bit, by)`, the admin events, every identity a `bytes32`. **Who is calling:** the token reads `_govSubject()`: the native id of `msg.sender`, or, when `msg.sender` is the chain's `GovernanceRouter` (the release's `GOV_ROUTER` immutable), the UA the router authenticated for that call. No governance operation has an `mtx*` or `ua*` entry on the token; a derived UA, a PQ key or an `msig`, or a gas-less admin, signs it at the router, relayed at fee 0 ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). In production the admin or a holder is a Safe, a multisig, or a UA through the router. BUILT on branch `governance` (T3 `7825361b`, T5 `7d0c6a86`, T6 `ead16677`, T7 `c2525e28`, T10b `ac29de05`, T11 `ea9f4e9d`).
 - **Validation in the token**, in `initialize` through `GovernanceLib` (the factory only forwards; `createTokenUnregistered`
   lets anyone bring an implementation, so the token is the one authority): each flag valid for the kind
   (`FeatureInvalidForKind(bit)`); `lockedFeatures ⊆ features` (`LockedNotSubset()`); a role holder in `roles` only for a
@@ -712,8 +712,8 @@ implementation itself, so what a release depends on is fixed in its code by cons
   or router in it (the factory adds its own), and no library code hash `0` or `keccak256("")`, a pin that checks nothing
   (`EnvInvalid`); `EnvPublished(domain, envVersion, envHash)` with
   `envHash = keccak256(abi.encode(env))`; views `tokenEnvOf`, `dexEnvOf`, `latestTokenEnvVersion`, `latestDexEnvVersion`.
-- **Deployment.** `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)` /
-  `deployDexImplementation(version, envVersion, initcode, implArgs)` name the env explicitly: it must be published for
+- **Deployment.** `deployTokenImplementation(kind, version, envVersion, initcode, implArgs, chainUid_)` /
+  `deployDexImplementation(version, envVersion, initcode, implArgs, chainUid_)` (the word [chain-bound](#factory)) name the env explicitly: it must be published for
   that kind or the DEX (`EnvUnknown(domain, envVersion)`). Interim rule, controller proposal 2026-10-20 (owner may
   override; the owner declined "bind the kind's latest env"): the final binding rule belongs to a later
   governance-matrix spec. The factory checks each `libs[i].codehash` against `libCodeHashes[i]`
@@ -805,7 +805,7 @@ slot and one list element fewer, no `admin()` read): 2,183,975 / 4,148,399 / 1,5
 recommended). **BUILT** (T70; `test/v2/FactoryGenericKind.t.sol`). A release is `ReleaseId {contractClass, kind,
 version}` for a class ≥ 3 (0–2 `ClassReserved`: tokens and the DEX keep their typed paths, Q10). Registrar only:
 `publishClassEnv(class, kind, envVersion, Env)`; `deployImplementation(id, envVersion, initSelector, interfaceId, initcode,
-implArgs)` (was `deployRelease`, renamed by the owner 2026-11-10), which checks code, `factoryInfo()` (224 B naming this
+implArgs, chainUid_)` (was `deployRelease`, renamed by the owner 2026-11-10), which checks code, `factoryInfo()` (224 B naming this
 factory and the release's own id, owner 0, initialized: `ReleaseInfoMismatch`), ERC-165 (`0x01ffc9a7`, `interfaceId`, not
 `0xffffffff`: `InterfaceNotSupported`), `validateEnv` and the modules ([CTR-TOK-30](#CTR-TOK-30)); `deprecateRelease(id,
 chainUid_, reason)` (immediate, `ReleaseIsDeprecated` on creation: an error cannot share the event's name); `setClassKindEnabled`
@@ -856,8 +856,8 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
 - `constructor(bytes32 admin)` (a native id: `AdminNotNative`), then `configureChain` once, the admin's direct call
   ([CTR-TOK-29](#CTR-TOK-29); `chainUid` non-zero, `ChainUidZero`). The admin is a UA id
   ([CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)): `admin()`,
-  `pendingAdmin()`, `adminGeneration()`, the two-step `transferAdmin` / `acceptAdmin` and `renounceAdmin`, both only after
-  `configureChain` (`ChainNotConfigured`); a derived admin acts only through the configured router's `subject()`.
+  `pendingAdmin()`, `adminGeneration()`, the two-step `transferAdmin` / `acceptAdmin` and `renounceAdmin(chainUid_)`, both
+  only after `configureChain` (`ChainNotConfigured`; the renounce chain-bound, below); a derived admin acts only through the configured router's `subject()`.
   `publishTokenEnv`, `publishDexEnv`, `publishClassEnv`, `deprecateToken`, `deprecateDex`, `deprecateRelease`,
   `setTokenKindEnabled`, `setClassKindEnabled`, `setChainEntries` and the approvals are admin-only (`NotAdmin(caller)`; an
   admin that is an EIP-7702 designator gets `CallerDelegated` on the direct path, owner ruling D2, 2026-10-30), each a router
@@ -872,6 +872,18 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   (`UADeprecateToken(…,uint64 version,bytes32 chainUid,string reason,…)`, `UASetTokenKindEnabled(…,bool on,bytes32
   chainUid,…)`), as the approvals sign theirs. Test `test_siblingReplay_chainBound` (`test/v2/Factory.t.sol`); the
   router's binding matrix covers the word (`GovRouterAdmin.t.sol`). Status **BUILT** (branch `ua-mtx-fix2-contracts`).
+  **Chain-bound deploys and renounce** ([CTR-GOV-27](../decisions.md#CTR-GOV-27), owner 2026-11-12). The three deploys take a
+  last `chainUid_` (`deployTokenImplementation(kind, version, envVersion, initcode, implArgs, chainUid_)`,
+  `deployDexImplementation(version, envVersion, initcode, implArgs, chainUid_)`, `deployImplementation(id, envVersion,
+  initSelector, interfaceId, initcode, implArgs, chainUid_)`), checked first, before the approval: the native admin's own
+  deploy carries no approval key, so its direct transaction made for a sibling is void here. `renounceAdmin(chainUid_)`:
+  the admin (`NotAdmin`), then the word, before anything is written; its router op `mtxRenounceAdmin` signs the target's
+  word (`UARenounceAdmin(bytes32 from,address target,bytes32 chainUid,…)`) and forwards it. The same errors as above.
+  Tests `test_siblingReplay_deploysAndRenounce` (`test/v2/Factory.t.sol`), `test_renounceAdmin_siblingWordRefused`
+  (`GovRouter.t.sol`). Status **BUILT** (branch `ua-mtx-fix2-contracts`). **Not changed (stopped, owner's call):**
+  `transferAdmin` (the shared `IAdmin` entry; `ComplianceRegistry` implements it and has no chain word) and
+  `setChainEntries` (its router op `mtxSetChainEntries` cannot take a 13th parameter: stack too deep in the ABI decoder);
+  both keep their sibling replay through a native admin's direct transaction: on siblings use the router.
 - **Release deploys: approve, then an open deploy** (owner, final, spec §5.6). The admin approves one release by hash
   (`approveTokenRelease`, `approveDexRelease`, `approveRelease`; the factory's own `chainUid`, address and `adminGeneration`
   bound, `until` at most 30 days ahead: `ApprovalFieldMismatch`, `ApprovalTooLong`, `ApprovalLive`), revokes an unused one
@@ -948,7 +960,7 @@ The block is the **built** function set, grouped by the built contracts; the rol
 function mtxSelectors() external view returns (bytes4[] memory, uint8[] memory, uint8[] memory);   // per kind, CTR-MTX-19
 // MetaTokenBase: kind(), creator(), version(), supportsInterface(bytes4), IS_HEDERA; IGovernance (GovernanceBase, CTR-GOV-01): features(), lockedFeatures(), validBits(),
 //   admin(), pendingAdmin() (both bytes32 UA ids), hasRole(uint8,bytes32), holderCount, grantOf, grantDelay(), pendingGrant, lastProposedAt(), bitLabel,
-//   grantRole, setGrant, cancelGrant, revokeRole, renounceRole, disableFeature, transferAdmin(bytes32), acceptAdmin, renounceAdmin;
+//   grantRole, setGrant, cancelGrant, revokeRole, renounceRole, disableFeature, transferAdmin(bytes32), acceptAdmin, renounceAdmin(bytes32);
 //   IRescuable: rescue(address asset) (anyone, with RESCUABLE), rescueTo()
 // NormalToken
 function mint(address to, uint256 amount) external;  function burn(uint256 amount) external;

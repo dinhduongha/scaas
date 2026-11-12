@@ -1571,7 +1571,7 @@ alloy::sol! {
         address[] libs; bytes32[] libCodeHashes; }
     function tokenEnvOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
     function publishTokenEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
-    function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs) external returns (address);
+    function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs, bytes32 chainUid) external returns (address);
     function createToken(uint8 kind, uint64 version, bytes initArgs, bytes32 salt) external returns (address);
     function registry() external view returns (address);
     function epoch(address token) external view returns (uint64);
@@ -1617,8 +1617,9 @@ async fn registry_zero_token(rpc: &str, chain_id: u64, dep: &Value, holder: Addr
     // T66b §4.5: version 2 names version 1's body modules (pinned in env 1, so in env 2)
     let v1 = view(rpc, f, implementationOfCall { kind: 0, version: 1 }).await;
     let impl_args = ImplArgs { modules: view(rpc, v1, modulesCall {}).await }.abi_encode().into();
-    send(rpc, &deployer, f, deployTokenImplementationCall { kind: 0, version: 2, envVersion: 2, initcode: code.into(), implArgs: impl_args }
-        .abi_encode()).await;
+    let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    send(rpc, &deployer, f, deployTokenImplementationCall { kind: 0, version: 2, envVersion: 2, initcode: code.into(), implArgs: impl_args,
+        chainUid: chain_uid }.abi_encode()).await;
     let c = TokenConfig { name: "SCaaS Registry Zero".into(), symbol: "bRZ".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         initialSupply: U256::from(supply), initialHolder: holder, ..Default::default() };
     let t = create(rpc, &deployer, f, createTokenCall { kind: 0, version: 2, initArgs: c.abi_encode().into(), salt: B256::repeat_byte(0x20) }.abi_encode()).await;
@@ -2436,9 +2437,9 @@ async fn offchain_stack_vf(chain_id: u64, vf: u64) -> OffchainStack {
     let ev = view(&rpc, factory, pqz3f::latestTokenEnvVersionCall { kind: 4 }).await + 1;
     send(&rpc, &deployer, factory, publishTokenEnvCall { kind: 4, envVersion: ev, env }.abi_encode()).await;
     let ver = view(&rpc, factory, pqz3f::latestVersionCall { kind: 4 }).await + 1;
-    send(&rpc, &deployer, factory, deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
-        implArgs: ImplArgs { modules: ms }.abi_encode().into() }.abi_encode()).await;
     let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    send(&rpc, &deployer, factory, deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
+        implArgs: ImplArgs { modules: ms }.abi_encode().into(), chainUid: chain_uid }.abi_encode()).await;
     send(&rpc, &deployer, factory, pqz3f::setTokenKindEnabledCall { kind: 4, on: true, chainUid: chain_uid }.abi_encode()).await;
     let verifier = small_key(0x3f47);
     let c = TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8), // PAYABLE

@@ -1587,15 +1587,19 @@
     "group": "K"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -4091,15 +4095,19 @@
     "group": "K"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -7117,15 +7125,19 @@
     "group": "K"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -10549,15 +10561,19 @@
     "group": "K"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -13923,15 +13939,19 @@
     "group": "K"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -17721,15 +17741,19 @@
     "group": "K"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -20701,15 +20725,19 @@
     "group": "W"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -23746,15 +23774,19 @@
     "group": "W"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -27313,15 +27345,19 @@
     "group": "W"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -31286,15 +31322,19 @@
     "group": "W"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -35201,15 +35241,19 @@
     "group": "W"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"
@@ -39540,15 +39584,19 @@
     "group": "W"
    },
    {
-    "sel": "8bad0c0a",
-    "sig": "renounceAdmin()",
+    "sel": "4fa3ed14",
+    "sig": "renounceAdmin(bytes32)",
     "name": "renounceAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IGovernance"

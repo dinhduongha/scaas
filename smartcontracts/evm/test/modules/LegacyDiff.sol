@@ -5,6 +5,7 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {ITokenModules} from "../../src/metatx/ITokenModule.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 interface ILive {
     function kind() external view returns (uint8);
@@ -29,6 +30,8 @@ abstract contract LegacyDiff is Test {
     address[] internal routing; // libraries (old and new) and modules: accesses to them are routing, not behaviour
     uint256 internal diffed;
     uint256 internal bothOk;
+    /// @dev The token under `_diff`'s chain word: its new side's `renounceAdmin(bytes32)` takes it (CTR-GOV-27).
+    bytes32 internal r3Uid;
 
     function _legacyLibs() internal {
         if (routing.length != 0) return;
@@ -152,6 +155,7 @@ abstract contract LegacyDiff is Test {
     ///      the same state.
     function _diff(address token, address oldImpl, address caller, bytes memory data, string memory what) internal {
         bytes memory code = token.code;
+        r3Uid = EnvKit.codeUidOf(token);
         uint256 snap = vm.snapshotState();
         Run memory n = _run(token, caller, _r3Call(data));
         vm.revertToState(snap);
@@ -216,7 +220,7 @@ abstract contract LegacyDiff is Test {
         if (s == bytes4(keccak256("pendingOwner()"))) return bytes4(keccak256("pendingAdmin()"));
         if (s == bytes4(keccak256("transferOwnership(bytes32)"))) return bytes4(keccak256("transferAdmin(bytes32)"));
         if (s == bytes4(keccak256("acceptOwnership()"))) return bytes4(keccak256("acceptAdmin()"));
-        if (s == bytes4(keccak256("renounceOwnership()"))) return bytes4(keccak256("renounceAdmin()"));
+        if (s == bytes4(keccak256("renounceOwnership()"))) return bytes4(keccak256("renounceAdmin(bytes32)"));
         if (s == bytes4(keccak256("NotOwner(bytes32)"))) return bytes4(keccak256("NotAdmin(bytes32)"));
         if (s == bytes4(keccak256("NotPendingOwner(bytes32)"))) return bytes4(keccak256("NotPendingAdmin(bytes32)"));
         if (s == bytes4(keccak256("OwnerAccountPool(bytes32)"))) return bytes4(keccak256("AdminAccountPool(bytes32)"));
@@ -234,14 +238,21 @@ abstract contract LegacyDiff is Test {
         return s;
     }
 
-    function _r3Call(bytes memory data) internal pure returns (bytes memory out) {
+    function _r3Call(bytes memory data) internal view returns (bytes memory out) {
         out = bytes.concat(data);
         if (out.length < 4) return out;
+        // Fable recheck-2 P3-1 (CTR-GOV-27): the renounce names the token's chain word, `r3Uid`, its first argument (the
+        // old entry took none and ignored any bytes after its selector, so they follow the word)
+        if (bytes4(out) == bytes4(keccak256("renounceOwnership()"))) {
+            bytes memory rest = new bytes(out.length - 4);
+            for (uint256 i; i < rest.length; ++i) rest[i] = out[i + 4];
+            out = bytes.concat(bytes4(out), r3Uid, rest);
+        }
         bytes4 s = _r3Sel(bytes4(out));
         for (uint256 i; i < 4; ++i) out[i] = s[i];
     }
 
-    function _r3Old(Run memory o) internal pure {
+    function _r3Old(Run memory o) internal view {
         if (!o.ok) o.ret = _r3Call(o.ret);
         for (uint256 i; i < o.calls.length; ++i) {
             (VmSafe.AccountAccessKind k, address a, uint256 v, bytes memory d, bool r) =

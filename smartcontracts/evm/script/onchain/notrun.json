@@ -14,7 +14,7 @@
     "completeRecovery(*": "waits RECOVERY_DELAY (2 days) after initiateRecovery; a real chain cannot skip time: its negative runs (gov)"
   },
   "OpenFactory": {
-    "renounceAdmin()": "ends the factory's administration for ever (CTR-GOV-23 Q1: no env, release or deprecation after it), so no matrix factory renounces; its refusals (before configureChain, a non-admin) and its effect are forge's (test/v2/FactoryAdmin.t.sol)"
+    "renounceAdmin(bytes32)": "ends the factory's administration for ever (CTR-GOV-23 Q1: no env, release or deprecation after it), so no matrix factory renounces; its refusals (before configureChain, a non-admin) and its effect are forge's (test/v2/FactoryAdmin.t.sol)"
   },
   "NormalZetherRegulatedToken": {
     "setAllowed(*": "refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (gov), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind"

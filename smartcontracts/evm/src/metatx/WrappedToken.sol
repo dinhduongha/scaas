@@ -198,6 +198,7 @@ interface IWrappedTokenAbi {
     error WrapControlNeedsHybrid(uint8 bit);
     error WrapControlActive(uint8 bit);
     error WrapSubjectZero();
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
 }
 
 /// @title WrappedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -556,7 +557,7 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MP);
     }
 
-    function renounceAdmin() external {
+    function renounceAdmin(bytes32) external {
         _forward(_MA);
     }
 

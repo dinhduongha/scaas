@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IGovernance} from "./IGovernance.sol";
+import {IAdmin} from "./IAdmin.sol";
 import {GovernanceLib} from "./GovernanceLib.sol";
 import {IGovernanceRouter} from "./IGovernanceRouter.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -135,7 +136,19 @@ abstract contract GovernanceBaseCore {
         GovernanceLib.transferAdmin(newAdmin, _govSubject());
     }
     function _acceptAdminBody() internal { GovernanceLib.acceptAdmin(_govSubject()); }
-    function _renounceAdminBody() internal { GovernanceLib.renounceAdmin(_govSubject(), _roleBits()); }
+    /// @dev The contract's chain word (`ChainEnvCode.chainUid()` on a factory-made token or DEX): `renounceAdmin`'s check.
+    function _govChainUid() internal view virtual returns (bytes32);
+
+    /// @dev Fable recheck-2 P3-1: the admin (`NotAdmin`, as every admin entry refuses a stranger first), then `chainUid_`
+    ///      this contract's word (`IGovernance.ChainUidMismatch`), before any write: a native admin's direct renounce made for a
+    ///      sibling with the same chain id is void here.
+    function _renounceAdminBody(bytes32 chainUid_) internal {
+        bytes32 c = _govSubject();
+        if (c == 0 || c != GovernanceLib.$().admin) revert IAdmin.NotAdmin(c);
+        bytes32 u = _govChainUid();
+        if (chainUid_ != u) revert IGovernance.ChainUidMismatch(u, chainUid_);
+        GovernanceLib.renounceAdmin(c, _roleBits());
+    }
 }
 
 /// @notice `GovernanceBaseCore` with its external entries, each calling its body (T66b, spec 2026-11-09-t66b-library-organisation.md §4.4):
@@ -225,7 +238,7 @@ abstract contract GovernanceBase is GovernanceBaseCore, IGovernance {
         _acceptAdminBody();
     }
 
-    function renounceAdmin() external override governed {
-        _renounceAdminBody();
+    function renounceAdmin(bytes32 chainUid_) external override governed {
+        _renounceAdminBody(chainUid_);
     }
 }

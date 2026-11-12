@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -372,7 +373,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         factory.publishTokenEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, e9);
         vm.prank(registrar);
         vm.expectRevert(IZetherToken.BadInit.selector);
-        factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, 9, code, args);
+        factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, 9, code, args, EnvKit.uidOf(address(factory)));
         // an honest copy of the transfer verifier on the same inner-product verifier is a different (valid) release
         IFactoryToken.Env memory e = _zenv();
         e.deps[0] = address(copy);
@@ -424,7 +425,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         factory.publishTokenEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, e);
         vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
-        factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, 1, type(NormalZetherToken).creationCode, "");
+        factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, 1, type(NormalZetherToken).creationCode, "", EnvKit.uidOf(address(factory)));
         // the factory-made token carries the env's verifiers
         assertEq(address(tok.verifier()), address(ver));
         assertEq(address(tok.burnVerifier()), address(burnVer));

@@ -204,7 +204,7 @@ abstract contract GovRouterFixture is UARegistryBase {
         rows[TRANSFER_ADMIN] =
             Row("TransferAdmin", ",bytes32 newAdmin", router.mtxTransferAdmin.selector);
         rows[ACCEPT_ADMIN] = Row("AcceptAdmin", "", router.mtxAcceptAdmin.selector);
-        rows[RENOUNCE_ADMIN] = Row("RenounceAdmin", "", router.mtxRenounceAdmin.selector);
+        rows[RENOUNCE_ADMIN] = Row("RenounceAdmin", ",bytes32 chainUid", router.mtxRenounceAdmin.selector);
         rows[RENOUNCE_ROLE] = Row("RenounceRole", ",uint8 bit", router.mtxRenounceRole.selector);
         rows[OP_MINT] = Row("Mint", ",address to,uint256 amount", router.mtxMint.selector);
         rows[MINT_TO_UA] = Row("MintToUA", ",bytes32 to,uint256 amount", router.mtxMintToUA.selector);
@@ -419,7 +419,7 @@ contract GovRouterTest is GovRouterFixture {
         assertEq(t.pendingAdmin(), y, "TransferAdmin");
         _do(ACCEPT_ADMIN, y, address(t), "");
         assertEq(t.admin(), y, "AcceptAdmin");
-        _do(RENOUNCE_ADMIN, y, address(t), "");
+        _do(RENOUNCE_ADMIN, y, address(t), abi.encode(EnvKit.codeUidOf(address(t))));
         assertEq(t.admin(), bytes32(0), "RenounceAdmin");
     }
 
@@ -667,6 +667,26 @@ contract GovRouterTest is GovRouterFixture {
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eoa));
         _run(late);
         assertEq(router.mtxNonce(eoa, 1), 0, "the nonce stays unspent: the target's refusal reverts the call");
+    }
+
+    /// Fable recheck-2 P3-1: `mtxRenounceAdmin` signs the target's chain word and forwards it. Signed for a sibling (another
+    /// word) the token refuses it by name, nothing written, nonce unspent; the old entry without the word has no entry (empty
+    /// revert); the control: the same signer with the token's word renounces.
+    function test_renounceAdmin_siblingWordRefused() public {
+        NormalToken t = _normal(eoa, 0, 0);
+        bytes32 u = EnvKit.codeUidOf(address(t));
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        bytes memory cd = _op(RENOUNCE_ADMIN, eoa, address(t), abi.encode(sib));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.ChainUidMismatch.selector, u, sib));
+        _run(cd);
+        assertEq(t.admin(), eoa, "the admin kept");
+        assertEq(router.mtxNonce(eoa, 0), 0, "the nonce stays unspent");
+        bytes4 oldSel = bytes4(keccak256("mtxRenounceAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),"
+            "address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+        (bool ok, bytes memory ret) = address(router).call(abi.encodePacked(oldSel, new bytes(32 * 12)));
+        assertTrue(!ok && ret.length == 0, "the old entry answers");
+        _do(RENOUNCE_ADMIN, eoa, address(t), abi.encode(u));
+        assertEq(t.admin(), bytes32(0), "the control");
     }
 
     /// A target without code: refused by name, nonce unspent (a call to it would succeed and do nothing).

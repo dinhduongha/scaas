@@ -36,7 +36,7 @@ library GovernanceRouterTypes {
     bytes32 internal constant UA_ACCEPT_ADMIN = keccak256(
         "UAAcceptAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_RENOUNCE_ADMIN = keccak256(
-        "UARenounceAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UARenounceAdmin(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_RENOUNCE_ROLE = keccak256(
         "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 
@@ -255,10 +255,12 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         _ua(GovernanceRouterTypes.UA_ACCEPT_ADMIN, e, target, IAdmin.acceptAdmin.selector, "", auth);
     }
 
-    function mtxRenounceAdmin(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth)
-        external
+    /// @notice The target's chain word as its direct entry takes it (Fable recheck-2 P3-1): signed and forwarded.
+    function mtxRenounceAdmin(MetaTxLib.UAEnvelope calldata e, address target, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_RENOUNCE_ADMIN, e, target, IGovernance.renounceAdmin.selector, "", auth);
+        _ua(GovernanceRouterTypes.UA_RENOUNCE_ADMIN, e, target, IGovernance.renounceAdmin.selector, abi.encode(chainUid),
+            auth);
     }
 
     function mtxRenounceRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)

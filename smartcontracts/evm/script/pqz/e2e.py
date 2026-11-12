@@ -1347,8 +1347,8 @@ def run(kd, kr, ke):
         # created (a PRECOMPILE one reverts SelfTestFailed(address(0)))
         env = [reg, 0, 0, ([0] if ZERO_DEP else [pqv]) if kind else [], [], libs, hashes]
         sd.send(fac, cd(f"publishTokenEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishTokenEnv(kind {kind}, 1)")
-        r = sd.send(fac, cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
-                               kind, 1, 1, code, impl_args(kind, ms)),
+        r = sd.send(fac, cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)", ["w", "w", "w", "b", "b", "w"],
+                               kind, 1, 1, code, impl_args(kind, ms), uid),
                     f"deployTokenImplementation(kind {kind}, 1) {name}")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower() and len(x["topics"]) == 4)
         log(f"      {name} release at 0x{lg['topics'][3][-40:]} ({int(r['gasUsed'], 16):,} gas)")

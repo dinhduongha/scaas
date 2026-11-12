@@ -202,6 +202,7 @@ interface INormalPqzTokenAbi {
     error ZeroFill(bytes32 orderHash);
     error ZeroRecipient();
     error ZeroU();
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
 }
 
 /// @title NormalPqzToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -633,7 +634,7 @@ contract NormalPqzToken is NormalPqzTokenCore, INormalPqzTokenAbi {
         _forwardView(_MP);
     }
 
-    function renounceAdmin() external {
+    function renounceAdmin(bytes32) external {
         _forward(_MA);
     }
 

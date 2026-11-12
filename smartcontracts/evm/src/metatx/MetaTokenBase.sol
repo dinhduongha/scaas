@@ -115,6 +115,8 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
 
     function _chainUidRaw() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
 
+    function _govChainUid() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
+
     /// @notice This instance's `chain_uid`; 0 on the implementation (a view: no revert).
     function chainUid() external view  returns (bytes32) { return ChainEnvCode.chainUid(); }
 

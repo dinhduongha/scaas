@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {IAdmin} from "./IAdmin.sol";
 
 /// @title The governance surface of every SCaaS contract (CTR-GOV-01, CTR-TOK-22); events and errors raised by
-///        `GovernanceLib`. The admin's views, entries, events and errors are `IAdmin`'s (CTR-GOV-23); this adds `renounceAdmin`.
+///        `GovernanceLib`. The admin's views, entries, events and errors are `IAdmin`'s (CTR-GOV-23); this adds `renounceAdmin(chainUid_)`.
 interface IGovernance is IAdmin {
     /// @notice A capability has no holder and binds or serves everyone; a power has holders. The type is `_roleBits()`.
     enum BitType { CAPABILITY, POWER }
@@ -103,6 +103,9 @@ interface IGovernance is IAdmin {
     error GrantBarred(uint8 bit, bytes32 account);
     /// @notice A change of `window` while the spent period still runs on the new grid (B-12, spec §1.5).
     error GrantWindowInUse(uint8 bit, bytes32 holder);
+    /// @notice `renounceAdmin`'s `chainUid_` is not this contract's chain word (`expected`; Fable recheck-2 P3-1, as
+    ///         `IOpenFactory.ChainUidMismatch`): a native admin's direct renounce made for a sibling is void here.
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
     /// @notice `renounceAdmin` while a bit that is not locked has holders (CTR-GOV-02).
     error AdminHasHolders(uint8 bit);
     /// @notice A `grantDelay` above 30 days at creation (B-27).
@@ -140,5 +143,7 @@ interface IGovernance is IAdmin {
     function revokeRole(uint8 bit, bytes32 account) external;
     function renounceRole(uint8 bit) external;
     function disableFeature(uint8 bit) external;
-    function renounceAdmin() external;
+    /// @notice The admin becomes 0 for good (`AdminHasHolders` first). `chainUid_` is this contract's chain word
+    ///         (`ChainUidMismatch`, Fable recheck-2 P3-1): a native admin's direct call is void on a sibling.
+    function renounceAdmin(bytes32 chainUid_) external;
 }

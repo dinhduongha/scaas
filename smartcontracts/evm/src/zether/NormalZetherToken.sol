@@ -171,6 +171,7 @@ interface INormalZetherTokenAbi {
     error ZeroAmount(bytes32 orderHash);
     error ZeroFill(bytes32 orderHash);
     error ZeroRecipient();
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
 }
 
 /// @title NormalZetherToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -569,7 +570,7 @@ contract NormalZetherToken is NormalZetherTokenCore, INormalZetherTokenAbi {
         _forwardView(_MZ);
     }
 
-    function renounceAdmin() external {
+    function renounceAdmin(bytes32) external {
         _forward(_MA);
     }
 

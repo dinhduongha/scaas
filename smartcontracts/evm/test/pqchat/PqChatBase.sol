@@ -111,7 +111,7 @@ abstract contract PqChatBase is UARegistryBase {
         f.publishClassEnv(3, 0, 1, _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
         impl = f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 1), 1, IPqChat.initialize.selector,
-            type(IPqChat).interfaceId, type(PqChat).creationCode, _args());
+            type(IPqChat).interfaceId, type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
         vm.prank(REGISTRAR);
         f.setClassKindEnabled(3, 0, true, EnvKit.uidOf(address(f)));
         chat = _instance("a", OWNER_UA);

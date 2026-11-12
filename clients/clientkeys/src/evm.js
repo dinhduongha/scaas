@@ -406,7 +406,7 @@ const OPS = {
   UADisableFeature: { fields: 'address target,uint8 bit', on: ROUTER },
   UATransferAdmin: { fields: 'address target,bytes32 newAdmin', on: ROUTER },
   UAAcceptAdmin: { fields: 'address target', on: ROUTER },
-  UARenounceAdmin: { fields: 'address target', on: ROUTER },
+  UARenounceAdmin: { fields: 'address target,bytes32 chainUid', on: ROUTER },
   UARenounceRole: { fields: 'address target,uint8 bit', on: ROUTER },
   UAMint: { fields: 'address target,address to,uint256 amount', on: ROUTER },
   UAMintToUA: { fields: 'address target,bytes32 to,uint256 amount', on: ROUTER },

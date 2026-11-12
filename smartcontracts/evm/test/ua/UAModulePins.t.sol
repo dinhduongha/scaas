@@ -63,8 +63,8 @@ contract UAModulePinsTest is Test {
         f.publishTokenEnv(NORMAL, 2, _env(ms));
         bytes memory code = type(NormalToken).creationCode;
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, ms[2]));
-        f.deployTokenImplementation(NORMAL, 1, 1, code, args);
-        address impl = f.deployTokenImplementation(NORMAL, 1, 2, code, args); // control
+        f.deployTokenImplementation(NORMAL, 1, 1, code, args, EnvKit.uidOf(address(f)));
+        address impl = f.deployTokenImplementation(NORMAL, 1, 2, code, args, EnvKit.uidOf(address(f))); // control
         assertEq(NormalToken(impl).modules(), ms);
     }
 
@@ -72,7 +72,7 @@ contract UAModulePinsTest is Test {
     function test_m_unregisteredModuleNotPinned() public {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
         f.publishTokenEnv(NORMAL, 1, _env(ms));
-        address impl = f.deployTokenImplementation(NORMAL, 1, 1, type(NormalToken).creationCode, args);
+        address impl = f.deployTokenImplementation(NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f)));
         f.publishTokenEnv(NORMAL, 2, _env(_first(ms, 2)));
         bytes memory init = abi.encode(normalInit("U", "U", 0, 1, address(this), address(0)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, ms[2]));
@@ -88,8 +88,8 @@ contract UAModulePinsTest is Test {
         f.publishDexEnv(2, _dexEnv(ms));
         bytes memory code = type(SCaaSDex).creationCode;
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, ms[0]));
-        f.deployDexImplementation(1, 1, code, args);
-        address impl = f.deployDexImplementation(1, 2, code, args); // control
+        f.deployDexImplementation(1, 1, code, args, EnvKit.uidOf(address(f)));
+        address impl = f.deployDexImplementation(1, 2, code, args, EnvKit.uidOf(address(f))); // control
         assertEq(SCaaSDex(impl).modules(), ms);
     }
 
@@ -100,6 +100,6 @@ contract UAModulePinsTest is Test {
         address at = vm.computeCreate2Address(keccak256(abi.encode(NORMAL, uint64(1))),
             keccak256(bytes.concat(code, abi.encode(address(f), bytes("")))), address(f));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModulesUnreadable.selector, at));
-        f.deployTokenImplementation(NORMAL, 1, 1, code, "");
+        f.deployTokenImplementation(NORMAL, 1, 1, code, "", EnvKit.uidOf(address(f)));
     }
 }

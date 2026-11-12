@@ -843,7 +843,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function disableFeature(uint8) external override { _forward(); }
     function transferAdmin(bytes32) external override { _forward(); }
     function acceptAdmin() external override { _forward(); }
-    function renounceAdmin() external override { _forward(); }
+    function renounceAdmin(bytes32) external override { _forward(); }
 
     /// @dev S1: today's `governed` entry: `_guardIn` (on the DEX the transient guard's check), DELEGATECALL of this call's
     ///      calldata to D, its revert data verbatim on failure, `_guardOut`, its return data verbatim (never a modifier

@@ -208,7 +208,7 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UADisableFeature", "mtxDisableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
     ("UATransferAdmin", "mtxTransferAdmin", GR, "bytes32 from,address target,bytes32 newAdmin,E", ""),
     ("UAAcceptAdmin", "mtxAcceptAdmin", GR, "bytes32 from,address target,E", ""),
-    ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,E", ""),
+    ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
     ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
     ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),

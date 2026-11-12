@@ -45,7 +45,7 @@ contract CoinReentersEveryEntry {
             abi.encodeWithSelector(t.disableFeature.selector, uint8(1)),
             abi.encodeWithSelector(t.transferAdmin.selector, address(1)),
             abi.encodeWithSelector(t.acceptAdmin.selector),
-            abi.encodeWithSelector(t.renounceAdmin.selector),
+            abi.encodeWithSelector(t.renounceAdmin.selector, bytes32(0)),
             abi.encodeWithSelector(t.disableWrap.selector, address(0), bytes32(0)),
             abi.encodeWithSelector(t.proposeRate.selector, address(0), uint96(1), uint96(1)),
             abi.encodeWithSelector(t.cancelRate.selector),

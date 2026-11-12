@@ -339,9 +339,10 @@ contract Gov is OnchainBase {
         (e, s) = _auth(du, _ty("UAAcceptAdmin", ""), t0r, "");
         vm.broadcast(k2);
         gr.mtxAcceptAdmin(e, t0r, s);
-        (e, s) = _auth(du, _ty("UARenounceAdmin", ""), t0r, "");
+        bytes32 u0 = IMetaTx(t0r).chainUid(); // the token's chain word (Fable recheck-2 P3-1)
+        (e, s) = _auth(du, _ty("UARenounceAdmin", "bytes32 chainUid"), t0r, abi.encode(u0));
         vm.broadcast(k2);
-        gr.mtxRenounceAdmin(e, t0r, s);
+        gr.mtxRenounceAdmin(e, t0r, u0, s);
         require(IGovernance(t0r).admin() == 0, "renounced");
         // the router's own lanes: a direct cancel and a signed one
         vm.broadcast(k2);

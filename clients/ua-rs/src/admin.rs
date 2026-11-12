@@ -18,7 +18,7 @@ pub const ENV_TYPE: &str = "Env(address registry,address smartKeyAccountImpl,boo
 pub const ADMIN_OPS: [(&str, &str); 18] = [
     ("UATransferAdmin", "bytes32 newAdmin"),
     ("UAAcceptAdmin", ""),
-    ("UARenounceAdmin", ""),
+    ("UARenounceAdmin", "bytes32 chainUid"),
     ("UAPublishTokenEnv", "uint8 kind,uint16 envVersion,Env env"),
     ("UAPublishDexEnv", "uint16 envVersion,Env env"),
     ("UAPublishClassEnv", "uint16 contractClass,uint16 kind,uint16 envVersion,Env env"),
