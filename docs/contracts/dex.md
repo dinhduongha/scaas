@@ -345,8 +345,11 @@ BUILT on branch `ua-mtx-fix2-dex`, UNAUDITED). Each signer only cares that it se
 its price; a token's transfer fee does not stop a match that still meets that. The matching, the fills and the price
 checks above are unchanged, and the contract does not require the submitter to compute transfer fees; the minimum fill
 ([CTR-DEX-14](#CTR-DEX-14)) stays on the fill, the seller's signed side, never on what arrived. (a) Every pull is measured
-at the seller (`balanceOf`, `balanceOfUA` for a derived id): its balance falls by at most what it signed to sell (the
-fill; Path B the whole `amount`), else `SellerOverDebited(orderHash)`; on every path. (b) On `mtxSettle`, what
+at the seller (`balanceOf`): its balance falls by at most what it signed to sell (the fill), else
+`SellerOverDebited(orderHash)`; on every path. (Only outside tokens are measured, below: a derived seller exists only on a
+SCaaS token and an outside leg with `ESCROW` (Path B) is refused `BadFlags`, so the code's `balanceOfUA` and whole-`amount`
+arms in the measured pull are not reached from `SCaaSDex` today; kept, their removal is a size lever for the owner, Fable
+fix2 N-1.) (b) On `mtxSettle`, what
 **arrived** of each token over the pulls is paid out in full, pro rata to the match's amounts (A: each maker's receive
 and the taker's Path B refund; B: the taker's receive and each maker's Path B refund), the dust to the last nonzero share,
 each `dexFee` recomputed on its share ([CTR-DEX-17](#CTR-DEX-17)); so step 5 still holds exactly. (c) Every payout to a
@@ -359,7 +362,7 @@ credits more is paid out. **Only outside tokens are measured** (owner 2026-11-12
 use moves exactly what it is asked on every path the DEX uses (the pull, a payout, a refund, a derived UA's ledger
 credit: one rule body for every kind, `_regMove` a `view` check, no fee, burn or rebase on those paths; the tax of the
 regulated kinds is only on their pay entries), so (a), (b) and (c) are skipped for it and conservation stays; test
-`test/merge/ScaasExactMoves.t.sol` holds every kind to it, so a future inexact kind turns it red. **A hybrid's book legs**
+`test/merge/ScaasExactMoves.t.sol` holds every kind to it (the pulls measured at the seller and the DEX, a payout, a derived UA's credit on every kind with a ledger, a derived seller's pull and refund on the PQZ kinds, kind 8 with `TAX` on at 1 %), so a future inexact kind turns it red. **A hybrid's book legs**
 (option (b), owner 2026-11-12): (a) and (c) apply (each maker's payout against its signed floor; the taker, a book party,
 against its signed floor too); an outside B the makers sell may arrive short, and the taker's share is what arrived (its
 receive and B's floors lowered by the shortfall, its fee recomputed); more than was pulled is refused; A, which the taker
@@ -557,7 +560,9 @@ creation (bit 29 is not one of `enableFeature`'s bits, and the DEX has no `enabl
 open by default too: `DexConfig.listedOnly` is false in every script and example, and `setListedOnly` stays for an
 operator who wants it ([CTR-DEX-23](#CTR-DEX-23)). The kind of every token is the factory's at use
 ([CTR-DEX-18](#CTR-DEX-18)), so an unlisted pair needs no record. Self-trade, the relayer binding and every other check are
-unchanged. With open markets the guard against a token that credits less than it was told to move (fee-on-transfer,
+unchanged. A closed DEX created with `admin` 0 can never trade (no `LISTING` holder, no admin to `disableFeature(29)`):
+every settle and hybrid is `MarketNotListed`, every exchange `TokenNotKnown`, for good; it harms only its creator, who chose
+the config (Fable fix2 N-4, noted, not refused). With open markets the guard against a token that credits less than it was told to move (fee-on-transfer,
 rebasing) is conservation (`ConservationBroken`, or a payout that cannot be made) and, on the exchange path, the
 recipient's delta ([CTR-DEX-21](#CTR-DEX-21)), and on the book path [the outcome rule](#settle-outcome): fail closed. Status **BUILT** (branch `ua-mtx-fix2-dex`, UNAUDITED); tests `test/v2/DexMarkets.t.sol`.
 
@@ -742,9 +747,11 @@ function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata da
    back more of A than it was given), ⇒ `ConservationBroken(A)`. (iii) With `leftover > 0` the taker's sold part `sold =
    taker.fill − leftover` must still satisfy **its own signed order**, else the whole hybrid reverts: `sold > 0`
    (`ZeroFill`), `sold ≥ minFill` (`BelowMinFill`; the remainder clause cannot apply because `sold < taker.fill ≤
-   amount − pulled`, so a fill-or-kill taker can never be refunded), `sold · receiveAmount ≤ floor · amount`
-   (`PriceLimit`; implied by the token's check at the pull, asserted anyway in one internal function
-   `_takerSoldCheck`). The errors carry the taker's order hash. There is no partial-refund path. (iv) Each maker's
+   amount − pulled`, so a fill-or-kill taker can never be refunded), `sold · receiveAmount ≤ (floor + surplus) · amount`
+   (`PriceLimit`; `floor` the taker's receive, lowered by hybrid (b)'s shortfall of an outside B, and `surplus` B's excess,
+   which the taker is sent too (Fable fix2 F-3: without the surplus a 1-unit leftover refused a taker its
+   measured payout would satisfy); implied by the token's check at the pull when nothing was lowered, asserted in one
+   internal function `_takerSoldCheck`; the measured payout is then held to the signed floor of `sold`). The errors carry the taker's order hash. There is no partial-refund path. (iv) Each maker's
    `minFill` and limit were checked at its pull on its exact fill; **the leftover never reaches a maker**.
 6. **Pay.** Makers as `mtxSettle` (`recv − dexFee` to the destination, fee split, Path B refund, `LegSettled` /
    `UALegSettled`). The taker receives `floor − dexFee + (out − outsideFloor)`: **all output above `outsideFloor` goes to

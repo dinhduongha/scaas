@@ -631,9 +631,10 @@ contract DexHybridTest is UADexBase {
         _expect(p, _route(0, 200), _err(ISCaaSDex.ZeroFill.selector, _h(p.taker)));
     }
 
-    /// PD5: the price check on the sold part cannot be reached through the entry (the token checked the larger fill
-    /// against the same floor); the harness runs `_takerSoldCheck` itself: 900 sold for a floor of 1600 is below the
-    /// limit 1800 per 1000 (900 · 1800 > 1600 · 1000); 1620 is exactly at it.
+    /// PD5: the price check on the sold part is reached through the entry only after hybrid (b) lowered the receive
+    /// (`DexMarkets.t.sol` `test_hybrid_feeTokenBook_leftover_priceOnTheCredit`); the harness runs `_takerSoldCheck`
+    /// itself: 900 sold for a floor of 1600 is below the limit 1800 per 1000 (900 · 1800 > 1600 · 1000); 1620 is exactly
+    /// at it, and so is 1600 with a surplus of 20 (F-3).
     function test_hybrid_refund_worsePrice_priceLimit() public {
         HybridHarness hh = new HybridHarness(address(f));
         ITradeToken.UATradeOrder memory o = _ua(uaP, address(B), 1000, 1800, 0);
@@ -642,6 +643,9 @@ contract DexHybridTest is UADexBase {
         vm.expectRevert(_err(ISCaaSDex.PriceLimit.selector, h));
         hh.takerSoldCheck(h, 1000, 1600, o, 100);
         hh.takerSoldCheck(h, 1000, 1620, o, 100);
+        hh.takerSoldCheck(h, 1000, 1600, o, 100, 20); // F-3: the surplus counts (1600 + 20 is at the limit)
+        vm.expectRevert(_err(ISCaaSDex.PriceLimit.selector, h));
+        hh.takerSoldCheck(h, 1000, 1600, o, 100, 19);
         vm.expectRevert(_err(ISCaaSDex.BelowMinFill.selector, h));
         hh.takerSoldCheck(h, 1000, 1620, o, 101);
         o.minFill = 0;

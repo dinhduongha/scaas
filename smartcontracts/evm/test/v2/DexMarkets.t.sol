@@ -151,6 +151,27 @@ contract DexMarketsTest is UADexBase {
 
     function freshFor(uint256 features, uint256 locked) external { _fresh(features, locked); }
 
+    /// Bit 29 never comes back (CTR-DEX-32): once disabled, `enableFeature(29)` reaches no code on the DEX (the call a
+    /// router's `mtxEnableFeature` forwards: no selector, no fallback), from the admin or any caller; `grantRole(29, ..)` is
+    /// refused; a second `disableFeature(29)` is `FeatureNotSet`. `features()` stays `DEX_BITS`. Control: the same calls'
+    /// target bit is really gone, and the bit is set on a fresh closed DEX.
+    function test_closed_neverReEnabled() public {
+        _fresh(CLOSED, 0);
+        assertEq(dex.features() & CLOSED, CLOSED, "control: set at creation");
+        dex.disableFeature(GovernanceBits.CLOSED_MARKETS);
+        bytes memory en = abi.encodeWithSignature("enableFeature(uint8)", GovernanceBits.CLOSED_MARKETS);
+        (bool ok,) = address(dex).call(en);
+        assertFalse(ok, "the admin's enableFeature(29)");
+        vm.prank(address(0xF00D)); // any caller, e.g. a governance router forwarding mtxEnableFeature
+        (ok,) = address(dex).call(en);
+        assertFalse(ok, "a router's enableFeature(29)");
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, GovernanceBits.CLOSED_MARKETS));
+        dex.grantRole(GovernanceBits.CLOSED_MARKETS, nid(address(this)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.CLOSED_MARKETS));
+        dex.disableFeature(GovernanceBits.CLOSED_MARKETS);
+        assertEq(dex.features(), GovernanceBits.DEX_BITS);
+    }
+
     /// The exchange path is open too: unknown tokens trade by default; on a closed DEX `TokenNotKnown`. The hybrid follows
     /// `mtxSettle`: any pair by default, `MarketNotListed` when closed.
     function test_exchangeAndHybrid_openByDefault_closedRefuse() public {
@@ -450,6 +471,26 @@ contract DexMarketsTest is UADexBase {
             abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(tf)));
     }
 
+    /// Fable fix2 F-3: hybrid (b) with a leftover. The book arrives short (792 of 800 of a 1 % fee token), the route takes
+    /// 599 A of 600 and pays 1150: alice's sold part 999 A, receive lowered to 1872, sent 1872 + 59 surplus = 1931,
+    /// credited 1912 >= her floor ⌈999 · 1.88⌉ = 1879. The price is tested on what she is sent (receive and surplus),
+    /// so it settles; the leftover 1 A is restored. Without the surplus (1872 · 1000 < 999 · 1880) it was `PriceLimit`.
+    /// Control: a route paying 1100 credits 1863 < 1879, `InsufficientOutput`.
+    function test_hybrid_feeTokenBook_leftover_priceOnTheCredit() public {
+        FeeOnTransferERC20 sym = new FeeOnTransferERC20();
+        sym.mint(dave, 1e6);
+        sym.mint(address(router), 1e6);
+        _fresh(0, 0);
+        uint256 a0 = A.balanceOf(alice);
+        _hybrid(_hybridBook(address(sym), 1880), _swap(address(A), address(sym), 599, 1150), "");
+        assertEq(sym.balanceOf(alice), 1912);
+        assertEq(A.balanceOf(alice), a0 - 999, "the leftover back");
+        assertEq(sym.balanceOf(address(dex)), 0);
+        _fresh(0, 0);
+        _hybrid(_hybridBook(address(sym), 1880), _swap(address(A), address(sym), 599, 1100),
+            abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(sym)));
+    }
+
     /// The makers receive an outside token with a fee on `transfer` (dave, the taker, sells it): each maker's payout is
     /// measured against its own signed floor (they are filled at their exact price): `InsufficientOutput`.
     function test_settle_makersReceiveAFeeToken_measured() public {
@@ -466,6 +507,16 @@ contract DexMarketsTest is UADexBase {
         ss[0].makers = new ISCaaSDex.DexLeg[](1);
         ss[0].makers[0] = _uaLeg(address(A), _ua(_pad(alice), address(tf), 1000, 334, 0), 1000);
         _expectOne(ss, abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(tf)));
+        // control (N-3): the same book with an exact outside token settles; alice gets her 334
+        MockERC20 ex = new MockERC20("Exact", "EX", 18);
+        ex.mint(dave, 1e6);
+        vm.prank(dave);
+        ex.approve(p, type(uint256).max);
+        t = _nat(dave, address(A), 334, 1000, 0);
+        ss[0].taker = DexLegs.leg0(address(ex), t, _ecdsa(DAVE_PK, dex.dexOrderDigest(address(ex), t)), 334);
+        ss[0].makers[0] = _uaLeg(address(A), _ua(_pad(alice), address(ex), 1000, 334, 0), 1000);
+        assertTrue(_settle(ss));
+        assertEq(ex.balanceOf(alice), 334);
     }
 
     /// Gas figures (not pins), the same fixture: `mtxSettle` 1x1 SCaaS against SCaaS (nothing measured), then with an

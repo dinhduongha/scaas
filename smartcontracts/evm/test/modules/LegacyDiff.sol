@@ -234,15 +234,18 @@ abstract contract LegacyDiff is Test {
 
     /// @dev CTR-DEX-32 / CTR-DEX-18 (fix2-dex, owner 2026-11-12): the DEX reads a token's kind from its factory at use
     ///      (`versionOf`, a STATICCALL) where it read its `setMarket` record before; those reads are the intended new calls
-    ///      out of the DEX and leave the comparison. Every other call out of either side is compared as before.
+    ///      out of the DEX and leave the comparison, to the DEX's `factory()` only. Every other call out of either side is
+    ///      compared as before.
     function _intendedCalls(address token, bytes[] memory calls) internal view returns (bytes[] memory out) {
         if (_kindOf(token) != type(uint8).max) return calls;
+        (, bytes memory fr) = token.staticcall(abi.encodeWithSignature("factory()"));
+        address factory = abi.decode(fr, (address)); // only the DEX's own factory read leaves (Fable fix2 N-2)
         out = new bytes[](calls.length);
         uint256 n;
         for (uint256 i; i < calls.length; ++i) {
-            (VmSafe.AccountAccessKind k,,, bytes memory d,) =
+            (VmSafe.AccountAccessKind k, address to,, bytes memory d,) =
                 abi.decode(calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
-            if (k == VmSafe.AccountAccessKind.StaticCall && d.length >= 4
+            if (k == VmSafe.AccountAccessKind.StaticCall && to == factory && d.length >= 4
                 && bytes4(d) == bytes4(keccak256("versionOf(address)"))) continue;
             out[n++] = calls[i];
         }

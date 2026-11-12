@@ -708,7 +708,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         if (leftover > p.outsideSell) revert ConservationBroken(a.token);
         bool restore = leftover != 0 && taker.o.flags & TradeLib.IOC == 0;
         if (leftover != 0) {
-            _takerSoldCheck(taker, leftover);
+            _takerSoldCheck(taker, leftover, t[1].excess);
             taker.sold -= leftover;
             if (!(restore && taker.ua)) taker.refund += leftover; // a SCaaS leg's restore is its refund (B P2-1)
         }
@@ -720,14 +720,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
 
     /// @dev DX7 (PD5): the taker's sold part `taker.sold − leftover` must satisfy its signed order, else the hybrid
     ///      reverts with its hash: > 0 (`ZeroFill`), ≥ `minFill` (`BelowMinFill`; never the remainder clause: the sold
-    ///      part is below a fill the token allowed), within the limit on the floor `taker.recv` (`PriceLimit`; implied
-    ///      by the token's check of the larger fill at the pull, kept anyway).
-    function _takerSoldCheck(Calc memory taker, uint256 leftover) internal pure {
+    ///      part is below a fill the token allowed), within the limit on what the taker is sent, `taker.recv` and B's
+    ///      `surplus` (`PriceLimit`). Hybrid (b): `_bookShort` may have lowered `taker.recv`; the surplus counts, as it
+    ///      does in the measured floor (Fable fix2 F-3).
+    function _takerSoldCheck(Calc memory taker, uint256 leftover, uint256 surplus) internal pure {
         uint256 sold = taker.sold - leftover;
         ITradeToken.UATradeOrder memory o = taker.o;
         if (sold == 0) revert ZeroFill(taker.h);
         if (sold < o.minFill) revert BelowMinFill(taker.h);
-        if (TradeLib.mulGt(sold, o.receiveAmount, taker.recv, o.amount)) revert PriceLimit(taker.h);
+        if (TradeLib.mulGt(sold, o.receiveAmount, taker.recv + surplus, o.amount)) revert PriceLimit(taker.h);
     }
 
     /// @dev DX7: the refunded leftover is fillable again — the SCaaS token's `restorePulled` (which moves it from this
