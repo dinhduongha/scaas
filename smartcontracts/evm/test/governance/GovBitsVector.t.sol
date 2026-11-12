@@ -18,6 +18,7 @@ import {plainEnv, regArgs} from "../helpers/Catalogue.sol";
 ///         `contractOrMsig`, RK-1, or `any`, bit 22); bit 21 has no entry; bit 22 `OPERATOR_TRANSFER`; the decoy-fee sentence.
 ///         Group 3h T61: bit 24 `PQZ_PROOF` (kinds 4, 5, 12, 13; any holder; PQZ proof path spec §5). Group 3l: bits 25
 ///         `WRAP_LIMIT`, 26 `WRAP_LIST`, 27 `REDEEMER` (the hybrids of 1, 3, 5, 9, 11, 13; wrap limits spec 2026-11-10 §2, §9).
+///         Round 3s: bit 28 `KYC`. CTR-DEX-32 (owner 2026-11-12): bit 29 `CLOSED_MARKETS`, the DEX's capability (no kinds row).
 contract GovBitsVectorTest is Test {
     string constant OUT = "../vectors/governance/governance_bits.json";
 
@@ -25,7 +26,7 @@ contract GovBitsVectorTest is Test {
     uint256 constant ROLES = B.NORMAL_ROLES | B.WRAPPED_ROLES | B.DEX_BITS | B.REGULATED_ROLES | (1 << B.OPERATOR_TRANSFER)
         | (1 << B.TAX) | (1 << B.PQZ_PROOF) | (1 << B.ALLOWLIST) | (1 << B.DENYLIST);
     /// The last row (CTR-GOV-20).
-    uint256 constant LAST = B.KYC; // round 3s (CTR-GOV-24; was B.REDEEMER, group 3l; B.PQZ_PROOF, group 3h T61)
+    uint256 constant LAST = B.CLOSED_MARKETS; // CTR-DEX-32 (was B.KYC, round 3s; B.REDEEMER, group 3l; B.PQZ_PROOF, 3h T61)
     /// `RegulatedBase`'s masks (internal there), composed from the same constants: the bits 8-13 add, without `ALLOWLIST` on
     /// 10-13 (CTR-GOV-17); the contract-only ones (an `msig` UA counts, RK-1); bit 22 any holder. Kind 8's `validBits()` is
     /// held to `REG` below, kinds 9 and 13 in `RegulatedSkeleton.test_masks`.
@@ -88,7 +89,7 @@ contract GovBitsVectorTest is Test {
             " masks; never edit by hand. Spec 2026-11-02-governance 1.2, 1.8, 4.3, 5.5. A wallet prints one sentence per set bit of features()",
             " (sentences.all, or the one its class selects: bit 1 plain or hybrid on maxSupply() != 0, bit 5 public or confidential by kind).",
             " type: capability (no holder), power (has holders), unused, reserved. kinds: the token kinds a regulated bit, bit 24 or bits 25-27 (hybrids only) is valid on;",
-            " holder: contractOrMsig (a native id with code or a threshold msig UA, sentences.msig) or any. Bits 29-127 are free; bits 128-255 are the application",
+            " holder: contractOrMsig (a native id with code or a threshold msig UA, sentences.msig) or any. Bits 30-127 are free; bits 128-255 are the application",
             " contract's own, the word is bitLabel(bit), never a row here (CTR-GOV-10 Change, owner 2026-11-04). {x} is a value the wallet",
             ' reads on chain.",\n',
             '  "version": 1,\n',
@@ -391,6 +392,19 @@ contract GovBitsVectorTest is Test {
                 )
             )
         );
+        // CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets, a capability with no holder, off by default
+        j = string.concat(
+            j,
+            _row(
+                B.CLOSED_MARKETS,
+                "CLOSED_MARKETS",
+                "capability",
+                _one(
+                    "all",
+                    "No holder, on a DEX: it settles only pairs it lists (setMarket) and its exchange path takes only tokens it knows; off, any pair and any token. Set and lockable only at creation; the admin can switch it off for good unless locked, never on again."
+                )
+            )
+        );
         j = string.concat(
             j,
             "  ],\n",
@@ -413,7 +427,7 @@ contract GovBitsVectorTest is Test {
     /// order; a type against the masks fails its row; an edit of the file fails the comparison.
     function test_bitsVectorEqualsTheConstants() public {
         string memory j = _build();
-        assertEq(_next, LAST + 1, "rows 0-28");
+        assertEq(_next, LAST + 1, "rows 0-29");
         if (vm.envOr("WRITE_BITS", false)) vm.writeFile(OUT, j);
         assertEq(
             vm.readFile(OUT),
@@ -432,7 +446,7 @@ contract GovBitsVectorTest is Test {
     function test_everyBitOfAKindHasANamedRow() public {
         string memory j = _build();
         uint256 all =
-            ROLES | B.NORMAL_BITS | B.WRAPPED_BITS | B.DEX_BITS | REG;
+            ROLES | B.NORMAL_BITS | B.WRAPPED_BITS | B.DEX_VALID | REG;
         for (uint256 bit; bit < 256; ++bit) {
             if (all & (1 << bit) == 0) continue;
             assertLe(bit, LAST, "a row exists");

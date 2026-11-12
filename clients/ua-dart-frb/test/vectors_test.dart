@@ -809,11 +809,11 @@ void main() {
   test('governance bits rows', () {
     final v = jsonDecode(File('$vectors/../governance/governance_bits.json').readAsStringSync()) as Map;
     final rows = v['bits'] as List;
-    expect(rows.length, 29); // round 3s: bit 28 KYC
+    expect(rows.length, 30); // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS
     for (final r in rows) {
       expect(jsonDecode(governanceBit(bit: r['bit'] as int)), r, reason: 'bit ${r['bit']}');
     }
-    for (final bit in [29, 127, 128, 255, 256, -1]) {
+    for (final bit in [30, 127, 128, 255, 256, -1]) {
       expect(errCode(() => governanceBit(bit: bit)), 'UAArgument', reason: '$bit');
     }
   });

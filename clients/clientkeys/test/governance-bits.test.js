@@ -37,8 +37,10 @@ test('governance_bits.json: the regulated rows carry their kinds and holder rule
   }
   // group 3h T61: bit 24 `PQZ_PROOF` (PQZ proof path spec §5: the PQZ kinds 4, 5, 12, 13, any holder); group 3l: bits 25-27
   // (the hybrids of the wrapped kinds; 25 a capability, 26 and 27 any holder), 27 the last row
-  assert.equal(v.bits.at(-1).bit, 28, 'bit 28 KYC is the last row (round 3s)');
-  assert.deepEqual(v.bits.slice(25).map((r) => r.name), ['WRAP_LIMIT', 'WRAP_LIST', 'REDEEMER', 'KYC']);
+  // CTR-DEX-32: bit 29 `CLOSED_MARKETS` (the DEX's capability, no kinds row) the last row
+  assert.equal(v.bits.at(-1).bit, 29, 'bit 29 CLOSED_MARKETS is the last row (CTR-DEX-32)');
+  assert.deepEqual(v.bits.slice(25).map((r) => r.name), ['WRAP_LIMIT', 'WRAP_LIST', 'REDEEMER', 'KYC', 'CLOSED_MARKETS']);
+  assert.equal(v.bits[29].type, 'capability');
   for (const b of [8, 9]) assert.deepEqual([v.bits[b].type, Object.keys(v.bits[b].sentences).includes('enableable')], ['power', true]);
   assert.ok(v.sentences.enableableWhen, 'enableableWhen');
   assert.equal(v.bits[24].name, 'PQZ_PROOF');

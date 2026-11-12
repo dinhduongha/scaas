@@ -32,6 +32,25 @@ pub const FLAG_LISTED_POOLS: u8 = 4;
 /// `tokenKind`: 1 = SCaaS (the token checks the order), 2 = outside (a `DexOrder`, pulled through the `DexPuller`).
 pub const KIND_SCAAS: u8 = 1;
 pub const KIND_OUTSIDE: u8 = 2;
+/// CTR-DEX-32: bit 29 of the DEX's `features()`; set, the DEX takes listed pairs and known tokens only.
+pub const CLOSED_MARKETS: u8 = 29;
+
+/// The DEX's market rule now (CTR-DEX-32): `true` when bit 29 `CLOSED_MARKETS` is set. Unreadable is the caller's error, never
+/// "open" (fail closed).
+pub async fn dex_closed(chain: &crate::chain::Chain, dex: Address) -> std::result::Result<bool, crate::chain::SimError> {
+    let f = chain.call_view(dex, ISCaaSDex::featuresCall {}).await?;
+    Ok(f.bit(CLOSED_MARKETS as usize))
+}
+
+/// A token's leg shape by the factory (CTR-DEX-18, CTR-DEX-32): SCaaS (shape 1) iff the factory made it from a registered
+/// release, `versionOf(token).version != 0`; else outside (shape 0). Never the DEX's `tokenKind` (0 for a pair never listed)
+/// and never a release's deprecation.
+pub async fn kind_by_factory(chain: &crate::chain::Chain, factory: Address, token: Address)
+    -> std::result::Result<u8, crate::chain::SimError>
+{
+    let v = chain.call_view(factory, crate::abi::IOpenFactory::versionOfCall { token }).await?;
+    Ok(if v.version != 0 { KIND_SCAAS } else { KIND_OUTSIDE })
+}
 /// Whole-book cap of resting orders: a valid order is almost free for its signer (gasless).
 pub const MAX_RESTING: usize = 10_000;
 pub const MAX_OPEN_PER_MAKER: usize = 50;
@@ -555,6 +574,12 @@ impl Book {
         let mut out: Vec<Row> = self.all().map(Row::of).collect();
         out.sort_by_key(|r| r.seq);
         out
+    }
+
+    /// CTR-DEX-32: a market served from now on (a closed DEX opened by `FeatureDisabled(29)`), its book empty; one already
+    /// served is left as it is.
+    pub fn add_market(&mut self, cfg: MarketCfg) {
+        self.markets.entry(pair(cfg.base, cfg.quote)).or_insert(MarketBook { cfg, asks: vec![], bids: vec![] });
     }
 
     pub fn markets(&self) -> impl Iterator<Item = &MarketCfg> {

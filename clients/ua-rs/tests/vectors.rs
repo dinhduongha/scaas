@@ -197,7 +197,7 @@ fn structures() {
     }
 }
 
-/// governance T14: `governance_bit` against the file on disk, every row (a stale compiled-in copy fails here), and none past bit 28 (round 3s: bit 28 `KYC`)
+/// governance T14: `governance_bit` against the file on disk, every row (a stale compiled-in copy fails here), and none past bit 29 (round 3s: bit 28 `KYC`; CTR-DEX-32: bit 29 `CLOSED_MARKETS`)
 /// (ua-mtx-merge T34: bit 22 `OPERATOR_TRANSFER`, CTR-GOV-20; T39 / T41: bit 23 `TAX`; 3h T61: bit 24 `PQZ_PROOF`; 3l: bits 25-27,
 /// the hybrids' wrap controls).
 #[test]
@@ -205,7 +205,7 @@ fn governance_bits_rows() {
     let path = format!("{}/../../smartcontracts/vectors/governance/governance_bits.json", env!("CARGO_MANIFEST_DIR"));
     let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let rows = v["bits"].as_array().unwrap();
-    assert_eq!(rows.len(), 29); // 3l: 24 -> 28 (bit 24 was already in the file; 25, 26, 27); round 3s: -> 29 (bit 28 KYC)
+    assert_eq!(rows.len(), 30); // 3l: 24 -> 28 (bit 24 was already in the file; 25, 26, 27); round 3s: -> 29 (bit 28 KYC); CTR-DEX-32: -> 30 (bit 29 CLOSED_MARKETS)
     for bit in 0..=255u8 {
         match (rows.get(bit as usize), governance_bit(bit)) {
             (Some(row), Some(ours)) => assert_eq!(&serde_json::from_str::<Value>(ours).unwrap(), row, "bit {bit}"),

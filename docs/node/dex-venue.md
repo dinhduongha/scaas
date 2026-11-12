@@ -105,8 +105,20 @@ does with it.
   `batch`, `nonce`, `validUntil`) signed in the **sell token's** EIP-712 domain (`salt = chain_uid`); the token verifies
   it and moves funds only into `dex`, with no allowance. When the sell token is an outside token the same struct is
   signed in the DEX's domain as a `DexOrder` (`dex` = the DEX, `ESCROW` refused) and pulled under the holder's
-  allowance to the DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)); intake reads `allowance(from, puller)`. The venue takes each token's kind from the DEX's own market listing (re-checked every poll,
-  [NODE-DEX-08](#NODE-DEX-08)), never from the order or the client.
+  allowance to the DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)); intake reads `allowance(from, puller)`. The venue takes each token's form from the DEX's factory: SCaaS (the token-verified `TradeOrder`, shape 1) iff
+  `versionOf(token).version != 0` on `factory()`, else outside (shape 0); never from the order, the client, the DEX's
+  `tokenKind` (0 for a pair never listed) or a release's deprecation.
+- <a id="closed-markets"></a>**Which markets are served: bit 29** ([CTR-DEX-32](../decisions.md#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them)). The venue
+  reads the DEX's `features()` at start: bit 29 `CLOSED_MARKETS` set, a client market is served only when the DEX lists
+  the pair (`marketListed(base, quote)`), the others wait; clear, every client market is served (open markets, the
+  default). An unread bit serves nothing (fail closed). The DEX's own `FeatureDisabled(29)` (the bit is set only at
+  creation and only ever cleared) makes the venue re-read the bit live before its cursor moves (an unread bit fails the
+  round, read again) and, open, serve the waiting markets with empty books. On a closed DEX the exchange path's tokens
+  must be `tokenKnown` (the DEX's own check; the venue plans no exchange). The liquidity guard classifies inputs the same
+  way (`versionOf` on the DEX's factory). Tests `market_rule_follows_bit_29_and_the_factory`,
+  `feature_disabled_29_opens_the_waiting_markets` (`scaas-node/src/dex/venue.rs`; mutants 5/5,
+  `smartcontracts/evm/runs/2026-11-12-fix2-contracts/mutants-venue-29.json`). Status **BUILT** (branch
+  `ua-mtx-fix2-contracts`), UNAUDITED.
 - **No role in the order.** The book keeps price-time priority over orders as they arrive; an incoming order that
   crosses is the **taker** of the settlement the venue builds, the resting orders it crosses are its **makers**, and an
   order that rests may later be a maker. One settlement is atomic; one `mtxSettle` call carries one or more

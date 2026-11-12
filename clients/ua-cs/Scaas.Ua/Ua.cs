@@ -88,8 +88,8 @@ public static partial class UA
 
     public static readonly byte[] MsgTag = Keccak256(Utf8("scaas.ua.msg.v1"));
 
-    /// <summary>The governance bits 0-28 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the
-    /// app from smartcontracts/vectors/governance/governance_bits.json; bits 29-127 are free, 128-255 the application's bitLabel(bit).</summary>
+    /// <summary>The governance bits 0-29 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the
+    /// app from smartcontracts/vectors/governance/governance_bits.json; bits 30-127 are free, 128-255 the application's bitLabel(bit).</summary>
     public static readonly (string Name, string Type)[] GovernanceBits =
     [
         ("PAYABLE", "capability"), ("MINTABLE", "power"), ("BURNABLE", "capability"), ("RATE_ADJUSTABLE", "power"),
@@ -101,6 +101,8 @@ public static partial class UA
         ("WRAP_LIMIT", "capability"), ("WRAP_LIST", "power"), ("REDEEMER", "power"),
         // round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
         ("KYC", "capability"),
+        // CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+        ("CLOSED_MARKETS", "capability"),
     ];
 
     public static Kind KindInfo(ushort kind) =>

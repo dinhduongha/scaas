@@ -715,12 +715,16 @@ async fn check_liquidity(chain: &Chain, w: &Work, max_gas_per_tx: u64) -> Result
         Err(SimError::Revert(m)) => return Err(policy(m)),
         Err(SimError::Transport(m)) => return Err(Refusal::Transport(m)),
     }
+    // CTR-DEX-32: an input is SCaaS iff the DEX's factory made it (`versionOf`), never the DEX's `tokenKind` (0 for a token of
+    // a pair never listed) and never a deprecation
+    let sim = |e: SimError| match e {
+        SimError::Transport(m) => Refusal::Transport(m),
+        SimError::Revert(m) => policy(m),
+    };
+    let factory = chain.call_view(w.to, ISCaaSDex::factoryCall {}).await.map_err(sim)?;
     let mut scaas = vec![];
     for t in &o.inputs {
-        if chain.call_view(w.to, ISCaaSDex::tokenKindCall { token: t.token }).await.map_err(|e| match e {
-            SimError::Transport(m) => Refusal::Transport(m),
-            SimError::Revert(m) => policy(m),
-        })? != 1 {
+        if crate::dex::kind_by_factory(chain, factory, t.token).await.map_err(sim)? != crate::dex::KIND_SCAAS {
             continue;
         }
         let ok = match chain.call_view(t.token, IERC165::supportsInterfaceCall { id: LIQUIDITY_PULL_ID.into() }).await {

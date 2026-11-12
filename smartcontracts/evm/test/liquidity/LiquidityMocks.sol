@@ -347,6 +347,16 @@ contract MockNodeDex {
         return 0;
     }
 
+    /// CTR-DEX-32: the node reads a token's shape from the DEX's factory (`versionOf`), never `tokenKind`; this mock is its own
+    /// factory and made no token.
+    function factory() external view returns (address) {
+        return address(this);
+    }
+
+    function versionOf(address) external pure returns (uint8, uint64) {
+        return (0, 0);
+    }
+
     fallback() external {
         revert NotLiquidityDex(address(this));
     }

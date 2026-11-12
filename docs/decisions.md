@@ -1971,7 +1971,7 @@ Change (2026-11-11, Fable review D P2-2 and A-4; controller call under the owner
 **Source.** `research/governance/permission-model.md` §1.4, opening decisions A, B, C.
 Change (2026-11-07, group 3h, CTR-GOV-22): bit 24 `PQZ_PROOF` is allocated: a power of the PQZ kinds 4, 5, 12, 13, any holder, in `ISSUER_BITS`; `governance_bits.json` row 24 with its sentence. Status: BUILT (T61 `6fb7a845`, `d4ae676d`).
 Change (owner 2026-11-10, group 3s, [CTR-GOV-24](#ctr-gov-24--kyc-bit-28-allowlist-and-denylist-lists-held-in-the-token-enabled-at-once); status: BUILT (ua-mtx-3s)): bit 28 `KYC` is allocated (a capability of the regulated kinds 8–13: the registry check); bits 8 and 9 become powers (the list holders); `governance_bits.json` rows 8, 9 and 28; bits 29–127 free.
-Change (owner 2026-11-12, [CTR-DEX-32](#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them); status: BUILT on branch `ua-mtx-fix2-dex`): bit 29 `CLOSED_MARKETS` is allocated (a capability of `SCaaSDex`: listed pairs and known tokens only); bits 30–127 free. Its `governance_bits.json` row (and every client's bit table) is not written yet.
+Change (owner 2026-11-12, [CTR-DEX-32](#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them); status: BUILT on branch `ua-mtx-fix2-dex`): bit 29 `CLOSED_MARKETS` is allocated (a capability of `SCaaSDex`: listed pairs and known tokens only); bits 30–127 free. Its `governance_bits.json` row and every client's bit table: written on branch `ua-mtx-fix2-contracts` (a capability, no kinds row).
 
 ### CTR-GOV-11 — "+0" on a plain transfer means no new read
 - old: governance:plus0 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-11 · superseded-by: —
@@ -3486,16 +3486,18 @@ has no kind record, so the DEX reads the kind from the factory at use ([CTR-DEX-
 **Status.** BUILT on branch `ua-mtx-fix2-dex`, UNAUDITED: `GovernanceBits.CLOSED_MARKETS`, `DEX_VALID`, `DexConfig.features`
 and `lockedFeatures`, `SCaaSDex._closed()` in `_checkMarket` and `_exchangeIn`, `SCaaSDexCore._scaas`; tests
 `test/v2/DexMarkets.t.sol`; the existing `MarketNotListed` / `TokenNotKnown` tests run on a closed DEX.
-`governance_bits.json` has no row 29 yet (every client reads that file: a separate change).
+`governance_bits.json` row 29 and the node's venue (closed: `marketListed` / `tokenKnown`; open: any; the shape by the
+factory's `versionOf`) on branch `ua-mtx-fix2-contracts` ([dex-venue.md](node/dex-venue.md)).
 **Why.** Owner: an open DEX by default; an operator who wants closed markets or listed-only targets makes that DEX itself.
 **Cost if wrong.** On an open DEX no listing keeps a token out: the guards are conservation and, on the exchange path, the
 recipient's delta (CTR-DEX-21 Change of 2026-11-12), and on the book path the outcome rule (CTR-DEX-16 Change of
 2026-11-12). A wallet reads the DEX's `features()` to know which rule it runs.
-**Source.** Owner 2026-11-12, in chat, relayed by the controller: "Dùng bit CLOSE MARKETS, mặc định tắt. Ai muốn tạo Dex với bật thì tự làm. Đường exchange cũng vậy, open cho tất cả. Ai muốn dùng công tắc setListedOnly thì tự làm." (use a CLOSE MARKETS bit, off by default; whoever wants a DEX with it on makes one; the exchange path the same, open to all; whoever wants the `setListedOnly` switch uses it). Controller calls (2026-11-12), on the normal feature-bit rules: the next
+**Source.** Owner 2026-11-12, in chat, relayed by the controller: "Dùng bit CLOSE MARKETS, mặc định tắt. Ai muốn tạo Dex với bật thì tự làm. Đường exchange cũng vậy, open cho tất cả. Ai muốn dùng công tắc setListedOnly thì tự làm." (use a CLOSE MARKETS bit, off by default; whoever wants a DEX with it on makes one; the exchange path the same, open to all; whoever wants the `setListedOnly` switch uses it). The owner confirmed the controller's reading of the exchange path, 2026-11-12: "theo bit 29 như agent đang làm." (by bit 29, as the agent is doing). Controller calls (2026-11-12), on the normal feature-bit rules: the next
 free bit (29); set and lockable only at creation (`DexConfig.features`, `lockedFeatures`; `LISTING` and `FEE_ROUTING` stay
 always set), never enabled later (not in `ENABLEABLE`; the DEX has no `enableFeature`), cleared one-way by the admin's
 `disableFeature(29)` unless locked; "the exchange path the same" read as: the exchange path's known-token check follows the
-same bit, besides `listedOnly` defaulting to false.
+same bit, besides `listedOnly` defaulting to false (owner: yes since 2026-11-12, quoted above). The settle
+fee-on-transfer-received gap with open markets (C6-4) stays open with the owner, as documented.
 
 ### CTR-DEX-80 — Fill-or-kill two-leg MetaTxDex settlement
 - old: R3 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-DEX-01, NODE-DEX-01, INT-ERP-12
