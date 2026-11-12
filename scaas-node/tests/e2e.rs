@@ -602,8 +602,9 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let m = UaMtx::Call(UAMetaTransaction { from: acct.into_word(), data: alloy::hex::decode(format!("cfdd7aea{:064x}", 9)).unwrap().into(),
         batch: U256::from(3), nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO,
         feeRecipient: Address::ZERO });
-    let ecdsa = owner.sign_hash_sync(&m.digest(&d)).unwrap().as_bytes().to_vec();
-    let sig = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    // B P3-2 (CTR-ACC-02): the account answers ERC-1271 by ERC-7739 only, over the token's `UAMetaTransaction`
+    let typ = <UAMetaTransaction as alloy::sol_types::SolStruct>::eip712_encode_type();
+    let sig = sign_7739(&rpc, &owner, acct, token, &typ, m.struct_hash()).await;
     let data = m.calldata(UASig { keyData: Bytes::new(), signature: sig.into(), members: vec![] });
     let floor = scaas_node::guard::erc1271_floor(data.len());
     let w = ProviderBuilder::new().wallet(EthereumWallet::from(relayer.clone())).connect_http(rpc.parse().unwrap());
@@ -1576,7 +1577,8 @@ async fn router_creations_signed_by_an_eoa() {
     let me = format!("{:#x}", owner.address().into_word());
     let dex_op = signed_op(&owner, json!({"entry": "mtxCreateDex", "contract": "gov_router", "token": format!("{router:#x}"),
         "args": {"target": format!("{factory:#x}"), "version": "1", "salt": z(0x61),
-            "config": {"admin": me, "relayerSharePpm": 0, "treasury": a(0x7a), "listedOnly": true, "grantDelay": "0", "rescueTo": a(0)}},
+            "config": {"admin": me, "relayerSharePpm": 0, "treasury": a(0x7a), "listedOnly": true, "grantDelay": "0", "rescueTo": a(0),
+                "features": "0", "lockedFeatures": "0"}},
         "envelope": envelope(owner.address(), lane, 0)}), chain_id, uid);
     let token_op = signed_op(&owner, json!({"entry": "mtxCreateToken", "contract": "gov_router", "token": format!("{router:#x}"),
         "args": {"target": format!("{factory:#x}"), "kind": 0, "version": "1", "salt": z(0x62),
@@ -1646,8 +1648,13 @@ async fn router_instance_creations_signed_by_an_eoa() {
     let init_zero = json!(format!("0x{}{}", alloy::hex::encode(&alloy::primitives::keccak256("initialize(bytes32)")[..4]), "00".repeat(32)));
     let raw_op = op(with(base(0x71, "1"), "init_call", init_zero.clone()), 0);
     let named_op = op(with(base(0x72, "1"), "config", json!({"owner": me})), 1);
-    let both = op(with(with(base(0x73, "1"), "config", json!({"owner": me})), "init_call", init_zero), 2);
-    let stranger = op(with(base(0x74, "1"), "config", json!({"owner": z(0x0b)})), 2);
+    // the two refused at parse: no digest to sign (the node computes none), so a filler `UASig` (the refusal is by name, before
+    // any signature check)
+    let unsigned = |args: Value, nonce: u64| json!({"entry": "mtxCreateInstance", "contract": "gov_router",
+        "token": format!("{router:#x}"), "args": args, "envelope": envelope(owner.address(), lane, nonce),
+        "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}});
+    let both = unsigned(with(with(base(0x73, "1"), "config", json!({"owner": me})), "init_call", init_zero), 2);
+    let stranger = unsigned(with(base(0x74, "1"), "config", json!({"owner": z(0x0b)})), 2);
     let unpublished = op(with(base(0x75, "9"), "config", json!({"owner": me})), 2);
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
@@ -2189,20 +2196,44 @@ async fn regulated_token(chain_id: u64, rpc: &str, issuer_key: &PrivateKeySigner
 }
 
 
-/// The router's `mtxFreeze` (`mtx<Op>`, op `UA<Op>`), or another of the eight, signed by the issuer account through ERC-1271 (its
-/// owner key's ECDSA in the account's `(keyIndex, proof, sig)` form), on the target's lane.
+/// A contract's EIP-712 domain separator from its own `eip712Domain()` (the five SCaaS fields).
+async fn separator(rpc: &str, c: Address) -> B256 {
+    let d = view(rpc, c, scaas_node::abi::IToken::eip712DomainCall {}).await;
+    keccak256((keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
+        keccak256(d.name.as_bytes()), keccak256(d.version.as_bytes()), d.chainId, d.verifyingContract, d.salt).abi_encode())
+}
+
+/// The router's `mtxFreeze` (`mtx<Op>`, op `UA<Op>`), or another of the eight, signed by the issuer account through ERC-1271, on the
+/// target's lane. A `SmartKeyAccount` answers ERC-1271 by ERC-7739 only (B P3-2, CTR-ACC-02): its owner key signs
+/// `TypedDataSign{contents: the router's struct, the account's domain}` under the router's separator, in the account's
+/// `(keyIndex, proof, sig)` form, then `app ‖ contents ‖ contentsDescription ‖ uint16(len)` (the router's type string).
 #[allow(clippy::too_many_arguments)]
-fn issuer_op(entry: &str, args: Value, issuer: Address, owner: &PrivateKeySigner, router: Address, token: Address, nonce: u64, chain_id: u64,
-    uid: B256) -> Value
+async fn issuer_op(rpc: &str, entry: &str, args: Value, issuer: Address, owner: &PrivateKeySigner, router: Address, token: Address,
+    nonce: u64) -> Value
 {
     let mut op = json!({"entry": entry, "contract": "gov_router", "token": format!("{router:#x}"), "args": args,
         "envelope": envelope(issuer, U256::from_be_slice(token.as_slice()), nonce),
         "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}});
-    let d = scaas_node::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain_id, uid).unwrap();
-    let ecdsa = owner.sign_hash_sync(&d).unwrap().as_bytes().to_vec();
-    let sig = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    let p = scaas_node::typed::Op::parse(&op, None).unwrap();
+    let sig = sign_7739(rpc, owner, issuer, router, &p.row.type_string(), p.typed.struct_hash.unwrap()).await;
     op["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(sig)));
     op
+}
+
+/// A `SmartKeyAccount`'s (key 0, secp256k1 `owner`) ERC-7739 signature for the struct `contents` of type `typ` in `app`'s domain
+/// (B P3-2, CTR-ACC-02): `owner` signs `0x1901 ‖ app ‖ hashStruct(TypedDataSign{contents, the account's domain})` in the account's
+/// `(keyIndex, proof, sig)` form, then `app ‖ contents ‖ typ ‖ uint16(len)` (implicit contents description).
+async fn sign_7739(rpc: &str, owner: &PrivateKeySigner, account: Address, app: Address, typ: &str, contents: B256) -> Vec<u8> {
+    let name = &typ[..typ.find('(').unwrap()];
+    let (sep, acct) = (separator(rpc, app).await, view(rpc, account, scaas_node::abi::IToken::eip712DomainCall {}).await);
+    let th = keccak256(format!("TypedDataSign({name} contents,string name,string version,uint256 chainId,address verifyingContract,\
+bytes32 salt){typ}"));
+    let tds = keccak256((th, contents, keccak256(acct.name.as_bytes()), keccak256(acct.version.as_bytes()), acct.chainId,
+        acct.verifyingContract, acct.salt).abi_encode());
+    let m = keccak256([&[0x19u8, 0x01][..], sep.as_slice(), tds.as_slice()].concat());
+    let ecdsa = owner.sign_hash_sync(&m).unwrap().as_bytes().to_vec();
+    let inner = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    [&inner[..], sep.as_slice(), contents.as_slice(), typ.as_bytes(), &(typ.len() as u16).to_be_bytes()].concat()
 }
 
 /// Regulated-kinds spec §3.1, §7 (plan T35): the issuer's `mtxFreeze` on the chain's `GovernanceRouter`, a `ua_metatx` job relayed at
@@ -2215,11 +2246,10 @@ async fn regulated_freeze_relayed_by_router() {
     let (_anvil, rpc) = start_anvil(chain_id, 31914).await;
     let (owner, holder) = (small_key(0x35A), small_key(0x35B));
     let (dep, token, issuer) = regulated_token(chain_id, &rpc, &owner, holder.address()).await;
-    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
     let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
     let a = holder.address().into_word();
-    let op = issuer_op("mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"),
-        "ref": format!("{:#x}", B256::repeat_byte(0x5e)), "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0, chain_id, uid);
+    let op = issuer_op(&rpc, "mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"),
+        "ref": format!("{:#x}", B256::repeat_byte(0x5e)), "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0).await;
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
@@ -2247,14 +2277,13 @@ async fn regulated_transfer_refused_frozen() {
     let (_anvil, rpc) = start_anvil(chain_id, 31915).await;
     let (owner, holder) = (small_key(0x35C), small_key(0x35D));
     let (dep, token, issuer) = regulated_token(chain_id, &rpc, &owner, holder.address()).await;
-    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
     let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
     let a = holder.address().into_word();
     let ref_ = format!("{:#x}", B256::repeat_byte(0x5e));
-    let freeze = issuer_op("mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_,
-        "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0, chain_id, uid);
-    let unfreeze = issuer_op("mtxUnfreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_}),
-        issuer, &owner, router, token, 1, chain_id, uid);
+    let freeze = issuer_op(&rpc, "mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_,
+        "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0).await;
+    let unfreeze = issuer_op(&rpc, "mtxUnfreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_}),
+        issuer, &owner, router, token, 1).await;
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };

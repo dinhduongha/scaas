@@ -117,7 +117,7 @@ const NESTED: &[(&str, &str)] = &[
     ("ConfidentialConfig", "bytes auditorKey,uint256 shieldScale,uint256 maxShielded,uint256 confidentialFee,uint8 disclosureMode,uint8 auditorMode,uint256 minDecoyFee,uint8 pqzVerifyMode,bytes32 pqzVerifierUA,bool pqzVerifierFixed,uint8 proofStore,uint64 verifierFee,uint64 verifierFeeMax"),
     ("RegulatedParams", "address complianceRegistry,uint64 requiredFlags,uint64 deniedFlags,bytes32 termsHash,bytes32 taxRecipient"),
     ("TokenConfig", "string name,string symbol,uint8 decimals,uint256 features,uint256 lockedFeatures,bytes32 admin,TokenRoles roles,uint256 initialSupply,address initialHolder,TokenLeg[] legs,TokenRate rate,ConfidentialConfig conf,uint64 grantDelay,address rescueTo,uint256 maxSupply,RegulatedParams reg"),
-    ("DexConfig", "bytes32 admin,uint32 relayerSharePpm,address treasury,bool listedOnly,uint64 grantDelay,address rescueTo"),
+    ("DexConfig", "bytes32 admin,uint32 relayerSharePpm,address treasury,bool listedOnly,uint64 grantDelay,address rescueTo,uint256 features,uint256 lockedFeatures"),
     // round 3r (spec 2026-11-10-admin-not-owner.md §5.4): a release env, the router's three publishes take one (bounded below)
     ("Env", "address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes"),
     // CTR-GOV-27: `setChainEntries`' named struct (flat, one level), nested in `UASetChainEntries`

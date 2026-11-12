@@ -899,7 +899,8 @@ lane, `batch` usually the factory's address) and `UASig`:
 (`name, symbol, decimals, features, lockedFeatures, admin, roles{minter, rateAdmin, guardian, issuer, compliance}, initialSupply,
 initialHolder, legs[{underlying, num, den}] (at most 8), rate{rateDelay, maxRateStepBps}, conf{…13 fields}, grantDelay, rescueTo,
 maxSupply, reg{complianceRegistry, requiredFlags, deniedFlags, termsHash, taxRecipient}`) or `ISCaaSDex.DexConfig` (`admin,
-relayerSharePpm, treasury, listedOnly, grantDelay, rescueTo`), every field named, a missing one `BAD_PAYLOAD`, a hex config
+relayerSharePpm, treasury, listedOnly, grantDelay, rescueTo, features, lockedFeatures`; the last two since CTR-DEX-32, bit 29
+`CLOSED_MARKETS` set and lockable at creation), every field named, a missing one `BAD_PAYLOAD`, a hex config
 `BAD_PAYLOAD: … not an object`. The node sends `abi.encode(config)` as `initArgs` and builds the signed `UACreateToken` /
 `UACreateDex` with `initHash = keccak256(initArgs)`; a job's own `initHash` is refused `BAD_PAYLOAD: args.initHash: the node hashes
 args.config`. The rule is `Rule::GovRouter`; the factory checks the release and the config itself. The gas is the simulation's,
