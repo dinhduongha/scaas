@@ -698,7 +698,21 @@ impl Venue {
     /// `POST /v1/dex/orders {chain, sellToken, order, auth | signature}`, by the DEX's listing (CTR-DEX-26): a SCaaS sell
     /// token's order is a `UATradeOrder` (`from`, `destination` ids) with `auth` (a `UASig`), an outside token's a `TradeOrder`
     /// (signed as a `DexOrder`) with `signature`; the other form is refused by name.
+    ///
+    /// Fable recheck 5 R5-4: a refusal (400) read while a failover endpoint answered is no verdict: 503, the client retries.
     pub async fn place(&self, sell: Address, wire: &WireOrder, signature: Option<&str>, auth: Option<&Value>)
+        -> std::result::Result<PlaceReply, VenueError>
+    {
+        let mark = self.chain.failover_answers();
+        match self.place_checked(sell, wire, signature, auth).await {
+            Err(VenueError::Bad(m)) if self.chain.failover_answers() != mark => {
+                Err(VenueError::Unavailable(crate::adapters::evm::failover_answer(&m)))
+            }
+            r => r,
+        }
+    }
+
+    async fn place_checked(&self, sell: Address, wire: &WireOrder, signature: Option<&str>, auth: Option<&Value>)
         -> std::result::Result<PlaceReply, VenueError>
     {
         let kind = self.kind(sell);
@@ -2323,6 +2337,19 @@ mod tests {
         assert!(v.watch_once().await.unwrap());
         assert_eq!(o.lock().unwrap().ingests, 3, "the same range, ingested once read");
         assert!(!in_book(&v.rows().await, &ask), "the denied maker left");
+    }
+
+    /// Fable recheck 5 R5-4: an order refused at intake on a failover endpoint's answer (the taker read unfunded) is 503,
+    /// `FAILOVER_ANSWER`; the control: the same read on the first endpoint is the client's 400.
+    #[tokio::test]
+    async fn an_intake_refusal_on_a_failover_answer_is_503() {
+        let taker = PrivateKeySigner::random();
+        let unfunded = || World { unfunded: [taker.address()].into_iter().collect(), ..Default::default() };
+        let (v, _) = venue(unfunded(), vec![]).await;
+        assert!(matches!(take(&v, &taker, 20, 10, 1).await, Err(VenueError::Bad(_))), "control: 400 on the first endpoint");
+        let (v, _) = on_failover(v, unfunded()).await;
+        let e = take(&v, &taker, 20, 10, 2).await;
+        assert!(matches!(&e, Err(VenueError::Unavailable(m)) if m.starts_with("FAILOVER_ANSWER")), "{:?}", e.err());
     }
 
     /// Fable recheck 5 R5-3: a maker read as refused by its leg's list on a failover endpoint (the first down) is no verdict:
