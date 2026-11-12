@@ -118,7 +118,7 @@ contract UniswapForkTest is Test {
         address dexImpl = Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         tok = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
             abi.encode(normalInit("Tok", "TOK", 18, 1_000_000e18, alice, address(0))), "tok"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "dex"));
         address[] memory keep = new address[](6);
         (keep[0], keep[1], keep[2], keep[3], keep[4], keep[5]) =
             (address(f), tokImpl, dexImpl, address(tok), address(dex), dex.puller());

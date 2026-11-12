@@ -11,6 +11,7 @@ import {TradeLib} from "../trade/TradeLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {TokenCall} from "./TokenCall.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
 
 /// @title The DEX's state accessor, constants and shared bodies (spec 2026-11-10-dex-liquidity.md §9.1; T66b rule 5,
 ///        written once): inherited by `SCaaSDex` and by its liquidity module `SCaaSDexLiquidityModule`, so an interaction,
@@ -93,9 +94,20 @@ abstract contract SCaaSDexCore {
         return keccak256(abi.encode(DEX_ORDER_TYPEHASH, sellToken, TradeLib.hashStruct(o)));
     }
 
-    /// @dev A SCaaS token (factory-made, recorded at `setMarket`) whose UA ledger is on.
+    /// @dev The DEX's factory (the DEX's `FACTORY`, the liquidity module's own immutable).
+    function _factoryAt() internal view virtual returns (address);
+
+    /// @dev SCaaS iff the factory made `token` from a registered release (version ≠ 0), read at use: a pair never passed to
+    ///      `setMarket` has no record (CTR-DEX-32). Release deprecation is the factory's concern, never read here (owner
+    ///      2026-11-12): a SCaaS token's leg is trusted to the token's own verify, deprecated or not.
+    function _scaas(address token) internal view returns (bool) {
+        (, uint64 v) = IOpenFactory(_factoryAt()).versionOf(token);
+        return v != 0;
+    }
+
+    /// @dev A SCaaS token (the factory at use) whose UA ledger is on.
     function _ledgerOn(address token) internal view returns (bool) {
-        return _s().kind[token] == KIND_SCAAS && IUALedger(token).registry() != address(0);
+        return _scaas(token) && IUALedger(token).registry() != address(0);
     }
 
     /// @dev Path (a)'s interactions in order, then every allowance an `approve` among them granted set back to 0.

@@ -14,7 +14,9 @@ interface ISCaaSDex {
     ///         rest to `treasury`. `listedOnly`: every exchange target or executor must be listed (CTR-DEX-23).
     ///         `grantDelay`: the admin's two calls (spec §1.6), at most 30 days. `rescueTo`: the `DexPuller`'s rescue
     ///         destination (spec §6.2), immutable, 0 = `RescueLib.SCAAS_DEV_RESCUE` (CTR-GOV-25); the DEX's own `rescue`
-    ///         sends a stray there too (Fable D P3-5).
+    ///         sends a stray there too (Fable D P3-5). `features`: the optional bits set at creation, today bit 29
+    ///         `CLOSED_MARKETS` (owner 2026-11-12; 0 = open markets; `LISTING` and `FEE_ROUTING` are always set);
+    ///         `lockedFeatures`: set bits the admin can never disable.
     struct DexConfig {
         bytes32 admin;
         uint32 relayerSharePpm;
@@ -22,6 +24,8 @@ interface ISCaaSDex {
         bool listedOnly;
         uint64 grantDelay;
         address rescueTo;
+        uint256 features;
+        uint256 lockedFeatures;
     }
 
     /// @notice One order in one settlement; `fill` = its `sellFill` in this call (Path B: the matched part). Tagged

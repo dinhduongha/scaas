@@ -554,14 +554,14 @@ contract GovDelayTest is Test {
         NormalToken n = _token("d", 30 days);
         assertEq(n.grantDelay(), 30 days);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantDelayTooLong.selector, uint64(30 days + 1)));
-        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days + 1, address(0))), "x");
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days, address(0))), "x"));
+        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days + 1, address(0), 0, 0)), "x");
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days, address(0), 0, 0)), "x"));
         assertEq(d.grantDelay(), 30 days);
     }
 
     /// B-27: `initHolder` holds both bits from creation, whatever the delay; the powers run at once.
     function test_dexInitHoldsBothBitsWithADelay() public {
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, D, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, D, address(0), 0, 0)), "d"));
         assertEq(d.grantDelay(), D);
         assertTrue(d.hasRole(GovernanceBits.LISTING, nid(OWNER)));
         assertTrue(d.hasRole(GovernanceBits.FEE_ROUTING, nid(OWNER)));
@@ -630,12 +630,12 @@ contract GovDelayTest is Test {
         vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
         f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(w), "w");
         // governance T10 (spec §6.2): the DEX's `rescueTo` is its puller's, accepted; the DEX rescues nothing itself
-        SCaaSDex dx = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0xBEEF))), "y"));
+        SCaaSDex dx = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0xBEEF), 0, 0)), "y"));
         assertEq(DexPuller(dx.puller()).rescueTo(), address(0xBEEF));
         w.rescueTo = address(0); // positive controls
         f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(w), "w");
         c.rescueTo = address(0);
         f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "c");
-        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "x");
+        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "x");
     }
 }

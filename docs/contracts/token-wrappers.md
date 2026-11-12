@@ -764,7 +764,8 @@ struct TokenConfig {
     ConfidentialConfig conf;                   // auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL}, minDecoyFee (both confidential layers; the least per-leg `decoyFee`, renamed from `multiLegFee`, owner 2026-10-20) — confidential kinds only (modes: CTR-ZTH-48/49, built in P3b; the token refuses a key that does not match auditorMode); no verifier field since plan 5g-Z2: the verifiers are the release's env deps, CTR-ZTH-20
     RegulatedParams reg;                       // *_REGULATED (8-13) only (ConfigFieldForOtherKind(6) elsewhere): complianceRegistry, requiredFlags, deniedFlags, termsHash ([asset-suite §2.2](asset-suite.md#22-configuration-and-init))
 }
-struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; } // owner a UA id
+struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo;
+    uint256 features; uint256 lockedFeatures; } // owner a UA id; features: bit 29 CLOSED_MARKETS or 0 (dex.md CTR-DEX-32)
 ```
 
 - **Creation** (order since T71–T72): `CREATE3` of an EIP-1167 clone with its `ChainEnv` appended to its code

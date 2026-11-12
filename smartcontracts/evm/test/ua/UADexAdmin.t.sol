@@ -35,7 +35,7 @@ contract UADexAdminTest is UADexBase {
         assertEq(ITokenModule(d).factory(), address(f));
         vm.expectCall(d, abi.encodeCall(IAdmin.admin, ()));
         assertEq(dex.admin(), nid(address(this)));
-        assertEq(dex.validBits(), GovernanceBits.DEX_BITS);
+        assertEq(dex.validBits(), GovernanceBits.DEX_VALID); // fix2-dex: + bit 29 CLOSED_MARKETS
         assertTrue(dex.hasRole(GovernanceBits.LISTING, nid(address(this))));
         vm.expectCall(d, abi.encodeCall(IAdmin.transferAdmin, (nid(dave))));
         dex.transferAdmin(nid(dave));
@@ -56,7 +56,7 @@ contract UADexAdminTest is UADexBase {
         d.transferAdmin(nid(dave));
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.grantRole(GovernanceBits.LISTING, nid(dave));
-        assertEq(d.validBits(), GovernanceBits.DEX_BITS);
+        assertEq(d.validBits(), GovernanceBits.DEX_VALID);
     }
 
     /// §4.5 and the liquidity spec §9.1 (L33): the DEX's constructor takes exactly two modules with code, the governance

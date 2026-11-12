@@ -437,7 +437,7 @@ contract GovRescueDexTest is Test {
     }
 
     function _dex(address rescueTo, bytes32 salt) internal returns (SCaaSDex) {
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, rescueTo)), salt));
+        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, rescueTo, 0, 0)), salt));
     }
 
     function test_pullerRescueWholeBalance() public {
@@ -517,9 +517,9 @@ contract GovRescueDexTest is Test {
         address[4] memory bad = [MetaTxLib.UA_POOL, MetaTxLib.SHIELD_POOL, address(d), p];
         for (uint256 i; i < 4; ++i) {
             vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-            d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, bad[i])));
+            d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, bad[i], 0, 0)));
         }
-        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, TO))); // control
+        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, TO, 0, 0))); // control
         assertEq(d.puller(), p);
         assertEq(DexPuller(p).rescueTo(), TO);
     }

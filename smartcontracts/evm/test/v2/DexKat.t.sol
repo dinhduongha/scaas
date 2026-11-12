@@ -53,7 +53,7 @@ contract DexKatTest is Test {
         vm.setNonce(address(this), vm.getNonce(address(this)) + 2);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 6, 1e9, alice, address(0))), "a"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 500_000, TREASURY, false, 0, address(0))), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 500_000, TREASURY, false, 0, address(0), 0, 0)), "dex"));
         // the outside token at its vector address (T66b: the body modules this setUp deploys move the test's nonces)
         usdc = MockERC20(vm.parseJsonAddress(vm.readFile(OUT), ".outside_token"));
         deployCodeTo("Mocks.sol:MockERC20", abi.encode("USD Coin", "USDC", uint8(6)), address(usdc));

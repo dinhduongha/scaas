@@ -149,7 +149,7 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         if (o.fee > TradeLib.MAX_FEE_PPM) revert ISCaaSDex.FeeAboveCap(h);
         if (t.pulled[h] != 0) revert ISCaaSDex.OrderClosed(h);
         if (p.pull.length != o.inputs.length) revert ISCaaSDex.LengthMismatch();
-        // kinds from the DEX's record (C6); the UA rules (CTR-UA-27): a derived signer gives SCaaS inputs with the
+        // kinds from the factory at use (CTR-DEX-32); the UA rules (CTR-UA-27): a derived signer gives SCaaS inputs with the
         // ledger on and no position; a derived recipient receives SCaaS outputs with the ledger on and no position
         bool derived = !UAKinds.inNativeSpace(o.from);
         bool verify = o.positionIn != 0;
@@ -158,7 +158,7 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
             if (p.pull[i] > o.inputs[i].amount) revert ISCaaSDex.Overfill(h);
             address tk = o.inputs[i].token;
             if (derived && !_ledgerOn(tk)) revert ISCaaSDex.UALegNotLedger(tk);
-            if (_s().kind[tk] != KIND_SCAAS) verify = true;
+            if (!_scaas(tk)) verify = true;
         }
         if (derived && o.positionIn != 0) revert ISCaaSDex.UALegNotLedger(o.positionManager);
         if (!UAKinds.inNativeSpace(r.to)) {
@@ -173,6 +173,8 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         if (verify && !SigCheck.isValid(r.from, h, p.auth.signature, _cap(r.from))) revert ISCaaSDex.BadSignature(h);
         t.pulled[h] = 1;
     }
+
+    function _factoryAt() internal view override returns (address) { return _FACTORY; }
 
     /// @dev Shape codes 1-5 (§6 step 1); returns the plan's tokens: inputs, outputs, extraTokens.
     function _shape(ISCaaSDex.LiquidityPlan calldata p, bytes32 to) private view returns (address[] memory tok) {
@@ -227,7 +229,7 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         DexStorage storage s = _s();
         for (uint256 i; i < o.inputs.length; ++i) {
             address tk = o.inputs[i].token;
-            if (s.kind[tk] == KIND_SCAAS) ILiquidityPullToken(tk).mtxLiquidityPull(o, p.auth, p.pull[i], r.submitter);
+            if (_scaas(tk)) ILiquidityPullToken(tk).mtxLiquidityPull(o, p.auth, p.pull[i], r.submitter);
             else DexPuller(s.puller).pull(tk, r.from, p.pull[i]);
         }
         if (o.positionIn != 0) {

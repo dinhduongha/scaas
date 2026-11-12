@@ -178,7 +178,7 @@ contract ChainNeutralKindsTest is Test {
 
     function test_dex_readsItsEnvAndItsReleaseSignsNothing() public {
         SCaaSDex dImpl = SCaaSDex(Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0xBEEF)));
-        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0xD7), false, 0, address(0))),
+        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0xD7), false, 0, address(0), 0, 0)),
             "d");
         assertEq(SCaaSDex(d).chainUid(), UID_);
         assertEq(SCaaSDex(d).GOV_ROUTER(), address(router));

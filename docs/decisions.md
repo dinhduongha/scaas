@@ -1912,6 +1912,7 @@ Change (2026-11-11, Fable review D P2-2 and A-4; controller call under the owner
 **Source.** `research/governance/permission-model.md` §1.4, opening decisions A, B, C.
 Change (2026-11-07, group 3h, CTR-GOV-22): bit 24 `PQZ_PROOF` is allocated: a power of the PQZ kinds 4, 5, 12, 13, any holder, in `ISSUER_BITS`; `governance_bits.json` row 24 with its sentence. Status: BUILT (T61 `6fb7a845`, `d4ae676d`).
 Change (owner 2026-11-10, group 3s, [CTR-GOV-24](#ctr-gov-24--kyc-bit-28-allowlist-and-denylist-lists-held-in-the-token-enabled-at-once); status: BUILT (ua-mtx-3s)): bit 28 `KYC` is allocated (a capability of the regulated kinds 8–13: the registry check); bits 8 and 9 become powers (the list holders); `governance_bits.json` rows 8, 9 and 28; bits 29–127 free.
+Change (owner 2026-11-12, [CTR-DEX-32](#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them); status: BUILT on branch `ua-mtx-fix2-dex`): bit 29 `CLOSED_MARKETS` is allocated (a capability of `SCaaSDex`: listed pairs and known tokens only); bits 30–127 free. Its `governance_bits.json` row (and every client's bit table) is not written yet.
 
 ### CTR-GOV-11 — "+0" on a plain transfer means no new read
 - old: governance:plus0 · status: current · owner: yes · date: 2026-11-02 · normative: decisions.md#CTR-GOV-11 · superseded-by: —
@@ -3193,6 +3194,7 @@ Change (2026-10-27): **review C6-8 (controller ruling of P2b-1, owner may overri
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §3 MG-8.4, §13 (N-M2).
 Change (2026-10-08): the pull is `DexPuller.pull` under the party's allowance to the puller, never to the DEX, so an exchange interaction cannot spend a user allowance (CTR-DEX-22). Source add: `history/specs/2026-10-08-dex-exchange-design.md` §3 DS-4.
 Change (2026-10-27): **review C6-4 (controller proposal, owner may override)**: on the exchange path a receive-only outside token with a transfer fee pays signers below their signed floor and conservation does not catch it (the DEX measures its own balance; the fee comes out of the recipient's side); the settle path pulls both tokens and is safe. The loss is bounded by the token's fee. Recorded in dex.md (CTR-DEX-18, -21): list exact-transfer tokens only, delist a token that shows a fee; a recipient-balance check was not built. **Review C6-9**: `setMarket` refuses `base == quote` and a zero token (`BadMarket`). Status: **done** (documented in review2 T8; C6-9 built in review2 T6 `4623478d`).
+Change (2026-11-12, owner, [CTR-DEX-32](#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them) and the ruling on deprecation under [CTR-DEX-30](#ctr-dex-30--liquidity-one-signed-liquidityorder-through-the-dex-outcomes-only); status: BUILT on branch `ua-mtx-fix2-dex`, UNAUDITED): the kind is read from the factory **at use** on every path (settle, exchange, hybrid, the ledger rule of a derived party, liquidity), no longer the `setMarket` snapshot, since with open markets a pair never listed has no record: SCaaS iff the factory made the token from a registered release (`versionOf`, version ≠ 0). The DEX no longer reads a release's deprecation at all, at `setMarket` either (old rule: SCaaS iff registered **and non-deprecated**, a snapshot to re-list after a `deprecateToken`, review W-Q): a deprecated release's token stays SCaaS and its legs are verified by the token. `setMarket` still records the kind, for the `tokenKind` view. Fable recheck2 P3-2 (the settle / exchange / hybrid paths kept the snapshot trust) is closed by this owner ruling, not by a DEX check. Cost: one factory read per decision. Tests `test/v2/DexMarkets.t.sol`, `test/v2/Dex.t.sol` (`test_classification_unregisteredIsOutside_deprecatedStaysScaas`); the old deprecation tests are in `smartcontracts/evm/legacy/ua-mtx-fix2-dex/`.
 Change (2026-11-02, typed-signing CD; controller calls, owner may override, TS-D19; status: documented; built in typed-signing C6; the `main` merge commit is added when it lands): the DEX's cancel is `CancelDexOrder(DexOrder order)` nested (`cancelDexOrderDigest(sellToken, TradeOrder)`); a leg is `DexLeg` / `ExchangeLeg` with typed members instead of opaque `bytes order` / `bytes sig` (Appendix X row 20, controller call): a dirty address word in a leg reverts the whole `mtxSettle` at the outer re-encoding.
 
 ### CTR-DEX-19 — dex must be a contract, nothing more (owner-accepted residual risk)
@@ -3384,6 +3386,29 @@ position-manager family binds the signed pool, range and minimum liquidity; `exc
 the target and executor roles (Fable P3: safe, no separate map now).
 **Cost if wrong.** A reader per family (≈ 40 lines of views); a wrong reader fails closed (`PositionMismatch`).
 **Source.** `docs/superpowers/specs/2026-11-10-dex-liquidity.md` §7.
+
+### CTR-DEX-32 — Markets open by default; bit 29 CLOSED_MARKETS closes them
+- old: — · status: current · owner: yes · date: 2026-11-12 · normative: contracts/dex.md#CTR-DEX-32 · superseded-by: —
+
+**Rule.** A new SCaaS bit, 29 `CLOSED_MARKETS`, a capability of `SCaaSDex` (no holder), off by default. Off: `mtxSettle`
+and the hybrids settle any pair with no `setMarket`, and the exchange path takes any token (no `TokenNotKnown`). On:
+today's rule, listed pairs (`MarketNotListed`) and known tokens only. `setMarket` stays. The exchange path's target list is
+open by default as well: `DexConfig.listedOnly` false in every script and example; `setListedOnly` stays. Self-trade and the
+relayer checks are unchanged. The fee-on-transfer guard of an open market is conservation (fail closed). A pair never listed
+has no kind record, so the DEX reads the kind from the factory at use ([CTR-DEX-18](contracts/dex.md#CTR-DEX-18)).
+**Status.** BUILT on branch `ua-mtx-fix2-dex`, UNAUDITED: `GovernanceBits.CLOSED_MARKETS`, `DEX_VALID`, `DexConfig.features`
+and `lockedFeatures`, `SCaaSDex._closed()` in `_checkMarket` and `_exchangeIn`, `SCaaSDexCore._scaas`; tests
+`test/v2/DexMarkets.t.sol`; the existing `MarketNotListed` / `TokenNotKnown` tests run on a closed DEX.
+`governance_bits.json` has no row 29 yet (every client reads that file: a separate change).
+**Why.** Owner: an open DEX by default; an operator who wants closed markets or listed-only targets makes that DEX itself.
+**Cost if wrong.** On an open DEX no listing keeps a token out: a receive-only outside token with a transfer fee pays a
+signer below its exchange-path floor by that fee (CTR-DEX-18 backstop, review C6-4); a token that credits less on a pull
+still fails conservation. A wallet reads the DEX's `features()` to know which rule it runs.
+**Source.** Owner 2026-11-12, in chat, relayed by the controller: "Dùng bit CLOSE MARKETS, mặc định tắt. Ai muốn tạo Dex với bật thì tự làm. Đường exchange cũng vậy, open cho tất cả. Ai muốn dùng công tắc setListedOnly thì tự làm." (use a CLOSE MARKETS bit, off by default; whoever wants a DEX with it on makes one; the exchange path the same, open to all; whoever wants the `setListedOnly` switch uses it). Controller calls (2026-11-12), on the normal feature-bit rules: the next
+free bit (29); set and lockable only at creation (`DexConfig.features`, `lockedFeatures`; `LISTING` and `FEE_ROUTING` stay
+always set), never enabled later (not in `ENABLEABLE`; the DEX has no `enableFeature`), cleared one-way by the admin's
+`disableFeature(29)` unless locked; "the exchange path the same" read as: the exchange path's known-token check follows the
+same bit, besides `listedOnly` defaulting to false.
 
 ### CTR-DEX-80 — Fill-or-kill two-leg MetaTxDex settlement
 - old: R3 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-DEX-01, NODE-DEX-01, INT-ERP-12

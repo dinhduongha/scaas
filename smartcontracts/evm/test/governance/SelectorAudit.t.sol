@@ -327,6 +327,8 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
 
     /// The test is the factory of every clone and registered no token.
     function isToken(address) external pure returns (bool) { return false; }
+    /// fix2-dex: the DEX reads the kind at use (`versionOf`, version 0: not a factory token)
+    function versionOf(address) external pure returns (uint8, uint64) {}
 
     function setUp() public override {
         super.setUp();
@@ -343,7 +345,7 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         wt = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), e)));
         wt.initialize(nid(address(this)), 1, abi.encode(w));
         dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), e));
-        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0))));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0), 0, 0)));
         _regulate(c);
         nr = NormalRegulatedToken(EnvKit.clone(address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs()))), e));
         nr.initialize(nid(address(this)), 1, abi.encode(c));

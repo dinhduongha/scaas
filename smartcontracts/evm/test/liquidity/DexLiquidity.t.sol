@@ -6,6 +6,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ITradeToken, ILiquidityPullToken} from "../../src/trade/ITradeToken.sol";
 import {SCaaSDexLiquidityModule} from "../../src/dex/SCaaSDexLiquidityModule.sol";
 import {V4PositionReader} from "../../src/dex/V4PositionReader.sol";
@@ -55,6 +56,17 @@ contract DexLiquidityTest is LiquidityBase {
         _run(bad, _addXs(ADD, ADD, address(dex)));
         _run(_plan(o, ALICE_PK, _u2(ADD, ADD)), _addXs(ADD, ADD, address(dex))); // the control
         assertEq(dex.pulled(h), 1);
+    }
+
+    /// fix2-dex (CTR-DEX-32): the kind is the factory's at use: on a DEX that never listed `a` / `b`, a SCaaS-only plan is
+    /// pulled by the tokens' `mtxLiquidityPull` (an EOA cannot approve the puller on a SCaaS token).
+    function test_unlistedScaasInputs_pulledByTheTokens() public {
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0,
+            0)), "fresh"));
+        ITradeToken.LiquidityOrder memory o = _addOrder(98_000);
+        _run(_plan(o, ALICE_PK, _u2(ADD, ADD)), _addXs(ADD, ADD, address(dex)));
+        assertEq(dex.pulled(dex.liquidityOrderDigest(o)), 1);
+        assertEq(dex.tokenKind(address(a)), 0);
     }
 
     function test_v2AddRefundFeeZero() public {

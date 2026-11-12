@@ -294,7 +294,7 @@ contract GovDeployTest is Test {
         assertEq(address(r), vm.computeCreate2Address(keccak256("scaas.deploy.v1"), keccak256(abi.encodePacked(
             type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router))), address(h)), "CREATE2");
 
-        address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0))), "venue");
+        address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0), 0, 0)), "venue");
         address puller = SCaaSDex(dex).puller();
         address alice = address(0xA11CE);
         _attest(r, nid(alice), 1, type(uint64).max);
@@ -612,8 +612,10 @@ contract GovDeployTest is Test {
         // switches carry `chainUid`, their typehashes): 0x34C0c8173824aE118c6Ec0E183290280C21530b9; fix2 D P3-5 (the metadata
         // hash: `ISCaaSDex.rescue`, `SCaaSDex`'s comments): 0xF35EF840Db3c7FD9F63e8cd86e88e2dE9CB46C29; fix2 CTR-GOV-25 (the
         // metadata hash: `RescueLib`, `GovernanceLib.init`, `DexPuller`): 0x3B3B1Cda834b39B4541d0861226E7bE4712302AF; fix2
-        // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): -> this
-        assertEq(router, 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a, "GovernanceRouter");
+        // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a;
+        // fix2-dex CTR-DEX-32 (the metadata hash: `ISCaaSDex.DexConfig` gains `features`, `lockedFeatures`; its code
+        // unchanged): -> this
+        assertEq(router, 0x442Df70CD12C49b876D5552Fa40b126C5E0E662f, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

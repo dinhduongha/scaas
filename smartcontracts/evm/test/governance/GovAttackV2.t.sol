@@ -147,7 +147,7 @@ contract GovAttackV2Test is Test {
 
     function _dex(bytes32 salt) internal returns (SCaaSDex) {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), salt));
+        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), salt));
     }
 
     // ------------------------------------------------------------------ delay (B-01, B-02)

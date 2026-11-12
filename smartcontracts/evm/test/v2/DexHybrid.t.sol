@@ -8,6 +8,8 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {nid} from "../helpers/Ids.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UADexBase} from "../ua/UADex.t.sol";
 import {MockRouter, MockExecutor, Hostile} from "./DexExchange.t.sol";
@@ -258,7 +260,11 @@ contract DexHybridTest is UADexBase {
         _expect(p, _route(600, 1150), abi.encodeWithSelector(ISCaaSDex.FillMismatch.selector, 1001, 1000));
     }
 
+    /// On a DEX made with bit 29 `CLOSED_MARKETS` (fix2-dex, owner 2026-11-12: open by default, `DexMarkets.t.sol`).
     function test_hybrid_marketNotListed() public {
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0,
+            address(0), 1 << 29, 0)), "closed"));
+        dex.setMarket(address(A), address(B), true);
         dex.setMarket(address(A), address(B), false);
         _expect(_base(), _route(600, 1150),
             abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(A), address(B)));

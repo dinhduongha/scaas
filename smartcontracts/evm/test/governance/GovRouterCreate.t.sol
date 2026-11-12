@@ -127,7 +127,7 @@ contract GovRouterCreateTest is GovRouterFixture {
     }
 
     function test_create_dexAndInstance() public {
-        bytes memory dexArgs = abi.encode(ISCaaSDex.DexConfig(eoa, 0, TREASURY, false, 0, address(0)));
+        bytes memory dexArgs = abi.encode(ISCaaSDex.DexConfig(eoa, 0, TREASURY, false, 0, address(0), 0, 0));
         MetaTxLib.UAEnvelope memory e = _envelope(router, pq, 0);
         bytes32 d = _d(CREATE_DEX, e, abi.encode(uint64(1), keccak256(dexArgs), bytes32("dex")));
         router.mtxCreateDex(e, address(f), 1, dexArgs, "dex", _auth(pq, d));

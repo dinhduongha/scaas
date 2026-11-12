@@ -182,7 +182,7 @@ contract Dex is OnchainBase {
     }
 
     function _dex(uint64 grantDelay, string memory what) internal returns (ISCaaSDex d) {
-        bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, TREASURY, false, grantDelay, address(0)));
+        bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, TREASURY, false, grantDelay, address(0), 0, 0));
         vm.broadcast(k1);
         d = ISCaaSDex(f.createDex(1, cfg, _salt(what)));
         _book(address(d), "SCaaSDex");

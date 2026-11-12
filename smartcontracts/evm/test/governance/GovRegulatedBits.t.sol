@@ -226,7 +226,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         assertEq(req, 3);
         assertEq(den, 4);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         address n = _rCreate(false, _rCfg(false, 1), "n");
         vm.prank(OWNER);
         d.setMarket(t, n, true);

@@ -7,7 +7,6 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {ISCaaSDex, IExchangeExecutor} from "./ISCaaSDex.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
-import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 import {SaltedEIP712, SaltedEIP712Core} from "../common/SaltedEIP712.sol";
@@ -86,7 +85,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         uint256 recv;    // gross receive
         uint256 fee;     // dexFee on recv
         uint256 refund;  // Path B: amount - sold
-        bool outside;    // an outside-token leg (`DexOrder`), from the DEX's listing
+        bool outside;    // an outside-token leg (`DexOrder`), from the factory at use
         bool ua;         // shape 1: a `UATradeOrder`
         ITradeToken.UATradeOrder o; // the decoded order, ids as `bytes32` (shape 0: the address zero-padded)
     }
@@ -137,8 +136,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         if (s.initialized) revert AlreadyInitialized();
         s.initialized = true;
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(GovernanceBits.DEX_BITS, 0, cfg.admin, cfg.grantDelay, address(0), none, GovernanceBits.DEX_BITS,
-            GovernanceBits.DEX_BITS, 0, address(0)); // no contract-only bit: no registry read
+        GovernanceLib.init(GovernanceBits.DEX_BITS | cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, address(0),
+            none, GovernanceBits.DEX_VALID, GovernanceBits.DEX_BITS, 0, address(0)); // no contract-only bit: no registry read
         if (cfg.admin != 0) { // the admin holds both bits from creation (B-27: `grantRole` would only propose)
             GovernanceLib.initHolder(GovernanceBits.LISTING, cfg.admin, GovernanceBits.DEX_BITS, 0, address(0));
             GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.admin, GovernanceBits.DEX_BITS, 0, address(0));
@@ -207,12 +206,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         emit FeeSplitSet(ppm, t);
     }
 
-    /// @dev SCaaS iff the factory made it from a registered release (version ≠ 0). Release deprecation is the factory's
-    ///      concern, never read here (owner 2026-11-12): a SCaaS token's leg is trusted to the token's own verify.
+    /// @dev The `tokenKind` view's record: `_scaas` at `setMarket`; every decision reads `_scaas` at use.
     function _classify(address token) private view returns (uint8) {
-        (, uint64 v) = IOpenFactory(FACTORY).versionOf(token);
-        return v != 0 ? KIND_SCAAS : KIND_OUTSIDE;
+        return _scaas(token) ? KIND_SCAAS : KIND_OUTSIDE;
     }
+
+    function _factoryAt() internal view override returns (address) { return FACTORY; }
+
+    /// @dev Bit 29 `CLOSED_MARKETS` (owner 2026-11-12): on, only listed pairs and known tokens trade; off (the default), any.
+    function _closed() private view returns (bool) { return GovernanceLib.hasFeature(GovernanceBits.CLOSED_MARKETS); }
 
     function _pair(address a, address b) private pure returns (bytes32) {
         return a < b ? keccak256(abi.encode(a, b)) : keccak256(abi.encode(b, a));
@@ -383,10 +385,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function _checkMarket(address a, address b) private view {
         DexStorage storage s = _s();
         if (a == b) revert TokenMismatch();
-        if (!s.listed[_pair(a, b)]) revert MarketNotListed(a, b);
+        if (_closed() && !s.listed[_pair(a, b)]) revert MarketNotListed(a, b);
     }
 
-    /// @dev A leg's order in the one form, and its kind from the listing (never from the leg): shape 0 a `TradeOrder`
+    /// @dev A leg's order in the one form, and its kind from the factory at use (never from the leg; no listing needed,
+    ///      CTR-DEX-32): shape 0 a `TradeOrder`
     ///      (a native id is its address zero-padded, the same word), only on an outside token (`LegShapeUnknown(0)` on a
     ///      SCaaS token, R12); shape 1 a `UATradeOrder`, only on a SCaaS token, whose registry is asked only for a
     ///      derived seller (C; a UA holds no other token, CTR-DEX-26).
@@ -394,7 +397,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         ITradeToken.UATradeOrder calldata uaOrder) private view returns (Calc memory c)
     {
         if (shape > 1) revert LegShapeUnknown(shape);
-        c.outside = _s().kind[sellToken] != KIND_SCAAS;
+        c.outside = !_scaas(sellToken);
         if (shape == 0) {
             if (!c.outside) revert LegShapeUnknown(shape);
             c.o = TradeLib.core(order);
@@ -688,8 +691,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             ExchangeLeg calldata l = p.legs[i];
             Calc memory ci = _decode(l.sellToken, l.shape, l.order, l.uaOrder);
             address rt = ci.o.receiveToken;
-            if (s.listings[l.sellToken] == 0) revert TokenNotKnown(l.sellToken);
-            if (s.listings[rt] == 0) revert TokenNotKnown(rt);
+            if (_closed()) {
+                if (s.listings[l.sellToken] == 0) revert TokenNotKnown(l.sellToken);
+                if (s.listings[rt] == 0) revert TokenNotKnown(rt);
+            }
             for (uint256 j; j < i; ++j) if (c[j].o.from == ci.o.from) revert SelfTrade(ci.o.from);
             _calc(ci, l.sellToken, submitter, l.sellFill, l.receiveFill);
             c[i] = ci;
