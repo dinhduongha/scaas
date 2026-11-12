@@ -357,7 +357,9 @@ the whole read (a log window's head and logs alike), `rpc_urls` in the order giv
 error answer that is no revert) moves the read to the next endpoint. A revert is the contract's answer and is final only from
 the first endpoint: a failover endpoint's revert is a transport error and the read moves on (Fable recheck 3 R3-1), so no
 revert of a failover endpoint makes a job `dead`; the venue takes a failed settlement's evidence, a leg's own revert and an
-ERC-1271 `false` or an EOA's bad signature from the first endpoint only (from another: no verdict, the order stays). A failover
+ERC-1271 `false` or an EOA's bad signature from the first endpoint only (from another: no verdict, the order stays). Nor does its
+*value* (recheck 4 R4-1; it may lag a block): `Chain` counts failover answers, and a lane refusal (guard, fill, simulation) while
+the count moved is requeued `FAILOVER_ANSWER: …`, a venue maker health read so is no verdict (503); final once the first answers. A failover
 endpoint answers at all only when its `eth_blockNumber` is at or above the highest block the chain has seen from its first
 endpoint: the lanes' receipts and the heads the indexer, the DEX venue and the health probe poll, one value per `[[chains]]`
 table shared by every lane, the indexer and the venue (Fable recheck 2 P2-1, recheck 3 R3-1). A failover endpoint's own head

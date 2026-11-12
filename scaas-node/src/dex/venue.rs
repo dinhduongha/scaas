@@ -532,11 +532,18 @@ impl Venue {
     }
 
     /// A resting order can still settle `r.remaining`: open on chain for that much, funded, signature valid.
+    /// Fable recheck 4 R4-1: a `false` read while a failover endpoint answered is no verdict (it may be a block behind the
+    /// maker's funding or approval): `Err`, the RPC's, so nobody is blamed.
     async fn healthy(&self, r: &Resting) -> Result<bool> {
+        let mark = self.chain.failover_answers();
         let c = self.on_chain(r.sell, r.hash, &r.order).await?;
-        Ok(c.remaining >= r.remaining
+        let ok = c.remaining >= r.remaining
             && c.fundable >= r.remaining
-            && self.authorized(r.sell, r.order.from, r.hash, &r.auth).await?)
+            && self.authorized(r.sell, r.order.from, r.hash, &r.auth).await?;
+        if !ok && self.chain.failover_answers() != mark {
+            return Err(anyhow!("rpc: order {:#x} read unhealthy on a failover endpoint only", r.hash));
+        }
+        Ok(ok)
     }
 
     /// Simulate `mtxSettle` from the lane: `Ok(ok per settlement)`; all failed ⇒ `NothingSettled` ⇒ all `false`. A
@@ -2470,6 +2477,22 @@ mod tests {
         let (v, _) = venue(w, makers).await;
         let r = take(&v, &taker, 69, 30, 1).await.unwrap();
         assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&asks[3]))));
+    }
+
+    /// Fable recheck 4 R4-1: a maker read unfunded on a failover endpoint (it may be a block behind its funding) is no verdict:
+    /// `Err` (503), never `invalid`; funded there, it is healthy. Control: unfunded on the first endpoint is `false`.
+    #[tokio::test]
+    async fn a_maker_unhealthy_on_a_failover_answer_is_no_verdict() {
+        let maker = PrivateKeySigner::random();
+        let o = order(maker.address(), QUOTE, 100, 200, 1);
+        let r = Resting { hash: oh(&o), sell: BASE, remaining: o.amount, order: o.clone(), auth: Auth::Ua(ua(sig_of(&maker, oh(&o)))), seq: 1 };
+        let unfunded = || World { unfunded: [maker.address()].into_iter().collect(), ..Default::default() };
+        let (v, _) = venue(unfunded(), vec![]).await;
+        assert!(!v.healthy(&r).await.unwrap(), "control: the first endpoint's answer is a verdict");
+        let (v, world) = on_failover(v, unfunded()).await;
+        assert!(v.healthy(&r).await.unwrap_err().to_string().contains("failover endpoint only"));
+        world.lock().unwrap().unfunded.clear();
+        assert!(v.healthy(&r).await.unwrap(), "funded on the failover endpoint: healthy");
     }
 
     #[test]

@@ -118,6 +118,9 @@ pub struct Chain {
     /// Fable recheck 2 P3-5, recheck 3 R3-3: per endpoint, its `eth_chainId` is `number` and its block 0 is this chain's (checked
     /// once, at a failover endpoint's first use); `false`: another network, dropped from every read.
     chain_ok: Vec<std::sync::OnceLock<bool>>,
+    /// Fable recheck 4 R4-1: the answers a failover endpoint (not the first) gave; a check that would refuse a job or blame an order
+    /// requeues instead when this moved during it ([`Chain::failover_answers`]).
+    failover: std::sync::atomic::AtomicU64,
     /// Fable recheck 3 R3-4: one read's time on one endpoint, and a simulation's (`rpc_timeout_ms`, `rpc_simulate_timeout_ms`).
     read_timeout: std::time::Duration,
     simulate_timeout: std::time::Duration,
@@ -154,6 +157,7 @@ impl Chain {
             compliance: cfg.compliance_registry.zip(cfg.compliance_registry_codehash),
             head: cfg.head.clone(),
             chain_ok: cfg.rpc_urls.iter().map(|_| Default::default()).collect(),
+            failover: Default::default(),
             read_timeout,
             simulate_timeout,
         })
@@ -242,7 +246,12 @@ impl Chain {
                     last = format!("endpoint {i} reverted (a failover endpoint decides nothing): {e}");
                 }
                 Err((_, e)) => return Err(e),
-                Ok(t) => return Ok((t, i)),
+                Ok(t) => {
+                    if i > 0 {
+                        self.failover.fetch_add(1, Relaxed);
+                    }
+                    return Ok((t, i));
+                }
             }
         }
         Err(SimError::Transport(last))
@@ -276,6 +285,14 @@ impl Chain {
     /// honest failover until a restart.
     pub fn saw_block(&self, n: u64) {
         self.head.fetch_max(n, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Fable recheck 4 R4-1: how many reads a failover endpoint answered (a value, never a verdict: its revert is a transport
+    /// error already). A failover endpoint may lag the head by a block (the shared head trails by a poll; a load-balanced URL
+    /// answers the head and the call from two backends), so a refusal or a blame read while this moved is no verdict: the lane
+    /// requeues the job, the venue answers 503. One rule for every check, present and future.
+    pub fn failover_answers(&self) -> u64 {
+        self.failover.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// The highest block seen ([`Chain::saw_block`]).
@@ -657,6 +674,10 @@ pub(crate) mod tests {
         let cfg = cfg_of(&["http://127.0.0.1:9", &level]);
         let (lane, venue) = (Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap(), Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap());
         assert_eq!(venue.call_raw(Address::ZERO, Bytes::new()).await.unwrap(), five, "control: at the head, its answer is used");
+        assert_eq!((venue.failover_answers(), lane.failover_answers()), (1, 0), "R4-1: a failover answer is counted, per Chain");
+        let first = chain_of(&[&level]);
+        first.call_raw(Address::ZERO, Bytes::new()).await.unwrap();
+        assert_eq!(first.failover_answers(), 0, "control: the first endpoint's answer is not");
         assert_eq!(venue.head.load(SeqCst), 0, "R3-2: a failover endpoint's own head raises nothing");
         lane.saw_block(0x11);
         let before = stale_n.load(SeqCst);

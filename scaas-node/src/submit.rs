@@ -345,6 +345,9 @@ pub struct Submitter {
     tripped: Option<&'static str>,
     /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
     guard: Guard,
+    /// Fable recheck 4 R4-1: [`Chain::failover_answers`] when the job in hand started ([`Submitter::submit`]); [`Submitter::fail`]
+    /// requeues when it moved.
+    failover_mark: u64,
 }
 
 impl Submitter {
@@ -381,6 +384,7 @@ impl Submitter {
             sampled: None,
             tripped: None,
             guard,
+            failover_mark: 0,
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -555,6 +559,7 @@ impl Submitter {
     /// digest, computed here; G2: a digest or the same bytes with a live transaction on another path (another lane, the
     /// gateway) is not signed twice.
     pub async fn submit(&mut self, w: Work) {
+        self.failover_mark = self.chain.failover_answers();
         match self.guard.check(&self.chain, &w).await {
             Ok(()) => {}
             // spec §11: a liquidity order the DEX already pulled landed (here or by another relayer): consumed, never dead (G6)
@@ -733,6 +738,13 @@ impl Submitter {
     }
 
     async fn fail(&self, w: &Work, reason: String) {
+        // Fable recheck 4 R4-1: one rule for every refusal of the submit path (the guard's reads, the fill, the simulation, the
+        // nonce read behind `consumed`): a failover endpoint answered a read of this job, so the refusal may be of a block behind
+        // the head; back in the queue, final once the first endpoint answers
+        if self.chain.failover_answers() != self.failover_mark {
+            return self.requeue(w, format!("FAILOVER_ANSWER: refused on a failover endpoint's answer (the first endpoint did not \
+                answer); retried: {reason}")).await;
+        }
         warn!(job = ?w.job_id, "simulation refused: {reason}");
         if let Some(id) = w.job_id {
             self.report(id, "dead", None, None, Some(reason)).await;
@@ -1081,6 +1093,8 @@ pub(crate) mod tests {
         designator: Option<Address>,
         /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: a pruned RPC).
         genesis: bool,
+        /// Fable recheck 4 R4-1: a failover endpoint of the chain: `eth_chainId` 31337 and block 0 hashed `UID`.
+        failover: bool,
         /// `latest`'s `gasLimit` (default 200,000,000, the SCaaS testnet's target).
         block_gas: Option<u64>,
         /// `latest` has no `blockAccessListHash`: a chain before Amsterdam (Osaka, an L2, anvil).
@@ -1190,6 +1204,12 @@ pub(crate) mod tests {
                     if !e.osaka {
                         b["blockAccessListHash"] = json!(format!("{:#x}", B256::repeat_byte(0xba)));
                     }
+                    Ok(b)
+                }
+                "eth_chainId" if e.failover => Ok(json!("0x7a69")),
+                "eth_getBlockByNumber" if e.failover && p[0] == "0x0" => {
+                    let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                    b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
                     Ok(b)
                 }
                 "eth_getBlockByNumber" if e.genesis => {
@@ -2043,6 +2063,32 @@ pub(crate) mod tests {
         let (r, rpc) = outcomes(Evm::default(), vec![inv_job(8, other)], |_| {}).await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 0);
         assert!(r[0].0 == "dead" && r[0].1.starts_with("TOKEN_NOT_SERVED"), "{r:?}");
+    }
+
+    /// Fable recheck 4 R4-1: a refusal read while a failover endpoint answered is no verdict: the first endpoint answers
+    /// `chainUid()` with a transport error, the failover one (of this chain, at the head) with another chain's uid: the job is
+    /// back in the queue (`FAILOVER_ANSWER`), nothing sent. Control: the same answer from the first endpoint is `dead`.
+    #[tokio::test]
+    async fn a_refusal_on_a_failover_answer_is_requeued() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let (first, first_rpc) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
+        let (other, rpc) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.unwrap();
+        s.poll_outbox().await;
+        let reports = || -> Vec<(String, String)> { o.lock().unwrap().reports.iter()
+            .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string())).collect() };
+        let r = reports();
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("FAILOVER_ANSWER") && r[0].1.contains("CHAIN_UID_MISMATCH"), "{r:?}");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 0);
+        // the next job, refused on the first endpoint's own answer, is `dead`: the count is per job (marked at its submit)
+        (first_rpc.lock().unwrap().uid_err, first_rpc.lock().unwrap().uid) = (None, Some(0x25));
+        o.lock().unwrap().jobs = vec![job(8)];
+        s.poll_outbox().await;
+        let r = reports();
+        assert!(r.last().is_some_and(|x| x.0 == "dead" && x.1.starts_with("CHAIN_UID_MISMATCH")), "{r:?}");
+        let (r, _) = outcomes(Evm { uid: Some(0x25), ..ok() }, vec![job(7)], |_| {}).await;
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("CHAIN_UID_MISMATCH"), "control: {r:?}");
     }
 
     /// Review T4 I3: the guard's chain facts — binding (mismatch never cached, a revert or no `chainUid()` unbound, a
