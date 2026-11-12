@@ -2438,9 +2438,9 @@ unreachable unless accounting is broken), `RollOverRange`, `CapReached`, `RollTo
 `PqzVerifierChanged`, `PqzVerifierRevoked`, `PqzVerifierNotReady`, `PqzVerifierPending`, `PqzVerdictRequired`,
 `PqzVerdictRejected`, `PqzVerdictMismatch` ([§9.5](#pqz-verifier-mode)). Round 3t ([CTR-PQZ-36](#CTR-PQZ-36)):
 `VerifierFeeAboveMax(fee, max)`, `VerifierFeePending(pending)`, `VerifierFeeSame()`, `VerifierFeeNotReady(eta)`; the entry
-`setVerifierFee(uint64)` (kinds 4, 5, 12, 13: module Q on 4, 12, S on 5, 13), the events `VerifierFeeProposed(current, next,
+`setVerifierFee(uint64, bytes32 chainUid_)` (kinds 4, 5, 12, 13: module Q on 4, 12, S on 5, 13; the word [CTR-GOV-28](../decisions.md#CTR-GOV-28)), the events `VerifierFeeProposed(current, next,
 eta)`, `VerifierFeeSet(previous, next)`, and `pqzVerifyConfig()`'s four appended fields `verifierFee`, `verifierFeeMax`,
-`verifierFeePending`, `verifierFeeEta` (0 on `PRECOMPILE`; a dead pending reads 0, 0); `type(IPqzToken).interfaceId` `0xd87fe345`.
+`verifierFeePending`, `verifierFeeEta` (0 on `PRECOMPILE`; a dead pending reads 0, 0); `type(IPqzToken).interfaceId` `0xd87fe345`, `0x757d0753` since the four verifier setters took `chainUid_` ([CTR-GOV-28](../decisions.md#CTR-GOV-28)).
 
 ### <a id="pqz-verifier-mode"></a>9.5 PQZ verifier mode (OFFCHAIN)
 
@@ -2518,7 +2518,11 @@ derived keys held by separate parties (for example 2-of-3 `secp256k1` / `p256`, 
   pqzVerifierEpoch)`). With `noticePeriod = 0` the proposal applies at once. An owner change or a passed window leaves the pending
   dead. `pqzCancelVerifier()` deletes a live pending (`PqzVerifierCancelled(next)`; none live: nothing happens). Other refusals, in
   order: a caller who is not the admin `IGovernance.NotAdmin(bytes32)`, then a `PRECOMPILE` token `PqzVerifyConfigInvalid()`, then
-  a fixed verifier `PqzVerifierFixed()`.
+  a fixed verifier `PqzVerifierFixed()`. **The chain word** ([CTR-GOV-28](../decisions.md#CTR-GOV-28), owner 2026-11-13; BUILT on
+  branch `ua-mtx-fix3-chainuid`, UNAUDITED): the three entries are `pqzSetVerifier(next, chainUid_)`,
+  `pqzCancelVerifier(chainUid_)`, `pqzRevokeVerifier(chainUid_)`; a word that is not the token's is `ChainUidMismatch(expected,
+  got)`, the admin's before any write (after `NotAdmin` on the cancel and the revocation; on the transfer a non-admin is refused
+  by the order above first), so a native admin's direct call made for a sibling with the same chain id is void.
 - **The period** is the factory's `noticePeriod()` (set once by `configureChain`, [CTR-TOK-29](token-wrappers.md#CTR-TOK-29)),
   stored at init, so nothing later shortens it; never the creator's `grantDelay`. It may be 0 on a test chain; wallets show the
   stored value. Off chain, the wizard and the node submit a proposal only with a probe verdict signed by `next` (a typo would
@@ -2529,11 +2533,11 @@ derived keys held by separate parties (for example 2-of-3 `secp256k1` / `p256`, 
   the `OFFCHAIN` disclosure answers false, until a transfer through the notice sets a new verifier. A fixed verifier cannot be
   revoked (Q1, owner 2026-11-06: no).
 - **No governance bit** (C4): moving the trust root is an ownership-level act. **Relayed** through the `GovernanceRouter`:
-  `mtxPqzSetVerifier(UAEnvelope e, address target, bytes32 next, UASig auth)`, `mtxPqzCancelVerifier(UAEnvelope e, address
-  target, UASig auth)`, `mtxPqzRevokeVerifier(UAEnvelope e, address target, UASig auth)` over `UAPqzSetVerifier(bytes32
-  from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256
-  fee,address feeRecipient)` and `UAPqzCancelVerifier` / `UAPqzRevokeVerifier` (the same without `next`); fee mode `NONE`,
-  relayable at fee 0.
+  `mtxPqzSetVerifier(UAEnvelope e, address target, bytes32 next, bytes32 chainUid, UASig auth)`, `mtxPqzCancelVerifier(UAEnvelope
+  e, address target, bytes32 chainUid, UASig auth)`, `mtxPqzRevokeVerifier(UAEnvelope e, address target, bytes32 chainUid, UASig
+  auth)` over `UAPqzSetVerifier(bytes32 from,address target,bytes32 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256
+  validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)` and `UAPqzCancelVerifier` / `UAPqzRevokeVerifier`
+  (the same without `next`; the word signed and forwarded, CTR-GOV-28); fee mode `NONE`, relayable at fee 0.
 - **Storage** (`scaas.pqz`, appended slots 13–18, read on the `OFFCHAIN` branch only): `pqzVerifierUA`, `pqzVerifierShape`,
   `{pqzVerifierEpoch uint32, pqzVerifierFixed bool, noticePeriod uint64, eta uint64}`, `pqzPendingVerifier`, `pqzProposer`,
   `pqzProposerGeneration`. View `pqzVerifyConfig()` → `PqzVerifyConfig {pqzVerifyMode, verifier, fixed_, pqzVerifierEpoch,
@@ -2639,9 +2643,10 @@ only; `PRECOMPILE` tokens and every Zether kind keep their behaviour.
   fee is not 0: such a verifier halts every debit of the token, exits included, while shields keep landing; the relief is the
   admin's `setVerifierFee(0)`, at once, or the cause lifted, and with admin 0 only the cause's own (T31). `verifyTransferAmount`
   charges nothing (a view); `confidentialFee` is unchanged.
-- **Changing it.** The admin calls `setVerifierFee(uint64 next)` (`governed`, `nonReentrant`) or the router's
-  `mtxSetVerifierFee(UAEnvelope e, address target, uint64 next, UASig auth)` over `UASetVerifierFee` (typehash
-  `0xffa3baec…d14d`, fee mode `NONE`, relayable at fee 0 by any submitter), within `[0, verifierFeeMax]`: a decrease, to 0
+- **Changing it.** The admin calls `setVerifierFee(uint64 next, bytes32 chainUid_)` (`governed`, `nonReentrant`; the token's
+  chain word, [CTR-GOV-28](../decisions.md#CTR-GOV-28)) or the router's `mtxSetVerifierFee(UAEnvelope e, address target, uint64
+  next, bytes32 chainUid, UASig auth)` over `UASetVerifierFee` (typehash `0x5f8c20d2…076e`, was `0xffa3baec…d14d` before
+  CTR-GOV-28; fee mode `NONE`, relayable at fee 0 by any submitter), within `[0, verifierFeeMax]`: a decrease, to 0
   included, applies at once and cancels a pending increase (controller call 3); an increase proposes with `eta = now +
   noticePeriod` (the factory's, stored at init; at once when it is 0, both events), and the same call by the same proposer in
   the same admin generation within `[eta, eta + noticePeriod]` confirms, as the verifier transfer of

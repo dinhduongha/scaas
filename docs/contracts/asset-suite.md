@@ -369,10 +369,13 @@ interface IComplianceRegistry is IAdmin {   // smartcontracts/evm/src/regulated/
     //   (ChainUidMismatch(expected, got) after NotAdmin, CTR-GOV-27), acceptAdmin(); no renounceAdmin (Q2)
     function govRouter() external view returns (address);              // written once by the constructor; 0 = none
     function chainUid() external view returns (bytes32);               // written once by the constructor; not 0 (CTR-GOV-27)
-    function setKycProvider(bytes32 provider, bool enabled) external;  // admin; ids assigned once, never reused
+    function setKycProvider(bytes32 provider, bool enabled, bytes32 chainUid_) external;
+        // admin (NotAdmin), then chainUid_ the registry's word (ChainUidMismatch, CTR-GOV-28); ids assigned once, never reused
     function kycProviderId(bytes32 provider) external view returns (uint32);
     function kycProviderEnabled(uint32 id) external view returns (bool); // id 0 (the admin) always
-    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until) external;
+    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until, bytes32 chainUid_)
+        external;
+        // the subject (NotKycProvider), then chainUid_ the registry's word (ChainUidMismatch, CTR-GOV-28), before any write
         // the subject (pad(msg.sender) or the router's subject()): the admin (id 0) or an enabled KYC provider; at most
         // 256 rows; flags 0 = revoke; ELIGIBLE_CONTRACT only by the admin, until = max; a slot with providerId == 0 &&
         // flags != 0 only the admin overwrites or revokes (AdminWrittenSlot)
