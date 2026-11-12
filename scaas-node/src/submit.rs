@@ -435,7 +435,9 @@ impl Submitter {
             };
             // its replacements reuse the original transaction's gas limit (review M3); only when the RPC cannot tell,
             // the cap: the operator's, never past what the chain's blocks take (an unreadable block fails the start)
-            let sent = me.chain.tx_fees(hash).await.ok().flatten();
+            // Fable recheck 6 R6-2: an unread transaction fails the start (as `fees()` above); only an unknown one (`None`) takes
+            // the cap and, priced, leaves the nonce to the gap-fill
+            let sent = me.chain.tx_fees(hash).await.map_err(|e| anyhow::anyhow!("tracked job {}: eth_getTransactionByHash: {e:#}", j.job_id))?;
             let gas = match sent {
                 Some((g, _)) => g,
                 None => guard::total_cap(me.cfg.max_gas_per_tx, me.chain.block_gas().await?),
@@ -1104,6 +1106,8 @@ pub(crate) mod tests {
         genesis: bool,
         /// Fable recheck 4 R4-1: a failover endpoint of the chain: `eth_chainId` 31337 and block 0 hashed `UID`.
         failover: bool,
+        /// Fable recheck 6 R6-2: `eth_getTransactionByHash` fails (a transport error).
+        tx_err: bool,
         /// Fable recheck 4 R4-2: `classReleaseOf` answers a published release, deprecated; or none (implementation 0).
         release_deprecated: bool,
         release_unknown: bool,
@@ -1184,6 +1188,7 @@ pub(crate) mod tests {
                 "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
                 "eth_estimateGas" if e.sim == Some("estimate_down") => Err(err(-32000, "upstream timeout", None)),
                 "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
+                "eth_getTransactionByHash" if e.tx_err => Err(err(-32000, "upstream timeout", None)),
                 "eth_getTransactionByHash" => Ok(e.tx_gas.map_or(Value::Null, |g| {
                     let mut t = json!({"gas": format!("{g:#x}")});
                     if let Some(f) = e.tx_max_fee {
@@ -2327,6 +2332,11 @@ pub(crate) mod tests {
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
         let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
         assert_eq!(s.inflight.get(&0).expect("tracked").gas, guard::MAX_TX_GAS);
+        // Fable recheck 6 R6-2: the tracked transaction unread (a transport error, not "unknown"): the lane does not start
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, tx_err: true, ..Default::default() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        let e = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.err().expect("no start");
+        assert!(e.to_string().contains("eth_getTransactionByHash"), "{e:#}");
         // no original gas and no block: the lane does not start (retried like any start-up RPC failure)
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, block_err: true, ..Default::default() }).await;
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
