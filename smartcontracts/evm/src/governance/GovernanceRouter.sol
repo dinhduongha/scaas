@@ -6,6 +6,7 @@ import {IWrappedToken} from "../metatx/IWrappedToken.sol";
 import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {IRegulatedToken} from "../regulated/IRegulatedToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {RescueLib} from "../governance/RescueLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IPqzToken} from "../pqz/IPqzToken.sol";
@@ -424,5 +425,13 @@ contract GovernanceRouter is GovernanceRouterBase {
         return keccak256(abi.encode(T.ENV, v.registry, v.smartKeyAccountImpl, v.hedera, keccak256(abi.encodePacked(v.deps)),
             keccak256(abi.encodePacked(v.params)), keccak256(abi.encodePacked(v.libs)),
             keccak256(abi.encodePacked(v.libCodeHashes))));
+    }
+
+    // ------------------------------------------------------------------ rescue (CTR-GOV-26)
+
+    /// @notice CTR-GOV-26 (owner 2026-11-12): anyone; this contract holds nothing by design, so the whole balance of
+    ///         `asset` (`address(0)`: the native coin) goes to `RescueLib.SCAAS_DEV_RESCUE`, `IRescuable.Rescued`.
+    function rescue(address asset) external {
+        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);
     }
 }

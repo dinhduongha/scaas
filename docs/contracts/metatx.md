@@ -1096,7 +1096,7 @@ A service pull (a service contract taking the payer's tokens into its custody, [
 pull is the service's own operation, never the router's fee. The two compared (who pulls, what the signature binds, where
 the funds go): [service-pull spec §2.5](../superpowers/specs/2026-11-09-service-pull.md#25-the-relay-fee-and-a-service-pull-compared).
 
-**Deployment.** One stateless contract with no owner, no stored state and no constructor argument. `DeployBase`
+**Deployment.** One stateless contract with no owner, no stored state and no constructor argument; a stray left in it goes to the constant dev address by anyone's `rescue` ([CTR-GOV-26](../decisions.md#CTR-GOV-26)), under the `relay` entry guard. `DeployBase`
 deploys it through the deterministic CREATE2 deployer, as `UARegistry` and the verifiers, so it has the same address
 on every EVM chain. Its constructor creates its executor (`CREATE`, so the executor's address is fixed too). No token
 and no target needs to know either address: the payer's signature names the router (`relayer = router`).

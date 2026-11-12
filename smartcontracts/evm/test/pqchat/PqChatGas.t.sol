@@ -33,9 +33,11 @@ contract PqChatGasTest is PqTopicsBase {
     // 43,147,530 -> 43,110,810 (-24 x 1,530)
     // Fable D P3-1 (2026-11-11, `initialize` checks `creating()`): 27,801 -> 27,999 B; regular 1,906,679 -> 1,921,243;
     // state 43,110,810 -> 43,413,750 (+198 x 1,530)
-    uint256 internal constant RUNTIME = 27_999;
-    uint256 internal constant RELEASE_REGULAR = 1_921_243;
-    uint256 internal constant RELEASE_STATE = 43_413_750;
+    // fix2 CTR-GOV-26 (owner 2026-11-12, `rescue(asset)` to the constant dev address): 27,999 -> 28,776 B; regular
+    // 1,921,243 -> 1,971,175; state 43,413,750 -> 44,602,560 (+777 x 1,530)
+    uint256 internal constant RUNTIME = 28_776;
+    uint256 internal constant RELEASE_REGULAR = 1_971_175;
+    uint256 internal constant RELEASE_STATE = 44_602_560;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
     uint256 internal constant MODULE_RUNTIME = 16_398;

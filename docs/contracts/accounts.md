@@ -1332,7 +1332,7 @@ the registry check where an account opens for a derived owner. Every non-EVM own
 
 <a id="monotonic-registry"></a>
 <a id="CTR-UA-15"></a>**CTR-UA-15** — **The registry is monotonic and admin-free**: no unregister, no freeze, no status,
-no owner, non-upgradeable, holds no value. A record never changes after `register`; the only later writes **add** an attribute
+no owner, non-upgradeable, holds no value (a stray goes to the constant dev address by anyone's `rescue`, [CTR-GOV-26](../decisions.md#CTR-GOV-26)). A record never changes after `register`; the only later writes **add** an attribute
 that was absent and never change or remove one: the PQZ proof of a key version (`storePqzPop`), PQZ key versions (`setPqzKey`, each `(ua, version)` once,
 [CTR-UA-42](#CTR-UA-42))
 and KEM versions (`setKemKey`, each once, [CTR-UA-32](#CTR-UA-32)). Tokens may then rely on a record

@@ -2076,6 +2076,16 @@ Change (2026-11-11, Fable review A-2; controller call under the owner's leave; s
 **Cost if wrong.** Strays on such a contract go to the dev address, not back to their sender; refunds stay off chain, as for any rescue.
 **Source.** Owner 2026-11-12, in chat, relayed by the controller: "rescueTo = 0 => dùng native address của dev. Địa chỉ của dev là hằng: 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131" (rescueTo 0 uses the dev's native address; the dev's address is a constant; checksum verified, an EOA).
 
+<a id="CTR-GOV-26"></a>
+### CTR-GOV-26 — rescue on the chain singletons, to the constant dev address
+- old: — · status: current · owner: yes · date: 2026-11-12 · normative: decisions.md#CTR-GOV-26 · superseded-by: —
+
+**Rule.** `rescue(address asset)` on `UARegistry`, `OpenFactory`, `GovernanceRouter`, `RelayFeeRouter` and `PqChat` (the implementation and every instance): anyone, no signature, not an `mtx*`; the contract's whole balance of `asset` (an ERC-20 by `safeTransfer`; `address(0)`: the native coin by value, refused to an EIP-7702 designator, `RescueAssetInvalid(address(0))`) to the constant `RescueLib.SCAAS_DEV_RESCUE` ([CTR-GOV-25](#CTR-GOV-25)), `IRescuable.Rescued`; the send is `RescueLib`'s, the tokens' own. None of the five holds anything by design (no `payable` entry; `RelayFeeRouter` holds an open-mode payment only inside `relay`, so its `rescue` runs under the same entry guard, `nonReentrant`); a stray there is stuck otherwise. No owner, no setter, no stored destination: `UARegistry` stays admin-free ([CTR-UA-15](contracts/accounts.md#CTR-UA-15)). Not on wallets, verifiers or libraries. Selector audit: `PERMISSIONLESS` on each.
+**Status.** BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED; tests `test/governance/SingletonRescue.t.sol`.
+**Why.** Owner: the proposal of the 2026-11-12 brief, approved as proposed; a token or ERC-20 sent by mistake to a chain singleton is otherwise lost for good.
+**Cost if wrong.** Strays go to the dev address, not back to their sender; refunds stay off chain.
+**Source.** Owner 2026-11-12, in chat, relayed by the controller: "đồng ý, làm theo đề xuất" (agreed, do as proposed), on the proposal: `rescue(address asset)` on `UARegistry`, `OpenFactory`, `GovernanceRouter`, `RelayFeeRouter`, `PqChat`, anyone, always to `SCAAS_DEV_RESCUE`, the whole balance.
+
 ## 17. Contracts — Meta-transactions
 
 ### CTR-MTX-01 — Payment is a MetaTransfer with entryRef ≠ 0

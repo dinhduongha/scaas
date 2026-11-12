@@ -561,8 +561,9 @@ contract GovDeployTest is Test {
         // T66b sources it imports, the `IERC20MetaTx` comment of f0c03715 among them; its code unchanged):
         // 0xd981282EC3f2F979B953BDE7c7c3c4100caDfe89; Fable review fixes 2026-11-11 (the metadata hash: `MetaTxLib` loses
         // `hashStruct` / `validateMode`, B P3-3; its code unchanged): -> 0x43E08564FE056f53014bb2c40C4f845E550Eb8Cf;
-        // re-check C6 (the metadata hash: `ModeUnknownBits` leaves `MetaTxLib`): -> this
-        assertEq(rf, 0xa3097e517E91B9e0f807815f92052212AD53a454, "RelayFeeRouter");
+        // re-check C6 (the metadata hash: `ModeUnknownBits` leaves `MetaTxLib`): 0xa3097e517E91B9e0f807815f92052212AD53a454;
+        // fix2 CTR-GOV-26 (its `rescue(asset)` to the constant dev address, under the entry guard): -> this
+        assertEq(rf, 0x92CF546e4F32C23859255BC207B33af34F584A2A, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -610,8 +611,9 @@ contract GovDeployTest is Test {
         // `ITradeToken`, `MetaTxLib`): 0xD05a7FF11D301Cd9112Ea2eAb6174f3E84bA7c3A; fix2 D P3-2 (the deprecations and kind
         // switches carry `chainUid`, their typehashes): 0x34C0c8173824aE118c6Ec0E183290280C21530b9; fix2 D P3-5 (the metadata
         // hash: `ISCaaSDex.rescue`, `SCaaSDex`'s comments): 0xF35EF840Db3c7FD9F63e8cd86e88e2dE9CB46C29; fix2 CTR-GOV-25 (the
-        // metadata hash: `RescueLib`, `GovernanceLib.init`, `DexPuller`): -> this
-        assertEq(router, 0x3B3B1Cda834b39B4541d0861226E7bE4712302AF, "GovernanceRouter");
+        // metadata hash: `RescueLib`, `GovernanceLib.init`, `DexPuller`): 0x3B3B1Cda834b39B4541d0861226E7bE4712302AF; fix2
+        // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): -> this
+        assertEq(router, 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

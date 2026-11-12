@@ -21,6 +21,13 @@ library RescueLib {
         return stored == address(0) ? SCAAS_DEV_RESCUE : stored;
     }
 
+    /// @notice The whole balance of `asset` (`address(0)`: the native coin) to `dest`, `IRescuable.Rescued`.
+    function all(address asset, address dest) internal {
+        uint256 amount = asset == address(0) ? address(this).balance : IERC20(asset).balanceOf(address(this));
+        send(asset, dest, amount);
+        emit IRescuable.Rescued(asset, dest, amount);
+    }
+
     /// @dev The native coin (`address(0)`) by value, refused to a designator as `WrappedLib.payOut` refuses it; an ERC-20
     ///      by `safeTransfer`.
     function send(address asset, address dest, uint256 amount) internal {

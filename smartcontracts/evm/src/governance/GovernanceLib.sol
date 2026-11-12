@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {IGovernance} from "./IGovernance.sol";
 import {IAdmin} from "./IAdmin.sol";
@@ -482,10 +481,7 @@ library GovernanceLib {
     /// @notice `NORMAL*`: the whole balance of `asset` (the native coin by value) to `rescueTo`; the token owes none of it.
     ///         The caller's guard is the token's `nonReentrant`.
     function rescue(address asset) public {
-        address to = rescueOpen(asset);
-        uint256 amount = asset == address(0) ? address(this).balance : IERC20(asset).balanceOf(address(this));
-        RescueLib.send(asset, to, amount);
-        emit IRescuable.Rescued(asset, to, amount);
+        RescueLib.all(asset, rescueOpen(asset));
     }
 
     /// @dev The two first rows of spec §6.2 on every kind: bit 17, and never the token's own units. Returns `rescueTo`.

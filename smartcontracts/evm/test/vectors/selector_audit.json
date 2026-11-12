@@ -1,5 +1,5 @@
 {
- "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. ADMIN: the admin (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending admin role. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, ADMIN, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5). Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1): class OWNER renamed ADMIN, the three admin entries acceptAdmin(), renounceAdmin(), transferAdmin(bytes32) and their errors NotAdmin(bytes32), NotPendingAdmin(bytes32) in place of the ownership names, and the router's mtxTransferAdmin, mtxAcceptAdmin, mtxRenounceAdmin (SIGNED), every class unchanged. Round 3r T7 (spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §7; owner naming 2026-11-11): the router's fifteen admin ops of OpenFactory and ComplianceRegistry (SIGNED); OpenFactory added: its admin entries ADMIN (configureChain direct only, the rest direct or through its router), acceptAdmin HOLDER_OWN, the three release deploys APPROVED(release) (open to anyone against a live approval of their key, the native admin's own call its own approval; a stranger's zero-argument call ReleaseNotApproved), the four creations PERMISSIONLESS. APPROVED(reason): anyone, against an approval the admin gave, for the reason given. Round 3s (spec 2026-11-10-token-lists.md §6, §9; CTR-GOV-24): each regulated kind 8-13 adds setAllowed BIT(8), setDenied BIT(9) (a holder of the bit, the feature on or off: a holder writes a dormant list) and enableFeature ADMIN; setAllowed exists on 10-13 too, where bit 8 is not valid, so no holder can exist and it always reverts MissingRole (one IRegulatedToken for the six kinds, Fable P3-8); the router adds mtxSetAllowed, mtxSetDenied, mtxEnableFeature (SIGNED).",
+ "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. ADMIN: the admin (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending admin role. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, ADMIN, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5). Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1): class OWNER renamed ADMIN, the three admin entries acceptAdmin(), renounceAdmin(), transferAdmin(bytes32) and their errors NotAdmin(bytes32), NotPendingAdmin(bytes32) in place of the ownership names, and the router's mtxTransferAdmin, mtxAcceptAdmin, mtxRenounceAdmin (SIGNED), every class unchanged. Round 3r T7 (spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §7; owner naming 2026-11-11): the router's fifteen admin ops of OpenFactory and ComplianceRegistry (SIGNED); OpenFactory added: its admin entries ADMIN (configureChain direct only, the rest direct or through its router), acceptAdmin HOLDER_OWN, the three release deploys APPROVED(release) (open to anyone against a live approval of their key, the native admin's own call its own approval; a stranger's zero-argument call ReleaseNotApproved), the four creations PERMISSIONLESS. APPROVED(reason): anyone, against an approval the admin gave, for the reason given. Round 3s (spec 2026-11-10-token-lists.md §6, §9; CTR-GOV-24): each regulated kind 8-13 adds setAllowed BIT(8), setDenied BIT(9) (a holder of the bit, the feature on or off: a holder writes a dormant list) and enableFeature ADMIN; setAllowed exists on 10-13 too, where bit 8 is not valid, so no holder can exist and it always reverts MissingRole (one IRegulatedToken for the six kinds, Fable P3-8); the router adds mtxSetAllowed, mtxSetDenied, mtxEnableFeature (SIGNED). Fix2 CTR-GOV-26 (owner 2026-11-12): rescue(address) PERMISSIONLESS on GovernanceRouter and OpenFactory (UARegistry's row with its audit, ua-mtx-merge), and two contracts added whole: RelayFeeRouter, PqChat (each entry SIGNED by the subject it acts for, or PERMISSIONLESS with its reason; PqChat.initialize FACTORY).",
  "NormalToken": [
   {
    "sig": "acceptAdmin()",
@@ -4668,6 +4668,11 @@
    "sig": "mtxUnpause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the whole balance of a stray to the constant SCAAS_DEV_RESCUE; the contract holds nothing by design, CTR-GOV-26)",
+   "error": ""
   }
  ],
  "OpenFactory": [
@@ -4767,6 +4772,11 @@
    "error": "NotAdmin(bytes32)"
   },
   {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the whole balance of a stray to the constant SCAAS_DEV_RESCUE; the contract holds nothing by design, CTR-GOV-26)",
+   "error": ""
+  },
+  {
    "sig": "revokeApproval(bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
@@ -4790,6 +4800,95 @@
    "sig": "transferAdmin(bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "RelayFeeRouter": [
+  {
+   "sig": "relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the whole balance of a stray to the constant SCAAS_DEV_RESCUE; the contract holds nothing by design, CTR-GOV-26)",
+   "error": ""
+  }
+ ],
+ "PqChat": [
+  {
+   "sig": "addWraps(bytes32,uint32,(bytes32,uint64,bytes,bytes32,bytes)[])",
+   "class": "PERMISSIONLESS(unsigned wraps of an epoch, checked against its signed hash; pqchat.md section 10)",
+   "error": ""
+  },
+  {
+   "sig": "createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "initialize(bytes32)",
+   "class": "FACTORY",
+   "error": "PqChatNotFactory()"
+  },
+  {
+   "sig": "leave((bytes32,bytes32,bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "postMessage((bytes32,bytes32,bytes32,bytes16,uint64,bytes32[],bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "remove((bytes32,bytes32,uint64,bytes32[],bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the whole balance of a stray to the constant SCAAS_DEV_RESCUE; the contract holds nothing by design, CTR-GOV-26)",
+   "error": ""
+  },
+  {
+   "sig": "setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "storeMessage(uint8,bytes8,bytes)",
+   "class": "PERMISSIONLESS(an unsigned blob, one per call; pqchat.md section 10)",
+   "error": ""
+  },
+  {
+   "sig": "updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
   }
  ]
 }

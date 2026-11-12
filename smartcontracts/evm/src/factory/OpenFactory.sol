@@ -9,6 +9,7 @@ import {Create3} from "./Create3.sol";
 import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {SigCheck} from "../common/SigCheck.sol";
+import {RescueLib} from "../governance/RescueLib.sol";
 import {UAAdmin} from "../governance/UAAdmin.sol";
 import {IAdmin} from "../governance/IAdmin.sol";
 
@@ -282,6 +283,12 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     function renounceAdmin() external configured {
         _renounceAdmin();
+    }
+
+    /// @notice CTR-GOV-26 (owner 2026-11-12): anyone; this contract holds nothing by design, so the whole balance of
+    ///         `asset` (`address(0)`: the native coin) goes to `RescueLib.SCAAS_DEV_RESCUE`, `IRescuable.Rescued`.
+    function rescue(address asset) external {
+        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);
     }
 
     function adminGeneration() external view returns (uint32) {
