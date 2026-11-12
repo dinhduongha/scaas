@@ -350,33 +350,33 @@ nonce is gap-filled): `args.pqz_fee` against word 256 of the token's own stateme
 <a id="rpc-failover"></a>**Chain reads fail over** ([ARCH-POS-15](../decisions.md#ARCH-POS-15), failover; BUILT, `chain::tests::chain_reads_fail_over_on_transport_errors_never_on_a_revert`;
 Fable review of ua-mtx-merge E N-11; recheck 2 P3-4). These reads go through one read helper (`Chain::read`): the simulation,
 `chainUid()`, `pqzVerifyConfig` and the statement views, the service and registry reads, `eip712Domain()`, the subject nonce, code
-reads, the latest block's gas limit, the `VerifierFeeSet`, `UAPqzKeyCurrent` and executed-event logs, the DEX venue's checks
-(its views, a failed settlement's evidence, ERC-1271) and the drift reader's balances. Not through it: the lane's own sends,
-nonces, fees and receipts, and the indexers' log scans (their quorum). One endpoint answers
-the whole read (a log window's head and logs alike), `rpc_urls` in the order given; a transport error (the endpoint down, an
-error answer that is no revert) moves the read to the next endpoint. A revert is the contract's answer and is final only from
-the first endpoint; a failover endpoint's revert is a transport error (recheck 3 R3-1), and so is a refusal read from its *value*
-(recheck 4 R4-1, 5 R5-1..4; it may lag a block): `Chain` counts failover answers, and a refusal while the count moved is
-`FAILOVER_ANSWER: …`, back in the queue, on the pipelined lane and the generic lane runner (Hedera); at a restart a tracked job so
-refused (or a tracked transaction that cannot be read, recheck 6) fails the start: the node process exits and its supervisor restarts it
-(every chain and the gateway down meanwhile, as for any read error at a lane start). The venue's evidence, maker health and list
-reads are no verdict (the order stays; 503, `LIST_UNREAD`); the gateway, order intake and both cancels answer 503, not 400 (recheck 6).
-No job goes `dead` on a chain read (an unread status or nonce is asked again; the generic runner's expiry reads `op_consumed` first,
-recheck 6), only by the clock (`expired before submit`); `scaas_rpc_failover_answers_total` counts the failover answers (R5-5). A failover endpoint answers at all only
+reads, the latest block's gas limit, the `VerifierFeeSet`, `UAPqzKeyCurrent` and executed-event logs, the DEX venue's checks (its
+views, a failed settlement's evidence, ERC-1271) and the drift reader's balances. Not through it: the lane's own sends, nonces, fees
+and receipts, and the indexers' log scans (their quorum). One endpoint answers the whole read (a log window's head and logs alike),
+`rpc_urls` in the order given; a transport error (the endpoint down, an error answer that is no revert) moves the read to the next
+endpoint. A revert is the contract's answer and is final only from the first endpoint; a failover endpoint's revert is a transport
+error (recheck 3 R3-1), and so is a refusal read from its *value* (recheck 4 R4-1, 5 R5-1..4; it may lag a block): `Chain` counts
+failover answers, and a refusal while the count moved is `FAILOVER_ANSWER: …`, back in the queue, on the pipelined lane and the
+generic lane runner (Hedera); at a restart such a tracked job (or an unread tracked transaction) fails the start: the node exits, its
+supervisor restarts it (all chains and the gateway down meanwhile). The venue's evidence, maker health and list reads are no verdict
+(the order stays; 503, `LIST_UNREAD`); the gateway, order intake and both cancels answer 503, not 400 (recheck 6). No job goes `dead`
+on an unread chain or on a failover endpoint's answer; an expiry (`expired before submit`, `expired while stuck; nonce gap-filled`,
+`expired before inclusion`) is `dead` only after the first endpoint said the op did not land (recheck 7); a first endpoint's revert
+stays `dead` by design. `scaas_rpc_failover_answers_total` counts the failover answers (R5-5). A failover endpoint answers at all only
 when its `eth_blockNumber` is at or above the highest block seen from the first endpoint (its receipts, the heads the indexer, the
 venue and the health probe poll), one value per `[[chains]]` table (recheck 2 P2-1, 3 R3-1); its own head never raises it (R3-2),
 nothing lowers it, a restart clears it. It is used only once its `eth_chainId` and block 0 hash are the chain's (the pinned
 `chain_uid`, else the first endpoint's block 0), read at first use and kept; another network (another id, or a reset or forked one
 with the same id) is dropped with a log line, an unreadable id or block 0 is logged as such and asked again (recheck 2 P3-5, 3 R3-3).
-The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The strict-majority option stays
-deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each request gets `rpc_timeout_ms` (30 s: a read's, each
-span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms`
-(120 s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0
-refused at start; an endpoint that accepts and never answers fails the read over (Fable recheck 3 R3-4, recheck 4 R4-3; tests
+The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The strict-majority option
+stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each request gets `rpc_timeout_ms` (30 s: a read's, each
+span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms` (120
+s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0 refused at
+start; an endpoint that accepts and never answers fails the read over (Fable recheck 3 R3-4, recheck 4 R4-3; tests
 `a_hung_endpoint_and_the_block_gas_read_fail_over`, `each_log_span_has_its_own_timeout`). An error answer is a revert when it carries
-revert data or names a revert, else when it names an execution error, except a node's own limit by its exact phrase (geth's
-`execution aborted (timeout = …)`; Nethermind 2.2.0's names neither; Erigon's, Reth's unverified, a known limit, recheck 4 R4-5):
-transport (recheck 2 P3-8, recheck 3 R3-6; `an_aborted_execution_is_transport`). The venue's ERC-1271 call uses the same classifier.
+revert data or names a revert, else when it names an execution error, except a node's own limit by its exact phrase (geth's `execution
+aborted (timeout = …)`; Nethermind 2.2.0's names neither; Erigon's, Reth's unverified, a known limit, recheck 4 R4-5): transport
+(recheck 2 P3-8, recheck 3 R3-6; `an_aborted_execution_is_transport`). The venue's ERC-1271 call uses the same classifier.
 
 **Log windows** (Fable recheck R-6; BUILT, `chain::tests::a_log_window_is_chunked_for_an_rpc_that_caps_the_range`). The
 `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` and the executed-event lookup
