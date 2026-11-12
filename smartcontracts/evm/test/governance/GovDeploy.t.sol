@@ -563,8 +563,9 @@ contract GovDeployTest is Test {
         // `hashStruct` / `validateMode`, B P3-3; its code unchanged): -> 0x43E08564FE056f53014bb2c40C4f845E550Eb8Cf;
         // re-check C6 (the metadata hash: `ModeUnknownBits` leaves `MetaTxLib`): 0xa3097e517E91B9e0f807815f92052212AD53a454;
         // fix2 CTR-GOV-26 (its `rescue(asset)` to the constant dev address, under the entry guard):
-        // 0x92CF546e4F32C23859255BC207B33af34F584A2A; CTR-GOV-25 Change (the constant is the `RescueVault`): -> this
-        assertEq(rf, 0xd96A3154BD20B4082D430E792e8245910c12F1FD, "RelayFeeRouter");
+        // 0x92CF546e4F32C23859255BC207B33af34F584A2A; CTR-GOV-25 Change (the constant is the one-owner `RescueVault`):
+        // 0xd96A3154BD20B4082D430E792e8245910c12F1FD; CTR-GOV-25 Change (the two-role `RescueVault`, admin + rescuer): -> this
+        assertEq(rf, 0xcc4746baCAFfD3605D7745AB8fE18CA44501f445, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -616,8 +617,9 @@ contract GovDeployTest is Test {
         // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a; fix2
         // recheck-2 P3-1 (CTR-GOV-27: `mtxRenounceAdmin` and `UARenounceAdmin` carry `chainUid`; the metadata hash:
         // `IGovernance`, `IOpenFactory`): 0x60B276496DA55AA0dAD11DcbDaf6Eb00e1E2e51B; CTR-GOV-25 Change (the constant is the
-        // `RescueVault`): -> this
-        assertEq(router, 0xcf6aB482462467de132E93aE6471e0A6d9117c9c, "GovernanceRouter");
+        // one-owner `RescueVault`): 0xcf6aB482462467de132E93aE6471e0A6d9117c9c; CTR-GOV-25 Change (the two-role
+        // `RescueVault`, admin + rescuer): -> this
+        assertEq(router, 0xE8b1c2FFc9E8BC552a266E86e8Bd6046E8E6272A, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
