@@ -247,7 +247,12 @@ if [ "${MATRIX_DEPLOY:-0}" = 1 ] && { [ "$tgt" = local ] || [ ! -f "$DEPLOY_JSON
     ../scripts/deploy.sh evm "$RPC" || fail "deploy.sh: $(grep -E 'Error|refus' "$LOG" | tail -1 | cut -c1-140)"
   say "" "deploy ok $NTX txs (${SECS}s): $DEPLOY_JSON"
 fi
-if [ "$tgt" = scaas-testnet ]; then NOTE=runs/2026-11-10-ua-mtx-merge-t66b-step5-7622.txt; export NOTE; fi
+# the SCaaS testnet's base book: its deploy's own plan (deploy.sh's dry-run file) when this checkout made the deploy (a
+# reset), else the Step 5 deploy rows of its runs note
+if [ "$tgt" = scaas-testnet ] && [ ! -f "broadcast/Deploy.s.sol/$CHAIN/dry-run/run-latest.json" ]; then
+  NOTE=runs/2026-11-10-ua-mtx-merge-t66b-step5-7622.txt
+  export NOTE
+fi
 if [ -n "$SCOPE" ]; then
   STAGE=compile
   say "" "compile (scripts/capped) …"
