@@ -416,14 +416,14 @@ impl Submitter {
                     // group 3f: a replacement re-signs the bytes, so a PQZ debit gets its verdict again; none ⇒ gap-filled only
                     Ok(()) => match me.guard.pqz_fill(&me.chain, &mut w).await {
                         Ok(()) => Some(w),
-                        Err(r) if moved(&me) => anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r:?}", j.job_id))),
+                        Err(r) if moved(&me) => anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r:?}; the lane does not start: the node exits, its supervisor restarts it", j.job_id))),
                         Err(r) => {
                             warn!(job = j.job_id, nonce = n, "tracked PQZ job without a verdict ({r:?}); its nonce is only gap-filled");
                             None
                         }
                     },
                     Err(Refusal::Policy(r)) if moved(&me) => {
-                        anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r}", j.job_id)))
+                        anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r}; the lane does not start: the node exits, its supervisor restarts it", j.job_id)))
                     }
                     Err(Refusal::Policy(r)) => {
                         warn!(job = j.job_id, nonce = n, "tracked job refused by the guard: {r}; its nonce is only gap-filled");
@@ -437,7 +437,7 @@ impl Submitter {
             // the cap: the operator's, never past what the chain's blocks take (an unreadable block fails the start)
             // Fable recheck 6 R6-2: an unread transaction fails the start (as `fees()` above); only an unknown one (`None`) takes
             // the cap and, priced, leaves the nonce to the gap-fill
-            let sent = me.chain.tx_fees(hash).await.map_err(|e| anyhow::anyhow!("tracked job {}: eth_getTransactionByHash: {e:#}", j.job_id))?;
+            let sent = me.chain.tx_fees(hash).await.map_err(|e| anyhow::anyhow!("tracked job {}: eth_getTransactionByHash: {e:#}; the lane does not start: the node exits, its supervisor restarts it", j.job_id))?;
             let gas = match sent {
                 Some((g, _)) => g,
                 None => guard::total_cap(me.cfg.max_gas_per_tx, me.chain.block_gas().await?),
@@ -2386,7 +2386,8 @@ pub(crate) mod tests {
         let (other, _) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
         let e = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.err().expect("no start");
-        assert!(e.to_string().starts_with("FAILOVER_ANSWER") && e.to_string().contains("CHAIN_UID_MISMATCH"), "{e:#}");
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER") && e.to_string().contains("CHAIN_UID_MISMATCH")
+            && e.to_string().contains("the node exits"), "{e:#}");
         let (url, _) = fake_evm(Evm { uid: Some(0x25), ..ok() }).await;
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked, ..Default::default() }).await;
         let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.unwrap();

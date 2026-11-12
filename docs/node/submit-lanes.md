@@ -357,10 +357,12 @@ the whole read (a log window's head and logs alike), `rpc_urls` in the order giv
 error answer that is no revert) moves the read to the next endpoint. A revert is the contract's answer and is final only from
 the first endpoint; a failover endpoint's revert is a transport error (recheck 3 R3-1), and so is a refusal read from its *value*
 (recheck 4 R4-1, 5 R5-1..4; it may lag a block): `Chain` counts failover answers, and a refusal while the count moved is
-`FAILOVER_ANSWER: …`, back in the queue, on the pipelined lane, the generic lane runner (Hedera) and a restart's tracked jobs (the
-start is retried); the venue's evidence, maker health and list reads are no verdict (the order stays; 503, `LIST_UNREAD`), the
-gateway and order intake answer 503, not 400. While the first endpoint does not answer, no job is `dead`, expired ones included,
-and nothing is sent; `scaas_rpc_failover_answers_total` counts the failover answers (R5-5). A failover endpoint answers at all only
+`FAILOVER_ANSWER: …`, back in the queue, on the pipelined lane and the generic lane runner (Hedera); at a restart a tracked job so
+refused (or a tracked transaction that cannot be read, recheck 6) fails the start: the node process exits and its supervisor restarts it
+(every chain and the gateway down meanwhile, as for any read error at a lane start). The venue's evidence, maker health and list
+reads are no verdict (the order stays; 503, `LIST_UNREAD`); the gateway, order intake and both cancels answer 503, not 400 (recheck 6).
+No job goes `dead` on a chain read (an unread status or nonce is asked again; the generic runner's expiry reads `op_consumed` first,
+recheck 6), only by the clock (`expired before submit`); `scaas_rpc_failover_answers_total` counts the failover answers (R5-5). A failover endpoint answers at all only
 when its `eth_blockNumber` is at or above the highest block seen from the first endpoint (its receipts, the heads the indexer, the
 venue and the health probe poll), one value per `[[chains]]` table (recheck 2 P2-1, 3 R3-1); its own head never raises it (R3-2),
 nothing lowers it, a restart clears it. It is used only once its `eth_chainId` and block 0 hash are the chain's (the pinned
