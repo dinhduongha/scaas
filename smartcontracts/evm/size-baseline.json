@@ -53,7 +53,7 @@
     "WrappedZetherTokenZ": "module",
     "ZetherLib": "library"
   },
-  "GovernanceLib": 15574,
+  "GovernanceLib": 15625,
   "GovernanceRouter": 24679,
   "NormalPqzRegulatedToken": 23304,
   "NormalPqzRegulatedTokenA": 28553,
@@ -76,7 +76,7 @@
   "PqChat": 27999,
   "PqzBurnLib": 15584,
   "PqzTransferLib": 24731,
-  "SCaaSDex": 33238,
+  "SCaaSDex": 33222,
   "UARegistry": 28165,
   "UARegistryAuxLib": 20192,
   "UARegistryCoreLib": 33685,

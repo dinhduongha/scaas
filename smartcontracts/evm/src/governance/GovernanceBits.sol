@@ -71,7 +71,8 @@ library GovernanceBits {
 
     // Per kind (CTR-TOK-22, spec §1.2). No plain kind takes a bit of 5-9 or 28: each refuses them as invalid for the kind;
     // the regulated kinds 8-13 hold them (CTR-AS-17, CTR-GOV-03, CTR-GOV-24), and bit 22 (CTR-GOV-20).
-    /// @dev `RESCUABLE` on every token kind (spec §6.2, CTR-GOV-06): set at creation iff `rescueTo != 0`, always locked.
+    /// @dev `RESCUABLE` on every token kind (spec §6.2, CTR-GOV-06): set at creation, always locked;
+    ///      `rescueTo` comes only with it, and 0 there stores `SCAAS_DEV_RESCUE` (CTR-GOV-25).
     uint256 internal constant NORMAL_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE);
     /// @dev `MINTABLE` makes a hybrid (spec §5.2, CTR-GOV-12): set at creation iff `maxSupply != 0`.
     uint256 internal constant WRAPPED_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE)

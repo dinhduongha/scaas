@@ -276,7 +276,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         GovernanceLib.rescue(asset);
     }
 
-    /// @notice Immutable: set by `init` with bit 17, no writer after.
+    /// @notice Immutable: set by `init` with bit 17 (0 there: `SCAAS_DEV_RESCUE`, CTR-GOV-25), no writer after; 0 without it.
     function _rescueToBody() internal view returns (address) {
         return GovernanceLib.$().rescueTo;
     }

@@ -609,8 +609,9 @@ contract GovDeployTest is Test {
         // 0xc1F97DFA09Ee3D51D370542dbD2c0f5024d8C880; re-check C1, C2, C4, C6 (the metadata hash: `GovernanceLib._cuts`,
         // `ITradeToken`, `MetaTxLib`): 0xD05a7FF11D301Cd9112Ea2eAb6174f3E84bA7c3A; fix2 D P3-2 (the deprecations and kind
         // switches carry `chainUid`, their typehashes): 0x34C0c8173824aE118c6Ec0E183290280C21530b9; fix2 D P3-5 (the metadata
-        // hash: `ISCaaSDex.rescue`, `SCaaSDex`'s comments): -> this
-        assertEq(router, 0xF35EF840Db3c7FD9F63e8cd86e88e2dE9CB46C29, "GovernanceRouter");
+        // hash: `ISCaaSDex.rescue`, `SCaaSDex`'s comments): 0xF35EF840Db3c7FD9F63e8cd86e88e2dE9CB46C29; fix2 CTR-GOV-25 (the
+        // metadata hash: `RescueLib`, `GovernanceLib.init`, `DexPuller`): -> this
+        assertEq(router, 0x3B3B1Cda834b39B4541d0861226E7bE4712302AF, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

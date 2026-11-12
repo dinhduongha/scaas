@@ -137,7 +137,8 @@ interface IFactoryToken {
         RateConfig rate;             // WRAPPED* only, with RATE_ADJUSTABLE
         ConfidentialConfig conf;     // *_ZETHER only
         uint64 grantDelay;           // spec §1.6: the admin's two calls, at most 30 days; 0 = one call
-        address rescueTo;            // spec §6.2: with `RESCUABLE` only, immutable; never the token or a pool
+        address rescueTo;            // spec §6.2: with `RESCUABLE` only (0 there: SCAAS_DEV_RESCUE, CTR-GOV-25), immutable;
+                                     // never the token or a pool
         uint256 maxSupply;           // WRAPPED* only, spec §5.2: the hybrid's cap, with `MINTABLE` only; 0 = no hybrid
         RegulatedParams reg;         // *_REGULATED (8-13) only
     }

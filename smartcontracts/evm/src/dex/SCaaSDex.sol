@@ -257,11 +257,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function puller() external view returns (address) { return _s().puller; }
 
     /// @notice Anyone, no signature, not an `mtx*` (Fable D P3-5; `DexPuller.rescue`'s rule, CTR-DEX-22): the DEX's whole
-    ///         balance of `token` to `rescueTo` (`DexConfig.rescueTo`, held by the puller; 0 = no rescue, `RescueOff`). The
-    ///         entry guard keeps it out of a running settlement or plan: only a stray between calls moves.
+    ///         balance of `token` to `rescueTo` (`DexConfig.rescueTo`, held by the puller; 0: `SCAAS_DEV_RESCUE`,
+    ///         CTR-GOV-25). The entry guard keeps it out of a running settlement or plan: only a stray between calls moves.
     function rescue(address token) external nonReentrant {
         address to = DexPuller(_s().puller).rescueTo();
-        if (to == address(0)) revert DexPuller.RescueOff();
         uint256 amount = IERC20(token).balanceOf(address(this));
         _send(token, to, amount);
         emit IRescuable.Rescued(token, to, amount);

@@ -398,3 +398,5 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `test/vectors/erc1271_kat.json`; superseded by ERC-7739 the same day (owner 2026-11-12: "only ERC-7739"; a wallet shows
   only `hash: 0x…` for the Safe-style message). clientkeys' `erc1271Digest` / `erc1271TypedData` and their test are in
   `clients/clientkeys/legacy/ua-mtx-fix2-contracts/`. Not built.
+  `src/dex/DexPuller.sol` as it stood at `829006be`: `DexConfig.rescueTo` 0 meant no rescue (`RescueOff()`); superseded
+  by CTR-GOV-25 (owner 2026-11-12: 0 is the constant dev address `SCAAS_DEV_RESCUE`). Not built.

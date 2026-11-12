@@ -1,0 +1,51 @@
+[
+ {
+  "id": "G25-1 no default at init",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x0000000000000000000000000000000000000000 != 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131] test_rescueToZeroIsTheDevAddress() (gas: 1346"
+ },
+ {
+  "id": "G25-2 default without the bit",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131 != 0x0000000000000000000000000000000000000000] test_rescueOffWithoutTheBit() (gas: 3262608)"
+ },
+ {
+  "id": "G25-3 address without the bit accepted",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_rescueToThisOrAPoolRefusedAtInit() (gas: 3658348)"
+ },
+ {
+  "id": "G25-4 to() keeps 0",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SafeERC20FailedOperation(0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f)] test_dexRescueWholeBalance() (gas: 822261)"
+ },
+ {
+  "id": "G25-5 another constant",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: the owner's constant: 0x000000000000000000000000000000000000dEaD != 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131] test_rescueToZeroIsTheDevAddress() (gas: "
+ },
+ {
+  "id": "G25-6 puller keeps 0",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SafeERC20FailedOperation(0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f)] test_dexRescueWholeBalance() (gas: 822261)",
+  "note": "rerun with --match-test \"puller|dex\"; the first run filtered \"Dex\" (case) and ran no test that reads the puller"
+ },
+ {
+  "id": "G25-7 send: no designator check",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_rescueToDesignatorRefusedNative() (gas: 1394258)"
+ },
+ {
+  "id": "G25-8 send: native as ERC-20",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SafeERC20FailedOperation(0x0000000000000000000000000000000000000000)] test_rescueNativeLessReserve() (gas: 1988263)"
+ }
+]
