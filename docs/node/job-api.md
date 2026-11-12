@@ -163,10 +163,10 @@ Payload by kind:
   builds the inner calldata from `call` and sends the router's `relay(target, callData, token, from, payee, value, batch,
   nonce, validUntil, auth)` to `args.relayer`, which must be `params.relay_fee.router`; a hex call is refused; a `call` naming
   `mtxRelayFee` is refused `BAD_PAYLOAD` by its `entry`, before its body is parsed (no nesting); the payee is
-  never `pad(executor)`, open mode `payee = pad(router)`. *Known limit* (Fable review of ua-mtx-merge E N-4; PLANNED, open): a PQZ debit
-  as `call` is built with the empty verdict; its `pqz_verdict` and `pqz_fee` are parsed and ignored (the fill reads the outer
-  entry), so on an `OFFCHAIN` token the job reverts `PqzVerdictRequired` at simulation and is `dead` with no hint, and on a
-  `PRECOMPILE` token the `pqz_fee` pre-check is skipped. Target: refuse by name at parse an inner row with a verdict slot.
+  never `pad(executor)`, open mode `payee = pad(router)`. A PQZ debit (a row taking the verdict last) as `call` is refused
+  `BAD_PAYLOAD: a PQZ debit (<entry>) is no relay fee's call` at parse, zero sends: the node rebuilds its verdict after the payer
+  hashed the call (`callDataHash`), so the combination is not supported; the debit is its own job (Fable review of ua-mtx-merge
+  E N-4; BUILT, `typed::tests::relay_fee_call_object`).
 - *EVM, the fee covers the quote.* After the simulation, a relay fee that reaches this lane (open mode or bound to it) must be
   worth, at `params.relay_fee.min_wei_value[token]`, at least the quote: the gas limit × the job's **fee ceiling**
   (`FEE_HEADROOM` = 2 × the max fee per gas of its first send) + 2 × the L1 data fee on an OP-stack chain
@@ -280,7 +280,7 @@ JSON; the struct names are the vector file's keys.
 | Key | Rule |
 |---|---|
 | `entry` | The contract function: `mtxUnwrap`, `mtxUnshield`, … |
-| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`, `gov_router`, `pqchat`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind. *Known limit* (Fable review of ua-mtx-merge E N-6; PLANNED, open): on a `token` / `zether` / `pqz` row the name is not checked against the token's `eip712Domain().name` (the venue and the service path read it, the job path does not): a wrong one only picks the node's digest domain, so an EOA signer is refused `BAD_SIGNATURE` and a derived signer's landed job is labelled `superseded`; target: read the name once per token (immutable) and refuse a mismatch by name |
+| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`, `gov_router`, `pqchat`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind. On a `token` / `zether` / `pqz` row the name must be the token's own kind: the guard reads the token's `eip712Domain().name` once (an immutable of its kind, kept) and refuses another `CONTRACT_KIND_MISMATCH` (`dead`, zero sends; unreadable: back in the queue), so the node's digest domain is always the token's (Fable review of ua-mtx-merge E N-6; BUILT, `guard::tests::the_op_contract_is_the_token_domain_kind`). The same holds for a transfer struct job's `contract` (absent = `token`) and for a relay fee, whose payer signs in the fee token's domain (Fable recheck 2 P3-1; `submit::tests::a_transfer_and_a_relay_fee_name_the_token_kind`). **Operator note:** a job with a wrong `contract` on a token, accepted before, is now `CONTRACT_KIND_MISMATCH` (`dead`, or `consumed` if its nonce was spent) |
 | `struct` | Only when an entry has two rows on a kind (`ENTRY_AMBIGUOUS`): `CancelUAOrder` / `CancelUAWrapOrder`, `UARollOverSigned` / `ZetherRollOver`, `UASetRollOverMode` / `ZetherSetRollOverMode`, `CancelDexOrder` / `mtxCancelOrders` |
 | `token` | The call's target; a `UARelayFee`'s fee token; a wrap order's wrapper |
 | `envelope` | `from` + `batch`, `nonce`, `validUntil`, `mode`, `relayer`, `fee`, `feeRecipient`, on every entry whose struct ends with them (`UAEnvelope`, `from` an id; `Envelope`, `from` an address, on the address entries); exactly these keys |
@@ -342,6 +342,7 @@ Gateway: `POST /v1/op {chain, op}` takes the same object, for a token's entry on
 | `BAD_PAYLOAD` | a field missing, unknown, or not its type (the path is named) |
 | `MANDATE_LANE` | above |
 | `BAD_SIGNATURE` | above |
+| `CONTRACT_KIND_MISMATCH` | `contract` names a token kind (`token`, `zether`, `pqz`) whose domain is not the token's `eip712Domain().name` |
 | `CALL_TARGET_REFUSED` / `TOKEN_NOT_SERVED` | the target does not meet the kind's rule ([call table](#call-table)); `TOKEN_NOT_SERVED` also a Soroban mandate job's `token` ([NET-SOR-29](../networks/soroban.md#NET-SOR-29)) |
 | `UNSIGNED_WRITE_NOT_PAID` | an unsigned `PqChat` write, neither a relay fee's call nor under `relay_unsigned_pqchat` ([call table](#pqchat-calls)) |
 | `HEX_ARGS_REFUSED` | a struct sent as hex where the entry names its fields: a `PqChat` job's `args`, record, list or `sig` ([call table](#pqchat-calls)), a pay's `meta.body`, a PQZ verdict |
@@ -754,12 +755,15 @@ lane only relays what the role holders already signed. The rule of contract kind
 Refusal: `403 CALL_TARGET_REFUSED` at accept (step 4), re-checked at lease; on the legacy
 pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape needs a table row (a node release).
 
-*Known limits* (Fable review of ua-mtx-merge E N-10, N-11; PLANNED, open): the `registry`, `account` and `factory` rows are pinned against
-the node's own `abi.rs` bindings, one direction only (not in `selector_audit.json`), so a new state-changing entry on
-`UARegistry`, `SmartKeyAccount` or `SmartKeyAccountFactory` fails no node test (today the only registry write without a row is
-`cacheExpandedKey`, permissionless and unsigned); target: add the three to `selector_audit.json` and to
-`allow_lists_equal_the_selector_audit_both_directions`. `mtxCreateToken`, `mtxCreateDex` and `mtxCreateInstance` have no row
-(`guard.rs` `NOT_ROWS`) until relaying creations is decided: an open item against "every state-changing `mtx*` is relayable";
+The `registry`, `factory` and `account` rows are walked both directions against `UARegistry`, `SmartKeyAccountFactory` and `SmartKeyAccount` in
+`selector_audit.json` (Fable review of ua-mtx-merge E N-10; BUILT, `allow_lists_equal_the_selector_audit_both_directions` and
+forge `SelectorAudit.t.sol` `test_everySelectorIsClassified`): each row is a `SIGNED` entry, or a `PERMISSIONLESS` one whose
+proof or address fixes what it writes (`storePqzPop`, `deploy`); a new `SIGNED` write without a row fails; `cacheExpandedKey`
+(`PERMISSIONLESS`) has no row. On the account (owner 2026-11-12; BUILT) the guardian's `initiateRecovery` is the audit class
+`GUARDIAN` (a stranger is refused `NotGuardian()`), no row; its self-only operations (`addKey`, `setGuardian`, `execute`, …) are
+reached through its signed `mtx*` rows; its generic `mtxExecute` / `mtxBatch` on an address `MetaTransaction` are no row (a job
+names its operation).
+`mtxCreateToken`, `mtxCreateDex` and `mtxCreateInstance` are rows ([NODE-JOB-26](#NODE-JOB-26), [NODE-JOB-27](#NODE-JOB-27));
 the four release approvals are covered by the owner's ruling of 2026-11-10.
 Selector matching suffices outside the token/role set: a lane's authority is only `msg.sender` of the direct call,
 never of calls the target makes. One operator session (or a stolen one) could otherwise turn a lane that holds fee
@@ -840,7 +844,7 @@ is `422 HEX_ARGS_REFUSED`.
 | `VestingGrant.release`; `Distribution.claim`, `claimMany` | runtime code = EIP-1167 clone of the registered asset-suite implementation (codehash checked at lease, cached) | client asset-suite flows ([contracts/asset-suite.md](../contracts/asset-suite.md)) |
 | `ExchangeOffer.exchange(MetaTransaction,bytes)` | EIP-1167 clone of the registered `ExchangeOffer` implementation (like `SCaaSDex.mtxSettle`: the leg carries the holder's own signature) | client corporate actions |
 | `Safe.execTransaction` | a registered role-holder contract (`chain_contract.kind = role_holder`); the owners' signatures are inside the calldata | issuer / compliance / buyer role holders |
-| `GovernanceRouter.mtx<Op>` (the `typed.rs` rows of contract kind `gov_router`, 35 at `26586d2e`; group 3f adds `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` ([NODE-JOB-22](#NODE-JOB-22)), group 3h `mtxSetProofStore`, group 3l `mtxSetWrapLimits`, `mtxSetWrapMember`; CTR-GOV-23 adds the eleven admin ops of `OpenFactory` and a `ComplianceRegistry`, `mtxPublishTokenEnv`, `mtxPublishDexEnv`, `mtxPublishClassEnv`, `mtxDeprecateToken`, `mtxDeprecateDex`, `mtxDeprecateRelease`, `mtxSetTokenKindEnabled`, `mtxSetClassKindEnabled`, `mtxSetKycProvider`, `mtxSetCompliance`, `mtxSetChainEntries`, an `Env` at most 4 deps, 2 params and 32 libs with one code hash each, the compliance arrays of one length at most 256; the four release approvals and the three open deploys are no row: release management is not a node job, owner 2026-11-10) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | admins and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0. The first call of a delayed `mtxSetWrapLimits` lands and changes nothing (`WrapLimitsProposed`, its `eta`): an operator reads `landed` as proposed, not applied; naming it in the job's result is SPECIFIED, not built |
+| `GovernanceRouter.mtx<Op>` (the `typed.rs` rows of contract kind `gov_router`, 35 at `26586d2e`; group 3f adds `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` ([NODE-JOB-22](#NODE-JOB-22)), group 3h `mtxSetProofStore`, group 3l `mtxSetWrapLimits`, `mtxSetWrapMember`; CTR-GOV-23 adds the eleven admin ops of `OpenFactory` and a `ComplianceRegistry`, `mtxPublishTokenEnv`, `mtxPublishDexEnv`, `mtxPublishClassEnv`, `mtxDeprecateToken`, `mtxDeprecateDex`, `mtxDeprecateRelease`, `mtxSetTokenKindEnabled`, `mtxSetClassKindEnabled`, `mtxSetKycProvider`, `mtxSetCompliance`, `mtxSetChainEntries`, an `Env` at most 4 deps, 2 params and 32 libs with one code hash each, the compliance arrays of one length at most 256; the four release approvals and the three open deploys are no row: release management is not a node job, owner 2026-11-10; owner 2026-11-12 adds the creations `mtxCreateToken`, `mtxCreateDex`, [NODE-JOB-26](#NODE-JOB-26), and `mtxCreateInstance`, [NODE-JOB-27](#NODE-JOB-27)) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | admins and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0. The first call of a delayed `mtxSetWrapLimits` lands and changes nothing (`WrapLimitsProposed`, its `eta`): an operator reads `landed` as proposed, not applied; naming it in the job's result is SPECIFIED, not built |
 | `PqChat` writes (12, `typed.rs` contract kind `pqchat`, [above](#pqchat-calls)) | `Rule::FactoryClass(3)`: `token_factory`'s `infoOf` lists it as class 3, `version ≠ 0` (unset ⇒ refused); `storeMessage` / `addWraps` only paid or under `relay_unsigned_pqchat` | PqChat clients (sessions, messages, public topics), any relayer |
 | A configured service's declared entries `<op>(<Op>, UAMetaTransfer, UASig)` (contract kind `service`, [NODE-JOB-25](#NODE-JOB-25)) | `[[chains.services]]` of this chain, equal to its `servicePullEntries()` both directions; one kind per address | payers of a service pull, any relayer |
 
@@ -879,7 +883,50 @@ guard's service rule, config), EVM only. **UNAUDITED.**
 
 **Factory classes** (PLANNED; factory index spec §8.6, [CTR-TOK-27](../contracts/token-wrappers.md#CTR-TOK-27)): the guard rule
 `factory_class(class)` generalizes `Rule::FactoryClass(3)`: `infoOf(target).contractClass == class` and `version ≠ 0` on the chain's
-`token_factory`, cacheable for ever; no node row relays a factory creation until relaying creations is decided.
+`token_factory`, cacheable for ever. A token's or a DEX's creation is relayed through the router ([NODE-JOB-26](#NODE-JOB-26)), a
+class instance's too ([NODE-JOB-27](#NODE-JOB-27)).
+
+<a id="NODE-JOB-26"></a>**NODE-JOB-26** — **The factory's creations of a token and a DEX are relayable: the config is named, the node
+encodes `initArgs` and fills `initHash`** (owner 2026-11-12: every state-changing `mtx*` is relayable, fee 0 too). Status: **BUILT**
+(branch `ua-mtx-fix2-node`; tests `typed::tests::creation_rows_encode_the_named_config`, e2e `router_creations_signed_by_an_eoa`;
+the named config and its `initArgs` are the known answer `smartcontracts/vectors/factory/create_config.json`, checked against the
+Solidity structs field by field by forge `test/factory/CreateConfigKat.t.sol` and read by the node and `clientkeys`, Fable recheck 2
+P3-7).
+**UNAUDITED.** A `ua_metatx` job on the chain's `GovernanceRouter` (`contract: "gov_router"`), the creator's `UAEnvelope` (its own
+lane, `batch` usually the factory's address) and `UASig`:
+`{entry: "mtxCreateToken", args: {target: <OpenFactory>, kind, version, salt, config: {TokenConfig}}}` or
+`{entry: "mtxCreateDex", args: {target, version, salt, config: {DexConfig}}}`. `config` is `IFactoryToken.TokenConfig`
+(`name, symbol, decimals, features, lockedFeatures, admin, roles{minter, rateAdmin, guardian, issuer, compliance}, initialSupply,
+initialHolder, legs[{underlying, num, den}] (at most 8), rate{rateDelay, maxRateStepBps}, conf{…13 fields}, grantDelay, rescueTo,
+maxSupply, reg{complianceRegistry, requiredFlags, deniedFlags, termsHash, taxRecipient}`) or `ISCaaSDex.DexConfig` (`admin,
+relayerSharePpm, treasury, listedOnly, grantDelay, rescueTo`), every field named, a missing one `BAD_PAYLOAD`, a hex config
+`BAD_PAYLOAD: … not an object`. The node sends `abi.encode(config)` as `initArgs` and builds the signed `UACreateToken` /
+`UACreateDex` with `initHash = keccak256(initArgs)`; a job's own `initHash` is refused `BAD_PAYLOAD: args.initHash: the node hashes
+args.config`. The rule is `Rule::GovRouter`; the factory checks the release and the config itself. The gas is the simulation's,
+under the same caps as every job (the estimate, regular + state, within `max_gas_per_tx` and the block gas limit). Clients sign the
+same struct (`clientkeys` `UACreateToken` with `extra.initArgs`): what a client signs over its `initArgs` is what the node rebuilds
+from the named config when that config encodes to those bytes (`clientkeys` `creationInitArgs`, against the same vector).
+
+<a id="NODE-JOB-27"></a>**NODE-JOB-27** — **A generic class's creation is relayable in two forms: its `init_call` bytes, or a known
+class's named config the node builds the call from** (owner 2026-11-12: both the generic row and the
+per-class ones). Status: **BUILT** (branch `ua-mtx-fix2-node`; tests `typed::tests::instance_rows_take_init_call_or_a_named_config`,
+`guard::tests::an_instance_names_a_live_release`, e2e `router_instance_creations_signed_by_an_eoa`; the known answer is the
+`instance` row of `smartcontracts/vectors/factory/create_config.json`, checked by forge `CreateConfigKat.t.sol`
+`test_instanceInitCallKat` and read by the node and `clientkeys` `instanceInitCall`). **UNAUDITED.** A `ua_metatx` job on the chain's
+`GovernanceRouter` (`contract: "gov_router"`), the creator's `UAEnvelope` and `UASig`, the struct `UACreateInstance`'s fields by
+their names: `{entry: "mtxCreateInstance", args: {target: <OpenFactory>, contractClass, kind, version, salt, init_call: "0x…"}}`
+(the generic row) or `{…, config: {…}}` (a per-class row, same entry). `init_call` is the one named exception to explicit
+parameters here: it mirrors the contract's own `bytes initCall` (a class's catalogued initializer with its own typed arguments,
+precedent `Interaction.data`), at most 4,096 bytes (`INIT_CALL_TOO_LONG`). Known classes by named config (BUILT): `PqChat`
+(class 3, kind 0), `config: {owner}`, `owner` 0 or the creator (`envelope.from`; another is refused here, the instance would refuse
+it `PqChatOwnerNotCreator`); the node sends `initialize(owner)`. Refused by name (`dead`, nothing sent): both `config` and
+`init_call` (`BAD_PAYLOAD: args.config and args.init_call`), neither (`BAD_PAYLOAD: args.init_call: missing`), a job's own
+`initHash` (`BAD_PAYLOAD: args.initHash: the node hashes …`), a named config for a class without one (`INSTANCE_CONFIG_UNKNOWN`),
+an unknown config field. The node signs `initHash = keccak256(initCall)` and, before the simulation, reads the release on the
+factory (`classReleaseOf`): not published `RELEASE_UNKNOWN`, deprecated `RELEASE_DEPRECATED` (`dead`, after the subject nonce is
+read: a creation that landed and is delivered again is `consumed`, Fable recheck 4 R4-2); an unread answer is back in the queue. The factory checks the rest (usable from, the kind enabled, the initializer's selector). Rule `Rule::GovRouter`; the gas
+is the simulation's under the same caps as every job. *Known limit* (PLANNED): a class added later gets a named row only with a
+node release (`typed.rs` `INSTANCE_CONFIGS`); until then its creation takes `init_call`.
 
 `pqz_call` jobs are not `call` jobs: their own selector list is in the kinds table above.
 
@@ -1006,7 +1053,9 @@ cancels 2 rps (burst 10).
 
 Terminal reasons that are not HTTP codes: job `dead` with `error = ATTEMPTS_EXHAUSTED` (`attempt_count >
 chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_VERDICT_EXPIRED`, `PQZ_FEE_MISMATCH`, `PQZ_FEE_LOG_UNREAD`, `PQZ_VERIFIER_PROBE_UNREAD`, `PQZ_KEY_ROTATED`,
-`PQZ_KEY_VERSION_UNKNOWN`, `PROOF_STORE_OVER_LANE_CAP` ([NODE-JOB-24](submit-lanes.md#NODE-JOB-24)); a lane stopped by
+`PQZ_KEY_VERSION_UNKNOWN`, `PROOF_STORE_OVER_LANE_CAP` ([NODE-JOB-24](submit-lanes.md#NODE-JOB-24)), `FAILOVER_ANSWER: <refusal>` (the
+refusal was read while a failover `rpc_urls` endpoint answered: no verdict until the first endpoint answers; the gateway and DEX
+intake answer it 503, [submit-lanes.md](submit-lanes.md#rpc-failover)); a lane stopped by
 `SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 
 ## 15. Client conformance

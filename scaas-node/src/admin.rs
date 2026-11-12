@@ -33,6 +33,8 @@ pub struct ChainProbe {
     pub adapter: Arc<dyn ChainAdapter>,
     pub max_lag: u64,
     pub lanes: Vec<LaneProbe>,
+    /// Fable recheck 5 R5-5: `ChainCfg::failover`, the reads a failover endpoint answered on this chain.
+    pub failover: Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// `blockchain.chain.relay_stats` (Odoo).
@@ -55,6 +57,8 @@ pub struct Reading {
     pub max_lag: u64,
     /// (nhãn lane, số dư gần nhất, trạng thái cầu dao theo `NAMES`, tx đã vào sổ mà không đọc được phí)
     pub lanes: Vec<(String, Option<u128>, [bool; 3], u64)>,
+    /// The reads a failover endpoint answered (R5-5).
+    pub failover: u64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -80,8 +84,10 @@ pub fn render(readings: &[Reading]) -> Snapshot {
     };
     let mut jobs = Vec::new();
     let (mut attention, mut lag, mut drift, mut balance, mut open, mut unread) = (vec![], vec![], vec![], vec![], vec![], vec![]);
+    let mut failover = vec![];
     for r in readings {
         let c = esc(&r.key);
+        failover.push((format!("chain=\"{c}\""), r.failover.to_string()));
         if let Err(e) = &r.head {
             reasons.push(crate::chain::redact_urls(&format!("{}: rpc: {e}", r.key)));
         }
@@ -120,6 +126,8 @@ pub fn render(readings: &[Reading]) -> Snapshot {
     fam("scaas_breaker_open", "Gas circuit breaker open (1) per lane.", "gauge", open);
     fam("scaas_fee_unread_total", "Landed transactions whose fee could not be read, so the gas budget missed it.", "counter", unread);
     fam("scaas_drift_alerts", "Unmatched inbound transfers plus balance mismatches.", "gauge", drift);
+    fam("scaas_rpc_failover_answers_total", "Chain reads answered by an rpc_urls endpoint other than the first (no job dead on them).",
+        "counter", failover);
     let ready = reasons.is_empty() && !readings.is_empty();
     Snapshot { ready, reasons, metrics: m }
 }
@@ -150,7 +158,7 @@ async fn read(p: &ChainProbe, odoo: &Odoo) -> Reading {
             (l.lane.clone(), bal, st, unread)
         })
         .collect();
-    Reading { key: p.key.clone(), head, stats, max_lag: p.max_lag, lanes }
+    Reading { key: p.key.clone(), head, stats, max_lag: p.max_lag, lanes, failover: p.failover.load(std::sync::atomic::Ordering::Relaxed) }
 }
 
 /// Tuần tự theo chain, mỗi lần đọc có trần 3 s.
@@ -221,6 +229,7 @@ mod tests {
             }),
             max_lag: 50,
             lanes: vec![("0xaa".into(), Some(10), [false, true, false], 2)],
+            failover: 4,
         }
     }
 
@@ -269,6 +278,9 @@ scaas_fee_unread_total{chain=\"evm:7622\",lane=\"0xaa\"} 2
 # HELP scaas_drift_alerts Unmatched inbound transfers plus balance mismatches.
 # TYPE scaas_drift_alerts gauge
 scaas_drift_alerts{chain=\"evm:7622\"} 3
+# HELP scaas_rpc_failover_answers_total Chain reads answered by an rpc_urls endpoint other than the first (no job dead on them).
+# TYPE scaas_rpc_failover_answers_total counter
+scaas_rpc_failover_answers_total{chain=\"evm:7622\"} 4
 ";
         assert_eq!(render(&[ok_reading()]).metrics, want);
         assert_eq!(esc("a\"b\\c\nd"), "a\\\"b\\\\c\\nd");

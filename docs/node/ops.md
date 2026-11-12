@@ -210,6 +210,7 @@ Existing (BUILT, `admin.rs` `render()`, `submit.rs`; first-release forms `scaas_
 | `scaas_indexer_lag_blocks` | gauge | `chain` | final head − indexed block |
 | `scaas_relayer_balance` | gauge | `chain`, `lane` | smallest gas-coin unit; the account that pays, so on a chain with `fee_bump_lane` every lane reports the fee account |
 | `scaas_breaker_open` | gauge | `chain`, `lane`, `breaker` | + `revert_streak`, reported on every lane of the chain |
+| `scaas_rpc_failover_answers_total` | counter | `chain` | chain reads answered by an `rpc_urls` endpoint other than the first (the first did not answer); no job is `dead` or order `invalid` on them (`FAILOVER_ANSWER`, [submit-lanes.md](submit-lanes.md#rpc-failover)); 0 on families with no EVM `Chain`. BUILT (Fable recheck 5 R5-5) |
 | `scaas_fee_unread_total` | counter | `chain`, `lane` | landed transactions (mined or reverted) whose fee `tx_fee` could not read, so the gas budget missed that fee; each is also a warning in the log naming the job. BUILT (ua8-soroban B9a) |
 | `scaas_submit_bump_skipped_consumed_total` | counter | none today; `chain`, `lane` added with the metrics core | consumption check |
 | `scaas_config_toml_drift` | gauge | — | [NODE-STO-03](store.md#NODE-STO-03) |
@@ -474,6 +475,7 @@ groups:
   - {alert: ScaasLaneHeadStuck, expr: 'scaas_lane_head_stuck_seconds > 300', labels: {severity: P2, runbook: rb-03-stuck-lane}}
   - {alert: ScaasFeeCapReached, expr: 'increase(scaas_submit_fee_cap_reached_total[15m]) > 0', labels: {severity: P2, runbook: rb-03-stuck-lane}}
   - {alert: ScaasFeeUnread, expr: 'increase(scaas_fee_unread_total[15m]) > 0', labels: {severity: P2, runbook: rb-02-breaker-open}}
+  - {alert: ScaasRpcFailover, expr: 'increase(scaas_rpc_failover_answers_total[15m]) > 0', for: 15m, labels: {severity: P2, runbook: rb-01-node-down-or-not-ready}}  # the first rpc_urls endpoint keeps failing: jobs wait as FAILOVER_ANSWER
   - alert: ScaasLaneRunwayLow
     expr: |
       (scaas_relayer_balance{chain!~"$FEE_BUMP_CHAINS"} - on (chain, lane) scaas_relayer_balance_floor)
@@ -838,7 +840,7 @@ Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE
 [pqz_verifier]
 endpoints = ["https://pqz-verifier.example.org"]   # asked in order; URLs only, no secret
 refuse_shield_when_unserved = false                # opt-in
-# timeout_ms = 5000            # one endpoint's whole request
+# timeout_ms = 5000            # one endpoint's whole request; one that does not answer (or a 5xx) rests max(10 s, 4 x timeout_ms); set it above the verifier's normal verdict time with a margin: a slow answer rests nothing and costs that long per job (submit-lanes.md)
 # max_response_bytes = 262144  # read in chunks, a longer answer is no answer
 # valid_margin_secs = 30       # a verdict expiring sooner is re-fetched
 ```
@@ -910,6 +912,8 @@ only. **UNAUDITED.**
 | PQZ jobs gain `args.pqz_verdict: {pqzVerifierEpoch, validUntil, auth}` (BUILT, [NODE-JOB-22](job-api.md#NODE-JOB-22)) | PQZ job producers | `OFFCHAIN` token: send it, or let the node fetch it; `PRECOMPILE` token: leave it out (`PQZ_VERDICT_NOT_EXPECTED`) |
 | `ConfidentialConfig` gained `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` (group 3f) and `proofStore` (group 3h); the `TokenConfig` encoding moved for every kind (BUILT) | token creators, the wizard | every kind sends the fields; non-PQZ kinds leave them 0 / false (`ConfigFieldForOtherKind(4)`); a PQZ creation states the mode and, for `OFFCHAIN`, the verifier and fixed or transferable, after showing the maximum loss |
 | `[pqz_verifier] endpoints`, `refuse_shield_when_unserved` (BUILT, [above](#pqz-verifier)) | node operators | configure endpoints for the `OFFCHAIN` tokens served; the node signs nothing and holds no verifier key |
+| The router's creations are rows (BUILT, [NODE-JOB-26](job-api.md#NODE-JOB-26), [NODE-JOB-27](job-api.md#NODE-JOB-27)): `mtxCreateToken` / `mtxCreateDex` with a named `config`; `mtxCreateInstance` with `init_call` bytes (at most 4,096) or a known class's named `config` (`PqChat`: `{owner}`, 0 or the creator), never both; refused by name `RELEASE_UNKNOWN`, `RELEASE_DEPRECATED`, `INSTANCE_CONFIG_UNKNOWN`, `INIT_CALL_TOO_LONG` | creators, wallets, job producers | send the struct's fields by name, never `initHash`; list the chain's router in `governance_routers` |
+| Chain reads per `[[chains]]` table (BUILT, Fable recheck 3, [submit-lanes.md](submit-lanes.md#rpc-failover)): `rpc_timeout_ms` (30 s) bounds each request (reads, each log span, the lane's nonce, fee, send, receipt), `rpc_simulate_timeout_ms` (120 s, unmeasured) each request of a simulation, 0 refused at start; a failover endpoint (the second `rpc_urls` entry onward) is used only on the chain's id and block 0, at or above the head the first endpoint gave, and none of its answers (a revert or a value) makes a job `dead` or an order `invalid` (`FAILOVER_ANSWER`, requeued; 503 at the gateway, DEX intake and cancels); no job goes `dead` on an unread chain or on a failover endpoint's answer, and an expiry is `dead` only after the first endpoint said the op did not land (the three expiry verdicts (`expired before submit`, `expired while stuck; nonce gap-filled`, `expired before inclusion`); a first endpoint's revert stays `dead` by design); a tracked job refused on a failover answer, or a tracked transaction that cannot be read, at a restart makes the node process exit (its supervisor restarts it; every chain and the gateway down meanwhile); `scaas_rpc_failover_answers_total` counts the reads failover endpoints answered (alert `ScaasRpcFailover`); an RPC that caps `eth_getLogs` below 500 blocks is given up for the PQZ log reads | node operators | raise `rpc_simulate_timeout_ms` if a PQZ or Zether simulation's error is the HTTP client's timeout (`simulate: … operation timed out`); repair the first endpoint when `FAILOVER_ANSWER` jobs pile up or the failover counter climbs; pin `chain_uid` so a failover endpoint can be checked while the first is down; list one endpoint with an `eth_getLogs` cap of at least 500 blocks |
 | The PQZ verifier (off-chain) is a separate trust role (BUILT, T48) | whoever a token names as verifier | run `scaas-pqz-verifier` (or another implementation of its contract) apart from the node, its key in its own keystore |
 | Alerts `PqzVerifierProposed`, `PqzVerifierRevoked`; per-token `pqz_last_verdict_at` (BUILT) | operators, wallets | watch a proposal before its `eta`; a revocation freezes the token's confidential balances until a new verifier is set |
 | The verdict-less `verifyTransferAmount` reverts `PqzVerdictRequired()` on an `OFFCHAIN` token (BUILT, T45) | ERP reconciliation | use the verdict form, or `pqz-ffi` on `disclosureStatement` |

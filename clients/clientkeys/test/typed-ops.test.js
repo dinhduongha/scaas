@@ -16,6 +16,7 @@ import * as zether from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode, word } from '../src/bytes.js';
 import { expectedCall, norm } from '../scripts/typed-ops-expected.mjs';
 import * as reg from '../src/regulated.js';
+import { creationInitArgs, instanceInitCall } from '../src/factory.js';
 
 const { TYPED_OPS, hashTypedData, hashStruct, checkOp, checkWrapOrder, checkUAWrapOrder, checkTradeOrder, checkCancel, encodeType } = evm;
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url)));
@@ -863,4 +864,46 @@ test('the router creations: initHash binds the extra bytes', () => {
     assert.throws(() => op.call(td, d.signature, { [field]: '0x00' }), /not the signed initHash/, name);
     assert.throws(() => op.call(td, d.signature, {}), new RegExp(`needs extra.${field}`), name);
   }
+});
+
+// Fable recheck 2 P3-7 (NODE-JOB-26): a creation's named config and its `initArgs` (smartcontracts/vectors/factory/create_config.json,
+// checked against the Solidity structs by forge `CreateConfigKat.t.sol`, read by the node too): the bytes a client sends in
+// `extra.initArgs` are the ones the node rebuilds from the named config, and they bind the signed `initHash`.
+test('the router creations: the named config vector binds initHash', () => {
+  const K = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/factory/create_config.json', import.meta.url)));
+  for (const [name, key] of [['UACreateToken', 'token'], ['UACreateDex', 'dex']]) {
+    const op = TYPED_OPS[name];
+    const d = V.ops[name].domains.gov_router;
+    const { initArgs, initHash } = K[key];
+    assert.equal(hex(keccak_256(fromHex(initArgs))), initHash, name);
+    const td = { types: op.types, primaryType: op.primary, domain: d.domain, message: { ...V.ops[name].message, initHash } };
+    const data = hex(op.call(td, d.signature, { initArgs }).data);
+    assert.ok(data.includes(initArgs.slice(2)), `${name}: the calldata carries initArgs`);
+    assert.throws(() => op.call(td, d.signature, { initArgs: d.extra.initArgs }), /not the signed initHash/, name);
+    // Fable recheck 3 R3-7: the named config itself encodes to the row's initArgs (the same struct order forge checks)
+    assert.equal(creationInitArgs(key, K[key].config), initArgs, `${name}: config -> initArgs`);
+    assert.throws(() => creationInitArgs(key, { ...K[key].config, extra: 1 }), /no field extra/, name);
+    const { grantDelay, ...missing } = K[key].config;
+    assert.throws(() => creationInitArgs(key, missing), /config.grantDelay: missing/, name);
+  }
+  const swapped = { ...K.dex.config, grantDelay: K.dex.config.relayerSharePpm, relayerSharePpm: Number(K.dex.config.grantDelay) };
+  assert.notEqual(creationInitArgs('dex', swapped), K.dex.initArgs, 'two fields swapped: other bytes');
+  assert.throws(() => creationInitArgs('token', { ...K.token.config, decimals: 256 }), /out of uint8/);
+});
+
+// Owner 2026-11-12 (mtxCreateInstance, both forms): the `instance` row of create_config.json (forge test_instanceInitCallKat, the
+// node's instance_rows_take_init_call_or_a_named_config): PqChat's named config builds the row's initCall, whose keccak is the
+// signed initHash; the router entry carries those bytes and refuses others.
+test('the router creations: the instance row, named config and initCall', () => {
+  const K = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/factory/create_config.json', import.meta.url)));
+  const { contractClass, kind, config, initCall, initHash } = K.instance;
+  assert.equal(instanceInitCall(contractClass, kind, config), initCall);
+  assert.equal(hex(keccak_256(fromHex(initCall))), initHash);
+  const op = TYPED_OPS.UACreateInstance;
+  const d = V.ops.UACreateInstance.domains.gov_router;
+  const td = { types: op.types, primaryType: op.primary, domain: d.domain, message: { ...V.ops.UACreateInstance.message, initHash } };
+  assert.ok(hex(op.call(td, d.signature, { initCall }).data).includes(initCall.slice(2)), 'the calldata carries initCall');
+  assert.throws(() => op.call(td, d.signature, { initCall: d.extra.initCall }), /not the signed initHash/);
+  assert.throws(() => instanceInitCall(7, 0, config), /class 7 kind 0: no named config/);
+  assert.throws(() => instanceInitCall(3, 0, { ...config, admin: 1 }), /no field admin/);
 });

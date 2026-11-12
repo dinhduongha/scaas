@@ -308,10 +308,13 @@ pub fn pqz_health(state: &mut PqzHealth, rows: &mut [Value]) {
         let verified = !r["pqz_verified"].is_null();
         let (Some(c), true) = (r["contract"].as_str().map(str::to_string), verified || ev.starts_with("PqzVerifier") || ev.starts_with("VerifierFee"))
         else { continue };
-        let s = state.entry(c).or_insert_with(|| json!({"pqz_last_verdict_at": null, "pqz_verifier_epoch": null, "pqz_verifier_revoked": false,
+        // Fable E N-9: unknown until seen (this state lives in memory: after a restart a revoked verifier is never "not revoked")
+        let s = state.entry(c).or_insert_with(|| json!({"pqz_last_verdict_at": null, "pqz_verifier_epoch": null, "pqz_verifier_revoked": null,
             "pqz_verifier_fee": null}));
         if verified {
-            (s["pqz_last_verdict_at"], s["pqz_verifier_epoch"]) = (r["block_number"].clone(), r["pqz_verified"]["pqz_verifier_epoch"].clone());
+            // a verdict was checked: its verifier was not revoked then
+            (s["pqz_last_verdict_at"], s["pqz_verifier_epoch"], s["pqz_verifier_revoked"]) =
+                (r["block_number"].clone(), r["pqz_verified"]["pqz_verifier_epoch"].clone(), json!(false));
         }
         match ev.as_str() {
             "PqzVerifierRevoked" => (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) = (json!(true), r["pqz_verifier_epoch"].clone()),
@@ -615,6 +618,7 @@ pub async fn step_health(chain: &Chain, odoo: &Odoo, router: Option<Address>, re
     }
     let mode = if nc.finality_mode == "tag" { Mode::Tag } else { Mode::Depth(nc.finality_depth) };
     let latest = chain.primary().get_block_number().await?;
+    chain.saw_block(latest); // Fable recheck 3 R3-1: the first endpoint's head feeds the chain's shared head
     let finalized = if mode == Mode::Tag { chain.finalized_number().await? } else { None };
     let Some(safe) = safe_head(&mode, latest, finalized) else { return Ok(false) };
     let Some((from, to)) = next_range(nc.indexed_block, safe, MAX_SPAN) else { return Ok(false) };
@@ -1060,6 +1064,25 @@ mod tests {
         assert_eq!(o.lock().unwrap().ingests, 0, "cursor not advanced");
     }
 
+    /// Fable recheck 3 R3-1: the head the indexer reads from the first endpoint feeds the chain's shared head (what a failover
+    /// endpoint is checked against), for every `Chain` of the table. Control: a fresh `Chain` has seen nothing.
+    #[tokio::test]
+    async fn the_indexer_head_feeds_the_shared_head() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (odoo, _) = fake_odoo(Fake { tokens: json!([{"address": format!("{:#x}", Address::repeat_byte(1)), "decimals": 6}]),
+            ..Default::default() }).await;
+        let (url, _) = crate::chain::tests::fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x64"}),
+            _ => json!({"error": {"code": -32000, "message": "busy"}}),
+        }).await;
+        let cfg = crate::config::ChainCfg { evm_chain_number: 296, rpc_urls: vec![url], ..Default::default() };
+        let (chain, lane) = (Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap(),
+            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap());
+        assert_eq!(lane.seen_head(), 0, "control");
+        let _ = step(&chain, &odoo, None).await;
+        assert_eq!((chain.seen_head(), lane.seen_head()), (0x64, 0x64));
+    }
+
     /// Group 3h (pqz-proof-path spec §10, C11): `ProofStoreSet(previous, next)` is a row and an alert (as 3e's tax recipient: a
     /// holder of bit 24 changed what each later debit leaves in history); a `PqzDebitProof` is no row (no proof data indexed, no
     /// archive); the filter asks for the one, not the other.
@@ -1106,6 +1129,24 @@ mod tests {
             log_at(t, 4, 0, P::VerifierFeeProposed { current: 0, next: 4, eta: 1 }.encode_log_data())], None);
         pqz_health(&mut state, &mut later);
         assert_eq!((later[0]["pqz_verifier_fee"].as_u64(), later[1]["pqz_verifier_fee"].as_u64()), (Some(0), Some(0)), "{later:?}");
+    }
+
+    /// Fable E N-9: a fresh state (a restart) knows nothing: a token's first verifier rows before anything that sets them are stamped
+    /// `pqz_verifier_revoked: null` and epoch `null`, never "not revoked"; a revocation, a new verifier and a verified op set them.
+    #[test]
+    fn pqz_health_is_unknown_until_seen() {
+        use crate::abi::{IPqzEvents as C, IPqzToken as P};
+        let tok = Address::repeat_byte(0x70);
+        let (ver, next) = (B256::repeat_byte(0x0e), B256::repeat_byte(0x0f));
+        let mut rows = pay_events(&[log_at(tok, 1, 0, P::PqzVerifierProposed { current: ver, next, eta: 1 }.encode_log_data()),
+            log_at(tok, 2, 0, P::PqzVerifierCancelled { next }.encode_log_data()),
+            log_at(tok, 3, 0, C::PqzVerifierRevoked { previous: ver, pqzVerifierEpoch: 3 }.encode_log_data()),
+            log_at(tok, 4, 0, P::PqzVerifierSet { previous: B256::ZERO, next, pqzVerifierEpoch: 4 }.encode_log_data())], None);
+        pqz_health(&mut PqzHealth::default(), &mut rows);
+        let st = |r: &Value| (r["pqz_verifier_revoked"].as_bool(), r["pqz_verifier_epoch"].as_u64());
+        assert_eq!(rows.iter().map(st).collect::<Vec<_>>(), [(None, None), (None, None), (Some(true), Some(3)), (Some(false), Some(4))]);
+        assert!(rows[0]["pqz_verifier_revoked"].is_null(), "unknown is null, not absent");
+        assert!(rows.iter().all(client_ingest_accepts));
     }
 
     /// Group 3f (spec §11.1, Codex #10): a `PqzVerified` joins the op event after it of the same token and transaction

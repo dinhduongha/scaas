@@ -100,7 +100,7 @@ kind (`conf` is in every `TokenConfig`, empty or not); all chains are test-only,
 | `OpenFactory`, `GovernanceRouter.mtxCreateToken` | none in code: `initArgs` is opaque (the router signs `keccak256(initArgs)`); a given configuration's bytes and `initHash` move |
 | `PqzStateLib.init` | the rows of §3.3 |
 | `MetaTokenBase._requireUnused` (kinds 0, 1, 8, 9), `ZetherLib.init` (2, 3, 10, 11) | the two fields join the `ConfigFieldForOtherKind(4)` checks (`ZetherLib` on the 3f line, as `proofStore` did) |
-| Node | `scaas-node/tests/e2e.rs:1557` (`sol!` struct), the e2e configs; `src/` decodes no `TokenConfig` (creations are no node rows) |
+| Node | `scaas-node/tests/e2e.rs:1557` (`sol!` struct), the e2e configs; `src/` decoded no `TokenConfig` then. Since NODE-JOB-26 (2026-11-12) the creations are node rows: `scaas-node/src/typed.rs` `NESTED` (`TokenConfig`, `ConfidentialConfig`, …) and the known answer `smartcontracts/vectors/factory/create_config.json` (forge `CreateConfigKat.t.sol`) change with the struct |
 | Scripts | `script/pqz/e2e.py` (`CFG`, its self-test against the source turns red until updated, the T25 precedent), `script/onchain/pq.py` (`create_cfg`), `script/onchain/{Tokens,Dex,Gov,WrapLimits}.s.sol`, `script/ZetherE2E.s.sol` |
 | Tests | 19 positional `IFactoryToken.ConfidentialConfig(…)` constructions in 15 files: 10 under `test/` (`test/pqz/helpers/PqzFixture.sol:96`, the five Zether files, `GovProofBit`, `NamedEntry`, `ZetherPairs`, `DiffZether`) and the five scripts above |
 | Clients | none: no `TokenConfig` encoder in `clientkeys`, `ua-rs` or a `ua-*` at `7ec69f67` (grep); the wizard's encoder, when built, takes the fields |

@@ -32,6 +32,8 @@ import {regArgs} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
+import {SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
 
 /// governance T13, the selector audit (spec §10.1; CTR-GOV-11; GD-6). Every external that writes state on the six kinds,
 /// `SCaaSDex`, `DexPuller` and `GovernanceRouter`, read from its ABI in `FOUNDRY_OUT` (else `./out`), is a row of
@@ -148,8 +150,9 @@ abstract contract SelectorAuditRows is Test {
         return n + 1;
     }
 
+    /// Owner 2026-11-12: `GUARDIAN`, the caller must be the account's guardian (`SmartKeyAccount.initiateRecovery`).
     function _named(string memory c) internal pure returns (bool) {
-        return _bitOf(c) != 0 || _eq(c, "ADMIN") || _eq(c, "HOLDER_OWN") || _eq(c, "FACTORY");
+        return _bitOf(c) != 0 || _eq(c, "ADMIN") || _eq(c, "HOLDER_OWN") || _eq(c, "FACTORY") || _eq(c, "GUARDIAN");
     }
 
     function _known(string memory c) internal pure returns (bool) {
@@ -174,6 +177,8 @@ abstract contract SelectorAuditRows is Test {
                 string.concat(where, ": a BIT row names a role's refusal"));
         } else if (_eq(r.class, "ADMIN")) {
             require(_eq(r.error, "NotAdmin(bytes32)"), string.concat(where, ": an ADMIN row names NotAdmin"));
+        } else if (_eq(r.class, "GUARDIAN")) {
+            require(_eq(r.error, "NotGuardian()"), string.concat(where, ": a GUARDIAN row names NotGuardian"));
         } else if (_eq(r.class, "HOLDER_OWN")) {
             require(_eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotPendingAdmin(bytes32)"),
                 string.concat(where, ": a HOLDER_OWN row names the holder's refusal"));
@@ -367,13 +372,15 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
     }
 
     function test_everySelectorIsClassified() public {
-        string[16] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+        // Fable review of ua-mtx-merge E N-10: + UARegistry and SmartKeyAccountFactory (the node's `registry` and `factory` kinds);
+        // owner 2026-11-12: + SmartKeyAccount (`account`, class GUARDIAN)
+        string[19] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
             "WrappedPqzToken", "SCaaSDex", "DexPuller", "GovernanceRouter", "NormalRegulatedToken", "WrappedRegulatedToken",
             "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken",
-            "OpenFactory"];
+            "OpenFactory", "UARegistry", "SmartKeyAccountFactory", "SmartKeyAccount"];
         uint256 bad;
         for (uint256 i; i < all.length; ++i) bad += _classified(all[i]);
-        assertEq(bad, 0, "every non-view external of the sixteen has exactly one pinned row");
+        assertEq(bad, 0, "every non-view external of the nineteen has exactly one pinned row");
     }
 
     function test_strangerRevertsOnEveryGatedRow() public {
@@ -385,6 +392,9 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         _stranger("NormalRegulatedToken", address(nr));
         _stranger("WrappedRegulatedToken", address(wr));
         _stranger("OpenFactory", address(fac));
+        // owner 2026-11-12: a live account with a guardian that is not the stranger (GUARDIAN: `NotGuardian()`, FACTORY: `NotFactory()`)
+        SmartKeyAccountFactory kf = new SmartKeyAccountFactory(chainUidA);
+        _stranger("SmartKeyAccount", kf.deploy(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(0x5EED)), 0, 0, 0), address(0x6A2D)));
     }
 
     function test_noGovernanceSelectorIsRelayable() public {

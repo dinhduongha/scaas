@@ -79,3 +79,61 @@ export function releaseApprovalKey(domain, m) {
     hex(b32(m.initcodeHash, 'initcodeHash')), hex(b32(m.implArgsHash, 'implArgsHash'))];
   return hex(keccak_256(abiEncode(ts, vs)));
 }
+
+// Fable recheck 3 R3-7 (NODE-JOB-26): a creation's named config as the factory decodes it, field by field in the Solidity
+// structs' order (IFactoryToken.TokenConfig, GovernanceLib.Roles, ISCaaSDex.DexConfig); `{ of: T }` is `T[]`.
+const ROLES = [['minter', 'bytes32'], ['rateAdmin', 'bytes32'], ['guardian', 'bytes32'], ['issuer', 'bytes32'], ['compliance', 'bytes32']];
+const LEG = [['underlying', 'address'], ['num', 'uint256'], ['den', 'uint256']];
+const RATE = [['rateDelay', 'uint32'], ['maxRateStepBps', 'uint16']];
+const CONF = [['auditorKey', 'bytes'], ['shieldScale', 'uint256'], ['maxShielded', 'uint256'], ['confidentialFee', 'uint256'],
+  ['disclosureMode', 'uint8'], ['auditorMode', 'uint8'], ['minDecoyFee', 'uint256'], ['pqzVerifyMode', 'uint8'],
+  ['pqzVerifierUA', 'bytes32'], ['pqzVerifierFixed', 'bool'], ['proofStore', 'uint8'], ['verifierFee', 'uint64'],
+  ['verifierFeeMax', 'uint64']];
+const REG = [['complianceRegistry', 'address'], ['requiredFlags', 'uint64'], ['deniedFlags', 'uint64'], ['termsHash', 'bytes32'],
+  ['taxRecipient', 'bytes32']];
+const CONFIG = {
+  token: [['name', 'string'], ['symbol', 'string'], ['decimals', 'uint8'], ['features', 'uint256'], ['lockedFeatures', 'uint256'],
+    ['admin', 'bytes32'], ['roles', ROLES], ['initialSupply', 'uint256'], ['initialHolder', 'address'], ['legs', { of: LEG }],
+    ['rate', RATE], ['conf', CONF], ['grantDelay', 'uint64'], ['rescueTo', 'address'], ['maxSupply', 'uint256'], ['reg', REG]],
+  dex: [['admin', 'bytes32'], ['relayerSharePpm', 'uint32'], ['treasury', 'address'], ['listedOnly', 'bool'],
+    ['grantDelay', 'uint64'], ['rescueTo', 'address']],
+};
+
+const typeOf = (t) => typeof t === 'string' ? t : t.of ? `${typeOf(t.of)}[]` : `(${t.map(([, x]) => typeOf(x)).join(',')})`;
+
+function valueOf(t, v, path) {
+  if (v === undefined) throw new Error(`${path}: missing`);
+  if (t.of) {
+    if (!Array.isArray(v)) throw new Error(`${path}: an array`);
+    return v.map((x, i) => valueOf(t.of, x, `${path}[${i}]`));
+  }
+  if (Array.isArray(t)) {
+    const extra = Object.keys(v).filter((k) => !t.some(([n]) => n === k));
+    if (extra.length) throw new Error(`${path}: no field ${extra.join(', ')}`);
+    return t.map(([n, x]) => valueOf(x, v[n], `${path}.${n}`));
+  }
+  if (t.startsWith('uint')) {
+    const n = BigInt(v);
+    if (n < 0n || n >= 1n << BigInt(t.slice(4))) throw new Error(`${path}: out of ${t}`);
+    return n;
+  }
+  return v;
+}
+
+/** `initArgs = abi.encode(config)` of a token (`kind` `token`) or DEX (`dex`) creation from its named config, every field
+ *  named and none unknown; `initHash = keccak256(initArgs)` is what the creation signs. */
+export function creationInitArgs(kind, config) {
+  const t = CONFIG[kind] ?? (() => { throw new Error(`no creation config ${kind}`); })();
+  return hex(abiEncode([typeOf(t)], [valueOf(t, config, 'config')]));
+}
+
+/** Owner 2026-11-12 (`mtxCreateInstance`, the per-class named form): the initializer call a known generic class takes from its
+ *  named config, the bytes a creation sends as `initCall` (`initHash = keccak256(initCall)`). `PqChat` (class 3, kind 0):
+ *  `initialize(bytes32 owner)`, `owner` 0 or the creator. Any other class: send its `initCall` bytes. */
+export function instanceInitCall(contractClass, kind, config) {
+  if (Number(contractClass) !== 3 || Number(kind) !== 0) throw new Error(`class ${contractClass} kind ${kind}: no named config; send initCall`);
+  const extra = Object.keys(config).filter((k) => k !== 'owner');
+  if (extra.length) throw new Error(`config: no field ${extra.join(', ')}`);
+  if (config.owner === undefined) throw new Error('config.owner: missing');
+  return hex(concatBytes(keccak_256(utf8ToBytes('initialize(bytes32)')).subarray(0, 4), b32(config.owner, 'owner')));
+}

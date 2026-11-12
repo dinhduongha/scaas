@@ -633,6 +633,13 @@ sol! {
             uint64 createdBlock; uint64 createdAt;
         }
         function infoOf(address c) external view returns (Created memory);
+        /// Owner 2026-11-12: a generic release (`mtxCreateInstance` is checked against it before the simulation).
+        struct ReleaseId { uint16 contractClass; uint16 kind; uint64 version; }
+        struct ClassRelease {
+            address implementation; uint16 envVersion; bytes32 envHash; uint64 usableFrom; bool deprecated; bytes4 initSelector;
+            bytes4 interfaceId;
+        }
+        function classReleaseOf(ReleaseId calldata id) external view returns (ClassRelease memory);
     }
 
     /// `IGovernance`'s events the indexer reads (M-08) and the errors of a role or a pending the node names (§3.1).

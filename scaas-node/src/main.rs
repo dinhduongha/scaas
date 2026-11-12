@@ -188,7 +188,8 @@ async fn main() -> Result<()> {
                     });
                 }
             }
-            probes.push(ChainProbe { key: cc.chain_key(), adapter: adapter.clone(), max_lag: cc.max_index_lag, lanes: probe_lanes });
+            probes.push(ChainProbe { key: cc.chain_key(), adapter: adapter.clone(), max_lag: cc.max_index_lag, lanes: probe_lanes,
+                failover: cc.failover.clone() });
             if cfg.modules.indexer {
                 let idx = legacy(&cfg, false)?;
                 let a = adapter.clone();
@@ -254,7 +255,8 @@ async fn main() -> Result<()> {
         }
         let probe_chain = chain::Chain::connect_lanes(cc, &signers[..1])?;
         let probe = adapters::evm::EvmAdapter::new(cc, probe_chain, tokens.clone())?;
-        probes.push(ChainProbe { key: cc.chain_key(), adapter: Arc::new(probe), max_lag: cc.max_index_lag, lanes: probe_lanes });
+        probes.push(ChainProbe { key: cc.chain_key(), adapter: Arc::new(probe), max_lag: cc.max_index_lag, lanes: probe_lanes,
+            failover: cc.failover.clone() });
         if let Some(tx) = first_tx {
             // DEX (R35): sổ lệnh bền ở Odoo + watcher riêng; settle qua outbox. Lệnh khoá `relayer` =
             // ví lane 0 (RS5-9) mà job outbox chưa ghim được lane (RS5-11) ⇒ DEX chỉ chạy một lane.
