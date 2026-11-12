@@ -569,8 +569,10 @@ impl Submitter {
                 }
                 return;
             }
-            // Fable recheck 2 P3-2: a wrong `contract` delivered again after its op landed (a derived signer's) is `consumed`
-            Err(Refusal::Policy(reason)) if reason.starts_with("CONTRACT_KIND_MISMATCH") => {
+            // Fable recheck 2 P3-2: a wrong `contract` delivered again after its op landed (a derived signer's) is `consumed`;
+            // recheck 4 R4-2: a creation delivered again after its release was deprecated, the same
+            Err(Refusal::Policy(reason)) if ["CONTRACT_KIND_MISMATCH", "RELEASE_DEPRECATED", "RELEASE_UNKNOWN"]
+                .iter().any(|p| reason.starts_with(p)) => {
                 return match self.consumed(&w).await {
                     Ok(true) => self.report_consumed(&w).await,
                     Ok(false) => self.fail(&w, reason).await,
@@ -1095,6 +1097,9 @@ pub(crate) mod tests {
         genesis: bool,
         /// Fable recheck 4 R4-1: a failover endpoint of the chain: `eth_chainId` 31337 and block 0 hashed `UID`.
         failover: bool,
+        /// Fable recheck 4 R4-2: `classReleaseOf` answers a published release, deprecated; or none (implementation 0).
+        release_deprecated: bool,
+        release_unknown: bool,
         /// `latest`'s `gasLimit` (default 200,000,000, the SCaaS testnet's target).
         block_gas: Option<u64>,
         /// `latest` has no `blockAccessListHash`: a chain before Amsterdam (Osaka, an L2, anvil).
@@ -1241,6 +1246,11 @@ pub(crate) mod tests {
                         Ok(json!(format!("0x{}", alloy::hex::encode(IToken::eip712DomainCall::abi_encode_returns(&IToken::eip712DomainReturn {
                             fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(7622),
                             verifyingContract: TOKEN, salt: B256::ZERO, extensions: vec![] })))))
+                    } else if sel == crate::abi::IOpenFactory::classReleaseOfCall::SELECTOR {
+                        use crate::abi::IOpenFactory as F;
+                        Ok(json!(format!("0x{}", alloy::hex::encode(F::classReleaseOfCall::abi_encode_returns(&F::ClassRelease {
+                            implementation: if e.release_unknown { Address::ZERO } else { Address::repeat_byte(0x1e) }, envVersion: 1, envHash: B256::ZERO, usableFrom: 0,
+                            deprecated: e.release_deprecated, initSelector: Default::default(), interfaceId: Default::default() })))))
                     } else if sel == IToken::chainUidCall::SELECTOR {
                         match e.uid_err {
                             Some("revert") => Err(err(3, "execution reverted", Some("0x".into()))),
@@ -2711,6 +2721,26 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         }
         let (r, _) = outcomes(ok(), vec![call_job(9, ROUTER, relay_data(ROUTER, 100))], |_| {}).await;
         assert!(r[0].0 == "dead" && r[0].1.contains("no params.relay_fee.router"), "{r:?}");
+    }
+
+    /// Fable recheck 4 R4-2: a creation refused `RELEASE_DEPRECATED` or `RELEASE_UNKNOWN` reads the subject nonce first: spent (it
+    /// landed before, delivered again) is `consumed`; unspent `dead`; unreadable `queued`. Nothing is sent.
+    #[tokio::test]
+    async fn a_release_refusal_reads_the_nonce_first() {
+        let v = crate::typed::testkit::vectors();
+        let mut op = crate::typed::testkit::op_of("UACreateInstance", "gov_router", &v).unwrap();
+        op["envelope"]["nonce"] = json!("0");
+        let router: Address = op["token"].as_str().unwrap().parse().unwrap();
+        for (unknown, name) in [(false, "RELEASE_DEPRECATED"), (true, "RELEASE_UNKNOWN")] {
+            for (nonce, want) in [(Some(1), "consumed"), (Some(0), "dead"), (None, "queued")] {
+                let e = Evm { mtx_nonce: nonce, release_deprecated: !unknown, release_unknown: unknown, ..Default::default() };
+                let job = json!({"id": 9, "kind": "ua_metatx", "op": op.clone()});
+                let (r, rpc) = outcomes(e, vec![job], |c| c.governance_routers = vec![router]).await;
+                assert_eq!(r[0].0, want, "{name}, mtxNonce {nonce:?}: {r:?}");
+                assert!(want != "dead" || r[0].1.starts_with(name), "{r:?}");
+                assert!(rpc.lock().unwrap().sent.is_empty());
+            }
+        }
     }
 
     /// Fable recheck 2 P3-1: a transfer struct job (its `contract` defaults to `token`) and a relay fee (signed in the fee token's

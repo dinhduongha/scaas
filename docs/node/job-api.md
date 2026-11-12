@@ -923,8 +923,8 @@ it `PqChatOwnerNotCreator`); the node sends `initialize(owner)`. Refused by name
 `init_call` (`BAD_PAYLOAD: args.config and args.init_call`), neither (`BAD_PAYLOAD: args.init_call: missing`), a job's own
 `initHash` (`BAD_PAYLOAD: args.initHash: the node hashes …`), a named config for a class without one (`INSTANCE_CONFIG_UNKNOWN`),
 an unknown config field. The node signs `initHash = keccak256(initCall)` and, before the simulation, reads the release on the
-factory (`classReleaseOf`): not published `RELEASE_UNKNOWN`, deprecated `RELEASE_DEPRECATED` (`dead`); an unread answer is back in
-the queue. The factory checks the rest (usable from, the kind enabled, the initializer's selector). Rule `Rule::GovRouter`; the gas
+factory (`classReleaseOf`): not published `RELEASE_UNKNOWN`, deprecated `RELEASE_DEPRECATED` (`dead`, after the subject nonce is
+read: a creation that landed and is delivered again is `consumed`, Fable recheck 4 R4-2); an unread answer is back in the queue. The factory checks the rest (usable from, the kind enabled, the initializer's selector). Rule `Rule::GovRouter`; the gas
 is the simulation's under the same caps as every job. *Known limit* (PLANNED): a class added later gets a named row only with a
 node release (`typed.rs` `INSTANCE_CONFIGS`); until then its creation takes `init_call`.
 
