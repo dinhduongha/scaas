@@ -1123,7 +1123,10 @@ impl Venue {
     /// `FeatureEnabled(8 | 9)`, gets its halt recomputed ([`Venue::venue_halted`]); an account a list event refuses, and on
     /// `FeatureEnabled(8 | 9)` every maker and receiver of the leg's orders, is dropped only if its live flag refuses it;
     /// `FeatureEnabled(28)` reruns the venue's eligibility alert. A transport error fails the round: the range is read again.
+    /// Fable recheck 5 R5-3: a drop or a halt read while a failover endpoint answered is no verdict: `LIST_UNREAD`, the range
+    /// is read again (no maker `invalid` on an answer that may be a block behind).
     async fn read_lists(&self, events: &[Value]) -> Result<ListPlan> {
+        let mark = self.chain.failover_answers();
         let venue = [self.dex.into_word(), self.puller.into_word()];
         let mut legs: std::collections::BTreeMap<Address, Vec<&Value>> = Default::default();
         for e in events.iter().filter(|e| matches!(e["event"].as_str(), Some("AllowedSet" | "DeniedSet" | "FeatureEnabled"))) {
@@ -1161,6 +1164,9 @@ impl Venue {
                     plan.drops.push((t, a));
                 }
             }
+        }
+        if (!plan.drops.is_empty() || !plan.halts.is_empty()) && self.chain.failover_answers() != mark {
+            bail!("LIST_UNREAD: a failover endpoint answered the list reads (the first endpoint did not); read again");
         }
         Ok(plan)
     }
@@ -2317,6 +2323,29 @@ mod tests {
         assert!(v.watch_once().await.unwrap());
         assert_eq!(o.lock().unwrap().ingests, 3, "the same range, ingested once read");
         assert!(!in_book(&v.rows().await, &ask), "the denied maker left");
+    }
+
+    /// Fable recheck 5 R5-3: a maker read as refused by its leg's list on a failover endpoint (the first down) is no verdict:
+    /// `LIST_UNREAD`, nothing dropped; the control: the same read on the first endpoint drops it.
+    #[tokio::test]
+    async fn a_list_drop_on_a_failover_answer_is_read_again() {
+        let m = PrivateKeySigner::random();
+        let ask = order(m.address(), QUOTE, 10, 30, 1);
+        let denied = || World { lists: [(m.address().into_word(), 3)].into_iter().collect(),
+            reg: [(BASE, (C_DENY, 0, 0, 0))].into_iter().collect(), ..Default::default() };
+        let events = |v: &Venue| v.accepted(&[log_at(BASE,
+            IRegulatedToken::DeniedSet { account: m.address().into_word(), by: B256::ZERO, on: true }.encode_log_data())]);
+        let (v, _) = regulated_venue(denied(), C_DENY, 0, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        assert_eq!(v.read_lists(&events(&v)).await.unwrap().drops.len(), 1, "control: the first endpoint's answer drops it");
+        let dex_denied = |v: &Venue| v.accepted(&[log_at(BASE,
+            IRegulatedToken::DeniedSet { account: DEX.into_word(), by: B256::ZERO, on: true }.encode_log_data())]);
+        let plan = v.read_lists(&dex_denied(&v)).await.unwrap();
+        assert!(plan.drops.is_empty() && plan.halts.len() == 1, "control: a halt on the first endpoint's answer");
+        let (v, _) = on_failover(v, denied()).await;
+        let e = v.read_lists(&events(&v)).await.unwrap_err();
+        assert!(format!("{e:#}").starts_with("LIST_UNREAD: a failover endpoint"), "{e:#}");
+        let e = v.read_lists(&dex_denied(&v)).await.unwrap_err();
+        assert!(format!("{e:#}").starts_with("LIST_UNREAD: a failover endpoint"), "a halt: {e:#}");
     }
 
     /// Spec §7: an `AccountFrozen` of a regulated leg drops that account's orders selling it (a frozen account cannot send);
