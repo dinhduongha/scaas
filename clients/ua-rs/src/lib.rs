@@ -163,7 +163,7 @@ pub const GROUPS: &[&str] = &[
 ];
 
 pub const PURPOSES: &[&str] = &[
-    "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
+    "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
     "vc-anchor", "trade", "kem", "pqz-key", "membership",
 ];
 

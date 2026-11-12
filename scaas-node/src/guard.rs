@@ -1270,7 +1270,7 @@ impl Guard {
 }
 
 /// The typed digest of `w`, computed here (no chain view: only the cached `chain_uid`): the dedup key, on `w.typed`. On `w.meta`
-/// the digest its `MetaTransactionExecuted` will carry: the same, but for a receiver fee, which lands as its payment.
+/// the digest its `MetaTransactionExecuted` will carry: the same, but for a payee fee, which lands as its payment.
 pub async fn fill_digest(chain: &Chain, w: &mut Work) -> Result<(), SimError> {
     let Some(t) = w.typed.as_mut() else { return Ok(()) };
     if t.digest.is_some() || t.struct_hash.is_none() {
@@ -1574,7 +1574,7 @@ mod tests {
                     }.to_string());
                 }
                 let (mut w, _) = crate::submit::work_of_op(Some(1), &op, None).unwrap_or_else(|e| panic!("{name}: {e:#}"));
-                if matches!(name.as_str(), "UAPayUnderMandate" | "UADelegateRevoke" | "UAReceiverFee") {
+                if matches!(name.as_str(), "UAPayUnderMandate" | "UADelegateRevoke" | "UAPayeeFee") {
                     w.typed.as_mut().unwrap().signer = None; // the vector's lane 7, its one key for payer and payee
                 }
                 assert_eq!(format!("0x{}", alloy::hex::encode(&w.data[..4])), d["selector"].as_str().unwrap(), "{name}");
@@ -1649,17 +1649,17 @@ mod tests {
         }
     }
 
-    /// Item of the lane, not of `Typed`: after `fill_digest` a receiver fee is keyed by its outer digest and `classify` compares
+    /// Item of the lane, not of `Typed`: after `fill_digest` a payee fee is keyed by its outer digest and `classify` compares
     /// the payment's, what the chain emits; an ordinary op has one digest for both.
     #[tokio::test]
     async fn fill_digest_keeps_the_key_and_what_the_chain_emits_apart() {
         use crate::typed::testkit::{op_of, vectors};
         let v = vectors();
-        let d = &v["ops"]["UAReceiverFee"]["domains"]["token"];
+        let d = &v["ops"]["UAPayeeFee"]["domains"]["token"];
         let uid: B256 = d["domain"]["salt"].as_str().unwrap().parse().unwrap();
         let (cfg, _) = bound(uid).await;
         let chain = Chain::with_signer(&cfg, signer()).unwrap();
-        let (mut w, _) = crate::submit::work_of_op(Some(1), &op_of("UAReceiverFee", "token", &v).unwrap(), None).unwrap();
+        let (mut w, _) = crate::submit::work_of_op(Some(1), &op_of("UAPayeeFee", "token", &v).unwrap(), None).unwrap();
         fill_digest(&chain, &mut w).await.unwrap();
         let t = w.typed.clone().unwrap();
         assert_eq!(format!("{:#x}", w.digest().unwrap()), d["digest"].as_str().unwrap(), "the in-flight key: the vector's outer digest");

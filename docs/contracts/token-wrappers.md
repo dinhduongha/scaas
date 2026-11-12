@@ -47,7 +47,7 @@ classDiagram
     class ERC20MetaTx {
         <<abstract>>
         ERC-20, MetaTransfer (entryRef), fee
-        receiver-pays, approve only by contracts, UA ledger
+        payee fee, approve only by contracts, UA ledger
     }
     class MetaTokenBase {
         <<abstract>>
@@ -523,7 +523,7 @@ immutable: see the administration bullet below.
 
 | Bit | Flag | Holder | Valid kinds | Meaning |
 |---|---|---|---|---|
-| 0 | `PAYABLE` | — | all | `IERC20Payment` works (`mtxPay`, `payWithFee`, `payLane`, `PaymentSettled`); **default off**; immutable (no role). `MetaTransfer` is never gated (`PaymentSettled` is also emitted by any `MetaTransfer` with `entryRef ≠ 0`, whatever the flag; the flag gates `mtxPay`, `payWithFee`, `mtxPayReceiverFee` and `supportsInterface(IERC20Payment)`) |
+| 0 | `PAYABLE` | — | all | `IERC20Payment` works (`mtxPay`, `payWithFee`, `payLane`, `PaymentSettled`); **default off**; immutable (no role). `MetaTransfer` is never gated (`PaymentSettled` is also emitted by any `MetaTransfer` with `entryRef ≠ 0`, whatever the flag; the flag gates `mtxPay`, `payWithFee`, `mtxPayWithPayeeFee` and `supportsInterface(IERC20Payment)`) |
 | 1 | `MINTABLE` | `minter` | `NORMAL*`, `WRAPPED*` as a hybrid (under `maxSupply`, [CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)) | `mint` to a public balance (a minter never mints into a shielded balance) |
 | 2 | `BURNABLE` | — (holder) | `NORMAL*` | holder `burn` of its public balance |
 | 3 | `RATE_ADJUSTABLE` | `rateAdmin` (contract) | `WRAPPED*` | rate change with timelock; off ⇒ rates fixed at creation |
@@ -1011,7 +1011,7 @@ each library ≤ 24,576 B.
 | `ZetherLib` (built, 15,662 B) | statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries | `*_ZETHER` |
 | `HederaLib` | HIP-632 signature path (`requireValid`, public view, linked; 753 B), HTS associate | all (branch on `IS_HEDERA`, [CTR-TOK-23](#CTR-TOK-23)) |
 
-- **Pay stays inline** (controller ruling, pending the owner): `mtxPay`, `payWithFee` and `mtxPayReceiverFee` are thin builders over the inline `MetaTransfer` core, which a library cannot call; each checks the `PAYABLE` flag.
+- **Pay stays inline** (controller ruling, pending the owner): `mtxPay`, `payWithFee` and `mtxPayWithPayeeFee` are thin builders over the inline `MetaTransfer` core, which a library cannot call; each checks the `PAYABLE` flag.
 - **Inline in the token**, never behind a library: ERC-20 `transfer`/`transferFrom`, the core of a `MetaTransfer`, and
   the per-transfer administration check of a regulated implementation (a bit test plus a mapping read, cheaper than a `DELEGATECALL`); a plain implementation has none: a plain `transfer` and `mtxTransfer` add no storage read ([CTR-GOV-11](../decisions.md#ctr-gov-11--0-on-a-plain-transfer-means-no-new-read)).
 - **Signature check:** one internal `SigCheck` for every contract ([CTR-MTX-25](metatx.md#CTR-MTX-25)).
@@ -1130,7 +1130,7 @@ generator's input; a kind has the subset it declares):
 | Group | Entries |
 |---|---|
 | kept in the token | `allowance`, `approve`, `balanceOf`, `balanceOfUA`, `chainUid`, `decimals`, `FACTORY`, `factory`, `implementation`, `IS_HEDERA`, `kind`, `modules`, `name`, `RATE_WINDOW`, `registry`, `REGISTRY_CODEHASH`, `SMART_KEY_ACCOUNT_IMPL`, `symbol`, `totalSupply`, `transfer`, `transferFrom`, `transferToUA` |
-| P | `cancelNonce`, `executeMetaTransaction`, `metaPayId`, `mtxBatch`, `mtxBatchTransfer`, `mtxCancelNonce`, `mtxDigest`, `mtxExecute`, `mtxExecuteTransfer`, `mtxNonce`, `mtxPay`, `mtxPayReceiverFee`, `mtxPayWithTax`, `mtxRelayFee`, `mtxTransfer`, `mtxTransferDigest`, `mtxTransferWithFee`, `payLane`, `payWithFee`, `payWithFeeToUA`, `payWithTax`, `receiverFeeDigest`, `setTaxRate`, `setTaxRecipient`, `supportedModes`, `taxConfig` |
+| P | `cancelNonce`, `executeMetaTransaction`, `metaPayId`, `mtxBatch`, `mtxBatchTransfer`, `mtxCancelNonce`, `mtxDigest`, `mtxExecute`, `mtxExecuteTransfer`, `mtxNonce`, `mtxPay`, `mtxPayWithPayeeFee`, `mtxPayWithTax`, `mtxRelayFee`, `mtxTransfer`, `mtxTransferDigest`, `mtxTransferWithFee`, `payLane`, `payWithFee`, `payWithFeeToUA`, `payWithTax`, `payeeFeeDigest`, `setTaxRate`, `setTaxRecipient`, `supportedModes`, `taxConfig` |
 | T | `cancelOrderDigest`, `invalidateNoncesDigest`, `minNonce`, `mtxCancelOrder`, `mtxInvalidateNonces`, `mtxTrade`, `mtxWrapOrder`, `pulled`, `restorePulled`, `tradeOrderDigest` |
 | A | `acceptAdmin`, `bitLabel`, `burn`, `cancelGrant`, `chainEnv`, `creator`, `disableFeature`, `eip712Domain`, `features`, `GOV_ROUTER`, `grantDelay`, `grantOf`, `grantRole`, `hasRole`, `holderCount`, `initialize`, `lastProposedAt`, `lockedFeatures`, `mint`, `mintToUA`, `mtxBurn`, `mtxSelectors`, `admin`, `paymentCount`, `paymentsOf`, `pendingGrant`, `pendingAdmin`, `renounceAdmin`, `renounceRole`, `rescue`, `rescueTo`, `revokeRole`, `setGrant`, `supportsInterface`, `transferAdmin`, `underlyings`, `validateEnv`, `validBits`, `version` |
 | W | `addReserve`, `cancelRate`, `collateralValue`, `disableFeature`, `disableWrap`, `executeRate`, `legOf`, `maxRateStepBps`, `maxSupply`, `mint`, `mintToUA`, `mtxAddReserve`, `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA`, `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `pendingRate`, `previewUnwrap`, `previewWrap`, `proposeRate`, `rateAdjustable`, `rateDelay`, `rescue`, `setWrapLimits`, `setWrapMember`, `underlying`, `underlyings`, `unwrap`, `unwrapToUA`, `wrap`, `wrapLimits`, `wrapQuotaOf`, `wrapQuotaTotal`, `wrapToUA` |

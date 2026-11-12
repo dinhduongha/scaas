@@ -662,10 +662,10 @@
       "purposeTag": "0x243df251450bc87d866e515bc95550d1dea3a9017a0b6bdd834ebf0bc0c3d626"
     },
     {
-      "purpose": "receiver-fee",
+      "purpose": "payee-fee",
       "version": 1,
-      "tag": "scaas.ua.purpose.receiver-fee.v1",
-      "purposeTag": "0x37eb8dc32cfd77c0119dbff5dfdf055cc19cfc0ee77d3fba5121eb83350f9a8e"
+      "tag": "scaas.ua.purpose.payee-fee.v1",
+      "purposeTag": "0x3e5fd01dce69dff51f9df847bc3198dfb2d9227428e2bd3eedb515afd6cc23fa"
     },
     {
       "purpose": "vp",
@@ -2824,11 +2824,11 @@
     },
     {
       "kind": 256,
-      "purpose": "receiver-fee",
+      "purpose": "payee-fee",
       "version": 1,
-      "purposeTag": "0x37eb8dc32cfd77c0119dbff5dfdf055cc19cfc0ee77d3fba5121eb83350f9a8e",
+      "purposeTag": "0x3e5fd01dce69dff51f9df847bc3198dfb2d9227428e2bd3eedb515afd6cc23fa",
       "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
-      "uaMsg": "0xa73c025496d33a82c14853fe70bca79e33066aa97708dd1a1858813425a3ee39"
+      "uaMsg": "0xc29b0cfecc37c90827c47b4a89c15e66a7416eeb00253bc8ae544557a55e440b"
     },
     {
       "kind": 256,

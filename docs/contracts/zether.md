@@ -967,7 +967,7 @@ other write of the account is a Zether Schnorr by `x` through `registry.requireA
 |---|---|---|
 | `mtxRollOverSigned`, `mtxSetRollOverMode` | `zether-owner` | `UASig{signature: sig}` (before typed-signing C3 `abi.encode(bytes(""), sig)`): Schnorr by `x` over `uaMessage(0x0141, PURPOSE_ZETHER_OWNER, digest)`, `Y` from the record; a registered Zether UA only, else `AccountNotRegistered` |
 | `register` PoP | `pop` (version 2) | Schnorr by `x` over `uaMessage(0x0141, PURPOSE_POP_V2, typed(UARegistration{UAPortableRecord{UA, 0x0141, 0, UAKemRecord{UA, 0, 0, 0}}, 0}))` |
-| UA-ledger writes of the account's public balance (`ua*`, `uaExecute(mtxShield)`, trade, mandates, receiver fee) | the write's purpose | the same Schnorr (`abi.encode(bytes(""), sig)`); `zether-bls12381` is a SIGNING UA, not an `msig` member (CTR-UA-14) |
+| UA-ledger writes of the account's public balance (`ua*`, `uaExecute(mtxShield)`, trade, mandates, payee fee) | the write's purpose | the same Schnorr (`abi.encode(bytes(""), sig)`); `zether-bls12381` is a SIGNING UA, not an `msig` member (CTR-UA-14) |
 
 Schnorr (every curve):
 
@@ -1255,7 +1255,7 @@ Zether token (its own confidential account is classical by nature). Since typed-
   on both layers (the Zether invariant handler of plan 5h Task 3z, `PqzPoolInvariantTest`): `totalSupply()` unchanged by shield / unshield / fees,
   `Σ balanceOf == totalSupply`, `balanceOf(SHIELD_POOL) == totalShielded·shieldScale`, `reserve ≥ totalSupply()`. The pool guard lives in
   `ERC20MetaTx._uaMove` (a native `SHIELD_POOL` side reverts `ShieldPoolNotPayable`, which covers outer fees, `uaExecute` fee calls and
-  receiver fees); a unshield's payee check also refuses `UA_POOL` (`UAPoolNotPayable`). **Trust boundary:** the layers move the pool only
+  payee fees); a unshield's payee check also refuses `UA_POOL` (`UAPoolNotPayable`). **Trust boundary:** the layers move the pool only
   through the internal `_poolMove`, which is unguarded by design (the guarded `_uaMove` would refuse the pool); only layer code may call it, and
   any contract that inherits `ERC20MetaTx` and calls `_poolMove` can move the pool. The libraries return what the debit moved (Zether
   `fee`, PQZ `PqzCore.Paid`) and the token pays exactly that.

@@ -1100,9 +1100,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -1112,7 +1112,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -1121,7 +1121,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -1429,6 +1429,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -1539,34 +1567,6 @@
     "vis": "external",
     "domain": "trade",
     "group": "T"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "7b103999",
@@ -3276,9 +3276,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -3288,7 +3288,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -3297,7 +3297,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -3809,6 +3809,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -4047,34 +4075,6 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "7b103999",
@@ -6295,9 +6295,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -6307,7 +6307,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -6316,7 +6316,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -6945,6 +6945,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -7055,34 +7083,6 @@
     "vis": "external",
     "domain": "trade",
     "group": "T"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "5524d548",
@@ -9290,9 +9290,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -9302,7 +9302,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -9311,7 +9311,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -10253,6 +10253,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -10491,34 +10519,6 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "5524d548",
@@ -12953,9 +12953,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -12965,7 +12965,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -12974,7 +12974,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -13509,6 +13509,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -13891,34 +13919,6 @@
     "vis": "external",
     "domain": "trade",
     "group": "T"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "7b103999",
@@ -16302,9 +16302,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -16314,7 +16314,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -16323,7 +16323,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -17183,6 +17183,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -17693,34 +17721,6 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "7b103999",
@@ -20052,9 +20052,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -20064,7 +20064,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -20073,7 +20073,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -20517,6 +20517,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -20627,34 +20655,6 @@
     "vis": "external",
     "domain": "trade",
     "group": "T"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "baaf8b3f",
@@ -22769,9 +22769,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -22781,7 +22781,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -22790,7 +22790,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -23438,6 +23438,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -23676,34 +23704,6 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "baaf8b3f",
@@ -26329,9 +26329,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -26341,7 +26341,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -26350,7 +26350,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -27115,6 +27115,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -27225,34 +27253,6 @@
     "vis": "external",
     "domain": "trade",
     "group": "T"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "baaf8b3f",
@@ -29865,9 +29865,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -29877,7 +29877,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -29886,7 +29886,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -30964,6 +30964,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -31202,34 +31230,6 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "baaf8b3f",
@@ -34069,9 +34069,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -34081,7 +34081,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -34090,7 +34090,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -34761,6 +34761,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -35143,34 +35171,6 @@
     "vis": "external",
     "domain": "trade",
     "group": "T"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "baaf8b3f",
@@ -37959,9 +37959,9 @@
     "group": "P"
    },
    {
-    "sel": "0de1ca2d",
-    "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-    "name": "mtxPayReceiverFee",
+    "sel": "94a190f1",
+    "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+    "name": "mtxPayWithPayeeFee",
     "decl": "MetaTokenBase",
     "kept": false,
     "mut": "nonpayable",
@@ -37971,7 +37971,7 @@
      "IUARegistry.UASig calldata payerAuth",
      "uint256 fee",
      "address feeRecipient",
-     "uint256 rfValidUntil",
+     "uint256 pfValidUntil",
      "IUARegistry.UASig calldata payeeAuth",
      "MetaTxLib.PayMeta calldata meta"
     ],
@@ -37980,7 +37980,7 @@
      "payerAuth",
      "fee",
      "feeRecipient",
-     "rfValidUntil",
+     "pfValidUntil",
      "payeeAuth",
      "meta"
     ],
@@ -38976,6 +38976,34 @@
     "group": "P"
    },
    {
+    "sel": "48ee392e",
+    "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+    "name": "payeeFeeDigest",
+    "decl": "MetaTokenBase",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "MetaTxLib.UAMetaTransfer calldata t",
+     "uint256 fee",
+     "address feeRecipient",
+     "uint256 validUntil"
+    ],
+    "names": [
+     "t",
+     "fee",
+     "feeRecipient",
+     "validUntil"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IMetaTokenV2"
+    ],
+    "vis": "public",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
     "sel": "5456387b",
     "sig": "paymentCount(bytes32)",
     "name": "paymentCount",
@@ -39486,34 +39514,6 @@
     "vis": "external",
     "domain": "wrapped",
     "group": "W"
-   },
-   {
-    "sel": "7c4fa261",
-    "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-    "name": "receiverFeeDigest",
-    "decl": "MetaTokenBase",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "MetaTxLib.UAMetaTransfer calldata t",
-     "uint256 fee",
-     "address feeRecipient",
-     "uint256 validUntil"
-    ],
-    "names": [
-     "t",
-     "fee",
-     "feeRecipient",
-     "validUntil"
-    ],
-    "returns": "bytes32 _p0",
-    "ifaces": [
-     "IMetaTokenV2"
-    ],
-    "vis": "public",
-    "domain": "pay",
-    "group": "P"
    },
    {
     "sel": "baaf8b3f",

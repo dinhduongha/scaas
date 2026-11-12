@@ -4,7 +4,7 @@
 // signatures.json's `native` key, RFC 6979), the entry's signature, selector and calldata. Fields a row does not set are
 // fillers, keccak256 of the field's path: right types, not valid proofs, ciphertexts or lengths, since a typed digest
 // hashes `bytes` whatever their length. C2-C6 run these against the chain as NamedEntry.t.sol does (`structHash` under the
-// contract's own domain). The rows of the C0 entries and of C6's orders, cancels and receiver fees take values their
+// contract's own domain). The rows of the C0 entries and of C6's orders, cancels and payee fees take values their
 // fixtures accept. ua-mtx-merge T11 (CTR-MTX-30, MD-7): one row per op, the merged `UA<Op>` on its `mtx<Op>` entry with
 // `UASig`; the address rows of merged ops are in vectors/typed/legacy/ua-mtx-merge/ (generator in clientkeys/legacy/).
 //   node scripts/typed-ops-vectors.mjs [outDir]
@@ -91,7 +91,7 @@ const ROW = {
   UASetRollOverMode: { rollOverMode: 1 },
   ZetherSetRollOverMode: { mode: 1 },
   PqzAuth: { op: 1, chainId: contexts.A.chainId, token: CONTRACT.pqz, registry: contexts.A.registry, chainUid: contexts.A.chainUid },
-  UAReceiverFee: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), fee: 300000, feeRecipient: FEE_TO,
+  UAPayeeFee: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), fee: 300000, feeRecipient: FEE_TO,
     validUntil: 1800000060 },
   // a regulated kind's payment with its tax (pay-meta-tax spec §5.2): AMOUNT 1,000 of the 100,000,000
   UAPayWithTax: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), taxMode: 2, tax: 1000 },
@@ -204,7 +204,7 @@ function extraOf(name, td, at) {
   const base = (TYPED_OPS[name]?.primary ?? name).replace(/^UA/, '');
   if (/^Pqz(Transfer|Unshield)/.test(base)) return { pqzAuth: PQZ_AUTH, pqzVerdict: EMPTY_PQZ_VERDICT };
   if (base === 'RollOverSigned' || base === 'SetRollOverMode') return { ownerSig: OWNER_SIG };
-  if (base === 'ReceiverFee') {
+  if (base === 'PayeeFee') {
     return { payerSig: nativeSig(hashTypedData(uaMetaTransferTypedData({ ...at, message: td.message.payment }))), meta: META };
   }
   if (base === 'PayWithTax' || base === 'PayUnderMandate') return { meta: META };

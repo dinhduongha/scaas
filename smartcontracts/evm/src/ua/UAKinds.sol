@@ -53,7 +53,7 @@ library UAKinds {
     bytes32 internal constant PURPOSE_ZETHER_AUTH = keccak256("scaas.ua.purpose.zether-auth.v1");
     bytes32 internal constant PURPOSE_ZETHER_OWNER = keccak256("scaas.ua.purpose.zether-owner.v1");
     bytes32 internal constant PURPOSE_KEYOP = keccak256("scaas.ua.purpose.keyop.v1");
-    bytes32 internal constant PURPOSE_RECEIVER_FEE = keccak256("scaas.ua.purpose.receiver-fee.v1");
+    bytes32 internal constant PURPOSE_PAYEE_FEE = keccak256("scaas.ua.purpose.payee-fee.v1");
     bytes32 internal constant PURPOSE_VP = keccak256("scaas.ua.purpose.vp.v1");
     bytes32 internal constant PURPOSE_VC_ANCHOR = keccak256("scaas.ua.purpose.vc-anchor.v1");
     /// @notice `UATradeOrder`, `CancelOrder` over a UA order hash, `UAInvalidateNonces` (dex.md CTR-DEX-25; UA-5b).

@@ -161,8 +161,8 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _mtxPayBody(t, auth, meta);
     }
 
-    function mtxPayReceiverFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool _p0) {
-        return _mtxPayReceiverFeeBody(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth, meta);
+    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool _p0) {
+        return _mtxPayWithPayeeFeeBody(t, payerAuth, fee, feeRecipient, pfValidUntil, payeeAuth, meta);
     }
 
     function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant {
@@ -197,6 +197,10 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _payWithFeeToUABody(to, amount, feeMode, fee, feeRecipient, entryRef, meta);
     }
 
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) external view returns (bytes32 _p0) {
+        return _payeeFeeDigestBody(t, fee, feeRecipient, validUntil);
+    }
+
     function paymentCount(bytes32 payNo) external view returns (uint256 _p0) {
         return _paymentCountBody(payNo);
     }
@@ -215,10 +219,6 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
 
     function pulled(bytes32 orderHash) external view returns (uint256 _p0) {
         return _pulledBody(orderHash);
-    }
-
-    function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) external view returns (bytes32 _p0) {
-        return _receiverFeeDigestBody(t, fee, feeRecipient, validUntil);
     }
 
     function renounceAdmin(bytes32 chainUid_) external governed {

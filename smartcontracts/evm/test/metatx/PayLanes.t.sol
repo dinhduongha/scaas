@@ -16,7 +16,7 @@ import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 
 /// @notice Pay-meta-tax spec §2.2, §2.3, §2.5 (T37; O3, O12): every pay entry consumes `(t.from, t.batch, t.nonce)` like
 ///         `mtxExecuteTransfer`, on any lane; one `entryRef` takes several payments; `payLane(entryRef)` at nonce 0 is a
-///         client convention that still works; the receiver-fee shape lost its lane terms; the generic path lands a pay
+///         client convention that still works; the payee-fee shape lost its lane terms; the generic path lands a pay
 ///         signature without `PaymentMeta` (O12, pinned). Every kind of the parity rigs.
 contract PayLanesTest is PayRigBase {
     uint256 internal constant PAYEE_PK = 0xB0B0B;
@@ -100,9 +100,9 @@ contract PayLanesTest is PayRigBase {
         }
     }
 
-    // ------------------------------------------------------------------ receiver-pays (spec §2.5)
+    // ------------------------------------------------------------------ payee fee (spec §2.5)
 
-    /// The payer's payment for receiver-pays: fee `NONE`, `RESTRICT_RELAYER`, the payee `vm.addr(PAYEE_PK)`.
+    /// The payer's payment for payee fee: fee `NONE`, `RESTRICT_RELAYER`, the payee `vm.addr(PAYEE_PK)`.
     function _rfX(bytes32 ref, uint256 batch, uint256 nonce) internal view returns (MetaTxLib.UAMetaTransfer memory) {
         return MetaTxLib.UAMetaTransfer(MetaTxLib.pad(signer), MetaTxLib.pad(vm.addr(PAYEE_PK)), AMOUNT, ref, batch, nonce,
             block.timestamp + 300, MetaTxLib.MODE_RESTRICT_RELAYER, REL, 0, address(0));
@@ -110,15 +110,15 @@ contract PayLanesTest is PayRigBase {
 
     function _rf(address t, MetaTxLib.UAMetaTransfer memory x, MetaTxLib.PayMeta memory m) internal {
         IUARegistry.UASig memory pa = _sigOf(t, x);
-        bytes32 rd = NormalToken(t).receiverFeeDigest(x, 10, RF_TO, block.timestamp + 300);
+        bytes32 rd = NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300);
         IUARegistry.UASig memory qa = UACall.auth(x.to, _ecdsa(PAYEE_PK, rd));
         uint256 vu = block.timestamp + 300;
         vm.prank(REL);
-        NormalToken(t).mtxPayReceiverFee(x, pa, 10, RF_TO, vu, qa, m);
+        NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, vu, qa, m);
     }
 
-    /// A receiver fee on a free lane (lane 7, nonces 0 and 1): no `payLane` / nonce-0 term.
-    function test_receiverFee_freeLane() public {
+    /// A payee fee on a free lane (lane 7, nonces 0 and 1): no `payLane` / nonce-0 term.
+    function test_payeeFee_freeLane() public {
         for (uint256 i; i < toks.length; ++i) {
             address t = toks[i];
             MetaTxLib.PayMeta memory m = _meta(60 + i);
@@ -130,37 +130,37 @@ contract PayLanesTest is PayRigBase {
     }
 
     /// RP2: the payee's co-signature is dead once the payer's nonce was used elsewhere.
-    function test_receiverFee_coSignDeadAfterNonceUsed() public {
+    function test_payeeFee_coSignDeadAfterNonceUsed() public {
         for (uint256 i; i < toks.length; ++i) {
             address t = toks[i];
             MetaTxLib.PayMeta memory m = _meta(70 + i);
             MetaTxLib.UAMetaTransfer memory x = _rfX(PayMetaKit.id(m), 7, 0);
             IUARegistry.UASig memory pa = _sigOf(t, x);
             IUARegistry.UASig memory qa = UACall.auth(x.to,
-                _ecdsa(PAYEE_PK, NormalToken(t).receiverFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+                _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
             uint256 snap = vm.snapshotState();
             vm.prank(REL);
-            NormalToken(t).mtxPayReceiverFee(x, pa, 10, RF_TO, block.timestamp + 300, qa, m); // control
+            NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, block.timestamp + 300, qa, m); // control
             vm.revertToState(snap);
             vm.prank(REL);
             NormalToken(t).mtxPay(x, pa, m); // the payer's nonce, used by a plain pay
             vm.prank(REL);
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-            NormalToken(t).mtxPayReceiverFee(x, pa, 10, RF_TO, block.timestamp + 300, qa, m);
+            NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, block.timestamp + 300, qa, m);
         }
     }
 
-    /// The receiver-fee entry checks `PayMeta` like every pay entry: a mismatched one is refused by name.
-    function test_receiverFee_metaMismatch() public {
+    /// The payee-fee entry checks `PayMeta` like every pay entry: a mismatched one is refused by name.
+    function test_payeeFee_metaMismatch() public {
         address t = toks[0];
         MetaTxLib.PayMeta memory m = _meta(80);
         MetaTxLib.PayMeta memory other = _meta(81);
         MetaTxLib.UAMetaTransfer memory x = _rfX(PayMetaKit.id(m), 7, 0);
         IUARegistry.UASig memory pa = _sigOf(t, x);
         IUARegistry.UASig memory qa = UACall.auth(x.to,
-            _ecdsa(PAYEE_PK, NormalToken(t).receiverFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+            _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, x.entryRef, PayMetaKit.id(other)));
-        NormalToken(t).mtxPayReceiverFee(x, pa, 10, RF_TO, block.timestamp + 300, qa, other);
+        NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, block.timestamp + 300, qa, other);
     }
 }

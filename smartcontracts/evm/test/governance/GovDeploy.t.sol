@@ -614,8 +614,9 @@ contract GovDeployTest is Test {
         // metadata hash: `RescueLib`, `GovernanceLib.init`, `DexPuller`): 0x3B3B1Cda834b39B4541d0861226E7bE4712302AF; fix2
         // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a; fix2
         // recheck-2 P3-1 (CTR-GOV-27: `mtxRenounceAdmin` and `UARenounceAdmin` carry `chainUid`; the metadata hash:
-        // `IGovernance`, `IOpenFactory`): -> this
-        assertEq(router, 0x60B276496DA55AA0dAD11DcbDaf6Eb00e1E2e51B, "GovernanceRouter");
+        // `IGovernance`, `IOpenFactory`): 0x60B276496DA55AA0dAD11DcbDaf6Eb00e1E2e51B; fix2 CTR-MTX-86 (the payee-fee names; the
+        // metadata hash: `MtxPipelineLib`, `UAMetaTxBase`, `UAKinds`): -> this
+        assertEq(router, 0xAC730941186ffda9664cbAf9C386628a256F6Bd4, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

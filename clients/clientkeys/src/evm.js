@@ -204,7 +204,7 @@ const wrapOrderOf = (id) => `${id} from,address wrappedToken,uint256 amount,uint
 const transferOf = (id) => `${id} from,${id} to,uint256 value,bytes32 entryRef,${E}`;
 const relayFeeOf = (id) => `${id} from,address target,bytes32 callDataHash,${id} payee,uint256 value,uint256 batch,uint256 nonce,`
   + 'uint256 validUntil,address relayer';
-const RECEIVER_FEE = 'uint256 fee,address feeRecipient,uint256 validUntil';
+const PAYEE_FEE = 'uint256 fee,address feeRecipient,uint256 validUntil';
 
 // Every struct a signed type nests or an entry takes (Appendix X.2). The last group is calldata only, never signed.
 const STRUCTS = Object.fromEntries(Object.entries({
@@ -374,7 +374,7 @@ const OPS = {
     args: (m, x) => [['bytes32', m.ua], ['uint8', m.rollOverMode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(x.ownerSig, 'ownerSig')]] },
   UARollOverBatch: { fields: 'bytes32[] uas', on: ZETHER },
   // TS-D19: `x.payerSig` is the payer's signature of the nested `UAMetaTransfer`
-  UAReceiverFee: { raw: `UAMetaTransfer payment,${RECEIVER_FEE}`, on: TOKENS, entry: 'mtxPayReceiverFee', call: (m, sig, x) => [['UAMetaTransfer', m.payment],
+  UAPayeeFee: { raw: `UAMetaTransfer payment,${PAYEE_FEE}`, on: TOKENS, entry: 'mtxPayWithPayeeFee', call: (m, sig, x) => [['UAMetaTransfer', m.payment],
     ['UASig', uaSigOf(x.payerSig, 'payerSig')], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)],
     ...payMetaTail(m, x)] },
   // pay-meta-tax spec §5.2: the payer signs the payment with its tax (kinds 8-13); `x.meta` the `PayMeta`
@@ -766,7 +766,7 @@ export const {
   uaExecuteTypedData, uaExecuteCalldata,
   addKeyTypedData, addKeyCalldata, removeKeyTypedData, removeKeyCalldata, rotateKeyTypedData, rotateKeyCalldata,
   setGuardianTypedData, setGuardianCalldata, cancelRecoveryTypedData, cancelRecoveryCalldata, executeTypedData, executeCalldata,
-  uaReceiverFeeTypedData, uaReceiverFeeCalldata, uaRelayFeeTypedData, uaRelayFeeCalldata, uaWrapOrderTypedData, uaWrapOrderCalldata,
+  uaPayeeFeeTypedData, uaPayeeFeeCalldata, uaRelayFeeTypedData, uaRelayFeeCalldata, uaWrapOrderTypedData, uaWrapOrderCalldata,
   uaPayWithTaxTypedData, uaPayWithTaxCalldata,
   cancelUAOrderTypedData, cancelUAOrderCalldata, cancelUAWrapOrderTypedData, cancelUAWrapOrderCalldata,
   cancelDexOrderTypedData, cancelDexOrderCalldata,
@@ -975,16 +975,16 @@ export function checkPayment(td, { account, chainId, chainUid, amount, decimals,
   return { digest, payee, token: expectedToken, entryRef, ...fee };
 }
 
-/** The payee's side of receiver-pays (CTR-MTX-05/06): `td` is the `UAReceiverFee` (`mtxPayReceiverFee`; `payee` a 32-byte
- *  id, `padId` for a native one; ua-mtx-merge: the address `ReceiverFee` left) to co-sign, nesting the payer's payment (TS-D19). The payment must be the one the payee expects, as `checkPayment` checks it for the payer: to `payee`,
+/** The payee's side of payee fee (CTR-MTX-05/06): `td` is the `UAPayeeFee` (`mtxPayWithPayeeFee`; `payee` a 32-byte
+ *  id, `padId` for a native one; ua-mtx-merge: the address `ReceiverFee` left; owner 2026-11-12: was `UAReceiverFee`) to co-sign, nesting the payer's payment (TS-D19). The payment must be the one the payee expects, as `checkPayment` checks it for the payer: to `payee`,
  *  `amount` (× 10^`decimals`) with the request's `entryRef` on lane `payLane(entryRef)` nonce 0, the contract's shape (fee
  *  NONE, relayer bound: mode 1), in `expectedToken`'s domain salted with `chainUid`. The fee is the payee's own: non-zero, at
  *  most the amount and `maxFee` (default 0), to the `feeRecipient` it named, with a near deadline. The server supplies only
  *  the payment's `from` / `validUntil` / `relayer` and the fee's `validUntil`. Returns {digest, paymentDigest (what the
  *  payer signs), payer, fee, feeRecipient}. */
-export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimals, entryRef, expectedToken, maxFee = 0, feeRecipient,
+export function checkPayeeFee(td, { payee, chainId, chainUid, amount, decimals, entryRef, expectedToken, maxFee = 0, feeRecipient,
   now = Math.floor(Date.now() / 1000), maxWindow = 86400 }) {
-  if (!td || td.primaryType !== 'UAReceiverFee') refuse('this is not a receiver fee');
+  if (!td || td.primaryType !== 'UAPayeeFee') refuse('this is not a payee fee');
   if ([payee, amount, entryRef, expectedToken, feeRecipient].some((v) => v == null)) {
     refuse('the payee, amount, reference, token and fee recipient are required');
   }
@@ -999,7 +999,7 @@ export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimal
   if (!same(p.entryRef, entryRef)) refuse('the payment reference differs from the request');
   const batch = payLane(entryRef);
   if (uint(p.batch, 'the lane') !== batch || uint(p.nonce, 'the nonce') !== 0n) refuse('a payment is signed once, on its request lane');
-  if (uint(p.mode, 'the fee mode') !== 1n || uint(p.fee, 'the payer fee') !== 0n) refuse('the payment is not in the receiver-pays shape');
+  if (uint(p.mode, 'the fee mode') !== 1n || uint(p.fee, 'the payer fee') !== 0n) refuse('the payment is not in the payee fee shape');
   const fee = uint(m.fee, 'the fee');
   if (fee === 0n) refuse('no fee to co-sign');
   if (fee > value) refuse('the fee is more than the payment');
@@ -1008,9 +1008,9 @@ export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimal
   const validUntil = deadline(m.validUntil, now, maxWindow);
   const payment = { ...p, to: payee, value, entryRef, batch, nonce: 0 };
   const paymentDigest = digestOf(uaMetaTransferTypedData({ name: d.name, contract: expectedToken, chainId, chainUid, message: payment }));
-  const digest = digestOf(uaReceiverFeeTypedData({ name: d.name, contract: expectedToken, chainId, chainUid,
+  const digest = digestOf(uaPayeeFeeTypedData({ name: d.name, contract: expectedToken, chainId, chainUid,
     message: { payment, fee, feeRecipient, validUntil } }));
-  if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected receiver fee fields');
+  if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected payee fee fields');
   return { digest, paymentDigest, payer: p.from, fee, feeRecipient };
 }
 
@@ -1171,15 +1171,15 @@ export function buildPay({ name, token, chainId, chainUid, from, to, amount, met
   return { typedData, digest: digestOf(typedData), payId: p.payId, meta: p.meta, shown: p.shown, calldata };
 }
 
-/** Receiver-pays (spec §2.5): the payer's payment (`buildPay`, fee NONE, relayer bound: mode 1) and the payee's
- *  `UAReceiverFee` over it; `calldata(payerAuth, payeeAuth)` is `mtxPayReceiverFee(t, payerAuth, fee, feeRecipient,
- *  rfValidUntil, payeeAuth, meta)`. */
-export function buildPayReceiverFee({ fee, feeRecipient, rfValidUntil, ...pay }) {
+/** Payee fee (spec §2.5): the payer's payment (`buildPay`, fee NONE, relayer bound: mode 1) and the payee's
+ *  `UAPayeeFee` over it; `calldata(payerAuth, payeeAuth)` is `mtxPayWithPayeeFee(t, payerAuth, fee, feeRecipient,
+ *  pfValidUntil, payeeAuth, meta)`. */
+export function buildPayWithPayeeFee({ fee, feeRecipient, pfValidUntil, ...pay }) {
   const payer = buildPay({ ...pay, mode: 1, fee: 0, feeRecipient: ZERO_ADDRESS });
   const at = { name: pay.name ?? 'SCaaS MetaToken', contract: pay.token, chainId: pay.chainId, chainUid: pay.chainUid };
-  const typedData = uaReceiverFeeTypedData({ ...at, message: { payment: payer.typedData.message, fee, feeRecipient, validUntil: rfValidUntil } });
+  const typedData = uaPayeeFeeTypedData({ ...at, message: { payment: payer.typedData.message, fee, feeRecipient, validUntil: pfValidUntil } });
   return { payment: payer, typedData, digest: digestOf(typedData), payId: payer.payId, meta: payer.meta, shown: payer.shown,
-    calldata: (payerAuth, payeeAuth) => uaReceiverFeeCalldata(typedData, payeeAuth, { payerSig: payerAuth, meta: payer.meta }) };
+    calldata: (payerAuth, payeeAuth) => uaPayeeFeeCalldata(typedData, payeeAuth, { payerSig: payerAuth, meta: payer.meta }) };
 }
 
 /** The tax of a PERCENT payment, `floor(value × ratePpm / 10^6)` (PT-6), from `regulatedConfig().tax.effectivePpm`. */

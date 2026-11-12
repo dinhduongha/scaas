@@ -219,7 +219,11 @@ pub fn work_from_job_with(job: &Job, fee_recipient: Option<Address>, services: &
         anyhow::bail!("unknown job kind {k:?} (metatx | ua_metatx | call)");
     }
     if job.receiver_fee.is_some() {
-        anyhow::bail!("receiver-pays (receiver_fee) goes as the named entry mtxPayReceiverFee; refused, never relayed without it");
+        anyhow::bail!("RECEIVER_FEE_REFUSED: the job field receiver_fee is now payee_fee (owner 2026-11-12); a payee fee goes as \
+            the named entry mtxPayWithPayeeFee");
+    }
+    if job.payee_fee.is_some() {
+        anyhow::bail!("the payee fee (payee_fee) goes as the named entry mtxPayWithPayeeFee; refused, never relayed without it");
     }
     if job.call.is_some() || job.calldata.is_some() || job.data.is_some() {
         return Err(hex_refused("call"));
@@ -1793,7 +1797,7 @@ pub(crate) mod tests {
     }
 
     /// NODE-LANE-10 for every origin (review T2 I1): an outbox job's unbound `feeRecipient`/`relayer` never reach the
-    /// chain as the job carries them; receiver-pays is refused, not dropped (m5); the in-flight key is the token's
+    /// chain as the job carries them; payee fee is refused, not dropped (m5); the in-flight key is the token's
     /// digest, never the job's `digest` (m6).
     #[tokio::test]
     async fn outbox_jobs_are_normalized_and_keyed_by_the_token_digest() {
@@ -1819,8 +1823,16 @@ pub(crate) mod tests {
         let bound = UAMetaTransfer { mode: 0x23, ..t.clone() };
         assert_eq!(sent(raw(&bound), Some(ours)), UaMtx::Transfer(bound.clone()), "bound fields are the signer's");
         let mut rf = raw(&t);
-        rf["receiver_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
-        assert!(work_from_job(&serde_json::from_value(rf).unwrap(), None).is_err(), "receiver-pays is not built");
+        rf["payee_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
+        assert!(work_from_job(&serde_json::from_value(rf.clone()).unwrap(), None).is_err(), "payee fee is not built");
+        // owner 2026-11-12 (CTR-MTX-86): the old field name is refused by name, whichever field the job also carries
+        for keep in [true, false] {
+            let mut old = if keep { rf.clone() } else { raw(&t) };
+            old["receiver_fee"] = rf["payee_fee"].clone();
+            let e = work_from_job(&serde_json::from_value(old).unwrap(), None).unwrap_err().to_string();
+            assert!(e.starts_with("RECEIVER_FEE_REFUSED") && e.contains("payee_fee"), "{e}");
+        }
+        assert!(work_from_job(&serde_json::from_value(raw(&t)).unwrap(), None).is_ok(), "control: the plain job is built");
         // through the lane: normalized on chain, keyed by the typed digest computed here
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let (odoo, o) = fake_odoo(Fake { jobs: vec![raw(&t)], tokens: toks(), ..Default::default() }).await;

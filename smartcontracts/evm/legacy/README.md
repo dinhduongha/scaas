@@ -405,3 +405,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `mtxRenounceAdmin` and its `UARenounceAdmin` typehash without `chainUid`), the selector-audit rows they had
   (`test/vectors/selector_audit.json`); the old typed row in `smartcontracts/vectors/typed/legacy/ua-mtx-fix2-contracts/`,
   clientkeys' and ua-rs's old table rows in `clients/{clientkeys,ua-rs}/legacy/ua-mtx-fix2-contracts/`. Not built.
+  The receiver-fee names (owner 2026-11-12, CTR-MTX-86: "payee fee", "payee" consistently), as they stood at `202a05a9`:
+  `src/metatx/ReceiverFeeV1.sol` (`mtxPayReceiverFee`, `receiverFeeDigest`, `UAReceiverFeePaid`, `ReceiverFee*`, the
+  `UAReceiverFee` typehash, the purpose `receiver-fee`), the selector-audit rows `mtxPayReceiverFee` of every kind
+  (`test/vectors/selector_audit.json`); the old typed row in `smartcontracts/vectors/typed/legacy/ua-mtx-fix2-contracts/`,
+  clientkeys', zether-prover's and the node's old names in their `legacy/ua-mtx-fix2-contracts/`. Not built.

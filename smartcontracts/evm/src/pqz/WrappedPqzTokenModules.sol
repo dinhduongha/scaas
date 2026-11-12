@@ -90,11 +90,11 @@ contract WrappedPqzTokenP is WrappedPqzTokenCore {
         return MtxPipelineLib._transferDigest(domainSeparator, t);
     }
 
-    function _pipeReceiverFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
+    function _pipePayeeFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
         address feeRecipient, uint256 validUntil)
         internal pure override returns (bytes32)
     {
-        return MtxPipelineLib._receiverFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
+        return MtxPipelineLib._payeeFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
     }
 
     function _pipePayWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax)
@@ -177,8 +177,8 @@ contract WrappedPqzTokenP is WrappedPqzTokenCore {
         return _mtxPayBody(t, auth, meta);
     }
 
-    function mtxPayReceiverFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta) external onlyDelegated returns (bool _p0) {
-        return _mtxPayReceiverFeeBody(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth, meta);
+    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta) external onlyDelegated returns (bool _p0) {
+        return _mtxPayWithPayeeFeeBody(t, payerAuth, fee, feeRecipient, pfValidUntil, payeeAuth, meta);
     }
 
     function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external onlyDelegated {
@@ -209,8 +209,8 @@ contract WrappedPqzTokenP is WrappedPqzTokenCore {
         return _payWithFeeToUABody(to, amount, feeMode, fee, feeRecipient, entryRef, meta);
     }
 
-    function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) external view onlyDelegated returns (bytes32 _p0) {
-        return _receiverFeeDigestBody(t, fee, feeRecipient, validUntil);
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) external view onlyDelegated returns (bytes32 _p0) {
+        return _payeeFeeDigestBody(t, fee, feeRecipient, validUntil);
     }
 
     function supportedModes() external pure returns (uint32 _p0) {

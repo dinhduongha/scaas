@@ -1442,7 +1442,7 @@ pays; every fee from a hidden balance (`txFee`, `decoyFee`) moves from the pool 
 `totalSupply()` never moves on shield, unshield or fee, stays the true total, `Σ balanceOf == totalSupply` holds,
 `balanceOf(SHIELD_POOL) == totalShielded·shieldScale` and the escrow invariant is `reserve ≥ totalSupply()` on a non-hybrid (a hybrid claims none, [CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)). The pool guard lives in
 the shared base, `ERC20MetaTx._uaMove` (a native `SHIELD_POOL` side of a ledger move reverts, which covers outer fees,
-`uaExecute` fee calls and receiver fees); the confidential layers move the pool only through the **internal `_poolMove`**.
+`uaExecute` fee calls and payee fees); the confidential layers move the pool only through the **internal `_poolMove`**.
 `_poolMove` is deliberately unguarded and is the inheritance trust boundary of the token tree: only layer code (`PqzLayer`,
 `ZetherLayer`, the underlying variants) may call it, and any contract that inherits `ERC20MetaTx` and calls it can move the
 pool. Relations and proofs are unchanged by the pool.

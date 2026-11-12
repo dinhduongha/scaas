@@ -121,8 +121,8 @@ contract HederaV2Test is Test {
         assertEq(IERC20MetaTx(t).balanceOf(shop), 250);
     }
 
-    /// HIP-632 payee: a native Hedera account co-signs the `UAReceiverFee` (64-byte ed25519) for an EVM payer's payment.
-    function test_tier1NativeAccountPayeeCoSignsReceiverFee() public {
+    /// HIP-632 payee: a native Hedera account co-signs the `UAPayeeFee` (64-byte ed25519) for an EVM payer's payment.
+    function test_tier1NativeAccountPayeeCoSignsPayeeFee() public {
         vm.prank(alice);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
         uint256 payerPk = 0xB0B;
@@ -137,10 +137,10 @@ contract HederaV2Test is Test {
         bytes32 d = IERC20MetaTx(t).mtxTransferDigest(x);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPk, d);
         bytes memory payerSig = abi.encodePacked(r, s, v);
-        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(x, 30, feeTo, block.timestamp));
+        bytes memory payeeSig = _edSign(IMetaTokenV2(t).payeeFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
-        IMetaTokenV2(t).mtxPayReceiverFee(x, _n(payerSig), 30, feeTo, block.timestamp, _n(payeeSig),
+        IMetaTokenV2(t).mtxPayWithPayeeFee(x, _n(payerSig), 30, feeTo, block.timestamp, _n(payeeSig),
             PayMetaKit.meta("request-1"));
         assertEq(IERC20MetaTx(t).balanceOf(payer), 300);
         assertEq(IERC20MetaTx(t).balanceOf(alice), aliceBefore + 200 - 30);
@@ -317,9 +317,9 @@ contract HederaV2Test is Test {
         assertEq(IERC20MetaTx(t).balanceOf(alice), 10e6);
     }
 
-    /// HIP-632 payee on the UA path: a native Hedera account co-signs the `ReceiverFee` (64-byte ed25519) of an EVM payer's
-    /// `UAMetaTransfer` through `MtxPipelineLib.authorize(PURPOSE_RECEIVER_FEE)` (its HIP-632 branch).
-    function test_uaPayReceiverFee_hip632Payee() public {
+    /// HIP-632 payee on the UA path: a native Hedera account co-signs the `UAPayeeFee` (64-byte ed25519) of an EVM payer's
+    /// `UAMetaTransfer` through `MtxPipelineLib.authorize(PURPOSE_PAYEE_FEE)` (its HIP-632 branch).
+    function test_uaPayWithPayeeFee_hip632Payee() public {
         _ledgerOn();
         vm.prank(alice);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 2, abi.encode(normalInit("Points", "PTS", 0, 1000, alice, address(0))), "n2");
@@ -334,10 +334,10 @@ contract HederaV2Test is Test {
             validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
         bytes32 d = IERC20MetaTx(t).mtxTransferDigest(x);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPk, d);
-        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(x, 30, feeTo, block.timestamp));
+        bytes memory payeeSig = _edSign(IMetaTokenV2(t).payeeFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
-        IMetaTokenV2(t).mtxPayReceiverFee(x, UACall.auth(x.from, abi.encodePacked(r, s, v)), 30, feeTo, block.timestamp, UACall.auth(x.to, payeeSig),
+        IMetaTokenV2(t).mtxPayWithPayeeFee(x, UACall.auth(x.from, abi.encodePacked(r, s, v)), 30, feeTo, block.timestamp, UACall.auth(x.to, payeeSig),
             PayMetaKit.meta("request-ua"));
         assertEq(IERC20MetaTx(t).balanceOf(payer), 300);
         assertEq(IERC20MetaTx(t).balanceOf(alice), aliceBefore + 200 - 30);

@@ -19,9 +19,9 @@ library Erc7739Kit {
     string internal constant UA_CANCEL_NONCE_TYPE =
         "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
     string internal constant UA_AUTH_TYPE = "UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)";
-    /// `UAReceiverFee`'s own member list; it nests `UAMetaTransfer`, which sorts first (explicit `contentsDescription`).
-    string internal constant UA_RECEIVER_FEE_OWN =
-        "UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)";
+    /// `UAPayeeFee`'s own member list; it nests `UAMetaTransfer`, which sorts first (explicit `contentsDescription`).
+    string internal constant UA_PAYEE_FEE_OWN =
+        "UAPayeeFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)";
     string internal constant UA_TRANSFER_TYPE =
         "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
 

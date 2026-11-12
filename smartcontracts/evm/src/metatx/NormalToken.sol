@@ -50,7 +50,7 @@ interface INormalTokenAbi {
     event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
     event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
-    event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
+    event UAPayeeFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
     event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
     error AdminAccountPool(bytes32 account);
     error AdminHasHolders(uint8 bit);
@@ -116,9 +116,9 @@ interface INormalTokenAbi {
     error PayMetaShape();
     error PayRecordAmount(uint256 amount);
     error PriceLimit(bytes32 orderHash);
-    error ReceiverFeeAmount(uint256 fee, uint256 value);
-    error ReceiverFeeExpired(uint256 validUntil, uint256 nowTs);
-    error ReceiverFeeShape();
+    error PayeeFeeAmount(uint256 fee, uint256 value);
+    error PayeeFeeExpired(uint256 validUntil, uint256 nowTs);
+    error PayeeFeeShape();
     error RescueAssetInvalid(address asset);
     error RescueConfigInvalid();
     error RescueTouchedLeg(address leg);
@@ -349,7 +349,7 @@ contract NormalToken is NormalTokenCore, INormalTokenAbi {
         _forward(_MP);
     }
 
-    function mtxPayReceiverFee(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, uint256, address, uint256, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, uint256, address, uint256, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
         _forward(_MP);
     }
 
@@ -389,6 +389,10 @@ contract NormalToken is NormalTokenCore, INormalTokenAbi {
         _forward(_MP);
     }
 
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256) external view returns (bytes32 _p0) {
+        _forwardView(_MP);
+    }
+
     function paymentCount(bytes32) external view returns (uint256 _p0) {
         _forwardView(_MA);
     }
@@ -407,10 +411,6 @@ contract NormalToken is NormalTokenCore, INormalTokenAbi {
 
     function pulled(bytes32) external view returns (uint256 _p0) {
         _forwardView(_MT);
-    }
-
-    function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256) external view returns (bytes32 _p0) {
-        _forwardView(_MP);
     }
 
     function renounceAdmin(bytes32) external {

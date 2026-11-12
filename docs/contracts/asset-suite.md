@@ -554,7 +554,7 @@ writable. Test: `test/as/Record.t.sol` (T8).
 
 <a id="CTR-AS-25"></a>**CTR-AS-25** — **Every fee leg of a token checks its recipient before effects** (RK-6): `_regFeeTo(feeTo,
 fee)` with `fee ≠ 0` refuses `F(feeTo)` (`FeeRecipientFrozen`) and `!R(feeTo)` (`NotEligible`) on the envelope fee,
-`payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee` (a frozen payee cannot pay a receiver fee, owner 2026-11-05),
+`payWithFee`, `payWithFeeToUA`, `mtxPayWithPayeeFee` (a frozen payee cannot pay a payee fee, owner 2026-11-05),
 `mtxRelayFee` (the signed payee) and the wrap-order fee; the DEX relayer share is an ordinary credit (a frozen relayer still
 receives it). Test: `test/as/FeeLegs.t.sol`.
 

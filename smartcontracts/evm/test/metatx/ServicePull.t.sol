@@ -460,7 +460,7 @@ contract ServicePullTest is UALedgerBase {
     }
 
     /// N8: a third party lands `t` on the token directly: `mtxExecuteTransfer`, `mtxBatchTransfer` (the relayer binding);
-    /// `mtxPay`, `mtxPayReceiverFee` (`PAYABLE` on: the pay reference first).
+    /// `mtxPay`, `mtxPayWithPayeeFee` (`PAYABLE` on: the pay reference first).
     function test_N8_tokenDirect() public {
         RefServiceEscrow.Deposit memory op = _dep(_pad(alice), "n8");
         _control(op);
@@ -483,7 +483,7 @@ contract ServicePullTest is UALedgerBase {
         tok.mtxPay(t, a, m);
         vm.prank(REL);
         vm.expectRevert(mis);
-        tok.mtxPayReceiverFee(t, a, 0, address(0), block.timestamp + 300, a, m);
+        tok.mtxPayWithPayeeFee(t, a, 0, address(0), block.timestamp + 300, a, m);
         assertEq(tok.balanceOf(address(s)), 0);
     }
 

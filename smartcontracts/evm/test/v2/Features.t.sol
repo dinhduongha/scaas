@@ -164,7 +164,7 @@ contract FeaturesTest is Test {
         t.mtxPay(x, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectRevert(off);
-        t.mtxPayReceiverFee(x, s, 1, address(0xFEE), block.timestamp, s, PayMetaKit.meta("r"));
+        t.mtxPayWithPayeeFee(x, s, 1, address(0xFEE), block.timestamp, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectEmit(address(t));
         emit IUALedger.UAPaymentSettled(x.from, x.to, 10, 0, relayer, ref); // a typed payment is never gated

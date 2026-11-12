@@ -1249,3 +1249,11 @@ attesterEnabled	renamed	owner 2026-11-10, group 3r (CTR-GOV-23; spec 2026-11-10-
 attestationOf	renamed	owner 2026-11-10, group 3r (CTR-GOV-23; spec 2026-11-10-admin-not-owner.md §4.1): the ComplianceRegistry attester is a KYC provider, a UA id; complianceOf(bytes32) (flags, validUntil, providerId): contracts/asset-suite.md (§2.6 ComplianceRegistry)
 ModeUnknownBits	obsolete	Fable review B P3-3 (2026-11-11): `validateMode` moved to legacy/ua-mtx-fix-contracts/; the one mode check is MtxPipelineLib._checkEnvelope, error MetaTxUnknownMode: contracts/metatx.md (mode)
 validateMode(m.mode)	obsolete	Fable review B P3-3 (2026-11-11): moved to legacy/ua-mtx-fix-contracts/; step 1 refuses an unknown mode flag bit or fee value (MetaTxUnknownMode): contracts/metatx.md (pipeline step 1)
+receiver_fee: {fee, feeRecipient, validUntil, signature}	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): the job field is payee_fee: node/job-api.md (§7a kind rules)
+token.features ∋ receiver_fee	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): token.features ∋ payee_fee: node/job-api.md (§7a kind rules)
+valid_until = min(m.validUntil, receiver_fee.validUntil)	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): valid_until = min(m.validUntil, payee_fee.validUntil): node/job-api.md (§7a kind rules)
+ReceiverFeeShape	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): PayeeFeeShape: contracts/metatx.md#CTR-MTX-86
+block.timestamp ≤ rfValidUntil	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): block.timestamp ≤ pfValidUntil (PayeeFeeExpired): contracts/metatx.md#CTR-MTX-06
+fee_paid_by_receiver	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): fee_paid_by_payee: integration.md (payee fee, client side)
+receiver_fee_amount	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): payee_fee_amount: integration.md (payee fee, client side)
+ReceiverFeeLib	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): PayeeFeeLib: node/sponsorship.md#payee-fee

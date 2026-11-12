@@ -175,7 +175,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
   ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)), `FeeSplitSet`, `MarketSet`, `ExchangeTargetSet`, `ListedOnlySet`.
   The DEX watcher reads them with its own cursor ([NODE-DEX-04](dex-venue.md#NODE-DEX-04)); a `TradeFilled` alone is
   never booked as a trade (a leg pulled into the DEX for escrow shows the whole amount with nothing received);
-- `ReceiverFeePaid` and the tender events of `chain_contract` rows (indexed like token events; a namespace receives
+- `UAPayeeFeePaid` and the tender events of `chain_contract` rows (indexed like token events; a namespace receives
   them when the contract is in its token subset);
 - universal accounts: `UATransfer`, `UAMetaTransactionExecuted`, `UARegistered` (with key data), balances per 32-byte
   id; `Transfer` to/from `UA_POOL` ([CTR-UA-18](../contracts/accounts.md#CTR-UA-18)) is paired with the

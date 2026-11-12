@@ -14,16 +14,16 @@ cost fields, admin routes and metrics **SPECIFIED**; `SponsorshipPool` **PLANNED
 6. [Admin](#admin)
    - 6.1 [Metrics](#metrics)
 7. [Security](#7-security)
-8. [Receiver pays](#receiver-pays)
+8. [Payee fee](#payee-fee)
 9. [Pool](#pool)
 
 ## 1. Scope
 
 <a id="scope"></a>In scope: node sponsorship policy — matching, fee-floor waiver, budgets, rate caps, accounting,
-metrics, admin API; the node side of receiver-pays (a payee co-signature carried by the job,
-[contracts/metatx.md#receiver-pays](../contracts/metatx.md#receiver-pays)); `SponsorshipPool`: the rule
+metrics, admin API; the node side of the payee fee (a payee co-signature carried by the job,
+[contracts/metatx.md#payee-fee](../contracts/metatx.md#payee-fee)); `SponsorshipPool`: the rule
 ([NODE-SPN-04](#NODE-SPN-04)) and the constraints its design must meet. Not in scope: a fee market or any in-protocol
-mesh reward ([NODE-MESH-05](mesh.md#NODE-MESH-05) stays); fiat valuation in the node; receiver-pays on v1 tokens,
+mesh reward ([NODE-MESH-05](mesh.md#NODE-MESH-05) stays); fiat valuation in the node; payee fee on v1 tokens,
 non-EVM families (no fee fields) and Zether tokens (hidden amounts).
 
 Typical use: "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" (an inbound-payment subsidy
@@ -221,36 +221,36 @@ account; the write without `fallback_to_namespace` ⇒ `422`**; the `~gateway` U
 namespace ⇒ `DUPLICATE_CALL {uid}`, the same call in two namespaces accepted in both; concurrent accepts on PostgreSQL
 and MySQL; feed fields per family (EVM, Hedera, one non-EVM); admin route roles and audit rows; toml import precedence.
 
-## <a id="receiver-pays"></a>8. Receiver pays
+## <a id="payee-fee"></a>8. Payee fee
 
-<a id="receiver-pays"></a>The node side of receiver-pays ([CTR-MTX-05](../contracts/metatx.md#CTR-MTX-05),
+<a id="receiver-pays"></a>The node side of the payee fee ([CTR-MTX-05](../contracts/metatx.md#CTR-MTX-05),
 [CTR-MTX-06](../contracts/metatx.md#CTR-MTX-06)):
 
-- **Job payload** (`kind = metatx`): optional `receiver_fee: {fee, feeRecipient, validUntil, signature}`. Digest = the
+- **Job payload** (`kind = metatx`): optional `payee_fee: {fee, feeRecipient, validUntil, signature}`. Digest = the
   payer digest (G2 unchanged). Accept adds: the shape checks of the contract function (pay op `pay(entryRef)`, payer fee mode `NONE`,
   relayer bound, `batch = payLane(entryRef)`, `nonce = 0` — once per `(payer, entryRef)` —, `feeRecipient ≠ 0`, `feeRecipient ≠ m.to`, `0 < fee ≤ m.value`) without RPC;
-  `valid_until = min(m.validUntil, receiver_fee.validUntil)`; `bus.scope` forced `restricted`
+  `valid_until = min(m.validUntil, payee_fee.validUntil)`; `bus.scope` forced `restricted`
   ([NODE-MESH-17](mesh.md#NODE-MESH-17): the mesh envelope has no slot for the co-signature); never batched.
   Normalization may rewrite the payer's unbound `feeRecipient`; the contract ignores it. The co-signed `feeRecipient`
-  is signed and untouched. Submit calls `mtxPayReceiverFee`.
-- **Payee client:** the payment request carries "fee paid by receiver" and the receiver fee amount (base units); once
+  is signed and untouched. Submit calls `mtxPayWithPayeeFee`.
+- **Payee client:** the payment request carries "fee paid by payee" and the payee fee amount (base units); once
   the payer's address is known the payee's server builds the payer's typed data (fee `NONE`, relayer = its lane),
-  computes the payment digest and signs `ReceiverFee` with the receiving wallet's key. That key controls the wallet (a
+  computes the payment digest and signs `UAPayeeFee` with the receiving wallet's key. That key controls the wallet (a
   `SmartKeyAccount` key validates any digest), so the receiving wallet for this mode is a dedicated **hot collection
-  wallet** holding only incoming receiver-pays funds, swept to a cold treasury; a cold receiving wallet cannot
+  wallet** holding only incoming payee fee funds, swept to a cold treasury; a cold receiving wallet cannot
   co-sign and must not offer this mode. Booking: receipt `N` from `PaymentSettled`, fee expense `F` from
-  `ReceiverFeePaid` matched by digest. E-cheque flow: the payee's request names the relayer lane; the payer signs
+  `UAPayeeFeePaid` matched by digest. E-cheque flow: the payee's request names the relayer lane; the payer signs
   offline with that relayer bound and hands the intent to the payee, which co-signs and pushes it to that relayer's
   node.
-- Contract size: the token families stay under the 24576-byte (EIP-170) CI gate; if one exceeds it, the receiver-fee
-  hashing moves to an external library (`ReceiverFeeLib`).
-- Token capability: admin flag `token.features` contains `receiver_fee` (set at registration; simulation is the final
+- Contract size: the token families stay under the 24576-byte (EIP-170) CI gate; if one exceeds it, the payee-fee
+  hashing moves to an external library (`PayeeFeeLib`).
+- Token capability: admin flag `token.features` contains `payee_fee` (set at registration; simulation is the final
   check) ⇒ else `422 FEATURE_UNSUPPORTED`.
-- **Indexer:** decodes `ReceiverFeePaid` into `range` items; the payee books receipt `N` from `PaymentSettled(…, N, entryRef)` and fee
-  expense `F` from `ReceiverFeePaid`, matched by digest ([integration.md#inbound](../integration.md#inbound)).
+- **Indexer:** decodes `UAPayeeFeePaid` into `range` items; the payee books receipt `N` from `PaymentSettled(…, N, entryRef)` and fee
+  expense `F` from `UAPayeeFeePaid`, matched by digest ([integration.md#inbound](../integration.md#inbound)).
 - The payee names the relayer's fee address (the node's `chains.fee_recipient`) in its co-signature. A co-signing
   receiving wallet is a **hot collection wallet**: its key controls the wallet, so it holds only incoming
-  receiver-pays funds and is swept to a cold treasury.
+  payee fee funds and is swept to a cold treasury.
 
 ## <a id="pool"></a>9. Pool
 

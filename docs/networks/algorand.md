@@ -44,7 +44,7 @@ smart-key and passkey UA accounts; the relay-fee router ([CTR-MTX-27](../contrac
 `scaas-node` adapter; `clientkeys`, `ua-rs` and `ua-qt` signing; a localnet devnet, tests and shared vectors (owner
 2026-10-28). Out of scope: Zether and PQZ, PQ signers, the asset suite, token wrappers and the tender
 ([NET-ALL-17](README.md#NET-ALL-17)–[19](README.md#NET-ALL-19) keep them PLANNED), the mesh (job API only),
-`MetaCall` / `MetaTransfer` ([NET-ALL-26](README.md#NET-ALL-26)), public testnets and mainnet, receiver-pays. BUILT.
+`MetaCall` / `MetaTransfer` ([NET-ALL-26](README.md#NET-ALL-26)), public testnets and mainnet, payee fee. BUILT.
 
 <a id="NET-ALG-02"></a>**NET-ALG-02** — **The relayer pays every MBR, exactly; users hold no ALGO.** A call that creates
 boxes is preceded in its group by a payment to the app address of **exactly** their MBR (the app's `AcctMinBalance`

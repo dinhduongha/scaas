@@ -79,7 +79,7 @@ interface IWrappedPqzRegulatedTokenAbi {
     event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
     event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
-    event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
+    event UAPayeeFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
     event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
     event UAWrapped(bytes32 indexed to, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event Unpaused(bytes32 indexed ref);
@@ -236,9 +236,9 @@ interface IWrappedPqzRegulatedTokenAbi {
     error RateFixed();
     error RateInvalid(uint256 num, uint256 den);
     error RateStepTooLarge();
-    error ReceiverFeeAmount(uint256 fee, uint256 value);
-    error ReceiverFeeExpired(uint256 validUntil, uint256 nowTs);
-    error ReceiverFeeShape();
+    error PayeeFeeAmount(uint256 fee, uint256 value);
+    error PayeeFeeExpired(uint256 validUntil, uint256 nowTs);
+    error PayeeFeeShape();
     error RecordFreezeShorter(uint64 until);
     error RefRequired();
     error RefreshRecipient(bytes32 recipient);
@@ -659,7 +659,7 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
         _forward(_MP);
     }
 
-    function mtxPayReceiverFee(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, uint256, address, uint256, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, uint256, address, uint256, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
         _forward(_MP);
     }
 
@@ -795,6 +795,10 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
         _forward(_MP);
     }
 
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256) external view returns (bytes32 _p0) {
+        _forwardView(_MP);
+    }
+
     function paymentCount(bytes32) external view returns (uint256 _p0) {
         _forwardView(_MA);
     }
@@ -889,10 +893,6 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
 
     function rateDelay() external view returns (uint32 _p0) {
         _forwardView(_MW);
-    }
-
-    function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256) external view returns (bytes32 _p0) {
-        _forwardView(_MP);
     }
 
     function recordOrder(bytes32, bytes32, bytes32, bytes32, uint256, uint64) external {

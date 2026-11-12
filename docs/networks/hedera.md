@@ -407,7 +407,7 @@ Hedera item ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)).
 
 Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
 
-Hedera runs the same EVM contracts, so the pay entries with `PayMeta` (`mtxPay`, `mtxPayReceiverFee`, `payWithFee`,
+Hedera runs the same EVM contracts, so the pay entries with `PayMeta` (`mtxPay`, `mtxPayWithPayeeFee`, `payWithFee`,
 `payWithFeeToUA`; `mtxPayMeta` / `uaPayMeta` are in legacy since the merge) and `RelayFeeRouter` (CTR-MTX-26 / -27) are the EVM ones
 ([evm.md](evm.md#paymeta-relayfee)). What differs is the signature rule, which the split keeps inside `MtxPipelineLib`
 (`requireSignature`): a 64-byte signature from an address with no code goes to the HIP-632 `HederaLib.requireValid`

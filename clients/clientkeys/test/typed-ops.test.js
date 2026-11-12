@@ -44,7 +44,7 @@ const PLAN = {
   UARollOver: '0xd5ad0bcf…0465fd', UAPqzRollOver: '0x900621af…44e200a9bb75', UAPrepareAcc: '0xe173bbc7…ef43cc',
   AddKey: '0x9d156f1f…7244a6bb', RemoveKey: '0xcef46d27…618280b3', RotateKey: '0x5b8f8761…64fb0777',
   SetGuardian: '0xd2603850…6b967689f6', CancelRecovery: '0x3df995dd…1213adda', Execute: '0xe0b649e9…c6053f1df7',
-  UAReceiverFee: '0xb12d2a08…7c75021a', UARelayFee: '0x220269b9…e493e43ea5', UAWrapOrder: '0x2a01cb57…fc04533c',
+  UAPayeeFee: '0x8a3955a6…6a16c7ca', UARelayFee: '0x220269b9…e493e43ea5', UAWrapOrder: '0x2a01cb57…fc04533c',
   CancelUAOrder: '0x47eb46c7…a1eaeba', CancelUAWrapOrder: '0x7679e176…2326d9d', CancelDexOrder: '0xcc35e105…f433c6',
   ZetherRollOver: '0x52e2c8f8…71768b1e', ZetherSetRollOverMode: '0x5f5a4ffa…4d55e09d', PqzAuth: '0x380b0de6…42644e6f',
   UACancelNonce: '0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54',
@@ -170,7 +170,7 @@ test('kept unchanged: the type strings the plan freezes', () => {
   const nested = (name) => TYPED_OPS[name].typeString.slice(name.length);
   assert.ok(nested('CancelUAOrder').endsWith(`UATradeOrder${order('bytes32')}`));
   assert.ok(nested('CancelDexOrder').endsWith(`DexOrder(address sellToken,TradeOrder order)TradeOrder${order('address')}`));
-  assert.ok(nested('UAReceiverFee').endsWith(`UAMetaTransfer${transfer('bytes32')}`));
+  assert.ok(nested('UAPayeeFee').endsWith(`UAMetaTransfer${transfer('bytes32')}`));
 });
 
 test('the table covers every allowlisted entry of every contract, one row per op, and only them', () => {
@@ -537,10 +537,10 @@ test('canonical zero for an unbound relayer / fee recipient: envelope and nested
   assert.deepEqual([m(1).relayer, m(1).feeRecipient], [A, ZERO]);
   assert.deepEqual([m(2).relayer, m(2).feeRecipient], [ZERO, B]);
   assert.deepEqual([m(3).relayer, m(3).feeRecipient], [A, B]);
-  const open = evm.uaReceiverFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
+  const open = evm.uaPayeeFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
     mode: 0, relayer: A, feeRecipient: B }, fee: 1, feeRecipient: B, validUntil: 9 } }).message.payment;
   assert.deepEqual([open.relayer, open.feeRecipient], [ZERO, ZERO]);
-  const ua = evm.uaReceiverFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
+  const ua = evm.uaPayeeFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
     mode: 1, relayer: A, feeRecipient: B }, fee: 1, feeRecipient: B, validUntil: 9 } }).message.payment;
   assert.deepEqual([ua.relayer, ua.feeRecipient], [A, ZERO]);
   // the order's `relayer` is no envelope field: it stays
@@ -741,7 +741,7 @@ test('checkOp keeps a relayer or fee recipient the client named: refused when th
   const payment = { from: R_ME, to: '0x' + '22'.repeat(32), value: 5, entryRef: '0x' + '09'.repeat(32), batch: 1, nonce: 0, validUntil: 9, mode: 0,
     relayer: R_RELAYER, fee: 0, feeRecipient: ZERO };
   const rf = { payment, fee: 1, feeRecipient: R_FEE_TO, validUntil: 9 };
-  assert.throws(() => checkOp(evm.uaReceiverFeeTypedData({ ...R_AT, message: rf }), rWant(rf, { op: 'UAReceiverFee' })),
+  assert.throws(() => checkOp(evm.uaPayeeFeeTypedData({ ...R_AT, message: rf }), rWant(rf, { op: 'UAPayeeFee' })),
     /relayer you named is not bound/);
 });
 
@@ -807,7 +807,7 @@ test('calldata refuses what the entry cannot verify: the missing signature, an e
   for (const name of ['UARollOverSigned', 'UASetRollOverMode']) {
     assert.throws(() => builders[`${bld(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: ownerSig is required/, name);
   }
-  assert.throws(() => evm.uaReceiverFeeCalldata(tdOf('UAReceiverFee'), one('UAReceiverFee').signature), /payerSig is required/);
+  assert.throws(() => evm.uaPayeeFeeCalldata(tdOf('UAPayeeFee'), one('UAPayeeFee').signature), /payerSig is required/);
   assert.throws(() => evm.uaUnwrapCalldata(tdOf('UAUnwrap')), /signature is required/);
   assert.throws(() => evm.uaUnwrapCalldata(tdOf('UAUnwrap'), '0x'), /signature is required/);
   // the account's own: a raw signature is 65 bytes, anything else names its key

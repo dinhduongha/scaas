@@ -1,0 +1,32 @@
+[
+ {
+  "id": "typehash-old-name/pin",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0xf0c870b15a34c8f1df8917d8b35fd0f4eb1a786822b1f34caab389764285c24f != 0x485576e51565141ae6af737974deb5ce0a980212ceb06e89a461ecea7178fe2"
+ },
+ {
+  "id": "typehash-old-name/old-sig-refused",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_oldReceiverFeeNamesHaveNoEntry() (gas: 382301)"
+ },
+ {
+  "id": "typehash-old-name/vectors",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: 0x0bdf5a6b] test_typedOpsVectors_UAPayeeFeeRow() (gas: 554024355)"
+ },
+ {
+  "id": "purpose-tag-old-name",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x37eb8dc32cfd77c0119dbff5dfdf055cc19cfc0ee77d3fba5121eb83350f9a8e != 0x3e5fd01dce69dff51f9df847bc3198dfb2d9227428e2bd3eedb515afd6cc23f"
+ },
+ {
+  "id": "payee-purpose-is-metatx",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_uaPayWithPayeeFee_purposeSeparation() (gas: 422879)"
+ }
+]

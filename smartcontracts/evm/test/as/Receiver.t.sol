@@ -186,7 +186,7 @@ contract ReceiverTest is RegFixture {
         }
     }
 
-    /// A relayed typed transfer at a `FIXED` fee, `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`: three calls each
+    /// A relayed typed transfer at a `FIXED` fee, `payWithFee`, `payWithFeeToUA`, `mtxPayWithPayeeFee`: three calls each
     /// (the receiver; the fee recipient at its seat and at its move).
     function test_callBudgetFeePaths() public {
         for (uint256 i; i < 2; ++i) {
@@ -218,12 +218,12 @@ contract ReceiverTest is RegFixture {
             IUARegistry.UASig memory rs;
             (v, r, s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(p));
             ps.signature = abi.encodePacked(r, s, v);
-            (v, r, s) = vm.sign(BOB_PK, NormalToken(t).receiverFeeDigest(p, 3, feeTo, block.timestamp + 300));
+            (v, r, s) = vm.sign(BOB_PK, NormalToken(t).payeeFeeDigest(p, 3, feeTo, block.timestamp + 300));
             rs.signature = abi.encodePacked(r, s, v);
             _countStart();
             vm.prank(relayer);
-            NormalToken(t).mtxPayReceiverFee(p, ps, 3, feeTo, block.timestamp + 300, rs, PayMetaKit.meta("request-3"));
-            _budget(3, "mtxPayReceiverFee");
+            NormalToken(t).mtxPayWithPayeeFee(p, ps, 3, feeTo, block.timestamp + 300, rs, PayMetaKit.meta("request-3"));
+            _budget(3, "mtxPayWithPayeeFee");
         }
     }
 

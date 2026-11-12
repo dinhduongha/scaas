@@ -27,10 +27,10 @@ import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Common root of the v2 tiers on `ERC20MetaTx` (TW2 §3.3, §7; CTR-MTX-07). EIP-1167 clones.
 /// @notice The named functions (CTR-MTX-09) only build the `UAMetaTransfer` of their operation and run its pipeline;
-///         receiver-pays (CTR-MTX-05/06); one form per operation for native and derived ids (ua-mtx-merge T2: today's
+///         payee fee (CTR-MTX-05/06); one form per operation for native and derived ids (ua-mtx-merge T2: today's
 ///         `ua*` bodies under the `mtx*` names, the address bodies in legacy/ua-mtx-merge/). Features, admin and roles
 ///         (CTR-GOV-01) live in `GovernanceBase`, init and provenance in the ERC-7201 namespace `scaas.token`. Pay
-///         (`mtxPay`, `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`, each with `PayMeta` last) works only with `PAYABLE`; a
+///         (`mtxPay`, `payWithFee`, `payWithFeeToUA`, `mtxPayWithPayeeFee`, each with `PayMeta` last) works only with `PAYABLE`; a
 ///         `UAMetaTransfer` through `mtxExecuteTransfer` (with or without `entryRef`) is never gated. Chain-neutral code
 ///         (CTR-TOK-29): the chain values (`chain_uid`, the UA registry, the router, the `SmartKeyAccount` implementation,
 ///         Hedera, the dependencies) are the instance's `ChainEnv`, appended to its clone's code by the factory and read
@@ -369,39 +369,39 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         return _pipePaymentsOf(payNo, offset, limit);
     }
 
-    // ------------------------------------------------------------------ receiver-pays (CTR-MTX-05, CTR-MTX-06)
+    // ------------------------------------------------------------------ payee fee (CTR-MTX-05, CTR-MTX-06)
 
-    function _receiverFeeDigestBody(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) internal view returns (bytes32)
+    function _payeeFeeDigestBody(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) internal view returns (bytes32)
     {
-        return _pipeReceiverFeeDigest(_domainSeparatorV4(), t, fee, feeRecipient, validUntil);
+        return _pipePayeeFeeDigest(_domainSeparatorV4(), t, fee, feeRecipient, validUntil);
     }
 
     /// @notice CTR-MTX-05/06 on ids: the shape on `t`, then the payer's `UAMetaTransfer` through the typed pipeline,
-    ///         untouched; the payee `t.to` co-signs `UAReceiverFee` nesting it — a native id itself (ECDSA, ERC-1271,
-    ///         HIP-632), a derived one through the registry under `receiver-fee` — and pays `fee` out of what it
+    ///         untouched; the payee `t.to` co-signs `UAPayeeFee` nesting it — a native id itself (ECDSA, ERC-1271,
+    ///         HIP-632), a derived one through the registry under `payee-fee` — and pays `fee` out of what it
     ///         received. A `UA_POOL` recipient is refused before any move (a move to the pool's address would credit its
     ///         slot with no UA balance behind it).
-    function _mtxPayReceiverFeeBody(
+    function _mtxPayWithPayeeFeeBody(
         MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
-        uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth,
+        uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth,
         MetaTxLib.PayMeta calldata meta
     ) internal returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(t.entryRef, meta); // `entryRef` ≠ 0 with it; any lane (spec §2.5, O3)
-        _receiverFee(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth);
+        _payeeFee(t, payerAuth, fee, feeRecipient, pfValidUntil, payeeAuth);
         _payRecord(meta, t.to, t.value - fee); // the payee paid `fee` out of `value` (`fee <= value` checked)
         return true;
     }
 
-    /// @dev `mtxPayReceiverFee`'s body after `_payMeta` (its seven arguments leave no stack for the locals).
-    function _receiverFee(
+    /// @dev `mtxPayWithPayeeFee`'s body after `_payMeta` (its seven arguments leave no stack for the locals).
+    function _payeeFee(
         MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
-        uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth
+        uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth
     ) private {
         if (t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0
-            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || feeRecipient == address(0)) revert IMetaTokenV2.ReceiverFeeShape();
-        if (block.timestamp > rfValidUntil) revert IMetaTokenV2.ReceiverFeeExpired(rfValidUntil, block.timestamp);
-        if (fee == 0 || fee > t.value) revert IMetaTokenV2.ReceiverFeeAmount(fee, t.value);
+            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || feeRecipient == address(0)) revert IMetaTokenV2.PayeeFeeShape();
+        if (block.timestamp > pfValidUntil) revert IMetaTokenV2.PayeeFeeExpired(pfValidUntil, block.timestamp);
+        if (fee == 0 || fee > t.value) revert IMetaTokenV2.PayeeFeeAmount(fee, t.value);
         bytes32 to = MetaTxLib.pad(feeRecipient);
         if (to == t.to) revert IERC20MetaTx.FeeRecipientIsPayee();
         // early only: without it the fee's `_uaMove` reverts the whole call with the same `TransferToSelf`
@@ -409,10 +409,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         if (feeRecipient == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
         _regFeeTo(to, fee);
         bytes32 d = _uaExecuteTransfer(t, 0, payerAuth, 0, 0);
-        _pipeAuthorize(_mtxCtx(), t.to, UAKinds.PURPOSE_RECEIVER_FEE,
-            _receiverFeeDigestBody(t, fee, feeRecipient, rfValidUntil), payeeAuth);
+        _pipeAuthorize(_mtxCtx(), t.to, UAKinds.PURPOSE_PAYEE_FEE,
+            _payeeFeeDigestBody(t, fee, feeRecipient, pfValidUntil), payeeAuth);
         _uaMove(t.to, to, fee);
-        emit IMetaTokenV2.UAReceiverFeePaid(d, t.to, feeRecipient, fee);
+        emit IMetaTokenV2.UAPayeeFeePaid(d, t.to, feeRecipient, fee);
     }
 
     // ------------------------------------------------------------------ relay fee (CTR-MTX-27, TS-D19)

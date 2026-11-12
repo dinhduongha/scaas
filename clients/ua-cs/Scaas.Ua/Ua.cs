@@ -67,7 +67,7 @@ public static partial class UA
          "fndsa512", "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe"];
 
     public static readonly string[] Purposes =
-        ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
+        ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
          "vc-anchor", "trade", "kem", "pqz-key", "membership"];
 
     public const string DomainType =

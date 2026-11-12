@@ -25,7 +25,7 @@ HOOKS = {
     'Authorize': ([f'{C} c', 'bytes32 from', 'bytes32 purpose', 'bytes32 digest', f'{S} auth'], ' view', ''),
     'CallDigest': (['bytes32 domainSeparator', 'bytes32 typehash', f'{E} e'], ' pure', 'bytes32'),
     'TransferDigest': (['bytes32 domainSeparator', f'{T} t'], ' pure', 'bytes32'),
-    'ReceiverFeeDigest': (['bytes32 domainSeparator', f'{T} t', 'uint256 fee', 'address feeRecipient',
+    'PayeeFeeDigest': (['bytes32 domainSeparator', f'{T} t', 'uint256 fee', 'address feeRecipient',
                            'uint256 validUntil'], ' pure', 'bytes32'),
     'PayWithTaxHash': ([f'{T} t', 'uint8 taxMode', 'uint256 tax'], ' pure', 'bytes32'),
     'MetaPayId': ([f'{PM} m'], ' pure', 'bytes32'),
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     for p, d in (('src/metatx/ERC20MetaTx.sol', {'TransferDigest': 1, 'Authorize': 3, 'PreCall': 1, 'PreNamed': 1,
                                                   'PreTransferUA': 1}),
                  ('src/metatx/MetaTokenBase.sol', {'MetaPayId': 1, 'PayMeta': 1, 'PayRecord': 1, 'PaymentCount': 1,
-                                                    'PaymentsOf': 1, 'ReceiverFeeDigest': 1, 'Authorize': 1}),
+                                                    'PaymentsOf': 1, 'PayeeFeeDigest': 1, 'Authorize': 1}),
                  ('src/regulated/RegulatedBase.sol', {'PayWithTaxHash': 1})):
         s = edit(p, d)
         open(p, 'w').write(s)

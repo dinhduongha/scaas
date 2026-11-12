@@ -60,7 +60,7 @@ const asTrade = (o) => ({ ...o, receiveToken: o.wrappedToken, receiveAmount: o.m
 const metaTuple = (x) => [x.salt, x.payNo, x.save, x.schema, x.body];
 const transferTuple = (t) => [t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient];
 const OTHER = {
-  UAReceiverFee: (m, s, d) => [transferTuple(m.payment), ['0x', d.extra.payerSig, []], m.fee, m.feeRecipient, m.validUntil, ['0x', s, []],
+  UAPayeeFee: (m, s, d) => [transferTuple(m.payment), ['0x', d.extra.payerSig, []], m.fee, m.feeRecipient, m.validUntil, ['0x', s, []],
     metaTuple(d.extra.meta)],
   UARelayFee: (m, s) => [m.from, m.target, m.callDataHash, m.payee, m.value, m.batch, m.nonce, m.validUntil, ['0x', s, []]],
   UAPayWithTax: (m, s, d) => [transferTuple(m.payment), m.taxMode, m.tax, ['0x', s, []], metaTuple(d.extra.meta)],

@@ -548,7 +548,7 @@ arguments (`IUARegistry`, [§1.8](#registry); client builders [CLI-SGN-41](../cl
   signature encoding that is one cryptographic object (a WebAuthn assertion, a BLS, Schnorr, MuSig2 or FROST signature, an ML-DSA, FN-DSA
   or SLH-DSA signature, a HIP-632 signature) stays one `bytes signature` (owner 2026-10-31). External standards keep their ABI (ERC-1271,
   Uniswap callbacks).
-- **Tokens.** Since typed-signing C2-C6 the named `ua*` entries take `UASig` (`uaUnwrap`, the UA transfer, trade, cancel and receiver-fee entries, `uaCancelNonce`, the confidential twins; [CTR-MTX-28](metatx.md#CTR-MTX-28)). The generic `uaExecute` / `uaBatch` and `uaShield` keep `bytes auth` = `abi.encode(keyData, sig)` (TS-D14, owner table): `UAKinds.uaSig` converts it to a `UASig` for the registry (an `msig` is told by `keccak256(TAG(msig) ‖ keyData) == ua`). On a named `ua*` entry a native id signs with `UASig.signature`; `keyData` and `members` are ignored there, being unsigned.
+- **Tokens.** Since typed-signing C2-C6 the named `ua*` entries take `UASig` (`uaUnwrap`, the UA transfer, trade, cancel and payee-fee entries, `uaCancelNonce`, the confidential twins; [CTR-MTX-28](metatx.md#CTR-MTX-28)). The generic `uaExecute` / `uaBatch` and `uaShield` keep `bytes auth` = `abi.encode(keyData, sig)` (TS-D14, owner table): `UAKinds.uaSig` converts it to a `UASig` for the registry (an `msig` is told by `keccak256(TAG(msig) ‖ keyData) == ua`). On a named `ua*` entry a native id signs with `UASig.signature`; `keyData` and `members` are ignored there, being unsigned.
 - **The registry is a trio: `UARegistry` and two libraries by domain (owner 2026-11-09, T66b spec §11 (d), (f); it replaces the owner's ruling of 2026-11-01 of one library, which split the registry in two; BUILT on `ua-mtx-merge` T66b, UNAUDITED).** `UARegistry` (28,165 B of runtime, 48.03 M asked) keeps the hot views (`requireAuthorized`, `requirePortable`'s entry, `kindOf`, `recordOf`, `checkedOf`, the key and member readers) and `uaAuthDigest` (on the registry's EIP-712 immutables); no hot read gains a `DELEGATECALL`, and there is no `fallback`. `UARegistryCoreLib` (33,685 B, 56.64 M asked: under the 57 M line) holds the `register` forms, the `msig` and its verification, `acceptMembership`, the `requirePortable` body, the reads `registrationOf` and `uaCount`, and four helpers callable only by delegation (`portableOk`, `pqzHolder`, `pqzProof`, `keyUa`). `UARegistryAuxLib` (20,192 B, 34.04 M asked) holds the writes after registration (`setPqzKey`, `storePqzPop`, `setKemKey`, `cacheExpandedKey`), the reads off the hot path (`popOf`, `popSlotsOf`, `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`, `uaAt`, `uaPage`, `uaIndex`) and the five `*Digest` views. One `DELEGATECALL` from the registry per operation; the registry's `pure` views whose code a library holds forward through `_libPure(lib, sel)` (R-1). An Aux operation runs a core helper it shares by one nested `DELEGATECALL` (the registry's three appended configuration words forwarded), one level only: Aux to core, never back; `setPqzKey` makes two such calls to keep its check order. Execution gas of the Aux writers, old -> new: `setKemKey` +8.1 k, `setPqzKey` +12.9 k, `storePqzPop` +29.0 k (the key and the proof copied), `cacheExpandedKey` +5.9 k; the charged gas of `storePqzPop` and of an ML-DSA-65 `setKemKey` is unchanged (the EIP-7976 calldata floor). The registry's selectors, ABI, digests, events, errors, storage and verification rules are those before the split. The registry's constructor refuses a library without code (`UAConfig(0)`), and the Aux library's code hash pins the core it links; deploy order core library, Aux library, registry ([NET-EVM-06](../networks/evm.md#NET-EVM-06)). **Next lever, when the core library grows** (deferred by the owner 2026-11-09, not built): entries move from the core to the Aux library in this order, each measured: `acceptMembership` (≈ 981 B exclusive), the reads `registrationOf` and `uaCount`, the `pure` `uaOf` and `keyHashOf`, and only if the core still misses its line `registerFrost`, `registerMuSig2`, `registerWebAuthn`; `register`, `registerMsig`, the `msig` verification, `requirePortable` and the shared helpers stay. The pre-split sources are frozen in `smartcontracts/evm/legacy/typed-signing/UARegistryPreSplit.sol` and the one-library `UARegistryLib` in `smartcontracts/evm/legacy/` (`a1353950`). The `ua8-soroban` minimal-`msig` rule (U8S-D1) lands in `UARegistryCoreLib._msig`.
 
 <a id="CTR-UA-37"></a>**CTR-UA-37** — **Listing in an `msig` is no consent; a member's acceptance is, and only accepted members count at
@@ -659,7 +659,7 @@ Layer 3 — purposes:
 | `zether-auth` | the PQZ `authDigest` ([pq-zero-knowledge.md](pq-zero-knowledge.md)); classical Zether has none (its proof alone spends) |
 | `zether-owner` | the Zether rollOver/mode digests |
 | `keyop` | family subject-account key operations (replaces `scaas.keyop.v1` by version bump) |
-| `receiver-fee` | the `ReceiverFee` co-sign when the payee is a UA ([CTR-MTX-05](metatx.md#CTR-MTX-05)) |
+| `payee-fee` | the `UAPayeeFee` co-sign when the payee is a UA ([CTR-MTX-05](metatx.md#CTR-MTX-05)) |
 | `trade` | EIP-712 digest of `UATradeOrder`, of `CancelOrder` over a `UATradeOrder` hash, and of `UAInvalidateNonces` ([CTR-DEX-25](dex.md#CTR-DEX-25)), and of `LiquidityOrder` in the DEX's domain ([CTR-DEX-30](dex.md#CTR-DEX-30); the type hash and domain separate it); BUILT (UA-5b: `UAKinds.PURPOSE_TRADE`, the six UA libraries, `kinds.json`) |
 | `vp` | VC presentation / KB-JWT |
 | `vc-anchor` | *reserved* (anchor contract deferred) |
@@ -1004,7 +1004,7 @@ the UA ledger ([CTR-UA-28](#CTR-UA-28)). Rules for every UA form:
 - **Regulated tokens** (not built): the asset suite's per-transfer checks will hook `_uaMove` and `_uaMint` too, the
   UA → UA branch included, and compliance will key accounts by `bytes32` ([CTR-AS-07](asset-suite.md#CTR-AS-07)).
 
-Phases (`TODO.md`, stream UA-5): **UA-5a** receivers, one-step wrap and receiver-pays ([CTR-UA-28](#CTR-UA-28),
+Phases (`TODO.md`, stream UA-5): **UA-5a** receivers, one-step wrap and payee fee ([CTR-UA-28](#CTR-UA-28),
 [CTR-MTX-05](metatx.md#CTR-MTX-05)); **UA-5b** trade and DEX; **UA-5c** Zether public side and mandates. Status: UA-5a
 and UA-5b **BUILT** (UA-5b on EVM; the node's UA order intake, `bytes32` book and PQ order gossip after UA F5), UA-5c
 **SPECIFIED**; relayed `ua*` use needs the node's UA jobs (UA F5; the address-allowlist rows of
@@ -1026,7 +1026,7 @@ EVM tokens, address-typed paths:
 | same | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` | `o.from` | N | `_requireValidSignature`; `msg.sender == o.dex` |
 | `MetaTokenBase` | `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxBatch` (`mtxExecuteWithFee` went to `legacy/typed-signing/`) | `from` / `m.from` | N | same pipeline |
 | same | `payWithFee`, `wrap`, `unwrap`, `addReserve`; `mtxWrapOrder` | sender (`_msgSender()`); `o.from` | N | — ; the underlying's `mtxTrade` |
-| same | `mtxPayReceiverFee` | payer `t.from`, payee `t.to` co-signs | N (payer), N (payee) | `_requireValidSignature` |
+| same | `mtxPayWithPayeeFee` | payer `t.from`, payee `t.to` co-signs | N (payer), N (payee) | `_requireValidSignature` |
 | same (BUILT, UA-5a) | `payWithFeeToUA`; `wrapToUA`; `unwrapToUA`; `mintToUA` (`NORMAL*`, minter) | sender (`_msgSender()`), or for `unwrapToUA` the signer of `uaExecute`; receiver `to` | sender N (`unwrapToUA`: U); `to` U-derived | — ([CTR-UA-28](#CTR-UA-28)) |
 | Hedera children | as above | as above | N incl. `hedera-native` | HIP-632 for 64-byte sigs from codeless accounts |
 | regulated tokens (planned) | transfers, `recordOrder`, `freeze`, … | `to`, `account` | N (address-keyed `ComplianceRegistry`); U when built, keyed by `bytes32` ([CTR-UA-27](#CTR-UA-27)) | — |
@@ -1049,7 +1049,7 @@ EVM Zether (the `*_ZETHER` tokens, BLS12-381 only):
 The proof-covered entry points carry no `authSig`: the proof of knowledge of `x` is the authorization. The roll-over and
 mode digests take purpose `zether-owner` (the purpose names the digest, CTR-UA-10): `sig = abi.encode(bytes(""), sig)`,
 `sig` a Zether Schnorr by `x` over `uaMessage(0x0141, PURPOSE_ZETHER_OWNER, digest)`, `Y` read from the record (Zether
-is a stored kind, below). Every other write of a Zether UA (UA-ledger transfers, trades, mandates, receiver fees) is the
+is a stored kind, below). Every other write of a Zether UA (UA-ledger transfers, trades, mandates, payee fees) is the
 same Schnorr under that write's purpose, through `requireAuthorized`.
 
 PQZ tokens (op 1 transfer, op 7 multi-recipient, unshield, burn): the proof, plus `requireAuthorized(from,
@@ -1208,7 +1208,7 @@ struct UAMetaTransfer {
 | `uaBatchTransfer(UAMetaTransfer[] ts, bytes[] auths)` | `UAMetaTransfer` per item | `mtxBatchTransfer` | each U | each |
 | `uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes auth)` | — | `cancelNonce` | **derived** SIGNING `ua` only (purpose `metatx-cancel`); native ids use `cancelNonce` (sender), which writes `_uaNonce[pad(sender)]` | — |
 | `transferToUA(bytes32 to, uint256 amount)` | — | — | sender N | registered SIGNING (emits `Transfer(sender, UA_POOL)` + `UATransfer`) |
-| `uaPayReceiverFee(UAMetaTransfer t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth)` (BUILT, UA-5a) | `UAMetaTransfer` as given; the payee co-signs `ReceiverFee` | `mtxPayReceiverFee` | U | U, co-signs (derived: purpose `receiver-fee`) ([CTR-MTX-05](metatx.md#CTR-MTX-05)) |
+| `uaPayReceiverFee(UAMetaTransfer t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth)` (BUILT, UA-5a) | `UAMetaTransfer` as given; the payee co-signs `UAPayeeFee` | `mtxPayWithPayeeFee` | U | U, co-signs (derived: purpose `payee-fee`) ([CTR-MTX-05](metatx.md#CTR-MTX-05)) |
 | `uaTrade(UATradeOrder o, auth, f)` (only `o.dex`), `uaCancelOrder`, `uaInvalidateNonces` (BUILT, UA-5b; `UALedgerOff` while the ledger is off, a padded native `from` included) | `UATradeOrder` / `CancelOrder` / `UAInvalidateNonces` | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` | U (purpose `trade`) | `o.dex`; proceeds to `o.destination` U via the DEX ([CTR-DEX-25](dex.md#CTR-DEX-25)) |
 | `uaWrap(address u, UATradeOrder o, auth)` (BUILT, UA-5b) | `UATradeOrder` on the underlying | `mtxWrap` | U | `o.destination` U ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
 | views `balanceOfUA(bytes32)`, `uaNonce(bytes32, batch)`, `uaDigest(m)`, `uaTransferDigest(t)`, `registry()` | — | — | — | — |
@@ -1269,10 +1269,10 @@ error UALegNotLedger(address token);
 | `payWithFeeToUA` | `payWithFee` with a derived payee: the caller (`_msgSender()`, native: not allowlisted, it charges its own fee) pays `amount` to `to` by `_uaMove(pad(payer), to, amount)` and the fee on top to `feeRecipient`; a native `to` reverts `UANotRegistered` (use `payWithFee`); emits `UAPaymentSettled(pad(payer), to, amount, feeAmount, feeRecipient, entryRef)`. `MandateWallet` pays a derived payee through it ([CTR-ACC-12](mandates.md#CTR-ACC-12)). |
 
 Every `to` is checked as a `UAMetaTransfer` receiver (`UANotRegistered`, `UAKindNotAccepted`). The reserve invariant of
-the wrapper kinds is unchanged: `totalSupply` counts `UA_POOL`. `uaPayReceiverFee` (the UA twin of receiver-pays) is
+the wrapper kinds is unchanged: `totalSupply` counts `UA_POOL`. `uaPayReceiverFee` (the UA twin of payee fee) is
 [CTR-MTX-05](metatx.md#CTR-MTX-05); the unshield to a UA (`mtxUnshield` with a derived-UA `recipient`) is [CTR-ZTH-51](zether.md#CTR-ZTH-51). Status **BUILT (UA-5a)**
 (plan `docs/superpowers/plans/2026-10-13-ua5a-receivers-wrap.md`; `test/ua/UAReceivers.t.sol`, `UAAllowlist5a.t.sol`,
-`UAReceiverFee.t.sol`, `wrapToUA` / `unwrapToUA` also at a 3/2 rate (minted, burned and out distinct), the
+`UAPayeeFee.t.sol`, `wrapToUA` / `unwrapToUA` also at a 3/2 rate (minted, burned and out distinct), the
 `UALedgerInvariant` replay over the new moves with the ledger-leg wrapper at 3/2, and `invariant_ledgerLegSolvent`).
 
 Measured (forge, osaka; a native caller, cold: each call from its own state snapshot, minus intrinsic gas):
@@ -2296,10 +2296,10 @@ private/PoA chains with zero gas price it is not money. EIP-7825 (16.78 M per tr
 
 Cross-language vectors (`smartcontracts/vectors/ua/`; `kinds.json` and `structures.json` BUILT as the identity layer — `signatures.json` BUILT with the UA-2a verifiers (PoPs, `metatx` / `member` signatures and negatives for the seven classical kinds, native `UAAuth`, `msig` sets, the official BIP-340 vectors; re-verified by noble and by `scaas-ua::verify`); `groups.json` BUILT (UA-2c: 20 groups, the official BIP-327 and RFC 9591 E.5 vectors, ZF's DKG vector, 57 negatives, T-FROST rows; generated by the `scaas-ua` signers, the secp256k1 rows re-verified by noble), `metatx3.json` BUILT (UA-4: the native key and the eight classical kinds of `signatures.json` × both structs, generated by
 `ua-sig-vectors.mjs` with clientkeys' builders, recomputed and verified by `test/ua/UAMetaTx3Vectors.t.sol`; group and
-`msig` rows wait for UA F3; UA-5a adds the `burn`, `unwrapToUA` and `receiverFee` rows), `pq_signatures.json` BUILT
+`msig` rows wait for UA F3; UA-5a adds the `burn`, `unwrapToUA` and `payeeFee` rows), `pq_signatures.json` BUILT
 (P6c: the PQ kinds on context A — PoPs, `metatx` / `member` signatures, 27 negatives, the `msig` treasury
 `{mldsa65 ×3} t=2` and hybrid `{mldsa65, p256} t=2` with their member signature sets, and their `metatx3` rows; UA-5a:
-`metatx3.receiverFee`, an `mldsa65` payer and an `mldsa65` payee); generated by `ua-sig-vectors.mjs` from `src/pq.js`, re-verified by noble
+`metatx3.payeeFee`, an `mldsa65` payer and an `mldsa65` payee); generated by `ua-sig-vectors.mjs` from `src/pq.js`, re-verified by noble
 (`test/pq-sig.test.js`) and on chain by `test/ua/UARegistryPq.t.sol` and `UAMetaTx3Pq.t.sol`), `derivation.json` with the signers):
 
 `kinds.json` — for **every** kind (including native rows for member refs):
@@ -2341,9 +2341,9 @@ bad PoK, `Y ≠ Σ C_i0`; the FROST(bn254, keccak256) ciphersuite's vectors.
 
 `metatx3.json` (BUILT, UA-4) — `UAMetaTransaction` and `UAMetaTransfer` typed data (one vector set per struct; domain `salt` = `chain_uid`), digests and auth blobs per kind (the v3 KAT,
 like `MetaTxKat`). UA-5a (BUILT; documented in `noteUA5a`, the earlier keys byte-identical): `burn` and `unwrapToUA` —
-`UAMetaTransaction` rows per signer, as `call`; `receiverFee` — `uaPayReceiverFee` rows `{payer, payee, transfer,
-paymentDigest, receiverFee, receiverFeeDigest, payerAuth, payeeAuth}`, a native payer × each of the eight derived payees
-and `p256` × `bip340`; a derived payee signs under purpose `receiver-fee`. `uatrade_kat.json` (BUILT, UA-5b; generated
+`UAMetaTransaction` rows per signer, as `call`; `payeeFee` — `mtxPayWithPayeeFee` rows `{payer, payee, transfer,
+paymentDigest, payeeFee, payeeFeeDigest, payerAuth, payeeAuth}`, a native payer × each of the eight derived payees
+and `p256` × `bip340`; a derived payee signs under purpose `payee-fee`. `uatrade_kat.json` (BUILT, UA-5b; generated
 by `ua-sig-vectors.mjs`, re-verified by `test/ua-trade.test.js` and on chain by `test/ua/UATradeVectors.t.sol`) —
 `UATradeOrder`, `CancelOrder` over its hash and `UAInvalidateNonces` under purpose `trade` in the sell token's domain:
 a native and the eight classical derived signers (order, struct hash, order hash, auth, cancel and invalidate digests
@@ -2534,7 +2534,7 @@ was made, so `PersonalSign` accepts whatever `hash` the caller passes; it is mea
 an app's EIP-712 digest nor an EIP-191 hash has no supported form. A key shared by two accounts, or an owner's EOA and its
 `MandateWallet`, answers only for the wallet it signed for. In a batch, each leaf is the ERC-7739 message of its operation
 and each operation carries its own suffix. Every caller of `SigCheck`'s ERC-1271 (tokens, DEX, registry, Zether and PQZ
-envelopes) is unchanged: the signature it forwards is longer, the wallet rebuilds. Each caller family is tested with a real `SmartKeyAccount` clone and a real `MandateWallet` (`TypedDataSign` accepted, the raw digest refused; `test_erc7739RealWallets_*`: DEX outside order, router op, registry `UAAuth`, receiver-fee co-signature with the longest type at the 50 k cap, Zether and PQZ relayed shields). Clients: clientkeys `erc7739TypedData` /
+envelopes) is unchanged: the signature it forwards is longer, the wallet rebuilds. Each caller family is tested with a real `SmartKeyAccount` clone and a real `MandateWallet` (`TypedDataSign` accepted, the raw digest refused; `test_erc7739RealWallets_*`: DEX outside order, router op, registry `UAAuth`, payee-fee co-signature with the longest type at the 50 k cap, Zether and PQZ relayed shields). Clients: clientkeys `erc7739TypedData` /
 `erc7739Signature`, KAT `erc7739_kat.json` (forge `AccountKat.t.sol`, read by clientkeys).
 The account's own entries (`from = account`, already in its domain) are checked unwrapped through `isValidOwnDigest`, the
 account's static self-call only (`NotSelf` for anyone else). The Safe-style one-level wrap of `be8d0772` is in
@@ -2605,6 +2605,6 @@ Key lifecycle per family ([NET-ALL-05](../networks/README.md#NET-ALL-05) is norm
 
 <a id="smart-account-limitations"></a>
 
-- **Scoped receiver-fee key** (PLANNED): a `SmartKeyAccount` key kind that validates only `ReceiverFee` preimages with a
+- **Scoped payee-fee key** (PLANNED): a `SmartKeyAccount` key kind that validates only `UAPayeeFee` preimages with a
   fee cap, so that a payee's co-signing key ([CTR-MTX-05](metatx.md#CTR-MTX-05)) need not control its wallet. Until
   then the co-signing wallet is a hot collection wallet.

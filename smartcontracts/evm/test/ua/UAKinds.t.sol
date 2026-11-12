@@ -93,7 +93,7 @@ contract UAKindsTest is Test {
         bytes32[15] memory p = [
             UAKinds.PURPOSE_POP, UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL,
             UAKinds.PURPOSE_MEMBER, UAKinds.PURPOSE_ZETHER_AUTH, UAKinds.PURPOSE_ZETHER_OWNER, UAKinds.PURPOSE_KEYOP,
-            UAKinds.PURPOSE_RECEIVER_FEE, UAKinds.PURPOSE_VP, UAKinds.PURPOSE_VC_ANCHOR, UAKinds.PURPOSE_TRADE,
+            UAKinds.PURPOSE_PAYEE_FEE, UAKinds.PURPOSE_VP, UAKinds.PURPOSE_VC_ANCHOR, UAKinds.PURPOSE_TRADE,
             UAKinds.PURPOSE_KEM, UAKinds.PURPOSE_PQZ_KEY, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.PURPOSE_POP_V2
         ];
         assertEq(_count(j, "purposes"), 15);

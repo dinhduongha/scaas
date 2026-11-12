@@ -82,7 +82,7 @@ _BY = {k[0]: k for k in KINDS}
 _SCHEME = {s[0]: s for s in SCHEMES}
 GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
           'fndsa512', 'slhdsa128s', 'mldsa87', 'fndsa1024', 'pqz-mlwe')
-PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee',
+PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'payee-fee',
             'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership')
 
 

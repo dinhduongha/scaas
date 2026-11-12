@@ -9,7 +9,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | File | Covers | Status |
 |---|---|---|
 | [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SmartKeyAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SmartKeyAccount` **BUILT** |
-| [metatx.md](metatx.md) | the one base `ERC20MetaTx`: `MetaTransaction` struct, typehash, `mode`, 2D nonces, `mtxExecute` (generic self-call, ticket, selector allowlist, fee classes), `mtx` names, pay references and the pay-once horizon, receiver-pays | **SPECIFIED** (built as the v1/v2 lines) |
+| [metatx.md](metatx.md) | the one base `ERC20MetaTx`: `MetaTransaction` struct, typehash, `mode`, 2D nonces, `mtxExecute` (generic self-call, ticket, selector allowlist, fee classes), `mtx` names, pay references and the pay-once horizon, payee fee | **SPECIFIED** (built as the v1/v2 lines) |
 | [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, signature wrap, the one `OpenFactory`, allowance rule | tiers **BUILT** (EVM, Hedera); one base and factory **SPECIFIED** |
 | [dex.md](dex.md) | `SCaaSDex` with token-verified `TradeOrder`s, outside-token legs through the `DexPuller`, the exchange path against AMMs (`mtxExchange`), managed-market venue contract | **SPECIFIED** (built: `SCaaSDex`, P2b-1, P2b-2, P2c; `SCaaSDexV1` with DEX-signed orders over allowances) |
 | [tender.md](tender.md) | `SealedBidTender` | **SPECIFIED** |
@@ -287,7 +287,7 @@ interacts with, not of the contract). The protocol provides the switches; the cr
 Per-family availability of every contract area is one matrix in
 [networks/README.md](../networks/README.md#availability) ([NET-ALL-17](../networks/README.md#NET-ALL-17),
 [NET-ALL-18](../networks/README.md#NET-ALL-18), [NET-ALL-19](../networks/README.md#NET-ALL-19)). In short: v2 token
-tiers, receiver-pays, the tender and the asset suite are EVM and Hedera first; classical Zether is EVM only (dev
+tiers, payee fee, the tender and the asset suite are EVM and Hedera first; classical Zether is EVM only (dev
 chains); PQ Zether is the private EVM chain only; the meta-transaction model itself exists natively on every family.
 
 ## <a id="governance"></a>8. Governance

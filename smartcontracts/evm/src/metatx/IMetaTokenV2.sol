@@ -10,8 +10,8 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///        (accounts.md CTR-UA-26; ua-mtx-merge T2: each builds its `UAMetaTransfer`, one form for native and derived ids;
 ///        the address forms and `ReceiverFee` are in legacy/ua-mtx-merge/).
 interface IMetaTokenV2 is IERC20Payment {
-    /// @notice `mtxPayReceiverFee` (CTR-MTX-05 on ids): the payee is an id.
-    event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient,
+    /// @notice `mtxPayWithPayeeFee` (CTR-MTX-05 on ids): the payee is an id.
+    event UAPayeeFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient,
                             uint256 fee);
 
     /// @notice Every pay entry (CTR-MTX-26, pay-meta-tax spec §3.2), before the payment's events; never parsed. `payNo`
@@ -24,9 +24,9 @@ interface IMetaTokenV2 is IERC20Payment {
     error PayMetaMismatch(bytes32 entryRef, bytes32 payId);
     /// @notice A saved pay of `amount >= 2^192` (plan T83: `PayRecord.amount` is a `uint192`; fail closed).
     error PayRecordAmount(uint256 amount);
-    error ReceiverFeeShape();
-    error ReceiverFeeExpired(uint256 validUntil, uint256 nowTs);
-    error ReceiverFeeAmount(uint256 fee, uint256 value);
+    error PayeeFeeShape();
+    error PayeeFeeExpired(uint256 validUntil, uint256 nowTs);
+    error PayeeFeeAmount(uint256 fee, uint256 value);
 
     /// @notice CTR-MTX-26: `keccak256(abi.encodePacked("scaas.pay.meta.v3", salt, keccak256(abi.encode(payNo, save,
     ///         schema, body))))`.
@@ -42,13 +42,13 @@ interface IMetaTokenV2 is IERC20Payment {
     function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
         external view returns (MetaTxLib.PayRecord[] memory);
 
-    function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
         external view returns (bytes32);
 
-    /// @notice Receiver-pays: payer and payee are ids; a derived payee co-signs under `receiver-fee`.
-    function mtxPayReceiverFee(
+    /// @notice Payee fee: payer and payee are ids; a derived payee co-signs under `payee-fee`.
+    function mtxPayWithPayeeFee(
         MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
-        uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth,
+        uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth,
         MetaTxLib.PayMeta calldata meta
     ) external returns (bool);
 

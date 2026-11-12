@@ -1458,12 +1458,13 @@ Change (2026-11-10, the `ua*` / `mtx*` merge, [CTR-MTX-30](contracts/metatx.md#C
 **Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 149.
 Change (2026-11-10, the `ua*` / `mtx*` merge, [CTR-MTX-30](contracts/metatx.md#CTR-MTX-30), spec row R45; status: BUILT on branch `ua-mtx-merge`, UNAUDITED: `scaas-node/tests/mesh_vectors.rs`): the token KAT cases are the regenerated `UAMetaTransfer` rows (forge `TokenKat.t.sol`).
 
-### NODE-MESH-17 — receiver_fee jobs use restricted bus scope
+### NODE-MESH-17 — payee_fee jobs use restricted bus scope
 - old: R193(node) · status: current · owner: no · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-17 · superseded-by: —
 
-**Why.** A receiver-fee co-signature must not travel to open peers.
+**Why.** A payee-fee co-signature must not travel to open peers.
 **Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 181.
 
+Change (owner 2026-11-12, [CTR-MTX-86](contracts/metatx.md#CTR-MTX-86); status: BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED): the job field is `payee_fee` (was `receiver_fee`, refused by name `RECEIVER_FEE_REFUSED`); the rule is unchanged.
 ### NODE-MESH-18 — UA intents in scaas-intent/1.3
 - old: R316 · status: current · owner: no · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-18 · superseded-by: —
 
@@ -2192,22 +2193,23 @@ Change (2026-11-10, ua-mtx-merge T19; pay-meta-tax spec §10; status: BUILT on b
 Change (2026-10-27): **review C0-12 (controller proposal, owner may override)**: `cancelNonce(batch)` advances a lane by one, so it invalidates the one intent signed for the current nonce, not every pending intent: with E5 and E6 signed ahead one cancel kills E5 and makes E6 executable at once (every executed intent is still signed and bounded by `validUntil`). metatx.md is corrected (k pending intents need k cancels). The code option, `cancelNonceTo(batch, newNonce)` with a UA twin (it would also close V3-02), is not built: it adds an entry point to every token and the review rates the harm as bounded. Status: **done** (review2 T8, branch `review2-fix`; documentation only).
 Change (2026-11-10, ua-mtx-merge T19; pay-meta-tax spec §10; status: BUILT on branch `ua-mtx-merge`, UNAUDITED): owner O3, controller call C3 (T37 `3740b85e`): invoice pay-once leaves the protocol; what stays is the nonce lifetime: one signature runs at most once, and on the families that prune lane state the horizon `H` and its obligations stay, keyed on every lane, until each family's round gives a complete replay answer.
 
-### CTR-MTX-05 — Receiver-pays via payee co-signed ReceiverFee
+### CTR-MTX-05 — Payee fee via payee co-signed UAPayeeFee
 - old: R192 · status: current · owner: no · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-05 · superseded-by: —
 
 Change (2026-10-13): owner — the UA twin `uaPayReceiverFee(UAMetaTransfer t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth)`: payer and payee are ids; the payee co-signs the same `ReceiverFee` over the payer's UA digest, a derived payee through `requireAuthorized` under purpose `receiver-fee`; event `UAReceiverFeePaid`. SPECIFIED (UA-5a). The address-path function is BUILT (P1b/P1c), not planned. Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.8.
 
-**Why.** Receiver-pays needs the payee to consent to the fee; a co-signed `ReceiverFee` keeps both parties bound to the same numbers.
+**Why.** The payee fee needs the payee to consent to the fee; a co-signed `UAPayeeFee` (`ReceiverFee` / `UAReceiverFee` before) keeps both parties bound to the same numbers.
 **Cost if wrong.** Without the payee signature a relayer could charge the payee arbitrarily.
 **Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:172`
 Change (2026-10-08): `paymentDigest` is the digest of the payer's `MetaTransfer`; `mtxPayReceiverFee` takes `MetaTransfer t`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-5.
 Change (2026-11-02, typed-signing CD; controller call, owner may override, TS-D19; status: documented; built in typed-signing C6; the `main` merge commit is added when it lands): `ReceiverFee(MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)` nests the payer's whole struct (`UAReceiverFee` nests `UAMetaTransfer`), so the payee's wallet shows the payment's fields; before C6 the field was `bytes32 paymentDigest`. The views are `receiverFeeDigest(MetaTransfer, …)` / `uaReceiverFeeDigest(UAMetaTransfer, …)`; the event keeps the payment digest as `paymentDigest`; `uaPayReceiverFee` takes `UASig` for payer and payee.
 Change (2026-11-10, the `ua*` / `mtx*` merge, [CTR-MTX-30](contracts/metatx.md#CTR-MTX-30), spec row R21; status: BUILT on branch `ua-mtx-merge`, UNAUDITED): `UAReceiverFee(UAMetaTransfer payment, uint256 fee, address feeRecipient, uint256 validUntil)` is the token's only receiver-fee struct (`mtxPayReceiverFee`); `ReceiverFee` is no longer in `src`.
 
-### CTR-MTX-06 — Receiver-pays shape; every tier of the one base
+Change (owner 2026-11-12, [CTR-MTX-86](contracts/metatx.md#CTR-MTX-86); status: BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED): the names only, the rule unchanged: `mtxPayWithPayeeFee`, `UAPayeeFee` (a new typehash, the same members), `UAPayeeFeePaid`, `payeeFeeDigest`, the errors `PayeeFee*`, the purpose `payee-fee`.
+### CTR-MTX-06 — Payee-fee shape; every tier of the one base
 - old: R193(shape) · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-06 · superseded-by: —
 
-**Why.** Receiver-pays keeps its fixed shape (fee `NONE` on the payer, restricted relayer, pay lane with nonce 0, payee-signed absolute fee); with the v1 line deleted it is available on every tier of the one base, still not in `mtxBatch`.
+**Why.** The payee fee keeps its fixed shape (fee `NONE` on the payer, restricted relayer, pay lane with nonce 0, payee-signed absolute fee); with the v1 line deleted it is available on every tier of the one base, still not in `mtxBatch`.
 **Cost if wrong.** A looser shape would let a submitter attach the co-signature to another intent.
 **Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:181`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-9.
 Change (2026-10-08): the payer shape is a `MetaTransfer` with `entryRef ≠ 0`, fee `NONE`, relayer bound, `payLane`/0; not in `mtxBatchTransfer`. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-5.
@@ -2215,6 +2217,7 @@ Change (2026-11-02, typed-signing CD; controller call; status: documented; built
 Change (2026-11-10, the `ua*` / `mtx*` merge, [CTR-MTX-30](contracts/metatx.md#CTR-MTX-30), spec row R21; status: BUILT on branch `ua-mtx-merge`, UNAUDITED): the payer shape is a `UAMetaTransfer` with the same constraints, nested in `UAReceiverFee` ([CTR-MTX-05](contracts/metatx.md#CTR-MTX-05)'s Change).
 Change (owner ruling O3 2026-11-05, pay-meta-tax spec §2.5; status: BUILT on branch `ua-mtx-merge`, T37 `3740b85e`, UNAUDITED): the payer shape loses `batch = payLane(entryRef)` and `nonce = 0`; it keeps `entryRef ≠ 0` (now `entryRef == metaPayId(meta)`, the `PayMeta` last), fee `NONE` with `fee == 0`, the relayer bound, `feeRecipient ≠ 0`, `0 < fee ≤ value`, `feeRecipient ≠ payee`, the token and the pools refused. The co-signature stays single-use: `UAReceiverFee` nests the whole `UAMetaTransfer`, lane and nonce included. Tests: `test/ua/UAReceiverFee.t.sol` `test_uaPayReceiverFee_shapeErrors`, `test/metatx/PayLanes.t.sol` `test_receiverFee_freeLane`, `test_receiverFee_coSignDeadAfterNonceUsed`.
 
+Change (owner 2026-11-12, [CTR-MTX-86](contracts/metatx.md#CTR-MTX-86); status: BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED): the shape is unchanged; it is named the payee-fee shape (`PayeeFeeShape`, `PayeeFeeExpired`, `PayeeFeeAmount`).
 ### CTR-MTX-07 — One meta-tx tree: MetaTxBase, ERC20MetaTx, MetaTokenBase
 - old: R131, typed-signing:TS-D18 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-07 · superseded-by: —
 
@@ -2576,6 +2579,15 @@ Controller calls (the owner may override): C1 `entryRef` is the full EIP-712 dig
 - old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-MTX-15, CTR-MTX-23
 
 **What it said.** From 2026-10-07 to 2026-10-08 one 11-field `MetaTransaction{from, to, value, data, …}` carried a transfer (`data` empty), a payment (`data = pay(bytes32)`) and self-calls (`to = value = 0`).
+
+### CTR-MTX-86 — The payee fee: "payee" consistently
+- old: — · status: current · owner: yes · date: 2026-11-12 · normative: contracts/metatx.md#CTR-MTX-86 · superseded-by: —
+
+**Rule.** The payee fee ([CTR-MTX-05](contracts/metatx.md#CTR-MTX-05), [CTR-MTX-06](contracts/metatx.md#CTR-MTX-06), their ids unchanged) is named "payee fee", "payee" consistently, in code and current docs: the entry `mtxPayWithPayeeFee` (was `mtxPayReceiverFee`, selector `0x0de1ca2d` -> `0x94a190f1`), the view `payeeFeeDigest` (was `receiverFeeDigest`, `0x7c4fa261` -> `0x48ee392e`), the typed struct `UAPayeeFee` (was `UAReceiverFee`, the same members; typehash `0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a` -> `0x8a3955a6c3529266f588d56c7bfd28bdd0b5ad194fc9ca4428e159686a16c7ca`), the event `UAPayeeFeePaid` (was `UAReceiverFeePaid`), the errors `PayeeFeeShape` / `PayeeFeeExpired` / `PayeeFeeAmount` (were `ReceiverFee*`), the UA purpose `payee-fee` (`scaas.ua.purpose.payee-fee.v1`, was `receiver-fee`; tag `0x37eb8dc3…` -> `0x3e5fd01d…`), the internal names (`_mtxPayWithPayeeFeeBody`, `_payeeFee`, `MtxPipelineLib.payeeFeeDigest`, `pfValidUntil`), the node's job field `payee_fee` (was `receiver_fee`; a job still carrying `receiver_fee` is refused by name, `RECEIVER_FEE_REFUSED`), the clients' builders (`uaPayeeFeeTypedData`, `checkPayeeFee`, `buildPayWithPayeeFee`) and the vector rows (`typed_ops.json`, `metatx3.json` `payeeFee`, `kinds.json`). On every `PAYABLE` kind, the Hedera and regulated kinds included. The old names have no entry; they are recorded in the `legacy/ua-mtx-fix2-contracts/` dirs.
+**Status.** BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED; tests `test/v2/PayeeFee.t.sol` (`test_payeeFeeDigestIsPinned`, `test_oldReceiverFeeNamesHaveNoEntry`), `test/ua/UAPayeeFee.t.sol`, the node's `outbox_jobs_are_normalized_and_keyed_by_the_token_digest`.
+**Why.** The owner's ruling, quoted below: the party that co-signs and pays this fee is the payee, and the names say so. The UA purpose `receiver-fee` was the last "receiver fee" word in code; renaming it follows "'payee' consistently" as read by the build (a byte change: a new purpose tag).
+**Cost if wrong.** A payee's wallet signs a new struct name and a derived payee a new purpose: co-signatures made under the old names fail `MetaTxBadSignature`; job producers send `payee_fee` and the op `UAPayeeFee`; indexers read `UAPayeeFeePaid`.
+**Source.** Owner 2026-11-12, in chat, relayed by the controller: "Rename: `mtxPayReceiverFee` -> `mtxPayWithPayeeFee`; struct `UAReceiverFee` -> `UAPayeeFee` (typehash changes); event `UAReceiverFeePaid` -> `UAPayeeFeePaid`; internal names and 'receiver fee / receiver-pays' wording -> 'payee fee' in code and current docs, 'payee' consistently."
 
 ## 18. Contracts — Token wrappers and factory
 
