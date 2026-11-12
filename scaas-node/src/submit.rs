@@ -744,8 +744,7 @@ impl Submitter {
         // nonce read behind `consumed`): a failover endpoint answered a read of this job, so the refusal may be of a block behind
         // the head; back in the queue, final once the first endpoint answers
         if self.chain.failover_answers() != self.failover_mark {
-            return self.requeue(w, format!("FAILOVER_ANSWER: refused on a failover endpoint's answer (the first endpoint did not \
-                answer); retried: {reason}")).await;
+            return self.requeue(w, crate::adapters::evm::failover_answer(&reason)).await;
         }
         warn!(job = ?w.job_id, "simulation refused: {reason}");
         if let Some(id) = w.job_id {
@@ -1610,6 +1609,40 @@ pub(crate) mod tests {
             assert!(last["error"].as_str().unwrap().starts_with(prefix), "{sim} {nonce}: {last}");
             assert!(rpc.lock().unwrap().sent.is_empty());
         }
+    }
+
+    /// Fable recheck 5 R5-1: the generic lane runner (Hedera's, `EvmAdapter`) keeps the rule: a guard refusal on a failover
+    /// endpoint's answer (`chainUid()` of another chain) and a simulation revert whose nonce read a failover endpoint answered are
+    /// back in the queue (`FAILOVER_ANSWER`), never `dead`; nothing is sent. Controls: the same answers from the first endpoint
+    /// are `dead`.
+    #[tokio::test]
+    async fn the_generic_runner_requeues_a_refusal_on_a_failover_answer() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let run = |first: Evm, second: Option<Evm>| async move {
+            let (url, rpc) = fake_evm(first).await;
+            let mut cfg = test_cfg(&url);
+            if let Some(e) = second {
+                cfg.rpc_urls.push(fake_evm(Evm { failover: true, ..e }).await.0);
+            }
+            let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()],
+                Default::default()).unwrap();
+            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "depth", "finality_depth": 0,
+                "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
+            crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            assert!(rpc.lock().unwrap().sent.is_empty());
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            (last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string())
+        };
+        let (st, e) = run(Evm { uid_err: Some("transport"), ..ok() }, Some(Evm { uid: Some(0x25), ..ok() })).await;
+        assert!(st == "queued" && e.contains("FAILOVER_ANSWER") && e.contains("CHAIN_UID_MISMATCH"), "{st}: {e}");
+        let (st, e) = run(Evm { uid: Some(0x25), ..ok() }, None).await;
+        assert!(st == "dead" && e.starts_with("CHAIN_UID_MISMATCH"), "control: {st}: {e}");
+        let (st, e) = run(Evm { sim: Some("revert"), mtx_nonce: None, ..Default::default() }, Some(Evm { sim: Some("revert"), ..ok() })).await;
+        assert!(st == "queued" && e.starts_with("FAILOVER_ANSWER") && e.contains("MetaTxBadNonce("), "{st}: {e}");
+        let (st, e) = run(Evm { sim: Some("revert"), ..ok() }, None).await;
+        assert!(st == "dead" && e.starts_with("MetaTxBadNonce("), "control: {st}: {e}");
     }
 
     /// As `Frozen`: `ComplianceRegistryUnavailable` (the token's bounded registry call failed) is a refusal, named, never `dead`.
