@@ -1257,3 +1257,10 @@ block.timestamp ≤ rfValidUntil	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" c
 fee_paid_by_receiver	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): fee_paid_by_payee: integration.md (payee fee, client side)
 receiver_fee_amount	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): payee_fee_amount: integration.md (payee fee, client side)
 ReceiverFeeLib	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): PayeeFeeLib: node/sponsorship.md#payee-fee
+disableControls	renamed	`disableControls(bits)` is the governance `disableFeature(bit, chainUid_)` of every kind (CTR-TOK-22; the word CTR-GOV-28): contracts/asset-suite.md#CTR-AS-17, decisions.md#CTR-GOV-28
+RECEIVER_FEE_TYPEHASH	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently) after the ua* / mtx* merge: UA_PAYEE_FEE_TYPEHASH (MtxPipelineLib), the payee's UAPayeeFee nesting the payer's UAMetaTransfer: contracts/metatx.md#CTR-MTX-05
+rfValidUntil	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): pfValidUntil of mtxPayWithPayeeFee (PayeeFeeExpired): contracts/metatx.md#CTR-MTX-05
+payerSig	renamed	the ua* / mtx* merge (CTR-MTX-30): the payer's signature is a UASig, payerAuth of mtxPayWithPayeeFee: contracts/metatx.md#CTR-MTX-05
+payeeSig	renamed	the ua* / mtx* merge (CTR-MTX-30): the payee's co-signature is a UASig, payeeAuth of mtxPayWithPayeeFee: contracts/metatx.md#CTR-MTX-05
+Each payment request is payable at most once	obsolete	withdrawn by owner O3, O11 (pay-meta-tax, 2026-11-10): one entryRef takes several payments, the lane a client convention: decisions.md#CTR-MTX-03 (its Change of 2026-11-10), contracts/metatx.md#CTR-MTX-31
+1.39	obsolete	the SCaaS testnet client version of 2026-10-07 (Nethermind 1.39); the current client is in the SCaaS testnet table: networks/evm.md

@@ -65,7 +65,7 @@ only) and the error contract ([errors](#errors)).
 
 Shape: `{"api": 1, "chains": [{chain, chain_key, chain_uid?, family, routes, tokens, fee_recipient, breaker_open,
 max_valid_for_secs, dex?: {address, relayer, markets: [{id, min_base_amount}], relayer_fee_policy: {modes, max_ppm},
-max_open_per_maker, min_ttl_secs, max_ttl_secs}}]}`. `chain` is numeric for EVM and Hedera (the `/v1/op` body);
+max_open_per_maker, min_ttl_secs, max_ttl_secs}}]}`. `chain` is numeric for EVM and Hedera (chain ids 295–298, [hedera.md](../networks/hedera.md)) (the `/v1/op` body);
 `chain_key` is always present. `routes` ⊆ `metatx`, `ops`, `ua-metatx`, `ua-register`, `dex`. `chain_uid` is present
 for chains with a UA registry; clients compare it with the EIP-712 `salt` before signing; UA routes are listed only
 while the [chain binding](#chain-binding) holds. Target (SPECIFIED): `chain_uid` is present for every EVM and Hedera
