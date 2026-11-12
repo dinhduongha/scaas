@@ -355,20 +355,18 @@ reads, the latest block's gas limit, the `VerifierFeeSet`, `UAPqzKeyCurrent` and
 nonces, fees and receipts, and the indexers' log scans (their quorum). One endpoint answers
 the whole read (a log window's head and logs alike), `rpc_urls` in the order given; a transport error (the endpoint down, an
 error answer that is no revert) moves the read to the next endpoint. A revert is the contract's answer and is final only from
-the first endpoint: a failover endpoint's revert is a transport error and the read moves on (Fable recheck 3 R3-1), so no
-revert of a failover endpoint makes a job `dead`; the venue takes a failed settlement's evidence, a leg's own revert and an
-ERC-1271 `false` or an EOA's bad signature from the first endpoint only (from another: no verdict, the order stays). Nor does its
-*value* (recheck 4 R4-1; it may lag a block): `Chain` counts failover answers, and a lane refusal (guard, fill, simulation) while
-the count moved is requeued `FAILOVER_ANSWER: …`, a venue maker health read so is no verdict (503); final once the first answers. A failover
-endpoint answers at all only when its `eth_blockNumber` is at or above the highest block the chain has seen from its first
-endpoint: the lanes' receipts and the heads the indexer, the DEX venue and the health probe poll, one value per `[[chains]]`
-table shared by every lane, the indexer and the venue (Fable recheck 2 P2-1, recheck 3 R3-1). A failover endpoint's own head
-never raises it (R3-2): nothing lowers it, and a restart clears it. Stale or headless, the endpoint is a transport error and the
-job is back in the queue. A failover endpoint is used only once its `eth_chainId` equals the chain's number and its block 0 hash
-equals the chain's (the pinned `chain_uid`, else the first endpoint's block 0): read at its first use and kept; one on another
-network (another id, or a reset or forked network with the same id) is dropped with a log line; an id or block 0 that could not
-be read is logged as unreadable and asked again next time (Fable recheck 2 P3-5, recheck 3 R3-3). The lane's own sends, nonces,
-fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The strict-majority option stays
+the first endpoint; a failover endpoint's revert is a transport error (recheck 3 R3-1), and so is a refusal read from its *value*
+(recheck 4 R4-1, 5 R5-1..4; it may lag a block): `Chain` counts failover answers, and a refusal while the count moved is
+`FAILOVER_ANSWER: …`, back in the queue, on the pipelined lane, the generic lane runner (Hedera) and a restart's tracked jobs (the
+start is retried); the venue's evidence, maker health and list reads are no verdict (the order stays; 503, `LIST_UNREAD`), the
+gateway and order intake answer 503, not 400. While the first endpoint does not answer, no job is `dead`, expired ones included,
+and nothing is sent; `scaas_rpc_failover_answers_total` counts the failover answers (R5-5). A failover endpoint answers at all only
+when its `eth_blockNumber` is at or above the highest block seen from the first endpoint (its receipts, the heads the indexer, the
+venue and the health probe poll), one value per `[[chains]]` table (recheck 2 P2-1, 3 R3-1); its own head never raises it (R3-2),
+nothing lowers it, a restart clears it. It is used only once its `eth_chainId` and block 0 hash are the chain's (the pinned
+`chain_uid`, else the first endpoint's block 0), read at first use and kept; another network (another id, or a reset or forked one
+with the same id) is dropped with a log line, an unreadable id or block 0 is logged as such and asked again (recheck 2 P3-5, 3 R3-3).
+The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The strict-majority option stays
 deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each request gets `rpc_timeout_ms` (30 s: a read's, each
 span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms`
 (120 s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0

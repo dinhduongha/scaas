@@ -126,6 +126,8 @@ pub struct Chain {
     /// Fable recheck 4 R4-1: the answers a failover endpoint (not the first) gave; a check that would refuse a job or blame an order
     /// requeues instead when this moved during it ([`Chain::failover_answers`]).
     failover: std::sync::atomic::AtomicU64,
+    /// The same over every `Chain` of the table (`ChainCfg::failover`), for health (R5-5).
+    failover_total: std::sync::Arc<std::sync::atomic::AtomicU64>,
     /// Fable recheck 4 R4-3: the same endpoints with each request bounded by `rpc_simulate_timeout_ms`, for the simulation only;
     /// `providers` bound each request by `rpc_timeout_ms` (a read's, each log span's, the lane's nonce, fee, send, receipt).
     simulators: Vec<DynProvider>,
@@ -160,6 +162,7 @@ impl Chain {
             head: cfg.head.clone(),
             chain_ok: cfg.rpc_urls.iter().map(|_| Default::default()).collect(),
             failover: Default::default(),
+            failover_total: cfg.failover.clone(),
             simulators,
         })
     }
@@ -250,6 +253,7 @@ impl Chain {
                 Ok(t) => {
                     if i > 0 {
                         self.failover.fetch_add(1, Relaxed);
+                        self.failover_total.fetch_add(1, Relaxed);
                     }
                     return Ok((t, i));
                 }
@@ -676,6 +680,7 @@ pub(crate) mod tests {
         let (lane, venue) = (Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap(), Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap());
         assert_eq!(venue.call_raw(Address::ZERO, Bytes::new()).await.unwrap(), five, "control: at the head, its answer is used");
         assert_eq!((venue.failover_answers(), lane.failover_answers()), (1, 0), "R4-1: a failover answer is counted, per Chain");
+        assert_eq!(cfg.failover.load(SeqCst), 1, "R5-5: and per table, for health");
         let first = chain_of(&[&level]);
         first.call_raw(Address::ZERO, Bytes::new()).await.unwrap();
         assert_eq!(first.failover_answers(), 0, "control: the first endpoint's answer is not");

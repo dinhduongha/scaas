@@ -390,6 +390,10 @@ pub struct ChainCfg {
     /// a runtime value, never read from the file, cleared by a restart.
     #[serde(skip)]
     pub head: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Fable recheck 5 R5-5: the chain reads a failover endpoint answered, over every `Chain` of this table (health:
+    /// `scaas_rpc_failover_answers_total`); a runtime value, never read from the file.
+    #[serde(skip)]
+    pub failover: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 fn default_rpc_timeout_ms() -> u64 {
@@ -499,6 +503,7 @@ impl Default for ChainCfg {
             rpc_timeout_ms: default_rpc_timeout_ms(),
             rpc_simulate_timeout_ms: default_rpc_simulate_timeout_ms(),
             head: Default::default(),
+            failover: Default::default(),
         }
     }
 }

@@ -1053,7 +1053,9 @@ cancels 2 rps (burst 10).
 
 Terminal reasons that are not HTTP codes: job `dead` with `error = ATTEMPTS_EXHAUSTED` (`attempt_count >
 chain.max_attempts`); job `queued` (never `dead` while the op may land) with `PQZ_VERDICT_REFUSED: <error>`, `PQZ_VERDICT_EXPIRED`, `PQZ_FEE_MISMATCH`, `PQZ_FEE_LOG_UNREAD`, `PQZ_VERIFIER_PROBE_UNREAD`, `PQZ_KEY_ROTATED`,
-`PQZ_KEY_VERSION_UNKNOWN`, `PROOF_STORE_OVER_LANE_CAP` ([NODE-JOB-24](submit-lanes.md#NODE-JOB-24)); a lane stopped by
+`PQZ_KEY_VERSION_UNKNOWN`, `PROOF_STORE_OVER_LANE_CAP` ([NODE-JOB-24](submit-lanes.md#NODE-JOB-24)), `FAILOVER_ANSWER: <refusal>` (the
+refusal was read while a failover `rpc_urls` endpoint answered: no verdict until the first endpoint answers; the gateway and DEX
+intake answer it 503, [submit-lanes.md](submit-lanes.md#rpc-failover)); a lane stopped by
 `SERVICE_ENTRIES_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)); chain `halted` with reason `PROGRAM_UPGRADEABLE` ([NODE-STO-07](store.md#NODE-STO-07)).
 
 ## 15. Client conformance
