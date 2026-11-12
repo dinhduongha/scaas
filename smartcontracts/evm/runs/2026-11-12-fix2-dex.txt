@@ -1,0 +1,20 @@
+ua-mtx-fix2-dex round summary (branch ua-mtx-fix2-dex, from a18e9464). step | commit | rc | counts. Full output in
+git-ignored local logs. No branch closing gate here: targeted tests of the touched code + mutants; the controller runs the
+full gate later.
+
+--- Fable recheck2 P3-2 (scratchpad review recheck2-contracts.md) ---
+P3-2 closed by owner ruling 2026-11-12, not by a DEX check: the DEX never reads a release's deprecation (CTR-DEX-30
+  Change, CTR-DEX-18 Change); the D P3-4 live read, its test and mutant specs moved to legacy/ua-mtx-fix2-dex/
+deprecation ruling | 324cead0 | - | intermediate commit, gated with the next one
+CLOSED_MARKETS bit 29 + kind at use | 65979048 | 0 | test/v2/Dex*.sol 206 (10 suites); test/ua 636 (46); test/liquidity
+  81 + 1 skipped (mldsa65, --ffi) (8); test/governance 484 (51); test/v2 616 (47); test/metatx/T*.sol 139 (9);
+  test/merge 118 (10); test/as/FeeLegs 2; test/metatx/MsgSenderLint 9; DexLiquidityUA 4 (after the K7 test);
+  forge build script test/fork ok
+mutants | 65979048 | 0 | 17/17 killed (runs/2026-11-12-fix2-dex/mutants.json; K7 killed after
+  test_derivedSigner_unlistedScaasInputs was added, first run survived)
+size gate | 65979048 | 0 | 0 errors; SCaaSDex 33222 -> 33061, SCaaSDexLiquidityModule 19487 -> 19158,
+  SCaaSDexGovernanceModule 6463 -> 6465; no baseline row moved
+gas (regular) | 65979048 | 0 | mtxSettle 1x1 305462 -> 311105; mtxExchange 289049 -> 291018; mtxHybrid 1x1
+  400409 -> 406053, 1x2 473499 -> 480688; mtxLiquidity 419953 -> 418277, 467038 -> 460925, 523851 -> 517739
+docs_check | 65979048 | 0 | 0 errors, 6 warnings (budgets, as before); test_docs_check ok
+not run | - | - | node e2e (DexConfig fixture changed), clients; governance_bits.json row 29 not written
