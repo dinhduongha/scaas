@@ -140,7 +140,8 @@ interface IGovernance is IAdmin {
     function revokeRole(uint8 bit, bytes32 account) external;
     function renounceRole(uint8 bit) external;
     function disableFeature(uint8 bit) external;
-    /// @notice The admin becomes 0 for good (`AdminHasHolders` first). `chainUid_` is this contract's chain word
-    ///         (`ChainUidMismatch`, Fable recheck-2 P3-1): a native admin's direct call is void on a sibling.
+    /// @notice The admin becomes 0 for good. Refused in order: `NotAdmin`, then `chainUid_` not this contract's chain word
+    ///         (`ChainUidMismatch`, Fable recheck-2 P3-1: a native admin's direct call is void on a sibling), then
+    ///         `AdminHasHolders` while a live holder stays.
     function renounceAdmin(bytes32 chainUid_) external;
 }

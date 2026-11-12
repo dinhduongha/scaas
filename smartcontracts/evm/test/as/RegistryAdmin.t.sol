@@ -419,16 +419,19 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         assertEq(c.pendingAdmin(), nid(next));
     }
 
-    /// F-11's positive control: every registry has one runtime (the admin and the router in storage), the code hash of
-    /// `type(ComplianceRegistry).runtimeCode`, whatever the admin and the router.
+    /// F-11's positive control: every registry has one runtime (the admin, the router and the chain word in storage), the
+    /// code hash of `type(ComplianceRegistry).runtimeCode`, whatever the admin, the router and the word.
     function test_codeHash_oneRuntime() public {
         bytes32 h = keccak256(type(ComplianceRegistry).runtimeCode);
         IRegistryAdmin a = _reg(nid(admin), address(0));
         IRegistryAdmin b = _reg(msig, address(router));
         IRegistryAdmin c = _reg(nid(next), address(trouter));
+        (address d,) = _create(nid(next), address(0), REG_SIB); // GOV-3: another chain word
         assertEq(address(a).codehash, h);
         assertEq(address(b).codehash, h, "another admin and router");
         assertEq(address(c).codehash, h, "a third");
+        assertEq(IRegistryAdmin(d).chainUid(), REG_SIB);
+        assertEq(d.codehash, h, "another chain word");
     }
 
     // ------------------------------------------------------------------ the direct native admin (§8)

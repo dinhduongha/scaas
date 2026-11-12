@@ -7,6 +7,7 @@ import {RescueLib} from "../../src/governance/RescueLib.sol";
 import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {DeployRescueVault} from "../../script/DeployRescueVault.s.sol";
+import {NoReturnERC20} from "../v2/DexOutside.t.sol";
 
 /// CTR-GOV-25 Change (owner 2026-11-12, spec superpowers/specs/2026-11-12-rescue-vault.md): the dev rescue destination is a
 /// `RescueVault` at one CREATE2 address on every chain, two roles. `rescuer` receives: `withdraw(token, amount, to)` by
@@ -64,7 +65,7 @@ contract RescueVaultTest is Test {
     /// and keeps a counterfactual balance.
     function test_addressIsTheConstant() public {
         bytes memory init = vm.parseBytes(vm.readFile(INIT));
-        assertEq(keccak256(init), 0x83bd280daa9bf92f46b32a8d21b75b3483848f75efecdeadc50bbae84d19f280, "init code pin");
+        assertEq(keccak256(init), 0xd42ad5b70d9fb69e4881bcb241d6053df3da0b7818a21e635d92d549d1dcd4fd, "init code pin");
         address a = vm.computeCreate2Address(SALT, keccak256(init), DEPLOYER);
         assertEq(a, RescueLib.SCAAS_DEV_RESCUE, "the constant");
         vm.deal(a, 3 ether); // counterfactual: funds before the vault exists
@@ -83,7 +84,7 @@ contract RescueVaultTest is Test {
     /// the deployed vault. An edit of `RescueVault.sol`, an import or a compiler setting fails here; the artifact stays the
     /// deploy truth.
     function test_artifactIsTheSource() public view {
-        assertEq(keccak256(type(RescueVault).creationCode), 0xb70ea35fdf474e57f943e79eabe99dea21642132cf99f5d87e5465bc1c1d536a, "creation code pin");
+        assertEq(keccak256(type(RescueVault).creationCode), 0xa103dbdc3ecd0a1fc6cd1c96fe8bd904a07b7c5c55cc809eb4e466dcc153dc66, "creation code pin");
         assertEq(abi.encodePacked(type(RescueVault).creationCode, abi.encode(_ua(ADMIN), DEV_EOA)), vm.parseBytes(vm.readFile(INIT)));
     }
 
@@ -97,6 +98,29 @@ contract RescueVaultTest is Test {
         vm.expectRevert(RescueVault.RescuerInvalid.selector);
         new RescueVault(_ua(alice), address(0));
         new RescueVault(_ua(alice), res); // control
+    }
+
+    /// ERC-5267: a tool that builds the domain from `eip712Domain()` alone (bit 0 name, 1 version, 2 chainId,
+    /// 3 verifyingContract, 4 salt) gets the digests the vault checks. A wrong field set (0x0d: chainId instead of version)
+    /// gives another digest and fails here.
+    function test_eip712DomainRebuildsTheDigest() public view {
+        (bytes1 f, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt, uint256[] memory ext) =
+            v.eip712Domain();
+        assertEq(ext.length, 0);
+        string memory t = "EIP712Domain(";
+        bytes memory enc;
+        string memory sep = "";
+        if (uint8(f) & 0x01 != 0) { t = string.concat(t, "string name"); enc = abi.encode(keccak256(bytes(name))); sep = ","; }
+        if (uint8(f) & 0x02 != 0) { t = string.concat(t, sep, "string version"); enc = bytes.concat(enc, abi.encode(keccak256(bytes(version)))); sep = ","; }
+        if (uint8(f) & 0x04 != 0) { t = string.concat(t, sep, "uint256 chainId"); enc = bytes.concat(enc, abi.encode(chainId)); sep = ","; }
+        if (uint8(f) & 0x08 != 0) { t = string.concat(t, sep, "address verifyingContract"); enc = bytes.concat(enc, abi.encode(vc)); sep = ","; }
+        if (uint8(f) & 0x10 != 0) { t = string.concat(t, sep, "bytes32 salt"); enc = bytes.concat(enc, abi.encode(salt)); }
+        assertEq(uint8(f) & 0xe0, 0, "no undefined bits");
+        bytes32 domain = keccak256(bytes.concat(keccak256(bytes(string.concat(t, ")"))), enc));
+        bytes32 sr = keccak256(abi.encode(v.SET_RESCUER_TYPEHASH(), uint64(1), bob));
+        bytes32 ra = keccak256(abi.encode(v.ROTATE_ADMIN_TYPEHASH(), uint64(2), _ua(bob)));
+        assertEq(keccak256(abi.encodePacked(hex"1901", domain, sr)), v.setRescuerDigest(1, bob), "setRescuer from ERC-5267");
+        assertEq(keccak256(abi.encodePacked(hex"1901", domain, ra)), v.rotateAdminDigest(2, _ua(bob)), "rotateAdmin from ERC-5267");
     }
 
     // ------------------------------------------------------------------ withdraw
@@ -187,6 +211,18 @@ contract RescueVaultTest is Test {
         vm.prank(res); // control: a plain address takes the native coin
         v.withdraw(address(0), 1, o);
         assertEq(o.balance, 1);
+    }
+
+    /// A USDT-style token (no return value) withdraws through `SafeERC20`, to `to` and to the rescuer.
+    function test_noReturnTokenWithdraws() public {
+        NoReturnERC20 t = new NoReturnERC20();
+        t.mint(address(v), 10);
+        vm.prank(res);
+        v.withdraw(address(t), 4, PAYEE);
+        vm.prank(STRANGER);
+        v.withdraw(address(t), 6, PAYEE);
+        assertEq(t.balanceOf(PAYEE), 4);
+        assertEq(t.balanceOf(res), 6);
     }
 
     // ------------------------------------------------------------------ admin operations
@@ -369,7 +405,7 @@ contract RescueVaultTest is Test {
 
     /// `DeployRescueVault`: deploys at the constant, then applies the admin log from the vault's `seq() + 1`; a second run with
     /// the same log is a no-op. The dev key is not here, so the test hands the deployed vault's admin to `alice` (slot 0, `seq`
-    /// 0 kept).
+    /// 0 kept). The log is passed as JSON (`deployAndCatchUp`), so no file is written.
     function test_deployScriptDeploysAndCatchesUp() public {
         vm.etch(DEPLOYER, DEPLOYER_CODE);
         DeployRescueVault s = new DeployRescueVault();
@@ -379,23 +415,49 @@ contract RescueVaultTest is Test {
         assertEq(w.admin(), _ua(ADMIN), "the committed log is empty");
         assertEq(w.rescuer(), DEV_EOA);
         vm.store(address(w), bytes32(0), _ua(alice));
-        string memory path = "./deployments/rescue-vault-log.test.json";
-        vm.createDir("./deployments", true);
-        vm.writeFile(path, string.concat(
+        bytes memory init = vm.parseBytes(vm.readFile(INIT));
+        string memory log = _log(w);
+        s.deployAndCatchUp(init, log);
+        assertEq(w.admin(), _ua(bob));
+        assertEq(w.rescuer(), bob);
+        assertEq(w.seq(), 3);
+        s.deployAndCatchUp(init, log); // again: every row skipped
+        assertEq(w.seq(), 3);
+    }
+
+    /// The script's refusals: no deterministic deployer; init code whose address is not the constant (one constructor
+    /// argument changed); a vault that took an operation outside the log (V-2: a skipped row is still compared), each with
+    /// its control.
+    function test_deployScriptRefusals() public {
+        DeployRescueVault s = new DeployRescueVault();
+        bytes memory init = vm.parseBytes(vm.readFile(INIT));
+        vm.etch(DEPLOYER, ""); // Foundry places the deployer by default: a chain without it
+        vm.expectRevert(bytes(
+            "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)"));
+        s.deployAndCatchUp(init, "[]");
+        vm.etch(DEPLOYER, DEPLOYER_CODE);
+        bytes memory other = abi.encodePacked(type(RescueVault).creationCode, abi.encode(_ua(ADMIN), PAYEE));
+        vm.expectRevert(bytes("rescue-vault-init.hex is not RescueLib.SCAAS_DEV_RESCUE's init code"));
+        s.deployAndCatchUp(other, "[]");
+        s.deployAndCatchUp(init, "[]"); // control: the committed bytes deploy
+        RescueVault w = RescueVault(payable(RescueLib.SCAAS_DEV_RESCUE));
+        vm.store(address(w), bytes32(0), _ua(alice));
+        string memory log = _log(w);
+        s.deployAndCatchUp(init, log);
+        w.setRescuer(4, PAYEE, _signRescuer(bobKey, w, 4, PAYEE)); // an operation not in the log
+        vm.expectRevert(bytes("vault differs from the admin log: another operation was applied on this chain (spec R1 / R3)"));
+        s.deployAndCatchUp(init, log);
+    }
+
+    /// The three-row admin log of the script tests: alice sets PAYEE, rotates to bob, bob sets himself.
+    function _log(RescueVault w) internal view returns (string memory) {
+        return string.concat(
             '[{"seq":1,"op":"setRescuer","newRescuer":"', vm.toString(PAYEE), '","sig":"',
             vm.toString(_signRescuer(aliceKey, w, 1, PAYEE)), '"},',
             '{"seq":2,"op":"rotateAdmin","newAdmin":"', vm.toString(_ua(bob)), '","sig":"',
             vm.toString(_signAdmin(aliceKey, w, 2, _ua(bob))), '"},',
             '{"seq":3,"op":"setRescuer","newRescuer":"', vm.toString(bob), '","sig":"',
-            vm.toString(_signRescuer(bobKey, w, 3, bob)), '"}]'));
-        vm.setEnv("RESCUE_VAULT_LOG", path);
-        s.run();
-        assertEq(w.admin(), _ua(bob));
-        assertEq(w.rescuer(), bob);
-        assertEq(w.seq(), 3);
-        s.run(); // again: every row skipped
-        assertEq(w.seq(), 3);
-        vm.removeFile(path);
+            vm.toString(_signRescuer(bobKey, w, 3, bob)), '"}]');
     }
 
     // ------------------------------------------------------------------ KAT (clientkeys)

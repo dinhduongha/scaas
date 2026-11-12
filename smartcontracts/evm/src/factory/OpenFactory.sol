@@ -203,6 +203,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
             bytes4 v = IOpenFactory.complianceRegistry.selector;
             _entry(complianceRegistry, complianceRegistry_, entries.complianceRegistryCodeHash, v);
             if (_addr(complianceRegistry_, _GOV_ROUTER, v) != govRouter) revert EntryMismatch(v);
+            _requireChainUid(complianceRegistry_, chainUid); // GOV-1: its `transferAdmin` word is this chain's
             complianceRegistry = complianceRegistry_;
         }
         address smartKeyAccountFactory_ = entries.smartKeyAccountFactory;

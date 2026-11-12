@@ -428,6 +428,18 @@ contract FactoryDirectoryTest is Test {
         _call(deployer, address(n), _cd(_with(_only(1), 1, address(none), _h(address(none)))));
     }
 
+    /// Fable fix2 GOV-1: a compliance registry built with another chain word (a sibling's init code sent here; the native
+    /// admin case, no router) is refused (`ChainUidMismatch`), so its admin's direct `transferAdmin` for the sibling cannot
+    /// replay on the registry this chain uses; the registry with this chain's word is taken (control).
+    function test_complianceRegistry_otherChainUidRefused() public {
+        OpenFactory n = _factory(address(0));
+        ComplianceRegistry sib = new ComplianceRegistry(nid(deployer), address(0), UID_B);
+        ComplianceRegistry own = new ComplianceRegistry(nid(deployer), address(0), UID);
+        _refused(deployer, address(n), _cd(_with(_only(1), 1, address(sib), _h(address(sib)))),
+            abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID, UID_B));
+        _call(deployer, address(n), _cd(_with(_only(1), 1, address(own), _h(address(own))))); // positive control
+    }
+
     /// D8: an account factory of another `chainUid` is refused (`ChainUidMismatch`, before its implementation).
     function test_accountFactory_otherChainUidRefused() public {
         OpenFactory f = _factory(address(router));

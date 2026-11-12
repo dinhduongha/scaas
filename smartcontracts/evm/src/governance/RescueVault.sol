@@ -85,13 +85,13 @@ contract RescueVault {
         return _digest(keccak256(abi.encode(ROTATE_ADMIN_TYPEHASH, seq_, newAdmin)));
     }
 
-    /// @notice ERC-5267: name, version, verifyingContract (fields 0x0d); no chainId, no salt.
+    /// @notice ERC-5267: name, version, verifyingContract (fields 0x0b); no chainId, no salt.
     function eip712Domain() external view returns (
             bytes1 fields, string memory name, string memory version, uint256 chainId,
             address verifyingContract, bytes32 salt, uint256[] memory extensions
         )
     {
-        return (hex"0d", "SCaaS RescueVault", "1", 0, address(this), bytes32(0), new uint256[](0));
+        return (hex"0b", "SCaaS RescueVault", "1", 0, address(this), bytes32(0), new uint256[](0));
     }
 
     /// @dev `seq_` must be the next one, and `sig` the current admin's 65-byte low-s ECDSA over `digest`.

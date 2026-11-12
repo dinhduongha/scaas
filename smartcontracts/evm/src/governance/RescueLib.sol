@@ -17,7 +17,7 @@ library RescueLib {
     ///         `0x0389f77E846ff687d44db57bcC9DCB55dd6f4131`) at its CREATE2 address
     ///         through `0x4e59b44847b379578588920ca78fbf26c0b4956c`, salt `keccak256("scaas.rescue-vault.v1")`
     ///         (`test/governance/RescueVault.t.sol` `test_addressIsTheConstant`).
-    address internal constant SCAAS_DEV_RESCUE = 0xE20dddfCa81db0Bd8F1036189f20739e1605dF34;
+    address internal constant SCAAS_DEV_RESCUE = 0xd33d17991f57BefB4CcBb3E57c477c10BdE5B465;
 
     /// @notice The effective destination: `stored`, or `SCAAS_DEV_RESCUE` for 0.
     function to(address stored) internal pure returns (address) {

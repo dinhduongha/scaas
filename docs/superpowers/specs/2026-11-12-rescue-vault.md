@@ -50,7 +50,7 @@ contract RescueVault {
     function seq() external view returns (uint64);
     function setRescuerDigest(uint64 seq, address newRescuer) external view returns (bytes32);
     function rotateAdminDigest(uint64 seq, bytes32 newAdmin) external view returns (bytes32);
-    function eip712Domain() external view returns (...);         // ERC-5267, fields 0x0d
+    function eip712Domain() external view returns (...);         // ERC-5267, fields 0x0b
 }
 ```
 
@@ -117,7 +117,8 @@ they hold.
 
 Init code = `type(RescueVault).creationCode ‖ abi.encode(bytes32(uint256(uint160(0xAb92b0E9bD2E18F7003c30dAFE93Ef9bc3e1248C))),
 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131)`, salt `keccak256("scaas.rescue-vault.v1")`, deployer
-`0x4e59b44847b379578588920ca78fbf26c0b4956c` (NET-EVM-05): `0xE20dddfCa81db0Bd8F1036189f20739e1605dF34`. The init code holds no
+`0x4e59b44847b379578588920ca78fbf26c0b4956c` (NET-EVM-05): `0xd33d17991f57BefB4CcBb3E57c477c10BdE5B465` (was `0xE20dddfC…dF34` with ERC-5267 fields `0x0d`, a wrong field
+set: chainId instead of version; never deployed, Fable fix2 V-1). The init code holds no
 chain id, chain uid, block value or other per-chain value, so the address is one on every EVM chain. Funds may be sent to it before
 the vault exists there (EIP-7610 refuses a CREATE2 only onto code, a nonce or storage, never onto a balance); deploying is open to
 anyone and always gives the same contract with the same first admin and rescuer.
@@ -128,10 +129,10 @@ settings (solc 0.8.37, optimizer 200 runs, no via-IR, Amsterdam). The vault impo
 moves it; the designator and native-space checks are copies of `SigCheck.isDesignator` and `UAKinds.inNativeSpace` for that reason.
 
 **The init code is committed** as `smartcontracts/evm/rescue-vault-init.hex` (one line, `0x`, the creation code followed by the
-two constructor arguments; keccak `0x83bd280d…4d19f280`), and the deploy script sends those bytes, never a fresh compile: a later
+two constructor arguments; keccak `0xd42ad5b7…d1dcd4fd`), and the deploy script sends those bytes, never a fresh compile: a later
 compiler, OpenZeppelin commit or setting cannot move the address. `test_addressIsTheConstant` pins the artifact's keccak and its
 CREATE2 address against `RescueLib.SCAAS_DEV_RESCUE` and deploys it; `test_artifactIsTheSource` pins today's compile (creation
-code hash `0xb70ea35f…1c1d536a`) to the artifact, so every behaviour test of the source tests the deployed bytes; the deploy
+code hash `0xa103dbdc…c153dc66`) to the artifact, so every behaviour test of the source tests the deployed bytes; the deploy
 script refuses an artifact whose address is not the constant. **`RescueVault.sol` must never be edited**; under a later compiler
 `test_artifactIsTheSource` may fail while the artifact stays the deploy truth. A new vault means a new file, a new salt and a new
 constant, under a new owner ruling.
@@ -173,10 +174,12 @@ moves its code and metadata hash, so CREATE2 addresses and code-hash pins move, 
 
 `script/DeployRescueVault.s.sol` (never run against a live chain from this branch): refuses without the deterministic deployer,
 reads the committed init code `rescue-vault-init.hex` (§2.3), computes its address and refuses unless it equals
-`RescueLib.SCAAS_DEV_RESCUE`, deploys only when there is no code at it, then applies the public admin log
+`RescueLib.SCAAS_DEV_RESCUE`, deploys only when there is no code at it, then reads the public admin log
 `smartcontracts/evm/rescue-vault-admin-log.json` (committed, `[]` today; env `RESCUE_VAULT_LOG` for another file), a JSON array in
-`seq` order of `{"seq", "op": "setRescuer", "newRescuer", "sig"}` and `{"seq", "op": "rotateAdmin", "newAdmin", "sig"}`, skipping
-the rows at or below the vault's `seq()` (any other `op` refused), and logs the final `rescuer()`, `admin()` and `seq()`. Anyone may
+`seq` order of `{"seq", "op": "setRescuer", "newRescuer", "sig"}` and `{"seq", "op": "rotateAdmin", "newAdmin", "sig"}`, applying
+the rows above the vault's `seq()` (any other `op` refused), logs the final `rescuer()`, `admin()` and `seq()`, and refuses
+unless they equal the log's last `seq` (0 for `[]`), last `newRescuer` and last `newAdmin` (the init code's for a kind with no
+row): a chain whose vault took an operation outside the log (R1, R3) fails instead of reading as caught up. Anyone may
 run it; it needs no key of the vault, only gas. A new chain catches up the same way: deploy, then replay the log.
 
 **When.** An admin operation is not applied on every chain at once (owner 2026-11-12: "mỗi lần đổi chủ phải áp ngay lên mọi chain
@@ -191,17 +194,20 @@ needed (any chain may be caught up later from the log).
 
 ## 6. Tests and evidence
 
-`test/governance/RescueVault.t.sol`, 19 tests: the committed init code's address equals the constant (first admin and rescuer),
-counterfactual balance kept, a second deploy fails; the init code equals today's compile; the constructor refuses a zero or
+`test/governance/RescueVault.t.sol`, 22 tests: the committed init code's address equals the constant (first admin and rescuer),
+counterfactual balance kept, a second deploy fails; the init code equals today's compile; `eip712Domain()`'s declared fields rebuild both digests (fails on `0x0d`); the constructor refuses a zero or
 non-native admin and a zero rescuer; the rescuer pays `to`; the rescuer with `to` 0 and a stranger (any `to`) pay the rescuer,
 ERC-20 and native; the admin is not a rescuer (its `withdraw` with `to` pays the rescuer) until it sets itself; a designator rescuer
-cannot direct, a call paying it still works; native refused to a designator `to` with the ERC-20 and plain-address controls;
+cannot direct, a call paying it still works; native refused to a designator `to` with the ERC-20 and plain-address controls; a no-return (USDT-style) token withdraws through
+`SafeERC20`;
 `setRescuer` by anyone, the old rescuer then a stranger; `rotateAdmin`, the old admin key then void, the new one signs; a non-native
 or zero admin and a zero rescuer refused; the shared `seq` (a signature of one kind fails as the other; `seq` 1 spent by one kind
 voids the other kind's `seq` 1; replay); skipped, stale and replayed `seq`; wrong signer, the rescuer's key, another value, another
 vault's domain (both kinds), the high-s twin, 64 bytes, each with the positive control; an admin log replayed on a second deploy at
 the same address after a fresh fork state with another chain id, in order only, once; a real `RelayFeeRouter.rescue` pays the vault
 (ERC-20 and native) and a stranger sweeps it to the dev EOA; the deploy script deploys, applies a mixed log, and is a no-op on a
-rerun; the KAT (both digests). Mutants: `smartcontracts/evm/runs/2026-11-12-rescue-vault/mutants.json`, each against the one test
-that names its rule (the address and artifact pins excluded, since any edit of the file moves them). clientkeys
+rerun; it refuses a chain without the deployer, init code at another address and a vault that took an operation outside the
+log, each with its control; the KAT (both digests). Mutants: `smartcontracts/evm/runs/2026-11-12-rescue-vault/mutants.json`, each against the one test
+that names its rule (the address and artifact pins excluded, since any edit of the file moves them). The Fable fix2 check's mutants (the 0x0d field set, the three script refusals, `transfer` for `safeTransfer`):
+`smartcontracts/evm/runs/2026-11-12-fix2-check-contracts.txt`. clientkeys
 `test/rescue-vault.test.js` against the KAT, with negatives.
