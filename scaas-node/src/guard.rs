@@ -1478,8 +1478,13 @@ mod tests {
     }
 
     /// [`bound`], and the release `classReleaseOf` answers: `(implementation, deprecated)`, a live one at first; `None`: a revert.
+    /// Fable recheck 4 R4-4: only for the vector's `UACreateInstance` release `(contractClass, kind, version)` asked of its
+    /// `target`; any other id or address answers the zero struct (no release).
     async fn bound_release(uid: B256) -> (ChainCfg, Arc<Mutex<Vec<String>>>, Arc<Mutex<Option<(Address, bool)>>>) {
         let release: Arc<Mutex<Option<(Address, bool)>>> = Arc::new(Mutex::new(Some((Address::repeat_byte(0x1e), false))));
+        let m = typed::testkit::vectors()["ops"]["UACreateInstance"]["message"].clone();
+        let n = |k: &str| m[k].as_u64().or_else(|| m[k].as_str().and_then(|x| x.parse().ok())).unwrap();
+        let want = (m["target"].as_str().unwrap().parse::<Address>().unwrap(), n("contractClass") as u16, n("kind") as u16, n("version"));
         let r2 = release.clone();
         let seen: Arc<Mutex<Vec<String>>> = Default::default();
         let s2 = seen.clone();
@@ -1494,7 +1499,10 @@ mod tests {
                 let result = match m.as_str() {
                     "eth_call" if typed::testkit::domain_answer(input, to).is_some() => serde_json::json!(typed::testkit::domain_answer(input, to)),
                     // owner 2026-11-12: the release `mtxCreateInstance` names (`bound_release`)
-                    "eth_call" if input.starts_with(&release) => match now {
+                    "eth_call" if input.starts_with(&release) => match now.filter(|_| {
+                        let id = IOpenFactory::classReleaseOfCall::abi_decode(&alloy::hex::decode(&input[2..]).unwrap()).unwrap().id;
+                        (to, id.contractClass, id.kind, id.version) == want
+                    }).or(if now.is_some() { Some((Address::ZERO, false)) } else { None }) {
                         Some((implementation, deprecated)) => serde_json::json!(format!("0x{}", alloy::hex::encode(
                             IOpenFactory::classReleaseOfCall::abi_encode_returns(&IOpenFactory::ClassRelease { implementation,
                                 envVersion: 1, envHash: B256::ZERO, usableFrom: 0, deprecated, initSelector: Default::default(),
