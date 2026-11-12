@@ -48,7 +48,7 @@ fs_permissions = [
   { access = "read", path = "./broadcast" }, # script/ZetherE2E.s.sol gasSplit (the e2e broadcast)
   { access = "read", path = "./test" }, # test/ExpectRevertLint.t.sol scans the tests
   { access = "read", path = "./chain-uids.json" }, # script/DeployBase.sol _setup (chain-neutral spec §3.3)
-  { access = "read", path = "./rescue-vault-rotations.json" }, # script/DeployRescueVault.s.sol, the public rotation log
+  { access = "read", path = "./rescue-vault-admin-log.json" }, # script/DeployRescueVault.s.sol, the public admin log
   { access = "read", path = "./rescue-vault-init.hex" }, # script/DeployRescueVault.s.sol, the vault's committed init code
   { access = "read-write", path = "./releases.json" }, # script/DeployBase.sol, the release list (spec §6.2)
 ]

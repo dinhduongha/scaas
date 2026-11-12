@@ -385,7 +385,7 @@ contract GovRescueTest is Test {
     /// CTR-GOV-25 (owner 2026-11-12): the bit with `rescueTo` 0 stores the constant dev address; `rescueTo()` answers it
     /// and a rescue (an ERC-20, the native coin) pays it, on `NORMAL` and `WRAPPED`. Without the bit: 0, no rescue.
     function test_rescueToZeroIsTheDevAddress() public {
-        assertEq(RescueLib.SCAAS_DEV_RESCUE, 0xc564b98ad818d5C870f4B2058C95435259D126cf, "the vault (was the EOA 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131)");
+        assertEq(RescueLib.SCAAS_DEV_RESCUE, 0xE20dddfCa81db0Bd8F1036189f20739e1605dF34, "the vault (was the EOA 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131, then the one-owner vault 0xc564b98ad818d5C870f4B2058C95435259D126cf)");
         address dev = RescueLib.SCAAS_DEV_RESCUE;
         IFactoryToken.TokenConfig memory c = _base(address(0));
         c.features = 1 | RESCUABLE;

@@ -9,13 +9,15 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {DeployRescueVault} from "../../script/DeployRescueVault.s.sol";
 
 /// CTR-GOV-25 Change (owner 2026-11-12, spec superpowers/specs/2026-11-12-rescue-vault.md): the dev rescue destination is a
-/// one-owner `RescueVault` at one CREATE2 address on every chain. `withdraw(token, amount, to)`: anyone; the owner with `to`
-/// not 0 pays `to`, every other call pays the owner. `rotate`: the owner's chain-neutral signature, `seq == seq() + 1`.
+/// `RescueVault` at one CREATE2 address on every chain, two roles. `rescuer` receives: `withdraw(token, amount, to)` by
+/// anyone; the rescuer with `to` not 0 pays `to`, every other call pays the rescuer. `admin` (a native UA) only administers:
+/// `setRescuer` and `rotateAdmin`, its chain-neutral signature, one shared `seq == seq() + 1`.
 contract RescueVaultTest is Test {
     address constant DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
     bytes constant DEPLOYER_CODE = hex"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3";
     bytes32 constant SALT = keccak256("scaas.rescue-vault.v1");
-    address constant DEV_EOA = 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131;
+    address constant DEV_EOA = 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131; // the first rescuer
+    address constant ADMIN = 0xAb92b0E9bD2E18F7003c30dAFE93Ef9bc3e1248C; // the first admin, as a native UA (owner 2026-11-12)
     address constant STRANGER = address(0x5757);
     address constant PAYEE = address(0xBEEF);
     string constant KAT = "../vectors/governance/rescue_vault_kat.json";
@@ -24,38 +26,53 @@ contract RescueVaultTest is Test {
 
     uint256 internal aliceKey = 0xA11CE;
     uint256 internal bobKey = 0xB0B;
-    address internal alice = vm.addr(aliceKey);
+    address internal alice = vm.addr(aliceKey); // the admin
     address internal bob = vm.addr(bobKey);
+    address internal res = makeAddr("rescuer"); // the rescuer
     MockERC20 internal foo = new MockERC20("FOO", "FOO", 18);
-    RescueVault internal v = new RescueVault(alice);
+    RescueVault internal v = new RescueVault(_ua(alice), res);
 
-    function _deploy(address initialOwner) internal returns (address a) {
+    function _ua(address a) internal pure returns (bytes32) {
+        return bytes32(uint256(uint160(a)));
+    }
+
+    function _deploy(bytes32 admin, address rescuer) internal returns (address a) {
         if (DEPLOYER.code.length == 0) vm.etch(DEPLOYER, DEPLOYER_CODE);
         (bool ok, bytes memory ret) =
-            DEPLOYER.call(abi.encodePacked(SALT, type(RescueVault).creationCode, abi.encode(initialOwner)));
+            DEPLOYER.call(abi.encodePacked(SALT, type(RescueVault).creationCode, abi.encode(admin, rescuer)));
         require(ok && ret.length == 20, "deploy");
         a = address(bytes20(ret));
     }
 
-    function _sign(uint256 key, RescueVault w, uint64 seq_, address newOwner) internal view returns (bytes memory) {
-        (uint8 v_, bytes32 r, bytes32 s) = vm.sign(key, w.rotateDigest(seq_, newOwner));
+    function _sig(uint256 key, bytes32 digest) internal pure returns (bytes memory) {
+        (uint8 v_, bytes32 r, bytes32 s) = vm.sign(key, digest);
         return abi.encodePacked(r, s, v_);
+    }
+
+    function _signRescuer(uint256 key, RescueVault w, uint64 seq_, address r) internal view returns (bytes memory) {
+        return _sig(key, w.setRescuerDigest(seq_, r));
+    }
+
+    function _signAdmin(uint256 key, RescueVault w, uint64 seq_, bytes32 a) internal view returns (bytes memory) {
+        return _sig(key, w.rotateAdminDigest(seq_, a));
     }
 
     // ------------------------------------------------------------------ the address
 
     /// The committed init code `rescue-vault-init.hex` is what the deploy script sends: its keccak gives the constant, so a
-    /// later compiler cannot move the address; deploying it gives the dev EOA as owner and keeps a counterfactual balance.
+    /// later compiler cannot move the address; deploying it gives `ADMIN` as admin (a native UA) and the dev EOA as rescuer,
+    /// and keeps a counterfactual balance.
     function test_addressIsTheConstant() public {
         bytes memory init = vm.parseBytes(vm.readFile(INIT));
-        assertEq(keccak256(init), 0x6e3fba8f9e78c33c4903c66e7836ca0e858f6fb48f9320b8117728572000c677, "init code pin");
+        assertEq(keccak256(init), 0x83bd280daa9bf92f46b32a8d21b75b3483848f75efecdeadc50bbae84d19f280, "init code pin");
         address a = vm.computeCreate2Address(SALT, keccak256(init), DEPLOYER);
         assertEq(a, RescueLib.SCAAS_DEV_RESCUE, "the constant");
         vm.deal(a, 3 ether); // counterfactual: funds before the vault exists
         if (DEPLOYER.code.length == 0) vm.etch(DEPLOYER, DEPLOYER_CODE);
         (bool ok, bytes memory ret) = DEPLOYER.call(abi.encodePacked(SALT, init));
         assertTrue(ok && ret.length == 20 && address(bytes20(ret)) == a, "deploys at the constant");
-        assertEq(RescueVault(payable(a)).owner(), DEV_EOA);
+        assertEq(RescueVault(payable(a)).admin(), _ua(ADMIN));
+        assertEq(RescueVault(payable(a)).rescuer(), DEV_EOA);
         assertEq(RescueVault(payable(a)).seq(), 0);
         assertEq(a.balance, 3 ether, "the balance survives the deploy");
         (ok,) = DEPLOYER.call{gas: 1_000_000}(abi.encodePacked(SALT, init)); // a second deploy fails: one per chain
@@ -66,72 +83,93 @@ contract RescueVaultTest is Test {
     /// the deployed vault. An edit of `RescueVault.sol`, an import or a compiler setting fails here; the artifact stays the
     /// deploy truth.
     function test_artifactIsTheSource() public view {
-        assertEq(keccak256(type(RescueVault).creationCode), 0x1852908124267432d15f20cf5efecc80bf62b5957de0cdf1a9d2026597d85047, "creation code pin");
-        assertEq(abi.encodePacked(type(RescueVault).creationCode, abi.encode(DEV_EOA)), vm.parseBytes(vm.readFile(INIT)));
+        assertEq(keccak256(type(RescueVault).creationCode), 0xb70ea35fdf474e57f943e79eabe99dea21642132cf99f5d87e5465bc1c1d536a, "creation code pin");
+        assertEq(abi.encodePacked(type(RescueVault).creationCode, abi.encode(_ua(ADMIN), DEV_EOA)), vm.parseBytes(vm.readFile(INIT)));
     }
 
-    function test_zeroInitialOwnerRefused() public {
-        vm.expectRevert(RescueVault.OwnerInvalid.selector);
-        new RescueVault(address(0));
+    /// The admin is a native UA (not 0, high 96 bits 0); the rescuer is not 0.
+    function test_constructorRefusesBadValues() public {
+        bytes32 derived = bytes32(uint256(uint160(alice)) | (uint256(1) << 160));
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.AdminInvalid.selector, bytes32(0)));
+        new RescueVault(bytes32(0), res);
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.AdminInvalid.selector, derived));
+        new RescueVault(derived, res);
+        vm.expectRevert(RescueVault.RescuerInvalid.selector);
+        new RescueVault(_ua(alice), address(0));
+        new RescueVault(_ua(alice), res); // control
     }
 
     // ------------------------------------------------------------------ withdraw
 
-    function test_ownerWithdrawsToTo() public {
+    function test_rescuerWithdrawsToTo() public {
         foo.mint(address(v), 10);
         vm.deal(address(v), 2 ether);
         vm.expectEmit(address(v));
-        emit RescueVault.Withdrawn(address(foo), PAYEE, 4, alice);
-        vm.prank(alice);
+        emit RescueVault.Withdrawn(address(foo), PAYEE, 4, res);
+        vm.prank(res);
         v.withdraw(address(foo), 4, PAYEE);
-        vm.prank(alice);
+        vm.prank(res);
         v.withdraw(address(0), 1 ether, PAYEE);
         assertEq(foo.balanceOf(PAYEE), 4);
         assertEq(PAYEE.balance, 1 ether);
-        assertEq(foo.balanceOf(alice) + alice.balance, 0, "nothing to the owner");
+        assertEq(foo.balanceOf(res) + res.balance, 0, "nothing to the rescuer");
     }
 
-    /// The owner with `to` 0 pays the owner (owner 2026-11-12, "chủ gọi, nhưng to = 0 thì cũng về địa chỉ chủ").
-    function test_ownerWithZeroToPaysTheOwner() public {
+    /// The rescuer with `to` 0 pays the rescuer.
+    function test_rescuerWithZeroToPaysTheRescuer() public {
         foo.mint(address(v), 10);
         vm.deal(address(v), 2 ether);
-        vm.prank(alice);
+        vm.prank(res);
         v.withdraw(address(foo), 3, address(0));
-        vm.prank(alice);
+        vm.prank(res);
         v.withdraw(address(0), 1 ether, address(0));
-        assertEq(foo.balanceOf(alice), 3);
-        assertEq(alice.balance, 1 ether);
+        assertEq(foo.balanceOf(res), 3);
+        assertEq(res.balance, 1 ether);
     }
 
-    /// Anyone else pays the owner; the stranger's `to` is ignored.
-    function test_strangerPaysTheOwner() public {
+    /// Anyone else pays the rescuer; the stranger's `to` is ignored.
+    function test_strangerPaysTheRescuer() public {
         foo.mint(address(v), 10);
         vm.deal(address(v), 2 ether);
         vm.expectEmit(address(v));
-        emit RescueVault.Withdrawn(address(foo), alice, 5, STRANGER);
+        emit RescueVault.Withdrawn(address(foo), res, 5, STRANGER);
         vm.prank(STRANGER);
         v.withdraw(address(foo), 5, PAYEE);
         vm.prank(STRANGER);
         v.withdraw(address(0), 1 ether, PAYEE);
         vm.prank(STRANGER);
         v.withdraw(address(0), 1 ether, address(0));
-        assertEq(foo.balanceOf(alice), 5);
-        assertEq(alice.balance, 2 ether);
+        assertEq(foo.balanceOf(res), 5);
+        assertEq(res.balance, 2 ether);
         assertEq(foo.balanceOf(PAYEE) + PAYEE.balance + foo.balanceOf(STRANGER) + STRANGER.balance, 0);
     }
 
-    /// An owner that is an EIP-7702 designator cannot direct funds (an EOA runs no code); a call that pays it still works.
-    function test_designatorOwnerCannotDirect() public {
+    /// The admin only administers: its `withdraw` with a `to` pays the rescuer, never `to` and never the admin; once the admin
+    /// sets itself as rescuer, it is the rescuer.
+    function test_adminIsNotARescuer() public {
         foo.mint(address(v), 10);
-        vm.etch(alice, abi.encodePacked(hex"ef0100", address(0xC0DE)));
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(RescueVault.CallerDelegated.selector, alice));
+        v.withdraw(address(foo), 4, PAYEE);
+        assertEq(foo.balanceOf(res), 4);
+        assertEq(foo.balanceOf(PAYEE) + foo.balanceOf(alice), 0);
+        v.setRescuer(1, alice, _signRescuer(aliceKey, v, 1, alice));
+        vm.prank(alice); // control: now set as rescuer
+        v.withdraw(address(foo), 6, PAYEE);
+        assertEq(foo.balanceOf(PAYEE), 6);
+    }
+
+    /// A rescuer that is an EIP-7702 designator cannot direct funds (an EOA runs no code); a call that pays it still works.
+    function test_designatorRescuerCannotDirect() public {
+        foo.mint(address(v), 10);
+        vm.etch(res, abi.encodePacked(hex"ef0100", address(0xC0DE)));
+        vm.prank(res);
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.CallerDelegated.selector, res));
         v.withdraw(address(foo), 1, PAYEE);
-        vm.prank(alice); // control: to 0 pays the owner (an ERC-20, no code runs there)
+        vm.prank(res); // control: to 0 pays the rescuer (an ERC-20, no code runs there)
         v.withdraw(address(foo), 1, address(0));
         vm.prank(STRANGER);
         v.withdraw(address(foo), 1, address(0));
-        assertEq(foo.balanceOf(alice), 2);
+        assertEq(foo.balanceOf(res), 2);
     }
 
     /// The native coin is refused to a designator destination (as `RescueLib.send`); an ERC-20 goes.
@@ -139,115 +177,178 @@ contract RescueVaultTest is Test {
         foo.mint(address(v), 10);
         vm.deal(address(v), 1 ether);
         vm.etch(PAYEE, abi.encodePacked(hex"ef0100", address(0xC0DE)));
-        vm.prank(alice);
+        vm.prank(res);
         vm.expectRevert(abi.encodeWithSelector(RescueVault.ToInvalid.selector, PAYEE));
         v.withdraw(address(0), 1, PAYEE);
-        vm.prank(alice);
+        vm.prank(res);
         v.withdraw(address(foo), 1, PAYEE);
         assertEq(foo.balanceOf(PAYEE), 1);
         address o = makeAddr("plain");
-        vm.prank(alice); // control: a plain address takes the native coin
+        vm.prank(res); // control: a plain address takes the native coin
         v.withdraw(address(0), 1, o);
         assertEq(o.balance, 1);
     }
 
-    // ------------------------------------------------------------------ rotate
+    // ------------------------------------------------------------------ admin operations
 
-    function test_rotateThenOldOwnerIsAStranger() public {
-        bytes memory sig = _sign(aliceKey, v, 1, bob);
+    /// `setRescuer` by the admin's signature, submitted by anyone: the old rescuer is then a stranger.
+    function test_setRescuerThenOldRescuerIsAStranger() public {
+        bytes memory sig = _signRescuer(aliceKey, v, 1, bob);
         vm.expectEmit(address(v));
-        emit RescueVault.Rotated(1, alice, bob);
+        emit RescueVault.RescuerSet(1, res, bob);
         vm.prank(STRANGER); // anyone submits
-        v.rotate(1, bob, sig);
-        assertEq(v.owner(), bob);
+        v.setRescuer(1, bob, sig);
+        assertEq(v.rescuer(), bob);
         assertEq(v.seq(), 1);
+        assertEq(v.admin(), _ua(alice), "the admin stays");
         foo.mint(address(v), 10);
-        vm.prank(alice);
-        v.withdraw(address(foo), 4, PAYEE); // the old owner now pays the new one
+        vm.prank(res);
+        v.withdraw(address(foo), 4, PAYEE); // the old rescuer now pays the new one
         assertEq(foo.balanceOf(bob), 4);
         assertEq(foo.balanceOf(PAYEE), 0);
         vm.prank(bob);
         v.withdraw(address(foo), 6, PAYEE);
         assertEq(foo.balanceOf(PAYEE), 6);
-        bytes memory old = _sign(aliceKey, v, 2, alice);
-        bytes memory cur = _sign(bobKey, v, 2, alice);
-        vm.expectRevert(RescueVault.SignatureInvalid.selector); // the old key no longer rotates
-        v.rotate(2, alice, old);
-        v.rotate(2, alice, cur); // control
-        assertEq(v.owner(), alice);
     }
 
-    function test_rotateStaleOrSkippedSeqRefused() public {
-        bytes memory sig = _sign(aliceKey, v, 1, bob);
-        bytes memory skipped = _sign(aliceKey, v, 2, bob);
-        bytes memory stale = _sign(aliceKey, v, 0, bob);
-        vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 1, 2));
-        v.rotate(2, bob, skipped);
-        vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 1, 0));
-        v.rotate(0, bob, stale);
-        v.rotate(1, bob, sig);
+    /// `rotateAdmin` by the admin's signature: the old admin key no longer signs, the new one does; the rescuer stays.
+    function test_rotateAdminThenOldKeyIsVoid() public {
+        bytes memory sig = _signAdmin(aliceKey, v, 1, _ua(bob));
+        vm.expectEmit(address(v));
+        emit RescueVault.AdminRotated(1, _ua(alice), _ua(bob));
+        vm.prank(STRANGER);
+        v.rotateAdmin(1, _ua(bob), sig);
+        assertEq(v.admin(), _ua(bob));
+        assertEq(v.rescuer(), res, "the rescuer stays");
+        bytes memory oldR = _signRescuer(aliceKey, v, 2, PAYEE);
+        bytes memory oldA = _signAdmin(aliceKey, v, 2, _ua(alice));
+        bytes memory newR = _signRescuer(bobKey, v, 2, PAYEE);
+        vm.expectRevert(RescueVault.SignatureInvalid.selector); // the old key
+        v.setRescuer(2, PAYEE, oldR);
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.rotateAdmin(2, _ua(alice), oldA);
+        v.setRescuer(2, PAYEE, newR); // control: the new key
+        assertEq(v.rescuer(), PAYEE);
+    }
+
+    /// The new admin must be a native UA (not 0, high 96 bits 0): a derived or PQ UA cannot be checked chain-neutrally.
+    function test_rotateAdminRefusesNonNative() public {
+        bytes32 derived = bytes32(uint256(uint160(bob)) | (uint256(0xff) << 248));
+        bytes memory sD = _signAdmin(aliceKey, v, 1, derived);
+        bytes memory s0 = _signAdmin(aliceKey, v, 1, bytes32(0));
+        bytes memory sR0 = _signRescuer(aliceKey, v, 1, address(0));
+        bytes memory ok = _signAdmin(aliceKey, v, 1, _ua(bob));
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.AdminInvalid.selector, derived));
+        v.rotateAdmin(1, derived, sD);
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.AdminInvalid.selector, bytes32(0)));
+        v.rotateAdmin(1, bytes32(0), s0);
+        vm.expectRevert(RescueVault.RescuerInvalid.selector);
+        v.setRescuer(1, address(0), sR0);
+        v.rotateAdmin(1, _ua(bob), ok); // control
+    }
+
+    /// One `seq` for both operations: a signature for `seq` 1 of one kind is void once the other kind used `seq` 1; a
+    /// signature of one kind never passes as the other (the typehash), even for the same 32 bytes.
+    function test_seqSharedAcrossOps() public {
+        bytes memory r1 = _signRescuer(aliceKey, v, 1, bob);
+        bytes memory a1 = _signAdmin(aliceKey, v, 1, _ua(bob));
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.rotateAdmin(1, _ua(bob), r1); // a setRescuer signature as rotateAdmin
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.setRescuer(1, bob, a1); // and the reverse
+        v.setRescuer(1, bob, r1);
         vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 2, 1));
-        v.rotate(1, bob, sig); // replayed
+        v.rotateAdmin(1, _ua(bob), a1); // seq 1 is spent by the other kind
+        v.rotateAdmin(2, _ua(bob), _signAdmin(aliceKey, v, 2, _ua(bob)));
+        assertEq(v.seq(), 2);
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 3, 1));
+        v.setRescuer(1, bob, r1); // replayed
     }
 
-    function test_rotateBadSignaturesRefused() public {
-        bytes memory good = _sign(aliceKey, v, 1, bob);
-        bytes memory notOwner = _sign(bobKey, v, 1, bob);
-        bytes memory otherVault = _sign(aliceKey, new RescueVault(alice), 1, bob);
-        bytes memory zero = _sign(aliceKey, v, 1, address(0));
-        vm.expectRevert(RescueVault.SignatureInvalid.selector);
-        v.rotate(1, bob, notOwner);
-        vm.expectRevert(RescueVault.SignatureInvalid.selector);
-        v.rotate(1, PAYEE, good); // another newOwner than signed
-        vm.expectRevert(RescueVault.SignatureInvalid.selector);
-        v.rotate(1, bob, otherVault); // another vault's domain
-        (uint8 v_, bytes32 r, bytes32 s) = vm.sign(aliceKey, v.rotateDigest(1, bob));
-        vm.expectRevert(RescueVault.SignatureInvalid.selector);
-        v.rotate(1, bob, abi.encodePacked(r, bytes32(N - uint256(s)), v_ == 27 ? uint8(28) : uint8(27))); // high-s twin
-        vm.expectRevert(RescueVault.SignatureInvalid.selector);
-        v.rotate(1, bob, abi.encodePacked(r, s)); // 64 bytes
-        vm.expectRevert(RescueVault.OwnerInvalid.selector);
-        v.rotate(1, address(0), zero);
-        v.rotate(1, bob, good); // control
-        assertEq(v.owner(), bob);
+    function test_staleOrSkippedSeqRefused() public {
+        bytes memory sig = _signRescuer(aliceKey, v, 1, bob);
+        bytes memory skipped = _signRescuer(aliceKey, v, 2, bob);
+        bytes memory stale = _signAdmin(aliceKey, v, 0, _ua(bob));
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 1, 2));
+        v.setRescuer(2, bob, skipped);
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 1, 0));
+        v.rotateAdmin(0, _ua(bob), stale);
+        v.setRescuer(1, bob, sig);
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 2, 1));
+        v.setRescuer(1, bob, sig); // replayed
     }
 
-    /// A rotation is chain-neutral: signed once, it brings a vault deployed later at the same address on another chain (another
-    /// chain id, another history) to the same owner, once.
-    function test_rotationReplaysOnASecondChain() public {
+    function test_badSignaturesRefused() public {
+        RescueVault other = new RescueVault(_ua(alice), res);
+        bytes memory good = _signRescuer(aliceKey, v, 1, bob);
+        bytes memory goodA = _signAdmin(aliceKey, v, 1, _ua(bob));
+        bytes memory notAdmin = _signRescuer(bobKey, v, 1, bob);
+        uint256 resKey = 0x7E5;
+        RescueVault w = new RescueVault(_ua(alice), vm.addr(resKey));
+        bytes memory byRescuer = _signRescuer(resKey, w, 1, bob);
+        bytes memory otherR = _signRescuer(aliceKey, other, 1, bob);
+        bytes memory otherA = _signAdmin(aliceKey, other, 1, _ua(bob));
+        (uint8 v_, bytes32 r, bytes32 s) = vm.sign(aliceKey, v.setRescuerDigest(1, bob));
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.setRescuer(1, bob, notAdmin); // not the admin
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        w.setRescuer(1, bob, byRescuer); // the rescuer's key is not the admin's
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.setRescuer(1, PAYEE, good); // another value than signed
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.rotateAdmin(1, _ua(PAYEE), goodA); // another admin than signed
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.setRescuer(1, bob, otherR); // another vault's domain
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.rotateAdmin(1, _ua(bob), otherA);
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.setRescuer(1, bob, abi.encodePacked(r, bytes32(N - uint256(s)), v_ == 27 ? uint8(28) : uint8(27))); // high-s twin
+        vm.expectRevert(RescueVault.SignatureInvalid.selector);
+        v.setRescuer(1, bob, abi.encodePacked(r, s)); // 64 bytes
+        v.setRescuer(1, bob, good); // control
+        assertEq(v.rescuer(), bob);
+    }
+
+    /// Admin operations are chain-neutral: signed once, they bring a vault deployed later at the same address on another chain
+    /// (another chain id, another history) to the same admin and rescuer, in order, once.
+    function test_adminLogReplaysOnASecondChain() public {
         uint256 before = vm.snapshotState();
         vm.chainId(7622);
-        RescueVault a = RescueVault(payable(_deploy(alice)));
-        bytes memory sig1 = _sign(aliceKey, a, 1, bob);
-        bytes memory sig2 = _sign(bobKey, a, 2, PAYEE);
-        a.rotate(1, bob, sig1);
-        a.rotate(2, PAYEE, sig2);
-        assertEq(a.owner(), PAYEE);
+        RescueVault a = RescueVault(payable(_deploy(_ua(alice), res)));
+        bytes memory sig1 = _signRescuer(aliceKey, a, 1, PAYEE);
+        bytes memory sig2 = _signAdmin(aliceKey, a, 2, _ua(bob));
+        bytes memory sig3 = _signRescuer(bobKey, a, 3, bob);
+        a.setRescuer(1, PAYEE, sig1);
+        a.rotateAdmin(2, _ua(bob), sig2);
+        a.setRescuer(3, bob, sig3);
+        assertEq(a.rescuer(), bob);
 
         vm.revertToState(before); // a fresh chain: no vault yet
         vm.chainId(1);
         vm.roll(block.number + 1000);
         vm.warp(block.timestamp + 1 days);
         assertEq(address(a).code.length, 0);
-        RescueVault b = RescueVault(payable(_deploy(alice)));
+        RescueVault b = RescueVault(payable(_deploy(_ua(alice), res)));
         assertEq(address(b), address(a), "one address");
-        assertEq(b.owner(), alice, "the first owner until caught up");
+        assertEq(b.rescuer(), res, "the first rescuer until caught up");
         vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 1, 2));
-        b.rotate(2, PAYEE, sig2); // out of order
-        b.rotate(1, bob, sig1);
-        b.rotate(2, PAYEE, sig2);
-        assertEq(b.owner(), PAYEE);
-        assertEq(b.seq(), 2);
-        vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 3, 2));
-        b.rotate(2, PAYEE, sig2);
+        b.rotateAdmin(2, _ua(bob), sig2); // out of order
+        b.setRescuer(1, PAYEE, sig1);
+        b.rotateAdmin(2, _ua(bob), sig2);
+        b.setRescuer(3, bob, sig3);
+        assertEq(b.admin(), _ua(bob));
+        assertEq(b.rescuer(), bob);
+        assertEq(b.seq(), 3);
+        vm.expectRevert(abi.encodeWithSelector(RescueVault.SeqInvalid.selector, 4, 3));
+        b.setRescuer(3, bob, sig3);
     }
 
     // ------------------------------------------------------------------ a real rescue pays the vault
 
     /// `RescueLib` refuses only a designator destination: a singleton's `rescue` pays the deployed vault (an ERC-20 and the
-    /// native coin), and anyone then sweeps it to the dev EOA.
+    /// native coin), and anyone then sweeps it to the dev EOA, the rescuer.
     function test_realRescuePaysTheVault() public {
-        address vault = _deploy(DEV_EOA);
+        address vault = _deploy(_ua(ADMIN), DEV_EOA);
         assertEq(vault, RescueLib.SCAAS_DEV_RESCUE);
         RelayFeeRouter r = new RelayFeeRouter();
         foo.mint(address(r), 7);
@@ -266,44 +367,54 @@ contract RescueVaultTest is Test {
 
     // ------------------------------------------------------------------ the deploy script
 
-    /// `DeployRescueVault`: deploys at the constant, then applies the log from the vault's `seq() + 1`; a second run with the
-    /// same log is a no-op. The dev key is not here, so the test hands the deployed vault to `alice` (slot 0, `seq` 0 kept).
+    /// `DeployRescueVault`: deploys at the constant, then applies the admin log from the vault's `seq() + 1`; a second run with
+    /// the same log is a no-op. The dev key is not here, so the test hands the deployed vault's admin to `alice` (slot 0, `seq`
+    /// 0 kept).
     function test_deployScriptDeploysAndCatchesUp() public {
         vm.etch(DEPLOYER, DEPLOYER_CODE);
         DeployRescueVault s = new DeployRescueVault();
-        vm.setEnv("RESCUE_VAULT_LOG", "./rescue-vault-rotations.json"); // the committed log
+        vm.setEnv("RESCUE_VAULT_LOG", "./rescue-vault-admin-log.json"); // the committed log
         s.run();
         RescueVault w = RescueVault(payable(RescueLib.SCAAS_DEV_RESCUE));
-        assertEq(w.owner(), DEV_EOA, "the committed log is empty");
-        vm.store(address(w), bytes32(0), bytes32(uint256(uint160(alice))));
+        assertEq(w.admin(), _ua(ADMIN), "the committed log is empty");
+        assertEq(w.rescuer(), DEV_EOA);
+        vm.store(address(w), bytes32(0), _ua(alice));
         string memory path = "./deployments/rescue-vault-log.test.json";
         vm.createDir("./deployments", true);
         vm.writeFile(path, string.concat(
-            '[{"seq":1,"newOwner":"', vm.toString(bob), '","sig":"', vm.toString(_sign(aliceKey, w, 1, bob)), '"},',
-            '{"seq":2,"newOwner":"', vm.toString(PAYEE), '","sig":"', vm.toString(_sign(bobKey, w, 2, PAYEE)), '"}]'));
+            '[{"seq":1,"op":"setRescuer","newRescuer":"', vm.toString(PAYEE), '","sig":"',
+            vm.toString(_signRescuer(aliceKey, w, 1, PAYEE)), '"},',
+            '{"seq":2,"op":"rotateAdmin","newAdmin":"', vm.toString(_ua(bob)), '","sig":"',
+            vm.toString(_signAdmin(aliceKey, w, 2, _ua(bob))), '"},',
+            '{"seq":3,"op":"setRescuer","newRescuer":"', vm.toString(bob), '","sig":"',
+            vm.toString(_signRescuer(bobKey, w, 3, bob)), '"}]'));
         vm.setEnv("RESCUE_VAULT_LOG", path);
         s.run();
-        assertEq(w.owner(), PAYEE);
-        assertEq(w.seq(), 2);
+        assertEq(w.admin(), _ua(bob));
+        assertEq(w.rescuer(), bob);
+        assertEq(w.seq(), 3);
         s.run(); // again: every row skipped
-        assertEq(w.seq(), 2);
+        assertEq(w.seq(), 3);
         vm.removeFile(path);
     }
 
     // ------------------------------------------------------------------ KAT (clientkeys)
 
-    /// The rotation digest of the vault at the constant address for fixed fields; `WRITE_RESCUE_VAULT=true` writes the file.
-    function test_rotateKat() public {
-        RescueVault w = RescueVault(payable(_deploy(DEV_EOA)));
-        address newOwner = 0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF;
+    /// Both admin digests of the vault at the constant address for fixed fields; `WRITE_RESCUE_VAULT=true` writes the file.
+    function test_adminOpsKat() public {
+        RescueVault w = RescueVault(payable(_deploy(_ua(ADMIN), DEV_EOA)));
+        address newRescuer = 0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF;
+        bytes32 newAdmin = _ua(0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69);
         string memory j = string.concat(
             "{\n",
             '  "_comment": "Generated by smartcontracts/evm/test/governance/RescueVault.t.sol (WRITE_RESCUE_VAULT=true); spec superpowers/specs/2026-11-12-rescue-vault.md",\n',
             '  "vault": "', vm.toString(address(w)), '",\n',
-            '  "rotateTypehash": "', vm.toString(w.ROTATE_TYPEHASH()), '",\n',
-            '  "seq": 1,\n',
-            '  "newOwner": "', vm.toString(newOwner), '",\n',
-            '  "digest": "', vm.toString(w.rotateDigest(1, newOwner)), '"\n',
+            '  "setRescuerTypehash": "', vm.toString(w.SET_RESCUER_TYPEHASH()), '",\n',
+            '  "rotateAdminTypehash": "', vm.toString(w.ROTATE_ADMIN_TYPEHASH()), '",\n',
+            '  "setRescuer": {"seq": 1, "newRescuer": "', vm.toString(newRescuer), '", "digest": "',
+            vm.toString(w.setRescuerDigest(1, newRescuer)), '"},\n',
+            '  "rotateAdmin": {"seq": 2, "newAdmin": "', vm.toString(newAdmin), '", "digest": "',
+            vm.toString(w.rotateAdminDigest(2, newAdmin)), '"}\n',
             "}\n"
         );
         if (vm.envOr("WRITE_RESCUE_VAULT", false)) vm.writeFile(KAT, j);

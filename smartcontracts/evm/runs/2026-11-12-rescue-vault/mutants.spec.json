@@ -1,11 +1,11 @@
 [
  {
-  "id": "RV-1 owner's to ignored",
+  "id": "RV-1 rescuer's to ignored",
   "file": "src/governance/RescueVault.sol",
   "old": "            dest = to;\n",
   "new": "            dest = dest;\n",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_ownerWithdrawsToTo"
+  "test": "test_rescuerWithdrawsToTo"
  },
  {
   "id": "RV-2 a stranger directs",
@@ -13,26 +13,34 @@
   "old": "if (msg.sender == dest && to != address(0)) {",
   "new": "if (to != address(0)) {",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_strangerPaysTheOwner"
+  "test": "test_strangerPaysTheRescuer"
  },
  {
-  "id": "RV-3 owner's to 0 taken",
+  "id": "RV-3 rescuer's to 0 taken",
   "file": "src/governance/RescueVault.sol",
   "old": "if (msg.sender == dest && to != address(0)) {",
   "new": "if (msg.sender == dest) {",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_ownerWithZeroToPaysTheOwner"
+  "test": "test_rescuerWithZeroToPaysTheRescuer"
  },
  {
-  "id": "RV-4 designator owner directs",
+  "id": "RV-4 the admin directs",
+  "file": "src/governance/RescueVault.sol",
+  "old": "if (msg.sender == dest && to != address(0)) {",
+  "new": "if ((msg.sender == dest || msg.sender == address(uint160(uint256(admin)))) && to != address(0)) {",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_adminIsNotARescuer"
+ },
+ {
+  "id": "RV-5 designator rescuer directs",
   "file": "src/governance/RescueVault.sol",
   "old": "            if (_isDesignator(msg.sender)) revert CallerDelegated(msg.sender);\n",
   "new": "",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_designatorOwnerCannotDirect"
+  "test": "test_designatorRescuerCannotDirect"
  },
  {
-  "id": "RV-5 native to a designator",
+  "id": "RV-6 native to a designator",
   "file": "src/governance/RescueVault.sol",
   "old": "            if (_isDesignator(dest)) revert ToInvalid(dest);\n",
   "new": "",
@@ -40,90 +48,138 @@
   "test": "test_nativeRefusedToADesignator"
  },
  {
-  "id": "RV-6 seq may skip",
+  "id": "RV-7 seq may skip",
   "file": "src/governance/RescueVault.sol",
   "old": "if (seq_ != seq + 1) revert",
   "new": "if (seq_ <= seq) revert",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_rotateStaleOrSkippedSeqRefused"
+  "test": "test_staleOrSkippedSeqRefused"
  },
  {
-  "id": "RV-7 seq not written",
+  "id": "RV-8 seq not written",
   "file": "src/governance/RescueVault.sol",
   "old": "        seq = seq_;\n",
   "new": "",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_rotateStaleOrSkippedSeqRefused"
+  "test": "test_staleOrSkippedSeqRefused"
  },
  {
-  "id": "RV-8 any signer rotates",
+  "id": "RV-9 any signer",
   "file": "src/governance/RescueVault.sol",
-  "old": "if (err != ECDSA.RecoverError.NoError || signer != previous) revert",
-  "new": "if (err != ECDSA.RecoverError.NoError) revert",
+  "old": "|| signer != address(uint160(uint256(admin)))",
+  "new": "|| signer == address(0)",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_rotateBadSignaturesRefused"
+  "test": "test_badSignaturesRefused"
  },
  {
-  "id": "RV-9 zero new owner",
+  "id": "RV-10 zero rescuer set",
   "file": "src/governance/RescueVault.sol",
-  "old": "        if (newOwner == address(0)) revert OwnerInvalid();\n",
+  "old": "        if (newRescuer == address(0)) revert RescuerInvalid();\n",
   "new": "",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_rotateBadSignaturesRefused"
+  "test": "test_rotateAdminRefusesNonNative"
  },
  {
-  "id": "RV-10 owner not moved",
+  "id": "RV-11 rescuer not moved",
   "file": "src/governance/RescueVault.sol",
-  "old": "        owner = newOwner;\n",
+  "old": "        rescuer = newRescuer;\n",
   "new": "",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_rotateThenOldOwnerIsAStranger"
+  "test": "test_setRescuerThenOldRescuerIsAStranger"
  },
  {
-  "id": "RV-11 chain-bound domain",
+  "id": "RV-12 admin not moved",
+  "file": "src/governance/RescueVault.sol",
+  "old": "        admin = newAdmin;\n",
+  "new": "",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_rotateAdminThenOldKeyIsVoid"
+ },
+ {
+  "id": "RV-13 chain-bound domain",
   "file": "src/governance/RescueVault.sol",
   "old": "keccak256(\"1\"), address(this)));",
   "new": "keccak256(\"1\"), block.chainid, address(this)));",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_rotationReplaysOnASecondChain"
+  "test": "test_adminLogReplaysOnASecondChain"
  },
  {
-  "id": "RV-12 no verifyingContract",
+  "id": "RV-14 no verifyingContract",
   "file": "src/governance/RescueVault.sol",
   "old": "keccak256(\"1\"), address(this)));",
-  "new": "keccak256(\"1\")));",
+  "new": "keccak256(\"1\"), address(0)));",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_rotateBadSignaturesRefused"
+  "test": "test_badSignaturesRefused"
  },
  {
-  "id": "RV-13 newOwner not signed",
+  "id": "RV-15 newRescuer not signed",
   "file": "src/governance/RescueVault.sol",
-  "old": "keccak256(abi.encode(ROTATE_TYPEHASH, seq_, newOwner))",
-  "new": "keccak256(abi.encode(ROTATE_TYPEHASH, seq_))",
+  "old": "abi.encode(SET_RESCUER_TYPEHASH, seq_, newRescuer)",
+  "new": "abi.encode(SET_RESCUER_TYPEHASH, seq_)",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_rotateBadSignaturesRefused"
+  "test": "test_badSignaturesRefused"
  },
  {
-  "id": "RV-14 zero first owner",
+  "id": "RV-16 newAdmin not signed",
   "file": "src/governance/RescueVault.sol",
-  "old": "        if (initialOwner == address(0)) revert OwnerInvalid();\n",
+  "old": "abi.encode(ROTATE_ADMIN_TYPEHASH, seq_, newAdmin)",
+  "new": "abi.encode(ROTATE_ADMIN_TYPEHASH, seq_)",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_badSignaturesRefused"
+ },
+ {
+  "id": "RV-17 one typehash for both ops",
+  "file": "src/governance/RescueVault.sol",
+  "old": "keccak256(\"RotateAdmin(uint64 seq,bytes32 newAdmin)\")",
+  "new": "keccak256(\"SetRescuer(uint64 seq,address newRescuer)\")",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_seqSharedAcrossOps"
+ },
+ {
+  "id": "RV-18 non-native admin",
+  "file": "src/governance/RescueVault.sol",
+  "old": "if (a == bytes32(0) || uint256(a) >> 160 != 0)",
+  "new": "if (a == bytes32(0))",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_rotateAdminRefusesNonNative"
+ },
+ {
+  "id": "RV-19 zero admin",
+  "file": "src/governance/RescueVault.sol",
+  "old": "if (a == bytes32(0) || uint256(a) >> 160 != 0)",
+  "new": "if (uint256(a) >> 160 != 0)",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_constructorRefusesBadValues"
+ },
+ {
+  "id": "RV-20 zero first rescuer",
+  "file": "src/governance/RescueVault.sol",
+  "old": "        if (initialRescuer == address(0)) revert RescuerInvalid();\n",
   "new": "",
   "path": "test/governance/RescueVault.t.sol",
-  "test": "test_zeroInitialOwnerRefused"
+  "test": "test_constructorRefusesBadValues"
  },
  {
-  "id": "RV-15 constant back to the EOA",
+  "id": "RV-21 constant back to the one-owner vault",
   "file": "src/governance/RescueLib.sol",
-  "old": "SCAAS_DEV_RESCUE = 0xc564b98ad818d5C870f4B2058C95435259D126cf;",
-  "new": "SCAAS_DEV_RESCUE = 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131;",
+  "old": "0xE20dddfCa81db0Bd8F1036189f20739e1605dF34",
+  "new": "0xc564b98ad818d5C870f4B2058C95435259D126cf",
   "path": "test/governance/RescueVault.t.sol",
   "test": "test_realRescuePaysTheVault"
  },
  {
-  "id": "RV-16 script skips no row",
+  "id": "RV-22 script skips no row",
   "file": "script/DeployRescueVault.s.sol",
   "old": "            if (s <= v.seq()) continue;\n",
   "new": "",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_deployScriptDeploysAndCatchesUp"
+ },
+ {
+  "id": "RV-23 script ignores op",
+  "file": "script/DeployRescueVault.s.sol",
+  "old": "if (op == keccak256(\"setRescuer\")) {",
+  "new": "if (true) {",
   "path": "test/governance/RescueVault.t.sol",
   "test": "test_deployScriptDeploysAndCatchesUp"
  }
