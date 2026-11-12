@@ -74,8 +74,11 @@ pub fn classify(e: &TransportError) -> SimError {
 /// Fable recheck 4 R4-5: Nethermind 2.2.0 (the client of this project's chains) answers its own timeout with
 /// `<method> request was canceled due to enabled timeout.` (the fragment from the local `nethermind/nethermind:2.2.0` image's
 /// `Nethermind.JsonRpc.dll`, its error name `Timeout`; the method-name prefix is how the fragment reads, not seen in a run):
-/// neither "revert" nor "execution", so [`classify`] reads it as transport already, no phrase here. Erigon's and Reth's are not
-/// verified (no copy here): one containing "execution" would read as a revert.
+/// neither "revert" nor "execution", so [`classify`] reads it as transport already, no phrase here. Recheck 5 R5-6: a timed-out
+/// `eth_estimateGas` may answer instead the estimate's frame `err: <error> (supplied gas <n>)` (`Nethermind.JsonRpc.dll`) with
+/// the EVM's cancellation, `Cancellation Requested` (`Nethermind.Evm.dll`): read from the DLLs, not seen in a run; transport too
+/// (and not one of [`classify_sim`]'s two gas messages). Replace both by the real answers the first time a run times out.
+/// Erigon's and Reth's are not verified (no copy here): one containing "execution" would read as a revert.
 fn node_limit(m: &str) -> bool {
     m.starts_with("execution aborted (timeout = ") && m.ends_with(')')
 }
@@ -914,6 +917,11 @@ pub(crate) mod tests {
         assert!(matches!(call(reason).await, Err(SimError::Revert(_))), "a revert whose reason names a timeout");
         assert!(matches!(call(other).await, Err(SimError::Revert(_))), "not the node's phrase: the EVM's");
         assert!(matches!(call(nethermind).await, Err(SimError::Transport(_))), "Nethermind's own timeout");
+        // recheck 5 R5-6: the estimate's frame around the EVM's cancellation (from the DLLs), transport for a simulation too
+        let (cancelled, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "err: Cancellation Requested (supplied gas 100000000)"}})).await;
+        assert!(matches!(call(cancelled.clone()).await, Err(SimError::Transport(_))), "the estimate's cancellation");
+        let c = chain_of(&[&cancelled]);
+        assert!(matches!(c.simulate(Address::ZERO, Bytes::new()).await, Err(SimError::Transport(_))), "the same through classify_sim");
     }
 
     /// NODE-GW-07: the chain's `chain_uid` is its block 0 hash; a configured one that differs refuses the chain.
