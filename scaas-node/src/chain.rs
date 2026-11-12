@@ -121,9 +121,9 @@ pub struct Chain {
     /// Fable recheck 4 R4-1: the answers a failover endpoint (not the first) gave; a check that would refuse a job or blame an order
     /// requeues instead when this moved during it ([`Chain::failover_answers`]).
     failover: std::sync::atomic::AtomicU64,
-    /// Fable recheck 3 R3-4: one read's time on one endpoint, and a simulation's (`rpc_timeout_ms`, `rpc_simulate_timeout_ms`).
-    read_timeout: std::time::Duration,
-    simulate_timeout: std::time::Duration,
+    /// Fable recheck 4 R4-3: the same endpoints with each request bounded by `rpc_simulate_timeout_ms`, for the simulation only;
+    /// `providers` bound each request by `rpc_timeout_ms` (a read's, each log span's, the lane's nonce, fee, send, receipt).
+    simulators: Vec<DynProvider>,
 }
 
 impl Chain {
@@ -134,16 +134,13 @@ impl Chain {
 
     pub fn with_signer(cfg: &ChainCfg, signer: PrivateKeySigner) -> Result<Self> {
         let address = signer.address();
-        let (read_timeout, simulate_timeout) =
-            (std::time::Duration::from_millis(cfg.rpc_timeout_ms), std::time::Duration::from_millis(cfg.rpc_simulate_timeout_ms));
-        let providers = cfg
-            .rpc_urls
-            .iter()
-            // Fable recheck 2 P3-4: a request timeout, so an endpoint that accepts and never answers fails a read over; each read
-            // is bounded by its own limit ([`Chain::read_within`]), this one bounds every other request (sends, receipts, scans)
+        // Fable recheck 2 P3-4, recheck 4 R4-3: a timeout per request, so an endpoint that accepts and never answers fails a read
+        // over; a simulation's requests get the larger one
+        let with = |ms: u64| cfg.rpc_urls.iter()
             .map(|u| Ok(ProviderBuilder::new().disable_recommended_fillers()
-                .connect_reqwest(reqwest::Client::builder().timeout(read_timeout.max(simulate_timeout)).build()?, u.parse()?).erased()))
-            .collect::<Result<Vec<_>>>()?;
+                .connect_reqwest(reqwest::Client::builder().timeout(std::time::Duration::from_millis(ms)).build()?, u.parse()?).erased()))
+            .collect::<Result<Vec<_>>>();
+        let (providers, simulators) = (with(cfg.rpc_timeout_ms)?, with(cfg.rpc_simulate_timeout_ms)?);
         if providers.is_empty() {
             return Err(anyhow!("chain {}: no rpc_urls", cfg.evm_chain_number));
         }
@@ -158,8 +155,7 @@ impl Chain {
             head: cfg.head.clone(),
             chain_ok: cfg.rpc_urls.iter().map(|_| Default::default()).collect(),
             failover: Default::default(),
-            read_timeout,
-            simulate_timeout,
+            simulators,
         })
     }
 
@@ -200,11 +196,11 @@ impl Chain {
         F: Fn(DynProvider) -> Fut,
         Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
     {
-        self.read_within(self.read_timeout, f).await
+        self.read_within(false, f).await
     }
 
-    /// [`Chain::read_at`] with `limit` per endpoint (R3-4: a simulation's is larger).
-    async fn read_within<T, F, Fut>(&self, limit: std::time::Duration, f: F) -> std::result::Result<(T, usize), SimError>
+    /// [`Chain::read_at`]; `simulate`: `f` gets the endpoint's simulation client (R3-4, R4-3: each request its own limit).
+    async fn read_within<T, F, Fut>(&self, simulate: bool, f: F) -> std::result::Result<(T, usize), SimError>
     where
         F: Fn(DynProvider) -> Fut,
         Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
@@ -227,10 +223,10 @@ impl Chain {
                     Err(e) => Err(classify(&e)),
                 }
             };
-            let answer = tokio::time::timeout(limit, async {
+            let answer = async {
                 fresh.await.map_err(|e| (false, e))?;
-                f(p.clone()).await.map_err(|e| (true, e))
-            }).await.unwrap_or_else(|_| Err((true, SimError::Transport(format!("endpoint {i}: no answer within {} ms", limit.as_millis())))));
+                f(if simulate { self.simulators[i].clone() } else { p.clone() }).await.map_err(|e| (true, e))
+            }.await;
             match answer {
                 Err((false, e)) => {
                     let e = e.to_string();
@@ -318,7 +314,7 @@ impl Chain {
     /// transaction needs, regular + state (EIP-8037); no gas field, so both calls run at the RPC's gas cap.
     pub async fn simulate_from(&self, from: Address, to: Address, data: Bytes) -> std::result::Result<u64, SimError> {
         let tx = TransactionRequest::default().with_from(from).with_to(to).with_input(data);
-        self.read_within(self.simulate_timeout, |p| {
+        self.read_within(true, |p| {
             let tx = tx.clone();
             async move {
                 p.call(tx.clone()).await.map_err(|e| classify_sim(&e))?;
@@ -763,6 +759,31 @@ pub(crate) mod tests {
         }
     }
 
+    /// Fable recheck 4 R4-3: each request of a log window has its own `rpc_timeout_ms`, not the window: an RPC that caps the range
+    /// and answers each span in 400 ms reads a 10,001-block window (several spans, over a second in all) under a 1 s limit;
+    /// control: a span slower than the limit fails the window over.
+    #[tokio::test]
+    async fn each_log_span_has_its_own_timeout() {
+        async fn serve(delay: u64) -> String {
+            let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| async move {
+                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                let mut a = capped_logs(&r, 2_000);
+                a["jsonrpc"] = json!("2.0");
+                a["id"] = r["id"].clone();
+                axum::Json(a)
+            }));
+            let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}", l.local_addr().unwrap());
+            tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+            url
+        }
+        let c = |url: &str| Chain::with_signer(&ChainCfg { rpc_timeout_ms: 1_000, ..cfg_of(&[url]) }, PrivateKeySigner::random()).unwrap();
+        let t = std::time::Instant::now();
+        let logs = c(&serve(400).await).logs_since(Address::ZERO, B256::ZERO, 10_000).await.unwrap();
+        assert!(logs.len() >= 3 && t.elapsed() > std::time::Duration::from_millis(1_200), "{} spans in {:?}", logs.len(), t.elapsed());
+        assert!(c(&serve(2_500).await).logs_since(Address::ZERO, B256::ZERO, 10_000).await.is_err(), "control: one slow request");
+    }
+
     /// Fable recheck R-6: a log window an RPC refuses whole (it caps the `eth_getLogs` range) is read in tenths, contiguous and
     /// complete; an endpoint that refuses even `LOG_SPAN_MIN` blocks fails the read over. Control: an uncapped RPC answers the
     /// window in one request.
@@ -855,10 +876,11 @@ pub(crate) mod tests {
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let c = quick(&[&slow], 300, 10_000);
         assert_eq!(c.simulate(Address::ZERO, Bytes::new()).await.unwrap(), 21_000, "a simulation within its own limit");
-        // a fresh client: no pooled connection the server may have closed meanwhile (a quick transport error of another kind)
+        // a fresh client: no pooled connection the server may have closed meanwhile
+        let t = std::time::Instant::now();
         let got = quick(&[&slow], 300, 10_000).call_raw(Address::ZERO, Bytes::new()).await;
-        assert!(matches!(&got, Err(SimError::Transport(e)) if e.contains("within 300 ms")), "control: a read of the same speed times \
-            out: {got:?}");
+        assert!(matches!(&got, Err(SimError::Transport(_))) && t.elapsed() < std::time::Duration::from_millis(1_400),
+            "control: a read of the same speed times out: {got:?} after {:?}", t.elapsed());
         let (busy, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "header not found"}})).await;
         assert_eq!(chain_of(&[&busy, &good]).block_gas().await.unwrap().limit, 30_000_000, "the gas cap's read fails over");
     }

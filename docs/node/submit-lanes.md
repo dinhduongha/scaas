@@ -369,10 +369,11 @@ equals the chain's (the pinned `chain_uid`, else the first endpoint's block 0): 
 network (another id, or a reset or forked network with the same id) is dropped with a log line; an id or block 0 that could not
 be read is logged as unreadable and asked again next time (Fable recheck 2 P3-5, recheck 3 R3-3). The lane's own sends, nonces,
 fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The strict-majority option stays
-deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each endpoint of a read gets `rpc_timeout_ms` (30 s), a
-simulation `rpc_simulate_timeout_ms` (120 s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured,
-chosen generous), per `[[chains]]` table; every other request is bounded by the larger one, so an endpoint that accepts and
-never answers fails the read over (Fable recheck 3 R3-4; test `a_hung_endpoint_and_the_block_gas_read_fail_over`). An error
+deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each request gets `rpc_timeout_ms` (30 s: a read's, each
+span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms`
+(120 s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0
+refused at start; an endpoint that accepts and never answers fails the read over (Fable recheck 3 R3-4, recheck 4 R4-3; tests
+`a_hung_endpoint_and_the_block_gas_read_fail_over`, `each_log_span_has_its_own_timeout`). An error
 answer counts as a revert when it carries revert data or names a revert; else one naming an execution error is a revert too,
 except a node's own limit by its exact phrase (`execution aborted (timeout = …)`), which is a transport error (Fable recheck 2
 P3-8, recheck 3 R3-6; `an_aborted_execution_is_transport`). The venue's ERC-1271 call uses the same classifier.
