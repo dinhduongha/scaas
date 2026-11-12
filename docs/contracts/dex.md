@@ -605,7 +605,7 @@ only the plan's named tokens. **`SCaaSDex.rescue(token)`** (fix2 2026-11-12, Fab
 documented limit): anyone sends the DEX's whole balance of an ERC-20 `token` to the puller's immutable `rescueTo`
 (`DexConfig.rescueTo`; 0 = no rescue, `RescueOff`), `IRescuable.Rescued`, the puller's rule ([CTR-DEX-22](#CTR-DEX-22)),
 under the DEX's entry guard (`nonReentrant`), so nothing inside a running settlement or plan reaches it. With a
-`rescueTo`, a stray goes there before a submitter's plan can move it; with none, the sweep above stands. Tests
+`rescueTo`, anyone may send a stray there; until then the sweep above stands (the rescue and a submitter's plan race), and with none it stands always. Tests
 `test_dexRescueWholeBalance`, `test_dexRescueNotReentrant` (`test/governance/GovRescue.t.sol`). Status **BUILT** (branch
 `ua-mtx-fix2-contracts`).
 Not to be confused with

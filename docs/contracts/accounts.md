@@ -2535,7 +2535,7 @@ an app's EIP-712 digest nor an EIP-191 hash has no supported form. A key shared 
 `MandateWallet`, answers only for the wallet it signed for. In a batch, each leaf is the ERC-7739 message of its operation
 and each operation carries its own suffix. Every caller of `SigCheck`'s ERC-1271 (tokens, DEX, registry, Zether and PQZ
 envelopes) is unchanged: the signature it forwards is longer, the wallet rebuilds. Clients: clientkeys `erc7739TypedData` /
-`erc7739Signature`, KAT `erc7739_kat.json` (forge `AccountKat.t.sol`; also checked against viem 2.23's ERC-7739 helpers).
+`erc7739Signature`, KAT `erc7739_kat.json` (forge `AccountKat.t.sol`, read by clientkeys).
 The account's own entries (`from = account`, already in its domain) are checked unwrapped through `isValidOwnDigest`, the
 account's static self-call only (`NotSelf` for anyone else). The Safe-style one-level wrap of `be8d0772` is in
 `smartcontracts/evm/legacy/ua-mtx-fix2-contracts/` and `clients/clientkeys/legacy/ua-mtx-fix2-contracts/`.
@@ -2608,4 +2608,3 @@ Key lifecycle per family ([NET-ALL-05](../networks/README.md#NET-ALL-05) is norm
 - **Scoped receiver-fee key** (PLANNED): a `SmartKeyAccount` key kind that validates only `ReceiverFee` preimages with a
   fee cap, so that a payee's co-signing key ([CTR-MTX-05](metatx.md#CTR-MTX-05)) need not control its wallet. Until
   then the co-signing wallet is a hot collection wallet.
-- ERC-1271 digests are not account-wrapped (above).
