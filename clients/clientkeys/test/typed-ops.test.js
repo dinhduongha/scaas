@@ -361,7 +361,7 @@ test('GovernanceRouter: 53 rows equal GovRouterTypehash.t.sol, target the first 
 // relayer and fee recipient signs both as 0.
 test('round 3s: UASetAllowed, UASetDenied, UAEnableFeature', () => {
   const JUNK = '0x' + 'ba'.repeat(20);
-  for (const [name, params] of [['UASetAllowed', 'accounts,on'], ['UASetDenied', 'accounts,on'], ['UAEnableFeature', 'bit']]) {
+  for (const [name, params] of [['UASetAllowed', 'accounts,on'], ['UASetDenied', 'accounts,on'], ['UAEnableFeature', 'bit,chainUid']]) {
     assert.deepEqual(TYPED_OPS[name].fields.map((f) => f.name).slice(0, -7), ['from', 'target', ...params.split(',')], name);
   }
   const r = V.ops.UASetDenied;
@@ -374,6 +374,23 @@ test('round 3s: UASetAllowed, UASetDenied, UAEnableFeature', () => {
   const swapped = build({ ...r.message, accounts: [...r.message.accounts].reverse() });
   assert.notEqual(hex(hashTypedData(swapped)), d.digest, 'the order of accounts is signed');
   assert.equal(V.ops.UAEnableFeature.message.bit, 9);
+});
+
+// CTR-GOV-28 (owner 2026-11-13): every admin op of a token, the DEX or a registry signs the target's chain word as its last op
+// field (`bytes32 chainUid`, before the envelope); the rows carry context A's; another word is another digest.
+test('CTR-GOV-28: the twelve admin ops sign the chain word last', () => {
+  const ops = ['UAGrantRole', 'UARevokeRole', 'UASetGrant', 'UACancelGrant', 'UADisableFeature', 'UAEnableFeature', 'UAPqzSetVerifier',
+    'UAPqzCancelVerifier', 'UAPqzRevokeVerifier', 'UASetVerifierFee', 'UASetKycProvider', 'UASetCompliance'];
+  for (const name of ops) {
+    const f = TYPED_OPS[name].fields;
+    assert.deepEqual([f.at(-8).name, f.at(-8).type], ['chainUid', 'bytes32'], name);
+    const r = V.ops[name];
+    const d = r.domains.gov_router;
+    assert.equal(r.message.chainUid, d.domain.salt, `${name}: context A's word (the router's salt there)`);
+    const build = (m) => builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: m });
+    assert.equal(hex(hashTypedData(build(r.message))), d.digest, `${name}: the row's digest`);
+    assert.notEqual(hex(hashTypedData(build({ ...r.message, chainUid: '0x' + '00'.repeat(32) }))), d.digest, `${name}: the word is signed`);
+  }
 });
 
 // ua-mtx-merge T34 (regulated-kinds spec §3.1, §7; CTR-GOV-20 Change, owner 2026-11-06): the router's eight regulated controls.

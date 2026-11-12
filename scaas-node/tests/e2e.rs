@@ -2401,7 +2401,7 @@ mod pqz3f {
         struct PqzTransferArgs { uint64 p; uint256 validUntilBlock; uint256 shieldIn; bytes32 fromUA; uint64 keyVersion; bytes32 toUA;
             bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
         function transferSingleStatement(PqzTransferArgs t, bytes32 binding) external view returns (bytes);
-        function pqzRevokeVerifier() external;
+        function pqzRevokeVerifier(bytes32 chainUid_) external; // CTR-GOV-28: the token's chain word
         function setTokenKindEnabled(uint8 kind, bool on, bytes32 chainUid) external;
         function latestTokenEnvVersion(uint8 kind) external view returns (uint16);
         function latestVersion(uint8 kind) external view returns (uint64);
@@ -2864,7 +2864,7 @@ async fn pqz_revoked_verifier_on_anvil() {
     let (j1, stmt, proof) = st.transfer_job(1, 0).await;
     let mut j1 = j1;
     j1["op"]["args"]["pqz_verdict"] = st.verdict(&stmt, &proof).await;
-    send(&st.rpc, &deployer, st.token, pqz3f::pqzRevokeVerifierCall {}.abi_encode()).await;
+    send(&st.rpc, &deployer, st.token, pqz3f::pqzRevokeVerifierCall { chainUid_: st.uid }.abi_encode()).await;
     let cfg = view(&st.rpc, st.token, scaas_node::abi::IPqzToken::pqzVerifyConfigCall {}).await;
     assert_eq!(cfg.verifier, B256::ZERO, "revoked at once");
     let (url, seen) = fake_pqz_verifier(&st).await;

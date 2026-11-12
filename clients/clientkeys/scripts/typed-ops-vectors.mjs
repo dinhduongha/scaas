@@ -180,6 +180,12 @@ const LISTED = [padId('0x00000000000000000000000000000000000007a1'), padId('0x00
 ROW.UASetAllowed = { accounts: LISTED, on: true };
 ROW.UASetDenied = { accounts: LISTED, on: true, mode: 0, fee: 0 };
 ROW.UAEnableFeature = { bit: 9 };
+// CTR-GOV-28 (owner 2026-11-13): every admin op of a token, the DEX or a registry names the target's chain word, context A's
+// (the router rows run there), as `UATransferAdmin` does
+for (const n of ['UAGrantRole', 'UARevokeRole', 'UASetGrant', 'UACancelGrant', 'UADisableFeature', 'UAEnableFeature', 'UAPqzSetVerifier',
+  'UAPqzCancelVerifier', 'UAPqzRevokeVerifier', 'UASetVerifierFee', 'UASetKycProvider', 'UASetCompliance']) {
+  ROW[n] = { ...ROW[n], chainUid: contexts.A.chainUid };
+}
 
 function sample(name, op) {
   const own = {};

@@ -58,7 +58,8 @@ test('UASetVerifierFee: the router type string, typehash and entry as Governance
   const op = evm.TYPED_OPS.UASetVerifierFee;
   const src = read('smartcontracts/evm/src/governance/GovernanceRouterBase.sol');
   assert.ok(src.includes(`"${op.typeString}"`), 'the type string');
-  assert.equal(op.typehash, '0xffa3baec15773742773872cec5ac6e8000b668a4576324f215b5e663818dd14d');
+  // CTR-GOV-28: + `bytes32 chainUid` (was 0xffa3baec15773742773872cec5ac6e8000b668a4576324f215b5e663818dd14d)
+  assert.equal(op.typehash, '0x5f8c20d2f3af20d59df1aa1fe75e52fc9b95a15483b98b268246963ff7b4076e');
   assert.equal(op.entry, 'mtxSetVerifierFee');
   assert.ok(read('smartcontracts/evm/src/governance/GovernanceRouter.sol').includes('function mtxSetVerifierFee('));
 });

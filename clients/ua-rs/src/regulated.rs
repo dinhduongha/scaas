@@ -203,11 +203,11 @@ pub fn set_list_struct_hash(allow: bool, e: &Envelope, target: &[u8; 20], accoun
     crate::wraplimit::struct_hash(keccak256(set_list_type(allow).as_bytes()), e, target, &[words, crate::wraplimit::bool_word(on)])
 }
 
-/// `UAEnableFeature`: the admin switches on 8, 9 or 28.
+/// `UAEnableFeature`: the admin switches on 8, 9 or 28; `chainUid` the token's chain word (CTR-GOV-28).
 pub fn enable_feature_type() -> String {
-    format!("UAEnableFeature(bytes32 from,address target,uint8 bit,{ENVELOPE})")
+    format!("UAEnableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid,{ENVELOPE})")
 }
 
-pub fn enable_feature_struct_hash(e: &Envelope, target: &[u8; 20], bit: u8) -> [u8; 32] {
-    crate::wraplimit::struct_hash(keccak256(enable_feature_type().as_bytes()), e, target, &[word(bit as u64)])
+pub fn enable_feature_struct_hash(e: &Envelope, target: &[u8; 20], bit: u8, chain_uid: &[u8; 32]) -> [u8; 32] {
+    crate::wraplimit::struct_hash(keccak256(enable_feature_type().as_bytes()), e, target, &[word(bit as u64), *chain_uid])
 }

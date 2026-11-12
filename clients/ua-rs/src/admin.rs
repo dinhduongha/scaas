@@ -29,8 +29,9 @@ pub const ADMIN_OPS: [(&str, &str); 18] = [
     ("UADeprecateRelease", "uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason"),
     ("UASetTokenKindEnabled", "uint8 kind,bool on,bytes32 chainUid"),
     ("UASetClassKindEnabled", "uint16 contractClass,uint16 kind,bool on,bytes32 chainUid"),
-    ("UASetKycProvider", "bytes32 provider,bool enabled"),
-    ("UASetCompliance", "bytes32[] accounts,uint64[] flags,uint64[] until"),
+    // CTR-GOV-28 (owner 2026-11-13): the registry's chain word last
+    ("UASetKycProvider", "bytes32 provider,bool enabled,bytes32 chainUid"),
+    ("UASetCompliance", "bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid"),
     ("UASetChainEntries", "ChainEntries entries,bytes32 chainUid"),
     ("UAApproveTokenRelease", "uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until"),
     ("UAApproveDexRelease", "uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until"),

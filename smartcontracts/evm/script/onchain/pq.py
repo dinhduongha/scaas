@@ -170,7 +170,7 @@ def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
     """Sections 8 and 9: the regulated PQZ kinds, then the public layer of every kind signed by an ML-DSA-65 UA."""
     alice, bob = U["alice"], U["bob"]
     if "pqUSD" in D.addr:  # round 3t (spec §13): the setter on a PRECOMPILE token
-        neg(sd.addr, D.addr["pqUSD"], E.cd("setVerifierFee(uint64)", ["w"], 1), sel_hex("PqzVerifyConfigInvalid()"),
+        neg(sd.addr, D.addr["pqUSD"], E.cd("setVerifierFee(uint64,bytes32)", ["w", "w"], 1, E.CTX[1]), sel_hex("PqzVerifyConfigInvalid()"),
             "pqUSD (PRECOMPILE) setVerifierFee(1)")
     E.log("\n## 8. (T66b Step 5b) the regulated PQZ kinds 12 and 13 (KYC on a ComplianceRegistry, no account denied)")
     # round 3r: (bytes32 admin, address govRouter): the deployer contract's native id, no router; CTR-GOV-27: the chain word
@@ -234,12 +234,12 @@ def lists(sd, t, nm):
     holder (`grantRole(9)`, grantDelay 0: at once), an account denied, the deny list switched on; bit 8 is outside the
     masks of 10-13, so `setAllowed` is `MissingRole` (no holder can exist) and `enableFeature(8)` `FeatureInvalidForKind`."""
     d = [E.pad("0x" + "00" * 17 + "de41ed")]
-    sd.send(t, E.cd("grantRole(uint8,bytes32)", ["w", "w"], 9, E.pad(sd.addr)), f"{nm} grantRole(DENYLIST, deployer)")
+    sd.send(t, E.cd("grantRole(uint8,bytes32,bytes32)", ["w"] * 3, 9, E.pad(sd.addr), E.CTX[1]), f"{nm} grantRole(DENYLIST, deployer)")
     sd.send(t, E.cd("setDenied(bytes32[],bool)", [("a", "w"), "w"], d, 1), f"{nm} setDenied([0xde41ed], true)")
-    sd.send(t, E.cd("enableFeature(uint8)", ["w"], 9), f"{nm} enableFeature(DENYLIST), at once")
+    sd.send(t, E.cd("enableFeature(uint8,bytes32)", ["w", "w"], 9, E.CTX[1]), f"{nm} enableFeature(DENYLIST), at once")
     neg(sd.addr, t, E.cd("setAllowed(bytes32[],bool)", [("a", "w"), "w"], d, 1), sel_hex("MissingRole(uint8,bytes32)"),
         f"{nm} setAllowed (bit 8 outside the mask: no holder)")
-    neg(sd.addr, t, E.cd("enableFeature(uint8)", ["w"], 8), sel_hex("FeatureInvalidForKind(uint8)"), f"{nm} enableFeature(ALLOWLIST)")
+    neg(sd.addr, t, E.cd("enableFeature(uint8,bytes32)", ["w", "w"], 8, E.CTX[1]), sel_hex("FeatureInvalidForKind(uint8)"), f"{nm} enableFeature(ALLOWLIST)")
 
 
 def public(pq, sd, sr, alice, bob, toks, tusd, router):
@@ -422,9 +422,9 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
                     [b"", E.ecdsa(sd.key, d), []])
         return sr.send(router, data, what) if send else data
 
-    T_SET = "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    T_CANCEL = "UAPqzCancelVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    T_REVOKE = "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    T_SET = "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    T_CANCEL = "UAPqzCancelVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    T_REVOKE = "UAPqzRevokeVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     T_STORE = "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
 
     # 1. a FIXED verifier, kind 4, bit 24 (PQZ_PROOF) held by the deployer: the life cycle, setProofStore both ways, negatives
@@ -449,7 +449,7 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         "pqOF op 1 with a verdict signed by a non-verifier (key 3)")
     neg(sd.addr, tf, E.cd(E.API["verifyAmt"], ["w", "w", "w", "w", "w", "b"], E.kc("any entry"), 0, 1, 0, 0, b"\x00" * 32),
         sel_hex("PqzVerdictRequired()"), "pqOF the five-argument verifyTransferAmount on an OFFCHAIN token")
-    neg(sd.addr, tf, E.cd("pqzSetVerifier(bytes32)", ["w"], E.pad(s3.addr)), sel_hex("PqzVerifierFixed()"),
+    neg(sd.addr, tf, E.cd("pqzSetVerifier(bytes32,bytes32)", ["w", "w"], E.pad(s3.addr), E.CTX[1]), sel_hex("PqzVerifierFixed()"),
         "pqOF pqzSetVerifier on a fixed verifier")
     E.check_public(CF, "pqOF")
     E.restore(CF, "pqOF")
@@ -465,10 +465,10 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     E.transfer(pq, sd, C2, alice, bob, E.ZERO32, 20, False, "pqW op 1 alice→bob 20, verdict signed")
     E.burn(pq, sd, C2, alice, 10, sd.addr, "pqW unshield-unwrap alice 10 → deployer in tUSD, verdict signed", unwrap=(tusd, 10 * E.SCALE))
     E.restore(C2, "pqW")
-    sd.send(t1, E.cd("pqzSetVerifier(bytes32)", ["w"], E.pad(s3.addr)), "pqUSD pqzSetVerifier(key 3), direct, notice 0: at once")
+    sd.send(t1, E.cd("pqzSetVerifier(bytes32,bytes32)", ["w", "w"], E.pad(s3.addr), E.CTX[1]), "pqUSD pqzSetVerifier(key 3), direct, notice 0: at once")
     E.check(E.words(E.call(t1, E.cd("pqzVerifyConfig()", [])), 4)[1] == E.pad(s3.addr), "pqUSD verifier = key 3")
-    sd.send(t1, E.cd("pqzRevokeVerifier()", []), "pqUSD pqzRevokeVerifier(), direct")
-    sd.send(t1, E.cd("pqzSetVerifier(bytes32)", ["w"], E.pad(sd.addr)), "pqUSD pqzSetVerifier(deployer), direct: re-assigned")
+    sd.send(t1, E.cd("pqzRevokeVerifier(bytes32)", ["w"], E.CTX[1]), "pqUSD pqzRevokeVerifier(), direct")
+    sd.send(t1, E.cd("pqzSetVerifier(bytes32,bytes32)", ["w", "w"], E.pad(sd.addr), E.CTX[1]), "pqUSD pqzSetVerifier(deployer), direct: re-assigned")
 
     # 3. TRANSFERABLE on a factory with a 30 s notice: kind 4's release there, a token, the router change
     N = 30
@@ -504,26 +504,26 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     life(tt, "pqOT", CT, transfers=False)
     E.transfer(pq, sd, CT, alice, bob, E.ZERO32, 10, True, "pqOT op 1 alice→bob 10, verdict by the deployer")
     nxt = E.pad(s3.addr)
-    r = router_op("mtxPqzSetVerifier", T_SET, [tt, nxt], ["address", "bytes32"], "pqOT mtxPqzSetVerifier(key 3): the proposal")
-    neg(sr.addr, router, router_op("mtxPqzSetVerifier", T_SET, [tt, nxt], ["address", "bytes32"], "", send=False),
+    r = router_op("mtxPqzSetVerifier", T_SET, [tt, nxt, E.CTX[1]], ["address", "bytes32", "bytes32"], "pqOT mtxPqzSetVerifier(key 3): the proposal")
+    neg(sr.addr, router, router_op("mtxPqzSetVerifier", T_SET, [tt, nxt, E.CTX[1]], ["address", "bytes32", "bytes32"], "", send=False),
         sel_hex("PqzVerifierNotReady(uint64)"), "pqOT the confirm before the notice ends")
     wait_eta(r, N)
-    router_op("mtxPqzSetVerifier", T_SET, [tt, nxt], ["address", "bytes32"], "pqOT mtxPqzSetVerifier(key 3): the confirm after 30 s")
+    router_op("mtxPqzSetVerifier", T_SET, [tt, nxt, E.CTX[1]], ["address", "bytes32", "bytes32"], "pqOT mtxPqzSetVerifier(key 3): the confirm after 30 s")
     E.check(E.words(E.call(tt, E.cd("pqzVerifyConfig()", [])), 4)[1] == nxt, "pqOT verifier = key 3, epoch + 1")
     E.VERIFIER[0] = s3
     E.transfer(pq, sd, CT, alice, bob, E.ZERO32, 5, True, "pqOT op 1 alice→bob 5, verdict by the new verifier (key 3)")
     neg(sd.addr, tt, calldata_with(signed_by(sd.key, nxt), CT, "old verifier"), sel_hex("PqzVerdictRejected()"),
         "pqOT a verdict by the replaced verifier")
-    router_op("mtxPqzSetVerifier", T_SET, [tt, E.pad(sd.addr)], ["address", "bytes32"], "pqOT propose the deployer again")
-    router_op("mtxPqzCancelVerifier", T_CANCEL, [tt], ["address"], "pqOT mtxPqzCancelVerifier: the proposal dropped")
-    sd.send(tt, E.cd("pqzSetVerifier(bytes32)", ["w"], E.pad(sd.addr)), "pqOT pqzSetVerifier(deployer), direct: a proposal")
-    sd.send(tt, E.cd("pqzCancelVerifier()", []), "pqOT pqzCancelVerifier(), direct")
-    router_op("mtxPqzRevokeVerifier", T_REVOKE, [tt], ["address"], "pqOT mtxPqzRevokeVerifier: frozen")
+    router_op("mtxPqzSetVerifier", T_SET, [tt, E.pad(sd.addr), E.CTX[1]], ["address", "bytes32", "bytes32"], "pqOT propose the deployer again")
+    router_op("mtxPqzCancelVerifier", T_CANCEL, [tt, E.CTX[1]], ["address", "bytes32"], "pqOT mtxPqzCancelVerifier: the proposal dropped")
+    sd.send(tt, E.cd("pqzSetVerifier(bytes32,bytes32)", ["w", "w"], E.pad(sd.addr), E.CTX[1]), "pqOT pqzSetVerifier(deployer), direct: a proposal")
+    sd.send(tt, E.cd("pqzCancelVerifier(bytes32)", ["w"], E.CTX[1]), "pqOT pqzCancelVerifier(), direct")
+    router_op("mtxPqzRevokeVerifier", T_REVOKE, [tt, E.CTX[1]], ["address", "bytes32"], "pqOT mtxPqzRevokeVerifier: frozen")
     neg(sd.addr, tt, calldata_with(lambda t, st, p: E.NO_VERDICT, CT, "revoked"), sel_hex("PqzVerifierRevoked()"),
         "pqOT op 1 after the revocation (every OFFCHAIN proof refused)")
-    r = router_op("mtxPqzSetVerifier", T_SET, [tt, E.pad(sd.addr)], ["address", "bytes32"], "pqOT re-assign the deployer: proposal")
+    r = router_op("mtxPqzSetVerifier", T_SET, [tt, E.pad(sd.addr), E.CTX[1]], ["address", "bytes32", "bytes32"], "pqOT re-assign the deployer: proposal")
     wait_eta(r, N)
-    router_op("mtxPqzSetVerifier", T_SET, [tt, E.pad(sd.addr)], ["address", "bytes32"], "pqOT re-assign the deployer: confirm")
+    router_op("mtxPqzSetVerifier", T_SET, [tt, E.pad(sd.addr), E.CTX[1]], ["address", "bytes32", "bytes32"], "pqOT re-assign the deployer: confirm")
     E.VERIFIER[0] = sd
     E.transfer(pq, sd, CT, alice, bob, E.ZERO32, 3, True, "pqOT op 1 alice→bob 3 after the re-assignment")
     E.restore(CT, "pqOT")
@@ -542,7 +542,7 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
     The `PRECOMPILE` setter's refusal is group pq's (`mine`: no `PRECOMPILE` token on zero-dep releases)."""
     E.log("\n## 10b. (round 3t) the verifier fee: payouts per form, the setter, the router op, stale and split ops, a frozen verifier")
     VF, VMAX = 2, 6
-    T_FEE = ("UASetVerifierFee(bytes32 from,address target,uint64 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,"
+    T_FEE = ("UASetVerifierFee(bytes32 from,address target,uint64 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,"
              "address relayer,uint256 fee,address feeRecipient)")
     EV = {e: "0x" + E.kc(e + sig).hex() for e, sig in (("VerifierFeeProposed", "(uint64,uint64,uint64)"),
                                                          ("VerifierFeeSet", "(uint64,uint64)"))}
@@ -568,7 +568,7 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
         return r
 
     def set_fee(t, nm, nxt, what, events, by=None):
-        r = (by or sd).send(t, E.cd("setVerifierFee(uint64)", ["w"], nxt), f"{nm} setVerifierFee({nxt}): {what}")
+        r = (by or sd).send(t, E.cd("setVerifierFee(uint64,bytes32)", ["w", "w"], nxt, E.CTX[1]), f"{nm} setVerifierFee({nxt}): {what}")
         got = [x["topics"][0] for x in r["logs"] if x["address"].lower() == t.lower()]
         E.check(got == [EV[e] for e in events], f"{nm} setVerifierFee({nxt}) emitted {', '.join(events)}")
         return r
@@ -591,7 +591,7 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
     neg(sd.addr, tf, stale, AUTH_REJ, "pqVF op 1 built at the old fee, after the decrease")
     paid(tf, C, 0, "op 1 at fee 0", lambda: E.transfer(pq, sd, C, alice, bob, E.ZERO32, 1, True, "pqVF op 1 at fee 0, rebuilt"))
     set_fee(tf, "pqVF", VF, "an increase on notice 0: at once", ["VerifierFeeProposed", "VerifierFeeSet"])
-    router_op("mtxSetVerifierFee", T_FEE, [tf, VF + 1], ["address", "uint64"],
+    router_op("mtxSetVerifierFee", T_FEE, [tf, VF + 1, E.CTX[1]], ["address", "uint64", "bytes32"],
               "pqVF mtxSetVerifierFee(vf + 1) through the router, fee 0, relayed by key 2")
     E.check(vcfg(tf)[0] == VF + 1, "pqVF verifierFee vf + 1 by the router op")
     set_fee(tf, "pqVF", VF, "back to vf", ["VerifierFeeSet"])
@@ -615,7 +615,7 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
     r = set_fee(tn, "pqVFN", 3, "an increase: the proposal", ["VerifierFeeProposed"])
     c = vcfg(tn)
     E.check(c[:3] == [1, VMAX, 3] and c[3] > 0, f"pqVFN pending 3 at eta {c[3]}, the fee still 1")
-    neg(sd.addr, tn, E.cd("setVerifierFee(uint64)", ["w"], 3), sel_hex("VerifierFeeNotReady(uint64)"), "pqVFN the confirm before eta")
+    neg(sd.addr, tn, E.cd("setVerifierFee(uint64,bytes32)", ["w", "w"], 3, E.CTX[1]), sel_hex("VerifierFeeNotReady(uint64)"), "pqVFN the confirm before eta")
     wait_eta(r, N)
     set_fee(tn, "pqVFN", 3, "the confirm after the notice", ["VerifierFeeSet"])
     E.check(vcfg(tn)[:3] == [3, VMAX, 0], "pqVFN verifierFee 3, nothing pending")
@@ -624,8 +624,8 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
     E.check(vcfg(tn)[:4] == [3, VMAX, 0, 0], "pqVFN the pending cancelled, the fee unmoved")
     for nxt, err, what in ((3, "VerifierFeeSame()", "the current value, nothing pending"),
                            (VMAX + 1, "VerifierFeeAboveMax(uint64,uint64)", "above the cap")):
-        neg(sd.addr, tn, E.cd("setVerifierFee(uint64)", ["w"], nxt), sel_hex(err), f"pqVFN setVerifierFee({nxt}): {what}")
-    neg(s3.addr, tn, E.cd("setVerifierFee(uint64)", ["w"], 0), sel_hex("NotAdmin(bytes32)"), "pqVFN setVerifierFee by a stranger")
+        neg(sd.addr, tn, E.cd("setVerifierFee(uint64,bytes32)", ["w", "w"], nxt, E.CTX[1]), sel_hex(err), f"pqVFN setVerifierFee({nxt}): {what}")
+    neg(s3.addr, tn, E.cd("setVerifierFee(uint64,bytes32)", ["w", "w"], 0, E.CTX[1]), sel_hex("NotAdmin(bytes32)"), "pqVFN setVerifierFee by a stranger")
 
     # the setter on kinds 5 and 12 (notice-0 factory): a decrease at once, an increase at once with both events
     for kind, nm, legs, feat, rg in ((5, "pqVF5", [[tusd, 1, 1]], 1, None),
