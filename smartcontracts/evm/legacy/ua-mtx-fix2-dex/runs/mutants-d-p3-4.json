@@ -1,0 +1,32 @@
+[
+ {
+  "id": "D34-1 live read dropped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: MetaTxBadSignature() != BadSignature(0x3a5a21d3aa05e8077063fc1b7a69774d6c9b3ce3d7ee0e37a7f37a8f3498efd0)] test_deprecatedRelease"
+ },
+ {
+  "id": "D34-2 never deprecated",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: MetaTxBadSignature() != BadSignature(0x3a5a21d3aa05e8077063fc1b7a69774d6c9b3ce3d7ee0e37a7f37a8f3498efd0)] test_deprecatedRelease"
+ },
+ {
+  "id": "D34-3 always deprecated",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: BadSignature(0x3a5a21d3aa05e8077063fc1b7a69774d6c9b3ce3d7ee0e37a7f37a8f3498efd0) != MetaTxBadSignature()] test_deprecatedRelease"
+ },
+ {
+  "id": "D34-4 inverted",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: BadSignature(0x3a5a21d3aa05e8077063fc1b7a69774d6c9b3ce3d7ee0e37a7f37a8f3498efd0) != MetaTxBadSignature()] test_deprecatedRelease"
+ },
+ {
+  "id": "D34-5 snapshot dropped (live only)",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: MetaTxBadSignature() != BadSignature(0x6a00e497b47f120309b6fd984a9a350b11f1b6b1a20355ef88b76ac1708883e1)] test_L16_dexVerify() ("
+ }
+]

@@ -602,8 +602,9 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let m = UaMtx::Call(UAMetaTransaction { from: acct.into_word(), data: alloy::hex::decode(format!("cfdd7aea{:064x}", 9)).unwrap().into(),
         batch: U256::from(3), nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO,
         feeRecipient: Address::ZERO });
-    let ecdsa = owner.sign_hash_sync(&m.digest(&d)).unwrap().as_bytes().to_vec();
-    let sig = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    // B P3-2 (CTR-ACC-02): the account answers ERC-1271 by ERC-7739 only, over the token's `UAMetaTransaction`
+    let typ = <UAMetaTransaction as alloy::sol_types::SolStruct>::eip712_encode_type();
+    let sig = sign_7739(&rpc, &owner, acct, token, &typ, m.struct_hash()).await;
     let data = m.calldata(UASig { keyData: Bytes::new(), signature: sig.into(), members: vec![] });
     let floor = scaas_node::guard::erc1271_floor(data.len());
     let w = ProviderBuilder::new().wallet(EthereumWallet::from(relayer.clone())).connect_http(rpc.parse().unwrap());
@@ -734,7 +735,7 @@ async fn drain(s: &mut Submitter, rx: &mut mpsc::Receiver<Work>) {
 
 alloy::sol! {
     // `owner` a UA id (CTR-GOV-01 Change): a native account's is its address padded to 32 bytes
-    struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; }
+    struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; uint256 features; uint256 lockedFeatures; }
     function createDex(uint64 version, bytes initArgs, bytes32 salt) external returns (address dex);
     function setMarket(address base, address quote, bool listed) external;
     function approve(address spender, uint256 value) external returns (bool);
@@ -795,7 +796,7 @@ async fn dex_order_with_a_ua_trade_order_leg() {
     send(&rpc, &deployer, token_b, IToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
     let treasury = Address::repeat_byte(0x7a);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
-        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
+        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
     send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
     let usdc = deploy_outside_token(&rpc, &deployer).await;
     send(&rpc, &deployer, usdc, mintCall { to: dave.address(), value: U256::from(1_000_000_000u64) }.abi_encode()).await;
@@ -1043,7 +1044,7 @@ async fn dex_fill_below_half_settles_on_anvil() {
     send(&rpc, &deployer, token_b, IToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
     let treasury = Address::repeat_byte(0x7a);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
-        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
+        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
     send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
 
     let relayer = key(RELAYER);
@@ -1516,7 +1517,7 @@ async fn router_op_signed_by_an_eoa() {
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
     let deployer = key(DEPLOYER);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: owner.address().into_word(),
-        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(),
+        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(),
         salt: B256::repeat_byte(0x60) }.abi_encode()).await;
     assert!(!view(&rpc, dex, listedOnlyCall {}).await);
     let op = signed_op(&owner, json!({"entry": "mtxSetListedOnly", "contract": "gov_router", "token": format!("{router:#x}"),
@@ -1576,7 +1577,8 @@ async fn router_creations_signed_by_an_eoa() {
     let me = format!("{:#x}", owner.address().into_word());
     let dex_op = signed_op(&owner, json!({"entry": "mtxCreateDex", "contract": "gov_router", "token": format!("{router:#x}"),
         "args": {"target": format!("{factory:#x}"), "version": "1", "salt": z(0x61),
-            "config": {"admin": me, "relayerSharePpm": 0, "treasury": a(0x7a), "listedOnly": true, "grantDelay": "0", "rescueTo": a(0)}},
+            "config": {"admin": me, "relayerSharePpm": 0, "treasury": a(0x7a), "listedOnly": true, "grantDelay": "0", "rescueTo": a(0),
+                "features": "0", "lockedFeatures": "0"}},
         "envelope": envelope(owner.address(), lane, 0)}), chain_id, uid);
     let token_op = signed_op(&owner, json!({"entry": "mtxCreateToken", "contract": "gov_router", "token": format!("{router:#x}"),
         "args": {"target": format!("{factory:#x}"), "kind": 0, "version": "1", "salt": z(0x62),
@@ -1646,8 +1648,13 @@ async fn router_instance_creations_signed_by_an_eoa() {
     let init_zero = json!(format!("0x{}{}", alloy::hex::encode(&alloy::primitives::keccak256("initialize(bytes32)")[..4]), "00".repeat(32)));
     let raw_op = op(with(base(0x71, "1"), "init_call", init_zero.clone()), 0);
     let named_op = op(with(base(0x72, "1"), "config", json!({"owner": me})), 1);
-    let both = op(with(with(base(0x73, "1"), "config", json!({"owner": me})), "init_call", init_zero), 2);
-    let stranger = op(with(base(0x74, "1"), "config", json!({"owner": z(0x0b)})), 2);
+    // the two refused at parse: no digest to sign (the node computes none), so a filler `UASig` (the refusal is by name, before
+    // any signature check)
+    let unsigned = |args: Value, nonce: u64| json!({"entry": "mtxCreateInstance", "contract": "gov_router",
+        "token": format!("{router:#x}"), "args": args, "envelope": envelope(owner.address(), lane, nonce),
+        "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}});
+    let both = unsigned(with(with(base(0x73, "1"), "config", json!({"owner": me})), "init_call", init_zero), 2);
+    let stranger = unsigned(with(base(0x74, "1"), "config", json!({"owner": z(0x0b)})), 2);
     let unpublished = op(with(base(0x75, "9"), "config", json!({"owner": me})), 2);
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
@@ -1705,8 +1712,8 @@ alloy::sol! {
     struct FactoryEnv { address registry; address smartKeyAccountImpl; bool hedera; address[] deps; bytes32[] params;
         address[] libs; bytes32[] libCodeHashes; }
     function tokenEnvOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
-    function publishTokenEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
-    function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs) external returns (address);
+    function publishTokenEnv(uint8 kind, uint16 envVersion, bytes32 chainUid, FactoryEnv env) external;
+    function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs, bytes32 chainUid) external returns (address);
     function createToken(uint8 kind, uint64 version, bytes initArgs, bytes32 salt) external returns (address);
     function registry() external view returns (address);
     function epoch(address token) external view returns (uint64);
@@ -1747,13 +1754,15 @@ async fn registry_zero_token(rpc: &str, chain_id: u64, dep: &Value, holder: Addr
     let mut env = view(rpc, f, tokenEnvOfCall { kind: 0, envVersion: 1 }).await;
     assert_ne!(env.registry, Address::ZERO, "the deploy's NORMAL release is on the registry");
     env.registry = Address::ZERO;
-    send(rpc, &deployer, f, publishTokenEnvCall { kind: 0, envVersion: 2, env }.abi_encode()).await;
+    let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap(); // the factory's word (CTR-GOV-27)
+    send(rpc, &deployer, f, publishTokenEnvCall { kind: 0, envVersion: 2, chainUid: chain_uid, env }.abi_encode()).await;
     let code = linked(chain_id, "NormalToken.sol", "NormalToken");
     // T66b §4.5: version 2 names version 1's body modules (pinned in env 1, so in env 2)
     let v1 = view(rpc, f, implementationOfCall { kind: 0, version: 1 }).await;
     let impl_args = ImplArgs { modules: view(rpc, v1, modulesCall {}).await }.abi_encode().into();
-    send(rpc, &deployer, f, deployTokenImplementationCall { kind: 0, version: 2, envVersion: 2, initcode: code.into(), implArgs: impl_args }
-        .abi_encode()).await;
+    let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    send(rpc, &deployer, f, deployTokenImplementationCall { kind: 0, version: 2, envVersion: 2, initcode: code.into(), implArgs: impl_args,
+        chainUid: chain_uid }.abi_encode()).await;
     let c = TokenConfig { name: "SCaaS Registry Zero".into(), symbol: "bRZ".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         initialSupply: U256::from(supply), initialHolder: holder, ..Default::default() };
     let t = create(rpc, &deployer, f, createTokenCall { kind: 0, version: 2, initArgs: c.abi_encode().into(), salt: B256::repeat_byte(0x20) }.abi_encode()).await;
@@ -2187,20 +2196,44 @@ async fn regulated_token(chain_id: u64, rpc: &str, issuer_key: &PrivateKeySigner
 }
 
 
-/// The router's `mtxFreeze` (`mtx<Op>`, op `UA<Op>`), or another of the eight, signed by the issuer account through ERC-1271 (its
-/// owner key's ECDSA in the account's `(keyIndex, proof, sig)` form), on the target's lane.
+/// A contract's EIP-712 domain separator from its own `eip712Domain()` (the five SCaaS fields).
+async fn separator(rpc: &str, c: Address) -> B256 {
+    let d = view(rpc, c, scaas_node::abi::IToken::eip712DomainCall {}).await;
+    keccak256((keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
+        keccak256(d.name.as_bytes()), keccak256(d.version.as_bytes()), d.chainId, d.verifyingContract, d.salt).abi_encode())
+}
+
+/// The router's `mtxFreeze` (`mtx<Op>`, op `UA<Op>`), or another of the eight, signed by the issuer account through ERC-1271, on the
+/// target's lane. A `SmartKeyAccount` answers ERC-1271 by ERC-7739 only (B P3-2, CTR-ACC-02): its owner key signs
+/// `TypedDataSign{contents: the router's struct, the account's domain}` under the router's separator, in the account's
+/// `(keyIndex, proof, sig)` form, then `app ‖ contents ‖ contentsDescription ‖ uint16(len)` (the router's type string).
 #[allow(clippy::too_many_arguments)]
-fn issuer_op(entry: &str, args: Value, issuer: Address, owner: &PrivateKeySigner, router: Address, token: Address, nonce: u64, chain_id: u64,
-    uid: B256) -> Value
+async fn issuer_op(rpc: &str, entry: &str, args: Value, issuer: Address, owner: &PrivateKeySigner, router: Address, token: Address,
+    nonce: u64) -> Value
 {
     let mut op = json!({"entry": entry, "contract": "gov_router", "token": format!("{router:#x}"), "args": args,
         "envelope": envelope(issuer, U256::from_be_slice(token.as_slice()), nonce),
         "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}});
-    let d = scaas_node::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain_id, uid).unwrap();
-    let ecdsa = owner.sign_hash_sync(&d).unwrap().as_bytes().to_vec();
-    let sig = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    let p = scaas_node::typed::Op::parse(&op, None).unwrap();
+    let sig = sign_7739(rpc, owner, issuer, router, &p.row.type_string(), p.typed.struct_hash.unwrap()).await;
     op["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(sig)));
     op
+}
+
+/// A `SmartKeyAccount`'s (key 0, secp256k1 `owner`) ERC-7739 signature for the struct `contents` of type `typ` in `app`'s domain
+/// (B P3-2, CTR-ACC-02): `owner` signs `0x1901 ‖ app ‖ hashStruct(TypedDataSign{contents, the account's domain})` in the account's
+/// `(keyIndex, proof, sig)` form, then `app ‖ contents ‖ typ ‖ uint16(len)` (implicit contents description).
+async fn sign_7739(rpc: &str, owner: &PrivateKeySigner, account: Address, app: Address, typ: &str, contents: B256) -> Vec<u8> {
+    let name = &typ[..typ.find('(').unwrap()];
+    let (sep, acct) = (separator(rpc, app).await, view(rpc, account, scaas_node::abi::IToken::eip712DomainCall {}).await);
+    let th = keccak256(format!("TypedDataSign({name} contents,string name,string version,uint256 chainId,address verifyingContract,\
+bytes32 salt){typ}"));
+    let tds = keccak256((th, contents, keccak256(acct.name.as_bytes()), keccak256(acct.version.as_bytes()), acct.chainId,
+        acct.verifyingContract, acct.salt).abi_encode());
+    let m = keccak256([&[0x19u8, 0x01][..], sep.as_slice(), tds.as_slice()].concat());
+    let ecdsa = owner.sign_hash_sync(&m).unwrap().as_bytes().to_vec();
+    let inner = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    [&inner[..], sep.as_slice(), contents.as_slice(), typ.as_bytes(), &(typ.len() as u16).to_be_bytes()].concat()
 }
 
 /// Regulated-kinds spec §3.1, §7 (plan T35): the issuer's `mtxFreeze` on the chain's `GovernanceRouter`, a `ua_metatx` job relayed at
@@ -2213,11 +2246,10 @@ async fn regulated_freeze_relayed_by_router() {
     let (_anvil, rpc) = start_anvil(chain_id, 31914).await;
     let (owner, holder) = (small_key(0x35A), small_key(0x35B));
     let (dep, token, issuer) = regulated_token(chain_id, &rpc, &owner, holder.address()).await;
-    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
     let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
     let a = holder.address().into_word();
-    let op = issuer_op("mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"),
-        "ref": format!("{:#x}", B256::repeat_byte(0x5e)), "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0, chain_id, uid);
+    let op = issuer_op(&rpc, "mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"),
+        "ref": format!("{:#x}", B256::repeat_byte(0x5e)), "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0).await;
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
@@ -2245,14 +2277,13 @@ async fn regulated_transfer_refused_frozen() {
     let (_anvil, rpc) = start_anvil(chain_id, 31915).await;
     let (owner, holder) = (small_key(0x35C), small_key(0x35D));
     let (dep, token, issuer) = regulated_token(chain_id, &rpc, &owner, holder.address()).await;
-    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
     let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
     let a = holder.address().into_word();
     let ref_ = format!("{:#x}", B256::repeat_byte(0x5e));
-    let freeze = issuer_op("mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_,
-        "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0, chain_id, uid);
-    let unfreeze = issuer_op("mtxUnfreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_}),
-        issuer, &owner, router, token, 1, chain_id, uid);
+    let freeze = issuer_op(&rpc, "mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_,
+        "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0).await;
+    let unfreeze = issuer_op(&rpc, "mtxUnfreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_}),
+        issuer, &owner, router, token, 1).await;
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
@@ -2371,7 +2402,7 @@ mod pqz3f {
             bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
         function transferSingleStatement(PqzTransferArgs t, bytes32 binding) external view returns (bytes);
         function pqzRevokeVerifier() external;
-        function setTokenKindEnabled(uint8 kind, bool on) external;
+        function setTokenKindEnabled(uint8 kind, bool on, bytes32 chainUid) external;
         function latestTokenEnvVersion(uint8 kind) external view returns (uint16);
         function latestVersion(uint8 kind) external view returns (uint64);
         function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
@@ -2569,11 +2600,12 @@ async fn offchain_stack_vf(chain_id: u64, vf: u64) -> OffchainStack {
     let mut env = view(&rpc, factory, tokenEnvOfCall { kind: 0, envVersion: 1 }).await;
     (env.deps, env.libs, env.libCodeHashes) = (vec![Address::ZERO], libs, hashes);
     let ev = view(&rpc, factory, pqz3f::latestTokenEnvVersionCall { kind: 4 }).await + 1;
-    send(&rpc, &deployer, factory, publishTokenEnvCall { kind: 4, envVersion: ev, env }.abi_encode()).await;
+    let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    send(&rpc, &deployer, factory, publishTokenEnvCall { kind: 4, envVersion: ev, chainUid: chain_uid, env }.abi_encode()).await;
     let ver = view(&rpc, factory, pqz3f::latestVersionCall { kind: 4 }).await + 1;
     send(&rpc, &deployer, factory, deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
-        implArgs: ImplArgs { modules: ms }.abi_encode().into() }.abi_encode()).await;
-    send(&rpc, &deployer, factory, pqz3f::setTokenKindEnabledCall { kind: 4, on: true }.abi_encode()).await;
+        implArgs: ImplArgs { modules: ms }.abi_encode().into(), chainUid: chain_uid }.abi_encode()).await;
+    send(&rpc, &deployer, factory, pqz3f::setTokenKindEnabledCall { kind: 4, on: true, chainUid: chain_uid }.abi_encode()).await;
     let verifier = small_key(0x3f47);
     let c = TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         owner: deployer.address().into_word(), initialSupply: U256::from(1_000_000u64), initialHolder: deployer.address(),
@@ -2952,7 +2984,7 @@ async fn liquidity_pre_checks_on_a_chain() {
     let (a, b, factory) = (at("demo_token"), at("demo_token_2"), at("token_factory"));
     let deployer = key(DEPLOYER);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
-        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(),
+        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(),
         salt: B256::repeat_byte(0x11) }.abi_encode()).await;
     send(&rpc, &deployer, dex, setMarketCall { base: a, quote: b, listed: true }.abi_encode()).await;
     let ms = view(&rpc, dex, scaas_node::abi::ISCaaSDex::modulesCall {}).await;
@@ -3043,10 +3075,13 @@ async fn liquidity_pre_checks_on_a_chain() {
     let r2 = report(&state, 2);
     assert!(r2["chain_state"] == "dead" && r2["error"].as_str().unwrap_or_default().starts_with("DEX_NOT_LIQUIDITY"), "{r2}");
 
-    // a token of an earlier release as a SCaaS input: the DEX still lists it SCaaS, its code answers no ILiquidityPullToken
+    // a token of an earlier release as a SCaaS input: the DEX's factory still answers a version for it (CTR-DEX-32: the shape the
+    // guard reads), its code answers no ILiquidityPullToken
     let earlier = format!("0x{}", alloy::hex::encode(liquidity_mock("MockEarlierToken", true)));
     let _: Value = pr.raw_request("anvil_setCode".into(), (b, earlier)).await.unwrap();
-    assert_eq!(view(&rpc, dex, scaas_node::abi::ISCaaSDex::tokenKindCall { token: b }).await, 1, "still a SCaaS input to the DEX");
+    let factory = view(&rpc, dex, scaas_node::abi::ISCaaSDex::factoryCall {}).await;
+    assert_ne!(view(&rpc, factory, scaas_node::abi::IOpenFactory::versionOfCall { token: b }).await.version, 0,
+        "still a SCaaS input to the DEX");
     let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-earlier").await;
     state.lock().unwrap().jobs.push(liquidity_job(3, (chain_id, uid, dex), &alice, &[(a, 1_000), (b, 1_000)], (pair, 1, carol), add.clone()));
     run_outbox(&mut s).await;

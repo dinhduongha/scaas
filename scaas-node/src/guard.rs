@@ -303,10 +303,11 @@ pub fn pq_register(data: &[u8]) -> bool {
 }
 
 /// Forge's minimum relayer CALL gas of a `SmartKeyAccount`-signed `mtxExecute` after the split (the ERC-1271 call two
-/// frames below the token: token → `MtxPipelineLib` → wallet, ≥ (400,000 · 64/63 + 5,000) · 64/63): 446,904
-/// (`smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`, `test_minGas_smartKeyAccountMtxExecute`, Task 8).
+/// frames below the token: token → `MtxPipelineLib` → wallet, ≥ (400,000 · 64/63 + 5,000) · 64/63): 446,912
+/// (`test_minGas_smartKeyAccountMtxExecute`; 446,904 at `smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`,
+/// Task 8; 446,912 with the ERC-7739 signature, B P3-2, 2026-11-12).
 /// It is execution gas only (`call{gas: g}`): no intrinsic, no calldata.
-pub const ERC1271_CALL_GAS: u64 = 446_904;
+pub const ERC1271_CALL_GAS: u64 = 446_912;
 
 /// The gas floor of a contract signer's meta-tx whose calldata is `len` bytes (P1b note c; T17 fix 1): 21,000
 /// intrinsic (pre-Amsterdam; EIP-2780 lowers it, which only grows the margin) + 64 gas per calldata byte (the EIP-7976
@@ -714,12 +715,16 @@ async fn check_liquidity(chain: &Chain, w: &Work, max_gas_per_tx: u64) -> Result
         Err(SimError::Revert(m)) => return Err(policy(m)),
         Err(SimError::Transport(m)) => return Err(Refusal::Transport(m)),
     }
+    // CTR-DEX-32: an input is SCaaS iff the DEX's factory made it (`versionOf`), never the DEX's `tokenKind` (0 for a token of
+    // a pair never listed) and never a deprecation
+    let sim = |e: SimError| match e {
+        SimError::Transport(m) => Refusal::Transport(m),
+        SimError::Revert(m) => policy(m),
+    };
+    let factory = chain.call_view(w.to, ISCaaSDex::factoryCall {}).await.map_err(sim)?;
     let mut scaas = vec![];
     for t in &o.inputs {
-        if chain.call_view(w.to, ISCaaSDex::tokenKindCall { token: t.token }).await.map_err(|e| match e {
-            SimError::Transport(m) => Refusal::Transport(m),
-            SimError::Revert(m) => policy(m),
-        })? != 1 {
+        if crate::dex::kind_by_factory(chain, factory, t.token).await.map_err(sim)? != crate::dex::KIND_SCAAS {
             continue;
         }
         let ok = match chain.call_view(t.token, IERC165::supportsInterfaceCall { id: LIQUIDITY_PULL_ID.into() }).await {
@@ -1269,7 +1274,7 @@ impl Guard {
 }
 
 /// The typed digest of `w`, computed here (no chain view: only the cached `chain_uid`): the dedup key, on `w.typed`. On `w.meta`
-/// the digest its `MetaTransactionExecuted` will carry: the same, but for a receiver fee, which lands as its payment.
+/// the digest its `MetaTransactionExecuted` will carry: the same, but for a payee fee, which lands as its payment.
 pub async fn fill_digest(chain: &Chain, w: &mut Work) -> Result<(), SimError> {
     let Some(t) = w.typed.as_mut() else { return Ok(()) };
     if t.digest.is_some() || t.struct_hash.is_none() {
@@ -1573,7 +1578,7 @@ mod tests {
                     }.to_string());
                 }
                 let (mut w, _) = crate::submit::work_of_op(Some(1), &op, None).unwrap_or_else(|e| panic!("{name}: {e:#}"));
-                if matches!(name.as_str(), "UAPayUnderMandate" | "UADelegateRevoke" | "UAReceiverFee") {
+                if matches!(name.as_str(), "UAPayUnderMandate" | "UADelegateRevoke" | "UAPayeeFee") {
                     w.typed.as_mut().unwrap().signer = None; // the vector's lane 7, its one key for payer and payee
                 }
                 assert_eq!(format!("0x{}", alloy::hex::encode(&w.data[..4])), d["selector"].as_str().unwrap(), "{name}");
@@ -1637,7 +1642,7 @@ mod tests {
             "mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)", "mtxRevoke(address,uint64,uint256,bytes)",
             "mtxExecuteAsOwnerRaw(bytes,uint256,uint256,bytes)",
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-            "transferAdmin(bytes32)", "setListedOnly(bool)"] {
+            "transferAdmin(bytes32,bytes32)", "setListedOnly(bool)"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
                 let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
@@ -1648,17 +1653,17 @@ mod tests {
         }
     }
 
-    /// Item of the lane, not of `Typed`: after `fill_digest` a receiver fee is keyed by its outer digest and `classify` compares
+    /// Item of the lane, not of `Typed`: after `fill_digest` a payee fee is keyed by its outer digest and `classify` compares
     /// the payment's, what the chain emits; an ordinary op has one digest for both.
     #[tokio::test]
     async fn fill_digest_keeps_the_key_and_what_the_chain_emits_apart() {
         use crate::typed::testkit::{op_of, vectors};
         let v = vectors();
-        let d = &v["ops"]["UAReceiverFee"]["domains"]["token"];
+        let d = &v["ops"]["UAPayeeFee"]["domains"]["token"];
         let uid: B256 = d["domain"]["salt"].as_str().unwrap().parse().unwrap();
         let (cfg, _) = bound(uid).await;
         let chain = Chain::with_signer(&cfg, signer()).unwrap();
-        let (mut w, _) = crate::submit::work_of_op(Some(1), &op_of("UAReceiverFee", "token", &v).unwrap(), None).unwrap();
+        let (mut w, _) = crate::submit::work_of_op(Some(1), &op_of("UAPayeeFee", "token", &v).unwrap(), None).unwrap();
         fill_digest(&chain, &mut w).await.unwrap();
         let t = w.typed.clone().unwrap();
         assert_eq!(format!("{:#x}", w.digest().unwrap()), d["digest"].as_str().unwrap(), "the in-flight key: the vector's outer digest");
@@ -2626,17 +2631,17 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     #[test]
     fn erc1271_floor_covers_forge_minimum() {
         let log = std::fs::read_to_string(format!(
-            "{}/../smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt", env!("CARGO_MANIFEST_DIR"))).unwrap();
+            "{}/../smartcontracts/evm/runs/2026-11-12-fix2-contracts-node-floor.txt", env!("CARGO_MANIFEST_DIR"))).unwrap();
         let tag = "min gas, SmartKeyAccount-signed mtxExecute (relayer's call gas):";
         let measured: u64 = log.lines().find_map(|l| l.trim().strip_prefix(tag)).unwrap().trim().parse().unwrap();
-        assert_eq!(measured, ERC1271_CALL_GAS, "Task 8's figure");
+        assert_eq!(measured, ERC1271_CALL_GAS, "the forge figure (B P3-2: ERC-7739)");
         const { assert!(ERC1271_CALL_GAS >= (400_000 * 64 / 63 + 5_000) * 64 / 63, "two frames above the 400 k cap") };
         for len in [0usize, 708, 4_000] {
             let f = erc1271_floor(len);
             assert!(f >= 21_000 + 64 * len as u64 + measured + measured / 10, "{len}: {f}");
         }
-        assert_eq!(erc1271_floor(0), 512_594);
-        assert_eq!(erc1271_floor(708), 512_594 + 45_312);
+        assert_eq!(erc1271_floor(0), 512_603);
+        assert_eq!(erc1271_floor(708), 512_603 + 45_312);
     }
 
     #[test]

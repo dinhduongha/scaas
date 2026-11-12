@@ -1,0 +1,75 @@
+Fix round 2 of the ua-mtx-merge whole-branch review (owner 2026-11-12: fix the documented limits), branch
+ua-mtx-fix2-contracts from d709d672. Foundry 1.8.5, forge test -j 1 under scripts/capped (4 GB), per directory
+(runs/2026-11-12-fix2-contracts/gate.sh) and per PQZ set (atset.sh); full output in git-ignored logs.
+Mutants: runs/2026-11-12-fix2-contracts/mutants.py with mutants-d-p3-{2,4,5}.json. UNAUDITED.
+
+step | commit | rc | counts
+--- per finding ---
+D P3-2 chainUid on the deprecations and kind switches | 3bf17a15 | 0 | test/v2 608 + Factory.t.sol 25; governance 150 (the five
+  rerun suites); mutants 10/10 killed
+D P3-2 clients | 3bf17a15 | 0 | clientkeys 327 passed 3 skipped; ua-rs 69; zether-prover typed_ops 7; scaas-node --lib 728,
+  clippy --all-targets -D warnings clean; node e2e and scaas-pqz-verifier tests compile (cargo check), not run
+D P3-4 liquidity reads the factory at use | 8c4a7b06 | 0 | test/liquidity 80 passed 1 skipped; mutants 5/5 killed
+D P3-5 SCaaSDex.rescue | 704f8e4e | 0 | GovRescue + SelectorAudit 33 passed; mutants 5/5 killed
+--- full gate, default set n2304-kmax4096, tree at 704f8e4e ---
+test/account | 704f8e4e | 0 | 54 passed
+test/as | 704f8e4e | 0 | 353 passed
+test/confidential | 704f8e4e | 0 | 5 passed
+test/fork | 704f8e4e | 0 | 1 skipped
+test/governance | 704f8e4e | 1 | 477 passed, 1 failed (GovDeploy router address: the metadata hash; moved in 72bf1eb9), then
+  GovDeploy 19 passed
+test/hedera | 704f8e4e | 0 | 20 passed
+test/liquidity | 704f8e4e | 0 | 80 passed, 1 skipped
+test/merge | 704f8e4e | 0 | 118 passed
+test/metatx | 704f8e4e | 0 | 400 passed
+test/modules | 704f8e4e | 0 | 35 passed
+test/p6f | 704f8e4e | 0 | 4 passed
+test/pqchat | 704f8e4e | 0 | 99 passed
+test/pqz | 704f8e4e | 0 | 454 passed, 4 skipped
+test/pqzh | 704f8e4e | 0 | 42 passed
+test/research | 704f8e4e | 0 | 93 passed, 6 skipped (debit_min_gas unchanged)
+test/ua | 704f8e4e | 0 | 635 passed
+test/v2 | 704f8e4e | 0 | 609 passed
+test/vectors | 704f8e4e | 0 | no tests
+test/wallet | 704f8e4e | 0 | 99 passed
+test/wrap | 704f8e4e | 0 | 72 passed
+test/zether | 704f8e4e | 0 | 335 passed, 4 skipped
+test/{BlsKat,ExpectRevertLint,FeePolicy,HashToCurve,MultiSig} | 704f8e4e | 0 | 6 / 3 / 8 / 8 / 4 passed
+size gate | 704f8e4e | 0 | 166 contracts, 0 errors (OpenFactory notice line, as before); rows moved: OpenFactory 34184 -> 34298,
+  GovernanceRouter 24613 -> 24679 (3bf17a15), SCaaSDex 32829 -> 33238 (704f8e4e); SCaaSDexLiquidityModule 19055 -> 19487 (no row)
+docs_check | 704f8e4e | 0 | 0 errors, 6 warnings (budgets, as before)
+--- B P3-2 (owner 2026-11-12: ERC-7739 only; the Safe-style wrap of be8d0772 is in legacy/) ---
+B P3-2 Safe-style wrap (superseded) | be8d0772 | 0 | account 57, wallet 99, metatx 400, merge 118, v2 609; mutants 8/8
+B P3-2 ERC-7739 | 43e0bc39 | 0 | account 57, wallet 100, metatx 400, merge 118; clientkeys 328 passed 3 skipped; node --lib 728,
+  clippy clean; size 0 errors (SmartKeyAccount 21322 -> 22993, MandateWallet 18069 -> 19763, no rows); mutants 12/12;
+  node ERC1271_CALL_GAS 446904 -> 446912 (runs/2026-11-12-fix2-contracts-node-floor.txt)
+gate at 43e0bc39 (default set every dir green; PQZ sets n2048, n2304 green) | 43e0bc39 | - | superseded, stopped by the
+  controller at n2560 ua; not evidence for any commit (log local)
+--- Fable recheck 2 (scratchpad review recheck2-contracts.md) ---
+P3-4 docs | 4aec46f3 | 0 | docs_check 0 errors
+P3-3 operator notes | d0d5a5d0 | 0 | docs_check 0 errors
+P2-2 real wallets per caller family | 1a19aa74 | 0 | 7 new tests (DEX, router, registry, receiver fee, Zether, PQZ);
+  mutants 10/10
+P3-5 parser negatives, P3-6 note | 09955699 | 0 | account 58; clientkeys 328 passed 3 skipped; mutants 6/7 (survivor
+  equivalent); D mutants re-run: d-p3-2 10/10, d-p3-4 5/5, d-p3-5 5/5
+P2-1 Gov script ERC-7739 | 5c982a89 | 0 | local anvil gov group ok 163/163 txs, 17/17 negatives; control (old script) FAIL
+  MetaTxBadSignature
+P3-1, P3-2 (+ CLOSED_MARKETS), rescueTo constant, singleton rescue, merge of ua-mtx-merge, payee-fee rename | - | - | not
+  started on this branch (see the report)
+--- resumed 2026-11-12 (after the pause): A2, the DEX merge, the vault merge, debit_min_gas (b) ---
+A2 CTR-GOV-27 rest of P3-1 | 5f39e11f | 0 | every forge dir at the default set green but research (the then-red
+  debit_min_gas); node --lib 756, clippy clean; clientkeys 330 pass 3 skipped, cast check 108 structs; ua-rs 70;
+  zether-prover typed_ops 7; mutants 14/14 (mutants-a2.json); size gate 0 errors (OpenFactory 35028, T-1 35286)
+merge ua-mtx-fix2-dex 8f4b1b64 | 14bc0e2d | 0 | governance 487, v2 632, liquidity 82 + 1 skipped, ua/UADex* 15, as 355,
+  merge 119, metatx 400, modules 35 (after LegacyDiff's intended DEX differences), fork rc 0; SCaaSDex 34939 (T-1 35386)
+node venue bit 29 + governance_bits row 29 | dabf74db | 0 | node --lib 758, clippy clean; node mutants 5/5
+  (mutants-venue-29.json); clientkeys 331 pass 2 skipped; ua-rs, ua-py, ua-go, ua-cs, ua-dart, ua-c, ua-cxx green;
+  ua-dart-frb, ua-qt not run
+node e2e (merged tree, alone, CAPPED_MEM=6G) | 27845671 | 0 | first run 18 passed 6 failed (named in the commit); after
+  the fixes 24/24 (23 in one run, router_creations 1/1 after its config fields)
+merge ua-mtx-rescue-vault e374704f | 4f84335c | 0 | every forge dir at the default set green but research (the then-red
+  debit_min_gas, 92 pass 1 fail); size gate 0 errors, no row moved
+debit_min_gas (b) | a1b2007a | 0 | measured +44 at each set (7,299,442 / 7,514,728 / 7,727,577 / 7,969,371), pinned
+  7,300,000 / 7,515,000 / 7,728,000 / 7,970,000; mutants 4/4 (mutants-debit-min-gas.json)
+four sets after the pin (at-set.sh) | a1b2007a | 0 | n2304: research 93 + 6 skipped, pqz 455 + 4, ua bound 18; n2048:
+  95 + 4, 456 + 3, 18; n2560: 93 + 6, 451 + 8, 18; n2816: 86 + 13, 446 + 13, 18; no failure at any set

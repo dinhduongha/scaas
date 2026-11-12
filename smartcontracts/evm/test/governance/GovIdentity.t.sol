@@ -90,7 +90,7 @@ contract GovIdentityTest is Test {
 
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
         d = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), _cenv()));
-        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, address(0xAA), false, 0, address(0))));
+        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, address(0xAA), false, 0, address(0), 0, 0)));
     }
 
     function _open() internal pure returns (IGovernance.GrantTerms memory g) {
@@ -122,13 +122,13 @@ contract GovIdentityTest is Test {
         assertFalse(t.hasRole(MINT, MINTER));
         // ownership moves to a native account, then back to another derived UA
         bytes32 alice = bytes32(uint256(uint160(ALICE)));
-        router.run(ISSUER, address(t), abi.encodeCall(IAdmin.transferAdmin, (alice)));
+        router.run(ISSUER, address(t), abi.encodeCall(IAdmin.transferAdmin, (alice, EnvKit.codeUidOf(address(t)))));
         assertEq(t.pendingAdmin(), alice);
         vm.prank(ALICE);
         t.acceptAdmin();
         assertEq(t.admin(), alice);
         vm.prank(ALICE);
-        t.transferAdmin(MINTER);
+        t.transferAdmin(MINTER, EnvKit.codeUidOf(address(t)));
         router.run(MINTER, address(t), abi.encodeCall(IAdmin.acceptAdmin, ()));
         assertEq(t.admin(), MINTER);
         // nobody reaches the derived owner's power directly: no address is its id
@@ -174,7 +174,7 @@ contract GovIdentityTest is Test {
         // the same low 160 bits under other top bits is another identity
         bytes32 shadow = bytes32(uint256(uint160(ALICE)) | (uint256(1) << 200));
         vm.prank(ALICE);
-        t.transferAdmin(shadow);
+        t.transferAdmin(shadow, EnvKit.codeUidOf(address(t)));
         vm.prank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, bytes32(uint256(uint160(ALICE)))));
         t.acceptAdmin();
@@ -194,7 +194,7 @@ contract GovIdentityTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, alice));
         t.grantRole(MINT, alice);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, alice));
-        t.transferAdmin(alice);
+        t.transferAdmin(alice, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, alice));
         t.disableFeature(MINT);
         router.set(MINTER);
@@ -216,7 +216,7 @@ contract GovIdentityTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
         t.setGrant(MINT, ISSUER, _limited(1));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
-        t.transferAdmin(ISSUER);
+        t.transferAdmin(ISSUER, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, bytes32(0)));
         t.acceptAdmin();
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, bytes32(0)));
@@ -262,7 +262,7 @@ contract GovIdentityTest is Test {
             n.initialize(nid(address(this)), 1, abi.encode(c));
             NormalToken t = _normal(ISSUER, 0);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, pools[i]));
-            router.run(ISSUER, address(t), abi.encodeCall(IAdmin.transferAdmin, (pools[i])));
+            router.run(ISSUER, address(t), abi.encodeCall(IAdmin.transferAdmin, (pools[i], EnvKit.codeUidOf(address(t)))));
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, pools[i]));
             router.run(ISSUER, address(t), abi.encodeCall(IGovernance.grantRole, (MINT, pools[i])));
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, pools[i]));

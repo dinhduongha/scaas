@@ -12,6 +12,8 @@ import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {MtxHash} from "../helpers/MtxHash.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {RefServiceEscrow, RefServiceEscrowFailAfter, NoopPullToken, ReenterPullToken, NakedPuller}
@@ -205,7 +207,13 @@ contract ServicePullTest is UALedgerBase {
         RefServiceEscrow.Deposit memory op = _dep(_pad(address(acct)), "ska");
         MetaTxLib.UAMetaTransfer memory t = _pull(op);
         IUARegistry.UASig memory a;
-        a.signature = abi.encode(uint256(0), new bytes32[](0), _ecdsa(ALICE_PK, tok.mtxTransferDigest(t)));
+        // the key signs the token's `UAMetaTransfer` nested in ERC-7739 `TypedDataSign` (CTR-ACC-02)
+        bytes32 app = Erc7739Kit.separator(address(tok));
+        bytes32 c = MtxHash.hashStruct(t);
+        assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), tok.mtxTransferDigest(t));
+        a.signature = Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0), _ecdsa(ALICE_PK,
+            Erc7739Kit.nested(address(acct), app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c))), app, c,
+            Erc7739Kit.UA_TRANSFER_TYPE);
         vm.prank(REL);
         s.deposit(op, t, a);
         assertEq(tok.balanceOf(address(acct)), 5_000 - AMT);
@@ -452,7 +460,7 @@ contract ServicePullTest is UALedgerBase {
     }
 
     /// N8: a third party lands `t` on the token directly: `mtxExecuteTransfer`, `mtxBatchTransfer` (the relayer binding);
-    /// `mtxPay`, `mtxPayReceiverFee` (`PAYABLE` on: the pay reference first).
+    /// `mtxPay`, `mtxPayWithPayeeFee` (`PAYABLE` on: the pay reference first).
     function test_N8_tokenDirect() public {
         RefServiceEscrow.Deposit memory op = _dep(_pad(alice), "n8");
         _control(op);
@@ -475,7 +483,7 @@ contract ServicePullTest is UALedgerBase {
         tok.mtxPay(t, a, m);
         vm.prank(REL);
         vm.expectRevert(mis);
-        tok.mtxPayReceiverFee(t, a, 0, address(0), block.timestamp + 300, a, m);
+        tok.mtxPayWithPayeeFee(t, a, 0, address(0), block.timestamp + 300, a, m);
         assertEq(tok.balanceOf(address(s)), 0);
     }
 

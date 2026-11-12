@@ -1,0 +1,82 @@
+[
+ {
+  "id": "ska-raw-fallback/dex",
+  "file": "src/account/SmartKeyAccount.sol",
+  "old": "return _isValid(message, inner) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "new": "return _isValid(message, inner) || _isValid(hash, signature) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "path": "test/v2/DexOutside.t.sol",
+  "test": "erc7739RealWallets"
+ },
+ {
+  "id": "mw-raw-fallback/dex",
+  "file": "src/wallet/MandateWallet.sol",
+  "old": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);",
+  "new": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);\n        if (rec != address(uint160(uint256(owner)))) (rec, err,) = ECDSA.tryRecover(hash, sig);",
+  "path": "test/v2/DexOutside.t.sol",
+  "test": "erc7739RealWallets"
+ },
+ {
+  "id": "ska-raw-fallback/router-registry",
+  "file": "src/account/SmartKeyAccount.sol",
+  "old": "return _isValid(message, inner) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "new": "return _isValid(message, inner) || _isValid(hash, signature) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "path": "test/governance/GovRouter.t.sol",
+  "test": "erc7739RealWallets"
+ },
+ {
+  "id": "mw-raw-fallback/router-registry",
+  "file": "src/wallet/MandateWallet.sol",
+  "old": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);",
+  "new": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);\n        if (rec != address(uint160(uint256(owner)))) (rec, err,) = ECDSA.tryRecover(hash, sig);",
+  "path": "test/governance/GovRouter.t.sol",
+  "test": "erc7739RealWallets"
+ },
+ {
+  "id": "ska-raw-fallback/receiver-fee",
+  "file": "src/account/SmartKeyAccount.sol",
+  "old": "return _isValid(message, inner) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "new": "return _isValid(message, inner) || _isValid(hash, signature) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "path": "test/ua/UAReceiverFee.t.sol",
+  "test": "erc7739RealWallets"
+ },
+ {
+  "id": "mw-raw-fallback/receiver-fee",
+  "file": "src/wallet/MandateWallet.sol",
+  "old": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);",
+  "new": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);\n        if (rec != address(uint160(uint256(owner)))) (rec, err,) = ECDSA.tryRecover(hash, sig);",
+  "path": "test/ua/UAReceiverFee.t.sol",
+  "test": "erc7739RealWallets"
+ },
+ {
+  "id": "ska-raw-fallback/zether",
+  "file": "src/account/SmartKeyAccount.sol",
+  "old": "return _isValid(message, inner) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "new": "return _isValid(message, inner) || _isValid(hash, signature) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "path": "test/zether/ZetherRelay.t.sol",
+  "test": "erc7739RealWallets"
+ },
+ {
+  "id": "mw-raw-fallback/zether",
+  "file": "src/wallet/MandateWallet.sol",
+  "old": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);",
+  "new": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);\n        if (rec != address(uint160(uint256(owner)))) (rec, err,) = ECDSA.tryRecover(hash, sig);",
+  "path": "test/zether/ZetherRelay.t.sol",
+  "test": "erc7739RealWallets"
+ },
+ {
+  "id": "ska-raw-fallback/pqz",
+  "file": "src/account/SmartKeyAccount.sol",
+  "old": "return _isValid(message, inner) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "new": "return _isValid(message, inner) || _isValid(hash, signature) ? IERC1271.isValidSignature.selector : _INVALID;",
+  "path": "test/pqz/PqzRelay.t.sol",
+  "test": "erc7739RealWallets"
+ },
+ {
+  "id": "mw-raw-fallback/pqz",
+  "file": "src/wallet/MandateWallet.sol",
+  "old": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);",
+  "new": "(address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);\n        if (rec != address(uint160(uint256(owner)))) (rec, err,) = ECDSA.tryRecover(hash, sig);",
+  "path": "test/pqz/PqzRelay.t.sol",
+  "test": "erc7739RealWallets"
+ }
+]

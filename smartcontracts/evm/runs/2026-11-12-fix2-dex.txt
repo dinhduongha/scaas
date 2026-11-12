@@ -1,0 +1,53 @@
+ua-mtx-fix2-dex round summary (branch ua-mtx-fix2-dex, from a18e9464). step | commit | rc | counts. Full output in
+git-ignored local logs. No branch closing gate here: targeted tests of the touched code + mutants; the controller runs the
+full gate later.
+
+--- Fable recheck2 P3-2 (scratchpad review recheck2-contracts.md) ---
+P3-2 closed by owner ruling 2026-11-12, not by a DEX check: the DEX never reads a release's deprecation (CTR-DEX-30
+  Change, CTR-DEX-18 Change); the D P3-4 live read, its test and mutant specs moved to legacy/ua-mtx-fix2-dex/
+deprecation ruling | 324cead0 | - | intermediate commit, gated with the next one
+CLOSED_MARKETS bit 29 + kind at use | 65979048 | 0 | test/v2/Dex*.sol 206 (10 suites); test/ua 636 (46); test/liquidity
+  81 + 1 skipped (mldsa65, --ffi) (8); test/governance 484 (51); test/v2 616 (47); test/metatx/T*.sol 139 (9);
+  test/merge 118 (10); test/as/FeeLegs 2; test/metatx/MsgSenderLint 9; DexLiquidityUA 4 (after the K7 test);
+  forge build script test/fork ok
+mutants | 65979048 | 0 | 17/17 killed (runs/2026-11-12-fix2-dex/mutants.json; K7 killed after
+  test_derivedSigner_unlistedScaasInputs was added, first run survived)
+size gate | 65979048 | 0 | 0 errors; SCaaSDex 33222 -> 33061, SCaaSDexLiquidityModule 19487 -> 19158,
+  SCaaSDexGovernanceModule 6463 -> 6465; no baseline row moved
+gas (regular) | 65979048 | 0 | mtxSettle 1x1 305462 -> 311105; mtxExchange 289049 -> 291018; mtxHybrid 1x1
+  400409 -> 406053, 1x2 473499 -> 480688; mtxLiquidity 419953 -> 418277, 467038 -> 460925, 523851 -> 517739
+docs_check | 65979048 | 0 | 0 errors, 6 warnings (budgets, as before); test_docs_check ok
+not run | - | - | node e2e (DexConfig fixture changed), clients; governance_bits.json row 29 not written
+
+--- recipient-balance check on the exchange path (owner 2026-11-12, closes review C6-4; settle on hold) ---
+exchange / hybrid taker recipient delta | (this commit) | 0 | test/v2/Dex*.sol 209 (10 suites); test/liquidity 82 + 1
+  skipped (8); test/ua/UADex*.sol 15 (3); test/merge 118 (10); mutants 5/5 (runs/2026-11-12-fix2-dex/
+  mutants-recipient.json; R5 killed after test_exchange_recipientDelta_netOfTheFee was added, first run survived)
+size gate | (this commit) | 0 | SCaaSDex 33061 -> 33461 (baseline row 33222 -> 33461, reason in _comment);
+  module 19158, governance module 6465 unchanged
+gas (regular, 65979048 -> this) | (this commit) | 0 | mtxExchange 291018 -> 293889; mtxExchangeBatch 301223 -> 304094;
+  mtxHybrid 1x1 406053 -> 408948, 1x2 480688 -> 483612; mtxSettle 1x1 311105 -> 311153 (no check; the _payLeg flag);
+  mtxLiquidity unchanged
+
+--- settle outcome rule (owner 2026-11-12) ---
+settle outcome rule | (this commit) | 0 | test/v2 625 (47 suites) then test/v2/Dex*.sol 215 (10) after the last
+  edits; test/ua/UADex*.sol 15 (3); test/liquidity 82 + 1 skipped (8); test/merge 118 (10); test/governance 484 (51;
+  GovDeploy re-run 19 after the router pin); test/metatx/T*.sol 139 (9); test/as/FeeLegs 9
+mutants | (this commit) | 0 | 7/7 killed (runs/2026-11-12-fix2-dex/mutants-settle.json; run before the derived-recipient
+  guard in _sendChecked, which only names an existing refusal earlier); a taker-share mutant left out: equivalent
+  (a Path B refund exists only on a SCaaS token, which arrives exactly)
+size gate | (this commit) | 0 | SCaaSDex 33461 -> 34359 (over the 33,594 notice line, owner-accepted; row moved)
+gas (regular, 6a51c72f -> this) | (this commit) | 0 | mtxSettle 1x1 311153 -> 328318; mtxExchange 293889 -> 296716;
+  mtxExchangeBatch 304094 -> 306921; mtxHybrid 1x1 408948 -> 418812, 1x2 483612 -> 500514; mtxLiquidity unchanged
+
+--- no measuring of SCaaS tokens; hybrid option (b) (owner 2026-11-12) ---
+precondition | - | - | one _update / _uaMove body for every kind, _regMove a view check, mtxTrade / restorePulled /
+  transferToUA exact, the regulated tax on pay entries only; test/merge/ScaasExactMoves.t.sol 13 kinds green
+tests | (this commit) | 0 | test/v2 626 (47) then test/v2/Dex*.sol 218 (10) after the last tests; test/ua/UADex*.sol
+  15; test/liquidity 82 + 1 skipped; test/merge 119 (11); test/metatx/T*.sol 139; test/as/FeeLegs 9; test/governance 484
+mutants | (this commit) | 0 | 9/9 killed (runs/2026-11-12-fix2-dex/mutants-scaas-hybrid.json; X5 and H3 killed after
+  their tests were added, first run survived)
+size gate | (this commit) | 0 | SCaaSDex 34359 -> 34893 (row moved; T-1 line 35,386)
+gas (regular, 2e97aded -> this) | (this commit) | 0 | mtxSettle 1x1 328318 -> 314763 (311105 before the outcome rule);
+  mtxExchange 296716 -> 295232; mtxExchangeBatch 306921 -> 305437; mtxHybrid 1x1 418812 -> 411307, 1x2 500514 ->
+  487621; DexMarkets figures (total, one fixture): 1x1 SCaaS-SCaaS 331319, 1x1 with an outside maker 290088

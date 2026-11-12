@@ -68,7 +68,7 @@ contract DexLiquidityMldsaTest is UARegistryBase {
         B = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
             abi.encode(normalInit("B", "B", 0, 1e6, address(this), address(0))), "B"));
         dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0,
-            address(0))), "dex"));
+            address(0), 0, 0)), "dex"));
         dex.setMarket(address(A), address(B), true);
         pair = MockV2LiquidityPair(new MockV2Factory().createPair(address(A), address(B)));
         A.transferToUA(ua, 100_000);

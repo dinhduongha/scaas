@@ -30,7 +30,7 @@ import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 ///         `UATradeOrder` (CTR-DEX-15, -25; T6: the token's only order form) through `TradeLib`. The UA ledger
 ///         (CTR-UA-18/19/26): `bytes32` balances of derived UAs, shown as the holder `UA_POOL`, and the `ua*`
 ///         pipelines on the same lanes. Every signature (the
-///         relayed paths, trade, cancel, invalidate, receiver-fee) is checked in `MtxPipelineLib` (`requireSignature`
+///         relayed paths, trade, cancel, invalidate, payee-fee) is checked in `MtxPipelineLib` (`requireSignature`
 ///         / `authorize`; a derived UA by the registry's `requireAuthorized`), never here (owner 2026-10-27).
 abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
     using MetaTxLib for MetaTxLib.UAMetaTransaction;
@@ -299,7 +299,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
         _uaMove(m.from, MetaTxLib.pad(feeTo), fee);
     }
 
-    /// @dev Every typed entry (struct, batch, the named builders, receiver-pays, the relay fee) goes through here
+    /// @dev Every typed entry (struct, batch, the named builders, payee fee, the relay fee) goes through here
     ///      (CTR-MTX-23 on ids): steps 1-4 in `MtxPipelineLib.preTransferUA` (`have` read here), everything checked
     ///      before the nonce and the moves, which cannot fail afterwards. `signed`: the struct the signer signed when it
     ///      is not `t` (`UARelayFee`), else 0. Returns the digest. A native side moves in the ERC-20 ledger and emits

@@ -77,8 +77,8 @@ abstract contract RegFixture is Test {
             type(NormalRegulatedToken).creationCode, regArgs());
         Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, plainEnv(address(f), address(0), UID, address(ureg), h),
             type(WrappedRegulatedToken).creationCode, regArgs());
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true, EnvKit.uidOf(address(f)));
         issuer = address(new Holder());
         compliance = address(new Holder());
         usd = new MockERC20("USD", "USD", 0);
@@ -86,7 +86,7 @@ abstract contract RegFixture is Test {
         t9 = f.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(_cfg9()), "t9");
         _wrapFor(t9, alice, SUPPLY);
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(nid(cadmin), address(0));
+        creg = new ComplianceRegistry(nid(cadmin), address(0), UID);
         vm.prank(cadmin);
         creg.setKycProvider(nid(attester), true);
     }

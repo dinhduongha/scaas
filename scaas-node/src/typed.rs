@@ -117,9 +117,11 @@ const NESTED: &[(&str, &str)] = &[
     ("ConfidentialConfig", "bytes auditorKey,uint256 shieldScale,uint256 maxShielded,uint256 confidentialFee,uint8 disclosureMode,uint8 auditorMode,uint256 minDecoyFee,uint8 pqzVerifyMode,bytes32 pqzVerifierUA,bool pqzVerifierFixed,uint8 proofStore,uint64 verifierFee,uint64 verifierFeeMax"),
     ("RegulatedParams", "address complianceRegistry,uint64 requiredFlags,uint64 deniedFlags,bytes32 termsHash,bytes32 taxRecipient"),
     ("TokenConfig", "string name,string symbol,uint8 decimals,uint256 features,uint256 lockedFeatures,bytes32 admin,TokenRoles roles,uint256 initialSupply,address initialHolder,TokenLeg[] legs,TokenRate rate,ConfidentialConfig conf,uint64 grantDelay,address rescueTo,uint256 maxSupply,RegulatedParams reg"),
-    ("DexConfig", "bytes32 admin,uint32 relayerSharePpm,address treasury,bool listedOnly,uint64 grantDelay,address rescueTo"),
+    ("DexConfig", "bytes32 admin,uint32 relayerSharePpm,address treasury,bool listedOnly,uint64 grantDelay,address rescueTo,uint256 features,uint256 lockedFeatures"),
     // round 3r (spec 2026-11-10-admin-not-owner.md §5.4): a release env, the router's three publishes take one (bounded below)
     ("Env", "address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes"),
+    // CTR-GOV-27: `setChainEntries`' named struct (flat, one level), nested in `UASetChainEntries`
+    ("ChainEntries", "address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash"),
     // `IPqChat`'s records (UA-7 spec §4.1, topics spec §2), by the contract's field names; `Wrap` here is a member's key wrap, not
     // the op of that name
     ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
@@ -198,7 +200,7 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // the pay entries (pay-meta-tax spec §2.1, §5.3): `PayMeta` last (spec §7.1: `meta` named per schema, the node builds the body);
     // `mtxPay` signs the payment `UAMetaTransfer` itself (its fields the envelope's and `to`, `value`, `entryRef`)
     ("UAMetaTransfer", "mtxPay", T, "bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,E", "$ @ meta:PayMeta"),
-    ("UAReceiverFee", "mtxPayReceiverFee", T, "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", "payment payerSig:UASig fee feeRecipient validUntil @ meta:PayMeta"),
+    ("UAPayeeFee", "mtxPayWithPayeeFee", T, "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", "payment payerSig:UASig fee feeRecipient validUntil @ meta:PayMeta"),
     ("UAPayWithTax", "mtxPayWithTax", T, "UAMetaTransfer payment,uint8 taxMode,uint256 tax", "payment taxMode tax @ meta:PayMeta"),
     // pay-meta-tax spec §4 (O4): the payer's own lane
     ("UARelayFee", "mtxRelayFee", T, "bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer", "from target callDataHash payee value batch nonce validUntil @"),
@@ -215,9 +217,9 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
     ("UACancelGrant", "mtxCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
     ("UADisableFeature", "mtxDisableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
-    ("UATransferAdmin", "mtxTransferAdmin", GR, "bytes32 from,address target,bytes32 newAdmin,E", ""),
+    ("UATransferAdmin", "mtxTransferAdmin", GR, "bytes32 from,address target,bytes32 newAdmin,bytes32 chainUid,E", ""),
     ("UAAcceptAdmin", "mtxAcceptAdmin", GR, "bytes32 from,address target,E", ""),
-    ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,E", ""),
+    ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
     ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
     ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),
@@ -262,14 +264,14 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // round 3r (CTR-GOV-23, spec §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its envs, deprecations, kind
     // switches, directory) and of a `ComplianceRegistry` (its KYC providers, the rows); the four release approvals are no row
     // (release management is not a node job, owner 2026-11-10)
-    ("UAPublishTokenEnv", "mtxPublishTokenEnv", GR, "bytes32 from,address target,uint8 kind,uint16 envVersion,Env env,E", ""),
-    ("UAPublishDexEnv", "mtxPublishDexEnv", GR, "bytes32 from,address target,uint16 envVersion,Env env,E", ""),
-    ("UAPublishClassEnv", "mtxPublishClassEnv", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint16 envVersion,Env env,E", ""),
-    ("UADeprecateToken", "mtxDeprecateToken", GR, "bytes32 from,address target,uint8 kind,uint64 version,string reason,E", ""),
-    ("UADeprecateDex", "mtxDeprecateDex", GR, "bytes32 from,address target,uint64 version,string reason,E", ""),
-    ("UADeprecateRelease", "mtxDeprecateRelease", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,string reason,E", ""),
-    ("UASetTokenKindEnabled", "mtxSetTokenKindEnabled", GR, "bytes32 from,address target,uint8 kind,bool on,E", ""),
-    ("UASetClassKindEnabled", "mtxSetClassKindEnabled", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,E", ""),
+    ("UAPublishTokenEnv", "mtxPublishTokenEnv", GR, "bytes32 from,address target,uint8 kind,uint16 envVersion,bytes32 chainUid,Env env,E", ""),
+    ("UAPublishDexEnv", "mtxPublishDexEnv", GR, "bytes32 from,address target,uint16 envVersion,bytes32 chainUid,Env env,E", ""),
+    ("UAPublishClassEnv", "mtxPublishClassEnv", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env,E", ""),
+    ("UADeprecateToken", "mtxDeprecateToken", GR, "bytes32 from,address target,uint8 kind,uint64 version,bytes32 chainUid,string reason,E", ""),
+    ("UADeprecateDex", "mtxDeprecateDex", GR, "bytes32 from,address target,uint64 version,bytes32 chainUid,string reason,E", ""),
+    ("UADeprecateRelease", "mtxDeprecateRelease", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason,E", ""),
+    ("UASetTokenKindEnabled", "mtxSetTokenKindEnabled", GR, "bytes32 from,address target,uint8 kind,bool on,bytes32 chainUid,E", ""),
+    ("UASetClassKindEnabled", "mtxSetClassKindEnabled", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid,E", ""),
     ("UASetKycProvider", "mtxSetKycProvider", GR, "bytes32 from,address target,bytes32 provider,bool enabled,E", ""),
     ("UASetCompliance", "mtxSetCompliance", GR, "bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,E", ""),
     // owner 2026-11-12: the factory's creations through the router (chain-neutral spec §4.4, S3), relayable at fee 0 like every
@@ -282,7 +284,7 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
         "E target version init!config:DexConfig salt @"),
     ("UACreateInstance", "mtxCreateInstance", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,bytes32 salt,E",
         "E target contractClass kind version initcall! salt @"),
-    ("UASetChainEntries", "mtxSetChainEntries", GR, "bytes32 from,address target,address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash,E", ""),
+    ("UASetChainEntries", "mtxSetChainEntries", GR, "bytes32 from,address target,ChainEntries entries,bytes32 chainUid,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
     ("UAInvalidateNonces", "mtxInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -1185,7 +1187,7 @@ pub struct Typed {
     pub domain_of: Address,
     /// `None`: a plain entry, no typed digest.
     pub struct_hash: Option<B256>,
-    /// The struct `MetaTransactionExecuted` reports when it is not `struct_hash`: a receiver fee's payment.
+    /// The struct `MetaTransactionExecuted` reports when it is not `struct_hash`: a payee fee's payment.
     pub lane_hash: Option<B256>,
     /// `(native signer, signature)` when the signer is known here (the guard recovers a 65-byte one, any other length is the
     /// contract's); `None`: a derived UA, a member set, a key of an account.
@@ -1231,7 +1233,7 @@ impl Typed {
         self.hashed(self.struct_hash?, chain_id, chain_uid)
     }
 
-    /// The digest the op's lane reports on chain, what `classify` compares: the payment's for a receiver fee.
+    /// The digest the op's lane reports on chain, what `classify` compares: the payment's for a payee fee.
     pub fn lane_digest_on(&self, chain_id: u64, chain_uid: B256) -> Option<B256> {
         self.hashed(self.lane_hash.or(self.struct_hash)?, chain_id, chain_uid)
     }
@@ -1460,7 +1462,7 @@ impl Op {
             Some(x @ (Val::Address(_) | Val::FixedBytes(..))) if row.name != "CancelDexOrder" => Some(x),
             _ => at(t, 1).and_then(|x| at(&x, 0)),
         });
-        // spec §7.1 (C2): `UAPayWithTax`'s signer is the payer `payment.from`; `UAReceiverFee`'s the payee `payment.to`
+        // spec §7.1 (C2): `UAPayWithTax`'s signer is the payer `payment.from`; `UAPayeeFee`'s the payee `payment.to`
         let payment_signer = if row.name == "UAPayWithTax" { 0 } else { 1 };
         let who = a.vals.get("from").cloned().or_else(|| a.vals.get("ua").filter(|_| !row.enveloped).cloned())
             .or_else(|| order_from.clone())
@@ -1478,8 +1480,8 @@ impl Op {
         let derived_signer = derived(a.vals.get("from").cloned()) || derived(order_from)
             || derived(a.vals.get("payment").and_then(|p| at(p, 0)));
         let derived_side = derived_signer || derived(a.vals.get("to").cloned()) || payee.is_some_and(|w| native(&w).is_none());
-        // the outer digest is the job's identity for `UAPayWithTax` (spec §7.1, Codex #1); a receiver fee reports its payment's
-        let lane_hash = pos(&row.fields, "payment").filter(|_| row.name == "UAReceiverFee").and_then(|i| {
+        // the outer digest is the job's identity for `UAPayWithTax` (spec §7.1, Codex #1); a payee fee reports its payment's
+        let lane_hash = pos(&row.fields, "payment").filter(|_| row.name == "UAPayeeFee").and_then(|i| {
             let ty = row.fields[i].0.as_str();
             Some(hash_tuple(ty, nested(ty)?, a.vals["payment"].as_tuple()?))
         });
@@ -1543,7 +1545,7 @@ fn payment_lane(p: &Val) -> Option<(B256, U256, U256)> {
     Some((word_of(&t[0])?, t[4].as_uint()?.0, t[5].as_uint()?.0))
 }
 
-/// A job's deadline: what the chain enforces on the op (the envelope, a fee's, the sooner of a receiver fee and its payment)
+/// A job's deadline: what the chain enforces on the op (the envelope, a fee's, the sooner of a payee fee and its payment)
 /// and `op.validUntil`, the job's own, whichever comes first: a job deadline narrows a signed one, never extends it. A cancel
 /// has no enforced deadline, so its order's `validUntil` is used only when the job names none.
 fn deadline(o: &Map<String, Value>, a: &Assembled, liquidity: bool) -> Result<u64> {
@@ -1708,7 +1710,7 @@ pub mod testkit {
         if let Some(m) = args.get("meta").cloned() {
             args.insert("meta".into(), named_meta(&m));
         }
-        if row.name == "UAReceiverFee" {
+        if row.name == "UAPayeeFee" {
             let s = args["payerSig"].clone();
             args.insert("payerSig".into(), json!({"keyData": "0x", "signature": s, "members": []}));
         }
@@ -2408,6 +2410,28 @@ mod tests {
         Op::parse(&op_of("Execute", "account", &v).unwrap(), FEE).unwrap();
     }
 
+    /// CTR-GOV-27: every node row signing a `chainUid` (`mtxTransferAdmin`, `mtxRenounceAdmin`, the three env publishes, the
+    /// three deprecations, the two kind switches, `mtxSetChainEntries`; `UARevokeApproval` has no node row, `NO_NODE_ROW`) takes
+    /// it as a named field; a job without it is refused by name; `ChainEntries` is one named object (a packed blob is refused),
+    /// its struct hash nested in the signed one; the vector rows parse (the positive control).
+    #[test]
+    fn chain_word_rows_refuse_a_missing_word() {
+        let v = vectors();
+        let rows: Vec<&str> = TYPED.iter().filter(|r| r.2 == GR && r.3.contains("bytes32 chainUid")).map(|r| r.0).collect();
+        assert_eq!(rows.len(), 11, "{rows:?}");
+        for op in rows {
+            let good = op_of(op, "gov_router", &v).unwrap();
+            Op::parse(&good, FEE).unwrap();
+            let mut o = good.clone();
+            o["args"].as_object_mut().unwrap().remove("chainUid").unwrap();
+            let e = Op::parse(&o, FEE).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("args.chainUid: missing"), "{op}: {e}");
+        }
+        let mut o = op_of("UASetChainEntries", "gov_router", &v).unwrap();
+        o["args"]["entries"] = json!(format!("0x{}", "00".repeat(9 * 32)));
+        assert_eq!(Op::parse(&o, FEE).unwrap_err().to_string(), "BAD_PAYLOAD: args.entries: not an object", "a packed blob");
+    }
+
     /// The router's rows (spec 2026-11-02-governance §3.2): every op is named JSON, `target` a named field the node signs and sends; a
     /// hex form is refused by name, and no generic entry, no governed contract and no other domain takes a router struct.
     #[test]
@@ -2525,7 +2549,7 @@ mod tests {
         let env = env.unwrap();
         assert_eq!(env["relayer"], json!(format!("{:#x}", Address::ZERO)));
         assert_eq!(env["feeRecipient"], json!(format!("{ours:#x}")));
-        let mut op = op_of("UAReceiverFee", "token", &v).unwrap();
+        let mut op = op_of("UAPayeeFee", "token", &v).unwrap();
         let base = Op::parse(&op, FEE).unwrap().typed.struct_hash;
         op["args"]["payment"]["feeRecipient"] = json!(format!("{:#x}", Address::repeat_byte(0x77)));
         assert_eq!(Op::parse(&op, FEE).unwrap().typed.struct_hash, base, "mode 1 does not bind it");
@@ -2666,7 +2690,7 @@ mod tests {
         }
         op.as_object_mut().unwrap().remove("validUntil");
         assert_eq!(Op::parse(&op, FEE).unwrap().valid_until, signed);
-        let mut fee = op_of("UAReceiverFee", "token", &v).unwrap();
+        let mut fee = op_of("UAPayeeFee", "token", &v).unwrap();
         fee.as_object_mut().unwrap().remove("validUntil");
         let outer: u64 = fee["args"]["validUntil"].as_str().unwrap().parse().unwrap();
         fee["args"]["payment"]["validUntil"] = json!((outer + 5).to_string());
@@ -2678,15 +2702,15 @@ mod tests {
         assert_eq!(Op::parse(&c, FEE).unwrap().valid_until, signed + 100, "the chain enforces no deadline on a cancel");
     }
 
-    /// `classify` compares what the chain emits: a receiver fee lands as its payment's `MetaTransfer`, not the outer struct.
+    /// `classify` compares what the chain emits: a payee fee lands as its payment's `MetaTransfer`, not the outer struct.
     #[test]
-    fn a_receiver_fee_is_recognised_by_its_payment_digest() {
+    fn a_payee_fee_is_recognised_by_its_payment_digest() {
         let v = vectors();
-        let d = &v["ops"]["UAReceiverFee"]["domains"]["token"];
-        let op = op_of("UAReceiverFee", "token", &v).unwrap();
+        let d = &v["ops"]["UAPayeeFee"]["domains"]["token"];
+        let op = op_of("UAPayeeFee", "token", &v).unwrap();
         let p = Op::parse(&op, FEE).unwrap();
         let (chain, at, uid) = domain_of(d);
-        let wire = v["ops"]["UAReceiverFee"]["message"]["payment"].clone();
+        let wire = v["ops"]["UAPayeeFee"]["message"]["payment"].clone();
         let m = crate::metatx::UaMtx::from_wire(None, &wire).unwrap();
         let dom = crate::metatx::Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: chain, verifying_contract: at, salt: uid };
         assert_eq!(p.typed.lane_digest_on(chain, uid), Some(m.digest(&dom)), "the sol! struct, another path");
@@ -2903,9 +2927,9 @@ mod tests {
     fn the_signer_is_found_where_the_row_keeps_it() {
         let v = vectors();
         let key: Address = v["key"]["address"].as_str().unwrap().parse().unwrap();
-        let payee = Address::from_word(v["ops"]["UAReceiverFee"]["message"]["payment"]["to"].as_str().unwrap().parse().unwrap());
+        let payee = Address::from_word(v["ops"]["UAPayeeFee"]["message"]["payment"]["to"].as_str().unwrap().parse().unwrap());
         for (name, kind, who) in [("Wrap", "token", Some(key)), ("UAUnwrap", "token", Some(key)), ("CancelUAOrder", "token", Some(key)),
-            ("CancelDexOrder", "dex", Some(key)), ("UAWrapOrder", "token", Some(key)), ("UAReceiverFee", "token", Some(payee)),
+            ("CancelDexOrder", "dex", Some(key)), ("UAWrapOrder", "token", Some(key)), ("UAPayeeFee", "token", Some(payee)),
             ("UACancelNonce", "token", Some(key)), ("UASetPayee", "wallet", Some(key)), ("AddKey", "account", None)] {
             let op = op_of(name, kind, &v).unwrap();
             let s = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}")).typed.signer;
@@ -2914,8 +2938,8 @@ mod tests {
     }
 
     /// pay-meta-tax T42 (spec §7.1, C2, Codex #1): `tax_job_signer_is_payer_distinct_payee`, `tax_job_outer_digest_is_job_id`: the
-    /// `UAPayWithTax` row's signer is the payment's `from` (never the receiver-fee fallback to `payment.to`), its job identity
-    /// the outer struct (no inner lane hash); a receiver fee keeps its payment's; the relay fee's router call carries the
+    /// `UAPayWithTax` row's signer is the payment's `from` (never the payee-fee fallback to `payment.to`), its job identity
+    /// the outer struct (no inner lane hash); a payee fee keeps its payment's; the relay fee's router call carries the
     /// payer's `batch`, `nonce` (`relay_fee_job_batch_nonce`).
     #[test]
     fn tax_job_signer_is_payer_and_outer_digest_is_job_id() {
@@ -2930,8 +2954,8 @@ mod tests {
             assert_eq!(format!("{:#x}", p.typed.struct_hash.unwrap()), v["ops"]["UAPayWithTax"]["structHash"].as_str().unwrap());
             assert_eq!(p.typed.payee.map(|w| format!("{w:#x}")), m["to"].as_str().map(str::to_string));
         }
-        let rf = Op::parse(&op_of("UAReceiverFee", "token", &v).unwrap(), FEE).unwrap();
-        assert!(rf.typed.lane_hash.is_some(), "a receiver fee is matched by its payment's digest");
+        let rf = Op::parse(&op_of("UAPayeeFee", "token", &v).unwrap(), FEE).unwrap();
+        assert!(rf.typed.lane_hash.is_some(), "a payee fee is matched by its payment's digest");
         let d = &v["ops"]["UARelayFee"]["domains"]["token"];
         let c = IRelayFeeRouter::relayCall::abi_decode(&hex(&d["routerCalldata"])).unwrap();
         assert_eq!((c.batch, c.nonce), (U256::from(7), U256::ZERO), "the payer's lane in the router call");

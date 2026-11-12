@@ -1026,12 +1026,12 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
         _expect(address(np), H_FEE, _pad(FEE_TO), 0, 5);
         vm.prank(alice);
         np.payWithFeeToUA(uaP, 1000, FeeMode.FIXED, 5, FEE_TO, PayMetaKit.ref(bytes32(0)), PayMetaKit.meta(bytes32(0)));
-        // mtxPayReceiverFee: the fee recipient, before the payer's transfer
+        // mtxPayWithPayeeFee: the fee recipient, before the payer's transfer
         MetaTxLib.UAMetaTransfer memory t = _t(_pad(alice), _pad(bob), 100);
         (t.entryRef, t.nonce) = (PayMetaKit.ref(bytes32(uint256(9))), 0);
         t.batch = np.payLane(t.entryRef);
         _expect(address(np), H_FEE, _pad(FEE_TO), 0, 3);
-        np.mtxPayReceiverFee(t, _noSig(), 3, FEE_TO, block.timestamp + 60, _noSig(), PayMetaKit.meta(bytes32(uint256(9))));
+        np.mtxPayWithPayeeFee(t, _noSig(), 3, FEE_TO, block.timestamp + 60, _noSig(), PayMetaKit.meta(bytes32(uint256(9))));
         // mtxRelayFee: the relay's payee and value
         _expect(address(np), H_FEE, uaB, 0, 7);
         np.mtxRelayFee(_pad(alice), address(0x1234), bytes32(0), uaB, 7, 2, 0, block.timestamp + 60, _noSig());

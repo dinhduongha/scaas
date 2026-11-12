@@ -6,6 +6,7 @@ import {IWrappedToken} from "../metatx/IWrappedToken.sol";
 import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {IRegulatedToken} from "../regulated/IRegulatedToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {RescueLib} from "../governance/RescueLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IPqzToken} from "../pqz/IPqzToken.sol";
@@ -281,25 +282,26 @@ contract GovernanceRouter is GovernanceRouterBase {
     /// @notice Round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4): the factory admin's ops, `target` the chain's
     ///         `OpenFactory`, which reads `subject()` as its admin (`UAAdmin`); the direct entry's parameters, the ids flat;
     ///         `Env` hashed as EIP-712 (`_envHash`), a `reason` as `keccak256(bytes(reason))`. Fee mode `NONE`.
+    ///         The env publishes carry the factory's `chainUid` word after the static fields, before `env` (CTR-GOV-27).
     function mtxPublishTokenEnv(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, uint16 envVersion,
-        IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_PUBLISH_TOKEN_ENV, e, target, abi.encode(kind, envVersion, _envHash(env)),
-            abi.encodeCall(IOpenFactory.publishTokenEnv, (kind, envVersion, env)), auth);
+        _uaCall(T.UA_PUBLISH_TOKEN_ENV, e, target, abi.encode(kind, envVersion, chainUid, _envHash(env)),
+            abi.encodeCall(IOpenFactory.publishTokenEnv, (kind, envVersion, chainUid, env)), auth);
     }
 
-    function mtxPublishDexEnv(MetaTxLib.UAEnvelope calldata e, address target, uint16 envVersion,
+    function mtxPublishDexEnv(MetaTxLib.UAEnvelope calldata e, address target, uint16 envVersion, bytes32 chainUid,
         IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_PUBLISH_DEX_ENV, e, target, abi.encode(envVersion, _envHash(env)),
-            abi.encodeCall(IOpenFactory.publishDexEnv, (envVersion, env)), auth);
+        _uaCall(T.UA_PUBLISH_DEX_ENV, e, target, abi.encode(envVersion, chainUid, _envHash(env)),
+            abi.encodeCall(IOpenFactory.publishDexEnv, (envVersion, chainUid, env)), auth);
     }
 
     function mtxPublishClassEnv(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
-        uint16 envVersion, IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external
+        uint16 envVersion, bytes32 chainUid, IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_PUBLISH_CLASS_ENV, e, target, abi.encode(contractClass, kind, envVersion, _envHash(env)),
-            abi.encodeCall(IOpenFactory.publishClassEnv, (contractClass, kind, envVersion, env)), auth);
+        _uaCall(T.UA_PUBLISH_CLASS_ENV, e, target, abi.encode(contractClass, kind, envVersion, chainUid, _envHash(env)),
+            abi.encodeCall(IOpenFactory.publishClassEnv, (contractClass, kind, envVersion, chainUid, env)), auth);
     }
 
     /// @notice Spec §5.6 item 1: one release approved by hash; the deploy goes to the factory, open to anyone.
@@ -344,56 +346,58 @@ contract GovernanceRouter is GovernanceRouterBase {
         _ua(T.UA_APPROVE_RELEASE, e, target, IOpenFactory.approveRelease.selector, abi.encode(approval), auth);
     }
 
-    function mtxRevokeApproval(MetaTxLib.UAEnvelope calldata e, address target, bytes32 key, IUARegistry.UASig calldata auth)
-        external
-    {
-        _ua(T.UA_REVOKE_APPROVAL, e, target, IOpenFactory.revokeApproval.selector, abi.encode(key), auth);
-    }
-
-    function mtxDeprecateToken(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, uint64 version,
-        string calldata reason, IUARegistry.UASig calldata auth) external
-    {
-        _uaCall(T.UA_DEPRECATE_TOKEN, e, target, abi.encode(kind, version, keccak256(bytes(reason))),
-            abi.encodeCall(IOpenFactory.deprecateToken, (kind, version, reason)), auth);
-    }
-
-    function mtxDeprecateDex(MetaTxLib.UAEnvelope calldata e, address target, uint64 version, string calldata reason,
+    function mtxRevokeApproval(MetaTxLib.UAEnvelope calldata e, address target, bytes32 key, bytes32 chainUid,
         IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_DEPRECATE_DEX, e, target, abi.encode(version, keccak256(bytes(reason))),
-            abi.encodeCall(IOpenFactory.deprecateDex, (version, reason)), auth);
+        _ua(T.UA_REVOKE_APPROVAL, e, target, IOpenFactory.revokeApproval.selector, abi.encode(key, chainUid), auth);
+    }
+
+    /// @notice The deprecations and kind switches carry the factory's `chainUid` word as their direct entries do (Fable
+    ///         D P3-2): after the op's static fields, before a `reason`.
+    function mtxDeprecateToken(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, uint64 version,
+        bytes32 chainUid, string calldata reason, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_DEPRECATE_TOKEN, e, target, abi.encode(kind, version, chainUid, keccak256(bytes(reason))),
+            abi.encodeCall(IOpenFactory.deprecateToken, (kind, version, chainUid, reason)), auth);
+    }
+
+    function mtxDeprecateDex(MetaTxLib.UAEnvelope calldata e, address target, uint64 version, bytes32 chainUid,
+        string calldata reason, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_DEPRECATE_DEX, e, target, abi.encode(version, chainUid, keccak256(bytes(reason))),
+            abi.encodeCall(IOpenFactory.deprecateDex, (version, chainUid, reason)), auth);
     }
 
     function mtxDeprecateRelease(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
-        uint64 version, string calldata reason, IUARegistry.UASig calldata auth) external
+        uint64 version, bytes32 chainUid, string calldata reason, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_DEPRECATE_RELEASE, e, target, abi.encode(contractClass, kind, version, keccak256(bytes(reason))),
-            abi.encodeCall(IOpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(contractClass, kind, version), reason)),
-            auth);
+        _uaCall(T.UA_DEPRECATE_RELEASE, e, target,
+            abi.encode(contractClass, kind, version, chainUid, keccak256(bytes(reason))), abi.encodeCall(
+                IOpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(contractClass, kind, version), chainUid, reason)
+            ), auth);
     }
 
     function mtxSetTokenKindEnabled(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, bool on,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_TOKEN_KIND_ENABLED, e, target, IOpenFactory.setTokenKindEnabled.selector, abi.encode(kind, on), auth);
+        _ua(T.UA_SET_TOKEN_KIND_ENABLED, e, target, IOpenFactory.setTokenKindEnabled.selector,
+            abi.encode(kind, on, chainUid), auth);
     }
 
     function mtxSetClassKindEnabled(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
-        bool on, IUARegistry.UASig calldata auth) external
+        bool on, bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
         _ua(T.UA_SET_CLASS_KIND_ENABLED, e, target, IOpenFactory.setClassKindEnabled.selector,
-            abi.encode(contractClass, kind, on), auth);
+            abi.encode(contractClass, kind, on, chainUid), auth);
     }
 
-    /// @notice Spec §13.3: the chain's write-once directory entries.
-    function mtxSetChainEntries(MetaTxLib.UAEnvelope calldata e, address target, address relayFeeRouter,
-        bytes32 relayFeeRouterCodeHash, bytes32 relayFeeExecutorCodeHash, address complianceRegistry,
-        bytes32 complianceRegistryCodeHash, address smartKeyAccountFactory, bytes32 smartKeyAccountFactoryCodeHash,
-        address zetherStatements, bytes32 zetherStatementsCodeHash, IUARegistry.UASig calldata auth) external
+    /// @notice Spec §13.3: the chain's write-once directory entries, one named struct signed as the EIP-712 `ChainEntries`,
+    ///         then the factory's `chainUid` word (CTR-GOV-27).
+    function mtxSetChainEntries(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.ChainEntries calldata entries,
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_CHAIN_ENTRIES, e, target, IOpenFactory.setChainEntries.selector, abi.encode(relayFeeRouter,
-            relayFeeRouterCodeHash, relayFeeExecutorCodeHash, complianceRegistry, complianceRegistryCodeHash,
-            smartKeyAccountFactory, smartKeyAccountFactoryCodeHash, zetherStatements, zetherStatementsCodeHash), auth);
+        _uaCall(T.UA_SET_CHAIN_ENTRIES, e, target, abi.encode(keccak256(abi.encode(T.CHAIN_ENTRIES, entries)), chainUid),
+            abi.encodeCall(IOpenFactory.setChainEntries, (entries, chainUid)), auth);
     }
 
     // ------------------------------------------------------------------ a compliance registry (round 3r, spec §5.3.1)
@@ -420,5 +424,13 @@ contract GovernanceRouter is GovernanceRouterBase {
         return keccak256(abi.encode(T.ENV, v.registry, v.smartKeyAccountImpl, v.hedera, keccak256(abi.encodePacked(v.deps)),
             keccak256(abi.encodePacked(v.params)), keccak256(abi.encodePacked(v.libs)),
             keccak256(abi.encodePacked(v.libCodeHashes))));
+    }
+
+    // ------------------------------------------------------------------ rescue (CTR-GOV-26)
+
+    /// @notice CTR-GOV-26 (owner 2026-11-12): anyone; this contract holds nothing by design, so the whole balance of
+    ///         `asset` (`address(0)`: the native coin) goes to `RescueLib.SCAAS_DEV_RESCUE`, `IRescuable.Rescued`.
+    function rescue(address asset) external {
+        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);
     }
 }

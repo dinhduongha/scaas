@@ -355,7 +355,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, vA, false);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);

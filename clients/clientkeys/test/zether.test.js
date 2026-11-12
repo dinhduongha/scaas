@@ -110,7 +110,7 @@ test('owner op: UASig{signature: Schnorr over uaMessage(kind, zether-owner, dige
 test('every UA-ledger write: Schnorr by x over uaMessage(0x0141, purpose, digest); no raw digest, no other purpose', () => {
   const k = R33.bls12381.keys[0];
   const digest = '0x' + '5a'.repeat(32);
-  for (const purpose of ['metatx', 'metatx-cancel', 'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'zether-owner']) {
+  for (const purpose of ['metatx', 'metatx-cancel', 'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'zether-owner']) {
     const sig = zetherSign('bls12381', fromHex(k.x), purpose, digest);
     assert.equal(sig.length, 160);
     assert.ok(schnorrVerify('bls12381', fromHex(k.Y), uaMessage(0x0141, purposeTag(purpose), digest), sig), purpose);

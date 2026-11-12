@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {deployDexModules} from "../../script/KindModules.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {SCaaSDexGovernanceModule} from "../../src/dex/SCaaSDexAdmin.sol";
@@ -35,14 +36,14 @@ contract UADexAdminTest is UADexBase {
         assertEq(ITokenModule(d).factory(), address(f));
         vm.expectCall(d, abi.encodeCall(IAdmin.admin, ()));
         assertEq(dex.admin(), nid(address(this)));
-        assertEq(dex.validBits(), GovernanceBits.DEX_BITS);
+        assertEq(dex.validBits(), GovernanceBits.DEX_VALID); // fix2-dex: + bit 29 CLOSED_MARKETS
         assertTrue(dex.hasRole(GovernanceBits.LISTING, nid(address(this))));
-        vm.expectCall(d, abi.encodeCall(IAdmin.transferAdmin, (nid(dave))));
-        dex.transferAdmin(nid(dave));
+        vm.expectCall(d, abi.encodeCall(IAdmin.transferAdmin, (nid(dave), EnvKit.codeUidOf(address(dex)))));
+        dex.transferAdmin(nid(dave), EnvKit.codeUidOf(address(dex)));
         assertEq(dex.pendingAdmin(), nid(dave));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(dave)));
         vm.prank(dave);
-        dex.renounceAdmin(); // D's revert data, verbatim through the stub
+        dex.renounceAdmin(EnvKit.codeUidOf(address(dex))); // D's revert data, verbatim through the stub
     }
 
     /// M2: D's entries answer only under DELEGATECALL; `validBits` is `pure` and reads nothing.
@@ -53,10 +54,10 @@ contract UADexAdminTest is UADexBase {
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.features();
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
-        d.transferAdmin(nid(dave));
+        d.transferAdmin(nid(dave), EnvKit.codeUidOf(address(d)));
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.grantRole(GovernanceBits.LISTING, nid(dave));
-        assertEq(d.validBits(), GovernanceBits.DEX_BITS);
+        assertEq(d.validBits(), GovernanceBits.DEX_VALID);
     }
 
     /// §4.5 and the liquidity spec §9.1 (L33): the DEX's constructor takes exactly two modules with code, the governance

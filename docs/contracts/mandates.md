@@ -113,7 +113,8 @@ only: a native signer signs with its own key and no registry is called; a derive
 registry (`UALedgerOff` when `registry` is 0). There are no `ua*` twins: the planned `uaExecute`, `uaPayUnderMandate`,
 `uaRevoke`, `uaExecuteAsOwner` are not built. `_mtxRule` and `_uaAllowed` both list the six wallet operations, `cancelNonce`
 on `_mtxRule` only. A native payee is paid by `payWithFee`, a derived one by `payWithFeeToUA`
-([CTR-UA-28](accounts.md#CTR-UA-28)). **ERC-1271:** a native owner keeps `isValidSignature` (ECDSA); a derived owner gets
+([CTR-UA-28](accounts.md#CTR-UA-28)). **ERC-1271:** a native owner keeps `isValidSignature` (ECDSA over the ERC-7739 `TypedDataSign`
+or `PersonalSign` message, bound to the wallet; a raw-hash signature is refused, [accounts.md CTR-ACC-02](accounts.md#erc1271-wrap)); a derived owner gets
 none (`0xffffffff`): token and DEX callers cap ERC-1271 at 50 k gas (a PQ check needs up to 5.95 M), and a 1271 answer
 would be a generic "sign this digest" for a UA key, which [CTR-UA-10](accounts.md#CTR-UA-10) layer 1 forbids; a derived
 owner acts through the signed `mtxExecute(e, target, value, data, auth)`. `HederaMandateWallet` follows (HIP-632 on the

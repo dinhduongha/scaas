@@ -31,6 +31,7 @@ import {IRegulatedToken} from "../../../src/regulated/IRegulatedToken.sol";
 import {NormalPqzRegulatedToken} from "../../../src/regulated/NormalPqzRegulatedToken.sol";
 import {WrappedPqzRegulatedToken} from "../../../src/regulated/WrappedPqzRegulatedToken.sol";
 import {ComplianceRegistry} from "../../../src/regulated/ComplianceRegistry.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// The signed PQZ entries alone (no overload), so `abi.encodeCall` can name each.
 interface IPqzSigned {
@@ -104,13 +105,13 @@ abstract contract PqzRegFixture is PqzNamedBase {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e,
             type(WrappedPqzRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         issuer = address(new Holder());
         compliance = address(new Holder());
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(nid(cadmin), address(0));
+        creg = new ComplianceRegistry(nid(cadmin), address(0), PQZ_UID);
         vm.prank(cadmin);
         creg.setKycProvider(nid(attester), true);
         usd = new MockERC20("USD", "USD", 6);

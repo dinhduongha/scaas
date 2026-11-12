@@ -17,6 +17,7 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// The delegate of the 2026-10-29 hot-wallet drain: says yes to every ERC-1271 question and, called on the victim's
 /// address, makes any call as the victim.
@@ -73,7 +74,7 @@ contract Sweeper7702Test is MandateFixture {
             PayMetaKit.ref(0), PayMetaKit.meta(0))));
         _swept(address(v), abi.encodeCall(IERC20.approve, (address(sweeper), 1_000)));
         _swept(address(v), abi.encodeCall(NormalToken.mint, (attacker, 1e9)));
-        _swept(address(v), abi.encodeCall(IAdmin.transferAdmin, (nid(attacker))));
+        _swept(address(v), abi.encodeCall(IAdmin.transferAdmin, (nid(attacker), EnvKit.codeUidOf(address(v)))));
         _swept(address(v), abi.encodeCall(IMetaTx.cancelNonce, (0)));
         _swept(address(wt), abi.encodeWithSignature("unwrap(uint256,address)", 100, attacker));
         _swept(address(w), abi.encodeCall(MandateWallet.execute, (address(t), 0, abi.encodeCall(IERC20.transfer, (attacker, 10_000)))));

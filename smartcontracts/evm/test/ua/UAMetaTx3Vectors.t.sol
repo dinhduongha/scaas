@@ -36,7 +36,7 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 /// hashes to the file's digest here, every auth passes (native: ECDSA over the digest; derived: `requireAuthorized`
 /// under `metatx`), and every `UAMetaTransfer` row really executes. Gas of `mtxExecuteTransfer` per signer is logged.
 /// UA-5a (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06): the `burn` rows execute under `uaExecute`, the
-/// `unwrapToUA` rows are checked as the `call` rows, every `receiverFee` row executes `mtxPayReceiverFee` (gas logged).
+/// `unwrapToUA` rows are checked as the `call` rows, every `payeeFee` row executes `mtxPayWithPayeeFee` (gas logged).
 contract UAMetaTx3VectorsTest is UARegistryBase {
     string internal sj;
     string internal vj;
@@ -211,33 +211,33 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         assertEq(n, 11);
     }
 
-    /// `receiverFee` rows: the payment digest and the `ReceiverFee` digest recomputed by the token, the row's two auth
-    /// blobs verified by the registry (the payer under `metatx`, a derived payee under `receiver-fee`), then executed.
+    /// `payeeFee` rows: the payment digest and the `UAPayeeFee` digest recomputed by the token, the row's two auth
+    /// blobs verified by the registry (the payer under `metatx`, a derived payee under `payee-fee`), then executed.
     /// pay-meta-tax T41 (O11): each row carries its `PayMeta` (`meta`), the entry's last parameter, `entryRef` its commitment.
-    function test_vectors_receiverFee() public {
+    function test_vectors_payeeFee() public {
         uint256 n;
-        for (uint256 i; vm.keyExistsJson(vj, string.concat(".receiverFee[", vm.toString(i), "]")); ++i) {
-            string memory r = string.concat(".receiverFee[", vm.toString(i), "].");
+        for (uint256 i; vm.keyExistsJson(vj, string.concat(".payeeFee[", vm.toString(i), "]")); ++i) {
+            string memory r = string.concat(".payeeFee[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransfer memory t = _transferAt(string.concat(r, "transfer.message."));
             bytes32 d = vm.parseJsonBytes32(vj, string.concat(r, "paymentDigest"));
             assertEq(tok.mtxTransferDigest(t), d);
-            uint256 fee = vm.parseJsonUint(vj, string.concat(r, "receiverFee.message.fee"));
-            address feeTo = vm.parseJsonAddress(vj, string.concat(r, "receiverFee.message.feeRecipient"));
-            uint256 until = vm.parseJsonUint(vj, string.concat(r, "receiverFee.message.validUntil"));
-            assertEq(tok.receiverFeeDigest(t, fee, feeTo, until), vm.parseJsonBytes32(vj, string.concat(r, "receiverFeeDigest")));
+            uint256 fee = vm.parseJsonUint(vj, string.concat(r, "payeeFee.message.fee"));
+            address feeTo = vm.parseJsonAddress(vj, string.concat(r, "payeeFee.message.feeRecipient"));
+            uint256 until = vm.parseJsonUint(vj, string.concat(r, "payeeFee.message.validUntil"));
+            assertEq(tok.payeeFeeDigest(t, fee, feeTo, until), vm.parseJsonBytes32(vj, string.concat(r, "payeeFeeDigest")));
             _fund(t.from, t.value);
             uint256 before = tok.balanceOfUA(t.to);
             IUARegistry.UASig memory payerAuth = UACall.auth(t.from, vm.parseJsonBytes(vj, string.concat(r, "payerAuth")));
             IUARegistry.UASig memory payeeAuth = UACall.auth(t.to, vm.parseJsonBytes(vj, string.concat(r, "payeeAuth")));
             _authorizedAs(t.from, UAKinds.PURPOSE_METATX, d, payerAuth);
-            _authorizedAs(t.to, UAKinds.PURPOSE_RECEIVER_FEE, tok.receiverFeeDigest(t, fee, feeTo, until), payeeAuth);
+            _authorizedAs(t.to, UAKinds.PURPOSE_PAYEE_FEE, tok.payeeFeeDigest(t, fee, feeTo, until), payeeAuth);
             MetaTxLib.PayMeta memory m = _metaAt(string.concat(r, "meta."));
             assertEq(PayMetaKit.id(m), t.entryRef, "the row's entryRef commits to its PayMeta");
             vm.prank(t.relayer);
             uint256 g = gasleft();
-            tok.mtxPayReceiverFee(t, payerAuth, fee, feeTo, until, payeeAuth, m);
+            tok.mtxPayWithPayeeFee(t, payerAuth, fee, feeTo, until, payeeAuth, m);
             g -= gasleft();
-            emit log_named_uint(string.concat("mtxPayReceiverFee ", vm.parseJsonString(vj, string.concat(r, "payer")), " > ",
+            emit log_named_uint(string.concat("mtxPayWithPayeeFee ", vm.parseJsonString(vj, string.concat(r, "payer")), " > ",
                 vm.parseJsonString(vj, string.concat(r, "payee"))), g);
             assertEq(tok.balanceOfUA(t.to), before + t.value - fee);
             ++n;

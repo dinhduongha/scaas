@@ -42,7 +42,7 @@ contract Venue {
 
 /// Plan T28 (regulated-kinds spec §3.2 fee rows, RK-6, Codex 1, F-15): every fee leg of the token checks its recipient
 /// before effects (`F` ⇒ `FeeRecipientFrozen`): the envelope fee (a typed transfer, `mtxCancelNonce`), `payWithFee`,
-/// `payWithFeeToUA`, `mtxPayReceiverFee` (and its payee, whose fee leg is its own send), `mtxRelayFee`, `mtxWrapOrder`;
+/// `payWithFeeToUA`, `mtxPayWithPayeeFee` (and its payee, whose fee leg is its own send), `mtxRelayFee`, `mtxWrapOrder`;
 /// the DEX relayer share is an ordinary credit. Kinds 8 and 9, each with its control.
 contract FeeLegsTest is RegFixture {
     uint32 constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
@@ -121,14 +121,14 @@ contract FeeLegsTest is RegFixture {
     {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
         ps.signature = abi.encodePacked(r, s, v);
-        (v, r, s) = vm.sign(BOB_PK, NormalToken(t).receiverFeeDigest(x, 3, feeTo, block.timestamp + 300));
+        (v, r, s) = vm.sign(BOB_PK, NormalToken(t).payeeFeeDigest(x, 3, feeTo, block.timestamp + 300));
         rs.signature = abi.encodePacked(r, s, v);
     }
 
-    /// `mtxPayReceiverFee`: a frozen fee recipient is refused before the payment (`FeeRecipientFrozen`); a frozen payee
-    /// cannot pay the receiver fee, which is its own send (`Frozen(payee)`, owner 2026-11-05 call 2); unfrozen, both
+    /// `mtxPayWithPayeeFee`: a frozen fee recipient is refused before the payment (`FeeRecipientFrozen`); a frozen payee
+    /// cannot pay the payee fee, which is its own send (`Frozen(payee)`, owner 2026-11-05 call 2); unfrozen, both
     /// signatures run (the control).
-    function test_payReceiverFeeFrozen() public {
+    function test_payPayeeFeeFrozen() public {
         for (uint256 i; i < 2; ++i) {
             address t = _ks()[i];
             MetaTxLib.UAMetaTransfer memory x = _payTr(t);
@@ -137,15 +137,15 @@ contract FeeLegsTest is RegFixture {
             _freeze(t, nid(feeTo));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(feeTo)));
-            NormalToken(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
+            NormalToken(t).mtxPayWithPayeeFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
             _unfreeze(t, nid(feeTo));
             _freeze(t, nid(bob));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(bob)));
-            NormalToken(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
+            NormalToken(t).mtxPayWithPayeeFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
             _unfreeze(t, nid(bob));
             vm.prank(relayer);
-            NormalToken(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
+            NormalToken(t).mtxPayWithPayeeFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
             assertEq(IERC20(t).balanceOf(bob), 97);
             assertEq(IERC20(t).balanceOf(feeTo), 3);
         }

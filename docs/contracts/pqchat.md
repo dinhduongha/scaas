@@ -74,7 +74,7 @@ reads its chain values from its own `ChainEnv`, is initialised once by the facto
 - **Registration** (registrar): the body module `PqChatTopics(factory)` first (below), then
   `publishClassEnv(3, 0, envVersion, env)` with the module pinned in `env.libs` (its code hash in `env.libCodeHashes`,
   checked by the factory at `deployImplementation`), `deployImplementation(ReleaseId(3, 0, v), envVersion, IPqChat.initialize.selector,
-  type(IPqChat).interfaceId, initcode, abi.encode(topics))`, `setClassKindEnabled(3, 0, true)` after the notice period. **Creation** (anyone): `createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize,
+  type(IPqChat).interfaceId, initcode, abi.encode(topics))`, `setClassKindEnabled(3, 0, true, chainUid)` after the notice period. **Creation** (anyone): `createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize,
   (ownerUA)))`, an EIP-1167 clone ([token-wrappers.md §6](token-wrappers.md#factory); the generic path is the factory
   index spec [`2026-11-07-factory-contract-index.md`](../superpowers/specs/2026-11-07-factory-contract-index.md) §8).
   The factory gets no `PqChat` code.
@@ -535,6 +535,7 @@ Status: **BUILT**. Errors are those of `IPqChat.sol`; "registry" means the bubbl
 | `postEntry(e, sig)` | anyone submits; `e.author` signs | topic known, parent in the topic, rights, lengths, `ref` shape, signature, nonce | `PqTopicUnknown`, `PqTopicParent`, `PqTopicNotWriter`, `PqTopicShape`, `PqTopicRef`, registry, `PqChatNonceUsed` |
 | `editEntry(d, sig)` | anyone submits; the original's author signs | original known, author, version, lengths, signature, nonce | `PqTopicUnknown`, `PqTopicNotAuthor`, `PqTopicVersion`, `PqTopicShape`, registry, `PqChatNonceUsed` |
 | `voteEntry(v, sig)` | anyone submits; `v.voter` signs | entry known, value, `seq`, signature | `PqTopicUnknown`, `PqTopicVoteValue`, `PqTopicSeq`, registry |
+| `rescue(asset)` | anyone, unsigned | none: the whole balance of `asset` (`address(0)`: the native coin) to the constant dev address ([CTR-GOV-26](../decisions.md#CTR-GOV-26)) | `RescueAssetInvalid` (native to a designator) |
 | `owner()`, `factoryInfo()`, `supportsInterface(id)`, `chainEnv()`, `FACTORY()` | view | — | — |
 | `sessionOf(sessionId)` | view | a session id here | `PqChatUnknown` (also for an epoch id) |
 | `epochOf(epochId)` | view | an epoch ≥ 1 here | `PqChatUnknown` (also for a session id) |

@@ -19,6 +19,8 @@ abstract contract ExampleApp is GovernanceBase {
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
 }
 

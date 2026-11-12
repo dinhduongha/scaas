@@ -187,7 +187,7 @@ CREATE TABLE token (chain_key TEXT NOT NULL, address TEXT NOT NULL, decimals INT
   active INTEGER NOT NULL DEFAULT 1,                              -- 0 = intake paused on every door, indexing continues
   kind TEXT NOT NULL DEFAULT 'meta' CHECK (kind IN ('meta', 'zether', 'meta_none', 'meta_single', 'meta_multi',
     'pqz')),                                                      -- built versionOf().kind 0–4; flags 5–8: features                                                      -- PqzToken (ops.md#pqz)
-  features TEXT NOT NULL DEFAULT '',                              -- space-separated: 'receiver_fee', 'ua' (v3: registry() ≠ 0)
+  features TEXT NOT NULL DEFAULT '',                              -- space-separated: 'payee_fee', 'ua' (v3: registry() ≠ 0)
   PRIMARY KEY (chain_key, address));
   -- planned: token.reg_cache TEXT (controls, roles, compliance registry of regulated tokens) and the snapshot
   -- builder's table (indexer-feeds.md#snapshots)

@@ -35,6 +35,8 @@ contract DelayApp is GovernanceBase {
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _validBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _roleBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
@@ -343,7 +345,7 @@ contract GovDelayTest is Test {
         _grant(MANAGER);
         assertTrue(_live(MANAGER));
         vm.prank(OWNER);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertFalse(_live(MANAGER));
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
@@ -355,7 +357,7 @@ contract GovDelayTest is Test {
     function test_afterTransferTheNewOwnerProposesAgain() public {
         _grant(MANAGER);
         vm.prank(OWNER);
-        t.transferAdmin(nid(NEXT));
+        t.transferAdmin(nid(NEXT), EnvKit.codeUidOf(address(t)));
         vm.prank(NEXT);
         t.acceptAdmin();
         assertFalse(_live(MANAGER));
@@ -376,11 +378,11 @@ contract GovDelayTest is Test {
     function test_aToBToAKillsThePending() public {
         _grant(MANAGER);
         vm.prank(OWNER);
-        t.transferAdmin(nid(NEXT));
+        t.transferAdmin(nid(NEXT), EnvKit.codeUidOf(address(t)));
         vm.prank(NEXT);
         t.acceptAdmin();
         vm.prank(NEXT);
-        t.transferAdmin(nid(OWNER));
+        t.transferAdmin(nid(OWNER), EnvKit.codeUidOf(address(t)));
         vm.prank(OWNER);
         t.acceptAdmin();
         assertEq(t.admin(), nid(OWNER));
@@ -395,14 +397,14 @@ contract GovDelayTest is Test {
         _grant(MANAGER);
         _grant(OFFICER);
         vm.startPrank(OWNER);
-        t.transferAdmin(nid(NEXT));
-        t.transferAdmin(bytes32(0));
+        t.transferAdmin(nid(NEXT), EnvKit.codeUidOf(address(t)));
+        t.transferAdmin(bytes32(0), EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         vm.warp(block.timestamp + D);
         _grant(MANAGER);
         assertTrue(t.hasRole(MINT, nid(MANAGER)));
         vm.prank(OWNER);
-        t.transferAdmin(nid(NEXT)); // pending, never accepted
+        t.transferAdmin(nid(NEXT), EnvKit.codeUidOf(address(t))); // pending, never accepted
         _grant(OFFICER);
         assertTrue(t.hasRole(MINT, nid(OFFICER)));
     }
@@ -554,14 +556,14 @@ contract GovDelayTest is Test {
         NormalToken n = _token("d", 30 days);
         assertEq(n.grantDelay(), 30 days);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantDelayTooLong.selector, uint64(30 days + 1)));
-        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days + 1, address(0))), "x");
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days, address(0))), "x"));
+        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days + 1, address(0), 0, 0)), "x");
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days, address(0), 0, 0)), "x"));
         assertEq(d.grantDelay(), 30 days);
     }
 
     /// B-27: `initHolder` holds both bits from creation, whatever the delay; the powers run at once.
     function test_dexInitHoldsBothBitsWithADelay() public {
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, D, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, D, address(0), 0, 0)), "d"));
         assertEq(d.grantDelay(), D);
         assertTrue(d.hasRole(GovernanceBits.LISTING, nid(OWNER)));
         assertTrue(d.hasRole(GovernanceBits.FEE_ROUTING, nid(OWNER)));
@@ -630,12 +632,12 @@ contract GovDelayTest is Test {
         vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
         f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(w), "w");
         // governance T10 (spec §6.2): the DEX's `rescueTo` is its puller's, accepted; the DEX rescues nothing itself
-        SCaaSDex dx = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0xBEEF))), "y"));
+        SCaaSDex dx = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0xBEEF), 0, 0)), "y"));
         assertEq(DexPuller(dx.puller()).rescueTo(), address(0xBEEF));
         w.rescueTo = address(0); // positive controls
         f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(w), "w");
         c.rescueTo = address(0);
         f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "c");
-        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "x");
+        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "x");
     }
 }

@@ -38,7 +38,8 @@ contract CreateConfigKatTest is Test {
     }
 
     function _dex() internal pure returns (ISCaaSDex.DexConfig memory d) {
-        d = ISCaaSDex.DexConfig(_w(0xad), 1000, _a(0x7e), true, 3600, _a(0x5e));
+        // CTR-DEX-32 (fix2-dex): `features` (bit 29 CLOSED_MARKETS) and `lockedFeatures` set and lockable at creation
+        d = ISCaaSDex.DexConfig(_w(0xad), 1000, _a(0x7e), true, 3600, _a(0x5e), uint256(1) << 29, uint256(1) << 12);
     }
 
     function _w(uint8 b) internal pure returns (bytes32) {
@@ -143,5 +144,7 @@ contract CreateConfigKatTest is Test {
         assertEq(vm.parseJsonBool(j, string.concat(p, "listedOnly")), d.listedOnly);
         assertEq(vm.parseJsonUint(j, string.concat(p, "grantDelay")), d.grantDelay);
         assertEq(vm.parseJsonAddress(j, string.concat(p, "rescueTo")), d.rescueTo);
+        assertEq(vm.parseJsonUint(j, string.concat(p, "features")), d.features);
+        assertEq(vm.parseJsonUint(j, string.concat(p, "lockedFeatures")), d.lockedFeatures);
     }
 }

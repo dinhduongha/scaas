@@ -400,7 +400,7 @@ payment never blocks an unrelated one, and a payment request derives its own lan
 
 Who pays is a commercial choice, not a contract change: the company relayer with fee 0 (the B2B default), a fee in
 the token to an open relayer, the payee submitting the payer's signed cheque itself, or the payee co-signing to pay
-the fee ([payers](contracts/metatx.md#payers), [receiver-pays](contracts/metatx.md#receiver-pays)). A sponsorship
+the fee ([payers](contracts/metatx.md#payers), [payee fee](contracts/metatx.md#payee-fee)). A sponsorship
 policy is node configuration ([node/sponsorship.md](node/sponsorship.md)).
 
 <a id="accounts-and-keys"></a>

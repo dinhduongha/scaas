@@ -1317,7 +1317,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -1333,12 +1333,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -3277,7 +3277,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -4514,7 +4514,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -4530,12 +4530,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -6081,7 +6081,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -7073,7 +7073,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -7089,12 +7089,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -8516,7 +8516,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -9326,7 +9326,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -9342,12 +9342,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -10376,7 +10376,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -11502,7 +11502,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -11518,12 +11518,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -13262,7 +13262,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -14268,7 +14268,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -14284,12 +14284,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -15635,7 +15635,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -17250,7 +17250,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -17266,12 +17266,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -19494,7 +19494,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -21119,7 +21119,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -21135,12 +21135,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -22970,7 +22970,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -24350,7 +24350,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -24366,12 +24366,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -26077,7 +26077,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -27275,7 +27275,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -27291,12 +27291,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -28609,7 +28609,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -30123,7 +30123,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -30139,12 +30139,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -32167,7 +32167,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -33561,7 +33561,7 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeAmount",
+     "name": "PayeeFeeAmount",
      "type": "error"
     },
     {
@@ -33577,12 +33577,12 @@
        "type": "uint256"
       }
      ],
-     "name": "ReceiverFeeExpired",
+     "name": "PayeeFeeExpired",
      "type": "error"
     },
     {
      "inputs": [],
-     "name": "ReceiverFeeShape",
+     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -35212,7 +35212,7 @@
        "type": "uint256"
       }
      ],
-     "name": "UAReceiverFeePaid",
+     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {

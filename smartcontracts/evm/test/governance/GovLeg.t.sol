@@ -64,9 +64,9 @@ abstract contract GovLegRows is Test {
             // T66b: a mock release with no body module (`Catalogue.release` would deploy kind 8's)
             uint16 v = Catalogue.env(f, k8, plainEnv(address(f), address(0), f.chainUid(), address(0), false));
             vm.prank(address(uint160(uint256(f.admin()))));
-            f.deployTokenImplementation(k8, 1, v, type(FlagLeg).creationCode, "");
+            f.deployTokenImplementation(k8, 1, v, type(FlagLeg).creationCode, "", EnvKit.uidOf(address(f)));
             vm.prank(address(uint160(uint256(f.admin()))));
-            f.setTokenKindEnabled(k8, true);
+            f.setTokenKindEnabled(k8, true, EnvKit.uidOf(address(f)));
         }
         return f.createToken(k8, 1, abi.encode(features), salt);
     }

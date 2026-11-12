@@ -88,11 +88,11 @@ contract NormalZetherRegulatedTokenP is NormalZetherRegulatedTokenCore {
         return MtxPipelineLib._transferDigest(domainSeparator, t);
     }
 
-    function _pipeReceiverFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
+    function _pipePayeeFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
         address feeRecipient, uint256 validUntil)
         internal pure override returns (bytes32)
     {
-        return MtxPipelineLib._receiverFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
+        return MtxPipelineLib._payeeFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
     }
 
     function _pipePayWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax)
@@ -175,8 +175,8 @@ contract NormalZetherRegulatedTokenP is NormalZetherRegulatedTokenCore {
         return _mtxPayBody(t, auth, meta);
     }
 
-    function mtxPayReceiverFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta) external onlyDelegated returns (bool _p0) {
-        return _mtxPayReceiverFeeBody(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth, meta);
+    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta) external onlyDelegated returns (bool _p0) {
+        return _mtxPayWithPayeeFeeBody(t, payerAuth, fee, feeRecipient, pfValidUntil, payeeAuth, meta);
     }
 
     function mtxPayWithTax(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta) external onlyDelegated returns (bool _p0) {
@@ -215,8 +215,8 @@ contract NormalZetherRegulatedTokenP is NormalZetherRegulatedTokenCore {
         return _payWithTaxBody(to, amount, taxMode, tax, entryRef, meta);
     }
 
-    function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) external view onlyDelegated returns (bytes32 _p0) {
-        return _receiverFeeDigestBody(t, fee, feeRecipient, validUntil);
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) external view onlyDelegated returns (bytes32 _p0) {
+        return _payeeFeeDigestBody(t, fee, feeRecipient, validUntil);
     }
 
     function setTaxRate(uint32 ratePpm) external onlyDelegated {
@@ -424,8 +424,8 @@ contract NormalZetherRegulatedTokenA is NormalZetherRegulatedTokenCore {
         return _pendingGrantBody(bit, account);
     }
 
-    function renounceAdmin() external onlyDelegated {
-        _renounceAdminBody();
+    function renounceAdmin(bytes32 chainUid_) external onlyDelegated {
+        _renounceAdminBody(chainUid_);
     }
 
     function renounceRole(uint8 bit) external onlyDelegated {
@@ -452,8 +452,8 @@ contract NormalZetherRegulatedTokenA is NormalZetherRegulatedTokenCore {
         return _supportsInterfaceBody(id);
     }
 
-    function transferAdmin(bytes32 newAdmin) external onlyDelegated {
-        _transferAdminBody(newAdmin);
+    function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external onlyDelegated {
+        _transferAdminBody(newAdmin, chainUid_);
     }
 
     function underlyings() external view onlyDelegated returns (address[] memory us) {

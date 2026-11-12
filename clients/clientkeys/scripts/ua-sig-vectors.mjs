@@ -9,8 +9,8 @@
 // (typed data from src/evm.js, digest, the auth blob of the native key and of every derived kind above); Foundry
 // (test/ua/UAMetaTx3Vectors.t.sol) recomputes each digest on a token and verifies each auth with the real verifiers.
 // UA-5a (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06) appends the keys burn and unwrapToUA (UAMetaTransaction rows
-// of the newly UA-allowlisted calls) and receiverFee (mtxPayReceiverFee: the payer's UAMetaTransfer, the payee's
-// ReceiverFee co-signature, a derived payee under the purpose receiver-fee); the existing keys stay byte-identical.
+// of the newly UA-allowlisted calls) and payeeFee (mtxPayWithPayeeFee: the payer's UAMetaTransfer, the payee's
+// UAPayeeFee co-signature, a derived payee under the purpose payee-fee); the existing keys stay byte-identical.
 // UA-5b (dex.md CTR-DEX-25/26) writes uatrade_kat.json: UATradeOrder, the CancelUAOrder nesting it and
 // UAInvalidateNonces under the purpose trade, for the native key and every derived kind, plus three mldsa65 orders (one
 // taker, two makers) for the per-transaction caps; the other files stay byte-identical.
@@ -34,7 +34,7 @@ import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from '.
 import * as ua from '../src/ua.js';
 import {
   hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTransferTypedData, unwrapToUACall, uaTradeOrderTypedData,
-  uaInvalidateNoncesTypedData, uaReceiverFeeTypedData, cancelUAOrderTypedData, payMeta, metaPayId,
+  uaInvalidateNoncesTypedData, uaPayeeFeeTypedData, cancelUAOrderTypedData, payMeta, metaPayId,
 } from '../src/evm.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
 import { holderPopMessageV1 } from '../legacy/ua8/ua-pop-v1.js';
@@ -480,7 +480,7 @@ const m3Rows = (build) => m3Signers.map((s) => {
     structHash: hex(hashStruct(typedData.types, typedData.primaryType, typedData.message)), digest: hex(digest),
     auth: hex(s.keyData ? abiEncode(['bytes', 'bytes'], [s.keyData, sig]) : sig) };
 });
-// UA-5a: `burn` and `unwrapToUA` under a UA (lanes 8 and 9; the fee as `call`'s), and receiver-pays on the UA path
+// UA-5a: `burn` and `unwrapToUA` under a UA (lanes 8 and 9; the fee as `call`'s), and payee fee on the UA path
 const m3CallOf = (data, batch) => (from) => uaMetaTxTypedData({ ...M3, message: { from, data: hex(data), batch, nonce: 0,
   validUntil: 1800000300, mode: 0x13, relayer: M3_RELAYER, fee: 5000, feeRecipient: M3_FEE_TO } });
 const M3_UA_TO = fromHex(row('p256').ua); // the receiver of `unwrapToUA`: a registered SIGNING UA
@@ -488,29 +488,29 @@ const m3Burn = m3CallOf(concatBytes(keccak_256(utf8ToBytes('burn(uint256)')).sub
   abiEncode(['uint256'], [1000000n])), 8);
 const m3UnwrapToUA = m3CallOf(unwrapToUACall(M3_UNDERLYING, 1000000n, M3_UA_TO, 990000n), 9);
 const M3_RF = { fee: 300000, feeRecipient: M3_FEE_TO, validUntil: 1800000060 };
-/** The payment of receiver-pays: fee NONE, relayer bound (mode 0x01), its own pay lane, nonce 0 (CTR-MTX-06's shape). */
+/** The payment of payee fee: fee NONE, relayer bound (mode 0x01), its own pay lane, nonce 0 (CTR-MTX-06's shape). */
 const m3Payment = (from, to, ref) => uaMetaTransferTypedData({ ...M3, message: { from, to, value: 100000000,
   entryRef: hex(ref), batch: payLane(ref), nonce: 0, validUntil: 1800000300, mode: 0x01, relayer: M3_RELAYER } });
 /** Native: ECDSA over the digest itself, whatever the purpose; derived: abi.encode(keyData, sig over ua_msg(kind, purpose, digest)). */
 const m3Auth = (s, purpose, d) => hex(s.keyData
   ? abiEncode(['bytes', 'bytes'], [s.keyData, SCHEMES[s.name].sign(int(fromHex(row(s.name).secret)), ua.uaMessage(s.kind, tag(purpose), d))])
   : ecdsa(nativeSk, d));
-/** One receiver-pays row: `payerAuth` under `metatx` over the payment digest, `payeeAuth` under `receiver-fee` over the
- *  `ReceiverFee` digest; `sign(signer, purpose, digest)` makes either auth blob. pay-meta-tax T41 (O11): the payment's
- *  `entryRef` is the commitment of the row's `meta` (a salt-only `PayMeta`, `mtxPayReceiverFee`'s last parameter). */
+/** One payee fee row: `payerAuth` under `metatx` over the payment digest, `payeeAuth` under `payee-fee` over the
+ *  `UAPayeeFee` digest; `sign(signer, purpose, digest)` makes either auth blob. pay-meta-tax T41 (O11): the payment's
+ *  `entryRef` is the commitment of the row's `meta` (a salt-only `PayMeta`, `mtxPayWithPayeeFee`'s last parameter). */
 const rfRow = (payer, payee, sign) => {
-  const meta = payMeta({ salt: hex(keccak_256(utf8ToBytes(`scaas.metatx3.receiverFee.${payer.name}.${payee.name}`))) });
+  const meta = payMeta({ salt: hex(keccak_256(utf8ToBytes(`scaas.metatx3.payeeFee.${payer.name}.${payee.name}`))) });
   const ref = fromHex(metaPayId(meta));
   const transfer = m3Payment(payer.id, payee.id, ref);
   const paymentDigest = hashTypedData(transfer);
-  const receiverFee = uaReceiverFeeTypedData({ ...M3, message: { payment: transfer.message, ...M3_RF } });
-  const receiverFeeDigest = hashTypedData(receiverFee);
-  return { payer: payer.name, payee: payee.name, meta, transfer, paymentDigest: hex(paymentDigest), receiverFee,
-    receiverFeeDigest: hex(receiverFeeDigest), payerAuth: sign(payer, 'metatx', paymentDigest),
-    payeeAuth: sign(payee, 'receiver-fee', receiverFeeDigest) };
+  const payeeFee = uaPayeeFeeTypedData({ ...M3, message: { payment: transfer.message, ...M3_RF } });
+  const payeeFeeDigest = hashTypedData(payeeFee);
+  return { payer: payer.name, payee: payee.name, meta, transfer, paymentDigest: hex(paymentDigest), payeeFee,
+    payeeFeeDigest: hex(payeeFeeDigest), payerAuth: sign(payer, 'metatx', paymentDigest),
+    payeeAuth: sign(payee, 'payee-fee', payeeFeeDigest) };
 };
 const m3Signer = (name) => m3Signers.find((s) => s.name === name);
-const m3ReceiverFee = [...m3Signers.slice(1).map((p) => rfRow(m3Signers[0], p, m3Auth)),
+const m3PayeeFee = [...m3Signers.slice(1).map((p) => rfRow(m3Signers[0], p, m3Auth)),
   rfRow(m3Signer('p256'), m3Signer('bip340'), m3Auth)];
 const m3Out = {
   note: 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (src/evm.js typed data, src/ua.js, @noble/curves 2.4.0); '
@@ -528,14 +528,14 @@ const m3Out = {
   call: m3Rows(m3Call),
   transfer: m3Rows(m3Transfer),
   noteUA5a: 'UA-5a (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06): burn and unwrapToUA are UAMetaTransaction rows '
-    + 'as call (auth under metatx); receiverFee rows are mtxPayReceiverFee(transfer, payerAuth, receiverFee.message.fee, '
+    + 'as call (auth under metatx); payeeFee rows are mtxPayWithPayeeFee(transfer, payerAuth, payeeFee.message.fee, '
     + 'feeRecipient, validUntil, payeeAuth): native payer x every derived payee, and p256 x bip340. A native payee signs '
-    + 'receiverFeeDigest itself; a derived payee abi.encode(bytes keyData, bytes sig over ua_msg(kind, receiver-fee, '
-    + 'receiverFeeDigest)). ua-mtx-merge (CTR-MTX-30, R47): the rows are those of the merged entries mtxExecute, '
-    + 'mtxExecuteTransfer and mtxPayReceiverFee, which take each auth as UASig{keyData, sig, []} (a native id: empty keyData).',
+    + 'payeeFeeDigest itself; a derived payee abi.encode(bytes keyData, bytes sig over ua_msg(kind, payee-fee, '
+    + 'payeeFeeDigest)). ua-mtx-merge (CTR-MTX-30, R47): the rows are those of the merged entries mtxExecute, '
+    + 'mtxExecuteTransfer and mtxPayWithPayeeFee, which take each auth as UASig{keyData, sig, []} (a native id: empty keyData).',
   burn: m3Rows(m3Burn),
   unwrapToUA: m3Rows(m3UnwrapToUA),
-  receiverFee: m3ReceiverFee,
+  payeeFee: m3PayeeFee,
 };
 
 // --- pq_signatures.json (P6c): the PQ kinds on context A; stored kinds, so every auth carries an empty keyData ---
@@ -636,8 +636,8 @@ const pqM3Rows = (build) => pqRows.map((r) => {
   return { name: r.name, kind: r.kind, from: r.ua, typedData,
     structHash: hex(hashStruct(typedData.types, typedData.primaryType, typedData.message)), digest: hex(digest), auth: pqAuth(sig) };
 });
-// UA-5a: receiver-pays with an mldsa65 payer (index 0) and an mldsa65 payee (index 1, extraKeys[0]): two PQ verifies in
-// one mtxPayReceiverFee, the per-transaction cap case (metatx.md the receiver-fee paragraph)
+// UA-5a: payee fee with an mldsa65 payer (index 0) and an mldsa65 payee (index 1, extraKeys[0]): two PQ verifies in
+// one mtxPayWithPayeeFee, the per-transaction cap case (metatx.md the payee-fee paragraph)
 const pqSigner = (index) => ({ name: `mldsa65#${index}`, kp: pqKey('mldsa65', index) });
 const pqRfAuth = (s, purpose, d) => pqAuth(pqSignMsg('mldsa65', s.kp.secretKey, ua.uaMessage(0x0131, tag(purpose), d)));
 const pqRf = [pqSigner(0), pqSigner(1)].map((s) => ({ ...s, id: s.kp.ua }));
@@ -651,7 +651,7 @@ const pqOut = {
   version: 1, context: 'A', contexts: { A: contexts.A, B: contexts.B, C: contexts.C, D: contexts.D }, digest: hex(DIGEST),
   mnemonic: PQ_MNEMONIC, kinds: pqRows, extraKeys: pqExtra, msig: { treasury: pqTreasury, hybrid: pqHybrid },
   metatx3: { token: M3.contract, call: pqM3Rows(m3Call), transfer: pqM3Rows(m3Transfer),
-    receiverFee: [rfRow(pqRf[0], pqRf[1], pqRfAuth)] },
+    payeeFee: [rfRow(pqRf[0], pqRf[1], pqRfAuth)] },
 };
 
 // --- write ---
@@ -753,7 +753,7 @@ const fuzzDiff = fuzzCases.filter((c) => c.noble !== c.valid).length;
 const negs = derivedRows.reduce((n, r) => n + r.negatives.length, 0);
 console.log(`signatures.json: ${derivedRows.length} derived kinds (${negs} negatives), native ${nativeSigs.length}+${nativeNegatives.length}, msig ${sets.length} sets, ${bip340Official.length} BIP-340 official, ${ed25519Rfc8032.length} ed25519Rfc8032; `
   + `ed25519_fuzz.json: ${fuzzCases.length} cases (${fuzzValid} valid, noble zip215:false alone differs on ${fuzzDiff}); `
-  + `metatx3.json: ${m3Out.call.length} + ${m3Out.transfer.length} + ${m3Out.burn.length} + ${m3Out.unwrapToUA.length} + ${m3Out.receiverFee.length} rows; `
+  + `metatx3.json: ${m3Out.call.length} + ${m3Out.transfer.length} + ${m3Out.burn.length} + ${m3Out.unwrapToUA.length} + ${m3Out.payeeFee.length} rows; `
   + `pq_signatures.json: ${pqRows.length} kinds (${pqRows.reduce((n, r) => n + r.negatives.length, 0)} negatives), msig 2 structures, `
-  + `metatx3 ${pqOut.metatx3.call.length} + ${pqOut.metatx3.transfer.length} + ${pqOut.metatx3.receiverFee.length}; `
+  + `metatx3 ${pqOut.metatx3.call.length} + ${pqOut.metatx3.transfer.length} + ${pqOut.metatx3.payeeFee.length}; `
   + `uatrade_kat.json: ${utOut.rows.length} rows + ${utOut.pq.length} mldsa65; written to ${OUT}`);

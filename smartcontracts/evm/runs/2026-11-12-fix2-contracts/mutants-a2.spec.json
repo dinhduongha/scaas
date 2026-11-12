@@ -1,0 +1,114 @@
+[
+ {
+  "id": "A2-1 UAAdmin.transferAdmin drops the word",
+  "file": "src/governance/UAAdmin.sol",
+  "old": "        _requireChainWord(chainUid_);\n",
+  "new": "",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_adminEntries"
+ },
+ {
+  "id": "A2-2 factory word hook empty",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "    function _requireChainWord(bytes32 chainUid_) internal view override {\n        _requireOnChain(chainUid_);\n    }",
+  "new": "    function _requireChainWord(bytes32 chainUid_) internal view override {}",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_adminEntries"
+ },
+ {
+  "id": "A2-3 registry word hook empty",
+  "file": "src/regulated/ComplianceRegistry.sol",
+  "old": "        if (chainUid_ != chainUid) revert ChainUidMismatch(chainUid, chainUid_);\n",
+  "new": "",
+  "path": "test/as/RegistryAdmin.t.sol",
+  "test": "test_transferAdmin_siblingWordRefused"
+ },
+ {
+  "id": "A2-4 registry constructor takes word 0",
+  "file": "src/regulated/ComplianceRegistry.sol",
+  "old": "        if (chainUid_ == bytes32(0)) revert ChainUidZero();\n",
+  "new": "",
+  "path": "test/as/RegistryAdmin.t.sol",
+  "test": "test_constructor_chainUidZero"
+ },
+ {
+  "id": "A2-5 governed transfer without the word",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        GovernanceLib.transferAdmin(newAdmin, _adminOnChain(chainUid_));",
+  "new": "        GovernanceLib.transferAdmin(newAdmin, _govSubject());",
+  "path": "test/governance/AdminNames.t.sol",
+  "test": "test_kind0_NormalToken"
+ },
+ {
+  "id": "A2-6 governed word check dropped",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        if (chainUid_ != u) revert IAdmin.ChainUidMismatch(u, chainUid_);\n",
+  "new": "",
+  "path": "test/governance/AdminNames.t.sol",
+  "test": "test_kind0_NormalToken"
+ },
+ {
+  "id": "A2-7 publishTokenEnv unbound",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "    function publishTokenEnv(TokenKind kind, uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env)\n        external onlyAdmin onChain(chainUid_)",
+  "new": "    function publishTokenEnv(TokenKind kind, uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env)\n        external onlyAdmin configured",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_adminEntries"
+ },
+ {
+  "id": "A2-8 publishDexEnv unbound",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "    function publishDexEnv(uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env)\n        external onlyAdmin onChain(chainUid_)",
+  "new": "    function publishDexEnv(uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env)\n        external onlyAdmin configured",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_adminEntries"
+ },
+ {
+  "id": "A2-9 publishClassEnv unbound",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "        IFactoryToken.Env calldata env) external onlyAdmin onChain(chainUid_)",
+  "new": "        IFactoryToken.Env calldata env) external onlyAdmin configured",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_adminEntries"
+ },
+ {
+  "id": "A2-10 revokeApproval unbound",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "    function revokeApproval(bytes32 key, bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {",
+  "new": "    function revokeApproval(bytes32 key, bytes32 chainUid_) external onlyAdmin configured {",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_adminEntries"
+ },
+ {
+  "id": "A2-11 setChainEntries unbound",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "    function setChainEntries(ChainEntries calldata entries, bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {",
+  "new": "    function setChainEntries(ChainEntries calldata entries, bytes32 chainUid_) external onlyAdmin configured {",
+  "path": "test/v2/FactoryDirectory.t.sol",
+  "test": "test_setChainEntries_siblingWordRefused"
+ },
+ {
+  "id": "A2-12 router signs no chainUid in UASetChainEntries",
+  "file": "src/governance/GovernanceRouter.sol",
+  "old": "abi.encode(keccak256(abi.encode(T.CHAIN_ENTRIES, entries)), chainUid),",
+  "new": "abi.encode(keccak256(abi.encode(T.CHAIN_ENTRIES, entries)), bytes32(0)),",
+  "path": "test/governance/GovRouterAdmin.t.sol",
+  "test": "test_binding_SetChainEntries"
+ },
+ {
+  "id": "A2-13 router signs a flat entries word",
+  "file": "src/governance/GovernanceRouter.sol",
+  "old": "abi.encode(keccak256(abi.encode(T.CHAIN_ENTRIES, entries)), chainUid),",
+  "new": "abi.encode(keccak256(abi.encode(entries)), chainUid),",
+  "path": "test/governance/GovRouterAdmin.t.sol",
+  "test": "test_binding_SetChainEntries"
+ },
+ {
+  "id": "A2-14 mtxTransferAdmin forwards a zero word",
+  "file": "src/governance/GovernanceRouterBase.sol",
+  "old": "            abi.encode(newAdmin, chainUid), auth);",
+  "new": "            abi.encode(newAdmin, bytes32(0)), auth);",
+  "path": "test/governance/GovRouter.t.sol",
+  "test": "test_transferAdmin_siblingWordRefused"
+ }
+]

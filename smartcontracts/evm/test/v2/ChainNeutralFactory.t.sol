@@ -171,7 +171,7 @@ contract ChainNeutralFactoryTest is Test {
         EnvKit.genesis(UID_);
         GovernanceRouter other = new GovernanceRouter(keccak256("other"), address(0), address(0), false);
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("other")));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, keccak256("other")));
         g.configureChain(UID_, 0, address(other), address(other).codehash, 0, bytes32(0));
         vm.prank(registrar);
         g.configureChain(UID_, 0, address(router), address(router).codehash, 0, bytes32(0));
@@ -185,13 +185,13 @@ contract ChainNeutralFactoryTest is Test {
         bytes memory code = type(NormalToken).creationCode;
         vm.startPrank(registrar);
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
-        g.publishTokenEnv(NORMAL, 1, e);
+        g.publishTokenEnv(NORMAL, 1, EnvKit.uidOf(address(g)), e);
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
-        g.publishDexEnv(1, e);
+        g.publishDexEnv(1, EnvKit.uidOf(address(g)), e);
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
-        g.deployTokenImplementation(NORMAL, 1, 1, code, "");
+        g.deployTokenImplementation(NORMAL, 1, 1, code, "", EnvKit.uidOf(address(g)));
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
-        g.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, "");
+        g.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, "", EnvKit.uidOf(address(g)));
         vm.stopPrank();
         vm.expectRevert(IOpenFactory.ChainNotConfigured.selector);
         g.createToken(NORMAL, 1, _cfg(alice), "s");
@@ -202,7 +202,7 @@ contract ChainNeutralFactoryTest is Test {
         assertEq(g.latestTokenEnvVersion(NORMAL), 0, "views answer");
         EnvKit.configure(g, UID_, 0, address(0)); // positive control
         vm.prank(registrar);
-        g.publishTokenEnv(NORMAL, 1, e);
+        g.publishTokenEnv(NORMAL, 1, EnvKit.uidOf(address(g)), e);
     }
 
     // ------------------------------------------------------------------ CREATE3 (spec §4)
@@ -302,7 +302,7 @@ contract ChainNeutralFactoryTest is Test {
         (, address want) = _expect(address(f), nid(alice), 2, 0, "d");
         vm.recordLogs();
         vm.prank(alice);
-        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, address(0xD7), false, 0, address(0))), "d");
+        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, address(0xD7), false, 0, address(0), 0, 0)), "d");
         assertEq(d, want);
         assertEq(SCaaSDex(d).chainUid(), UID_);
         assertEq(SCaaSDex(d).SMART_KEY_ACCOUNT_IMPL(), address(0xBEEF));
@@ -368,6 +368,7 @@ contract ChainNeutralFactoryTest is Test {
         assertEq(gb.chainUid(), uidB);
         assertEq(SmartKeyAccountFactory(b.smartKeyAccountFactory).chainUid(), uidB);
         assertEq(ComplianceRegistry(b.complianceRegistry).govRouter(), b.govRouter);
+        assertEq(ComplianceRegistry(b.complianceRegistry).chainUid(), uidB, "the registry's chain word (CTR-GOV-27)");
     }
 
     /// Chain `uid`'s shared contracts by CREATE2 (salt 0, so an argument moves the address), the factory, `configureChain`
@@ -379,12 +380,12 @@ contract ChainNeutralFactoryTest is Test {
         reg.setSmartKeyCloneHash(EnvKit.cloneHash(skaf.IMPLEMENTATION()));
         GovernanceRouter r = new GovernanceRouter{salt: 0}(uid, address(reg), skaf.IMPLEMENTATION(), false);
         RelayFeeRouter relay = new RelayFeeRouter{salt: 0}();
-        ComplianceRegistry c = new ComplianceRegistry{salt: 0}(nid(registrar), address(r));
+        ComplianceRegistry c = new ComplianceRegistry{salt: 0}(nid(registrar), address(r), uid);
         g = new OpenFactory{salt: 0}(nid(registrar));
         vm.startPrank(registrar);
         g.configureChain(uid, 0, address(r), address(r).codehash, 0, bytes32(0));
-        g.setChainEntries(address(relay), address(relay).codehash, relay.EXECUTOR().codehash, address(c), address(c).codehash,
-            address(skaf), address(skaf).codehash, address(0), bytes32(0));
+        g.setChainEntries(IOpenFactory.ChainEntries(address(relay), address(relay).codehash, relay.EXECUTOR().codehash,
+            address(c), address(c).codehash, address(skaf), address(skaf).codehash, address(0), bytes32(0)), uid);
         vm.stopPrank();
         d = g.directory();
         assertEq(d.uaRegistry, address(reg));

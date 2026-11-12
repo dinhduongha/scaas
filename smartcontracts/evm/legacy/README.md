@@ -392,3 +392,34 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   (2026-11-11): no contract called them; every contract hashes through `MtxPipelineLib._structHash` / `_namedHash` and
   checks the mode in `_checkEnvelope`, and the tests now reproduce digests through those (`test/helpers/MtxHash.sol`).
   `MetaTxLib.canon` stays in `src/` (Zether and PQZ use it). Not built.
+- `ua-mtx-fix2-contracts/`: the Safe-style one-level ERC-1271 wrap of `SmartKeyAccount` and `MandateWallet` (commit
+  `be8d0772`, B P3-2): `src/common/Erc1271SafeWrap.sol` (`MetaTxLib.ERC1271_MESSAGE_TYPEHASH`, the wallets' `erc1271Digest`
+  and `isValidSignature` bodies), `test/account/Erc1271SafeWrap.t.sol` (its KAT writer and tests) and
+  `test/vectors/erc1271_kat.json`; superseded by ERC-7739 the same day (owner 2026-11-12: "only ERC-7739"; a wallet shows
+  only `hash: 0x…` for the Safe-style message). clientkeys' `erc1271Digest` / `erc1271TypedData` and their test are in
+  `clients/clientkeys/legacy/ua-mtx-fix2-contracts/`. Not built.
+  `src/dex/DexPuller.sol` as it stood at `829006be`: `DexConfig.rescueTo` 0 meant no rescue (`RescueOff()`); superseded
+  by CTR-GOV-25 (owner 2026-11-12: 0 is the constant dev address `SCAAS_DEV_RESCUE`). Not built.
+  The admin entries without the chain word (Fable recheck-2 P3-1, owner 2026-11-12, CTR-GOV-27), as they stood at
+  `a18e9464`: `src/governance/AdminEntriesV1.sol` (`renounceAdmin()`, the three release deploys without the last `chainUid_`,
+  `mtxRenounceAdmin` and its `UARenounceAdmin` typehash without `chainUid`), the selector-audit rows they had
+  (`test/vectors/selector_audit.json`); the old typed row in `smartcontracts/vectors/typed/legacy/ua-mtx-fix2-contracts/`,
+  clientkeys' and ua-rs's old table rows in `clients/{clientkeys,ua-rs}/legacy/ua-mtx-fix2-contracts/`. Not built.
+  The receiver-fee names (owner 2026-11-12, CTR-MTX-86: "payee fee", "payee" consistently), as they stood at `202a05a9`:
+  `src/metatx/ReceiverFeeV1.sol` (`mtxPayReceiverFee`, `receiverFeeDigest`, `UAReceiverFeePaid`, `ReceiverFee*`, the
+  `UAReceiverFee` typehash, the purpose `receiver-fee`), the selector-audit rows `mtxPayReceiverFee` of every kind
+  (`test/vectors/selector_audit.json`); the old typed row in `smartcontracts/vectors/typed/legacy/ua-mtx-fix2-contracts/`,
+  clientkeys', zether-prover's and the node's old names in their `legacy/ua-mtx-fix2-contracts/`. Not built.
+  The rest of the admin entries without the chain word (CTR-GOV-27, owner 2026-11-12 "đồng ý."), as they stood at
+  `aeb1da09`: `src/governance/AdminEntriesV2.sol` (`transferAdmin(bytes32)` of every `IAdmin` contract, `OpenFactory`'s
+  three env publishes, `revokeApproval(bytes32)` and nine-parameter `setChainEntries`, the router's ops and typehashes of
+  the same; `ComplianceRegistry` then took no chain word), their selector-audit rows (`test/vectors/selector_audit.json`);
+  the old typed rows in `smartcontracts/vectors/typed/legacy/ua-mtx-fix2-contracts/typed_ops-a2.json`, clientkeys' and
+  ua-rs's old table rows in `clients/{clientkeys,ua-rs}/legacy/ua-mtx-fix2-contracts/`. Not built.
+- `ua-mtx-fix2-dex/`: the DEX as it stood at `a18e9464` (`src/dex/SCaaSDex.sol`, `src/dex/SCaaSDexLiquidityModule.sol`) with
+  the release-deprecation reads: `_classify` (SCaaS iff registered **and** not deprecated, a `setMarket` snapshot) and the
+  liquidity path's live read (`_deprecatedNow`, Fable D P3-4: a deprecated input made the DEX verify `h` itself); the tests
+  that held them (`test/liquidity/DexLiquidity.t.sol` `test_deprecatedRelease_dexVerifiesItself`, `test/v2/Dex.t.sol`
+  `test_classification_deprecatedAndUnregisteredAreOutside`, `test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller`)
+  and the mutant specs and results `runs/mutants-d-p3-4*.json`. Superseded by the owner's ruling of 2026-11-12 (the DEX never
+  reads a release's deprecation; CTR-DEX-18, CTR-DEX-30 Changes). Not built.

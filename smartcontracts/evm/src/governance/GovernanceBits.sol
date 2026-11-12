@@ -47,6 +47,11 @@ library GovernanceBits {
     ///      by `enableFeature`, at once; disabled by `disableFeature` after `grantDelay` (in the regulated delayed set).
     ///      Bits 8 and 9 are the token's own lists (`setAllowed`, `setDenied`): powers, any holder.
     uint8 internal constant KYC = 28;
+    /// @dev The DEX's closed markets (owner 2026-11-12): on, `mtxSettle` and the hybrids take only a listed pair and the
+    ///      exchange path only known tokens (`setMarket`); off, any pair and any token. A capability, no holder; off by
+    ///      default, set and locked at creation only (`DexConfig.features` / `lockedFeatures`), never enabled later; the
+    ///      admin's `disableFeature` opens the markets for good unless locked.
+    uint8 internal constant CLOSED_MARKETS = 29;
     /// @dev The bits `enableFeature` may switch on (spec §5.2): 8, 9, 28, each only where the kind's mask holds it and not
     ///      locked. 8 and 9 are never disabled (`FeatureNotDisableable`). No plain kind's mask holds them.
     uint256 internal constant ENABLEABLE = (1 << ALLOWLIST) | (1 << DENYLIST) | (1 << KYC);
@@ -71,7 +76,8 @@ library GovernanceBits {
 
     // Per kind (CTR-TOK-22, spec §1.2). No plain kind takes a bit of 5-9 or 28: each refuses them as invalid for the kind;
     // the regulated kinds 8-13 hold them (CTR-AS-17, CTR-GOV-03, CTR-GOV-24), and bit 22 (CTR-GOV-20).
-    /// @dev `RESCUABLE` on every token kind (spec §6.2, CTR-GOV-06): set at creation iff `rescueTo != 0`, always locked.
+    /// @dev `RESCUABLE` on every token kind (spec §6.2, CTR-GOV-06): set at creation, always locked;
+    ///      `rescueTo` comes only with it, and 0 there stores `SCAAS_DEV_RESCUE` (CTR-GOV-25).
     uint256 internal constant NORMAL_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE);
     /// @dev `MINTABLE` makes a hybrid (spec §5.2, CTR-GOV-12): set at creation iff `maxSupply != 0`.
     uint256 internal constant WRAPPED_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE)
@@ -86,6 +92,8 @@ library GovernanceBits {
     uint256 internal constant TOKEN_SCALAR = 1 << MINTABLE;
 
     uint256 internal constant DEX_BITS = (1 << LISTING) | (1 << FEE_ROUTING);
+    /// @dev The DEX's valid bits: its two powers and the capability `CLOSED_MARKETS`.
+    uint256 internal constant DEX_VALID = DEX_BITS | (1 << CLOSED_MARKETS);
 
     /// @notice Round 3s, spec §5.5 (Fable P2-2): the bits of 8, 9, 28 that can still be switched on: valid for the kind, not
     ///         set, not locked (off), the admin not 0, and for 28 a compliance registry (it cannot be set after creation).

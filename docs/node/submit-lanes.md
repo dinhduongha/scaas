@@ -657,7 +657,7 @@ has `Mtx::normalize(&mut self, fee_recipient: Option<Address>)`, called **once, 
 request, a job or an envelope**: BUILT in gateway `post_metatx` (`work_of`) and in `submit::work_from_job` (the outbox submitter and
 the EVM/Hedera adapters' `build`, with `[[chains]] fee_recipient`); the mesh work builder is SPECIFIED. The outbox's
 in-flight key is the typed digest the node computes locally from the op (typed-signing N1), never the job's `digest` field; for a derived-UA or contract signer, whose claim of `contract` the calldata cannot check, it is that digest together with `keccak(to ‖ data)`, both free or neither ([job-api.md](job-api.md#named-entries)). A job-API job built by an ERP with fee 0 and
-recipient 0 is unchanged in effect. A job carrying `receiver_fee` is refused (`dead`), never relayed without it. BUILT: the guard
+recipient 0 is unchanged in effect. A job carrying `payee_fee` is refused (`dead`, `PAYEE_FEE_REFUSED`; the old name `receiver_fee`: `RECEIVER_FEE_REFUSED`) on every family (the other adapters refuse it before any build), never relayed without it. BUILT: the guard
 ([NODE-JOB-20](job-api.md#NODE-JOB-20)) runs in `Submitter::submit` before the local digest, simulation or signing; a `MetaTransfer` and the
 order and wrap entries need a registered token (an entry also a listed DEX), else `TOKEN_NOT_SERVED`; the token lists refresh every
 15 s with the breaker sample. Jobs rebuilt from the tracked journal after a restart pass the guard too and keep their sent transaction's gas limit (`max_gas_per_tx` capped by the block gas limit, and by 2^24 before Amsterdam, when the RPC no longer knows it; [Amsterdam gas](#amsterdam-gas)); a refused
@@ -676,7 +676,7 @@ the batch's `outer_tx` row, journals every item with the same `lane_label`, `out
 A failing batch is re-simulated
 and resubmitted without the failing item (`dead` with its decoded reason; the item counts toward
 [NODE-LANE-15](#NODE-LANE-15)). Measured cost is split evenly over the items (remainder to the lowest `uid`), so
-`usage_day` sums to the fee paid. **Never batched**: unwrap ops, `receiver_fee` jobs, `call` jobs, sponsored jobs
+`usage_day` sums to the fee paid. **Never batched**: unwrap ops, `payee_fee` jobs, `call` jobs, sponsored jobs
 (their cap is per tx, [NODE-SPN-02](sponsorship.md#NODE-SPN-02)), PQZ envelopes. Flush: 50 items or 3 s. One journal
 transaction per outer tx keeps journal-before-broadcast and `plan()` unchanged; batched jobs wait ≤ 3 s.
 
@@ -713,8 +713,8 @@ covers a first-use lane PDA's rent). The router, the registered token, the shape
 the payer's own lane `(from, batch)` at its signed nonce since pay-meta-tax O4 (EVM; each non-EVM family keeps its
 own once-per-`ref` rule until its round), relayer = router, fee mode NONE) and the inner target's chain are checked
 before the simulation; a refusal is terminal. The gas floor
-of a contract signer's job is per job: `guard::erc1271_floor(len)` = 21,000 + 64 per calldata byte + 446,904 (forge's least relayer
-CALL gas of a `SmartKeyAccount`-signed `mtxExecute`, two frames below the token after the split) + 10 %, 512,594 at zero calldata;
+of a contract signer's job is per job: `guard::erc1271_floor(len)` = 21,000 + 64 per calldata byte + 446,912 (forge's least relayer
+CALL gas of a `SmartKeyAccount`-signed `mtxExecute`, two frames below the token after the split) + 10 %, 512,603 at zero calldata (446,904 / 512,594 before the ERC-7739 signature, B P3-2);
 an anvil run sends exactly that gas and it settles. EVM payers are ids since the `ua*` / `mtx*` merge (node-ua-jobs 2026-10-30; one `relay` on ids): it takes the same
 checks, and after the simulation the fee × `params.relay_fee.min_wei_value[token]` must reach the quote (the gas limit
 × the job's fee ceiling, 2 × its first max fee per gas, + 2 × the OP-stack L1 data fee; required for a derived payer, whose verify

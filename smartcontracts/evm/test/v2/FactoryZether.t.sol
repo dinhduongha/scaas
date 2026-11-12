@@ -111,7 +111,7 @@ contract FactoryZetherTest is Test {
     function _release(IOpenFactory.TokenKind k, bytes memory code, address[] memory ms) internal returns (address) {
         uint16 v = Catalogue.env(f, k, withModules(pinned(plainEnv(address(f), address(0), UID_, address(0), false), k), ms));
         vm.prank(registrar);
-        return f.deployTokenImplementation(k, 1, v, code, abi.encode(ImplArgs(ms)));
+        return f.deployTokenImplementation(k, 1, v, code, abi.encode(ImplArgs(ms)), EnvKit.uidOf(address(f)));
     }
 
     function _conf() internal pure returns (IFactoryToken.TokenConfig memory c) {
@@ -129,8 +129,8 @@ contract FactoryZetherTest is Test {
 
     function _enable() internal {
         vm.startPrank(registrar);
-        f.setTokenKindEnabled(NZ, true);
-        f.setTokenKindEnabled(UZ, true);
+        f.setTokenKindEnabled(NZ, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(UZ, true, EnvKit.uidOf(address(f)));
         vm.stopPrank();
     }
 
@@ -142,7 +142,7 @@ contract FactoryZetherTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, UZ));
         f.createToken(UZ, 1, abi.encode(_wrapped()), "a");
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        f.setTokenKindEnabled(NZ, true);
+        f.setTokenKindEnabled(NZ, true, EnvKit.uidOf(address(f)));
         vm.recordLogs();
         _enable();
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -154,7 +154,7 @@ contract FactoryZetherTest is Test {
         address w = f.createToken(UZ, 1, abi.encode(_wrapped()), "on");
         assertEq(f.getWrapper(nid(address(this)), address(usd)), w, "the index reads underlyings() after initialize");
         vm.prank(registrar);
-        f.setTokenKindEnabled(NZ, false);
+        f.setTokenKindEnabled(NZ, false, EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NZ));
         f.createToken(NZ, 1, abi.encode(_conf()), "off again");
     }
@@ -212,8 +212,8 @@ contract FactoryZetherTest is Test {
     /// Chain-neutral releases (plan T72): on the clones (a release carries no env and builds no domain).
     function test_domainNameHook() public {
         vm.startPrank(registrar);
-        f.setTokenKindEnabled(NZ, true);
-        f.setTokenKindEnabled(UZ, true);
+        f.setTokenKindEnabled(NZ, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(UZ, true, EnvKit.uidOf(address(f)));
         vm.stopPrank();
         address t = f.createToken(NZ, 1, abi.encode(_conf()), "dom");
         address w = f.createToken(UZ, 1, abi.encode(_wrapped()), "dom");

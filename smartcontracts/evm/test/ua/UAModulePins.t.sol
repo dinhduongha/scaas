@@ -59,47 +59,47 @@ contract UAModulePinsTest is Test {
     function test_m_releaseModuleNotPinned() public {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
         assertEq(ms.length, 3);
-        f.publishTokenEnv(NORMAL, 1, _env(_first(ms, 2)));
-        f.publishTokenEnv(NORMAL, 2, _env(ms));
+        f.publishTokenEnv(NORMAL, 1, EnvKit.uidOf(address(f)), _env(_first(ms, 2)));
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), _env(ms));
         bytes memory code = type(NormalToken).creationCode;
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, ms[2]));
-        f.deployTokenImplementation(NORMAL, 1, 1, code, args);
-        address impl = f.deployTokenImplementation(NORMAL, 1, 2, code, args); // control
+        f.deployTokenImplementation(NORMAL, 1, 1, code, args, EnvKit.uidOf(address(f)));
+        address impl = f.deployTokenImplementation(NORMAL, 1, 2, code, args, EnvKit.uidOf(address(f))); // control
         assertEq(NormalToken(impl).modules(), ms);
     }
 
     /// `createTokenUnregistered` checks the kind's latest env: one without the third module refuses, one with it creates.
     function test_m_unregisteredModuleNotPinned() public {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
-        f.publishTokenEnv(NORMAL, 1, _env(ms));
-        address impl = f.deployTokenImplementation(NORMAL, 1, 1, type(NormalToken).creationCode, args);
-        f.publishTokenEnv(NORMAL, 2, _env(_first(ms, 2)));
+        f.publishTokenEnv(NORMAL, 1, EnvKit.uidOf(address(f)), _env(ms));
+        address impl = f.deployTokenImplementation(NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f)));
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), _env(_first(ms, 2)));
         bytes memory init = abi.encode(normalInit("U", "U", 0, 1, address(this), address(0)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, ms[2]));
         f.createTokenUnregistered(NORMAL, impl, init, "u");
-        f.publishTokenEnv(NORMAL, 3, _env(ms));
+        f.publishTokenEnv(NORMAL, 3, EnvKit.uidOf(address(f)), _env(ms));
         assertTrue(f.createTokenUnregistered(NORMAL, impl, init, "u").code.length != 0); // control
     }
 
     /// `deployDexImplementation`: a DEX env without D refuses the release, one with D deploys it.
     function test_m_dexModuleNotPinned() public {
         (address[] memory ms, bytes memory args) = deployDexModules(address(f));
-        f.publishDexEnv(1, _dexEnv(new address[](0)));
-        f.publishDexEnv(2, _dexEnv(ms));
+        f.publishDexEnv(1, EnvKit.uidOf(address(f)), _dexEnv(new address[](0)));
+        f.publishDexEnv(2, EnvKit.uidOf(address(f)), _dexEnv(ms));
         bytes memory code = type(SCaaSDex).creationCode;
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, ms[0]));
-        f.deployDexImplementation(1, 1, code, args);
-        address impl = f.deployDexImplementation(1, 2, code, args); // control
+        f.deployDexImplementation(1, 1, code, args, EnvKit.uidOf(address(f)));
+        address impl = f.deployDexImplementation(1, 2, code, args, EnvKit.uidOf(address(f))); // control
         assertEq(SCaaSDex(impl).modules(), ms);
     }
 
     /// A release without `modules()` is refused; the same env takes NormalToken (the control above, env 2's form).
     function test_m_modulesUnreadable() public {
-        f.publishTokenEnv(NORMAL, 1, _env(new address[](0)));
+        f.publishTokenEnv(NORMAL, 1, EnvKit.uidOf(address(f)), _env(new address[](0)));
         bytes memory code = type(NoModulesRelease).creationCode;
         address at = vm.computeCreate2Address(keccak256(abi.encode(NORMAL, uint64(1))),
             keccak256(bytes.concat(code, abi.encode(address(f), bytes("")))), address(f));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModulesUnreadable.selector, at));
-        f.deployTokenImplementation(NORMAL, 1, 1, code, "");
+        f.deployTokenImplementation(NORMAL, 1, 1, code, "", EnvKit.uidOf(address(f)));
     }
 }

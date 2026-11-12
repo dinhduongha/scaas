@@ -52,6 +52,8 @@ contract TopBandApp is GovernanceBase {
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _validBits() internal pure override returns (uint256) { return BITS; }
     function _roleBits() internal pure override returns (uint256) { return BITS; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
@@ -99,8 +101,8 @@ contract GovDexForwardHolder {
         try dex.grantRole(GovernanceBits.LISTING, other) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
         try dex.revokeRole(GovernanceBits.LISTING, bytes32(uint256(uint160(address(this))))) { errs.push(0); }
         catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.transferAdmin(other) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.renounceAdmin() { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.transferAdmin(other, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.renounceAdmin(EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
     }
 }
 
@@ -357,9 +359,9 @@ contract GovGrantTest is Test {
         vm.startPrank(OWNER);
         t.grantRole(MINT, nid(MANAGER));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, MINT));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         t.revokeRole(MINT, nid(MANAGER));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(t.admin(), bytes32(0));
     }
@@ -368,7 +370,7 @@ contract GovGrantTest is Test {
         NormalToken l = _token("l", 1 << MINT);
         vm.startPrank(OWNER);
         l.grantRole(MINT, nid(MANAGER));
-        l.renounceAdmin();
+        l.renounceAdmin(EnvKit.codeUidOf(address(l)));
         vm.stopPrank();
         assertEq(l.admin(), bytes32(0));
         vm.prank(MANAGER);
@@ -379,7 +381,7 @@ contract GovGrantTest is Test {
         vm.startPrank(OWNER);
         t.grantRole(MINT, nid(MANAGER));
         t.disableFeature(MINT);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(t.admin(), bytes32(0));
     }
@@ -538,7 +540,7 @@ contract GovGrantTest is Test {
 
     function _dexOf(bytes32 salt) internal returns (SCaaSDex) {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), salt));
+        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), salt));
     }
 
     /// `hasRole` is true for a limited holder: every power on the wrapped kinds must go through `use`.
@@ -565,7 +567,7 @@ contract GovGrantTest is Test {
 
     function test_dexPowerIsBound() public {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         assertTrue(d.hasRole(GovernanceBits.LISTING, nid(OWNER)));
         IGovernance.GrantTerms memory g = _open();
         g.maxUses = 1;
@@ -608,7 +610,7 @@ contract GovGrantTest is Test {
     function test_dexInitHoldsBothBitsThroughInitHolder() public {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         vm.startStateDiffRecording();
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(_libCalls(acc, GovernanceLib.initHolder.selector), 2, "initHolder, once per bit");
         assertEq(_libCalls(acc, GovernanceLib.grantRole.selector), 0, "no grantRole at init");
@@ -618,7 +620,7 @@ contract GovGrantTest is Test {
         assertEq(d.holderCount(GovernanceBits.FEE_ROUTING), 1);
         assertEq(d.admin(), nid(OWNER));
         // no owner: no holder either
-        d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(0, 0, address(0xAA), false, 0, address(0))), "d0"));
+        d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(0, 0, address(0xAA), false, 0, address(0), 0, 0)), "d0"));
         assertEq(d.holderCount(GovernanceBits.LISTING), 0);
         assertEq(d.holderCount(GovernanceBits.FEE_ROUTING), 0);
     }
@@ -626,7 +628,7 @@ contract GovGrantTest is Test {
     /// B-31: every `GovernanceBase` contract answers `IGovernance` and `IERC165`, the DEX too.
     function test_dexAnswersIGovernance() public {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         assertTrue(d.supportsInterface(type(IGovernance).interfaceId));
         assertTrue(d.supportsInterface(type(IERC165).interfaceId));
         assertFalse(d.supportsInterface(0xffffffff));
@@ -638,7 +640,7 @@ contract GovGrantTest is Test {
     function test_dexForwardedGovernanceRefusedInsideASettlement() public {
         GovDexForwardHolder h = new GovDexForwardHolder();
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         h.setDex(d);
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.features, c.initialSupply, c.initialHolder) = ("A", "A", 1, 1e6, vm.addr(ALICE_PK));
@@ -669,7 +671,7 @@ contract GovGrantTest is Test {
     function test_dexPowerRefusedInsideASettlement() public {
         GovDexHolder h = new GovDexHolder();
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         h.setDex(d);
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.features, c.initialSupply, c.initialHolder) = ("A", "A", 1, 1e6, vm.addr(ALICE_PK));
@@ -752,12 +754,12 @@ contract GovGrantTest is Test {
     function _renounceRefused() internal {
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, MINT));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
     }
 
     function _renounce() internal {
         vm.prank(OWNER);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
     }
 

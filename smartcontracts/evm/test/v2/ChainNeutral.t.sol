@@ -67,7 +67,7 @@ contract ChainNeutralTest is Test {
             address(0))), "t");
         s.unregistered = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, s.normalRelease,
             abi.encode(normalInit("U", "U", 6, 0, alice, address(0))), "u");
-        s.dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, alice, false, 0, address(0))), "d");
+        s.dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, alice, false, 0, address(0), 0, 0)), "d");
         vm.stopPrank();
         s.tokenCode = s.token.codehash;
         s.dexCode = s.dex.codehash;
@@ -200,9 +200,9 @@ contract ChainNeutralTest is Test {
     function _plainToken(OpenFactory f, address registrar) internal returns (address t) {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), ""); // T66b: its body modules, pinned
         vm.startPrank(registrar);
-        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1,
+        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)),
             withModules(plainEnv(address(f), address(0), bytes32(0), address(0), false), ms));
-        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
+        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f)));
         vm.stopPrank();
         vm.prank(alice);
         t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("T", "T", 6, 1e12, alice, address(0))),

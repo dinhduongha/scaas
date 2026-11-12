@@ -3,11 +3,11 @@ export { normalizeMnemonic, wordsToEntropy, seedFromEntropy, deriveKey, signDige
 export { createVault, openVault, enablePrf, needsRewrap, rewrapPin, checkPassphrase, SCRYPT } from './vault.js';
 export { SeedBackup } from './backup.js';
 export {
-  hashTypedData, secpSubjectKey, passkeySubjectKey, accountSignature, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
+  hashTypedData, secpSubjectKey, passkeySubjectKey, accountSignature, erc7739TypedData, erc7739Signature, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
   checkCall, checkOp, checkTradeOrder, checkWrapOrder, checkUAWrapOrder, checkCancel, payLane, uaTradeOrderTypedData, tradeOrderTypedData, cancelUAOrderTypedData,
   cancelUAWrapOrderTypedData, invalidateNoncesTypedData, uaInvalidateNoncesTypedData,
   uaMetaTxTypedData, uaMetaTransferTypedData, padId,
-  metaPayId, payMeta, payNoFromUuid, payNoToUuid, encodeMetaBody, decodeMetaBody, payMetaWarning, checkPayMeta, buildPay, buildPayReceiverFee,
+  metaPayId, payMeta, payNoFromUuid, payNoToUuid, encodeMetaBody, decodeMetaBody, payMetaWarning, checkPayMeta, buildPay, buildPayWithPayeeFee,
   buildPayWithTax, percentTax, relayRef, mtxExecuteCalldata, mtxExecuteTransferCalldata, buildRelayFee,
 } from './evm.js';
 export { b64url, fromB64url, hex, fromHex, wipe } from './bytes.js';

@@ -185,10 +185,10 @@ export function zetherPop(curve, x, ...rest) {
 }
 
 // The purposes a Zether UA signs: no contract accepts `member` (the kind is SIGNING, not MEMBER) or `zether-auth` (no PQZ key).
-const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'zether-owner'];
+const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'zether-owner'];
 
 /**
- * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, receiver-fee, vp, vc-anchor, trade,
+ * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, payee-fee, vp, vc-anchor, trade,
  * zether-owner): Schnorr by `x` over `uaMessage(0x0141, purpose, digest)`, returned RAW as `R‖z` (160 bytes); the
  * registry reads `Y` from its record. A token's `bytes auth` wants `abi.encode(bytes(""), sig)`, `requireAuthorized` and
  * the owner ops (`zetherOwnerSig`) take `UASig{signature: sig}` (`uaSig` in ua.js). Spends carry no signature: the

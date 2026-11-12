@@ -58,7 +58,7 @@ struct LegacyWrapOrder {
     uint256 validUntil;
 }
 
-/// typed-signing C6: the order, receiver-fee, relay-fee and cancel rows of `typed_ops.json` run on every token kind, under
+/// typed-signing C6: the order, payee-fee, relay-fee and cancel rows of `typed_ops.json` run on every token kind, under
 /// that kind's own domain: the row by itself, its calldata equal to the message's fields, then that calldata on a contract
 /// with the signature re-made over the row's `structHash`, so the entry hashes what clientkeys hashed.
 abstract contract OrderRows is Test {
@@ -296,14 +296,14 @@ abstract contract OrderRows is Test {
     }
 
     /// The row's two signatures, the payer's and the payee's, re-made under `t`'s domain; the payee a wallet of the row's key.
-    /// ua-mtx-merge T2 / T11: the row names the merged `mtxPayReceiverFee`.
-    function _receiverFee(string memory op, NormalToken t, MetaTxLib.UAMetaTransfer memory x, bytes32 paymentDigest, bytes memory built) private {
+    /// ua-mtx-merge T2 / T11: the row names the merged `mtxPayWithPayeeFee` (owner 2026-11-12: the payee-fee names).
+    function _payeeFee(string memory op, NormalToken t, MetaTxLib.UAMetaTransfer memory x, bytes32 paymentDigest, bytes memory built) private {
         checkRow(j, op, _kind());
         bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
         assertEq(keccak256(built), keccak256(cd), "calldata");
         swap(cd, vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig")), ecdsa(rowKey(j), paymentDigest));
         swap(cd, _sigOf(op), onChain(j, op, address(t)));
-        assertEq(bytes4(cd), IMetaTokenV2.mtxPayReceiverFee.selector, "the row names the merged mtx entry");
+        assertEq(bytes4(cd), IMetaTokenV2.mtxPayWithPayeeFee.selector, "the row names the merged mtx entry");
         deployCodeTo("WalletMocks.sol:Mock1271Wallet", abi.encode(vm.parseJsonAddress(j, ".key.address")), address(uint160(uint256(x.to))));
         t.mint(address(uint160(uint256(x.from))), FUNDS * 100);
         vm.prank(x.relayer);
@@ -312,7 +312,7 @@ abstract contract OrderRows is Test {
     }
 
     /// ua-mtx-merge T2 (R21), meaning: the address `mtxPayReceiverFee` / `ReceiverFee` left the token; the row (until
-    /// T11 retires it, MD-7) finds no entry. Receiver-pays is `UAReceiverFee`'s row, below.
+    /// T11 retires it, MD-7) finds no entry. The payee fee is `UAPayeeFee`'s row, below.
     function test_typedOpsVectors_ReceiverFeeRowHasNoEntry() public {
         j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row retired
         string memory op = "ReceiverFee";
@@ -328,9 +328,9 @@ abstract contract OrderRows is Test {
         assertEq(t.balanceOf(feeTo), 0);
     }
 
-    function test_typedOpsVectors_UAReceiverFeeRow() public {
+    function test_typedOpsVectors_UAPayeeFeeRow() public {
         j = vm.readFile(TYPED_OPS);
-        string memory op = "UAReceiverFee";
+        string memory op = "UAPayeeFee";
         NormalToken t = _normalKind();
         MetaTxLib.UAMetaTransfer memory x = _payment(op);
         IUARegistry.UASig memory payer;
@@ -338,9 +338,9 @@ abstract contract OrderRows is Test {
         uint256 fee = _u(_f(op, "fee"));
         address feeTo = vm.parseJsonAddress(j, _f(op, "feeRecipient"));
         // pay-meta-tax T41: the row's `PayMeta` (`extra.meta`) the entry's last parameter, `entryRef` its commitment
-        bytes memory built = abi.encodeCall(IMetaTokenV2.mtxPayReceiverFee, (x, payer, fee, feeTo, _u(_f(op, "validUntil")),
+        bytes memory built = abi.encodeCall(IMetaTokenV2.mtxPayWithPayeeFee, (x, payer, fee, feeTo, _u(_f(op, "validUntil")),
             _uaSig(op), rowMeta(j, op, _kind())));
-        _receiverFee(op, t, x, t.mtxTransferDigest(x), built);
+        _payeeFee(op, t, x, t.mtxTransferDigest(x), built);
         assertEq(t.balanceOf(feeTo), fee);
     }
 
@@ -407,7 +407,7 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
         j = vm.readFile(TYPED_OPS);
         string memory op = "CancelDexOrder";
         SCaaSDex dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), EnvKit.env(chainUidA, address(0), address(0), false)));
-        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0))));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0), 0, 0)));
         string memory p = ".ops.CancelDexOrder.message.order.";
         address sell = vm.parseJsonAddress(j, string.concat(p, "sellToken"));
         string memory q = string.concat(p, "order.");
@@ -435,8 +435,8 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
     function test_c6EntriesNotAllowlisted() public {
         bytes4[13] memory sels = [ITradeToken.mtxTrade.selector, ITradeToken.mtxTrade.selector, ITradeToken.mtxCancelOrder.selector,
             ITradeToken.mtxCancelOrder.selector, ITradeToken.mtxInvalidateNonces.selector, ITradeToken.mtxInvalidateNonces.selector,
-            IERC20MetaTx.mtxRelayFee.selector, IERC20MetaTx.mtxRelayFee.selector, IMetaTokenV2.mtxPayReceiverFee.selector,
-            IMetaTokenV2.mtxPayReceiverFee.selector, IWrappedToken.mtxWrapOrder.selector, IWrappedToken.mtxWrapOrder.selector,
+            IERC20MetaTx.mtxRelayFee.selector, IERC20MetaTx.mtxRelayFee.selector, IMetaTokenV2.mtxPayWithPayeeFee.selector,
+            IMetaTokenV2.mtxPayWithPayeeFee.selector, IWrappedToken.mtxWrapOrder.selector, IWrappedToken.mtxWrapOrder.selector,
             UAMetaTxBase.mtxCancelNonce.selector];
         bytes32 me = _pad(alice);
         for (uint256 i; i < sels.length; ++i) {

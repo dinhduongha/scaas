@@ -82,7 +82,7 @@ var Groups = []string{"p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1",
 	"mldsa65", "fndsa512", "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe"}
 
 var Purposes = []string{"pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop",
-	"receiver-fee", "vp", "vc-anchor", "trade", "kem", "pqz-key", "membership"}
+	"payee-fee", "vp", "vc-anchor", "trade", "kem", "pqz-key", "membership"}
 
 const (
 	DomainType   = "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
@@ -101,8 +101,8 @@ func Keccak256(parts ...[]byte) (out [32]byte) {
 
 var MsgTag = Keccak256([]byte("scaas.ua.msg.v1"))
 
-// GovernanceBit is a row of the governance bits 0-28 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
-// smartcontracts/vectors/governance/governance_bits.json; bits 29-127 are free, 128-255 the application's bitLabel(bit).
+// GovernanceBit is a row of the governance bits 0-29 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
+// smartcontracts/vectors/governance/governance_bits.json; bits 30-127 are free, 128-255 the application's bitLabel(bit).
 type GovernanceBit struct{ Name, Type string }
 
 // GovernanceBits is indexed by bit.
@@ -116,6 +116,8 @@ var GovernanceBits = []GovernanceBit{
 	{"WRAP_LIMIT", "capability"}, {"WRAP_LIST", "power"}, {"REDEEMER", "power"},
 	// round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
 	{"KYC", "capability"},
+	// CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+	{"CLOSED_MARKETS", "capability"},
 }
 
 func KindInfo(kind uint16) (*Kind, error) {

@@ -144,7 +144,7 @@ contract GovGasDex is GovRows {
     }
 
     function _dexConfig() internal pure returns (ISCaaSDex.DexConfig memory) {
-        return ISCaaSDex.DexConfig(nid(G_TO), 0, G_TO, false, 0, address(0));
+        return ISCaaSDex.DexConfig(nid(G_TO), 0, G_TO, false, 0, address(0), 0, 0);
     }
 
     function test_createDex() public {
@@ -161,10 +161,10 @@ contract GovGasInstance is GovRows {
     function setUp() public {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0);
-        f.publishClassEnv(4, 0, 1, plainEnv(address(f), address(0), UID, address(0), false));
+        f.publishClassEnv(4, 0, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), UID, address(0), false));
         f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
-            type(NoteKind).creationCode, "");
-        f.setClassKindEnabled(4, 0, true);
+            type(NoteKind).creationCode, "", EnvKit.uidOf(address(f)));
+        f.setClassKindEnabled(4, 0, true, EnvKit.uidOf(address(f)));
         f.createInstance(IOpenFactory.ReleaseId(4, 0, 1), "i0", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")));
     }
 

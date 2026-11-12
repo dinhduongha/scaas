@@ -161,7 +161,7 @@ contract DexExchangeTest is Test {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"));
         b = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("B", "B", 0, 1e6, bob, address(0))), "b"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0))), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0, 0)), "dex"));
         puller = dex.puller();
         usdc = new MockERC20("USD Coin", "USDC", 6);
         c = new MockERC20("Hop", "C", 18);
@@ -710,8 +710,15 @@ contract DexExchangeTest is Test {
     // ------------------------------------------------------------------ plan checks
 
     /// Known = a side of a listed market (counted per listed market, so a repeated listing is one): an unlisted token,
-    /// or one whose last market was delisted, is refused on either side of a leg.
+    /// or one whose last market was delisted, is refused on either side of a leg, on a DEX made with bit 29
+    /// `CLOSED_MARKETS` (fix2-dex, owner 2026-11-12: open by default, `DexMarkets.t.sol`).
     function test_exchange_tokenNotKnown() public {
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0),
+            1 << 29, 0)), "closed"));
+        vm.startPrank(admin);
+        dex.setMarket(address(a), address(b), true);
+        dex.setMarket(address(usdc), address(b), true);
+        vm.stopPrank();
         DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(c), _order(alice, address(b), 1000, 1900, 0),
             1000, 1900));
         _expectExchange(p, new ISCaaSDex.Interaction[](0), _err(ISCaaSDex.TokenNotKnown.selector, address(c)));

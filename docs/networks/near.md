@@ -41,7 +41,7 @@ passkey UA accounts; the relay-fee router ([CTR-MTX-27](../contracts/metatx.md#C
 scope: Zether and PQZ (EVM precompile families only), PQ signers, the asset suite, token wrappers and the tender
 ([NET-ALL-17](README.md#NET-ALL-17)–[19](README.md#NET-ALL-19) keep them PLANNED), the mesh (job API only),
 `MetaCall` / `MetaTransfer` ([NET-ALL-26](README.md#NET-ALL-26): NEAR signs the built `MetaOp` v1 and migrates with
-the other families), public testnets and mainnet, receiver-pays (EVM only). BUILT.
+the other families), public testnets and mainnet, payee fee (EVM only). BUILT.
 
 <a id="NET-NEAR-09"></a>**NET-NEAR-09** — **The relayer pays every storage stake; users hold no NEAR.** Every call that
 creates a record (a registration, a UA balance, a lane, a subject record, a mandate, an order, an escrow entry) takes

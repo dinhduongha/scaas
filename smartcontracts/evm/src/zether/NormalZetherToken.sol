@@ -56,7 +56,7 @@ interface INormalZetherTokenAbi {
     event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
     event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
-    event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
+    event UAPayeeFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
     event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
     event Unshielded(bytes32 indexed ua, uint256 amount, bytes32 indexed recipient, address blob);
     error AccountNotRegistered(ZetherTypes.UA account);
@@ -140,9 +140,9 @@ interface INormalZetherTokenAbi {
     error PendingSeqMismatch(uint256 expected, uint256 got);
     error PriceLimit(bytes32 orderHash);
     error ProofRejected();
-    error ReceiverFeeAmount(uint256 fee, uint256 value);
-    error ReceiverFeeExpired(uint256 validUntil, uint256 nowTs);
-    error ReceiverFeeShape();
+    error PayeeFeeAmount(uint256 fee, uint256 value);
+    error PayeeFeeExpired(uint256 validUntil, uint256 nowTs);
+    error PayeeFeeShape();
     error RescueAssetInvalid(address asset);
     error RescueConfigInvalid();
     error RescueTouchedLeg(address leg);
@@ -171,6 +171,7 @@ interface INormalZetherTokenAbi {
     error ZeroAmount(bytes32 orderHash);
     error ZeroFill(bytes32 orderHash);
     error ZeroRecipient();
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
 }
 
 /// @title NormalZetherToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -453,7 +454,7 @@ contract NormalZetherToken is NormalZetherTokenCore, INormalZetherTokenAbi {
         _forward(_MP);
     }
 
-    function mtxPayReceiverFee(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, uint256, address, uint256, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, uint256, address, uint256, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
         _forward(_MP);
     }
 
@@ -541,6 +542,10 @@ contract NormalZetherToken is NormalZetherTokenCore, INormalZetherTokenAbi {
         _forward(_MP);
     }
 
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256) external view returns (bytes32 _p0) {
+        _forwardView(_MP);
+    }
+
     function paymentCount(bytes32) external view returns (uint256 _p0) {
         _forwardView(_MA);
     }
@@ -561,15 +566,11 @@ contract NormalZetherToken is NormalZetherTokenCore, INormalZetherTokenAbi {
         _forwardView(_MT);
     }
 
-    function receiverFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256) external view returns (bytes32 _p0) {
-        _forwardView(_MP);
-    }
-
     function registered(ZetherTypes.UA) external view returns (bool _p0) {
         _forwardView(_MZ);
     }
 
-    function renounceAdmin() external {
+    function renounceAdmin(bytes32) external {
         _forward(_MA);
     }
 
@@ -621,7 +622,7 @@ contract NormalZetherToken is NormalZetherTokenCore, INormalZetherTokenAbi {
         _forwardView(_MT);
     }
 
-    function transferAdmin(bytes32) external {
+    function transferAdmin(bytes32, bytes32) external {
         _forward(_MA);
     }
 

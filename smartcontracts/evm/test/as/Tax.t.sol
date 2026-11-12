@@ -44,7 +44,7 @@ contract TaxTest is RegFixture {
         fN = EnvKit.factory(address(this), UID, NOTICE);
         Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(fN), address(0), UID,
             address(ureg), false), type(NormalRegulatedToken).creationCode, regArgs());
-        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
+        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(fN)));
         vm.warp(block.timestamp + NOTICE); // the release is usable after the factory's notice period
         t8n = fN.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(_taxCfg8(nid(taxTo))), "tax8n");
     }

@@ -18,6 +18,7 @@ import {NormalZetherRegulatedToken} from "../../../src/regulated/NormalZetherReg
 import {WrappedZetherRegulatedToken} from "../../../src/regulated/WrappedZetherRegulatedToken.sol";
 import {NormalPqzRegulatedToken} from "../../../src/regulated/NormalPqzRegulatedToken.sol";
 import {WrappedPqzRegulatedToken} from "../../../src/regulated/WrappedPqzRegulatedToken.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 // The regulated kinds 8-13 as `KindRig`s (spec 2026-11-09-service-pull §11, plan T77): one token of each kind with
 // `FREEZE`, `FORCE`, `PAUSE`, `RECORD` (issuer and compliance two `Holder` contracts, the owner an EOA, `grantDelay` one day,
@@ -69,8 +70,8 @@ contract ZetherRegRig is ZetherFixture, KindRig {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
             type(WrappedZetherRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         (address issuer, address compliance) = (address(new Holder()), address(new Holder()));
         MockERC20 usd = new MockERC20("USD", "USD", 6);
@@ -98,8 +99,8 @@ contract PqzRegRig is PqzFixture, KindRig {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e,
             type(WrappedPqzRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         (address issuer, address compliance) = (address(new Holder()), address(new Holder()));
         MockERC20 usd = new MockERC20("USD", "USD", 6);

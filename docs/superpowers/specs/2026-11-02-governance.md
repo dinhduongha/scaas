@@ -854,7 +854,7 @@ The wizard refuses a `MODERATE` token as a tender, vesting or offer deposit asse
 
 ### 6.2 Rescue, CTR-GOV-06 — SPECIFIED
 
-`RESCUABLE` is set ⇔ `rescueTo ≠ 0`, else `RescueConfigInvalid()`, and `init` refuses a `rescueTo` that is `this`, `UA_POOL` or `SHIELD_POOL` with the same error: the first would repeat `Rescued` for one surplus, the other two brick the rescue of a SCaaS token. Always locked; `rescueTo` has no writer after `init`. `rescue(address asset)`: anyone, no signature, not an `mtx*`, `nonReentrant` (R-16), one direct entry on every token kind, `WrappedPqzToken` last. The body is `WrappedLib.rescue` on `WRAPPED*`, `GovernanceLib` on `NORMAL*`.
+`rescueTo` comes only with `RESCUABLE`, else `RescueConfigInvalid()`; `RESCUABLE` with `rescueTo` 0 stores the constant dev address `RescueLib.SCAAS_DEV_RESCUE` (owner 2026-11-12, [CTR-GOV-25](../../decisions.md#CTR-GOV-25)), and `rescueTo()` returns it. `init` refuses a `rescueTo` that is `this`, `UA_POOL` or `SHIELD_POOL` with the same error: the first would repeat `Rescued` for one surplus, the other two brick the rescue of a SCaaS token. Always locked; `rescueTo` has no writer after `init`. `rescue(address asset)`: anyone, no signature, not an `mtx*`, `nonReentrant` (R-16), one direct entry on every token kind, `WrappedPqzToken` last. The body is `WrappedLib.rescue` on `WRAPPED*`, `GovernanceLib` on `NORMAL*`.
 
 ```solidity
 interface IRescuable {
@@ -879,7 +879,7 @@ The first row that matches decides.
 
 `safeTransfer` for ERC-20; `Rescued`. Refund of a stray's owner is off chain. The wizard refuses rebasing legs. A token answers `IRescuable` by `supportsInterface` while bit 17 is set.
 
-**Not on:** `SCaaSDex`, CTR-DEX-20 pays strays to the next submitter, and bit 17 stays off there (CTR-GOV-10). `DexPuller` takes `rescueTo` as a constructor argument from `DexConfig.rescueTo`, immutable, with `rescue(address token)`, anyone, whole balance; 0 reverts `RescueOff()`. `SCaaSDex.initialize` refuses a `rescueTo` that is `UA_POOL`, `SHIELD_POOL`, the DEX or its puller with `RescueConfigInvalid()`, as `init` does for a token (review 2026-11-04 M-2). It calls only `balanceOf` and `transfer`, so user allowances stay out of reach (R-16). `SealedBidTender`: none, CTR-TND-08 stands (CTR-GOV-14). The relay router holds nothing and has no owner.
+**Not on:** `SCaaSDex`, CTR-DEX-20 pays strays to the next submitter, and bit 17 stays off there (CTR-GOV-10). `DexPuller` takes `rescueTo` as a constructor argument from `DexConfig.rescueTo`, immutable (0: `SCAAS_DEV_RESCUE`, CTR-GOV-25; the earlier `RescueOff()` is gone), with `rescue(address token)`, anyone, whole balance. `SCaaSDex.initialize` refuses a `rescueTo` that is `UA_POOL`, `SHIELD_POOL`, the DEX or its puller with `RescueConfigInvalid()`, as `init` does for a token (review 2026-11-04 M-2). It calls only `balanceOf` and `transfer`, so user allowances stay out of reach (R-16). `SealedBidTender`: none, CTR-TND-08 stands (CTR-GOV-14). The relay router holds nothing and has no owner. The chain singletons (`UARegistry`, `OpenFactory`, `GovernanceRouter`, `RelayFeeRouter`, `PqChat`) take `rescue(asset)` by anyone to the constant dev address (owner 2026-11-12, [CTR-GOV-26](../../decisions.md#CTR-GOV-26)).
 
 ### 6.3 Every family, CTR-GOV-07 — SPECIFIED for the semantics, PLANNED per family
 

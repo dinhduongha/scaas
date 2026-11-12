@@ -1,0 +1,62 @@
+[
+ {
+  "id": "V1 fields 0x0d",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: setRescuer from ERC-5267: 0x4a9b9fc829c3a8875f9482cacc2cdf20b97b7f15f4c8523343f7a9cfada3e830 != 0x9a5d44e929593ff69b8f183f143f04564e90c601e22380bca26f3af"
+ },
+ {
+  "id": "V2 script: no final check",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_deployScriptRefusals() (gas: 1973717)"
+ },
+ {
+  "id": "V3a script: no deployer check",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: deploy failed != no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)] test_depl"
+ },
+ {
+  "id": "V3b script: no address check",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_deployScriptRefusals() (gas: 985272)"
+ },
+ {
+  "id": "V3c withdraw: transfer, not safeTransfer",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: EvmError: Revert] test_noReturnTokenWithdraws() (gas: 185973)"
+ },
+ {
+  "id": "GOV1 directory: no registry word check",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: refused] test_complianceRegistry_otherChainUidRefused() (gas: 3017450)"
+ },
+ {
+  "id": "F2 29 in ENABLEABLE",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_closed_disableOpens_lockHolds() (gas: 1516025)"
+ },
+ {
+  "id": "F3 price without the surplus",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: PriceLimit(0xf2e524663a6bb8047cdf1dff19b2368650589731e9f7d4e3c3d68afc5b23d8f8)] test_hybrid_feeTokenBook_leftover_priceOnTheCredit() (gas: 1089495)"
+ },
+ {
+  "id": "F3 harness: surplus ignored",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: PriceLimit(0xdabc31545dc394527fa3167263fd61e7c7bb9eb939a344961942003782d7e47d)] test_hybrid_refund_worsePrice_priceLimit() (gas: 2502904)"
+ },
+ {
+  "id": "F1 derived restore 1 short",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NORMAL_PQZ: derived pull and refund: 1999599 != 1999600] test_everyKind_movesExactly() (gas: 4803669)"
+ }
+]

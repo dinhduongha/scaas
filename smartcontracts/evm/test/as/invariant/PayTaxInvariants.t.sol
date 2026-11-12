@@ -33,7 +33,7 @@ contract PayTaxInvariants is RegFixture {
         OpenFactory fN = EnvKit.factory(address(this), UID, NOTICE);
         Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(fN), address(0), UID,
             address(ureg), false), type(NormalRegulatedToken).creationCode, regArgs());
-        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
+        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(fN)));
         vm.warp(block.timestamp + NOTICE);
         IFactoryToken.TokenConfig memory c = _cfg8();
         c.features |= 1 << GovernanceBits.TAX;

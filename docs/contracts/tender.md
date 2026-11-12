@@ -29,7 +29,7 @@ the same bytecode on Hedera); nothing is built.
 
 In scope: the `SealedBidTender` contract (EVM; same bytecode on Hedera), the bidder and buyer flows, and the node and
 client touchpoints. The same design family also specifies gas sponsorship ([node/sponsorship.md](../node/sponsorship.md)),
-receiver-pays ([metatx.md](metatx.md#receiver-pays)), an on-chain `SponsorshipPool` (rule only, PLANNED) and
+payee fee ([metatx.md](metatx.md#payee-fee)), an on-chain `SponsorshipPool` (rule only, PLANNED) and
 crypto-shredding of commitments ([integration.md](../integration.md)). Not in scope: multi-criteria scoring,
 multi-lot tenders, other auction types (pre-qualification = the eligibility allowlist); confidential bids, Zether
 deposits and anonymous bidders (a fresh `SmartKeyAccount` per tender is possible); hiding the address graph (SCaaS is

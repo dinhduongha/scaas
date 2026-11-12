@@ -10,7 +10,7 @@ import {UAAdmin} from "../governance/UAAdmin.sol";
 ///        renounced (owner, Q2: only the admin disables a compromised KYC provider or writes an `ELIGIBLE_CONTRACT` row);
 ///        each KYC provider is a UA id too and the subject of its own `setCompliance`.
 /// @notice **UNAUDITED.** The code is pinned (F-11): the admin (the `scaas.admin` namespace) and `govRouter` live in
-///         storage, written by the constructor; no immutable, so every deployment has one runtime and one `extcodehash`,
+///         storage, written by the constructor (`chainUid` too, CTR-GOV-27); no immutable, so every deployment has one runtime and one `extcodehash`,
 ///         the `COMPLIANCE_REGISTRY_CODEHASH` a regulated release carries (`type(ComplianceRegistry).runtimeCode` is the
 ///         deployed code). The code hash pins the code, not the router: a regulated token also checks `govRouter()`
 ///         (spec §5.3, Fable P1-1). No `SELFDESTRUCT`, no upgrade path, no personal data.
@@ -29,24 +29,32 @@ contract ComplianceRegistry is IComplianceRegistry, UAAdmin {
 
     address public govRouter;
     uint32 internal _lastId;
+    /// @notice The chain word `transferAdmin` checks (CTR-GOV-27), written once by the constructor.
+    bytes32 public chainUid;
     mapping(bytes32 provider => uint32) public kycProviderId;
     mapping(uint32 id => bool) internal _enabled;
     mapping(bytes32 account => ComplianceRow) internal _rows;
 
-    /// @notice `admin_` any UA but 0; a derived one only with a router (its one path), and a router has code.
-    constructor(bytes32 admin_, address govRouter_) {
+    /// @notice `admin_` any UA but 0; a derived one only with a router (its one path), and a router has code; `chainUid_`
+    ///         this chain's word, not 0 (CTR-GOV-27).
+    constructor(bytes32 admin_, address govRouter_, bytes32 chainUid_) {
         if (admin_ == bytes32(0)) revert AdminZero();
+        if (chainUid_ == bytes32(0)) revert ChainUidZero();
         if (govRouter_ == address(0)) {
             if (uint256(admin_) >> 160 != 0) revert AdminUnreachable(admin_);
         } else if (govRouter_.code.length == 0) {
             revert RouterNotContract(govRouter_);
         }
-        govRouter = govRouter_;
+        (govRouter, chainUid) = (govRouter_, chainUid_);
         _initAdmin(admin_);
     }
 
     function _adminRouter() internal view override returns (address) {
         return govRouter;
+    }
+
+    function _requireChainWord(bytes32 chainUid_) internal view override {
+        if (chainUid_ != chainUid) revert ChainUidMismatch(chainUid, chainUid_);
     }
 
     function setKycProvider(bytes32 provider, bool enabled) external onlyAdmin {

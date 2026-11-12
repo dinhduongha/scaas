@@ -6,6 +6,8 @@ import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
+import {ERC7739Lib} from "../../src/common/ERC7739Lib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MergeBase} from "../merge/MergedEntry.t.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
@@ -482,19 +484,41 @@ contract MandateWalletMergedTest is MergeBase {
         assertEq(tok.balanceOf(NPP), 10);
     }
 
-    /// CTR-ACC-12: a derived owner has no ERC-1271 answer, even for a key whose address is its low 160 bits.
+    /// CTR-ACC-12: a derived owner has no ERC-1271 answer, even for a key whose address is its low 160 bits. CTR-ACC-02
+    /// (B P3-2, ERC-7739 only): a native owner's answer is over the `PersonalSign` / `TypedDataSign` message naming this
+    /// wallet, never the raw `h`; `isValidSignature(0x7739…7739, "")` is `0x77390001` for a native owner only.
     function test_derivedOwnerHasNoErc1271Answer() public {
         bytes32 h = keccak256("anything");
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, h);
-        bytes memory sig = abi.encodePacked(r, s, v);
         IMandateMerged n = _wallet(_pad(alice), REG_L);
-        assertEq(n.isValidSignature(h, sig), bytes4(0x1626ba7e), "positive control: a native owner's ECDSA");
-        assertEq(n.isValidSignature(h, _sig(BOB_PK, h).signature), bytes4(0xffffffff), "another key");
+        bytes memory sig = _ecdsa(ALICE_PK, Erc7739Kit.personal(address(n), h));
+        assertEq(n.isValidSignature(h, sig), bytes4(0x1626ba7e), "positive control: a native owner's ECDSA, PersonalSign");
+        assertEq(n.isValidSignature(h, _ecdsa(BOB_PK, Erc7739Kit.personal(address(n), h))), bytes4(0xffffffff), "another key");
+        assertEq(n.isValidSignature(h, _ecdsa(ALICE_PK, h)), bytes4(0xffffffff), "the raw hash");
+        assertEq(n.isValidSignature(ERC7739Lib.DETECT, ""), bytes4(0x77390001), "support detection");
+        assertEq(_wallet(_pad(alice), REG_L).isValidSignature(h, sig), bytes4(0xffffffff), "same owner, other wallet");
         bytes32 shadow = _pad(alice) | bytes32(uint256(1) << 200);
         IMandateMerged d = _wallet(shadow, REG_L);
-        assertEq(d.isValidSignature(h, sig), bytes4(0xffffffff), "derived owner, its low 160 bits' key");
+        assertEq(d.isValidSignature(h, _ecdsa(ALICE_PK, Erc7739Kit.personal(address(d), h))), bytes4(0xffffffff),
+            "derived owner, its low 160 bits' key");
         IMandateMerged d2 = _wallet(uaP, REG_L);
-        assertEq(d2.isValidSignature(h, sig), bytes4(0xffffffff), "derived owner");
+        assertEq(d2.isValidSignature(h, _ecdsa(ALICE_PK, Erc7739Kit.personal(address(d2), h))), bytes4(0xffffffff),
+            "derived owner");
+        assertEq(d2.isValidSignature(ERC7739Lib.DETECT, ""), bytes4(0xffffffff), "derived owner: no detection answer");
+    }
+
+    /// CTR-ACC-02: a native owner's `TypedDataSign` answers for its own wallet only.
+    function test_nativeOwnerTypedDataSignBoundToTheWallet() public {
+        IMandateMerged n = _wallet(_pad(alice), REG_L);
+        bytes32 app = keccak256("app");
+        bytes32 c = keccak256("contents");
+        bytes32 ah = keccak256(abi.encodePacked(hex"1901", app, c));
+        bytes memory td = Erc7739Kit.wrap(_ecdsa(ALICE_PK, Erc7739Kit.nested(address(n), app, "Mail", "Mail(address to)", c)),
+            app, c, "Mail(address to)");
+        assertEq(n.isValidSignature(ah, td), bytes4(0x1626ba7e), "positive control: TypedDataSign");
+        assertEq(_wallet(_pad(alice), REG_L).isValidSignature(ah, td), bytes4(0xffffffff), "same owner, other wallet");
+        assertEq(n.isValidSignature(keccak256("other"), td), bytes4(0xffffffff), "the hash is not app || contents");
+        // a suffix length past the signature falls back to PersonalSign (no underflow), which this ECDSA does not match
+        assertEq(n.isValidSignature(ah, abi.encodePacked(_ecdsa(ALICE_PK, ah), bytes2(0xffff))), bytes4(0xffffffff), "length");
     }
 
     // ------------------------------------------------------------------ invariant 3: the retired forms
@@ -617,13 +641,15 @@ contract MandateWalletMergedTest is MergeBase {
 
     /// `SmartKeyAccount` keeps its address surface (Q6): its code without the CBOR tail, as at `ref/pre-ua-mtx-merge`.
     /// T66b (controller 2026-11-09): the `<X>Core` + flat-face split of `UAMetaTxBase` / `MetaTxBase` moved it, 21,003 -> 21,085 B:
-    /// 0xd201866a…5876 -> this; its ABI and behaviour unchanged.
+    /// 0xd201866a…5876 -> 0xbede204d…3962; its ABI and behaviour unchanged. B P3-2 (ua-mtx-fix2-contracts): ERC-1271 over
+    /// `erc1271Digest(hash)`, the self-call through `isValidOwnDigest`: 0xbede204d…3962 -> 0x4d73f626…33e1; ERC-7739 only
+    /// (owner 2026-11-12; `erc1271Digest` to legacy): -> this.
     function test_smartKeyAccountByteIdentical() public {
         address at = address(0xA002);
         deployCodeTo("SmartKeyAccount.sol:SmartKeyAccount", abi.encode(keccak256("wallet-uid")), at);
         bytes memory c = at.code;
         uint256 meta = (uint256(uint8(c[c.length - 2])) << 8 | uint8(c[c.length - 1])) + 2;
         assembly ("memory-safe") { mstore(c, sub(mload(c), meta)) }
-        assertEq(keccak256(c), 0xbede204d12566a090b8389385fe356d6a6ae25485cad9869454d73f367473962);
+        assertEq(keccak256(c), 0xfb57bbfbdc8f91765feef8ff715e18a0a6284274f74de4f469ef6cb8b0b842da);
     }
 }

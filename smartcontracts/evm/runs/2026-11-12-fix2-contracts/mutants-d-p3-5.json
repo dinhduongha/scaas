@@ -1,0 +1,32 @@
+[
+ {
+  "id": "D35-1 no entry guard",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_dexRescueNotReentrant() (gas: 830328)"
+ },
+ {
+  "id": "D35-2 no RescueOff",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: SafeERC20FailedOperation(0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f) != RescueOff()] test_dexRescueWholeBalance() (gas: 824860)"
+ },
+ {
+  "id": "D35-3 part of the balance",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 7 != 15] test_dexRescueNotReentrant() (gas: 1007657)"
+ },
+ {
+  "id": "D35-4 another destination",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0 != 15] test_dexRescueNotReentrant() (gas: 996863)"
+ },
+ {
+  "id": "D35-5 no event",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Transfer != expected Rescued] test_dexRescueWholeBalance() (gas: 419711)"
+ }
+]

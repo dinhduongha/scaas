@@ -214,10 +214,10 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         (address[] memory ms, bytes memory implArgs) = probeModules("GovRegulatedBits.t.sol:MockNormalRegulated", 0, address(f), "");
         uint16 ev = Catalogue.env(f, k8, withModules(pinned(plainEnv(address(f), address(0), UID, address(0), false), k8), ms));
         vm.prank(address(uint160(uint256(f.admin()))));
-        f.deployTokenImplementation(k8, 1, ev, type(MockNormalRegulated).creationCode, implArgs);
+        f.deployTokenImplementation(k8, 1, ev, type(MockNormalRegulated).creationCode, implArgs, EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, k8));
         f.createToken(k8, 1, args, "r");
-        f.setTokenKindEnabled(k8, true);
+        f.setTokenKindEnabled(k8, true, EnvKit.uidOf(address(f)));
         address t = f.createToken(k8, 1, args, "r");
         assertTrue(f.isRegisteredToken(t));
         assertEq(NormalToken(t).kind(), 8);
@@ -226,7 +226,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         assertEq(req, 3);
         assertEq(den, 4);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         address n = _rCreate(false, _rCfg(false, 1), "n");
         vm.prank(OWNER);
         d.setMarket(t, n, true);

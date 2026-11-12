@@ -18,6 +18,8 @@ interface IComplianceRegistry is IAdmin {
 
     /// @notice The constructor's admin is 0.
     error AdminZero();
+    /// @notice The constructor's `chainUid_` is 0 (CTR-GOV-27: `transferAdmin` checks it).
+    error ChainUidZero();
     /// @notice A derived admin (high 96 bits set) with no router: nobody could act as it (Fable P2-3).
     error AdminUnreachable(bytes32 admin);
     /// @notice The constructor's router is not 0 and has no code.
@@ -40,6 +42,8 @@ interface IComplianceRegistry is IAdmin {
     /// @notice The one router whose `subject()` the registry asks (0 = none), written once by the constructor. A
     ///         regulated token takes only a registry whose router is 0 or its own (`ComplianceRegistryRouterMismatch`).
     function govRouter() external view returns (address);
+    /// @notice This chain's word, written once by the constructor: `transferAdmin`'s `chainUid_` (CTR-GOV-27).
+    function chainUid() external view returns (bytes32);
     /// @notice Admin only. A KYC provider's id is assigned at its first enabling and never reused; id 0 is the admin.
     function setKycProvider(bytes32 provider, bool enabled) external;
     function kycProviderId(bytes32 provider) external view returns (uint32);

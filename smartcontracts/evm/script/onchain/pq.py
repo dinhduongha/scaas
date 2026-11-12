@@ -173,8 +173,8 @@ def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
         neg(sd.addr, D.addr["pqUSD"], E.cd("setVerifierFee(uint64)", ["w"], 1), sel_hex("PqzVerifyConfigInvalid()"),
             "pqUSD (PRECOMPILE) setVerifierFee(1)")
     E.log("\n## 8. (T66b Step 5b) the regulated PQZ kinds 12 and 13 (KYC on a ComplianceRegistry, no account denied)")
-    # round 3r: (bytes32 admin, address govRouter): the deployer contract's native id, no router
-    cr = D.deploy("ComplianceRegistry", E.encs(["w", "w"], [E.CREATE2_DEPLOYER, 0]), label="ComplianceRegistry")
+    # round 3r: (bytes32 admin, address govRouter): the deployer contract's native id, no router; CTR-GOV-27: the chain word
+    cr = D.deploy("ComplianceRegistry", E.encs(["w", "w", "w"], [E.CREATE2_DEPLOYER, 0, E.CTX[1]]), label="ComplianceRegistry")
 
     def create_reg(kind, name, sym, legs, dmode, amode, feat, salt):
         conf = [aud.ua if amode else b"", E.SCALE, E.MAXS, E.FEE, dmode, amode, E.MIN_DECOY, 0, 0, 0, 0, 0, 0]
@@ -487,11 +487,13 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         ms.append(D.deploy2(mn, E.encs(["w", "b"], [fac2, E.core_args(4)]), f"module {mn} (factory 2)", src=src))
     libs += ms
     hashes = [E.keccak256(E.hb(_rpc0("eth_getCode", [x, "latest"]))) for x in libs]
-    sd.send(fac2, E.cd(f"publishTokenEnv(uint8,uint16,{E.ENV_S})", ["w", "w", E.ENV], 4, 1, [reg, 0, 0, [0], [], libs, hashes]),
+    sd.send(fac2, E.cd(f"publishTokenEnv(uint8,uint16,bytes32,{E.ENV_S})", ["w", "w", "w", E.ENV], 4, 1, E.CTX[1],
+                       [reg, 0, 0, [0], [], libs, hashes]),
             "factory 2 publishTokenEnv(kind 4, 1), deps [0x0]")
-    sd.send(fac2, E.cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"], 4, 1, 1, code,
-                       E.impl_args(4, ms)), "factory 2 deployTokenImplementation(kind 4, 1)")
-    sd.send(fac2, E.cd("setTokenKindEnabled(uint8,bool)", ["w", "w"], 4, 1), "factory 2 setTokenKindEnabled(4, true)")
+    sd.send(fac2, E.cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)", ["w", "w", "w", "b", "b", "w"], 4, 1,
+                       1, code, E.impl_args(4, ms), E.CTX[1]), "factory 2 deployTokenImplementation(kind 4, 1)")
+    sd.send(fac2, E.cd("setTokenKindEnabled(uint8,bool,bytes32)", ["w"] * 3, 4, 1, E.CTX[1]),
+            "factory 2 setTokenKindEnabled(4, true)")
     # a release on a factory with a notice period is usable only after it (VersionNotYetUsable)
     t0 = int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16)
     while int(_rpc0("eth_getBlockByNumber", ["latest", False])["timestamp"], 16) <= t0 + N + 1:

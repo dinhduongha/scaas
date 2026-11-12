@@ -1,0 +1,50 @@
+[
+ {
+  "id": "G26-1 registry: no body",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: log != expected log] test_eachSingletonRescuesToTheDevAddress() (gas: 2104855)"
+ },
+ {
+  "id": "G26-2 factory: to itself",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Rescued param mismatch at to: expected=0x0389f77E846ff687d44db57bcC9DCB55dd6f4131, got=0xa0Cb889707d426A7A386870A03bc70d1b0697598] test_eachSingletonResc"
+ },
+ {
+  "id": "G26-3 router: no body",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: log != expected log] test_eachSingletonRescuesToTheDevAddress() (gas: 2362599)"
+ },
+ {
+  "id": "G26-4 relay router: no body",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: log != expected log] test_eachSingletonRescuesToTheDevAddress() (gas: 2527643)"
+ },
+ {
+  "id": "G26-5 relay router: no entry guard",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_relayFeeRouterRescueNotReentrant() (gas: 796522)"
+ },
+ {
+  "id": "G26-6 pqchat: no body",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: log != expected log] test_eachSingletonRescuesToTheDevAddress() (gas: 2718371)"
+ },
+ {
+  "id": "G26-7 all: native amount 0",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 1000000000000000000 != 0] test_eachSingletonRescuesToTheDevAddress() (gas: 2174543)"
+ },
+ {
+  "id": "G26-8 all: no event",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Transfer != expected Rescued] test_eachSingletonRescuesToTheDevAddress() (gas: 2124613)"
+ }
+]

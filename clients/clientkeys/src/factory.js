@@ -96,7 +96,7 @@ const CONFIG = {
     ['admin', 'bytes32'], ['roles', ROLES], ['initialSupply', 'uint256'], ['initialHolder', 'address'], ['legs', { of: LEG }],
     ['rate', RATE], ['conf', CONF], ['grantDelay', 'uint64'], ['rescueTo', 'address'], ['maxSupply', 'uint256'], ['reg', REG]],
   dex: [['admin', 'bytes32'], ['relayerSharePpm', 'uint32'], ['treasury', 'address'], ['listedOnly', 'bool'],
-    ['grantDelay', 'uint64'], ['rescueTo', 'address']],
+    ['grantDelay', 'uint64'], ['rescueTo', 'address'], ['features', 'uint256'], ['lockedFeatures', 'uint256']],
 };
 
 const typeOf = (t) => typeof t === 'string' ? t : t.of ? `${typeOf(t.of)}[]` : `(${t.map(([, x]) => typeOf(x)).join(',')})`;

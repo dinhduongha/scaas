@@ -6,6 +6,7 @@ import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {UAMetaTxBase, UAMetaTxBaseCore} from "../metatx/UAMetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {ERC7739Lib} from "../common/ERC7739Lib.sol";
 import {IERC20Payment} from "../metatx/IERC20Payment.sol";
 import {IMetaTokenV2} from "../metatx/IMetaTokenV2.sol";
 import {FeeMode} from "../common/FeePolicy.sol";
@@ -29,8 +30,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         revoke. From `UAMetaTxBase`: the generic `mtxExecute` / `mtxBatch` and the ordered `mtxCancelNonce` on ids.
 ///         A native signer signs with its own key (no registry call); a derived one through `UARegistry`
 ///         (`UALedgerOff` at registry 0). `executeMetaTransaction` refuses every call (MD-11 (b)).
-///         ERC-1271 answers for a native owner (ECDSA), so it also pays by hand with `from = wallet`; a derived owner
-///         gets no answer and acts through `mtxExecute`.
+///         ERC-1271 answers for a native owner (ECDSA over the ERC-7739 message, bound to this wallet, CTR-ACC-02), so
+///         it also pays by hand with `from = wallet`; a derived owner gets no answer and acts through `mtxExecute`.
 contract MandateWallet is UAMetaTxBase, IERC1271 {
     struct Mandate {
         bytes32 delegate;      // 0 = none or revoked
@@ -230,10 +231,16 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
     }
 
     /// @inheritdoc IERC1271
-    /// @dev A native owner: ECDSA by its address. A derived owner has no ERC-1271 answer (CTR-ACC-12).
+    /// @dev A native owner: ECDSA by its address over the ERC-7739 message of `hash` (CTR-ACC-02: `TypedDataSign` with
+    ///      this wallet's domain fields inside, or `PersonalSign` in its domain), never the raw `hash`;
+    ///      `isValidSignature(0x7739…7739, "")` answers `0x77390001`. A derived owner has no ERC-1271 answer (CTR-ACC-12).
     function isValidSignature(bytes32 hash, bytes calldata sig) external view returns (bytes4) {
         if (!UAKinds.inNativeSpace(owner)) return bytes4(0xffffffff);
-        (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, sig);
+        if (hash == ERC7739Lib.DETECT && sig.length == 0) return ERC7739Lib.SUPPORTED;
+        (, string memory n, string memory v, uint256 id, address vc, bytes32 salt,) = _eip712DomainBody();
+        (bytes32 message, bytes calldata inner) =
+            ERC7739Lib.unwrap(hash, sig, _domainSeparatorV4(), ERC7739Lib.domainFields(n, v, id, vc, salt));
+        (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);
         return err == ECDSA.RecoverError.NoError && rec == address(uint160(uint256(owner)))
             ? IERC1271.isValidSignature.selector : bytes4(0xffffffff);
     }

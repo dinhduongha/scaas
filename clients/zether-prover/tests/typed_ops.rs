@@ -114,11 +114,11 @@ fn unbound_relayer_and_fee_recipient_hash_as_zero() {
         assert_ne!(bound, digest("UABurn", &|m| set(m, 19, field, &zero)), "{field} bound is hashed");
     }
 
-    // a nested payment: `UAReceiverFee`'s mode 1 binds the relayer only
-    let row = &v["ops"]["UAReceiverFee"]["domains"]["zether"]["digest"];
-    assert_eq!(&digest("UAReceiverFee", &|m| m["payment"]["feeRecipient"] = json!(other)), row, "nested fee recipient unbound");
-    let bound = digest("UAReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &other));
-    assert_ne!(bound, digest("UAReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &zero)), "nested, bound");
+    // a nested payment: `UAPayeeFee`'s mode 1 binds the relayer only
+    let row = &v["ops"]["UAPayeeFee"]["domains"]["zether"]["digest"];
+    assert_eq!(&digest("UAPayeeFee", &|m| m["payment"]["feeRecipient"] = json!(other)), row, "nested fee recipient unbound");
+    let bound = digest("UAPayeeFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &other));
+    assert_ne!(bound, digest("UAPayeeFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &zero)), "nested, bound");
 }
 
 #[test]

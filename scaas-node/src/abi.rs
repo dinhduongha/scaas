@@ -161,6 +161,11 @@ sol! {
         function puller() external view returns (address);
         function marketListed(address a, address b) external view returns (bool);
         function tokenKind(address token) external view returns (uint8);
+        /// CTR-DEX-32: the exchange path's known-token check on a closed DEX; its factory and `features()` (bit 29
+        /// `CLOSED_MARKETS`), which the venue reads
+        function tokenKnown(address token) external view returns (bool);
+        function factory() external view returns (address);
+        function features() external view returns (uint256);
         function chainUid() external view returns (bytes32);
         function SMART_KEY_ACCOUNT_IMPL() external view returns (address);
         event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
@@ -633,6 +638,8 @@ sol! {
             uint64 createdBlock; uint64 createdAt;
         }
         function infoOf(address c) external view returns (Created memory);
+        /// CTR-DEX-18 / CTR-DEX-32: a token is SCaaS iff the factory made it from a registered release (`version != 0`).
+        function versionOf(address token) external view returns (uint8 kind, uint64 version);
         /// Owner 2026-11-12: a generic release (`mtxCreateInstance` is checked against it before the simulation).
         struct ReleaseId { uint16 contractClass; uint16 kind; uint64 version; }
         struct ClassRelease {

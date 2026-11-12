@@ -182,7 +182,7 @@ contract Dex is OnchainBase {
     }
 
     function _dex(uint64 grantDelay, string memory what) internal returns (ISCaaSDex d) {
-        bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, TREASURY, false, grantDelay, address(0)));
+        bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, TREASURY, false, grantDelay, address(0), 0, 0));
         vm.broadcast(k1);
         d = ISCaaSDex(f.createDex(1, cfg, _salt(what)));
         _book(address(d), "SCaaSDex");
@@ -486,7 +486,7 @@ contract Dex is OnchainBase {
         vm.startBroadcast(k1);
         g.revokeRole{gas: G}(GovernanceBits.LISTING, _pad(a2));
         dex.setListedOnly{gas: G}(true); // after the trades: with it every interaction target (the token of an approve too) is listed
-        g.transferAdmin{gas: G}(_pad(a2));
+        g.transferAdmin{gas: G}(_pad(a2), dex.chainUid());
         vm.stopBroadcast();
         vm.broadcast(k2);
         g.acceptAdmin{gas: G}();
@@ -497,7 +497,7 @@ contract Dex is OnchainBase {
         g2.cancelGrant{gas: G}(GovernanceBits.LISTING, _pad(a3));
         g2.disableFeature{gas: G}(GovernanceBits.LISTING);
         g2.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING);
-        g2.renounceAdmin{gas: G}();
+        g2.renounceAdmin{gas: G}(dex2.chainUid());
         vm.stopBroadcast();
     }
 

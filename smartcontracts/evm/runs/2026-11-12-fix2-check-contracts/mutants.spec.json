@@ -1,0 +1,81 @@
+[
+ {
+  "id": "V1 fields 0x0d",
+  "file": "src/governance/RescueVault.sol",
+  "old": "return (hex\"0b\", \"SCaaS RescueVault\"",
+  "new": "return (hex\"0d\", \"SCaaS RescueVault\"",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_eip712DomainRebuildsTheDigest"
+ },
+ {
+  "id": "V2 script: no final check",
+  "file": "script/DeployRescueVault.s.sol",
+  "old": "require(v.seq() == wantSeq &&",
+  "new": "require(true ||",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_deployScriptRefusals"
+ },
+ {
+  "id": "V3a script: no deployer check",
+  "file": "script/DeployRescueVault.s.sol",
+  "old": "require(DEPLOYER.code.length != 0,",
+  "new": "require(true,",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_deployScriptRefusals"
+ },
+ {
+  "id": "V3b script: no address check",
+  "file": "script/DeployRescueVault.s.sol",
+  "old": "require(a == RescueLib.SCAAS_DEV_RESCUE,",
+  "new": "require(true,",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_deployScriptRefusals"
+ },
+ {
+  "id": "V3c withdraw: transfer, not safeTransfer",
+  "file": "src/governance/RescueVault.sol",
+  "old": "IERC20(token).safeTransfer(dest, amount);",
+  "new": "require(IERC20(token).transfer(dest, amount));",
+  "path": "test/governance/RescueVault.t.sol",
+  "test": "test_noReturnTokenWithdraws"
+ },
+ {
+  "id": "GOV1 directory: no registry word check",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "            _requireChainUid(complianceRegistry_, chainUid); // GOV-1",
+  "new": "            // GOV-1",
+  "path": "test/v2/FactoryDirectory.t.sol",
+  "test": "test_complianceRegistry_otherChainUidRefused"
+ },
+ {
+  "id": "F2 29 in ENABLEABLE",
+  "file": "src/governance/GovernanceBits.sol",
+  "old": "uint256 internal constant ENABLEABLE = (1 << ALLOWLIST)",
+  "new": "uint256 internal constant ENABLEABLE = (1 << 29) | (1 << ALLOWLIST)",
+  "path": "test/v2/DexMarkets.t.sol",
+  "test": "test_closed_"
+ },
+ {
+  "id": "F3 price without the surplus",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "taker.recv + surplus, o.amount)",
+  "new": "taker.recv, o.amount)",
+  "path": "test/v2/DexMarkets.t.sol",
+  "test": "test_hybrid_feeTokenBook_leftover_priceOnTheCredit"
+ },
+ {
+  "id": "F3 harness: surplus ignored",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "taker.recv + surplus, o.amount)",
+  "new": "taker.recv + surplus / 2, o.amount)",
+  "path": "test/v2/DexHybrid.t.sol",
+  "test": "test_hybrid_refund_worsePrice_priceLimit"
+ },
+ {
+  "id": "F1 derived restore 1 short",
+  "file": "src/metatx/ERC20MetaTx.sol",
+  "old": "        _uaMove(TradeLib.pad(o.dex), o.from, amount);\n    }",
+  "new": "        _uaMove(TradeLib.pad(o.dex), o.from, uint256(o.from) >> 160 != 0 ? amount - 1 : amount);\n    }",
+  "path": "test/merge/ScaasExactMoves.t.sol"
+ }
+]

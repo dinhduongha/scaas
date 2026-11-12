@@ -815,14 +815,14 @@ static void set_key_args() {
         CHECK(code_of([&] { setPqzKeyArgs(bad.first); }) == bad.second, bad.first);
 }
 
-// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 28 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
+// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 29 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
 static void governance_bits_rows() {
     std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../governance/governance_bits.json");
     if (!f) { std::fprintf(stderr, "cannot open governance_bits.json\n"); std::exit(2); }
     json v = json::parse(f);
-    CHECK(v["bits"].size() == 29, "rows 0-28"); // round 3s: bit 28 KYC
+    CHECK(v["bits"].size() == 30, "rows 0-29"); // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS
     for (auto& r : v["bits"]) CHECK(json::parse(governanceBit(r["bit"].get<uint8_t>())) == r, std::to_string(r["bit"].get<int>()));
-    for (int bit : {29, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
+    for (int bit : {30, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
 }
 
 // pay-meta-tax T41 / T83: paymeta.json v3 rows (save without a payNo refused) and paytax.json's UAPayWithTax digest row

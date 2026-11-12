@@ -81,7 +81,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(fN)));
         vm.warp(block.timestamp + NOTICE); // the release usable
     }
 
@@ -494,7 +494,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotProposer.selector, uint8(0), bytes32(uint256(5)), me));
         _fee(address(t), 5);
         address o2 = address(0x0A2);
-        IGovernance(address(t)).transferAdmin(nid(o2));
+        IGovernance(address(t)).transferAdmin(nid(o2), EnvKit.codeUidOf(address(IGovernance(address(t)))));
         vm.prank(o2);
         IGovernance(address(t)).acceptAdmin();
         assertEq(_cfgOf(address(t)).verifierFeePending, 0, "dead after the admin change");
@@ -592,7 +592,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
         IFactoryToken.TokenConfig memory c = _offCfg(F, CAP);
         c.admin = nId;
         t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "f-router"));

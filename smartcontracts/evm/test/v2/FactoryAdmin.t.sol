@@ -40,9 +40,9 @@ interface IFactoryAdmin {
     function admin() external view returns (bytes32);
     function pendingAdmin() external view returns (bytes32);
     function adminGeneration() external view returns (uint32);
-    function transferAdmin(bytes32 newAdmin) external;
+    function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external;
     function acceptAdmin() external;
-    function renounceAdmin() external;
+    function renounceAdmin(bytes32 chainUid_) external;
     function approveTokenRelease(IOpenFactory.TokenKind kind, uint64 version, uint16 envVersion, bytes32 initcodeHash,
         bytes32 implArgsHash, bytes32 chainUid, address factory, uint32 adminGeneration, uint64 until) external;
     function approveDexRelease(uint64 version, uint16 envVersion, bytes32 initcodeHash, bytes32 implArgsHash,
@@ -50,7 +50,7 @@ interface IFactoryAdmin {
     function approveRelease(IOpenFactory.ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
         bytes32 initcodeHash, bytes32 implArgsHash, bytes32 chainUid, address factory, uint32 adminGeneration, uint64 until)
         external;
-    function revokeApproval(bytes32 key) external;
+    function revokeApproval(bytes32 key, bytes32 chainUid_) external;
     /// `state` 0 none, 1 live, 2 consumed.
     function approvalOf(bytes32 key) external view returns (uint8 state, uint32 adminGeneration, uint64 until);
 }
@@ -230,15 +230,15 @@ contract FactoryAdminTest is UARegistryBase {
         _configure(f, router_);
         IFactoryToken.Env memory e;
         vm.startPrank(deployer);
-        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, e);
-        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 2, e);
-        f.publishTokenEnv(IOpenFactory.TokenKind.WRAPPED, 1, e);
-        f.publishDexEnv(1, e);
-        f.publishDexEnv(2, e);
-        f.publishClassEnv(CLS, 0, 1, e);
-        f.publishClassEnv(CLS, 0, 2, e);
-        f.publishClassEnv(CLS, 1, 1, e);
-        f.publishClassEnv(CLS + 1, 0, 1, e);
+        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)), e);
+        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 2, EnvKit.uidOf(address(f)), e);
+        f.publishTokenEnv(IOpenFactory.TokenKind.WRAPPED, 1, EnvKit.uidOf(address(f)), e);
+        f.publishDexEnv(1, EnvKit.uidOf(address(f)), e);
+        f.publishDexEnv(2, EnvKit.uidOf(address(f)), e);
+        f.publishClassEnv(CLS, 0, 1, EnvKit.uidOf(address(f)), e);
+        f.publishClassEnv(CLS, 0, 2, EnvKit.uidOf(address(f)), e);
+        f.publishClassEnv(CLS, 1, 1, EnvKit.uidOf(address(f)), e);
+        f.publishClassEnv(CLS + 1, 0, 1, EnvKit.uidOf(address(f)), e);
         vm.stopPrank();
     }
 
@@ -311,13 +311,15 @@ contract FactoryAdminTest is UARegistryBase {
             (_id(r), r.envVersion, r.sel, r.iface, h1, h2, uid, fac, gen, until));
     }
 
-    function _deployCd(Rel memory r) internal pure returns (bytes memory) {
+    /// @dev The deploy of `r` on `fac`, with `fac`'s chain word (Fable recheck-2 P3-1).
+    function _deployCd(Rel memory r, address fac) internal view returns (bytes memory) {
+        bytes32 u = EnvKit.uidOf(fac);
         if (r.d == 0) {
             return abi.encodeCall(OpenFactory.deployTokenImplementation,
-                (IOpenFactory.TokenKind(uint8(r.knd)), r.version, r.envVersion, r.code, r.args));
+                (IOpenFactory.TokenKind(uint8(r.knd)), r.version, r.envVersion, r.code, r.args, u));
         }
-        if (r.d == 1) return abi.encodeCall(OpenFactory.deployDexImplementation, (r.version, r.envVersion, r.code, r.args));
-        return abi.encodeCall(OpenFactory.deployImplementation, (_id(r), r.envVersion, r.sel, r.iface, r.code, r.args));
+        if (r.d == 1) return abi.encodeCall(OpenFactory.deployDexImplementation, (r.version, r.envVersion, r.code, r.args, u));
+        return abi.encodeCall(OpenFactory.deployImplementation, (_id(r), r.envVersion, r.sel, r.iface, r.code, r.args, u));
     }
 
     function _until() internal view returns (uint64) {
@@ -366,17 +368,18 @@ contract FactoryAdminTest is UARegistryBase {
         IFactoryToken.Env memory e;
         Rel memory t = _tok();
         c = new bytes[](11);
-        c[0] = abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, 9, e));
-        c[1] = abi.encodeCall(OpenFactory.publishDexEnv, (9, e));
-        c[2] = abi.encodeCall(OpenFactory.publishClassEnv, (CLS, 0, 9, e));
-        c[3] = abi.encodeCall(OpenFactory.setTokenKindEnabled, (IOpenFactory.TokenKind.WRAPPED, true));
-        c[4] = abi.encodeCall(OpenFactory.setClassKindEnabled, (CLS, 0, true));
+        c[0] = abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, 9, EnvKit.uidOf(address(f)), e));
+        c[1] = abi.encodeCall(OpenFactory.publishDexEnv, (9, EnvKit.uidOf(address(f)), e));
+        c[2] = abi.encodeCall(OpenFactory.publishClassEnv, (CLS, 0, 9, EnvKit.uidOf(address(f)), e));
+        bytes32 u = EnvKit.uidOf(address(f));
+        c[3] = abi.encodeCall(OpenFactory.setTokenKindEnabled, (IOpenFactory.TokenKind.WRAPPED, true, u));
+        c[4] = abi.encodeCall(OpenFactory.setClassKindEnabled, (CLS, 0, true, u));
         c[5] = _approveCd(f, t, _until());
         c[6] = _approveCd(f, _dex(), _until());
         c[7] = _approveCd(f, _cls(), _until());
-        c[8] = abi.encodeCall(OpenFactory.deprecateToken, (IOpenFactory.TokenKind.NORMAL, 1, "x"));
-        c[9] = abi.encodeCall(OpenFactory.deprecateDex, (1, "x"));
-        c[10] = abi.encodeCall(OpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(CLS, 0, 1), "x"));
+        c[8] = abi.encodeCall(OpenFactory.deprecateToken, (IOpenFactory.TokenKind.NORMAL, 1, u, "x"));
+        c[9] = abi.encodeCall(OpenFactory.deprecateDex, (1, u, "x"));
+        c[10] = abi.encodeCall(OpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(CLS, 0, 1), u, "x"));
     }
 
     // ------------------------------------------------------------------ the real router: signing
@@ -440,15 +443,21 @@ contract FactoryAdminTest is UARegistryBase {
     }
 
     function _transferCd(bytes32 by, OpenFactory f, bytes32 to) internal view returns (bytes memory) {
+        return _transferCd(by, f, to, EnvKit.uidOf(address(f)));
+    }
+
+    function _transferCd(bytes32 by, OpenFactory f, bytes32 to, bytes32 u) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _env(by);
         IUARegistry.UASig memory a =
-            _auth(by, _digest("TransferAdmin", ",bytes32 newAdmin", e, address(f), abi.encode(to)));
-        return abi.encodeCall(router.mtxTransferAdmin, (e, address(f), to, a));
+            _auth(by, _digest("TransferAdmin", ",bytes32 newAdmin,bytes32 chainUid", e, address(f), abi.encode(to, u)));
+        return abi.encodeCall(router.mtxTransferAdmin, (e, address(f), to, u, a));
     }
 
     function _renounceCd(bytes32 by, OpenFactory f) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _env(by);
-        return abi.encodeCall(router.mtxRenounceAdmin, (e, address(f), _auth(by, _digest("RenounceAdmin", "", e, address(f), ""))));
+        bytes32 u = EnvKit.uidOf(address(f));
+        IUARegistry.UASig memory a = _auth(by, _digest("RenounceAdmin", ",bytes32 chainUid", e, address(f), abi.encode(u)));
+        return abi.encodeCall(router.mtxRenounceAdmin, (e, address(f), u, a));
     }
 
     // ------------------------------------------------------------------ the constructor (§5.2)
@@ -488,7 +497,7 @@ contract FactoryAdminTest is UARegistryBase {
         OpenFactory f = _ready(address(trouter));
         bytes[] memory c = _adminOps(f);
         Rel[3] memory rs = _rels();
-        for (uint256 i; i < 3; ++i) _call(deployer, address(f), _deployCd(rs[i]));
+        for (uint256 i; i < 3; ++i) _call(deployer, address(f), _deployCd(rs[i], address(f)));
         for (uint256 i; i < c.length; ++i) _call(deployer, address(f), c[i]);
         assertEq(f.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL), 9);
         assertEq(f.latestDexEnvVersion(), 9);
@@ -499,16 +508,16 @@ contract FactoryAdminTest is UARegistryBase {
         assertTrue(f.isDexDeprecated(1));
         assertTrue(f.classReleaseOf(IOpenFactory.ReleaseId(CLS, 0, 1)).deprecated);
         for (uint256 i; i < 3; ++i) assertEq(_state(f, _key(f, rs[i])), LIVE, "approved after its deploy: live, unused");
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (_key(f, rs[0]))));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (_key(f, rs[0]), EnvKit.uidOf(address(f)))));
         assertEq(_state(f, _key(f, rs[0])), NONE);
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next))));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next), EnvKit.uidOf(address(f)))));
         assertEq(_a(f).admin(), nid(deployer), "M18: the transfer is two steps");
         assertEq(_a(f).pendingAdmin(), nid(next));
         _call(next, address(f), abi.encodeCall(IFactoryAdmin.acceptAdmin, ()));
         assertEq(_a(f).admin(), nid(next));
         assertEq(_a(f).pendingAdmin(), bytes32(0));
         assertEq(_a(f).adminGeneration(), 1);
-        _call(next, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, ()));
+        _call(next, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, (EnvKit.uidOf(address(f)))));
         assertEq(_a(f).admin(), bytes32(0));
         assertEq(_a(f).adminGeneration(), 2);
     }
@@ -521,12 +530,12 @@ contract FactoryAdminTest is UARegistryBase {
         OpenFactory f = _ready(address(trouter));
         bytes[] memory c = _adminOps(f);
         for (uint256 i; i < c.length; ++i) _refused(STRANGER, address(f), c[i], _notAdmin(nid(STRANGER)));
-        _refused(STRANGER, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(STRANGER))), _notAdmin(nid(STRANGER)));
-        _refused(STRANGER, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, ()), _notAdmin(nid(STRANGER)));
-        _refused(STRANGER, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (bytes32(uint256(1)))),
+        _refused(STRANGER, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(STRANGER), EnvKit.uidOf(address(f)))), _notAdmin(nid(STRANGER)));
+        _refused(STRANGER, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, (EnvKit.uidOf(address(f)))), _notAdmin(nid(STRANGER)));
+        _refused(STRANGER, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (bytes32(uint256(1)), EnvKit.uidOf(address(f)))),
             _notAdmin(nid(STRANGER)));
         Rel[3] memory rs = _rels();
-        for (uint256 i; i < 3; ++i) _refused(STRANGER, address(f), _deployCd(rs[i]), _notApproved(_key(f, rs[i])));
+        for (uint256 i; i < 3; ++i) _refused(STRANGER, address(f), _deployCd(rs[i], address(f)), _notApproved(_key(f, rs[i])));
     }
 
     /// M4: an admin EOA that is an EIP-7702 designator is no direct authority (D2): every direct op `CallerDelegated`.
@@ -539,9 +548,9 @@ contract FactoryAdminTest is UARegistryBase {
         EnvKit.genesis(chainUidA);
         _refused(deployer, address(u), abi.encodeCall(OpenFactory.configureChain, (chainUidA, 0, address(0), bytes32(0), 0, bytes32(0))), d);
         for (uint256 i; i < c.length; ++i) _refused(deployer, address(f), c[i], d);
-        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next))), d);
-        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, ()), d);
-        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (bytes32(uint256(1)))), d);
+        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next), EnvKit.uidOf(address(f)))), d);
+        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, (EnvKit.uidOf(address(f)))), d);
+        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (bytes32(uint256(1)), EnvKit.uidOf(address(f)))), d);
     }
 
     /// `configureChain` is direct only (§5.2): before it the factory has no router, so a router naming the admin is its
@@ -576,7 +585,7 @@ contract FactoryAdminTest is UARegistryBase {
 
     function _derivedAccepts(bytes32 id) internal {
         OpenFactory f = _ready(address(router));
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (id)));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (id, EnvKit.uidOf(address(f)))));
         assertEq(_a(f).admin(), nid(deployer), "two steps");
         assertEq(_a(f).pendingAdmin(), id);
         bytes memory cd = _acceptCd(id, f);
@@ -586,7 +595,7 @@ contract FactoryAdminTest is UARegistryBase {
         assertEq(_a(f).admin(), id);
         assertEq(_a(f).pendingAdmin(), bytes32(0));
         assertEq(_a(f).adminGeneration(), 1);
-        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(deployer))), _notAdmin(nid(deployer)));
+        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(deployer), EnvKit.uidOf(address(f)))), _notAdmin(nid(deployer)));
         _call(RELAYER, address(router), _transferCd(id, f, nid(next)));
         assertEq(_a(f).pendingAdmin(), nid(next));
         _call(next, address(f), abi.encodeCall(IFactoryAdmin.acceptAdmin, ()));
@@ -597,7 +606,7 @@ contract FactoryAdminTest is UARegistryBase {
     /// admin's renounce through the router ends the admin.
     function test_router_anotherSignerNotAdmin() public {
         OpenFactory f = _ready(address(router));
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (ml)));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (ml, EnvKit.uidOf(address(f)))));
         _accept(ml, f);
         _refused(RELAYER, address(router), _transferCd(k1, f, k1), _notAdmin(k1));
         _refused(RELAYER, address(router), _renounceCd(msig, f), _notAdmin(msig));
@@ -609,13 +618,13 @@ contract FactoryAdminTest is UARegistryBase {
     /// A derived admin acts on every op through the router (the test router: T7 builds the real router's ops).
     function test_derivedAdmin_everyOpThroughRouter() public {
         OpenFactory f = _ready(address(trouter));
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (ml)));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (ml, EnvKit.uidOf(address(f)))));
         _via(trouter, ml, f, abi.encodeCall(IFactoryAdmin.acceptAdmin, ()));
         assertEq(_a(f).admin(), ml);
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
             _via(trouter, ml, f, _approveCd(f, rs[i], _until()));
-            _call(STRANGER, address(f), _deployCd(rs[i]));
+            _call(STRANGER, address(f), _deployCd(rs[i], address(f)));
         }
         bytes[] memory c = _adminOps(f);
         for (uint256 i; i < c.length; ++i) {
@@ -624,9 +633,9 @@ contract FactoryAdminTest is UARegistryBase {
             _refused(deployer, address(f), c[i], _notAdmin(nid(deployer)));
         }
         assertTrue(f.isTokenDeprecated(IOpenFactory.TokenKind.NORMAL, 1));
-        _via(trouter, ml, f, abi.encodeCall(IFactoryAdmin.transferAdmin, (k1)));
+        _via(trouter, ml, f, abi.encodeCall(IFactoryAdmin.transferAdmin, (k1, EnvKit.uidOf(address(f)))));
         assertEq(_a(f).pendingAdmin(), k1);
-        _via(trouter, ml, f, abi.encodeCall(IFactoryAdmin.renounceAdmin, ()));
+        _via(trouter, ml, f, abi.encodeCall(IFactoryAdmin.renounceAdmin, (EnvKit.uidOf(address(f)))));
         assertEq(_a(f).admin(), bytes32(0));
     }
 
@@ -637,8 +646,8 @@ contract FactoryAdminTest is UARegistryBase {
         bytes[] memory c = _adminOps(f);
         bytes memory e = _notAdmin(nid(address(fake)));
         for (uint256 i; i < c.length; ++i) _viaRefused(fake, nid(deployer), f, c[i], e);
-        _viaRefused(fake, nid(deployer), f, abi.encodeCall(IFactoryAdmin.transferAdmin, (ml)), e);
-        _viaRefused(fake, nid(deployer), f, abi.encodeCall(IFactoryAdmin.renounceAdmin, ()), e);
+        _viaRefused(fake, nid(deployer), f, abi.encodeCall(IFactoryAdmin.transferAdmin, (ml, EnvKit.uidOf(address(f)))), e);
+        _viaRefused(fake, nid(deployer), f, abi.encodeCall(IFactoryAdmin.renounceAdmin, (EnvKit.uidOf(address(f)))), e);
         _viaRefused(fake, nid(next), f, abi.encodeCall(IFactoryAdmin.acceptAdmin, ()),
             abi.encodeWithSelector(IFactoryAdmin.NotPendingAdmin.selector, nid(address(fake))));
     }
@@ -651,7 +660,7 @@ contract FactoryAdminTest is UARegistryBase {
         _viaRefused(trouter, bytes32(0), f, abi.encodeCall(IFactoryAdmin.acceptAdmin, ()),
             abi.encodeWithSelector(IFactoryAdmin.NotPendingAdmin.selector, bytes32(0)));
         assertEq(_a(f).admin(), nid(deployer), "M19: the admin stays");
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next))));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next), EnvKit.uidOf(address(f)))));
         _refused(STRANGER, address(f), abi.encodeCall(IFactoryAdmin.acceptAdmin, ()),
             abi.encodeWithSelector(IFactoryAdmin.NotPendingAdmin.selector, nid(STRANGER)));
         _call(next, address(f), abi.encodeCall(IFactoryAdmin.acceptAdmin, ()));
@@ -659,8 +668,8 @@ contract FactoryAdminTest is UARegistryBase {
             abi.encodeWithSelector(IFactoryAdmin.NotPendingAdmin.selector, nid(next)));
         assertEq(_a(f).adminGeneration(), 1, "M9: one accept, one generation");
         // a pending cancelled by `transferAdmin(0)` cannot accept
-        _call(next, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(deployer))));
-        _call(next, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (bytes32(0))));
+        _call(next, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(deployer), EnvKit.uidOf(address(f)))));
+        _call(next, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (bytes32(0), EnvKit.uidOf(address(f)))));
         _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.acceptAdmin, ()),
             abi.encodeWithSelector(IFactoryAdmin.NotPendingAdmin.selector, nid(deployer)));
     }
@@ -669,10 +678,10 @@ contract FactoryAdminTest is UARegistryBase {
     /// answering 0.
     function test_renounce_endsEveryOp() public {
         OpenFactory f = _ready(address(trouter));
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next))));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next), EnvKit.uidOf(address(f)))));
         vm.expectEmit(true, true, true, true, address(f));
         emit IFactoryAdmin.AdminTransferred(nid(deployer), bytes32(0));
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, ()));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, (EnvKit.uidOf(address(f)))));
         assertEq(_a(f).admin(), bytes32(0));
         assertEq(_a(f).pendingAdmin(), bytes32(0), "M17: the pending is cleared");
         assertEq(_a(f).adminGeneration(), 1);
@@ -683,33 +692,33 @@ contract FactoryAdminTest is UARegistryBase {
             _refused(deployer, address(f), c[i], _notAdmin(nid(deployer)));
             _viaRefused(trouter, bytes32(0), f, c[i], _notAdmin(bytes32(0)));
         }
-        _viaRefused(trouter, bytes32(0), f, abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next))), _notAdmin(bytes32(0)));
-        _viaRefused(trouter, bytes32(0), f, abi.encodeCall(IFactoryAdmin.renounceAdmin, ()), _notAdmin(bytes32(0)));
-        _viaRefused(trouter, bytes32(0), f, abi.encodeCall(IFactoryAdmin.revokeApproval, (bytes32(uint256(1)))),
+        _viaRefused(trouter, bytes32(0), f, abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next), EnvKit.uidOf(address(f)))), _notAdmin(bytes32(0)));
+        _viaRefused(trouter, bytes32(0), f, abi.encodeCall(IFactoryAdmin.renounceAdmin, (EnvKit.uidOf(address(f)))), _notAdmin(bytes32(0)));
+        _viaRefused(trouter, bytes32(0), f, abi.encodeCall(IFactoryAdmin.revokeApproval, (bytes32(uint256(1)), EnvKit.uidOf(address(f)))),
             _notAdmin(bytes32(0)));
         Rel memory t = _tok();
-        _refused(deployer, address(f), _deployCd(t), _notApproved(_key(f, t)));
+        _refused(deployer, address(f), _deployCd(t, address(f)), _notApproved(_key(f, t)));
     }
 
     /// M22: before `configureChain`, the admin can neither transfer nor renounce (nor approve, revoke or deploy).
     function test_unconfigured_refused() public {
         OpenFactory f = _new(nid(deployer));
         bytes memory nc = abi.encodeWithSelector(IOpenFactory.ChainNotConfigured.selector);
-        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next))), nc);
-        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, ()), nc);
+        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next), EnvKit.uidOf(address(f)))), nc);
+        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.renounceAdmin, (EnvKit.uidOf(address(f)))), nc);
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
             _refused(deployer, address(f), _approveWith(rs[i], bytes32(0), address(f), 0, _until()), nc);
-            _refused(deployer, address(f), _deployCd(rs[i]), nc);
+            _refused(deployer, address(f), _deployCd(rs[i], address(f)), nc);
         }
-        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (bytes32(uint256(1)))), nc);
+        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (bytes32(uint256(1)), EnvKit.uidOf(address(f)))), nc);
         assertEq(_a(f).admin(), nid(deployer));
     }
 
     /// A derived pending on a factory without a router has no path to accept: the admin stays.
     function test_routerless_derivedPendingCannotAccept() public {
         OpenFactory f = _ready(address(0));
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (ml)));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (ml, EnvKit.uidOf(address(f)))));
         _refused(RELAYER, address(router), _acceptCd(ml, f),
             abi.encodeWithSelector(IFactoryAdmin.NotPendingAdmin.selector, nid(address(router))));
         assertEq(_a(f).admin(), nid(deployer));
@@ -723,7 +732,7 @@ contract FactoryAdminTest is UARegistryBase {
         OpenFactory f = _ready(address(trouter));
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
-            _call(deployer, address(f), _deployCd(rs[i]));
+            _call(deployer, address(f), _deployCd(rs[i], address(f)));
             assertEq(_state(f, _key(f, rs[i])), NONE, "no approval written");
         }
         assertTrue(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) != address(0));
@@ -746,7 +755,7 @@ contract FactoryAdminTest is UARegistryBase {
             assertEq(s, LIVE);
             assertEq(g, 0);
             assertEq(un, u);
-            _call(STRANGER, address(f), _deployCd(rs[i]));
+            _call(STRANGER, address(f), _deployCd(rs[i], address(f)));
             assertEq(_state(f, k), CONSUMED);
         }
         assertTrue(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) != address(0));
@@ -758,7 +767,7 @@ contract FactoryAdminTest is UARegistryBase {
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
             _via(trouter, nid(deployer), f, _approveCd(f, rs[i], _until()));
-            _call(STRANGER, address(f), _deployCd(rs[i]));
+            _call(STRANGER, address(f), _deployCd(rs[i], address(f)));
             assertEq(_state(f, _key(f, rs[i])), CONSUMED);
         }
     }
@@ -771,13 +780,13 @@ contract FactoryAdminTest is UARegistryBase {
             UAKinds.uaOf(UAKinds.WEBAUTHN_P256, abi.encode("webauthn-p256"))];
         for (uint256 j; j < 3; ++j) {
             OpenFactory f = _ready(address(trouter));
-            _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (ids[j])));
+            _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (ids[j], EnvKit.uidOf(address(f)))));
             _via(trouter, ids[j], f, abi.encodeCall(IFactoryAdmin.acceptAdmin, ()));
             Rel[3] memory rs = _rels();
             for (uint256 i; i < 3; ++i) {
                 _via(trouter, ids[j], f, _approveCd(f, rs[i], _until()));
                 assertEq(_state(f, _key(f, rs[i])), LIVE);
-                _call(next, address(f), _deployCd(rs[i]));
+                _call(next, address(f), _deployCd(rs[i], address(f)));
                 assertEq(_state(f, _key(f, rs[i])), CONSUMED);
             }
         }
@@ -789,7 +798,7 @@ contract FactoryAdminTest is UARegistryBase {
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
             _call(deployer, address(f), _approveCd(f, rs[i], _until()));
-            _call(deployer, address(f), _deployCd(rs[i]));
+            _call(deployer, address(f), _deployCd(rs[i], address(f)));
             assertEq(_state(f, _key(f, rs[i])), CONSUMED);
         }
     }
@@ -801,9 +810,9 @@ contract FactoryAdminTest is UARegistryBase {
         vm.etch(deployer, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
-            _refused(deployer, address(f), _deployCd(rs[i]), _notApproved(_key(f, rs[i])));
+            _refused(deployer, address(f), _deployCd(rs[i], address(f)), _notApproved(_key(f, rs[i])));
             _via(trouter, nid(deployer), f, _approveCd(f, rs[i], _until()));
-            _call(deployer, address(f), _deployCd(rs[i]));
+            _call(deployer, address(f), _deployCd(rs[i], address(f)));
             assertEq(_state(f, _key(f, rs[i])), CONSUMED);
         }
     }
@@ -830,10 +839,10 @@ contract FactoryAdminTest is UARegistryBase {
         OpenFactory f = _ready(address(trouter));
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
-            _refused(STRANGER, address(f), _deployCd(rs[i]), _notApproved(_key(f, rs[i])));
+            _refused(STRANGER, address(f), _deployCd(rs[i], address(f)), _notApproved(_key(f, rs[i])));
             Rel memory v0 = rs[i];
             v0.version = 0;
-            _refused(STRANGER, address(f), _deployCd(v0), _notApproved(_key(f, v0)));
+            _refused(STRANGER, address(f), _deployCd(v0, address(f)), _notApproved(_key(f, v0)));
         }
     }
 
@@ -846,9 +855,9 @@ contract FactoryAdminTest is UARegistryBase {
         for (uint256 i; i < 3; ++i) {
             Rel[] memory off = _offByOne(rs[i]);
             for (uint256 j; j < off.length; ++j) {
-                _refused(STRANGER, address(f), _deployCd(off[j]), _notApproved(_key(f, off[j])));
+                _refused(STRANGER, address(f), _deployCd(off[j], address(f)), _notApproved(_key(f, off[j])));
             }
-            _call(STRANGER, address(f), _deployCd(rs[i]));
+            _call(STRANGER, address(f), _deployCd(rs[i], address(f)));
         }
     }
 
@@ -880,8 +889,8 @@ contract FactoryAdminTest is UARegistryBase {
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
             _call(deployer, address(f), _approveCd(f, rs[i], _until()));
-            _call(STRANGER, address(f), _deployCd(rs[i]));
-            _refused(STRANGER, address(f), _deployCd(rs[i]), _notApproved(_key(f, rs[i])));
+            _call(STRANGER, address(f), _deployCd(rs[i], address(f)));
+            _refused(STRANGER, address(f), _deployCd(rs[i], address(f)), _notApproved(_key(f, rs[i])));
         }
     }
 
@@ -893,9 +902,9 @@ contract FactoryAdminTest is UARegistryBase {
             _call(deployer, address(f), _approveCd(f, rs[i], _until()));
             vm.expectEmit(true, true, true, true, address(f));
             emit IFactoryAdmin.ReleaseApprovalRevoked(k);
-            _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k)));
+            _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k, EnvKit.uidOf(address(f)))));
             assertEq(_state(f, k), NONE);
-            _refused(STRANGER, address(f), _deployCd(rs[i]), _notApproved(k));
+            _refused(STRANGER, address(f), _deployCd(rs[i], address(f)), _notApproved(k));
         }
     }
 
@@ -906,9 +915,9 @@ contract FactoryAdminTest is UARegistryBase {
         uint64 u = uint64(block.timestamp + 1 hours);
         for (uint256 i; i < 3; ++i) _call(deployer, address(f), _approveCd(f, rs[i], u));
         vm.warp(u);
-        _call(STRANGER, address(f), _deployCd(rs[0]));
+        _call(STRANGER, address(f), _deployCd(rs[0], address(f)));
         vm.warp(u + 1);
-        for (uint256 i = 1; i < 3; ++i) _refused(STRANGER, address(f), _deployCd(rs[i]), _notApproved(_key(f, rs[i])));
+        for (uint256 i = 1; i < 3; ++i) _refused(STRANGER, address(f), _deployCd(rs[i], address(f)), _notApproved(_key(f, rs[i])));
     }
 
     /// M26 (generation): an approval of the previous admin term opens nothing, after a transfer and after a renounce.
@@ -920,22 +929,22 @@ contract FactoryAdminTest is UARegistryBase {
             _call(deployer, address(f), _approveCd(f, rs[i], _until()));
             _call(deployer, address(g), _approveCd(g, rs[i], _until()));
         }
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next))));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next), EnvKit.uidOf(address(f)))));
         _call(next, address(f), abi.encodeCall(IFactoryAdmin.acceptAdmin, ()));
-        _call(deployer, address(g), abi.encodeCall(IFactoryAdmin.renounceAdmin, ()));
+        _call(deployer, address(g), abi.encodeCall(IFactoryAdmin.renounceAdmin, (EnvKit.uidOf(address(g)))));
         for (uint256 i; i < 3; ++i) {
-            _refused(STRANGER, address(f), _deployCd(rs[i]), _notApproved(_key(f, rs[i])));
-            _refused(STRANGER, address(g), _deployCd(rs[i]), _notApproved(_key(g, rs[i])));
+            _refused(STRANGER, address(f), _deployCd(rs[i], address(f)), _notApproved(_key(f, rs[i])));
+            _refused(STRANGER, address(g), _deployCd(rs[i], address(g)), _notApproved(_key(g, rs[i])));
         }
     }
 
     /// M23: after the admin moves to an `msig`, the original deployer EOA has no shortcut.
     function test_deploy_deployerAfterMoveToMsigRefused() public {
         OpenFactory f = _ready(address(router));
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (msig)));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (msig, EnvKit.uidOf(address(f)))));
         _accept(msig, f);
         Rel[3] memory rs = _rels();
-        for (uint256 i; i < 3; ++i) _refused(deployer, address(f), _deployCd(rs[i]), _notApproved(_key(f, rs[i])));
+        for (uint256 i; i < 3; ++i) _refused(deployer, address(f), _deployCd(rs[i], address(f)), _notApproved(_key(f, rs[i])));
     }
 
     /// M23 (the router's subject): a deploy through a router acting for the admin is no shortcut (no deploy is a router
@@ -944,7 +953,7 @@ contract FactoryAdminTest is UARegistryBase {
         OpenFactory f = _ready(address(trouter));
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
-            _viaRefused(trouter, nid(deployer), f, _deployCd(rs[i]), _notApproved(_key(f, rs[i])));
+            _viaRefused(trouter, nid(deployer), f, _deployCd(rs[i], address(f)), _notApproved(_key(f, rs[i])));
         }
     }
 
@@ -970,7 +979,7 @@ contract FactoryAdminTest is UARegistryBase {
         for (uint256 i; i < 3; ++i) {
             _call(deployer, address(f), _approveCd(f, rs[i], _until()));
             assertTrue(_key(f, rs[i]) != _key(g, rs[i]));
-            _refused(STRANGER, address(g), _deployCd(rs[i]), _notApproved(_key(g, rs[i])));
+            _refused(STRANGER, address(g), _deployCd(rs[i], address(g)), _notApproved(_key(g, rs[i])));
             _refused(deployer, address(g), _approveCd(f, rs[i], _until()),
                 abi.encodeWithSelector(IFactoryAdmin.ApprovalFieldMismatch.selector, uint8(1)));
         }
@@ -998,15 +1007,15 @@ contract FactoryAdminTest is UARegistryBase {
         IFactoryToken.Env memory e;
         vm.startPrank(deployer);
         fb.configureChain(uidB, 0, address(rb), address(rb).codehash, 0, bytes32(0));
-        fb.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, e);
-        fb.publishDexEnv(1, e);
-        fb.publishClassEnv(CLS, 0, 1, e);
+        fb.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(fb)), e);
+        fb.publishDexEnv(1, EnvKit.uidOf(address(fb)), e);
+        fb.publishClassEnv(CLS, 0, 1, EnvKit.uidOf(address(fb)), e);
         vm.stopPrank();
         for (uint256 i; i < 3; ++i) {
             assertEq(_state(fb, keysA[i]), NONE);
             assertTrue(_key(fb, rs[i]) != keysA[i]);
             _refused(deployer, address(fb), cds[i], abi.encodeWithSelector(IFactoryAdmin.ApprovalFieldMismatch.selector, uint8(0)));
-            _refused(STRANGER, address(fb), _deployCd(rs[i]), _notApproved(_key(fb, rs[i])));
+            _refused(STRANGER, address(fb), _deployCd(rs[i], address(fb)), _notApproved(_key(fb, rs[i])));
         }
     }
 
@@ -1016,17 +1025,17 @@ contract FactoryAdminTest is UARegistryBase {
         Rel[3] memory rs = _rels();
         bytes32 k0 = _key(f, rs[0]);
         bytes memory nr = abi.encodeWithSelector(IFactoryAdmin.ApprovalNotRevocable.selector, k0);
-        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k0)), nr);
+        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k0, EnvKit.uidOf(address(f)))), nr);
         _call(deployer, address(f), _approveCd(f, rs[0], _until()));
-        _refused(STRANGER, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k0)), _notAdmin(nid(STRANGER)));
-        _call(STRANGER, address(f), _deployCd(rs[0]));
-        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k0)), nr);
+        _refused(STRANGER, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k0, EnvKit.uidOf(address(f)))), _notAdmin(nid(STRANGER)));
+        _call(STRANGER, address(f), _deployCd(rs[0], address(f)));
+        _refused(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k0, EnvKit.uidOf(address(f)))), nr);
         assertEq(_state(f, k0), CONSUMED);
         // an expired entry and one of an earlier term are stored, not consumed: revocable
         bytes32 k1_ = _key(f, rs[1]);
         _call(deployer, address(f), _approveCd(f, rs[1], uint64(block.timestamp + 1)));
         vm.warp(block.timestamp + 2);
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k1_)));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k1_, EnvKit.uidOf(address(f)))));
         assertEq(_state(f, k1_), NONE);
     }
 
@@ -1054,15 +1063,15 @@ contract FactoryAdminTest is UARegistryBase {
         vm.warp(block.timestamp + 2 hours);
         _call(deployer, address(f), _approveCd(f, rs[0], _until())); // after expiry
         assertEq(_state(f, k), LIVE);
-        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next))));
+        _call(deployer, address(f), abi.encodeCall(IFactoryAdmin.transferAdmin, (nid(next), EnvKit.uidOf(address(f)))));
         _call(next, address(f), abi.encodeCall(IFactoryAdmin.acceptAdmin, ()));
         _call(next, address(f), _approveCd(f, rs[0], _until())); // after a transfer
         (, uint32 g,) = _a(f).approvalOf(k);
         assertEq(g, 1);
-        _call(next, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k)));
+        _call(next, address(f), abi.encodeCall(IFactoryAdmin.revokeApproval, (k, EnvKit.uidOf(address(f)))));
         _call(next, address(f), _approveCd(f, rs[0], _until())); // after a revoke
         assertEq(_state(f, k), LIVE);
-        _call(STRANGER, address(f), _deployCd(rs[0]));
+        _call(STRANGER, address(f), _deployCd(rs[0], address(f)));
     }
 
     // ------------------------------------------------------------------ gas independence (§5.6 item 3, Fable re-check N3)
@@ -1096,16 +1105,16 @@ contract FactoryAdminTest is UARegistryBase {
     function test_lowestGasDeployEqualsAmple() public {
         OpenFactory f = _ready(address(trouter));
         Rel memory r = _burn();
-        uint256 low = _lowestGas(f, deployer, _deployCd(r));
+        uint256 low = _lowestGas(f, deployer, _deployCd(r, address(f)));
         console2.log("lowest gas of the class deploy (shortcut)", low);
         uint256 snap = vm.snapshotState();
         vm.prank(deployer);
-        (bool ok,) = address(f).call{gas: low}(_deployCd(r));
+        (bool ok,) = address(f).call{gas: low}(_deployCd(r, address(f)));
         assertTrue(ok);
         IOpenFactory.ClassRelease memory a = f.classReleaseOf(_id(r));
         bytes32 ha = a.implementation.codehash;
         vm.revertToState(snap);
-        _call(deployer, address(f), _deployCd(r));
+        _call(deployer, address(f), _deployCd(r, address(f)));
         IOpenFactory.ClassRelease memory b = f.classReleaseOf(_id(r));
         assertEq(abi.encode(a), abi.encode(b));
         assertEq(ha, b.implementation.codehash);
@@ -1115,7 +1124,7 @@ contract FactoryAdminTest is UARegistryBase {
     /// probes and the lowest that passes them, the deploy fails with `ProbeGasLow` and nothing else from the probes.
     function test_supportsBelowFloorProbeGasLow() public {
         OpenFactory f = _ready(address(trouter));
-        bytes memory cd = _deployCd(_burn());
+        bytes memory cd = _deployCd(_burn(), address(f));
         uint256 low = _lowestGas(f, deployer, cd);
         bool seen;
         for (uint256 g = low - 1; g > 150_000 && !seen; g -= 10_000) {
@@ -1187,15 +1196,15 @@ contract FactoryAdminTest is UARegistryBase {
         DeploySend ds = new DeploySend();
         Rel[3] memory rs = _rels();
         for (uint256 i; i < 3; ++i) {
-            address want = ds.releaseAt(address(f), _deployCd(rs[i]));
+            address want = ds.releaseAt(address(f), _deployCd(rs[i], address(f)));
             assertEq(want.code.length, 0);
             vm.prank(deployer);
-            (bool ok, bytes memory ret) = address(f).call(_deployCd(rs[i]));
+            (bool ok, bytes memory ret) = address(f).call(_deployCd(rs[i], address(f)));
             assertTrue(ok);
             assertEq(abi.decode(ret, (address)), want);
         }
         assertEq(ds.releaseAt(address(f), abi.encodeCall(OpenFactory.setTokenKindEnabled,
-            (IOpenFactory.TokenKind.NORMAL, true))), address(0));
+            (IOpenFactory.TokenKind.NORMAL, true, EnvKit.uidOf(address(f))))), address(0));
     }
 
     // ------------------------------------------------------------------ gas (§5.6 "Gas", §9)
@@ -1208,8 +1217,8 @@ contract FactoryAdminTest is UARegistryBase {
         string[3] memory names = [string("token"), "dex", "class"];
         for (uint256 i; i < 3; ++i) {
             (uint256 ar, uint256 as_) = _gasOf(deployer, address(f), _approveCd(f, rs[i], _until()));
-            (uint256 dr, uint256 ds) = _gasOf(STRANGER, address(f), _deployCd(rs[i]));
-            (uint256 sr, uint256 ss) = _gasOf(deployer, address(g), _deployCd(rs[i]));
+            (uint256 dr, uint256 ds) = _gasOf(STRANGER, address(f), _deployCd(rs[i], address(f)));
+            (uint256 sr, uint256 ss) = _gasOf(deployer, address(g), _deployCd(rs[i], address(g)));
             console2.log(string.concat("FACTORYGAS ", names[i], " approve: regular / state"), ar, as_);
             console2.log(string.concat("FACTORYGAS ", names[i], " deploy through the approval: regular / state"), dr, ds);
             console2.log(string.concat("FACTORYGAS ", names[i], " deploy by the admin (shortcut): regular / state"), sr, ss);

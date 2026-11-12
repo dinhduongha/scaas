@@ -461,7 +461,7 @@ connector has no quote model).
 <a id="payment-modes"></a><a id="INT-ERP-27"></a>**INT-ERP-27** — **The payment mode is configuration, not code.** A
 deployment chooses per company and channel among: sponsored (company relayer, `MODE_FEE_NONE` +
 `MODE_RESTRICT_RELAYER`, gas as OPEX); fee in token (`MODE_FEE_PERCENT`/`FIXED`, fee ≤ 1 % to `feeRecipient`); payee
-self-relay ([inbound](#inbound)); receiver pays the fee; a node gas-sponsorship policy; the enterprise inbound gateway.
+self-relay ([inbound](#inbound)); the payee pays the fee; a node gas-sponsorship policy; the enterprise inbound gateway.
 
 <a id="bus-scope"></a><a id="INT-ERP-15"></a>**INT-ERP-15** — **Bus scope is a per-tenant client setting delivered per
 job.** `restricted` (default) keeps [INT-ERP-06](#INT-ERP-06): terms pin `MODE_RESTRICT_RELAYER` to the company relayer
@@ -755,12 +755,12 @@ that several jobs share one `tx_hash`.
 | Non-EVM inbound | The client builds the `MetaOp`, the payer signs, the client pushes `signed_op` jobs | **BUILT** (via the example outbox); job API **SPECIFIED** |
 | Payee self-relay ("e-cheque") | Payer signs offline with fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits; the ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
 | Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data. A policy caps a tenant's own spend only with `on_exhausted = reject`; with `unsponsored` an exhausted policy books the job to the namespace and marks it `sponsor_fallback` (the admin must set `fallback_to_namespace`, audited) ([NODE-SPN-01](node/sponsorship.md#NODE-SPN-01)) | **SPECIFIED** |
-| Receiver pays fee | Two signatures (payer's `pay`, payee's fee authorization); booked as payment N and fee F | **SPECIFIED** ([CTR-MTX-05](contracts/metatx.md#CTR-MTX-05); job field `receiver_fee`, event `ReceiverFeePaid`) |
+| Payee fee | Two signatures (payer's `pay`, payee's fee authorization); booked as payment N and fee F | **SPECIFIED** ([CTR-MTX-05](contracts/metatx.md#CTR-MTX-05); job field `payee_fee`, event `PayeeFeePaid`) |
 
-Receiver pays, client side: the **payee ERP** sets `fee_paid_by_receiver` and `receiver_fee_amount` (base units) on the
+Payee fee, client side: the **payee ERP** sets `fee_paid_by_payee` and `payee_fee_amount` (base units) on the
 request it issues; the payer's terms stay fee `NONE`; once the payer's address is known (portal: wallet connect), the
-payee signs `ReceiverFee` over the `paymentDigest` (a `SmartKeyAccount` payee signs through `mtxExecuteAsOwner` rules) and
-books payment `N` received and fee `F` paid from `PaymentSettled` + `ReceiverFeePaid`. The **payer ERP** is unchanged
+payee signs `UAPayeeFee` over the `paymentDigest` (a `SmartKeyAccount` payee signs through `mtxExecuteAsOwner` rules) and
+books payment `N` received and fee `F` paid from `PaymentSettled` + `UAPayeeFeePaid`. The **payer ERP** is unchanged
 (pays `N`, books `N`). **E-cheque flow:** the payee's request names the relayer lane; the payer signs offline with that
 relayer bound and hands the intent to the payee, which co-signs over the digest and pushes it to that node.
 

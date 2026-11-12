@@ -13,7 +13,10 @@ interface ISCaaSDex {
     /// @notice Written once by `initialize` (CTR-DEX-24). `relayerSharePpm` of every fee goes to the submitter, the
     ///         rest to `treasury`. `listedOnly`: every exchange target or executor must be listed (CTR-DEX-23).
     ///         `grantDelay`: the admin's two calls (spec §1.6), at most 30 days. `rescueTo`: the `DexPuller`'s rescue
-    ///         destination (spec §6.2), immutable, 0 = none; the DEX itself rescues nothing (CTR-DEX-20).
+    ///         destination (spec §6.2), immutable, 0 = `RescueLib.SCAAS_DEV_RESCUE` (CTR-GOV-25); the DEX's own `rescue`
+    ///         sends a stray there too (Fable D P3-5). `features`: the optional bits set at creation, today bit 29
+    ///         `CLOSED_MARKETS` (owner 2026-11-12; 0 = open markets; `LISTING` and `FEE_ROUTING` are always set);
+    ///         `lockedFeatures`: set bits the admin can never disable.
     struct DexConfig {
         bytes32 admin;
         uint32 relayerSharePpm;
@@ -21,6 +24,8 @@ interface ISCaaSDex {
         bool listedOnly;
         uint64 grantDelay;
         address rescueTo;
+        uint256 features;
+        uint256 lockedFeatures;
     }
 
     /// @notice One order in one settlement; `fill` = its `sellFill` in this call (Path B: the matched part). Tagged
@@ -205,6 +210,8 @@ interface ISCaaSDex {
     error ForbiddenSelector(address target, bytes4 selector);
     error TargetNotListed(address target);
     error InsufficientOutput(address token);
+    /// @notice A pull took more from the seller than it signed to sell (owner 2026-11-12).
+    error SellerOverDebited(bytes32 orderHash);
     /// @notice Liquidity (CTR-DEX-30, -31): `code` 1 no input or no output, 2 more than eight, 3 a zero, repeated or shared
     ///         token or a zero maximum, 4 the position fields disagree, 5 a recipient that is the DEX, its puller, a plan
     ///         token or the manager; 6 is a token's (not exactly one input).
@@ -271,6 +278,9 @@ interface ISCaaSDex {
     function minNonce(address from, uint256 batch) external view returns (uint256);
     /// @notice The `DexPuller` holders of outside tokens approve (CTR-DEX-22), deployed by `initialize`.
     function puller() external view returns (address);
+    /// @notice Anyone: the DEX's whole balance of `token` to the puller's `rescueTo` (never 0, CTR-GOV-25), the puller's rule
+    ///         (Fable D P3-5); under the entry guard, so never inside a running settlement or plan.
+    function rescue(address token) external;
 
     function relayerSharePpm() external view returns (uint32);
     function treasury() external view returns (address);

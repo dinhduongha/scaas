@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {IGovernance} from "./IGovernance.sol";
 import {IAdmin} from "./IAdmin.sol";
 import {GovernanceBits} from "./GovernanceBits.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IRescuable} from "./IRescuable.sol";
+import {RescueLib} from "./RescueLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 
@@ -24,7 +22,6 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         promises the power is permanent. A holder may renounce its own role. A power runs through `GovernanceUse.use`
 ///         (`GovernanceBase.sol`): a whole-shape holder inline, a limited one by one DELEGATECALL to `useLimited` (B-26).
 library GovernanceLib {
-    using SafeERC20 for IERC20;
     /// @dev The value of `roles`: 0 none, `WHOLE` no limit, `LIMITED` a `Grant` binds it.
     uint8 internal constant WHOLE = 1;
     uint8 internal constant LIMITED = 2;
@@ -93,8 +90,9 @@ library GovernanceLib {
     // ------------------------------------------------------------------ init (CTR-TOK-22 "Validation in the token")
 
     /// @notice Validates the flags against the contract's masks and writes features, admin, `grantDelay` and initial roles.
-    ///         Called once by the contract's `initialize`. `grantDelay` above 30 days is refused (B-27); `rescueTo` comes with
-    ///         bit 17 and is never the contract itself or a pool (spec §6.2, `RescueConfigInvalid`). `roles.issuer` holds
+    ///         Called once by the contract's `initialize`. `grantDelay` above 30 days is refused (B-27); `rescueTo` comes only
+    ///         with bit 17 and is never the contract itself or a pool (spec §6.2, `RescueConfigInvalid`); bit 17 with
+    ///         `rescueTo` 0 stores `RescueLib.SCAAS_DEV_RESCUE` (CTR-GOV-25). `roles.issuer` holds
     ///         each set bit of 5-7, `roles.compliance` bit 10 (regulated-kinds spec §2.4); `uaRegistry` answers `kindOf` for
     ///         a derived holder of a regulated contract-only bit (RK-1).
     function init(uint256 features, uint256 locked, bytes32 admin, uint64 grantDelay, address rescueTo, Roles memory roles,
@@ -103,15 +101,15 @@ library GovernanceLib {
         if (grantDelay > MAX_GRANT_DELAY) revert IGovernance.GrantDelayTooLong(grantDelay);
         uint256 bad = features & ~valid;
         if (bad != 0) revert IGovernance.FeatureInvalidForKind(_lowest(bad));
-        if ((features & _bit(GovernanceBits.RESCUABLE) != 0) != (rescueTo != address(0)) || rescueTo == address(this)
-            || rescueTo == MetaTxLib.UA_POOL || rescueTo == MetaTxLib.SHIELD_POOL) revert IRescuable.RescueConfigInvalid();
+        if ((features & _bit(GovernanceBits.RESCUABLE) == 0 && rescueTo != address(0)) || rescueTo == address(this) || rescueTo == MetaTxLib.UA_POOL
+            || rescueTo == MetaTxLib.SHIELD_POOL) revert IRescuable.RescueConfigInvalid();
         // a lock holds a set bit on; only 8, 9, 28, where valid, may be locked off (round 3s, spec §5.3)
         if (locked & ~(features | (GovernanceBits.ENABLEABLE & valid)) != 0) revert IGovernance.LockedNotSubset();
         GovernanceStorage storage s = $();
         s.features = features;
         s.lockedFeatures = locked | (features & GovernanceBits.ALWAYS_LOCKED);
         s.grantDelay = grantDelay;
-        s.rescueTo = rescueTo;
+        if (features & _bit(GovernanceBits.RESCUABLE) != 0) s.rescueTo = RescueLib.to(rescueTo);
         if (roles.minter != 0) _grant(s, GovernanceBits.MINTABLE, roles.minter, 0, roleBits, contractOnly, uaRegistry);
         if (roles.rateAdmin != 0) {
             _grant(s, GovernanceBits.RATE_ADJUSTABLE, roles.rateAdmin, 0, roleBits, contractOnly, uaRegistry);
@@ -483,10 +481,7 @@ library GovernanceLib {
     /// @notice `NORMAL*`: the whole balance of `asset` (the native coin by value) to `rescueTo`; the token owes none of it.
     ///         The caller's guard is the token's `nonReentrant`.
     function rescue(address asset) public {
-        address to = rescueOpen(asset);
-        uint256 amount = asset == address(0) ? address(this).balance : IERC20(asset).balanceOf(address(this));
-        rescueSend(asset, to, amount);
-        emit IRescuable.Rescued(asset, to, amount);
+        RescueLib.all(asset, rescueOpen(asset));
     }
 
     /// @dev The two first rows of spec §6.2 on every kind: bit 17, and never the token's own units. Returns `rescueTo`.
@@ -495,16 +490,6 @@ library GovernanceLib {
         if (s.features & _bit(GovernanceBits.RESCUABLE) == 0) revert IGovernance.FeatureNotSet(GovernanceBits.RESCUABLE);
         if (asset == address(this)) revert IRescuable.RescueAssetInvalid(asset);
         return s.rescueTo;
-    }
-
-    /// @dev The native coin by value, refused to a designator as `WrappedLib.payOut` refuses it; an ERC-20 by `safeTransfer`.
-    function rescueSend(address asset, address to, uint256 amount) internal {
-        if (asset == address(0)) {
-            if (SigCheck.isDesignator(to)) revert IRescuable.RescueAssetInvalid(asset);
-            Address.sendValue(payable(to), amount);
-        } else {
-            IERC20(asset).safeTransfer(to, amount);
-        }
     }
 
     function requireFeature(uint8 bit) internal view {

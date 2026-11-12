@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -33,9 +34,13 @@ contract PqChatGasTest is PqTopicsBase {
     // 43,147,530 -> 43,110,810 (-24 x 1,530)
     // Fable D P3-1 (2026-11-11, `initialize` checks `creating()`): 27,801 -> 27,999 B; regular 1,906,679 -> 1,921,243;
     // state 43,110,810 -> 43,413,750 (+198 x 1,530)
-    uint256 internal constant RUNTIME = 27_999;
-    uint256 internal constant RELEASE_REGULAR = 1_921_243;
-    uint256 internal constant RELEASE_STATE = 43_413_750;
+    // fix2 CTR-GOV-26 (owner 2026-11-12, `rescue(asset)` to the constant dev address): 27,999 -> 28,776 B; regular
+    // 1,921,243 -> 1,971,175; state 43,413,750 -> 44,602,560 (+777 x 1,530)
+    // fix2 recheck-2 P3-1 (CTR-GOV-27, `deployImplementation`'s last `chainUid_`: one more calldata word, the EIP-7976 floor;
+    // PqChat unchanged): regular 1,971,175 -> 1,973,256
+    uint256 internal constant RUNTIME = 28_776;
+    uint256 internal constant RELEASE_REGULAR = 1_973_256;
+    uint256 internal constant RELEASE_STATE = 44_602_560;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
     uint256 internal constant MODULE_RUNTIME = 16_398;
@@ -238,7 +243,7 @@ contract PqChatGasTest is PqTopicsBase {
         bytes memory code = type(PqChat).creationCode;
         vm.prank(REGISTRAR);
         address r = f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 1, IPqChat.initialize.selector,
-            type(IPqChat).interfaceId, code, _args());
+            type(IPqChat).interfaceId, code, _args(), EnvKit.uidOf(address(f)));
         Vm.Gas memory g = vm.lastCallGas();
         (uint256 regular, uint256 state) = (uint256(g.gasTotalUsed) * 64 / 63, uint256(int256(g.gasStateUsed)));
         uint256 asked = (regular + state) * 105 / 100;

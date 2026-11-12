@@ -75,6 +75,7 @@ contract Misc is OnchainBase {
     string internal constant E3R =
         "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
     string internal constant ENV_T = "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)";
+    string internal constant CE_T = "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)";
 
     function run() external {
         _init("misc");
@@ -295,13 +296,13 @@ contract Misc is OnchainBase {
         bytes memory implArgs = abi.encode(ImplArgs(ms));
         cfg0 = abi.encode(_cfg0("Onchain f2", "oF2"));
         vm.startBroadcast(k1);
-        f2.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, withMs);
-        address impl = f2.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, implArgs);
+        f2.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, uid, withMs);
+        address impl = f2.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, implArgs, f2.chainUid());
         address tok = f2.createToken(IOpenFactory.TokenKind.NORMAL, 1, cfg0, _salt("f2-t1"));
         impl2 = address(new NormalToken(address(f2), implArgs));
         address tokU = f2.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl2, cfg0, _salt("f2-tu"));
-        f2.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 2, e); // env 2: no module pinned (the ModuleNotPinned negative)
-        f2.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 3, withMs); // env 3, the latest: the modules again (KindDisabled's)
+        f2.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 2, uid, e); // env 2: no module pinned (the ModuleNotPinned negative)
+        f2.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 3, uid, withMs); // env 3, the latest: the modules again (KindDisabled's)
         vm.stopBroadcast();
         _book(impl, "NormalToken");
         _book(tok, "NormalToken");
@@ -310,14 +311,14 @@ contract Misc is OnchainBase {
         _dex();
         _classKind();
         vm.startBroadcast(k1);
-        f2.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, "onchain matrix: deprecated after its use");
+        f2.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, f2.chainUid(), "onchain matrix: deprecated after its use");
         // already on (the default 0 and 1): an idempotent write. Both carry REFUND_GAS: the simulated 21,147 x 1.10 ran out
         // of gas on a fresh anvil (the fork's receipt: 19,904), and the NORMAL write frees a slot
-        f2.setTokenKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.WRAPPED, true);
-        f2.setTokenKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.NORMAL, false);
+        f2.setTokenKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.WRAPPED, true, f2.chainUid());
+        f2.setTokenKindEnabled{gas: REFUND_GAS}(IOpenFactory.TokenKind.NORMAL, false, f2.chainUid());
         vm.stopBroadcast();
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.deployTokenImplementation, (IOpenFactory.TokenKind.NORMAL, 3, 2,
-            type(NormalToken).creationCode, implArgs)), IOpenFactory.ModuleNotPinned.selector,
+            type(NormalToken).creationCode, implArgs, f2.chainUid())), IOpenFactory.ModuleNotPinned.selector,
             "factory: a release whose modules its env does not pin (approved through the router: `_factoryRouter`)");
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind.NORMAL, 1, cfg0, _salt("n1"))),
             IOpenFactory.VersionDeprecated.selector, "factory: createToken of a deprecated release");
@@ -325,7 +326,7 @@ contract Misc is OnchainBase {
             _salt("n2"))), IOpenFactory.KindDisabled.selector, "factory: a disabled kind");
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind.NORMAL_REGULATED, 1, cfg0,
             _salt("n3"))), IOpenFactory.VersionUnknown.selector, "factory: a kind outside the catalogue");
-        _neg(a2, address(f2), abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, 4, e)),
+        _neg(a2, address(f2), abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, 4, uid, e)),
             IAdmin.NotAdmin.selector, "factory: publishTokenEnv by another than the admin");
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.configureChain, (uid, 0, address(0), bytes32(0), 0, bytes32(0))),
             IAdmin.NotAdmin.selector, "factory: configureChain by the former admin (the msig is the admin: `_factoryRouter`)");
@@ -341,7 +342,7 @@ contract Misc is OnchainBase {
     function _factoryRouter() internal {
         gr = GovernanceRouter(f5.govRouter());
         vm.broadcast(k1);
-        f2.transferAdmin(um);
+        f2.transferAdmin(um, uid);
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory a) = _mauth("UAAcceptAdmin", "", address(f2), "");
         vm.broadcast(k3);
         gr.mtxAcceptAdmin(e, address(f2), a);
@@ -351,29 +352,30 @@ contract Misc is OnchainBase {
         // the token: env 4 (the modules pinned), release 2 on it approved and deployed by key 3, then deprecated; release 3
         // on env 2 approved and left live (its deploy is the ModuleNotPinned negative of `_factory`)
         IFactoryToken.Env memory withMs = _withModules(_plainEnv());
-        (e, a) = _mauth("UAPublishTokenEnv", "uint8 kind,uint16 envVersion,Env env,", address(f2),
-            abi.encode(IOpenFactory.TokenKind.NORMAL, uint16(4), _envHash(withMs)));
+        (e, a) = _mauth("UAPublishTokenEnv", "uint8 kind,uint16 envVersion,bytes32 chainUid,Env env,", address(f2),
+            abi.encode(IOpenFactory.TokenKind.NORMAL, uint16(4), uid, _envHash(withMs)));
         vm.broadcast(k3);
-        gr.mtxPublishTokenEnv(e, address(f2), IOpenFactory.TokenKind.NORMAL, 4, withMs, a);
+        gr.mtxPublishTokenEnv(e, address(f2), IOpenFactory.TokenKind.NORMAL, 4, uid, withMs, a);
         bytes memory code = type(NormalToken).creationCode;
         bytes memory implArgs = abi.encode(ImplArgs(ms));
         _approveToken(2, 4, code, implArgs, gen, until);
         _approveToken(3, 2, code, implArgs, gen, until);
         vm.broadcast(k3);
-        address impl = f2.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 2, 4, code, implArgs);
+        address impl = f2.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 2, 4, code, implArgs, uid);
         _book(impl, "NormalToken");
         string memory why = "onchain matrix: deprecated after its use (the msig admin, through the router)";
-        (e, a) = _mauth("UADeprecateToken", "uint8 kind,uint64 version,string reason,", address(f2),
-            abi.encode(IOpenFactory.TokenKind.NORMAL, uint64(2), keccak256(bytes(why))));
+        (e, a) = _mauth("UADeprecateToken", "uint8 kind,uint64 version,bytes32 chainUid,string reason,", address(f2),
+            abi.encode(IOpenFactory.TokenKind.NORMAL, uint64(2), uid, keccak256(bytes(why))));
         vm.broadcast(k3);
-        gr.mtxDeprecateToken(e, address(f2), IOpenFactory.TokenKind.NORMAL, 2, why, a);
-        (e, a) = _mauth("UASetTokenKindEnabled", "uint8 kind,bool on,", address(f2), abi.encode(IOpenFactory.TokenKind.WRAPPED, false));
+        gr.mtxDeprecateToken(e, address(f2), IOpenFactory.TokenKind.NORMAL, 2, uid, why, a);
+        (e, a) = _mauth("UASetTokenKindEnabled", "uint8 kind,bool on,bytes32 chainUid,", address(f2),
+            abi.encode(IOpenFactory.TokenKind.WRAPPED, false, uid));
         vm.broadcast(k3);
-        gr.mtxSetTokenKindEnabled{gas: REFUND_GAS}(e, address(f2), IOpenFactory.TokenKind.WRAPPED, false, a);
-        _neg(a1, address(f2), abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, 5, withMs)),
+        gr.mtxSetTokenKindEnabled{gas: REFUND_GAS}(e, address(f2), IOpenFactory.TokenKind.WRAPPED, false, uid, a);
+        _neg(a1, address(f2), abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, 5, uid, withMs)),
             IAdmin.NotAdmin.selector, "factory: publishTokenEnv by the former admin (key 1)");
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.deployTokenImplementation, (IOpenFactory.TokenKind.NORMAL, 4, 4, code,
-            implArgs)), IOpenFactory.ReleaseNotApproved.selector, "factory: the former admin's deploy without an approval");
+            implArgs, f2.chainUid())), IOpenFactory.ReleaseNotApproved.selector, "factory: the former admin's deploy without an approval");
         _dexRouter(gen, until);
         _classRouter(gen, until);
         _entriesRouter();
@@ -383,11 +385,14 @@ contract Misc is OnchainBase {
     function _entriesRouter() internal {
         address rf = _dep("relay_fee_router");
         address ex = _dep("relay_fee_executor");
-        _sendStatic(gr.mtxSetChainEntries.selector, "UASetChainEntries", "address relayFeeRouter,bytes32 relayFeeRouterCodeHash,"
-            "bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,"
-            "address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,"
-            "bytes32 zetherStatementsCodeHash,", abi.encode(rf, rf.codehash, ex.codehash, address(0), bytes32(0), address(0),
-            bytes32(0), address(0), bytes32(0)));
+        // CTR-GOV-27: the entries one named struct, signed as the nested EIP-712 `ChainEntries`, then f2's chain word
+        IOpenFactory.ChainEntries memory ce = IOpenFactory.ChainEntries(rf, rf.codehash, ex.codehash, address(0), bytes32(0),
+            address(0), bytes32(0), address(0), bytes32(0));
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory a) = _mauth("UASetChainEntries",
+            "ChainEntries entries,bytes32 chainUid,", address(f2), abi.encode(keccak256(abi.encode(keccak256(bytes(CE_T)), ce)),
+            uid));
+        vm.broadcast(k3);
+        gr.mtxSetChainEntries(e, address(f2), ce, uid, a);
         require(f2.relayFeeRouter() == rf && f2.relayFeeExecutor() == ex, "f2: the directory's relay pair");
     }
 
@@ -419,14 +424,16 @@ contract Misc is OnchainBase {
     function _dexRouter(uint32 gen, uint64 until) internal {
         IFactoryToken.Env memory de = f2.dexEnvOf(1);
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory a) =
-            _mauth("UAPublishDexEnv", "uint16 envVersion,Env env,", address(f2), abi.encode(uint16(2), _envHash(de)));
+            _mauth("UAPublishDexEnv", "uint16 envVersion,bytes32 chainUid,Env env,", address(f2),
+                abi.encode(uint16(2), uid, _envHash(de)));
         vm.broadcast(k3);
-        gr.mtxPublishDexEnv(e, address(f2), 2, de, a);
+        gr.mtxPublishDexEnv(e, address(f2), 2, uid, de, a);
         _dexApproveRevoke(abi.encode(ImplArgs(_dexModules(de))), gen, until);
         string memory why = "onchain matrix: deprecated after its use (the msig admin, through the router)";
-        (e, a) = _mauth("UADeprecateDex", "uint64 version,string reason,", address(f2), abi.encode(uint64(1), keccak256(bytes(why))));
+        (e, a) = _mauth("UADeprecateDex", "uint64 version,bytes32 chainUid,string reason,", address(f2),
+            abi.encode(uint64(1), uid, keccak256(bytes(why))));
         vm.broadcast(k3);
-        gr.mtxDeprecateDex(e, address(f2), 1, why, a);
+        gr.mtxDeprecateDex(e, address(f2), 1, uid, why, a);
     }
 
     /// @dev DEX release 2 approved through the router, then revoked; its deploy is the ReleaseNotApproved negative.
@@ -436,10 +443,12 @@ contract Misc is OnchainBase {
             "bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,",
             abi.encode(uint64(2), uint16(2), h1, h2, uid, address(f2), gen, until));
         bytes32 key = keccak256(abi.encode(keccak256("scaas.factory.release.dex"), uid, address(f2), uint64(2), uint16(2), h1, h2));
-        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory a) = _mauth("UARevokeApproval", "bytes32 key,", address(f2), abi.encode(key));
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory a) =
+            _mauth("UARevokeApproval", "bytes32 key,bytes32 chainUid,", address(f2), abi.encode(key, uid));
         vm.broadcast(k3);
-        gr.mtxRevokeApproval(e, address(f2), key, a);
-        _neg(a3, address(f2), abi.encodeCall(OpenFactory.deployDexImplementation, (2, 2, type(SCaaSDex).creationCode, dexArgs)),
+        gr.mtxRevokeApproval(e, address(f2), key, uid, a);
+        _neg(a3, address(f2), abi.encodeCall(OpenFactory.deployDexImplementation, (2, 2, type(SCaaSDex).creationCode, dexArgs,
+            f2.chainUid())),
             IOpenFactory.ReleaseNotApproved.selector, "factory: a DEX release whose approval the msig revoked");
     }
 
@@ -455,10 +464,10 @@ contract Misc is OnchainBase {
         ce.params = new bytes32[](1);
         ce.params[0] = bytes32(uint256(131_072));
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory a) = _mauth("UAPublishClassEnv",
-            "uint16 contractClass,uint16 kind,uint16 envVersion,Env env,", address(f2),
-            abi.encode(NOTE_CLASS, uint16(2), uint16(1), _envHash(ce)));
+            "uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env,", address(f2),
+            abi.encode(NOTE_CLASS, uint16(2), uint16(1), uid, _envHash(ce)));
         vm.broadcast(k3);
-        gr.mtxPublishClassEnv(e, address(f2), NOTE_CLASS, 2, 1, ce, a);
+        gr.mtxPublishClassEnv(e, address(f2), NOTE_CLASS, 2, 1, uid, ce, a);
         _sendStatic(gr.mtxApproveRelease.selector, "UAApproveRelease", "uint16 contractClass,uint16 kind,uint64 version,"
             "uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,"
             "address factory,uint32 adminGeneration,uint64 until,", bytes.concat(abi.encode(NOTE_CLASS, uint16(2), uint64(1),
@@ -466,16 +475,16 @@ contract Misc is OnchainBase {
             keccak256("")), abi.encode(uid, address(f2), gen, until)));
         vm.broadcast(k3);
         f2.deployImplementation(IOpenFactory.ReleaseId(NOTE_CLASS, 2, 1), 1, INoteKind.initialize.selector,
-            type(INoteKind).interfaceId, type(NoteKind).creationCode, "");
-        (e, a) = _mauth("UASetClassKindEnabled", "uint16 contractClass,uint16 kind,bool on,", address(f2),
-            abi.encode(NOTE_CLASS, uint16(2), true));
+            type(INoteKind).interfaceId, type(NoteKind).creationCode, "", uid);
+        (e, a) = _mauth("UASetClassKindEnabled", "uint16 contractClass,uint16 kind,bool on,bytes32 chainUid,", address(f2),
+            abi.encode(NOTE_CLASS, uint16(2), true, uid));
         vm.broadcast(k3);
-        gr.mtxSetClassKindEnabled(e, address(f2), NOTE_CLASS, 2, true, a);
+        gr.mtxSetClassKindEnabled(e, address(f2), NOTE_CLASS, 2, true, uid, a);
         string memory why = "onchain matrix: deprecated after its use (the msig admin, through the router)";
-        (e, a) = _mauth("UADeprecateRelease", "uint16 contractClass,uint16 kind,uint64 version,string reason,", address(f2),
-            abi.encode(NOTE_CLASS, uint16(0), uint64(1), keccak256(bytes(why))));
+        (e, a) = _mauth("UADeprecateRelease", "uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason,",
+            address(f2), abi.encode(NOTE_CLASS, uint16(0), uint64(1), uid, keccak256(bytes(why))));
         vm.broadcast(k3);
-        gr.mtxDeprecateRelease(e, address(f2), NOTE_CLASS, 0, 1, why, a);
+        gr.mtxDeprecateRelease(e, address(f2), NOTE_CLASS, 0, 1, uid, why, a);
     }
 
     /// @dev The msig's router envelope (lane 0, its next nonce, open mode, fee 0) and its `UASig`: slot 1 (the secp256k1 UA)
@@ -486,6 +495,7 @@ contract Misc is OnchainBase {
         (e.from, e.nonce, e.validUntil) = (um, gr.mtxNonce(um, 0), vu);
         string memory typ = string.concat(op, "(bytes32 from,address target,", fields, E3R);
         if (bytes(fields).length != 0 && _hasEnv(fields)) typ = string.concat(typ, ENV_T);
+        if (bytes(fields).length >= 12 && bytes12(bytes(fields)) == bytes12("ChainEntries")) typ = string.concat(typ, CE_T);
         bytes32 d = _named(address(gr), typ, bytes.concat(abi.encode(target), words), e);
         bytes32 md = UAKinds.memberDigest(um, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_METATX, d));
         s.members = new IUARegistry.MemberSig[](1);
@@ -566,12 +576,12 @@ contract Misc is OnchainBase {
         _book(d[1], "SCaaSDexLiquidityModule");
         (e.libs[2], e.libCodeHashes[2]) = (d[0], d[0].codehash);
         (e.libs[3], e.libCodeHashes[3]) = (d[1], d[1].codehash);
-        ISCaaSDex.DexConfig memory c = ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, a1);
+        ISCaaSDex.DexConfig memory c = ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, a1, 0, 0);
         vm.startBroadcast(k1);
-        f2.publishDexEnv(1, e);
+        f2.publishDexEnv(1, uid, e);
         // a fixed limit: the release's regular + EIP-8037 state gas, simulated 51.9 M on the SCaaS testnet and 55.1 M on a
         // fresh anvil, would ask more than 60 M at the group's x 1.30
-        address impl = f2.deployDexImplementation{gas: DEX_RELEASE_GAS}(1, 1, type(SCaaSDex).creationCode, abi.encode(ImplArgs(d)));
+        address impl = f2.deployDexImplementation{gas: DEX_RELEASE_GAS}(1, 1, type(SCaaSDex).creationCode, abi.encode(ImplArgs(d)), f2.chainUid());
         address dex = f2.createDex(1, abi.encode(c), _salt("f2-dex"));
         vm.stopBroadcast(); // deprecated through the router by f2's msig admin (`_factoryRouter`)
         _book(impl, "SCaaSDex");
@@ -588,9 +598,9 @@ contract Misc is OnchainBase {
         IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(NOTE_CLASS, 0, 1);
         bytes memory init = abi.encodeCall(INoteKind.initialize, (_pad(a1), "onchain"));
         vm.startBroadcast(k1);
-        f2.publishClassEnv(NOTE_CLASS, 0, 1, e);
-        f2.deployImplementation(id, 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, type(NoteKind).creationCode, "");
-        f2.setClassKindEnabled(NOTE_CLASS, 0, true);
+        f2.publishClassEnv(NOTE_CLASS, 0, 1, uid, e);
+        f2.deployImplementation(id, 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, type(NoteKind).creationCode, "", f2.chainUid());
+        f2.setClassKindEnabled(NOTE_CLASS, 0, true, f2.chainUid());
         f2.createInstance(id, _salt("note-1"), init);
         vm.stopBroadcast(); // deprecated through the router by f2's msig admin (`_factoryRouter`)
         _neg(a1, address(f2), abi.encodeCall(OpenFactory.createInstance, (id, _salt("n5"), init)),

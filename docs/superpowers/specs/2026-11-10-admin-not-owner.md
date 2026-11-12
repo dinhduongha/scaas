@@ -241,7 +241,8 @@ no expiry, as in `GovernanceLib`: a forgotten pending can accept years later; th
   native first admin, and the transfer after `configureChain` (§6).
 - `transferAdmin`, `acceptAdmin`, `renounceAdmin` (owner, Q1); `admin()`, `pendingAdmin()` replace `registrar()`. `transferAdmin`
   and `renounceAdmin` carry `configured` (Fable P2-4): a slip, or a sibling's replayed direct transaction, cannot end an
-  unconfigured factory, whose address is the same on every chain. `admin()` shares its selector with the proxy admins of
+  unconfigured factory, whose address is the same on every chain. `renounceAdmin(chainUid_)` also names the factory's word
+  after the admin check (fix2 2026-11-12, Fable recheck-2 P3-1): void on a configured sibling too. `admin()` shares its selector with the proxy admins of
   ERC-1967 tooling; an explorer may label it so, harmlessly (Fable P3).
 - **Renounce ends every admin op for good, deprecation included:** no env, no release, no deprecation, no kind switch on that
   chain's factory; a release found bad after a renounce can no longer be stopped there (owner, Q1: stated consequence).
@@ -318,11 +319,11 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
 | `UAApproveDexRelease` | `uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveDexRelease` |
 | `UAApproveRelease` | `uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until` | `approveRelease` |
 | `UARevokeApproval` | `bytes32 key` | `revokeApproval` |
-| `UADeprecateToken` | `uint8 kind,uint64 version,string reason` | `deprecateToken` |
-| `UADeprecateDex` | `uint64 version,string reason` | `deprecateDex` |
-| `UADeprecateRelease` | `uint16 contractClass,uint16 kind,uint64 version,string reason` | `deprecateRelease` |
-| `UASetTokenKindEnabled` | `uint8 kind,bool on` | `setTokenKindEnabled` |
-| `UASetClassKindEnabled` | `uint16 contractClass,uint16 kind,bool on` | `setClassKindEnabled` |
+| `UADeprecateToken` | `uint8 kind,uint64 version,bytes32 chainUid,string reason` | `deprecateToken` |
+| `UADeprecateDex` | `uint64 version,bytes32 chainUid,string reason` | `deprecateDex` |
+| `UADeprecateRelease` | `uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason` | `deprecateRelease` |
+| `UASetTokenKindEnabled` | `uint8 kind,bool on,bytes32 chainUid` | `setTokenKindEnabled` |
+| `UASetClassKindEnabled` | `uint16 contractClass,uint16 kind,bool on,bytes32 chainUid` | `setClassKindEnabled` |
 | `UASetKycProvider` | `bytes32 provider,bool enabled` | `ComplianceRegistry.setKycProvider` |
 | `UASetCompliance` | `bytes32[] accounts,uint64[] flags,uint64[] until` | `ComplianceRegistry.setCompliance` (the admin or a KYC provider, §5.3.1) |
 | `UASetChainEntries` | `address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash` | `OpenFactory.setChainEntries` (§13.3) |
@@ -330,6 +331,17 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
 - `Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[]
   libCodeHashes)` is appended to the three publish types and hashed as EIP-712 does (each array `keccak256` of its 32-byte
   words), so every field of the env is signed by name.
+- The five deprecations and kind switches sign the factory's `chainUid` as their direct entries take it (fix2 2026-11-12,
+  Fable D P3-2): a native admin's direct call is void on a sibling with the same chain id.
+- `renounceAdmin(bytes32 chainUid_)` on the factory, every token kind and the DEX, and the three deploys with a last
+  `chainUid_` (fix2 2026-11-12, owner: Fable recheck-2 P3-1 option (a)): the router's `UARenounceAdmin(bytes32 from,address
+  target,bytes32 chainUid,E)` (`0x3284850e…`, was `0x4be88ff9…` of §4.3) signs the target's word and forwards it; the
+  selectors `renounceAdmin(bytes32)` `0x4fa3ed14` (was `renounceAdmin()` `0x8bad0c0a` of §4.2), `mtxRenounceAdmin`
+  `0xfcdfdb9a` (was `0xfeedac3d`). Then (owner 2026-11-12, "đồng ý.", CTR-GOV-27's Change): `transferAdmin(bytes32,bytes32)`
+  `0xc0e34c56` (was `transferAdmin(bytes32)` `0xe923bc3d` of §4.2) on every `IAdmin` contract, `ComplianceRegistry` with a
+  constructor chain word in storage; `setChainEntries(ChainEntries, bytes32)` and `UASetChainEntries(…,ChainEntries
+  entries,bytes32 chainUid,…)` with the nested struct; the three env publishes and `revokeApproval` with the word
+  ([token-wrappers.md](../../contracts/token-wrappers.md#factory)).
 - No release deploy is a router op (§5.6); the approvals sign the release's hashes as `UACreateToken` signs `initHash` (S3). A
   `string reason` is signed as `keccak256(bytes(reason))`, as EIP-712 hashes a string (Fable P1-3). The ids flat, as
   `UACreateInstance` (`:234-241`). `UASetCompliance` names its third array `until` because `validUntil` is an envelope word (the
@@ -415,7 +427,8 @@ no other path; split, the signed part is small and the large transaction verifie
 2. **Revoke.** `revokeApproval(bytes32 key)`, `onlyAdmin configured`, deletes any stored entry not consumed, live or not
    (`ApprovalNotRevocable(key)` for an unknown or consumed one), and emits `ReleaseApprovalRevoked(key)`; through the router
    `UARevokeApproval`.
-3. **Deploy.** `deployTokenImplementation`, `deployDexImplementation`, `deployImplementation` keep their names and ABI, carry no
+3. **Deploy.** `deployTokenImplementation`, `deployDexImplementation`, `deployImplementation` keep their names (their ABI gains a
+   last `bytes32 chainUid_`, checked first: fix2 2026-11-12, Fable recheck-2 P3-1), carry no
    signature and go **straight to the factory, open to anyone**. The factory rebuilds `key` from the call (the table above: every
    stored caller field, the hashes of `initcode` and `implArgs` computed from the bytes) and accepts the deploy only against a
    live approval of it (else `ReleaseNotApproved(key)`, checked before the version); it marks the approval consumed (each is used

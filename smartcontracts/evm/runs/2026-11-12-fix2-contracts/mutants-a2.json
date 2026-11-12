@@ -1,0 +1,86 @@
+[
+ {
+  "id": "A2-1 UAAdmin.transferAdmin drops the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_adminEntries() (gas: 53064)"
+ },
+ {
+  "id": "A2-2 factory word hook empty",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_adminEntries() (gas: 53064)"
+ },
+ {
+  "id": "A2-3 registry word hook empty",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: refused] test_transferAdmin_siblingWordRefused() (gas: 334266)"
+ },
+ {
+  "id": "A2-4 registry constructor takes word 0",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x96d3F6c20EEd2697647F543fE6C08bC2Fbf39758 != 0x0000000000000000000000000000000000000000] test_constructor_chainUidZero() (gas: 295557)"
+ },
+ {
+  "id": "A2-5 governed transfer without the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NormalToken: a sibling's word transferred] test_kind0_NormalToken() (gas: 324443)"
+ },
+ {
+  "id": "A2-6 governed word check dropped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NormalToken: a sibling's word transferred] test_kind0_NormalToken() (gas: 317892)"
+ },
+ {
+  "id": "A2-7 publishTokenEnv unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_adminEntries() (gas: 141498)"
+ },
+ {
+  "id": "A2-8 publishDexEnv unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_adminEntries() (gas: 238269)"
+ },
+ {
+  "id": "A2-9 publishClassEnv unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_adminEntries() (gas: 332189)"
+ },
+ {
+  "id": "A2-10 revokeApproval unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x50aff2aa0000000000000000000000000000000000000000000000000000000000000001 != 0x14767f4524e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c19"
+ },
+ {
+  "id": "A2-11 setChainEntries unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: refused] test_setChainEntries_siblingWordRefused() (gas: 2536130)"
+ },
+ {
+  "id": "A2-12 router signs no chainUid in UASetChainEntries",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: UAUnauthorized(0x9ceb60eaa9f276db91f4697f744ea4e347bee0d842694ef39f0a4cd6f61c5129)] test_binding_SetChainEntries() (gas: 9534629)"
+ },
+ {
+  "id": "A2-13 router signs a flat entries word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: UAUnauthorized(0x9ceb60eaa9f276db91f4697f744ea4e347bee0d842694ef39f0a4cd6f61c5129)] test_binding_SetChainEntries() (gas: 9534605)"
+ },
+ {
+  "id": "A2-14 mtxTransferAdmin forwards a zero word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: MetaTxBadSignature() != ChainUidMismatch(0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc, 0xdf801b8641ddb2a5f"
+ }
+]

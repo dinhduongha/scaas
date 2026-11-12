@@ -13,6 +13,7 @@ import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {IAdmin} from "../governance/IAdmin.sol";
+import {RescueLib} from "../governance/RescueLib.sol";
 import {IRescuable} from "../governance/IRescuable.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -508,12 +509,12 @@ library WrappedLib {
             uint256 bal = _balance(asset);
             if (bal < r) revert IWrappedToken.ReserveShortfall(asset, bal, r);
             amount = bal - r;
-            GovernanceLib.rescueSend(asset, to, amount);
+            RescueLib.send(asset, to, amount);
             bal = _balance(asset);
             if (bal < r) revert IWrappedToken.ReserveShortfall(asset, bal, r);
         } else {
             amount = _balance(asset);
-            GovernanceLib.rescueSend(asset, to, amount);
+            RescueLib.send(asset, to, amount);
         }
         for (uint256 i; i < n; ++i) {
             address leg = s.legs[i].token;

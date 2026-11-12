@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {nid} from "../helpers/Ids.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -59,6 +61,16 @@ contract DexLiquidityUATest is UADexBase {
         uint256 a0 = A.balanceOfUA(uaP);
         _run(_plan(_order(address(pair))));
         assertEq(A.balanceOfUA(uaP), a0 - 50_000);
+        assertGt(pair.balanceOf(RECV), 48_000);
+    }
+
+    /// fix2-dex (CTR-DEX-32): on a DEX that never listed `A` / `B` the kind is the factory's at use, so a derived signer's
+    /// SCaaS inputs are verified by the tokens (the DEX cannot verify a derived signer itself).
+    function test_derivedSigner_unlistedScaasInputs() public {
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0,
+            address(0), 0, 0)), "fresh"));
+        assertEq(dex.tokenKind(address(A)), 0);
+        _run(_plan(_order(address(pair))));
         assertGt(pair.balanceOf(RECV), 48_000);
     }
 

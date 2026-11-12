@@ -102,10 +102,10 @@ contract GovProofBitTest is PqzOffchainBase {
         Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e, type(WrappedPqzRegulatedToken).creationCode,
             regArgs());
         vm.startPrank(registrar);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
-        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(f)));
         vm.stopPrank();
     }
 
@@ -190,7 +190,7 @@ contract GovProofBitTest is PqzOffchainBase {
         c.features |= m;
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL, 1, _plain(), type(NormalToken).creationCode);
         vm.prank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL, true, EnvKit.uidOf(address(factory)));
         c.conf = IFactoryToken.ConfidentialConfig("", 0, 0, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, BIT));
         factory.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "plain-24");

@@ -11,6 +11,7 @@ import {TradeLib} from "../trade/TradeLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {TokenCall} from "./TokenCall.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
 
 /// @title The DEX's state accessor, constants and shared bodies (spec 2026-11-10-dex-liquidity.md §9.1; T66b rule 5,
 ///        written once): inherited by `SCaaSDex` and by its liquidity module `SCaaSDexLiquidityModule`, so an interaction,
@@ -93,9 +94,20 @@ abstract contract SCaaSDexCore {
         return keccak256(abi.encode(DEX_ORDER_TYPEHASH, sellToken, TradeLib.hashStruct(o)));
     }
 
-    /// @dev A SCaaS token (factory-made, recorded at `setMarket`) whose UA ledger is on.
+    /// @dev The DEX's factory (the DEX's `FACTORY`, the liquidity module's own immutable).
+    function _factoryAt() internal view virtual returns (address);
+
+    /// @dev SCaaS iff the factory made `token` from a registered release (version ≠ 0), read at use: a pair never passed to
+    ///      `setMarket` has no record (CTR-DEX-32). Release deprecation is the factory's concern, never read here (owner
+    ///      2026-11-12): a SCaaS token's leg is trusted to the token's own verify, deprecated or not.
+    function _scaas(address token) internal view returns (bool) {
+        (, uint64 v) = IOpenFactory(_factoryAt()).versionOf(token);
+        return v != 0;
+    }
+
+    /// @dev A SCaaS token (the factory at use) whose UA ledger is on.
     function _ledgerOn(address token) internal view returns (bool) {
-        return _s().kind[token] == KIND_SCAAS && IUALedger(token).registry() != address(0);
+        return _scaas(token) && IUALedger(token).registry() != address(0);
     }
 
     /// @dev Path (a)'s interactions in order, then every allowance an `approve` among them granted set back to 0.
@@ -183,6 +195,39 @@ abstract contract SCaaSDexCore {
             b := mload(0)
         }
         if (!ok) _tokenFailed(token);
+    }
+
+    /// @dev One word from a capped `staticcall`; `ok` false when it reverted or returned less than a word.
+    function _word(address target, bytes memory data) internal view returns (bool ok, uint256 w) {
+        assembly ("memory-safe") {
+            let g := gas()
+            if gt(g, 500000) { g := 500000 } // C6-1: TokenCall.TOKEN_GAS
+            ok := staticcall(g, target, add(data, 0x20), mload(data), 0, 0x20)
+            ok := and(ok, gt(returndatasize(), 0x1f))
+            w := mload(0)
+        }
+    }
+
+    /// @dev The balance of an id: `balanceOf` of a native one, `balanceOfUA` of a derived one.
+    function _balOf(address token, bytes32 id) internal view returns (uint256 w) {
+        bool ok;
+        (ok, w) = _word(token, UAKinds.inNativeSpace(id)
+            ? abi.encodeCall(IERC20.balanceOf, (TradeLib.addr(id)))
+            : abi.encodeCall(IUALedger.balanceOfUA, (id)));
+        if (!ok) _tokenFailed(token);
+    }
+
+    /// @dev A payout to an order's recipient, measured there (owner 2026-11-12, closes review C6-4): its balance of `token`
+    ///      (`balanceOf`, or `balanceOfUA` of a derived id: no token is assumed exact) must rise by at least `min`, else
+    ///      `InsufficientOutput(token)`. A token that credits less than the DEX sends (a fee or a hook on `transfer`) fails
+    ///      closed even when the DEX's own balance conserves.
+    function _sendChecked(address token, bytes32 to, uint256 amount, uint256 min) internal {
+        // a derived id is paid only through a ledger: refused by name before its balance is read (`_sendTo`'s rule)
+        if (!UAKinds.inNativeSpace(to) && !_ledgerOn(token)) revert ISCaaSDex.UAReceiveNotLedger(token);
+        uint256 b = _balOf(token, to);
+        _sendTo(token, to, amount);
+        uint256 a = _balOf(token, to);
+        if (a < b || a - b < min) revert ISCaaSDex.InsufficientOutput(token);
     }
 
     /// @dev To an id: a native one by `_send`, a derived one by the token's `transferToUA` from the DEX's own

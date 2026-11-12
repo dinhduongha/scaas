@@ -142,6 +142,8 @@ contract NamespaceProbe is UAMetaTxBase {
 contract AdminProbe is UAAdmin {
     function _adminRouter() internal pure override returns (address) {}
 
+    function _requireChainWord(bytes32) internal pure override {}
+
     function poke() external {
         AdminStorage storage s = _adminStorage();
         (s.admin, s.pendingAdmin, s.adminGeneration) = (NamespaceProbeIds.U, NamespaceProbeIds.V, 0x12345678);

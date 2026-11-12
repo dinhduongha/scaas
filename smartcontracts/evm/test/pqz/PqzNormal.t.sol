@@ -403,7 +403,8 @@ contract PqzNormalTest is PqzFixture {
     function test_factoryGate() public {
         bytes memory code = type(NormalPqzToken).creationCode;
         vm.prank(registrar);
-        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployTokenImplementation.selector, uint8(6), 1, 1, code, ""));
+        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployTokenImplementation.selector, uint8(6), 1, 1, code, "",
+            EnvKit.uidOf(address(factory))));
         assertFalse(ok, "kind 6 (dropped, D21) fails ABI decoding");
         // an unregistered PQZ implementation cannot be cloned at all (owner 2026-10-19)
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
@@ -416,7 +417,7 @@ contract PqzNormalTest is PqzFixture {
         _mockSelfTest();
         // the factory's generic gate: the kind disabled
         vm.prank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, false);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, false, EnvKit.uidOf(address(factory)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, IOpenFactory.TokenKind.NORMAL_PQZ));
         factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(1 << 40)), "g4");
         assertEq(tok.kind(), 4);
@@ -473,7 +474,7 @@ contract PqzNormalTest is PqzFixture {
                 withModules(pinned(bad[i], IOpenFactory.TokenKind.NORMAL_PQZ), ms));
             vm.prank(registrar);
             vm.expectRevert(IPqzToken.BadInit.selector);
-            factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args);
+            factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args, EnvKit.uidOf(address(factory)));
         }
     }
 
@@ -603,7 +604,7 @@ contract PqzNormalTest is PqzFixture {
             Catalogue.release(g, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(g), PQZ_UID, address(reg), fv),
                 type(NormalPqzToken).creationCode);
             vm.prank(registrar);
-            g.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+            g.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(g)));
             if (i == 2) vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0))); // the real pair, self-test failing
             vm.expectRevert(i == 2 ? abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ)
                 : abi.encodeWithSelector(PqzSafety.NotPqz.selector, pre[i], ids[i]));

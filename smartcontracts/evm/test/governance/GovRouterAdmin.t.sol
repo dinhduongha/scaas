@@ -30,11 +30,11 @@ import {NoteKind, INoteKind} from "../v2/mocks/GenericKinds.sol";
 /// the ABI apart from the source's declarations (and compiles against the router before T7: the red run).
 interface IRouterAdminOps {
     function mtxPublishTokenEnv(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, uint16 envVersion,
-        IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external;
-    function mtxPublishDexEnv(MetaTxLib.UAEnvelope calldata e, address target, uint16 envVersion,
+        bytes32 chainUid, IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external;
+    function mtxPublishDexEnv(MetaTxLib.UAEnvelope calldata e, address target, uint16 envVersion, bytes32 chainUid,
         IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external;
     function mtxPublishClassEnv(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
-        uint16 envVersion, IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external;
+        uint16 envVersion, bytes32 chainUid, IFactoryToken.Env calldata env, IUARegistry.UASig calldata auth) external;
     function mtxApproveTokenRelease(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind,
         uint64 version, uint16 envVersion, bytes32 initcodeHash, bytes32 implArgsHash, bytes32 chainUid, address factory,
         uint32 adminGeneration, uint64 until, IUARegistry.UASig calldata auth) external;
@@ -43,26 +43,24 @@ interface IRouterAdminOps {
         IUARegistry.UASig calldata auth) external;
     function mtxApproveRelease(MetaTxLib.UAEnvelope calldata e, address target, GovernanceRouter.ReleaseApproval calldata approval,
         IUARegistry.UASig calldata auth) external;
-    function mtxRevokeApproval(MetaTxLib.UAEnvelope calldata e, address target, bytes32 key, IUARegistry.UASig calldata auth)
-        external;
+    function mtxRevokeApproval(MetaTxLib.UAEnvelope calldata e, address target, bytes32 key, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external;
     function mtxDeprecateToken(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, uint64 version,
+        bytes32 chainUid, string calldata reason, IUARegistry.UASig calldata auth) external;
+    function mtxDeprecateDex(MetaTxLib.UAEnvelope calldata e, address target, uint64 version, bytes32 chainUid,
         string calldata reason, IUARegistry.UASig calldata auth) external;
-    function mtxDeprecateDex(MetaTxLib.UAEnvelope calldata e, address target, uint64 version, string calldata reason,
-        IUARegistry.UASig calldata auth) external;
     function mtxDeprecateRelease(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
-        uint64 version, string calldata reason, IUARegistry.UASig calldata auth) external;
+        uint64 version, bytes32 chainUid, string calldata reason, IUARegistry.UASig calldata auth) external;
     function mtxSetTokenKindEnabled(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, bool on,
-        IUARegistry.UASig calldata auth) external;
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external;
     function mtxSetClassKindEnabled(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
-        bool on, IUARegistry.UASig calldata auth) external;
+        bool on, bytes32 chainUid, IUARegistry.UASig calldata auth) external;
     function mtxSetKycProvider(MetaTxLib.UAEnvelope calldata e, address target, bytes32 provider, bool enabled,
         IUARegistry.UASig calldata auth) external;
     function mtxSetCompliance(MetaTxLib.UAEnvelope calldata e, address target, bytes32[] calldata accounts,
         uint64[] calldata flags, uint64[] calldata until, IUARegistry.UASig calldata auth) external;
-    function mtxSetChainEntries(MetaTxLib.UAEnvelope calldata e, address target, address relayFeeRouter,
-        bytes32 relayFeeRouterCodeHash, bytes32 relayFeeExecutorCodeHash, address complianceRegistry,
-        bytes32 complianceRegistryCodeHash, address smartKeyAccountFactory, bytes32 smartKeyAccountFactoryCodeHash,
-        address zetherStatements, bytes32 zetherStatementsCodeHash, IUARegistry.UASig calldata auth) external;
+    function mtxSetChainEntries(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.ChainEntries calldata entries,
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external;
 }
 
 /// A token (kind 0) or DEX release for the catalogue's checks and nothing more.
@@ -93,7 +91,7 @@ contract RouterReenter {
         _cd = cd;
     }
 
-    function setTokenKindEnabled(uint8, bool) external {
+    function setTokenKindEnabled(uint8, bool, bytes32) external {
         (bool ok, bytes memory ret) = _router.call(_cd);
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
     }
@@ -149,6 +147,8 @@ contract GovRouterAdminTest is UARegistryBase {
         ",uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
     string constant ENV_T =
         "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)";
+    string constant CE_T =
+        "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)";
 
     // the fifteen ops, in the order of spec §5.4's table
     uint8 constant PUBLISH_ENV = 0;
@@ -254,17 +254,17 @@ contract GovRouterAdminTest is UARegistryBase {
         IFactoryToken.Env memory e;
         vm.startPrank(deployer);
         f.configureChain(chainUidA, 0, address(router), address(router).codehash, 0, bytes32(0));
-        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, e);
-        f.publishDexEnv(1, e);
-        f.publishClassEnv(CLS, 0, 1, e);
-        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(RouterOpsRelease).creationCode, hex"01");
-        f.deployDexImplementation(1, 1, type(RouterOpsRelease).creationCode, hex"02");
+        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, chainUidA, e);
+        f.publishDexEnv(1, chainUidA, e);
+        f.publishClassEnv(CLS, 0, 1, chainUidA, e);
+        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(RouterOpsRelease).creationCode, hex"01", EnvKit.uidOf(address(f)));
+        f.deployDexImplementation(1, 1, type(RouterOpsRelease).creationCode, hex"02", EnvKit.uidOf(address(f)));
         f.deployImplementation(IOpenFactory.ReleaseId(CLS, 0, 1), 1, INoteKind.initialize.selector,
-            type(INoteKind).interfaceId, type(NoteKind).creationCode, hex"03");
-        if (admin_ != nid(deployer)) f.transferAdmin(admin_);
+            type(INoteKind).interfaceId, type(NoteKind).creationCode, hex"03", EnvKit.uidOf(address(f)));
+        if (admin_ != nid(deployer)) f.transferAdmin(admin_, chainUidA);
         vm.stopPrank();
         if (admin_ != nid(deployer)) _acceptVia(admin_, address(f));
-        cr = new ComplianceRegistry(admin_, address(router));
+        cr = new ComplianceRegistry(admin_, address(router), chainUidA);
     }
 
     function _call(address from, address to, bytes memory cd) internal {
@@ -294,21 +294,24 @@ contract GovRouterAdminTest is UARegistryBase {
 
     /// The words after `target` in the type string (spec §5.4's table, verbatim).
     function _params(uint8 op) internal pure returns (string memory) {
-        return [string(",uint8 kind,uint16 envVersion,Env env"), ",uint16 envVersion,Env env",
-            ",uint16 contractClass,uint16 kind,uint16 envVersion,Env env",
+        return [string(",uint8 kind,uint16 envVersion,bytes32 chainUid,Env env"), ",uint16 envVersion,bytes32 chainUid,Env env",
+            ",uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env",
             ",uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until",
             ",uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until",
             ",uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until",
-            ",bytes32 key", ",uint8 kind,uint64 version,string reason", ",uint64 version,string reason",
-            ",uint16 contractClass,uint16 kind,uint64 version,string reason", ",uint8 kind,bool on",
-            ",uint16 contractClass,uint16 kind,bool on", ",bytes32 provider,bool enabled",
+            ",bytes32 key,bytes32 chainUid", ",uint8 kind,uint64 version,bytes32 chainUid,string reason",
+            ",uint64 version,bytes32 chainUid,string reason",
+            ",uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason",
+            ",uint8 kind,bool on,bytes32 chainUid", ",uint16 contractClass,uint16 kind,bool on,bytes32 chainUid",
+            ",bytes32 provider,bool enabled",
             ",bytes32[] accounts,uint64[] flags,uint64[] until",
-            ",address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash"][op];
+            ",ChainEntries entries,bytes32 chainUid"][op];
     }
 
     function _typeString(uint8 op) internal pure returns (string memory s) {
         s = string.concat("UA", _name(op), "(bytes32 from,address target", _params(op), TAIL);
         if (op <= PUBLISH_CLASS_ENV) s = string.concat(s, ENV_T);
+        if (op == SET_ENTRIES) s = string.concat(s, CE_T);
     }
 
     function _domain(GovernanceRouter r) internal view returns (bytes32) {
@@ -338,6 +341,12 @@ contract GovRouterAdminTest is UARegistryBase {
         else if (p.op == SET_COMPLIANCE) {
             b = abi.encode(keccak256(abi.encodePacked(p.accounts)), keccak256(abi.encodePacked(p.flags)),
                 keccak256(abi.encodePacked(p.until)));
+        } else if (p.op == SET_ENTRIES) {
+            // the nested `ChainEntries` struct hash over the first nine words, then `chainUid` (CTR-GOV-27)
+            uint256[] memory w = p.w;
+            bytes memory nine;
+            for (uint256 i; i < 9; ++i) nine = bytes.concat(nine, bytes32(w[i]));
+            b = abi.encode(keccak256(bytes.concat(keccak256(bytes(CE_T)), nine)), w[9]);
         }
     }
 
@@ -396,21 +405,25 @@ contract GovRouterAdminTest is UARegistryBase {
         uint8 op = p.op;
         if (op == PUBLISH_ENV) {
             return abi.encodeCall(IRouterAdminOps.mtxPublishTokenEnv,
-                (e, p.target, IOpenFactory.TokenKind(p.w[0]), uint16(p.w[1]), p.env, a));
+                (e, p.target, IOpenFactory.TokenKind(p.w[0]), uint16(p.w[1]), bytes32(p.w[2]), p.env, a));
         }
-        if (op == PUBLISH_DEX_ENV) return abi.encodeCall(IRouterAdminOps.mtxPublishDexEnv, (e, p.target, uint16(p.w[0]), p.env, a));
+        if (op == PUBLISH_DEX_ENV) {
+            return abi.encodeCall(IRouterAdminOps.mtxPublishDexEnv, (e, p.target, uint16(p.w[0]), bytes32(p.w[1]), p.env, a));
+        }
         if (op == PUBLISH_CLASS_ENV) {
             return abi.encodeCall(IRouterAdminOps.mtxPublishClassEnv,
-                (e, p.target, uint16(p.w[0]), uint16(p.w[1]), uint16(p.w[2]), p.env, a));
+                (e, p.target, uint16(p.w[0]), uint16(p.w[1]), uint16(p.w[2]), bytes32(p.w[3]), p.env, a));
         }
         if (op == DEPRECATE) {
             return abi.encodeCall(IRouterAdminOps.mtxDeprecateToken,
-                (e, p.target, IOpenFactory.TokenKind(p.w[0]), uint64(p.w[1]), p.reason, a));
+                (e, p.target, IOpenFactory.TokenKind(p.w[0]), uint64(p.w[1]), bytes32(p.w[2]), p.reason, a));
         }
-        if (op == DEPRECATE_DEX) return abi.encodeCall(IRouterAdminOps.mtxDeprecateDex, (e, p.target, uint64(p.w[0]), p.reason, a));
+        if (op == DEPRECATE_DEX) {
+            return abi.encodeCall(IRouterAdminOps.mtxDeprecateDex, (e, p.target, uint64(p.w[0]), bytes32(p.w[1]), p.reason, a));
+        }
         if (op == DEPRECATE_RELEASE) {
             return abi.encodeCall(IRouterAdminOps.mtxDeprecateRelease,
-                (e, p.target, uint16(p.w[0]), uint16(p.w[1]), uint64(p.w[2]), p.reason, a));
+                (e, p.target, uint16(p.w[0]), uint16(p.w[1]), uint64(p.w[2]), bytes32(p.w[3]), p.reason, a));
         }
         if (op == SET_COMPLIANCE) {
             return abi.encodeCall(IRouterAdminOps.mtxSetCompliance, (e, p.target, p.accounts, p.flags, p.until, a));
@@ -450,6 +463,11 @@ contract GovRouterAdminTest is UARegistryBase {
     function _w(uint256 a, uint256 b, uint256 c) internal pure returns (uint256[] memory w) {
         w = new uint256[](3);
         (w[0], w[1], w[2]) = (a, b, c);
+    }
+
+    function _w(uint256 a, uint256 b, uint256 c, uint256 d) internal pure returns (uint256[] memory w) {
+        w = new uint256[](4);
+        (w[0], w[1], w[2], w[3]) = (a, b, c, d);
     }
 
     function _u(address a) internal pure returns (uint256) {
@@ -520,9 +538,10 @@ contract GovRouterAdminTest is UARegistryBase {
         w[n + 5] = block.timestamp + 1 days;
     }
 
-    /// The four directory entries with their code hashes (`setChainEntries`' nine words).
+    /// The four directory entries with their code hashes (`ChainEntries`' nine words), then `chainUid` (CTR-GOV-27).
     function _entries(ComplianceRegistry cr) internal view returns (uint256[] memory w) {
-        w = new uint256[](9);
+        w = new uint256[](10);
+        w[9] = uint256(chainUidA);
         w[0] = _u(address(relay));
         w[1] = _h(address(relay));
         w[2] = _h(relay.EXECUTOR());
@@ -537,16 +556,16 @@ contract GovRouterAdminTest is UARegistryBase {
     /// The untouched op `op` on `f` / `cr`, valid there now (the positive control).
     function _base(uint8 op, OpenFactory f, ComplianceRegistry cr) internal view returns (P memory p) {
         (p.op, p.target) = (op, address(f));
-        if (op == PUBLISH_ENV) (p.w, p.env) = (_w(0, 9), _fullEnv());
-        else if (op == PUBLISH_DEX_ENV) (p.w, p.env) = (_w(9), _fullEnv());
-        else if (op == PUBLISH_CLASS_ENV) (p.w, p.env) = (_w(CLS, 0, 9), _fullEnv());
+        if (op == PUBLISH_ENV) (p.w, p.env) = (_w(0, 9, uint256(chainUidA)), _fullEnv());
+        else if (op == PUBLISH_DEX_ENV) (p.w, p.env) = (_w(9, uint256(chainUidA)), _fullEnv());
+        else if (op == PUBLISH_CLASS_ENV) (p.w, p.env) = (_w(CLS, 0, 9, uint256(chainUidA)), _fullEnv());
         else if (op >= APPROVE_TOKEN && op <= APPROVE_CLASS) p.w = _approval(op, f);
-        else if (op == REVOKE) p.w = _w(uint256(_key(f, _base(APPROVE_TOKEN, f, cr))));
-        else if (op == DEPRECATE) (p.w, p.reason) = (_w(0, 1), "a release found bad");
-        else if (op == DEPRECATE_DEX) (p.w, p.reason) = (_w(1), "a release found bad");
-        else if (op == DEPRECATE_RELEASE) (p.w, p.reason) = (_w(CLS, 0, 1), "a release found bad");
-        else if (op == SET_KIND) p.w = _w(1, 1);
-        else if (op == SET_CLASS_KIND) p.w = _w(CLS, 0, 1);
+        else if (op == REVOKE) p.w = _w(uint256(_key(f, _base(APPROVE_TOKEN, f, cr))), uint256(chainUidA));
+        else if (op == DEPRECATE) (p.w, p.reason) = (_w(0, 1, uint256(chainUidA)), "a release found bad");
+        else if (op == DEPRECATE_DEX) (p.w, p.reason) = (_w(1, uint256(chainUidA)), "a release found bad");
+        else if (op == DEPRECATE_RELEASE) (p.w, p.reason) = (_w(CLS, 0, 1, uint256(chainUidA)), "a release found bad");
+        else if (op == SET_KIND) p.w = _w(1, 1, uint256(chainUidA));
+        else if (op == SET_CLASS_KIND) p.w = _w(CLS, 0, 1, uint256(chainUidA));
         else if (op == SET_KYC) (p.target, p.w) = (address(cr), _w(uint256(PROV), 1));
         else if (op == SET_COMPLIANCE) {
             p.target = address(cr);
@@ -614,17 +633,17 @@ contract GovRouterAdminTest is UARegistryBase {
         if (by != nid(deployer)) {
             vm.prank(deployer);
             vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(deployer)));
-            f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED, false);
+            f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED, false, EnvKit.uidOf(address(f)));
         }
     }
 
     /// Another account deploys the release `p` approved; the approval is consumed.
     function _deployApproved(OpenFactory f, P memory p) internal {
         vm.prank(STRANGER);
-        if (p.op == APPROVE_DEX) f.deployDexImplementation(2, 1, _code(p.op), _args(p.op));
+        if (p.op == APPROVE_DEX) f.deployDexImplementation(2, 1, _code(p.op), _args(p.op), EnvKit.uidOf(address(f)));
         else {
             f.deployImplementation(IOpenFactory.ReleaseId(CLS, 0, 2), 1, INoteKind.initialize.selector,
-                type(INoteKind).interfaceId, _code(p.op), _args(p.op));
+                type(INoteKind).interfaceId, _code(p.op), _args(p.op), EnvKit.uidOf(address(f)));
         }
         assertEq(uint8(f.approvalOf(_key(f, p)).state), uint8(IOpenFactory.ApprovalState.CONSUMED));
     }
@@ -793,21 +812,21 @@ contract GovRouterAdminTest is UARegistryBase {
         console2.log(string.concat("BINDING ", _name(op), ": variants refused"), n);
     }
 
-    function test_binding_PublishTokenEnv() public { assertEq(_matrix(PUBLISH_ENV), 18); }
-    function test_binding_PublishDexEnv() public { assertEq(_matrix(PUBLISH_DEX_ENV), 17); }
-    function test_binding_PublishClassEnv() public { assertEq(_matrix(PUBLISH_CLASS_ENV), 19); }
+    function test_binding_PublishTokenEnv() public { assertEq(_matrix(PUBLISH_ENV), 19); }
+    function test_binding_PublishDexEnv() public { assertEq(_matrix(PUBLISH_DEX_ENV), 18); }
+    function test_binding_PublishClassEnv() public { assertEq(_matrix(PUBLISH_CLASS_ENV), 20); }
     function test_binding_ApproveTokenRelease() public { assertEq(_matrix(APPROVE_TOKEN), 10); }
     function test_binding_ApproveDexRelease() public { assertEq(_matrix(APPROVE_DEX), 9); }
     function test_binding_ApproveRelease() public { assertEq(_matrix(APPROVE_CLASS), 13); }
-    function test_binding_RevokeApproval() public { assertEq(_matrix(REVOKE), 2); }
-    function test_binding_DeprecateToken() public { assertEq(_matrix(DEPRECATE), 6); }
-    function test_binding_DeprecateDex() public { assertEq(_matrix(DEPRECATE_DEX), 5); }
-    function test_binding_DeprecateRelease() public { assertEq(_matrix(DEPRECATE_RELEASE), 7); }
-    function test_binding_SetTokenKindEnabled() public { assertEq(_matrix(SET_KIND), 3); }
-    function test_binding_SetClassKindEnabled() public { assertEq(_matrix(SET_CLASS_KIND), 4); }
+    function test_binding_RevokeApproval() public { assertEq(_matrix(REVOKE), 3); }
+    function test_binding_DeprecateToken() public { assertEq(_matrix(DEPRECATE), 7); }
+    function test_binding_DeprecateDex() public { assertEq(_matrix(DEPRECATE_DEX), 6); }
+    function test_binding_DeprecateRelease() public { assertEq(_matrix(DEPRECATE_RELEASE), 8); }
+    function test_binding_SetTokenKindEnabled() public { assertEq(_matrix(SET_KIND), 4); }
+    function test_binding_SetClassKindEnabled() public { assertEq(_matrix(SET_CLASS_KIND), 5); }
     function test_binding_SetKycProvider() public { assertEq(_matrix(SET_KYC), 3); }
     function test_binding_SetCompliance() public { assertEq(_matrix(SET_COMPLIANCE), 10); }
-    function test_binding_SetChainEntries() public { assertEq(_matrix(SET_ENTRIES), 10); }
+    function test_binding_SetChainEntries() public { assertEq(_matrix(SET_ENTRIES), 11); }
 
     // ------------------------------------------------------------------ replay, nesting, delegation (§5.5, §8)
 
@@ -874,7 +893,7 @@ contract GovRouterAdminTest is UARegistryBase {
         // the positive control: a contract admin whose ERC-1271 says yes passes with any bytes (the delegate would have)
         vm.etch(deployer, "");
         vm.prank(deployer);
-        f.transferAdmin(nid(address(yes)));
+        f.transferAdmin(nid(address(yes)), chainUidA);
         _acceptVia(nid(address(yes)), address(f));
         p = _base(SET_CLASS_KIND, f, cr);
         e = _env(nid(address(yes)));
@@ -916,8 +935,8 @@ contract GovRouterAdminTest is UARegistryBase {
         (p.w[7], p.w[8]) = (0, 0); // Zether later
         vm.prank(deployer);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(deployer)));
-        f.setChainEntries(address(relay), bytes32(p.w[1]), bytes32(p.w[2]), address(cr), bytes32(p.w[4]), address(skaf),
-            bytes32(p.w[6]), address(0), bytes32(0));
+        f.setChainEntries(IOpenFactory.ChainEntries(address(relay), bytes32(p.w[1]), bytes32(p.w[2]), address(cr),
+            bytes32(p.w[4]), address(skaf), bytes32(p.w[6]), address(0), bytes32(0)), chainUidA);
         _send(p, ml);
         assertEq(f.zetherStatements(), address(0));
         p = _base(SET_ENTRIES, f, cr);

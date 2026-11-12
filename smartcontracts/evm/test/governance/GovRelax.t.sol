@@ -61,6 +61,8 @@ contract RelaxApp is GovernanceBase {
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _validBits() internal pure override returns (uint256) { return VALID; }
     function _roleBits() internal pure override returns (uint256) { return ROLES; }
     function _contractOnlyBits() internal pure override returns (uint256) { return ONLY; }
@@ -517,7 +519,7 @@ contract GovRelaxTest is Test {
         vm.prank(OWNER);
         a.disableFeature(PAUSE);
         vm.prank(OWNER);
-        a.transferAdmin(nid(NEXT));
+        a.transferAdmin(nid(NEXT), bytes32(0)); // a test app: no chain word
         assertTrue(_live(FREEZE, nid(issuer)), "control: live before the accept");
         vm.prank(NEXT);
         a.acceptAdmin();

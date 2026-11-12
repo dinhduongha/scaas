@@ -3,8 +3,8 @@
 //! or from calldata; a fresh salt per build; the token's modes in a request (`disclosureMode`, `auditorMode`, CTR-ZTH-38/48/49).
 
 use serde_json::{json, Value};
-use zether_prover::api::{self, call};
-use zether_prover::curve::{keccak256, Bls12381};
+use zether_prover::api::call;
+use zether_prover::curve::keccak256;
 #[cfg(feature = "bn254")]
 use zether_prover::curve::Bn254;
 

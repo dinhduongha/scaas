@@ -1,0 +1,34 @@
+[
+ {
+  "id": "DMG-1 pin below the measurement",
+  "file": "src/pqz/PqzSet.sol",
+  "old": "    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_515_000;",
+  "new": "    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_514_000;",
+  "path": "test/research/PqzProofStoreGas.t.sol",
+  "test": "test_debitMinGas_isTheCheapestLogDebit"
+ },
+ {
+  "id": "DMG-2 pin one unit below the measurement",
+  "file": "src/pqz/PqzSet.sol",
+  "old": "    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_515_000;",
+  "new": "    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_514_727;",
+  "path": "test/research/PqzProofStoreGas.t.sol",
+  "test": "test_debitMinGas_isTheCheapestLogDebit"
+ },
+ {
+  "id": "DMG-3 pin not rounded",
+  "file": "src/pqz/PqzSet.sol",
+  "old": "    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_515_000;",
+  "new": "    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_514_728;",
+  "path": "test/research/PqzProofStoreGas.t.sol",
+  "test": "test_debitMinGas_isTheCheapestLogDebit"
+ },
+ {
+  "id": "DMG-4 pin a step too high",
+  "file": "src/pqz/PqzSet.sol",
+  "old": "    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_515_000;",
+  "new": "    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_516_000;",
+  "path": "test/research/PqzProofStoreGas.t.sol",
+  "test": "test_debitMinGas_isTheCheapestLogDebit"
+ }
+]

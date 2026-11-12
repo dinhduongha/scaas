@@ -29,9 +29,29 @@ pub const FLAG_IOC: u8 = 1;
 pub const FLAG_ESCROW: u8 = 2;
 /// Read only on the exchange path (CTR-DEX-23); a book order may carry it.
 pub const FLAG_LISTED_POOLS: u8 = 4;
-/// `tokenKind`: 1 = SCaaS (the token checks the order), 2 = outside (a `DexOrder`, pulled through the `DexPuller`).
+/// The venue's leg shape of a token, from the factory ([`kind_by_factory`]; no longer the DEX's `tokenKind` values): 1 = SCaaS
+/// (shape 1, the token checks the order), 2 = outside (shape 0, a `DexOrder` pulled through the `DexPuller`).
 pub const KIND_SCAAS: u8 = 1;
 pub const KIND_OUTSIDE: u8 = 2;
+/// CTR-DEX-32: bit 29 of the DEX's `features()`; set, the DEX takes listed pairs and known tokens only.
+pub const CLOSED_MARKETS: u8 = 29;
+
+/// The DEX's market rule now (CTR-DEX-32): `true` when bit 29 `CLOSED_MARKETS` is set. Unreadable is the caller's error, never
+/// "open" (fail closed).
+pub async fn dex_closed(chain: &crate::chain::Chain, dex: Address) -> std::result::Result<bool, crate::chain::SimError> {
+    let f = chain.call_view(dex, ISCaaSDex::featuresCall {}).await?;
+    Ok(f.bit(CLOSED_MARKETS as usize))
+}
+
+/// A token's leg shape by the factory (CTR-DEX-18, CTR-DEX-32): SCaaS (shape 1) iff the factory made it from a registered
+/// release, `versionOf(token).version != 0`; else outside (shape 0). Never the DEX's `tokenKind` (0 for a pair never listed)
+/// and never a release's deprecation.
+pub async fn kind_by_factory(chain: &crate::chain::Chain, factory: Address, token: Address)
+    -> std::result::Result<u8, crate::chain::SimError>
+{
+    let v = chain.call_view(factory, crate::abi::IOpenFactory::versionOfCall { token }).await?;
+    Ok(if v.version != 0 { KIND_SCAAS } else { KIND_OUTSIDE })
+}
 /// Whole-book cap of resting orders: a valid order is almost free for its signer (gasless).
 pub const MAX_RESTING: usize = 10_000;
 pub const MAX_OPEN_PER_MAKER: usize = 50;
@@ -555,6 +575,22 @@ impl Book {
         let mut out: Vec<Row> = self.all().map(Row::of).collect();
         out.sort_by_key(|r| r.seq);
         out
+    }
+
+    /// NODE-DEX-20: the markets of `other` (loaded as at start) served from now on, with their rows and unmined fills; one
+    /// already served is left as it is.
+    pub fn add_markets(&mut self, other: Book) {
+        self.next_seq = self.next_seq.max(other.next_seq);
+        for (k, m) in other.markets {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.markets.entry(k) {
+                for r in m.asks.iter().chain(&m.bids) {
+                    if let Some(p) = other.pending.get(&r.hash) {
+                        self.pending.insert(r.hash, *p);
+                    }
+                }
+                e.insert(m);
+            }
+        }
     }
 
     pub fn markets(&self) -> impl Iterator<Item = &MarketCfg> {

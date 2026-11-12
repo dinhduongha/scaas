@@ -5,6 +5,11 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {ITokenModules} from "../../src/metatx/ITokenModule.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {MtxHash} from "../helpers/MtxHash.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 
 interface ILive {
     function kind() external view returns (uint8);
@@ -29,6 +34,8 @@ abstract contract LegacyDiff is Test {
     address[] internal routing; // libraries (old and new) and modules: accesses to them are routing, not behaviour
     uint256 internal diffed;
     uint256 internal bothOk;
+    /// @dev The token under `_diff`'s chain word: its new side's `renounceAdmin(bytes32)` and `transferAdmin(bytes32,bytes32)` take it (CTR-GOV-27).
+    bytes32 internal r3Uid;
 
     function _legacyLibs() internal {
         if (routing.length != 0) return;
@@ -152,8 +159,10 @@ abstract contract LegacyDiff is Test {
     ///      the same state.
     function _diff(address token, address oldImpl, address caller, bytes memory data, string memory what) internal {
         bytes memory code = token.code;
+        r3Uid = EnvKit.codeUidOf(token);
         uint256 snap = vm.snapshotState();
         Run memory n = _run(token, caller, _r3Call(data));
+        n.calls = _intendedCalls(token, n.calls);
         vm.revertToState(snap);
         vm.etch(token, _withImpl(code, oldImpl));
         Run memory o = _run(token, caller, data);
@@ -193,30 +202,69 @@ abstract contract LegacyDiff is Test {
     ///      2026-11-10-token-lists.md §3): `validBits()` of the regulated kinds 8-13 adds bit 28 `KYC`
     ///      (`GovernanceBits.REGULATED`). Round 3t (CTR-PQZ-36, spec 2026-11-11-verifier-fee.md §7.3): `pqzVerifyConfig()` of
     ///      the PQZ kinds 4, 5, 12, 13 appends `verifierFee`, `verifierFeeMax`, `verifierFeePending`, `verifierFeeEta` to the
-    ///      seven old words; a token created without a fee reads 0 for the four.
+    ///      seven old words; a token created without a fee reads 0 for the four. Owner 2026-11-12 (CTR-MTX-86): the old
+    ///      `receiverFeeDigest` answer is checked as the digest under the `UAReceiverFee` typehash, then expected under
+    ///      `UAPayeeFee`'s (the same members, the same payment hash, domain and arguments).
     function _intended(address token, bytes memory data, Run memory o) internal view returns (bytes memory) {
         if (o.ok && o.ret.length == 7 * 32 && bytes4(data) == bytes4(keccak256("pqzVerifyConfig()"))) {
             return bytes.concat(o.ret, new bytes(4 * 32));
+        }
+        if (o.ok && o.ret.length == 32 && bytes4(data) == bytes4(0x7c4fa261)) {
+            bytes memory args = new bytes(data.length - 4);
+            for (uint256 i; i < args.length; ++i) args[i] = data[i + 4];
+            (MetaTxLib.UAMetaTransfer memory t, uint256 fee, address to, uint256 until) =
+                abi.decode(args, (MetaTxLib.UAMetaTransfer, uint256, address, uint256));
+            bytes32 sep = Erc7739Kit.separator(token);
+            bytes32 old = keccak256(abi.encodePacked(hex"1901", sep, keccak256(abi.encode(
+                bytes32(0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a), MtxHash.hashStruct(t), fee, to,
+                until))));
+            require(abi.decode(o.ret, (bytes32)) == old, "receiverFeeDigest: the old answer");
+            return abi.encode(keccak256(abi.encodePacked(hex"1901", sep, keccak256(abi.encode(
+                bytes32(0x8a3955a6c3529266f588d56c7bfd28bdd0b5ad194fc9ca4428e159686a16c7ca), MtxHash.hashStruct(t), fee, to,
+                until)))));
         }
         if (!o.ok || o.ret.length != 32 || bytes4(data) != bytes4(keccak256("validBits()"))) return o.ret;
         uint8 k = _kindOf(token);
         uint256 b = abi.decode(o.ret, (uint256));
         if (k >= 8 && k <= 13) b |= uint256(1) << GovernanceBits.KYC;
         if (k == 1 || k == 3 || k == 5 || k == 9 || k == 11 || k == 13) b |= GovernanceBits.WRAP_CONTROLS;
+        if (k == type(uint8).max) b |= uint256(1) << GovernanceBits.CLOSED_MARKETS; // the DEX, CTR-DEX-32
         return abi.encode(b);
+    }
+
+    /// @dev CTR-DEX-32 / CTR-DEX-18 (fix2-dex, owner 2026-11-12): the DEX reads a token's kind from its factory at use
+    ///      (`versionOf`, a STATICCALL) where it read its `setMarket` record before; those reads are the intended new calls
+    ///      out of the DEX and leave the comparison, to the DEX's `factory()` only. Every other call out of either side is
+    ///      compared as before.
+    function _intendedCalls(address token, bytes[] memory calls) internal view returns (bytes[] memory out) {
+        if (_kindOf(token) != type(uint8).max) return calls;
+        (, bytes memory fr) = token.staticcall(abi.encodeWithSignature("factory()"));
+        address factory = abi.decode(fr, (address)); // only the DEX's own factory read leaves (Fable fix2 N-2)
+        out = new bytes[](calls.length);
+        uint256 n;
+        for (uint256 i; i < calls.length; ++i) {
+            (VmSafe.AccountAccessKind k, address to,, bytes memory d,) =
+                abi.decode(calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
+            if (k == VmSafe.AccountAccessKind.StaticCall && to == factory && d.length >= 4
+                && bytes4(d) == bytes4(keccak256("versionOf(address)"))) continue;
+            out[n++] = calls[i];
+        }
+        assembly ("memory-safe") { mstore(out, n) }
     }
 
     /// @dev Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1-§4.3): d142b57c's ownership names are the admin
     ///      names now, same arguments, storage and rules. A row of an old entry runs on the new side under its new selector;
     ///      the old side's revert selector, event topic0 and the selector of each call it records (the call under test is the
     ///      first) are read under the new names. T6 (§4.1's row "Compliance registry names in the regulated code"): the
-    ///      regulated kinds' `REGISTRY_CODEHASH()` and three registry errors likewise. Nothing else is mapped.
+    ///      regulated kinds' `REGISTRY_CODEHASH()` and three registry errors likewise. Owner 2026-11-12 (CTR-MTX-86): the
+    ///      payee-fee names, `mtxPayReceiverFee`, `receiverFeeDigest`, the three `ReceiverFee*` errors and the event
+    ///      `UAReceiverFeePaid`, likewise. Nothing else is mapped.
     function _r3Sel(bytes4 s) internal pure returns (bytes4) {
         if (s == bytes4(keccak256("owner()"))) return bytes4(keccak256("admin()"));
         if (s == bytes4(keccak256("pendingOwner()"))) return bytes4(keccak256("pendingAdmin()"));
-        if (s == bytes4(keccak256("transferOwnership(bytes32)"))) return bytes4(keccak256("transferAdmin(bytes32)"));
+        if (s == bytes4(keccak256("transferOwnership(bytes32)"))) return bytes4(keccak256("transferAdmin(bytes32,bytes32)"));
         if (s == bytes4(keccak256("acceptOwnership()"))) return bytes4(keccak256("acceptAdmin()"));
-        if (s == bytes4(keccak256("renounceOwnership()"))) return bytes4(keccak256("renounceAdmin()"));
+        if (s == bytes4(keccak256("renounceOwnership()"))) return bytes4(keccak256("renounceAdmin(bytes32)"));
         if (s == bytes4(keccak256("NotOwner(bytes32)"))) return bytes4(keccak256("NotAdmin(bytes32)"));
         if (s == bytes4(keccak256("NotPendingOwner(bytes32)"))) return bytes4(keccak256("NotPendingAdmin(bytes32)"));
         if (s == bytes4(keccak256("OwnerAccountPool(bytes32)"))) return bytes4(keccak256("AdminAccountPool(bytes32)"));
@@ -231,17 +279,37 @@ abstract contract LegacyDiff is Test {
         if (s == bytes4(keccak256("RegistryGasStarved(uint256,uint256)"))) {
             return bytes4(keccak256("ComplianceRegistryGasStarved(uint256,uint256)"));
         }
+        if (s == 0x0de1ca2d) return IMetaTokenV2.mtxPayWithPayeeFee.selector; // mtxPayReceiverFee
+        if (s == 0x7c4fa261) return IMetaTokenV2.payeeFeeDigest.selector; // receiverFeeDigest
+        if (s == bytes4(keccak256("ReceiverFeeShape()"))) return IMetaTokenV2.PayeeFeeShape.selector;
+        if (s == bytes4(keccak256("ReceiverFeeExpired(uint256,uint256)"))) return IMetaTokenV2.PayeeFeeExpired.selector;
+        if (s == bytes4(keccak256("ReceiverFeeAmount(uint256,uint256)"))) return IMetaTokenV2.PayeeFeeAmount.selector;
         return s;
     }
 
-    function _r3Call(bytes memory data) internal pure returns (bytes memory out) {
+    function _r3Call(bytes memory data) internal view returns (bytes memory out) {
         out = bytes.concat(data);
         if (out.length < 4) return out;
+        // Fable recheck-2 P3-1 (CTR-GOV-27): the renounce names the token's chain word, `r3Uid`, its first argument (the
+        // old entry took none and ignored any bytes after its selector, so they follow the word)
+        if (bytes4(out) == bytes4(keccak256("renounceOwnership()"))) {
+            bytes memory rest = new bytes(out.length - 4);
+            for (uint256 i; i < rest.length; ++i) rest[i] = out[i + 4];
+            out = bytes.concat(bytes4(out), r3Uid, rest);
+        }
+        // CTR-GOV-27: the transfer names the token's chain word after `newAdmin` (the words after it follow the word)
+        if (bytes4(out) == bytes4(keccak256("transferOwnership(bytes32)")) && out.length >= 36) {
+            bytes memory head = new bytes(36);
+            bytes memory rest = new bytes(out.length - 36);
+            for (uint256 i; i < 36; ++i) head[i] = out[i];
+            for (uint256 i; i < rest.length; ++i) rest[i] = out[i + 36];
+            out = bytes.concat(head, r3Uid, rest);
+        }
         bytes4 s = _r3Sel(bytes4(out));
         for (uint256 i; i < 4; ++i) out[i] = s[i];
     }
 
-    function _r3Old(Run memory o) internal pure {
+    function _r3Old(Run memory o) internal view {
         if (!o.ok) o.ret = _r3Call(o.ret);
         for (uint256 i; i < o.calls.length; ++i) {
             (VmSafe.AccountAccessKind k, address a, uint256 v, bytes memory d, bool r) =
@@ -255,6 +323,8 @@ abstract contract LegacyDiff is Test {
                 o.logs[i].topics[0] = keccak256("AdminTransferStarted(bytes32,bytes32)");
             } else if (t == keccak256("OwnershipTransferred(bytes32,bytes32)")) {
                 o.logs[i].topics[0] = keccak256("AdminTransferred(bytes32,bytes32)");
+            } else if (t == keccak256("UAReceiverFeePaid(bytes32,bytes32,address,uint256)")) {
+                o.logs[i].topics[0] = IMetaTokenV2.UAPayeeFeePaid.selector;
             }
         }
     }

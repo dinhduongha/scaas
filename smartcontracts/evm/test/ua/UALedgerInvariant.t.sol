@@ -23,7 +23,7 @@ import {UALedgerBase} from "./UALedgerBase.sol";
 /// UA-5a (CTR-UA-28, CTR-UA-26, CTR-MTX-05): `wrapToUA` on `wrp` and on the native-leg `wrpN`, `mintToUA`,
 /// `payWithFeeToUA`, `burn` under a derived UA, wraps of the ledger-leg `wrpL` (leg `tok` at 3/2, wrapped by this
 /// handler, a contract; `wrap` or `wrapToUA`), `unwrapToUA` from `wrpL` (direct by a native, or under `uaExecute` by a
-/// UA), `mtxPayReceiverFee`. On `wrpL` the handler checks minted ⌊a·n/d⌋, out ⌊w·d/n⌋, burned ⌈out·n/d⌉ and the reserve
+/// UA), `mtxPayWithPayeeFee`. On `wrpL` the handler checks minted ⌊a·n/d⌋, out ⌊w·d/n⌋, burned ⌈out·n/d⌉ and the reserve
 /// against the balances per call.
 /// After every call the handler replays the tokens' `Transfer` logs per native holder and `UATransfer` logs per
 /// derived id, and checks `UATransfer` is emitted exactly for the moves with a derived side.
@@ -164,7 +164,7 @@ contract UALedgerHandler is Test {
                 keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt)), structHash));
     }
 
-    // ----- ops: UA-5a receivers, the UA allowlist, receiver-pays -----
+    // ----- ops: UA-5a receivers, the UA allowlist, payee fee -----
 
     /// `wrapToUA` by a native: on `wrp` (ERC-20 leg) or on `wrpN` (the native coin, `msg.value`).
     function wrapToUA(uint256 who, uint256 ua, uint256 amount, bool nativeLeg) external {
@@ -296,9 +296,9 @@ contract UALedgerHandler is Test {
         _settle2(wrpL, n, n, tok, 1, 1);
     }
 
-    /// Receiver-pays on `tok`: payer and payee index 0–2 a native, 3–4 a UA (distinct); the payee pays `fee` (1 … value)
+    /// Payee fee on `tok`: payer and payee index 0–2 a native, 3–4 a UA (distinct); the payee pays `fee` (1 … value)
     /// to `FEE_TO` out of the payment.
-    function mtxPayReceiverFee(uint256 payer, uint256 payee, uint256 amount, uint256 fee) external {
+    function mtxPayWithPayeeFee(uint256 payer, uint256 payee, uint256 amount, uint256 fee) external {
         (payer, payee) = (payer % 5, payee % 5);
         if (payer == payee) return;
         bytes32 p = _id(payer);
@@ -315,10 +315,10 @@ contract UALedgerHandler is Test {
         });
         bytes32 d = tok.mtxTransferDigest(x);
         bytes memory payerAuth = _auth(payer, d);
-        bytes memory payeeAuth = _sign(payee, UAKinds.PURPOSE_RECEIVER_FEE,
-            tok.receiverFeeDigest(x, fee, FEE_TO, block.timestamp));
+        bytes memory payeeAuth = _sign(payee, UAKinds.PURPOSE_PAYEE_FEE,
+            tok.payeeFeeDigest(x, fee, FEE_TO, block.timestamp));
         vm.prank(RELAYER);
-        tok.mtxPayReceiverFee(x, UACall.auth(x.from, payerAuth), fee, FEE_TO, block.timestamp, UACall.auth(x.to, payeeAuth), PayMetaKit.meta(seed));
+        tok.mtxPayWithPayeeFee(x, UACall.auth(x.from, payerAuth), fee, FEE_TO, block.timestamp, UACall.auth(x.to, payeeAuth), PayMetaKit.meta(seed));
         bool pUA = payer > 2;
         bool qUA = payee > 2;
         // the payment (UATransfer iff a derived side, Transfer iff a native side), then the fee from the payee to FEE_TO

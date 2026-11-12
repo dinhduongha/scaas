@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TokenCall} from "./TokenCall.sol";
+import {RescueLib} from "../governance/RescueLib.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title `DexPuller` (CTR-DEX-22): the only holder of user allowances for outside tokens. Deployed by its DEX's
@@ -14,24 +15,23 @@ contract DexPuller {
     using SafeERC20 for IERC20;
 
     address public immutable dex;
-    /// @notice `DexConfig.rescueTo` (spec §6.2, CTR-GOV-06): immutable; 0 = no rescue.
+    /// @notice `DexConfig.rescueTo` (spec §6.2, CTR-GOV-06), immutable; 0 stores `RescueLib.SCAAS_DEV_RESCUE`
+    ///         (CTR-GOV-25).
     address public immutable rescueTo;
 
     event Rescued(address indexed asset, address indexed to, uint256 amount);
 
     error NotDex(address caller);
-    error RescueOff();
 
     constructor(address rescueTo_) {
         dex = msg.sender;
-        rescueTo = rescueTo_;
+        rescueTo = RescueLib.to(rescueTo_);
     }
 
     /// @notice Anyone: the puller's whole balance of `token` to `rescueTo`. It holds no user's funds, only allowances, and
     ///         calls only `balanceOf` and `transfer`, so no allowance is spent (R-16).
     function rescue(address token) external {
         address to = rescueTo;
-        if (to == address(0)) revert RescueOff();
         uint256 amount = IERC20(token).balanceOf(address(this));
         IERC20(token).safeTransfer(to, amount);
         emit Rescued(token, to, amount);

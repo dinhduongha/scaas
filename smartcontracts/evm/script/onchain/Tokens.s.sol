@@ -273,7 +273,7 @@ contract Tokens is OnchainBase {
         (uint64 eta,,,) = NormalToken(x).pendingGrant(GovernanceBits.MINTABLE, _pad(a2));
         require(eta != 0, "pending grant");
         NormalToken(x).cancelGrant(GovernanceBits.MINTABLE, _pad(a2));
-        NormalToken(x).renounceAdmin();
+        NormalToken(x).renounceAdmin(NormalToken(x).chainUid());
         vm.stopBroadcast();
         require(NormalToken(x).admin() == 0, "renounced");
     }
@@ -410,7 +410,7 @@ contract Tokens is OnchainBase {
         _transfers();
         _generic();
         _pays();
-        _receiverFee();
+        _payeeFee();
         _relay();
         _cancels();
     }
@@ -543,17 +543,17 @@ contract Tokens is OnchainBase {
         vm.stopBroadcast();
     }
 
-    /// @dev The payee (test key 2, a native id) pays 5 of 1,000 to test key 3, co-signing under `receiver-fee`; the payer's
+    /// @dev The payee (test key 2, a native id) pays 5 of 1,000 to test key 3, co-signing under `payee-fee`; the payer's
     ///      transfer is bound to the relayer (the payee itself sends).
-    function _receiverFee() internal {
+    function _payeeFee() internal {
         NormalToken n = NormalToken(t);
         MetaTxLib.PayMeta memory m = _nextMeta(false);
         MetaTxLib.UAMetaTransfer memory x = _tr(_pad(a2), 1_000, 0);
         (x.entryRef, x.mode, x.relayer) = (_metaId(m), MetaTxLib.MODE_RESTRICT_RELAYER, a2);
         IUARegistry.UASig memory ps = _sig(k1, n.mtxTransferDigest(x));
-        IUARegistry.UASig memory qs = _sig(k2, n.receiverFeeDigest(x, 5, a3, vu));
+        IUARegistry.UASig memory qs = _sig(k2, n.payeeFeeDigest(x, 5, a3, vu));
         vm.broadcast(k2);
-        n.mtxPayReceiverFee(x, ps, 5, a3, vu, qs, m);
+        n.mtxPayWithPayeeFee(x, ps, 5, a3, vu, qs, m);
     }
 
     /// @dev `RelayFeeRouter.relay`: its executor runs a relayed `mtxTransfer`, then the payer's `UARelayFee` of 1 to the
@@ -637,11 +637,12 @@ contract Tokens is OnchainBase {
         vm.stopBroadcast();
         vm.broadcast(k3);
         n.mint(a3, 10); // the limited holder: `useLimited`
+        bytes32 nu = n.chainUid(); // the token's chain word (CTR-GOV-27)
         vm.broadcast(k1);
-        n.transferAdmin(_pad(a2));
+        n.transferAdmin(_pad(a2), nu);
         vm.startBroadcast(k2);
         n.acceptAdmin();
-        n.transferAdmin(_pad(a1));
+        n.transferAdmin(_pad(a1), nu);
         vm.stopBroadcast();
         vm.startBroadcast(k1);
         n.acceptAdmin();
@@ -664,7 +665,7 @@ contract Tokens is OnchainBase {
         } else {
             n.disableFeature(GovernanceBits.MINTABLE);
         }
-        n.renounceAdmin();
+        n.renounceAdmin(n.chainUid());
         vm.stopBroadcast();
         require(n.admin() == 0, "renounced");
     }

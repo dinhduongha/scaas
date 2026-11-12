@@ -47,6 +47,7 @@ import {
     ZetherTransferVerifierBls12381,
     ZetherBurnVerifierBls12381
 } from "../../src/zether/ZetherVerifier.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// @notice Plan T16 (CTR-GOV-19, GD-12; spec S0, S8, §12.10): every kind has a deploy path, the chain's `GovernanceRouter` is
 ///         deployed before the releases and gated, and every kind's release fits a 200 M block (the SCaaS testnet's,
@@ -245,9 +246,9 @@ contract GovDeployTest is Test {
             bytes memory code = b == 4 ? type(NormalPqzRegulatedToken).creationCode : type(WrappedPqzRegulatedToken).creationCode;
             (address[] memory ms, bytes memory args) = deployKindModules(uint8(k), address(f), regArgs()); // T66b
             vm.startPrank(address(h));
-            f.publishTokenEnv(k, 1, withModules(e, ms));
-            w = f.deployTokenImplementation(k, 1, 1, code, args);
-            f.setTokenKindEnabled(k, true);
+            f.publishTokenEnv(k, 1, EnvKit.uidOf(address(f)), withModules(e, ms));
+            w = f.deployTokenImplementation(k, 1, 1, code, args, EnvKit.uidOf(address(f)));
+            f.setTokenKindEnabled(k, true, EnvKit.uidOf(address(f)));
             vm.stopPrank();
         }
         assertEq(NormalRegulatedToken(w).kind(), uint8(k), "the release's kind");
@@ -290,10 +291,11 @@ contract GovDeployTest is Test {
         address router = vm.parseJsonAddress(json, ".governance_router");
         assertEq(r.admin(), nid(address(this)), "COMPLIANCE_ADMIN");
         assertEq(r.govRouter(), router, "the chain's router");
+        assertEq(r.chainUid(), ZUID, "the chain's word (CTR-GOV-27)");
         assertEq(address(r), vm.computeCreate2Address(keccak256("scaas.deploy.v1"), keccak256(abi.encodePacked(
-            type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router))), address(h)), "CREATE2");
+            type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router, ZUID))), address(h)), "CREATE2");
 
-        address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0))), "venue");
+        address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0), 0, 0)), "venue");
         address puller = SCaaSDex(dex).puller();
         address alice = address(0xA11CE);
         _attest(r, nid(alice), 1, type(uint64).max);
@@ -365,9 +367,10 @@ contract GovDeployTest is Test {
         // T83: 44,635 -> 45,522 B (the pay records' views and `_payRecord`, the v3 `PayMeta` tuple); T66b (the body
         // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name;
         // group 3l: 17,808 -> 19,366 B (the five wrap-limit stubs); merge3k (+ ua-mtx-liquidity's `mtxLiquidityPull` stub):
-        // 19,366 -> 19,532 B; Fable review fixes 2026-11-11 (B P3-1, B P2-1 in the ERC-20 core): 19,532 -> 19,626 B
-        h.limitCode(19_625);
-        vm.expectRevert(bytes("WrappedToken runtime 19626 B > chain code limit 19625 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // 19,366 -> 19,532 B; Fable review fixes 2026-11-11 (B P3-1, B P2-1 in the ERC-20 core): 19,532 -> 19,626 B;
+        // fix2 CTR-GOV-27's Change (`transferAdmin(bytes32,bytes32)`'s stub in the dispatcher): 19,626 -> 19,652 B
+        h.limitCode(19_651);
+        vm.expectRevert(bytes("WrappedToken runtime 19652 B > chain code limit 19651 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 
@@ -433,7 +436,7 @@ contract GovDeployTest is Test {
             _release(type(WrappedRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_REGULATED, router),
             _release(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, router),
             _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router),
-            abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router)), // a plain deploy
+            abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router, ZUID)), // a plain deploy
             _release(type(NormalZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, router), // T30
             _release(type(WrappedZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, router),
             _release(type(NormalPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, router) // T31
@@ -560,8 +563,12 @@ contract GovDeployTest is Test {
         // T66b sources it imports, the `IERC20MetaTx` comment of f0c03715 among them; its code unchanged):
         // 0xd981282EC3f2F979B953BDE7c7c3c4100caDfe89; Fable review fixes 2026-11-11 (the metadata hash: `MetaTxLib` loses
         // `hashStruct` / `validateMode`, B P3-3; its code unchanged): -> 0x43E08564FE056f53014bb2c40C4f845E550Eb8Cf;
-        // re-check C6 (the metadata hash: `ModeUnknownBits` leaves `MetaTxLib`): -> this
-        assertEq(rf, 0xa3097e517E91B9e0f807815f92052212AD53a454, "RelayFeeRouter");
+        // re-check C6 (the metadata hash: `ModeUnknownBits` leaves `MetaTxLib`): 0xa3097e517E91B9e0f807815f92052212AD53a454;
+        // fix2 CTR-GOV-26 (its `rescue(asset)` to the constant dev address, under the entry guard):
+        // 0x92CF546e4F32C23859255BC207B33af34F584A2A; CTR-GOV-25 Change (the constant is the one-owner `RescueVault`):
+        // 0xd96A3154BD20B4082D430E792e8245910c12F1FD; CTR-GOV-25 Change (the two-role `RescueVault`, admin + rescuer):
+        // 0xcc4746baCAFfD3605D7745AB8fE18CA44501f445; Fable fix2 V-1 (the vault's ERC-5267 fields 0x0b moved the constant): -> this
+        assertEq(rf, 0xBbc8A5561C5d1877a3Cb0Bac6Ca80446BA100F5F, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -606,8 +613,27 @@ contract GovDeployTest is Test {
         // 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a): -> 0xf6cEa6aB1eF258779F44546EE3BD596aD2576EFe; Fable review fixes
         // 2026-11-11 (`MtxPipelineLib._callFee`'s refusals, B P3-4; the metadata hash: `MetaTxLib`, `GovernanceLib`):
         // 0xc1F97DFA09Ee3D51D370542dbD2c0f5024d8C880; re-check C1, C2, C4, C6 (the metadata hash: `GovernanceLib._cuts`,
-        // `ITradeToken`, `MetaTxLib`): -> this
-        assertEq(router, 0xD05a7FF11D301Cd9112Ea2eAb6174f3E84bA7c3A, "GovernanceRouter");
+        // `ITradeToken`, `MetaTxLib`): 0xD05a7FF11D301Cd9112Ea2eAb6174f3E84bA7c3A; fix2 D P3-2 (the deprecations and kind
+        // switches carry `chainUid`, their typehashes): 0x34C0c8173824aE118c6Ec0E183290280C21530b9; fix2 D P3-5 (the metadata
+        // hash: `ISCaaSDex.rescue`, `SCaaSDex`'s comments): 0xF35EF840Db3c7FD9F63e8cd86e88e2dE9CB46C29; fix2 CTR-GOV-25 (the
+        // metadata hash: `RescueLib`, `GovernanceLib.init`, `DexPuller`): 0x3B3B1Cda834b39B4541d0861226E7bE4712302AF; fix2
+        // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a; fix2
+        // recheck-2 P3-1 (CTR-GOV-27: `mtxRenounceAdmin` and `UARenounceAdmin` carry `chainUid`; the metadata hash:
+        // `IGovernance`, `IOpenFactory`): 0x60B276496DA55AA0dAD11DcbDaf6Eb00e1E2e51B; fix2 CTR-MTX-86 (the payee-fee names; the
+        // metadata hash: `MtxPipelineLib`, `UAMetaTxBase`, `UAKinds`): 0xAC730941186ffda9664cbAf9C386628a256F6Bd4; fix2
+        // CTR-GOV-27's Change (`mtxTransferAdmin`, the three `mtxPublish*Env`, `mtxRevokeApproval` carry `chainUid`,
+        // `mtxSetChainEntries` the nested `ChainEntries`; the metadata hash: `IAdmin`, `IOpenFactory`, `IComplianceRegistry`):
+        // 0x2f014B077cFcaa4a0A6C7239147DeD7FAe23877F. On ua-mtx-fix2-dex from 0x1C8CfE54…: fix2-dex CTR-DEX-32 (the metadata
+        // hash: `ISCaaSDex.DexConfig` gains `features`, `lockedFeatures`; its code unchanged):
+        // 0x442Df70CD12C49b876D5552Fa40b126C5E0E662f; fix2-dex settle outcome rule (the metadata hash:
+        // `ISCaaSDex.SellerOverDebited`): 0x51E43059317Bf99D7d615a0334e1781BA62CFFf5. The merge of 8f4b1b64 (both):
+        // 0x34021369121a22e7A94f19778C9704a24A493a05. On ua-mtx-rescue-vault from 0x60B27649…: CTR-GOV-25 Change (the constant
+        // is the one-owner `RescueVault`): 0xcf6aB482462467de132E93aE6471e0A6d9117c9c; CTR-GOV-25 Change (the two-role
+        // `RescueVault`, admin + rescuer): 0xE8b1c2FFc9E8BC552a266E86e8Bd6046E8E6272A. The merge of e374704f (both):
+        // 0xf670956b67F159a1323e12309cD375D28a44d2a3; Fable fix2 V-1 (the vault's ERC-5267 fields 0x0b moved the constant):
+        // 0xc18b4D5EA8a7d88ed37Da8F26A4c4e521c38C2BA; Fable fix2 GOV-4 (the metadata hash: `IGovernance.renounceAdmin`'s
+        // NatSpec): -> this
+        assertEq(router, 0xB1218049Db73aF164e688b770DBC05d422624A1a, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

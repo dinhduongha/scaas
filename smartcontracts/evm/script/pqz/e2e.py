@@ -1346,14 +1346,16 @@ def run(kd, kr, ke):
         # group 3f (spec §3 C6): --zero-dep publishes the PQZ kinds on deps = [0x0], where only an OFFCHAIN token can be
         # created (a PRECOMPILE one reverts SelfTestFailed(address(0)))
         env = [reg, 0, 0, ([0] if ZERO_DEP else [pqv]) if kind else [], [], libs, hashes]
-        sd.send(fac, cd(f"publishTokenEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishTokenEnv(kind {kind}, 1)")
-        r = sd.send(fac, cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
-                               kind, 1, 1, code, impl_args(kind, ms)),
+        sd.send(fac, cd(f"publishTokenEnv(uint8,uint16,bytes32,{ENV_S})", ["w", "w", "w", ENV], kind, 1, uid, env),
+                f"publishTokenEnv(kind {kind}, 1)")
+        r = sd.send(fac, cd("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)", ["w", "w", "w", "b", "b", "w"],
+                               kind, 1, 1, code, impl_args(kind, ms), uid),
                     f"deployTokenImplementation(kind {kind}, 1) {name}")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower() and len(x["topics"]) == 4)
         log(f"      {name} release at 0x{lg['topics'][3][-40:]} ({int(r['gasUsed'], 16):,} gas)")
     for kind in [k for k, _ in RELEASES if k and k not in SKIP_KINDS]:
-        sd.send(fac, cd("setTokenKindEnabled(uint8,bool)", ["w", "w"], kind, 1), f"setTokenKindEnabled({kind}, true)")
+        sd.send(fac, cd("setTokenKindEnabled(uint8,bool,bytes32)", ["w"] * 3, kind, 1, uid),
+                f"setTokenKindEnabled({kind}, true)")
 
     # -------------------------------------------------------------- 2. UAs
     log("\n## 2. UAs: ML-DSA UAs and PQZ holders (ML-DSA UA + pqz-mlwe key attribute, real R_REG proofs)")

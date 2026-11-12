@@ -685,8 +685,8 @@ client-side publication claim. Policy and peers are node store tables managed in
 with ERC-20 `validUntil` of 300 s a 300 s window never opens. A tenant that opts in exposes payer, payee, amount and
 timing to admitted peers of the matching class (or the world, for `public`).
 
-<a id="NODE-MESH-17"></a>**NODE-MESH-17** — **Jobs carrying a receiver-fee co-signature use the restricted bus scope**:
-the envelope has no slot for the payee co-signature ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays)), so
+<a id="NODE-MESH-17"></a>**NODE-MESH-17** — **Jobs carrying a payee-fee co-signature use the restricted bus scope**:
+the envelope has no slot for the payee co-signature ([sponsorship.md#payee-fee](sponsorship.md#payee-fee)), so
 the job API forces `bus.scope = restricted`.
 
 ## <a id="private-profile"></a>8. Private profile

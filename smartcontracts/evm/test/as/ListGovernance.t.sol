@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ListFixture, IListOps} from "./helpers/ListFixture.sol";
@@ -441,12 +442,12 @@ contract ListGovernanceTest is ListFixture {
         IERC20(t).transfer(bob, 1);
         vm.startPrank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, uint8(1)));
-        NormalToken(t).renounceAdmin();
+        NormalToken(t).renounceAdmin(EnvKit.codeUidOf(address(NormalToken(t))));
         NormalToken(t).revokeRole(1, nid(address(this)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, DENY));
-        NormalToken(t).renounceAdmin();
+        NormalToken(t).renounceAdmin(EnvKit.codeUidOf(address(NormalToken(t))));
         NormalToken(t).revokeRole(DENY, nid(issuer));
-        NormalToken(t).renounceAdmin();
+        NormalToken(t).renounceAdmin(EnvKit.codeUidOf(address(NormalToken(t))));
         vm.stopPrank();
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, DENY, nid(issuer)));

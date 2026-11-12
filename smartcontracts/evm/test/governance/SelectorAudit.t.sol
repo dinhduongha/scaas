@@ -32,6 +32,7 @@ import {regArgs} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
 
@@ -331,6 +332,8 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
 
     /// The test is the factory of every clone and registered no token.
     function isToken(address) external pure returns (bool) { return false; }
+    /// fix2-dex: the DEX reads the kind at use (`versionOf`, version 0: not a factory token)
+    function versionOf(address) external pure returns (uint8, uint64) {}
 
     function setUp() public override {
         super.setUp();
@@ -347,7 +350,7 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         wt = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), e)));
         wt.initialize(nid(address(this)), 1, abi.encode(w));
         dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), e));
-        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0))));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0), 0, 0)));
         _regulate(c);
         nr = NormalRegulatedToken(EnvKit.clone(address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs()))), e));
         nr.initialize(nid(address(this)), 1, abi.encode(c));
@@ -373,14 +376,15 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
 
     function test_everySelectorIsClassified() public {
         // Fable review of ua-mtx-merge E N-10: + UARegistry and SmartKeyAccountFactory (the node's `registry` and `factory` kinds);
-        // owner 2026-11-12: + SmartKeyAccount (`account`, class GUARDIAN)
-        string[19] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+        // owner 2026-11-12: + SmartKeyAccount (`account`, class GUARDIAN); fix2 CTR-GOV-26: + `RelayFeeRouter`, `PqChat` (their
+        // `rescue`, and every other entry with them)
+        string[21] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
             "WrappedPqzToken", "SCaaSDex", "DexPuller", "GovernanceRouter", "NormalRegulatedToken", "WrappedRegulatedToken",
             "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken",
-            "OpenFactory", "UARegistry", "SmartKeyAccountFactory", "SmartKeyAccount"];
+            "OpenFactory", "UARegistry", "SmartKeyAccountFactory", "SmartKeyAccount", "RelayFeeRouter", "PqChat"];
         uint256 bad;
         for (uint256 i; i < all.length; ++i) bad += _classified(all[i]);
-        assertEq(bad, 0, "every non-view external of the nineteen has exactly one pinned row");
+        assertEq(bad, 0, "every non-view external of the twenty-one has exactly one pinned row");
     }
 
     function test_strangerRevertsOnEveryGatedRow() public {
@@ -392,6 +396,7 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         _stranger("NormalRegulatedToken", address(nr));
         _stranger("WrappedRegulatedToken", address(wr));
         _stranger("OpenFactory", address(fac));
+        _stranger("RelayFeeRouter", address(new RelayFeeRouter())); // fix2 CTR-GOV-26
         // owner 2026-11-12: a live account with a guardian that is not the stranger (GUARDIAN: `NotGuardian()`, FACTORY: `NotFactory()`)
         SmartKeyAccountFactory kf = new SmartKeyAccountFactory(chainUidA);
         _stranger("SmartKeyAccount", kf.deploy(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(0x5EED)), 0, 0, 0), address(0x6A2D)));

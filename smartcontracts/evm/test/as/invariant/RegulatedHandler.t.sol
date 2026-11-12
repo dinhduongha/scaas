@@ -37,6 +37,7 @@ import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {WrappedPqzToken} from "../../../src/pqz/WrappedPqzToken.sol";
 import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 interface IShielded {
     function totalShielded() external view returns (uint256);
@@ -620,7 +621,7 @@ abstract contract RegCore is Test {
     /// The owner hands over to the other owner (`acceptAdmin` kills every pending, Codex 2).
     function handover() external {
         address next = cGov[1 - cOwner];
-        _op(K_GOV, _owner(), abi.encodeCall(IAdmin.transferAdmin, (nid(next))));
+        _op(K_GOV, _owner(), abi.encodeCall(IAdmin.transferAdmin, (nid(next), EnvKit.codeUidOf(cT))));
         if (_op(K_GOV, next, abi.encodeCall(IAdmin.acceptAdmin, ()))) cOwner = 1 - cOwner;
     }
 

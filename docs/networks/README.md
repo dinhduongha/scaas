@@ -209,7 +209,7 @@ Parity with EVM ([CTR-MTX-09](../contracts/metatx.md#CTR-MTX-09), [CTR-MTX-23](.
 | `mtxPay(UAMetaTransfer, UASig, PayMeta)` | `mtx_pay` / `MtxPay` | EVM: `entryRef == metaPayId(meta)`, any lane of the payer (pay-meta-tax O3, [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)); non-EVM until its round: `entry_ref = payId`, lane derived on chain as `H("scaas.pay.lane" ‖ payId)`, `nonce = 0` |
 | `mtxExecuteTransfer` | `mtx_execute_transfer` / `MtxExecuteTransfer` | the transfer struct on a client-chosen lane (Move: fields as typed arguments); not on Soroban (host nonces, no lanes) |
 | `mtxBatchTransfer`, `mtxBatch` | multi-message transactions (Cosmos messages, Solana instructions, Sui PTB commands, GRAM messages from one lane); Aptos `mtx_batch_transfer` with parallel vectors | atomic per transaction |
-| `mtxTransferWithFee`, `mtxPayReceiverFee` (`mtxExecuteWithFee` is in legacy, typed-signing) | none while non-EVM tokens charge no relayer fee | added with a token fee |
+| `mtxTransferWithFee`, `mtxPayWithPayeeFee` (`mtxExecuteWithFee` is in legacy, typed-signing) | none while non-EVM tokens charge no relayer fee | added with a token fee |
 
 One rule (the `ua*` / `mtx*` merge, [CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30); BUILT on EVM, SPECIFIED elsewhere):
 per operation a contract has its direct entry and at most one contract-verified signed entry, which takes every subject the
@@ -770,7 +770,7 @@ Non-EVM books are served after the venue moves into the node store ([CLI-APP-21]
 | Snapshot builder | SPECIFIED | SPECIFIED (same indexer) | with each family's token | 〃 | 〃 | 〃 | 〃 | 〃 | 〃 |
 | Managed markets | SPECIFIED | SPECIFIED | where an order book exists | — | — | — | — | — | — |
 | Sealed-bid tender | SPECIFIED | SPECIFIED (same bytecode on HSCS; the tender checks no signature, so no Hedera child; deposit token = Hedera v2 meta token; tight gas limit since HSCS charges ≥ 80 % of it) | PLANNED: contract holds the deposit; commit = the meta token's signed `Relay` op with a `pay` memo = `depositRef`, executed by the tender via submessage; commitment over `(chain_id, contract, tender, bidder, price, salt)` with SHA-256 | PLANNED: the bidder's `require_auth` entries for `commit_bid` (deposit = SAC/token `transfer` sub-invocation in the same auth tree); reveal/withdraw permissionless | PLANNED: tender object / resource; deposit coin moved by the relayer-submitted PTB / entry function under the bidder's signed op; time from `Clock` / `timestamp` | PLANNED: async — deposit arrives as a jetton `transfer_notification` with `forward_payload = (tenderId, commitment)`; reveal/withdraw are internal messages; bounce handling on refunds | PLANNED: program + PDA vault per tender; deposit through the token-program CPI under the bidder's precompile-verified op | PLANNED | PLANNED |
-| Receiver-pays | EVM v2 | Hedera v2 | — | — | — | — | — | — | — |
+| Payee fee | EVM v2 | Hedera v2 | — | — | — | — | — | — | — |
 | Gas sponsorship policy (node) | all | all | book and limit only | 〃 | 〃 | 〃 | 〃 | 〃 | 〃 |
 | Token wrappers v2 | SPECIFIED | SPECIFIED ([hedera wrappers](hedera.md#wrappers)) | today `scaas-token` (CW20 + meta-op, `minter`, `initial_balances`, tier 1): tier 1 unchanged (gets `Burn` and minter renounce with its next version); wrapper of a bank denom (`info.funds`) or a CW20 (`Receive`) with the same rate/reserve rules and `wrap_rate_vectors.json`: PLANNED | today SEP-41 token + `pay`, admin `mint`, `burn` (tier 1): unchanged; wrapper of a Stellar Asset Contract (e.g. USDC): PLANNED | none needed (the subject `Account` holds any FA / `Coin<T>`; gasless for every asset) | today Tact jetton + custom wallet + `SignedOp`, admin `Mint` (tier 1): unchanged; third-party jettons cannot carry `SignedOp`, so a wrapper minter (receive `transfer_notification`, mint; unwrap with bounce handling) is the only gasless route: PLANNED, highest value of the three | none needed (the `SmartKeyAccount` PDA owns SPL token accounts for any mint) | PLANNED (no NEP-141 wrapper yet) | PLANNED (no ASA / ARC-200 wrapper yet) |
 | Post-quantum Zether | any EVM chain whose client has the `PQZ` precompile and passes its self-test (no chain-id allowlist, owner ruling 2026-10-31); today the SCaaS testnet (precompile in our client); dev chains tests only (anvil cannot host the precompile, so forge mocks it with `vm.mockCall` on KAT inputs; end to end on a SCaaS testnet copy) | no | Cosmos SDK private chains feasible later (Go module calling `libpqz` via cgo; own spec) | no | no | no | no | no | no |
@@ -778,7 +778,7 @@ Non-EVM books are served after the venue moves into the node store ([CLI-APP-21]
 
 Common to all wrappers: fees are `NONE` off EVM, so fee policies are EVM/Hedera only; named meta-tx functions are
 EVM/Hedera (non-EVM ops are already named — `pay`, `Relay{payload}`, `SignedOp`); a multi-underlying guardian and
-rate timelock, when built elsewhere, follow the EVM rules verbatim. Receiver-pays is unavailable on v1, Zether and
+rate timelock, when built elsewhere, follow the EVM rules verbatim. Payee fee is unavailable on v1, Zether and
 non-EVM families; there the options are payee self-relay and sponsorship. Sponsorship cost fields apply on every
 family and `signed_op` jobs match on the decoded op. Classical Zether feasibility per family:
 [contracts/zether](../contracts/zether.md).

@@ -177,14 +177,17 @@ contract ProofPathInvariantsTest is PqzFixture {
     /// 139,424; round 3r T2 (the admin names in each face's dispatch) mtxTransfer_normalZether 83,689 -> 83,711,
     /// mtxTransfer_wrappedZether 83,645 -> 83,667. Fable review fixes 2026-11-11 (B P3-1: `_poolMove`'s native `UA_POOL`
     /// refusal, `transferToUA`'s `_subject()`): mtxTransfer 83,711 / 83,667 -> 83,825 / 83,781, transferToUA 69,104 / 69,104
-    /// -> 69,307 / 69,307, uaExecuteTransfer 139,434 / 139,424 -> 139,496 / 139,486. The test keeps P7's claim as: these
+    /// -> 69,307 / 69,307, uaExecuteTransfer 139,434 / 139,424 -> 139,496 / 139,486; fix2 CTR-GOV-26 (the registry's dispatch: `rescue`)
+    /// uaExecuteTransfer -> 139,518 / 139,508; fix2 recheck-2 P3-1 (CTR-GOV-27, the faces' `renounceAdmin(bytes32)` in the
+    /// dispatch) uaExecuteTransfer 139,518 / 139,508 -> 139,473 / 139,530; fix2 CTR-MTX-86 (the payee-fee names: the
+    /// faces' and P modules' dispatch order) mtxTransfer 83,825 / 83,781 -> 83,781 / 83,737. The test keeps P7's claim as: these
     /// rows are the pins.
     function test_P7_zetherPinsUnchanged() public view {
         string memory j = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/plus_zero_gas.json"));
         string[8] memory k = ["mtxTransfer_normalZether", "mtxTransfer_wrappedZether", "transferToUA_normalZether",
             "transferToUA_wrappedZether", "transfer_normalZether", "transfer_wrappedZether", "uaExecuteTransfer_normalZether",
             "uaExecuteTransfer_wrappedZether"];
-        uint256[8] memory at7558 = [uint256(83825), 83781, 69307, 69307, 46440, 46462, 139496, 139486]; // + review fixes B P3-1
+        uint256[8] memory at7558 = [uint256(83781), 83737, 69307, 69307, 46440, 46462, 139473, 139530]; // + B P3-1, CTR-GOV-26, -27, CTR-MTX-86
         for (uint256 i; i < 8; ++i) assertEq(vm.parseJsonUint(j, string.concat(".", k[i])), at7558[i], k[i]);
     }
 }

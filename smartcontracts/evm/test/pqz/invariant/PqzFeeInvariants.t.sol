@@ -49,8 +49,8 @@ contract PqzFeeInvariantsTest is PqzOffchainBase {
         Catalogue.release(fN, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
             type(WrappedPqzToken).creationCode);
         vm.startPrank(registrar);
-        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
-        fN.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true);
+        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(fN)));
+        fN.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, EnvKit.uidOf(address(fN)));
         vm.stopPrank();
         vm.warp(block.timestamp + 1 days); // the releases usable
         NormalPqzToken pre = NormalPqzToken(fN.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1,

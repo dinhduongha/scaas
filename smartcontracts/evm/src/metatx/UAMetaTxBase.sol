@@ -174,11 +174,11 @@ abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
         return MtxPipelineLib.transferDigest(domainSeparator, t);
     }
 
-    function _pipeReceiverFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
+    function _pipePayeeFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
         address feeRecipient, uint256 validUntil)
         internal pure virtual returns (bytes32)
     {
-        return MtxPipelineLib.receiverFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
+        return MtxPipelineLib.payeeFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
     }
 
     function _pipePayWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax)
@@ -354,7 +354,7 @@ abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
     function _regPre(bytes32 /* from */, bytes4 /* sel */, uint32 /* mode */) internal view virtual {}
 
     /// @notice Empty here (as `_regPre`). After `pre*` and before the self-call or move of the same seats, with the
-    ///         pipeline's `feeTo` and `fee`; and the fee legs of `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`,
+    ///         pipeline's `feeTo` and `fee`; and the fee legs of `payWithFee`, `payWithFeeToUA`, `mtxPayWithPayeeFee`,
     ///         `mtxRelayFee`, `mtxWrapOrder`.
     function _regFeeTo(bytes32 /* feeTo */, uint256 /* fee */) internal view virtual {}
 }

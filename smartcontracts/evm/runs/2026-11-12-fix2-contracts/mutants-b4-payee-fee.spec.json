@@ -1,0 +1,42 @@
+[
+ {
+  "id": "typehash-old-name/pin",
+  "file": "src/metatx/MtxPipelineLib.sol",
+  "old": "\"UAPayeeFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,\"",
+  "new": "\"UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,\"",
+  "path": "test/v2/PayeeFee.t.sol",
+  "test": "payeeFeeDigestIsPinned"
+ },
+ {
+  "id": "typehash-old-name/old-sig-refused",
+  "file": "src/metatx/MtxPipelineLib.sol",
+  "old": "\"UAPayeeFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,\"",
+  "new": "\"UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,\"",
+  "path": "test/v2/PayeeFee.t.sol",
+  "test": "oldReceiverFeeNamesHaveNoEntry"
+ },
+ {
+  "id": "typehash-old-name/vectors",
+  "file": "src/metatx/MtxPipelineLib.sol",
+  "old": "\"UAPayeeFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,\"",
+  "new": "\"UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,\"",
+  "path": "test/metatx/TradeTyped.t.sol",
+  "test": "UAPayeeFeeRow"
+ },
+ {
+  "id": "purpose-tag-old-name",
+  "file": "src/ua/UAKinds.sol",
+  "old": "keccak256(\"scaas.ua.purpose.payee-fee.v1\")",
+  "new": "keccak256(\"scaas.ua.purpose.receiver-fee.v1\")",
+  "path": "test/ua/UAKinds.t.sol",
+  "test": "test_groupsPurposesConstants"
+ },
+ {
+  "id": "payee-purpose-is-metatx",
+  "file": "src/metatx/MetaTokenBase.sol",
+  "old": "_pipeAuthorize(_mtxCtx(), t.to, UAKinds.PURPOSE_PAYEE_FEE,",
+  "new": "_pipeAuthorize(_mtxCtx(), t.to, UAKinds.PURPOSE_METATX,",
+  "path": "test/ua/UAPayeeFee.t.sol",
+  "test": "purposeSeparation"
+ }
+]

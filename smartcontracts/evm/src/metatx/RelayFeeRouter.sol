@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SigCheck} from "../common/SigCheck.sol";
+import {RescueLib} from "../governance/RescueLib.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 
@@ -72,6 +73,13 @@ contract RelayFeeRouter is ReentrancyGuardTransient {
         RelayFeeExecutor(EXECUTOR).exec(target, callData);
         IERC20MetaTx(token).mtxRelayFee(from, target, keccak256(callData), payee, value, batch, nonce, validUntil, auth);
         emit RelayFeePaid(relayRef(target, callData), target, token, from, _payee(token, payee, value), value);
+    }
+
+    /// @notice CTR-GOV-26 (owner 2026-11-12): anyone; the router holds an open-mode payment only inside `relay`, so this
+    ///         runs under the same entry guard: the whole balance of `asset` (`address(0)`: the native coin) goes to
+    ///         `RescueLib.SCAAS_DEV_RESCUE`, `IRescuable.Rescued`.
+    function rescue(address asset) external nonReentrant {
+        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);
     }
 
     /// @notice The payment reference of one call: the chain, the target and the exact call bytes.

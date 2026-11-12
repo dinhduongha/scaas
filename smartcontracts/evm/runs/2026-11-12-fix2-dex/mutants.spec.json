@@ -1,0 +1,121 @@
+[
+ {
+  "id": "C1 closed always on",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "return GovernanceLib.hasFeature(GovernanceBits.CLOSED_MARKETS);",
+  "new": "return true;",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "C2 closed always off",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "return GovernanceLib.hasFeature(GovernanceBits.CLOSED_MARKETS);",
+  "new": "return false;",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "C3 settle gate dropped (always closed)",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "if (_closed() && !s.listed[_pair(a, b)])",
+  "new": "if (!s.listed[_pair(a, b)])",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "C4 settle listing check dropped",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "if (_closed() && !s.listed[_pair(a, b)])",
+  "new": "if (_closed() && false)",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "C5 exchange gate always on",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "            if (_closed()) {\n                if (s.listings",
+  "new": "            if (true) {\n                if (s.listings",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "C6 exchange gate always off",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "            if (_closed()) {\n                if (s.listings",
+  "new": "            if (false) {\n                if (s.listings",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "C7 init features dropped",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "GovernanceLib.init(GovernanceBits.DEX_BITS | cfg.features,",
+  "new": "GovernanceLib.init(GovernanceBits.DEX_BITS,",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "C8 init lock dropped",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "cfg.lockedFeatures, cfg.admin,",
+  "new": "0, cfg.admin,",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "C9 init valid without bit 29",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "none, GovernanceBits.DEX_VALID,",
+  "new": "none, GovernanceBits.DEX_BITS,",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "C10 validBits view without bit 29",
+  "file": "src/dex/SCaaSDexAdmin.sol",
+  "old": "return GovernanceBits.DEX_VALID;",
+  "new": "return GovernanceBits.DEX_BITS;",
+  "path": "test/ua/UADexAdmin.t.sol"
+ },
+ {
+  "id": "K1 settle kind from the setMarket record",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "c.outside = !_scaas(sellToken);",
+  "new": "c.outside = _s().kind[sellToken] != KIND_SCAAS;",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "K2 ledger rule from the setMarket record",
+  "file": "src/dex/SCaaSDexCore.sol",
+  "old": "return _scaas(token) && IUALedger",
+  "new": "return _s().kind[token] == KIND_SCAAS && IUALedger",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "K3 every token SCaaS",
+  "file": "src/dex/SCaaSDexCore.sol",
+  "old": "        return v != 0;\n",
+  "new": "        v; return true;\n",
+  "path": "test/v2/DexOutside.t.sol"
+ },
+ {
+  "id": "K4 no token SCaaS",
+  "file": "src/dex/SCaaSDexCore.sol",
+  "old": "        return v != 0;\n",
+  "new": "        v; return false;\n",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "K5 liquidity verify skip for outside inputs",
+  "file": "src/dex/SCaaSDexLiquidityModule.sol",
+  "old": "if (!_scaas(tk)) verify = true;",
+  "new": "tk;",
+  "path": "test/liquidity/**/*.sol"
+ },
+ {
+  "id": "K6 liquidity pull route from the record",
+  "file": "src/dex/SCaaSDexLiquidityModule.sol",
+  "old": "if (_scaas(tk)) ILiquidityPullToken",
+  "new": "if (s.kind[tk] == KIND_SCAAS) ILiquidityPullToken",
+  "path": "test/liquidity/DexLiquidity.t.sol"
+ },
+ {
+  "id": "K7 liquidity verify from the record",
+  "file": "src/dex/SCaaSDexLiquidityModule.sol",
+  "old": "if (!_scaas(tk)) verify = true;",
+  "new": "if (_s().kind[tk] != KIND_SCAAS) verify = true;",
+  "path": "test/liquidity/**/*.sol"
+ }
+]

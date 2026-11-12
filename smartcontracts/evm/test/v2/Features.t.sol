@@ -164,7 +164,7 @@ contract FeaturesTest is Test {
         t.mtxPay(x, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectRevert(off);
-        t.mtxPayReceiverFee(x, s, 1, address(0xFEE), block.timestamp, s, PayMetaKit.meta("r"));
+        t.mtxPayWithPayeeFee(x, s, 1, address(0xFEE), block.timestamp, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectEmit(address(t));
         emit IUALedger.UAPaymentSettled(x.from, x.to, 10, 0, relayer, ref); // a typed payment is never gated
@@ -204,12 +204,12 @@ contract FeaturesTest is Test {
         vm.prank(minter);
         t.mint(alice, 3);
         vm.prank(ownerA);
-        t.transferAdmin(nid(address(0x0B)));
+        t.transferAdmin(nid(address(0x0B)), EnvKit.codeUidOf(address(t)));
         vm.prank(address(0x0B));
         t.acceptAdmin();
         assertEq(t.admin(), nid(address(0x0B)));
         vm.prank(address(0x0B));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
         vm.prank(minter);
         t.mint(alice, 1);                                     // holders keep their role after the owner renounces
@@ -251,7 +251,7 @@ contract FeaturesTest is Test {
         vm.startPrank(ownerA);
         t.grantRole(1, nid(minter));
         t.disableFeature(1);
-        t.transferAdmin(nid(minter));
+        t.transferAdmin(nid(minter), EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(vm.load(address(t), lane), laneBefore);
         assertEq(vm.load(address(t), bal), balBefore);

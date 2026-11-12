@@ -27,8 +27,9 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use super::{
-    auth_of, hex_of, order_of, pair, trade_of, ua_sig_json, Auth, Book, DexOrder, ISCaaSDex, MarketCfg, Placement,
-    PlannedSettlement, Resting, Row, UATradeOrder, WireOrder, FLAG_IOC, KIND_OUTSIDE, KIND_SCAAS, PURPOSE_TRADE,
+    auth_of, dex_closed, hex_of, kind_by_factory, order_of, pair, trade_of, ua_sig_json, Auth, Book, DexOrder, ISCaaSDex,
+    MarketCfg, Placement, PlannedSettlement, Resting, Row, UATradeOrder, WireOrder, CLOSED_MARKETS, FLAG_IOC, KIND_OUTSIDE,
+    KIND_SCAAS, PURPOSE_TRADE,
 };
 use crate::abi::{IComplianceRegistry, IERC165, IMtxIds, IRegulatedToken, IToken, IUALedger, IUARegistry, TradeFill};
 use crate::metatx::native;
@@ -200,8 +201,16 @@ pub struct Venue {
     indexer: Option<Odoo>,
     pub dex: Address,
     puller: Address,
-    /// `tokenKind` per token, from the DEX's listing (never from the order or the client).
-    kinds: HashMap<Address, u8>,
+    /// The leg shape per token of a served market, from the DEX's factory (`versionOf`, CTR-DEX-32; never from the order, the
+    /// client, the DEX's `tokenKind` or a deprecation). Grows when a closed DEX opens.
+    kinds: std::sync::RwLock<HashMap<Address, u8>>,
+    /// The DEX's factory, the source of [`kind_by_factory`].
+    factory: Address,
+    /// CTR-DEX-32: the client's markets a closed DEX does not list, not served; served from the `FeatureDisabled(29)` that
+    /// opens the DEX on (the bit is never enabled later).
+    waiting: std::sync::Mutex<Vec<MarketCfg>>,
+    /// The client's markets whose check at start was unread (a transport error): not served, read again each watcher round.
+    unread: std::sync::Mutex<Vec<MarketCfg>>,
     /// EIP-1167 runtime codehash of this chain's `SmartKeyAccount` clones (the DEX's `SMART_KEY_ACCOUNT_IMPL`): the one
     /// ERC-1271 signer given 400 k gas (CTR-DEX-08). `None` = no implementation on this chain.
     clone_codehash: Option<B256>,
@@ -220,7 +229,9 @@ pub struct Venue {
 }
 
 impl Venue {
-    /// Load the markets and the book from the client; serve only markets the DEX lists with both tokens classified.
+    /// Load the markets and the book from the client; serve the markets the DEX takes ([NODE-DEX-20]: every one when bit 29
+    /// is clear, the listed ones when set), each token's shape by the factory. A closed DEX's other markets wait for its
+    /// `FeatureDisabled(29)`; a market whose check is unread is read again each watcher round; neither is served meanwhile.
     pub async fn start(chain: Arc<Chain>, relay: Odoo, indexer: Option<Odoo>, dex: Address) -> Result<Arc<Self>> {
         let n = chain.number;
         let mr: MarketsReply = relay
@@ -232,17 +243,27 @@ impl Venue {
         }
         let puller = view(&chain, dex, ISCaaSDex::pullerCall {}).await.context("puller()")?;
         let ska = view(&chain, dex, ISCaaSDex::SMART_KEY_ACCOUNT_IMPLCall {}).await.context("SMART_KEY_ACCOUNT_IMPL()")?;
+        let factory = view(&chain, dex, ISCaaSDex::factoryCall {}).await.context("factory()")?;
+        // CTR-DEX-32: fail closed, an unread bit 29 serves nothing
+        let closed = dex_closed(&chain, dex).await.map_err(|e| anyhow!("{e}")).context("features(): bit 29 CLOSED_MARKETS")?;
         let mut markets = vec![];
         let mut kinds = HashMap::new();
+        let (mut waiting, mut unread) = (vec![], vec![]);
         for m in mr.markets {
-            match onchain_market(&chain, dex, &m).await {
+            match onchain_market(&chain, dex, factory, closed, &m).await {
                 Ok(Some((kb, kq))) => {
                     kinds.insert(m.base, kb);
                     kinds.insert(m.quote, kq);
                     markets.push(m);
                 }
-                Ok(None) => warn!(chain = n, market = m.id, "market not listed on the DEX; not served"),
-                Err(e) => warn!(chain = n, market = m.id, "market check: {e:#}; not served"),
+                Ok(None) => {
+                    warn!(chain = n, market = m.id, "market not listed on a closed DEX; not served until it opens");
+                    waiting.push(m);
+                }
+                Err(e) => {
+                    warn!(chain = n, market = m.id, "market check: {e:#}; not served, read again each round");
+                    unread.push(m);
+                }
             }
         }
         let load: LoadReply = relay
@@ -259,7 +280,10 @@ impl Venue {
             indexer,
             dex,
             puller,
-            kinds,
+            kinds: std::sync::RwLock::new(kinds),
+            factory,
+            waiting: std::sync::Mutex::new(waiting),
+            unread: std::sync::Mutex::new(unread),
             clone_codehash: clone_codehash(ska),
             book: Mutex::new(book),
             trades: Default::default(),
@@ -269,7 +293,7 @@ impl Venue {
             registry: me_registry,
         });
         me.load_pending(&mut *me.book.lock().await).await.context("pending fills")?;
-        me.load_regulated().await.context("regulated legs")?;
+        me.load_regulated(me.scaas_tokens()).await.context("regulated legs")?;
         Ok(me)
     }
 
@@ -302,7 +326,83 @@ impl Venue {
     }
 
     fn kind(&self, token: Address) -> u8 {
-        self.kinds.get(&token).copied().unwrap_or_default()
+        self.kinds.read().map(|k| k.get(&token).copied().unwrap_or_default()).unwrap_or_default()
+    }
+
+    /// The SCaaS tokens of the served markets.
+    fn scaas_tokens(&self) -> Vec<Address> {
+        self.kinds.read().map(|k| k.iter().filter(|(_, v)| **v == KIND_SCAAS).map(|(t, _)| *t).collect()).unwrap_or_default()
+    }
+
+    /// [NODE-DEX-20]: the markets served from this round, before the cursor moves and before the book lock (an unread value fails
+    /// the round, read again). A `FeatureDisabled(29)` of the DEX in `events` re-reads the bit live; open, the waiting markets.
+    /// Each round, the markets unread at start (a closed DEX's unlisted one moves to the waiting). Then the start loads of each
+    /// ([`Venue::start`]): the factory's shapes, the regulated legs, the client's rows and their unmined fills, as a book of
+    /// those markets. `None`: nothing opens.
+    async fn read_reopen(&self, events: &[Value]) -> Result<Option<Book>> {
+        let dex = format!("{:#x}", self.dex);
+        let seen = events.iter().any(|e| e["event"] == "FeatureDisabled" && e["bit"].as_u64() == Some(CLOSED_MARKETS as u64)
+            && e["contract"].as_str().is_some_and(|c| c.eq_ignore_ascii_case(&dex)));
+        let unread = self.unread.lock().map(|u| u.clone()).unwrap_or_default();
+        if !seen && unread.is_empty() {
+            return Ok(None);
+        }
+        let closed = dex_closed(&self.chain, self.dex).await.map_err(|e| anyhow!("features(): {e}"))?;
+        let mut out = vec![];
+        if seen && !closed {
+            for m in self.waiting.lock().map(|w| w.clone()).unwrap_or_default() {
+                match onchain_market(&self.chain, self.dex, self.factory, false, &m).await? {
+                    Some(k) => out.push((m, k)),
+                    None => warn!(chain = self.chain.number, market = m.id, "market check after the DEX opened: not served"),
+                }
+            }
+        }
+        for m in unread {
+            match onchain_market(&self.chain, self.dex, self.factory, closed, &m).await {
+                Ok(Some(k)) => out.push((m, k)),
+                Ok(None) => {
+                    warn!(chain = self.chain.number, market = m.id, "market not listed on a closed DEX; not served until it opens");
+                    if let (Ok(mut u), Ok(mut w)) = (self.unread.lock(), self.waiting.lock()) {
+                        u.retain(|x| x.id != m.id);
+                        w.push(m);
+                    }
+                }
+                Err(e) => warn!(chain = self.chain.number, market = m.id, "market check: {e:#}; not served, read again next round"),
+            }
+        }
+        if out.is_empty() {
+            return Ok(None);
+        }
+        if let Ok(mut k) = self.kinds.write() {
+            for (m, (kb, kq)) in &out {
+                k.insert(m.base, *kb);
+                k.insert(m.quote, *kq);
+            }
+        }
+        let fresh = out.iter().flat_map(|(m, (kb, kq))| [(m.base, *kb), (m.quote, *kq)])
+            .filter(|(_, k)| *k == KIND_SCAAS).map(|(t, _)| t).collect();
+        self.load_regulated(fresh).await.context("regulated legs")?;
+        let load: LoadReply = self.relay
+            .call("blockchain.dex.order", "dex_book_load", json!({"evm_chain_number": self.chain.number}))
+            .await
+            .context("dex_book_load")?;
+        let mut opened = Book::load(out.into_iter().map(|(m, _)| m).collect(), &load.rows)?;
+        self.load_pending(&mut opened).await.context("pending fills")?;
+        Ok(Some(opened))
+    }
+
+    /// The markets [`Venue::read_reopen`] loaded, served from now on with their rows; no longer waiting or unread.
+    fn open_markets(&self, book: &mut Book, opened: Book) {
+        let ids: HashSet<i64> = opened.markets().map(|m| m.id).collect();
+        for list in [&self.waiting, &self.unread] {
+            if let Ok(mut l) = list.lock() {
+                l.retain(|m| !ids.contains(&m.id));
+            }
+        }
+        for m in opened.markets() {
+            info!(chain = self.chain.number, market = m.id, "market served from now on (NODE-DEX-20)");
+        }
+        book.add_markets(opened);
     }
 
     // ------------------------------------------------------------------------------ regulated legs (NODE-DEX-11)
@@ -310,8 +410,8 @@ impl Venue {
     /// The SCaaS legs that answer `type(IRegulatedToken).interfaceId` (M-10), each with its `pausedUntil`; for each, the venue's
     /// own eligibility, alerted by name, never assumed: the registry admin attests the DEX and its puller `ELIGIBLE_CONTRACT`
     /// (an operator step, owner 2026-11-06); until then intake refuses `VENUE_NOT_ELIGIBLE` on a listed leg.
-    async fn load_regulated(&self) -> Result<()> {
-        for (&t, _) in self.kinds.iter().filter(|(_, k)| **k == KIND_SCAAS) {
+    async fn load_regulated(&self, tokens: Vec<Address>) -> Result<()> {
+        for t in tokens {
             let call = IERC165::supportsInterfaceCall { id: crate::abi::regulated_interface_id().into() };
             let regulated = match self.chain.call_view(t, call).await {
                 Ok(yes) => yes,
@@ -1241,7 +1341,7 @@ impl Venue {
         if !quorum_ok(hash, &others, nc.finality_quorum) {
             return Ok(false);
         }
-        let mut contracts: Vec<Address> = self.kinds.keys().copied().collect();
+        let mut contracts: Vec<Address> = self.kinds.read().map(|k| k.keys().copied().collect()).unwrap_or_default();
         contracts.push(self.dex);
         let f = Filter::new().from_block(from).to_block(to).address(contracts).event_signature(vec![
             ISCaaSDex::LegSettled::SIGNATURE_HASH,
@@ -1257,14 +1357,17 @@ impl Venue {
             IRegulatedToken::AllowedSet::SIGNATURE_HASH,
             IRegulatedToken::DeniedSet::SIGNATURE_HASH,
             crate::abi::IGovernance::FeatureEnabled::SIGNATURE_HASH,
+            crate::abi::IGovernance::FeatureDisabled::SIGNATURE_HASH,
         ]);
         let logs = self.chain.primary().get_logs(&f).await?;
         let events = self.accepted(&logs);
         // Fable P2-2: the lists read before the cursor moves and before the book lock; unreadable, the round fails and is retried
         let lists = self.read_lists(&events).await?;
+        let opened = self.read_reopen(&events).await?;
         // the regulated legs' events are the venue's own (the halt, the frozen makers): the client gets the orders' states
         let fills: Vec<&Value> = events.iter().filter(|e| !matches!(e["event"].as_str(),
-            Some("Paused" | "Unpaused" | "AccountFrozen" | "AllowedSet" | "DeniedSet" | "FeatureEnabled"))).collect();
+            Some("Paused" | "Unpaused" | "AccountFrozen" | "AllowedSet" | "DeniedSet" | "FeatureEnabled" | "FeatureDisabled")))
+            .collect();
         let _: Value = idx
             .call(
                 "blockchain.dex.trade",
@@ -1277,6 +1380,9 @@ impl Venue {
         let mut book = self.book.lock().await;
         let mut frozen = self.apply_events(&mut book, &events);
         frozen.extend(self.apply_lists(&mut book, &lists));
+        if let Some(o) = opened {
+            self.open_markets(&mut book, o);
+        }
         if !frozen.is_empty() {
             let mut commit = Commit::default();
             for r in &frozen {
@@ -1404,15 +1510,18 @@ async fn view<C: SolCall>(chain: &Chain, to: Address, call: C) -> Result<C::Retu
     chain.call_view(to, call).await.map_err(|e| anyhow!("{e}"))
 }
 
-/// The market as the DEX lists it: `Some((kind of base, kind of quote))` when listed and both classified.
-async fn onchain_market(chain: &Chain, dex: Address, m: &MarketCfg) -> Result<Option<(u8, u8)>> {
+/// The market as the DEX takes it (CTR-DEX-32): on a closed DEX only a listed pair (`marketListed`), on an open one any pair;
+/// `Some((shape of base, shape of quote))`, each by the factory ([`kind_by_factory`]), `None` when a closed DEX does not list it.
+async fn onchain_market(chain: &Chain, dex: Address, factory: Address, closed: bool, m: &MarketCfg)
+    -> Result<Option<(u8, u8)>>
+{
     let (a, b) = pair(m.base, m.quote);
-    if !view(chain, dex, ISCaaSDex::marketListedCall { a, b }).await? {
+    if closed && !view(chain, dex, ISCaaSDex::marketListedCall { a, b }).await? {
         return Ok(None);
     }
-    let kb = view(chain, dex, ISCaaSDex::tokenKindCall { token: m.base }).await?;
-    let kq = view(chain, dex, ISCaaSDex::tokenKindCall { token: m.quote }).await?;
-    Ok((kb != 0 && kq != 0).then_some((kb, kq)))
+    let kb = kind_by_factory(chain, factory, m.base).await.map_err(|e| anyhow!("versionOf({:#x}): {e}", m.base))?;
+    let kq = kind_by_factory(chain, factory, m.quote).await.map_err(|e| anyhow!("versionOf({:#x}): {e}", m.quote))?;
+    Ok(Some((kb, kq)))
 }
 
 /// One line on the tape: quote/base price, base amount, the taker's side. The side is read from the market's base:
@@ -1606,6 +1715,10 @@ pub fn encode_event(log: &Log) -> Option<Value> {
     } else if topic0 == crate::abi::IGovernance::FeatureEnabled::SIGNATURE_HASH {
         let e = log.log_decode::<crate::abi::IGovernance::FeatureEnabled>().ok()?.inner.data;
         (v["event"], v["bit"]) = (json!("FeatureEnabled"), json!(e.bit));
+    } else if topic0 == crate::abi::IGovernance::FeatureDisabled::SIGNATURE_HASH {
+        // the DEX's only ([`Venue::accepted`]): `FeatureDisabled(29)` opens its markets (NODE-DEX-20)
+        let e = log.log_decode::<crate::abi::IGovernance::FeatureDisabled>().ok()?.inner.data;
+        (v["event"], v["bit"]) = (json!("FeatureDisabled"), json!(e.bit));
     } else {
         return None;
     }
@@ -1951,7 +2064,15 @@ mod tests {
         lists_down: bool,
         /// Fable recheck 6 R6-3: `mtxInvalidateNonces` answers a transport error.
         invalidate_down: bool,
+        /// CTR-DEX-32: the DEX's `features()` (`None`: the call reverts); its listed pairs; the tokens `FACTORY`'s `versionOf`
+        /// answers a non-zero version for.
+        features: Option<U256>,
+        listed: HashSet<(Address, Address)>,
+        made: HashSet<Address>,
+        /// Fable N-3: `versionOf` of these tokens answers a transport error.
+        version_down: HashSet<Address>,
     }
+    const FACTORY: Address = Address::repeat_byte(0xfa);
     const REG_REGISTRY: Address = Address::repeat_byte(0xc0);
     type W = Arc<std::sync::Mutex<World>>;
 
@@ -2096,6 +2217,23 @@ mod tests {
                         Ok(hexs(&(f, v, 0u32).abi_encode()))
                     } else if sel == IComplianceRegistry::kycProviderEnabledCall::SELECTOR {
                         Ok(hexs(&true.abi_encode()))
+                    } else if sel == ISCaaSDex::featuresCall::SELECTOR {
+                        assert_eq!(to, DEX);
+                        match w.features { Some(f) => Ok(word(f)), None => revert(vec![]) }
+                    } else if sel == ISCaaSDex::marketListedCall::SELECTOR {
+                        let c = ISCaaSDex::marketListedCall::abi_decode(&input).unwrap();
+                        Ok(hexs(&w.listed.contains(&(c.a, c.b)).abi_encode()))
+                    } else if sel == ISCaaSDex::factoryCall::SELECTOR {
+                        Ok(hexs(&FACTORY.abi_encode()))
+                    } else if sel == ISCaaSDex::pullerCall::SELECTOR || sel == ISCaaSDex::SMART_KEY_ACCOUNT_IMPLCall::SELECTOR {
+                        Ok(hexs(&Address::ZERO.abi_encode()))
+                    } else if sel == crate::abi::IOpenFactory::versionOfCall::SELECTOR {
+                        assert_eq!(to, FACTORY);
+                        let t = crate::abi::IOpenFactory::versionOfCall::abi_decode(&input).unwrap().token;
+                        if w.version_down.contains(&t) {
+                            return Json(json!({"jsonrpc": "2.0", "id": r["id"], "error": {"code": -32603, "message": "upstream unavailable"}}));
+                        }
+                        Ok(hexs(&(U256::ZERO, U256::from(u64::from(w.made.contains(&t)))).abi_encode()))
                     } else {
                         panic!("unexpected eth_call {}", alloy::hex::encode(sel))
                     }
@@ -2158,7 +2296,8 @@ mod tests {
         }
         book.next_seq = 100;
         let v = Venue { chain, relay, indexer: None, dex: DEX, puller: Address::repeat_byte(0x9),
-            kinds: [(BASE, KIND_SCAAS), (QUOTE, KIND_SCAAS)].into_iter().collect(), clone_codehash: None,
+            kinds: std::sync::RwLock::new([(BASE, KIND_SCAAS), (QUOTE, KIND_SCAAS)].into_iter().collect()), factory: FACTORY,
+            waiting: Default::default(), unread: Default::default(), clone_codehash: None,
             book: Mutex::new(book), trades: Default::default(), cancels: Default::default(), regulated: Default::default(),
             list_halted: Default::default(),
             registry: None };
@@ -2318,7 +2457,7 @@ mod tests {
             v.apply_lists(&mut *v.book.lock().await, &plan);
         };
         // (c) at start
-        v.load_regulated().await.unwrap();
+        v.load_regulated(v.scaas_tokens()).await.unwrap();
         assert_eq!(v.halted(BASE, now()), Some(u64::MAX), "a restart while the DEX is denied keeps the halt");
         // (a) the allow edit of a denied DEX
         round(list("AllowedSet", dex, true)).await;
@@ -2438,7 +2577,7 @@ mod tests {
         let ask = order(maker.address(), QUOTE, 10, 20, 1);
         let h = oh(&ask);
         let (v, _) = venue(World::default(), vec![(ask.clone(), sig_of(&maker, h))]).await;
-        let v = Venue { kinds: [(BASE, KIND_SCAAS), (QUOTE, KIND_SCAAS), (evil, KIND_OUTSIDE)].into_iter().collect(), ..v };
+        let v = Venue { kinds: std::sync::RwLock::new([(BASE, KIND_SCAAS), (QUOTE, KIND_SCAAS), (evil, KIND_OUTSIDE)].into_iter().collect()), ..v };
         let leg = |sold: u64| ISCaaSDex::UALegSettled { r#ref: B256::ZERO, orderHash: h, from: ask.from,
             destination: ask.from, sold: U256::from(sold), received: U256::ZERO, dexFee: U256::ZERO,
             refund: U256::ZERO, relayerShare: U256::ZERO, treasuryShare: U256::ZERO }.encode_log_data();
@@ -2737,7 +2876,7 @@ mod tests {
         let mut w = World::default();
         w.no_trade.insert(BASE);
         let (v, world) = venue(w, vec![]).await;
-        let v = Venue { kinds: [(BASE, KIND_OUTSIDE), (QUOTE, KIND_SCAAS)].into_iter().collect(), ..v };
+        let v = Venue { kinds: std::sync::RwLock::new([(BASE, KIND_OUTSIDE), (QUOTE, KIND_SCAAS)].into_iter().collect()), ..v };
         assert_eq!(v.leg_faults(&s).await.unwrap(), Vec::<B256>::new(), "the outside maker is never probed");
         world.lock().unwrap().named.insert(oh(&ask));
         assert_eq!(v.fault(&s).await, vec![oh(&ask)], "its own revert names it");
@@ -2932,5 +3071,110 @@ mod tests {
         assert_eq!(restorable(u(60), u(100), u(40), u(0)), u(60));
         assert_eq!(restorable(u(60), u(100), u(40), u(20)), u(40), "another fill of 20 still pulls");
         assert_eq!(restorable(u(60), u(50), u(40), u(20)), u(0));
+    }
+
+    /// CTR-DEX-32: the market rule follows bit 29 and the shape the factory. Open (bit 29 off): a pair the DEX never listed is
+    /// served, each token's shape by `versionOf` (a made token SCaaS, another outside: never the DEX's `tokenKind`, 0 for an
+    /// unlisted pair); closed: the unlisted pair is refused (not served) and a listed one served; an unread bit fails closed.
+    #[tokio::test]
+    async fn market_rule_follows_bit_29_and_the_factory() {
+        let other = Address::repeat_byte(0x0c);
+        let m = MarketCfg { base: BASE, quote: other, ..market() };
+        let mut w = World { features: Some(U256::ZERO), ..Default::default() };
+        w.made.insert(BASE);
+        let (v, world) = venue(w, vec![]).await;
+        assert!(!dex_closed(&v.chain, DEX).await.unwrap(), "bit 29 off: open");
+        assert_eq!(onchain_market(&v.chain, DEX, FACTORY, false, &m).await.unwrap(), Some((KIND_SCAAS, KIND_OUTSIDE)),
+            "an unlisted pair on an open DEX, shapes by the factory");
+        world.lock().unwrap().features = Some(U256::from(1) << 29);
+        assert!(dex_closed(&v.chain, DEX).await.unwrap(), "bit 29 on: closed");
+        assert_eq!(onchain_market(&v.chain, DEX, FACTORY, true, &m).await.unwrap(), None, "unlisted: refused on a closed DEX");
+        world.lock().unwrap().listed.insert(pair(BASE, other));
+        assert_eq!(onchain_market(&v.chain, DEX, FACTORY, true, &m).await.unwrap(), Some((KIND_SCAAS, KIND_OUTSIDE)),
+            "listed: served on a closed DEX (the control)");
+        world.lock().unwrap().made.insert(other);
+        assert_eq!(onchain_market(&v.chain, DEX, FACTORY, true, &m).await.unwrap(), Some((KIND_SCAAS, KIND_SCAAS)),
+            "the factory's answer decides the shape");
+        world.lock().unwrap().features = None;
+        assert!(dex_closed(&v.chain, DEX).await.is_err(), "an unread bit is an error, never open (fail closed)");
+    }
+
+    /// The `FeatureDisabled(bit)` log of contract `c`, as the chain answers it.
+    fn feature_disabled(c: Address, bit: u8) -> Value {
+        let ev = crate::abi::IGovernance::FeatureDisabled { bit, by: B256::ZERO };
+        serde_json::to_value(log_at(c, ev.encode_log_data())).unwrap()
+    }
+
+    /// One watcher round over `logs`; whether the market `(base, quote)` is served after it.
+    async fn round(v: &Venue, world: &W, logs: Vec<Value>, base: Address, quote: Address) -> bool {
+        world.lock().unwrap().logs = logs;
+        assert!(v.watch_once().await.unwrap());
+        v.book.lock().await.market_of(base, quote).is_some()
+    }
+
+    /// NODE-DEX-20 (CTR-DEX-32; Fable N-1, N-2): a closed DEX's unlisted market waits; the DEX's own `FeatureDisabled(29)` log,
+    /// through the watcher (its filter, `accepted`, `encode_event`), re-reads the bit live and, open, serves the market as at
+    /// start: the factory's shapes, its regulated leg loaded, the client's resting row back in the book with its unmined fill.
+    /// The same log from a token, another bit, or the bit read still set opens nothing.
+    #[tokio::test]
+    async fn feature_disabled_29_opens_the_waiting_markets() {
+        let (fresh, other) = (Address::repeat_byte(0x0e), Address::repeat_byte(0x0c));
+        let m = MarketCfg { id: 7, base: fresh, quote: other, ..market() };
+        let mut w = World { features: Some(U256::from(1) << 29), ..Default::default() };
+        w.made.insert(fresh);
+        w.reg.insert(fresh, (0, 0, 0, now() + 3600));
+        let (v, world) = venue(w, vec![]).await;
+        v.waiting.lock().unwrap().push(m.clone());
+        // the client's resting ask on the waiting market: 400 of 1000 planned before, not yet mined (pulled 0 on chain)
+        let maker = PrivateKeySigner::random();
+        let o = order(maker.address(), other, 1000, 1000, 1);
+        let r = Resting { hash: oh(&o), sell: fresh, order: o.clone(), auth: Auth::Ua(ua(sig_of(&maker, oh(&o)))),
+                          remaining: U256::from(600), seq: 3 };
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (relay, _) = fake_odoo(Fake { dex_book: json!([Row::of(&r)]), ..Default::default() }).await;
+        let (idx, _) = fake_odoo(Fake { tokens: json!([]), ..Default::default() }).await;
+        let v = Venue { relay, indexer: Some(idx), ..v };
+        assert!(!round(&v, &world, vec![feature_disabled(DEX, 29)], fresh, other).await, "the bit read still set: nothing opens");
+        world.lock().unwrap().features = Some(U256::ZERO);
+        assert!(!round(&v, &world, vec![feature_disabled(BASE, 29)], fresh, other).await, "a token's FeatureDisabled(29)");
+        assert!(!round(&v, &world, vec![feature_disabled(DEX, 5)], fresh, other).await, "another bit");
+        assert!(round(&v, &world, vec![feature_disabled(DEX, 29)], fresh, other).await, "the DEX's FeatureDisabled(29): served");
+        assert_eq!((v.kind(fresh), v.kind(other)), (KIND_SCAAS, KIND_OUTSIDE), "the factory's shapes");
+        assert!(v.is_regulated(fresh) && v.halted(fresh, now()).is_some(), "N-2: the regulated leg loaded, its pause read");
+        let book = v.book.lock().await;
+        assert_eq!(book.get(oh(&o)).map(|x| x.remaining), Some(U256::from(600)), "N-2: the client's row is back");
+        assert_eq!(book.pending_of(oh(&o)), U256::from(400), "N-2: its unmined fill pending");
+        assert!(v.waiting.lock().unwrap().is_empty());
+    }
+
+    /// NODE-DEX-20 (Fable N-3): a market whose check is unread at start (`versionOf` down) is not served, kept and read again
+    /// each watcher round with no event: served once read on an open DEX; on a closed DEX that no longer lists it, waiting.
+    #[tokio::test]
+    async fn a_market_unread_at_start_is_read_again_each_round() {
+        let other = Address::repeat_byte(0x0c);
+        let m = MarketCfg { id: 7, base: BASE, quote: other, ..market() };
+        for closed in [false, true] {
+            let mut w = World { features: Some(U256::from(u8::from(closed)) << 29), ..Default::default() };
+            w.made.insert(BASE);
+            w.listed.extend([pair(BASE, QUOTE), pair(BASE, other)]);
+            w.version_down.insert(other);
+            let (url, world) = fake_chain(w).await;
+            let cfg = crate::config::ChainCfg { family: "evm".into(), evm_chain_number: 31337, rpc_urls: vec![url],
+                                                chain_uid: Some(B256::repeat_byte(0x24)), ..Default::default() };
+            let chain = Arc::new(Chain::with_signer(&cfg, relayer_key()).unwrap());
+            use crate::adapter::tests::{fake_odoo, Fake};
+            let (odoo, _) = fake_odoo(Fake { tokens: json!([]), dex_book: json!([]),
+                dex_markets: json!({"dex": format!("{DEX:#x}"), "markets": [market(), m.clone()]}), ..Default::default() }).await;
+            let v = Venue::start(chain, odoo.clone(), Some(odoo), DEX).await.unwrap();
+            assert!(v.book.lock().await.market_of(BASE, QUOTE).is_some(), "control: the read market is served");
+            assert_eq!(v.unread.lock().unwrap().len(), 1, "kept, never dropped until a restart");
+            assert!(!round(&v, &world, vec![], BASE, other).await, "still unread: not served (fail closed)");
+            assert_eq!(v.unread.lock().unwrap().len(), 1);
+            world.lock().unwrap().version_down.clear();
+            world.lock().unwrap().listed.remove(&pair(BASE, other)); // a closed DEX delisted it meanwhile
+            assert_eq!(round(&v, &world, vec![], BASE, other).await, !closed, "read again with no event (closed {closed})");
+            assert!(v.unread.lock().unwrap().is_empty());
+            assert_eq!(v.waiting.lock().unwrap().len(), usize::from(closed), "a closed DEX's unlisted market waits");
+        }
     }
 }

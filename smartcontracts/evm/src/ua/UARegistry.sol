@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {SaltedEIP712, SaltedEIP712Core} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
+import {RescueLib} from "../governance/RescueLib.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 import {IUARegistry} from "./IUARegistry.sol";
 import {IUAKindVerifier} from "./IUAVerifier.sol";
@@ -818,4 +819,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return false;
     }
 
+    // ------------------------------------------------------------------ rescue (CTR-GOV-26)
+
+    /// @notice CTR-GOV-26 (owner 2026-11-12): anyone; the registry holds nothing by design (no owner, no setter, CTR-UA-15),
+    ///         so the whole balance of `asset` (`address(0)`: the native coin) goes to `RescueLib.SCAAS_DEV_RESCUE`,
+    ///         `IRescuable.Rescued`.
+    function rescue(address asset) external {
+        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);
+    }
 }

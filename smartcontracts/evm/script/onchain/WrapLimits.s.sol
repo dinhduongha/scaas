@@ -412,13 +412,13 @@ contract WrapLimitsSetup is WrapLimitsKit {
         bytes memory core = k >= 8 ? abi.encode(vm.parseJsonBytes32(dj, ".compliance_registry_codehash")) : bytes("");
         address[] memory ms = _modules(k, core);
         IOpenFactory.TokenKind kind = IOpenFactory.TokenKind(k);
-        _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.publishTokenEnv, (kind, 1, _env(i, e5, ms))), false,
+        _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.publishTokenEnv, (kind, 1, fw.chainUid(), _env(i, e5, ms))), false,
             string.concat("factory | publishTokenEnv kind ", vm.toString(k)));
         string memory face = string.concat(_label(i), ".sol:", _label(i));
         _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.deployTokenImplementation, (kind, 1, 1, vm.getCode(face),
-            kindImplArgs(k, ms, core))), true, string.concat("release | ", _label(i)));
+            kindImplArgs(k, ms, core), fw.chainUid())), true, string.concat("release | ", _label(i)));
         if (k != 1) {
-            _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.setTokenKindEnabled, (kind, true)), false,
+            _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.setTokenKindEnabled, (kind, true, fw.chainUid())), false,
                 string.concat("factory | setTokenKindEnabled kind ", vm.toString(k)));
         }
     }

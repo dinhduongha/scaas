@@ -8,6 +8,8 @@ import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {Vm} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
@@ -568,15 +570,24 @@ contract MandateWalletTest is MandateFixture {
     function test_owner_still_pays_manually_through_meta_tx() public {
         bytes32 ref = keccak256("manual");
         MetaTxLib.UAMetaTransfer memory x = _tr(address(w), npp, 50, ref, t.payLane(ref), RR);
-        bytes memory sig = _sig(OWNER_PK, t.mtxTransferDigest(x));
+        // the owner signs the token's `UAMetaTransfer` nested in ERC-7739 `TypedDataSign` (CTR-ACC-02)
+        bytes memory sig = _sig7739(OWNER_PK, x);
         vm.prank(relayer);
         t.mtxExecuteTransfer(x, _nativeSig(sig));
         assertEq(t.balanceOf(npp), 50);
         x = _tr(address(w), npp, 50, keccak256("d"), 1, RR);
-        sig = _sig(DELEGATE_PK, t.mtxTransferDigest(x));
+        sig = _sig7739(DELEGATE_PK, x);
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         t.mtxExecuteTransfer(x, _nativeSig(sig));
+    }
+
+    function _sig7739(uint256 pk, MetaTxLib.UAMetaTransfer memory x) internal view returns (bytes memory) {
+        bytes32 app = Erc7739Kit.separator(address(t));
+        bytes32 c = MtxHash.hashStruct(x);
+        assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), t.mtxTransferDigest(x), "the kit rebuilds the token digest");
+        bytes32 m = Erc7739Kit.nested(address(w), app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c);
+        return Erc7739Kit.wrap(_sig(pk, m), app, c, Erc7739Kit.UA_TRANSFER_TYPE);
     }
 
     /// The delegated path never uses an allowance: no `approve` / `transferFrom` / `permit` / `increaseAllowance`

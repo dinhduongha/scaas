@@ -1,0 +1,308 @@
+{
+ "note": "The rows of test/vectors/selector_audit.json as they stood at a18e9464 that Fable recheck-2 P3-1 (owner 2026-11-12, CTR-GOV-27) moved in place: renounceAdmin() on the twelve kinds, the DEX and OpenFactory, the router's mtxRenounceAdmin without bytes32 chainUid, the three release deploys without the last bytes32 chainUid_. Reference only. Also the mtxPayReceiverFee rows of every kind as they stood at 202a05a9, renamed mtxPayWithPayeeFee in place by the payee-fee rename (owner 2026-11-12, CTR-MTX-86), class unchanged. CTR-GOV-27 (owner 2026-11-12): the rows as they stood at aeb1da09 that moved in place: transferAdmin(bytes32) on the twelve kinds, the DEX and OpenFactory; OpenFactory's publishTokenEnv, publishDexEnv, publishClassEnv without the chain word, revokeApproval(bytes32), setChainEntries with nine flat parameters; the router's mtxTransferAdmin, mtxPublish*Env, mtxRevokeApproval and mtxSetChainEntries in their old forms.",
+ "NormalToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalZetherToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedZetherToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalPqzToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedPqzToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalZetherRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedZetherRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "NormalPqzRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "WrappedPqzRegulatedToken": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "SCaaSDex": [
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "GovernanceRouter": [
+  {
+   "sig": "mtxRenounceAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPublishClassEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPublishDexEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPublishTokenEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRevokeApproval((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetChainEntries((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  }
+ ],
+ "OpenFactory": [
+  {
+   "sig": "deployDexImplementation(uint64,uint16,bytes,bytes)",
+   "class": "APPROVED(release)",
+   "error": "ReleaseNotApproved(bytes32)"
+  },
+  {
+   "sig": "deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes)",
+   "class": "APPROVED(release)",
+   "error": "ReleaseNotApproved(bytes32)"
+  },
+  {
+   "sig": "deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)",
+   "class": "APPROVED(release)",
+   "error": "ReleaseNotApproved(bytes32)"
+  },
+  {
+   "sig": "renounceAdmin()",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "publishClassEnv(uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "publishDexEnv(uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "publishTokenEnv(uint8,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "revokeApproval(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setChainEntries(address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "transferAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ]
+}

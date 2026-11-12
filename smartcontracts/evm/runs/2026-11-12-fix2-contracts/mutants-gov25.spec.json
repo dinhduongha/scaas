@@ -1,0 +1,59 @@
+[
+ {
+  "id": "G25-1 no default at init",
+  "file": "src/governance/GovernanceLib.sol",
+  "old": "s.rescueTo = RescueLib.to(rescueTo);",
+  "new": "s.rescueTo = rescueTo;",
+  "path": "test/governance/GovRescue.t.sol"
+ },
+ {
+  "id": "G25-2 default without the bit",
+  "file": "src/governance/GovernanceLib.sol",
+  "old": "        if (features & _bit(GovernanceBits.RESCUABLE) != 0) s.rescueTo = RescueLib.to(rescueTo);",
+  "new": "        s.rescueTo = RescueLib.to(rescueTo);",
+  "path": "test/governance/GovRescue.t.sol"
+ },
+ {
+  "id": "G25-3 address without the bit accepted",
+  "file": "src/governance/GovernanceLib.sol",
+  "old": "if ((features & _bit(GovernanceBits.RESCUABLE) == 0 && rescueTo != address(0))",
+  "new": "if ((false && rescueTo != address(0))",
+  "path": "test/governance/GovRescue.t.sol"
+ },
+ {
+  "id": "G25-4 to() keeps 0",
+  "file": "src/governance/RescueLib.sol",
+  "old": "return stored == address(0) ? SCAAS_DEV_RESCUE : stored;",
+  "new": "return stored;",
+  "path": "test/governance/GovRescue.t.sol"
+ },
+ {
+  "id": "G25-5 another constant",
+  "file": "src/governance/RescueLib.sol",
+  "old": "SCAAS_DEV_RESCUE = 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131;",
+  "new": "SCAAS_DEV_RESCUE = address(0xDEAD);",
+  "path": "test/governance/GovRescue.t.sol"
+ },
+ {
+  "id": "G25-6 puller keeps 0",
+  "file": "src/dex/DexPuller.sol",
+  "old": "rescueTo = RescueLib.to(rescueTo_);",
+  "new": "rescueTo = rescueTo_;",
+  "path": "test/governance/GovRescue.t.sol",
+  "test": "puller|dex"
+ },
+ {
+  "id": "G25-7 send: no designator check",
+  "file": "src/governance/RescueLib.sol",
+  "old": "            if (SigCheck.isDesignator(dest)) revert IRescuable.RescueAssetInvalid(asset);\n",
+  "new": "",
+  "path": "test/governance/GovRescue.t.sol"
+ },
+ {
+  "id": "G25-8 send: native as ERC-20",
+  "file": "src/governance/RescueLib.sol",
+  "old": "        if (asset == address(0)) {\n            if (SigCheck",
+  "new": "        if (asset == address(1)) {\n            if (SigCheck",
+  "path": "test/governance/GovRescue.t.sol"
+ }
+]

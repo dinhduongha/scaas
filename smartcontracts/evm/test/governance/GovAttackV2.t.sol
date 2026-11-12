@@ -35,6 +35,8 @@ contract BranchApp is GovernanceBase {
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _validBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _roleBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
@@ -147,7 +149,7 @@ contract GovAttackV2Test is Test {
 
     function _dex(bytes32 salt) internal returns (SCaaSDex) {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), salt));
+        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), salt));
     }
 
     // ------------------------------------------------------------------ delay (B-01, B-02)
@@ -213,7 +215,7 @@ contract GovAttackV2Test is Test {
         (ok, ret) = address(f).call(abi.encodeWithSelector(f.createToken.selector, uint8(8), uint64(1), cfg, bytes32("b")));
         assertFalse(ok);
         assertEq(ret, abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, uint8(8), uint64(1)));
-        (ok,) = address(f).call(abi.encodeWithSelector(f.setTokenKindEnabled.selector, uint8(8), true));
+        (ok,) = address(f).call(abi.encodeWithSelector(f.setTokenKindEnabled.selector, uint8(8), true, EnvKit.uidOf(address(f))));
         assertTrue(ok);
         assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED));
     }
@@ -309,14 +311,14 @@ contract GovAttackV2Test is Test {
         _mint(OFFICER, 1);
         vm.prank(OWNER); // positive control: a live root blocks it
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, MINT));
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         vm.prank(OWNER);
         t.revokeRole(MINT, nid(MANAGER));
         _refused(OFFICER, 1, _ex(7)); // dead
         assertTrue(t.hasRole(MINT, nid(OFFICER))); // and reported as a holder
         assertEq(t.holderCount(MINT), 1);
         vm.prank(OWNER);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
     }
 
@@ -328,7 +330,7 @@ contract GovAttackV2Test is Test {
         vm.prank(MANAGER); // positive control: with an owner, the leaf is added
         t.setGrant(MINT, nid(OFFICER2), _leafTerms(10));
         vm.prank(OWNER);
-        t.renounceAdmin();
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
         assertEq(t.holderCount(MINT), 2);
         vm.prank(MANAGER);
@@ -473,7 +475,7 @@ contract GovAttackV2Test is Test {
         address next = address(0x1234);
         address evil = address(0xE11);
         vm.prank(OWNER);
-        d.transferAdmin(nid(next));
+        d.transferAdmin(nid(next), EnvKit.codeUidOf(address(d)));
         vm.prank(next);
         d.acceptAdmin();
         assertEq(d.admin(), nid(next));
@@ -610,10 +612,10 @@ contract GovAttackV2Test is Test {
         f.createToken(IOpenFactory.TokenKind.NORMAL, 1, cfg, "p");
         vm.startPrank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, MetaTxLib.UA_POOL));
-        t.transferAdmin(nid(MetaTxLib.UA_POOL));
+        t.transferAdmin(nid(MetaTxLib.UA_POOL), EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, MetaTxLib.SHIELD_POOL));
-        t.transferAdmin(nid(MetaTxLib.SHIELD_POOL));
-        t.transferAdmin(nid(OFFICER)); // positive control
+        t.transferAdmin(nid(MetaTxLib.SHIELD_POOL), EnvKit.codeUidOf(address(t)));
+        t.transferAdmin(nid(OFFICER), EnvKit.codeUidOf(address(t))); // positive control
         vm.stopPrank();
         assertEq(t.pendingAdmin(), nid(OFFICER));
     }

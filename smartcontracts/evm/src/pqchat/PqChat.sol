@@ -11,6 +11,7 @@ import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
+import {RescueLib} from "../governance/RescueLib.sol";
 
 /// @title `PqChat` (UA-7, CTR-CHAT-01; D22: class 3, kind 0 on the factory's generic path): sessions, epochs in chunks, the
 ///        home-instance slot, admins, leave, on-chain and stored messages, public topics and votes.
@@ -70,6 +71,12 @@ contract PqChat is IPqChat, PqChatCore {
     function factoryInfo() external view returns (IOpenFactory.FactoryInfo memory) {
         S storage s = _s();
         return IOpenFactory.FactoryInfo(FACTORY, ChainEnvCode.chainUid(), CLASS, KIND, VERSION, s.initialized);
+    }
+
+    /// @notice CTR-GOV-26 (owner 2026-11-12): anyone; this contract holds nothing by design, so the whole balance of
+    ///         `asset` (`address(0)`: the native coin) goes to `RescueLib.SCAAS_DEV_RESCUE`, `IRescuable.Rescued`.
+    function rescue(address asset) external {
+        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);
     }
 
     function supportsInterface(bytes4 id) external pure returns (bool) {

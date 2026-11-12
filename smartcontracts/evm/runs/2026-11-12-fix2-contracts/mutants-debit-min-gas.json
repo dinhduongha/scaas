@@ -1,0 +1,26 @@
+[
+ {
+  "id": "DMG-1 pin below the measurement",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: set.toml debit_min_gas: at least the LOG burn's full relayed regular gas: 7514000 < 7514728] test_debitMinGas_isTheCheapestLogDebit() (gas: 18574798)"
+ },
+ {
+  "id": "DMG-2 pin one unit below the measurement",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: set.toml debit_min_gas: at least the LOG burn's full relayed regular gas: 7514727 < 7514728] test_debitMinGas_isTheCheapestLogDebit() (gas: 18574798)"
+ },
+ {
+  "id": "DMG-3 pin not rounded",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: set.toml debit_min_gas: a multiple of 1,000: 728 != 0] test_debitMinGas_isTheCheapestLogDebit() (gas: 18575160)"
+ },
+ {
+  "id": "DMG-4 pin a step too high",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: set.toml debit_min_gas: the measurement rounded up, no more: 1272 >= 1000] test_debitMinGas_isTheCheapestLogDebit() (gas: 18575645)"
+ }
+]

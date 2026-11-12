@@ -175,12 +175,17 @@ contract Gov is OnchainBase {
         internal view returns (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s)
     {
         (e.from, e.nonce, e.validUntil) = (g.from, gr.mtxNonce(g.from, 0), vu);
-        s = _signR(g, _named(address(gr), typ, bytes.concat(abi.encode(target), words), e));
+        bytes memory args = bytes.concat(abi.encode(target), words);
+        // a SmartKeyAccount answers ERC-1271 by ERC-7739 only (B P3-2): `TypedDataSign` over the router's struct
+        if (g.how == 1) s.signature = _sign7739(g.pk, address(uint160(uint256(g.from))), address(gr), typ, _namedStruct(typ, args, e));
+        else s = _signR(g, _named(address(gr), typ, args, e));
     }
 
+    /// @dev A native id's own ECDSA (0) or a registered secp256k1 UA (2) over `d`; a SmartKeyAccount (1) signs through
+    ///      `_sign7739` (the raw digest is refused).
     function _signR(Sg memory g, bytes32 d) internal view returns (IUARegistry.UASig memory s) {
-        if (g.how == 1) s.signature = abi.encode(uint256(0), new bytes32[](0), _ecdsa(g.pk, d));
-        else if (g.how == 2) {
+        require(g.how != 1, "a SmartKeyAccount signs ERC-7739 (_auth)");
+        if (g.how == 2) {
             (s.keyData, s.signature) = (keyD, _ecdsa(g.pk, UAKinds.uaMessage(UAKinds.SECP256K1, UAKinds.PURPOSE_METATX, d)));
         }
         else s.signature = _ecdsa(g.pk, d);
@@ -218,7 +223,7 @@ contract Gov is OnchainBase {
     /// T11 adds the router steps), one KYC provider `a2` (its native id).
     function _compliance() internal {
         vm.broadcast(k1);
-        cr = new ComplianceRegistry(_pad(iss), address(gr));
+        cr = new ComplianceRegistry(_pad(iss), address(gr), bookUid); // this chain's word (CTR-GOV-27)
         _book(address(cr), "ComplianceRegistry");
         require(address(cr).codehash == _dep("compliance_registry").codehash, "compliance code");
         _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a2), true)));
@@ -257,7 +262,7 @@ contract Gov is OnchainBase {
     /// two-step transfer, its signed `mtxAcceptAdmin`); then its admin ops are that UA's router ops, sent by key 2 at fee 0: a
     /// KYC provider (key 3's native id) enabled and an admin row written.
     function _complianceRouter() internal {
-        _skaExec(iss, pkI, address(cr), abi.encodeCall(IAdmin.transferAdmin, (uaD)));
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(IAdmin.transferAdmin, (uaD, cr.chainUid())));
         Sg memory d = Sg(uaD, kD, 2);
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(d, _ty("UAAcceptAdmin", ""), address(cr), "");
         vm.broadcast(k2);
@@ -327,16 +332,18 @@ contract Gov is OnchainBase {
         vm.broadcast(k2);
         gr.mtxCancelGrant(e, t0d, GovernanceBits.MINTABLE, _pad(a3), s);
         // ownership: transfer, accept by the new owner, renounce
-        (e, s) = _auth(o, _ty("UATransferAdmin", "bytes32 newAdmin"), t0r, abi.encode(uaD));
+        bytes32 tu = IMetaTx(t0r).chainUid(); // the token's chain word (CTR-GOV-27)
+        (e, s) = _auth(o, _ty("UATransferAdmin", "bytes32 newAdmin,bytes32 chainUid"), t0r, abi.encode(uaD, tu));
         vm.broadcast(k2);
-        gr.mtxTransferAdmin(e, t0r, uaD, s);
+        gr.mtxTransferAdmin(e, t0r, uaD, tu, s);
         Sg memory du = Sg(uaD, kD, 2); // the registered UA signs through the registry
         (e, s) = _auth(du, _ty("UAAcceptAdmin", ""), t0r, "");
         vm.broadcast(k2);
         gr.mtxAcceptAdmin(e, t0r, s);
-        (e, s) = _auth(du, _ty("UARenounceAdmin", ""), t0r, "");
+        bytes32 u0 = IMetaTx(t0r).chainUid(); // the token's chain word (Fable recheck-2 P3-1)
+        (e, s) = _auth(du, _ty("UARenounceAdmin", "bytes32 chainUid"), t0r, abi.encode(u0));
         vm.broadcast(k2);
-        gr.mtxRenounceAdmin(e, t0r, s);
+        gr.mtxRenounceAdmin(e, t0r, u0, s);
         require(IGovernance(t0r).admin() == 0, "renounced");
         // the router's own lanes: a direct cancel and a signed one
         vm.broadcast(k2);
@@ -608,7 +615,7 @@ contract Gov is OnchainBase {
     // ------------------------------------------------------------------ the DEX setters and the factory's creations
 
     function _dexAndCreations() internal {
-        bytes memory init = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, address(0)));
+        bytes memory init = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, address(0), 0, 0));
         vm.broadcast(k1);
         dex = f.createDex(1, init, _salt("dex"));
         _book(dex, "SCaaSDex");
