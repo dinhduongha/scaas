@@ -152,11 +152,6 @@ impl Verifier {
         Ok(Self { cfg: cfg.clone(), http, resting: Default::default(), backoff })
     }
 
-    /// An answer this slow is near the timeout: its endpoint rests as a silent one does (P3-6).
-    fn slow(&self, t: Instant) -> bool {
-        t.elapsed() >= Duration::from_millis(self.cfg.timeout_ms * 4 / 5)
-    }
-
     /// Endpoint `i` failed by transport within the last [`ENDPOINT_BACKOFF`]: it is not asked.
     fn resting(&self, i: usize) -> bool {
         self.resting.lock().is_ok_and(|m| m.get(&i).is_some_and(|t| *t > Instant::now()))
@@ -252,14 +247,9 @@ impl Verifier {
                 errs.push(format!("endpoint {}: skipped, it did not answer in the last {} s", i + 1, self.backoff.as_secs()));
                 continue;
             }
-            let t = Instant::now();
+            // Fable recheck 3 R3-5: an answer rests nothing, however slow; only a timeout, a dropped connection or a 5xx does
             match self.ask(e, body).await {
-                Ok(v) => {
-                    if self.slow(t) {
-                        self.rest(i);
-                    }
-                    return Ok(v);
-                }
+                Ok(v) => return Ok(v),
                 Err((down, x)) => {
                     tracing::warn!(endpoint = i + 1, url = %e, "pqz verifier: {x}");
                     if down {
@@ -341,14 +331,8 @@ impl Verifier {
                 continue;
             }
             let url = format!("{}{ROUTE}/probe", e.trim_end_matches('/'));
-            let t = Instant::now();
             match self.http.post(url).json(&body).send().await {
-                Ok(r) if r.status().is_success() => {
-                    if self.slow(t) {
-                        self.rest(i);
-                    }
-                    return Some(true);
-                }
+                Ok(r) if r.status().is_success() => return Some(true),
                 // Fable recheck R-5: a 5xx (a restart behind a proxy) says nothing about the pool either
                 Ok(r) if r.status().is_server_error() => {
                     tracing::warn!(endpoint = i + 1, "pqz verifier probe: HTTP {}", r.status());
@@ -452,10 +436,10 @@ mod tests {
             async move {
                 n2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 if mode == 1 {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    tokio::time::sleep(Duration::from_secs(5)).await; // past every timeout of the tests
                 }
                 if mode == 3 {
-                    tokio::time::sleep(Duration::from_millis(180)).await; // an answer near a 200 ms timeout
+                    tokio::time::sleep(Duration::from_millis(1_000)).await; // a slow answer, well inside a 4 s timeout
                 }
                 if mode == 2 {
                     return (axum::http::StatusCode::UNPROCESSABLE_ENTITY, axum::Json(json!({"error": "refused"})));
@@ -480,17 +464,17 @@ mod tests {
         let (slow, slow_n) = endpoint(1).await;
         let (good, good_n) = endpoint(0).await;
         let (no, no_n) = endpoint(2).await;
-        let cfg = PqzVerifierCfg { endpoints: vec![slow.clone(), no, good], timeout_ms: 200, ..Default::default() };
+        let cfg = PqzVerifierCfg { endpoints: vec![slow.clone(), no, good], timeout_ms: 500, ..Default::default() };
         let v = Verifier::new(&cfg).unwrap();
         let t = Instant::now();
         for _ in 0..5 {
             assert_eq!(v.fetch(&json!({})).await.unwrap().epoch, 2);
         }
-        assert!(t.elapsed() < Duration::from_millis(950), "one timeout, not five: {:?}", t.elapsed());
+        assert!(t.elapsed() < Duration::from_millis(2_000), "one 500 ms timeout, not five: {:?}", t.elapsed());
         assert_eq!((slow_n.load(SeqCst), no_n.load(SeqCst), good_n.load(SeqCst)), (1, 5, 5));
         let chain = Chain::with_signer(&crate::config::ChainCfg { evm_chain_number: 1, rpc_urls: vec!["http://127.0.0.1:9".into()],
             ..Default::default() }, alloy::signers::local::PrivateKeySigner::random()).unwrap();
-        let only_slow = Verifier { cfg: PqzVerifierCfg { endpoints: vec![slow.clone()], timeout_ms: 200, ..Default::default() },
+        let only_slow = Verifier { cfg: PqzVerifierCfg { endpoints: vec![slow.clone()], timeout_ms: 500, ..Default::default() },
             http: v.http.clone(), resting: Mutex::new(v.resting.lock().unwrap().clone()), backoff: ENDPOINT_BACKOFF };
         assert_eq!(only_slow.serves(&chain, Address::ZERO).await, None, "resting: unknown");
         assert_eq!(slow_n.load(SeqCst), 1, "the probe did not ask it");
@@ -500,21 +484,19 @@ mod tests {
             c.fetch(&json!({})).await.unwrap();
         }
         assert_eq!(slow_n.load(SeqCst), 4, "control: no backoff, asked every time");
-        // Fable recheck 2 P3-6: an answer near the timeout is used, and its endpoint rests; a fast one does not (the control);
-        // the window follows `timeout_ms`
+        // Fable recheck 3 R3-5: a slow answer (a heavy set's normal verdict) is used and rests nothing, so it serves every job, not
+        // one per window (the timeout above is the control: it rests); the window follows `timeout_ms`
         let (late, late_n) = endpoint(3).await;
         let (good2, good2_n) = endpoint(0).await;
-        let v = Verifier::new(&PqzVerifierCfg { endpoints: vec![late, good2.clone()], timeout_ms: 200, ..Default::default() }).unwrap();
-        for _ in 0..3 {
+        let v = Verifier::new(&PqzVerifierCfg { endpoints: vec![late.clone(), good2], timeout_ms: 4_000, ..Default::default() }).unwrap();
+        for _ in 0..2 {
             assert_eq!(v.fetch(&json!({})).await.unwrap().epoch, 2);
         }
-        assert_eq!((late_n.load(SeqCst), good2_n.load(SeqCst)), (1, 2), "the slow endpoint answered once, then rested");
-        let fast = Verifier::new(&PqzVerifierCfg { endpoints: vec![good2], timeout_ms: 200, ..Default::default() }).unwrap();
-        fast.fetch(&json!({})).await.unwrap();
-        assert!(!fast.resting(0), "control: a fast answer rests nothing");
-        let probe = Verifier::new(&PqzVerifierCfg { endpoints: vec![endpoint(3).await.0], timeout_ms: 200, ..Default::default() }).unwrap();
+        assert_eq!((late_n.load(SeqCst), good2_n.load(SeqCst)), (2, 0), "the slow endpoint answered every job");
+        assert!(!v.resting(0));
+        let probe = Verifier::new(&PqzVerifierCfg { endpoints: vec![late], timeout_ms: 4_000, ..Default::default() }).unwrap();
         assert_eq!(probe.serves(&chain, Address::ZERO).await, Some(true));
-        assert!(probe.resting(0), "a slow probe answer rests its endpoint too");
+        assert!(!probe.resting(0), "a slow probe answer rests nothing either");
         assert_eq!(Verifier::new(&PqzVerifierCfg { timeout_ms: 20_000, ..Default::default() }).unwrap().backoff, Duration::from_secs(80));
         assert_eq!(Verifier::new(&PqzVerifierCfg { timeout_ms: 200, ..Default::default() }).unwrap().backoff, ENDPOINT_BACKOFF);
     }

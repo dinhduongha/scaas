@@ -16,6 +16,7 @@ import * as zether from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode, word } from '../src/bytes.js';
 import { expectedCall, norm } from '../scripts/typed-ops-expected.mjs';
 import * as reg from '../src/regulated.js';
+import { creationInitArgs } from '../src/factory.js';
 
 const { TYPED_OPS, hashTypedData, hashStruct, checkOp, checkWrapOrder, checkUAWrapOrder, checkTradeOrder, checkCancel, encodeType } = evm;
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url)));
@@ -879,5 +880,13 @@ test('the router creations: the named config vector binds initHash', () => {
     const data = hex(op.call(td, d.signature, { initArgs }).data);
     assert.ok(data.includes(initArgs.slice(2)), `${name}: the calldata carries initArgs`);
     assert.throws(() => op.call(td, d.signature, { initArgs: d.extra.initArgs }), /not the signed initHash/, name);
+    // Fable recheck 3 R3-7: the named config itself encodes to the row's initArgs (the same struct order forge checks)
+    assert.equal(creationInitArgs(key, K[key].config), initArgs, `${name}: config -> initArgs`);
+    assert.throws(() => creationInitArgs(key, { ...K[key].config, extra: 1 }), /no field extra/, name);
+    const { grantDelay, ...missing } = K[key].config;
+    assert.throws(() => creationInitArgs(key, missing), /config.grantDelay: missing/, name);
   }
+  const swapped = { ...K.dex.config, grantDelay: K.dex.config.relayerSharePpm, relayerSharePpm: Number(K.dex.config.grantDelay) };
+  assert.notEqual(creationInitArgs('dex', swapped), K.dex.initArgs, 'two fields swapped: other bytes');
+  assert.throws(() => creationInitArgs('token', { ...K.token.config, decimals: 256 }), /out of uint8/);
 });

@@ -1,5 +1,5 @@
 {
-  "note": "Owner 2026-11-12, Fable recheck 2 P3-7 (NODE-JOB-26): a creation's named config and the factory's initArgs = abi.encode(config), initHash = keccak256(initArgs). The config is named as node jobs carry it; test/factory/CreateConfigKat.t.sol checks initArgs against the Solidity structs IFactoryToken.TokenConfig and ISCaaSDex.DexConfig field by field (WRITE_CREATE_CONFIG_KAT=true rewrites initArgs and initHash from them); read by scaas-node (typed::tests::creation_rows_encode_the_named_config) and clientkeys (test/typed-ops.test.js). Values are distinct, not a valid token.",
+  "note": "Owner 2026-11-12, Fable recheck 2 P3-7 (NODE-JOB-26): a creation's named config and the factory's initArgs = abi.encode(config), initHash = keccak256(initArgs). The config is named as node jobs carry it; test/factory/CreateConfigKat.t.sol checks initArgs against the Solidity structs IFactoryToken.TokenConfig and ISCaaSDex.DexConfig field by field (WRITE_CREATE_CONFIG_KAT=true rewrites initArgs and initHash from them); read by scaas-node (typed::tests::creation_rows_encode_the_named_config) and clientkeys (test/typed-ops.test.js: creationInitArgs encodes config to initArgs). No ua-* client builds a creation yet; one that does reads this row. Values are distinct, not a valid token.",
   "token": {
     "config": {
       "name": "Named",

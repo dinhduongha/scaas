@@ -838,7 +838,7 @@ Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE
 [pqz_verifier]
 endpoints = ["https://pqz-verifier.example.org"]   # asked in order; URLs only, no secret
 refuse_shield_when_unserved = false                # opt-in
-# timeout_ms = 5000            # one endpoint's whole request; one that does not answer, or answers near it, rests max(10 s, 4 x timeout_ms) (submit-lanes.md)
+# timeout_ms = 5000            # one endpoint's whole request; one that does not answer (or a 5xx) rests max(10 s, 4 x timeout_ms); set it above the verifier's normal verdict time with a margin: a slow answer rests nothing and costs that long per job (submit-lanes.md)
 # max_response_bytes = 262144  # read in chunks, a longer answer is no answer
 # valid_margin_secs = 30       # a verdict expiring sooner is re-fetched
 ```
@@ -910,6 +910,7 @@ only. **UNAUDITED.**
 | PQZ jobs gain `args.pqz_verdict: {pqzVerifierEpoch, validUntil, auth}` (BUILT, [NODE-JOB-22](job-api.md#NODE-JOB-22)) | PQZ job producers | `OFFCHAIN` token: send it, or let the node fetch it; `PRECOMPILE` token: leave it out (`PQZ_VERDICT_NOT_EXPECTED`) |
 | `ConfidentialConfig` gained `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` (group 3f) and `proofStore` (group 3h); the `TokenConfig` encoding moved for every kind (BUILT) | token creators, the wizard | every kind sends the fields; non-PQZ kinds leave them 0 / false (`ConfigFieldForOtherKind(4)`); a PQZ creation states the mode and, for `OFFCHAIN`, the verifier and fixed or transferable, after showing the maximum loss |
 | `[pqz_verifier] endpoints`, `refuse_shield_when_unserved` (BUILT, [above](#pqz-verifier)) | node operators | configure endpoints for the `OFFCHAIN` tokens served; the node signs nothing and holds no verifier key |
+| Chain reads per `[[chains]]` table (BUILT, Fable recheck 3, [submit-lanes.md](submit-lanes.md#rpc-failover)): `rpc_timeout_ms` (30 s) bounds one endpoint of a read, `rpc_simulate_timeout_ms` (120 s, unmeasured) a simulation; a failover endpoint (the second `rpc_urls` entry onward) is used only on the chain's id and block 0, at or above the head the first endpoint gave, and its revert decides nothing; an RPC that caps `eth_getLogs` below 500 blocks is given up for the PQZ log reads | node operators | raise `rpc_simulate_timeout_ms` if a PQZ or Zether simulation logs `no answer within`; pin `chain_uid` so a failover endpoint can be checked while the first is down; list one endpoint with an `eth_getLogs` cap of at least 500 blocks |
 | The PQZ verifier (off-chain) is a separate trust role (BUILT, T48) | whoever a token names as verifier | run `scaas-pqz-verifier` (or another implementation of its contract) apart from the node, its key in its own keystore |
 | Alerts `PqzVerifierProposed`, `PqzVerifierRevoked`; per-token `pqz_last_verdict_at` (BUILT) | operators, wallets | watch a proposal before its `eta`; a revocation freezes the token's confidential balances until a new verifier is set |
 | The verdict-less `verifyTransferAmount` reverts `PqzVerdictRequired()` on an `OFFCHAIN` token (BUILT, T45) | ERP reconciliation | use the verdict form, or `pqz-ffi` on `disclosureStatement` |

@@ -32,7 +32,7 @@ use super::{
 };
 use crate::abi::{IComplianceRegistry, IERC165, IMtxIds, IRegulatedToken, IToken, IUALedger, IUARegistry, TradeFill};
 use crate::metatx::native;
-use crate::chain::{classify, is_contract, Chain, SimError};
+use crate::chain::{classify, classify_sim, is_contract, Chain, SimError};
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
 use crate::submit::now;
@@ -566,8 +566,9 @@ impl Venue {
     async fn fault(&self, p: &PlannedSettlement) -> Vec<B256> {
         let data = ISCaaSDex::settleOneCall { s: p.to_settlement(), submitter: self.relayer() }.abi_encode();
         let tx = TransactionRequest::default().from(self.dex).to(self.dex).input(data.into());
-        // Fable recheck 2 P3-4: through `Chain::read`; the revert data of an error answer, nothing on a success
-        let raw = self.chain.read(|p| {
+        // Fable recheck 2 P3-4: through `Chain::read`; the revert data of an error answer, nothing on a success; recheck 3 R3-1:
+        // evidence from the first endpoint only (a failover endpoint's revert blames nobody)
+        let raw = self.chain.read_at(|p| {
             let tx = tx.clone();
             async move {
                 match p.call(tx).await {
@@ -579,7 +580,7 @@ impl Venue {
                 }
             }
         }).await;
-        let Ok(Some(raw)) = raw else { return vec![] };
+        let Ok((Some(raw), 0)) = raw else { return vec![] };
         let legs: Vec<B256> = p.makers.iter().map(|(m, _, _)| m.hash).chain([p.taker.hash]).collect();
         let mut named: Vec<B256> = vec![];
         for w in raw.get(4..).unwrap_or_default().as_chunks::<32>().0.iter().copied().map(B256::from) {
@@ -610,7 +611,7 @@ impl Venue {
             let data = IToken::mtxTradeCall { o: r.order.clone(), auth: auth.clone(), f }.abi_encode();
             let tx = TransactionRequest::default().from(self.dex).to(r.sell).input(data.into());
             // Fable recheck 2 P3-4: through `Chain::read`; `Some(revert data)` when the leg's own pull reverts
-            let leg = self.chain.read(|p| {
+            let leg = self.chain.read_at(|p| {
                 let tx = tx.clone();
                 async move {
                     match p.call(tx).await {
@@ -623,8 +624,10 @@ impl Venue {
                 }
             }).await;
             match leg {
-                Ok(None) => {}
-                Ok(Some(raw)) => {
+                Ok((None, _)) => {}
+                // Fable recheck 3 R3-1: a failover endpoint's revert is no evidence against a leg
+                Ok((Some(_), i)) if i > 0 => return Err(down(format!("rpc: leg {:#x} reverted on failover endpoint {i} only", r.hash))),
+                Ok((Some(raw), _)) => {
                     // F-16: a pause is no leg's fault; the market halts until it ends, nobody is blamed
                     let paused = raw.filter(|_| self.is_regulated(r.sell))
                         .and_then(|raw| <IRegulatedToken::TokenPaused as alloy::sol_types::SolError>::abi_decode(&raw).ok());
@@ -645,8 +648,14 @@ impl Venue {
     /// only, the delegate is never asked; a contract ⇒ ERC-1271 called from `verifier` with the cap by codehash as the
     /// callee's gas, accepted only as exactly 32 bytes equal to the magic word. `Err` = the RPC, never a verdict.
     async fn valid_sig(&self, verifier: Address, signer: Address, digest: B256, sig: &Bytes) -> Result<bool> {
-        let code = self.chain.code_at(signer).await.map_err(|e| anyhow!("{e}"))?;
+        // Fable recheck 3 R3-1: no code read on a failover endpoint (it may lag the signer's deploy): an ECDSA verdict from the
+        // first endpoint's answer only
+        let (code, at) = self.chain.read_at(|p| async move { p.get_code_at(signer).await.map_err(|e| classify(&e)) })
+            .await.map_err(|e| anyhow!("{e}"))?;
         if !is_contract(&code) {
+            if at > 0 && !ecdsa_ok(signer, digest, sig) {
+                return Err(anyhow!("rpc: {signer:#x} has no code on failover endpoint {at} only"));
+            }
             return Ok(ecdsa_ok(signer, digest, sig));
         }
         alloy::sol! {
@@ -656,21 +665,25 @@ impl Venue {
         // the callee of a top-level call gets `gas − intrinsic`: exactly the cap `staticcall` gives it
         let gas = sig_cap(&code, self.clone_codehash) + intrinsic(&data);
         let tx = TransactionRequest::default().from(verifier).to(signer).input(data.into()).gas_limit(gas);
-        // Fable recheck 2 P3-4: through `Chain::read`
-        self.chain.read(|p| {
+        // Fable recheck 2 P3-4: through `Chain::read`; recheck 3 R3-1: a `false` from a failover endpoint is no verdict
+        let (ok, at) = self.chain.read_at(|p| {
             let tx = tx.clone();
             async move {
                 match p.call(tx).await {
                     Ok(out) => Ok(magic_ok(&out)),
-                    // the EVM's answer (a revert, out of gas inside the cap) is `false`, as a failed `staticcall` is
-                    Err(e) if e.as_error_resp().is_some_and(|r| {
-                        let m = r.message.to_ascii_lowercase();
-                        r.as_revert_data().is_some() || m.contains("revert") || m.contains("execution") || m.contains("gas")
-                    }) => Ok(false),
-                    Err(e) => Err(SimError::Transport(e.to_string())),
+                    // the EVM's answer (a revert, out of gas inside the cap) is `false`, as a failed `staticcall` is; Fable recheck 3
+                    // R3-6: by the shared classifier (a node's own limit is transport)
+                    Err(e) => match classify_sim(&e) {
+                        SimError::Revert(_) => Ok(false),
+                        t => Err(t),
+                    },
                 }
             }
-        }).await.map_err(|e| anyhow!("{e}"))
+        }).await.map_err(|e| anyhow!("{e}"))?;
+        if !ok && at > 0 {
+            return Err(anyhow!("rpc: ERC-1271 of {signer:#x} refused on failover endpoint {at} only"));
+        }
+        Ok(ok)
     }
 
     // ------------------------------------------------------------------------------ intake
@@ -1169,6 +1182,7 @@ impl Venue {
             idx.call("blockchain.dex.trade", "dex_cursor", json!({"evm_chain_number": self.chain.number})).await?;
         let mode = if nc.finality_mode == "tag" { Mode::Tag } else { Mode::Depth(nc.finality_depth) };
         let latest = self.chain.primary().get_block_number().await?;
+        self.chain.saw_block(latest); // Fable recheck 3 R3-1
         let finalized = if mode == Mode::Tag { self.chain.finalized_number().await? } else { None };
         let Some(safe) = safe_head(&mode, latest, finalized) else { return Ok(false) };
         let Some((from, to)) = next_range(cur.indexed_block, safe, MAX_LOG_SPAN) else { return Ok(false) };
@@ -1915,6 +1929,7 @@ mod tests {
                     Ok(hexs(w.codes.get(&a).map(|c| c.as_ref()).unwrap_or_default()))
                 }
                 "eth_blockNumber" => Ok(json!("0xa")),
+                "eth_chainId" => Ok(json!("0x7a69")),
                 "eth_getBlockByNumber" => {
                     Ok(serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
                 }
@@ -2049,6 +2064,15 @@ mod tests {
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         (url, s)
+    }
+
+    /// `v` on a fresh fake chain of `w` that is its second endpoint, the first down (Fable recheck 3 R3-1).
+    async fn on_failover(v: Venue, w: World) -> (Venue, W) {
+        let (url, world) = fake_chain(w).await;
+        let block0: B256 = "0xd490a652c286563a398812c62434decf124c8e52d9c820a6185e88813aea05d5".parse().unwrap();
+        let cfg = crate::config::ChainCfg { evm_chain_number: 31337, chain_uid: Some(block0),
+            rpc_urls: vec!["http://127.0.0.1:9".into(), url], ..Default::default() };
+        (Venue { chain: Arc::new(Chain::with_signer(&cfg, relayer_key()).unwrap()), ..v }, world)
     }
 
     fn market() -> MarketCfg {
@@ -2539,6 +2563,7 @@ mod tests {
         let (idx, _) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
         let v = Venue { indexer: Some(idx), ..v };
         assert!(v.watch_once().await.unwrap());
+        assert_eq!(v.chain.seen_head(), 0xa, "Fable recheck 3 R3-1: the watcher's first-endpoint head feeds the shared head");
         assert_eq!(v.book.lock().await.pending_of(oh(&ask)), U256::ZERO);
         let r = take(&v, &PrivateKeySigner::random(), 80, 40, 1).await.unwrap();
         assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&ask))));
@@ -2559,6 +2584,21 @@ mod tests {
         }
         world.lock().unwrap().sig_errors.insert(wallet, json!({"code": -32603, "message": "upstream unavailable"}));
         assert!(v.valid_sig(BASE, wallet, d, &sig).await.is_err());
+        // Fable recheck 3 R3-6: the shared classifier: a node's own limit is no verdict
+        world.lock().unwrap().sig_errors.insert(wallet, json!({"code": -32000, "message": "execution aborted (timeout = 5s)"}));
+        assert!(v.valid_sig(BASE, wallet, d, &sig).await.is_err());
+        // Fable recheck 3 R3-1: answered by a failover endpoint (the first down), a revert, a non-magic answer and an EOA's bad
+        // signature are no verdict (the first endpoint's are `false`, above); a good one is still accepted
+        let mut w = World::default();
+        w.codes.insert(wallet, Bytes::from_static(&[0x60, 0x01]));
+        w.sig_errors.insert(wallet, json!({"code": 3, "message": "execution reverted", "data": "0x"}));
+        let (v, world) = on_failover(v, w).await;
+        assert!(v.valid_sig(BASE, wallet, d, &sig).await.unwrap_err().to_string().contains("refused on failover endpoint 1 only"));
+        world.lock().unwrap().sig_errors.clear();
+        assert!(v.valid_sig(BASE, wallet, d, &sig).await.unwrap_err().to_string().contains("failover endpoint 1 only"));
+        let eoa = PrivateKeySigner::random();
+        assert!(v.valid_sig(BASE, eoa.address(), d, &sig).await.unwrap_err().to_string().contains("failover endpoint 1 only"));
+        assert!(v.valid_sig(BASE, eoa.address(), d, &sig_of(&eoa, d)).await.unwrap(), "control: a good signature");
     }
 
     /// CTR-UA-24 on the venue too (owner ruling 2026-10-30, D1, superseding 2026-10-28): an EIP-7702 maker signs with
@@ -2600,6 +2640,16 @@ mod tests {
         assert_eq!(v.leg_faults(&s).await.unwrap(), Vec::<B256>::new(), "the outside maker is never probed");
         world.lock().unwrap().named.insert(oh(&ask));
         assert_eq!(v.fault(&s).await, vec![oh(&ask)], "its own revert names it");
+        world.lock().unwrap().bad_sig.insert(oh(&bid));
+        assert_eq!(v.leg_faults(&s).await.unwrap(), vec![oh(&bid)], "the SCaaS leg's own pull reverts: blamed");
+        // Fable recheck 3 R3-1: the same reverts answered by a failover endpoint blame nobody (the controls are the two above)
+        let mut w = World::default();
+        w.no_trade.insert(BASE);
+        w.named.insert(oh(&ask));
+        let (v, world) = on_failover(v, w).await;
+        assert_eq!(v.fault(&s).await, Vec::<B256>::new(), "a failover endpoint's revert names nobody");
+        world.lock().unwrap().bad_sig.insert(oh(&bid));
+        assert!(matches!(v.leg_faults(&s).await, Err(VenueError::Unavailable(e)) if e.contains("failover endpoint 1 only")));
     }
 
     /// `contract_of` is read before the book moves: an unreadable kind leaves the order where it is, and each kind reaches the job.

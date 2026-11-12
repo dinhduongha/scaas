@@ -377,6 +377,26 @@ pub struct ChainCfg {
     /// The top-level `[pqz_verifier]`, set by [`Config::load`] (never read from a `[[chains]]` table).
     #[serde(skip)]
     pub pqz_verifier: PqzVerifierCfg,
+    /// Fable recheck 3 R3-4: one chain read's time on one endpoint (its head check and its requests); past it the read fails
+    /// over. Every request of the chain's client is bounded by the larger of this and `rpc_simulate_timeout_ms`.
+    #[serde(default = "default_rpc_timeout_ms")]
+    pub rpc_timeout_ms: u64,
+    /// The same for a simulation (`eth_call` then `eth_estimateGas`, which runs the call several times): a PQZ or Zether proof
+    /// check is the slowest call the node makes. Unmeasured default, generous.
+    #[serde(default = "default_rpc_simulate_timeout_ms")]
+    pub rpc_simulate_timeout_ms: u64,
+    /// Fable recheck 3 R3-1: the highest block of this chain the node has seen from its first endpoint (the lanes' receipts, the
+    /// heads the indexer, the venue and the health probe poll), shared by every `Chain` built from this table (clones share it);
+    /// a runtime value, never read from the file, cleared by a restart.
+    #[serde(skip)]
+    pub head: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+fn default_rpc_timeout_ms() -> u64 {
+    30_000
+}
+fn default_rpc_simulate_timeout_ms() -> u64 {
+    120_000
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -476,6 +496,9 @@ impl Default for ChainCfg {
             gossip: false,
             exclusive_ms: default_exclusive_ms(),
             pqz_verifier: PqzVerifierCfg::default(),
+            rpc_timeout_ms: default_rpc_timeout_ms(),
+            rpc_simulate_timeout_ms: default_rpc_simulate_timeout_ms(),
+            head: Default::default(),
         }
     }
 }

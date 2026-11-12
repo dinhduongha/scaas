@@ -60,15 +60,19 @@ pub fn classify(e: &TransportError) -> SimError {
             Some(data) => SimError::Revert(decode_revert(&data)),
             // Node trả lỗi JSON-RPC có nghĩa (execution reverted không data, out of gas…):
             // đó là câu trả lời của EVM, không phải mạng.
-            // Fable recheck 2 P3-8: but a node's own limit ("execution aborted (timeout = 5s)") is the endpoint's, not the EVM's
-            None if (resp.message.contains("revert") || resp.message.contains("execution"))
-                && !resp.message.contains("timeout") && !resp.message.contains("aborted") => {
-                SimError::Revert(resp.message.to_string())
-            }
+            // Fable recheck 2 P3-8, recheck 3 R3-6: a revert first; then a node's own limit, matched by its exact phrase, is the
+            // endpoint's answer, not the EVM's
+            None if resp.message.contains("revert") => SimError::Revert(resp.message.to_string()),
+            None if resp.message.contains("execution") && !node_limit(&resp.message) => SimError::Revert(resp.message.to_string()),
             None => SimError::Transport(resp.message.to_string()),
         },
         None => SimError::Transport(e.to_string()),
     }
+}
+
+/// A node's own limit on one call, not the EVM's answer: geth's `execution aborted (timeout = 5s)` (`--rpc.evmtimeout`).
+fn node_limit(m: &str) -> bool {
+    m.starts_with("execution aborted (timeout = ") && m.ends_with(')')
 }
 
 /// [`classify`] for a simulation without a gas field: "out of gas" / "gas required exceeds allowance" there is the
@@ -89,10 +93,6 @@ pub fn classify_sim(e: &TransportError) -> SimError {
 const LOG_SPAN_MIN: u64 = 10;
 const LOG_WINDOW_SPANS: u64 = 20;
 
-/// One RPC request's whole time (connect, send, answer): past it the request is a transport error and a read fails over.
-// ponytail: one fixed bound, generous for a heavy `eth_call` / `eth_estimateGas`; a config field if an operator needs another
-const RPC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(if cfg!(test) { 2 } else { 30 });
-
 /// The `latest` header's gas facts ([`Chain::block_gas`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockGas {
@@ -111,12 +111,16 @@ pub struct Chain {
     uid: tokio::sync::OnceCell<B256>,
     /// `compliance_registry` and its pinned code hash (regulated-kinds spec §5, F-11).
     compliance: Option<(Address, B256)>,
-    /// Fable recheck 2 P2-1: the highest block this chain has seen (a receipt's, an endpoint's head); a failover endpoint below it
-    /// answers no read.
-    head: std::sync::atomic::AtomicU64,
-    /// Fable recheck 2 P3-5: per endpoint, its `eth_chainId` equals `number` (checked once, at a failover endpoint's first use);
-    /// `false`: another chain, dropped from every read.
+    /// Fable recheck 2 P2-1, recheck 3 R3-1, R3-2: the highest block this chain has seen from its first endpoint, one value
+    /// shared by every `Chain` of the same `[[chains]]` table (`ChainCfg::head`), raised by [`Chain::saw_block`] only; a
+    /// failover endpoint below it answers no read.
+    head: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Fable recheck 2 P3-5, recheck 3 R3-3: per endpoint, its `eth_chainId` is `number` and its block 0 is this chain's (checked
+    /// once, at a failover endpoint's first use); `false`: another network, dropped from every read.
     chain_ok: Vec<std::sync::OnceLock<bool>>,
+    /// Fable recheck 3 R3-4: one read's time on one endpoint, and a simulation's (`rpc_timeout_ms`, `rpc_simulate_timeout_ms`).
+    read_timeout: std::time::Duration,
+    simulate_timeout: std::time::Duration,
 }
 
 impl Chain {
@@ -127,12 +131,15 @@ impl Chain {
 
     pub fn with_signer(cfg: &ChainCfg, signer: PrivateKeySigner) -> Result<Self> {
         let address = signer.address();
+        let (read_timeout, simulate_timeout) =
+            (std::time::Duration::from_millis(cfg.rpc_timeout_ms), std::time::Duration::from_millis(cfg.rpc_simulate_timeout_ms));
         let providers = cfg
             .rpc_urls
             .iter()
-            // Fable recheck 2 P3-4: a request timeout, so an endpoint that accepts and never answers fails a read over
+            // Fable recheck 2 P3-4: a request timeout, so an endpoint that accepts and never answers fails a read over; each read
+            // is bounded by its own limit ([`Chain::read_within`]), this one bounds every other request (sends, receipts, scans)
             .map(|u| Ok(ProviderBuilder::new().disable_recommended_fillers()
-                .connect_reqwest(reqwest::Client::builder().timeout(RPC_TIMEOUT).build()?, u.parse()?).erased()))
+                .connect_reqwest(reqwest::Client::builder().timeout(read_timeout.max(simulate_timeout)).build()?, u.parse()?).erased()))
             .collect::<Result<Vec<_>>>()?;
         if providers.is_empty() {
             return Err(anyhow!("chain {}: no rpc_urls", cfg.evm_chain_number));
@@ -145,8 +152,10 @@ impl Chain {
             pinned_uid: cfg.chain_uid,
             uid: Default::default(),
             compliance: cfg.compliance_registry.zip(cfg.compliance_registry_codehash),
-            head: Default::default(),
+            head: cfg.head.clone(),
             chain_ok: cfg.rpc_urls.iter().map(|_| Default::default()).collect(),
+            read_timeout,
+            simulate_timeout,
         })
     }
 
@@ -165,11 +174,33 @@ impl Chain {
     /// ARCH-POS-15, failover (the default; the strict-majority option is deferred to `scaas-rpc`): one read, answered completely
     /// by one endpoint, `rpc_urls` in the order given, never mixing answers of two endpoints. A transport error (the endpoint
     /// down, an error answer that is no revert) moves the whole read to the next endpoint; a revert is the contract's answer and
-    /// is final. A failover endpoint (not the first) answers only when its head is at or above the highest block this chain has
-    /// seen ([`Chain::saw_block`]; Fable recheck 2 P2-1): a stale one could revert a job that lands at the head, so it is a
-    /// transport error. The lane's own sends, nonces, fees and receipts stay on the first endpoint, and the indexers keep their
-    /// quorum over all of them.
+    /// is final only from the first endpoint: a failover endpoint's revert is a transport error (Fable recheck 3 R3-1), so no
+    /// revert of an endpoint other than the first makes a job `dead` or an order `invalid` (the venue's evidence read out of an
+    /// answer takes the first endpoint's only, [`Chain::read_at`]). A failover endpoint answers at all only when it is this chain
+    /// (its id and block 0, R3-3) and its head is at or above the highest block this chain has seen from its first endpoint
+    /// ([`Chain::saw_block`]; Fable recheck 2 P2-1; its own head never raises it, R3-2). Each endpoint gets `rpc_timeout_ms`
+    /// (R3-4). The lane's own sends, nonces, fees and receipts stay on the first endpoint, and the indexers keep their quorum
+    /// over all of them.
     pub async fn read<T, F, Fut>(&self, f: F) -> std::result::Result<T, SimError>
+    where
+        F: Fn(DynProvider) -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
+    {
+        self.read_at(f).await.map(|(t, _)| t)
+    }
+
+    /// [`Chain::read`], with the index of the endpoint that answered: a caller that reads a refusal out of an `Ok` (the venue's
+    /// evidence, an ERC-1271 `false`) takes it from the first endpoint only.
+    pub async fn read_at<T, F, Fut>(&self, f: F) -> std::result::Result<(T, usize), SimError>
+    where
+        F: Fn(DynProvider) -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
+    {
+        self.read_within(self.read_timeout, f).await
+    }
+
+    /// [`Chain::read_at`] with `limit` per endpoint (R3-4: a simulation's is larger).
+    async fn read_within<T, F, Fut>(&self, limit: std::time::Duration, f: F) -> std::result::Result<(T, usize), SimError>
     where
         F: Fn(DynProvider) -> Fut,
         Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
@@ -177,56 +208,79 @@ impl Chain {
         use std::sync::atomic::Ordering::Relaxed;
         let mut last = String::new();
         for (i, p) in self.providers.iter().enumerate() {
-            let fresh = match i {
-                0 => Ok(()),
-                _ if !self.same_chain(i, p).await => Err(SimError::Transport(format!("endpoint {i} is not chain {}", self.number))),
-                _ => match p.get_block_number().await {
-                    Ok(n) if n >= self.head.load(Relaxed) => {
-                        self.saw_block(n);
-                        Ok(())
-                    }
+            let fresh = async {
+                if i == 0 {
+                    return Ok(());
+                }
+                match self.same_chain(i, p).await {
+                    Ok(true) => {}
+                    Ok(false) => return Err(SimError::Transport(format!("endpoint {i} is not chain {}", self.number))),
+                    Err(e) => return Err(SimError::Transport(e)),
+                }
+                match p.get_block_number().await {
+                    Ok(n) if n >= self.head.load(Relaxed) => Ok(()),
                     Ok(n) => Err(SimError::Transport(format!("endpoint {i} at block {n}, behind {}", self.head.load(Relaxed)))),
                     Err(e) => Err(classify(&e)),
-                },
+                }
             };
-            if let Err(e) = fresh {
-                let e = e.to_string();
-                tracing::warn!(chain = self.number, endpoint = i, error = %redact_urls(&e), "chain read: endpoint not used; next");
-                last = e;
-                continue;
-            }
-            match f(p.clone()).await {
-                Err(SimError::Transport(e)) => {
+            let answer = tokio::time::timeout(limit, async {
+                fresh.await.map_err(|e| (false, e))?;
+                f(p.clone()).await.map_err(|e| (true, e))
+            }).await.unwrap_or_else(|_| Err((true, SimError::Transport(format!("endpoint {i}: no answer within {} ms", limit.as_millis())))));
+            match answer {
+                Err((false, e)) => {
+                    let e = e.to_string();
+                    tracing::warn!(chain = self.number, endpoint = i, error = %redact_urls(&e), "chain read: endpoint not used; next");
+                    last = e;
+                }
+                Err((_, SimError::Transport(e))) => {
                     tracing::warn!(chain = self.number, endpoint = i, error = %redact_urls(&e), "chain read failed; next endpoint");
                     last = e;
                 }
-                r => return r,
+                Err((_, SimError::Revert(e))) if i > 0 => {
+                    tracing::warn!(chain = self.number, endpoint = i, "chain read: a failover endpoint's revert is no verdict; next");
+                    last = format!("endpoint {i} reverted (a failover endpoint decides nothing): {e}");
+                }
+                Err((_, e)) => return Err(e),
+                Ok(t) => return Ok((t, i)),
             }
         }
         Err(SimError::Transport(last))
     }
 
-    /// Endpoint `i` answers `eth_chainId` = `number`: read once and kept; another chain is dropped with one log line, an unread
-    /// id is asked again next time (Fable recheck 2 P3-5).
-    async fn same_chain(&self, i: usize, p: &DynProvider) -> bool {
+    /// Endpoint `i` is this chain: its `eth_chainId` is `number` and its block 0 hash is the chain's (the pinned `chain_uid`, else
+    /// the one [`Chain::uid`] read, else the first endpoint's block 0): read once and kept; another network is dropped with one
+    /// log line (Fable recheck 2 P3-5, recheck 3 R3-3: a reset or forked network keeps its id). `Err`: unreadable, not kept,
+    /// asked again next time.
+    async fn same_chain(&self, i: usize, p: &DynProvider) -> std::result::Result<bool, String> {
         if let Some(ok) = self.chain_ok[i].get() {
-            return *ok;
+            return Ok(*ok);
         }
-        match p.get_chain_id().await {
-            Ok(id) => {
-                let ok = id == self.number;
-                if !ok {
-                    tracing::warn!(chain = self.number, endpoint = i, got = id, "rpc_urls endpoint is on another chain; dropped");
-                }
-                *self.chain_ok[i].get_or_init(|| ok)
-            }
-            Err(_) => false,
+        let unread = |what: &str| format!("endpoint {i}: {what} unreadable; not used");
+        let id = p.get_chain_id().await.map_err(|_| unread("chain id"))?;
+        let ok = id == self.number && {
+            let want = match self.pinned_uid.or(self.uid.get().copied()) {
+                Some(u) => u,
+                None => Self::block_hash(self.primary(), 0).await.ok_or_else(|| unread("the first endpoint's block 0"))?,
+            };
+            Self::block_hash(p, 0).await.ok_or_else(|| unread("block 0"))? == want
+        };
+        if !ok {
+            tracing::warn!(chain = self.number, endpoint = i, got = id, "rpc_urls endpoint is another network (chain id or block 0); dropped");
         }
+        Ok(*self.chain_ok[i].get_or_init(|| ok))
     }
 
-    /// A block this chain has seen (a receipt's, an endpoint's head): failover endpoints below it answer no read.
+    /// A block of this chain from its first endpoint (a lane's receipt, a polled head): failover endpoints below it answer no
+    /// read. Never fed by a failover endpoint's own answer (R3-2): nothing lowers it, so one wrong number would refuse every
+    /// honest failover until a restart.
     pub fn saw_block(&self, n: u64) {
         self.head.fetch_max(n, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The highest block seen ([`Chain::saw_block`]).
+    pub fn seen_head(&self) -> u64 {
+        self.head.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// [`Chain::read`] of one `eth_call` from `from` (with `gas` when given), classified by [`classify`].
@@ -247,7 +301,7 @@ impl Chain {
     /// transaction needs, regular + state (EIP-8037); no gas field, so both calls run at the RPC's gas cap.
     pub async fn simulate_from(&self, from: Address, to: Address, data: Bytes) -> std::result::Result<u64, SimError> {
         let tx = TransactionRequest::default().with_from(from).with_to(to).with_input(data);
-        self.read(|p| {
+        self.read_within(self.simulate_timeout, |p| {
             let tx = tx.clone();
             async move {
                 p.call(tx.clone()).await.map_err(|e| classify_sim(&e))?;
@@ -255,6 +309,7 @@ impl Chain {
             }
         })
         .await
+        .map(|(g, _)| g)
     }
 
     /// The `latest` header's gas facts: its `gasLimit` (EIP-8037 includes a transaction only when its gas limit fits
@@ -405,11 +460,10 @@ impl Chain {
     /// an endpoint that refuses the floor fails the read over. Fable recheck 2 P3-3: a transport error never shrinks a span, it
     /// fails the read over at once; after an answer the span grows back (doubles), staying below half of a span refused.
     async fn logs_back(&self, filter: Filter, lookback: u64) -> Result<Vec<alloy::rpc::types::Log>> {
-        self.read(|p| {
+        let (out, at) = self.read_at(|p| {
             let filter = filter.clone();
             async move {
                 let latest = p.get_block_number().await.map_err(|e| classify(&e))?;
-                self.saw_block(latest);
                 let start = latest.saturating_sub(lookback);
                 let whole = latest - start + 1;
                 let floor = LOG_SPAN_MIN.max(whole.div_ceil(LOG_WINDOW_SPANS));
@@ -431,11 +485,15 @@ impl Chain {
                         Err(e) => return Err(SimError::Transport(e.to_string())),
                     }
                 }
-                Ok(out)
+                Ok((latest, out))
             }
         })
         .await
-        .map_err(|e| anyhow!("{e}"))
+        .map_err(|e| anyhow!("{e}"))?;
+        if at == 0 {
+            self.saw_block(out.0); // R3-2: the first endpoint's head only
+        }
+        Ok(out.1)
     }
 
     /// Ký EIP-1559; trả bytes thô và hash — hash biết TRƯỚC khi gửi (journal, review F5).
@@ -486,7 +544,7 @@ pub fn executed_events(m: &MetaRef) -> Vec<B256> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use serde_json::{json, Value};
 
@@ -510,17 +568,26 @@ mod tests {
     }
 
     /// A fake RPC answering each request with `f(request)` (a `result` or an `error` member), counting the requests.
-    async fn fake_rpc(f: fn(&Value) -> Value) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
-        fake_rpc_on(f, 296).await
+    pub(crate) async fn fake_rpc(f: fn(&Value) -> Value) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        fake_rpc_on(f, 296, genesis()).await
     }
 
-    /// [`fake_rpc`] answering `eth_chainId` with `id` (P3-5); `eth_chainId` is not counted.
-    async fn fake_rpc_on(f: fn(&Value) -> Value, id: u64) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    /// The block 0 hash of the fake chain 296 ([`chain_of`] pins it).
+    fn genesis() -> B256 {
+        B256::repeat_byte(0x60)
+    }
+
+    /// [`fake_rpc`] answering `eth_chainId` with `id` (P3-5) and block 0 with hash `zero` (R3-3); neither is counted.
+    async fn fake_rpc_on(f: fn(&Value) -> Value, id: u64, zero: B256) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         let n: std::sync::Arc<std::sync::atomic::AtomicUsize> = Default::default();
         let n2 = n.clone();
+        let mut block: Value = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+        block["hash"] = json!(format!("{zero:#x}"));
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
             let mut a = if r["method"] == "eth_chainId" {
                 json!({"result": format!("{id:#x}")})
+            } else if r["method"] == "eth_getBlockByNumber" && r["params"][0] == "0x0" {
+                json!({"result": block.clone()})
             } else {
                 n2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 f(&r)
@@ -538,8 +605,12 @@ mod tests {
     }
 
     fn chain_of(urls: &[&str]) -> Chain {
-        let cfg = ChainCfg { evm_chain_number: 296, rpc_urls: urls.iter().map(|u| u.to_string()).collect(), ..Default::default() };
-        Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()
+        Chain::with_signer(&cfg_of(urls), PrivateKeySigner::random()).unwrap()
+    }
+
+    fn cfg_of(urls: &[&str]) -> ChainCfg {
+        ChainCfg { evm_chain_number: 296, rpc_urls: urls.iter().map(|u| u.to_string()).collect(), chain_uid: Some(genesis()),
+            ..Default::default() }
     }
 
     /// ARCH-POS-15 (failover): a chain read moves to the next `rpc_urls` endpoint on a transport error (the endpoint down, an
@@ -565,36 +636,64 @@ mod tests {
         assert!(matches!(call(chain_of(&[&rev, &good])).await, Err(SimError::Revert(_))), "a revert is final");
         assert_eq!((rev_n.load(SeqCst), good_n.load(SeqCst)), (1, before), "the next endpoint is never asked after a revert");
         assert!(matches!(call(chain_of(&["http://127.0.0.1:9", &busy])).await, Err(SimError::Transport(_))), "all down");
-        // Fable recheck 2 P2-1: a failover endpoint behind the highest block seen answers nothing (its revert could kill a job that
-        // lands at the head); at or above it, its revert is final (the control)
+        // Fable recheck 2 P2-1: a failover endpoint behind the highest block seen answers nothing; recheck 3 R3-1: a failover
+        // endpoint's revert decides nothing even at the head or with no head seen yet (a fresh `Chain`); its value is used
         let (stale, stale_n) = fake_rpc(|r| match r["method"].as_str() {
             Some("eth_blockNumber") => json!({"result": "0x10"}),
             _ => json!({"error": {"code": 3, "message": "execution reverted", "data": "0xdeadbeef"}}),
         }).await;
+        let (level, _) = fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x10"}),
+            _ => json!({"result": format!("0x{:064x}", 5)}),
+        }).await;
+        let fresh = chain_of(&["http://127.0.0.1:9", &stale]);
+        assert_eq!(fresh.head.load(SeqCst), 0);
+        assert!(matches!(call(fresh).await, Err(SimError::Transport(e)) if e.contains("decides nothing")), "head 0: requeue");
+        let at_head = chain_of(&["http://127.0.0.1:9", &stale]);
+        at_head.saw_block(0x10);
+        assert!(matches!(call(at_head).await, Err(SimError::Transport(e)) if e.contains("decides nothing")), "at the head too");
+        assert!(matches!(call(chain_of(&[&stale])).await, Err(SimError::Revert(_))), "control: the first endpoint's revert is final");
+        // the head is shared by every `Chain` of one table: a lane's receipt refuses a stale endpoint to the venue's object
+        let cfg = cfg_of(&["http://127.0.0.1:9", &level]);
+        let (lane, venue) = (Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap(), Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap());
+        assert_eq!(venue.call_raw(Address::ZERO, Bytes::new()).await.unwrap(), five, "control: at the head, its answer is used");
+        assert_eq!(venue.head.load(SeqCst), 0, "R3-2: a failover endpoint's own head raises nothing");
+        lane.saw_block(0x11);
+        let before = stale_n.load(SeqCst);
+        assert!(matches!(venue.call_raw(Address::ZERO, Bytes::new()).await, Err(SimError::Transport(e)) if e.contains("behind 17")));
         let behind = chain_of(&["http://127.0.0.1:9", &stale]);
         behind.saw_block(0x11);
         assert!(matches!(call(behind).await, Err(SimError::Transport(e)) if e.contains("behind")), "stale: requeue, never final");
-        assert_eq!(stale_n.load(SeqCst), 1, "only its head was read");
-        let level = chain_of(&["http://127.0.0.1:9", &stale]);
-        level.saw_block(0x10);
-        assert!(matches!(call(level).await, Err(SimError::Revert(_))), "control: at the head, its revert is the contract's");
+        assert_eq!(stale_n.load(SeqCst) - before, 1, "only its head was read");
         let (headless, _) = fake_rpc(|r| match r["method"].as_str() {
             Some("eth_blockNumber") => json!({"error": {"code": -32000, "message": "header not found"}}),
             _ => json!({"error": {"code": 3, "message": "execution reverted", "data": "0xdeadbeef"}}),
         }).await;
         assert!(matches!(call(chain_of(&["http://127.0.0.1:9", &headless])).await, Err(SimError::Transport(_))),
             "a failover endpoint whose head is unread answers nothing");
-        // Fable recheck 2 P3-5: a failover endpoint on another chain answers nothing, checked once; the control is `good` above
-        let (other, other_n) = fake_rpc_on(|r| match r["method"].as_str() {
+        // Fable recheck 2 P3-5, recheck 3 R3-3: a failover endpoint on another chain id, or on the same id with another block 0
+        // (a reset or forked network), answers nothing, checked once; the control is `level` above
+        let answer = |r: &Value| match r["method"].as_str() {
             Some("eth_blockNumber") => json!({"result": "0x64"}),
             _ => json!({"result": format!("0x{:064x}", 5)}),
-        }, 1).await;
-        let c = chain_of(&["http://127.0.0.1:9", &other]);
-        for _ in 0..2 {
-            assert!(matches!(c.call_raw(Address::ZERO, Bytes::new()).await, Err(SimError::Transport(e)) if e.contains("not chain 296")));
+        };
+        for (id, zero) in [(1, genesis()), (296, B256::repeat_byte(0x61))] {
+            let (other, other_n) = fake_rpc_on(answer, id, zero).await;
+            let c = chain_of(&["http://127.0.0.1:9", &other]);
+            for _ in 0..2 {
+                assert!(matches!(c.call_raw(Address::ZERO, Bytes::new()).await, Err(SimError::Transport(e)) if e.contains("not chain 296")));
+            }
+            assert_eq!(other_n.load(SeqCst), 0, "nothing but its chain id and block 0 was asked");
+            assert_eq!(c.chain_ok[1].get(), Some(&false), "dropped, once");
         }
-        assert_eq!(other_n.load(SeqCst), 0, "nothing but its chain id was asked");
-        assert_eq!(c.chain_ok[1].get(), Some(&false), "dropped, once");
+        // with no pinned chain_uid, block 0 is the first endpoint's; unread there: the failover endpoint is not used
+        let (same, _) = fake_rpc(answer).await;
+        let c = Chain::with_signer(&ChainCfg { chain_uid: None, ..cfg_of(&["http://127.0.0.1:9", &same]) }, PrivateKeySigner::random()).unwrap();
+        assert!(matches!(c.call_raw(Address::ZERO, Bytes::new()).await, Err(SimError::Transport(e)) if e.contains("unreadable")));
+        assert_eq!(c.chain_ok[1].get(), None, "not kept");
+        let (first, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "busy"}})).await;
+        let c = Chain::with_signer(&ChainCfg { chain_uid: None, ..cfg_of(&[&first, &same]) }, PrivateKeySigner::random()).unwrap();
+        assert_eq!(c.call_raw(Address::ZERO, Bytes::new()).await.unwrap(), five, "the first endpoint's block 0 matches");
         // an unread chain id is no answer: the endpoint is not used, and it is asked again next time
         let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
             axum::Json(match r["method"].as_str() {
@@ -607,13 +706,18 @@ mod tests {
         let mute = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let c = chain_of(&["http://127.0.0.1:9", &mute]);
-        assert!(matches!(c.call_raw(Address::ZERO, Bytes::new()).await, Err(SimError::Transport(_))), "unread chain id: not used");
+        assert!(matches!(c.call_raw(Address::ZERO, Bytes::new()).await, Err(SimError::Transport(e)) if e.contains("chain id unreadable")),
+            "unread chain id: not used");
         assert_eq!(c.chain_ok[1].get(), None, "not kept");
         // a window of logs: the busy endpoint refuses the head, the good one answers the head and the logs
         let c = chain_of(&[&busy, &good]);
         let before = good_n.load(SeqCst);
         assert!(c.logs_since(Address::ZERO, B256::ZERO, 10).await.unwrap().is_empty());
         assert_eq!(good_n.load(SeqCst) - before, 3, "its head check, eth_blockNumber and eth_getLogs, all on the good endpoint");
+        assert_eq!(c.head.load(SeqCst), 0, "R3-2: a failover endpoint's head in a log read raises nothing");
+        let c = chain_of(&[&good]);
+        c.logs_since(Address::ZERO, B256::ZERO, 10).await.unwrap();
+        assert_eq!(c.head.load(SeqCst), 0x64, "control: the first endpoint's head does");
         assert_eq!(c.subject_nonce(&MetaRef { token: Address::ZERO, from: B256::ZERO, batch: U256::ZERO, nonce: U256::ZERO,
             digest: None, ua: true, addr_nonce: false }).await.unwrap(), U256::from(5), "the subject nonce view fails over too");
     }
@@ -695,8 +799,10 @@ mod tests {
         assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1, "one request, then the next endpoint");
     }
 
-    /// Fable recheck 2 P3-4: an endpoint that accepts and never answers fails the read over after [`RPC_TIMEOUT`]; the block gas
-    /// limit (every job's cap) fails over too. Control: the good endpoint alone.
+    /// Fable recheck 2 P3-4: an endpoint that accepts and never answers fails the read over after `rpc_timeout_ms`; the block gas
+    /// limit (every job's cap) fails over too. Control: the good endpoint alone. Recheck 3 R3-4: a simulation gets
+    /// `rpc_simulate_timeout_ms`: an answer slower than a read's limit is a simulation's (the control: the same call as a read
+    /// times out).
     #[tokio::test]
     async fn a_hung_endpoint_and_the_block_gas_read_fail_over() {
         let hung = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -713,24 +819,45 @@ mod tests {
             _ => json!({"result": format!("0x{:064x}", 5)}),
         }).await;
         assert_eq!(chain_of(&[&good]).block_gas().await.unwrap().limit, 30_000_000, "control");
-        let two = chain_of(&[&hung_url, &good]);
-        let got = tokio::time::timeout(std::time::Duration::from_secs(6), two.call_raw(Address::ZERO, Bytes::new())).await;
+        let quick = |urls: &[&str], read: u64, simulate: u64| Chain::with_signer(&ChainCfg { rpc_timeout_ms: read,
+            rpc_simulate_timeout_ms: simulate, ..cfg_of(urls) }, PrivateKeySigner::random()).unwrap();
+        let two = quick(&[&hung_url, &good], 500, 500);
+        let got = tokio::time::timeout(std::time::Duration::from_secs(20), two.call_raw(Address::ZERO, Bytes::new())).await;
         assert_eq!(got.expect("one timeout, then the next endpoint").unwrap().len(), 32);
+        let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
+            tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": if r["method"] == "eth_estimateGas" { json!("0x5208") }
+                else { json!("0x") }}))
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let slow = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let c = quick(&[&slow], 300, 10_000);
+        assert_eq!(c.simulate(Address::ZERO, Bytes::new()).await.unwrap(), 21_000, "a simulation within its own limit");
+        // a fresh client: no pooled connection the server may have closed meanwhile (a quick transport error of another kind)
+        let got = quick(&[&slow], 300, 10_000).call_raw(Address::ZERO, Bytes::new()).await;
+        assert!(matches!(&got, Err(SimError::Transport(e)) if e.contains("within 300 ms")), "control: a read of the same speed times \
+            out: {got:?}");
         let (busy, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "header not found"}})).await;
         assert_eq!(chain_of(&[&busy, &good]).block_gas().await.unwrap().limit, 30_000_000, "the gas cap's read fails over");
     }
 
     /// Fable recheck 2 P3-8: an error answer saying execution was aborted by the node's own timeout is a transport error (it fails
     /// over); an EVM revert or an execution error without data stays a revert (the controls).
+    /// Recheck 3 R3-6: matched by the exact phrase, after a revert: a revert reason that says "timeout" stays a revert.
     #[tokio::test]
     async fn an_aborted_execution_is_transport() {
         let (aborted, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "execution aborted (timeout = 5s)"}})).await;
         let (exec, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "VM execution error."}})).await;
         let (rev, _) = fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted"}})).await;
+        let (reason, _) = fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted: timeout elapsed"}})).await;
+        let (other, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "execution timeout aborted"}})).await;
         let call = |u: String| async move { chain_of(&[&u]).call_raw(Address::ZERO, Bytes::new()).await };
         assert!(matches!(call(aborted).await, Err(SimError::Transport(_))));
         assert!(matches!(call(exec).await, Err(SimError::Revert(_))), "control: an execution error");
         assert!(matches!(call(rev).await, Err(SimError::Revert(_))), "control: a revert");
+        assert!(matches!(call(reason).await, Err(SimError::Revert(_))), "a revert whose reason names a timeout");
+        assert!(matches!(call(other).await, Err(SimError::Revert(_))), "not the node's phrase: the EVM's");
     }
 
     /// NODE-GW-07: the chain's `chain_uid` is its block 0 hash; a configured one that differs refuses the chain.

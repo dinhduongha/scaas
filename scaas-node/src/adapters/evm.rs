@@ -182,6 +182,7 @@ impl ChainAdapter for EvmAdapter {
     async fn final_head(&self) -> Result<Option<Head>> {
         let c = &self.chains[0];
         let latest = c.primary().get_block_number().await?;
+        c.saw_block(latest); // Fable recheck 3 R3-1: the health probe's first-endpoint head feeds the shared head
         let finalized = if self.mode == Mode::Tag { c.finalized_number().await? } else { None };
         let Some(safe) = safe_head(&self.mode, latest, finalized) else { return Ok(None) };
         let Some(hash) = Chain::block_hash(c.primary(), safe).await else { return Ok(None) };
@@ -223,5 +224,27 @@ impl ChainAdapter for EvmAdapter {
             .get_transaction_receipt(hash)
             .await?
             .map(|rc| u128::from(rc.gas_used).saturating_mul(rc.effective_gas_price)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Fable recheck 3 R3-1: the health probe's first-endpoint head feeds the shared head of the chain's table (the lanes, the
+    /// indexer and the venue check a failover endpoint against it). Control: before the probe it is 0.
+    #[tokio::test]
+    async fn the_probe_head_feeds_the_shared_head() {
+        let (url, _) = crate::chain::tests::fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x64"}),
+            _ => json!({"error": {"code": -32000, "message": "busy"}}),
+        }).await;
+        let cfg = ChainCfg { evm_chain_number: 296, rpc_urls: vec![url], ..Default::default() };
+        let lane = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
+        let probe = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
+        let a = EvmAdapter::new(&cfg, vec![probe], Default::default()).unwrap();
+        assert_eq!(lane.seen_head(), 0, "control");
+        let _ = a.final_head().await;
+        assert_eq!(lane.seen_head(), 0x64);
     }
 }

@@ -354,16 +354,26 @@ reads, the latest block's gas limit, the `VerifierFeeSet`, `UAPqzKeyCurrent` and
 (its views, a failed settlement's evidence, ERC-1271) and the drift reader's balances. Not through it: the lane's own sends,
 nonces, fees and receipts, and the indexers' log scans (their quorum). One endpoint answers
 the whole read (a log window's head and logs alike), `rpc_urls` in the order given; a transport error (the endpoint down, an
-error answer that is no revert) moves the read to the next endpoint, a revert is the contract's answer and is final. A failover
-endpoint (not the first) answers only when its `eth_blockNumber` is at or above the highest block the chain has seen (a receipt's,
-an endpoint's head): a stale one could revert a job that lands at the head, so it counts as a transport error and the job is back
-in the queue, never `dead` (Fable recheck 2 P2-1). A failover endpoint is used only once its `eth_chainId` equals the chain's
-number, read at its first use and kept; one on another chain is dropped with a log line (Fable recheck 2 P3-5). The lane's
-own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The
-strict-majority option stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Every RPC request has a 30 s
-timeout, so an endpoint that accepts and never answers fails the read over (test `a_hung_endpoint_and_the_block_gas_read_fail_over`). An
-error answer counts as a revert when it carries revert data or names a revert or an execution error, except a node's own limit
-(`execution aborted (timeout = …)`), which is a transport error (Fable recheck 2 P3-8; `an_aborted_execution_is_transport`).
+error answer that is no revert) moves the read to the next endpoint. A revert is the contract's answer and is final only from
+the first endpoint: a failover endpoint's revert is a transport error and the read moves on (Fable recheck 3 R3-1), so no
+revert of a failover endpoint makes a job `dead`; the venue takes a failed settlement's evidence, a leg's own revert and an
+ERC-1271 `false` or an EOA's bad signature from the first endpoint only (from another: no verdict, the order stays). A failover
+endpoint answers at all only when its `eth_blockNumber` is at or above the highest block the chain has seen from its first
+endpoint: the lanes' receipts and the heads the indexer, the DEX venue and the health probe poll, one value per `[[chains]]`
+table shared by every lane, the indexer and the venue (Fable recheck 2 P2-1, recheck 3 R3-1). A failover endpoint's own head
+never raises it (R3-2): nothing lowers it, and a restart clears it. Stale or headless, the endpoint is a transport error and the
+job is back in the queue. A failover endpoint is used only once its `eth_chainId` equals the chain's number and its block 0 hash
+equals the chain's (the pinned `chain_uid`, else the first endpoint's block 0): read at its first use and kept; one on another
+network (another id, or a reset or forked network with the same id) is dropped with a log line; an id or block 0 that could not
+be read is logged as unreadable and asked again next time (Fable recheck 2 P3-5, recheck 3 R3-3). The lane's own sends, nonces,
+fees and receipts stay on the first endpoint; the indexers keep their quorum over all of them. The strict-majority option stays
+deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each endpoint of a read gets `rpc_timeout_ms` (30 s), a
+simulation `rpc_simulate_timeout_ms` (120 s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured,
+chosen generous), per `[[chains]]` table; every other request is bounded by the larger one, so an endpoint that accepts and
+never answers fails the read over (Fable recheck 3 R3-4; test `a_hung_endpoint_and_the_block_gas_read_fail_over`). An error
+answer counts as a revert when it carries revert data or names a revert; else one naming an execution error is a revert too,
+except a node's own limit by its exact phrase (`execution aborted (timeout = …)`), which is a transport error (Fable recheck 2
+P3-8, recheck 3 R3-6; `an_aborted_execution_is_transport`). The venue's ERC-1271 call uses the same classifier.
 
 **Log windows** (Fable recheck R-6; BUILT, `chain::tests::a_log_window_is_chunked_for_an_rpc_that_caps_the_range`). The
 `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` and the executed-event lookup
@@ -371,19 +381,24 @@ span a fixed window (`ROTATION_LOOKBACK`, 10,000 blocks). An endpoint that refus
 the `eth_getLogs` range) is asked again in tenths of it, contiguous up to the head, down to a floor of 10 blocks or a twentieth of
 the window, whichever is larger; after an answer the span doubles again, below half of a span refused. One that refuses the floor
 fails the read over to the next endpoint, so a window costs at most about 25 requests; a transport error fails over at once and
-never shrinks the span (Fable recheck 2 P3-3). *Known limit* (PLANNED, open): the window is not bounded by the job's intake block (the pull path
+never shrinks the span (Fable recheck 2 P3-3). *Operator note:* an RPC that caps `eth_getLogs` below a twentieth of the window
+(500 blocks) is given up for these reads: the PQZ jobs that need them stay in the queue (`PQZ_FEE_LOG_UNREAD`,
+`PQZ_KEY_ROTATED read`) and the log says the span was refused; list a second endpoint with a cap of at least 500 blocks
+(Fable recheck 3 R3-8). *Known limit* (PLANNED, open): the window is not bounded by the job's intake block (the pull path
 carries none; `ponytail:` on `ROTATION_LOOKBACK`).
 
 **A silent verifier endpoint rests** (Fable review of ua-mtx-merge E N-7; BUILT,
 `pqz::tests::a_silent_verifier_endpoint_rests_for_the_backoff_window`). The verifier fetch and the shield probe run inside the
 lane's single loop (at intake, and again in `track` when a stuck debit's replacement re-runs the fill), `timeout_ms` (5 s) per
-endpoint. An endpoint that did not answer (a timeout, a refused connection, a 5xx), or answered slower than four fifths of
-`timeout_ms` (the answer is used), is not asked again for `max(10 s, 4 × timeout_ms)`, by the fetch or the probe: inside that
-window it counts as not answering (`PQZ_VERDICT_MISSING`, `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue) and the next endpoint is
-asked. So a silent or slow endpoint costs the loop at most one `timeout_ms` per window, a quarter of the loop's time at worst, not
-one per job (Fable recheck 2 P3-6). A refusal (a 4xx, a malformed answer) is an answer: that endpoint is asked again at once.
-*Residual* (open): answers just under four fifths of `timeout_ms` still cost that much per job; a fetch budget per poll round is
-not built.
+endpoint. An endpoint that did not answer (a timeout, a refused connection, a 5xx) is not asked again for
+`max(10 s, 4 × timeout_ms)`, by the fetch or the probe: inside that window it counts as not answering (`PQZ_VERDICT_MISSING`,
+`PQZ_VERIFIER_PROBE_UNREAD`, back in the queue) and the next endpoint is asked. So each silent endpoint costs the loop at most
+one `timeout_ms` per window, a quarter of the loop's time per endpoint (two silent ones: half), not one per job. An answer rests
+nothing, however slow (Fable recheck 3 R3-5, superseding recheck 2 P3-6's rest of slow answers, which served a heavy set's
+normal verdict one job per window). A refusal (a 4xx, a malformed answer) is an answer: that endpoint is asked again at once.
+*Known limit* (documented, not built): an endpoint whose normal answer takes most of `timeout_ms` costs that much per job in the
+lane's loop; a fetch budget per poll round is not built. Operators set `timeout_ms` above the verifier's normal verdict time
+with a margin ([ops.md](ops.md)).
 
 <a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
 P2; **BUILT**, T63 `39fa296c`, `a6040f9a`, node mutants N1–N3 killed). A PQZ debit whose simulation is over the lane's cap (`gas …

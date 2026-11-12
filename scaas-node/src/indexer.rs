@@ -618,6 +618,7 @@ pub async fn step_health(chain: &Chain, odoo: &Odoo, router: Option<Address>, re
     }
     let mode = if nc.finality_mode == "tag" { Mode::Tag } else { Mode::Depth(nc.finality_depth) };
     let latest = chain.primary().get_block_number().await?;
+    chain.saw_block(latest); // Fable recheck 3 R3-1: the first endpoint's head feeds the chain's shared head
     let finalized = if mode == Mode::Tag { chain.finalized_number().await? } else { None };
     let Some(safe) = safe_head(&mode, latest, finalized) else { return Ok(false) };
     let Some((from, to)) = next_range(nc.indexed_block, safe, MAX_SPAN) else { return Ok(false) };
@@ -1061,6 +1062,25 @@ mod tests {
         let chain = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
         assert!(!step(&chain, &odoo, None).await.unwrap());
         assert_eq!(o.lock().unwrap().ingests, 0, "cursor not advanced");
+    }
+
+    /// Fable recheck 3 R3-1: the head the indexer reads from the first endpoint feeds the chain's shared head (what a failover
+    /// endpoint is checked against), for every `Chain` of the table. Control: a fresh `Chain` has seen nothing.
+    #[tokio::test]
+    async fn the_indexer_head_feeds_the_shared_head() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (odoo, _) = fake_odoo(Fake { tokens: json!([{"address": format!("{:#x}", Address::repeat_byte(1)), "decimals": 6}]),
+            ..Default::default() }).await;
+        let (url, _) = crate::chain::tests::fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x64"}),
+            _ => json!({"error": {"code": -32000, "message": "busy"}}),
+        }).await;
+        let cfg = crate::config::ChainCfg { evm_chain_number: 296, rpc_urls: vec![url], ..Default::default() };
+        let (chain, lane) = (Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap(),
+            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap());
+        assert_eq!(lane.seen_head(), 0, "control");
+        let _ = step(&chain, &odoo, None).await;
+        assert_eq!((chain.seen_head(), lane.seen_head()), (0x64, 0x64));
     }
 
     /// Group 3h (pqz-proof-path spec §10, C11): `ProofStoreSet(previous, next)` is a row and an alert (as 3e's tax recipient: a
