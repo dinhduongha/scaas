@@ -1762,12 +1762,15 @@ pub(crate) mod tests {
     /// Lỗi tạm thời nhả digest ngay (không ai bị chặn tới hết hạn).
     #[tokio::test]
     async fn one_digest_is_signed_once_across_lanes_and_released_on_transient_errors() {
+        // Fable recheck 7 R7-3: each job built once: `job()` stamps `validUntil` from the clock, so two calls a second apart are
+        // two ops (other digests), and the test would pass or fail by the second
+        let j7 = job(7);
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j7.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;
         let mut b = lane(&url, odoo, 2, set.clone()).await;
-        let mut w = work_from_job(&serde_json::from_value(resign(job(0))).unwrap(), None).unwrap();
+        let mut w = work_from_job(&serde_json::from_value(resign(j7)).unwrap(), None).unwrap();
         w.job_id = None; // the gateway's path
         a.submit(w.clone()).await;
         b.poll_outbox().await;
@@ -1776,11 +1779,12 @@ pub(crate) mod tests {
         let claims = o.lock().unwrap().claims;
         assert_eq!((claims, states(&o).len()), (0, 0), "skipped before relay_claim");
 
+        let j8 = job(8);
         let (url, _) = fake_evm(Evm { sim: Some("transport"), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(8)], tokens: toks(), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j8.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let want = {
-            let j: Job = serde_json::from_value(resign(job(8))).unwrap();
+            let j: Job = serde_json::from_value(resign(j8)).unwrap();
             work_from_job(&j, None).unwrap().typed.unwrap().digest_on(31337, B256::from(U256::from(UID))).unwrap()
         };
         lane(&url, odoo, 1, set.clone()).await.poll_outbox().await;
