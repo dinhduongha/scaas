@@ -3395,7 +3395,9 @@ contract UARegistryUA8Test is UARegistryBase {
     // KEM version word, the KEM hash-commit slot), by R2 (the registry split: `runs/…-r2-pins.txt`, old and new) and by group
     // 3g T51 (the versioned PQZ key records: the key marker and `PqzVersions` slots, dispatch; `runs/…-t51-gas-pins.txt`) and by T66b
     // R-1 (seven `pure` entries in `UARegistryLib`'s dispatch; `runs/2026-11-09-ua-mtx-merge-t66b-build/ua8-pins-r1.txt`) and by T66b 3.1b (the reads `popOf`, `registrationOf` behind
-    // the libraries' DELEGATECALL; `ua8-pins-3.1b.txt` there) (old -> new
+    // the libraries' DELEGATECALL; `ua8-pins-3.1b.txt` there) and by fix3 (the row "registrationOf msig-pq on gen 2 (gen 1
+    // record)" at n2048, n2560, n2816 +44, the shift of fix2's CTR-GOV-27 / CTR-MTX-86 that only n2304's run re-pinned;
+    // `runs/2026-11-13-fix3-chainuid/ua8-pins.txt`) (old -> new
     // in their commit messages). Regular gas = `gasTotalUsed`, EIP-8037 state gas = `gasStateUsed`
     // (the log `runs/2026-10-30-ua8-gas.txt` has the table). The `mldsa65` precompile is the exact-input mock, so its
     // verify gas is the mock's, and the 0x0142 verifier is the `rreg` stand-in: both verifies are not real figures.
@@ -3452,7 +3454,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (1827736, 44100720);
         if (h == keccak256("register msig-pq without pqzPop n2048-kmax1024")) return (1663896, 29737080);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2048-kmax1024")) return (1827736, 43904880);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (135561, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (135605, 0);
         if (h == keccak256("registrationOf msig-pq on gen 1 n2048-kmax1024")) return (92990, 0);
         if (h == keccak256("register mldsa65/n2304-kmax4096")) return (3613592, 87900030);
         if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3740568, 79930260);
@@ -3482,7 +3484,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (2106264, 50753160);
         if (h == keccak256("register msig-pq without pqzPop n2560-kmax16384")) return (1926040, 36003960);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2560-kmax16384")) return (2106264, 50557320);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (156768, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (156812, 0);
         if (h == keccak256("registrationOf msig-pq on gen 1 n2560-kmax16384")) return (106557, 0);
         if (h == keccak256("register mldsa65/n2816-kmax65536")) return (4201368, 102249900);
         if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4328344, 94280130);
@@ -3497,7 +3499,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (2294680, 55534410);
         if (h == keccak256("register msig-pq without pqzPop n2816-kmax65536")) return (2057112, 39137400);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2816-kmax65536")) return (2294680, 55338570);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (176276, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (176320, 0);
         if (h == keccak256("registrationOf msig-pq on gen 1 n2816-kmax65536")) return (121770, 0);
         return (0, 0); // an unpinned name fails its check
     }
