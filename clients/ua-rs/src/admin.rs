@@ -12,16 +12,18 @@ use crate::{address_word, keccak, keccak256, word};
 const ENVELOPE: &str =
     "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient";
 pub const ENV_TYPE: &str = "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)";
+/// CTR-GOV-27: `setChainEntries`'s named struct, nested in `UASetChainEntries`.
+pub const CHAIN_ENTRIES_TYPE: &str = "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)";
 
 /// The 18 ops and their params after `bytes32 from,address target`, the router entry's in order (spec §5.4, owner naming
 /// 2026-11-11).
 pub const ADMIN_OPS: [(&str, &str); 18] = [
-    ("UATransferAdmin", "bytes32 newAdmin"),
+    ("UATransferAdmin", "bytes32 newAdmin,bytes32 chainUid"),
     ("UAAcceptAdmin", ""),
     ("UARenounceAdmin", "bytes32 chainUid"),
-    ("UAPublishTokenEnv", "uint8 kind,uint16 envVersion,Env env"),
-    ("UAPublishDexEnv", "uint16 envVersion,Env env"),
-    ("UAPublishClassEnv", "uint16 contractClass,uint16 kind,uint16 envVersion,Env env"),
+    ("UAPublishTokenEnv", "uint8 kind,uint16 envVersion,bytes32 chainUid,Env env"),
+    ("UAPublishDexEnv", "uint16 envVersion,bytes32 chainUid,Env env"),
+    ("UAPublishClassEnv", "uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env"),
     ("UADeprecateToken", "uint8 kind,uint64 version,bytes32 chainUid,string reason"),
     ("UADeprecateDex", "uint64 version,bytes32 chainUid,string reason"),
     ("UADeprecateRelease", "uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason"),
@@ -29,11 +31,11 @@ pub const ADMIN_OPS: [(&str, &str); 18] = [
     ("UASetClassKindEnabled", "uint16 contractClass,uint16 kind,bool on,bytes32 chainUid"),
     ("UASetKycProvider", "bytes32 provider,bool enabled"),
     ("UASetCompliance", "bytes32[] accounts,uint64[] flags,uint64[] until"),
-    ("UASetChainEntries", "address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash"),
+    ("UASetChainEntries", "ChainEntries entries,bytes32 chainUid"),
     ("UAApproveTokenRelease", "uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until"),
     ("UAApproveDexRelease", "uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until"),
     ("UAApproveRelease", "uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until"),
-    ("UARevokeApproval", "bytes32 key"),
+    ("UARevokeApproval", "bytes32 key,bytes32 chainUid"),
 ];
 
 /// A release env (`IOpenFactory.Env`).
@@ -48,13 +50,15 @@ pub struct Env {
     pub lib_code_hashes: Vec<[u8; 32]>,
 }
 
-/// One param: a static field as its ABI word (`bytes4` left-aligned), a `string`, an array as its elements' words, an `Env`.
+/// One param: a static field as its ABI word (`bytes4` left-aligned), a `string`, an array as its elements' words, an `Env`,
+/// the nine words of a `ChainEntries` in its field order (CTR-GOV-27).
 #[derive(Debug, Clone, Copy)]
 pub enum Param<'a> {
     Word([u8; 32]),
     Text(&'a str),
     Words(&'a [[u8; 32]]),
     Env(&'a Env),
+    ChainEntries(&'a [[u8; 32]; 9]),
 }
 
 fn params_of(op: &str) -> Option<&'static str> {
@@ -66,7 +70,8 @@ pub fn type_string(op: &str) -> Option<String> {
     params_of(op).map(|p| {
         let sep = if p.is_empty() { "" } else { "," };
         let env = if p.contains("Env env") { ENV_TYPE } else { "" };
-        format!("{op}(bytes32 from,address target,{p}{sep}{ENVELOPE}){env}")
+        let ce = if p.contains("ChainEntries entries") { CHAIN_ENTRIES_TYPE } else { "" };
+        format!("{op}(bytes32 from,address target,{p}{sep}{ENVELOPE}){env}{ce}")
     })
 }
 
@@ -93,6 +98,17 @@ pub fn env_hash(e: &Env) -> [u8; 32] {
         &word(e.hedera as u64), &addrs(&e.deps), &words_hash(&e.params), &addrs(&e.libs), &words_hash(&e.lib_code_hashes)])
 }
 
+/// `hashStruct(ChainEntries)`: its typehash and the nine words (an address field with its high 12 bytes 0).
+pub fn chain_entries_hash(w: &[[u8; 32]; 9]) -> Result<[u8; 32], RouterOpError> {
+    let ty: Vec<&str> = CHAIN_ENTRIES_TYPE[13..CHAIN_ENTRIES_TYPE.len() - 1].split(',').map(|f| f.split_once(' ').unwrap().0).collect();
+    if !ty.iter().zip(w).all(|(t, x)| fits(t, x)) {
+        return Err(RouterOpError::Range);
+    }
+    let mut words = vec![keccak256(CHAIN_ENTRIES_TYPE.as_bytes())];
+    words.extend_from_slice(w);
+    Ok(words_hash(&words))
+}
+
 /// `hashStruct(UA<Op>)` over `params` (one per field, in order, each of its field's shape), `relayer` hashed as 0 unless
 /// `mode & 1`, `feeRecipient` as 0 unless `mode & 2` (`MetaTxLib.canon`).
 pub fn struct_hash(op: &str, e: &Envelope, target: &[u8; 20], params: &[Param]) -> Result<[u8; 32], RouterOpError> {
@@ -105,7 +121,10 @@ pub fn struct_hash(op: &str, e: &Envelope, target: &[u8; 20], params: &[Param]) 
     let mut words: Vec<[u8; 32]> = vec![keccak256(type_string(op).unwrap().as_bytes()), e.from, address_word(target)];
     for (ty, p) in types.iter().zip(params) {
         words.push(match (ty.strip_suffix("[]"), p) {
-            (None, Param::Word(w)) if *ty != "string" && *ty != "Env" => if fits(ty, w) { *w } else { return Err(RouterOpError::Range) },
+            (None, Param::Word(w)) if *ty != "string" && *ty != "Env" && *ty != "ChainEntries" => {
+                if fits(ty, w) { *w } else { return Err(RouterOpError::Range) }
+            }
+            (None, Param::ChainEntries(c)) if *ty == "ChainEntries" => chain_entries_hash(c)?,
             (None, Param::Text(s)) if *ty == "string" => keccak256(s.as_bytes()),
             (None, Param::Env(v)) if *ty == "Env" => env_hash(v),
             (Some(el), Param::Words(ws)) if ws.iter().all(|w| fits(el, w)) => words_hash(ws),

@@ -637,11 +637,12 @@ contract Tokens is OnchainBase {
         vm.stopBroadcast();
         vm.broadcast(k3);
         n.mint(a3, 10); // the limited holder: `useLimited`
+        bytes32 nu = n.chainUid(); // the token's chain word (CTR-GOV-27)
         vm.broadcast(k1);
-        n.transferAdmin(_pad(a2));
+        n.transferAdmin(_pad(a2), nu);
         vm.startBroadcast(k2);
         n.acceptAdmin();
-        n.transferAdmin(_pad(a1));
+        n.transferAdmin(_pad(a1), nu);
         vm.stopBroadcast();
         vm.startBroadcast(k1);
         n.acceptAdmin();

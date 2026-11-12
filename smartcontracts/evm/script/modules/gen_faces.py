@@ -136,7 +136,8 @@ REG3S_EVENTS = ['    event AllowedSet(bytes32 indexed account, bytes32 indexed b
 REG3S_ERRORS = [f'    error {e};' for e in ['NotAllowed(bytes32 account)', 'Denied(bytes32 account)', 'ListBatchInvalid(uint256 length)',
                                           'ListAccountZero()', 'ComplianceRegistryNotSet()', 'ListHolderMissing(uint8 bit)']]
 
-# Fable recheck-2 P3-1 (owner 2026-11-12): `renounceAdmin(chainUid_)`'s refusal (`IGovernance`, raised by the governance module)
+# Fable recheck-2 P3-1 (owner 2026-11-12), CTR-GOV-27: the refusal of `renounceAdmin(chainUid_)` and `transferAdmin(newAdmin,
+# chainUid_)` (`IAdmin`, raised by the governance module)
 GOV_P31_ERRORS = ['    error ChainUidMismatch(bytes32 expected, bytes32 got);']
 
 

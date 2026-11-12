@@ -357,7 +357,7 @@ contract GovDelayTest is Test {
     function test_afterTransferTheNewOwnerProposesAgain() public {
         _grant(MANAGER);
         vm.prank(OWNER);
-        t.transferAdmin(nid(NEXT));
+        t.transferAdmin(nid(NEXT), EnvKit.codeUidOf(address(t)));
         vm.prank(NEXT);
         t.acceptAdmin();
         assertFalse(_live(MANAGER));
@@ -378,11 +378,11 @@ contract GovDelayTest is Test {
     function test_aToBToAKillsThePending() public {
         _grant(MANAGER);
         vm.prank(OWNER);
-        t.transferAdmin(nid(NEXT));
+        t.transferAdmin(nid(NEXT), EnvKit.codeUidOf(address(t)));
         vm.prank(NEXT);
         t.acceptAdmin();
         vm.prank(NEXT);
-        t.transferAdmin(nid(OWNER));
+        t.transferAdmin(nid(OWNER), EnvKit.codeUidOf(address(t)));
         vm.prank(OWNER);
         t.acceptAdmin();
         assertEq(t.admin(), nid(OWNER));
@@ -397,14 +397,14 @@ contract GovDelayTest is Test {
         _grant(MANAGER);
         _grant(OFFICER);
         vm.startPrank(OWNER);
-        t.transferAdmin(nid(NEXT));
-        t.transferAdmin(bytes32(0));
+        t.transferAdmin(nid(NEXT), EnvKit.codeUidOf(address(t)));
+        t.transferAdmin(bytes32(0), EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         vm.warp(block.timestamp + D);
         _grant(MANAGER);
         assertTrue(t.hasRole(MINT, nid(MANAGER)));
         vm.prank(OWNER);
-        t.transferAdmin(nid(NEXT)); // pending, never accepted
+        t.transferAdmin(nid(NEXT), EnvKit.codeUidOf(address(t))); // pending, never accepted
         _grant(OFFICER);
         assertTrue(t.hasRole(MINT, nid(OFFICER)));
     }

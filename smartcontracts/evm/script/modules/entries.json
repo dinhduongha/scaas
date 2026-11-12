@@ -1869,18 +1869,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -4431,18 +4433,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -7465,18 +7469,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -10955,18 +10961,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -14301,18 +14309,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -18157,18 +18167,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21141,18 +21153,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -24244,18 +24258,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27819,18 +27835,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31850,18 +31868,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35737,18 +35757,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40134,18 +40156,20 @@
     "group": "K"
    },
    {
-    "sel": "e923bc3d",
-    "sig": "transferAdmin(bytes32)",
+    "sel": "c0e34c56",
+    "sig": "transferAdmin(bytes32,bytes32)",
     "name": "transferAdmin",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "bytes32 newAdmin"
+     "bytes32 newAdmin",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "newAdmin"
+     "newAdmin",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [

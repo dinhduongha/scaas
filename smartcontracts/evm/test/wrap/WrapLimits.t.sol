@@ -469,7 +469,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         (uint64 eta,) = _pending(w);
         address next = address(0x0B);
         vm.prank(OWNER);
-        w.transferAdmin(_pad(next));
+        w.transferAdmin(_pad(next), EnvKit.codeUidOf(address(w)));
         vm.prank(next);
         w.acceptAdmin();
         vm.warp(eta);

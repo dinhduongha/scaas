@@ -11,7 +11,6 @@ import {IGovernance} from "../governance/IGovernance.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {RescueLib} from "../governance/RescueLib.sol";
 import {UAAdmin} from "../governance/UAAdmin.sol";
-import {IAdmin} from "../governance/IAdmin.sol";
 
 /// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25, CTR-TOK-29): the one token factory of a chain (plan 5g-Z2), at the same
 ///        address on every chain.
@@ -131,9 +130,10 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         _;
     }
 
-    /// @dev The deprecations and kind switches (Fable D P3-2), the deploys and `renounceAdmin` (Fable recheck-2 P3-1):
-    ///      `configured` and the caller's `chainUid_` this factory's, so a native admin's direct call is void on a sibling
-    ///      with the same chain id (the approvals bind it the same way).
+    /// @dev The deprecations and kind switches (Fable D P3-2), the deploys and `renounceAdmin` (Fable recheck-2 P3-1),
+    ///      `transferAdmin`, `setChainEntries`, the env publishes and `revokeApproval` (CTR-GOV-27): `configured` and the
+    ///      caller's `chainUid_` this factory's, so a native admin's direct call is void on a sibling with the same chain
+    ///      id (the approvals bind it the same way).
     modifier onChain(bytes32 chainUid_) {
         _requireOnChain(chainUid_);
         _;
@@ -187,29 +187,28 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     // ------------------------------------------------------------------ the directory (spec §13)
 
     /// @notice Admin only, after `configureChain`: the write-once entries (spec §13.3; `IOpenFactory.setChainEntries`).
-    function setChainEntries(address relayFeeRouter_, bytes32 relayFeeRouterCodeHash, bytes32 relayFeeExecutorCodeHash,
-        address complianceRegistry_, bytes32 complianceRegistryCodeHash, address smartKeyAccountFactory_,
-        bytes32 smartKeyAccountFactoryCodeHash, address zetherStatements_, bytes32 zetherStatementsCodeHash)
-        external onlyAdmin configured
-    {
+    function setChainEntries(ChainEntries calldata entries, bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {
+        address relayFeeRouter_ = entries.relayFeeRouter;
         if (relayFeeRouter_ != address(0)) {
-            _entry(relayFeeRouter, relayFeeRouter_, relayFeeRouterCodeHash, IOpenFactory.relayFeeRouter.selector);
+            _entry(relayFeeRouter, relayFeeRouter_, entries.relayFeeRouterCodeHash, IOpenFactory.relayFeeRouter.selector);
             bytes4 v = IOpenFactory.relayFeeExecutor.selector;
             address x = _addr(relayFeeRouter_, _EXECUTOR, v);
-            _requireCode(x, relayFeeExecutorCodeHash);
+            _requireCode(x, entries.relayFeeExecutorCodeHash);
             if (_addr(x, _ROUTER, v) != relayFeeRouter_) revert EntryMismatch(v);
-            emit ChainEntrySet(v, x, relayFeeExecutorCodeHash); // the executor's checked hash too (Fable 3r3s3t P3-10)
+            emit ChainEntrySet(v, x, entries.relayFeeExecutorCodeHash); // the executor's checked hash too (Fable 3r3s3t P3-10)
             relayFeeRouter = relayFeeRouter_;
         }
+        address complianceRegistry_ = entries.complianceRegistry;
         if (complianceRegistry_ != address(0)) {
             bytes4 v = IOpenFactory.complianceRegistry.selector;
-            _entry(complianceRegistry, complianceRegistry_, complianceRegistryCodeHash, v);
+            _entry(complianceRegistry, complianceRegistry_, entries.complianceRegistryCodeHash, v);
             if (_addr(complianceRegistry_, _GOV_ROUTER, v) != govRouter) revert EntryMismatch(v);
             complianceRegistry = complianceRegistry_;
         }
+        address smartKeyAccountFactory_ = entries.smartKeyAccountFactory;
         if (smartKeyAccountFactory_ != address(0)) {
             bytes4 v = IOpenFactory.smartKeyAccountFactory.selector;
-            _entry(smartKeyAccountFactory, smartKeyAccountFactory_, smartKeyAccountFactoryCodeHash, v);
+            _entry(smartKeyAccountFactory, smartKeyAccountFactory_, entries.smartKeyAccountFactoryCodeHash, v);
             _requireChainUid(smartKeyAccountFactory_, chainUid);
             if (govRouter != address(0)) {
                 bytes32 want = _routerCloneHash();
@@ -218,8 +217,10 @@ contract OpenFactory is IOpenFactory, UAAdmin {
             }
             smartKeyAccountFactory = smartKeyAccountFactory_;
         }
+        address zetherStatements_ = entries.zetherStatements;
         if (zetherStatements_ != address(0)) {
-            _entry(zetherStatements, zetherStatements_, zetherStatementsCodeHash, IOpenFactory.zetherStatements.selector);
+            _entry(zetherStatements, zetherStatements_, entries.zetherStatementsCodeHash,
+                IOpenFactory.zetherStatements.selector);
             zetherStatements = zetherStatements_;
         }
     }
@@ -276,10 +277,10 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     // ------------------------------------------------------------------ the admin (spec §5.2)
 
-    /// @notice Two steps, as `UAAdmin`, after `configureChain` (Fable P2-4: a slip or a sibling's replayed direct call cannot
-    ///         end an unconfigured factory, whose address is the same on every chain).
-    function transferAdmin(bytes32 newAdmin) public override(IAdmin, UAAdmin) configured {
-        super.transferAdmin(newAdmin);
+    /// @dev `UAAdmin.transferAdmin`'s word: after `configureChain` (Fable P2-4: a slip or a sibling's replayed direct call
+    ///      cannot end an unconfigured factory, whose address is the same on every chain), this factory's `chainUid`.
+    function _requireChainWord(bytes32 chainUid_) internal view override {
+        _requireOnChain(chainUid_);
     }
 
     function renounceAdmin(bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {
@@ -320,7 +321,7 @@ contract OpenFactory is IOpenFactory, UAAdmin {
             adminGeneration_, until);
     }
 
-    function revokeApproval(bytes32 key) external onlyAdmin configured {
+    function revokeApproval(bytes32 key, bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {
         if (_approvals[key].state != ApprovalState.LIVE) revert ApprovalNotRevocable(key);
         delete _approvals[key];
         emit ReleaseApprovalRevoked(key);
@@ -381,13 +382,15 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     // ------------------------------------------------------------------ environments
 
-    function publishTokenEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env)
-        external onlyAdmin configured
+    function publishTokenEnv(TokenKind kind, uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env)
+        external onlyAdmin onChain(chainUid_)
     {
         emit EnvPublished(uint8(kind), envVersion, _publish(uint8(kind), envVersion, env));
     }
 
-    function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external onlyAdmin configured {
+    function publishDexEnv(uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env)
+        external onlyAdmin onChain(chainUid_)
+    {
         emit EnvPublished(DEX_DOMAIN, envVersion, _publish(DEX_DOMAIN, envVersion, env));
     }
 
@@ -598,8 +601,8 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     // ------------------------------------------------------------------ the generic catalogue (index spec §8, CTR-TOK-28)
 
-    function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, IFactoryToken.Env calldata env)
-        external onlyAdmin configured
+    function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, bytes32 chainUid_,
+        IFactoryToken.Env calldata env) external onlyAdmin onChain(chainUid_)
     {
         uint32 d = _domain(contractClass, kind);
         bytes32 h = _publish(d, envVersion, env);

@@ -246,7 +246,7 @@ contract GovDeployTest is Test {
             bytes memory code = b == 4 ? type(NormalPqzRegulatedToken).creationCode : type(WrappedPqzRegulatedToken).creationCode;
             (address[] memory ms, bytes memory args) = deployKindModules(uint8(k), address(f), regArgs()); // T66b
             vm.startPrank(address(h));
-            f.publishTokenEnv(k, 1, withModules(e, ms));
+            f.publishTokenEnv(k, 1, EnvKit.uidOf(address(f)), withModules(e, ms));
             w = f.deployTokenImplementation(k, 1, 1, code, args, EnvKit.uidOf(address(f)));
             f.setTokenKindEnabled(k, true, EnvKit.uidOf(address(f)));
             vm.stopPrank();
@@ -291,8 +291,9 @@ contract GovDeployTest is Test {
         address router = vm.parseJsonAddress(json, ".governance_router");
         assertEq(r.admin(), nid(address(this)), "COMPLIANCE_ADMIN");
         assertEq(r.govRouter(), router, "the chain's router");
+        assertEq(r.chainUid(), ZUID, "the chain's word (CTR-GOV-27)");
         assertEq(address(r), vm.computeCreate2Address(keccak256("scaas.deploy.v1"), keccak256(abi.encodePacked(
-            type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router))), address(h)), "CREATE2");
+            type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router, ZUID))), address(h)), "CREATE2");
 
         address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0))), "venue");
         address puller = SCaaSDex(dex).puller();
@@ -366,9 +367,10 @@ contract GovDeployTest is Test {
         // T83: 44,635 -> 45,522 B (the pay records' views and `_payRecord`, the v3 `PayMeta` tuple); T66b (the body
         // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name;
         // group 3l: 17,808 -> 19,366 B (the five wrap-limit stubs); merge3k (+ ua-mtx-liquidity's `mtxLiquidityPull` stub):
-        // 19,366 -> 19,532 B; Fable review fixes 2026-11-11 (B P3-1, B P2-1 in the ERC-20 core): 19,532 -> 19,626 B
-        h.limitCode(19_625);
-        vm.expectRevert(bytes("WrappedToken runtime 19626 B > chain code limit 19625 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // 19,366 -> 19,532 B; Fable review fixes 2026-11-11 (B P3-1, B P2-1 in the ERC-20 core): 19,532 -> 19,626 B;
+        // fix2 CTR-GOV-27's Change (`transferAdmin(bytes32,bytes32)`'s stub in the dispatcher): 19,626 -> 19,652 B
+        h.limitCode(19_651);
+        vm.expectRevert(bytes("WrappedToken runtime 19652 B > chain code limit 19651 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 
@@ -434,7 +436,7 @@ contract GovDeployTest is Test {
             _release(type(WrappedRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_REGULATED, router),
             _release(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, router),
             _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router),
-            abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router)), // a plain deploy
+            abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router, ZUID)), // a plain deploy
             _release(type(NormalZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, router), // T30
             _release(type(WrappedZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, router),
             _release(type(NormalPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, router) // T31
@@ -615,8 +617,11 @@ contract GovDeployTest is Test {
         // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a; fix2
         // recheck-2 P3-1 (CTR-GOV-27: `mtxRenounceAdmin` and `UARenounceAdmin` carry `chainUid`; the metadata hash:
         // `IGovernance`, `IOpenFactory`): 0x60B276496DA55AA0dAD11DcbDaf6Eb00e1E2e51B; fix2 CTR-MTX-86 (the payee-fee names; the
-        // metadata hash: `MtxPipelineLib`, `UAMetaTxBase`, `UAKinds`): -> this
-        assertEq(router, 0xAC730941186ffda9664cbAf9C386628a256F6Bd4, "GovernanceRouter");
+        // metadata hash: `MtxPipelineLib`, `UAMetaTxBase`, `UAKinds`): 0xAC730941186ffda9664cbAf9C386628a256F6Bd4; fix2
+        // CTR-GOV-27's Change (`mtxTransferAdmin`, the three `mtxPublish*Env`, `mtxRevokeApproval` carry `chainUid`,
+        // `mtxSetChainEntries` the nested `ChainEntries`; the metadata hash: `IAdmin`, `IOpenFactory`, `IComplianceRegistry`):
+        // -> this
+        assertEq(router, 0x2f014B077cFcaa4a0A6C7239147DeD7FAe23877F, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

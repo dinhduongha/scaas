@@ -336,7 +336,7 @@ contract GovRescueTest is Test {
     function test_rescueOnNormalTakesAll() public {
         NormalToken n = _normal(TO);
         vm.prank(OWNER);
-        n.transferAdmin(nid(BOB));
+        n.transferAdmin(nid(BOB), EnvKit.codeUidOf(address(n)));
         vm.prank(BOB);
         n.acceptAdmin();
         assertEq(n.rescueTo(), TO);

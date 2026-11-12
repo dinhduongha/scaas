@@ -223,7 +223,7 @@ contract Gov is OnchainBase {
     /// T11 adds the router steps), one KYC provider `a2` (its native id).
     function _compliance() internal {
         vm.broadcast(k1);
-        cr = new ComplianceRegistry(_pad(iss), address(gr));
+        cr = new ComplianceRegistry(_pad(iss), address(gr), bookUid); // this chain's word (CTR-GOV-27)
         _book(address(cr), "ComplianceRegistry");
         require(address(cr).codehash == _dep("compliance_registry").codehash, "compliance code");
         _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a2), true)));
@@ -262,7 +262,7 @@ contract Gov is OnchainBase {
     /// two-step transfer, its signed `mtxAcceptAdmin`); then its admin ops are that UA's router ops, sent by key 2 at fee 0: a
     /// KYC provider (key 3's native id) enabled and an admin row written.
     function _complianceRouter() internal {
-        _skaExec(iss, pkI, address(cr), abi.encodeCall(IAdmin.transferAdmin, (uaD)));
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(IAdmin.transferAdmin, (uaD, cr.chainUid())));
         Sg memory d = Sg(uaD, kD, 2);
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(d, _ty("UAAcceptAdmin", ""), address(cr), "");
         vm.broadcast(k2);
@@ -332,9 +332,10 @@ contract Gov is OnchainBase {
         vm.broadcast(k2);
         gr.mtxCancelGrant(e, t0d, GovernanceBits.MINTABLE, _pad(a3), s);
         // ownership: transfer, accept by the new owner, renounce
-        (e, s) = _auth(o, _ty("UATransferAdmin", "bytes32 newAdmin"), t0r, abi.encode(uaD));
+        bytes32 tu = IMetaTx(t0r).chainUid(); // the token's chain word (CTR-GOV-27)
+        (e, s) = _auth(o, _ty("UATransferAdmin", "bytes32 newAdmin,bytes32 chainUid"), t0r, abi.encode(uaD, tu));
         vm.broadcast(k2);
-        gr.mtxTransferAdmin(e, t0r, uaD, s);
+        gr.mtxTransferAdmin(e, t0r, uaD, tu, s);
         Sg memory du = Sg(uaD, kD, 2); // the registered UA signs through the registry
         (e, s) = _auth(du, _ty("UAAcceptAdmin", ""), t0r, "");
         vm.broadcast(k2);

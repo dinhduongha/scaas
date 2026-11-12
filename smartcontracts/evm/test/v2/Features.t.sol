@@ -204,7 +204,7 @@ contract FeaturesTest is Test {
         vm.prank(minter);
         t.mint(alice, 3);
         vm.prank(ownerA);
-        t.transferAdmin(nid(address(0x0B)));
+        t.transferAdmin(nid(address(0x0B)), EnvKit.codeUidOf(address(t)));
         vm.prank(address(0x0B));
         t.acceptAdmin();
         assertEq(t.admin(), nid(address(0x0B)));
@@ -251,7 +251,7 @@ contract FeaturesTest is Test {
         vm.startPrank(ownerA);
         t.grantRole(1, nid(minter));
         t.disableFeature(1);
-        t.transferAdmin(nid(minter));
+        t.transferAdmin(nid(minter), EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(vm.load(address(t), lane), laneBefore);
         assertEq(vm.load(address(t), bal), balBefore);

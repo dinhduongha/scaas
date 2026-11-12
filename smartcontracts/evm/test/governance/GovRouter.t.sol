@@ -202,7 +202,7 @@ abstract contract GovRouterFixture is UARegistryBase {
         rows[CANCEL_GRANT] = Row("CancelGrant", ",uint8 bit,bytes32 account", router.mtxCancelGrant.selector);
         rows[DISABLE_FEATURE] = Row("DisableFeature", ",uint8 bit", router.mtxDisableFeature.selector);
         rows[TRANSFER_ADMIN] =
-            Row("TransferAdmin", ",bytes32 newAdmin", router.mtxTransferAdmin.selector);
+            Row("TransferAdmin", ",bytes32 newAdmin,bytes32 chainUid", router.mtxTransferAdmin.selector);
         rows[ACCEPT_ADMIN] = Row("AcceptAdmin", "", router.mtxAcceptAdmin.selector);
         rows[RENOUNCE_ADMIN] = Row("RenounceAdmin", ",bytes32 chainUid", router.mtxRenounceAdmin.selector);
         rows[RENOUNCE_ROLE] = Row("RenounceRole", ",uint8 bit", router.mtxRenounceRole.selector);
@@ -415,7 +415,7 @@ contract GovRouterTest is GovRouterFixture {
         assertFalse(t.hasRole(MINT, s), "RenounceRole");
         _do(DISABLE_FEATURE, s, address(t), abi.encode(MINT));
         assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
-        _do(TRANSFER_ADMIN, s, address(t), abi.encode(y));
+        _do(TRANSFER_ADMIN, s, address(t), abi.encode(y, EnvKit.codeUidOf(address(t))));
         assertEq(t.pendingAdmin(), y, "TransferAdmin");
         _do(ACCEPT_ADMIN, y, address(t), "");
         assertEq(t.admin(), y, "AcceptAdmin");
@@ -515,18 +515,18 @@ contract GovRouterTest is GovRouterFixture {
         NormalToken t = _normal(_pad(creator), 0, 0);
         SCaaSDex d = _dex(msig);
         vm.prank(creator);
-        t.transferAdmin(msig);
+        t.transferAdmin(msig, EnvKit.codeUidOf(address(t)));
         _do(ACCEPT_ADMIN, msig, address(t), "");
         assertEq(t.admin(), msig, "the msig became owner through the router");
         _do(GRANT_ROLE, msig, address(t), abi.encode(MINT, pq));
         _do(OP_MINT, pq, address(t), abi.encode(BOB, uint256(9)));
         assertEq(t.balanceOf(BOB), 9);
-        _do(TRANSFER_ADMIN, msig, address(t), abi.encode(pq));
+        _do(TRANSFER_ADMIN, msig, address(t), abi.encode(pq, EnvKit.codeUidOf(address(t))));
         _do(ACCEPT_ADMIN, pq, address(t), "");
         assertEq(t.admin(), pq);
 
         _do(SET_MARKET, msig, address(d), abi.encode(address(usd), address(t), true));
-        _do(TRANSFER_ADMIN, msig, address(d), abi.encode(pq));
+        _do(TRANSFER_ADMIN, msig, address(d), abi.encode(pq, EnvKit.codeUidOf(address(d))));
         _do(ACCEPT_ADMIN, pq, address(d), "");
         assertEq(d.admin(), pq);
         _do(GRANT_ROLE, pq, address(d), abi.encode(LISTING, pq));
@@ -662,7 +662,7 @@ contract GovRouterTest is GovRouterFixture {
         NormalToken t = _normal(eoa, 0, 0);
         bytes memory late = _signed(router, GRANT_ROLE, eoa, 1, address(t), abi.encode(MINT, stranger),
             abi.encode(MINT, stranger));
-        _do(TRANSFER_ADMIN, eoa, address(t), abi.encode(next));
+        _do(TRANSFER_ADMIN, eoa, address(t), abi.encode(next, EnvKit.codeUidOf(address(t))));
         _do(ACCEPT_ADMIN, next, address(t), "");
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eoa));
         _run(late);
@@ -677,7 +677,7 @@ contract GovRouterTest is GovRouterFixture {
         bytes32 u = EnvKit.codeUidOf(address(t));
         bytes32 sib = keccak256("a sibling with the same chain id");
         bytes memory cd = _op(RENOUNCE_ADMIN, eoa, address(t), abi.encode(sib));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.ChainUidMismatch.selector, u, sib));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, u, sib));
         _run(cd);
         assertEq(t.admin(), eoa, "the admin kept");
         assertEq(router.mtxNonce(eoa, 0), 0, "the nonce stays unspent");
@@ -687,6 +687,33 @@ contract GovRouterTest is GovRouterFixture {
         assertTrue(!ok && ret.length == 0, "the old entry answers");
         _do(RENOUNCE_ADMIN, eoa, address(t), abi.encode(u));
         assertEq(t.admin(), bytes32(0), "the control");
+    }
+
+    /// CTR-GOV-27: `mtxTransferAdmin` signs the target's chain word and forwards it, on a token and on the DEX. Signed for a
+    /// sibling (another word) the target refuses it by name, nothing written, nonce unspent; the old entry without the word
+    /// has no entry (empty revert); the control: the same signer with the target's word names the successor.
+    function test_transferAdmin_siblingWordRefused() public {
+        NormalToken t = _normal(eoa, 0, 0);
+        SCaaSDex d = _dex(eoa);
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        address[2] memory ts = [address(t), address(d)];
+        for (uint256 i; i < 2; ++i) {
+            bytes32 u = EnvKit.codeUidOf(ts[i]);
+            assertTrue(u != bytes32(0), "a clone's word");
+            bytes memory cd = _op(TRANSFER_ADMIN, eoa, ts[i], abi.encode(next, sib));
+            vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, u, sib));
+            _run(cd);
+            assertEq(IAdmin(ts[i]).pendingAdmin(), bytes32(0), "nothing written");
+            assertEq(router.mtxNonce(eoa, 0), 0, "the nonce stays unspent");
+        }
+        bytes4 oldSel = bytes4(keccak256("mtxTransferAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),"
+            "address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+        (bool ok, bytes memory ret) = address(router).call(abi.encodePacked(oldSel, new bytes(32 * 13)));
+        assertTrue(!ok && ret.length == 0, "the old entry answers");
+        for (uint256 i; i < 2; ++i) {
+            _do(TRANSFER_ADMIN, eoa, ts[i], abi.encode(next, EnvKit.codeUidOf(ts[i])));
+            assertEq(IAdmin(ts[i]).pendingAdmin(), next, "the control");
+        }
     }
 
     /// A target without code: refused by name, nonce unspent (a call to it would succeed and do nothing).

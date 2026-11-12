@@ -101,7 +101,7 @@ contract GovDexForwardHolder {
         try dex.grantRole(GovernanceBits.LISTING, other) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
         try dex.revokeRole(GovernanceBits.LISTING, bytes32(uint256(uint160(address(this))))) { errs.push(0); }
         catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.transferAdmin(other) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.transferAdmin(other, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
         try dex.renounceAdmin(EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
     }
 }

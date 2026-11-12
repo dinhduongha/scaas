@@ -45,7 +45,7 @@ contract FactoryGenericKindTest is Test {
 
     function _publish(uint16 c, uint16 k, uint16 v) internal {
         vm.prank(registrar);
-        f.publishClassEnv(c, k, v, _env());
+        f.publishClassEnv(c, k, v, EnvKit.uidOf(address(f)), _env());
     }
 
     function _release(uint16 c, uint16 k, uint64 v, bytes memory code, bytes4 sel, bytes4 iface, bytes memory implArgs)
@@ -159,7 +159,7 @@ contract FactoryGenericKindTest is Test {
         for (uint16 c; c <= 2; ++c) {
             vm.startPrank(registrar);
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassReserved.selector, c));
-            f.publishClassEnv(c, 0, 1, _env());
+            f.publishClassEnv(c, 0, 1, EnvKit.uidOf(address(f)), _env());
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassReserved.selector, c));
             f.deployImplementation(_id(c, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
                 type(NoteKind).creationCode, "", EnvKit.uidOf(address(f)));
@@ -237,7 +237,7 @@ contract FactoryGenericKindTest is Test {
         (e.libs, e.libCodeHashes) = (new address[](1), new bytes32[](1));
         (e.libs[0], e.libCodeHashes[0]) = (mod, mod.codehash);
         vm.prank(registrar);
-        f.publishClassEnv(4, 0, 2, e);
+        f.publishClassEnv(4, 0, 2, EnvKit.uidOf(address(f)), e);
         vm.prank(registrar);
         address r = f.deployImplementation(_id(4, 0, 1), 2, sel, iface, code, abi.encode(uint8(18)), EnvKit.uidOf(address(f)));
         assertEq(BadKind(r).modules()[0], mod, "the pinned module");
@@ -277,7 +277,7 @@ contract FactoryGenericKindTest is Test {
         vm.expectRevert(bytes("init reverts"));
         f.createInstance(_id(4, 0, 14), "14", _noteCall(0, ""));
         // another chain_uid after init (chain-neutral spec §3.2)
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("another chain")));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, keccak256("another chain")));
         f.createInstance(_id(4, 0, 15), "15", _noteCall(0, ""));
         // another version after init (T68: the post-init version comparison)
         address p17 = f.predictAddress(nid(address(this)), 4, 0, "17");
@@ -317,7 +317,7 @@ contract FactoryGenericKindTest is Test {
 
     function test_generic_adminOnly() public {
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        f.publishClassEnv(4, 0, 1, _env());
+        f.publishClassEnv(4, 0, 1, EnvKit.uidOf(address(f)), _env());
         vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
         f.deployImplementation(_id(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, "", "", EnvKit.uidOf(address(f)));
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
@@ -327,7 +327,7 @@ contract FactoryGenericKindTest is Test {
         vm.etch(registrar, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, registrar));
-        f.publishClassEnv(4, 0, 1, _env());
+        f.publishClassEnv(4, 0, 1, EnvKit.uidOf(address(f)), _env());
         vm.etch(registrar, "");
         _publish(4, 0, 1); // positive control
     }

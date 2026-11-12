@@ -43,9 +43,7 @@ interface IFactoryDirectory {
 
     function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, bytes32 govRouterCodeHash,
         uint256 refBlock, bytes32 refHash) external;
-    function setChainEntries(address relayFeeRouter_, bytes32 relayFeeRouterCodeHash, bytes32 relayFeeExecutorCodeHash,
-        address complianceRegistry_, bytes32 complianceRegistryCodeHash, address smartKeyAccountFactory_,
-        bytes32 smartKeyAccountFactoryCodeHash, address zetherStatements_, bytes32 zetherStatementsCodeHash) external;
+    function setChainEntries(IOpenFactory.ChainEntries calldata entries, bytes32 chainUid_) external;
     function directory() external view returns (Directory memory);
     function uaRegistry() external view returns (address);
     function govRouter() external view returns (address);
@@ -114,7 +112,7 @@ contract FactoryDirectoryTest is Test {
         router = new GovernanceRouter(UID, address(ureg), impl, false);
         trouter = new TestRouter(UID, address(ureg));
         relay = new RelayFeeRouter();
-        creg = new ComplianceRegistry(nid(deployer), address(router));
+        creg = new ComplianceRegistry(nid(deployer), address(router), UID);
         zs = new ZetherStatements();
     }
 
@@ -154,8 +152,13 @@ contract FactoryDirectoryTest is Test {
     }
 
     function _cd(E memory e) internal pure returns (bytes memory) {
-        return abi.encodeCall(IFactoryDirectory.setChainEntries,
-            (e.relay, e.relayHash, e.execHash, e.creg, e.cregHash, e.skaf, e.skafHash, e.zs, e.zsHash));
+        return _cd(e, UID);
+    }
+
+    /// The entries `e` as the named struct (CTR-GOV-27), with the chain word `uid`.
+    function _cd(E memory e, bytes32 uid) internal pure returns (bytes memory) {
+        return abi.encodeCall(IFactoryDirectory.setChainEntries, (IOpenFactory.ChainEntries(e.relay, e.relayHash, e.execHash,
+            e.creg, e.cregHash, e.skaf, e.skafHash, e.zs, e.zsHash), uid));
     }
 
     /// The view selector of entry `i` (0 relay, 1 compliance registry, 2 account factory, 3 Zether statements).
@@ -313,6 +316,20 @@ contract FactoryDirectoryTest is Test {
         _call(deployer, address(f), _cd(_all())); // positive control
     }
 
+    /// CTR-GOV-27: the admin's call made for a sibling factory (the same address, another chain word) is refused by name
+    /// before any write, after `NotAdmin` for a stranger; the same entries with the factory's own word are the control.
+    function test_setChainEntries_siblingWordRefused() public {
+        OpenFactory f = _factory(address(router));
+        vm.recordLogs();
+        _refused(deployer, address(f), _cd(_all(), UID_B),
+            abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID, UID_B));
+        _refused(STRANGER, address(f), _cd(_all(), UID_B), abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(STRANGER)));
+        assertEq(vm.getRecordedLogs().length, 0, "nothing written");
+        for (uint256 i; i < 4; ++i) assertEq(_entryAt(f, i), address(0));
+        _call(deployer, address(f), _cd(_all())); // positive control
+        assertEq(_d(f).zetherStatements(), address(zs));
+    }
+
     /// 0 leaves an entry open and writes nothing; a later call fills it.
     function test_setChainEntries_zeroLeavesOpenLaterFills() public {
         OpenFactory f = _factory(address(router));
@@ -400,8 +417,8 @@ contract FactoryDirectoryTest is Test {
     /// refused; on a router-less factory a registry without a router is the one taken.
     function test_complianceRegistry_otherRouterRefused() public {
         OpenFactory f = _factory(address(router));
-        ComplianceRegistry other = new ComplianceRegistry(nid(deployer), address(trouter));
-        ComplianceRegistry none = new ComplianceRegistry(nid(deployer), address(0));
+        ComplianceRegistry other = new ComplianceRegistry(nid(deployer), address(trouter), UID);
+        ComplianceRegistry none = new ComplianceRegistry(nid(deployer), address(0), UID);
         bytes memory err = _mismatch(IFactoryDirectory.complianceRegistry.selector);
         _refused(deployer, address(f), _cd(_with(_only(1), 1, address(other), _h(address(other)))), err);
         _refused(deployer, address(f), _cd(_with(_only(1), 1, address(none), _h(address(none)))), err);
@@ -416,7 +433,7 @@ contract FactoryDirectoryTest is Test {
         OpenFactory f = _factory(address(router));
         SmartKeyAccountFactory b = new SmartKeyAccountFactory(UID_B);
         _refused(deployer, address(f), _cd(_with(_only(2), 2, address(b), _h(address(b)))),
-            abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID, UID_B));
+            abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID, UID_B));
         _call(deployer, address(f), _cd(_only(2))); // positive control
     }
 
@@ -475,9 +492,9 @@ contract FactoryDirectoryTest is Test {
 
     /// `p` 0 `publishTokenEnv`, 1 `publishDexEnv`, 2 `publishClassEnv`, of env version `v`.
     function _pub(uint256 p, uint16 v, IFactoryToken.Env memory e) internal pure returns (bytes memory) {
-        if (p == 0) return abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, v, e));
-        if (p == 1) return abi.encodeCall(OpenFactory.publishDexEnv, (v, e));
-        return abi.encodeCall(OpenFactory.publishClassEnv, (CLS, 0, v, e));
+        if (p == 0) return abi.encodeCall(OpenFactory.publishTokenEnv, (IOpenFactory.TokenKind.NORMAL, v, UID, e));
+        if (p == 1) return abi.encodeCall(OpenFactory.publishDexEnv, (v, UID, e));
+        return abi.encodeCall(OpenFactory.publishClassEnv, (CLS, 0, v, UID, e));
     }
 
     /// D4, D10 (publish entry `p`): another registry `EnvRegistryMismatch`, another implementation

@@ -261,8 +261,8 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _tradeOrderDigestBody(o);
     }
 
-    function transferAdmin(bytes32 newAdmin) external governed {
-        _transferAdminBody(newAdmin);
+    function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external governed {
+        _transferAdminBody(newAdmin, chainUid_);
     }
 
     function underlyings() external view returns (address[] memory us) {

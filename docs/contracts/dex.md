@@ -492,7 +492,7 @@ their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Apto
 
 <a id="admin"></a>
 <a id="CTR-DEX-03"></a>**CTR-DEX-03** — The DEX is on `GovernanceBase` ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)): one `owner`, a UA id (`bytes32`), set at
-creation ([CTR-DEX-24](#CTR-DEX-24)), with a two-step `transferAdmin` / `acceptAdmin` and a `renounceAdmin(chainUid_)`
+creation ([CTR-DEX-24](#CTR-DEX-24)), with a two-step `transferAdmin(newAdmin, chainUid_)` / `acceptAdmin` and a `renounceAdmin(chainUid_)`
 (the DEX's own chain word after the admin check, `ChainUidMismatch`: chain-bound as a token's, [token-wrappers.md](token-wrappers.md#factory),
 owner 2026-11-12, Fable recheck-2 P3-1); in
 production a Safe, a multisig, or a derived UA (a PQ key, an `msig`) acting through the chain's `GovernanceRouter`

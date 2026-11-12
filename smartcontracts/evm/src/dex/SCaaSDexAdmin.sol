@@ -106,7 +106,9 @@ contract SCaaSDexGovernanceModule is SCaaSDexGovernance {
     function revokeRole(uint8 bit, bytes32 account) external onlyDelegated { _revokeRoleBody(bit, account); }
     function renounceRole(uint8 bit) external onlyDelegated { _renounceRoleBody(bit); }
     function disableFeature(uint8 bit) external onlyDelegated { _disableFeatureBody(bit); }
-    function transferAdmin(bytes32 newAdmin) external onlyDelegated { _transferAdminBody(newAdmin); }
+    function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external onlyDelegated {
+        _transferAdminBody(newAdmin, chainUid_);
+    }
     function acceptAdmin() external onlyDelegated { _acceptAdminBody(); }
     function renounceAdmin(bytes32 chainUid_) external onlyDelegated { _renounceAdminBody(chainUid_); }
 }

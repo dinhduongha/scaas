@@ -410,3 +410,9 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `UAReceiverFee` typehash, the purpose `receiver-fee`), the selector-audit rows `mtxPayReceiverFee` of every kind
   (`test/vectors/selector_audit.json`); the old typed row in `smartcontracts/vectors/typed/legacy/ua-mtx-fix2-contracts/`,
   clientkeys', zether-prover's and the node's old names in their `legacy/ua-mtx-fix2-contracts/`. Not built.
+  The rest of the admin entries without the chain word (CTR-GOV-27, owner 2026-11-12 "đồng ý."), as they stood at
+  `aeb1da09`: `src/governance/AdminEntriesV2.sol` (`transferAdmin(bytes32)` of every `IAdmin` contract, `OpenFactory`'s
+  three env publishes, `revokeApproval(bytes32)` and nine-parameter `setChainEntries`, the router's ops and typehashes of
+  the same; `ComplianceRegistry` then took no chain word), their selector-audit rows (`test/vectors/selector_audit.json`);
+  the old typed rows in `smartcontracts/vectors/typed/legacy/ua-mtx-fix2-contracts/typed_ops-a2.json`, clientkeys' and
+  ua-rs's old table rows in `clients/{clientkeys,ua-rs}/legacy/ua-mtx-fix2-contracts/`. Not built.

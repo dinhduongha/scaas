@@ -28,6 +28,7 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 
 /// accounts.md CTR-UA-18 (the ledger, `UA_POOL`, events), CTR-UA-19 (structs, domain, `initialize` check), CTR-UA-24
 /// (the native path), CTR-UA-26 (pipelines, receivers, allowlist, one nonce map, `uaCancelNonce`); T-V3-1 (the shared
@@ -552,10 +553,10 @@ contract UALedgerTest is UALedgerBase {
     function test_initialize_registryChainUid() public {
         bytes32 other = keccak256("other genesis");
         OpenFactory g = EnvKit.factory(address(this), other, 0);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, other, chainUidA));
-        g.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(g), address(0), other, REG_L, false));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, other, chainUidA));
+        g.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(g)), plainEnv(address(g), address(0), other, REG_L, false));
         OpenFactory h = EnvKit.factory(address(this), chainUidA, 0); // positive control: this chain's factory
-        h.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(h), address(0), chainUidA, REG_L, false));
+        h.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(h)), plainEnv(address(h), address(0), chainUidA, REG_L, false));
     }
 
     function test_uaDigest_domainAndTypehash() public view {

@@ -991,7 +991,7 @@ contract WrappedPqzRegulatedToken is WrappedPqzRegulatedTokenCore, IWrappedPqzRe
         _forwardView(_MT);
     }
 
-    function transferAdmin(bytes32) external {
+    function transferAdmin(bytes32, bytes32) external {
         _forward(_MA);
     }
 

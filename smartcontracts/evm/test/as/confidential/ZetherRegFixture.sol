@@ -100,7 +100,7 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         issuer = address(new Holder());
         compliance = address(new Holder());
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(nid(cadmin), address(0));
+        creg = new ComplianceRegistry(nid(cadmin), address(0), bytes32(uint256(0x5EC0)));
         vm.prank(cadmin);
         creg.setKycProvider(nid(attester), true);
         usd = new MockERC20("USD", "USD", 6);

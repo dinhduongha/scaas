@@ -1,5 +1,5 @@
 {
- "_comment": "T66b \u00a74.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures. Liquidity spec 2026-11-10 (re-check P3): module T of every kind also makes one STATICCALL to its caller (T7, `liquidityOrderDigest`, capped, one word read), which M5 allows; the DEX liquidity module SCaaSDexLiquidityModule makes no DELEGATECALL. Owner 2026-11-10 (CTR-TOK-30's Change, group 3p): the W of 8, 10, 12 renamed R and the Q2 of 5, 13 renamed S, their figures unchanged; 9, 11, 13 split W into W and R: W [26, 0] -> [21, 0] on 9, [26, 0] -> [21, 0] on 11, [26, 0] -> [21, 0] on 13, R [8, 0] on each (measured by runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol). Round 3s (spec 2026-11-10-token-lists.md, CTR-GOV-24): R gains enableFeature, setAllowed, setDenied, listFlagsOf: R [7, 0] -> [8, 0] on 8, 10, 12, [8, 0] -> [9, 0] on 9, 11, 13 (measured on the built modules). Fable recheck-2 P3-1 (owner 2026-11-12, CTR-GOV-27): `renounceAdmin(chainUid_)` checks the admin, then the chain word, before its `GovernanceLib.renounceAdmin` call; the compiled module has one more DELEGATECALL site, to a closure library (the second figure stays 0), in every A and in SCaaSDexGovernanceModule: A [9, 0] -> [10, 0] on 0 and 8, [5, 0] -> [6, 0] on 1, [12, 0] -> [13, 0] on 2 and 10, [6, 0] -> [7, 0] on 3, 5 and 9, [10, 0] -> [11, 0] on 4 and 12, [7, 0] -> [8, 0] on 11 and 13; the DEX governance module [6, 0] -> [7, 0] (measured by runs/2026-11-12-fix2-contracts/probe/ProbeP31.t.sol).",
+ "_comment": "T66b \u00a74.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures. Liquidity spec 2026-11-10 (re-check P3): module T of every kind also makes one STATICCALL to its caller (T7, `liquidityOrderDigest`, capped, one word read), which M5 allows; the DEX liquidity module SCaaSDexLiquidityModule makes no DELEGATECALL. Owner 2026-11-10 (CTR-TOK-30's Change, group 3p): the W of 8, 10, 12 renamed R and the Q2 of 5, 13 renamed S, their figures unchanged; 9, 11, 13 split W into W and R: W [26, 0] -> [21, 0] on 9, [26, 0] -> [21, 0] on 11, [26, 0] -> [21, 0] on 13, R [8, 0] on each (measured by runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol). Round 3s (spec 2026-11-10-token-lists.md, CTR-GOV-24): R gains enableFeature, setAllowed, setDenied, listFlagsOf: R [7, 0] -> [8, 0] on 8, 10, 12, [8, 0] -> [9, 0] on 9, 11, 13 (measured on the built modules). Fable recheck-2 P3-1 (owner 2026-11-12, CTR-GOV-27): `renounceAdmin(chainUid_)` checks the admin, then the chain word, before its `GovernanceLib.renounceAdmin` call; the compiled module has one more DELEGATECALL site, to a closure library (the second figure stays 0), in every A and in SCaaSDexGovernanceModule: A [9, 0] -> [10, 0] on 0 and 8, [5, 0] -> [6, 0] on 1, [12, 0] -> [13, 0] on 2 and 10, [6, 0] -> [7, 0] on 3, 5 and 9, [10, 0] -> [11, 0] on 4 and 12, [7, 0] -> [8, 0] on 11 and 13; the DEX governance module [6, 0] -> [7, 0] (measured by runs/2026-11-12-fix2-contracts/probe/ProbeP31.t.sol). CTR-GOV-27 Change (owner 2026-11-12): `transferAdmin` and `renounceAdmin` share one \"admin, then word\" helper (`GovernanceBaseCore._adminOnChain`), so the compiled module has one DELEGATECALL site fewer than recheck-2 P3-1 left (to a closure library; the second figure stays 0), in every A and in SCaaSDexGovernanceModule: A [10, 0] -> [9, 0] on 0 and 8, [6, 0] -> [5, 0] on 1, [13, 0] -> [12, 0] on 2 and 10, [7, 0] -> [6, 0] on 3, 5 and 9, [11, 0] -> [10, 0] on 4 and 12, [8, 0] -> [7, 0] on 11 and 13; the DEX governance module [7, 0] -> [6, 0] (measured by runs/2026-11-12-fix2-contracts/probe/ProbeP31.t.sol).",
  "NormalTokenP": [
   2,
   0
@@ -9,7 +9,7 @@
   0
  ],
  "NormalTokenA": [
-  10,
+  9,
   0
  ],
  "WrappedTokenP": [
@@ -21,7 +21,7 @@
   0
  ],
  "WrappedTokenA": [
-  6,
+  5,
   0
  ],
  "WrappedTokenW": [
@@ -37,7 +37,7 @@
   0
  ],
  "NormalZetherTokenA": [
-  13,
+  12,
   0
  ],
  "NormalZetherTokenZ": [
@@ -53,7 +53,7 @@
   0
  ],
  "WrappedZetherTokenA": [
-  7,
+  6,
   0
  ],
  "WrappedZetherTokenW": [
@@ -73,7 +73,7 @@
   0
  ],
  "NormalPqzTokenA": [
-  11,
+  10,
   0
  ],
  "NormalPqzTokenQ": [
@@ -89,7 +89,7 @@
   0
  ],
  "WrappedPqzTokenA": [
-  7,
+  6,
   0
  ],
  "WrappedPqzTokenW": [
@@ -113,7 +113,7 @@
   0
  ],
  "NormalRegulatedTokenA": [
-  10,
+  9,
   0
  ],
  "NormalRegulatedTokenR": [
@@ -129,7 +129,7 @@
   0
  ],
  "WrappedRegulatedTokenA": [
-  7,
+  6,
   0
  ],
  "WrappedRegulatedTokenW": [
@@ -149,7 +149,7 @@
   0
  ],
  "NormalZetherRegulatedTokenA": [
-  13,
+  12,
   0
  ],
  "NormalZetherRegulatedTokenR": [
@@ -169,7 +169,7 @@
   0
  ],
  "WrappedZetherRegulatedTokenA": [
-  8,
+  7,
   0
  ],
  "WrappedZetherRegulatedTokenW": [
@@ -193,7 +193,7 @@
   0
  ],
  "NormalPqzRegulatedTokenA": [
-  11,
+  10,
   0
  ],
  "NormalPqzRegulatedTokenR": [
@@ -213,7 +213,7 @@
   0
  ],
  "WrappedPqzRegulatedTokenA": [
-  8,
+  7,
   0
  ],
  "WrappedPqzRegulatedTokenW": [
@@ -233,7 +233,7 @@
   0
  ],
  "SCaaSDexGovernanceModule": [
-  7,
+  6,
   0
  ],
  "SCaaSDexLiquidityModule": [

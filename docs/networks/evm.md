@@ -334,11 +334,11 @@ which seeds the client and the node configuration. forge writes it during the si
 **Deploy order and the factory admin ([CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract), NET-EVM-05). BUILT (T10).**
 `SmartKeyAccountFactory` → the relay pair (`RelayFeeRouter` and its executor) under the constant `RELAY_SALT =
 keccak256("scaas.deploy.v1")`, reused when its code is there (one address on every chain and stack; `DEPLOY_SALT` moves only
-the rest) → the UA registry → the router → `ComplianceRegistry(COMPLIANCE_ADMIN, router)` with `DEPLOY_REGULATED`
+the rest) → the UA registry → the router → `ComplianceRegistry(COMPLIANCE_ADMIN, router, chainUid)` with `DEPLOY_REGULATED`
 (`COMPLIANCE_ADMIN` a UA id, `bytes32`, required) → `ZetherStatements` with `DEPLOY_ZETHER` → `OpenFactory(pad(admin))`, whose
 address depends on none of them → `configureChain` → `setChainEntries` (the relay pair, the registry, the account factory,
 `ZetherStatements`; 0 leaves an entry open), then the gate compares `directory()` with what the run deployed → envs and
-releases (the admin's own deploys: its own approval) → `transferAdmin(FACTORY_ADMIN_NEXT)` when set (optional `bytes32`;
+releases (the admin's own deploys: its own approval) → `transferAdmin(FACTORY_ADMIN_NEXT, chainUid)` when set (optional `bytes32`;
 `FACTORY_ADMIN_NEXT` accepts by its own signed `mtxAcceptAdmin`, a separate step). The book gains `factory_admin` and
 `factory_pending_admin`; the gate reads `admin()` and `pendingAdmin()` against them. The sending run (`DeploySend.s.sol`)
 counts a release deploy whose `CREATE2` address already has code as done and sends nothing for it (the release deploys are

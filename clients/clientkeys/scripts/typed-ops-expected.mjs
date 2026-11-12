@@ -41,9 +41,13 @@ const CONF = {
   m.netUnwrap, m.wrapList, m.unwrapList],
   // the factory's creations (ua-mtx-merge T76): the struct signs `initHash`, the call takes the bytes (`extra`)
   // round 3r: the three publishes take the `Env` tuple; the class approval its words as one static struct (`ReleaseApproval`)
-  PublishTokenEnv: (m) => [m.target, m.kind, m.envVersion, envTuple(m.env)],
-  PublishDexEnv: (m) => [m.target, m.envVersion, envTuple(m.env)],
-  PublishClassEnv: (m) => [m.target, m.contractClass, m.kind, m.envVersion, envTuple(m.env)],
+  // CTR-GOV-27: the factory's chain word after the static fields, before `env`; `setChainEntries` takes one named struct
+  PublishTokenEnv: (m) => [m.target, m.kind, m.envVersion, m.chainUid, envTuple(m.env)],
+  PublishDexEnv: (m) => [m.target, m.envVersion, m.chainUid, envTuple(m.env)],
+  PublishClassEnv: (m) => [m.target, m.contractClass, m.kind, m.envVersion, m.chainUid, envTuple(m.env)],
+  SetChainEntries: (m) => [m.target, ['relayFeeRouter', 'relayFeeRouterCodeHash', 'relayFeeExecutorCodeHash', 'complianceRegistry',
+    'complianceRegistryCodeHash', 'smartKeyAccountFactory', 'smartKeyAccountFactoryCodeHash', 'zetherStatements',
+    'zetherStatementsCodeHash'].map((k) => m.entries[k]), m.chainUid],
   ApproveRelease: (m) => [m.target, ['contractClass', 'kind', 'version', 'envVersion', 'initSelector', 'interfaceId', 'initcodeHash',
     'implArgsHash', 'chainUid', 'factory', 'adminGeneration', 'until'].map((k) => m[k])],
   CreateToken: (m, x) => [m.target, m.kind, m.version, x.initArgs, m.salt],

@@ -41,13 +41,17 @@ interface IRegistryAdmin {
     error LengthMismatch();
     error EligibleContractAdminOnly();
     error AdminWrittenSlot(bytes32 account);
+    /// CTR-GOV-27: the constructor's chain word 0; `transferAdmin`'s word not the registry's.
+    error ChainUidZero();
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
     /// `RegulatedLib.init` (spec §5.3, Fable P1-1).
     error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
 
     function admin() external view returns (bytes32);
     function pendingAdmin() external view returns (bytes32);
     function govRouter() external view returns (address);
-    function transferAdmin(bytes32 newAdmin) external;
+    function chainUid() external view returns (bytes32);
+    function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external;
     function acceptAdmin() external;
     function setKycProvider(bytes32 provider, bool enabled) external;
     function kycProviderId(bytes32 provider) external view returns (uint32);
@@ -89,8 +93,16 @@ contract RegistryTestRouter {
 
 /// Shared by the two suites: the registry by CREATE (a refused constructor returns its revert data) and the calls.
 abstract contract RegistryCalls {
+    /// The registries' chain word (CTR-GOV-27) and a sibling's (the same chain id, another word).
+    bytes32 internal constant REG_UID = bytes32(uint256(0x5EC0));
+    bytes32 internal constant REG_SIB = bytes32(uint256(0x5EC1));
+
     function _create(bytes32 admin_, address router_) internal returns (address a, bytes memory err) {
-        bytes memory code = abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(admin_, router_));
+        return _create(admin_, router_, REG_UID);
+    }
+
+    function _create(bytes32 admin_, address router_, bytes32 uid) internal returns (address a, bytes memory err) {
+        bytes memory code = abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(admin_, router_, uid));
         assembly ("memory-safe") {
             a := create(0, add(code, 32), mload(code))
             if iszero(a) {
@@ -241,7 +253,7 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
     }
 
     function _xfer(bytes32 to) internal pure returns (bytes memory) {
-        return abi.encodeCall(IRegistryAdmin.transferAdmin, (to));
+        return abi.encodeCall(IRegistryAdmin.transferAdmin, (to, REG_UID));
     }
 
     function _accept() internal pure returns (bytes memory) {
@@ -304,10 +316,14 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
     }
 
     function _transferCd(bytes32 by, address target, bytes32 to) internal view returns (bytes memory) {
+        return _transferCd(by, target, to, REG_UID);
+    }
+
+    function _transferCd(bytes32 by, address target, bytes32 to, bytes32 uid) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _env(router, by);
         IUARegistry.UASig memory a =
-            _auth(by, _digest(router, "TransferAdmin", ",bytes32 newAdmin", e, target, abi.encode(to)));
-        return abi.encodeCall(router.mtxTransferAdmin, (e, target, to, a));
+            _auth(by, _digest(router, "TransferAdmin", ",bytes32 newAdmin,bytes32 chainUid", e, target, abi.encode(to, uid)));
+        return abi.encodeCall(router.mtxTransferAdmin, (e, target, to, uid, a));
     }
 
     /// @dev The registry has no chain word (and no renounce): the op signs 0 (Fable recheck-2 P3-1 gave the op the word).
@@ -374,6 +390,33 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         c = _reg(nid(address(trouter)), address(router));
         assertEq(c.admin(), nid(address(trouter)));
         assertEq(c.govRouter(), address(router));
+        assertEq(c.chainUid(), REG_UID, "the constructor's chain word");
+    }
+
+    /// CTR-GOV-27: the chain word 0 is refused (`ChainUidZero`) after its control (any other word is taken).
+    function test_constructor_chainUidZero() public {
+        (address a, bytes memory err) = _create(nid(admin), address(0), bytes32(0));
+        assertEq(a, address(0));
+        assertEq(err, abi.encodeWithSelector(IRegistryAdmin.ChainUidZero.selector));
+        (a, err) = _create(nid(admin), address(0), REG_SIB); // the control
+        assertEq(IRegistryAdmin(a).chainUid(), REG_SIB);
+    }
+
+    /// CTR-GOV-27: `transferAdmin` made for a sibling registry (another chain word) is refused by name, directly and through
+    /// the router, nothing written; a stranger meets `NotAdmin` first (the admin before the word); the same call with the
+    /// registry's own word is the control.
+    function test_transferAdmin_siblingWordRefused() public {
+        IRegistryAdmin c = _reg(nid(admin), address(router));
+        bytes memory mm = abi.encodeWithSelector(IRegistryAdmin.ChainUidMismatch.selector, REG_UID, REG_SIB);
+        _refused(admin, address(c), abi.encodeCall(IRegistryAdmin.transferAdmin, (nid(next), REG_SIB)), mm);
+        _refused(STRANGER, address(c), abi.encodeCall(IRegistryAdmin.transferAdmin, (nid(next), REG_SIB)),
+            _notAdmin(nid(STRANGER)));
+        _call(admin, address(c), _xfer(ml));
+        _call(RELAYER, address(router), _acceptCd(router, ml, address(c)));
+        _refused(RELAYER, address(router), _transferCd(ml, address(c), nid(next), REG_SIB), mm);
+        assertEq(c.pendingAdmin(), bytes32(0), "nothing written");
+        _call(RELAYER, address(router), _transferCd(ml, address(c), nid(next))); // the control
+        assertEq(c.pendingAdmin(), nid(next));
     }
 
     /// F-11's positive control: every registry has one runtime (the admin and the router in storage), the code hash of

@@ -23,7 +23,8 @@ contract AdminNamesTest is Test {
     // the new five (§4.2) and the errors they raise
     bytes4 internal constant ADMIN = 0xf851a440; // admin()
     bytes4 internal constant PENDING_ADMIN = 0x26782247; // pendingAdmin()
-    bytes4 internal constant TRANSFER_ADMIN = 0xe923bc3d; // transferAdmin(bytes32)
+    bytes4 internal constant TRANSFER_ADMIN = 0xc0e34c56; // transferAdmin(bytes32,bytes32) (CTR-GOV-27; was 0xe923bc3d)
+    bytes4 internal constant TRANSFER_ADMIN_OLD = 0xe923bc3d; // transferAdmin(bytes32): no entry since CTR-GOV-27
     bytes4 internal constant ACCEPT_ADMIN = 0x0e18b681; // acceptAdmin()
     bytes4 internal constant RENOUNCE_ADMIN = 0x4fa3ed14; // renounceAdmin(bytes32) (Fable recheck-2 P3-1; was 0x8bad0c0a, renounceAdmin())
     bytes4 internal constant RENOUNCE_ADMIN_OLD = 0x8bad0c0a; // renounceAdmin(): no entry since recheck-2 P3-1
@@ -41,7 +42,8 @@ contract AdminNamesTest is Test {
     function test_selectorValues() public pure {
         assertEq(ADMIN, bytes4(keccak256("admin()")));
         assertEq(PENDING_ADMIN, bytes4(keccak256("pendingAdmin()")));
-        assertEq(TRANSFER_ADMIN, bytes4(keccak256("transferAdmin(bytes32)")));
+        assertEq(TRANSFER_ADMIN, bytes4(keccak256("transferAdmin(bytes32,bytes32)")));
+        assertEq(TRANSFER_ADMIN_OLD, bytes4(keccak256("transferAdmin(bytes32)")));
         assertEq(ACCEPT_ADMIN, bytes4(keccak256("acceptAdmin()")));
         assertEq(RENOUNCE_ADMIN, bytes4(keccak256("renounceAdmin(bytes32)")));
         assertEq(RENOUNCE_ADMIN_OLD, bytes4(keccak256("renounceAdmin()")));
@@ -95,10 +97,12 @@ contract AdminNamesTest is Test {
         vm.store(t, bytes32(uint256(NS) + 2), nid(A1));
         assertEq(_word(t, ADMIN), nid(A1), string.concat(name, ": admin()"));
         assertEq(_word(t, PENDING_ADMIN), 0, string.concat(name, ": pendingAdmin()"));
-        _refused(name, t, abi.encodeWithSelector(TRANSFER_ADMIN, nid(A2)), NOT_ADMIN);
+        _refused(name, t, abi.encodeWithSelector(TRANSFER_ADMIN, nid(A2), UID), NOT_ADMIN);
+        _refused(name, t, abi.encodeWithSelector(TRANSFER_ADMIN, nid(A2), SIB), NOT_ADMIN); // the admin before the word
+        _transferSibling(name, t);
         _refused(name, t, abi.encodePacked(ACCEPT_ADMIN), NOT_PENDING_ADMIN);
         _refused(name, t, abi.encodeWithSelector(RENOUNCE_ADMIN, UID), NOT_ADMIN);
-        (bool ok1,) = _call(t, A1, abi.encodeWithSelector(TRANSFER_ADMIN, nid(A2)));
+        (bool ok1,) = _call(t, A1, abi.encodeWithSelector(TRANSFER_ADMIN, nid(A2), UID));
         assertTrue(ok1, string.concat(name, ": transferAdmin"));
         assertEq(_word(t, PENDING_ADMIN), nid(A2), string.concat(name, ": pending after transferAdmin"));
         assertEq(_word(t, ADMIN), nid(A1), string.concat(name, ": two steps"));
@@ -118,6 +122,17 @@ contract AdminNamesTest is Test {
         (bool ok3,) = _call(t, A2, abi.encodeWithSelector(RENOUNCE_ADMIN, UID));
         assertTrue(ok3, string.concat(name, ": renounceAdmin"));
         assertEq(_word(t, ADMIN), 0, string.concat(name, ": admin after renounceAdmin"));
+    }
+
+    /// CTR-GOV-27: the admin's transfer made for a sibling (another chain word) is refused by name, nothing written; the old
+    /// selector has no entry; the same call with the clone's own word is the control (`_check`, after this).
+    function _transferSibling(string memory name, address t) internal {
+        (bool okT, bytes memory retT) = _call(t, A1, abi.encodeWithSelector(TRANSFER_ADMIN, nid(A2), SIB));
+        assertFalse(okT, string.concat(name, ": a sibling's word transferred"));
+        assertEq(retT, abi.encodeWithSelector(CHAIN_UID_MISMATCH, UID, SIB), string.concat(name, ": transfer ChainUidMismatch"));
+        (bool okTO, bytes memory retTO) = _call(t, A1, abi.encodeWithSelector(TRANSFER_ADMIN_OLD, nid(A2)));
+        assertTrue(!okTO && retTO.length == 0, string.concat(name, ": transferAdmin(bytes32) has no entry"));
+        assertEq(_word(t, PENDING_ADMIN), 0, string.concat(name, ": no pending after the refusals"));
     }
 
     // ------------------------------------------------------------------ the 12 kinds and the DEX

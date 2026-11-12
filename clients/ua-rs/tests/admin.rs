@@ -3,7 +3,7 @@
 //! `typed/typed_ops.json` (clientkeys; forge runs them on a real router): type string, struct hash, digest, a non-zero unbound
 //! `relayer` / `feeRecipient` hashed as 0; the three approval rows' `approvalKey` (checked on the factory by forge).
 use scaas_ua::admin::{
-    class_release_key, dex_release_key, digest, struct_hash, token_release_key, type_string, Env, Param, ADMIN_OPS,
+    CHAIN_ENTRIES_TYPE, class_release_key, dex_release_key, digest, struct_hash, token_release_key, type_string, Env, Param, ADMIN_OPS,
 };
 use scaas_ua::regulated::{router_domain_separator, Envelope, RouterOpError};
 use serde_json::Value;
@@ -85,6 +85,7 @@ enum Own {
     T(String),
     A(Vec<[u8; 32]>),
     E(Env),
+    C([[u8; 32]; 9]),
 }
 fn own(op: &str, m: &Value) -> Vec<Own> {
     let (_, list) = ADMIN_OPS.iter().find(|(n, _)| *n == op).unwrap();
@@ -95,6 +96,10 @@ fn own(op: &str, m: &Value) -> Vec<Own> {
             Some(el) => Own::A(v.as_array().unwrap().iter().map(|x| static_word(el, x)).collect()),
             None if ty == "string" => Own::T(v.as_str().unwrap().to_string()),
             None if ty == "Env" => Own::E(env(v)),
+            None if ty == "ChainEntries" => {
+                let f = ua_rs_ce_fields();
+                Own::C(std::array::from_fn(|i| static_word(f[i].0, &v[f[i].1])))
+            }
             None => Own::W(static_word(ty, v)),
         }
     }).collect()
@@ -105,7 +110,14 @@ fn params(o: &[Own]) -> Vec<Param<'_>> {
         Own::T(s) => Param::Text(s),
         Own::A(a) => Param::Words(a),
         Own::E(e) => Param::Env(e),
+        Own::C(c) => Param::ChainEntries(c),
     }).collect()
+}
+
+/// `ChainEntries`' fields `(type, name)` from the library's type string (CTR-GOV-27).
+fn ua_rs_ce_fields() -> Vec<(&'static str, &'static str)> {
+    let t = CHAIN_ENTRIES_TYPE;
+    t[13..t.len() - 1].split(',').map(|f| f.split_once(' ').unwrap()).collect()
 }
 
 /// Every one of the 18 rows: type string, struct hash and digest; a non-zero relayer and fee recipient left unbound give the
@@ -185,4 +197,22 @@ fn typed_ops_approval_keys() {
         num(&f(op, "kind")) as u16, num(&f(op, "version")) as u64, num(&f(op, "envVersion")) as u16,
         w4(f(op, "initSelector")), w4(f(op, "interfaceId")), &b32(&f(op, "initcodeHash")), &b32(&f(op, "implArgsHash")));
     assert_eq!(k, b32(&v["ops"][op]["approvalKey"]), "{op}");
+}
+
+/// CTR-GOV-27: `UASetChainEntries` nests `ChainEntries`; an address field with a high byte set is refused (`Range`), the same
+/// nine words with it cleared hash; a plain word in the struct's place is refused (`Params`).
+#[test]
+fn chain_entries_nested() {
+    let e = Envelope { from: [1; 32], batch: [0; 32], nonce: [0; 32], valid_until: [0; 32], mode: 0, relayer: [0; 20],
+        fee: [0; 32], fee_recipient: [0; 20] };
+    let mut w = [[0u8; 32]; 9];
+    w[0][31] = 1;
+    let uid = [7u8; 32];
+    assert!(struct_hash("UASetChainEntries", &e, &[2; 20], &[Param::ChainEntries(&w), Param::Word(uid)]).is_ok());
+    w[3][0] = 1; // complianceRegistry: an address
+    assert!(matches!(struct_hash("UASetChainEntries", &e, &[2; 20], &[Param::ChainEntries(&w), Param::Word(uid)]),
+        Err(RouterOpError::Range)));
+    assert!(matches!(struct_hash("UASetChainEntries", &e, &[2; 20], &[Param::Word(uid), Param::Word(uid)]),
+        Err(RouterOpError::Params)));
+    assert!(type_string("UASetChainEntries").unwrap().ends_with(CHAIN_ENTRIES_TYPE));
 }

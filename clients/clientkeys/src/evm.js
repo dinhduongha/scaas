@@ -246,6 +246,8 @@ const STRUCTS = Object.fromEntries(Object.entries({
   // array the keccak256 of its 32-byte words); `ReleaseApproval` the class approval entry's one static struct (calldata only:
   // the struct `UAApproveRelease` signs its words flat)
   Env: 'address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes',
+  // CTR-GOV-27: `setChainEntries`'s named struct, nested in the router's `UASetChainEntries`
+  ChainEntries: 'address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash',
   ReleaseApproval: 'uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,'
     + 'bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until',
   // group 3f (PQZ verifier mode spec §5.1, §5.3): what a PQZ verifier UA signs in the token's domain (purpose `pqz-verdict`), and
@@ -404,7 +406,7 @@ const OPS = {
   UASetGrant: { fields: 'address target,uint8 bit,bytes32 holder,GrantTerms terms', on: ROUTER },
   UACancelGrant: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER },
   UADisableFeature: { fields: 'address target,uint8 bit', on: ROUTER },
-  UATransferAdmin: { fields: 'address target,bytes32 newAdmin', on: ROUTER },
+  UATransferAdmin: { fields: 'address target,bytes32 newAdmin,bytes32 chainUid', on: ROUTER },
   UAAcceptAdmin: { fields: 'address target', on: ROUTER },
   UARenounceAdmin: { fields: 'address target,bytes32 chainUid', on: ROUTER },
   UARenounceRole: { fields: 'address target,uint8 bit', on: ROUTER },
@@ -464,9 +466,10 @@ const OPS = {
   // envs, the release approvals of §5.6, the revoke, the deprecations, the kind switches, the directory of §13.3) and of a
   // `ComplianceRegistry` (its KYC providers; the rows by the admin or a provider); `target` the factory or the registry, the
   // ids flat; the class approval's entry takes its words as one static struct (`ReleaseApproval`, the same calldata).
-  UAPublishTokenEnv: { fields: 'address target,uint8 kind,uint16 envVersion,Env env', on: ROUTER },
-  UAPublishDexEnv: { fields: 'address target,uint16 envVersion,Env env', on: ROUTER },
-  UAPublishClassEnv: { fields: 'address target,uint16 contractClass,uint16 kind,uint16 envVersion,Env env', on: ROUTER },
+  UAPublishTokenEnv: { fields: 'address target,uint8 kind,uint16 envVersion,bytes32 chainUid,Env env', on: ROUTER },
+  UAPublishDexEnv: { fields: 'address target,uint16 envVersion,bytes32 chainUid,Env env', on: ROUTER },
+  UAPublishClassEnv: { fields: 'address target,uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env',
+    on: ROUTER },
   UAApproveTokenRelease: { fields: 'address target,uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,'
     + 'bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until', on: ROUTER },
   UAApproveDexRelease: { fields: 'address target,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,'
@@ -474,7 +477,7 @@ const OPS = {
   UAApproveRelease: { fields: 'address target,uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,'
     + 'bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until',
     on: ROUTER, args: (m) => [['address', m.target], ['ReleaseApproval', m]] },
-  UARevokeApproval: { fields: 'address target,bytes32 key', on: ROUTER },
+  UARevokeApproval: { fields: 'address target,bytes32 key,bytes32 chainUid', on: ROUTER },
   UADeprecateToken: { fields: 'address target,uint8 kind,uint64 version,bytes32 chainUid,string reason', on: ROUTER },
   UADeprecateDex: { fields: 'address target,uint64 version,bytes32 chainUid,string reason', on: ROUTER },
   UADeprecateRelease: { fields: 'address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason',
@@ -483,9 +486,8 @@ const OPS = {
   UASetClassKindEnabled: { fields: 'address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid', on: ROUTER },
   UASetKycProvider: { fields: 'address target,bytes32 provider,bool enabled', on: ROUTER },
   UASetCompliance: { fields: 'address target,bytes32[] accounts,uint64[] flags,uint64[] until', on: ROUTER },
-  UASetChainEntries: { fields: 'address target,address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,'
-    + 'address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,'
-    + 'address zetherStatements,bytes32 zetherStatementsCodeHash', on: ROUTER },
+  // CTR-GOV-27: the entries one named struct (`ChainEntries`, nested EIP-712), then the factory's chain word
+  UASetChainEntries: { fields: 'address target,ChainEntries entries,bytes32 chainUid', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'

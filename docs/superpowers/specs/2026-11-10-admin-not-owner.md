@@ -337,9 +337,11 @@ their selectors equal `IGovernance`'s. In `GovernanceRouter`, next to the creati
   `chainUid_` (fix2 2026-11-12, owner: Fable recheck-2 P3-1 option (a)): the router's `UARenounceAdmin(bytes32 from,address
   target,bytes32 chainUid,E)` (`0x3284850e…`, was `0x4be88ff9…` of §4.3) signs the target's word and forwards it; the
   selectors `renounceAdmin(bytes32)` `0x4fa3ed14` (was `renounceAdmin()` `0x8bad0c0a` of §4.2), `mtxRenounceAdmin`
-  `0xfcdfdb9a` (was `0xfeedac3d`). Not changed, stopped for the owner: `transferAdmin(bytes32)` (shared `IAdmin`;
-  `ComplianceRegistry` has no chain word) and `setChainEntries` / `UASetChainEntries` (a 13th router parameter is too deep
-  for the ABI decoder) ([token-wrappers.md](../../contracts/token-wrappers.md#factory)).
+  `0xfcdfdb9a` (was `0xfeedac3d`). Then (owner 2026-11-12, "đồng ý.", CTR-GOV-27's Change): `transferAdmin(bytes32,bytes32)`
+  `0xc0e34c56` (was `transferAdmin(bytes32)` `0xe923bc3d` of §4.2) on every `IAdmin` contract, `ComplianceRegistry` with a
+  constructor chain word in storage; `setChainEntries(ChainEntries, bytes32)` and `UASetChainEntries(…,ChainEntries
+  entries,bytes32 chainUid,…)` with the nested struct; the three env publishes and `revokeApproval` with the word
+  ([token-wrappers.md](../../contracts/token-wrappers.md#factory)).
 - No release deploy is a router op (§5.6); the approvals sign the release's hashes as `UACreateToken` signs `initHash` (S3). A
   `string reason` is signed as `keccak256(bytes(reason))`, as EIP-712 hashes a string (Fable P1-3). The ids flat, as
   `UACreateInstance` (`:234-241`). `UASetCompliance` names its third array `until` because `validUntil` is an envelope word (the

@@ -639,7 +639,7 @@ empty output — with no symptom until someone has deposited funds.
   every token is a 45-byte EIP-1167 clone (`363d3d373d3d3d363d73<impl>5af43d82803e903d91602b57fd5bf3`) that
   `DELEGATECALL`s it with its own storage. A clone costs ~45 000 gas instead of ~2.5 M.
 - **Versions live in the factory, which deploys them** (owner 2026-10-20, plan 5g-Z2): the registrar publishes
-  versioned environments (`publishTokenEnv(kind, envVersion, Env)`, never changed) and releases code with
+  versioned environments (`publishTokenEnv(kind, envVersion, chainUid_, Env)`, never changed) and releases code with
   `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)` (registrar only, append-only, version 0
   forbidden; the factory's own `CREATE2` with the named env appended, [CTR-TOK-03](#CTR-TOK-03)); a release is usable
   `noticePeriod` seconds after its deployment; `deprecateToken` is immediate and refuses new tokens of that version (owner 2026-10-20; tokens already
@@ -707,7 +707,7 @@ implementation itself, so what a release depends on is fixed in its code by cons
   `libCodeHashes`. Each instance carries its own configuration in `initArgs` (rates, features, roles, the confidential
   settings…), decoded by the implementation's generic `initialize(creator, version, initArgs)`; the factory never reads it
   (owner 2026-10-20).
-- **Envs** are published per kind (and one domain for the DEX) by `publishTokenEnv(kind, envVersion, Env)` /
+- **Envs** are published per kind (and one domain for the DEX) by `publishTokenEnv(kind, envVersion, chainUid_, Env)` /
   `publishDexEnv(envVersion, Env)`: versions from 1, append-only, never changed (`EnvAlreadyPublished`), no factory, `chainUid`
   or router in it (the factory adds its own), and no library code hash `0` or `keccak256("")`, a pin that checks nothing
   (`EnvInvalid`); `EnvPublished(domain, envVersion, envHash)` with
@@ -880,10 +880,22 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   the admin (`NotAdmin`), then the word, before anything is written; its router op `mtxRenounceAdmin` signs the target's
   word (`UARenounceAdmin(bytes32 from,address target,bytes32 chainUid,…)`) and forwards it. The same errors as above.
   Tests `test_siblingReplay_deploysAndRenounce` (`test/v2/Factory.t.sol`), `test_renounceAdmin_siblingWordRefused`
-  (`GovRouter.t.sol`). Status **BUILT** (branch `ua-mtx-fix2-contracts`). **Not changed (stopped, owner's call):**
-  `transferAdmin` (the shared `IAdmin` entry; `ComplianceRegistry` implements it and has no chain word) and
-  `setChainEntries` (its router op `mtxSetChainEntries` cannot take a 13th parameter: stack too deep in the ABI decoder);
-  both keep their sibling replay through a native admin's direct transaction: on siblings use the router.
+  (`GovRouter.t.sol`). Status **BUILT** (branch `ua-mtx-fix2-contracts`).
+  **Chain-bound transfer, directory, publishes and revoke** ([CTR-GOV-27](../decisions.md#CTR-GOV-27)'s Change, owner
+  2026-11-12). `transferAdmin(newAdmin, chainUid_)` on every `IAdmin` contract (the factory, every token kind, the DEX, a
+  `ComplianceRegistry`: [asset-suite.md](asset-suite.md#CTR-AS-07)), `setChainEntries(ChainEntries entries, chainUid_)` (the
+  nine words one named struct), `publishTokenEnv(kind, envVersion, chainUid_, env)`, `publishDexEnv(envVersion, chainUid_,
+  env)`, `publishClassEnv(class, kind, envVersion, chainUid_, env)` and `revokeApproval(key, chainUid_)`: the admin
+  (`NotAdmin`), then the word (`ChainNotConfigured`, `ChainUidMismatch`), before anything is written. Their router ops sign
+  the word after the op's static fields, before `env` (`UATransferAdmin(…,bytes32 newAdmin,bytes32 chainUid,…)`,
+  `UARevokeApproval(…,bytes32 key,bytes32 chainUid,…)`, `UAPublishTokenEnv(…,uint16 envVersion,bytes32 chainUid,Env env,…)`),
+  and `UASetChainEntries(bytes32 from,address target,ChainEntries entries,bytes32 chainUid,…)` nests the EIP-712 struct
+  `ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,…,bytes32 zetherStatementsCodeHash)`. Tests
+  `test_siblingReplay_adminEntries` (`test/v2/Factory.t.sol`), `test_setChainEntries_siblingWordRefused`
+  (`FactoryDirectory.t.sol`), `test_transferAdmin_siblingWordRefused` (`GovRouter.t.sol`, `RegistryAdmin.t.sol`), the 12 kinds
+  and the DEX in `AdminNames.t.sol`, the router's binding matrix (`GovRouterAdmin.t.sol`). Status **BUILT** (branch
+  `ua-mtx-fix2-contracts`). No direct admin entry of the factory is left without the word but `configureChain`, which
+  writes it.
 - **Release deploys: approve, then an open deploy** (owner, final, spec §5.6). The admin approves one release by hash
   (`approveTokenRelease`, `approveDexRelease`, `approveRelease`; the factory's own `chainUid`, address and `adminGeneration`
   bound, `until` at most 30 days ahead: `ApprovalFieldMismatch`, `ApprovalTooLong`, `ApprovalLive`), revokes an unused one
@@ -893,7 +905,8 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   consumed once (`ReleaseNotApproved(key)`, checked before the version); the native admin's own deploy is its own approval
   (and consumes a live one of the same key). A deploy's result does not depend on the sender's gas (`_supports` requires its
   probe's stipend: `ProbeGasLow`). No node row (release management is not a node job, owner 2026-11-10). BUILT (T5, T7).
-- **The chain's directory** (owner, option (a), spec §13): `setChainEntries(relayFeeRouter, …, zetherStatements, …)` writes
+- **The chain's directory** (owner, option (a), spec §13): `setChainEntries(ChainEntries(relayFeeRouter, …, zetherStatements,
+  …), chainUid_)` writes
   each non-zero entry once (`EntryAlreadySet`), each against its code hash and its bindings (the relay router's
   `EXECUTOR()`, the registry's `govRouter()`, the account factory's `chainUid()` and implementation); `directory()` and one
   view per entry (`uaRegistry()` is the router's `registry()`); every env publish takes only the router's registry and
@@ -960,7 +973,7 @@ The block is the **built** function set, grouped by the built contracts; the rol
 function mtxSelectors() external view returns (bytes4[] memory, uint8[] memory, uint8[] memory);   // per kind, CTR-MTX-19
 // MetaTokenBase: kind(), creator(), version(), supportsInterface(bytes4), IS_HEDERA; IGovernance (GovernanceBase, CTR-GOV-01): features(), lockedFeatures(), validBits(),
 //   admin(), pendingAdmin() (both bytes32 UA ids), hasRole(uint8,bytes32), holderCount, grantOf, grantDelay(), pendingGrant, lastProposedAt(), bitLabel,
-//   grantRole, setGrant, cancelGrant, revokeRole, renounceRole, disableFeature, transferAdmin(bytes32), acceptAdmin, renounceAdmin(bytes32);
+//   grantRole, setGrant, cancelGrant, revokeRole, renounceRole, disableFeature, transferAdmin(bytes32,bytes32), acceptAdmin, renounceAdmin(bytes32);
 //   IRescuable: rescue(address asset) (anyone, with RESCUABLE), rescueTo()
 // NormalToken
 function mint(address to, uint256 amount) external;  function burn(uint256 amount) external;

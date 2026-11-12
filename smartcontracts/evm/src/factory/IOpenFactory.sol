@@ -117,7 +117,7 @@ interface IOpenFactory is IAdmin {
     error VersionKindMismatch(TokenKind expected, uint256 got);
     error ImplementationNotAContract(address implementation);
     error ImplementationFactoryMismatch(address implementation);
-    error ChainUidMismatch(bytes32 expected, bytes32 got);
+    // `ChainUidMismatch(expected, got)` is `IAdmin`'s (CTR-GOV-27: one error on every admin contract).
     /// @notice The factory's index takes at most 8 legs (`underlyings()` after `initialize`).
     error UnderlyingCountInvalid(uint256 n);
     error SaltAlreadyUsed(address existing);
@@ -212,8 +212,9 @@ interface IOpenFactory is IAdmin {
     function approveRelease(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
         bytes32 initcodeHash, bytes32 implArgsHash, bytes32 chainUid, address factory, uint32 adminGeneration, uint64 until)
         external;
-    /// @notice Admin only, after `configureChain`: deletes a stored approval not consumed, live or not.
-    function revokeApproval(bytes32 key) external;
+    /// @notice Admin only, after `configureChain`: deletes a stored approval not consumed, live or not. `chainUid_` this
+    ///         factory's (`ChainUidMismatch`, CTR-GOV-27), checked after the admin, before any write.
+    function revokeApproval(bytes32 key, bytes32 chainUid_) external;
     function approvalOf(bytes32 key) external view returns (Approval memory);
 
     /// @notice Admin only, direct only (before it the factory has no router), once (chain-neutral spec §3.1): this chain's `chain_uid` (≠ 0; its genesis hash whenever the
@@ -248,6 +249,20 @@ interface IOpenFactory is IAdmin {
         address zetherStatements;
     }
 
+    /// @notice `setChainEntries`'s named fields (CTR-GOV-27): each address with the code hash it must have; an address 0
+    ///         leaves its entry open. The router signs it as the EIP-712 struct `ChainEntries`.
+    struct ChainEntries {
+        address relayFeeRouter;
+        bytes32 relayFeeRouterCodeHash;
+        bytes32 relayFeeExecutorCodeHash;
+        address complianceRegistry;
+        bytes32 complianceRegistryCodeHash;
+        address smartKeyAccountFactory;
+        bytes32 smartKeyAccountFactoryCodeHash;
+        address zetherStatements;
+        bytes32 zetherStatementsCodeHash;
+    }
+
     /// @notice A write-once entry written (`view_` the selector of its view), with the code hash the admin gave.
     event ChainEntrySet(bytes4 indexed view_, address at_, bytes32 codeHash);
 
@@ -274,10 +289,9 @@ interface IOpenFactory is IAdmin {
     ///         `ROUTER()` with the relay router; the compliance registry's `govRouter()` is the factory's; the account
     ///         factory's `chainUid()` is the factory's and, with a router, its `IMPLEMENTATION()`'s clone code hash the
     ///         router's. Every view call fails closed. `ChainEntrySet` per entry written, the relay executor's too (`view_` =
-    ///         `relayFeeExecutor.selector`, Fable 3r3s3t P3-10).
-    function setChainEntries(address relayFeeRouter_, bytes32 relayFeeRouterCodeHash, bytes32 relayFeeExecutorCodeHash,
-        address complianceRegistry_, bytes32 complianceRegistryCodeHash, address smartKeyAccountFactory_,
-        bytes32 smartKeyAccountFactoryCodeHash, address zetherStatements_, bytes32 zetherStatementsCodeHash) external;
+    ///         `relayFeeExecutor.selector`, Fable 3r3s3t P3-10). `chainUid_` this factory's (`ChainUidMismatch`, CTR-GOV-27),
+    ///         checked after the admin, before any write.
+    function setChainEntries(ChainEntries calldata entries, bytes32 chainUid_) external;
     /// @notice Every entry by its view (spec §13.6).
     function directory() external view returns (Directory memory);
     /// @notice The router's `registry()`, stored nowhere; 0 without a router.
@@ -297,8 +311,10 @@ interface IOpenFactory is IAdmin {
     ///         `registry ≠ 0` must name this factory's `chainUid` (`ChainUidMismatch`); with a router, a `registry ≠ 0`
     ///         must be `uaRegistry()` (`EnvRegistryMismatch`) and a `smartKeyAccountImpl ≠ 0` an implementation of the
     ///         router's `smartKeyCloneHash()` (`EnvSmartKeyAccountMismatch`, spec §13.4). At most `MAX_LIBS` (32) libraries.
-    function publishTokenEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
-    function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external;
+    ///         `chainUid_` this factory's (`ChainUidMismatch`, CTR-GOV-27), checked after the admin, before any write; the
+    ///         same word on `publishDexEnv` and `publishClassEnv`.
+    function publishTokenEnv(TokenKind kind, uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env) external;
+    function publishDexEnv(uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env) external;
     function tokenEnvOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
     function dexEnvOf(uint16 envVersion) external view returns (IFactoryToken.Env memory);
     function latestTokenEnvVersion(TokenKind kind) external view returns (uint16);
@@ -456,7 +472,8 @@ interface IOpenFactory is IAdmin {
 
     /// @notice Admin only: env `envVersion` of a generic `(contractClass, kind)` (`ClassReserved` for 0-2), as
     ///         `publishTokenEnv`.
-    function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
+    function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, bytes32 chainUid_,
+        IFactoryToken.Env calldata env) external;
     /// @notice As `deployTokenImplementation` (approved by `approveRelease`, which also binds `initSelector` and
     ///         `interfaceId`): the release `id` from chain-neutral init code, `initcode ‖ abi.encode(id, factory, implArgs)`
     ///         `CREATE2`d (salt `keccak256(abi.encode("release", id))`) on env `envVersion`; checked: code, `factoryInfo()`,

@@ -110,7 +110,7 @@ abstract contract DeployBase is DeployBook {
     ///         CTR-AS-07, regulated-kinds spec §6.1, F-21); the registry's constructor refuses 0 (`AdminZero`).
     bytes32 internal complianceAdmin;
     /// @notice `FACTORY_ADMIN_NEXT` env (optional `bytes32`, round 3r spec §6): the run's last transaction is the factory's
-    ///         `transferAdmin(next)`; `next` accepts by its own signed `mtxAcceptAdmin`, a separate step. JSON `factory_admin`,
+    ///         `transferAdmin(next, chainUid)`; `next` accepts by its own signed `mtxAcceptAdmin`, a separate step. JSON `factory_admin`,
     ///         `factory_pending_admin`.
     bytes32 internal factoryAdminNext;
     /// @notice The chain's `SmartKeyAccountFactory` (`Deploy.s.sol` sets it first), the directory's entry; 0 leaves it open.
@@ -396,15 +396,14 @@ abstract contract DeployBase is DeployBook {
             dexModules[0] = _module("SCaaSDexAdmin.sol:SCaaSDexGovernanceModule", abi.encode(address(f), bytes("")), 0);
             dexModules[1] = _module("SCaaSDexLiquidityModule.sol:SCaaSDexLiquidityModule", abi.encode(address(f), bytes("")), 0);
             bytes memory dexArgs = abi.encode(ImplArgs(dexModules));
-            f.publishDexEnv(1, _withModules(_env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs),
-                dexModules));
+            _publishDexEnv(f, smartKeyAccountImpl, isHedera, dexLibs, dexModules);
             vm.serializeAddress("deploy", "dex_implementation", _dexRelease(f, dexArgs));
         }
         if (deployWrapped && register && !configureOnly) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployRegulated && register && !configureOnly) _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployPqChat && register && !configureOnly) _deployPqChat(f, address(reg));
         if (deployZether && !configureOnly) _deployZether(f, register, smartKeyAccountImpl, address(reg));
-        if (register && !configureOnly && factoryAdminNext != bytes32(0)) f.transferAdmin(factoryAdminNext);
+        if (register && !configureOnly && factoryAdminNext != bytes32(0)) f.transferAdmin(factoryAdminNext, f.chainUid());
         if (register) {
             require(f.admin() == MetaTxLib.pad(registrar) && f.pendingAdmin() == (configureOnly ? bytes32(0) : factoryAdminNext),
                 "factory admin gate (admin, pendingAdmin)");
@@ -412,6 +411,15 @@ abstract contract DeployBase is DeployBook {
         vm.serializeBytes32("deploy", "factory_admin", f.admin());
         vm.serializeBytes32("deploy", "factory_pending_admin", f.pendingAdmin());
         vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
+    /// @notice DEX env 1: the libraries and the modules, under the factory's chain word (CTR-GOV-27; its own frame: the
+    ///         caller's stack is full).
+    function _publishDexEnv(OpenFactory f, address smartKeyAccountImpl, bool isHedera, address[] memory dexLibs,
+        address[] memory dexModules) internal
+    {
+        f.publishDexEnv(1, uid, _withModules(_env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs),
+            dexModules));
     }
 
     /// @notice The shared contracts before the factory (spec §13.10): the relay pair under `RELAY_SALT` (reused when there),
@@ -432,11 +440,12 @@ abstract contract DeployBase is DeployBook {
     ///         its init code (`_builtHash`; the executor: the router's CREATE at nonce 1).
     function _writeDirectory(OpenFactory f, UARegistry reg) internal {
         require(relayFeeExecutor == vm.computeCreateAddress(relayFeeRouter, 1), "relay executor: not this build's");
-        f.setChainEntries(relayFeeRouter, _builtHash(relayFeeRouter, type(RelayFeeRouter).creationCode, RELAY_SALT),
-            relayFeeExecutor.codehash, complianceRegistry,
-            complianceRegistry == address(0) ? bytes32(0) : _complianceRegistryCodehash(), accountFactory,
+        f.setChainEntries(IOpenFactory.ChainEntries(relayFeeRouter,
+            _builtHash(relayFeeRouter, type(RelayFeeRouter).creationCode, RELAY_SALT), relayFeeExecutor.codehash,
+            complianceRegistry, complianceRegistry == address(0) ? bytes32(0) : _complianceRegistryCodehash(), accountFactory,
             _builtHash(accountFactory, abi.encodePacked(type(SmartKeyAccountFactory).creationCode, abi.encode(uid)), salt),
-            zetherStatements, zetherStatements == address(0) ? bytes32(0) : keccak256(type(ZetherStatements).runtimeCode));
+            zetherStatements, zetherStatements == address(0) ? bytes32(0) : keccak256(type(ZetherStatements).runtimeCode)),
+            f.chainUid());
         IOpenFactory.Directory memory d = f.directory();
         require(d.uaRegistry == address(reg) && d.govRouter == govRouter && d.relayFeeRouter == relayFeeRouter
             && d.relayFeeExecutor == relayFeeExecutor && d.complianceRegistry == complianceRegistry
@@ -461,7 +470,7 @@ abstract contract DeployBase is DeployBook {
     ///         `pqchat_implementation`, `pqchat_topics`. **UNAUDITED.**
     function _deployPqChat(OpenFactory f, address reg) internal {
         address topics = _module("PqChatTopics.sol:PqChatTopics", abi.encode(address(f)), 3, 0);
-        f.publishClassEnv(3, 0, 1, _pqchatEnv(reg, topics));
+        f.publishClassEnv(3, 0, 1, f.chainUid(), _pqchatEnv(reg, topics));
         address impl = _pqchatRelease(f, abi.encode(topics));
         f.setClassKindEnabled(3, 0, true, f.chainUid());
         vm.serializeAddress("deploy", "pqchat_topics", topics);
@@ -550,11 +559,11 @@ abstract contract DeployBase is DeployBook {
     ///         its admin the native id of `COMPLIANCE_ADMIN` (none refused by the registry's own constructor, `AdminZero`;
     ///         any account, round 3r) and its router `govRouter`; its runtime the code every regulated release pins
     ///         (`COMPLIANCE_REGISTRY_CODEHASH`, F-11), equal for every admin and router. JSON `compliance_registry`,
-    ///         `compliance_registry_codehash`. Not a release: no factory, no `chainUid()`; the code pin is its gate. The
+    ///         `compliance_registry_codehash`. Not a release: no factory; its `chainUid()` the run's (CTR-GOV-27); the code pin is its gate. The
     ///         `ELIGIBLE_CONTRACT` rows of a DEX venue (`createDex`, after this deploy) and of its `puller()` are the admin's
     ///         own `setCompliance` call: this script holds no key of the admin.
     function _deployComplianceRegistry() internal returns (address) {
-        ComplianceRegistry r = new ComplianceRegistry{salt: salt}(complianceAdmin, govRouter);
+        ComplianceRegistry r = new ComplianceRegistry{salt: salt}(complianceAdmin, govRouter, uid);
         require(address(r).codehash == _complianceRegistryCodehash(),
             "ComplianceRegistry: code differs from COMPLIANCE_REGISTRY_CODEHASH (F-11)");
         vm.serializeAddress("deploy", "compliance_registry", address(r));
@@ -615,7 +624,7 @@ abstract contract DeployBase is DeployBook {
         string[] memory n = kindModuleNames(uint8(kind));
         address[] memory ms = new address[](n.length);
         for (uint256 i; i < n.length; ++i) ms[i] = _module(n[i], abi.encode(address(f), coreArgs), uint8(kind));
-        f.publishTokenEnv(kind, 1, _withModules(e, ms));
+        f.publishTokenEnv(kind, 1, f.chainUid(), _withModules(e, ms));
         return _release(f, kind, name, code, kindImplArgs(uint8(kind), ms, coreArgs));
     }
 

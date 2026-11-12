@@ -1,5 +1,5 @@
 {
- "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. ADMIN: the admin (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending admin role. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, ADMIN, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5). Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1): class OWNER renamed ADMIN, the three admin entries acceptAdmin(), renounceAdmin(), transferAdmin(bytes32) and their errors NotAdmin(bytes32), NotPendingAdmin(bytes32) in place of the ownership names, and the router's mtxTransferAdmin, mtxAcceptAdmin, mtxRenounceAdmin (SIGNED), every class unchanged. Round 3r T7 (spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §7; owner naming 2026-11-11): the router's fifteen admin ops of OpenFactory and ComplianceRegistry (SIGNED); OpenFactory added: its admin entries ADMIN (configureChain direct only, the rest direct or through its router), acceptAdmin HOLDER_OWN, the three release deploys APPROVED(release) (open to anyone against a live approval of their key, the native admin's own call its own approval; a stranger's zero-argument call ReleaseNotApproved), the four creations PERMISSIONLESS. APPROVED(reason): anyone, against an approval the admin gave, for the reason given. Round 3s (spec 2026-11-10-token-lists.md §6, §9; CTR-GOV-24): each regulated kind 8-13 adds setAllowed BIT(8), setDenied BIT(9) (a holder of the bit, the feature on or off: a holder writes a dormant list) and enableFeature ADMIN; setAllowed exists on 10-13 too, where bit 8 is not valid, so no holder can exist and it always reverts MissingRole (one IRegulatedToken for the six kinds, Fable P3-8); the router adds mtxSetAllowed, mtxSetDenied, mtxEnableFeature (SIGNED). Fix2 CTR-GOV-26 (owner 2026-11-12): rescue(address) PERMISSIONLESS on GovernanceRouter and OpenFactory (UARegistry's row with its audit, ua-mtx-merge), and two contracts added whole: RelayFeeRouter, PqChat (each entry SIGNED by the subject it acts for, or PERMISSIONLESS with its reason; PqChat.initialize FACTORY). Fable recheck-2 P3-1 (owner 2026-11-12): renounceAdmin(bytes32) on every kind, the DEX and OpenFactory, the router's mtxRenounceAdmin with its bytes32 chainUid, and the three release deploys with a last bytes32 chainUid_, their signatures moved in place, every class unchanged; a stranger's zero-argument deploy now meets the chain word first (ChainUidMismatch(bytes32,bytes32), the factory's word against 0) where it met ReleaseNotApproved(bytes32). Fable review of ua-mtx-merge E N-10 (2026-11-12): UARegistry and SmartKeyAccountFactory added, each write SIGNED (a signature or proof of possession of the subject it registers or changes) or PERMISSIONLESS; Owner 2026-11-12: + SmartKeyAccount, with the class GUARDIAN (the account's guardian; a stranger's zero-argument call reverts NotGuardian()) for initiateRecovery; its self-only entries (reached by the account's own signed calls) are SIGNED. Merge of ua-mtx-merge into fix2 (2026-11-12): UARegistry's rescue(address) PERMISSIONLESS (CTR-GOV-26) joins its rows.",
+ "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. ADMIN: the admin (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending admin role. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, ADMIN, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5). Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1): class OWNER renamed ADMIN, the three admin entries acceptAdmin(), renounceAdmin(), transferAdmin(bytes32) and their errors NotAdmin(bytes32), NotPendingAdmin(bytes32) in place of the ownership names, and the router's mtxTransferAdmin, mtxAcceptAdmin, mtxRenounceAdmin (SIGNED), every class unchanged. Round 3r T7 (spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §7; owner naming 2026-11-11): the router's fifteen admin ops of OpenFactory and ComplianceRegistry (SIGNED); OpenFactory added: its admin entries ADMIN (configureChain direct only, the rest direct or through its router), acceptAdmin HOLDER_OWN, the three release deploys APPROVED(release) (open to anyone against a live approval of their key, the native admin's own call its own approval; a stranger's zero-argument call ReleaseNotApproved), the four creations PERMISSIONLESS. APPROVED(reason): anyone, against an approval the admin gave, for the reason given. Round 3s (spec 2026-11-10-token-lists.md §6, §9; CTR-GOV-24): each regulated kind 8-13 adds setAllowed BIT(8), setDenied BIT(9) (a holder of the bit, the feature on or off: a holder writes a dormant list) and enableFeature ADMIN; setAllowed exists on 10-13 too, where bit 8 is not valid, so no holder can exist and it always reverts MissingRole (one IRegulatedToken for the six kinds, Fable P3-8); the router adds mtxSetAllowed, mtxSetDenied, mtxEnableFeature (SIGNED). Fix2 CTR-GOV-26 (owner 2026-11-12): rescue(address) PERMISSIONLESS on GovernanceRouter and OpenFactory (UARegistry's row with its audit, ua-mtx-merge), and two contracts added whole: RelayFeeRouter, PqChat (each entry SIGNED by the subject it acts for, or PERMISSIONLESS with its reason; PqChat.initialize FACTORY). Fable recheck-2 P3-1 (owner 2026-11-12): renounceAdmin(bytes32) on every kind, the DEX and OpenFactory, the router's mtxRenounceAdmin with its bytes32 chainUid, and the three release deploys with a last bytes32 chainUid_, their signatures moved in place, every class unchanged; a stranger's zero-argument deploy now meets the chain word first (ChainUidMismatch(bytes32,bytes32), the factory's word against 0) where it met ReleaseNotApproved(bytes32). Fable review of ua-mtx-merge E N-10 (2026-11-12): UARegistry and SmartKeyAccountFactory added, each write SIGNED (a signature or proof of possession of the subject it registers or changes) or PERMISSIONLESS; Owner 2026-11-12: + SmartKeyAccount, with the class GUARDIAN (the account's guardian; a stranger's zero-argument call reverts NotGuardian()) for initiateRecovery; its self-only entries (reached by the account's own signed calls) are SIGNED. Merge of ua-mtx-merge into fix2 (2026-11-12): UARegistry's rescue(address) PERMISSIONLESS (CTR-GOV-26) joins its rows. CTR-GOV-27 (owner 2026-11-12, \"đồng ý.\"): transferAdmin(bytes32,bytes32) on every kind, the DEX and OpenFactory; OpenFactory's three env publishes (a bytes32 chainUid_ after the static fields, before env), revokeApproval(bytes32,bytes32) and setChainEntries(ChainEntries,bytes32) (one named struct, then the word); the router's mtxTransferAdmin, the three mtxPublish*Env, mtxRevokeApproval and mtxSetChainEntries likewise; their signatures moved in place, every class and error unchanged (a stranger meets NotAdmin before the word).",
  "NormalToken": [
   {
    "sig": "acceptAdmin()",
@@ -177,7 +177,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -434,7 +434,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -751,7 +751,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -1118,7 +1118,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -1450,7 +1450,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -1832,7 +1832,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -2124,7 +2124,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -2456,7 +2456,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -2848,7 +2848,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -3290,7 +3290,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -3697,7 +3697,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -4154,7 +4154,7 @@
    "error": ""
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -4341,7 +4341,7 @@
    "error": "NotSelf()"
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   }
@@ -4520,17 +4520,17 @@
    "error": ""
   },
   {
-   "sig": "mtxPublishClassEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPublishClassEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPublishDexEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPublishDexEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPublishTokenEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPublishTokenEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4550,7 +4550,7 @@
    "error": ""
   },
   {
-   "sig": "mtxRevokeApproval((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxRevokeApproval((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4570,7 +4570,7 @@
    "error": ""
   },
   {
-   "sig": "mtxSetChainEntries((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetChainEntries((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32),bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4655,7 +4655,7 @@
    "error": ""
   },
   {
-   "sig": "mtxTransferAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxTransferAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4752,17 +4752,17 @@
    "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "publishClassEnv(uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "sig": "publishClassEnv(uint16,uint16,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "publishDexEnv(uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "sig": "publishDexEnv(uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "publishTokenEnv(uint8,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "sig": "publishTokenEnv(uint8,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -4777,12 +4777,12 @@
    "error": ""
   },
   {
-   "sig": "revokeApproval(bytes32)",
+   "sig": "revokeApproval(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setChainEntries(address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32)",
+   "sig": "setChainEntries((address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32),bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   },
@@ -4797,7 +4797,7 @@
    "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "transferAdmin(bytes32)",
+   "sig": "transferAdmin(bytes32,bytes32)",
    "class": "ADMIN",
    "error": "NotAdmin(bytes32)"
   }

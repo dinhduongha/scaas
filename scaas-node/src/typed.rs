@@ -120,6 +120,8 @@ const NESTED: &[(&str, &str)] = &[
     ("DexConfig", "bytes32 admin,uint32 relayerSharePpm,address treasury,bool listedOnly,uint64 grantDelay,address rescueTo"),
     // round 3r (spec 2026-11-10-admin-not-owner.md §5.4): a release env, the router's three publishes take one (bounded below)
     ("Env", "address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes"),
+    // CTR-GOV-27: `setChainEntries`' named struct (flat, one level), nested in `UASetChainEntries`
+    ("ChainEntries", "address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash"),
     // `IPqChat`'s records (UA-7 spec §4.1, topics spec §2), by the contract's field names; `Wrap` here is a member's key wrap, not
     // the op of that name
     ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
@@ -215,7 +217,7 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
     ("UACancelGrant", "mtxCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
     ("UADisableFeature", "mtxDisableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
-    ("UATransferAdmin", "mtxTransferAdmin", GR, "bytes32 from,address target,bytes32 newAdmin,E", ""),
+    ("UATransferAdmin", "mtxTransferAdmin", GR, "bytes32 from,address target,bytes32 newAdmin,bytes32 chainUid,E", ""),
     ("UAAcceptAdmin", "mtxAcceptAdmin", GR, "bytes32 from,address target,E", ""),
     ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
@@ -262,9 +264,9 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // round 3r (CTR-GOV-23, spec §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its envs, deprecations, kind
     // switches, directory) and of a `ComplianceRegistry` (its KYC providers, the rows); the four release approvals are no row
     // (release management is not a node job, owner 2026-11-10)
-    ("UAPublishTokenEnv", "mtxPublishTokenEnv", GR, "bytes32 from,address target,uint8 kind,uint16 envVersion,Env env,E", ""),
-    ("UAPublishDexEnv", "mtxPublishDexEnv", GR, "bytes32 from,address target,uint16 envVersion,Env env,E", ""),
-    ("UAPublishClassEnv", "mtxPublishClassEnv", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint16 envVersion,Env env,E", ""),
+    ("UAPublishTokenEnv", "mtxPublishTokenEnv", GR, "bytes32 from,address target,uint8 kind,uint16 envVersion,bytes32 chainUid,Env env,E", ""),
+    ("UAPublishDexEnv", "mtxPublishDexEnv", GR, "bytes32 from,address target,uint16 envVersion,bytes32 chainUid,Env env,E", ""),
+    ("UAPublishClassEnv", "mtxPublishClassEnv", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env,E", ""),
     ("UADeprecateToken", "mtxDeprecateToken", GR, "bytes32 from,address target,uint8 kind,uint64 version,bytes32 chainUid,string reason,E", ""),
     ("UADeprecateDex", "mtxDeprecateDex", GR, "bytes32 from,address target,uint64 version,bytes32 chainUid,string reason,E", ""),
     ("UADeprecateRelease", "mtxDeprecateRelease", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason,E", ""),
@@ -282,7 +284,7 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
         "E target version init!config:DexConfig salt @"),
     ("UACreateInstance", "mtxCreateInstance", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,bytes32 salt,E",
         "E target contractClass kind version initcall! salt @"),
-    ("UASetChainEntries", "mtxSetChainEntries", GR, "bytes32 from,address target,address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash,E", ""),
+    ("UASetChainEntries", "mtxSetChainEntries", GR, "bytes32 from,address target,ChainEntries entries,bytes32 chainUid,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
     ("UAInvalidateNonces", "mtxInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -2406,6 +2408,25 @@ mod tests {
         }
         Op::parse(&op_of("UAExecute", "wallet", &v).unwrap(), FEE).unwrap();
         Op::parse(&op_of("Execute", "account", &v).unwrap(), FEE).unwrap();
+    }
+
+    /// CTR-GOV-27: `mtxTransferAdmin`, the three env publishes and `mtxSetChainEntries` take a named `chainUid`; a job without it
+    /// is refused by name; `ChainEntries` is one named object (a packed blob is refused), its struct hash nested in the signed
+    /// one; the vector rows parse (the positive control).
+    #[test]
+    fn chain_word_rows_refuse_a_missing_word() {
+        let v = vectors();
+        for op in ["UATransferAdmin", "UAPublishTokenEnv", "UAPublishDexEnv", "UAPublishClassEnv", "UASetChainEntries"] {
+            let good = op_of(op, "gov_router", &v).unwrap();
+            Op::parse(&good, FEE).unwrap();
+            let mut o = good.clone();
+            o["args"].as_object_mut().unwrap().remove("chainUid").unwrap();
+            let e = Op::parse(&o, FEE).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("args.chainUid: missing"), "{op}: {e}");
+        }
+        let mut o = op_of("UASetChainEntries", "gov_router", &v).unwrap();
+        o["args"]["entries"] = json!(format!("0x{}", "00".repeat(9 * 32)));
+        assert_eq!(Op::parse(&o, FEE).unwrap_err().to_string(), "BAD_PAYLOAD: args.entries: not an object", "a packed blob");
     }
 
     /// The router's rows (spec 2026-11-02-governance §3.2): every op is named JSON, `target` a named field the node signs and sends; a

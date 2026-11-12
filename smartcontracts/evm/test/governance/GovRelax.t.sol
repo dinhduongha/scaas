@@ -519,7 +519,7 @@ contract GovRelaxTest is Test {
         vm.prank(OWNER);
         a.disableFeature(PAUSE);
         vm.prank(OWNER);
-        a.transferAdmin(nid(NEXT));
+        a.transferAdmin(nid(NEXT), bytes32(0)); // a test app: no chain word
         assertTrue(_live(FREEZE, nid(issuer)), "control: live before the accept");
         vm.prank(NEXT);
         a.acceptAdmin();

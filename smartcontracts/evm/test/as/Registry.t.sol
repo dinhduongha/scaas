@@ -23,7 +23,7 @@ import {nid} from "../helpers/Ids.sol";
 contract RegistryTest is RegFixture {
     /// The canonical registry runtime's code hash (a pin: it moves with the registry's source, its interface or the
     /// compiler settings, old -> new in the commit).
-    bytes32 internal constant COMPLIANCE_REGISTRY_CODEHASH = 0xbeaea85c3d9d608d8b16f704dbc1ed9696e67a8e5e9dc16940d77758905b8b43;
+    bytes32 internal constant COMPLIANCE_REGISTRY_CODEHASH = 0x1dc2f8a75643f6fb1c5fd5ff929e8fd40d758ce0e51444c2a165c568eac88da4;
     uint64 internal constant ACCR = 2;
     uint64 internal constant MAX = type(uint64).max;
     bytes32 internal constant ACC = bytes32(uint256(0xACC));
@@ -40,8 +40,8 @@ contract RegistryTest is RegFixture {
         assertEq(creg.admin(), nid(cadmin));
         assertEq(creg.govRouter(), address(0));
         vm.expectRevert(IComplianceRegistry.AdminZero.selector);
-        new ComplianceRegistry(bytes32(0), address(0));
-        assertEq(new ComplianceRegistry(nid(bob), address(0)).admin(), nid(bob), "an EOA");
+        new ComplianceRegistry(bytes32(0), address(0), bytes32(uint256(0x5EC0)));
+        assertEq(new ComplianceRegistry(nid(bob), address(0), bytes32(uint256(0x5EC0))).admin(), nid(bob), "an EOA");
     }
 
     /// KYC provider ids: assigned at the first enabling from 1, never reused; a disable keeps the id; id 0 is the admin,
@@ -317,7 +317,7 @@ contract RegistryTest is RegFixture {
     function test_registryRuntimeHashPinned() public {
         assertEq(keccak256(type(ComplianceRegistry).runtimeCode), COMPLIANCE_REGISTRY_CODEHASH, "runtime pin");
         assertEq(address(creg).codehash, COMPLIANCE_REGISTRY_CODEHASH, "deployed");
-        assertEq(address(new ComplianceRegistry(nid(address(new Holder())), address(0))).codehash,
+        assertEq(address(new ComplianceRegistry(nid(address(new Holder())), address(0), bytes32(uint256(0x5EC0)))).codehash,
             COMPLIANCE_REGISTRY_CODEHASH, "another admin");
         for (uint256 i; i < 2; ++i) {
             address impl = f.implementationOf(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED

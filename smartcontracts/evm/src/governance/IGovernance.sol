@@ -103,9 +103,6 @@ interface IGovernance is IAdmin {
     error GrantBarred(uint8 bit, bytes32 account);
     /// @notice A change of `window` while the spent period still runs on the new grid (B-12, spec §1.5).
     error GrantWindowInUse(uint8 bit, bytes32 holder);
-    /// @notice `renounceAdmin`'s `chainUid_` is not this contract's chain word (`expected`; Fable recheck-2 P3-1, as
-    ///         `IOpenFactory.ChainUidMismatch`): a native admin's direct renounce made for a sibling is void here.
-    error ChainUidMismatch(bytes32 expected, bytes32 got);
     /// @notice `renounceAdmin` while a bit that is not locked has holders (CTR-GOV-02).
     error AdminHasHolders(uint8 bit);
     /// @notice A `grantDelay` above 30 days at creation (B-27).

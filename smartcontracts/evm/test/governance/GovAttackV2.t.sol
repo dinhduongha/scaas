@@ -475,7 +475,7 @@ contract GovAttackV2Test is Test {
         address next = address(0x1234);
         address evil = address(0xE11);
         vm.prank(OWNER);
-        d.transferAdmin(nid(next));
+        d.transferAdmin(nid(next), EnvKit.codeUidOf(address(d)));
         vm.prank(next);
         d.acceptAdmin();
         assertEq(d.admin(), nid(next));
@@ -612,10 +612,10 @@ contract GovAttackV2Test is Test {
         f.createToken(IOpenFactory.TokenKind.NORMAL, 1, cfg, "p");
         vm.startPrank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, MetaTxLib.UA_POOL));
-        t.transferAdmin(nid(MetaTxLib.UA_POOL));
+        t.transferAdmin(nid(MetaTxLib.UA_POOL), EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, MetaTxLib.SHIELD_POOL));
-        t.transferAdmin(nid(MetaTxLib.SHIELD_POOL));
-        t.transferAdmin(nid(OFFICER)); // positive control
+        t.transferAdmin(nid(MetaTxLib.SHIELD_POOL), EnvKit.codeUidOf(address(t)));
+        t.transferAdmin(nid(OFFICER), EnvKit.codeUidOf(address(t))); // positive control
         vm.stopPrank();
         assertEq(t.pendingAdmin(), nid(OFFICER));
     }

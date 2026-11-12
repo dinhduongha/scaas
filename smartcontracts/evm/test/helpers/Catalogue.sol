@@ -138,7 +138,7 @@ library Catalogue {
         if (v != 0 && keccak256(abi.encode(f.tokenEnvOf(kind, v))) == keccak256(abi.encode(e))) return v;
         v += 1;
         vm.prank(address(uint160(uint256(f.admin()))));
-        f.publishTokenEnv(kind, v, e);
+        f.publishTokenEnv(kind, v, EnvKit.uidOf(address(f)), e);
     }
 
     /// @dev Release `version` of `kind` from `code` (init code without arguments) on env `e`.
@@ -188,7 +188,7 @@ library Catalogue {
         uint16 v = f.latestDexEnvVersion();
         if (v == 0 || keccak256(abi.encode(f.dexEnvOf(v))) != keccak256(abi.encode(e))) {
             vm.prank(address(uint160(uint256(f.admin()))));
-            f.publishDexEnv(++v, e);
+            f.publishDexEnv(++v, EnvKit.uidOf(address(f)), e);
         }
         vm.prank(address(uint160(uint256(f.admin()))));
         return f.deployDexImplementation(version, v, code, implArgs, EnvKit.uidOf(address(f)));

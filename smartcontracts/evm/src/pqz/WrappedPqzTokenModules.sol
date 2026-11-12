@@ -418,8 +418,8 @@ contract WrappedPqzTokenA is WrappedPqzTokenCore {
         return _supportsInterfaceBody(id);
     }
 
-    function transferAdmin(bytes32 newAdmin) external onlyDelegated {
-        _transferAdminBody(newAdmin);
+    function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external onlyDelegated {
+        _transferAdminBody(newAdmin, chainUid_);
     }
 
     function validBits() external pure returns (uint256 _p0) {

@@ -38,8 +38,8 @@ contract UADexAdminTest is UADexBase {
         assertEq(dex.admin(), nid(address(this)));
         assertEq(dex.validBits(), GovernanceBits.DEX_BITS);
         assertTrue(dex.hasRole(GovernanceBits.LISTING, nid(address(this))));
-        vm.expectCall(d, abi.encodeCall(IAdmin.transferAdmin, (nid(dave))));
-        dex.transferAdmin(nid(dave));
+        vm.expectCall(d, abi.encodeCall(IAdmin.transferAdmin, (nid(dave), EnvKit.codeUidOf(address(dex)))));
+        dex.transferAdmin(nid(dave), EnvKit.codeUidOf(address(dex)));
         assertEq(dex.pendingAdmin(), nid(dave));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(dave)));
         vm.prank(dave);
@@ -54,7 +54,7 @@ contract UADexAdminTest is UADexBase {
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.features();
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
-        d.transferAdmin(nid(dave));
+        d.transferAdmin(nid(dave), EnvKit.codeUidOf(address(d)));
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.grantRole(GovernanceBits.LISTING, nid(dave));
         assertEq(d.validBits(), GovernanceBits.DEX_BITS);

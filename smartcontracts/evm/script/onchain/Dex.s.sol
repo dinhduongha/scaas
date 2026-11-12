@@ -486,7 +486,7 @@ contract Dex is OnchainBase {
         vm.startBroadcast(k1);
         g.revokeRole{gas: G}(GovernanceBits.LISTING, _pad(a2));
         dex.setListedOnly{gas: G}(true); // after the trades: with it every interaction target (the token of an approve too) is listed
-        g.transferAdmin{gas: G}(_pad(a2));
+        g.transferAdmin{gas: G}(_pad(a2), dex.chainUid());
         vm.stopBroadcast();
         vm.broadcast(k2);
         g.acceptAdmin{gas: G}();

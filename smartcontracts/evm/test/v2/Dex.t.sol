@@ -826,7 +826,7 @@ contract DexTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, empty));
         f.deployDexImplementation(3, 1, "", "", EnvKit.uidOf(address(f))); // an empty init code makes an account without code
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        f.publishDexEnv(2, plainEnv(address(f), address(0xBEEF), UID_, address(0), false));
+        f.publishDexEnv(2, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0xBEEF), UID_, address(0), false));
         vm.recordLogs();
         address v3 = Catalogue.dex(f, 3, code, address(0xBEEF));
         Vm.Log[] memory logs = vm.getRecordedLogs();

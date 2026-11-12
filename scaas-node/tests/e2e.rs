@@ -1705,7 +1705,7 @@ alloy::sol! {
     struct FactoryEnv { address registry; address smartKeyAccountImpl; bool hedera; address[] deps; bytes32[] params;
         address[] libs; bytes32[] libCodeHashes; }
     function tokenEnvOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
-    function publishTokenEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
+    function publishTokenEnv(uint8 kind, uint16 envVersion, bytes32 chainUid, FactoryEnv env) external;
     function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs, bytes32 chainUid) external returns (address);
     function createToken(uint8 kind, uint64 version, bytes initArgs, bytes32 salt) external returns (address);
     function registry() external view returns (address);
@@ -1747,7 +1747,8 @@ async fn registry_zero_token(rpc: &str, chain_id: u64, dep: &Value, holder: Addr
     let mut env = view(rpc, f, tokenEnvOfCall { kind: 0, envVersion: 1 }).await;
     assert_ne!(env.registry, Address::ZERO, "the deploy's NORMAL release is on the registry");
     env.registry = Address::ZERO;
-    send(rpc, &deployer, f, publishTokenEnvCall { kind: 0, envVersion: 2, env }.abi_encode()).await;
+    let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap(); // the factory's word (CTR-GOV-27)
+    send(rpc, &deployer, f, publishTokenEnvCall { kind: 0, envVersion: 2, chainUid: chain_uid, env }.abi_encode()).await;
     let code = linked(chain_id, "NormalToken.sol", "NormalToken");
     // T66b §4.5: version 2 names version 1's body modules (pinned in env 1, so in env 2)
     let v1 = view(rpc, f, implementationOfCall { kind: 0, version: 1 }).await;
@@ -2570,9 +2571,9 @@ async fn offchain_stack_vf(chain_id: u64, vf: u64) -> OffchainStack {
     let mut env = view(&rpc, factory, tokenEnvOfCall { kind: 0, envVersion: 1 }).await;
     (env.deps, env.libs, env.libCodeHashes) = (vec![Address::ZERO], libs, hashes);
     let ev = view(&rpc, factory, pqz3f::latestTokenEnvVersionCall { kind: 4 }).await + 1;
-    send(&rpc, &deployer, factory, publishTokenEnvCall { kind: 4, envVersion: ev, env }.abi_encode()).await;
-    let ver = view(&rpc, factory, pqz3f::latestVersionCall { kind: 4 }).await + 1;
     let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    send(&rpc, &deployer, factory, publishTokenEnvCall { kind: 4, envVersion: ev, chainUid: chain_uid, env }.abi_encode()).await;
+    let ver = view(&rpc, factory, pqz3f::latestVersionCall { kind: 4 }).await + 1;
     send(&rpc, &deployer, factory, deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
         implArgs: ImplArgs { modules: ms }.abi_encode().into(), chainUid: chain_uid }.abi_encode()).await;
     send(&rpc, &deployer, factory, pqz3f::setTokenKindEnabledCall { kind: 4, on: true, chainUid: chain_uid }.abi_encode()).await;

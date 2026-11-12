@@ -1598,7 +1598,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], bytes32(uint256(uint160(address(this)))), 0, 0);
-            t.transferAdmin(me);
+            t.transferAdmin(me, EnvKit.codeUidOf(address(t)));
             _row(f[i]);
             assertEq(t.admin(), me, f[i]);
         }
@@ -1843,7 +1843,7 @@ contract TypedOpsRouterTest is UALedgerBase {
     function test_routerRow_EnableFeature() public {
         string memory op = "UAEnableFeature";
         NormalRegulatedToken t = _regAt(op, true);
-        t.transferAdmin(me);
+        t.transferAdmin(me, EnvKit.codeUidOf(address(t)));
         vm.prank(signer);
         t.acceptAdmin();
         uint8 bit = uint8(_uint(op, "bit"));

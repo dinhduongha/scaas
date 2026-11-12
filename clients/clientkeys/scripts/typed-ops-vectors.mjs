@@ -170,6 +170,9 @@ ROW.UADeprecateRelease = { reason: REASON };
 ROW.UASetTokenKindEnabled = { kind: 1, on: true };
 // Fable recheck-2 P3-1: the renounce names the target's chain word, context A's (the router rows run on a token there)
 ROW.UARenounceAdmin = { chainUid: contexts.A.chainUid };
+// CTR-GOV-27: the transfer names the target's chain word too, context A's (the router rows run on a token there); the
+// factory's ops (publishes, revoke, entries) carry a filler word (their rows run on a sink)
+ROW.UATransferAdmin = { chainUid: contexts.A.chainUid };
 // Round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §6.2, §10): two accounts on a list (the order and the length are signed),
 // bit 9 switched on. `UASetDenied` leaves the relayer and the fee recipient unbound at fee 0 (mode 0): 0 in the message, as
 // `MetaTxLib.canon` hashes them, and test/typed-ops.test.js and ua-rs sign it again with a non-zero value in both.

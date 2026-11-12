@@ -437,8 +437,8 @@ contract NormalPqzTokenA is NormalPqzTokenCore {
         return _supportsInterfaceBody(id);
     }
 
-    function transferAdmin(bytes32 newAdmin) external onlyDelegated {
-        _transferAdminBody(newAdmin);
+    function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external onlyDelegated {
+        _transferAdminBody(newAdmin, chainUid_);
     }
 
     function underlyings() external view onlyDelegated returns (address[] memory us) {

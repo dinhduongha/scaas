@@ -15,7 +15,7 @@ import {DeployBase} from "./DeployBase.sol";
 ///      DEPLOY_WRAPPED (optional, true/false): the `WRAPPED` release too (GD-12). DEPLOY_REGULATED (optional, true/false):
 ///      the regulated releases (`_deployRegulated`: kinds 8 and 9, enabled; plan T28) and the canonical ComplianceRegistry
 ///      (`_deployComplianceRegistry`, plan T33) with COMPLIANCE_ADMIN (a UA id, bytes32, required; native or derived, round 3r) and the chain's router.
-///      FACTORY_ADMIN_NEXT (optional bytes32, round 3r): the run ends with the factory's transferAdmin(next); next accepts by
+///      FACTORY_ADMIN_NEXT (optional bytes32, round 3r): the run ends with the factory's transferAdmin(next, chainUid); next accepts by
 ///      its own signed mtxAcceptAdmin (JSON factory_admin, factory_pending_admin). CHAIN_CODE_LIMIT (optional, default
 ///      65,536, EIP-7954): the chain's declared code limit; a release above it is refused by name before anything is sent
 ///      (CTR-GOV-19, GD-4); the SCaaS testnet after the next reset: 131,072 (`maxCodeSize` `0x20000`). RELEASE_GAS_GATE

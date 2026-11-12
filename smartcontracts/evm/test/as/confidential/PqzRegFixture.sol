@@ -111,7 +111,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
         issuer = address(new Holder());
         compliance = address(new Holder());
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(nid(cadmin), address(0));
+        creg = new ComplianceRegistry(nid(cadmin), address(0), PQZ_UID);
         vm.prank(cadmin);
         creg.setKycProvider(nid(attester), true);
         usd = new MockERC20("USD", "USD", 6);

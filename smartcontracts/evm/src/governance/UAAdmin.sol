@@ -63,8 +63,13 @@ abstract contract UAAdmin is IAdmin {
         return _adminStorage().pendingAdmin;
     }
 
-    /// @notice The admin names its successor (0 cancels a pending); the successor's `acceptAdmin` completes it.
-    function transferAdmin(bytes32 newAdmin) public virtual onlyAdmin {
+    /// @dev This contract's chain word check (CTR-GOV-27): `ChainUidMismatch` unless `chainUid_` is its word.
+    function _requireChainWord(bytes32 chainUid_) internal view virtual;
+
+    /// @notice The admin names its successor (0 cancels a pending); the successor's `acceptAdmin` completes it. The admin
+    ///         first (`NotAdmin`), then `chainUid_` this contract's word (`ChainUidMismatch`), before any write (CTR-GOV-27).
+    function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) public onlyAdmin {
+        _requireChainWord(chainUid_);
         AdminStorage storage s = _adminStorage();
         s.pendingAdmin = newAdmin;
         emit AdminTransferStarted(s.admin, newAdmin);

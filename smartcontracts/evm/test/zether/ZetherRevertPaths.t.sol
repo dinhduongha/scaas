@@ -370,7 +370,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         IFactoryToken.Env memory e9 = withModules(pinned(bad[7], IOpenFactory.TokenKind.NORMAL_ZETHER),
             Catalogue.modulesOn(factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 1));
         vm.prank(registrar);
-        factory.publishTokenEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, e9);
+        factory.publishTokenEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, EnvKit.uidOf(address(factory)), e9);
         vm.prank(registrar);
         vm.expectRevert(IZetherToken.BadInit.selector);
         factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, 9, code, args, EnvKit.uidOf(address(factory)));
@@ -423,7 +423,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         IFactoryToken.Env memory e = _zenv();
         e.deps[0] = address(fake);
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
-        factory.publishTokenEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, e);
+        factory.publishTokenEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, EnvKit.uidOf(address(factory)), e);
         vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
         factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, 1, type(NormalZetherToken).creationCode, "", EnvKit.uidOf(address(factory)));
         // the factory-made token carries the env's verifiers

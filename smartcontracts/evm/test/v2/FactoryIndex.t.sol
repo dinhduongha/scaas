@@ -337,7 +337,7 @@ contract FactoryIndexTest is IndexAsserts {
         address t = _token(bob, NORMAL, _normal(nid(alice)), "m");
         bytes32 before = keccak256(_rawInfo(f, t));
         vm.prank(alice);
-        IGovernance(t).transferAdmin(nid(bob));
+        IGovernance(t).transferAdmin(nid(bob), EnvKit.codeUidOf(address(IGovernance(t))));
         vm.prank(bob);
         IGovernance(t).acceptAdmin();
         assertEq(IGovernance(t).admin(), nid(bob), "the contract's own admin moved");

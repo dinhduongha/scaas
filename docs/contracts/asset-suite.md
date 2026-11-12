@@ -363,10 +363,12 @@ interface IComplianceRegistry is IAdmin {   // smartcontracts/evm/src/regulated/
     event ComplianceSet(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed providerId);
     error AdminZero(); error AdminUnreachable(bytes32 admin); error RouterNotContract(address govRouter);
     error NotKycProvider(); error KycProviderZero(); error TooManyRows(uint256 n); error LengthMismatch();
-    error EligibleContractAdminOnly(); error AdminWrittenSlot(bytes32 account);
+    error EligibleContractAdminOnly(); error AdminWrittenSlot(bytes32 account); error ChainUidZero();
 
-    // IAdmin: admin(), pendingAdmin() (UA ids, bytes32), transferAdmin(bytes32), acceptAdmin(); no renounceAdmin (Q2)
+    // IAdmin: admin(), pendingAdmin() (UA ids, bytes32), transferAdmin(bytes32 newAdmin, bytes32 chainUid_)
+    //   (ChainUidMismatch(expected, got) after NotAdmin, CTR-GOV-27), acceptAdmin(); no renounceAdmin (Q2)
     function govRouter() external view returns (address);              // written once by the constructor; 0 = none
+    function chainUid() external view returns (bytes32);               // written once by the constructor; not 0 (CTR-GOV-27)
     function setKycProvider(bytes32 provider, bool enabled) external;  // admin; ids assigned once, never reused
     function kycProviderId(bytes32 provider) external view returns (uint32);
     function kycProviderEnabled(uint32 id) external view returns (bool); // id 0 (the admin) always
@@ -383,8 +385,11 @@ interface IComplianceRegistry is IAdmin {   // smartcontracts/evm/src/regulated/
 
 A token never calls it through a Solidity interface: it makes the bounded `STATICCALL` of [CTR-AS-28](#CTR-AS-28) and pins the
 canonical runtime by `extcodehash`. The admin is a UA id in storage ([CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)):
-its first value the constructor's `(bytes32 admin, address govRouter)`, a derived admin only with a router; it moves by the
-two-step `transferAdmin` / `acceptAdmin` and is never renounced (Q2); a derived admin and each derived KYC provider act
+its first value the constructor's `(bytes32 admin, address govRouter, bytes32 chainUid)`, a derived admin only with a router;
+it moves by the two-step `transferAdmin(newAdmin, chainUid_)` / `acceptAdmin` and is never renounced (Q2). The chain word is
+in storage, not an immutable, so every registry keeps one runtime and the pinned code hash
+([CTR-GOV-27](../decisions.md#CTR-GOV-27)'s Change): `transferAdmin` checks the admin, then the word, so a native admin's
+direct transfer made for a sibling registry is void here (`test_transferAdmin_siblingWordRefused`, BUILT); a derived admin and each derived KYC provider act
 through the router's `mtxSetKycProvider` / `mtxSetCompliance`, the provider the subject of its own call (spec
 2026-11-10-admin-not-owner.md §5.3.1). A regulated token takes only a registry whose `govRouter()` is 0 or its own
 (`ComplianceRegistryRouterMismatch`). BUILT (T29 `7411a468`; CTR-GOV-23; `test/as/Registry.t.sol`,

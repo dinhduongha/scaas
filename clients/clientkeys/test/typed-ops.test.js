@@ -325,12 +325,13 @@ test('GovernanceRouter: 53 rows equal GovRouterTypehash.t.sol, target the first 
   // group 3l: the leg array's two struct types are pinned there too, not rows
   // round 3r: + the fifteen admin ops of the factory and a compliance registry, and the `Env` struct pin
   const rows = pins.filter(([s]) => !s.startsWith('GrantTerms(') && !s.startsWith('WrapLimit(') && !s.startsWith('WrapLegLimits(')
-    && !s.startsWith('Env('));
+    && !s.startsWith('Env(') && !s.startsWith('ChainEntries('));
   const pqzPinned = rows.filter(([s]) => s.startsWith('UAPqz')).length;
   assert.ok(pqzPinned === 0 || pqzPinned === 3, `${pqzPinned} PQZ verifier pins`);
   // group 3h T61: + `UASetProofStore` (bit 24); group 3l: + `UASetWrapLimits`, `UASetWrapMember` and the two struct pins;
   // round 3s: + `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: + `UASetVerifierFee`
-  assert.equal(pins.length - pqzPinned, 58);
+  // CTR-GOV-27: + the `ChainEntries` struct pin
+  assert.equal(pins.length - pqzPinned, 59);
   assert.equal(rows.length - pqzPinned, 54);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));

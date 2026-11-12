@@ -34,7 +34,7 @@ abstract contract LegacyDiff is Test {
     address[] internal routing; // libraries (old and new) and modules: accesses to them are routing, not behaviour
     uint256 internal diffed;
     uint256 internal bothOk;
-    /// @dev The token under `_diff`'s chain word: its new side's `renounceAdmin(bytes32)` takes it (CTR-GOV-27).
+    /// @dev The token under `_diff`'s chain word: its new side's `renounceAdmin(bytes32)` and `transferAdmin(bytes32,bytes32)` take it (CTR-GOV-27).
     bytes32 internal r3Uid;
 
     function _legacyLibs() internal {
@@ -240,7 +240,7 @@ abstract contract LegacyDiff is Test {
     function _r3Sel(bytes4 s) internal pure returns (bytes4) {
         if (s == bytes4(keccak256("owner()"))) return bytes4(keccak256("admin()"));
         if (s == bytes4(keccak256("pendingOwner()"))) return bytes4(keccak256("pendingAdmin()"));
-        if (s == bytes4(keccak256("transferOwnership(bytes32)"))) return bytes4(keccak256("transferAdmin(bytes32)"));
+        if (s == bytes4(keccak256("transferOwnership(bytes32)"))) return bytes4(keccak256("transferAdmin(bytes32,bytes32)"));
         if (s == bytes4(keccak256("acceptOwnership()"))) return bytes4(keccak256("acceptAdmin()"));
         if (s == bytes4(keccak256("renounceOwnership()"))) return bytes4(keccak256("renounceAdmin(bytes32)"));
         if (s == bytes4(keccak256("NotOwner(bytes32)"))) return bytes4(keccak256("NotAdmin(bytes32)"));
@@ -274,6 +274,14 @@ abstract contract LegacyDiff is Test {
             bytes memory rest = new bytes(out.length - 4);
             for (uint256 i; i < rest.length; ++i) rest[i] = out[i + 4];
             out = bytes.concat(bytes4(out), r3Uid, rest);
+        }
+        // CTR-GOV-27: the transfer names the token's chain word after `newAdmin` (the words after it follow the word)
+        if (bytes4(out) == bytes4(keccak256("transferOwnership(bytes32)")) && out.length >= 36) {
+            bytes memory head = new bytes(36);
+            bytes memory rest = new bytes(out.length - 36);
+            for (uint256 i; i < 36; ++i) head[i] = out[i];
+            for (uint256 i; i < rest.length; ++i) rest[i] = out[i + 36];
+            out = bytes.concat(head, r3Uid, rest);
         }
         bytes4 s = _r3Sel(bytes4(out));
         for (uint256 i; i < 4; ++i) out[i] = s[i];

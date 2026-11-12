@@ -132,22 +132,26 @@ abstract contract GovernanceBaseCore {
     function _disableFeatureBody(uint8 bit) internal virtual {
         GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
     }
-    function _transferAdminBody(bytes32 newAdmin) internal {
-        GovernanceLib.transferAdmin(newAdmin, _govSubject());
+    function _transferAdminBody(bytes32 newAdmin, bytes32 chainUid_) internal {
+        GovernanceLib.transferAdmin(newAdmin, _adminOnChain(chainUid_));
     }
     function _acceptAdminBody() internal { GovernanceLib.acceptAdmin(_govSubject()); }
-    /// @dev The contract's chain word (`ChainEnvCode.chainUid()` on a factory-made token or DEX): `renounceAdmin`'s check.
+    /// @dev The contract's chain word (`ChainEnvCode.chainUid()` on a factory-made token or DEX): the check of
+    ///      `transferAdmin` and `renounceAdmin`.
     function _govChainUid() internal view virtual returns (bytes32);
 
-    /// @dev Fable recheck-2 P3-1: the admin (`NotAdmin`, as every admin entry refuses a stranger first), then `chainUid_`
-    ///      this contract's word (`IGovernance.ChainUidMismatch`), before any write: a native admin's direct renounce made for a
-    ///      sibling with the same chain id is void here.
-    function _renounceAdminBody(bytes32 chainUid_) internal {
-        bytes32 c = _govSubject();
+    /// @dev Fable recheck-2 P3-1, CTR-GOV-27: the admin (`NotAdmin`, as every admin entry refuses a stranger first), then
+    ///      `chainUid_` this contract's word (`IAdmin.ChainUidMismatch`), before any write: a native admin's direct
+    ///      `transferAdmin` or `renounceAdmin` made for a sibling with the same chain id is void here. Returns the admin.
+    function _adminOnChain(bytes32 chainUid_) private view returns (bytes32 c) {
+        c = _govSubject();
         if (c == 0 || c != GovernanceLib.$().admin) revert IAdmin.NotAdmin(c);
         bytes32 u = _govChainUid();
-        if (chainUid_ != u) revert IGovernance.ChainUidMismatch(u, chainUid_);
-        GovernanceLib.renounceAdmin(c, _roleBits());
+        if (chainUid_ != u) revert IAdmin.ChainUidMismatch(u, chainUid_);
+    }
+
+    function _renounceAdminBody(bytes32 chainUid_) internal {
+        GovernanceLib.renounceAdmin(_adminOnChain(chainUid_), _roleBits());
     }
 }
 
@@ -230,8 +234,8 @@ abstract contract GovernanceBase is GovernanceBaseCore, IGovernance {
         _disableFeatureBody(bit);
     }
 
-    function transferAdmin(bytes32 newAdmin) external override governed {
-        _transferAdminBody(newAdmin);
+    function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external override governed {
+        _transferAdminBody(newAdmin, chainUid_);
     }
 
     function acceptAdmin() external override governed {
