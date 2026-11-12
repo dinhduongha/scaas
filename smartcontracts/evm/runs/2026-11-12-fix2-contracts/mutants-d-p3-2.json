@@ -1,12 +1,62 @@
 [
- {"id":"D32-1 equality check removed","file":"src/factory/OpenFactory.sol","old":"        if (chainUid_ != chainUid) revert ChainUidMismatch(chainUid, chainUid_);\n","new":"","path":"test/v2/Factory.t.sol","test":"test_siblingReplay_chainBound"},
- {"id":"D32-2 configured check removed","file":"src/factory/OpenFactory.sol","old":"    function _requireOnChain(bytes32 chainUid_) private view {\n        if (chainUid == bytes32(0)) revert ChainNotConfigured();\n","new":"    function _requireOnChain(bytes32 chainUid_) private view {\n","path":"test/v2/Factory.t.sol","test":"test_siblingReplay_chainBound"},
- {"id":"D32-3 deprecateToken unbound","file":"src/factory/OpenFactory.sol","old":"    function deprecateToken(TokenKind kind, uint64 version, bytes32 chainUid_, string calldata reason)\n        external\n        onlyAdmin\n        onChain(chainUid_)\n","new":"    function deprecateToken(TokenKind kind, uint64 version, bytes32 chainUid_, string calldata reason)\n        external\n        onlyAdmin\n","path":"test/v2/Factory.t.sol","test":"test_siblingReplay_chainBound"},
- {"id":"D32-4 deprecateDex unbound","file":"src/factory/OpenFactory.sol","old":"external onlyAdmin onChain(chainUid_) {\n        if (_dexReleases[version].implementation","new":"external onlyAdmin {\n        if (_dexReleases[version].implementation","path":"test/v2/Factory.t.sol","test":"test_siblingReplay_chainBound"},
- {"id":"D32-5 deprecateRelease unbound","file":"src/factory/OpenFactory.sol","old":"    function deprecateRelease(ReleaseId calldata id, bytes32 chainUid_, string calldata reason)\n        external\n        onlyAdmin\n        onChain(chainUid_)\n","new":"    function deprecateRelease(ReleaseId calldata id, bytes32 chainUid_, string calldata reason)\n        external\n        onlyAdmin\n","path":"test/v2/Factory.t.sol","test":"test_siblingReplay_chainBound"},
- {"id":"D32-6 setTokenKindEnabled unbound","file":"src/factory/OpenFactory.sol","old":"function setTokenKindEnabled(TokenKind kind, bool on, bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {","new":"function setTokenKindEnabled(TokenKind kind, bool on, bytes32 chainUid_) external onlyAdmin {","path":"test/v2/Factory.t.sol","test":"test_siblingReplay_chainBound"},
- {"id":"D32-7 setClassKindEnabled unbound","file":"src/factory/OpenFactory.sol","old":"    function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on, bytes32 chainUid_)\n        external\n        onlyAdmin\n        onChain(chainUid_)\n","new":"    function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on, bytes32 chainUid_)\n        external\n        onlyAdmin\n","path":"test/v2/Factory.t.sol","test":"test_siblingReplay_chainBound"},
- {"id":"D32-8 router: chainUid not signed (setTokenKindEnabled)","file":"src/governance/GovernanceRouter.sol","old":"            abi.encode(kind, on, chainUid), auth);","new":"            bytes.concat(abi.encode(kind, on), bytes32(0)), auth);","path":"test/governance/GovRouterAdmin.t.sol","test":"test_binding_SetTokenKindEnabled"},
- {"id":"D32-9 router: chainUid not signed (deprecateToken)","file":"src/governance/GovernanceRouter.sol","old":"abi.encode(kind, version, chainUid, keccak256(bytes(reason)))","new":"abi.encode(kind, version, bytes32(0), keccak256(bytes(reason)))","path":"test/governance/GovRouterAdmin.t.sol","test":"test_binding_DeprecateToken"},
- {"id":"D32-10 router: another word forwarded (deprecateDex)","file":"src/governance/GovernanceRouter.sol","old":"abi.encodeCall(IOpenFactory.deprecateDex, (version, chainUid, reason))","new":"abi.encodeCall(IOpenFactory.deprecateDex, (version, bytes32(0), reason))","path":"test/governance/GovRouterAdmin.t.sol","test":"test_everyOp_secp256k1"}
+ {
+  "id": "D32-1 equality check removed",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_chainBound() (gas: 55354)"
+ },
+ {
+  "id": "D32-2 configured check removed",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0xd474a90e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "D32-3 deprecateToken unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_chainBound() (gas: 53203)"
+ },
+ {
+  "id": "D32-4 deprecateDex unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x92c888cb0000000000000000000000000000000000000000000000000000000000000001 != 0x14767f4524e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c19"
+ },
+ {
+  "id": "D32-5 deprecateRelease unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x917d36d300000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "D32-6 setTokenKindEnabled unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_chainBound() (gas: 138711)"
+ },
+ {
+  "id": "D32-7 setClassKindEnabled unbound",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a sibling's word accepted] test_siblingReplay_chainBound() (gas: 165486)"
+ },
+ {
+  "id": "D32-8 router: chainUid not signed (setTokenKindEnabled)",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: UAUnauthorized(0x9ceb60eaa9f276db91f4697f744ea4e347bee0d842694ef39f0a4cd6f61c5129)] test_binding_SetTokenKindEnabled() (gas: 8297111)"
+ },
+ {
+  "id": "D32-9 router: chainUid not signed (deprecateToken)",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: UAUnauthorized(0x9ceb60eaa9f276db91f4697f744ea4e347bee0d842694ef39f0a4cd6f61c5129)] test_binding_DeprecateToken() (gas: 8240354)"
+ },
+ {
+  "id": "D32-10 router: another word forwarded (deprecateDex)",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: ChainUidMismatch(0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc, 0x0000000000000000000000000000000000000000000000000000000000000000)]"
+ }
 ]

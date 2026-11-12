@@ -786,6 +786,37 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         assertEq(acct.isValidSignature(h, sig), bytes4(0xffffffff), "other chain, TypedDataSign");
     }
 
+    /// recheck2 P3-5: the `contentsDescription` parser, each refusal beside a positive control signed the same way: the key
+    /// signs the nested message for exactly the name and type it sends, so only the name rule refuses.
+    function test_erc7739ContentsNameRules() public {
+        bytes32 app = Erc7739Kit.separator(address(t));
+        bytes32 c = keccak256("contents");
+        bytes32 h = keccak256(abi.encodePacked(hex"1901", app, c));
+        assertEq(_nest(h, app, c, "Mail", "Mail(address to)", "Mail(address to)"), MAGIC, "positive control: implicit");
+        assertEq(_nest(h, app, c, "Order", "Asset(address t)Order(Asset a)", "Asset(address t)Order(Asset a)Order"), MAGIC,
+            "positive control: explicit");
+        assertEq(_nest(h, app, c, "Ma il", "Ma il(address to)", "Ma il(address to)"), _INV, "a space");
+        assertEq(_nest(h, app, c, "Ma\x00il", "Ma\x00il(address to)", "Ma\x00il(address to)"), _INV, "NUL");
+        assertEq(_nest(h, app, c, "Ma)il", "Ma)il(address to)", "Ma)il(address to)"), _INV, "a ) in the name");
+        assertEq(_nest(h, app, c, "", "(address to)", "(address to)"), _INV, "an empty name");
+        assertEq(_nest(h, app, c, "Ma(il", "Mail(address to)", "Mail(address to)Ma(il"), _INV, "explicit: a ( in the name");
+        assertEq(_nest(h, app, c, "Ma il", "Mail(address to)", "Mail(address to)Ma il"), _INV, "explicit: a space");
+        assertEq(_nest(h, app, c, "Ma,il", "Mail(address to)", "Mail(address to)Ma,il"), _INV, "explicit: a comma");
+        assertEq(_nest(h, app, c, "Mail", "Mail", "Mail"), _INV, "no ( and no ): no name");
+        bytes memory empty = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "", "", c)), app, c, "");
+        assertEq(acct.isValidSignature(h, empty), _INV, "an empty description");
+    }
+
+    bytes4 internal constant _INV = 0xffffffff;
+
+    function _nest(bytes32 h, bytes32 app, bytes32 c, string memory name, string memory ty, string memory descr)
+        internal view returns (bytes4)
+    {
+        bytes memory sig = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, name, ty, c)), app, c, descr);
+        (bool ok, bytes memory ret) = address(acct).staticcall(abi.encodeCall(IERC1271.isValidSignature, (h, sig)));
+        return ok && ret.length == 32 ? bytes4(ret) : _INV;
+    }
+
     /// CTR-ACC-02: ERC-7739's `PersonalSign` struct, verbatim (`cast keccak "PersonalSign(bytes prefixed)"`).
     function test_erc7739PersonalSignTypehashIsPinned() public pure {
         assertEq(ERC7739Lib.PERSONAL_SIGN_TYPEHASH, 0x983e65e5148e570cd828ead231ee759a8d7958721a768f93bc4483ba005c32de);

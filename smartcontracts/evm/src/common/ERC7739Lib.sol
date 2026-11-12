@@ -20,7 +20,10 @@ library ERC7739Lib {
     bytes4 internal constant SUPPORTED = 0x77390001;
     bytes32 internal constant PERSONAL_SIGN_TYPEHASH = keccak256("PersonalSign(bytes prefixed)");
 
-    /// @notice The message the wallet's key signed for `hash`, and the inner signature over it.
+    /// @notice The message the wallet's key signed for `hash`, and the inner signature over it. A suffix that does not
+    ///         rebuild `hash`, or names an invalid `contentsDescription`, falls through to `PersonalSign` with the whole
+    ///         signature (as OpenZeppelin v5.4.0 does): still a message naming this wallet, never the raw `hash`; do not
+    ///         turn the fall-through into a raw path.
     /// @param walletSeparator the wallet's own EIP-712 domain separator (the `PersonalSign` workflow)
     /// @param walletDomain    `abi.encode(keccak256(name), keccak256(version), chainId, verifyingContract, salt)` of the
     ///                        wallet's `eip712Domain()` (the `TypedDataSign` struct's last five fields)

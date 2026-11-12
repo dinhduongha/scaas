@@ -146,6 +146,10 @@ test('erc7739TypedData / erc7739Signature = forge KAT (erc7739_kat.json)', () =>
   assert.equal(hex(erc7739Signature(msig.subarray(0, 65), order)), m.signature, 'explicit mode: contentsType ‖ Order');
   assert.ok(new TextDecoder().decode(msig.subarray(65 + 64, msig.length - 2)).endsWith(')Order'));
   assert.throws(() => erc7739TypedData(td, { wallet: 'NormalToken', address: s.wallet, chainId, chainUid: k.salt }), /no ERC-7739/);
+  const w = { wallet: 'MandateWallet', address: m.wallet, chainId, chainUid: k.salt };
+  for (const bad of ['', 'order', 'Or der', 'Or,der', 'Or(der', 'Or)der', 'Or\0der']) {
+    assert.throws(() => erc7739TypedData({ ...order, primaryType: bad }, w), /refuses the contents name/, JSON.stringify(bad));
+  }
 });
 
 // ua-mtx-merge T3b / T11 (Q6, MD-11): the wallet's one signed entry per op over `UA<Op>`; the flat builders' KATs

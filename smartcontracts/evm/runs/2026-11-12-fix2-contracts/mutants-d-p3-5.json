@@ -1,7 +1,32 @@
 [
- {"id":"D35-1 no entry guard","file":"src/dex/SCaaSDex.sol","old":"function rescue(address token) external nonReentrant {","new":"function rescue(address token) external {","path":"test/governance/GovRescue.t.sol"},
- {"id":"D35-2 no RescueOff","file":"src/dex/SCaaSDex.sol","old":"        if (to == address(0)) revert DexPuller.RescueOff();\n","new":"","path":"test/governance/GovRescue.t.sol"},
- {"id":"D35-3 part of the balance","file":"src/dex/SCaaSDex.sol","old":"        uint256 amount = IERC20(token).balanceOf(address(this));\n        _send(token, to, amount);","new":"        uint256 amount = IERC20(token).balanceOf(address(this)) / 2;\n        _send(token, to, amount);","path":"test/governance/GovRescue.t.sol"},
- {"id":"D35-4 another destination","file":"src/dex/SCaaSDex.sol","old":"        address to = DexPuller(_s().puller).rescueTo();","new":"        address to = _s().treasury;","path":"test/governance/GovRescue.t.sol"},
- {"id":"D35-5 no event","file":"src/dex/SCaaSDex.sol","old":"        emit IRescuable.Rescued(token, to, amount);\n    }","new":"    }","path":"test/governance/GovRescue.t.sol"}
+ {
+  "id": "D35-1 no entry guard",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_dexRescueNotReentrant() (gas: 830328)"
+ },
+ {
+  "id": "D35-2 no RescueOff",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: SafeERC20FailedOperation(0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f) != RescueOff()] test_dexRescueWholeBalance() (gas: 824860)"
+ },
+ {
+  "id": "D35-3 part of the balance",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 7 != 15] test_dexRescueNotReentrant() (gas: 1007657)"
+ },
+ {
+  "id": "D35-4 another destination",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0 != 15] test_dexRescueNotReentrant() (gas: 996863)"
+ },
+ {
+  "id": "D35-5 no event",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Transfer != expected Rescued] test_dexRescueWholeBalance() (gas: 419711)"
+ }
 ]

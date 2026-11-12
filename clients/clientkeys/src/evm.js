@@ -123,6 +123,8 @@ export function accountSignature(keyIndex, proof, inner) {
 export function erc7739TypedData(td, { wallet, address, chainId, chainUid }) {
   if (wallet !== 'SmartKeyAccount' && wallet !== 'MandateWallet') throw new Error(`no ERC-7739 answer from ${wallet}`);
   if (td.types.TypedDataSign) throw new Error('the contents already define TypedDataSign');
+  // the wallet refuses a contentsName that is empty, starts a-z, or holds `, ()` space or NUL (ERC7739Lib, EIP-7739)
+  if (!/^[^a-z, ()\0][^, ()\0]*$/.test(td.primaryType ?? '')) throw new Error(`ERC-7739 refuses the contents name ${td.primaryType}`);
   return {
     types: { ...td.types, TypedDataSign: [{ name: 'contents', type: td.primaryType }, { name: 'name', type: 'string' },
       { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' },
