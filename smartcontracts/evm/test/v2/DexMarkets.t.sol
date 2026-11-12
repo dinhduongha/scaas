@@ -10,7 +10,7 @@ import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
-import {FeeOnTransferERC20} from "../helpers/Mocks.sol";
+import {FeeOnTransferERC20, MockERC20} from "../helpers/Mocks.sol";
 import {nid} from "../helpers/Ids.sol";
 import {UADexBase} from "../ua/UADex.t.sol";
 import {MockRouter} from "./DexExchange.t.sol";
@@ -193,5 +193,66 @@ contract DexMarketsTest is UADexBase {
         _exchange(_plan(), _swap(address(A), address(B), 1000, 2000), "");
         _fresh(0, 0);
         _hybrid(_hybridPlan(), _swap(address(A), address(B), 600, 1150), "");
+    }
+
+    // ------------------------------------------------------------------ the recipient's delta (owner 2026-11-12, C6-4)
+
+    /// A receive-only outside token on an open DEX: alice sells 1000 A for >= 1900 of `t` through the router, which pays
+    /// `out` of `t` to the DEX. Returns the plan.
+    function _toOutside(address t) internal view returns (ISCaaSDex.ExchangePlan memory p) {
+        p.ref = "x";
+        p.legs = new ISCaaSDex.ExchangeLeg[](1);
+        p.legs[0] = DexLegs.exchange(_uaLeg(address(A), _ua(_pad(alice), t, 1000, 1900, 0), 0), 1000, 1900);
+    }
+
+    /// The same receive-only plan with an exact token (the control) and with a 1 % fee-on-transfer token, one change at a
+    /// time: the route pays 1920, the DEX receives 1901 (floor 1900, conservation balances) and pays it all to alice, who
+    /// is credited 1882 < 1900: `InsufficientOutput`. With room (the route pays 2000) the fee token settles: the check is
+    /// on what alice is credited, not on the token.
+    function test_exchange_receiveOnlyFeeToken_recipientDelta() public {
+        _fresh(0, 0);
+        MockERC20 ex = new MockERC20("Exact", "EX", 18);
+        FeeOnTransferERC20 fot = new FeeOnTransferERC20();
+        ex.mint(address(router), 1e6);
+        fot.mint(address(router), 1e6);
+        _exchange(_toOutside(address(ex)), _swap(address(A), address(ex), 1000, 1920), ""); // the control
+        assertEq(ex.balanceOf(alice), 1920);
+        _fresh(0, 0);
+        _exchange(_toOutside(address(fot)), _swap(address(A), address(fot), 1000, 1920),
+            abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(fot)));
+        _exchange(_toOutside(address(fot)), _swap(address(A), address(fot), 1000, 2000), "");
+        assertGe(fot.balanceOf(alice), 1900);
+    }
+
+    /// The hybrid's taker (its exchange leg; no maker here): the same receive-only fee token, the same control.
+    function test_hybrid_receiveOnlyFeeToken_recipientDelta() public {
+        MockERC20 ex = new MockERC20("Exact", "EX", 18);
+        FeeOnTransferERC20 fot = new FeeOnTransferERC20();
+        ex.mint(address(router), 1e6);
+        fot.mint(address(router), 1e6);
+        ISCaaSDex.HybridPlan memory p;
+        p.ref = "hy";
+        p.makers = new ISCaaSDex.DexLeg[](0);
+        (p.outsideSell, p.outsideFloor) = (1000, 1900);
+        _fresh(0, 0);
+        p.taker = _uaLeg(address(A), _ua(_pad(alice), address(ex), 1000, 1900, 0), 1000);
+        _hybrid(p, _swap(address(A), address(ex), 1000, 1920), ""); // the control
+        assertEq(ex.balanceOf(alice), 1920);
+        _fresh(0, 0);
+        p.taker = _uaLeg(address(A), _ua(_pad(alice), address(fot), 1000, 1900, 0), 1000);
+        _hybrid(p, _swap(address(A), address(fot), 1000, 1920),
+            abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(fot)));
+    }
+
+    /// The minimum is net of the DEX fee: alice signs 0.3 % and the route pays exactly the floor (1900, surplus 0); she is
+    /// credited 1900 − ⌈5.7⌉ = 1894, which settles.
+    function test_exchange_recipientDelta_netOfTheFee() public {
+        _fresh(0, 0);
+        MockERC20 ex = new MockERC20("Exact", "EX", 18);
+        ex.mint(address(router), 1e6);
+        ISCaaSDex.ExchangePlan memory p = _toOutside(address(ex));
+        p.legs[0] = DexLegs.exchange(_uaLeg(address(A), _ua(_pad(alice), address(ex), 1000, 1900, 3_000), 0), 1000, 1900);
+        _exchange(p, _swap(address(A), address(ex), 1000, 1900), "");
+        assertEq(ex.balanceOf(alice), 1894);
     }
 }

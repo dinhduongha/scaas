@@ -197,6 +197,37 @@ abstract contract SCaaSDexCore {
         if (!ok) _tokenFailed(token);
     }
 
+    /// @dev One word from a capped `staticcall`; `ok` false when it reverted or returned less than a word.
+    function _word(address target, bytes memory data) internal view returns (bool ok, uint256 w) {
+        assembly ("memory-safe") {
+            let g := gas()
+            if gt(g, 500000) { g := 500000 } // C6-1: TokenCall.TOKEN_GAS
+            ok := staticcall(g, target, add(data, 0x20), mload(data), 0, 0x20)
+            ok := and(ok, gt(returndatasize(), 0x1f))
+            w := mload(0)
+        }
+    }
+
+    /// @dev The balance of an id: `balanceOf` of a native one, `balanceOfUA` of a derived one.
+    function _balOf(address token, bytes32 id) internal view returns (uint256 w) {
+        bool ok;
+        (ok, w) = _word(token, UAKinds.inNativeSpace(id)
+            ? abi.encodeCall(IERC20.balanceOf, (TradeLib.addr(id)))
+            : abi.encodeCall(IUALedger.balanceOfUA, (id)));
+        if (!ok) _tokenFailed(token);
+    }
+
+    /// @dev A payout to an order's recipient, measured there (owner 2026-11-12, closes review C6-4): its balance of `token`
+    ///      (`balanceOf`, or `balanceOfUA` of a derived id: no token is assumed exact) must rise by at least `min`, else
+    ///      `InsufficientOutput(token)`. A token that credits less than the DEX sends (a fee or a hook on `transfer`) fails
+    ///      closed even when the DEX's own balance conserves.
+    function _sendChecked(address token, bytes32 to, uint256 amount, uint256 min) internal {
+        uint256 b = _balOf(token, to);
+        _sendTo(token, to, amount);
+        uint256 a = _balOf(token, to);
+        if (a < b || a - b < min) revert ISCaaSDex.InsufficientOutput(token);
+    }
+
     /// @dev To an id: a native one by `_send`, a derived one by the token's `transferToUA` from the DEX's own
     ///      balance (it lowers `balanceOf(this)` as `safeTransfer` does, so conservation is unchanged), only in a SCaaS
     ///      token with its UA ledger on; the token checks the receiver (registered SIGNING).

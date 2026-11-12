@@ -369,30 +369,10 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
 
     // ------------------------------------------------------------------ reads (W-O: capped, one word, no revert data)
 
-    /// @dev One word from a capped `staticcall`; `ok` false when it reverted or returned less than a word.
-    function _word(address target, bytes memory data) private view returns (bool ok, uint256 w) {
-        assembly ("memory-safe") {
-            let g := gas()
-            if gt(g, 500000) { g := 500000 } // C6-1: TokenCall.TOKEN_GAS
-            ok := staticcall(g, target, add(data, 0x20), mload(data), 0, 0x20)
-            ok := and(ok, gt(returndatasize(), 0x1f))
-            w := mload(0)
-        }
-    }
-
     /// @dev `ownerOf(id)` as a word; a failed read reverts as `_tokenFailed` does.
     function _ownerOf(address pm, uint256 id) private view returns (uint256 w) {
         bool ok;
         (ok, w) = _word(pm, abi.encodeWithSelector(OWNER_OF, id));
         if (!ok) _tokenFailed(pm);
-    }
-
-    /// @dev The balance of an id: `balanceOf` of a native one, `balanceOfUA` of a derived one.
-    function _balOf(address token, bytes32 id) private view returns (uint256 w) {
-        bool ok;
-        (ok, w) = _word(token, UAKinds.inNativeSpace(id)
-            ? abi.encodeCall(IERC20.balanceOf, (TradeLib.addr(id)))
-            : abi.encodeCall(IUALedger.balanceOfUA, (id)));
-        if (!ok) _tokenFailed(token);
     }
 }

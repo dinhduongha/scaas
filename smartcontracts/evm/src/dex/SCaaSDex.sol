@@ -459,7 +459,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     }
 
     function _pay(bytes32 ref, address sellToken, Calc memory c, address submitter) private {
-        (bytes32 to, uint256 relayerShare, uint256 treasuryShare) = _payLeg(sellToken, c, 0, submitter);
+        (bytes32 to, uint256 relayerShare, uint256 treasuryShare) = _payLeg(sellToken, c, 0, submitter, false);
         if (c.ua) {
             emit UALegSettled(ref, c.h, c.o.from, to, c.sold, c.recv - c.fee, c.fee, c.refund, relayerShare,
                 treasuryShare);
@@ -469,8 +469,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         }
     }
 
-    /// @dev Proceeds net of the fee, plus `surplus`, to `destination` (or `from`), the fee split, the Path B refund.
-    function _payLeg(address sellToken, Calc memory c, uint256 surplus, address submitter)
+    /// @dev Proceeds net of the fee, plus `surplus`, to `destination` (or `from`), the fee split, the Path B refund. On
+    ///      the exchange path (`measured`: an exchange leg, a hybrid's taker) the recipient's delta must reach the floor
+    ///      less the fee (owner 2026-11-12, closes review C6-4); a book payout (`mtxSettle`, a hybrid's makers) is not
+    ///      measured here (pending the owner's settle ruling).
+    function _payLeg(address sellToken, Calc memory c, uint256 surplus, address submitter, bool measured)
         private returns (bytes32 to, uint256 relayerShare, uint256 treasuryShare)
     {
         DexStorage storage s = _s();
@@ -478,7 +481,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         to = o.destination == 0 ? o.from : o.destination;
         relayerShare = Math.mulDiv(c.fee, s.relayerSharePpm, PPM);
         treasuryShare = c.fee - relayerShare;
-        _sendTo(o.receiveToken, to, c.recv - c.fee + surplus);
+        if (measured) _sendChecked(o.receiveToken, to, c.recv - c.fee + surplus, c.recv - c.fee);
+        else _sendTo(o.receiveToken, to, c.recv - c.fee + surplus);
         _send(o.receiveToken, submitter, relayerShare);
         _send(o.receiveToken, s.treasury, treasuryShare);
         _sendTo(sellToken, o.from, c.refund);
@@ -765,7 +769,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     }
 
     function _payExchange(bytes32 ref, address sellToken, Calc memory c, uint256 surplus, address submitter) private {
-        (bytes32 to,,) = _payLeg(sellToken, c, surplus, submitter);
+        (bytes32 to,,) = _payLeg(sellToken, c, surplus, submitter, true);
         uint256 limit = Math.mulDiv(c.sold, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
         if (c.ua) {
             emit UAExchangeLegSettled(ref, c.h, c.o.from, to, c.sold, c.recv, surplus, c.fee, c.refund, limit);

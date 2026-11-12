@@ -18,3 +18,13 @@ gas (regular) | 65979048 | 0 | mtxSettle 1x1 305462 -> 311105; mtxExchange 28904
   400409 -> 406053, 1x2 473499 -> 480688; mtxLiquidity 419953 -> 418277, 467038 -> 460925, 523851 -> 517739
 docs_check | 65979048 | 0 | 0 errors, 6 warnings (budgets, as before); test_docs_check ok
 not run | - | - | node e2e (DexConfig fixture changed), clients; governance_bits.json row 29 not written
+
+--- recipient-balance check on the exchange path (owner 2026-11-12, closes review C6-4; settle on hold) ---
+exchange / hybrid taker recipient delta | (this commit) | 0 | test/v2/Dex*.sol 209 (10 suites); test/liquidity 82 + 1
+  skipped (8); test/ua/UADex*.sol 15 (3); test/merge 118 (10); mutants 5/5 (runs/2026-11-12-fix2-dex/
+  mutants-recipient.json; R5 killed after test_exchange_recipientDelta_netOfTheFee was added, first run survived)
+size gate | (this commit) | 0 | SCaaSDex 33061 -> 33461 (baseline row 33222 -> 33461, reason in _comment);
+  module 19158, governance module 6465 unchanged
+gas (regular, 65979048 -> this) | (this commit) | 0 | mtxExchange 291018 -> 293889; mtxExchangeBatch 301223 -> 304094;
+  mtxHybrid 1x1 406053 -> 408948, 1x2 480688 -> 483612; mtxSettle 1x1 311105 -> 311153 (no check; the _payLeg flag);
+  mtxLiquidity unchanged
