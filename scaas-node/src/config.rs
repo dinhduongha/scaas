@@ -377,6 +377,30 @@ pub struct ChainCfg {
     /// The top-level `[pqz_verifier]`, set by [`Config::load`] (never read from a `[[chains]]` table).
     #[serde(skip)]
     pub pqz_verifier: PqzVerifierCfg,
+    /// Fable recheck 3 R3-4, recheck 4 R4-3: one request's time (a read's, each span of a log window, the lane's nonce, fee,
+    /// send and receipt requests); past it a read fails over. Above 0.
+    #[serde(default = "default_rpc_timeout_ms")]
+    pub rpc_timeout_ms: u64,
+    /// The same for each request of a simulation (`eth_call`, `eth_estimateGas`, which runs the call several times): a PQZ or
+    /// Zether proof check is the slowest call the node makes. Unmeasured default, generous. Above 0.
+    #[serde(default = "default_rpc_simulate_timeout_ms")]
+    pub rpc_simulate_timeout_ms: u64,
+    /// Fable recheck 3 R3-1: the highest block of this chain the node has seen from its first endpoint (the lanes' receipts, the
+    /// heads the indexer, the venue and the health probe poll), shared by every `Chain` built from this table (clones share it);
+    /// a runtime value, never read from the file, cleared by a restart.
+    #[serde(skip)]
+    pub head: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Fable recheck 5 R5-5: the chain reads a failover endpoint answered, over every `Chain` of this table (health:
+    /// `scaas_rpc_failover_answers_total`); a runtime value, never read from the file.
+    #[serde(skip)]
+    pub failover: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+fn default_rpc_timeout_ms() -> u64 {
+    30_000
+}
+fn default_rpc_simulate_timeout_ms() -> u64 {
+    120_000
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -476,6 +500,10 @@ impl Default for ChainCfg {
             gossip: false,
             exclusive_ms: default_exclusive_ms(),
             pqz_verifier: PqzVerifierCfg::default(),
+            rpc_timeout_ms: default_rpc_timeout_ms(),
+            rpc_simulate_timeout_ms: default_rpc_simulate_timeout_ms(),
+            head: Default::default(),
+            failover: Default::default(),
         }
     }
 }
@@ -625,6 +653,10 @@ impl Config {
             }
             if c.compliance_registry.is_some() != c.compliance_registry_codehash.is_some() {
                 bail!("chain {key}: compliance_registry and compliance_registry_codehash are set together");
+            }
+            // Fable recheck 4 R4-3: a 0 timeout fails every read at once (nothing dies, nothing lands): refused at start
+            if c.rpc_timeout_ms == 0 || c.rpc_simulate_timeout_ms == 0 {
+                bail!("chain {key}: rpc_timeout_ms and rpc_simulate_timeout_ms must be above 0");
             }
             if c.is_evm() {
                 if c.evm_chain_number == 0 {
@@ -1123,6 +1155,21 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         let c = with(&format!("compliance_registry = \"{a}\"\ncompliance_registry_codehash = \"{h}\"")).unwrap();
         assert_eq!((c.chains[0].compliance_registry, c.chains[0].compliance_registry_codehash), (Some(Address::repeat_byte(0xc0)), Some(B256::repeat_byte(1))));
         assert_eq!(with("").unwrap().chains[0].compliance_registry, None);
+    }
+
+    /// Fable recheck 4 R4-3: the chain read timeouts default to 30 s and 120 s, are read from the table, and 0 is refused at start.
+    #[test]
+    fn rpc_timeouts_default_and_refuse_zero() {
+        let with = |extra: &str| -> Result<Config> {
+            let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\n{extra}")))?;
+            c.validate().map(|_| c)
+        };
+        let c = with("").unwrap();
+        assert_eq!((c.chains[0].rpc_timeout_ms, c.chains[0].rpc_simulate_timeout_ms), (30_000, 120_000));
+        assert_eq!(with("rpc_timeout_ms = 5000").unwrap().chains[0].rpc_timeout_ms, 5000);
+        for zero in ["rpc_timeout_ms = 0", "rpc_simulate_timeout_ms = 0"] {
+            assert!(with(zero).unwrap_err().to_string().contains("must be above 0"), "{zero}");
+        }
     }
 
     /// T17: the relay-fee / pay-meta keys of every family: defaults, and a set-but-invalid value is a startup error.

@@ -1,0 +1,11 @@
+# SCaaS testnet (7622, scaas-testnet) reset 3, 2026-11-11/12. Owner standing leave 2026-11-10 ("tự động làm, không cần hỏi nữa").
+# Branch ua-mtx-merge at d709d672 (short final gate green at 7c85c2a3). UNAUDITED. Full output in git-ignored .log files
+# beside this file; STATE.md has the detail of each step. Chain genesis / chain_uid
+# 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164.
+step | commit | rc | counts
+1 reset (reset3.sh) | d709d672 | 0 | probe + MLDSA87 439 ok / 0 FAIL; Blockscout on a fresh DB
+2 deploy (deploy3.sh, check3.py) | d709d672 | 0 | 113 tx, 113 status 1; check3 all checks passed (first try OOM-killed in a 2 GiB scope before any send)
+3 Blockscout verify (verify.sh) | d709d672 | 0 | 91 verified, 0 unverified at head 303 (3 linked clones, 3 create3 proxies, 1 data, 1 genesis, 1 no code)
+4 matrix (matrix.sh scaas-testnet, matrix/) | d709d672 + matrix.sh base-book fix | cut | tokens: 504 tx, 504 status 1, negatives 5 / 5 refused; matrix cut after group tokens (controller decision 2026-11-12: full matrix at reset 4); its post-group Blockscout verify skipped at 35/162 (owner 2026-11-12; reset 4 resets Blockscout; the deploy's own verify was complete: 91 verified, 0 unverified)
+5 PQZ kinds e2e (e2e3.sh, e2e3.py) | d709d672 | 0 | try 3: 571 ok, 178 tx ok, 9 negatives refused, 0 FAIL (tries 1, 2: harness gas and auditor leg, no contract change)
+6 smoke 1 + 2 (smoke3.sh) | d709d672 | 0 | 2 tx, 2 status 1; smoke 2 RelayFeeRouter.relay gasUsed 244,085 of 518,680 (try 1: harness recompile killed in the 1G scope)

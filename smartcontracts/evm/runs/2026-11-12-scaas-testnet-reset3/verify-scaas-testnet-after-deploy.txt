@@ -1,0 +1,102 @@
+# NET-EVM-09: every contract on chain 7622 (scaas-testnet, head 303), discovered from a block scan, the books, the broadcasts and the getters; script/onchain/vcheck.py
+verified 91 | verified (partial, harness) 0 | linked clone 0 | linked (clone, appended data) 3 | data 1 | create3 proxy 3 | genesis 1 | no code 1 | unverified 0
+verified | GovernanceLib | 0x39cd34ba4828fc22f3f0d5d4f72b076f04c28523
+verified | HederaLib | 0x1433f2696b3625e5770e0f55b682b4861aac52fe
+verified | ZetherLib | 0x13abce3ef7b8995ba334dccf8d8827691826345d
+verified | WrappedLib | 0xae58a83fe7d74c9f488e9b2efcf84bca4ce0a83d
+verified | ZetherWrappedLib | 0x96a3f6915e8eb4c7439651fdb5947c51b4af3d50
+verified | UARegistryCoreLib | 0x10f8f8db2340bf4af809e2658f8f064c76040e9b
+verified | UARegistryAuxLib | 0x81af0910058533baab9299e5ab58b6a9118689f7
+verified | RegulatedLib | 0x2080d1f8cf91b83f30d8dd329668c147faac2453
+verified | MtxPipelineLib | 0xcf9b8054d068cf18221b85709a718a07bf6ac917
+verified | TradeLib | 0xc7b428571d792935bac9c9712c50b05a6fb99cd6
+verified | SmartKeyAccountFactory | 0xa54587f691a74bedb99179bc0ec8a708bd4ed2f2
+verified | RelayFeeRouter | 0xa3097e517e91b9e0f807815f92052212ad53a454
+verified | WebAuthnP256Verifier | 0x9e187cf0262995208679178260843af72dca42b7
+verified | P256Verifier | 0x6449eab6829a5fa18a73a5208b638d9954eb9015
+verified | Ed25519Verifier | 0x8b11801f8e26ade75738563ded7d766c97399596
+verified | Bip340Verifier | 0x30f593996dbca1b03b93cb051a2e91993d383a4b
+verified | Secp256k1Verifier | 0x6c8338fed5df6842240cde654bec572b93d832cb
+verified | SchnorrBn254Verifier | 0xf88b749bcbe8de97b839eb6ce2847214b0ea970b
+verified | SchnorrBls12381Verifier | 0xaa6d85a9d719971dab282d4c1d27d43b6b489696
+verified | BlsMinSigBls12381Verifier | 0x76af3fdb786fe1febf488bba9c2998ecff9d288f
+verified | BlsMinSigBn254Verifier | 0xd54d4012d02682411bc7dba626ea49cd5d2c151d
+verified | Musig2Secp256k1Verifier | 0x10b5fc5b58bce6deb4a8be91bf04490467a7d32c
+verified | FrostSecp256k1Verifier | 0xb8f29d5da7805206186b3582f414843afbd06d86
+verified | Musig2Bn254Verifier | 0xbcf1d1720103e750583c5893ac0c1490b553c570
+verified | FrostBn254Verifier | 0x643a471c309ed919d6b865f4334ea2fca2c9f168
+verified | ZetherSchnorrBls12381Verifier | 0x6170bbc6c5e291c3b5c265a8cb68cf6db0dc472a
+verified | MldsaVerifier | 0x9998fcc911c20a484ac968cee455649c3e2b0d39
+verified | MldsaVerifier | 0x68af835d0b46d1cbd462b87d1ca19b69b730c0c4
+verified | FndsaVerifier | 0x17925c193eef7f7bb1a909a99a9048dc4d3704b6
+verified | SlhdsaVerifier | 0xc11244aa997519f3afc1f139c48d932ff11df451
+verified | FndsaVerifier | 0xf15b99e714b39f8ba2d7509123cd0741b922c8f9
+verified | UARegistry | 0x9385a29f55c3fb10e6c5c8d75afae22e3f6b880f
+verified | GovernanceRouter | 0xd6d4d918fd6e58fb6b9b2f769bde23673fac9e59
+verified | ComplianceRegistry | 0xd8e92111ae24e835d9f88ee60dcf86fb30c6a2b1
+verified | ZetherStatements | 0x44df9cd4e84cb9b358b3e492800646b1f84d4a69
+verified | OpenFactory | 0x5df729d77c6e2459f3bc8b9729f97f7308bef53c
+verified | RelayFeeExecutor | 0x1c07864abc6267592df95238e246f46e836d19f8
+verified | NormalTokenP | 0x05c2b30b4fd871c04c4ae251c4f609cab7681eaa
+verified | NormalTokenT | 0xd714e3bdf1859a1cc17be07167fa57e683921deb
+verified | NormalTokenA | 0xc86352904583a0dab6d179dce5804ca67b901418
+verified | NormalToken | 0xddc6dbfc7dd4223d29bb4a87e87aa69691e2f48c
+verified | SCaaSDexGovernanceModule | 0x9932d32abcea2c6033ef2b92ba0085e88caeefd5
+verified | SCaaSDexLiquidityModule | 0xe5bb4af0d99c5df1467111f42fafa0ad54550de6
+verified | SCaaSDex | 0x09fde21bfc1f6b9c4ed0b9262202ac083bcc4e97
+verified | WrappedTokenP | 0xe2c04362b24a7883598357580914a2eda80d39cf
+verified | WrappedTokenT | 0x757158c26b46fbc30386c8199c87d2f673e9653c
+verified | WrappedTokenA | 0x8aadae49a322291c58ba4c2cfa268dcb5db81646
+verified | WrappedTokenW | 0x786508640321fac3c92cf8af2513469bd7389fee
+verified | WrappedToken | 0x23e815b4551455aebe0086c0506144d855e872e7
+verified | NormalRegulatedTokenP | 0xb6b400a64a7436b2cb6c027165dd99e7e1a73392
+verified | NormalRegulatedTokenT | 0x47eacb92ac2f8ca3d4f5e6fcff0e57bd36971bf7
+verified | NormalRegulatedTokenA | 0x3b4f0c84cdee23916271349fd468c8dd4f2c3e34
+verified | NormalRegulatedTokenR | 0xd32a6caab6af4125b3c33f739060b2abf8869932
+verified | NormalRegulatedToken | 0x4083d168c8e38f72fa2d333ed4e4ca496f92b5d4
+verified | WrappedRegulatedTokenP | 0xf388e56cc37bf5732e28e4cfe44bcd5c6b7e55e8
+verified | WrappedRegulatedTokenT | 0x9bc6a25d6c9fb8af6cf84b14564669dc560c43a8
+verified | WrappedRegulatedTokenA | 0x7c01ef54e4166e4e483f681251962701df16229f
+verified | WrappedRegulatedTokenW | 0x37c19bf0551797de3212e9fc3435629dc862a9eb
+verified | WrappedRegulatedTokenR | 0x6ae0a2370eb61cfafe2b70a57b30ceb023e5aa0d
+verified | WrappedRegulatedToken | 0xb5ef8c788cfdcde55ea169dceaf7912295af4430
+verified | PqChatTopics | 0x576b1ef0012429c7f50d49cfb1d2f393d50e9928
+verified | PqChat | 0x2959a71f960d2337c6163308caa207c7fe3ecdc2
+verified | ZetherDisclosure | 0x31b56e66ccfd5872d450d0f8f75b3d34c43f891d
+verified | ZetherInnerProductVerifierBls12381 | 0x784179bab17c0736cc8df7538d40aa3817de3f1d
+verified | ZetherTransferVerifierBls12381 | 0xbae21b4bb115a0b61961aeb7c07c7a4ac6abc08a
+verified | ZetherBurnVerifierBls12381 | 0x8a54603fc94548324b6c32ba29ee8d9ef0cb91ac
+verified | NormalZetherTokenP | 0x6412aeecfa1f4acfa38cbed68f1f88ae1de1f305
+verified | NormalZetherTokenT | 0x951c6a190f075b5f499d7d4d014ea06fa61d88f6
+verified | NormalZetherTokenA | 0xcce7fe37e67921699fc3525d6e19d58246c7a5c3
+verified | NormalZetherTokenZ | 0x25ad2bb60968f7801aa925ce12dbae514cf43d9b
+verified | NormalZetherToken | 0xda01d7915b75edc0280404e938062f7ac262a076
+verified | WrappedZetherTokenP | 0xcd01331d74e48090cc8a5899447cd527bf90b697
+verified | WrappedZetherTokenT | 0x32b31873eccb95b2a6d0821d9ae3beca7c4bd598
+verified | WrappedZetherTokenA | 0x86ee5308f3bcf2efc5742b01ffba0ef3ab5805f1
+verified | WrappedZetherTokenW | 0xdbc903b528b8b819a8dd7f53dd37a8cb3456a386
+verified | WrappedZetherTokenZ | 0x25537a4a9517899517a563377a4297761744a1dd
+verified | WrappedZetherToken | 0x9eb4825ebaa950d0b4c3107179468e34c3c248c9
+verified | NormalZetherRegulatedTokenP | 0x49c2e652b322b1bd25b1fdb2edf894049ced0622
+verified | NormalZetherRegulatedTokenT | 0xd987b121f48eb06bcc4577b852b51576e47d9a9e
+verified | NormalZetherRegulatedTokenA | 0x916f00b05679666414e01edf9806a3f1ec64f4b5
+verified | NormalZetherRegulatedTokenZ | 0xcf5bcc8348afbac5b34dfee732208297f16c0636
+verified | NormalZetherRegulatedTokenR | 0xcbb26714e955019277ef466bbd7caac207e4ea11
+verified | NormalZetherRegulatedToken | 0x6d22678d10262772b65ce675cef1ee87ca2e0a4f
+verified | WrappedZetherRegulatedTokenP | 0x75d7eade26c822b5f96a10d1103096785c0e8d44
+verified | WrappedZetherRegulatedTokenT | 0x3ad7484d540286ca825cd468df686507880e6723
+verified | WrappedZetherRegulatedTokenA | 0xf7d5a30f6ce385977fa7924a59cdfba3ce195ca8
+verified | WrappedZetherRegulatedTokenW | 0xfe70b3b24c086d4f409d927f2ea1cf47761c6619
+verified | WrappedZetherRegulatedTokenZ | 0x5e0f48cd221c6d59fbe6ca124077fccfac57d728
+verified | WrappedZetherRegulatedTokenR | 0x6285f3d52fab8da309d3bd3dd3d88f97ca58575b
+verified | WrappedZetherRegulatedToken | 0x277996937f16b2c7ecf7db950e7d239ebf450cb8
+verified | SmartKeyAccount | 0xb25700d536b70964cc99ec0109f44b29943b0447
+linked (clone, appended data) | ? | 0x3ba951bf1f7f8f379f036d593daa0a4e94932983 | EIP-1167 proxy of 0x2959a71f960d2337c6163308caa207c7fe3ecdc2 (verified), 127 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x149e070ad75b82dfd202fe5b39b2f18f6cada860 | EIP-1167 proxy of 0xddc6dbfc7dd4223d29bb4a87e87aa69691e2f48c (verified), 95 B appended; the explorer: unknown
+linked (clone, appended data) | ? | 0x0f321e2b5a149a80ded29e19c7d7478e07874b3f | EIP-1167 proxy of 0xddc6dbfc7dd4223d29bb4a87e87aa69691e2f48c (verified), 95 B appended; the explorer: unknown
+create3 proxy | ? | 0x70c97cb7113dc1645d42de267851202953e69709 | the 8-byte CREATE3 proxy of src/factory/Create3.sol, bytecode without a source
+create3 proxy | ? | 0xc8240185967fbe38d9be34827a04ea2c85ca8aed | the 8-byte CREATE3 proxy of src/factory/Create3.sol, bytecode without a source
+create3 proxy | ? | 0xed1c2ea3ffe487566d9b104d4de51982909bb995 | the 8-byte CREATE3 proxy of src/factory/Create3.sol, bytecode without a source
+genesis | ? | 0x4e59b44847b379578588920ca78fbf26c0b4956c | code at block 0 (a predeploy, not ours)
+no code | admin | 0x85528c7e75ab86b58a166e263a49449927b15b02 | named by a book or broadcast; nothing on this chain
+data | SSTORE2 | 1 contracts (code 0x00…), not listed one by one

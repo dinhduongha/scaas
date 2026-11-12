@@ -11,7 +11,9 @@
 //! re-fetched once; none ⇒ `PQZ_VERDICT_MISSING`, zero sends. The precompile is never asked for (spec §3: OFFCHAIN ignores
 //! whether one exists). With `refuse_shield_when_unserved`, a shield into an `OFFCHAIN` token whose verifier is revoked or
 //! that no endpoint serves is `PQZ_VERIFIER_UNREACHABLE`. **UNAUDITED.**
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use alloy::dyn_abi::DynSolValue as Val;
 use alloy::primitives::{keccak256, Bytes, B256, U256};
@@ -28,9 +30,17 @@ use crate::typed::{self, PqzVerdictArgs, Row};
 /// The PQZ verifier's route (spec §11.2).
 const ROUTE: &str = "/v1/pqz-verdict";
 
+/// Fable E N-7: an endpoint that did not answer (a timeout, a refused connection, a 5xx) is skipped for at least this long, so the
+/// lane's single loop pays its `timeout_ms` once per window and endpoint, not once per job. Fable recheck 2 P3-6: the window is
+/// `max(10 s, 4 × timeout_ms)`, and an answer slower than four fifths of `timeout_ms` rests its endpoint too (the answer is used).
+const ENDPOINT_BACKOFF: Duration = Duration::from_secs(10);
+
 pub struct Verifier {
     cfg: PqzVerifierCfg,
     http: reqwest::Client,
+    /// Endpoint index → until when it is skipped ([`ENDPOINT_BACKOFF`]).
+    resting: Mutex<HashMap<usize, Instant>>,
+    backoff: Duration,
 }
 
 /// The `pqzVerifyConfig()` of an `OFFCHAIN` token; `None` for a `PRECOMPILE` one or a contract without the view (no `OFFCHAIN`
@@ -138,7 +148,19 @@ pub fn fee_mismatch(p: u64, e: U256, tx: U256, vf: u64, md: U256) -> String {
 impl Verifier {
     pub fn new(cfg: &PqzVerifierCfg) -> anyhow::Result<Self> {
         let http = reqwest::Client::builder().timeout(Duration::from_millis(cfg.timeout_ms)).build()?;
-        Ok(Self { cfg: cfg.clone(), http })
+        let backoff = ENDPOINT_BACKOFF.max(Duration::from_millis(cfg.timeout_ms.saturating_mul(4)));
+        Ok(Self { cfg: cfg.clone(), http, resting: Default::default(), backoff })
+    }
+
+    /// Endpoint `i` failed by transport within the last [`ENDPOINT_BACKOFF`]: it is not asked.
+    fn resting(&self, i: usize) -> bool {
+        self.resting.lock().is_ok_and(|m| m.get(&i).is_some_and(|t| *t > Instant::now()))
+    }
+
+    fn rest(&self, i: usize) {
+        if let Ok(mut m) = self.resting.lock() {
+            m.insert(i, Instant::now() + self.backoff);
+        }
     }
 
     /// The trailing `PqzSignedVerdict` of a PQZ debit, rebuilt into `w.data` (module doc); any other work unchanged. `Policy`:
@@ -221,10 +243,18 @@ impl Verifier {
     async fn fetch(&self, body: &Value) -> Result<PqzVerdictArgs, String> {
         let mut errs = Vec::new();
         for (i, e) in self.cfg.endpoints.iter().enumerate() {
+            if self.resting(i) {
+                errs.push(format!("endpoint {}: skipped, it did not answer in the last {} s", i + 1, self.backoff.as_secs()));
+                continue;
+            }
+            // Fable recheck 3 R3-5: an answer rests nothing, however slow; only a timeout, a dropped connection or a 5xx does
             match self.ask(e, body).await {
                 Ok(v) => return Ok(v),
-                Err(x) => {
+                Err((down, x)) => {
                     tracing::warn!(endpoint = i + 1, url = %e, "pqz verifier: {x}");
+                    if down {
+                        self.rest(i);
+                    }
                     errs.push(format!("endpoint {}: {}", i + 1, crate::chain::redact_urls(&x)));
                 }
             }
@@ -235,29 +265,30 @@ impl Verifier {
     /// One endpoint: a 2xx JSON answer of at most `max_response_bytes` (read in chunks, never buffered past it), the reference
     /// verifier's `{pqzVerdict, pqzVerdictSig}`: of the verdict only its `pqzVerifierEpoch` and `validUntil` are read (the
     /// node rebuilds the rest), the signature through the bounded `UASig` decoder (two levels, 16 slots).
-    async fn ask(&self, endpoint: &str, body: &Value) -> Result<PqzVerdictArgs, String> {
+    /// `Err((true, _))`: the endpoint did not answer (transport, 5xx), [`Verifier::rest`]s it.
+    async fn ask(&self, endpoint: &str, body: &Value) -> Result<PqzVerdictArgs, (bool, String)> {
         let url = format!("{}{ROUTE}", endpoint.trim_end_matches('/'));
-        let mut r = self.http.post(url).json(body).send().await.map_err(|e| e.without_url().to_string())?;
+        let mut r = self.http.post(url).json(body).send().await.map_err(|e| (true, e.without_url().to_string()))?;
         if !r.status().is_success() {
-            return Err(format!("HTTP {}", r.status()));
+            return Err((r.status().is_server_error(), format!("HTTP {}", r.status())));
         }
         let max = self.cfg.max_response_bytes;
-        let over = || format!("an answer above max_response_bytes {max}");
+        let over = || (false, format!("an answer above max_response_bytes {max}"));
         if r.content_length().is_some_and(|n| n > max as u64) {
             return Err(over());
         }
         let mut buf = Vec::new();
-        while let Some(c) = r.chunk().await.map_err(|e| e.without_url().to_string())? {
+        while let Some(c) = r.chunk().await.map_err(|e| (true, e.without_url().to_string()))? {
             if buf.len() + c.len() > max {
                 return Err(over());
             }
             buf.extend_from_slice(&c);
         }
-        let v: Value = serde_json::from_slice(&buf).map_err(|e| format!("not JSON: {e}"))?;
+        let v: Value = serde_json::from_slice(&buf).map_err(|e| (false, format!("not JSON: {e}")))?;
         let (pv, sig) = (&v["pqzVerdict"], &v["pqzVerdictSig"]);
         let until = pv["validUntil"].as_u64().map(|n| json!(n.to_string())).unwrap_or_else(|| pv["validUntil"].clone());
         let picked = json!({"pqzVerifierEpoch": pv["pqzVerifierEpoch"], "validUntil": until, "auth": sig});
-        typed::pqz_verdict_of(&picked, "answer").map_err(|e| format!("{e:#}"))
+        typed::pqz_verdict_of(&picked, "answer").map_err(|e| (false, format!("{e:#}")))
     }
 
     /// `refuse_shield_when_unserved` (spec §11.1, C8): a shield or wrap-shield into an `OFFCHAIN` token whose verifier is revoked
@@ -295,17 +326,23 @@ impl Verifier {
         let body = json!({"token": format!("{token:#x}"), "chainId": chain.number});
         let mut known = true;
         for (i, e) in self.cfg.endpoints.iter().enumerate() {
+            if self.resting(i) {
+                known = false; // Fable E N-7: it did not answer a moment ago; not asked again inside the window
+                continue;
+            }
             let url = format!("{}{ROUTE}/probe", e.trim_end_matches('/'));
             match self.http.post(url).json(&body).send().await {
                 Ok(r) if r.status().is_success() => return Some(true),
                 // Fable recheck R-5: a 5xx (a restart behind a proxy) says nothing about the pool either
                 Ok(r) if r.status().is_server_error() => {
                     tracing::warn!(endpoint = i + 1, "pqz verifier probe: HTTP {}", r.status());
+                    self.rest(i);
                     known = false;
                 }
                 Ok(_) => {}
                 Err(x) => {
                     tracing::warn!(endpoint = i + 1, "pqz verifier probe: {x}");
+                    self.rest(i);
                     known = false;
                 }
             }
@@ -387,5 +424,80 @@ mod tests {
             assert!(crate::typed::recovers(ua, &sig, verifier), "{}", r["form"]);
         }
         assert_eq!(rows.len(), 22);
+    }
+
+    /// A verifier endpoint: `mode` 0 answers a verdict, 1 answers after a second (past the test's timeout), 2 answers 422; counting
+    /// its requests (the verdict route and the probe alike).
+    async fn endpoint(mode: u8) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        let n: std::sync::Arc<std::sync::atomic::AtomicUsize> = Default::default();
+        let n2 = n.clone();
+        let h = move || {
+            let n2 = n2.clone();
+            async move {
+                n2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if mode == 1 {
+                    tokio::time::sleep(Duration::from_secs(5)).await; // past every timeout of the tests
+                }
+                if mode == 3 {
+                    tokio::time::sleep(Duration::from_millis(1_000)).await; // a slow answer, well inside a 4 s timeout
+                }
+                if mode == 2 {
+                    return (axum::http::StatusCode::UNPROCESSABLE_ENTITY, axum::Json(json!({"error": "refused"})));
+                }
+                (axum::http::StatusCode::OK, axum::Json(json!({"pqzVerdict": {"pqzVerifierEpoch": 2, "validUntil": 1_800_000_000u64},
+                    "pqzVerdictSig": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}})))
+            }
+        };
+        let app = axum::Router::new().route(ROUTE, axum::routing::post(h.clone())).route(&format!("{ROUTE}/probe"), axum::routing::post(h));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, n)
+    }
+
+    /// Fable E N-7: an endpoint that did not answer is not asked again for the backoff window, so five jobs pay its timeout once,
+    /// not five times, and the next endpoint answers each; the probe skips it too (unknown, never "not served"). A refusal (4xx)
+    /// is an answer: that endpoint is asked again. Control: with no backoff every fetch asks the silent endpoint again.
+    #[tokio::test]
+    async fn a_silent_verifier_endpoint_rests_for_the_backoff_window() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let (slow, slow_n) = endpoint(1).await;
+        let (good, good_n) = endpoint(0).await;
+        let (no, no_n) = endpoint(2).await;
+        let cfg = PqzVerifierCfg { endpoints: vec![slow.clone(), no, good], timeout_ms: 500, ..Default::default() };
+        let v = Verifier::new(&cfg).unwrap();
+        let t = Instant::now();
+        for _ in 0..5 {
+            assert_eq!(v.fetch(&json!({})).await.unwrap().epoch, 2);
+        }
+        assert!(t.elapsed() < Duration::from_millis(2_000), "one 500 ms timeout, not five: {:?}", t.elapsed());
+        assert_eq!((slow_n.load(SeqCst), no_n.load(SeqCst), good_n.load(SeqCst)), (1, 5, 5));
+        let chain = Chain::with_signer(&crate::config::ChainCfg { evm_chain_number: 1, rpc_urls: vec!["http://127.0.0.1:9".into()],
+            ..Default::default() }, alloy::signers::local::PrivateKeySigner::random()).unwrap();
+        let only_slow = Verifier { cfg: PqzVerifierCfg { endpoints: vec![slow.clone()], timeout_ms: 500, ..Default::default() },
+            http: v.http.clone(), resting: Mutex::new(v.resting.lock().unwrap().clone()), backoff: ENDPOINT_BACKOFF };
+        assert_eq!(only_slow.serves(&chain, Address::ZERO).await, None, "resting: unknown");
+        assert_eq!(slow_n.load(SeqCst), 1, "the probe did not ask it");
+        let mut c = Verifier::new(&cfg).unwrap();
+        c.backoff = Duration::ZERO;
+        for _ in 0..3 {
+            c.fetch(&json!({})).await.unwrap();
+        }
+        assert_eq!(slow_n.load(SeqCst), 4, "control: no backoff, asked every time");
+        // Fable recheck 3 R3-5: a slow answer (a heavy set's normal verdict) is used and rests nothing, so it serves every job, not
+        // one per window (the timeout above is the control: it rests); the window follows `timeout_ms`
+        let (late, late_n) = endpoint(3).await;
+        let (good2, good2_n) = endpoint(0).await;
+        let v = Verifier::new(&PqzVerifierCfg { endpoints: vec![late.clone(), good2], timeout_ms: 4_000, ..Default::default() }).unwrap();
+        for _ in 0..2 {
+            assert_eq!(v.fetch(&json!({})).await.unwrap().epoch, 2);
+        }
+        assert_eq!((late_n.load(SeqCst), good2_n.load(SeqCst)), (2, 0), "the slow endpoint answered every job");
+        assert!(!v.resting(0));
+        let probe = Verifier::new(&PqzVerifierCfg { endpoints: vec![late], timeout_ms: 4_000, ..Default::default() }).unwrap();
+        assert_eq!(probe.serves(&chain, Address::ZERO).await, Some(true));
+        assert!(!probe.resting(0), "a slow probe answer rests nothing either");
+        assert_eq!(Verifier::new(&PqzVerifierCfg { timeout_ms: 20_000, ..Default::default() }).unwrap().backoff, Duration::from_secs(80));
+        assert_eq!(Verifier::new(&PqzVerifierCfg { timeout_ms: 200, ..Default::default() }).unwrap().backoff, ENDPOINT_BACKOFF);
     }
 }

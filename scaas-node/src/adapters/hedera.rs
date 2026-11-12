@@ -151,7 +151,7 @@ impl ChainAdapter for HederaAdapter {
     /// R80: meta-tx ⇒ `mtxNonce(from, batch)` (both structs share the lane); job `call` ⇒ không biết.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         let Some(m) = work_from_job(job, self.inner.fee_recipient).ok().and_then(|w| w.meta) else { return Ok(None) };
-        Ok(Some(self.inner.lane(0)?.subject_nonce(&m).await? > m.nonce))
+        Ok(Some(self.inner.lane(0)?.nonce_spent(&m).await?))
     }
 
     fn call_key(&self, job: &Job) -> Option<B256> {
@@ -350,6 +350,9 @@ mod tests {
             "eth_getCode" => ok(json!("0x")),
             "eth_call" => {
                 let input = b["params"][0]["input"].as_str().or(b["params"][0]["data"].as_str()).unwrap_or_default().to_string();
+                if let Some(d) = crate::typed::testkit::domain_answer(&input, b["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default()) {
+                    return axum::Json(json!({"jsonrpc": "2.0", "id": id, "result": d}));
+                }
                 match &n.invalidate_revert {
                     Some(d) if input.starts_with(&format!("0x{}", alloy::hex::encode(guard::SEL_TOKEN_INVALIDATE_NONCES))) => json!(
                         {"jsonrpc": "2.0", "id": id, "error": {"code": 3, "message": "execution reverted", "data": format!("0x{}", alloy::hex::encode(d))}}),

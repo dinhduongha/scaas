@@ -347,16 +347,61 @@ nonce is gap-filled): `args.pqz_fee` against word 256 of the token's own stateme
 (also a simulation's `AuthRejected` / `PqzVerdictMismatch(3)` after an indexed `VerifierFeeSet` of the token), and the setter's
 `VerifierFeeNotReady`, `VerifierFeePending`; final: `VerifierFeeAboveMax`, `VerifierFeeSame`.
 
-*Known limits* (Fable review of ua-mtx-merge E N-7, N-11, recheck R-6; PLANNED, open). The verifier fetch and the shield probe run inside the
+<a id="rpc-failover"></a>**Chain reads fail over** ([ARCH-POS-15](../decisions.md#ARCH-POS-15), failover; BUILT, `chain::tests::chain_reads_fail_over_on_transport_errors_never_on_a_revert`;
+Fable review of ua-mtx-merge E N-11; recheck 2 P3-4). These reads go through one read helper (`Chain::read`): the simulation,
+`chainUid()`, `pqzVerifyConfig` and the statement views, the service and registry reads, `eip712Domain()`, the subject nonce, code
+reads, the latest block's gas limit, the `VerifierFeeSet`, `UAPqzKeyCurrent` and executed-event logs, the DEX venue's checks (its
+views, a failed settlement's evidence, ERC-1271) and the drift reader's balances. Not through it: the lane's own sends, nonces, fees
+and receipts, and the indexers' log scans (their quorum). One endpoint answers the whole read (a log window's head and logs alike),
+`rpc_urls` in the order given; a transport error (the endpoint down, an error answer that is no revert) moves the read to the next
+endpoint. A revert is the contract's answer and is final only from the first endpoint; a failover endpoint's revert is a transport
+error (recheck 3 R3-1), and so is a refusal read from its *value* (recheck 4 R4-1, 5 R5-1..4; it may lag a block): `Chain` counts
+failover answers, and a refusal while the count moved is `FAILOVER_ANSWER: …`, back in the queue, on the pipelined lane and the
+generic lane runner (Hedera); at a restart such a tracked job (or an unread tracked transaction) fails the start: the node exits, its
+supervisor restarts it (all chains and the gateway down meanwhile). The venue's evidence, maker health and list reads are no verdict
+(the order stays; 503, `LIST_UNREAD`); the gateway, order intake and both cancels answer 503, not 400 (recheck 6). No job goes `dead`
+on an unread chain or on a failover endpoint's answer; an expiry (`expired before submit`, `expired while stuck; nonce gap-filled`,
+`expired before inclusion`) is `dead` only after the first endpoint said the op did not land (recheck 7); a first endpoint's revert
+stays `dead` by design. `scaas_rpc_failover_answers_total` counts the failover answers (R5-5). A failover endpoint answers at all only
+when its `eth_blockNumber` is at or above the highest block seen from the first endpoint (its receipts, the heads the indexer, the
+venue and the health probe poll), one value per `[[chains]]` table (recheck 2 P2-1, 3 R3-1); its own head never raises it (R3-2),
+nothing lowers it, a restart clears it. It is used only once its `eth_chainId` and block 0 hash are the chain's (the pinned
+`chain_uid`, else the first endpoint's block 0), read at first use and kept; another network (another id, or a reset or forked one
+with the same id) is dropped with a log line, an unreadable id or block 0 is logged as such and asked again (recheck 2 P3-5, 3 R3-3).
+The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The strict-majority option
+stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each request gets `rpc_timeout_ms` (30 s: a read's, each
+span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms` (120
+s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0 refused at
+start; an endpoint that accepts and never answers fails the read over (Fable recheck 3 R3-4, recheck 4 R4-3; tests
+`a_hung_endpoint_and_the_block_gas_read_fail_over`, `each_log_span_has_its_own_timeout`). An error answer is a revert when it carries
+revert data or names a revert, else when it names an execution error, except a node's own limit by its exact phrase (geth's `execution
+aborted (timeout = …)`; Nethermind 2.2.0's names neither; Erigon's, Reth's unverified, a known limit, recheck 4 R4-5): transport
+(recheck 2 P3-8, recheck 3 R3-6; `an_aborted_execution_is_transport`). The venue's ERC-1271 call uses the same classifier.
+
+**Log windows** (Fable recheck R-6; BUILT, `chain::tests::a_log_window_is_chunked_for_an_rpc_that_caps_the_range`). The
+`VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` and the executed-event lookup
+span a fixed window (`ROTATION_LOOKBACK`, 10,000 blocks). An endpoint that refuses a span with an error answer (an RPC that caps
+the `eth_getLogs` range) is asked again in tenths of it, contiguous up to the head, down to a floor of 10 blocks or a twentieth of
+the window, whichever is larger; after an answer the span doubles again, below half of a span refused. One that refuses the floor
+fails the read over to the next endpoint, so a window costs at most about 25 requests; a transport error fails over at once and
+never shrinks the span (Fable recheck 2 P3-3). *Operator note:* an RPC that caps `eth_getLogs` below a twentieth of the window
+(500 blocks) is given up for these reads: the PQZ jobs that need them stay in the queue (`PQZ_FEE_LOG_UNREAD`,
+`PQZ_KEY_ROTATED read`) and the log says the span was refused; list a second endpoint with a cap of at least 500 blocks
+(Fable recheck 3 R3-8). *Known limit* (PLANNED, open): the window is not bounded by the job's intake block (the pull path
+carries none; `ponytail:` on `ROTATION_LOOKBACK`).
+
+**A silent verifier endpoint rests** (Fable review of ua-mtx-merge E N-7; BUILT,
+`pqz::tests::a_silent_verifier_endpoint_rests_for_the_backoff_window`). The verifier fetch and the shield probe run inside the
 lane's single loop (at intake, and again in `track` when a stuck debit's replacement re-runs the fill), `timeout_ms` (5 s) per
-endpoint and up to two fetches per job: two slow endpoints and ten PQZ jobs in one poll stall
-receipts and replacements for up to 200 s; target: bound the fetch time per round, or remember a failed endpoint for a few
-seconds. Every chain read added for PQZ, the services and the registry (`pqzVerifyConfig`, the statement views, the
-`VerifierFeeSet` and `UAPqzKeyCurrent` logs) goes to the first `rpc_urls` entry only, with no failover:
-[ARCH-POS-15](../decisions.md#ARCH-POS-15) (an RPC list in every consumer) is built in the reference readers first, not yet in
-the node. The `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` span a fixed
-10,000-block window (`ROTATION_LOOKBACK`, not the job's intake block) on that one RPC: an RPC that caps `eth_getLogs` below it
-keeps every such job queued until its `validUntil` (never `dead` wrongly); target: chunk the range, bound it by the intake block.
+endpoint. An endpoint that did not answer (a timeout, a refused connection, a 5xx) is not asked again for
+`max(10 s, 4 × timeout_ms)`, by the fetch or the probe: inside that window it counts as not answering (`PQZ_VERDICT_MISSING`,
+`PQZ_VERIFIER_PROBE_UNREAD`, back in the queue) and the next endpoint is asked. So each silent endpoint costs the loop at most
+one `timeout_ms` per window, a quarter of the loop's time per endpoint (two silent ones: half), not one per job. An answer rests
+nothing, however slow (Fable recheck 3 R3-5, superseding recheck 2 P3-6's rest of slow answers, which served a heavy set's
+normal verdict one job per window). A refusal (a 4xx, a malformed answer) is an answer: that endpoint is asked again at once.
+*Known limit* (documented, not built): an endpoint whose normal answer takes most of `timeout_ms` costs that much per job in the
+lane's loop; a fetch budget per poll round is not built. Operators set `timeout_ms` above the verifier's normal verdict time
+with a margin ([ops.md](ops.md)).
 
 <a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
 P2; **BUILT**, T63 `39fa296c`, `a6040f9a`, node mutants N1–N3 killed). A PQZ debit whose simulation is over the lane's cap (`gas …

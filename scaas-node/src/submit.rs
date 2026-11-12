@@ -345,6 +345,9 @@ pub struct Submitter {
     tripped: Option<&'static str>,
     /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
     guard: Guard,
+    /// Fable recheck 4 R4-1: [`Chain::failover_answers`] when the job in hand started ([`Submitter::submit`]); [`Submitter::fail`]
+    /// requeues when it moved.
+    failover_mark: u64,
 }
 
 impl Submitter {
@@ -381,6 +384,7 @@ impl Submitter {
             sampled: None,
             tripped: None,
             guard,
+            failover_mark: 0,
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -403,16 +407,24 @@ impl Submitter {
             };
             // review T4 m2: a rebuilt payload is re-signed by `track`, so it passes the guard too; refused ⇒ that
             // nonce is only ever gap-filled
+            // Fable recheck 5 R5-2: a refusal read while a failover endpoint answered is no verdict: the start fails (and is
+            // retried) as on a transport error, never a gap-fill and `dead`
+            let mark = me.chain.failover_answers();
+            let moved = |me: &Self| me.chain.failover_answers() != mark;
             let work = match work {
                 Some(mut w) => match me.guard.check(&me.chain, &w).await {
                     // group 3f: a replacement re-signs the bytes, so a PQZ debit gets its verdict again; none ⇒ gap-filled only
                     Ok(()) => match me.guard.pqz_fill(&me.chain, &mut w).await {
                         Ok(()) => Some(w),
+                        Err(r) if moved(&me) => anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r:?}; the lane does not start: the node exits, its supervisor restarts it", j.job_id))),
                         Err(r) => {
                             warn!(job = j.job_id, nonce = n, "tracked PQZ job without a verdict ({r:?}); its nonce is only gap-filled");
                             None
                         }
                     },
+                    Err(Refusal::Policy(r)) if moved(&me) => {
+                        anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r}; the lane does not start: the node exits, its supervisor restarts it", j.job_id)))
+                    }
                     Err(Refusal::Policy(r)) => {
                         warn!(job = j.job_id, nonce = n, "tracked job refused by the guard: {r}; its nonce is only gap-filled");
                         None
@@ -423,7 +435,9 @@ impl Submitter {
             };
             // its replacements reuse the original transaction's gas limit (review M3); only when the RPC cannot tell,
             // the cap: the operator's, never past what the chain's blocks take (an unreadable block fails the start)
-            let sent = me.chain.tx_fees(hash).await.ok().flatten();
+            // Fable recheck 6 R6-2: an unread transaction fails the start (as `fees()` above); only an unknown one (`None`) takes
+            // the cap and, priced, leaves the nonce to the gap-fill
+            let sent = me.chain.tx_fees(hash).await.map_err(|e| anyhow::anyhow!("tracked job {}: eth_getTransactionByHash: {e:#}; the lane does not start: the node exits, its supervisor restarts it", j.job_id))?;
             let gas = match sent {
                 Some((g, _)) => g,
                 None => guard::total_cap(me.cfg.max_gas_per_tx, me.chain.block_gas().await?),
@@ -555,6 +569,7 @@ impl Submitter {
     /// digest, computed here; G2: a digest or the same bytes with a live transaction on another path (another lane, the
     /// gateway) is not signed twice.
     pub async fn submit(&mut self, w: Work) {
+        self.failover_mark = self.chain.failover_answers();
         match self.guard.check(&self.chain, &w).await {
             Ok(()) => {}
             // spec §11: a liquidity order the DEX already pulled landed (here or by another relayer): consumed, never dead (G6)
@@ -563,6 +578,16 @@ impl Submitter {
                     self.report(id, "consumed", None, None, Some(reason)).await;
                 }
                 return;
+            }
+            // Fable recheck 2 P3-2: a wrong `contract` delivered again after its op landed (a derived signer's) is `consumed`;
+            // recheck 4 R4-2: a creation delivered again after its release was deprecated, the same
+            Err(Refusal::Policy(reason)) if ["CONTRACT_KIND_MISMATCH", "RELEASE_DEPRECATED", "RELEASE_UNKNOWN"]
+                .iter().any(|p| reason.starts_with(p)) => {
+                return match self.consumed(&w).await {
+                    Ok(true) => self.report_consumed(&w).await,
+                    Ok(false) => self.fail(&w, reason).await,
+                    Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+                };
             }
             Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
             Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
@@ -725,6 +750,12 @@ impl Submitter {
     }
 
     async fn fail(&self, w: &Work, reason: String) {
+        // Fable recheck 4 R4-1: one rule for every refusal of the submit path (the guard's reads, the fill, the simulation, the
+        // nonce read behind `consumed`): a failover endpoint answered a read of this job, so the refusal may be of a block behind
+        // the head; back in the queue, final once the first endpoint answers
+        if self.chain.failover_answers() != self.failover_mark {
+            return self.requeue(w, crate::adapters::evm::failover_answer(&reason)).await;
+        }
         warn!(job = ?w.job_id, "simulation refused: {reason}");
         if let Some(id) = w.job_id {
             self.report(id, "dead", None, None, Some(reason)).await;
@@ -909,6 +940,7 @@ impl Submitter {
     async fn receipt_of(&self, hashes: Vec<B256>) -> Result<Option<(B256, TransactionReceipt)>> {
         for h in hashes.into_iter().rev() {
             if let Some(rc) = self.chain.primary().get_transaction_receipt(h).await? {
+                self.chain.saw_block(rc.block_number.unwrap_or_default()); // Fable recheck 2 P2-1
                 return Ok(Some((h, rc)));
             }
         }
@@ -1072,6 +1104,15 @@ pub(crate) mod tests {
         designator: Option<Address>,
         /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: a pruned RPC).
         genesis: bool,
+        /// Fable recheck 4 R4-1: a failover endpoint of the chain: `eth_chainId` 31337 and block 0 hashed `UID`.
+        failover: bool,
+        /// Its `eth_chainId` when not 31337 (Hedera's 296).
+        failover_id: Option<u64>,
+        /// Fable recheck 6 R6-2: `eth_getTransactionByHash` fails (a transport error).
+        tx_err: bool,
+        /// Fable recheck 4 R4-2: `classReleaseOf` answers a published release, deprecated; or none (implementation 0).
+        release_deprecated: bool,
+        release_unknown: bool,
         /// `latest`'s `gasLimit` (default 200,000,000, the SCaaS testnet's target).
         block_gas: Option<u64>,
         /// `latest` has no `blockAccessListHash`: a chain before Amsterdam (Osaka, an L2, anvil).
@@ -1096,6 +1137,8 @@ pub(crate) mod tests {
         pqz_rotated: bool,
         /// Group 3f: `pqzVerifyConfig()` answers `(mode, verifier, epoch)`; `None`: it reverts (a token without the view).
         pqz_cfg: Option<(u8, B256, u32)>,
+        /// Fable E N-6: the token's `eip712Domain().name` (default: the first job's kind through `outcomes`, else `SCaaS MetaToken`).
+        domain: Option<&'static str>,
         /// Group 3f: the input of every `eth_call` to a PQZ view (`pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the
         /// statement views), in order.
         views: Vec<Vec<u8>>,
@@ -1147,6 +1190,7 @@ pub(crate) mod tests {
                 "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
                 "eth_estimateGas" if e.sim == Some("estimate_down") => Err(err(-32000, "upstream timeout", None)),
                 "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
+                "eth_getTransactionByHash" if e.tx_err => Err(err(-32000, "upstream timeout", None)),
                 "eth_getTransactionByHash" => Ok(e.tx_gas.map_or(Value::Null, |g| {
                     let mut t = json!({"gas": format!("{g:#x}")});
                     if let Some(f) = e.tx_max_fee {
@@ -1181,6 +1225,12 @@ pub(crate) mod tests {
                     }
                     Ok(b)
                 }
+                "eth_chainId" if e.failover => Ok(json!(format!("{:#x}", e.failover_id.unwrap_or(31337)))),
+                "eth_getBlockByNumber" if e.failover && p[0] == "0x0" => {
+                    let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                    b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
+                    Ok(b)
+                }
                 "eth_getBlockByNumber" if e.genesis => {
                     Ok(serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
                 }
@@ -1205,6 +1255,16 @@ pub(crate) mod tests {
                         Ok(json!(format!("0x{}", alloy::hex::encode(out))))
                     } else if sel == IToken::supportedModesCall::SELECTOR {
                         Ok(word(U256::from(0xF3)))
+                    } else if sel == IToken::eip712DomainCall::SELECTOR {
+                        let name = e.domain.unwrap_or("SCaaS MetaToken");
+                        Ok(json!(format!("0x{}", alloy::hex::encode(IToken::eip712DomainCall::abi_encode_returns(&IToken::eip712DomainReturn {
+                            fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(7622),
+                            verifyingContract: TOKEN, salt: B256::ZERO, extensions: vec![] })))))
+                    } else if sel == crate::abi::IOpenFactory::classReleaseOfCall::SELECTOR {
+                        use crate::abi::IOpenFactory as F;
+                        Ok(json!(format!("0x{}", alloy::hex::encode(F::classReleaseOfCall::abi_encode_returns(&F::ClassRelease {
+                            implementation: if e.release_unknown { Address::ZERO } else { Address::repeat_byte(0x1e) }, envVersion: 1, envHash: B256::ZERO, usableFrom: 0,
+                            deprecated: e.release_deprecated, initSelector: Default::default(), interfaceId: Default::default() })))))
                     } else if sel == IToken::chainUidCall::SELECTOR {
                         match e.uid_err {
                             Some("revert") => Err(err(3, "execution reverted", Some("0x".into()))),
@@ -1566,6 +1626,42 @@ pub(crate) mod tests {
         }
     }
 
+    /// Fable recheck 5 R5-1: the generic lane runner (Hedera's, `EvmAdapter`) keeps the rule: a guard refusal on a failover
+    /// endpoint's answer (`chainUid()` of another chain) and a simulation revert whose nonce read a failover endpoint answered are
+    /// back in the queue (`FAILOVER_ANSWER`), never `dead`; nothing is sent. Controls: the same answers from the first endpoint
+    /// are `dead`.
+    #[tokio::test]
+    async fn the_generic_runner_requeues_a_refusal_on_a_failover_answer() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let run = |first: Evm, second: Option<Evm>| async move {
+            let (url, rpc) = fake_evm(first).await;
+            let mut cfg = test_cfg(&url);
+            if let Some(e) = second {
+                cfg.rpc_urls.push(fake_evm(Evm { failover: true, ..e }).await.0);
+            }
+            let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()],
+                Default::default()).unwrap();
+            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "depth", "finality_depth": 0,
+                "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
+            crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            assert!(rpc.lock().unwrap().sent.is_empty());
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            (last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string())
+        };
+        let (st, e) = run(Evm { uid_err: Some("transport"), ..ok() }, Some(Evm { uid: Some(0x25), ..ok() })).await;
+        assert!(st == "queued" && e.contains("FAILOVER_ANSWER") && e.contains("CHAIN_UID_MISMATCH"), "{st}: {e}");
+        let (st, e) = run(Evm { uid: Some(0x25), ..ok() }, None).await;
+        assert!(st == "dead" && e.starts_with("CHAIN_UID_MISMATCH"), "control: {st}: {e}");
+        let (st, e) = run(Evm { sim: Some("revert"), mtx_nonce: None, ..Default::default() }, Some(Evm { sim: Some("revert"), ..ok() })).await;
+        // the nonce read behind the verdict answered by the failover endpoint: unread since recheck 7 R7-1 (before it: `Dead` read
+        // there, requeued by the classifier's mark)
+        assert!(st == "queued" && e.contains("FAILOVER_ANSWER"), "{st}: {e}");
+        let (st, e) = run(Evm { sim: Some("revert"), ..ok() }, None).await;
+        assert!(st == "dead" && e.starts_with("MetaTxBadNonce("), "control: {st}: {e}");
+    }
+
     /// As `Frozen`: `ComplianceRegistryUnavailable` (the token's bounded registry call failed) is a refusal, named, never `dead`.
     #[tokio::test]
     async fn registry_unavailable_is_refusal() {
@@ -1666,12 +1762,15 @@ pub(crate) mod tests {
     /// Lỗi tạm thời nhả digest ngay (không ai bị chặn tới hết hạn).
     #[tokio::test]
     async fn one_digest_is_signed_once_across_lanes_and_released_on_transient_errors() {
+        // Fable recheck 7 R7-3: each job built once: `job()` stamps `validUntil` from the clock, so two calls a second apart are
+        // two ops (other digests), and the test would pass or fail by the second
+        let j7 = job(7);
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j7.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;
         let mut b = lane(&url, odoo, 2, set.clone()).await;
-        let mut w = work_from_job(&serde_json::from_value(resign(job(0))).unwrap(), None).unwrap();
+        let mut w = work_from_job(&serde_json::from_value(resign(j7)).unwrap(), None).unwrap();
         w.job_id = None; // the gateway's path
         a.submit(w.clone()).await;
         b.poll_outbox().await;
@@ -1680,11 +1779,12 @@ pub(crate) mod tests {
         let claims = o.lock().unwrap().claims;
         assert_eq!((claims, states(&o).len()), (0, 0), "skipped before relay_claim");
 
+        let j8 = job(8);
         let (url, _) = fake_evm(Evm { sim: Some("transport"), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(8)], tokens: toks(), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j8.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let want = {
-            let j: Job = serde_json::from_value(resign(job(8))).unwrap();
+            let j: Job = serde_json::from_value(resign(j8)).unwrap();
             work_from_job(&j, None).unwrap().typed.unwrap().digest_on(31337, B256::from(U256::from(UID))).unwrap()
         };
         lane(&url, odoo, 1, set.clone()).await.poll_outbox().await;
@@ -1736,7 +1836,9 @@ pub(crate) mod tests {
     }
 
     /// Every report of one poll on a lane built with `tweak`, and the fake chain.
-    async fn outcomes(e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+    async fn outcomes(mut e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+        // Fable E N-6: the token answers the domain of the kind its first job names, unless the test sets one
+        e.domain = e.domain.or_else(|| jobs.first().and_then(|j| j["op"]["contract"].as_str()).and_then(crate::typed::domain_name));
         let (url, rpc) = fake_evm(e).await;
         let (odoo, o) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
         lane_cfg(&url, odoo, 1, InflightSet::default(), tweak).await.unwrap().poll_outbox().await;
@@ -1883,8 +1985,8 @@ pub(crate) mod tests {
         // (UAPayWithTax's three domains, the router's two tax ops); group 3f T46 / T47: -> 113, the router's three verifier ops
         // group 3h T61: -> 114, the router's `UASetProofStore`; group 3l: -> 116, the router's two wrap-limit ops
         // round 3r (CTR-GOV-23): -> 127, the router's eleven admin rows; round 3s: -> 130, the router's three list / enable rows
-        // round 3t: -> 131, the router's `UASetVerifierFee`
-        assert_eq!(n, 131, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // round 3t: -> 131, the router's `UASetVerifierFee`; owner 2026-11-12: -> 132, the router's `UACreateInstance`
+        assert_eq!(n, 132, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
@@ -2025,6 +2127,32 @@ pub(crate) mod tests {
         let (r, rpc) = outcomes(Evm::default(), vec![inv_job(8, other)], |_| {}).await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 0);
         assert!(r[0].0 == "dead" && r[0].1.starts_with("TOKEN_NOT_SERVED"), "{r:?}");
+    }
+
+    /// Fable recheck 4 R4-1: a refusal read while a failover endpoint answered is no verdict: the first endpoint answers
+    /// `chainUid()` with a transport error, the failover one (of this chain, at the head) with another chain's uid: the job is
+    /// back in the queue (`FAILOVER_ANSWER`), nothing sent. Control: the same answer from the first endpoint is `dead`.
+    #[tokio::test]
+    async fn a_refusal_on_a_failover_answer_is_requeued() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let (first, first_rpc) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
+        let (other, rpc) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.unwrap();
+        s.poll_outbox().await;
+        let reports = || -> Vec<(String, String)> { o.lock().unwrap().reports.iter()
+            .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string())).collect() };
+        let r = reports();
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("FAILOVER_ANSWER") && r[0].1.contains("CHAIN_UID_MISMATCH"), "{r:?}");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 0);
+        // the next job, refused on the first endpoint's own answer, is `dead`: the count is per job (marked at its submit)
+        (first_rpc.lock().unwrap().uid_err, first_rpc.lock().unwrap().uid) = (None, Some(0x25));
+        o.lock().unwrap().jobs = vec![job(8)];
+        s.poll_outbox().await;
+        let r = reports();
+        assert!(r.last().is_some_and(|x| x.0 == "dead" && x.1.starts_with("CHAIN_UID_MISMATCH")), "{r:?}");
+        let (r, _) = outcomes(Evm { uid: Some(0x25), ..ok() }, vec![job(7)], |_| {}).await;
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("CHAIN_UID_MISMATCH"), "control: {r:?}");
     }
 
     /// Review T4 I3: the guard's chain facts — binding (mismatch never cached, a revert or no `chainUid()` unbound, a
@@ -2212,6 +2340,11 @@ pub(crate) mod tests {
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
         let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
         assert_eq!(s.inflight.get(&0).expect("tracked").gas, guard::MAX_TX_GAS);
+        // Fable recheck 6 R6-2: the tracked transaction unread (a transport error, not "unknown"): the lane does not start
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, tx_err: true, ..Default::default() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        let e = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.err().expect("no start");
+        assert!(e.to_string().contains("eth_getTransactionByHash"), "{e:#}");
         // no original gas and no block: the lane does not start (retried like any start-up RPC failure)
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, block_err: true, ..Default::default() }).await;
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
@@ -2247,6 +2380,50 @@ pub(crate) mod tests {
                 false => assert!(last["chain_state"] == "dead" && last["error"].as_str().unwrap().contains("gap-filled"), "{last}"),
             }
         }
+    }
+
+    /// Fable recheck 7 R7-1: the lane's `consumed` and Hedera's `op_consumed` read "not spent" on a failover endpoint (the first
+    /// down) as no verdict (`Err`: every caller asks again); the controls: the first endpoint's "not spent" is `false`.
+    #[tokio::test]
+    async fn not_consumed_on_a_failover_answer_is_unread() {
+        let w = work_from_job(&serde_json::from_value::<Job>(job(7)).unwrap(), None).unwrap();
+        let (first, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (other, _) = fake_evm(Evm { mtx_nonce: Some(0), failover: true, ..Default::default() }).await;
+        let (other_h, _) = fake_evm(Evm { mtx_nonce: Some(0), failover: true, failover_id: Some(296), ..Default::default() }).await;
+        let one = test_cfg(&first);
+        let two = ChainCfg { rpc_urls: vec!["http://127.0.0.1:9".into(), other], ..test_cfg(&first) };
+        let chain = |c: &ChainCfg| Chain::with_signer(c, PrivateKeySigner::random()).unwrap();
+        assert!(!guard::consumed(&chain(&one), &w).await.unwrap(), "control");
+        assert!(guard::consumed(&chain(&two), &w).await.unwrap_err().to_string().starts_with("FAILOVER_ANSWER"));
+        let job: Job = serde_json::from_value(job(7)).unwrap();
+        let hedera = |urls: Vec<String>| {
+            let c = ChainCfg { family: "hedera".into(), evm_chain_number: 296, rpc_urls: urls, ..test_cfg(&first) };
+            crate::adapters::hedera::HederaAdapter::new(&c, vec![chain(&c)]).unwrap()
+        };
+        use crate::adapter::ChainAdapter;
+        assert_eq!(hedera(vec![first.clone()]).op_consumed(&job).await.unwrap(), Some(false), "control: Hedera");
+        let e = hedera(vec!["http://127.0.0.1:9".into(), other_h]).op_consumed(&job).await.unwrap_err();
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER"), "{e:#}");
+    }
+
+    /// Fable recheck 5 R5-2: at a restart, a tracked job refused on a failover endpoint's answer (the first endpoint answers
+    /// `chainUid()` with a transport error, the failover one with another chain's) is no verdict: the lane does not start (it is
+    /// retried), never a gap-fill and `dead`. Control: the same refusal from the first endpoint: only gap-filled.
+    #[tokio::test]
+    async fn a_tracked_job_refused_on_a_failover_answer_fails_the_start() {
+        let tracked = json!([{"job_id": 7, "nonce": 0, "state": "broadcast",
+            "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": job(7)}]);
+        let ok = || Evm { mtx_nonce: Some(0), count: 1, ..Default::default() };
+        let (first, _) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
+        let (other, _) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
+        let e = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.err().expect("no start");
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER") && e.to_string().contains("CHAIN_UID_MISMATCH")
+            && e.to_string().contains("the node exits"), "{e:#}");
+        let (url, _) = fake_evm(Evm { uid: Some(0x25), ..ok() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked, ..Default::default() }).await;
+        let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.unwrap();
+        assert!(s.inflight.get(&0).expect("tracked").work.is_none(), "control: refused on the first endpoint, only gap-filled");
     }
 
     // ------------------------------------------------------------------ CTR-MTX-26 / -27 on EVM (T17)
@@ -2647,6 +2824,47 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         }
         let (r, _) = outcomes(ok(), vec![call_job(9, ROUTER, relay_data(ROUTER, 100))], |_| {}).await;
         assert!(r[0].0 == "dead" && r[0].1.contains("no params.relay_fee.router"), "{r:?}");
+    }
+
+    /// Fable recheck 4 R4-2: a creation refused `RELEASE_DEPRECATED` or `RELEASE_UNKNOWN` reads the subject nonce first: spent (it
+    /// landed before, delivered again) is `consumed`; unspent `dead`; unreadable `queued`. Nothing is sent.
+    #[tokio::test]
+    async fn a_release_refusal_reads_the_nonce_first() {
+        let v = crate::typed::testkit::vectors();
+        let mut op = crate::typed::testkit::op_of("UACreateInstance", "gov_router", &v).unwrap();
+        op["envelope"]["nonce"] = json!("0");
+        let router: Address = op["token"].as_str().unwrap().parse().unwrap();
+        for (unknown, name) in [(false, "RELEASE_DEPRECATED"), (true, "RELEASE_UNKNOWN")] {
+            for (nonce, want) in [(Some(1), "consumed"), (Some(0), "dead"), (None, "queued")] {
+                let e = Evm { mtx_nonce: nonce, release_deprecated: !unknown, release_unknown: unknown, ..Default::default() };
+                let job = json!({"id": 9, "kind": "ua_metatx", "op": op.clone()});
+                let (r, rpc) = outcomes(e, vec![job], |c| c.governance_routers = vec![router]).await;
+                assert_eq!(r[0].0, want, "{name}, mtxNonce {nonce:?}: {r:?}");
+                assert!(want != "dead" || r[0].1.starts_with(name), "{r:?}");
+                assert!(rpc.lock().unwrap().sent.is_empty());
+            }
+        }
+    }
+
+    /// Fable recheck 2 P3-1: a transfer struct job (its `contract` defaults to `token`) and a relay fee (signed in the fee token's
+    /// domain) on a token of another kind are `CONTRACT_KIND_MISMATCH`, nothing sent; the control: the token's own kind.
+    #[tokio::test]
+    async fn a_transfer_and_a_relay_fee_name_the_token_kind() {
+        let ok = |d: Option<&'static str>| Evm { mtx_nonce: Some(0), domain: d, ..Default::default() };
+        for (what, j) in [("transfer", job(7)), ("relay fee", call_job(9, ROUTER, relay_data(ROUTER, 100)))] {
+            let (r, rpc) = outcomes(ok(Some("SCaaS PqzToken")), vec![j.clone()], |c| relay_params(c, &[])).await;
+            assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("CONTRACT_KIND_MISMATCH"), "{what}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{what}: nothing sent");
+            let (r, _) = outcomes(ok(None), vec![j], |c| relay_params(c, &[])).await;
+            assert!(r.iter().all(|x| !x.1.contains("CONTRACT_KIND_MISMATCH")), "{what} control: {r:?}");
+        }
+        // Fable recheck 2 P3-2: the same mismatch after the op's nonce was spent is `consumed`, never `dead`
+        let (r, _) = outcomes(Evm { mtx_nonce: Some(1), domain: Some("SCaaS PqzToken"), ..Default::default() }, vec![ua_job(7, &ua_meta(7))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["consumed"], "{r:?}");
+        let (r, _) = outcomes(Evm { mtx_nonce: None, domain: Some("SCaaS PqzToken"), ..Default::default() }, vec![ua_job(7, &ua_meta(7))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["queued"], "an unreadable nonce decides nothing: {r:?}");
     }
 
     /// CTR-MTX-27 on the lane: the whole `relay` is simulated and sent only when the fee reaches this lane (open mode,
@@ -3054,7 +3272,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     /// The fake token's verifier UA (a native id) and an `OFFCHAIN` token at epoch 2.
     const VERIFIER: B256 = B256::repeat_byte(0x0e);
     fn offchain() -> Evm {
-        Evm { mtx_nonce: Some(0), pqz_cfg: Some((1, VERIFIER, 2)), ..Default::default() }
+        Evm { mtx_nonce: Some(0), pqz_cfg: Some((1, VERIFIER, 2)), domain: Some("SCaaS PqzToken"), ..Default::default() }
     }
 
     /// A verifier's `UASig` (a native id's 65 bytes), `tag` its first byte.

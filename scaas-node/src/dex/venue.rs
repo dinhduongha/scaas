@@ -32,7 +32,7 @@ use super::{
 };
 use crate::abi::{IComplianceRegistry, IERC165, IMtxIds, IRegulatedToken, IToken, IUALedger, IUARegistry, TradeFill};
 use crate::metatx::native;
-use crate::chain::{classify, is_contract, Chain, SimError};
+use crate::chain::{classify, classify_sim, is_contract, Chain, SimError};
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
 use crate::submit::now;
@@ -473,8 +473,7 @@ impl Venue {
     // ------------------------------------------------------------------------------ chain reads
 
     async fn call(&self, from: Address, to: Address, data: Vec<u8>) -> std::result::Result<Bytes, SimError> {
-        let tx = TransactionRequest::default().from(from).to(to).input(data.into());
-        self.chain.primary().call(tx).await.map_err(|e| classify(&e))
+        self.chain.call_tx(TransactionRequest::default().from(from).to(to).input(data.into())).await
     }
 
     /// The order's hash where it is checked: the sell token (`UATradeOrder`) or the DEX (`DexOrder`).
@@ -533,11 +532,18 @@ impl Venue {
     }
 
     /// A resting order can still settle `r.remaining`: open on chain for that much, funded, signature valid.
+    /// Fable recheck 4 R4-1: a `false` read while a failover endpoint answered is no verdict (it may be a block behind the
+    /// maker's funding or approval): `Err`, the RPC's, so nobody is blamed.
     async fn healthy(&self, r: &Resting) -> Result<bool> {
+        let mark = self.chain.failover_answers();
         let c = self.on_chain(r.sell, r.hash, &r.order).await?;
-        Ok(c.remaining >= r.remaining
+        let ok = c.remaining >= r.remaining
             && c.fundable >= r.remaining
-            && self.authorized(r.sell, r.order.from, r.hash, &r.auth).await?)
+            && self.authorized(r.sell, r.order.from, r.hash, &r.auth).await?;
+        if !ok && self.chain.failover_answers() != mark {
+            return Err(anyhow!("rpc: order {:#x} read unhealthy on a failover endpoint only", r.hash));
+        }
+        Ok(ok)
     }
 
     /// Simulate `mtxSettle` from the lane: `Ok(ok per settlement)`; all failed ⇒ `NothingSettled` ⇒ all `false`. A
@@ -567,8 +573,21 @@ impl Venue {
     async fn fault(&self, p: &PlannedSettlement) -> Vec<B256> {
         let data = ISCaaSDex::settleOneCall { s: p.to_settlement(), submitter: self.relayer() }.abi_encode();
         let tx = TransactionRequest::default().from(self.dex).to(self.dex).input(data.into());
-        let Err(err) = self.chain.primary().call(tx).await else { return vec![] };
-        let Some(raw) = err.as_error_resp().and_then(|r| r.as_revert_data()) else { return vec![] };
+        // Fable recheck 2 P3-4: through `Chain::read`; the revert data of an error answer, nothing on a success; recheck 3 R3-1:
+        // evidence from the first endpoint only (a failover endpoint's revert blames nobody)
+        let raw = self.chain.read_at(|p| {
+            let tx = tx.clone();
+            async move {
+                match p.call(tx).await {
+                    Ok(_) => Ok(None),
+                    Err(e) => match e.as_error_resp() {
+                        Some(r) => Ok(r.as_revert_data()),
+                        None => Err(SimError::Transport(e.to_string())),
+                    },
+                }
+            }
+        }).await;
+        let Ok((Some(raw), 0)) = raw else { return vec![] };
         let legs: Vec<B256> = p.makers.iter().map(|(m, _, _)| m.hash).chain([p.taker.hash]).collect();
         let mut named: Vec<B256> = vec![];
         for w in raw.get(4..).unwrap_or_default().as_chunks::<32>().0.iter().copied().map(B256::from) {
@@ -598,21 +617,34 @@ impl Venue {
             let f = TradeFill { sellFill: sold, receiveFill: recv, dexFee: fee(recv, &r.order), submitter: self.relayer() };
             let data = IToken::mtxTradeCall { o: r.order.clone(), auth: auth.clone(), f }.abi_encode();
             let tx = TransactionRequest::default().from(self.dex).to(r.sell).input(data.into());
-            match self.chain.primary().call(tx).await {
-                Ok(_) => {}
-                Err(e) => {
+            // Fable recheck 2 P3-4: through `Chain::read`; `Some(revert data)` when the leg's own pull reverts
+            let leg = self.chain.read_at(|p| {
+                let tx = tx.clone();
+                async move {
+                    match p.call(tx).await {
+                        Ok(_) => Ok(None),
+                        Err(e) => match classify(&e) {
+                            SimError::Revert(_) => Ok(Some(e.as_error_resp().and_then(|x| x.as_revert_data()))),
+                            SimError::Transport(t) => Err(SimError::Transport(t)),
+                        },
+                    }
+                }
+            }).await;
+            match leg {
+                Ok((None, _)) => {}
+                // Fable recheck 3 R3-1: a failover endpoint's revert is no evidence against a leg
+                Ok((Some(_), i)) if i > 0 => return Err(down(format!("rpc: leg {:#x} reverted on failover endpoint {i} only", r.hash))),
+                Ok((Some(raw), _)) => {
                     // F-16: a pause is no leg's fault; the market halts until it ends, nobody is blamed
-                    let paused = e.as_error_resp().and_then(|x| x.as_revert_data()).filter(|_| self.is_regulated(r.sell))
+                    let paused = raw.filter(|_| self.is_regulated(r.sell))
                         .and_then(|raw| <IRegulatedToken::TokenPaused as alloy::sol_types::SolError>::abi_decode(&raw).ok());
                     if let Some(p) = paused {
                         self.set_paused(r.sell, p.until);
                         return Err(bad(format!("PAUSED: {:#x} until {}", r.sell, p.until)));
                     }
-                    match classify(&e) {
-                        SimError::Revert(_) => out.push(r.hash),
-                        SimError::Transport(e) => return Err(down(format!("rpc: {e}"))),
-                    }
+                    out.push(r.hash);
                 }
+                Err(e) => return Err(down(format!("rpc: {}", e.to_string().trim_start_matches("transport: ")))),
             }
         }
         Ok(out)
@@ -623,8 +655,14 @@ impl Venue {
     /// only, the delegate is never asked; a contract ⇒ ERC-1271 called from `verifier` with the cap by codehash as the
     /// callee's gas, accepted only as exactly 32 bytes equal to the magic word. `Err` = the RPC, never a verdict.
     async fn valid_sig(&self, verifier: Address, signer: Address, digest: B256, sig: &Bytes) -> Result<bool> {
-        let code = self.chain.primary().get_code_at(signer).await?;
+        // Fable recheck 3 R3-1: no code read on a failover endpoint (it may lag the signer's deploy): an ECDSA verdict from the
+        // first endpoint's answer only
+        let (code, at) = self.chain.read_at(|p| async move { p.get_code_at(signer).await.map_err(|e| classify(&e)) })
+            .await.map_err(|e| anyhow!("{e}"))?;
         if !is_contract(&code) {
+            if at > 0 && !ecdsa_ok(signer, digest, sig) {
+                return Err(anyhow!("rpc: {signer:#x} has no code on failover endpoint {at} only"));
+            }
             return Ok(ecdsa_ok(signer, digest, sig));
         }
         alloy::sol! {
@@ -634,15 +672,25 @@ impl Venue {
         // the callee of a top-level call gets `gas − intrinsic`: exactly the cap `staticcall` gives it
         let gas = sig_cap(&code, self.clone_codehash) + intrinsic(&data);
         let tx = TransactionRequest::default().from(verifier).to(signer).input(data.into()).gas_limit(gas);
-        match self.chain.primary().call(tx).await {
-            Ok(out) => Ok(magic_ok(&out)),
-            // the EVM's answer (a revert, out of gas inside the cap) is `false`, as a failed `staticcall` is
-            Err(e) if e.as_error_resp().is_some_and(|r| {
-                let m = r.message.to_ascii_lowercase();
-                r.as_revert_data().is_some() || m.contains("revert") || m.contains("execution") || m.contains("gas")
-            }) => Ok(false),
-            Err(e) => Err(e.into()),
+        // Fable recheck 2 P3-4: through `Chain::read`; recheck 3 R3-1: a `false` from a failover endpoint is no verdict
+        let (ok, at) = self.chain.read_at(|p| {
+            let tx = tx.clone();
+            async move {
+                match p.call(tx).await {
+                    Ok(out) => Ok(magic_ok(&out)),
+                    // the EVM's answer (a revert, out of gas inside the cap) is `false`, as a failed `staticcall` is; Fable recheck 3
+                    // R3-6: by the shared classifier (a node's own limit is transport)
+                    Err(e) => match classify_sim(&e) {
+                        SimError::Revert(_) => Ok(false),
+                        t => Err(t),
+                    },
+                }
+            }
+        }).await.map_err(|e| anyhow!("{e}"))?;
+        if !ok && at > 0 {
+            return Err(anyhow!("rpc: ERC-1271 of {signer:#x} refused on failover endpoint {at} only"));
         }
+        Ok(ok)
     }
 
     // ------------------------------------------------------------------------------ intake
@@ -650,7 +698,16 @@ impl Venue {
     /// `POST /v1/dex/orders {chain, sellToken, order, auth | signature}`, by the DEX's listing (CTR-DEX-26): a SCaaS sell
     /// token's order is a `UATradeOrder` (`from`, `destination` ids) with `auth` (a `UASig`), an outside token's a `TradeOrder`
     /// (signed as a `DexOrder`) with `signature`; the other form is refused by name.
+    ///
+    /// Fable recheck 5 R5-4: a refusal (400) read while a failover endpoint answered is no verdict: 503, the client retries.
     pub async fn place(&self, sell: Address, wire: &WireOrder, signature: Option<&str>, auth: Option<&Value>)
+        -> std::result::Result<PlaceReply, VenueError>
+    {
+        let mark = self.chain.failover_answers();
+        self.no_verdict_on_failover(mark, self.place_checked(sell, wire, signature, auth).await)
+    }
+
+    async fn place_checked(&self, sell: Address, wire: &WireOrder, signature: Option<&str>, auth: Option<&Value>)
         -> std::result::Result<PlaceReply, VenueError>
     {
         let kind = self.kind(sell);
@@ -837,6 +894,22 @@ impl Venue {
     /// order), `CancelDexOrder` with `signature` in the DEX's (an outside one); out of the book NOW, closed on chain at the
     /// next sync.
     pub async fn cancel(&self, h: B256, signature: Option<&str>, auth: Option<&Value>) -> std::result::Result<(), VenueError> {
+        let mark = self.chain.failover_answers();
+        self.no_verdict_on_failover(mark, self.cancel_checked(h, signature, auth).await)
+    }
+
+    /// Fable recheck 5 R5-4, recheck 6 R6-3: a refusal (400) read while a failover endpoint answered is no verdict: 503
+    /// `FAILOVER_ANSWER`, the client retries (order intake and both cancels).
+    fn no_verdict_on_failover<T>(&self, mark: u64, r: std::result::Result<T, VenueError>) -> std::result::Result<T, VenueError> {
+        match r {
+            Err(VenueError::Bad(m)) if self.chain.failover_answers() != mark => {
+                Err(VenueError::Unavailable(crate::adapters::evm::failover_answer(&m)))
+            }
+            r => r,
+        }
+    }
+
+    async fn cancel_checked(&self, h: B256, signature: Option<&str>, auth: Option<&Value>) -> std::result::Result<(), VenueError> {
         let mut book = self.book.lock().await;
         let r = book.get(h).cloned().ok_or_else(|| bad("order is not in the book"))?;
         let kind = self.kind(r.sell);
@@ -871,6 +944,13 @@ impl Venue {
     pub async fn cancel_all(&self, sell: Address, from: &str, batch: U256, min: U256, signature: Option<&str>, auth: Option<&Value>)
         -> std::result::Result<usize, VenueError>
     {
+        let mark = self.chain.failover_answers();
+        self.no_verdict_on_failover(mark, self.cancel_all_checked(sell, from, batch, min, signature, auth).await)
+    }
+
+    async fn cancel_all_checked(&self, sell: Address, from: &str, batch: U256, min: U256, signature: Option<&str>,
+        auth: Option<&Value>) -> std::result::Result<usize, VenueError>
+    {
         let kind = self.kind(sell);
         let sig = auth_of(kind, signature, auth).map_err(bad)?;
         let outside = kind == KIND_OUTSIDE;
@@ -896,7 +976,9 @@ impl Venue {
         let job_needed = match self.call(self.relayer(), target, call.clone()).await {
             Ok(_) => true,
             Err(SimError::Revert(r)) if r.starts_with("MinNonceNotIncreasing(") => false,
-            Err(e) => return Err(bad(format!("mtxInvalidateNonces refused: {e}"))),
+            Err(SimError::Revert(r)) => return Err(bad(format!("mtxInvalidateNonces refused: {r}"))),
+            // Fable recheck 6 R6-3: the chain did not answer: 503, never the client's 400
+            Err(SimError::Transport(t)) => return Err(down(format!("mtxInvalidateNonces unread: rpc: {t}"))),
         };
         let contract = if outside { "dex" } else { self.contract_of(sell).await? };
         let mut next = book.clone();
@@ -1075,7 +1157,10 @@ impl Venue {
     /// `FeatureEnabled(8 | 9)`, gets its halt recomputed ([`Venue::venue_halted`]); an account a list event refuses, and on
     /// `FeatureEnabled(8 | 9)` every maker and receiver of the leg's orders, is dropped only if its live flag refuses it;
     /// `FeatureEnabled(28)` reruns the venue's eligibility alert. A transport error fails the round: the range is read again.
+    /// Fable recheck 5 R5-3: a drop or a halt read while a failover endpoint answered is no verdict: `LIST_UNREAD`, the range
+    /// is read again (no maker `invalid` on an answer that may be a block behind).
     async fn read_lists(&self, events: &[Value]) -> Result<ListPlan> {
+        let mark = self.chain.failover_answers();
         let venue = [self.dex.into_word(), self.puller.into_word()];
         let mut legs: std::collections::BTreeMap<Address, Vec<&Value>> = Default::default();
         for e in events.iter().filter(|e| matches!(e["event"].as_str(), Some("AllowedSet" | "DeniedSet" | "FeatureEnabled"))) {
@@ -1114,6 +1199,9 @@ impl Venue {
                 }
             }
         }
+        if (!plan.drops.is_empty() || !plan.halts.is_empty()) && self.chain.failover_answers() != mark {
+            bail!("LIST_UNREAD: a failover endpoint answered the list reads (the first endpoint did not); read again");
+        }
         Ok(plan)
     }
 
@@ -1141,6 +1229,7 @@ impl Venue {
             idx.call("blockchain.dex.trade", "dex_cursor", json!({"evm_chain_number": self.chain.number})).await?;
         let mode = if nc.finality_mode == "tag" { Mode::Tag } else { Mode::Depth(nc.finality_depth) };
         let latest = self.chain.primary().get_block_number().await?;
+        self.chain.saw_block(latest); // Fable recheck 3 R3-1
         let finalized = if mode == Mode::Tag { self.chain.finalized_number().await? } else { None };
         let Some(safe) = safe_head(&mode, latest, finalized) else { return Ok(false) };
         let Some((from, to)) = next_range(cur.indexed_block, safe, MAX_LOG_SPAN) else { return Ok(false) };
@@ -1312,8 +1401,7 @@ fn clone_code(implementation: Address) -> Vec<u8> {
 }
 
 async fn view<C: SolCall>(chain: &Chain, to: Address, call: C) -> Result<C::Return> {
-    let tx = TransactionRequest::default().to(to).input(call.abi_encode().into());
-    Ok(C::abi_decode_returns(&chain.primary().call(tx).await?)?)
+    chain.call_view(to, call).await.map_err(|e| anyhow!("{e}"))
 }
 
 /// The market as the DEX lists it: `Some((kind of base, kind of quote))` when listed and both classified.
@@ -1861,6 +1949,8 @@ mod tests {
         trade_paused: HashMap<Address, u64>,
         /// Fable P2-2: `regulatedConfig` and `listFlagsOf` answer a transport error (an RPC blip).
         lists_down: bool,
+        /// Fable recheck 6 R6-3: `mtxInvalidateNonces` answers a transport error.
+        invalidate_down: bool,
     }
     const REG_REGISTRY: Address = Address::repeat_byte(0xc0);
     type W = Arc<std::sync::Mutex<World>>;
@@ -1888,6 +1978,7 @@ mod tests {
                     Ok(hexs(w.codes.get(&a).map(|c| c.as_ref()).unwrap_or_default()))
                 }
                 "eth_blockNumber" => Ok(json!("0xa")),
+                "eth_chainId" => Ok(json!("0x7a69")),
                 "eth_getBlockByNumber" => {
                     Ok(serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
                 }
@@ -1942,7 +2033,7 @@ mod tests {
                         let c = IToken::invalidateNoncesDigestCall::abi_decode(&input).unwrap();
                         Ok(hexs(keccak256((c.from, c.batch, c.newMin).abi_encode()).as_slice()))
                     } else if sel == IMtxIds::mtxInvalidateNoncesCall::SELECTOR {
-                        Ok(hexs(&[]))
+                        if w.invalidate_down { Err(json!({"code": -32603, "message": "upstream unavailable"})) } else { Ok(hexs(&[])) }
                     } else if sel == IToken::cancelOrderDigestCall::SELECTOR {
                         Ok(word(U256::from_be_bytes(oh(&IToken::cancelOrderDigestCall::abi_decode(&input).unwrap().o).0)))
                     } else if sel == IToken::eip712DomainCall::SELECTOR {
@@ -2022,6 +2113,15 @@ mod tests {
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         (url, s)
+    }
+
+    /// `v` on a fresh fake chain of `w` that is its second endpoint, the first down (Fable recheck 3 R3-1).
+    async fn on_failover(v: Venue, w: World) -> (Venue, W) {
+        let (url, world) = fake_chain(w).await;
+        let block0: B256 = "0xd490a652c286563a398812c62434decf124c8e52d9c820a6185e88813aea05d5".parse().unwrap();
+        let cfg = crate::config::ChainCfg { evm_chain_number: 31337, chain_uid: Some(block0),
+            rpc_urls: vec!["http://127.0.0.1:9".into(), url], ..Default::default() };
+        (Venue { chain: Arc::new(Chain::with_signer(&cfg, relayer_key()).unwrap()), ..v }, world)
     }
 
     fn market() -> MarketCfg {
@@ -2261,6 +2361,42 @@ mod tests {
         assert!(!in_book(&v.rows().await, &ask), "the denied maker left");
     }
 
+    /// Fable recheck 5 R5-4: an order refused at intake on a failover endpoint's answer (the taker read unfunded) is 503,
+    /// `FAILOVER_ANSWER`; the control: the same read on the first endpoint is the client's 400.
+    #[tokio::test]
+    async fn an_intake_refusal_on_a_failover_answer_is_503() {
+        let taker = PrivateKeySigner::random();
+        let unfunded = || World { unfunded: [taker.address()].into_iter().collect(), ..Default::default() };
+        let (v, _) = venue(unfunded(), vec![]).await;
+        assert!(matches!(take(&v, &taker, 20, 10, 1).await, Err(VenueError::Bad(_))), "control: 400 on the first endpoint");
+        let (v, _) = on_failover(v, unfunded()).await;
+        let e = take(&v, &taker, 20, 10, 2).await;
+        assert!(matches!(&e, Err(VenueError::Unavailable(m)) if m.starts_with("FAILOVER_ANSWER")), "{:?}", e.err());
+    }
+
+    /// Fable recheck 5 R5-3: a maker read as refused by its leg's list on a failover endpoint (the first down) is no verdict:
+    /// `LIST_UNREAD`, nothing dropped; the control: the same read on the first endpoint drops it.
+    #[tokio::test]
+    async fn a_list_drop_on_a_failover_answer_is_read_again() {
+        let m = PrivateKeySigner::random();
+        let ask = order(m.address(), QUOTE, 10, 30, 1);
+        let denied = || World { lists: [(m.address().into_word(), 3)].into_iter().collect(),
+            reg: [(BASE, (C_DENY, 0, 0, 0))].into_iter().collect(), ..Default::default() };
+        let events = |v: &Venue| v.accepted(&[log_at(BASE,
+            IRegulatedToken::DeniedSet { account: m.address().into_word(), by: B256::ZERO, on: true }.encode_log_data())]);
+        let (v, _) = regulated_venue(denied(), C_DENY, 0, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        assert_eq!(v.read_lists(&events(&v)).await.unwrap().drops.len(), 1, "control: the first endpoint's answer drops it");
+        let dex_denied = |v: &Venue| v.accepted(&[log_at(BASE,
+            IRegulatedToken::DeniedSet { account: DEX.into_word(), by: B256::ZERO, on: true }.encode_log_data())]);
+        let plan = v.read_lists(&dex_denied(&v)).await.unwrap();
+        assert!(plan.drops.is_empty() && plan.halts.len() == 1, "control: a halt on the first endpoint's answer");
+        let (v, _) = on_failover(v, denied()).await;
+        let e = v.read_lists(&events(&v)).await.unwrap_err();
+        assert!(format!("{e:#}").starts_with("LIST_UNREAD: a failover endpoint"), "{e:#}");
+        let e = v.read_lists(&dex_denied(&v)).await.unwrap_err();
+        assert!(format!("{e:#}").starts_with("LIST_UNREAD: a failover endpoint"), "a halt: {e:#}");
+    }
+
     /// Spec §7: an `AccountFrozen` of a regulated leg drops that account's orders selling it (a frozen account cannot send);
     /// its orders buying it stay (credits are never refused for a freeze), and another token's event drops nothing.
     #[tokio::test]
@@ -2421,6 +2557,22 @@ mod tests {
         assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&asks[3]))));
     }
 
+    /// Fable recheck 4 R4-1: a maker read unfunded on a failover endpoint (it may be a block behind its funding) is no verdict:
+    /// `Err` (503), never `invalid`; funded there, it is healthy. Control: unfunded on the first endpoint is `false`.
+    #[tokio::test]
+    async fn a_maker_unhealthy_on_a_failover_answer_is_no_verdict() {
+        let maker = PrivateKeySigner::random();
+        let o = order(maker.address(), QUOTE, 100, 200, 1);
+        let r = Resting { hash: oh(&o), sell: BASE, remaining: o.amount, order: o.clone(), auth: Auth::Ua(ua(sig_of(&maker, oh(&o)))), seq: 1 };
+        let unfunded = || World { unfunded: [maker.address()].into_iter().collect(), ..Default::default() };
+        let (v, _) = venue(unfunded(), vec![]).await;
+        assert!(!v.healthy(&r).await.unwrap(), "control: the first endpoint's answer is a verdict");
+        let (v, world) = on_failover(v, unfunded()).await;
+        assert!(v.healthy(&r).await.unwrap_err().to_string().contains("failover endpoint only"));
+        world.lock().unwrap().unfunded.clear();
+        assert!(v.healthy(&r).await.unwrap(), "funded on the failover endpoint: healthy");
+    }
+
     #[test]
     fn the_signature_rules_are_sigcheck_s() {
         let k = PrivateKeySigner::random();
@@ -2512,6 +2664,7 @@ mod tests {
         let (idx, _) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
         let v = Venue { indexer: Some(idx), ..v };
         assert!(v.watch_once().await.unwrap());
+        assert_eq!(v.chain.seen_head(), 0xa, "Fable recheck 3 R3-1: the watcher's first-endpoint head feeds the shared head");
         assert_eq!(v.book.lock().await.pending_of(oh(&ask)), U256::ZERO);
         let r = take(&v, &PrivateKeySigner::random(), 80, 40, 1).await.unwrap();
         assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&ask))));
@@ -2532,6 +2685,21 @@ mod tests {
         }
         world.lock().unwrap().sig_errors.insert(wallet, json!({"code": -32603, "message": "upstream unavailable"}));
         assert!(v.valid_sig(BASE, wallet, d, &sig).await.is_err());
+        // Fable recheck 3 R3-6: the shared classifier: a node's own limit is no verdict
+        world.lock().unwrap().sig_errors.insert(wallet, json!({"code": -32000, "message": "execution aborted (timeout = 5s)"}));
+        assert!(v.valid_sig(BASE, wallet, d, &sig).await.is_err());
+        // Fable recheck 3 R3-1: answered by a failover endpoint (the first down), a revert, a non-magic answer and an EOA's bad
+        // signature are no verdict (the first endpoint's are `false`, above); a good one is still accepted
+        let mut w = World::default();
+        w.codes.insert(wallet, Bytes::from_static(&[0x60, 0x01]));
+        w.sig_errors.insert(wallet, json!({"code": 3, "message": "execution reverted", "data": "0x"}));
+        let (v, world) = on_failover(v, w).await;
+        assert!(v.valid_sig(BASE, wallet, d, &sig).await.unwrap_err().to_string().contains("refused on failover endpoint 1 only"));
+        world.lock().unwrap().sig_errors.clear();
+        assert!(v.valid_sig(BASE, wallet, d, &sig).await.unwrap_err().to_string().contains("failover endpoint 1 only"));
+        let eoa = PrivateKeySigner::random();
+        assert!(v.valid_sig(BASE, eoa.address(), d, &sig).await.unwrap_err().to_string().contains("failover endpoint 1 only"));
+        assert!(v.valid_sig(BASE, eoa.address(), d, &sig_of(&eoa, d)).await.unwrap(), "control: a good signature");
     }
 
     /// CTR-UA-24 on the venue too (owner ruling 2026-10-30, D1, superseding 2026-10-28): an EIP-7702 maker signs with
@@ -2573,6 +2741,16 @@ mod tests {
         assert_eq!(v.leg_faults(&s).await.unwrap(), Vec::<B256>::new(), "the outside maker is never probed");
         world.lock().unwrap().named.insert(oh(&ask));
         assert_eq!(v.fault(&s).await, vec![oh(&ask)], "its own revert names it");
+        world.lock().unwrap().bad_sig.insert(oh(&bid));
+        assert_eq!(v.leg_faults(&s).await.unwrap(), vec![oh(&bid)], "the SCaaS leg's own pull reverts: blamed");
+        // Fable recheck 3 R3-1: the same reverts answered by a failover endpoint blame nobody (the controls are the two above)
+        let mut w = World::default();
+        w.no_trade.insert(BASE);
+        w.named.insert(oh(&ask));
+        let (v, world) = on_failover(v, w).await;
+        assert_eq!(v.fault(&s).await, Vec::<B256>::new(), "a failover endpoint's revert names nobody");
+        world.lock().unwrap().bad_sig.insert(oh(&bid));
+        assert!(matches!(v.leg_faults(&s).await, Err(VenueError::Unavailable(e)) if e.contains("failover endpoint 1 only")));
     }
 
     /// `contract_of` is read before the book moves: an unreadable kind leaves the order where it is, and each kind reaches the job.
@@ -2708,6 +2886,42 @@ mod tests {
             let r = v.place(BASE, &WireOrder::from_ua(&ask), None, Some(&auth)).await;
             assert_eq!(r.is_ok(), want, "{registry} {ok}: {:?}", r.err().map(|e| e.to_string()));
         }
+    }
+
+    /// Fable recheck 6 R6-3: a cancel and a cancel-all refused on a failover endpoint's answer (a derived seller's registry read
+    /// as 0) are 503 `FAILOVER_ANSWER`, the order stays; the controls: the same answer on the first endpoint is the client's 400.
+    /// An unread `mtxInvalidateNonces` simulation is 503, never 400.
+    #[tokio::test]
+    async fn a_cancel_refused_on_a_failover_answer_is_503() {
+        let from = B256::repeat_byte(0xa7);
+        let ask = UATradeOrder { from, ..order(Address::ZERO, QUOTE, 10, 20, 1) };
+        let auth = ua_sig_json(&UASig { keyData: Bytes::from_static(&[1, 2]), signature: Bytes::from_static(&[3; 64]), members: vec![] });
+        let booked = |v: &Venue| {
+            let v = v.book.try_lock().map(|mut b| b.insert(Resting { hash: oh(&ask), sell: BASE, remaining: ask.amount, order: ask.clone(),
+                auth: Auth::Ua(ua(Bytes::from_static(&[3; 64]))), seq: 1 }));
+            assert!(v.is_ok());
+        };
+        let id = format!("{from:#x}");
+        let (v, _) = venue(World::default(), vec![]).await;
+        booked(&v);
+        assert!(matches!(v.cancel(oh(&ask), None, Some(&auth)).await, Err(VenueError::Bad(m)) if m == "bad cancel signature"), "control");
+        assert!(matches!(v.cancel_all(BASE, &id, U256::from(1), U256::from(5), None, Some(&auth)).await,
+            Err(VenueError::Bad(m)) if m == "bad invalidate signature"), "control");
+        let (v, _) = on_failover(v, World::default()).await;
+        let e = v.cancel(oh(&ask), None, Some(&auth)).await;
+        assert!(matches!(&e, Err(VenueError::Unavailable(m)) if m.starts_with("FAILOVER_ANSWER")), "{:?}", e.err());
+        let e = v.cancel_all(BASE, &id, U256::from(1), U256::from(5), None, Some(&auth)).await;
+        assert!(matches!(&e, Err(VenueError::Unavailable(m)) if m.starts_with("FAILOVER_ANSWER")), "{:?}", e.err());
+        assert!(in_book(&v.rows().await, &ask), "the order stays");
+        // a native maker, a valid signature, the invalidate simulation unread: 503
+        let maker = PrivateKeySigner::random();
+        let a1 = order(maker.address(), QUOTE, 10, 30, 1);
+        let (v, _) = venue(World { invalidate_down: true, domain: Some("SCaaS MetaToken"), ..Default::default() },
+            vec![(a1.clone(), sig_of(&maker, oh(&a1)))]).await;
+        let digest = keccak256((a1.from, U256::from(1), U256::from(5)).abi_encode());
+        let e = v.cancel_all(BASE, &format!("{:#x}", a1.from), U256::from(1), U256::from(5), None,
+            Some(&ua_sig_json(&ua(sig_of(&maker, digest))))).await;
+        assert!(matches!(&e, Err(VenueError::Unavailable(m)) if m.contains("mtxInvalidateNonces unread")), "{:?}", e.err());
     }
 
     /// A failed fill hands back no more than the chain still has open after the book and the other planned fills.

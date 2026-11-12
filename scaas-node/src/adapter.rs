@@ -438,7 +438,9 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                 report(odoo, Report { error: Some(e.to_string()), ..rep(job, "queued") }).await;
                 return Some(e.to_string());
             }
-            Ok(TxStatus::Unknown) | Err(_) => {
+            // Fable recheck 6 R6-1: an unread status is no answer: asked again, never a verdict (the pipelined lane's `track`)
+            Err(e) => warn!(chain = %adapter.chain_key(), job, "tx_status unread; asked again: {e:#}"),
+            Ok(TxStatus::Unknown) => {
                 // Hỏi trạng thái TRƯỚC: bị từ chối khi gửi lại có thể vì tx lần trước đã vào khối.
                 if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Refused>()) {
                     if consumed {
@@ -459,10 +461,26 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                 // Before `Rejected`: a job past its deadline back in the queue would be rejected the same way on every claim.
                 if now() > f.valid_until.saturating_add(EXPIRY_GRACE) {
                     // Payload chủ thể đã hết hạn: tx (nếu còn đâu đó) sẽ bị contract từ chối.
-                    if !consumed {
-                        report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
+                    if consumed {
+                        return None;
                     }
-                    return None;
+                    // Fable recheck 6 R6-1: the op may have landed (an unseen transaction, another relayer): `consumed` first; an
+                    // unreadable answer is asked again, never `dead`
+                    match adapter.op_consumed(f.job).await {
+                        Ok(Some(true)) => {
+                            report(odoo, Report { error: Some("unknown".into()), ..rep(job, "consumed") }).await;
+                            return None;
+                        }
+                        Ok(_) => {
+                            report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
+                            return None;
+                        }
+                        Err(e) => {
+                            warn!(chain = %adapter.chain_key(), job, "expired, op_consumed unreadable; asked again: {e:#}");
+                            tokio::time::sleep(STATUS_POLL).await;
+                            continue;
+                        }
+                    }
                 }
                 if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
                     if consumed {
@@ -983,6 +1001,8 @@ pub(crate) mod tests {
         expired: bool,
         /// `sign` fails.
         unsignable: bool,
+        /// `tx_status` fails this many times first (Fable recheck 6 R6-1).
+        status_errors: std::sync::atomic::AtomicU32,
     }
 
     fn racy(build_revert: bool, consumed: Option<bool>, sends: &[bool], statuses: &[TxStatus]) -> Racy {
@@ -1000,6 +1020,7 @@ pub(crate) mod tests {
             rejected: false,
             expired: false,
             unsignable: false,
+            status_errors: Default::default(),
         }
     }
 
@@ -1041,6 +1062,10 @@ pub(crate) mod tests {
             }
         }
         async fn tx_status(&self, _: &str) -> Result<TxStatus> {
+            if self.status_errors.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+                self.status_errors.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                anyhow::bail!("rpc down");
+            }
             let mut q = self.statuses.lock().unwrap();
             Ok(if q.len() > 1 { q.pop_front().unwrap() } else { q[0].clone() })
         }
@@ -1099,6 +1124,23 @@ pub(crate) mod tests {
         assert_eq!(o.lock().unwrap().reports[1]["error"], "expired before inclusion");
         let a = Racy { rejected: true, ..racy(false, Some(false), &[], &[TxStatus::Unknown]) };
         assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "queued"]);
+    }
+
+    /// Fable recheck 6 R6-1: past the deadline a sent job whose transaction is not seen reads `op_consumed` first: landed is
+    /// `consumed`, never `dead`; an unreadable answer and an unread status are asked again (no verdict). Control: not consumed is
+    /// `dead` (`a_rejected_send_past_its_deadline_is_dead` too).
+    #[tokio::test]
+    async fn an_expired_job_is_dead_only_when_its_op_did_not_land() {
+        let a = Racy { expired: true, ..racy(false, Some(true), &[true], &[TxStatus::Unknown]) };
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "consumed"], "landed elsewhere: consumed");
+        let a = Racy { expired: true, status_errors: 2.into(), consumed_unreadable: 1.into(), ..racy(false, Some(true), &[true], &[TxStatus::Unknown]) };
+        let (states, _) = race(&a, &InflightSet::default()).await;
+        assert_eq!(states, ["signed", "broadcast", "consumed"], "unread twice, then landed: read again, never dead");
+        let a = Racy { expired: true, ..racy(false, Some(false), &[true], &[TxStatus::Unknown]) };
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "dead"], "control: not landed");
+        assert_eq!((a.status_errors.load(std::sync::atomic::Ordering::SeqCst), a.consumed_unreadable.load(std::sync::atomic::Ordering::SeqCst)), (0, 0));
+        let a = Racy { expired: true, status_errors: 2.into(), ..racy(false, Some(false), &[true], &[TxStatus::Mined { height: 1, tx_hash: None }]) };
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "mined"], "an unread status is no verdict");
     }
 
     /// A failure between the claim and the journal, on any family: the job goes back with its reason, or it stays claimed with no report.
