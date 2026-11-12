@@ -1,0 +1,50 @@
+Fix3 CTR-GOV-28 (owner 2026-11-13, every direct admin entry carries chainUid), branch ua-mtx-fix3-chainuid. Foundry 1.8.5,
+forge test -j 1 under scripts/capped (4 GB), per directory (runs/2026-11-13-fix3-chainuid/gate.sh) and per PQZ set
+(atset.sh over script/pqz/at-set.sh); full output in git-ignored logs. A full `forge build` of tests does not fit 4 GB (OOM):
+each directory compiles its own. UNAUDITED.
+
+step | commit | rc | counts
+--- full gate, default set n2304-kmax4096: src of 53b6fca2 (src unchanged since; first run on the working tree before 53b6fca2,
+    the red directories re-run after their pin moves, all in 53b6fca2 / 7aa81a04; fork, p6f, vectors: their suites skip without their env) ---
+test/governance/**/*.sol | 53b6fca2 | 0 | 53 suites, 525 passed, 0 failed, 0 skipped (first run rc 1: 53 suites, 500 passed, 24 failed, 0 skipped; pins moved in 53b6fca2)
+test/as/**/*.sol | 53b6fca2 | 0 | 69 suites, 357 passed, 0 failed, 0 skipped (first run rc 1: 69 suites, 350 passed, 7 failed, 0 skipped; pins moved in 53b6fca2)
+test/v2/**/*.sol | 53b6fca2 | 0 | 47 suites, 635 passed, 0 failed, 0 skipped (first run rc 1: 47 suites, 633 passed, 2 failed, 0 skipped; pins moved in 53b6fca2)
+test/merge/**/*.sol | 53b6fca2 | 0 | 11 suites, 119 passed, 0 failed, 0 skipped
+test/metatx/**/*.sol | 53b6fca2 | 0 | 36 suites, 400 passed, 0 failed, 0 skipped
+test/pqz/**/*.sol | 53b6fca2 | 0 | 40 suites, 455 passed, 0 failed, 4 skipped
+test/ua/**/*.sol | 53b6fca2 | 0 | 46 suites, 636 passed, 0 failed, 0 skipped
+test/zether/**/*.sol | 53b6fca2 | 0 | 27 suites, 336 passed, 0 failed, 4 skipped
+test/wrap/**/*.sol | 53b6fca2 | 0 | 10 suites, 72 passed, 0 failed, 0 skipped (first run rc 1: 10 suites, 71 passed, 1 failed, 0 skipped; pins moved in 53b6fca2)
+test/modules/**/*.sol | 53b6fca2 | 0 | 12 suites, 35 passed, 0 failed, 0 skipped (first run rc 1: 11 passed, 24 failed: out/t66b-legacy missing in the fresh worktree, then a copy built at another set; rebuilt with script/modules/legacy_artifacts.py build, and LegacyDiff maps the old admin rows)
+test/factory/**/*.sol | 53b6fca2 | 0 | 1 suite, 2 passed
+test/pqchat/**/*.sol | 53b6fca2 | 0 | 9 suites, 99 passed, 0 failed, 0 skipped
+test/account/**/*.sol | 53b6fca2 | 0 | 4 suites, 58 passed, 0 failed, 0 skipped
+test/wallet/**/*.sol | 53b6fca2 | 0 | 6 suites, 100 passed, 0 failed, 0 skipped
+test/liquidity/**/*.sol | 53b6fca2 | 0 | 8 suites, 82 passed, 0 failed, 1 skipped
+test/hedera/**/*.sol | 53b6fca2 | 0 | 2 suites, 20 passed, 0 failed, 0 skipped
+test/pqzh/**/*.sol | 53b6fca2 | 0 | 3 suites, 42 passed, 0 failed, 0 skipped
+test/confidential/**/*.sol | 53b6fca2 | 0 | 1 suite, 5 passed
+test/fork/**/*.sol | 53b6fca2 | 0 | no suite runs without its env
+test/p6f/**/*.sol | 53b6fca2 | 0 | no suite runs without its env
+test/vectors/**/*.sol | 53b6fca2 | 0 | no suite runs without its env
+test/research/**/*.sol | 53b6fca2 | 0 | 6 suites, 93 passed, 0 failed, 6 skipped
+test/{BlsKat,ExpectRevertLint,FeePolicy,HashToCurve,MultiSig}.t.sol | 53b6fca2 | 0 | 5 suites, 29 passed, 0 failed, 0 skipped
+test/pqz (re-run, P7 pin) | 7aa81a04 | 0 | 40 suites, 455 passed, 0 failed, 4 skipped
+--- other sets (atset.sh; research, pqz, ua) ---
+atset-n2048-kmax1024-pqz | 7aa81a04 | 0 | 40 suites, 456 passed, 0 failed, 3 skipped
+atset-n2048-kmax1024-research | e6a3753e | 0 | 6 suites, 95 passed, 0 failed, 4 skipped
+atset-n2048-kmax1024-ua | e6a3753e | 0 | 46 suites, 636 passed, 0 failed, 0 skipped
+atset-n2560-kmax16384-pqz | e6a3753e | 0 | 40 suites, 451 passed, 0 failed, 8 skipped
+atset-n2560-kmax16384-research | e6a3753e | 0 | 6 suites, 93 passed, 0 failed, 6 skipped
+atset-n2560-kmax16384-ua | e6a3753e | 0 | 46 suites, 636 passed, 0 failed, 0 skipped
+atset-n2816-kmax65536-pqz | e6a3753e | 0 | 40 suites, 446 passed, 0 failed, 13 skipped
+atset-n2816-kmax65536-research | e6a3753e | 0 | 6 suites, 86 passed, 0 failed, 13 skipped
+atset-n2816-kmax65536-ua | e6a3753e | 0 | 46 suites, 636 passed, 0 failed, 0 skipped
+atset-n2048-kmax1024-pqz first run | e6a3753e | 1 | test_P7_zetherPinsUnchanged (plus_zero_gas copy), fixed in 7aa81a04
+UA-8 gas rows, GAS_REPIN at the four sets | e6a3753e | 0 | 34 rows per set: registrationOf (gen 2) +44 at n2048, n2560, n2816 re-pinned (ua8-pins.txt)
+--- others ---
+size gate | 53b6fca2 | 0 | 0 errors, 169 contracts; SCaaSDex 35,046 (stop 35,386), NormalPqzRegulatedTokenQ 33,633 (notice 33,780), OpenFactory 35,040 (stop 35,286); 24 rows moved, NormalTokenA added (24,697)
+mutants | 53b6fca2 | 0 | killed 14 / 14 (mutants.json, mutants.spec.json): the shared word check, admin-only, the admin's word on shared entries, holder leaf, grantor revoke, proposer cancel, disableFeature, enableFeature, pqzRevokeVerifier, setVerifierFee, setKycProvider, setCompliance, router signing and forwarding
+node --lib, clippy -D warnings, clientkeys npm test, typed-ops cast check, ua-rs, zether-prover typed_ops | 91962671 | 0 | 760/760; clean; 337 (335 pass, 2 skipped); 108 structs; 70/70; 7/7 (the fork's run)
+docs_check check / facts / test_docs_check | ddaa8bc0 | 0 | 0 errors; 8852 facts 0 misses; ok
+node e2e (cargo test --test e2e -- --ignored) | - | - | NOT RUN (machine shutdown; needs 6 GB alone)

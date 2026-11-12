@@ -1,0 +1,114 @@
+[
+ {
+  "id": "F3-1 the shared word check empty",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        bytes32 u = _govChainUid();\n        if (chainUid_ != u) revert IAdmin.ChainUidMismatch(u, chainUid_);\n",
+  "new": "",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_kind0_NormalToken"
+ },
+ {
+  "id": "F3-2 admin-only entries skip the word",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        if (c == 0 || c != GovernanceLib.$().admin) revert IAdmin.NotAdmin(c);\n        _govChainWord(chainUid_);\n",
+  "new": "        if (c == 0 || c != GovernanceLib.$().admin) revert IAdmin.NotAdmin(c);\n",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_dex_SCaaSDex"
+ },
+ {
+  "id": "F3-3 the admin's word skipped on the shared-caller entries",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        if (admin) _govChainWord(chainUid_);\n",
+  "new": "",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_kind8_NormalRegulatedToken"
+ },
+ {
+  "id": "F3-4 a holder's leaf without the word",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert IGovernance.GrantNotNarrower(7);\n        if (!admin) _govChainWord(chainUid_);\n",
+  "new": "        if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert IGovernance.GrantNotNarrower(7);\n",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_kind1_WrappedToken"
+ },
+ {
+  "id": "F3-5 a grantor's revoke without the word",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        GovernanceLib.revokeRole(bit, account, c, _delayedRelaxBits());\n        if (!admin) _govChainWord(chainUid_);\n",
+  "new": "        GovernanceLib.revokeRole(bit, account, c, _delayedRelaxBits());\n",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_kind2_NormalZetherToken"
+ },
+ {
+  "id": "F3-6 a proposer's cancel without the word",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        GovernanceLib.cancelGrant(bit, account, c);\n        if (!admin) _govChainWord(chainUid_);\n",
+  "new": "        GovernanceLib.cancelGrant(bit, account, c);\n",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_proposerCancel"
+ },
+ {
+  "id": "F3-7 disableFeature without the word",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "    function _disableFeatureBody(uint8 bit, bytes32 chainUid_) internal {\n        _adminOnChain(chainUid_);\n",
+  "new": "    function _disableFeatureBody(uint8 bit, bytes32 chainUid_) internal {\n        _adminOnChain(GovernanceLib.$().admin == 0 ? chainUid_ : _govChainUid());\n",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_kind3_WrappedZetherToken"
+ },
+ {
+  "id": "F3-8 enableFeature without the word",
+  "file": "src/regulated/RegulatedBase.sol",
+  "old": "GovernanceLib.enableFeature(bit, _adminOnChain(chainUid_), _validBits());",
+  "new": "GovernanceLib.enableFeature(bit, _adminOnChain(_govChainUid()), _validBits());",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_kind9_WrappedRegulatedToken"
+ },
+ {
+  "id": "F3-9 pqzRevokeVerifier without the word",
+  "file": "src/pqz/PqzLayer.sol",
+  "old": "PqzStateLib.revokeVerifier(_adminOnChain(chainUid_));",
+  "new": "PqzStateLib.revokeVerifier(_adminOnChain(_govChainUid()));",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_kind4_NormalPqzToken"
+ },
+ {
+  "id": "F3-10 setVerifierFee: the admin's word skipped",
+  "file": "src/pqz/PqzLayer.sol",
+  "old": "        (bytes32 c, bool admin) = _subjectWord(chainUid_);\n        PqzStateLib.setVerifierFee(next, c);",
+  "new": "        (bytes32 c, bool admin) = _subjectWord(_govChainUid());\n        PqzStateLib.setVerifierFee(next, c);",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_kind13_WrappedPqzRegulatedToken"
+ },
+ {
+  "id": "F3-11 setKycProvider without the word",
+  "file": "src/regulated/ComplianceRegistry.sol",
+  "old": "    function setKycProvider(bytes32 provider, bool enabled, bytes32 chainUid_) external onlyAdmin {\n        _requireChainWord(chainUid_);\n",
+  "new": "    function setKycProvider(bytes32 provider, bool enabled, bytes32 chainUid_) external onlyAdmin {\n",
+  "path": "test/as/RegistryAdmin.t.sol",
+  "test": "test_kycAndRows_siblingWordRefused"
+ },
+ {
+  "id": "F3-12 setCompliance without the word",
+  "file": "src/regulated/ComplianceRegistry.sol",
+  "old": "            if (id == 0 || !_enabled[id]) revert NotKycProvider();\n        }\n        _requireChainWord(chainUid_);\n",
+  "new": "            if (id == 0 || !_enabled[id]) revert NotKycProvider();\n        }\n",
+  "path": "test/as/RegistryAdmin.t.sol",
+  "test": "test_kycAndRows_siblingWordRefused"
+ },
+ {
+  "id": "F3-13 the router does not sign setCompliance's word",
+  "file": "src/governance/GovernanceRouter.sol",
+  "old": "keccak256(abi.encodePacked(flags)), keccak256(abi.encodePacked(until)), chainUid),",
+  "new": "keccak256(abi.encodePacked(flags)), keccak256(abi.encodePacked(until)), bytes32(0)),",
+  "path": "test/governance/GovRouterAdmin.t.sol",
+  "test": "test_binding_SetCompliance"
+ },
+ {
+  "id": "F3-14 the router forwards no word on mtxGrantRole",
+  "file": "src/governance/GovernanceRouterBase.sol",
+  "old": "IGovernance.grantRole.selector, abi.encode(bit, account, chainUid),",
+  "new": "IGovernance.grantRole.selector, abi.encode(bit, account, bytes32(0)),",
+  "path": "test/governance/GovRouter.t.sol",
+  "test": "test_governanceOps_siblingWordRefused"
+ }
+]
