@@ -19,6 +19,7 @@ contract RescueVaultTest is Test {
     address constant STRANGER = address(0x5757);
     address constant PAYEE = address(0xBEEF);
     string constant KAT = "../vectors/governance/rescue_vault_kat.json";
+    string constant INIT = "./rescue-vault-init.hex";
     uint256 constant N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 
     uint256 internal aliceKey = 0xA11CE;
@@ -43,20 +44,30 @@ contract RescueVaultTest is Test {
 
     // ------------------------------------------------------------------ the address
 
-    /// The constant is the vault's CREATE2 address with the dev EOA as first owner; the creation code is pinned, so an edit
-    /// of `RescueVault.sol` (or of an import, or of a compiler setting) fails here before it moves the address.
+    /// The committed init code `rescue-vault-init.hex` is what the deploy script sends: its keccak gives the constant, so a
+    /// later compiler cannot move the address; deploying it gives the dev EOA as owner and keeps a counterfactual balance.
     function test_addressIsTheConstant() public {
-        bytes memory init = abi.encodePacked(type(RescueVault).creationCode, abi.encode(DEV_EOA));
-        assertEq(keccak256(type(RescueVault).creationCode), 0x1852908124267432d15f20cf5efecc80bf62b5957de0cdf1a9d2026597d85047, "creation code pin");
+        bytes memory init = vm.parseBytes(vm.readFile(INIT));
+        assertEq(keccak256(init), 0x6e3fba8f9e78c33c4903c66e7836ca0e858f6fb48f9320b8117728572000c677, "init code pin");
         address a = vm.computeCreate2Address(SALT, keccak256(init), DEPLOYER);
         assertEq(a, RescueLib.SCAAS_DEV_RESCUE, "the constant");
         vm.deal(a, 3 ether); // counterfactual: funds before the vault exists
-        assertEq(_deploy(DEV_EOA), a);
+        if (DEPLOYER.code.length == 0) vm.etch(DEPLOYER, DEPLOYER_CODE);
+        (bool ok, bytes memory ret) = DEPLOYER.call(abi.encodePacked(SALT, init));
+        assertTrue(ok && ret.length == 20 && address(bytes20(ret)) == a, "deploys at the constant");
         assertEq(RescueVault(payable(a)).owner(), DEV_EOA);
         assertEq(RescueVault(payable(a)).seq(), 0);
         assertEq(a.balance, 3 ether, "the balance survives the deploy");
-        (bool ok,) = DEPLOYER.call{gas: 1_000_000}(abi.encodePacked(SALT, init)); // a second deploy fails: one per chain
+        (ok,) = DEPLOYER.call{gas: 1_000_000}(abi.encodePacked(SALT, init)); // a second deploy fails: one per chain
         assertFalse(ok);
+    }
+
+    /// The source compiled today gives exactly the committed bytes, so every other test here (on the compiled source) tests
+    /// the deployed vault. An edit of `RescueVault.sol`, an import or a compiler setting fails here; the artifact stays the
+    /// deploy truth.
+    function test_artifactIsTheSource() public view {
+        assertEq(keccak256(type(RescueVault).creationCode), 0x1852908124267432d15f20cf5efecc80bf62b5957de0cdf1a9d2026597d85047, "creation code pin");
+        assertEq(abi.encodePacked(type(RescueVault).creationCode, abi.encode(DEV_EOA)), vm.parseBytes(vm.readFile(INIT)));
     }
 
     function test_zeroInitialOwnerRefused() public {
