@@ -668,8 +668,8 @@ covers a first-use lane PDA's rent). The router, the registered token, the shape
 the payer's own lane `(from, batch)` at its signed nonce since pay-meta-tax O4 (EVM; each non-EVM family keeps its
 own once-per-`ref` rule until its round), relayer = router, fee mode NONE) and the inner target's chain are checked
 before the simulation; a refusal is terminal. The gas floor
-of a contract signer's job is per job: `guard::erc1271_floor(len)` = 21,000 + 64 per calldata byte + 446,904 (forge's least relayer
-CALL gas of a `SmartKeyAccount`-signed `mtxExecute`, two frames below the token after the split) + 10 %, 512,594 at zero calldata;
+of a contract signer's job is per job: `guard::erc1271_floor(len)` = 21,000 + 64 per calldata byte + 446,912 (forge's least relayer
+CALL gas of a `SmartKeyAccount`-signed `mtxExecute`, two frames below the token after the split) + 10 %, 512,603 at zero calldata (446,904 / 512,594 before the ERC-7739 signature, B P3-2);
 an anvil run sends exactly that gas and it settles. EVM payers are ids since the `ua*` / `mtx*` merge (node-ua-jobs 2026-10-30; one `relay` on ids): it takes the same
 checks, and after the simulation the fee × `params.relay_fee.min_wei_value[token]` must reach the quote (the gas limit
 × the job's fee ceiling, 2 × its first max fee per gas, + 2 × the OP-stack L1 data fee; required for a derived payer, whose verify

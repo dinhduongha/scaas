@@ -392,3 +392,9 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   (2026-11-11): no contract called them; every contract hashes through `MtxPipelineLib._structHash` / `_namedHash` and
   checks the mode in `_checkEnvelope`, and the tests now reproduce digests through those (`test/helpers/MtxHash.sol`).
   `MetaTxLib.canon` stays in `src/` (Zether and PQZ use it). Not built.
+- `ua-mtx-fix2-contracts/`: the Safe-style one-level ERC-1271 wrap of `SmartKeyAccount` and `MandateWallet` (commit
+  `be8d0772`, B P3-2): `src/common/Erc1271SafeWrap.sol` (`MetaTxLib.ERC1271_MESSAGE_TYPEHASH`, the wallets' `erc1271Digest`
+  and `isValidSignature` bodies), `test/account/Erc1271SafeWrap.t.sol` (its KAT writer and tests) and
+  `test/vectors/erc1271_kat.json`; superseded by ERC-7739 the same day (owner 2026-11-12: "only ERC-7739"; a wallet shows
+  only `hash: 0x…` for the Safe-style message). clientkeys' `erc1271Digest` / `erc1271TypedData` and their test are in
+  `clients/clientkeys/legacy/ua-mtx-fix2-contracts/`. Not built.

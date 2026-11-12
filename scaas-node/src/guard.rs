@@ -303,10 +303,11 @@ pub fn pq_register(data: &[u8]) -> bool {
 }
 
 /// Forge's minimum relayer CALL gas of a `SmartKeyAccount`-signed `mtxExecute` after the split (the ERC-1271 call two
-/// frames below the token: token → `MtxPipelineLib` → wallet, ≥ (400,000 · 64/63 + 5,000) · 64/63): 446,904
-/// (`smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`, `test_minGas_smartKeyAccountMtxExecute`, Task 8).
+/// frames below the token: token → `MtxPipelineLib` → wallet, ≥ (400,000 · 64/63 + 5,000) · 64/63): 446,912
+/// (`test_minGas_smartKeyAccountMtxExecute`; 446,904 at `smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`,
+/// Task 8; 446,912 with the ERC-7739 signature, B P3-2, 2026-11-12).
 /// It is execution gas only (`call{gas: g}`): no intrinsic, no calldata.
-pub const ERC1271_CALL_GAS: u64 = 446_904;
+pub const ERC1271_CALL_GAS: u64 = 446_912;
 
 /// The gas floor of a contract signer's meta-tx whose calldata is `len` bytes (P1b note c; T17 fix 1): 21,000
 /// intrinsic (pre-Amsterdam; EIP-2780 lowers it, which only grows the margin) + 64 gas per calldata byte (the EIP-7976
@@ -2439,17 +2440,17 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     #[test]
     fn erc1271_floor_covers_forge_minimum() {
         let log = std::fs::read_to_string(format!(
-            "{}/../smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt", env!("CARGO_MANIFEST_DIR"))).unwrap();
+            "{}/../smartcontracts/evm/runs/2026-11-12-fix2-contracts-node-floor.txt", env!("CARGO_MANIFEST_DIR"))).unwrap();
         let tag = "min gas, SmartKeyAccount-signed mtxExecute (relayer's call gas):";
         let measured: u64 = log.lines().find_map(|l| l.trim().strip_prefix(tag)).unwrap().trim().parse().unwrap();
-        assert_eq!(measured, ERC1271_CALL_GAS, "Task 8's figure");
+        assert_eq!(measured, ERC1271_CALL_GAS, "the forge figure (B P3-2: ERC-7739)");
         const { assert!(ERC1271_CALL_GAS >= (400_000 * 64 / 63 + 5_000) * 64 / 63, "two frames above the 400 k cap") };
         for len in [0usize, 708, 4_000] {
             let f = erc1271_floor(len);
             assert!(f >= 21_000 + 64 * len as u64 + measured + measured / 10, "{len}: {f}");
         }
-        assert_eq!(erc1271_floor(0), 512_594);
-        assert_eq!(erc1271_floor(708), 512_594 + 45_312);
+        assert_eq!(erc1271_floor(0), 512_603);
+        assert_eq!(erc1271_floor(708), 512_603 + 45_312);
     }
 
     #[test]

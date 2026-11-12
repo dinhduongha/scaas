@@ -21,7 +21,8 @@ import {SigCheck} from "../../src/common/SigCheck.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
-import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
+import {SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {PqzRegistryBase, PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
@@ -29,6 +30,7 @@ import {plainEnv} from "../helpers/Catalogue.sol";
 import {IRig, PlainRig, PqzRig, ZetherRig} from "./helpers/KindRigs.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {MtxHash} from "../helpers/MtxHash.sol";
 
 /// Submits `cd` to `t` with exactly `g` gas for the frame (not a transaction: no intrinsic gas, no calldata floor).
 contract GasProbe {
@@ -510,8 +512,12 @@ contract MtxCtxTest is PqzRegistryBase {
             address(0x6A2D));
         tok.mint(acct, 1_000);
         MetaTxLib.MetaTransaction memory m = _mt(acct, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
-        bytes memory sig = abi.encode(uint256(0), new bytes32[](0),
-            _ecdsa(SKA_PK, SmartKeyAccount(payable(acct)).erc1271Digest(MtxDigest.metaTx(address(tok), m))));
+        bytes32 app = Erc7739Kit.separator(address(tok));
+        bytes32 c = MtxHash.hashStruct(m);
+        assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), MtxDigest.metaTx(address(tok), m));
+        bytes memory sig = Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0),
+            _ecdsa(SKA_PK, Erc7739Kit.nested(acct, app, "MetaTransaction", Erc7739Kit.METATX_TYPE, c))), app, c,
+            Erc7739Kit.METATX_TYPE);
         bytes memory cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (m, sig));
         // the ERC-1271 STATICCALL comes from module P's frame
         uint256 snap = vm.snapshotState();

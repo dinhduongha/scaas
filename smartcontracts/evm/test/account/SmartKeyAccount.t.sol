@@ -21,6 +21,8 @@ import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.s
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
+import {ERC7739Lib} from "../../src/common/ERC7739Lib.sol";
 
 /// Software authenticator: a fixed P-256 key, authenticatorData/clientDataJSON in the WebAuthn format (L3 §5.8.1.1),
 /// the signature normalised to low-s as clients do.
@@ -120,7 +122,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     }
 
     /// The account's verifier over a raw message (WebAuthn, batch, key checks): `isValidOwnDigest`, the account's own
-    /// self-call. ERC-1271 answers over `erc1271Digest(digest)` (CTR-ACC-02, B P3-2): `test_erc1271IsBoundToTheAccount`.
+    /// self-call. ERC-1271 answers over the ERC-7739 message (CTR-ACC-02, B P3-2): `test_erc7739IsBoundToTheAccount`.
     function _valid(SmartKeyAccount a, bytes32 digest, bytes memory sig) internal returns (bool) {
         vm.prank(address(a));
         return a.isValidOwnDigest(digest, sig);
@@ -387,15 +389,24 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     // ------------------------------------------------------------------ token payments (new tree)
 
-    /// `d`: what the account's key signs, the token's digest wrapped in the account's ERC-1271 message (CTR-ACC-02).
+    /// `d`: what the account's key signs, the token's `UAMetaTransfer` nested in ERC-7739 `TypedDataSign` (CTR-ACC-02).
     function _payment(address from, bytes32 ref) internal view returns (MetaTxLib.UAMetaTransfer memory x, bytes32 d) {
         x = _tr(from, shop, 400, ref, uint256(ref), RR);
-        d = SmartKeyAccount(payable(from)).erc1271Digest(t.mtxTransferDigest(x));
+        bytes32 app = Erc7739Kit.separator(address(t));
+        bytes32 c = MtxHash.hashStruct(x);
+        assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), t.mtxTransferDigest(x), "the kit rebuilds the token digest");
+        d = Erc7739Kit.nested(from, app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c);
+    }
+
+    /// The account signature `sig` with its ERC-7739 suffix for the token's `UAMetaTransfer` `x`.
+    function _w(MetaTxLib.UAMetaTransfer memory x, bytes memory sig) internal view returns (bytes memory) {
+        return Erc7739Kit.wrap(sig, Erc7739Kit.separator(address(t)), MtxHash.hashStruct(x), Erc7739Kit.UA_TRANSFER_TYPE);
     }
 
     function _payWith(MetaTxLib.UAMetaTransfer memory x, bytes memory sig) internal {
+        bytes memory s = _w(x, sig);
         vm.prank(relayer);
-        t.mtxExecuteTransfer(x, _nativeSig(sig));
+        t.mtxExecuteTransfer(x, _nativeSig(s));
     }
 
     function test_token_pay_signed_with_passkey() public {
@@ -431,7 +442,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         t.mint(address(b), 1000);
         (, bytes32 dA) = _payment(address(acct), keccak256("x"));
         (MetaTxLib.UAMetaTransfer memory xB,) = _payment(address(b), keccak256("x"));
-        bytes memory sig = _pk(0, PASSKEY, dA);
+        bytes memory sig = _w(xB, _pk(0, PASSKEY, dA));
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         t.mtxExecuteTransfer(xB, _nativeSig(sig));
@@ -441,7 +452,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         _ownerCall(abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED))), 0, PASSKEY, true);
         _ownerCall(abi.encodeCall(SmartKeyAccount.removeKey, (0)), 1, SEED, false);
         (MetaTxLib.UAMetaTransfer memory x, bytes32 d) = _payment(address(acct), keccak256("gone"));
-        bytes memory sig = _pk(0, PASSKEY, d);
+        bytes memory sig = _w(x, _pk(0, PASSKEY, d));
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         t.mtxExecuteTransfer(x, _nativeSig(sig));
@@ -732,34 +743,52 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         acct.mtxExecute(m, sig);
     }
 
-    /// CTR-ACC-02 (B P3-2): ERC-1271 answers over `hash` wrapped as `ERC1271Message(bytes32 hash)` in the account's own
-    /// domain, never the raw hash: a key shared by two accounts answers for the one it signed for, on one chain; the raw
-    /// verifier is the account's own self-call only.
-    function test_erc1271IsBoundToTheAccount() public {
-        assertEq(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, keccak256("ERC1271Message(bytes32 hash)"));
-        bytes32 ds = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS SmartKeyAccount"), keccak256("1"), uint256(7622), address(acct), UID_));
-        bytes32 w = keccak256(abi.encodePacked(hex"1901", ds, keccak256(abi.encode(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, D))));
-        assertEq(acct.erc1271Digest(D), w);
+    /// CTR-ACC-02 (B P3-2, owner 2026-11-12: ERC-7739 only): ERC-1271 answers over the `TypedDataSign` (implicit and
+    /// explicit `contentsDescription`) or the `PersonalSign` message, both naming the account and its chain, never the raw
+    /// hash; a key shared by two accounts answers for the one it signed for; `isValidSignature(0x7739…7739, "")` is
+    /// `0x77390001`; the raw verifier is the account's own self-call only.
+    function test_erc7739IsBoundToTheAccount() public {
         SmartKeyAccount b = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), address(0))));
-        bytes memory sig = _pk(0, PASSKEY, w);
-        assertEq(acct.isValidSignature(D, sig), MAGIC, "positive control: the wrapped message");
-        assertEq(b.isValidSignature(D, sig), bytes4(0xffffffff), "same key, other account");
-        assertEq(acct.isValidSignature(D, _pk(0, PASSKEY, D)), bytes4(0xffffffff), "the raw hash");
-        assertEq(b.isValidSignature(D, _pk(0, PASSKEY, b.erc1271Digest(D))), MAGIC, "positive control: b's own");
+        assertEq(acct.isValidSignature(ERC7739Lib.DETECT, ""), bytes4(0x77390001), "support detection");
+        bytes32 app = Erc7739Kit.separator(address(t));
+        bytes32 c = keccak256("contents");
+        bytes32 h = keccak256(abi.encodePacked(hex"1901", app, c));
+        // implicit mode
+        bytes memory sig = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "Mail", "Mail(address to)", c)),
+            app, c, "Mail(address to)");
+        assertEq(acct.isValidSignature(h, sig), MAGIC, "positive control: TypedDataSign, implicit");
+        assertEq(b.isValidSignature(h, sig), bytes4(0xffffffff), "same key, other account");
+        assertEq(acct.isValidSignature(keccak256("other"), sig), bytes4(0xffffffff), "the hash is not app || contents");
+        assertEq(acct.isValidSignature(h, _pk(0, PASSKEY, h)), bytes4(0xffffffff), "the raw hash");
+        // explicit mode: `Asset` sorts before `Order`
+        string memory ty = "Asset(address token)Order(Asset give)";
+        bytes memory ex = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "Order", ty, c)), app, c,
+            string.concat(ty, "Order"));
+        assertEq(acct.isValidSignature(h, ex), MAGIC, "positive control: TypedDataSign, explicit");
+        bytes memory lower = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "mail", "mail(address to)", c)),
+            app, c, "mail(address to)");
+        assertEq(acct.isValidSignature(h, lower), bytes4(0xffffffff), "contentsName starting a-z");
+        bytes memory comma = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "Ma,il", "Ma,il(address to)", c)),
+            app, c, "Ma,il(address to)");
+        assertEq(acct.isValidSignature(h, comma), bytes4(0xffffffff), "contentsName holding a comma");
+        // PersonalSign
+        bytes memory ps = _pk(0, PASSKEY, Erc7739Kit.personal(address(acct), D));
+        assertEq(acct.isValidSignature(D, ps), MAGIC, "positive control: PersonalSign");
+        assertEq(b.isValidSignature(D, ps), bytes4(0xffffffff), "PersonalSign, other account");
+        // the own-entry verifier
         bytes memory raw = _pk(0, PASSKEY, D);
         vm.prank(address(acct));
         assertTrue(acct.isValidOwnDigest(D, raw), "positive control: the account's own self-call");
         vm.expectRevert(SmartKeyAccount.NotSelf.selector);
         acct.isValidOwnDigest(D, raw);
         vm.chainId(7623);
-        assertEq(acct.isValidSignature(D, sig), bytes4(0xffffffff), "other chain");
+        assertEq(acct.isValidSignature(D, ps), bytes4(0xffffffff), "other chain");
+        assertEq(acct.isValidSignature(h, sig), bytes4(0xffffffff), "other chain, TypedDataSign");
     }
 
-    /// CTR-ACC-02: the ERC-1271 message struct, verbatim (`cast keccak "ERC1271Message(bytes32 hash)"`).
-    function test_erc1271MessageTypehashIsPinned() public pure {
-        assertEq(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, 0xff8bbe299de1266e571c68af5b71b4e716412184ca1bd495927110f9581950cb);
+    /// CTR-ACC-02: ERC-7739's `PersonalSign` struct, verbatim (`cast keccak "PersonalSign(bytes prefixed)"`).
+    function test_erc7739PersonalSignTypehashIsPinned() public pure {
+        assertEq(ERC7739Lib.PERSONAL_SIGN_TYPEHASH, 0x983e65e5148e570cd828ead231ee759a8d7958721a768f93bc4483ba005c32de);
     }
 
     /// CTR-ACC-11, MT-4: `("SCaaS SmartKeyAccount", "1", chainId, account, chain_uid)`, on every clone.

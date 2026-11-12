@@ -21,16 +21,22 @@ export function evmAddress(uncompressed) {
 
 const elementType = (t) => t.replace(/\[\]$/, '');
 
-/** EIP-712 `encodeType`: the primary type, then every struct it references, sorted by name. */
-export function encodeType(types, primary) {
+/** Every struct type `primary` references (not itself), sorted by name. */
+function structDeps(types, primary) {
   const deps = new Set();
   const walk = (t) => types[t].forEach((f) => {
     const e = elementType(f.type);
     if (types[e] && e !== primary && !deps.has(e)) { deps.add(e); walk(e); }
   });
   walk(primary);
-  const one = (t) => `${t}(${types[t].map((f) => `${f.type} ${f.name}`).join(',')})`;
-  return [primary, ...[...deps].sort()].map(one).join('');
+  return [...deps].sort();
+}
+
+const encodeOne = (types, t) => `${t}(${types[t].map((f) => `${f.type} ${f.name}`).join(',')})`;
+
+/** EIP-712 `encodeType`: the primary type, then every struct it references, sorted by name. */
+export function encodeType(types, primary) {
+  return [primary, ...structDeps(types, primary)].map((t) => encodeOne(types, t)).join('');
 }
 
 function encodeValue(type, value, types) {
@@ -107,25 +113,37 @@ export function accountSignature(keyIndex, proof, inner) {
   return abiEncode(['uint256', 'bytes32[]', 'bytes'], [keyIndex, proof, inner]);
 }
 
-/** The typed data a key signs for an ERC-1271 answer over `hash` (CTR-ACC-02): `ERC1271Message(bytes32 hash)` in the
- *  wallet's own salted domain, never the raw `hash`. `wallet`: `SmartKeyAccount` or `MandateWallet` (also
- *  `HederaMandateWallet`); `address`: the wallet's. A batch signs the root over these digests. */
-export function erc1271TypedData({ wallet, address, chainId, chainUid, hash }) {
-  const name = { SmartKeyAccount: 'SCaaS SmartKeyAccount', MandateWallet: 'SCaaS MandateWallet' }[wallet];
-  if (!name) throw new Error(`no ERC-1271 wrap for ${wallet}`);
+// ------------------------------------------------------------------ ERC-7739 (CTR-ACC-02, B P3-2)
+
+/** ERC-7739 `TypedDataSign`: what a key of a `SmartKeyAccount`, or a `MandateWallet`'s native owner, signs for the
+ *  wallet's ERC-1271 answer over the app's typed data `td`: `td`'s message nested as `contents` (its fields stay readable),
+ *  the wallet's own domain fields beside it, in the app's domain. `wallet`: `SmartKeyAccount` or `MandateWallet`
+ *  (`HederaMandateWallet` too); `address`: the wallet's. Its `hashTypedData` is the message the key signs (in a batch,
+ *  the leaf's digest); `erc7739Signature` wraps the result. */
+export function erc7739TypedData(td, { wallet, address, chainId, chainUid }) {
+  if (wallet !== 'SmartKeyAccount' && wallet !== 'MandateWallet') throw new Error(`no ERC-7739 answer from ${wallet}`);
+  if (td.types.TypedDataSign) throw new Error('the contents already define TypedDataSign');
   return {
-    types: { EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' },
-      { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }, { name: 'salt', type: 'bytes32' }],
-    ERC1271Message: [{ name: 'hash', type: 'bytes32' }] },
-    primaryType: 'ERC1271Message',
-    domain: { name, version: '1', chainId, verifyingContract: address, salt: chainUid },
-    message: { hash },
+    types: { ...td.types, TypedDataSign: [{ name: 'contents', type: td.primaryType }, { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' },
+      { name: 'salt', type: 'bytes32' }] },
+    primaryType: 'TypedDataSign',
+    domain: td.domain,
+    message: { contents: td.message, name: DOMAIN_OF[wallet], version: '1', chainId, verifyingContract: address, salt: chainUid },
   };
 }
 
-/** `wallet.erc1271Digest(hash)`: the message a key signs for the wallet's ERC-1271 answer (CTR-ACC-02). */
-export function erc1271Digest(args) {
-  return hashTypedData(erc1271TypedData(args));
+/** The signature the wallet's `isValidSignature(hashTypedData(td), ·)` takes: `inner ‖ APP_DOMAIN_SEPARATOR ‖
+ *  hashStruct(contents) ‖ contentsDescription ‖ uint16(contentsDescription.length)`. `contentsDescription` is the contents'
+ *  types sorted by name (as `TypedDataSign`'s `encodeType` lists them): implicit mode when `td.primaryType` sorts first,
+ *  else explicit (`contentsType ‖ contentsName`). `inner`: the key's signature (`accountSignature(…)` for an account). */
+export function erc7739Signature(inner, td) {
+  const names = [td.primaryType, ...structDeps(td.types, td.primaryType)].sort();
+  const contentsType = names.map((t) => encodeOne(td.types, t)).join('');
+  const descr = utf8ToBytes(names[0] === td.primaryType ? contentsType : contentsType + td.primaryType);
+  if (descr.length > 0xffff) throw new Error('contents description too long');
+  return concatBytes(inner instanceof Uint8Array ? inner : fromHex(inner), hashStruct(td.types, 'EIP712Domain', td.domain),
+    hashStruct(td.types, td.primaryType, td.message), descr, new Uint8Array([descr.length >> 8, descr.length & 0xff]));
 }
 
 // ------------------------------------------------------------------ Merkle batch (review S26)

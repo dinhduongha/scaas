@@ -12,6 +12,8 @@ import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {MtxHash} from "../helpers/MtxHash.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {RefServiceEscrow, RefServiceEscrowFailAfter, NoopPullToken, ReenterPullToken, NakedPuller}
@@ -205,8 +207,13 @@ contract ServicePullTest is UALedgerBase {
         RefServiceEscrow.Deposit memory op = _dep(_pad(address(acct)), "ska");
         MetaTxLib.UAMetaTransfer memory t = _pull(op);
         IUARegistry.UASig memory a;
-        // the key signs the token's digest wrapped in the account's ERC-1271 message (CTR-ACC-02)
-        a.signature = abi.encode(uint256(0), new bytes32[](0), _ecdsa(ALICE_PK, acct.erc1271Digest(tok.mtxTransferDigest(t))));
+        // the key signs the token's `UAMetaTransfer` nested in ERC-7739 `TypedDataSign` (CTR-ACC-02)
+        bytes32 app = Erc7739Kit.separator(address(tok));
+        bytes32 c = MtxHash.hashStruct(t);
+        assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), tok.mtxTransferDigest(t));
+        a.signature = Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0), _ecdsa(ALICE_PK,
+            Erc7739Kit.nested(address(acct), app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c))), app, c,
+            Erc7739Kit.UA_TRANSFER_TYPE);
         vm.prank(REL);
         s.deposit(op, t, a);
         assertEq(tok.balanceOf(address(acct)), 5_000 - AMT);

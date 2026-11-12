@@ -716,7 +716,7 @@ PQZH M = 4, the relayed path's per-byte cost on a larger envelope (`runs/2026-11
 n2816-kmax65536 7,367,673). The `n2560-kmax16384` rollover at `ROLL_MAX` 64 is 12,418,528 (`mtxExecute`) and 12,576,880
 (`uaExecute`), 6,032 under 0.75 · 2^24 = 12,582,912: the next token-path change that adds more than about 6 k forces 48
 (`runs/2026-10-27-metatx-split-rollscan-n2560-kmax16384.txt`). Pay-meta adds 37-52 gas to the token paths (PayMeta code).
-A `SmartKeyAccount`-signed `mtxExecute` needs 446,904 relayer call gas at least (`runs/2026-10-27-metatx-split-node-floor.txt`).
+A `SmartKeyAccount`-signed `mtxExecute` needs 446,912 relayer call gas at least with its ERC-7739 signature (B P3-2, `test_minGas_smartKeyAccountMtxExecute`; 446,904 before, `runs/2026-10-27-metatx-split-node-floor.txt`).
 Regeneration of the pre-split overhead JSON (`test/vectors/metatx-overhead-presplit.json`): check out `2ceda92d`, copy
 `smartcontracts/evm/runs/2026-11-01-typed-signing-c4-MtxSplitOverhead-at-2ceda92d.t.sol` to `test/pqz/MtxSplitOverhead.t.sol` there
 (today's test does not compile on it), run with `MTX_OV_PRESPLIT=1` at `n2304-kmax4096` and `n2048-kmax1024`, and write each line

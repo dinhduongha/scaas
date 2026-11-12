@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
-  hashTypedData, hashStruct, erc1271Digest, erc1271TypedData, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
+  hashTypedData, hashStruct, erc7739TypedData, erc7739Signature, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCall, addKeyTypedData, executeTypedData, checkOwnerCall, checkPayment,
   keyProofMessage, metaTxTypedData, uaMetaTxTypedData, uaMetaTransferTypedData, checkCall, tradeOrderTypedData, uaTradeOrderTypedData, padId,
   cancelUAOrderTypedData, cancelDexOrderTypedData, invalidateNoncesTypedData, uaInvalidateNoncesTypedData, checkTradeOrder, bidMinFill,
@@ -11,7 +11,7 @@ import {
   uaPayUnderMandateTypedData, uaPayUnderMandateCalldata, uaDelegateRevokeTypedData, uaDelegateRevokeCalldata, mtxExecuteCalldata,
   mtxExecuteTransferCalldata, TYPED_OPS, metaPayId,
 } from '../src/evm.js';
-import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
+import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
 
 const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta.url);
 const read = (f) => JSON.parse(readFileSync(new URL(f, vectors)));
@@ -108,25 +108,44 @@ test('SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_accoun
   assert.equal(evmAddress(r.recoverPublicKey(fromHex(k.digest)).toBytes(false)), k.signer_key);
 });
 
-// B P3-2 (CTR-ACC-02): a key signs `erc1271Digest`, the hash wrapped in the wallet's own domain, never the raw hash.
-test('erc1271Digest = forge KAT (AccountKat.t.sol, erc1271_kat.json): SmartKeyAccount and MandateWallet', () => {
-  const k = read('erc1271_kat.json');
-  assert.equal(hex(keccak_256(utf8ToBytes(k.type_string))), k.type_hash);
-  for (const [wallet, row, inner] of [['SmartKeyAccount', k.smart_key_account, (s) => s.subarray(160, 225)],
-    ['MandateWallet', k.mandate_wallet, (s) => s]]) {
-    const args = { wallet, address: row.verifying_contract, chainId: Number(k.chain_id), chainUid: k.salt, hash: k.hash };
-    const d = erc1271Digest(args);
-    assert.equal(hex(d), row.digest, wallet);
-    assert.equal(erc1271TypedData(args).domain.name, row.domain_name);
-    assert.notEqual(hex(erc1271Digest({ ...args, address: '0x' + '11'.repeat(20) })), row.digest, 'bound to the wallet');
-    assert.notEqual(hex(erc1271Digest({ ...args, chainId: 7623 })), row.digest, 'bound to the chain');
-    const sig = inner(fromHex(row.signature));
-    const r = secp256k1.Signature.fromBytes(sig.subarray(0, 64), 'compact').addRecoveryBit(sig[64] - 27);
-    assert.equal(evmAddress(r.recoverPublicKey(d).toBytes(false)), row.signer_key, wallet);
-  }
-  assert.equal(hex(accountSignature(0, [], fromHex(k.smart_key_account.signature).subarray(160, 225))), k.smart_key_account.signature);
-  assert.throws(() => erc1271Digest({ wallet: 'NormalToken', address: k.smart_key_account.verifying_contract, chainId: 7622,
-    chainUid: k.salt, hash: k.hash }), /no ERC-1271 wrap/);
+// B P3-2 (CTR-ACC-02, owner 2026-11-12: ERC-7739 only): the nested `TypedDataSign` a wallet key signs and the signature
+// suffix, against the forge KAT (AccountKat.t.sol, erc7739_kat.json): implicit mode (a token's `UAMetaTransfer` for a
+// `SmartKeyAccount`) and explicit mode (`Order` nesting `Asset` for a `MandateWallet`).
+test('erc7739TypedData / erc7739Signature = forge KAT (erc7739_kat.json)', () => {
+  const k = read('erc7739_kat.json');
+  const chainId = Number(k.chain_id);
+  const s = k.smart_key_account;
+  const td = uaMetaTransferTypedData({ name: s.app_name, contract: s.app_contract, chainId, chainUid: k.salt,
+    message: { from: s.from, to: s.to, value: s.value, entryRef: s.entry_ref, batch: s.batch, validUntil: s.valid_until } });
+  assert.equal(hex(hashTypedData(td)), hex(keccak_256(concatBytes(new Uint8Array([0x19, 1]), fromHex(s.app_separator),
+    fromHex(s.contents)))), 'the app hash is 0x1901 ‖ separator ‖ contents');
+  const nested = erc7739TypedData(td, { wallet: 'SmartKeyAccount', address: s.wallet, chainId, chainUid: k.salt });
+  assert.equal(hex(hashTypedData(nested)), s.digest);
+  const sig = fromHex(s.signature);
+  const blob = sig.subarray(0, sig.length - 66 - ((sig[sig.length - 2] << 8) | sig[sig.length - 1]));
+  assert.equal(blob.length, 256, 'abi.encode(0, [], 65-byte ECDSA)');
+  assert.equal(hex(erc7739Signature(blob, td)), s.signature);
+  const ecdsa = blob.subarray(160, 225);
+  const r = secp256k1.Signature.fromBytes(ecdsa.subarray(0, 64), 'compact').addRecoveryBit(ecdsa[64] - 27);
+  assert.equal(evmAddress(r.recoverPublicKey(fromHex(s.digest)).toBytes(false)), s.signer_key);
+  assert.notEqual(hex(hashTypedData(erc7739TypedData(td, { wallet: 'SmartKeyAccount', address: '0x' + '33'.repeat(20), chainId,
+    chainUid: k.salt }))), s.digest, 'bound to the wallet');
+
+  const m = k.mandate_wallet;
+  const order = {
+    types: { EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' },
+      { name: 'verifyingContract', type: 'address' }], Order: [{ name: 'give', type: 'Asset' }, { name: 'nonce', type: 'uint256' }],
+    Asset: [{ name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' }] },
+    primaryType: 'Order',
+    domain: { name: m.app_name, version: m.app_version, chainId, verifyingContract: m.app_contract },
+    message: { give: { token: m.token, amount: m.amount }, nonce: m.nonce },
+  };
+  const n2 = erc7739TypedData(order, { wallet: 'MandateWallet', address: m.wallet, chainId, chainUid: k.salt });
+  assert.equal(hex(hashTypedData(n2)), m.digest);
+  const msig = fromHex(m.signature);
+  assert.equal(hex(erc7739Signature(msig.subarray(0, 65), order)), m.signature, 'explicit mode: contentsType ‖ Order');
+  assert.ok(new TextDecoder().decode(msig.subarray(65 + 64, msig.length - 2)).endsWith(')Order'));
+  assert.throws(() => erc7739TypedData(td, { wallet: 'NormalToken', address: s.wallet, chainId, chainUid: k.salt }), /no ERC-7739/);
 });
 
 // ua-mtx-merge T3b / T11 (Q6, MD-11): the wallet's one signed entry per op over `UA<Op>`; the flat builders' KATs

@@ -18,6 +18,8 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {uaDigest, UA_PAY_UNDER_MANDATE, UA_DELEGATE_REVOKE} from "../wallet/MandateWalletMerged.t.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /// Shared writer of the account-side KATs (metatx.md §15: the `SmartKeyAccount` vector is a `MetaTransaction` vector in
 /// its own domain; the `MandateWallet` one, since ua-mtx-merge T3b, its `UA<Op>` structs), chain 7622 with its real
@@ -215,58 +217,101 @@ contract MandateWalletKatTest is MtxKatBase {
     }
 }
 
-/// `erc1271_kat.json` (B P3-2, CTR-ACC-02): ERC-1271 over `hash` wrapped as `ERC1271Message(bytes32 hash)` in the wallet's
-/// own domain, for a `SmartKeyAccount` (seed key 0, the account encoding) and a `MandateWallet` (its native owner's
-/// ECDSA); each answers the magic value, never over the raw `hash`. `WRITE_KAT=true` rewrites it; clientkeys'
-/// `erc1271Digest` reads it.
-contract Erc1271KatTest is MtxKatBase {
+/// `erc7739_kat.json` (B P3-2, CTR-ACC-02, owner 2026-11-12: ERC-7739 only): what a wallet key signs and the signature
+/// `isValidSignature` takes. `smart_key_account`: `TypedDataSign` over a `UAMetaTransfer` in a token's domain (implicit
+/// `contentsDescription`), seed key 0 in the account encoding; `mandate_wallet`: `TypedDataSign` over `Order` nesting
+/// `Asset` (explicit: `Asset` sorts first), the native owner's ECDSA; `mandate_wallet_personal`: `PersonalSign` over an
+/// EIP-191 hash. Each answers the magic value. `WRITE_KAT=true` rewrites it; clientkeys' `erc7739TypedData` /
+/// `erc7739Signature` read it.
+contract Erc7739KatTest is MtxKatBase {
     uint256 internal constant SEED = 0x5EED;
     uint256 internal constant OWNER_PK = 0x0A11CE;
-    bytes32 internal constant HASH = keccak256("scaas.kat.erc1271");
-    string internal constant PATH = "./test/vectors/erc1271_kat.json";
+    address internal constant TOKEN = 0x1111111111111111111111111111111111111111;
+    address internal constant APP = 0x2222222222222222222222222222222222222222;
+    string internal constant PATH = "./test/vectors/erc7739_kat.json";
+    string internal constant ORDER_TYPES = "Asset(address token,uint256 amount)Order(Asset give,uint256 nonce)";
 
-    function _row(string memory k, string memory name, address vc, bytes32 digest, address signer, bytes memory sig)
-        internal returns (string memory)
-    {
-        assertEq(digest, keccak256(abi.encodePacked(hex"1901", _domainSep(name, vc),
-            keccak256(abi.encode(keccak256("ERC1271Message(bytes32 hash)"), HASH)))), "digest formula");
-        assertEq(SmartKeyAccount(payable(vc)).isValidSignature(HASH, sig), bytes4(0x1626ba7e), k);
-        vm.serializeString(k, "domain_name", name);
-        vm.serializeString(k, "verifying_contract", vm.toString(vc));
-        vm.serializeString(k, "domain_separator", vm.toString(_domainSep(name, vc)));
-        vm.serializeString(k, "digest", vm.toString(digest));
-        vm.serializeString(k, "signer_key", vm.toString(signer));
-        return vm.serializeString(k, "signature", vm.toString(sig));
+    function _check(address wallet, bytes32 hash, bytes memory sig) internal view {
+        assertEq(SmartKeyAccount(payable(wallet)).isValidSignature(hash, sig), bytes4(0x1626ba7e), "magic");
     }
 
-    function test_erc1271Kat() public {
-        vm.chainId(7622);
-        SmartKeyAccountFactory fac = new SmartKeyAccountFactory(UID);
-        SmartKeyAccount a = SmartKeyAccount(payable(fac.deploy(
+    function _ska() internal returns (string memory) {
+        SmartKeyAccount a = SmartKeyAccount(payable(new SmartKeyAccountFactory(UID).deploy(
             SubjectKey(KeyKind.SECP256K1, bytes32(uint256(uint160(vm.addr(SEED)))), 0, 0, 0), address(0))));
-        bytes32 da = a.erc1271Digest(HASH);
-        bytes memory sa = abi.encode(uint256(0), new bytes32[](0), _ecdsa(SEED, da));
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer(MetaTxLib.pad(address(a)), MetaTxLib.pad(address(0x4EE)),
+            12_345_678, keccak256("scaas.kat.erc7739"), 7, 0, 1_800_000_300, 0, address(0), 0, address(0));
+        bytes32 app = _domainSep("SCaaS MetaToken", TOKEN);
+        bytes32 c = MtxHash.hashStruct(x);
+        bytes32 d = Erc7739Kit.nested(address(a), app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c);
+        bytes memory sig = Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0), _ecdsa(SEED, d)), app, c,
+            Erc7739Kit.UA_TRANSFER_TYPE);
+        _check(address(a), keccak256(abi.encodePacked(hex"1901", app, c)), sig);
+        vm.serializeString("ska", "wallet", vm.toString(address(a)));
+        vm.serializeString("ska", "app_name", "SCaaS MetaToken");
+        vm.serializeString("ska", "app_contract", vm.toString(TOKEN));
+        vm.serializeString("ska", "from", vm.toString(x.from));
+        vm.serializeString("ska", "to", vm.toString(x.to));
+        vm.serializeString("ska", "value", vm.toString(x.value));
+        vm.serializeString("ska", "entry_ref", vm.toString(x.entryRef));
+        vm.serializeString("ska", "batch", vm.toString(x.batch));
+        vm.serializeString("ska", "valid_until", vm.toString(x.validUntil));
+        vm.serializeString("ska", "app_separator", vm.toString(app));
+        vm.serializeString("ska", "contents", vm.toString(c));
+        vm.serializeString("ska", "digest", vm.toString(d));
+        vm.serializeString("ska", "signer_key", vm.toString(vm.addr(SEED)));
+        return vm.serializeString("ska", "signature", vm.toString(sig));
+    }
+
+    function _mw(MandateWallet w) internal returns (string memory) {
+        bytes32 asset = keccak256(abi.encode(keccak256("Asset(address token,uint256 amount)"), TOKEN, uint256(500)));
+        bytes32 c = keccak256(abi.encode(keccak256(bytes(string.concat("Order(Asset give,uint256 nonce)",
+            "Asset(address token,uint256 amount)"))), asset, uint256(9)));
+        bytes32 app = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+            keccak256("Example App"), keccak256("2"), uint256(7622), APP));
+        bytes32 d = Erc7739Kit.nested(address(w), app, "Order", ORDER_TYPES, c);
+        bytes memory sig = Erc7739Kit.wrap(_ecdsa(OWNER_PK, d), app, c, string.concat(ORDER_TYPES, "Order"));
+        _check(address(w), keccak256(abi.encodePacked(hex"1901", app, c)), sig);
+        vm.serializeString("mw", "wallet", vm.toString(address(w)));
+        vm.serializeString("mw", "app_name", "Example App");
+        vm.serializeString("mw", "app_version", "2");
+        vm.serializeString("mw", "app_contract", vm.toString(APP));
+        vm.serializeString("mw", "token", vm.toString(TOKEN));
+        vm.serializeString("mw", "amount", "500");
+        vm.serializeString("mw", "nonce", "9");
+        vm.serializeString("mw", "app_separator", vm.toString(app));
+        vm.serializeString("mw", "contents", vm.toString(c));
+        vm.serializeString("mw", "digest", vm.toString(d));
+        vm.serializeString("mw", "signer_key", vm.toString(vm.addr(OWNER_PK)));
+        return vm.serializeString("mw", "signature", vm.toString(sig));
+    }
+
+    function _mwPersonal(MandateWallet w) internal returns (string memory) {
+        bytes32 h = MessageHashUtils.toEthSignedMessageHash(bytes("scaas erc7739 kat"));
+        bytes32 d = Erc7739Kit.personal(address(w), h);
+        bytes memory sig = _ecdsa(OWNER_PK, d);
+        _check(address(w), h, sig);
+        vm.serializeString("mwp", "message", "scaas erc7739 kat");
+        vm.serializeString("mwp", "hash", vm.toString(h));
+        vm.serializeString("mwp", "digest", vm.toString(d));
+        return vm.serializeString("mwp", "signature", vm.toString(sig));
+    }
+
+    function test_erc7739Kat() public {
+        vm.chainId(7622);
         MandateWallet w = new MandateWallet(MetaTxLib.pad(vm.addr(OWNER_PK)), UID, address(0), false);
-        bytes32 dw = w.erc1271Digest(HASH);
-        bytes memory sw = _ecdsa(OWNER_PK, dw);
         vm.serializeString("kat", "chain_id", "7622");
-        vm.serializeString("kat", "domain_version", "1");
         vm.serializeString("kat", "salt", vm.toString(UID));
-        vm.serializeString("kat", "type_string", "ERC1271Message(bytes32 hash)");
-        vm.serializeString("kat", "type_hash", vm.toString(MetaTxLib.ERC1271_MESSAGE_TYPEHASH));
-        vm.serializeString("kat", "hash", vm.toString(HASH));
-        vm.serializeString("kat", "smart_key_account", _row("ska", "SCaaS SmartKeyAccount", address(a), da, vm.addr(SEED), sa));
-        string memory out =
-            vm.serializeString("kat", "mandate_wallet", _row("mw", "SCaaS MandateWallet", address(w), dw, vm.addr(OWNER_PK), sw));
+        vm.serializeString("kat", "smart_key_account", _ska());
+        vm.serializeString("kat", "mandate_wallet", _mw(w));
+        string memory out = vm.serializeString("kat", "mandate_wallet_personal", _mwPersonal(w));
         if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, PATH);
         string memory onDisk = vm.readFile(PATH);
-        assertEq(vm.parseJsonBytes32(onDisk, ".type_hash"), MetaTxLib.ERC1271_MESSAGE_TYPEHASH);
-        assertEq(vm.parseJsonBytes32(onDisk, ".hash"), HASH);
-        assertEq(vm.parseJsonAddress(onDisk, ".smart_key_account.verifying_contract"), address(a));
-        assertEq(vm.parseJsonBytes32(onDisk, ".smart_key_account.digest"), da);
-        assertEq(vm.parseJsonBytes(onDisk, ".smart_key_account.signature"), sa);
-        assertEq(vm.parseJsonAddress(onDisk, ".mandate_wallet.verifying_contract"), address(w));
-        assertEq(vm.parseJsonBytes32(onDisk, ".mandate_wallet.digest"), dw);
-        assertEq(vm.parseJsonBytes(onDisk, ".mandate_wallet.signature"), sw);
+        string[3] memory rows = ["smart_key_account", "mandate_wallet", "mandate_wallet_personal"];
+        for (uint256 i; i < 3; ++i) {
+            string memory k = string.concat(".", rows[i]);
+            assertEq(vm.parseJsonBytes32(onDisk, string.concat(k, ".digest")), vm.parseJsonBytes32(out, string.concat(k, ".digest")), k);
+            assertEq(vm.parseJsonBytes(onDisk, string.concat(k, ".signature")), vm.parseJsonBytes(out, string.concat(k, ".signature")), k);
+        }
     }
 }
