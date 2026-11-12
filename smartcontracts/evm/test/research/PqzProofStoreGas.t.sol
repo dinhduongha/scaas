@@ -199,14 +199,19 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
     }
 
     /// O11 (owner 2026-11-07): `PQZ_DEBIT_MIN_GAS` is the cheapest PQZL debit form, the burn of 1 to an address, as a full
-    /// relayed transaction on the costlier path (`uaExecute`, the ML-DSA-65 fee UA) under `LOG`.
+    /// relayed transaction on the costlier path (`uaExecute`, the ML-DSA-65 fee UA) under `LOG`. Owner 2026-11-12 option (b):
+    /// the pin is at least the measurement, rounded up to the next multiple of 1,000 (`set.toml` `debit_min_gas`), so a
+    /// selector more in a face no longer turns it red; a pin below the measurement fails (the mutant of
+    /// runs/2026-11-12-fix2-contracts/mutants-debit-min-gas.json).
     function test_debitMinGas_isTheCheapestLogDebit() public {
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         (viaUA, path) = (true, "uaExecute");
         uint256 g = _pair("pqzl", "BURN", "burn 1 to an address (the PQZ_DEBIT_MIN_GAS form)", address(tok),
             _burnP(1, address(0xD00D), _pf("pqzl", "BURN")), true);
         console2.log(string.concat("PQZ_DEBIT_MIN_GAS ", PqzSet.NAME, " pinned / measured under LOG"), PqzSet.PQZ_DEBIT_MIN_GAS, g);
-        assertEq(PqzSet.PQZ_DEBIT_MIN_GAS, g, "set.toml debit_min_gas: the LOG burn's full relayed regular gas");
+        assertGe(PqzSet.PQZ_DEBIT_MIN_GAS, g, "set.toml debit_min_gas: at least the LOG burn's full relayed regular gas");
+        assertEq(PqzSet.PQZ_DEBIT_MIN_GAS % 1_000, 0, "set.toml debit_min_gas: a multiple of 1,000");
+        assertLt(PqzSet.PQZ_DEBIT_MIN_GAS - g, 1_000, "set.toml debit_min_gas: the measurement rounded up, no more");
     }
 }
 

@@ -665,9 +665,14 @@ a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (re
 override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
 (register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one; `setPqzKey` on a gen-2 host counts the native slots of a record gen 1 holds at 400 k, gen 1's clone cap, as a gen-1 inner's) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` plus 16 gas per byte of the authorization's calldata is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit), and so is `PQZ_DEBIT_MIN_GAS` + 64 per byte, the EIP-7976 floor. The bytes `a` are the largest `MemberSig[]` a quorum signs, both levels: a signing slot `192 + ⌈sig / 32⌉ × 32`, an `msig` slot 192 and its leaves, each `128 + ⌈sig / 32⌉ × 32`, a PQ signature at its size, every classical kind and native at 1,024 B. The debit figure holds one holder signature, which is counted again, on the safe side.
-`PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: the full relayed transaction of the cheapest PQZL debit
-(burn 1 under LOG) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 7,299,398 at
-`n2048-kmax1024`, 7,514,684 at `n2304-kmax4096`, 7,727,533 at `n2560-kmax16384`, 7,969,327 at `n2816-kmax65536`, measured
+<a id="debit-min-gas"></a>`PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: **at least** the full relayed transaction of the
+cheapest PQZL debit (burn 1 under LOG) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]),
+**rounded up to the next multiple of 1,000** (owner 2026-11-12 option (b), [CTR-PQZ-12](#CTR-PQZ-12)'s Change;
+`test_debitMinGas_isTheCheapestLogDebit` holds `set >= measured`, a multiple of 1,000, less than 1,000 above; BUILT) —
+7,300,000 at `n2048-kmax1024`, 7,515,000 at `n2304-kmax4096`, 7,728,000 at `n2560-kmax16384`, 7,970,000 at
+`n2816-kmax65536` (measured 7,299,442 / 7,514,728 / 7,727,577 / 7,969,371 on branch `ua-mtx-fix2-contracts`, +44 at each
+set: the face selectors `renounceAdmin(bytes32)` and `transferAdmin(bytes32,bytes32)`, the payee-fee rename, the DEX merge;
+the pins were 7,299,398 / 7,514,684 / 7,727,533 / 7,969,327, equal to the measurement), measured before that
 on the body-module build ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30); owner 2026-11-09, T66b spec §11 (j):
 `test_debitMinGas_isTheCheapestLogDebit` at each set; before it 7,258,188 / 7,468,120 / 7,675,561 / 7,910,855: the stub to
 P and the self-call's stub to Q add two frames; moved +963 / +972 / +980 / +989 after rounds 3r + 3s + 3t, owner

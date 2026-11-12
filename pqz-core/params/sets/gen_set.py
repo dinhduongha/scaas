@@ -476,8 +476,9 @@ def roll_max(name):
 
 
 def debit_min_gas(name):
-    """set.toml debit_min_gas: the cheapest built PQZL debit form's full relayed regular gas on the costlier relay path
-    (review2 T2, C0-5); the UA registry bounds a PQZ holder's worst-case authorization + this by 2^24 (EIP-7825)."""
+    """set.toml debit_min_gas: at least the cheapest built PQZL debit form's full relayed regular gas on the costlier relay
+    path, rounded up to 1,000 (review2 T2, C0-5; owner 2026-11-12 option (b)); the UA registry bounds a PQZ holder's
+    worst-case authorization + this by 2^24 (EIP-7825)."""
     g = load(name)["debit_min_gas"]
     assert 0 < g < 2**24, f"{name}: debit_min_gas {g} is not in (0, 2^24)"
     return g
@@ -496,7 +497,7 @@ def sol_text(name):
             ("PACK_BITS", pack, "stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in plan 5h Task 8d part 2)"),
             ("S_AUD", c["S_AUD"], "legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)"),
             ("ROLL_MAX", roll_max(name), "entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)"),
-            ("PQZ_DEBIT_MIN_GAS", debit_min_gas(name), "the cheapest built PQZL debit form (burn 1), full relayed regular gas on the costlier relay path, uaExecute (set.toml debit_min_gas; the UA registry's PQZ holder bound)"),
+            ("PQZ_DEBIT_MIN_GAS", debit_min_gas(name), "at least the cheapest built PQZL debit form (burn 1), full relayed regular gas on the costlier relay path, uaExecute, rounded up to 1,000 (set.toml debit_min_gas; the UA registry's PQZ holder bound)"),
             ("PK", ln["pk"], "pk / u bytes (k polys x 64 be8)"), ("V", ln["v"], "v bytes (16 be8)"),
             ("CT", ln["ct"], "ciphertext u || v bytes"),
             ("STMT_TRANSFER", ln["stmt"]["TRANSFER"], "op 1 statement, auditor on"),
