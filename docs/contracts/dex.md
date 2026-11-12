@@ -340,6 +340,28 @@ reason)`); if none succeeds the whole call reverts, so the relayer's simulation 
 5. **Invariant**, asserted at the end of each settlement: the DEX's balance of every token touched is unchanged
    (`ConservationBroken(token)`).
 
+<a id="settle-outcome"></a>**The outcome rule** (owner 2026-11-12, [decisions](../decisions.md#ctr-dex-16--mtxsettle-everything-through-the-dex-balances-unchanged);
+BUILT on branch `ua-mtx-fix2-dex`, UNAUDITED). Each signer only cares that it sells what it signed and gets at least
+its price; a token's transfer fee does not stop a match that still meets that. The matching, the fills and the price
+checks above are unchanged, and neither the submitter nor the node does any transfer-fee math; the minimum fill
+([CTR-DEX-14](#CTR-DEX-14)) stays on the fill, the seller's signed side, never on what arrived. (a) Every pull is measured
+at the seller (`balanceOf`, `balanceOfUA` for a derived id): its balance falls by at most what it signed to sell (the
+fill; Path B the whole `amount`), else `SellerOverDebited(orderHash)`; on every path. (b) On `mtxSettle`, what
+**arrived** of each token over the pulls is paid out in full, pro rata to the match's amounts (A: each maker's receive
+and the taker's Path B refund; B: the taker's receive and each maker's Path B refund), the dust to the last nonzero share,
+each `dexFee` recomputed on its share ([CTR-DEX-17](#CTR-DEX-17)); so step 5 still holds exactly. (c) Every payout to a
+party is measured around **its own** transfer (not the whole settlement, where a recipient that is also the submitter or
+the treasury would count fee shares): the recipient's delta must reach its signed floor, `⌈sold · receiveAmount /
+amount⌉` less its fee on that amount, else `InsufficientOutput(receiveToken)`; a Path B refund must arrive in full; the
+fee shares carry no floor. With exact tokens nothing changes (every settle test keeps its amounts). A symmetric or a
+`transfer`-only fee token settles when the price leaves room for the fee and reverts when it does not; a token that
+credits more is paid out. A hybrid's book legs: (a) and (c) apply (each maker's payout against its signed floor, the
+taker's as on the exchange path, [CTR-DEX-21](#CTR-DEX-21)); its pulls must still arrive exactly (the route's amounts are
+fixed by the plan, `ConservationBroken`). **The submitter** (the caller of `mtxSettle`, `mtxHybrid*`, `mtxExchange*`,
+`mtxLiquidity`) does no transfer-fee math: it simulates and drops a match whose fees eat the price room; a failed match
+costs only its own gas (`MatchFailed` or a revert), the signers lose nothing and their orders stay open; its reward is
+`relayerShare` (owner 2026-11-12).
+
 **Transitional (BUILT, P2b-1, P2b-2).** `SCaaSDex` (`src/dex/SCaaSDex.sol`, a clone; namespace `scaas.dex`; salted
 domain) builds this: each settlement in a `settleOne` self-call, outside legs per [CTR-DEX-18](#CTR-DEX-18). Also
 `SelfTrade`, `DuplicateOrder`, `NoMakers`, `FillMismatch`, `NothingSettled`; a maker receives `ceil(fill · receiveAmount
@@ -379,13 +401,10 @@ settlement and makes every payment, instead of a token trusting a `receiveFill` 
 simple invariant — no dust, no donated tokens paid out, nothing stuck; (c) the token stays minimal — one recipient, no
 fee splitting, no route chosen by the caller; a signer reads one address to know where its funds can go. The cost is
 two transfers per leg instead of one. In Path A the signer relies on the named DEX for delivery; in Path B, chosen by
-`ESCROW`, for price as well. There is no per-party proceeds check: its expected figure would come from the same code
-that pays (it adds nothing against a DEX bug), and per-party balance deltas misfire when addresses are shared (two
-makers with one `destination`, a relayer or treasury that is also a `destination`). A token that credits less than it
-was told to move is caught by conservation: SCaaS tokens are exact by construction; with open markets
-([CTR-DEX-32](#CTR-DEX-32)) any outside token trades, fee-on-transfer and rebasing ones included, and the guard is
-conservation (fail closed): the DEX's own balance moves and the settlement reverts (a hook (ERC-777) token's calls are
-gas-capped, see above). `SCaaSDex` keeps its book semantics (price-time
+`ESCROW`, for price as well. Each payout is checked at its recipient against the signer's own floor, around that payout's transfer only, so shared
+addresses (two makers with one `destination`, a relayer or treasury that is also a `destination`) do not misfire; a
+token that credits less or more than it was told to move is handled by [the outcome rule](#settle-outcome) (a hook
+(ERC-777) token's calls are gas-capped, see above). `SCaaSDex` keeps its book semantics (price-time
 priority, limit + IOC/FOK, partial fills of at least `minFill`); the execution price is each maker's signed
 price, rounded in the maker's favour, and the node only emits matches that pass the same checks as the contract.
 
@@ -465,7 +484,7 @@ whole call with `UAVerifyGas` (17,955,669 needed).
 <a id="CTR-DEX-17"></a>**CTR-DEX-17** — **One fee: the signed `fee` rate, collected and distributed by the DEX in the
 same call** (owner). `fee` is the DEX fee rate (ppm, ≤ 1 %) the signer agrees to pay on what it receives, whatever
 role the order plays. The DEX charges `dexFee = ceil(receiveFill · fee / 10⁶)` ([CTR-DEX-11](#CTR-DEX-11)) — never
-more — **once per order per settlement, on its aggregate `receiveFill`** (a taker filled by several makers is charged
+more; on `mtxSettle` `receiveFill` is the order's share of what arrived ([the outcome rule](#settle-outcome)) — **once per order per settlement, on its aggregate `receiveFill`** (a taker filled by several makers is charged
 once on the total; a sum of per-maker ceilings could exceed the bound its token checks), in the `receiveToken`, deducts
 it before paying `destination`, and splits it at once: `relayerShare = floor(dexFee · relayerSharePpm / 10⁶)` to the
 relayer that submitted the settlement (`msg.sender`), the rest to `treasury`. There is **no separate relayer fee**: the
@@ -528,8 +547,7 @@ operator who wants it ([CTR-DEX-23](#CTR-DEX-23)). The kind of every token is th
 ([CTR-DEX-18](#CTR-DEX-18)), so an unlisted pair needs no record. Self-trade, the relayer binding and every other check are
 unchanged. With open markets the guard against a token that credits less than it was told to move (fee-on-transfer,
 rebasing) is conservation (`ConservationBroken`, or a payout that cannot be made) and, on the exchange path, the
-recipient's delta ([CTR-DEX-21](#CTR-DEX-21)): fail closed. The gap left is on the book path ([CTR-DEX-18](#CTR-DEX-18)
-backstop row): a book payout (`mtxSettle`, a hybrid's makers) is not measured: a fee charged on both pull and payout fails conservation there, but a token that charges only on `transfer`, or only when the DEX sends, conserves the DEX's balance and pays the recipient below its amount (open, pending the owner's settle ruling). Status **BUILT** (branch `ua-mtx-fix2-dex`, UNAUDITED); tests `test/v2/DexMarkets.t.sol`.
+recipient's delta ([CTR-DEX-21](#CTR-DEX-21)), and on the book path [the outcome rule](#settle-outcome): fail closed. Status **BUILT** (branch `ua-mtx-fix2-dex`, UNAUDITED); tests `test/v2/DexMarkets.t.sol`.
 
 <a id="CTR-DEX-24"></a>**CTR-DEX-24** — **`OpenFactory.createDex(version, initArgs, salt)` makes an `SCaaSDex` clone; `owner` is set by
 `initialize`; the `DexPuller` is deployed by `initialize`; `isDex(addr)` is advisory: tokens never consult it** (owner).
@@ -577,7 +595,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 | Flags | `IOC` allowed; **`ESCROW` refused** (`BadFlags`) — the fill is already pulled exactly into the DEX |
 | Pull | `DexPuller.pull(token, from, sellFill)` = `safeTransferFrom(from, DEX, sellFill)` under the party's allowance to the **puller**, never to the DEX ([CTR-DEX-22](#CTR-DEX-22)); an EOA may approve a contract on a token SCaaS does not control |
 | Cancel | `mtxCancelOrders(DexOrder[] orders, bytes[] sigs)` (`CancelDexOrder(DexOrder order)` in the DEX domain, nested since typed-signing C6; closed or bad-signature items skipped, no revert of the batch) and `mtxInvalidateNonces(from, batch, newMin, sig)` (`InvalidateNonces(address from,uint256 batch,uint256 minNonce)` in the DEX domain) |
-| Backstop | conservation ([CTR-DEX-16](#CTR-DEX-16)); on the exchange path (an exchange leg, a hybrid's taker) also **the recipient's delta** (owner 2026-11-12, closes review C6-4): the DEX reads the recipient's balance of the receive token before and after its payout (`balanceOf`, or `balanceOfUA` of a derived id, so a SCaaS ledger payout is measured too, nothing assumed exact) and requires a rise of at least `receiveFill − dexFee`, else `InsufficientOutput(receiveToken)`; a receive-only outside token with a transfer fee therefore fails closed unless the surplus covers its fee. Still open: a book payout (`mtxSettle`, a hybrid's makers) is not measured: a fee charged on both pull and payout fails conservation there, but a token that charges only on `transfer`, or only when the DEX sends, conserves the DEX's balance and pays the recipient below its amount (open, pending the owner's settle ruling) |
+| Backstop | conservation ([CTR-DEX-16](#CTR-DEX-16)); on the exchange path (an exchange leg, a hybrid's taker) also **the recipient's delta** (owner 2026-11-12, closes review C6-4): the DEX reads the recipient's balance of the receive token before and after its payout (`balanceOf`, or `balanceOfUA` of a derived id, so a SCaaS ledger payout is measured too, nothing assumed exact) and requires a rise of at least `receiveFill − dexFee`, else `InsufficientOutput(receiveToken)`; a receive-only outside token with a transfer fee therefore fails closed unless the surplus covers its fee. A book payout (`mtxSettle`, a hybrid's makers): [the outcome rule](#settle-outcome) |
 | Parties | native only: a UA holds no outside token ([CTR-UA-27](accounts.md#CTR-UA-27)); a shape-1 leg in an outside token reverts `UALegNotLedger` ([CTR-DEX-26](#CTR-DEX-26)) |
 | Transitional (BUILT, P2b-2) | on the DEX: `dexOrderDigest(sellToken, o)`, `cancelOrderDigest`, `invalidateNoncesDigest`, `pulled`, `minNonce`, `puller()`; `TradeLib`'s checks on the DEX's own `scaas.trade` state, the leg's token as the sell token (`SelfOrder` if `from` is it); `BadSignature(digest)`, `LengthMismatch`; payouts by `SafeERC20`; no `checkOrder`: the [section 10](#10-intake-reads-and-invariants) reads are the intake (controller ruling, pending the owner); limitation: no HIP-632 branch on DEX signatures, so a Hedera ED25519 account cannot sign a `DexOrder` or a DEX cancel |
 
@@ -919,7 +937,7 @@ input token's) or expiry. Status **BUILT** on EVM: `src/dex/SCaaSDexLiquidityMod
 `src/trade/LiquidityLib.sol`; tests `test/liquidity/` (UNAUDITED; the `mldsa65` two-input fit, `DexLiquidityMldsa.t.sol`,
 signs through `vm.ffi` and runs with `--ffi` and `MLDSA_CLIENTKEYS`: 12,143,505 regular gas within 2^24). Size (owner 2026-11-10, spec §9.3's lever (b)): the
 DEX-domain cancels `mtxCancelOrders`, `mtxInvalidateNonces` and their digest views run in the liquidity module too, behind
-typed stubs (the same rules, [CTR-DEX-18](#CTR-DEX-18)); `SCaaSDex` 32,809 B (its margin 33,594 B), the module 19,055 B; after fix2 (2026-11-12: `rescue`, the live read) 33,238 B and 19,487 B; after fix2-dex (the kind at use, no deprecation read, bit 29) 33,061 B and 19,158 B (measured at `a18e9464`: 33,222 B and 19,487 B); with the exchange path's recipient-balance check (owner 2026-11-12) `SCaaSDex` 33,461 B, its `size-baseline.json` row moved.
+typed stubs (the same rules, [CTR-DEX-18](#CTR-DEX-18)); `SCaaSDex` 32,809 B (its margin 33,594 B), the module 19,055 B; after fix2 (2026-11-12: `rescue`, the live read) 33,238 B and 19,487 B; after fix2-dex (the kind at use, no deprecation read, bit 29) 33,061 B and 19,158 B (measured at `a18e9464`: 33,222 B and 19,487 B); with the exchange path's recipient-balance check (owner 2026-11-12) `SCaaSDex` 33,461 B; with the settle outcome rule 34,359 B (over its 33,594 B notice line, accepted by the owner), its `size-baseline.json` row moved each time.
 **Deprecation is not the DEX's** (owner 2026-11-12, superseding the live read of Fable review D P3-4, whose code and test
 are in `smartcontracts/evm/legacy/ua-mtx-fix2-dex/`): the kind is the factory's at use ([CTR-DEX-18](#CTR-DEX-18)), never
 a release's deprecation. A SCaaS input is pulled by its token's `mtxLiquidityPull`, which verifies `h` itself, deprecated

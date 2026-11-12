@@ -1,0 +1,44 @@
+[
+ {
+  "id": "S1 arrival not paid out (no scaling)",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NothingSettled()] test_settle_feeOnTheArrivedShare() (gas: 972891)"
+ },
+ {
+  "id": "S2 no dust to the last share",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NothingSettled()] test_settle_moreArrives_proRata_dustToTheLast() (gas: 1131555)"
+ },
+ {
+  "id": "S3 fee not recomputed on the share",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 194040 != 194060] test_settle_feeOnTheArrivedShare() (gas: 1051934)"
+ },
+ {
+  "id": "S4 book floor dropped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_open_feeOnTransfer_belowTheFloorFails() (gas: 1002265)"
+ },
+ {
+  "id": "S5 book floor = the computed net amount",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NothingSettled()] test_settle_feeOnTheArrivedShare() (gas: 972320)"
+ },
+ {
+  "id": "S6 seller debit check dropped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_settle_sellerOverDebited() (gas: 1981613)"
+ },
+ {
+  "id": "S7 seller debit bound = amount",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_settle_sellerOverDebited() (gas: 1982213)"
+ }
+]

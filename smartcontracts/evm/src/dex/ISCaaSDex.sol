@@ -210,6 +210,8 @@ interface ISCaaSDex {
     error ForbiddenSelector(address target, bytes4 selector);
     error TargetNotListed(address target);
     error InsufficientOutput(address token);
+    /// @notice A pull took more from the seller than it signed to sell (owner 2026-11-12).
+    error SellerOverDebited(bytes32 orderHash);
     /// @notice Liquidity (CTR-DEX-30, -31): `code` 1 no input or no output, 2 more than eight, 3 a zero, repeated or shared
     ///         token or a zero maximum, 4 the position fields disagree, 5 a recipient that is the DEX, its puller, a plan
     ///         token or the manager; 6 is a token's (not exactly one input).

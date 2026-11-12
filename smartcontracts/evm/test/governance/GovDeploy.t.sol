@@ -614,8 +614,9 @@ contract GovDeployTest is Test {
         // metadata hash: `RescueLib`, `GovernanceLib.init`, `DexPuller`): 0x3B3B1Cda834b39B4541d0861226E7bE4712302AF; fix2
         // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a;
         // fix2-dex CTR-DEX-32 (the metadata hash: `ISCaaSDex.DexConfig` gains `features`, `lockedFeatures`; its code
-        // unchanged): -> this
-        assertEq(router, 0x442Df70CD12C49b876D5552Fa40b126C5E0E662f, "GovernanceRouter");
+        // unchanged): 0x442Df70CD12C49b876D5552Fa40b126C5E0E662f; fix2-dex settle outcome rule (the metadata hash:
+        // `ISCaaSDex.SellerOverDebited`; its code unchanged): -> this
+        assertEq(router, 0x51E43059317Bf99D7d615a0334e1781BA62CFFf5, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

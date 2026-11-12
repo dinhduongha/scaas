@@ -354,10 +354,47 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         uint256 balB = _bal(tokenB);
         _pullLeg(tokenA, taker, s.taker, submitter);
         for (uint256 i; i < n; ++i) _pullLeg(tokenB, makers[i], s.makers[i], submitter);
+        _arrived(tokenA, balA, taker, makers, true);
+        _arrived(tokenB, balB, taker, makers, false);
         _pay(s.ref, tokenA, taker, submitter);
         for (uint256 i; i < n; ++i) _pay(s.ref, tokenB, makers[i], submitter);
         if (_bal(tokenA) != balA) revert ConservationBroken(tokenA);
         if (_bal(tokenB) != balB) revert ConservationBroken(tokenB);
+    }
+
+    /// @dev The outcome rule of `mtxSettle` (owner 2026-11-12, CTR-DEX-16): everything that arrived of `token` over the
+    ///      pulls is paid out, pro rata to the match's amounts (A: each maker's receive, the taker's Path B refund; B: the
+    ///      taker's receive, each maker's refund), the dust to the last nonzero share, each fee recomputed on its share.
+    ///      Exact tokens arrive exactly and change nothing; each payout's floor is measured at `_pay`.
+    function _arrived(address token, uint256 bal, Calc memory taker, Calc[] memory makers, bool a) private view {
+        uint256 b = _bal(token);
+        if (b < bal) revert ConservationBroken(token);
+        uint256 x = b - bal;
+        uint256 e = a ? taker.refund : taker.recv;
+        uint256 last = makers.length; // the taker's slot
+        for (uint256 i; i < makers.length; ++i) {
+            uint256 v = a ? makers[i].recv : makers[i].refund;
+            e += v;
+            if (v != 0) last = i;
+        }
+        if (x == e) return;
+        uint256 left = x;
+        uint256 w = last == makers.length ? left : Math.mulDiv(a ? taker.refund : taker.recv, x, e);
+        left -= w;
+        if (a) taker.refund = w;
+        else _share(taker, w);
+        for (uint256 i; i < makers.length; ++i) {
+            w = i == last ? left : Math.mulDiv(a ? makers[i].recv : makers[i].refund, x, e);
+            left -= w;
+            if (a) _share(makers[i], w);
+            else makers[i].refund = w;
+        }
+    }
+
+    /// @dev A leg's receive becomes `v`, its fee recomputed on it (CTR-DEX-11).
+    function _share(Calc memory c, uint256 v) private pure {
+        c.recv = v;
+        c.fee = Math.mulDiv(v, c.o.fee, PPM, Math.Rounding.Ceil);
     }
 
     /// @dev The makers of a settlement or a hybrid: each sells B and receives A; no maker's `from` is the taker's
@@ -442,8 +479,19 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         _pull(sellToken, c, l.sig, l.auth, submitter);
     }
 
+    /// @dev Every pull, measured at the seller (owner 2026-11-12): its balance falls by at most what it signed to sell
+    ///      (the fill; Path B the whole `amount`), else `SellerOverDebited(h)`; `balanceOfUA` for a derived seller.
     function _pull(address sellToken, Calc memory c, bytes calldata sig, IUARegistry.UASig calldata auth, address submitter)
         private
+    {
+        uint256 b = _balOf(sellToken, c.o.from);
+        _pullRaw(sellToken, c, sig, auth, submitter);
+        uint256 a = _balOf(sellToken, c.o.from);
+        if (a < b && b - a > (c.o.flags & ESCROW != 0 ? c.o.amount : c.sold)) revert SellerOverDebited(c.h);
+    }
+
+    function _pullRaw(address sellToken, Calc memory c, bytes calldata sig, IUARegistry.UASig calldata auth,
+        address submitter) private
     {
         ITradeToken.UATradeOrder memory o = c.o;
         ITradeToken.TradeFill memory f = o.flags & ESCROW != 0
@@ -459,7 +507,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     }
 
     function _pay(bytes32 ref, address sellToken, Calc memory c, address submitter) private {
-        (bytes32 to, uint256 relayerShare, uint256 treasuryShare) = _payLeg(sellToken, c, 0, submitter, false);
+        // the signed floor (owner 2026-11-12): ⌈sold · receiveAmount / amount⌉ net of its fee, measured at the recipient
+        uint256 l = Math.mulDiv(c.sold, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
+        (bytes32 to, uint256 relayerShare, uint256 treasuryShare) =
+            _payLeg(sellToken, c, 0, submitter, l - Math.mulDiv(l, c.o.fee, PPM, Math.Rounding.Ceil));
         if (c.ua) {
             emit UALegSettled(ref, c.h, c.o.from, to, c.sold, c.recv - c.fee, c.fee, c.refund, relayerShare,
                 treasuryShare);
@@ -469,11 +520,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         }
     }
 
-    /// @dev Proceeds net of the fee, plus `surplus`, to `destination` (or `from`), the fee split, the Path B refund. On
-    ///      the exchange path (`measured`: an exchange leg, a hybrid's taker) the recipient's delta must reach the floor
-    ///      less the fee (owner 2026-11-12, closes review C6-4); a book payout (`mtxSettle`, a hybrid's makers) is not
-    ///      measured here (pending the owner's settle ruling).
-    function _payLeg(address sellToken, Calc memory c, uint256 surplus, address submitter, bool measured)
+    /// @dev Proceeds net of the fee, plus `surplus`, to `destination` (or `from`), the fee split, the Path B refund. Each
+    ///      payout to a party is measured around its own transfer (owner 2026-11-12): the recipient's delta at least `min`
+    ///      (a book leg: its signed floor; an exchange leg or a hybrid's taker: the floor less the fee, closing review
+    ///      C6-4), the refund in full; the fee shares carry no floor.
+    function _payLeg(address sellToken, Calc memory c, uint256 surplus, address submitter, uint256 min)
         private returns (bytes32 to, uint256 relayerShare, uint256 treasuryShare)
     {
         DexStorage storage s = _s();
@@ -481,11 +532,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         to = o.destination == 0 ? o.from : o.destination;
         relayerShare = Math.mulDiv(c.fee, s.relayerSharePpm, PPM);
         treasuryShare = c.fee - relayerShare;
-        if (measured) _sendChecked(o.receiveToken, to, c.recv - c.fee + surplus, c.recv - c.fee);
-        else _sendTo(o.receiveToken, to, c.recv - c.fee + surplus);
+        _sendChecked(o.receiveToken, to, c.recv - c.fee + surplus, min);
         _send(o.receiveToken, submitter, relayerShare);
         _send(o.receiveToken, s.treasury, treasuryShare);
-        _sendTo(sellToken, o.from, c.refund);
+        if (c.refund != 0) _sendChecked(sellToken, o.from, c.refund, c.refund);
     }
 
     // ------------------------------------------------------------------ exchange path (CTR-DEX-20, -21, -23)
@@ -769,7 +819,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     }
 
     function _payExchange(bytes32 ref, address sellToken, Calc memory c, uint256 surplus, address submitter) private {
-        (bytes32 to,,) = _payLeg(sellToken, c, surplus, submitter, true);
+        (bytes32 to,,) = _payLeg(sellToken, c, surplus, submitter, c.recv - c.fee);
         uint256 limit = Math.mulDiv(c.sold, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
         if (c.ua) {
             emit UAExchangeLegSettled(ref, c.h, c.o.from, to, c.sold, c.recv, surplus, c.fee, c.refund, limit);

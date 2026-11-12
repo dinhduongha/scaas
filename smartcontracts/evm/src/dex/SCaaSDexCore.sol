@@ -222,6 +222,8 @@ abstract contract SCaaSDexCore {
     ///      `InsufficientOutput(token)`. A token that credits less than the DEX sends (a fee or a hook on `transfer`) fails
     ///      closed even when the DEX's own balance conserves.
     function _sendChecked(address token, bytes32 to, uint256 amount, uint256 min) internal {
+        // a derived id is paid only through a ledger: refused by name before its balance is read (`_sendTo`'s rule)
+        if (!UAKinds.inNativeSpace(to) && !_ledgerOn(token)) revert ISCaaSDex.UAReceiveNotLedger(token);
         uint256 b = _balOf(token, to);
         _sendTo(token, to, amount);
         uint256 a = _balOf(token, to);

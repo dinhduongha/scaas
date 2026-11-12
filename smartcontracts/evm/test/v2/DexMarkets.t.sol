@@ -14,6 +14,25 @@ import {FeeOnTransferERC20, MockERC20} from "../helpers/Mocks.sol";
 import {nid} from "../helpers/Ids.sol";
 import {UADexBase} from "../ua/UADex.t.sol";
 import {MockRouter} from "./DexExchange.t.sol";
+import {RebaseUpERC20} from "./DexOutside.t.sol";
+
+/// Charges 1 % on `transfer` only (the pull, `transferFrom`, is exact): conservation alone cannot see it.
+contract TransferFeeERC20 is MockERC20 {
+    constructor() MockERC20("TFee", "TF", 18) {}
+    function transfer(address to, uint256 v) public override returns (bool) {
+        _burn(msg.sender, v / 100);
+        return super.transfer(to, v - v / 100);
+    }
+}
+
+/// `transferFrom` takes 1 % more from the seller than it moves.
+contract OverDebitERC20 is MockERC20 {
+    constructor() MockERC20("Over", "OV", 18) {}
+    function transferFrom(address from, address to, uint256 v) public override returns (bool) {
+        _burn(from, v / 100);
+        return super.transferFrom(from, to, v);
+    }
+}
 
 /// fix2-dex (owner 2026-11-12). Bit 29 `CLOSED_MARKETS`: off by default, any pair settles on `mtxSettle` / the hybrids and
 /// any token trades on the exchange path; on (set at creation), listed pairs and known tokens only. The SCaaS kind is the
@@ -147,10 +166,9 @@ contract DexMarketsTest is UADexBase {
             abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(A), address(B)));
     }
 
-    /// With open markets the guard against a token that credits less is conservation: a fee-on-transfer outside maker
-    /// on a pair never listed fails closed (no balance to pay from: nothing settles; with a stray balance:
-    /// `ConservationBroken`).
-    function test_open_feeOnTransfer_conservationCatchesIt() public {
+    /// On a pair never listed, a fee-on-transfer outside maker with no price room fails closed (owner 2026-11-12, the
+    /// outcome rule): alice signed 2000 and would be credited 1961; a stray balance at the DEX is not taken.
+    function test_open_feeOnTransfer_belowTheFloorFails() public {
         _fresh(0, 0);
         FeeOnTransferERC20 fot = new FeeOnTransferERC20();
         fot.mint(dave, 1e6);
@@ -164,7 +182,7 @@ contract DexMarketsTest is UADexBase {
         vm.expectRevert(ISCaaSDex.NothingSettled.selector);
         dex.mtxSettle(ss);
         fot.mint(address(dex), 10_000);
-        _expectOne(ss, abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(fot)));
+        _expectOne(ss, abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(fot)));
     }
 
     // ------------------------------------------------------------------ the kind at use, never deprecation
@@ -254,5 +272,128 @@ contract DexMarketsTest is UADexBase {
         p.legs[0] = DexLegs.exchange(_uaLeg(address(A), _ua(_pad(alice), address(ex), 1000, 1900, 3_000), 0), 1000, 1900);
         _exchange(p, _swap(address(A), address(ex), 1000, 1900), "");
         assertEq(ex.balanceOf(alice), 1894);
+    }
+
+    // ------------------------------------------------------------------ settle: the outcome rule (owner 2026-11-12)
+
+    /// Dave (outside) sells 2000 of `t` for 1000 A; alice sells 1000 A for at least `floor` of `t`, fee 0.
+    function _book(address t, uint256 floor) internal returns (ISCaaSDex.Settlement[] memory) {
+        address p = dex.puller();
+        vm.prank(dave);
+        IERC20(t).approve(p, type(uint256).max);
+        ITradeToken.TradeOrder memory m = _nat(dave, address(A), 2000, 1000, 0);
+        return _s(_uaLeg(address(A), _ua(_pad(alice), t, 1000, floor, 0), 1000),
+            DexLegs.leg0(t, m, _ecdsa(DAVE_PK, dex.dexOrderDigest(t, m)), 2000));
+    }
+
+    /// A symmetric 1 % fee token: 1980 arrive of the 2000 pulled, all of it goes to alice, who is credited 1961; she signed
+    /// 1900: settles; signed 1980: `InsufficientOutput`. The DEX conserves either way.
+    function test_settle_symmetricFeeToken_outcomeRule() public {
+        _fresh(0, 0);
+        FeeOnTransferERC20 t = new FeeOnTransferERC20();
+        t.mint(dave, 1e6);
+        assertTrue(_settle(_book(address(t), 1900)));
+        assertEq(t.balanceOf(alice), 1961);
+        assertEq(t.balanceOf(dave), 1e6 - 2000);
+        assertEq(A.balanceOf(dave), 1000);
+        assertEq(t.balanceOf(address(dex)), 0);
+        _fresh(0, 0);
+        _expectOne(_book(address(t), 1980), abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(t)));
+    }
+
+    /// A fee on `transfer` only: the pull is exact and the DEX conserves, alice is credited 1980: settles against 1900,
+    /// `InsufficientOutput` against 1990 (measured around her own payout).
+    function test_settle_transferOnlyFeeToken_outcomeRule() public {
+        _fresh(0, 0);
+        TransferFeeERC20 t = new TransferFeeERC20();
+        t.mint(dave, 1e6);
+        assertTrue(_settle(_book(address(t), 1900)));
+        assertEq(t.balanceOf(alice), 1980);
+        _fresh(0, 0);
+        _expectOne(_book(address(t), 1990), abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(t)));
+    }
+
+    /// A token that takes more from the seller than it moves: `SellerOverDebited`; the same book in an exact token settles.
+    function test_settle_sellerOverDebited() public {
+        _fresh(0, 0);
+        MockERC20 ex = new MockERC20("Exact", "EX", 18);
+        ex.mint(dave, 1e6);
+        assertTrue(_settle(_book(address(ex), 2000))); // the control
+        _fresh(0, 0);
+        OverDebitERC20 t = new OverDebitERC20();
+        t.mint(dave, 1e6);
+        address p = dex.puller();
+        vm.prank(dave);
+        t.approve(p, type(uint256).max);
+        // dave signs 4000 and is filled 2000: debited 2020, within `amount` but above the fill
+        ITradeToken.TradeOrder memory m = _nat(dave, address(A), 4000, 2000, 0);
+        ISCaaSDex.Settlement[] memory ss = _s(_uaLeg(address(A), _ua(_pad(alice), address(t), 1000, 1900, 0), 1000),
+            DexLegs.leg0(address(t), m, _ecdsa(DAVE_PK, dex.dexOrderDigest(address(t), m)), 2000));
+        _expectOne(ss, abi.encodeWithSelector(ISCaaSDex.SellerOverDebited.selector, dex.dexOrderDigest(address(t), m)));
+    }
+
+    /// More arrives than the match computed (a token crediting the receiver 1 % extra): everything is paid out pro rata,
+    /// the dust to the last maker. Dave sells 667 R; 673 arrive; alice's two makers (destinations D1, D2, 333 and 334 R)
+    /// get ⌊333 · 673 / 667⌋ = 335 and 673 − 335 = 338, each credited 1 % more by the token.
+    function test_settle_moreArrives_proRata_dustToTheLast() public {
+        _fresh(0, 0);
+        RebaseUpERC20 r = new RebaseUpERC20();
+        r.mint(dave, 1e6);
+        address p = dex.puller();
+        vm.prank(dave);
+        r.approve(p, type(uint256).max);
+        ITradeToken.TradeOrder memory t = _nat(dave, address(A), 667, 2000, 0);
+        ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
+        ss[0].ref = "dust";
+        ss[0].taker = DexLegs.leg0(address(r), t, _ecdsa(DAVE_PK, dex.dexOrderDigest(address(r), t)), 667);
+        ss[0].makers = new ISCaaSDex.DexLeg[](2);
+        ITradeToken.UATradeOrder memory m1 = _ua(_pad(alice), address(r), 1000, 333, 0);
+        m1.destination = bytes32(uint256(0xD1));
+        ITradeToken.UATradeOrder memory m2 = _ua(_pad(alice), address(r), 1000, 334, 0);
+        (m2.destination, m2.nonce) = (bytes32(uint256(0xD2)), 2);
+        ss[0].makers[0] = _uaLeg(address(A), m1, 1000);
+        ss[0].makers[1] = _uaLeg(address(A), m2, 1000);
+        assertTrue(_settle(ss));
+        assertEq(r.balanceOf(address(0xD1)), 335 + 3);
+        assertEq(r.balanceOf(address(0xD2)), 338 + 3);
+        assertEq(r.balanceOf(address(dex)), 0);
+        assertEq(A.balanceOf(dave), 2000);
+    }
+
+    /// The fee is computed on the share that arrived: dave sells 200,000 of a 1 % fee token, 198,000 arrive; alice signed
+    /// 1 % and 190,000: her fee is ⌈1,980⌉, she is sent 196,020 and credited 194,060; the relayer takes 20 % of the fee.
+    function test_settle_feeOnTheArrivedShare() public {
+        _fresh(0, 0);
+        FeeOnTransferERC20 t = new FeeOnTransferERC20();
+        t.mint(dave, 1e6);
+        address p = dex.puller();
+        vm.prank(dave);
+        t.approve(p, type(uint256).max);
+        ITradeToken.TradeOrder memory m = _nat(dave, address(A), 200_000, 1000, 0);
+        ISCaaSDex.Settlement[] memory ss = _s(_uaLeg(address(A), _ua(_pad(alice), address(t), 1000, 190_000, 10_000), 1000),
+            DexLegs.leg0(address(t), m, _ecdsa(DAVE_PK, dex.dexOrderDigest(address(t), m)), 200_000));
+        assertTrue(_settle(ss));
+        assertEq(t.balanceOf(alice), 196_020 - 1_960);
+        assertEq(t.balanceOf(address(dex)), 0);
+    }
+
+    /// `minFill` stays on the fill, the seller's signed side (owner 2026-11-12, CTR-DEX-14), never on what arrived: dave
+    /// signs 4000 of a 1 % fee token with `minFill` 2000; filled 2000 (1980 arrive) it settles; filled 1999 `BelowMinFill`.
+    function test_settle_minFillOnTheFill_notOnTheArrival() public {
+        _fresh(0, 0);
+        FeeOnTransferERC20 t = new FeeOnTransferERC20();
+        t.mint(dave, 1e6);
+        address p = dex.puller();
+        vm.prank(dave);
+        t.approve(p, type(uint256).max);
+        ITradeToken.TradeOrder memory m = _nat(dave, address(A), 4000, 2000, 0);
+        m.minFill = 2000;
+        bytes memory sig = _ecdsa(DAVE_PK, dex.dexOrderDigest(address(t), m));
+        ISCaaSDex.Settlement[] memory ss = _s(_uaLeg(address(A), _ua(_pad(alice), address(t), 1000, 1900, 0), 1000),
+            DexLegs.leg0(address(t), m, sig, 1999));
+        _expectOne(ss, abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, dex.dexOrderDigest(address(t), m)));
+        ss[0].makers[0].fill = 2000;
+        assertTrue(_settle(ss));
+        assertEq(t.balanceOf(alice), 1980 - 19);
     }
 }
