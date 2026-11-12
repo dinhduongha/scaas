@@ -1768,3 +1768,24 @@ export function checkLiquiditySettled(order, ev) {
   order.outputs.forEach((t, i) => { if (BigInt(ev.received[i]) < BigInt(t.amount)) refuse('an output below its minimum'); });
   return true;
 }
+
+// ------------------------------------------------------------------ RescueVault (CTR-GOV-25; spec 2026-11-12-rescue-vault.md)
+
+/** The rotation the vault's current owner signs (`eth_signTypedData_v4`): chain-neutral (no chainId, no salt), so one
+ *  signature moves the owner of the vault at `vault` on every chain, in `seq` order. KAT: vectors/governance/rescue_vault_kat.json. */
+export function rescueVaultRotateTypedData({ vault, seq, newOwner }) {
+  const s = BigInt(seq);
+  if (s < 1n || s >= 1n << 64n) throw new Error('seq: a uint64 from 1');
+  if (BigInt(newOwner) === 0n) throw new Error('newOwner: not the zero address');
+  return {
+    types: {
+      EIP712Domain: [
+        { name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'verifyingContract', type: 'address' },
+      ],
+      Rotate: [{ name: 'seq', type: 'uint64' }, { name: 'newOwner', type: 'address' }],
+    },
+    primaryType: 'Rotate',
+    domain: { name: 'SCaaS RescueVault', version: '1', verifyingContract: vault },
+    message: { seq: s.toString(), newOwner },
+  };
+}

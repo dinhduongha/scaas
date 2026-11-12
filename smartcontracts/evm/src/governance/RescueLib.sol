@@ -12,9 +12,11 @@ import {IRescuable} from "./IRescuable.sol";
 library RescueLib {
     using SafeERC20 for IERC20;
 
-    /// @notice CTR-GOV-25 (owner 2026-11-12): the destination when a stored `rescueTo` is 0. A plain EOA, the same on
-    ///         every chain.
-    address internal constant SCAAS_DEV_RESCUE = 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131;
+    /// @notice CTR-GOV-25 (owner 2026-11-12): the destination when a stored `rescueTo` is 0, the same on every chain: the
+    ///         `RescueVault` (first owner the dev EOA `0x0389f77E846ff687d44db57bcC9DCB55dd6f4131`) at its CREATE2 address
+    ///         through `0x4e59b44847b379578588920ca78fbf26c0b4956c`, salt `keccak256("scaas.rescue-vault.v1")`
+    ///         (`test/governance/RescueVault.t.sol` `test_addressIsTheConstant`).
+    address internal constant SCAAS_DEV_RESCUE = 0xc564b98ad818d5C870f4B2058C95435259D126cf;
 
     /// @notice The effective destination: `stored`, or `SCAAS_DEV_RESCUE` for 0.
     function to(address stored) internal pure returns (address) {
