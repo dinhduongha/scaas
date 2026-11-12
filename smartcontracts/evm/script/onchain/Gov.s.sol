@@ -175,12 +175,17 @@ contract Gov is OnchainBase {
         internal view returns (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s)
     {
         (e.from, e.nonce, e.validUntil) = (g.from, gr.mtxNonce(g.from, 0), vu);
-        s = _signR(g, _named(address(gr), typ, bytes.concat(abi.encode(target), words), e));
+        bytes memory args = bytes.concat(abi.encode(target), words);
+        // a SmartKeyAccount answers ERC-1271 by ERC-7739 only (B P3-2): `TypedDataSign` over the router's struct
+        if (g.how == 1) s.signature = _sign7739(g.pk, address(uint160(uint256(g.from))), address(gr), typ, _namedStruct(typ, args, e));
+        else s = _signR(g, _named(address(gr), typ, args, e));
     }
 
+    /// @dev A native id's own ECDSA (0) or a registered secp256k1 UA (2) over `d`; a SmartKeyAccount (1) signs through
+    ///      `_sign7739` (the raw digest is refused).
     function _signR(Sg memory g, bytes32 d) internal view returns (IUARegistry.UASig memory s) {
-        if (g.how == 1) s.signature = abi.encode(uint256(0), new bytes32[](0), _ecdsa(g.pk, d));
-        else if (g.how == 2) {
+        require(g.how != 1, "a SmartKeyAccount signs ERC-7739 (_auth)");
+        if (g.how == 2) {
             (s.keyData, s.signature) = (keyD, _ecdsa(g.pk, UAKinds.uaMessage(UAKinds.SECP256K1, UAKinds.PURPOSE_METATX, d)));
         }
         else s.signature = _ecdsa(g.pk, d);

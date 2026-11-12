@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {Erc7739Kit} from "../../test/helpers/Erc7739Kit.sol";
 import {DeployBook} from "../DeployBook.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -125,8 +126,30 @@ abstract contract OnchainBase is DeployBook {
     function _named(address c, string memory typ, bytes memory args, MetaTxLib.UAEnvelope memory e)
         internal view returns (bytes32)
     {
-        return _digest(c, keccak256(bytes.concat(keccak256(bytes(typ)), e.from, args, _tail(e.batch, e.nonce, e.validUntil,
-            e.mode, e.relayer, e.fee, e.feeRecipient))));
+        return _digest(c, _namedStruct(typ, args, e));
+    }
+
+    /// @dev The struct hash `_named` puts in `c`'s domain.
+    function _namedStruct(string memory typ, bytes memory args, MetaTxLib.UAEnvelope memory e)
+        internal pure returns (bytes32)
+    {
+        return keccak256(bytes.concat(keccak256(bytes(typ)), e.from, args, _tail(e.batch, e.nonce, e.validUntil, e.mode,
+            e.relayer, e.fee, e.feeRecipient)));
+    }
+
+    /// @dev A `SmartKeyAccount`'s key 0 (secp256k1) signs the named struct `sh` (type `typ`, a flat struct) of `app` in
+    ///      ERC-7739 `TypedDataSign` (CTR-ACC-02, owner 2026-11-12): the account encoding of the ECDSA, then the suffix.
+    function _sign7739(uint256 pk, address account, address app, string memory typ, bytes32 sh)
+        internal view returns (bytes memory)
+    {
+        bytes32 sep = Erc7739Kit.separator(app);
+        bytes memory t = bytes(typ);
+        uint256 n;
+        while (t[n] != "(") ++n;
+        bytes memory name = new bytes(n);
+        for (uint256 i; i < n; ++i) name[i] = t[i];
+        bytes32 m = Erc7739Kit.nested(account, sep, string(name), typ, sh);
+        return Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0), _ecdsa(pk, m)), sep, sh, typ);
     }
 
     function _namedA(address c, string memory typ, bytes memory args, MetaTxLib.Envelope memory e)
