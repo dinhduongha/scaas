@@ -652,7 +652,7 @@ exchange-path submitter can sweep it. Clients and the node never send tokens to 
 The liquidity path ([CTR-DEX-30](#CTR-DEX-30)) is one such plan too: its tokens need no listing and conservation covers
 only the plan's named tokens. **`SCaaSDex.rescue(token)`** (fix2 2026-11-12, Fable review D P3-5, the owner's call; was a
 documented limit): anyone sends the DEX's whole balance of an ERC-20 `token` to the puller's immutable `rescueTo`
-(`DexConfig.rescueTo`; 0 = the constant dev address `SCAAS_DEV_RESCUE`, [CTR-GOV-25](../decisions.md#CTR-GOV-25)), `IRescuable.Rescued`, the puller's rule ([CTR-DEX-22](#CTR-DEX-22)),
+(`DexConfig.rescueTo`; 0 = the constant dev address `SCAAS_DEV_RESCUE`, a `RescueVault`, [CTR-GOV-25](../decisions.md#CTR-GOV-25)), `IRescuable.Rescued`, the puller's rule ([CTR-DEX-22](#CTR-DEX-22)),
 under the DEX's entry guard (`nonReentrant`), so nothing inside a running settlement or plan reaches it. Anyone may
 send a stray there; until then the sweep above stands (the rescue and a submitter's plan race). Tests
 `test_dexRescueWholeBalance`, `test_dexRescueNotReentrant` (`test/governance/GovRescue.t.sol`). Status **BUILT** (branch
@@ -677,7 +677,7 @@ Holders of an **outside** token approve the puller, never the DEX; the DEX calls
 `DexOrder`, for `mtxSettle` and the exchange path alike. Why: an interaction runs as the DEX, so any allowance the DEX
 held could be spent by `outsideToken.transferFrom(victim, attacker, x)`. SCaaS tokens need no allowance at all.
 `DexPuller.rescue(token)`, callable by anyone, sends the puller's whole balance of `token` to its immutable `rescueTo`
-(`DexConfig.rescueTo`; 0 = the constant dev address `SCAAS_DEV_RESCUE`, [CTR-GOV-25](../decisions.md#CTR-GOV-25); never `UA_POOL`, `SHIELD_POOL`, the DEX or the puller, `RescueConfigInvalid` at `initialize`); it calls only `balanceOf` and `transfer`, so no allowance is spent
+(`DexConfig.rescueTo`; 0 = the constant dev address `SCAAS_DEV_RESCUE`, a `RescueVault`, [CTR-GOV-25](../decisions.md#CTR-GOV-25); never `UA_POOL`, `SHIELD_POOL`, the DEX or the puller, `RescueConfigInvalid` at `initialize`); it calls only `balanceOf` and `transfer`, so no allowance is spent
 ([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto); BUILT on branch `governance`, T10 `dc9bfde0`). `SCaaSDex.rescue(token)` applies the same rule to a stray at the DEX ([CTR-DEX-20](#CTR-DEX-20); fix2 2026-11-12).
 Change (2026-11-10, [CTR-DEX-30](#CTR-DEX-30)): the puller also pulls a given ERC-721 position by its unchanged `pull(manager, from, id)` (ERC-721 `transferFrom` shares ERC-20's selector); the DEX then checks `ownerOf(id) == DEX`, so the selector's double meaning decides nothing. BUILT.
 

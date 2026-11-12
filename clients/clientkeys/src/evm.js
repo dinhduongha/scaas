@@ -1772,3 +1772,44 @@ export function checkLiquiditySettled(order, ev) {
   order.outputs.forEach((t, i) => { if (BigInt(ev.received[i]) < BigInt(t.amount)) refuse('an output below its minimum'); });
   return true;
 }
+
+// ------------------------------------------------------------------ RescueVault (CTR-GOV-25; spec 2026-11-12-rescue-vault.md)
+
+const RESCUE_VAULT_DOMAIN_TYPE = [
+  { name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'verifyingContract', type: 'address' },
+];
+
+function rescueVaultSeq(seq) {
+  const s = BigInt(seq);
+  if (s < 1n || s >= 1n << 64n) throw new Error('seq: a uint64 from 1');
+  return s;
+}
+
+function rescueVaultTypedData(vault, primaryType, fields, message) {
+  return {
+    types: { EIP712Domain: RESCUE_VAULT_DOMAIN_TYPE, [primaryType]: fields },
+    primaryType,
+    domain: { name: 'SCaaS RescueVault', version: '1', verifyingContract: vault },
+    message,
+  };
+}
+
+/** `setRescuer`, signed by the vault's admin (`eth_signTypedData_v4`): chain-neutral (no chainId, no salt), so one signature
+ *  applies to the vault at `vault` on every chain, in the shared `seq` order. KAT: vectors/governance/rescue_vault_kat.json. */
+export function rescueVaultSetRescuerTypedData({ vault, seq, newRescuer }) {
+  const s = rescueVaultSeq(seq);
+  if (BigInt(newRescuer) === 0n) throw new Error('newRescuer: not the zero address');
+  return rescueVaultTypedData(vault, 'SetRescuer', [{ name: 'seq', type: 'uint64' }, { name: 'newRescuer', type: 'address' }],
+    { seq: s.toString(), newRescuer });
+}
+
+/** `rotateAdmin`, signed by the vault's admin: `newAdmin` a native UA (bytes32, an EOA address in the low 160 bits, not 0),
+ *  the only kind the chain-neutral vault can check. Same domain and shared `seq` as `setRescuer`. */
+export function rescueVaultRotateAdminTypedData({ vault, seq, newAdmin }) {
+  const s = rescueVaultSeq(seq);
+  if (!/^0x[0-9a-fA-F]{64}$/.test(newAdmin)) throw new Error('newAdmin: a bytes32');
+  const a = BigInt(newAdmin);
+  if (a === 0n || a >> 160n !== 0n) throw new Error('newAdmin: a native UA (high 96 bits 0, not 0)');
+  return rescueVaultTypedData(vault, 'RotateAdmin', [{ name: 'seq', type: 'uint64' }, { name: 'newAdmin', type: 'bytes32' }],
+    { seq: s.toString(), newAdmin });
+}

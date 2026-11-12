@@ -1,0 +1,140 @@
+[
+ {
+  "id": "RV-1 rescuer's to ignored",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Transfer != expected Withdrawn] test_rescuerWithdrawsToTo() (gas: 111760)"
+ },
+ {
+  "id": "RV-2 a stranger directs",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Transfer != expected Withdrawn] test_strangerPaysTheRescuer() (gas: 111555)"
+ },
+ {
+  "id": "RV-3 rescuer's to 0 taken",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: ERC20InvalidReceiver(0x0000000000000000000000000000000000000000)] test_rescuerWithZeroToPaysTheRescuer() (gas: 81974)"
+ },
+ {
+  "id": "RV-4 the admin directs",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0 != 4] test_adminIsNotARescuer() (gas: 121787)"
+ },
+ {
+  "id": "RV-5 designator rescuer directs",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_designatorRescuerCannotDirect() (gas: 112715)"
+ },
+ {
+  "id": "RV-6 native to a designator",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_nativeRefusedToADesignator() (gas: 94717)"
+ },
+ {
+  "id": "RV-7 seq may skip",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_staleOrSkippedSeqRefused() (gas: 91237)"
+ },
+ {
+  "id": "RV-8 seq not written",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_staleOrSkippedSeqRefused() (gas: 184354)"
+ },
+ {
+  "id": "RV-9 any signer",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_badSignaturesRefused() (gas: 705931)"
+ },
+ {
+  "id": "RV-10 zero rescuer set",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_rotateAdminRefusesNonNative() (gas: 161232)"
+ },
+ {
+  "id": "RV-11 rescuer not moved",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x6fDa80340c2d4afc398E24867Bca073eE9ad44Df != 0x0376AAc07Ad725E01357B1725B5ceC61aE10473c] test_setRescuerThenOldRescuerIsAStranger() (g"
+ },
+ {
+  "id": "RV-12 admin not moved",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x000000000000000000000000e05fcc23807536bee418f142d19fa0d21bb0cff7 != 0x0000000000000000000000000376aac07ad725e01357b1725b5cec61ae10473"
+ },
+ {
+  "id": "RV-13 chain-bound domain",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SignatureInvalid()] test_adminLogReplaysOnASecondChain() (gas: 806036)"
+ },
+ {
+  "id": "RV-14 no verifyingContract",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_badSignaturesRefused() (gas: 835701)"
+ },
+ {
+  "id": "RV-15 newRescuer not signed",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_badSignaturesRefused() (gas: 771863)"
+ },
+ {
+  "id": "RV-16 newAdmin not signed",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_badSignaturesRefused() (gas: 813255)"
+ },
+ {
+  "id": "RV-17 one typehash for both ops",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_seqSharedAcrossOps() (gas: 86498)"
+ },
+ {
+  "id": "RV-18 non-native admin",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_rotateAdminRefusesNonNative() (gas: 109150)"
+ },
+ {
+  "id": "RV-19 zero admin",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_constructorRefusesBadValues() (gas: 289497)"
+ },
+ {
+  "id": "RV-20 zero first rescuer",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_constructorRefusesBadValues() (gas: 847580)"
+ },
+ {
+  "id": "RV-21 constant back to the one-owner vault",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0xE20dddfCa81db0Bd8F1036189f20739e1605dF34 != 0xc564b98ad818d5C870f4B2058C95435259D126cf] test_realRescuePaysTheVault() (gas: 273030)"
+ },
+ {
+  "id": "RV-22 script skips no row",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SeqInvalid(4, 1)] test_deployScriptDeploysAndCatchesUp() (gas: 725130)"
+ },
+ {
+  "id": "RV-23 script ignores op",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: vm.parseJsonAddress: path \".[1].newRescuer\" must return exactly one JSON value] test_deployScriptDeploysAndCatchesUp() (gas: 587794)"
+ }
+]

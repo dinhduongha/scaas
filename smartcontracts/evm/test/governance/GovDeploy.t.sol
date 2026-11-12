@@ -564,8 +564,10 @@ contract GovDeployTest is Test {
         // 0xd981282EC3f2F979B953BDE7c7c3c4100caDfe89; Fable review fixes 2026-11-11 (the metadata hash: `MetaTxLib` loses
         // `hashStruct` / `validateMode`, B P3-3; its code unchanged): -> 0x43E08564FE056f53014bb2c40C4f845E550Eb8Cf;
         // re-check C6 (the metadata hash: `ModeUnknownBits` leaves `MetaTxLib`): 0xa3097e517E91B9e0f807815f92052212AD53a454;
-        // fix2 CTR-GOV-26 (its `rescue(asset)` to the constant dev address, under the entry guard): -> this
-        assertEq(rf, 0x92CF546e4F32C23859255BC207B33af34F584A2A, "RelayFeeRouter");
+        // fix2 CTR-GOV-26 (its `rescue(asset)` to the constant dev address, under the entry guard):
+        // 0x92CF546e4F32C23859255BC207B33af34F584A2A; CTR-GOV-25 Change (the constant is the one-owner `RescueVault`):
+        // 0xd96A3154BD20B4082D430E792e8245910c12F1FD; CTR-GOV-25 Change (the two-role `RescueVault`, admin + rescuer): -> this
+        assertEq(rf, 0xcc4746baCAFfD3605D7745AB8fE18CA44501f445, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -623,8 +625,11 @@ contract GovDeployTest is Test {
         // 0x2f014B077cFcaa4a0A6C7239147DeD7FAe23877F. On ua-mtx-fix2-dex from 0x1C8CfE54…: fix2-dex CTR-DEX-32 (the metadata
         // hash: `ISCaaSDex.DexConfig` gains `features`, `lockedFeatures`; its code unchanged):
         // 0x442Df70CD12C49b876D5552Fa40b126C5E0E662f; fix2-dex settle outcome rule (the metadata hash:
-        // `ISCaaSDex.SellerOverDebited`): 0x51E43059317Bf99D7d615a0334e1781BA62CFFf5. The merge of 8f4b1b64 (both): -> this
-        assertEq(router, 0x34021369121a22e7A94f19778C9704a24A493a05, "GovernanceRouter");
+        // `ISCaaSDex.SellerOverDebited`): 0x51E43059317Bf99D7d615a0334e1781BA62CFFf5. The merge of 8f4b1b64 (both):
+        // 0x34021369121a22e7A94f19778C9704a24A493a05. On ua-mtx-rescue-vault from 0x60B27649…: CTR-GOV-25 Change (the constant
+        // is the one-owner `RescueVault`): 0xcf6aB482462467de132E93aE6471e0A6d9117c9c; CTR-GOV-25 Change (the two-role
+        // `RescueVault`, admin + rescuer): 0xE8b1c2FFc9E8BC552a266E86e8Bd6046E8E6272A. The merge of e374704f (both): -> this
+        assertEq(router, 0xf670956b67F159a1323e12309cD375D28a44d2a3, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
