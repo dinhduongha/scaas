@@ -187,7 +187,7 @@ pub enum Verdict {
 /// an envelope. An RPC error is `Err`: no conclusion (fail closed).
 pub async fn consumed(chain: &Chain, w: &Work) -> anyhow::Result<bool> {
     let Some(m) = &w.meta else { return Ok(false) };
-    Ok(chain.subject_nonce(m).await? > m.nonce)
+    chain.nonce_spent(m).await
 }
 
 /// [`Verdict`] of a simulation (or the guard's build step) that refused `w` with `reason` (a `decode_revert` string or a named

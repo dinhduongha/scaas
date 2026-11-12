@@ -1106,6 +1106,8 @@ pub(crate) mod tests {
         genesis: bool,
         /// Fable recheck 4 R4-1: a failover endpoint of the chain: `eth_chainId` 31337 and block 0 hashed `UID`.
         failover: bool,
+        /// Its `eth_chainId` when not 31337 (Hedera's 296).
+        failover_id: Option<u64>,
         /// Fable recheck 6 R6-2: `eth_getTransactionByHash` fails (a transport error).
         tx_err: bool,
         /// Fable recheck 4 R4-2: `classReleaseOf` answers a published release, deprecated; or none (implementation 0).
@@ -1223,7 +1225,7 @@ pub(crate) mod tests {
                     }
                     Ok(b)
                 }
-                "eth_chainId" if e.failover => Ok(json!("0x7a69")),
+                "eth_chainId" if e.failover => Ok(json!(format!("{:#x}", e.failover_id.unwrap_or(31337)))),
                 "eth_getBlockByNumber" if e.failover && p[0] == "0x0" => {
                     let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
                     b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
@@ -1653,7 +1655,9 @@ pub(crate) mod tests {
         let (st, e) = run(Evm { uid: Some(0x25), ..ok() }, None).await;
         assert!(st == "dead" && e.starts_with("CHAIN_UID_MISMATCH"), "control: {st}: {e}");
         let (st, e) = run(Evm { sim: Some("revert"), mtx_nonce: None, ..Default::default() }, Some(Evm { sim: Some("revert"), ..ok() })).await;
-        assert!(st == "queued" && e.starts_with("FAILOVER_ANSWER") && e.contains("MetaTxBadNonce("), "{st}: {e}");
+        // the nonce read behind the verdict answered by the failover endpoint: unread since recheck 7 R7-1 (before it: `Dead` read
+        // there, requeued by the classifier's mark)
+        assert!(st == "queued" && e.contains("FAILOVER_ANSWER"), "{st}: {e}");
         let (st, e) = run(Evm { sim: Some("revert"), ..ok() }, None).await;
         assert!(st == "dead" && e.starts_with("MetaTxBadNonce("), "control: {st}: {e}");
     }
@@ -2372,6 +2376,30 @@ pub(crate) mod tests {
                 false => assert!(last["chain_state"] == "dead" && last["error"].as_str().unwrap().contains("gap-filled"), "{last}"),
             }
         }
+    }
+
+    /// Fable recheck 7 R7-1: the lane's `consumed` and Hedera's `op_consumed` read "not spent" on a failover endpoint (the first
+    /// down) as no verdict (`Err`: every caller asks again); the controls: the first endpoint's "not spent" is `false`.
+    #[tokio::test]
+    async fn not_consumed_on_a_failover_answer_is_unread() {
+        let w = work_from_job(&serde_json::from_value::<Job>(job(7)).unwrap(), None).unwrap();
+        let (first, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (other, _) = fake_evm(Evm { mtx_nonce: Some(0), failover: true, ..Default::default() }).await;
+        let (other_h, _) = fake_evm(Evm { mtx_nonce: Some(0), failover: true, failover_id: Some(296), ..Default::default() }).await;
+        let one = test_cfg(&first);
+        let two = ChainCfg { rpc_urls: vec!["http://127.0.0.1:9".into(), other], ..test_cfg(&first) };
+        let chain = |c: &ChainCfg| Chain::with_signer(c, PrivateKeySigner::random()).unwrap();
+        assert!(!guard::consumed(&chain(&one), &w).await.unwrap(), "control");
+        assert!(guard::consumed(&chain(&two), &w).await.unwrap_err().to_string().starts_with("FAILOVER_ANSWER"));
+        let job: Job = serde_json::from_value(job(7)).unwrap();
+        let hedera = |urls: Vec<String>| {
+            let c = ChainCfg { family: "hedera".into(), evm_chain_number: 296, rpc_urls: urls, ..test_cfg(&first) };
+            crate::adapters::hedera::HederaAdapter::new(&c, vec![chain(&c)]).unwrap()
+        };
+        use crate::adapter::ChainAdapter;
+        assert_eq!(hedera(vec![first.clone()]).op_consumed(&job).await.unwrap(), Some(false), "control: Hedera");
+        let e = hedera(vec!["http://127.0.0.1:9".into(), other_h]).op_consumed(&job).await.unwrap_err();
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER"), "{e:#}");
     }
 
     /// Fable recheck 5 R5-2: at a restart, a tracked job refused on a failover endpoint's answer (the first endpoint answers

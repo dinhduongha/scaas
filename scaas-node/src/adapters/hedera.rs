@@ -151,7 +151,7 @@ impl ChainAdapter for HederaAdapter {
     /// R80: meta-tx ⇒ `mtxNonce(from, batch)` (both structs share the lane); job `call` ⇒ không biết.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         let Some(m) = work_from_job(job, self.inner.fee_recipient).ok().and_then(|w| w.meta) else { return Ok(None) };
-        Ok(Some(self.inner.lane(0)?.subject_nonce(&m).await? > m.nonce))
+        Ok(Some(self.inner.lane(0)?.nonce_spent(&m).await?))
     }
 
     fn call_key(&self, job: &Job) -> Option<B256> {

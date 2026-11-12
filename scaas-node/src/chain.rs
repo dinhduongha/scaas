@@ -444,6 +444,18 @@ impl Chain {
         self.view(m.token, IMtxIds::mtxNonceCall { from: m.from, batch: m.batch }).await
     }
 
+    /// R80: `m`'s subject nonce is spent (`mtxNonce > nonce`). Fable recheck 7 R7-1: a "not spent" read while a failover endpoint
+    /// answered is no verdict (it may be a block behind another relayer's landing): `Err`, which every caller treats as unread;
+    /// a "spent" stands (a nonce only grows).
+    pub async fn nonce_spent(&self, m: &MetaRef) -> Result<bool> {
+        let mark = self.failover_answers();
+        let spent = self.subject_nonce(m).await? > m.nonce;
+        if !spent && self.failover_answers() != mark {
+            return Err(anyhow!("FAILOVER_ANSWER: mtxNonce read on a failover endpoint (the first endpoint did not answer); read again"));
+        }
+        Ok(spent)
+    }
+
     /// `MetaTransactionExecuted` (a UA subject: `UAMetaTransactionExecuted`) of `(from, batch, nonce)` trong `lookback`
     /// khối gần nhất ⇒ `(digest, relayer)` (§8.5). Both events index `from`, `relayer`, `batch` alike.
     pub async fn meta_executed(&self, m: &MetaRef, lookback: u64) -> Result<Option<(B256, Address)>> {
@@ -750,6 +762,26 @@ pub(crate) mod tests {
         assert_eq!(c.head.load(SeqCst), 0x64, "control: the first endpoint's head does");
         assert_eq!(c.subject_nonce(&MetaRef { token: Address::ZERO, from: B256::ZERO, batch: U256::ZERO, nonce: U256::ZERO,
             digest: None, ua: true, addr_nonce: false }).await.unwrap(), U256::from(5), "the subject nonce view fails over too");
+    }
+
+    /// Fable recheck 7 R7-1: "not spent" read on a failover endpoint (the first down) is no verdict (`Err`, read again); "spent"
+    /// there stands. Control: "not spent" from the first endpoint is `Ok(false)`.
+    #[tokio::test]
+    async fn an_unspent_nonce_on_a_failover_answer_is_unread() {
+        let m = MetaRef { token: Address::ZERO, from: B256::ZERO, batch: U256::ZERO, nonce: U256::from(3), digest: None, ua: true,
+            addr_nonce: false };
+        let at = |n: u64| -> fn(&Value) -> Value {
+            match n {
+                3 => |r| match r["method"].as_str() { Some("eth_blockNumber") => json!({"result": "0x10"}), _ => json!({"result": format!("0x{:064x}", 3)}) },
+                _ => |r| match r["method"].as_str() { Some("eth_blockNumber") => json!({"result": "0x10"}), _ => json!({"result": format!("0x{:064x}", 4)}) },
+            }
+        };
+        let (unspent, _) = fake_rpc(at(3)).await;
+        let (spent, _) = fake_rpc(at(4)).await;
+        assert!(!chain_of(&[&unspent]).nonce_spent(&m).await.unwrap(), "control: the first endpoint's answer");
+        let e = chain_of(&["http://127.0.0.1:9", &unspent]).nonce_spent(&m).await.unwrap_err();
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER"), "{e:#}");
+        assert!(chain_of(&["http://127.0.0.1:9", &spent]).nonce_spent(&m).await.unwrap(), "spent on a failover endpoint stands");
     }
 
     /// An RPC at head 12,288 whose `eth_getLogs` caps the range at `cap(request)` blocks and answers one log per accepted request,
