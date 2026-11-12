@@ -144,7 +144,7 @@ contract GovGasDex is GovRows {
     }
 
     function _dexConfig() internal pure returns (ISCaaSDex.DexConfig memory) {
-        return ISCaaSDex.DexConfig(nid(G_TO), 0, G_TO, false, 0, address(0));
+        return ISCaaSDex.DexConfig(nid(G_TO), 0, G_TO, false, 0, address(0), 0, 0);
     }
 
     function test_createDex() public {

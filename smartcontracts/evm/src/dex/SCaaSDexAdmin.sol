@@ -32,7 +32,7 @@ abstract contract SCaaSDexGovernance is ReentrancyGuardTransient, GovernanceBase
         return msg.sender;
     }
 
-    function _validBits() internal pure override returns (uint256) { return GovernanceBits.DEX_BITS; }
+    function _validBits() internal pure override returns (uint256) { return GovernanceBits.DEX_VALID; }
     function _roleBits() internal pure override returns (uint256) { return GovernanceBits.DEX_BITS; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
     function _scalarBits() internal pure override returns (uint256) { return 0; }

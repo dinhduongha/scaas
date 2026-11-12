@@ -90,7 +90,7 @@ contract GovIdentityTest is Test {
 
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
         d = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), _cenv()));
-        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, address(0xAA), false, 0, address(0))));
+        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, address(0xAA), false, 0, address(0), 0, 0)));
     }
 
     function _open() internal pure returns (IGovernance.GrantTerms memory g) {

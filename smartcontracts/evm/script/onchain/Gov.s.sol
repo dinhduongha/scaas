@@ -615,7 +615,7 @@ contract Gov is OnchainBase {
     // ------------------------------------------------------------------ the DEX setters and the factory's creations
 
     function _dexAndCreations() internal {
-        bytes memory init = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, address(0)));
+        bytes memory init = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, address(0), 0, 0));
         vm.broadcast(k1);
         dex = f.createDex(1, init, _salt("dex"));
         _book(dex, "SCaaSDex");

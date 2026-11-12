@@ -734,7 +734,7 @@ async fn drain(s: &mut Submitter, rx: &mut mpsc::Receiver<Work>) {
 
 alloy::sol! {
     // `owner` a UA id (CTR-GOV-01 Change): a native account's is its address padded to 32 bytes
-    struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; }
+    struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; uint256 features; uint256 lockedFeatures; }
     function createDex(uint64 version, bytes initArgs, bytes32 salt) external returns (address dex);
     function setMarket(address base, address quote, bool listed) external;
     function approve(address spender, uint256 value) external returns (bool);
@@ -795,7 +795,7 @@ async fn dex_order_with_a_ua_trade_order_leg() {
     send(&rpc, &deployer, token_b, IToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
     let treasury = Address::repeat_byte(0x7a);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
-        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
+        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
     send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
     let usdc = deploy_outside_token(&rpc, &deployer).await;
     send(&rpc, &deployer, usdc, mintCall { to: dave.address(), value: U256::from(1_000_000_000u64) }.abi_encode()).await;
@@ -1043,7 +1043,7 @@ async fn dex_fill_below_half_settles_on_anvil() {
     send(&rpc, &deployer, token_b, IToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
     let treasury = Address::repeat_byte(0x7a);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
-        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
+        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
     send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
 
     let relayer = key(RELAYER);
@@ -1516,7 +1516,7 @@ async fn router_op_signed_by_an_eoa() {
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
     let deployer = key(DEPLOYER);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: owner.address().into_word(),
-        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(),
+        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(),
         salt: B256::repeat_byte(0x60) }.abi_encode()).await;
     assert!(!view(&rpc, dex, listedOnlyCall {}).await);
     let op = signed_op(&owner, json!({"entry": "mtxSetListedOnly", "contract": "gov_router", "token": format!("{router:#x}"),
@@ -2955,7 +2955,7 @@ async fn liquidity_pre_checks_on_a_chain() {
     let (a, b, factory) = (at("demo_token"), at("demo_token_2"), at("token_factory"));
     let deployer = key(DEPLOYER);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
-        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(),
+        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(),
         salt: B256::repeat_byte(0x11) }.abi_encode()).await;
     send(&rpc, &deployer, dex, setMarketCall { base: a, quote: b, listed: true }.abi_encode()).await;
     let ms = view(&rpc, dex, scaas_node::abi::ISCaaSDex::modulesCall {}).await;

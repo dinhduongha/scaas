@@ -1346,6 +1346,8 @@ contract TypedOpsRouterTest is UALedgerBase {
 
     /// The test is the factory of every clone and registered no token: a market's legs are outside.
     function isToken(address) external pure returns (bool) { return false; }
+    /// fix2-dex: the DEX reads the kind at use (`versionOf`, version 0: not a factory token)
+    function versionOf(address) external pure returns (uint8, uint64) {}
 
     /// The factory's notice period the regulated clones read for a tax-rate increase (pay-meta-tax spec §6.2): none here.
     function noticePeriod() external pure returns (uint64) { return 0; }
@@ -1451,7 +1453,7 @@ contract TypedOpsRouterTest is UALedgerBase {
     function _dexAt(string memory op) internal returns (SCaaSDex d) {
         d = SCaaSDex(_addr(op, "target"));
         _clone(dexImpl, address(d));
-        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(me, 0, address(0x7EA5), false, 0, address(0))));
+        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(me, 0, address(0x7EA5), false, 0, address(0), 0, 0)));
     }
 
     /// ua-mtx-merge T7, meaning: one form per op, the `UA<Op>` row on the merged entry (was both the address `<Op>` row and

@@ -295,7 +295,7 @@ contract GovDeployTest is Test {
         assertEq(address(r), vm.computeCreate2Address(keccak256("scaas.deploy.v1"), keccak256(abi.encodePacked(
             type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router, ZUID))), address(h)), "CREATE2");
 
-        address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0))), "venue");
+        address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0), 0, 0)), "venue");
         address puller = SCaaSDex(dex).puller();
         address alice = address(0xA11CE);
         _attest(r, nid(alice), 1, type(uint64).max);
@@ -620,8 +620,11 @@ contract GovDeployTest is Test {
         // metadata hash: `MtxPipelineLib`, `UAMetaTxBase`, `UAKinds`): 0xAC730941186ffda9664cbAf9C386628a256F6Bd4; fix2
         // CTR-GOV-27's Change (`mtxTransferAdmin`, the three `mtxPublish*Env`, `mtxRevokeApproval` carry `chainUid`,
         // `mtxSetChainEntries` the nested `ChainEntries`; the metadata hash: `IAdmin`, `IOpenFactory`, `IComplianceRegistry`):
-        // -> this
-        assertEq(router, 0x2f014B077cFcaa4a0A6C7239147DeD7FAe23877F, "GovernanceRouter");
+        // 0x2f014B077cFcaa4a0A6C7239147DeD7FAe23877F. On ua-mtx-fix2-dex from 0x1C8CfE54…: fix2-dex CTR-DEX-32 (the metadata
+        // hash: `ISCaaSDex.DexConfig` gains `features`, `lockedFeatures`; its code unchanged):
+        // 0x442Df70CD12C49b876D5552Fa40b126C5E0E662f; fix2-dex settle outcome rule (the metadata hash:
+        // `ISCaaSDex.SellerOverDebited`): 0x51E43059317Bf99D7d615a0334e1781BA62CFFf5. The merge of 8f4b1b64 (both): -> this
+        assertEq(router, 0x34021369121a22e7A94f19778C9704a24A493a05, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

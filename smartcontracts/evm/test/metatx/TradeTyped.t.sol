@@ -407,7 +407,7 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
         j = vm.readFile(TYPED_OPS);
         string memory op = "CancelDexOrder";
         SCaaSDex dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), EnvKit.env(chainUidA, address(0), address(0), false)));
-        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0))));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0), 0, 0)));
         string memory p = ".ops.CancelDexOrder.message.order.";
         address sell = vm.parseJsonAddress(j, string.concat(p, "sellToken"));
         string memory q = string.concat(p, "order.");

@@ -47,6 +47,11 @@ library GovernanceBits {
     ///      by `enableFeature`, at once; disabled by `disableFeature` after `grantDelay` (in the regulated delayed set).
     ///      Bits 8 and 9 are the token's own lists (`setAllowed`, `setDenied`): powers, any holder.
     uint8 internal constant KYC = 28;
+    /// @dev The DEX's closed markets (owner 2026-11-12): on, `mtxSettle` and the hybrids take only a listed pair and the
+    ///      exchange path only known tokens (`setMarket`); off, any pair and any token. A capability, no holder; off by
+    ///      default, set and locked at creation only (`DexConfig.features` / `lockedFeatures`), never enabled later; the
+    ///      admin's `disableFeature` opens the markets for good unless locked.
+    uint8 internal constant CLOSED_MARKETS = 29;
     /// @dev The bits `enableFeature` may switch on (spec §5.2): 8, 9, 28, each only where the kind's mask holds it and not
     ///      locked. 8 and 9 are never disabled (`FeatureNotDisableable`). No plain kind's mask holds them.
     uint256 internal constant ENABLEABLE = (1 << ALLOWLIST) | (1 << DENYLIST) | (1 << KYC);
@@ -87,6 +92,8 @@ library GovernanceBits {
     uint256 internal constant TOKEN_SCALAR = 1 << MINTABLE;
 
     uint256 internal constant DEX_BITS = (1 << LISTING) | (1 << FEE_ROUTING);
+    /// @dev The DEX's valid bits: its two powers and the capability `CLOSED_MARKETS`.
+    uint256 internal constant DEX_VALID = DEX_BITS | (1 << CLOSED_MARKETS);
 
     /// @notice Round 3s, spec §5.5 (Fable P2-2): the bits of 8, 9, 28 that can still be switched on: valid for the kind, not
     ///         set, not locked (off), the admin not 0, and for 28 a compliance registry (it cannot be set after creation).

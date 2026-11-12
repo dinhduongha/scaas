@@ -302,7 +302,7 @@ contract ChainNeutralFactoryTest is Test {
         (, address want) = _expect(address(f), nid(alice), 2, 0, "d");
         vm.recordLogs();
         vm.prank(alice);
-        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, address(0xD7), false, 0, address(0))), "d");
+        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, address(0xD7), false, 0, address(0), 0, 0)), "d");
         assertEq(d, want);
         assertEq(SCaaSDex(d).chainUid(), UID_);
         assertEq(SCaaSDex(d).SMART_KEY_ACCOUNT_IMPL(), address(0xBEEF));

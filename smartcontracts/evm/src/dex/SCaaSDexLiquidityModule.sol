@@ -12,7 +12,6 @@ import {ITradeToken, ILiquidityPullToken} from "../trade/ITradeToken.sol";
 import {LiquidityLib} from "../trade/LiquidityLib.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
-import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -150,7 +149,7 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         if (o.fee > TradeLib.MAX_FEE_PPM) revert ISCaaSDex.FeeAboveCap(h);
         if (t.pulled[h] != 0) revert ISCaaSDex.OrderClosed(h);
         if (p.pull.length != o.inputs.length) revert ISCaaSDex.LengthMismatch();
-        // kinds from the DEX's record (C6); the UA rules (CTR-UA-27): a derived signer gives SCaaS inputs with the
+        // kinds from the factory at use (CTR-DEX-32); the UA rules (CTR-UA-27): a derived signer gives SCaaS inputs with the
         // ledger on and no position; a derived recipient receives SCaaS outputs with the ledger on and no position
         bool derived = !UAKinds.inNativeSpace(o.from);
         bool verify = o.positionIn != 0;
@@ -159,7 +158,7 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
             if (p.pull[i] > o.inputs[i].amount) revert ISCaaSDex.Overfill(h);
             address tk = o.inputs[i].token;
             if (derived && !_ledgerOn(tk)) revert ISCaaSDex.UALegNotLedger(tk);
-            if (_s().kind[tk] != KIND_SCAAS || _deprecatedNow(tk)) verify = true;
+            if (!_scaas(tk)) verify = true;
         }
         if (derived && o.positionIn != 0) revert ISCaaSDex.UALegNotLedger(o.positionManager);
         if (!UAKinds.inNativeSpace(r.to)) {
@@ -169,19 +168,13 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
             if (o.positionPool != 0) revert ISCaaSDex.UAReceiveNotLedger(o.positionManager);
         }
         if (!derived) r.from = TradeLib.addr(o.from);
-        // the DEX's own verify when anything moves outside the SCaaS tokens' own checks, or when an input's release is
-        // deprecated now (the listing's kind is a snapshot; Fable D P3-4); with live SCaaS inputs only, each token verifies
-        // `h` itself before the route runs
+        // the DEX's own verify when anything moves outside the SCaaS tokens' own checks; with SCaaS inputs only, each
+        // token verifies `h` itself before the route runs (deprecated or not: owner 2026-11-12)
         if (verify && !SigCheck.isValid(r.from, h, p.auth.signature, _cap(r.from))) revert ISCaaSDex.BadSignature(h);
         t.pulled[h] = 1;
     }
 
-    /// @dev A SCaaS input's release deprecated after its listing (Fable D P3-4): the factory read at use, so the skip of
-    ///      the DEX's own verify never trusts a release the admin has since closed.
-    function _deprecatedNow(address token) private view returns (bool) {
-        (IOpenFactory.TokenKind k, uint64 v) = IOpenFactory(_FACTORY).versionOf(token);
-        return IOpenFactory(_FACTORY).isTokenDeprecated(k, v);
-    }
+    function _factoryAt() internal view override returns (address) { return _FACTORY; }
 
     /// @dev Shape codes 1-5 (§6 step 1); returns the plan's tokens: inputs, outputs, extraTokens.
     function _shape(ISCaaSDex.LiquidityPlan calldata p, bytes32 to) private view returns (address[] memory tok) {
@@ -236,7 +229,7 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         DexStorage storage s = _s();
         for (uint256 i; i < o.inputs.length; ++i) {
             address tk = o.inputs[i].token;
-            if (s.kind[tk] == KIND_SCAAS) ILiquidityPullToken(tk).mtxLiquidityPull(o, p.auth, p.pull[i], r.submitter);
+            if (_scaas(tk)) ILiquidityPullToken(tk).mtxLiquidityPull(o, p.auth, p.pull[i], r.submitter);
             else DexPuller(s.puller).pull(tk, r.from, p.pull[i]);
         }
         if (o.positionIn != 0) {
@@ -376,30 +369,10 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
 
     // ------------------------------------------------------------------ reads (W-O: capped, one word, no revert data)
 
-    /// @dev One word from a capped `staticcall`; `ok` false when it reverted or returned less than a word.
-    function _word(address target, bytes memory data) private view returns (bool ok, uint256 w) {
-        assembly ("memory-safe") {
-            let g := gas()
-            if gt(g, 500000) { g := 500000 } // C6-1: TokenCall.TOKEN_GAS
-            ok := staticcall(g, target, add(data, 0x20), mload(data), 0, 0x20)
-            ok := and(ok, gt(returndatasize(), 0x1f))
-            w := mload(0)
-        }
-    }
-
     /// @dev `ownerOf(id)` as a word; a failed read reverts as `_tokenFailed` does.
     function _ownerOf(address pm, uint256 id) private view returns (uint256 w) {
         bool ok;
         (ok, w) = _word(pm, abi.encodeWithSelector(OWNER_OF, id));
         if (!ok) _tokenFailed(pm);
-    }
-
-    /// @dev The balance of an id: `balanceOf` of a native one, `balanceOfUA` of a derived one.
-    function _balOf(address token, bytes32 id) private view returns (uint256 w) {
-        bool ok;
-        (ok, w) = _word(token, UAKinds.inNativeSpace(id)
-            ? abi.encodeCall(IERC20.balanceOf, (TradeLib.addr(id)))
-            : abi.encodeCall(IUALedger.balanceOfUA, (id)));
-        if (!ok) _tokenFailed(token);
     }
 }

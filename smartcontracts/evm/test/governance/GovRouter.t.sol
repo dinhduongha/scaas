@@ -148,6 +148,8 @@ abstract contract GovRouterFixture is UARegistryBase {
     /// The test is the factory of every clone: it registered no token, so a leg is outside and a market is `KIND_OUTSIDE`.
     function isRegisteredToken(address) external pure returns (bool) { return false; }
     function isToken(address) external pure returns (bool) { return false; }
+    /// fix2-dex: the DEX reads the kind at use (`versionOf`, version 0: not a factory token)
+    function versionOf(address) external pure returns (uint8, uint64) {}
 
     function setUp() public virtual override {
         super.setUp();
@@ -260,7 +262,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
         if (dexImpl == address(0)) dexImpl = address(new SCaaSDex(address(this), dexArgs(address(this))));
         d = SCaaSDex(EnvKit.clone(dexImpl, _cenv()));
-        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, TREASURY, false, 0, address(0))));
+        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, TREASURY, false, 0, address(0), 0, 0)));
     }
 
     function _limited(uint128 total) internal pure returns (IGovernance.GrantTerms memory g) {

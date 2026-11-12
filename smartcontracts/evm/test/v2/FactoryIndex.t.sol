@@ -200,7 +200,7 @@ contract FactoryIndexTest is IndexAsserts {
     }
 
     function _dexCfg(bytes32 admin_) internal pure returns (bytes memory) {
-        return abi.encode(ISCaaSDex.DexConfig(admin_, 0, address(0xD7), false, 0, address(0)));
+        return abi.encode(ISCaaSDex.DexConfig(admin_, 0, address(0xD7), false, 0, address(0), 0, 0));
     }
 
     function _token(address creator, IOpenFactory.TokenKind k, IFactoryToken.TokenConfig memory c, bytes32 salt)

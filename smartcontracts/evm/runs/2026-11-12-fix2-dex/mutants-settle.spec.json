@@ -1,0 +1,51 @@
+[
+ {
+  "id": "S1 arrival not paid out (no scaling)",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "        if (x == e) return;\n",
+  "new": "        if (x == x) return;\n",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "S2 no dust to the last share",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "            w = i == last ? left : Math.mulDiv(a ? makers[i].recv : makers[i].refund, x, e);",
+  "new": "            w = Math.mulDiv(a ? makers[i].recv : makers[i].refund, x, e);",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "S3 fee not recomputed on the share",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "        c.fee = Math.mulDiv(v, c.o.fee, PPM, Math.Rounding.Ceil);",
+  "new": "        v;",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "S4 book floor dropped",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "_payLeg(sellToken, c, 0, submitter, l - Math.mulDiv(l, c.o.fee, PPM, Math.Rounding.Ceil));",
+  "new": "_payLeg(sellToken, c, 0, submitter, l - l);",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "S5 book floor = the computed net amount",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "_payLeg(sellToken, c, 0, submitter, l - Math.mulDiv(l, c.o.fee, PPM, Math.Rounding.Ceil));",
+  "new": "_payLeg(sellToken, c, 0, submitter, c.recv - c.fee + 0 * l);",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "S6 seller debit check dropped",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "if (a < b && b - a > (c.o.flags & ESCROW != 0 ? c.o.amount : c.sold)) revert SellerOverDebited(c.h);",
+  "new": "a; b;",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "S7 seller debit bound = amount",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "if (a < b && b - a > (c.o.flags & ESCROW != 0 ? c.o.amount : c.sold)) revert SellerOverDebited(c.h);",
+  "new": "if (a < b && b - a > c.o.amount) revert SellerOverDebited(c.h);",
+  "path": "test/v2/DexMarkets.t.sol"
+ }
+]

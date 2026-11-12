@@ -1,0 +1,105 @@
+[
+ {
+  "id": "C1 closed always on",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NothingSettled()] test_closed_disableOpens_lockHolds() (gas: 672135)"
+ },
+ {
+  "id": "C2 closed always off",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_closed_refusesAnUnlistedPair() (gas: 739182)"
+ },
+ {
+  "id": "C3 settle gate dropped (always closed)",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NothingSettled()] test_closed_disableOpens_lockHolds() (gas: 672135)"
+ },
+ {
+  "id": "C4 settle listing check dropped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_closed_refusesAnUnlistedPair() (gas: 741338)"
+ },
+ {
+  "id": "C5 exchange gate always on",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: TokenNotKnown(0x31c0D00C98b2ecb93Ef73c418889ce9E7021dc14)] test_deprecatedRelease_settlesThroughTheTokensVerify() (gas: 1309870)"
+ },
+ {
+  "id": "C6 exchange gate always off",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_exchangeAndHybrid_openByDefault_closedRefuse() (gas: 2133448)"
+ },
+ {
+  "id": "C7 init features dropped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: FeatureNotSet(29)] test_closed_disableOpens_lockHolds() (gas: 366116)"
+ },
+ {
+  "id": "C8 init lock dropped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0 != 536870912] test_closed_disableOpens_lockHolds() (gas: 1123366)"
+ },
+ {
+  "id": "C9 init valid without bit 29",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: FeatureInvalidForKind(29)] test_closed_disableOpens_lockHolds() (gas: 119951)"
+ },
+ {
+  "id": "C10 validBits view without bit 29",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 6144 != 536877056] test_d_directCallRefused() (gas: 77151)"
+ },
+ {
+  "id": "K1 settle kind from the setMarket record",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NothingSettled()] test_closed_disableOpens_lockHolds() (gas: 672135)"
+ },
+ {
+  "id": "K2 ledger rule from the setMarket record",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: UAReceiveNotLedger(0x38F0B58c354e41AFF944800d17E13968b6255507)] test_open_derivedReceiverOfAnUnlistedToken() (gas: 653045)"
+ },
+ {
+  "id": "K3 every token SCaaS",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NothingSettled()] test_C6_1_gasBurningTokenCannotStarveTheNextSettlement() (gas: 1079051)"
+ },
+ {
+  "id": "K4 no token SCaaS",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NothingSettled()] test_closed_disableOpens_lockHolds() (gas: 672135)"
+ },
+ {
+  "id": "K5 liquidity verify skip for outside inputs",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: MetaTxBadSignature() != BadSignature(0x6a00e497b47f120309b6fd984a9a350b11f1b6b1a20355ef88b76ac1708883e1)] test_L16_dexVerify() ("
+ },
+ {
+  "id": "K6 liquidity pull route from the record",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SafeERC20FailedOperation(0x19eA30A0A99DE9009bf9CB4c61C775E739533547)] test_unlistedScaasInputs_pulledByTheTokens() (gas: 532683)"
+ },
+ {
+  "id": "K7 liquidity verify from the record",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: BadSignature(0x6b8571ed96acec306bebc8be1c4087671164a8dfc0a56697dbfcedb09b378bae)] test_derivedSigner_unlistedScaasInputs() (gas: 561618)",
+  "note": "re-run after test_derivedSigner_unlistedScaasInputs was added (first run: survived)"
+ }
+]

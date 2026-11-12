@@ -162,6 +162,7 @@ abstract contract LegacyDiff is Test {
         r3Uid = EnvKit.codeUidOf(token);
         uint256 snap = vm.snapshotState();
         Run memory n = _run(token, caller, _r3Call(data));
+        n.calls = _intendedCalls(token, n.calls);
         vm.revertToState(snap);
         vm.etch(token, _withImpl(code, oldImpl));
         Run memory o = _run(token, caller, data);
@@ -227,7 +228,25 @@ abstract contract LegacyDiff is Test {
         uint256 b = abi.decode(o.ret, (uint256));
         if (k >= 8 && k <= 13) b |= uint256(1) << GovernanceBits.KYC;
         if (k == 1 || k == 3 || k == 5 || k == 9 || k == 11 || k == 13) b |= GovernanceBits.WRAP_CONTROLS;
+        if (k == type(uint8).max) b |= uint256(1) << GovernanceBits.CLOSED_MARKETS; // the DEX, CTR-DEX-32
         return abi.encode(b);
+    }
+
+    /// @dev CTR-DEX-32 / CTR-DEX-18 (fix2-dex, owner 2026-11-12): the DEX reads a token's kind from its factory at use
+    ///      (`versionOf`, a STATICCALL) where it read its `setMarket` record before; those reads are the intended new calls
+    ///      out of the DEX and leave the comparison. Every other call out of either side is compared as before.
+    function _intendedCalls(address token, bytes[] memory calls) internal view returns (bytes[] memory out) {
+        if (_kindOf(token) != type(uint8).max) return calls;
+        out = new bytes[](calls.length);
+        uint256 n;
+        for (uint256 i; i < calls.length; ++i) {
+            (VmSafe.AccountAccessKind k,,, bytes memory d,) =
+                abi.decode(calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
+            if (k == VmSafe.AccountAccessKind.StaticCall && d.length >= 4
+                && bytes4(d) == bytes4(keccak256("versionOf(address)"))) continue;
+            out[n++] = calls[i];
+        }
+        assembly ("memory-safe") { mstore(out, n) }
     }
 
     /// @dev Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1-§4.3): d142b57c's ownership names are the admin

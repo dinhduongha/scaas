@@ -52,7 +52,7 @@ abstract contract LiquidityBase is Test {
             abi.encode(normalInit("A", "A", 0, 2e9, alice, address(0))), "a"));
         b = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
             abi.encode(normalInit("B", "B", 0, 2e9, alice, address(0))), "b"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0))),
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0, 0)),
             "dex"));
         puller = dex.puller();
         usdc = new MockERC20("USD Coin", "USDC", 6);

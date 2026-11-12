@@ -68,7 +68,7 @@ contract Liquidity is OnchainBase {
         _book(address(v2f), "MockV2Factory");
         _book(address(posm), "MockPositionManagerV4");
         _book(address(reader), "V4PositionReader");
-        bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, TREASURY, false, 0, address(0)));
+        bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, TREASURY, false, 0, address(0), 0, 0));
         vm.broadcast(k1);
         dex = ISCaaSDex(f.createDex(1, cfg, _salt("dex")));
         _book(address(dex), "SCaaSDex");

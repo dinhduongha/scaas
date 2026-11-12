@@ -6,6 +6,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ITradeToken, ILiquidityPullToken} from "../../src/trade/ITradeToken.sol";
 import {SCaaSDexLiquidityModule} from "../../src/dex/SCaaSDexLiquidityModule.sol";
 import {V4PositionReader} from "../../src/dex/V4PositionReader.sol";
@@ -43,21 +44,29 @@ contract DexLiquidityTest is LiquidityBase {
     }
 
     /// A leftover goes back to alice, fee-free; `fee = 0` stays valid and relayable (no fee shares).
-    /// Fable D P3-4: the kind is the `setMarket` snapshot, the trust is read at use. A bad signature on a SCaaS-only plan:
-    /// before `a`'s release is deprecated the DEX skips its own verify and the token refuses; after (no `setMarket` since,
-    /// the kind still SCaaS) the DEX refuses first, `BadSignature(h)`; the good signature still settles (the control).
-    function test_deprecatedRelease_dexVerifiesItself() public {
+    /// Owner 2026-11-12 (supersedes Fable D P3-4's live read, now in `legacy/ua-mtx-fix2-dex/`): the DEX never reads a
+    /// release's deprecation. A SCaaS-only plan is verified by its tokens, deprecated or not: a bad signature fails at the
+    /// token (`MetaTxBadSignature`) after `a`'s release is deprecated as before, and the good signature still settles.
+    function test_deprecatedRelease_tokenStillVerifies() public {
         ITradeToken.LiquidityOrder memory o = _addOrder(98_000);
         ISCaaSDex.LiquidityPlan memory bad = _plan(o, 0xBAD, _u2(ADD, ADD));
         bytes32 h = dex.liquidityOrderDigest(o);
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // the token's own check
-        _run(bad, _addXs(ADD, ADD, address(dex)));
         f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, f.chainUid(), "its liquidity pull");
-        assertEq(dex.tokenKind(address(a)), 1, "the snapshot");
-        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // the token's own check, not the DEX's
         _run(bad, _addXs(ADD, ADD, address(dex)));
-        _run(_plan(o, ALICE_PK, _u2(ADD, ADD)), _addXs(ADD, ADD, address(dex)));
+        _run(_plan(o, ALICE_PK, _u2(ADD, ADD)), _addXs(ADD, ADD, address(dex))); // the control
         assertEq(dex.pulled(h), 1);
+    }
+
+    /// fix2-dex (CTR-DEX-32): the kind is the factory's at use: on a DEX that never listed `a` / `b`, a SCaaS-only plan is
+    /// pulled by the tokens' `mtxLiquidityPull` (an EOA cannot approve the puller on a SCaaS token).
+    function test_unlistedScaasInputs_pulledByTheTokens() public {
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0,
+            0)), "fresh"));
+        ITradeToken.LiquidityOrder memory o = _addOrder(98_000);
+        _run(_plan(o, ALICE_PK, _u2(ADD, ADD)), _addXs(ADD, ADD, address(dex)));
+        assertEq(dex.pulled(dex.liquidityOrderDigest(o)), 1);
+        assertEq(dex.tokenKind(address(a)), 0);
     }
 
     function test_v2AddRefundFeeZero() public {

@@ -576,7 +576,7 @@ contract Misc is OnchainBase {
         _book(d[1], "SCaaSDexLiquidityModule");
         (e.libs[2], e.libCodeHashes[2]) = (d[0], d[0].codehash);
         (e.libs[3], e.libCodeHashes[3]) = (d[1], d[1].codehash);
-        ISCaaSDex.DexConfig memory c = ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, a1);
+        ISCaaSDex.DexConfig memory c = ISCaaSDex.DexConfig(_pad(a1), 0, a1, false, 0, a1, 0, 0);
         vm.startBroadcast(k1);
         f2.publishDexEnv(1, uid, e);
         // a fixed limit: the release's regular + EIP-8037 state gas, simulated 51.9 M on the SCaaS testnet and 55.1 M on a

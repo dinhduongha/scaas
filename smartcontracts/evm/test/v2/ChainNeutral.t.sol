@@ -67,7 +67,7 @@ contract ChainNeutralTest is Test {
             address(0))), "t");
         s.unregistered = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, s.normalRelease,
             abi.encode(normalInit("U", "U", 6, 0, alice, address(0))), "u");
-        s.dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, alice, false, 0, address(0))), "d");
+        s.dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, alice, false, 0, address(0), 0, 0)), "d");
         vm.stopPrank();
         s.tokenCode = s.token.codehash;
         s.dexCode = s.dex.codehash;
