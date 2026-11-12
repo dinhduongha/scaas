@@ -11,6 +11,7 @@ import {IGovernance} from "../../../src/governance/IGovernance.sol";
 import {IZetherToken} from "../../../src/zether/IZetherToken.sol";
 import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Plan T32 (owner 2026-11-05, CTR-GOV-20; CTR-GOV-13, CTR-GOV-17, never lose ciphertext; I8), the row T30 left open: on
 /// kinds 10 and 11 `operatorTransfer` moves public balances only. A Zether UA holding a public (UA-ledger) balance and a
@@ -34,7 +35,7 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
         c.grantDelay = 0; // the grant applies at once
         tok = NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(c), "zop"));
         vm.prank(ownerA);
-        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK));
+        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK), EnvKit.codeUidOf(address(IGovernance(address(tok)))));
         _funded(300);
         _public(tok, address(this), PUBLIC);
         tok.transferToUA(aId, PUBLIC);

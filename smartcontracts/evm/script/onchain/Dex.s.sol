@@ -13,6 +13,7 @@ import {ISCaaSDex, IExchangeExecutor} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MockERC20} from "../../test/helpers/Mocks.sol";
 
 /// @notice `SCaaSDex.settleOne`, the self-call entry `ISCaaSDex` does not declare (for its negative).
@@ -200,7 +201,7 @@ contract Dex is OnchainBase {
         bytes32[] memory listed = new bytes32[](4);
         (listed[0], listed[1], listed[2], listed[3]) = (_pad(a1), _pad(a2), _pad(address(dex)), _pad(_puller()));
         IRegulatedToken(R).setAllowed{gas: G}(listed, true);
-        IRegulatedToken(R).enableFeature{gas: G}(GovernanceBits.ALLOWLIST);
+        IRegulatedToken(R).enableFeature{gas: G}(GovernanceBits.ALLOWLIST, IMetaTx(R).chainUid());
         dex.setFeeSplit{gas: G}(300_000, TREASURY);
         dex.setExchangeTarget{gas: G}(address(router), true);
         dex.setExchangeTarget{gas: G}(address(exec), true);
@@ -476,15 +477,15 @@ contract Dex is OnchainBase {
         IGovernance.GrantTerms memory t;
         (t.max, t.maxUses, t.validUntil) = (MAXW, 3, uint64(vu));
         vm.startBroadcast(k1);
-        g.setGrant{gas: G}(GovernanceBits.FEE_ROUTING, _pad(a2), t); // a limited holder of FEE_ROUTING
-        g.grantRole{gas: G}(GovernanceBits.LISTING, _pad(a2));
+        g.setGrant{gas: G}(GovernanceBits.FEE_ROUTING, _pad(a2), t, IMetaTx(address(g)).chainUid()); // a limited holder of FEE_ROUTING
+        g.grantRole{gas: G}(GovernanceBits.LISTING, _pad(a2), IMetaTx(address(g)).chainUid());
         vm.stopBroadcast();
         vm.startBroadcast(k2);
         dex.setFeeSplit{gas: G}(250_000, TREASURY); // a2 uses its grant
         g.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING);
         vm.stopBroadcast();
         vm.startBroadcast(k1);
-        g.revokeRole{gas: G}(GovernanceBits.LISTING, _pad(a2));
+        g.revokeRole{gas: G}(GovernanceBits.LISTING, _pad(a2), IMetaTx(address(g)).chainUid());
         dex.setListedOnly{gas: G}(true); // after the trades: with it every interaction target (the token of an approve too) is listed
         g.transferAdmin{gas: G}(_pad(a2), dex.chainUid());
         vm.stopBroadcast();
@@ -493,9 +494,9 @@ contract Dex is OnchainBase {
         // dex2 (grantDelay 1 h): a grant proposed then cancelled, a feature off, the owner's roles and ownership renounced
         IGovernance g2 = IGovernance(address(dex2));
         vm.startBroadcast(k1);
-        g2.grantRole{gas: G}(GovernanceBits.LISTING, _pad(a3));
-        g2.cancelGrant{gas: G}(GovernanceBits.LISTING, _pad(a3));
-        g2.disableFeature{gas: G}(GovernanceBits.LISTING);
+        g2.grantRole{gas: G}(GovernanceBits.LISTING, _pad(a3), IMetaTx(address(g2)).chainUid());
+        g2.cancelGrant{gas: G}(GovernanceBits.LISTING, _pad(a3), IMetaTx(address(g2)).chainUid());
+        g2.disableFeature{gas: G}(GovernanceBits.LISTING, IMetaTx(address(g2)).chainUid());
         g2.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING);
         g2.renounceAdmin{gas: G}(dex2.chainUid());
         vm.stopBroadcast();

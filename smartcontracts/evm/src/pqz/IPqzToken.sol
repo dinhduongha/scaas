@@ -328,16 +328,18 @@ interface IPqzToken is IConfidentialToken {
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent; plan 5h D8), per key version.
     function mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half) external;
     /// @notice Group 3f (spec §4.2-§4.4): the owner's verifier transfer (propose, confirm after the notice), its cancel,
-    ///         the immediate revocation; the verifier's configuration.
-    function pqzSetVerifier(bytes32 next) external;
-    function pqzCancelVerifier() external;
-    function pqzRevokeVerifier() external;
+    ///         the immediate revocation; the verifier's configuration. `chainUid_` the token's chain word (`ChainUidMismatch`,
+    ///         CTR-GOV-28), checked after the caller (`NotProposer`, `NotAdmin`) and before any write.
+    function pqzSetVerifier(bytes32 next, bytes32 chainUid_) external;
+    function pqzCancelVerifier(bytes32 chainUid_) external;
+    function pqzRevokeVerifier(bytes32 chainUid_) external;
     function pqzVerifyConfig() external view returns (PqzVerifyConfig memory);
     /// @notice Round 3t (CTR-PQZ-36): the admin sets an `OFFCHAIN` token's verifier fee within `[0, verifierFeeMax]`: a
     ///         decrease (to 0 included) at once, an increase proposed by the first call and confirmed by the same call of the
     ///         same proposer in the same admin generation within `[eta, eta + noticePeriod]`; the current value cancels a live
-    ///         pending increase. Through the router as `mtxSetVerifierFee`.
-    function setVerifierFee(uint64 next) external;
+    ///         pending increase. Through the router as `mtxSetVerifierFee`. `chainUid_` the token's chain word
+    ///         (`ChainUidMismatch`, CTR-GOV-28), checked after the caller and before any write.
+    function setVerifierFee(uint64 next, bytes32 chainUid_) external;
 }
 
 /// @title `mtxUnshieldUnwrap` of `WRAPPED_PQZ`, its explicit form (typed-signing Appendix X.3).

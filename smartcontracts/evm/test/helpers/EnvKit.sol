@@ -79,6 +79,13 @@ library EnvKit {
         }
     }
 
+    /// @dev A `ComplianceRegistry`'s `chainUid` read from its storage slot 1 (after `govRouter` and `_lastId` in slot 0), not
+    ///      by a call: the `chainUid_` argument of `setKycProvider` / `setCompliance` right after a `vm.prank` (CTR-GOV-28).
+    ///      `test_regUidOf_slot` (RegistryAdmin.t.sol) pins the slot.
+    function regUidOf(address r) internal view returns (bytes32) {
+        return vm.load(r, bytes32(uint256(1)));
+    }
+
     /// @dev `configureChain`'s router code hash argument: 0 for no router (spec §13.3).
     function codeHashOf(address router) internal view returns (bytes32) {
         return router == address(0) ? bytes32(0) : router.codehash;

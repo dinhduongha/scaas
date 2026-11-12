@@ -16,6 +16,7 @@ import {IMetaTx} from "../../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {UAKinds} from "../../../src/ua/UAKinds.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Group 3f, T45 on the regulated PQZ kinds 12 and 13 (PQZ verifier mode spec §5.3, §4.2): `mtxSelectors()` lists the
 /// proof-carrying entries with the verdict last and none of the pre-3f forms; an `OFFCHAIN` regulated token takes the
@@ -102,9 +103,9 @@ abstract contract PqzVerdictKinds is PqzRegFixture {
         _shieldTo(alice, BAL);
         vm.prank(address(0xBEEF));
         vm.expectRevert();
-        tok.pqzRevokeVerifier();
+        tok.pqzRevokeVerifier(EnvKit.codeUidOf(address(tok)));
         vm.prank(ownerA);
-        tok.pqzRevokeVerifier();
+        tok.pqzRevokeVerifier(EnvKit.codeUidOf(address(tok)));
         IPqzToken.PqzBurnArgs memory b = _burnArgs(bytes32(0), 0, 82);
         bytes memory st = tok.burnStatement(b, 0, 0, 0);
         IPqzToken.PqzSignedVerdict memory sv = _sv(st);

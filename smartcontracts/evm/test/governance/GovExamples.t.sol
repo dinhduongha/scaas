@@ -6,6 +6,7 @@ import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// The part every example shares: an application on the base with a `grantDelay`, no guard of its own, the caller as is.
 abstract contract ExampleApp is GovernanceBase {
@@ -164,11 +165,11 @@ contract GovExamplesTest is Test {
 
     function _twice(IGovernance app, uint8 bit, address holder, IGovernance.GrantTerms memory g) internal {
         vm.prank(OWNER);
-        app.setGrant(bit, nid(holder), g);
+        app.setGrant(bit, nid(holder), g, EnvKit.codeUidOf(address(app)));
         assertFalse(app.hasRole(bit, nid(holder)), "proposed");
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        app.setGrant(bit, nid(holder), g);
+        app.setGrant(bit, nid(holder), g, EnvKit.codeUidOf(address(app)));
         assertTrue(app.hasRole(bit, nid(holder)), "confirmed");
     }
 
@@ -214,7 +215,7 @@ contract GovExamplesTest is Test {
         IGovernance.GrantTerms memory l;
         (l.min, l.max, l.total, l.validUntil, l.scope) = (1e6, 2e7, 1e8, uint64(block.timestamp + 30 days), BRANCH);
         vm.prank(MANAGER); // at once: the leaf path takes no delay
-        b.setGrant(128, nid(OFFICER), l);
+        b.setGrant(128, nid(OFFICER), l, EnvKit.codeUidOf(address(b)));
         vm.startPrank(OFFICER);
         b.approveLoan(5);
         vm.expectRevert(_ex(1));
@@ -231,10 +232,10 @@ contract GovExamplesTest is Test {
     function _tree() internal returns (FamilyTree tr) {
         tr = new FamilyTree(OWNER, D);
         vm.prank(OWNER);
-        tr.grantRole(128, nid(OWNER));
+        tr.grantRole(128, nid(OWNER), EnvKit.codeUidOf(address(tr)));
         vm.warp(block.timestamp + D);
         vm.startPrank(OWNER);
-        tr.grantRole(128, nid(OWNER));
+        tr.grantRole(128, nid(OWNER), EnvKit.codeUidOf(address(tr)));
         tr.addMember(1, 2);
         tr.addMember(2, 3);
         tr.addMember(1, 4);
@@ -249,7 +250,7 @@ contract GovExamplesTest is Test {
         IGovernance.GrantTerms memory l;
         (l.max, l.maxUses, l.scope) = (type(uint128).max, uses, bytes32(son));
         vm.prank(MANAGER);
-        tr.setGrant(bit, nid(OFFICER), l);
+        tr.setGrant(bit, nid(OFFICER), l, EnvKit.codeUidOf(address(tr)));
     }
 
     function test_subtreeAddAndRemove() public {
@@ -278,7 +279,7 @@ contract GovExamplesTest is Test {
         (l.max, l.maxUses, l.scope) = (type(uint128).max, 1, bytes32(uint256(4)));
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(7)));
-        tr.setGrant(128, nid(OFFICER), l); // 4 is outside the head's subtree
+        tr.setGrant(128, nid(OFFICER), l, EnvKit.codeUidOf(address(tr))); // 4 is outside the head's subtree
         _leafOn(tr, 128, 3, 1);
         vm.prank(OFFICER);
         vm.expectRevert(abi.encodeWithSelector(FamilyTree.OutsideSubtree.selector, bytes32(uint256(3)), uint256(2)));
@@ -295,7 +296,7 @@ contract GovExamplesTest is Test {
         (g.max, g.delegable, g.scope) = (type(uint128).max, true, bytes32(uint256(1)));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantBudgetRequired.selector, uint8(128)));
-        tr.setGrant(128, nid(MANAGER), g);
+        tr.setGrant(128, nid(MANAGER), g, EnvKit.codeUidOf(address(tr)));
         g.maxUses = 10;
         _twice(tr, 128, MANAGER, g);
     }
@@ -323,7 +324,7 @@ contract GovExamplesTest is Test {
         IGovernance.GrantTerms memory l;
         (l.max, l.total, l.scope) = (type(uint128).max, 50, GA);
         vm.prank(MANAGER);
-        gl.setGrant(128, nid(OFFICER), l);
+        gl.setGrant(128, nid(OFFICER), l, EnvKit.codeUidOf(address(gl)));
         vm.prank(OFFICER);
         gl.moveWithin(2, 1, 50);
         assertEq(gl.grantOf(128, nid(MANAGER)).spentTotal, 150);
@@ -338,6 +339,6 @@ contract GovExamplesTest is Test {
         (g.max, g.scope, g.delegable) = (type(uint128).max, GA, true);
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantBudgetRequired.selector, uint8(128)));
-        gl.setGrant(128, nid(OFFICER), g);
+        gl.setGrant(128, nid(OFFICER), g, EnvKit.codeUidOf(address(gl)));
     }
 }

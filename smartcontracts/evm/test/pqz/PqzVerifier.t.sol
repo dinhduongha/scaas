@@ -164,12 +164,12 @@ contract PqzVerifierTest is PqzOffchainBase {
         _tryCreateStrict(id);
         NormalPqzToken t = _tok(fN, vA, false);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PqzVerifierUnregistered.selector, id));
-        t.pqzSetVerifier(id);
+        t.pqzSetVerifier(id, EnvKit.codeUidOf(address(t)));
         _asKind(id, UAKinds.MLDSA87);
         vm.expectRevert(_kindErr(UAKinds.MLDSA87));
-        t.pqzSetVerifier(id); // the kind check at the proposal
+        t.pqzSetVerifier(id, EnvKit.codeUidOf(address(t))); // the kind check at the proposal
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PqzVerifierUnregistered.selector, bytes32(0)));
-        t.pqzSetVerifier(0); // the zero id: no transfer to "revoked"
+        t.pqzSetVerifier(0, EnvKit.codeUidOf(address(t))); // the zero id: no transfer to "revoked"
     }
 
     // ------------------------------------------------------------------ the frozen shape (spec §4.1, C3)
@@ -219,8 +219,8 @@ contract PqzVerifierTest is PqzOffchainBase {
         IPqzToken.PqzSignedVerdict memory sv = _sv(t, st);
         vm.expectRevert(IPqzToken.PqzVerifierChanged.selector);
         t.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", sv);
-        t.pqzSetVerifier(vB);
-        t.pqzSetVerifier(vA); // a designator is an EOA: accepted, its new shape frozen
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
+        t.pqzSetVerifier(vA, EnvKit.codeUidOf(address(t))); // a designator is an EOA: accepted, its new shape frozen
         t.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", _sv(t, st));
     }
 
@@ -231,24 +231,24 @@ contract PqzVerifierTest is PqzOffchainBase {
         uint64 eta = uint64(block.timestamp) + NOTICE;
         vm.expectEmit(address(t));
         emit IPqzToken.PqzVerifierProposed(vA, vB, eta);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         IPqzToken.PqzVerifyConfig memory c = t.pqzVerifyConfig();
         assertEq(c.pending, vB);
         assertEq(c.eta, eta);
         assertEq(c.noticePeriod, NOTICE);
         vm.warp(eta - 1);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PqzVerifierNotReady.selector, eta));
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         assertEq(t.pqzVerifyConfig().verifier, vA, "still A");
     }
 
     function test_transfer_atEta() public {
         NormalPqzToken t = _tok(fN, vA, false);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         vm.warp(block.timestamp + NOTICE);
         vm.expectEmit(address(t));
         emit IPqzToken.PqzVerifierSet(vA, vB, 1);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         IPqzToken.PqzVerifyConfig memory c = t.pqzVerifyConfig();
         assertEq(c.verifier, vB);
 
@@ -256,9 +256,9 @@ contract PqzVerifierTest is PqzOffchainBase {
 
         assertEq(c.pending, 0);
         // the window closes at eta + notice: a late confirm is a new proposal
-        t.pqzSetVerifier(vA);
+        t.pqzSetVerifier(vA, EnvKit.codeUidOf(address(t)));
         vm.warp(block.timestamp + 2 * NOTICE + 1);
-        t.pqzSetVerifier(vA);
+        t.pqzSetVerifier(vA, EnvKit.codeUidOf(address(t)));
         assertEq(t.pqzVerifyConfig().verifier, vB, "the dead pending did not apply");
         assertEq(t.pqzVerifyConfig().pending, vA, "a new proposal");
     }
@@ -268,24 +268,24 @@ contract PqzVerifierTest is PqzOffchainBase {
         NormalPqzToken t = _tok(fN, vA, false);
         vm.prank(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(address(0xBEEF))));
-        t.pqzSetVerifier(vB);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         vm.warp(block.timestamp + NOTICE);
         vm.prank(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotProposer.selector, uint8(0), vB, me));
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         vm.prank(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(address(0xBEEF))));
-        t.pqzCancelVerifier();
+        t.pqzCancelVerifier(EnvKit.codeUidOf(address(t)));
         vm.prank(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(address(0xBEEF))));
-        t.pqzRevokeVerifier();
+        t.pqzRevokeVerifier(EnvKit.codeUidOf(address(t)));
     }
 
     /// An owner change between proposal and confirm kills the pending (`adminGeneration`).
     function test_transfer_ownerChanged() public {
         NormalPqzToken t = _tok(fN, vA, false);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         address o2 = address(0x0A2);
         IGovernance(address(t)).transferAdmin(nid(o2), EnvKit.codeUidOf(address(IGovernance(address(t)))));
         vm.prank(o2);
@@ -293,7 +293,7 @@ contract PqzVerifierTest is PqzOffchainBase {
         vm.warp(block.timestamp + NOTICE);
         assertEq(t.pqzVerifyConfig().pending, 0, "dead");
         vm.prank(o2);
-        t.pqzSetVerifier(vB); // a new proposal, not a confirm
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t))); // a new proposal, not a confirm
         assertEq(t.pqzVerifyConfig().verifier, vA);
         assertEq(t.pqzVerifyConfig().pending, vB);
     }
@@ -301,34 +301,34 @@ contract PqzVerifierTest is PqzOffchainBase {
     function test_transfer_fixed() public {
         NormalPqzToken t = _tok(fN, vA, true);
         vm.expectRevert(IPqzToken.PqzVerifierFixed.selector);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(IPqzToken.PqzVerifierFixed.selector);
-        t.pqzCancelVerifier();
+        t.pqzCancelVerifier(EnvKit.codeUidOf(address(t)));
     }
 
     function test_transfer_same() public {
         NormalPqzToken t = _tok(fN, vA, false);
         vm.expectRevert(IPqzToken.PqzVerifierSame.selector);
-        t.pqzSetVerifier(vA);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vA, EnvKit.codeUidOf(address(t)));
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PqzVerifierPending.selector, vB));
-        t.pqzSetVerifier(keccak256("another")); // another value while one is live
+        t.pqzSetVerifier(keccak256("another"), EnvKit.codeUidOf(address(t))); // another value while one is live
         vm.expectEmit(address(t));
         emit IPqzToken.PqzVerifierCancelled(vB);
-        t.pqzCancelVerifier();
+        t.pqzCancelVerifier(EnvKit.codeUidOf(address(t)));
         assertEq(t.pqzVerifyConfig().pending, 0);
-        t.pqzCancelVerifier(); // none live: nothing
+        t.pqzCancelVerifier(EnvKit.codeUidOf(address(t))); // none live: nothing
     }
 
     /// A factory notice period 0: the first call applies at once.
     function test_transfer_zeroNotice() public {
         NormalPqzToken t = _tok(factory, vA, false);
         assertEq(t.pqzVerifyConfig().noticePeriod, 0);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         assertEq(t.pqzVerifyConfig().verifier, vB);
         assertEq(t.pqzVerifyConfig().pqzVerifierEpoch, 1);
         assertEq(t.pqzVerifyConfig().pqzVerifyMode, PqzCore.OFFCHAIN, "I1: a transfer never writes the mode");
-        t.pqzRevokeVerifier();
+        t.pqzRevokeVerifier(EnvKit.codeUidOf(address(t)));
         assertEq(t.pqzVerifyConfig().pqzVerifyMode, PqzCore.OFFCHAIN, "I1: nor a revocation");
     }
 
@@ -338,11 +338,11 @@ contract PqzVerifierTest is PqzOffchainBase {
         c.admin = me;
         NormalPqzToken t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "precompile-owned"));
         vm.expectRevert(IPqzToken.PqzVerifyConfigInvalid.selector);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(IPqzToken.PqzVerifyConfigInvalid.selector);
-        t.pqzCancelVerifier();
+        t.pqzCancelVerifier(EnvKit.codeUidOf(address(t)));
         vm.expectRevert(IPqzToken.PqzVerifyConfigInvalid.selector);
-        t.pqzRevokeVerifier();
+        t.pqzRevokeVerifier(EnvKit.codeUidOf(address(t)));
     }
 
     // ------------------------------------------------------------------ revocation (spec §4.3, R4)
@@ -351,35 +351,35 @@ contract PqzVerifierTest is PqzOffchainBase {
         NormalPqzToken t = _tok(fN, vA, false);
         vm.expectEmit(address(t));
         emit PqzVerifierRevoked(vA, 1);
-        t.pqzRevokeVerifier();
+        t.pqzRevokeVerifier(EnvKit.codeUidOf(address(t)));
         IPqzToken.PqzVerifyConfig memory c = t.pqzVerifyConfig();
         assertEq(c.verifier, 0);
 
         assertEq(c.pqzVerifierEpoch, 1);
         // a new verifier only after a full notice
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         vm.warp(block.timestamp + NOTICE - 1);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PqzVerifierNotReady.selector, uint64(block.timestamp + 1)));
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         vm.warp(block.timestamp + 1);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         assertEq(t.pqzVerifyConfig().verifier, vB);
         assertEq(t.pqzVerifyConfig().pqzVerifierEpoch, 2);
     }
 
     function test_revoke_deletesPending() public {
         NormalPqzToken t = _tok(fN, vA, false);
-        t.pqzSetVerifier(vB);
-        t.pqzRevokeVerifier();
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
+        t.pqzRevokeVerifier(EnvKit.codeUidOf(address(t)));
         assertEq(t.pqzVerifyConfig().pending, 0);
         vm.warp(block.timestamp + NOTICE);
-        t.pqzSetVerifier(vB); // a new proposal
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t))); // a new proposal
         assertEq(t.pqzVerifyConfig().verifier, 0);
     }
 
     function test_revoke_fixedRefused() public {
         NormalPqzToken t = _tok(fN, vA, true);
         vm.expectRevert(IPqzToken.PqzVerifierFixed.selector);
-        t.pqzRevokeVerifier();
+        t.pqzRevokeVerifier(EnvKit.codeUidOf(address(t)));
     }
 }

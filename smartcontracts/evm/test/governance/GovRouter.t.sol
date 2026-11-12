@@ -198,11 +198,13 @@ abstract contract GovRouterFixture is UARegistryBase {
     }
 
     function _rows() internal {
-        rows[GRANT_ROLE] = Row("GrantRole", ",uint8 bit,bytes32 account", router.mtxGrantRole.selector);
-        rows[REVOKE_ROLE] = Row("RevokeRole", ",uint8 bit,bytes32 account", router.mtxRevokeRole.selector);
-        rows[SET_GRANT] = Row("SetGrant", ",uint8 bit,bytes32 holder,GrantTerms terms", router.mtxSetGrant.selector);
-        rows[CANCEL_GRANT] = Row("CancelGrant", ",uint8 bit,bytes32 account", router.mtxCancelGrant.selector);
-        rows[DISABLE_FEATURE] = Row("DisableFeature", ",uint8 bit", router.mtxDisableFeature.selector);
+        rows[GRANT_ROLE] = Row("GrantRole", ",uint8 bit,bytes32 account,bytes32 chainUid", router.mtxGrantRole.selector);
+        rows[REVOKE_ROLE] = Row("RevokeRole", ",uint8 bit,bytes32 account,bytes32 chainUid", router.mtxRevokeRole.selector);
+        rows[SET_GRANT] =
+            Row("SetGrant", ",uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid", router.mtxSetGrant.selector);
+        rows[CANCEL_GRANT] =
+            Row("CancelGrant", ",uint8 bit,bytes32 account,bytes32 chainUid", router.mtxCancelGrant.selector);
+        rows[DISABLE_FEATURE] = Row("DisableFeature", ",uint8 bit,bytes32 chainUid", router.mtxDisableFeature.selector);
         rows[TRANSFER_ADMIN] =
             Row("TransferAdmin", ",bytes32 newAdmin,bytes32 chainUid", router.mtxTransferAdmin.selector);
         rows[ACCEPT_ADMIN] = Row("AcceptAdmin", "", router.mtxAcceptAdmin.selector);
@@ -350,12 +352,13 @@ abstract contract GovRouterFixture is UARegistryBase {
         return _signed(router, op, from, 0, target, args, args);
     }
 
-    function _setGrantArgs(uint8 bit, bytes32 holder, IGovernance.GrantTerms memory t)
+    /// @dev `u` the target's chain word, the op's last field (CTR-GOV-28).
+    function _setGrantArgs(uint8 bit, bytes32 holder, IGovernance.GrantTerms memory t, bytes32 u)
         internal pure returns (bytes memory args, bytes memory words)
     {
-        args = abi.encode(bit, holder, t);
+        args = abi.encode(bit, holder, t, u);
         bytes32 th = keccak256(bytes(TERMS));
-        words = abi.encode(bit, holder, keccak256(abi.encode(th, t)));
+        words = abi.encode(bit, holder, keccak256(abi.encode(th, t)), u);
     }
 
     function _run(bytes memory cd) internal {
@@ -402,20 +405,20 @@ contract GovRouterTest is GovRouterFixture {
         assertEq(t.balanceOf(BOB), 5, "Mint");
         _do(MINT_TO_UA, s, address(t), abi.encode(pq, uint256(3)));
         assertEq(t.balanceOfUA(pq), 3, "MintToUA");
-        (bytes memory a, bytes memory wd) = _setGrantArgs(MINT, s, _limited(100));
+        (bytes memory a, bytes memory wd) = _setGrantArgs(MINT, s, _limited(100), EnvKit.codeUidOf(address(t)));
         _run(_signed(router, SET_GRANT, s, 0, address(t), a, wd));
         assertEq(t.grantOf(MINT, s).total, 100, "SetGrant: a narrowing applies at once");
-        _do(GRANT_ROLE, s, address(t), abi.encode(MINT, y));
+        _do(GRANT_ROLE, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
         (uint64 eta,,, bool live) = t.pendingGrant(MINT, y);
         assertTrue(eta != 0 && live, "GrantRole: proposed under the delay");
-        _do(CANCEL_GRANT, s, address(t), abi.encode(MINT, y));
+        _do(CANCEL_GRANT, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
         (eta,,,) = t.pendingGrant(MINT, y);
         assertEq(eta, 0, "CancelGrant");
-        _do(REVOKE_ROLE, s, address(t), abi.encode(MINT, y));
+        _do(REVOKE_ROLE, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
         assertTrue(t.grantOf(MINT, y).barred, "RevokeRole: the owner's revoke bars");
         _do(RENOUNCE_ROLE, s, address(t), abi.encode(MINT));
         assertFalse(t.hasRole(MINT, s), "RenounceRole");
-        _do(DISABLE_FEATURE, s, address(t), abi.encode(MINT));
+        _do(DISABLE_FEATURE, s, address(t), abi.encode(MINT, EnvKit.codeUidOf(address(t))));
         assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
         _do(TRANSFER_ADMIN, s, address(t), abi.encode(y, EnvKit.codeUidOf(address(t))));
         assertEq(t.pendingAdmin(), y, "TransferAdmin");
@@ -520,7 +523,7 @@ contract GovRouterTest is GovRouterFixture {
         t.transferAdmin(msig, EnvKit.codeUidOf(address(t)));
         _do(ACCEPT_ADMIN, msig, address(t), "");
         assertEq(t.admin(), msig, "the msig became owner through the router");
-        _do(GRANT_ROLE, msig, address(t), abi.encode(MINT, pq));
+        _do(GRANT_ROLE, msig, address(t), abi.encode(MINT, pq, EnvKit.codeUidOf(address(t))));
         _do(OP_MINT, pq, address(t), abi.encode(BOB, uint256(9)));
         assertEq(t.balanceOf(BOB), 9);
         _do(TRANSFER_ADMIN, msig, address(t), abi.encode(pq, EnvKit.codeUidOf(address(t))));
@@ -531,8 +534,8 @@ contract GovRouterTest is GovRouterFixture {
         _do(TRANSFER_ADMIN, msig, address(d), abi.encode(pq, EnvKit.codeUidOf(address(d))));
         _do(ACCEPT_ADMIN, pq, address(d), "");
         assertEq(d.admin(), pq);
-        _do(GRANT_ROLE, pq, address(d), abi.encode(LISTING, pq));
-        _do(REVOKE_ROLE, pq, address(d), abi.encode(LISTING, msig));
+        _do(GRANT_ROLE, pq, address(d), abi.encode(LISTING, pq, EnvKit.codeUidOf(address(d))));
+        _do(REVOKE_ROLE, pq, address(d), abi.encode(LISTING, msig, EnvKit.codeUidOf(address(d))));
         bytes memory cd = _op(SET_LISTED_ONLY, msig, address(d), abi.encode(true));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, LISTING, msig));
         _run(cd);
@@ -545,14 +548,14 @@ contract GovRouterTest is GovRouterFixture {
         NormalToken t = _normal(pq, 0, 0);
         IGovernance.GrantTerms memory g = IGovernance.GrantTerms(2, 50, 1000, 100, 1 days, uint64(block.timestamp + 30 days),
             7, true, bytes32(0));
-        (bytes memory a, bytes memory w) = _setGrantArgs(MINT, msig, g);
+        (bytes memory a, bytes memory w) = _setGrantArgs(MINT, msig, g, EnvKit.codeUidOf(address(t)));
         _run(_signed(router, SET_GRANT, pq, 0, address(t), a, w));
         IGovernance.Grant memory r = t.grantOf(MINT, msig);
         assertEq(abi.encode(r.min, r.max, r.total, r.perWindow, r.window, r.validUntil, r.maxUses, r.delegable, r.scope),
             abi.encode(g.min, g.max, g.total, g.perWindow, g.window, g.validUntil, g.maxUses, g.delegable, g.scope));
         // the terms are signed: other terms under a signature over these are refused
         g.total = 1001;
-        (bytes memory a2,) = _setGrantArgs(MINT, msig, g);
+        (bytes memory a2,) = _setGrantArgs(MINT, msig, g, EnvKit.codeUidOf(address(t)));
         bytes memory forged = _signed(router, SET_GRANT, pq, 0, address(t), a2, w);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
         _run(forged);
@@ -566,7 +569,7 @@ contract GovRouterTest is GovRouterFixture {
         bytes memory cd = _op(OP_MINT, msig, address(t), abi.encode(BOB, uint256(1)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, msig));
         _run(cd);
-        cd = _op(GRANT_ROLE, stranger, address(t), abi.encode(MINT, stranger));
+        cd = _op(GRANT_ROLE, stranger, address(t), abi.encode(MINT, stranger, EnvKit.codeUidOf(address(t))));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, stranger));
         _run(cd);
         assertEq(router.mtxNonce(msig, 0), 0);
@@ -608,7 +611,7 @@ contract GovRouterTest is GovRouterFixture {
     function test_msigBelowThresholdRefused() public {
         NormalToken t = _normal(msig, 0, 0);
         MetaTxLib.UAEnvelope memory e = _envelope(router, msig, 0);
-        bytes memory args = abi.encode(MINT, pq);
+        bytes memory args = abi.encode(MINT, pq, EnvKit.codeUidOf(address(t)));
         bytes32 d = _digest(router, GRANT_ROLE, e, address(t), args);
         IUARegistry.UASig memory a;
         a.members = _memberSigs(msig, UAKinds.PURPOSE_METATX, d, 1);
@@ -631,7 +634,7 @@ contract GovRouterTest is GovRouterFixture {
         bytes32 m2 = UACall.register(preg, UAKinds.MSIG, msigData, _none(), abi.encode(pop), "");
         NormalToken t = _normal(m2, 0, 0);
         MetaTxLib.UAEnvelope memory e = _envelope(router, m2, 0);
-        bytes memory args = abi.encode(MINT, pq);
+        bytes memory args = abi.encode(MINT, pq, EnvKit.codeUidOf(address(t)));
         bytes32 dg = _digest(router, GRANT_ROLE, e, address(t), args);
         IUARegistry.UASig memory a;
         a.members = new IUARegistry.MemberSig[](1);
@@ -662,8 +665,9 @@ contract GovRouterTest is GovRouterFixture {
     /// An envelope the owner signed before it handed the token over is refused by the token once the hand-over completes.
     function test_refuted_formerOwnersEnvelope() public {
         NormalToken t = _normal(eoa, 0, 0);
-        bytes memory late = _signed(router, GRANT_ROLE, eoa, 1, address(t), abi.encode(MINT, stranger),
-            abi.encode(MINT, stranger));
+        bytes32 tu = EnvKit.codeUidOf(address(t));
+        bytes memory late = _signed(router, GRANT_ROLE, eoa, 1, address(t), abi.encode(MINT, stranger, tu),
+            abi.encode(MINT, stranger, tu));
         _do(TRANSFER_ADMIN, eoa, address(t), abi.encode(next, EnvKit.codeUidOf(address(t))));
         _do(ACCEPT_ADMIN, next, address(t), "");
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eoa));
@@ -716,6 +720,47 @@ contract GovRouterTest is GovRouterFixture {
             _do(TRANSFER_ADMIN, eoa, ts[i], abi.encode(next, EnvKit.codeUidOf(ts[i])));
             assertEq(IAdmin(ts[i]).pendingAdmin(), next, "the control");
         }
+    }
+
+    /// CTR-GOV-28 (owner 2026-11-13): the router's five governance admin ops sign the target's chain word and forward it; one
+    /// signed for a sibling (another word) reaches the target, which refuses it by name, nothing written, the nonce unspent;
+    /// a relayer cannot swap the word under a signature (another word, another digest); the own word is the control.
+    function test_governanceOps_siblingWordRefused() public {
+        NormalToken t = _normal(eoa, eoa, 0);
+        bytes32 u = EnvKit.codeUidOf(address(t));
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        bytes memory mm = abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, u, sib);
+        uint256[4] memory ops = [GRANT_ROLE, REVOKE_ROLE, CANCEL_GRANT, DISABLE_FEATURE];
+        for (uint256 i; i < 4; ++i) {
+            bytes memory args = ops[i] == DISABLE_FEATURE ? abi.encode(MINT, sib) : abi.encode(MINT, pq, sib);
+            bytes memory cd = _op(ops[i], eoa, address(t), args);
+            vm.expectRevert(mm);
+            _run(cd);
+        }
+        (bytes memory a, bytes memory w) = _setGrantArgs(MINT, pq, _limited(5), sib);
+        bytes memory cdg = _signed(router, SET_GRANT, eoa, 0, address(t), a, w);
+        vm.expectRevert(mm);
+        _run(cdg);
+        assertEq(router.mtxNonce(eoa, 0), 0, "nonces unspent");
+        assertTrue(t.hasRole(MINT, eoa) && !t.hasRole(MINT, pq), "nothing written");
+        // a word swapped under the signature: another digest, the signer's key does not verify it
+        (a,) = _setGrantArgs(MINT, pq, _limited(5), u);
+        cdg = _signed(router, SET_GRANT, eoa, 0, address(t), a, w);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        _run(cdg);
+        // the controls, the own word
+        (a, w) = _setGrantArgs(MINT, pq, _limited(5), u);
+        _run(_signed(router, SET_GRANT, eoa, 0, address(t), a, w));
+        assertEq(t.grantOf(MINT, pq).total, 5, "SetGrant");
+        _do(REVOKE_ROLE, eoa, address(t), abi.encode(MINT, pq, u));
+        assertFalse(t.hasRole(MINT, pq), "RevokeRole");
+        _do(GRANT_ROLE, eoa, address(t), abi.encode(MINT, pq, u));
+        assertTrue(t.hasRole(MINT, pq), "GrantRole");
+        _do(CANCEL_GRANT, eoa, address(t), abi.encode(MINT, pq, u));
+        _do(REVOKE_ROLE, eoa, address(t), abi.encode(MINT, pq, u));
+        _do(REVOKE_ROLE, eoa, address(t), abi.encode(MINT, eoa, u));
+        _do(DISABLE_FEATURE, eoa, address(t), abi.encode(MINT, u));
+        assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
     }
 
     /// A target without code: refused by name, nonce unspent (a call to it would succeed and do nothing).
@@ -942,10 +987,10 @@ contract GovRouterRegulatedTest is GovRouterFixture {
         c.reg.termsHash = keccak256("terms");
         t.initialize(nid(address(this)), 1, abi.encode(c));
         vm.prank(address(uint160(uint256(eoa))));
-        t.grantRole(GovernanceBits.OPERATOR_TRANSFER, operator);
+        t.grantRole(GovernanceBits.OPERATOR_TRANSFER, operator, EnvKit.codeUidOf(address(t)));
         if (operator != issuer) {
             vm.prank(address(uint160(uint256(eoa))));
-            t.grantRole(GovernanceBits.TAX, operator);
+            t.grantRole(GovernanceBits.TAX, operator, EnvKit.codeUidOf(address(t)));
         }
     }
 

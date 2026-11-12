@@ -97,8 +97,8 @@ abstract contract RegulatedBase is MetaTokenBase {
     /// @notice Round 3s (spec §5.3): `GovernanceLib.enableFeature`, then the preconditions, the whole call reverting: 28 needs
     ///         the registry (`ComplianceRegistryNotSet`), 8 and 9 a holder root (`ListHolderMissing`, Fable P1-1: an enabled
     ///         list nobody can write stops every unlisted party for at least `grantDelay`); then the mirror.
-    function _enableFeatureBody(uint8 bit) internal {
-        GovernanceLib.enableFeature(bit, _govSubject(), _validBits());
+    function _enableFeatureBody(uint8 bit, bytes32 chainUid_) internal {
+        GovernanceLib.enableFeature(bit, _adminOnChain(chainUid_), _validBits());
         if (bit == GovernanceBits.KYC) {
             if (RegulatedLib.$().complianceRegistry == address(0)) revert IRegulatedToken.ComplianceRegistryNotSet();
         } else if (GovernanceLib.$().counts[bit].roots == 0) {

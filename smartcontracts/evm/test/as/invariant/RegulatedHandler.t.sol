@@ -162,7 +162,7 @@ abstract contract RegCore is Test {
         // bit 22 to the operator: the owner's two calls (grantRole keeps two calls on every bit, spec §3.6)
         for (uint256 i; i < 2; ++i) {
             vm.prank(gov[0]);
-            NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(gov[4]));
+            NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(gov[4]), EnvKit.codeUidOf(address(NormalToken(t))));
             if (i == 0) vm.warp(block.timestamp + cGd);
         }
     }
@@ -529,7 +529,7 @@ abstract contract RegCore is Test {
 
     /// The admin switches a list on, at once (bit 8 on 10-13: `FeatureInvalidForKind`).
     function enableList(bool deny) external {
-        _op(K_ENABLE, cGov[0], abi.encodeCall(IRegulatedToken.enableFeature, (deny ? uint8(9) : uint8(8))));
+        _op(K_ENABLE, cGov[0], abi.encodeCall(IRegulatedToken.enableFeature, (deny ? uint8(9) : uint8(8), EnvKit.codeUidOf(cT))));
     }
 
     // ------------------------------------------------------------------ the controls (spec §3.1)
@@ -605,11 +605,12 @@ abstract contract RegCore is Test {
         bytes32 holder = nid(hAddr);
         act %= 5;
         address who = w % 4 == 0 ? cGov[w % 6] : act == 1 ? hAddr : _owner();
-        bytes memory cd = act == 0 ? abi.encodeCall(IGovernance.revokeRole, (bit, holder))
+        bytes32 u = EnvKit.codeUidOf(cT);
+        bytes memory cd = act == 0 ? abi.encodeCall(IGovernance.revokeRole, (bit, holder, u))
             : act == 1 ? abi.encodeCall(IGovernance.renounceRole, (bit))
-            : act == 2 ? abi.encodeCall(IGovernance.disableFeature, (bit))
-            : act == 3 ? abi.encodeCall(IGovernance.cancelGrant, (bit, act == 3 && w % 2 == 0 ? bytes32(0) : holder))
-            : abi.encodeCall(IGovernance.grantRole, (22, nid(cGov[4])));
+            : act == 2 ? abi.encodeCall(IGovernance.disableFeature, (bit, u))
+            : act == 3 ? abi.encodeCall(IGovernance.cancelGrant, (bit, act == 3 && w % 2 == 0 ? bytes32(0) : holder, u))
+            : abi.encodeCall(IGovernance.grantRole, (22, nid(cGov[4]), u));
         _op(K_GOV, who, cd);
         if (twice % 2 == 0) {
             uint256 j = twice % 7;
@@ -636,7 +637,7 @@ abstract contract RegCore is Test {
         (as_[0], f_[0], v_[0]) = (a, fl, vu);
         _pre();
         vm.prank(how == 3 ? cAdmin : cAttester); // ELIGIBLE_CONTRACT: the admin's, a contract's only (CTR-AS-16)
-        (bool ok, bytes memory ret) = address(cReg).call(abi.encodeCall(ComplianceRegistry.setCompliance, (as_, f_, v_)));
+        (bool ok, bytes memory ret) = address(cReg).call(abi.encodeCall(ComplianceRegistry.setCompliance, (as_, f_, v_, EnvKit.regUidOf(address(cReg)))));
         _post(K_REG, ok, ret, 0);
     }
 

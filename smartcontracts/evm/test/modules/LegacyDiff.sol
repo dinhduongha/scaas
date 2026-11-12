@@ -34,7 +34,8 @@ abstract contract LegacyDiff is Test {
     address[] internal routing; // libraries (old and new) and modules: accesses to them are routing, not behaviour
     uint256 internal diffed;
     uint256 internal bothOk;
-    /// @dev The token under `_diff`'s chain word: its new side's `renounceAdmin(bytes32)` and `transferAdmin(bytes32,bytes32)` take it (CTR-GOV-27).
+    /// @dev The token under `_diff`'s chain word: its new side's `renounceAdmin(bytes32)` and `transferAdmin(bytes32,bytes32)` take it (CTR-GOV-27),
+    ///      and every other direct admin entry (CTR-GOV-28, `_f3Words`).
     bytes32 internal r3Uid;
 
     function _legacyLibs() internal {
@@ -287,9 +288,40 @@ abstract contract LegacyDiff is Test {
         return s;
     }
 
+    /// @dev Fix3 CTR-GOV-28 (owner 2026-11-13): d142b57c's direct admin entries whose new form takes a trailing
+    ///      `chainUid_`: the old selector, the new one and the old static words before the word (0 = not such an entry).
+    function _f3Words(bytes4 s) internal pure returns (bytes4 n, uint256 words) {
+        if (s == bytes4(keccak256("grantRole(uint8,bytes32)"))) return (bytes4(keccak256("grantRole(uint8,bytes32,bytes32)")), 2);
+        if (s == bytes4(keccak256("revokeRole(uint8,bytes32)"))) return (bytes4(keccak256("revokeRole(uint8,bytes32,bytes32)")), 2);
+        if (s == bytes4(keccak256("cancelGrant(uint8,bytes32)"))) {
+            return (bytes4(keccak256("cancelGrant(uint8,bytes32,bytes32)")), 2);
+        }
+        if (s == bytes4(keccak256("setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))"))) {
+            return (bytes4(keccak256("setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)")),
+                11);
+        }
+        if (s == bytes4(keccak256("disableFeature(uint8)"))) return (bytes4(keccak256("disableFeature(uint8,bytes32)")), 1);
+        if (s == bytes4(keccak256("enableFeature(uint8)"))) return (bytes4(keccak256("enableFeature(uint8,bytes32)")), 1);
+        if (s == bytes4(keccak256("pqzSetVerifier(bytes32)"))) return (bytes4(keccak256("pqzSetVerifier(bytes32,bytes32)")), 1);
+        if (s == bytes4(keccak256("pqzCancelVerifier()"))) return (bytes4(keccak256("pqzCancelVerifier(bytes32)")), 0);
+        if (s == bytes4(keccak256("pqzRevokeVerifier()"))) return (bytes4(keccak256("pqzRevokeVerifier(bytes32)")), 0);
+        if (s == bytes4(keccak256("setVerifierFee(uint64)"))) return (bytes4(keccak256("setVerifierFee(uint64,bytes32)")), 1);
+    }
+
     function _r3Call(bytes memory data) internal view returns (bytes memory out) {
         out = bytes.concat(data);
         if (out.length < 4) return out;
+        // CTR-GOV-28: the entry names the token's chain word after its old static words (the bytes after them follow it)
+        (bytes4 f3, uint256 w) = _f3Words(bytes4(out));
+        if (f3 != 0 && out.length >= 4 + 32 * w) {
+            bytes memory head = new bytes(4 + 32 * w);
+            bytes memory rest = new bytes(out.length - head.length);
+            for (uint256 i; i < head.length; ++i) head[i] = out[i];
+            for (uint256 i; i < rest.length; ++i) rest[i] = out[i + head.length];
+            out = bytes.concat(head, r3Uid, rest);
+            for (uint256 i; i < 4; ++i) out[i] = f3[i];
+            return out;
+        }
         // Fable recheck-2 P3-1 (CTR-GOV-27): the renounce names the token's chain word, `r3Uid`, its first argument (the
         // old entry took none and ignored any bytes after its selector, so they follow the word)
         if (bytes4(out) == bytes4(keccak256("renounceOwnership()"))) {

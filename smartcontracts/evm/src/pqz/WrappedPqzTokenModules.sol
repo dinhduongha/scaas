@@ -322,8 +322,8 @@ contract WrappedPqzTokenA is WrappedPqzTokenCore {
         return _bitLabelBody(bit);
     }
 
-    function cancelGrant(uint8 bit, bytes32 account) external onlyDelegated {
-        _cancelGrantBody(bit, account);
+    function cancelGrant(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _cancelGrantBody(bit, account, chainUid_);
     }
 
     function chainEnv() external view onlyDelegated returns (IFactoryToken.ChainEnv memory _p0) {
@@ -350,8 +350,8 @@ contract WrappedPqzTokenA is WrappedPqzTokenCore {
         return _grantOfBody(bit, holder);
     }
 
-    function grantRole(uint8 bit, bytes32 account) external onlyDelegated {
-        _grantRoleBody(bit, account);
+    function grantRole(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _grantRoleBody(bit, account, chainUid_);
     }
 
     function hasRole(uint8 bit, bytes32 account) external view onlyDelegated returns (bool _p0) {
@@ -406,12 +406,12 @@ contract WrappedPqzTokenA is WrappedPqzTokenCore {
         return _rescueToBody();
     }
 
-    function revokeRole(uint8 bit, bytes32 account) external onlyDelegated {
-        _revokeRoleBody(bit, account);
+    function revokeRole(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _revokeRoleBody(bit, account, chainUid_);
     }
 
-    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) external onlyDelegated {
-        _setGrantBody(bit, holder, terms);
+    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_) external onlyDelegated {
+        _setGrantBody(bit, holder, terms, chainUid_);
     }
 
     function supportsInterface(bytes4 id) external view onlyDelegated returns (bool _p0) {
@@ -598,8 +598,8 @@ contract WrappedPqzTokenQ is WrappedPqzTokenCore {
         return 6;
     }
 
-    function disableFeature(uint8 bit) external onlyDelegated {
-        _disableFeatureBody(bit);
+    function disableFeature(uint8 bit, bytes32 chainUid_) external onlyDelegated {
+        _disableFeatureBody(bit, chainUid_);
     }
 
     function executeRate() external onlyDelegated {
@@ -754,8 +754,8 @@ contract WrappedPqzTokenS is WrappedPqzTokenCore {
         return _pqzAccountBody(ua, keyVersion);
     }
 
-    function pqzCancelVerifier() external onlyDelegated {
-        _pqzCancelVerifierBody();
+    function pqzCancelVerifier(bytes32 chainUid_) external onlyDelegated {
+        _pqzCancelVerifierBody(chainUid_);
     }
 
     function pqzDebitRecord(bytes32 ua, uint64 counter) external view onlyDelegated returns (IPqzToken.DebitRecordView memory _p0) {
@@ -774,12 +774,12 @@ contract WrappedPqzTokenS is WrappedPqzTokenCore {
         return _pqzPendingCtBody(ua, keyVersion, i);
     }
 
-    function pqzRevokeVerifier() external onlyDelegated {
-        _pqzRevokeVerifierBody();
+    function pqzRevokeVerifier(bytes32 chainUid_) external onlyDelegated {
+        _pqzRevokeVerifierBody(chainUid_);
     }
 
-    function pqzSetVerifier(bytes32 next) external onlyDelegated {
-        _pqzSetVerifierBody(next);
+    function pqzSetVerifier(bytes32 next, bytes32 chainUid_) external onlyDelegated {
+        _pqzSetVerifierBody(next, chainUid_);
     }
 
     function pqzVerifyConfig() external view onlyDelegated returns (IPqzToken.PqzVerifyConfig memory _p0) {
@@ -802,8 +802,8 @@ contract WrappedPqzTokenS is WrappedPqzTokenCore {
         _setProofStoreBody(next);
     }
 
-    function setVerifierFee(uint64 next) external onlyDelegated {
-        _setVerifierFeeBody(next);
+    function setVerifierFee(uint64 next, bytes32 chainUid_) external onlyDelegated {
+        _setVerifierFeeBody(next, chainUid_);
     }
 
     function shieldScale() external view onlyDelegated returns (uint256 _p0) {

@@ -130,16 +130,22 @@ interface IGovernance is IAdmin {
     ///         (`account` 0), `argsHash` 0 but for set (regulated-kinds spec §3.6).
     function pendingGrant(uint8 bit, bytes32 account)
         external view returns (uint64 eta, bytes32 proposer, bytes32 commit, bool live);
-    /// @notice The admin, or the pending's proposer, deletes a pending of any action.
-    function cancelGrant(uint8 bit, bytes32 account) external;
+    /// @notice The admin, or the pending's proposer, deletes a pending of any action. `chainUid_` this contract's chain word
+    ///         (`ChainUidMismatch`, CTR-GOV-28), as on `setGrant` and `revokeRole`: a stranger is `NotAdmin` first; the
+    ///         admin's word is checked before any write, another caller's after its own checks (the call reverting whole).
+    function cancelGrant(uint8 bit, bytes32 account, bytes32 chainUid_) external;
     function grantOf(uint8 bit, bytes32 holder) external view returns (Grant memory);
-    function setGrant(uint8 bit, bytes32 holder, GrantTerms calldata terms) external;
+    function setGrant(uint8 bit, bytes32 holder, GrantTerms calldata terms, bytes32 chainUid_) external;
     /// @notice The label of an application bit (128-255): its type, the entry it gates, a name for a wallet.
     function bitLabel(uint8 bit) external view returns (BitType, bytes4, string memory);
-    function grantRole(uint8 bit, bytes32 account) external;
-    function revokeRole(uint8 bit, bytes32 account) external;
+    /// @notice The admin's; `NotAdmin`, then `chainUid_` not this contract's chain word (`ChainUidMismatch`, CTR-GOV-28), as
+    ///         on `disableFeature`.
+    function grantRole(uint8 bit, bytes32 account, bytes32 chainUid_) external;
+    /// @notice The admin, or a leaf's grantor; the caller, then the word (`ChainUidMismatch`, CTR-GOV-28).
+    function revokeRole(uint8 bit, bytes32 account, bytes32 chainUid_) external;
+    /// @notice A holder's own, no word (a role entry, not an admin entry).
     function renounceRole(uint8 bit) external;
-    function disableFeature(uint8 bit) external;
+    function disableFeature(uint8 bit, bytes32 chainUid_) external;
     /// @notice The admin becomes 0 for good. Refused in order: `NotAdmin`, then `chainUid_` not this contract's chain word
     ///         (`ChainUidMismatch`, Fable recheck-2 P3-1: a native admin's direct call is void on a sibling), then
     ///         `AdminHasHolders` while a live holder stays.

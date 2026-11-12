@@ -15,6 +15,7 @@ import {nid} from "../helpers/Ids.sol";
 import {UADexBase} from "../ua/UADex.t.sol";
 import {MockRouter} from "./DexExchange.t.sol";
 import {RebaseUpERC20} from "./DexOutside.t.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Charges 1 % on `transfer` only (the pull, `transferFrom`, is exact): conservation alone cannot see it.
 contract TransferFeeERC20 is MockERC20 {
@@ -135,13 +136,13 @@ contract DexMarketsTest is UADexBase {
     /// stays; a lock needs the bit set; the bit has no holder.
     function test_closed_disableOpens_lockHolds() public {
         _fresh(CLOSED, 0);
-        dex.disableFeature(GovernanceBits.CLOSED_MARKETS);
+        dex.disableFeature(GovernanceBits.CLOSED_MARKETS, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.features(), GovernanceBits.DEX_BITS);
         assertTrue(_settle(_book()));
         _fresh(CLOSED, CLOSED);
         assertEq(dex.lockedFeatures(), CLOSED);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureLocked.selector, GovernanceBits.CLOSED_MARKETS));
-        dex.disableFeature(GovernanceBits.CLOSED_MARKETS);
+        dex.disableFeature(GovernanceBits.CLOSED_MARKETS, EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(IGovernance.LockedNotSubset.selector);
         this.freshFor(0, CLOSED);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(30)));
@@ -158,7 +159,7 @@ contract DexMarketsTest is UADexBase {
     function test_closed_neverReEnabled() public {
         _fresh(CLOSED, 0);
         assertEq(dex.features() & CLOSED, CLOSED, "control: set at creation");
-        dex.disableFeature(GovernanceBits.CLOSED_MARKETS);
+        dex.disableFeature(GovernanceBits.CLOSED_MARKETS, EnvKit.codeUidOf(address(dex)));
         bytes memory en = abi.encodeWithSignature("enableFeature(uint8)", GovernanceBits.CLOSED_MARKETS);
         (bool ok,) = address(dex).call(en);
         assertFalse(ok, "the admin's enableFeature(29)");
@@ -166,9 +167,9 @@ contract DexMarketsTest is UADexBase {
         (ok,) = address(dex).call(en);
         assertFalse(ok, "a router's enableFeature(29)");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, GovernanceBits.CLOSED_MARKETS));
-        dex.grantRole(GovernanceBits.CLOSED_MARKETS, nid(address(this)));
+        dex.grantRole(GovernanceBits.CLOSED_MARKETS, nid(address(this)), EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.CLOSED_MARKETS));
-        dex.disableFeature(GovernanceBits.CLOSED_MARKETS);
+        dex.disableFeature(GovernanceBits.CLOSED_MARKETS, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.features(), GovernanceBits.DEX_BITS);
     }
 

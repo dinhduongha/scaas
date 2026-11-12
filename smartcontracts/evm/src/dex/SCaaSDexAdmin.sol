@@ -96,16 +96,25 @@ contract SCaaSDexGovernanceModule is SCaaSDexGovernance {
         return _bitLabelBody(bit);
     }
 
-    function grantRole(uint8 bit, bytes32 account) external onlyDelegated { _grantRoleBody(bit, account); }
-
-    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) external onlyDelegated {
-        _setGrantBody(bit, holder, terms);
+    function grantRole(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _grantRoleBody(bit, account, chainUid_);
     }
 
-    function cancelGrant(uint8 bit, bytes32 account) external onlyDelegated { _cancelGrantBody(bit, account); }
-    function revokeRole(uint8 bit, bytes32 account) external onlyDelegated { _revokeRoleBody(bit, account); }
+    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_)
+        external
+        onlyDelegated
+    {
+        _setGrantBody(bit, holder, terms, chainUid_);
+    }
+
+    function cancelGrant(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _cancelGrantBody(bit, account, chainUid_);
+    }
+    function revokeRole(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _revokeRoleBody(bit, account, chainUid_);
+    }
     function renounceRole(uint8 bit) external onlyDelegated { _renounceRoleBody(bit); }
-    function disableFeature(uint8 bit) external onlyDelegated { _disableFeatureBody(bit); }
+    function disableFeature(uint8 bit, bytes32 chainUid_) external onlyDelegated { _disableFeatureBody(bit, chainUid_); }
     function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external onlyDelegated {
         _transferAdminBody(newAdmin, chainUid_);
     }

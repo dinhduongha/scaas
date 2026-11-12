@@ -21,16 +21,16 @@ library GovernanceRouterTypes {
 
     // ---- the admin and the holder of a bit: every `GovernanceBase` contract
     bytes32 internal constant UA_GRANT_ROLE = keccak256(
-        "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_REVOKE_ROLE = keccak256(
-        "UARevokeRole(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UARevokeRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_GRANT = keccak256(
-        "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
         "GrantTerms(uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope)");
     bytes32 internal constant UA_CANCEL_GRANT = keccak256(
-        "UACancelGrant(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UACancelGrant(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_DISABLE_FEATURE = keccak256(
-        "UADisableFeature(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UADisableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_TRANSFER_ADMIN = keccak256(
         "UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_ACCEPT_ADMIN = keccak256(
@@ -97,14 +97,14 @@ library GovernanceRouterTypes {
     // ---- the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the admin's,
     //      no bit; fee mode `NONE`
     bytes32 internal constant UA_PQZ_SET_VERIFIER = keccak256(
-        "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_PQZ_CANCEL_VERIFIER = keccak256(
-        "UAPqzCancelVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAPqzCancelVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_PQZ_REVOKE_VERIFIER = keccak256(
-        "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAPqzRevokeVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     // ---- round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit; fee mode `NONE`
     bytes32 internal constant UA_SET_VERIFIER_FEE = keccak256(
-        "UASetVerifierFee(bytes32 from,address target,uint64 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UASetVerifierFee(bytes32 from,address target,uint64 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     // ---- bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): any holder; fee mode `NONE`
     bytes32 internal constant UA_SET_PROOF_STORE = keccak256(
         "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
@@ -129,7 +129,7 @@ library GovernanceRouterTypes {
     bytes32 internal constant UA_SET_DENIED = keccak256(
         "UASetDenied(bytes32 from,address target,bytes32[] accounts,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_ENABLE_FEATURE = keccak256(
-        "UAEnableFeature(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAEnableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 
     // ---- round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §13.3): the admin ops of `OpenFactory` and
     //      of a `ComplianceRegistry` (its KYC provider's `setCompliance` too); `target` the factory or the registry, then the
@@ -165,9 +165,9 @@ library GovernanceRouterTypes {
     bytes32 internal constant UA_SET_CLASS_KIND_ENABLED = keccak256(
         "UASetClassKindEnabled(bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_KYC_PROVIDER = keccak256(
-        "UASetKycProvider(bytes32 from,address target,bytes32 provider,bool enabled,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UASetKycProvider(bytes32 from,address target,bytes32 provider,bool enabled,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_COMPLIANCE = keccak256(
-        "UASetCompliance(bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UASetCompliance(bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     // CTR-GOV-27: the entries as one named struct `ChainEntries`, then the factory's `chainUid`
     bytes32 internal constant CHAIN_ENTRIES = keccak256(
         "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)");
@@ -217,35 +217,41 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
 
     // ------------------------------------------------------------------ the admin and a holder (IGovernance)
 
-    function mtxGrantRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
+    /// @dev CTR-GOV-28 (owner 2026-11-13): every admin op signs the target's chain word as its direct entry takes it, the
+    ///      last op field, and forwards it; the target checks it.
+    function mtxGrantRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account, bytes32 chainUid,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_GRANT_ROLE, e, target, IGovernance.grantRole.selector, abi.encode(bit, account), auth);
+        _ua(GovernanceRouterTypes.UA_GRANT_ROLE, e, target, IGovernance.grantRole.selector, abi.encode(bit, account, chainUid),
+            auth);
     }
 
-    function mtxRevokeRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
+    function mtxRevokeRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account, bytes32 chainUid,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_REVOKE_ROLE, e, target, IGovernance.revokeRole.selector, abi.encode(bit, account), auth);
+        _ua(GovernanceRouterTypes.UA_REVOKE_ROLE, e, target, IGovernance.revokeRole.selector,
+            abi.encode(bit, account, chainUid), auth);
     }
 
     function mtxSetGrant(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 holder,
-        IGovernance.GrantTerms calldata terms, IUARegistry.UASig calldata auth) external
+        IGovernance.GrantTerms calldata terms, bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(GovernanceRouterTypes.UA_SET_GRANT, e, target, abi.encode(bit, holder, _termsHash(terms)),
-            abi.encodeCall(IGovernance.setGrant, (bit, holder, terms)), auth);
+        _uaCall(GovernanceRouterTypes.UA_SET_GRANT, e, target, abi.encode(bit, holder, _termsHash(terms), chainUid),
+            abi.encodeCall(IGovernance.setGrant, (bit, holder, terms, chainUid)), auth);
     }
 
-    function mtxCancelGrant(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
+    function mtxCancelGrant(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account, bytes32 chainUid,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_CANCEL_GRANT, e, target, IGovernance.cancelGrant.selector, abi.encode(bit, account), auth);
+        _ua(GovernanceRouterTypes.UA_CANCEL_GRANT, e, target, IGovernance.cancelGrant.selector,
+            abi.encode(bit, account, chainUid), auth);
     }
 
-    function mtxDisableFeature(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)
-        external
+    function mtxDisableFeature(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_DISABLE_FEATURE, e, target, IGovernance.disableFeature.selector, abi.encode(bit), auth);
+        _ua(GovernanceRouterTypes.UA_DISABLE_FEATURE, e, target, IGovernance.disableFeature.selector,
+            abi.encode(bit, chainUid), auth);
     }
 
     /// @notice The target's chain word as its direct entry takes it (CTR-GOV-27): signed and forwarded; one op for every

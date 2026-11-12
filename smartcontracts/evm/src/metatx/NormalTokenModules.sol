@@ -320,8 +320,8 @@ contract NormalTokenA is NormalTokenCore {
         _burnBody(amount);
     }
 
-    function cancelGrant(uint8 bit, bytes32 account) external onlyDelegated {
-        _cancelGrantBody(bit, account);
+    function cancelGrant(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _cancelGrantBody(bit, account, chainUid_);
     }
 
     function chainEnv() external view onlyDelegated returns (IFactoryToken.ChainEnv memory _p0) {
@@ -332,8 +332,8 @@ contract NormalTokenA is NormalTokenCore {
         return _creatorBody();
     }
 
-    function disableFeature(uint8 bit) external onlyDelegated {
-        _disableFeatureBody(bit);
+    function disableFeature(uint8 bit, bytes32 chainUid_) external onlyDelegated {
+        _disableFeatureBody(bit, chainUid_);
     }
 
     function eip712Domain() external view onlyDelegated returns (bytes1 _p0, string memory _p1, string memory _p2, uint256 _p3, address _p4, bytes32 _p5, uint256[] memory _p6) {
@@ -352,8 +352,8 @@ contract NormalTokenA is NormalTokenCore {
         return _grantOfBody(bit, holder);
     }
 
-    function grantRole(uint8 bit, bytes32 account) external onlyDelegated {
-        _grantRoleBody(bit, account);
+    function grantRole(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _grantRoleBody(bit, account, chainUid_);
     }
 
     function hasRole(uint8 bit, bytes32 account) external view onlyDelegated returns (bool _p0) {
@@ -424,12 +424,12 @@ contract NormalTokenA is NormalTokenCore {
         return _rescueToBody();
     }
 
-    function revokeRole(uint8 bit, bytes32 account) external onlyDelegated {
-        _revokeRoleBody(bit, account);
+    function revokeRole(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _revokeRoleBody(bit, account, chainUid_);
     }
 
-    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) external onlyDelegated {
-        _setGrantBody(bit, holder, terms);
+    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_) external onlyDelegated {
+        _setGrantBody(bit, holder, terms, chainUid_);
     }
 
     function supportsInterface(bytes4 id) external view onlyDelegated returns (bool _p0) {

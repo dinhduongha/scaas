@@ -341,8 +341,8 @@ contract WrappedZetherRegulatedTokenA is WrappedZetherRegulatedTokenCore {
         return _bitLabelBody(bit);
     }
 
-    function cancelGrant(uint8 bit, bytes32 account) external onlyDelegated {
-        _cancelGrantBody(bit, account);
+    function cancelGrant(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _cancelGrantBody(bit, account, chainUid_);
     }
 
     function chainEnv() external view onlyDelegated returns (IFactoryToken.ChainEnv memory _p0) {
@@ -369,8 +369,8 @@ contract WrappedZetherRegulatedTokenA is WrappedZetherRegulatedTokenCore {
         return _grantOfBody(bit, holder);
     }
 
-    function grantRole(uint8 bit, bytes32 account) external onlyDelegated {
-        _grantRoleBody(bit, account);
+    function grantRole(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _grantRoleBody(bit, account, chainUid_);
     }
 
     function hasRole(uint8 bit, bytes32 account) external view onlyDelegated returns (bool _p0) {
@@ -425,12 +425,12 @@ contract WrappedZetherRegulatedTokenA is WrappedZetherRegulatedTokenCore {
         return _rescueToBody();
     }
 
-    function revokeRole(uint8 bit, bytes32 account) external onlyDelegated {
-        _revokeRoleBody(bit, account);
+    function revokeRole(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
+        _revokeRoleBody(bit, account, chainUid_);
     }
 
-    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) external onlyDelegated {
-        _setGrantBody(bit, holder, terms);
+    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_) external onlyDelegated {
+        _setGrantBody(bit, holder, terms, chainUid_);
     }
 
     function supportsInterface(bytes4 id) external view onlyDelegated returns (bool _p0) {
@@ -805,12 +805,12 @@ contract WrappedZetherRegulatedTokenR is WrappedZetherRegulatedTokenCore {
         return _canReceiveBody(account);
     }
 
-    function disableFeature(uint8 bit) external onlyDelegated {
-        _disableFeatureBody(bit);
+    function disableFeature(uint8 bit, bytes32 chainUid_) external onlyDelegated {
+        _disableFeatureBody(bit, chainUid_);
     }
 
-    function enableFeature(uint8 bit) external onlyDelegated {
-        _enableFeatureBody(bit);
+    function enableFeature(uint8 bit, bytes32 chainUid_) external onlyDelegated {
+        _enableFeatureBody(bit, chainUid_);
     }
 
     function forceTransfer(bytes32 recordId, uint256 amount) external onlyDelegated {

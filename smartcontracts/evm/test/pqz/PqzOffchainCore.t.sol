@@ -169,8 +169,8 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         _shieldOn(t, alice, 10);
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op1Of(t, alice, bob, 5, true);
         IPqzToken.PqzSignedVerdict memory old = _sv(t, st);
-        t.pqzSetVerifier(vB);
-        t.pqzSetVerifier(vA);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
+        t.pqzSetVerifier(vA, EnvKit.codeUidOf(address(t)));
         assertEq(t.pqzVerifyConfig().pqzVerifierEpoch, 2);
         assertEq(t.pqzVerifyConfig().verifier, vA);
         vm.expectRevert(_mismatch(5));
@@ -183,7 +183,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         _shieldOn(t, alice, 10);
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op1Of(t, alice, bob, 5, true);
         IPqzToken.PqzSignedVerdict memory sv = _sv(t, st);
-        t.pqzRevokeVerifier();
+        t.pqzRevokeVerifier(EnvKit.codeUidOf(address(t)));
         vm.expectRevert(IPqzToken.PqzVerifierRevoked.selector);
         t.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", sv);
     }

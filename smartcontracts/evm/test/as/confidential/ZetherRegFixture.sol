@@ -102,7 +102,7 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         cadmin = address(new Holder());
         creg = new ComplianceRegistry(nid(cadmin), address(0), bytes32(uint256(0x5EC0)));
         vm.prank(cadmin);
-        creg.setKycProvider(nid(attester), true);
+        creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
         usd = new MockERC20("USD", "USD", 6);
         _users();
         dave = _user(0xDA7E, address(0xD4));
@@ -182,7 +182,7 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         uint64[] memory vu = new uint64[](1);
         (as_[0], fl[0], vu[0]) = (a, SANCTIONED, type(uint64).max);
         vm.prank(attester);
-        creg.setCompliance(as_, fl, vu);
+        creg.setCompliance(as_, fl, vu, EnvKit.regUidOf(address(creg)));
     }
 
     /// `alice` holds `b` shielded units in `acc`.

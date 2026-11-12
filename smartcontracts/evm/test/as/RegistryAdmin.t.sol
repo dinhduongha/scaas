@@ -53,10 +53,11 @@ interface IRegistryAdmin {
     function chainUid() external view returns (bytes32);
     function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external;
     function acceptAdmin() external;
-    function setKycProvider(bytes32 provider, bool enabled) external;
+    function setKycProvider(bytes32 provider, bool enabled, bytes32 chainUid_) external;
     function kycProviderId(bytes32 provider) external view returns (uint32);
     function kycProviderEnabled(uint32 id) external view returns (bool);
-    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until) external;
+    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until, bytes32 chainUid_)
+        external;
     function complianceOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 providerId);
     function hasFlags(bytes32 account, uint64 required, uint64 denied) external view returns (bool);
 }
@@ -126,7 +127,7 @@ abstract contract RegistryCalls {
         uint64[] memory f = new uint64[](1);
         uint64[] memory u = new uint64[](1);
         (a[0], f[0], u[0]) = (account, flags, until);
-        return abi.encodeCall(IRegistryAdmin.setCompliance, (a, f, u));
+        return abi.encodeCall(IRegistryAdmin.setCompliance, (a, f, u, REG_UID));
     }
 }
 
@@ -249,7 +250,7 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
     }
 
     function _enable(bytes32 p, bool on) internal pure returns (bytes memory) {
-        return abi.encodeCall(IRegistryAdmin.setKycProvider, (p, on));
+        return abi.encodeCall(IRegistryAdmin.setKycProvider, (p, on, REG_UID));
     }
 
     function _xfer(bytes32 to) internal pure returns (bytes memory) {
@@ -338,10 +339,10 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
 
     /// The selectors and topics of spec §4.2 / §4.3 (recomputed there with `cast`), on this test's declarations.
     function test_selectorsAreTheSpecs() public pure {
-        assertEq(IRegistryAdmin.setKycProvider.selector, bytes4(0x105b99c7));
+        assertEq(IRegistryAdmin.setKycProvider.selector, bytes4(0x55939605)); // CTR-GOV-28 (+ chainUid_; was 0x105b99c7)
         assertEq(IRegistryAdmin.kycProviderId.selector, bytes4(0x2d4138d7));
         assertEq(IRegistryAdmin.kycProviderEnabled.selector, bytes4(0xbbc8fe54));
-        assertEq(IRegistryAdmin.setCompliance.selector, bytes4(0x7fa569a5));
+        assertEq(IRegistryAdmin.setCompliance.selector, bytes4(0x2f2e024a)); // CTR-GOV-28 (+ chainUid_; was 0x7fa569a5)
         assertEq(IRegistryAdmin.complianceOf.selector, bytes4(0x996ee3f2));
         assertEq(IRegistryAdmin.NotKycProvider.selector, bytes4(0x3f153a68));
         assertEq(IRegistryAdmin.KycProviderZero.selector, bytes4(0x42a1ea7f));
@@ -417,6 +418,48 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         assertEq(c.pendingAdmin(), bytes32(0), "nothing written");
         _call(RELAYER, address(router), _transferCd(ml, address(c), nid(next))); // the control
         assertEq(c.pendingAdmin(), nid(next));
+    }
+
+    /// CTR-GOV-28 (owner 2026-11-13): `setKycProvider` and `setCompliance` made for a sibling registry (another chain word)
+    /// are refused by name, nothing written; `setKycProvider` refuses a stranger `NotAdmin` first, `setCompliance` a subject
+    /// that is neither the admin nor an enabled provider `NotKycProvider` first (the caller before the word); an enabled
+    /// provider's row with a sibling's word is refused too; the old selectors have no entry; the same calls with the
+    /// registry's own word are the controls.
+    function test_kycAndRows_siblingWordRefused() public {
+        IRegistryAdmin c = _reg(nid(admin), address(0));
+        bytes memory mm = abi.encodeWithSelector(IRegistryAdmin.ChainUidMismatch.selector, REG_UID, REG_SIB);
+        _refused(admin, address(c), abi.encodeCall(IRegistryAdmin.setKycProvider, (nid(prov), true, REG_SIB)), mm);
+        _refused(STRANGER, address(c), abi.encodeCall(IRegistryAdmin.setKycProvider, (nid(prov), true, REG_SIB)),
+            _notAdmin(nid(STRANGER)));
+        assertEq(c.kycProviderId(nid(prov)), 0, "no provider written");
+        bytes32[] memory a = new bytes32[](1);
+        uint64[] memory f = new uint64[](1);
+        uint64[] memory u = new uint64[](1);
+        (a[0], f[0], u[0]) = (ACC, KYC, MAX);
+        bytes memory sibRow = abi.encodeCall(IRegistryAdmin.setCompliance, (a, f, u, REG_SIB));
+        _refused(admin, address(c), sibRow, mm);
+        _refused(prov, address(c), sibRow, _notProvider()); // not yet a provider: the caller first
+        (uint64 fl,,) = c.complianceOf(ACC);
+        assertEq(fl, 0, "no row written");
+        bytes4[2] memory olds = [bytes4(0x105b99c7), bytes4(0x7fa569a5)]; // setKycProvider(bytes32,bool), setCompliance(…)
+        for (uint256 i; i < 2; ++i) {
+            vm.prank(admin);
+            (bool ok, bytes memory ret) = address(c).call(abi.encodePacked(olds[i], new bytes(32 * 10)));
+            assertTrue(!ok && ret.length == 0, "an old selector answers");
+        }
+        _call(admin, address(c), _enable(nid(prov), true)); // the control (REG_UID)
+        _refused(prov, address(c), sibRow, mm); // an enabled provider: then the word
+        _call(prov, address(c), _row(ACC, KYC, MAX)); // the control
+        (fl,,) = c.complianceOf(ACC);
+        assertEq(fl, KYC);
+    }
+
+    /// `EnvKit.regUidOf` reads the registry's word from storage slot 1 (tests pass it right after a `vm.prank`).
+    function test_regUidOf_slot() public {
+        IRegistryAdmin c = _reg(nid(admin), address(0));
+        assertEq(EnvKit.regUidOf(address(c)), c.chainUid());
+        (address d,) = _create(nid(admin), address(0), REG_SIB);
+        assertEq(EnvKit.regUidOf(d), REG_SIB);
     }
 
     /// F-11's positive control: every registry has one runtime (the admin, the router and the chain word in storage), the
@@ -731,7 +774,7 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         _refused(admin, address(c), _row(bytes32(uint256(1)), ELIGIBLE, MAX - 1), ec);
         _call(admin, address(c), _row(bytes32(uint256(1)), ELIGIBLE, MAX));
         _refused(admin, address(c), abi.encodeCall(IRegistryAdmin.setCompliance, (new bytes32[](2), new uint64[](1),
-            new uint64[](2))), abi.encodeWithSelector(IRegistryAdmin.LengthMismatch.selector));
+            new uint64[](2), REG_UID)), abi.encodeWithSelector(IRegistryAdmin.LengthMismatch.selector));
     }
 
     /// At most 256 rows per call (the node's decode bound): 256 pass, 257 `TooManyRows(257)`.
@@ -742,7 +785,7 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
             uint64[] memory f = new uint64[](n);
             uint64[] memory u = new uint64[](n);
             for (uint256 i; i < n; ++i) (a[i], f[i], u[i]) = (bytes32(i + 1), KYC, MAX);
-            bytes memory cd = abi.encodeCall(IRegistryAdmin.setCompliance, (a, f, u));
+            bytes memory cd = abi.encodeCall(IRegistryAdmin.setCompliance, (a, f, u, REG_UID));
             if (n == 256) _call(admin, address(c), cd);
             else _refused(admin, address(c), cd, abi.encodeWithSelector(IRegistryAdmin.TooManyRows.selector, n));
         }

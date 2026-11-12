@@ -111,7 +111,7 @@ contract FeaturesTest is Test {
         t.mint(alice, 5);
         assertEq(t.balanceOf(alice), 5);
         vm.prank(ownerA);
-        t.disableFeature(1);
+        t.disableFeature(1, EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
         t.mint(alice, 1);
@@ -200,7 +200,7 @@ contract FeaturesTest is Test {
         vm.prank(ownerA);
         vm.expectEmit(address(t));
         emit IGovernance.RoleGranted(1, nid(minter), nid(ownerA));
-        t.grantRole(1, nid(minter));
+        t.grantRole(1, nid(minter), EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
         t.mint(alice, 3);
         vm.prank(ownerA);
@@ -249,8 +249,8 @@ contract FeaturesTest is Test {
         assertEq(uint256(laneBefore), 1);
         assertEq(uint256(balBefore), 100);
         vm.startPrank(ownerA);
-        t.grantRole(1, nid(minter));
-        t.disableFeature(1);
+        t.grantRole(1, nid(minter), EnvKit.codeUidOf(address(t)));
+        t.disableFeature(1, EnvKit.codeUidOf(address(t)));
         t.transferAdmin(nid(minter), EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(vm.load(address(t), lane), laneBefore);

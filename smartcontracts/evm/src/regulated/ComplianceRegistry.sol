@@ -29,7 +29,8 @@ contract ComplianceRegistry is IComplianceRegistry, UAAdmin {
 
     address public govRouter;
     uint32 internal _lastId;
-    /// @notice The chain word `transferAdmin` checks (CTR-GOV-27), written once by the constructor.
+    /// @notice The chain word every admin entry checks (`transferAdmin` CTR-GOV-27; `setKycProvider`, `setCompliance`
+    ///         CTR-GOV-28), written once by the constructor.
     bytes32 public chainUid;
     mapping(bytes32 provider => uint32) public kycProviderId;
     mapping(uint32 id => bool) internal _enabled;
@@ -57,7 +58,8 @@ contract ComplianceRegistry is IComplianceRegistry, UAAdmin {
         if (chainUid_ != chainUid) revert ChainUidMismatch(chainUid, chainUid_);
     }
 
-    function setKycProvider(bytes32 provider, bool enabled) external onlyAdmin {
+    function setKycProvider(bytes32 provider, bool enabled, bytes32 chainUid_) external onlyAdmin {
+        _requireChainWord(chainUid_);
         if (provider == bytes32(0)) revert KycProviderZero();
         uint32 id = kycProviderId[provider];
         if (id == 0) {
@@ -72,13 +74,16 @@ contract ComplianceRegistry is IComplianceRegistry, UAAdmin {
         return id == 0 || _enabled[id];
     }
 
-    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until) external {
+    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until, bytes32 chainUid_)
+        external
+    {
         bytes32 c = _adminSubject();
         uint32 id;
         if (c != _adminStorage().admin) {
             id = kycProviderId[c];
             if (id == 0 || !_enabled[id]) revert NotKycProvider();
         }
+        _requireChainWord(chainUid_);
         if (flags.length != accounts.length || until.length != accounts.length) revert LengthMismatch();
         if (accounts.length > MAX_ROWS) revert TooManyRows(accounts.length);
         for (uint256 i; i < accounts.length; ++i) {

@@ -735,10 +735,10 @@ contract ServicePullRegTest is RegFixture {
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "sp-op");
         address clerk = address(0xC1E2);
         vm.prank(ownerA);
-        NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk));
+        NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk), EnvKit.codeUidOf(address(NormalToken(t))));
         vm.warp(block.timestamp + GD);
         vm.prank(ownerA);
-        NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk));
+        NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk), EnvKit.codeUidOf(address(NormalToken(t))));
         RefServiceEscrow svc = new RefServiceEscrow(t);
         _deposit(ALICE_PK, svc, _dep(alice, "e"));
         vm.prank(clerk);

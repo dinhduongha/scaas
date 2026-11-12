@@ -56,9 +56,9 @@ interface IRouterAdminOps {
     function mtxSetClassKindEnabled(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
         bool on, bytes32 chainUid, IUARegistry.UASig calldata auth) external;
     function mtxSetKycProvider(MetaTxLib.UAEnvelope calldata e, address target, bytes32 provider, bool enabled,
-        IUARegistry.UASig calldata auth) external;
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external;
     function mtxSetCompliance(MetaTxLib.UAEnvelope calldata e, address target, bytes32[] calldata accounts,
-        uint64[] calldata flags, uint64[] calldata until, IUARegistry.UASig calldata auth) external;
+        uint64[] calldata flags, uint64[] calldata until, bytes32 chainUid, IUARegistry.UASig calldata auth) external;
     function mtxSetChainEntries(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.ChainEntries calldata entries,
         bytes32 chainUid, IUARegistry.UASig calldata auth) external;
 }
@@ -303,8 +303,8 @@ contract GovRouterAdminTest is UARegistryBase {
             ",uint64 version,bytes32 chainUid,string reason",
             ",uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason",
             ",uint8 kind,bool on,bytes32 chainUid", ",uint16 contractClass,uint16 kind,bool on,bytes32 chainUid",
-            ",bytes32 provider,bool enabled",
-            ",bytes32[] accounts,uint64[] flags,uint64[] until",
+            ",bytes32 provider,bool enabled,bytes32 chainUid",
+            ",bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid",
             ",ChainEntries entries,bytes32 chainUid"][op];
     }
 
@@ -339,8 +339,8 @@ contract GovRouterAdminTest is UARegistryBase {
         if (p.op <= PUBLISH_CLASS_ENV) b = bytes.concat(b, _envHash(p.env));
         else if (p.op >= DEPRECATE && p.op <= DEPRECATE_RELEASE) b = bytes.concat(b, keccak256(bytes(p.reason)));
         else if (p.op == SET_COMPLIANCE) {
-            b = abi.encode(keccak256(abi.encodePacked(p.accounts)), keccak256(abi.encodePacked(p.flags)),
-                keccak256(abi.encodePacked(p.until)));
+            b = bytes.concat(abi.encode(keccak256(abi.encodePacked(p.accounts)), keccak256(abi.encodePacked(p.flags)),
+                keccak256(abi.encodePacked(p.until))), abi.encodePacked(p.w)); // then the registry's word (CTR-GOV-28)
         } else if (p.op == SET_ENTRIES) {
             // the nested `ChainEntries` struct hash over the first nine words, then `chainUid` (CTR-GOV-27)
             uint256[] memory w = p.w;
@@ -426,7 +426,8 @@ contract GovRouterAdminTest is UARegistryBase {
                 (e, p.target, uint16(p.w[0]), uint16(p.w[1]), uint64(p.w[2]), bytes32(p.w[3]), p.reason, a));
         }
         if (op == SET_COMPLIANCE) {
-            return abi.encodeCall(IRouterAdminOps.mtxSetCompliance, (e, p.target, p.accounts, p.flags, p.until, a));
+            return abi.encodeCall(IRouterAdminOps.mtxSetCompliance,
+                (e, p.target, p.accounts, p.flags, p.until, bytes32(p.w[0]), a));
         }
         bytes memory head = bytes.concat(abi.encode(e), abi.encode(p.target), abi.encodePacked(p.w));
         return bytes.concat(_sel(op), head, abi.encode(head.length + 32), _tail(abi.encode(a)));
@@ -566,9 +567,9 @@ contract GovRouterAdminTest is UARegistryBase {
         else if (op == DEPRECATE_RELEASE) (p.w, p.reason) = (_w(CLS, 0, 1, uint256(chainUidA)), "a release found bad");
         else if (op == SET_KIND) p.w = _w(1, 1, uint256(chainUidA));
         else if (op == SET_CLASS_KIND) p.w = _w(CLS, 0, 1, uint256(chainUidA));
-        else if (op == SET_KYC) (p.target, p.w) = (address(cr), _w(uint256(PROV), 1));
+        else if (op == SET_KYC) (p.target, p.w) = (address(cr), _w(uint256(PROV), 1, uint256(chainUidA)));
         else if (op == SET_COMPLIANCE) {
-            p.target = address(cr);
+            (p.target, p.w) = (address(cr), _w(uint256(chainUidA)));
             (p.accounts, p.flags, p.until) = (new bytes32[](2), new uint64[](2), new uint64[](2));
             (p.accounts[0], p.accounts[1]) = (bytes32(uint256(0xACC1)), bytes32(uint256(0xACC2)));
             (p.flags[0], p.flags[1]) = (1, 3);
@@ -824,8 +825,8 @@ contract GovRouterAdminTest is UARegistryBase {
     function test_binding_DeprecateRelease() public { assertEq(_matrix(DEPRECATE_RELEASE), 8); }
     function test_binding_SetTokenKindEnabled() public { assertEq(_matrix(SET_KIND), 4); }
     function test_binding_SetClassKindEnabled() public { assertEq(_matrix(SET_CLASS_KIND), 5); }
-    function test_binding_SetKycProvider() public { assertEq(_matrix(SET_KYC), 3); }
-    function test_binding_SetCompliance() public { assertEq(_matrix(SET_COMPLIANCE), 10); }
+    function test_binding_SetKycProvider() public { assertEq(_matrix(SET_KYC), 4); } // + chainUid (CTR-GOV-28)
+    function test_binding_SetCompliance() public { assertEq(_matrix(SET_COMPLIANCE), 11); } // + chainUid
     function test_binding_SetChainEntries() public { assertEq(_matrix(SET_ENTRIES), 11); }
 
     // ------------------------------------------------------------------ replay, nesting, delegation (§5.5, §8)
@@ -912,6 +913,24 @@ contract GovRouterAdminTest is UARegistryBase {
         e = _env(k1);
         _refused(RELAYER, address(router), _cd(p, e, _auth(k1, _digestOn(router, p, e))),
             abi.encodeWithSelector(IAdmin.NotAdmin.selector, k1));
+    }
+
+    /// CTR-GOV-28: the registry's two ops signed for a sibling (another chain word) reach the registry, which refuses them by
+    /// name, nothing written, the nonce unspent; the own word is the control (`test_binding_SetKycProvider` /
+    /// `test_binding_SetCompliance`).
+    function test_registryOps_siblingWordRefused() public {
+        (OpenFactory f, ComplianceRegistry cr) = _stack(ml);
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        bytes memory mm = abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, chainUidA, sib);
+        uint8[2] memory ops = [SET_KYC, SET_COMPLIANCE];
+        for (uint256 i; i < 2; ++i) {
+            P memory p = _base(ops[i], f, cr);
+            p.w[p.w.length - 1] = uint256(sib);
+            MetaTxLib.UAEnvelope memory e = _env(ml);
+            _refused(RELAYER, address(router), _cd(p, e, _auth(ml, _digestOn(router, p, e))), mm);
+            assertEq(router.mtxNonce(ml, 0), e.nonce, "the nonce stays unspent");
+        }
+        assertEq(cr.kycProviderId(PROV), 0, "nothing written");
     }
 
     /// A derived KYC provider writes its rows through the router's `mtxSetCompliance` under its own id (spec §5.3.1).

@@ -34,8 +34,9 @@ contract RouterPairsTest is GovRouterFixture {
 
     /// The ABI types of each op's own parameters (after `target`), index = op.
     function _types(uint256 op) internal pure returns (string memory) {
-        string[19] memory t = ["uint8,bytes32", "uint8,bytes32",
-            "uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)", "uint8,bytes32", "uint8",
+        string[19] memory t = ["uint8,bytes32,bytes32", "uint8,bytes32,bytes32",
+            "uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32", "uint8,bytes32,bytes32",
+            "uint8,bytes32",
             "bytes32,bytes32", "", "bytes32", "uint8", "address,uint256", "bytes32,uint256", "address,bytes32", "address,uint96,uint96", "",
             "", "address,address,bool", "address,bool", "bool", "uint32,address"];
         return t[op];
@@ -108,26 +109,26 @@ contract RouterPairsTest is GovRouterFixture {
     function _rowBy(uint256 op, bytes32 s, bytes32 y) internal {
         if (op == GRANT_ROLE) {
             NormalToken t = _normal(s, 0, 0);
-            _m(op, s, address(t), abi.encode(MINT, y));
+            _m(op, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
             assertTrue(t.hasRole(MINT, y), "GrantRole");
         } else if (op == REVOKE_ROLE) {
             NormalToken t = _normal(s, y, 0);
-            _m(op, s, address(t), abi.encode(MINT, y));
+            _m(op, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
             assertTrue(t.grantOf(MINT, y).barred, "RevokeRole");
         } else if (op == SET_GRANT) {
             NormalToken t = _normal(s, 0, 0);
-            (bytes memory a, bytes memory w) = _setGrantArgs(MINT, y, _limited(100));
+            (bytes memory a, bytes memory w) = _setGrantArgs(MINT, y, _limited(100), EnvKit.codeUidOf(address(t)));
             _runOn(router, _mCall(router, op, s, 0, address(t), a, w));
             assertEq(t.grantOf(MINT, y).total, 100, "SetGrant");
         } else if (op == CANCEL_GRANT) {
             NormalToken t = _normal(s, 0, 1 hours);
-            _m(GRANT_ROLE, s, address(t), abi.encode(MINT, y));
-            _m(op, s, address(t), abi.encode(MINT, y));
+            _m(GRANT_ROLE, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
+            _m(op, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
             (uint64 eta,,,) = t.pendingGrant(MINT, y);
             assertEq(eta, 0, "CancelGrant");
         } else if (op == DISABLE_FEATURE) {
             NormalToken t = _normal(s, 0, 0);
-            _m(op, s, address(t), abi.encode(MINT));
+            _m(op, s, address(t), abi.encode(MINT, EnvKit.codeUidOf(address(t))));
             assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
         } else if (op == TRANSFER_ADMIN) {
             NormalToken t = _normal(s, 0, 0);
@@ -310,7 +311,7 @@ contract RouterPairsTest is GovRouterFixture {
     /// same subjects' merged op runs.
     function test_routerGenericEntriesRefuseEveryCall() public {
         NormalToken t = _normal(pq, pq, 0);
-        bytes[4] memory blobs = [abi.encodeCall(IGovernance.grantRole, (MINT, eoa)),
+        bytes[4] memory blobs = [abi.encodeCall(IGovernance.grantRole, (MINT, eoa, EnvKit.codeUidOf(address(t)))),
             _mCall(router, OP_MINT, pq, 0, address(t), abi.encode(BOB, uint256(1)), abi.encode(BOB, uint256(1))),
             abi.encodeCall(IMetaTx.cancelNonce, (7)), bytes("")];
         bytes32[2] memory who = [eoa, pq];
@@ -354,7 +355,7 @@ contract RouterPairsTest is GovRouterFixture {
     function _oldHasNoEntry(uint256 op, address target) internal {
         bytes memory args = _anyArgs(op);
         bytes memory words = args;
-        if (op == SET_GRANT) (args, words) = _setGrantArgs(MINT, next, _limited(1));
+        if (op == SET_GRANT) (args, words) = _setGrantArgs(MINT, next, _limited(1), keccak256("a chain word"));
         MetaTxLib.UAEnvelope memory e = _envelope(router, eoa, 0);
         bytes memory oldSig = _ecdsa(eoa, keccak256(abi.encodePacked("\x19\x01", _domain(router),
             _structHash(op, false, e, target, words))));
@@ -374,8 +375,9 @@ contract RouterPairsTest is GovRouterFixture {
     function _anyArgs(uint256 op) internal view returns (bytes memory) {
         string memory ty = _types(op);
         if (bytes(ty).length == 0) return "";
-        if (op == GRANT_ROLE || op == REVOKE_ROLE || op == CANCEL_GRANT) return abi.encode(MINT, next);
-        if (op == DISABLE_FEATURE || op == RENOUNCE_ROLE) return abi.encode(MINT);
+        if (op == GRANT_ROLE || op == REVOKE_ROLE || op == CANCEL_GRANT) return abi.encode(MINT, next, keccak256("a chain word"));
+        if (op == DISABLE_FEATURE) return abi.encode(MINT, keccak256("a chain word"));
+        if (op == RENOUNCE_ROLE) return abi.encode(MINT);
         if (op == TRANSFER_ADMIN) return abi.encode(next, keccak256("a chain word"));
         if (op == RENOUNCE_ADMIN) return abi.encode(keccak256("a chain word"));
         if (op == OP_MINT) return abi.encode(BOB, uint256(1));

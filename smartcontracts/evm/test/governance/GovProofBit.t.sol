@@ -262,9 +262,9 @@ contract GovProofBitTest is PqzOffchainBase {
     function test_bit24_notDelayed() public {
         for (uint8 k = 12; k <= 13; ++k) {
             NormalPqzToken t = _tok24(k, nId, true, 1 days);
-            IGovernance(address(t)).revokeRole(BIT, nId);
+            IGovernance(address(t)).revokeRole(BIT, nId, EnvKit.codeUidOf(address(IGovernance(address(t)))));
             assertFalse(IGovernance(address(t)).hasRole(BIT, nId), "revoked at once");
-            IGovernance(address(t)).disableFeature(BIT);
+            IGovernance(address(t)).disableFeature(BIT, EnvKit.codeUidOf(address(IGovernance(address(t)))));
             assertEq(IGovernance(address(t)).features() & (uint256(1) << BIT), 0, "disabled at once");
         }
     }
@@ -337,7 +337,7 @@ contract GovProofBitTest is PqzOffchainBase {
         NormalPqzToken t = _tok24(12, nId, true, 1 days);
         _shieldOn(t, alice, 10);
         if (mode != PqzCore.NONE) _routerSet(nId, address(t), mode);
-        IGovernance(address(t)).disableFeature(BIT);
+        IGovernance(address(t)).disableFeature(BIT, EnvKit.codeUidOf(address(IGovernance(address(t)))));
         vm.prank(vm.addr(NKEY));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, BIT));
         t.setProofStore(mode == PqzCore.NONE ? PqzCore.LOG : PqzCore.NONE);

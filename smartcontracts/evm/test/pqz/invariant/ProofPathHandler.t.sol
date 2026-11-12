@@ -13,6 +13,7 @@ import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
 import {IGovernance} from "../../../src/governance/IGovernance.sol";
 import {UARegistry} from "../../../src/ua/UARegistry.sol";
 import {UACall} from "../../ua/UACall.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Group 3h, T64 (spec 2026-11-06-pqz-proof-path §11.2): the handler of the proof-path invariants P1-P7 and P1′. Actors: four
 /// `mldsa65` UAs holding proven PQZ keys. Actions: shields (same-block merges into the tail entry), rollovers, every debit form of
@@ -168,7 +169,7 @@ contract ProofPathHandler is PqzFixture {
 
     function disable24(uint256 coin) external {
         if (disabled || coin % 8 != 0) return;
-        IGovernance(address(tok)).disableFeature(24);
+        IGovernance(address(tok)).disableFeature(24, EnvKit.codeUidOf(address(IGovernance(address(tok)))));
         disabled = true;
     }
 

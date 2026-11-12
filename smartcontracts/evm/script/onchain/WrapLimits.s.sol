@@ -9,6 +9,7 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedgerViews} from "../../src/metatx/IUALedgerViews.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -293,10 +294,11 @@ abstract contract WrapLimitsKit is OnchainBase {
     }
 
     function _roleData(uint256 i, uint8 bit, bytes32 who, bool grant) internal view returns (bytes memory) {
+        bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word, signed and forwarded (CTR-GOV-28)
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(grant ? "UAGrantRole" : "UARevokeRole",
-            "(bytes32 from,address target,uint8 bit,bytes32 account,", TAIL), tk[i], abi.encode(bit, who));
-        if (grant) return abi.encodeCall(GovernanceRouterBase.mtxGrantRole, (e, tk[i], bit, who, s));
-        return abi.encodeCall(GovernanceRouterBase.mtxRevokeRole, (e, tk[i], bit, who, s));
+            "(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,", TAIL), tk[i], abi.encode(bit, who, u));
+        if (grant) return abi.encodeCall(GovernanceRouterBase.mtxGrantRole, (e, tk[i], bit, who, u, s));
+        return abi.encodeCall(GovernanceRouterBase.mtxRevokeRole, (e, tk[i], bit, who, u, s));
     }
 
     /// @dev Bit 27 to `who` as a limited grant: a budget of `budget` quanta (raw units of the leg above the entitlement).
@@ -308,10 +310,11 @@ abstract contract WrapLimitsKit is OnchainBase {
     function _redeemerData(uint256 i, bytes32 who, uint256 budget) internal view returns (bytes memory) {
         IGovernance.GrantTerms memory t;
         (t.max, t.total) = (type(uint128).max, uint128(budget * Q));
+        bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word (CTR-GOV-28)
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(
-            "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,", TAIL, TERMS_T), tk[i],
-            abi.encode(RED, who, keccak256(abi.encode(keccak256(bytes(TERMS_T)), t))));
-        return abi.encodeCall(GovernanceRouterBase.mtxSetGrant, (e, tk[i], RED, who, t, s));
+            "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,", TAIL, TERMS_T), tk[i],
+            abi.encode(RED, who, keccak256(abi.encode(keccak256(bytes(TERMS_T)), t)), u));
+        return abi.encodeCall(GovernanceRouterBase.mtxSetGrant, (e, tk[i], RED, who, t, u, s));
     }
 
     function _ready(uint256 i, string memory what) internal {
@@ -518,9 +521,9 @@ contract WrapLimits is WrapLimitsKit {
         _nx(A5, i, _unwrapData(A5, 5), _aboveNet(A5, 5), "an unwrap of units received by transfer (the net rule): UnwrapAboveNetWrapped");
         _nx(a3, i, _unwrapData(a3, 4), abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(2)),
             "the redeemer past its budget (15 of 18 Q spent): GrantExhausted");
-        _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (WL)),
+        _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (WL, IMetaTx(tk[i]).chainUid())),
             abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, WL), "disableFeature(25) with the limits on: WrapControlActive");
-        _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (RED)),
+        _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (RED, IMetaTx(tk[i]).chainUid())),
             abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, RED), "disableFeature(27) with a holder: WrapControlActive");
     }
 
@@ -563,7 +566,7 @@ contract WrapLimits is WrapLimitsKit {
         _setLimits(i, 4, "router mtxSetWrapLimits (wrap looser + unwrapper list: proposed)");
         _nx(a3, i, _wrapData(1), abi.encodeWithSelector(IWrappedToken.WrapperNotListed.selector, _pad(a3)),
             "a wrap by an id not on the wrapper list: WrapperNotListed");
-        _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (WLIST)),
+        _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (WLIST, IMetaTx(tk[i]).chainUid())),
             abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, WLIST), "disableFeature(26) with a list on: WrapControlActive");
     }
 

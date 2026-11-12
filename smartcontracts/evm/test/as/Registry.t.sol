@@ -14,6 +14,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {Catalogue, plainEnv} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T29 (regulated-kinds spec §2.4, §5; CTR-AS-07, CTR-AS-16, CTR-GOV-18): the canonical `ComplianceRegistry` (its
 /// admin a UA id, KYC providers by id, `ELIGIBLE_CONTRACT` admin only; round 3r's admin and provider rules:
@@ -23,7 +24,8 @@ import {nid} from "../helpers/Ids.sol";
 contract RegistryTest is RegFixture {
     /// The canonical registry runtime's code hash (a pin: it moves with the registry's source, its interface or the
     /// compiler settings, old -> new in the commit).
-    bytes32 internal constant COMPLIANCE_REGISTRY_CODEHASH = 0x1dc2f8a75643f6fb1c5fd5ff929e8fd40d758ce0e51444c2a165c568eac88da4;
+    ///      Fix3 CTR-GOV-28 (`setKycProvider` and `setCompliance` take `chainUid_`): 0x1dc2f8a7…8da4 -> this.
+    bytes32 internal constant COMPLIANCE_REGISTRY_CODEHASH = 0x368a66a3d8e30f2147f5298b21b315e63c62b40555d17d7671aafa4e4de40383;
     uint64 internal constant ACCR = 2;
     uint64 internal constant MAX = type(uint64).max;
     bytes32 internal constant ACC = bytes32(uint256(0xACC));
@@ -52,21 +54,21 @@ contract RegistryTest is RegFixture {
         assertTrue(creg.kycProviderEnabled(1));
         assertFalse(creg.kycProviderEnabled(2), "not assigned");
         vm.prank(cadmin);
-        creg.setKycProvider(nid(attester), false);
+        creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
         assertEq(creg.kycProviderId(nid(attester)), 1);
         assertFalse(creg.kycProviderEnabled(1));
         vm.prank(cadmin);
-        creg.setKycProvider(nid(bob), true);
+        creg.setKycProvider(nid(bob), true, EnvKit.regUidOf(address(creg)));
         assertEq(creg.kycProviderId(nid(bob)), 2, "the next id");
         vm.prank(cadmin);
-        creg.setKycProvider(nid(attester), true);
+        creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
         assertEq(creg.kycProviderId(nid(attester)), 1, "never reused, never reassigned");
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(attester)));
         vm.prank(attester);
-        creg.setKycProvider(nid(alice), true);
+        creg.setKycProvider(nid(alice), true, EnvKit.regUidOf(address(creg)));
         vm.expectRevert(IComplianceRegistry.NotKycProvider.selector);
         vm.prank(cadmin);
-        creg.setKycProvider(nid(alice), false); // never enabled: nothing to disable
+        creg.setKycProvider(nid(alice), false, EnvKit.regUidOf(address(creg))); // never enabled: nothing to disable
     }
 
     /// `setCompliance`: an enabled KYC provider (its id) or the admin (id 0); anyone else `NotKycProvider`, a disabled
@@ -85,12 +87,12 @@ contract RegistryTest is RegFixture {
         vm.expectRevert(IComplianceRegistry.NotKycProvider.selector);
         _attestAs(bob, ACC, KYC, MAX);
         vm.prank(cadmin);
-        creg.setKycProvider(nid(attester), false);
+        creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
         vm.expectRevert(IComplianceRegistry.NotKycProvider.selector);
         _attest(ACC, KYC, MAX);
         vm.expectRevert(IComplianceRegistry.LengthMismatch.selector);
         vm.prank(cadmin);
-        creg.setCompliance(new bytes32[](2), new uint64[](1), new uint64[](2));
+        creg.setCompliance(new bytes32[](2), new uint64[](1), new uint64[](2), EnvKit.regUidOf(address(creg)));
         _attestAs(cadmin, ACC, 0, MAX); // revoke
         assertFalse(_has(ACC, KYC, 0));
     }
@@ -103,7 +105,7 @@ contract RegistryTest is RegFixture {
         bytes32 b = bytes32(uint256(0xB0B));
         bytes memory locked = abi.encodeWithSelector(IComplianceRegistry.AdminWrittenSlot.selector, ACC);
         vm.prank(cadmin);
-        creg.setKycProvider(nid(bob), true); // attester id 2
+        creg.setKycProvider(nid(bob), true, EnvKit.regUidOf(address(creg))); // attester id 2
         _attest(ACC, KYC, MAX); // the control: an empty slot is open to an attester
         _attest(ACC, ACCR, 7); // its own row
         _attestAs(bob, ACC, KYC, MAX); // another attester's row
@@ -126,7 +128,7 @@ contract RegistryTest is RegFixture {
         (as_[0], as_[1], f2[0], f2[1], v2[0], v2[1]) = (b, ACC, KYC, KYC, MAX, MAX);
         vm.prank(attester);
         vm.expectRevert(locked);
-        creg.setCompliance(as_, f2, v2);
+        creg.setCompliance(as_, f2, v2, EnvKit.regUidOf(address(creg)));
         (fl,,) = creg.complianceOf(b);
         assertEq(fl, 0, "the batch's first row reverted with it");
         // the admin still overwrites and revokes its own row
@@ -180,7 +182,7 @@ contract RegistryTest is RegFixture {
         assertTrue(_has(ACC, 0, SANCTIONED), "denied, lapsed: not active");
         _attest(ACC, SANCTIONED, MAX);
         vm.prank(cadmin);
-        creg.setKycProvider(nid(attester), false);
+        creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
         assertTrue(_has(ACC, 0, SANCTIONED), "denied, attester disabled: not active");
         _attestAs(cadmin, ACC, ELIGIBLE, MAX);
         assertTrue(_has(ACC, KYC | ACCR, 0), "ELIGIBLE_CONTRACT satisfies required");
@@ -200,13 +202,13 @@ contract RegistryTest is RegFixture {
             vm.prank(alice);
             IERC20(t).transfer(bob, 1); // the control
             vm.prank(cadmin);
-            creg.setKycProvider(nid(attester), false);
+            creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
             assertFalse(_has(nid(bob), KYC, 0));
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0)));
             IERC20(t).transfer(bob, 1);
             vm.prank(cadmin);
-            creg.setKycProvider(nid(attester), true);
+            creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);
         }
@@ -289,7 +291,7 @@ contract RegistryTest is RegFixture {
             IERC20(t).transfer(bob, 1);
             assertEq(_countEnd(0), 0, "no registry call");
             vm.prank(ownerA);
-            IRegulatedToken(t).enableFeature(GovernanceBits.KYC);
+            IRegulatedToken(t).enableFeature(GovernanceBits.KYC, EnvKit.codeUidOf(address(IRegulatedToken(t))));
             vm.prank(alice);
             vm.expectRevert(ne);
             IERC20(t).transfer(bob, 1);

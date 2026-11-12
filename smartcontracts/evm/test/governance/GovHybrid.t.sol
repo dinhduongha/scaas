@@ -289,7 +289,7 @@ contract GovHybridTest is UALedgerBase {
     function test_disableMintableLeavesAHybrid() public {
         WrappedToken w = _hybrid(address(und), CAP);
         vm.prank(OWNER);
-        w.disableFeature(MINT);
+        w.disableFeature(MINT, EnvKit.codeUidOf(address(w)));
         assertEq(w.features() & (uint256(1) << MINT), 0);
         assertEq(w.maxSupply(), CAP);
         bytes32 slotA = keccak256(abi.encode(uint256(0), NS));
@@ -320,7 +320,7 @@ contract GovHybridTest is UALedgerBase {
         IGovernance.GrantTerms memory g;
         (g.max, g.total, g.perWindow, g.window) = (type(uint128).max, 100, 50, 1 days);
         vm.prank(OWNER);
-        w.setGrant(MINT, nid(MINTER2), g);
+        w.setGrant(MINT, nid(MINTER2), g, EnvKit.codeUidOf(address(w)));
         vm.prank(MINTER2);
         w.mint(alice, 50);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(3)));

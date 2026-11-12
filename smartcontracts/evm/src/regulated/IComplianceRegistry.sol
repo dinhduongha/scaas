@@ -42,10 +42,12 @@ interface IComplianceRegistry is IAdmin {
     /// @notice The one router whose `subject()` the registry asks (0 = none), written once by the constructor. A
     ///         regulated token takes only a registry whose router is 0 or its own (`ComplianceRegistryRouterMismatch`).
     function govRouter() external view returns (address);
-    /// @notice This chain's word, written once by the constructor: `transferAdmin`'s `chainUid_` (CTR-GOV-27).
+    /// @notice This chain's word, written once by the constructor: the `chainUid_` of `transferAdmin` (CTR-GOV-27),
+    ///         `setKycProvider` and `setCompliance` (CTR-GOV-28).
     function chainUid() external view returns (bytes32);
-    /// @notice Admin only. A KYC provider's id is assigned at its first enabling and never reused; id 0 is the admin.
-    function setKycProvider(bytes32 provider, bool enabled) external;
+    /// @notice Admin only (`NotAdmin`), then `chainUid_` the registry's word (`ChainUidMismatch`, CTR-GOV-28). A KYC
+    ///         provider's id is assigned at its first enabling and never reused; id 0 is the admin.
+    function setKycProvider(bytes32 provider, bool enabled, bytes32 chainUid_) external;
     function kycProviderId(bytes32 provider) external view returns (uint32);
     /// @notice Id 0 (the admin) is always enabled; an id never assigned is not.
     function kycProviderEnabled(uint32 id) external view returns (bool);
@@ -53,8 +55,10 @@ interface IComplianceRegistry is IAdmin {
     ///         (its id), at most 256 rows. Flags 0 revoke. `ELIGIBLE_CONTRACT` only by the admin, with
     ///         `until == type(uint64).max` (CTR-AS-16). A row the admin wrote (`providerId == 0 && flags != 0`) only the
     ///         admin overwrites or revokes; a KYC provider gets `AdminWrittenSlot` (owner 2026-11-06). `until` is the
-    ///         row's `validUntil` (the router's envelope has a `validUntil` of its own).
-    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until) external;
+    ///         row's `validUntil` (the router's envelope has a `validUntil` of its own). The subject first
+    ///         (`NotKycProvider`), then `chainUid_` the registry's word (`ChainUidMismatch`, CTR-GOV-28), before any write.
+    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until, bytes32 chainUid_)
+        external;
     function complianceOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 providerId);
     /// @notice `(required == 0 || (active && ((f & required) == required || f & ELIGIBLE_CONTRACT != 0)))
     ///         && !(active && f & denied != 0)`, `active = kycProviderEnabled(id) && validUntil >= now`.

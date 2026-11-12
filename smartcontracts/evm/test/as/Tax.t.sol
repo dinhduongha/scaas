@@ -79,7 +79,7 @@ contract TaxTest is RegFixture {
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "eoa");
         assertTrue(IGovernance(t).hasRole(GovernanceBits.TAX, nid(issuer)), "the issuer seat");
         vm.prank(ownerA);
-        IGovernance(t).grantRole(GovernanceBits.TAX, nid(clerk));
+        IGovernance(t).grantRole(GovernanceBits.TAX, nid(clerk), EnvKit.codeUidOf(address(IGovernance(t))));
         vm.prank(clerk);
         IRegulatedToken(t).setTaxRate(1_000);
         assertEq(_cfgOf(t).effectivePpm, 1_000);
@@ -114,10 +114,10 @@ contract TaxTest is RegFixture {
     /// `RoleRevoked(23)` and `disableFeature(23)` apply at once (Q5): never delay-relaxed.
     function test_taxBit_revokeAndDisableImmediate() public {
         vm.prank(ownerA);
-        IGovernance(t8t).revokeRole(GovernanceBits.TAX, nid(issuer));
+        IGovernance(t8t).revokeRole(GovernanceBits.TAX, nid(issuer), EnvKit.codeUidOf(address(IGovernance(t8t))));
         assertFalse(IGovernance(t8t).hasRole(GovernanceBits.TAX, nid(issuer)), "revoked at once");
         vm.prank(ownerA);
-        IGovernance(t8t).disableFeature(GovernanceBits.TAX);
+        IGovernance(t8t).disableFeature(GovernanceBits.TAX, EnvKit.codeUidOf(address(IGovernance(t8t))));
         assertFalse(_cfgOf(t8t).enabled, "disabled at once");
     }
 

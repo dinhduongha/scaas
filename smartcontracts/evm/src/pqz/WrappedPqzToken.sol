@@ -361,7 +361,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forwardView(_MS);
     }
 
-    function cancelGrant(uint8, bytes32) external {
+    function cancelGrant(uint8, bytes32, bytes32) external {
         _forward(_MA);
     }
 
@@ -393,7 +393,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forwardView(_MA);
     }
 
-    function disableFeature(uint8) external {
+    function disableFeature(uint8, bytes32) external {
         _forward(_MQ);
     }
 
@@ -437,7 +437,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forwardView(_MA);
     }
 
-    function grantRole(uint8, bytes32) external {
+    function grantRole(uint8, bytes32, bytes32) external {
         _forward(_MA);
     }
 
@@ -729,7 +729,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forwardView(_MS);
     }
 
-    function pqzCancelVerifier() external {
+    function pqzCancelVerifier(bytes32) external {
         _forward(_MS);
     }
 
@@ -749,11 +749,11 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forwardView(_MS);
     }
 
-    function pqzRevokeVerifier() external {
+    function pqzRevokeVerifier(bytes32) external {
         _forward(_MS);
     }
 
-    function pqzSetVerifier(bytes32) external {
+    function pqzSetVerifier(bytes32, bytes32) external {
         _forward(_MS);
     }
 
@@ -817,11 +817,11 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forward(_MT);
     }
 
-    function revokeRole(uint8, bytes32) external {
+    function revokeRole(uint8, bytes32, bytes32) external {
         _forward(_MA);
     }
 
-    function setGrant(uint8, bytes32, IGovernance.GrantTerms calldata) external {
+    function setGrant(uint8, bytes32, IGovernance.GrantTerms calldata, bytes32) external {
         _forward(_MA);
     }
 
@@ -829,7 +829,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forward(_MS);
     }
 
-    function setVerifierFee(uint64) external {
+    function setVerifierFee(uint64, bytes32) external {
         _forward(_MS);
     }
 

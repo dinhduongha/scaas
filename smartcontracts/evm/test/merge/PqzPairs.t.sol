@@ -474,8 +474,9 @@ contract PqzPairsTest is PqzNamedBase {
         // group 3h T58: `pqzDebitRecord`: IPqzToken 0x4c91dc6a -> 0x5037795c; T59: `ownTag` in the three args structs (the six
         // proof-carrying selectors): -> 0xd8bbf337; T60: `proofStore()`: -> 0x191d0352; T61: `setProofStore`: -> 0x3fef18ca; round 3t
         // (CTR-PQZ-36): `setVerifierFee(uint64)` 0xe790fb8f: -> 0xd87fe345 (= 0x3fef18ca ^ 0xe790fb8f; `pqzVerifyConfig()`'s return
-        // does not enter the id)
-        assertEq(type(IPqzToken).interfaceId, bytes4(0xd87fe345), "IPqzToken");
+        // does not enter the id); fix3 CTR-GOV-28: the four verifier setters take `chainUid_` (`pqzSetVerifier(bytes32,bytes32)`,
+        // `pqzCancelVerifier(bytes32)`, `pqzRevokeVerifier(bytes32)`, `setVerifierFee(uint64,bytes32)`): -> 0x757d0753
+        assertEq(type(IPqzToken).interfaceId, bytes4(0x757d0753), "IPqzToken");
         assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector, "IPqzWrappedToken");
     }

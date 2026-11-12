@@ -13,6 +13,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A contract caller for `approve` (an EOA neither grants nor holds an allowance).
 contract Approver {
@@ -129,13 +130,13 @@ contract PauseTest is RegFixture {
             address t = _ks()[i];
             _pause(t, until);
             vm.prank(ownerA);
-            NormalToken(t).revokeRole(7, nid(issuer));
+            NormalToken(t).revokeRole(7, nid(issuer), EnvKit.codeUidOf(address(NormalToken(t))));
             vm.warp(_now() + GD);
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
             IERC20(t).transfer(bob, 1); // proposed only: still paused
             vm.prank(ownerA);
-            NormalToken(t).revokeRole(7, nid(issuer));
+            NormalToken(t).revokeRole(7, nid(issuer), EnvKit.codeUidOf(address(NormalToken(t))));
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);
             vm.warp(1_800_000_000);

@@ -341,7 +341,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         (bytes32 ref, bytes memory st) = _sent(7);
         IPqzToken.PqzSignedVerdict memory sv = _sv(off, st);
         assertTrue(_disclose8(off, ref, 7, sv));
-        off.pqzRevokeVerifier();
+        off.pqzRevokeVerifier(EnvKit.codeUidOf(address(off)));
         assertFalse(_disclose8(off, ref, 7, sv), "revoked: false");
     }
 
@@ -361,10 +361,11 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
         c.admin = nId;
         NormalPqzToken t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-router"));
-        _rop(router, GovernanceRouterTypes.UA_PQZ_SET_VERIFIER, address(t), abi.encode(vB));
+        bytes32 tu = EnvKit.codeUidOf(address(t)); // the token's chain word, the ops' last field (CTR-GOV-28)
+        _rop(router, GovernanceRouterTypes.UA_PQZ_SET_VERIFIER, address(t), abi.encode(vB, tu));
         assertEq(t.pqzVerifyConfig().verifier, vB, "notice 0: at once");
-        _rop(router, GovernanceRouterTypes.UA_PQZ_CANCEL_VERIFIER, address(t), "");
-        _rop(router, GovernanceRouterTypes.UA_PQZ_REVOKE_VERIFIER, address(t), "");
+        _rop(router, GovernanceRouterTypes.UA_PQZ_CANCEL_VERIFIER, address(t), abi.encode(tu));
+        _rop(router, GovernanceRouterTypes.UA_PQZ_REVOKE_VERIFIER, address(t), abi.encode(tu));
         assertEq(t.pqzVerifyConfig().verifier, 0, "revoked");
         assertEq(t.pqzVerifyConfig().pqzVerifierEpoch, 2);
     }
@@ -378,9 +379,14 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         IUARegistry.UASig memory auth;
         auth.signature = abi.encodePacked(r, ss, vv);
         vm.prank(address(0x4E1A));
-        if (th == GovernanceRouterTypes.UA_PQZ_SET_VERIFIER) router.mtxPqzSetVerifier(u, target, abi.decode(args, (bytes32)), auth);
-        else if (th == GovernanceRouterTypes.UA_PQZ_CANCEL_VERIFIER) router.mtxPqzCancelVerifier(u, target, auth);
-        else router.mtxPqzRevokeVerifier(u, target, auth);
+        if (th == GovernanceRouterTypes.UA_PQZ_SET_VERIFIER) {
+            (bytes32 next, bytes32 cu) = abi.decode(args, (bytes32, bytes32));
+            router.mtxPqzSetVerifier(u, target, next, cu, auth);
+        } else if (th == GovernanceRouterTypes.UA_PQZ_CANCEL_VERIFIER) {
+            router.mtxPqzCancelVerifier(u, target, abi.decode(args, (bytes32)), auth);
+        } else {
+            router.mtxPqzRevokeVerifier(u, target, abi.decode(args, (bytes32)), auth);
+        }
     }
 
     // ------------------------------------------------------------------ the allow-lists (CTR-MTX-19)

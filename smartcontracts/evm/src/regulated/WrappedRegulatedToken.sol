@@ -331,7 +331,7 @@ contract WrappedRegulatedToken is WrappedRegulatedTokenCore, IWrappedRegulatedTo
         _forwardView(_MR);
     }
 
-    function cancelGrant(uint8, bytes32) external {
+    function cancelGrant(uint8, bytes32, bytes32) external {
         _forward(_MA);
     }
 
@@ -359,7 +359,7 @@ contract WrappedRegulatedToken is WrappedRegulatedTokenCore, IWrappedRegulatedTo
         _forwardView(_MA);
     }
 
-    function disableFeature(uint8) external {
+    function disableFeature(uint8, bytes32) external {
         _forward(_MR);
     }
 
@@ -371,7 +371,7 @@ contract WrappedRegulatedToken is WrappedRegulatedTokenCore, IWrappedRegulatedTo
         _forwardView(_MA);
     }
 
-    function enableFeature(uint8) external {
+    function enableFeature(uint8, bytes32) external {
         _forward(_MR);
     }
 
@@ -407,7 +407,7 @@ contract WrappedRegulatedToken is WrappedRegulatedTokenCore, IWrappedRegulatedTo
         _forwardView(_MA);
     }
 
-    function grantRole(uint8, bytes32) external {
+    function grantRole(uint8, bytes32, bytes32) external {
         _forward(_MA);
     }
 
@@ -687,7 +687,7 @@ contract WrappedRegulatedToken is WrappedRegulatedTokenCore, IWrappedRegulatedTo
         _forward(_MR);
     }
 
-    function revokeRole(uint8, bytes32) external {
+    function revokeRole(uint8, bytes32, bytes32) external {
         _forward(_MA);
     }
 
@@ -699,7 +699,7 @@ contract WrappedRegulatedToken is WrappedRegulatedTokenCore, IWrappedRegulatedTo
         _forward(_MR);
     }
 
-    function setGrant(uint8, bytes32, IGovernance.GrantTerms calldata) external {
+    function setGrant(uint8, bytes32, IGovernance.GrantTerms calldata, bytes32) external {
         _forward(_MA);
     }
 

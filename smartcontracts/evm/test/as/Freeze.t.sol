@@ -14,6 +14,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T28 (regulated-kinds spec §3.2, §3.3 T1-T3, T5, T7; RK-4, RK-8): the issuer-only freeze on kinds 8 and 9. Every
 /// refusal has its positive control: the same call on an unfrozen account passes.
@@ -178,11 +179,11 @@ contract FreezeTest is RegFixture {
             address t = _ks()[i];
             _freeze(t, a);
             vm.prank(ownerA);
-            NormalToken(t).revokeRole(5, nid(issuer)); // proposes
+            NormalToken(t).revokeRole(5, nid(issuer), EnvKit.codeUidOf(address(NormalToken(t)))); // proposes
             assertTrue(_r(t).isFrozen(a), "a proposal changes nothing");
             vm.warp(block.timestamp + GD);
             vm.prank(ownerA);
-            NormalToken(t).revokeRole(5, nid(issuer));
+            NormalToken(t).revokeRole(5, nid(issuer), EnvKit.codeUidOf(address(NormalToken(t))));
             assertFalse(_r(t).isFrozen(a), "no root of bit 5");
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);

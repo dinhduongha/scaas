@@ -269,10 +269,10 @@ contract Tokens is OnchainBase {
         (c.initialSupply, c.initialHolder) = (1e6, a1);
         address x = _create(0, c, "throwaway");
         vm.startBroadcast(k1);
-        NormalToken(x).grantRole(GovernanceBits.MINTABLE, _pad(a2));
+        NormalToken(x).grantRole(GovernanceBits.MINTABLE, _pad(a2), IMetaTx(x).chainUid());
         (uint64 eta,,,) = NormalToken(x).pendingGrant(GovernanceBits.MINTABLE, _pad(a2));
         require(eta != 0, "pending grant");
-        NormalToken(x).cancelGrant(GovernanceBits.MINTABLE, _pad(a2));
+        NormalToken(x).cancelGrant(GovernanceBits.MINTABLE, _pad(a2), IMetaTx(x).chainUid());
         NormalToken(x).renounceAdmin(NormalToken(x).chainUid());
         vm.stopBroadcast();
         require(NormalToken(x).admin() == 0, "renounced");
@@ -625,15 +625,15 @@ contract Tokens is OnchainBase {
         IGovernance.GrantTerms memory g;
         (g.max, g.total) = (100, 1_000);
         vm.startBroadcast(k1);
-        n.grantRole(mb, _pad(a2));
+        n.grantRole(mb, _pad(a2), IMetaTx(address(n)).chainUid());
         vm.stopBroadcast();
         vm.broadcast(k2);
         n.renounceRole(mb);
         vm.startBroadcast(k1);
-        n.grantRole(mb, _pad(a2));
-        n.revokeRole(mb, _pad(a2));
-        n.setGrant(mb, _pad(a3), g);
-        n.cancelGrant(mb, _pad(a2));
+        n.grantRole(mb, _pad(a2), IMetaTx(address(n)).chainUid());
+        n.revokeRole(mb, _pad(a2), IMetaTx(address(n)).chainUid());
+        n.setGrant(mb, _pad(a3), g, IMetaTx(address(n)).chainUid());
+        n.cancelGrant(mb, _pad(a2), IMetaTx(address(n)).chainUid());
         vm.stopBroadcast();
         vm.broadcast(k3);
         n.mint(a3, 10); // the limited holder: `useLimited`
@@ -658,12 +658,12 @@ contract Tokens is OnchainBase {
         if (_regulated(k)) {
             // MINTABLE stays (the MissingRole negative on kind 8); KYC off (`_regDisabled`; grantDelay 0: at once), the holders
             // revoked
-            n.disableFeature(GovernanceBits.KYC);
-            n.revokeRole(GovernanceBits.MINTABLE, _pad(a1));
-            n.revokeRole(GovernanceBits.MINTABLE, _pad(a3));
-            n.revokeRole(GovernanceBits.TAX, _pad(a1));
+            n.disableFeature(GovernanceBits.KYC, IMetaTx(address(n)).chainUid());
+            n.revokeRole(GovernanceBits.MINTABLE, _pad(a1), IMetaTx(address(n)).chainUid());
+            n.revokeRole(GovernanceBits.MINTABLE, _pad(a3), IMetaTx(address(n)).chainUid());
+            n.revokeRole(GovernanceBits.TAX, _pad(a1), IMetaTx(address(n)).chainUid());
         } else {
-            n.disableFeature(GovernanceBits.MINTABLE);
+            n.disableFeature(GovernanceBits.MINTABLE, IMetaTx(address(n)).chainUid());
         }
         n.renounceAdmin(n.chainUid());
         vm.stopBroadcast();

@@ -56,7 +56,7 @@ contract UADexAdminTest is UADexBase {
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
         d.transferAdmin(nid(dave), EnvKit.codeUidOf(address(d)));
         vm.expectRevert(SCaaSDexGovernanceModule.NotDelegated.selector);
-        d.grantRole(GovernanceBits.LISTING, nid(dave));
+        d.grantRole(GovernanceBits.LISTING, nid(dave), EnvKit.codeUidOf(address(d)));
         assertEq(d.validBits(), GovernanceBits.DEX_VALID);
     }
 

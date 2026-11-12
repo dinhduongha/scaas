@@ -9,6 +9,7 @@ import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T28 (regulated-kinds spec §2.2 mirror sync, §3.3 T9, Codex 3, RK-3, I12): `controls` follows `features` only when a
 /// disable applied, through each kind's `disableFeature` (on 9 composed with `WrappedToken`'s). A `disableFeature(FREEZE)` or
@@ -64,13 +65,13 @@ contract MirrorTest is RegFixture {
         assertTrue(_on(t, bit), "after the proposal");
         _mirrorHolds(t);
         vm.prank(ownerA);
-        NormalToken(t).cancelGrant(bit, 0);
+        NormalToken(t).cancelGrant(bit, 0, EnvKit.codeUidOf(address(NormalToken(t))));
         assertTrue(_on(t, bit), "after the cancellation");
         _disable(t, bit); // proposal again
         vm.warp(block.timestamp + GD - 1);
         vm.prank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotReady.selector, bit, bytes32(0), uint64(_now() + 1)));
-        NormalToken(t).disableFeature(bit);
+        NormalToken(t).disableFeature(bit, EnvKit.codeUidOf(address(NormalToken(t))));
         assertTrue(_on(t, bit), "after an early confirm");
         vm.warp(block.timestamp + 1 + GD + 1); // past eta + grantDelay: the pending is dead
         _disable(t, bit); // proposes anew

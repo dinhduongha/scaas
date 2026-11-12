@@ -240,11 +240,11 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         NormalToken n = NormalToken(_rCreate(false, _rCfg(false, 1), "n"));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(3)));
-        n.grantRole(3, nid(holder));
+        n.grantRole(3, nid(holder), EnvKit.codeUidOf(address(n)));
         WrappedToken w = WrappedToken(payable(_rCreate(true, _rCfg(true, 1), "w")));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(3)));
-        w.grantRole(3, nid(holder));
+        w.grantRole(3, nid(holder), EnvKit.codeUidOf(address(w)));
     }
 }
 

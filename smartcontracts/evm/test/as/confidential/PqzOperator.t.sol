@@ -12,6 +12,7 @@ import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {WrappedPqzToken} from "../../../src/pqz/WrappedPqzToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Plan T32 (owner 2026-11-05, CTR-GOV-20; CTR-GOV-13, CTR-GOV-17, never lose ciphertext; I8), the row T31 left open: on
 /// kinds 12 and 13 `operatorTransfer` moves public balances only. A PQZ UA holding a public (UA-ledger) balance and a
@@ -32,7 +33,7 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
         tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(c), "pop"));
         w = WrappedPqzToken(payable(address(tok)));
         vm.prank(ownerA);
-        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK));
+        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK), EnvKit.codeUidOf(address(IGovernance(address(tok)))));
         _shieldTo(alice, 300);
         _pub(address(this), PUBLIC);
         tok.transferToUA(alice, PUBLIC);
