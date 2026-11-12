@@ -590,6 +590,11 @@ pub(crate) async fn step_once(
         }
     }
     let Some(job) = job else { return Ok(Step::Idle) };
+    // CTR-MTX-86, one rule on every family: a payee-fee field is refused by name before any build, never relayed without it
+    if let Err(e) = crate::submit::refuse_payee_fee_fields(&job) {
+        report(odoo, Report { error: Some(e.to_string()), ..rep(job.id, "dead") }).await;
+        return Ok(Step::Done);
+    }
     // G2: giữ digest tới khi `follow` xong (guard rơi ở mọi lối ra của hàm này).
     let digest = match adapter.digest(&job).await {
         Ok(d) => d,
@@ -804,6 +809,9 @@ pub(crate) mod tests {
         pub dex_sync: Value,
         /// Every `dex_book_commit` body, in order.
         pub commits: Vec<Value>,
+        /// `dex_book_load`'s rows and `dex_markets`'s answer (Null = the generic reply).
+        pub dex_book: Value,
+        pub dex_markets: Value,
     }
     pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
@@ -834,6 +842,8 @@ pub(crate) mod tests {
                     serde_json::json!({"ok": true})
                 }
                 "dex_sync" if !o.dex_sync.is_null() => std::mem::take(&mut o.dex_sync),
+                "dex_book_load" if !o.dex_book.is_null() => serde_json::json!({"rows": o.dex_book}),
+                "dex_markets" if !o.dex_markets.is_null() => o.dex_markets.clone(),
                 "dex_book_commit" => {
                     o.commits.push(b);
                     serde_json::json!({"ok": true})
@@ -879,6 +889,29 @@ pub(crate) mod tests {
         let states: Vec<&str> = o.reports.iter().filter_map(|r| r["chain_state"].as_str()).collect();
         assert_eq!(states, ["signed", "queued"]);
         assert!(o.reports[1]["error"].as_str().unwrap().contains("sequence mismatch"));
+    }
+
+    /// CTR-MTX-86, one rule on every family (Fable N-4): a job carrying `payee_fee` or `receiver_fee` is refused by name (`dead`)
+    /// before any build on a non-EVM adapter, never relayed without it; the plain job is built (the control).
+    #[tokio::test]
+    async fn payee_fee_fields_are_refused_on_every_family() {
+        for (field, code) in [(None, "signed"), (Some("payee_fee"), "PAYEE_FEE_REFUSED"), (Some("receiver_fee"), "RECEIVER_FEE_REFUSED")] {
+            let mut job = serde_json::json!({"id": 7, "kind": "signed_op", "op": {}});
+            if let Some(f) = field {
+                job[f] = serde_json::json!({"fee": "1", "feeRecipient": "0x00000000000000000000000000000000000000aa"});
+            }
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job], ..Default::default() }).await;
+            lane_step(&Mock::default(), &odoo, 0, "n#0").await.unwrap();
+            let o = o.lock().unwrap();
+            let r = &o.reports[0];
+            match field {
+                None => assert_eq!(r["chain_state"], "signed", "control: {r}"),
+                Some(_) => {
+                    assert_eq!((r["chain_state"].as_str(), o.reports.len()), (Some("dead"), 1), "{r}");
+                    assert!(r["error"].as_str().unwrap().starts_with(code), "{r}");
+                }
+            }
+        }
     }
 
     /// Adapter giả: trạng thái tx theo tx id, sequence lane = 4, RPC mô phỏng luôn lỗi mạng.

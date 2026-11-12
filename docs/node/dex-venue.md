@@ -108,17 +108,24 @@ does with it.
   allowance to the DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)); intake reads `allowance(from, puller)`. The venue takes each token's form from the DEX's factory: SCaaS (the token-verified `TradeOrder`, shape 1) iff
   `versionOf(token).version != 0` on `factory()`, else outside (shape 0); never from the order, the client, the DEX's
   `tokenKind` (0 for a pair never listed) or a release's deprecation.
-- <a id="closed-markets"></a>**Which markets are served: bit 29** ([CTR-DEX-32](../decisions.md#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them)). The venue
+- <a id="closed-markets"></a><a id="NODE-DEX-20"></a>**NODE-DEX-20** — **Which markets are served: bit 29**
+  ([CTR-DEX-32](../decisions.md#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them)). The venue
   reads the DEX's `features()` at start: bit 29 `CLOSED_MARKETS` set, a client market is served only when the DEX lists
   the pair (`marketListed(base, quote)`), the others wait; clear, every client market is served (open markets, the
-  default). An unread bit serves nothing (fail closed). The DEX's own `FeatureDisabled(29)` (the bit is set only at
-  creation and only ever cleared) makes the venue re-read the bit live before its cursor moves (an unread bit fails the
-  round, read again) and, open, serve the waiting markets with empty books. On a closed DEX the exchange path's tokens
+  default). An unread bit serves nothing (fail closed). A market whose own check is unread at start (a transport error on
+  `marketListed` or `versionOf`) is not served and is read again each watcher round (a node without the indexer module runs no watcher: a restart there); read
+  on a closed DEX that does not list it, it waits. The DEX's own `FeatureDisabled(29)` log (the bit is set only at
+  creation and only ever cleared; the watcher reads it from the DEX only, never from a token) makes the venue re-read the
+  bit live before its cursor moves (an unread bit fails the round, read again) and, open, serve the waiting markets. A
+  market served late gets the start loads first: each token's shape by the factory, its regulated legs
+  ([NODE-DEX-11](#NODE-DEX-11): pause, list halt, eligibility alert), the client's resting rows of it and their
+  unmined fills; an unread load fails the round, read again. On a closed DEX the exchange path's tokens
   must be `tokenKnown` (the DEX's own check; the venue plans no exchange). The liquidity guard classifies inputs the same
   way (`versionOf` on the DEX's factory). Tests `market_rule_follows_bit_29_and_the_factory`,
-  `feature_disabled_29_opens_the_waiting_markets` (`scaas-node/src/dex/venue.rs`; mutants 5/5,
-  `smartcontracts/evm/runs/2026-11-12-fix2-contracts/mutants-venue-29.json`). Status **BUILT** (branch
-  `ua-mtx-fix2-contracts`), UNAUDITED.
+  `feature_disabled_29_opens_the_waiting_markets` (an encoded log through the watcher's filter, `accepted` and
+  `encode_event`), `a_market_unread_at_start_is_read_again_each_round` (`scaas-node/src/dex/venue.rs`); mutants 8/8
+  killed, `scaas-node/runs/2026-11-12-fix2-node-mutants.{py,txt}`. Status **BUILT** (branch `ua-mtx-fix2-contracts`),
+  UNAUDITED.
 - **No role in the order.** The book keeps price-time priority over orders as they arrive; an incoming order that
   crosses is the **taker** of the settlement the venue builds, the resting orders it crosses are its **makers**, and an
   order that rests may later be a maker. One settlement is atomic; one `mtxSettle` call carries one or more

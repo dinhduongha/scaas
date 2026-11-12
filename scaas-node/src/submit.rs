@@ -205,6 +205,21 @@ struct Sent {
     ceiling: Option<u128>,
 }
 
+/// CTR-MTX-86, one rule on every family (the EVM lanes here, the other adapters' `step_once`): a job carrying `receiver_fee`
+/// (the old name) or `payee_fee` is refused by name, never relayed without the payee's fee authorization. The node builds no
+/// payee fee: it goes as the named EVM entry `mtxPayWithPayeeFee` (an `op`); the other families have no such entry.
+pub fn refuse_payee_fee_fields(job: &Job) -> Result<()> {
+    if job.receiver_fee.is_some() {
+        anyhow::bail!("RECEIVER_FEE_REFUSED: the job field receiver_fee is now payee_fee (owner 2026-11-12); a payee fee goes as \
+            the named entry mtxPayWithPayeeFee");
+    }
+    if job.payee_fee.is_some() {
+        anyhow::bail!("PAYEE_FEE_REFUSED: the payee fee (payee_fee) goes as the named EVM entry mtxPayWithPayeeFee; refused, never \
+            relayed without it");
+    }
+    Ok(())
+}
+
 /// One job, one `Work` (job-api.md): a named `op`, or a transfer struct. NODE-LANE-10 (R84): the unbound `relayer` /
 /// `feeRecipient` are normalized here (`fee_recipient` = `[[chains]] fee_recipient`), never relayed as the job carries them.
 /// The dedup key is the typed digest of what is built here (`guard::fill_digest`), never the job's `digest` field.
@@ -218,13 +233,7 @@ pub fn work_from_job_with(job: &Job, fee_recipient: Option<Address>, services: &
     if let Some(k) = job.kind.as_deref().filter(|k| !matches!(*k, "metatx" | "ua_metatx" | "call")) {
         anyhow::bail!("unknown job kind {k:?} (metatx | ua_metatx | call)");
     }
-    if job.receiver_fee.is_some() {
-        anyhow::bail!("RECEIVER_FEE_REFUSED: the job field receiver_fee is now payee_fee (owner 2026-11-12); a payee fee goes as \
-            the named entry mtxPayWithPayeeFee");
-    }
-    if job.payee_fee.is_some() {
-        anyhow::bail!("the payee fee (payee_fee) goes as the named entry mtxPayWithPayeeFee; refused, never relayed without it");
-    }
+    refuse_payee_fee_fields(job)?;
     if job.call.is_some() || job.calldata.is_some() || job.data.is_some() {
         return Err(hex_refused("call"));
     }
@@ -1824,7 +1833,8 @@ pub(crate) mod tests {
         assert_eq!(sent(raw(&bound), Some(ours)), UaMtx::Transfer(bound.clone()), "bound fields are the signer's");
         let mut rf = raw(&t);
         rf["payee_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
-        assert!(work_from_job(&serde_json::from_value(rf.clone()).unwrap(), None).is_err(), "payee fee is not built");
+        let e = work_from_job(&serde_json::from_value(rf.clone()).unwrap(), None).unwrap_err().to_string();
+        assert!(e.starts_with("PAYEE_FEE_REFUSED"), "payee fee is not built: {e}");
         // owner 2026-11-12 (CTR-MTX-86): the old field name is refused by name, whichever field the job also carries
         for keep in [true, false] {
             let mut old = if keep { rf.clone() } else { raw(&t) };

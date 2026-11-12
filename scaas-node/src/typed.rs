@@ -2410,13 +2410,16 @@ mod tests {
         Op::parse(&op_of("Execute", "account", &v).unwrap(), FEE).unwrap();
     }
 
-    /// CTR-GOV-27: `mtxTransferAdmin`, the three env publishes and `mtxSetChainEntries` take a named `chainUid`; a job without it
-    /// is refused by name; `ChainEntries` is one named object (a packed blob is refused), its struct hash nested in the signed
-    /// one; the vector rows parse (the positive control).
+    /// CTR-GOV-27: every node row signing a `chainUid` (`mtxTransferAdmin`, `mtxRenounceAdmin`, the three env publishes, the
+    /// three deprecations, the two kind switches, `mtxSetChainEntries`; `UARevokeApproval` has no node row, `NO_NODE_ROW`) takes
+    /// it as a named field; a job without it is refused by name; `ChainEntries` is one named object (a packed blob is refused),
+    /// its struct hash nested in the signed one; the vector rows parse (the positive control).
     #[test]
     fn chain_word_rows_refuse_a_missing_word() {
         let v = vectors();
-        for op in ["UATransferAdmin", "UAPublishTokenEnv", "UAPublishDexEnv", "UAPublishClassEnv", "UASetChainEntries"] {
+        let rows: Vec<&str> = TYPED.iter().filter(|r| r.2 == GR && r.3.contains("bytes32 chainUid")).map(|r| r.0).collect();
+        assert_eq!(rows.len(), 11, "{rows:?}");
+        for op in rows {
             let good = op_of(op, "gov_router", &v).unwrap();
             Op::parse(&good, FEE).unwrap();
             let mut o = good.clone();

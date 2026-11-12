@@ -29,7 +29,8 @@ pub const FLAG_IOC: u8 = 1;
 pub const FLAG_ESCROW: u8 = 2;
 /// Read only on the exchange path (CTR-DEX-23); a book order may carry it.
 pub const FLAG_LISTED_POOLS: u8 = 4;
-/// `tokenKind`: 1 = SCaaS (the token checks the order), 2 = outside (a `DexOrder`, pulled through the `DexPuller`).
+/// The venue's leg shape of a token, from the factory ([`kind_by_factory`]; no longer the DEX's `tokenKind` values): 1 = SCaaS
+/// (shape 1, the token checks the order), 2 = outside (shape 0, a `DexOrder` pulled through the `DexPuller`).
 pub const KIND_SCAAS: u8 = 1;
 pub const KIND_OUTSIDE: u8 = 2;
 /// CTR-DEX-32: bit 29 of the DEX's `features()`; set, the DEX takes listed pairs and known tokens only.
@@ -576,10 +577,20 @@ impl Book {
         out
     }
 
-    /// CTR-DEX-32: a market served from now on (a closed DEX opened by `FeatureDisabled(29)`), its book empty; one already
-    /// served is left as it is.
-    pub fn add_market(&mut self, cfg: MarketCfg) {
-        self.markets.entry(pair(cfg.base, cfg.quote)).or_insert(MarketBook { cfg, asks: vec![], bids: vec![] });
+    /// NODE-DEX-20: the markets of `other` (loaded as at start) served from now on, with their rows and unmined fills; one
+    /// already served is left as it is.
+    pub fn add_markets(&mut self, other: Book) {
+        self.next_seq = self.next_seq.max(other.next_seq);
+        for (k, m) in other.markets {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.markets.entry(k) {
+                for r in m.asks.iter().chain(&m.bids) {
+                    if let Some(p) = other.pending.get(&r.hash) {
+                        self.pending.insert(r.hash, *p);
+                    }
+                }
+                e.insert(m);
+            }
+        }
     }
 
     pub fn markets(&self) -> impl Iterator<Item = &MarketCfg> {

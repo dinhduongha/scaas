@@ -805,7 +805,7 @@ void main() {
     }
   });
 
-  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 27 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
+  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 29 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
   test('governance bits rows', () {
     final v = jsonDecode(File('$vectors/../governance/governance_bits.json').readAsStringSync()) as Map;
     final rows = v['bits'] as List;

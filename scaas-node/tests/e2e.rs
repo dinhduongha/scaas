@@ -3075,10 +3075,13 @@ async fn liquidity_pre_checks_on_a_chain() {
     let r2 = report(&state, 2);
     assert!(r2["chain_state"] == "dead" && r2["error"].as_str().unwrap_or_default().starts_with("DEX_NOT_LIQUIDITY"), "{r2}");
 
-    // a token of an earlier release as a SCaaS input: the DEX still lists it SCaaS, its code answers no ILiquidityPullToken
+    // a token of an earlier release as a SCaaS input: the DEX's factory still answers a version for it (CTR-DEX-32: the shape the
+    // guard reads), its code answers no ILiquidityPullToken
     let earlier = format!("0x{}", alloy::hex::encode(liquidity_mock("MockEarlierToken", true)));
     let _: Value = pr.raw_request("anvil_setCode".into(), (b, earlier)).await.unwrap();
-    assert_eq!(view(&rpc, dex, scaas_node::abi::ISCaaSDex::tokenKindCall { token: b }).await, 1, "still a SCaaS input to the DEX");
+    let factory = view(&rpc, dex, scaas_node::abi::ISCaaSDex::factoryCall {}).await;
+    assert_ne!(view(&rpc, factory, scaas_node::abi::IOpenFactory::versionOfCall { token: b }).await.version, 0,
+        "still a SCaaS input to the DEX");
     let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-earlier").await;
     state.lock().unwrap().jobs.push(liquidity_job(3, (chain_id, uid, dex), &alice, &[(a, 1_000), (b, 1_000)], (pair, 1, carol), add.clone()));
     run_outbox(&mut s).await;

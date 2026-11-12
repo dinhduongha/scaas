@@ -1339,6 +1339,23 @@ DEX with the liquidity mark read as a retry with more gas.
 **Cost if wrong.** A planner later moves who builds plans; the contract's checks are unchanged.
 **Source.** `docs/superpowers/specs/2026-11-10-dex-liquidity.md` §11, §19.1.
 
+### NODE-DEX-20 — The venue serves the markets the DEX takes by bit 29; late markets get the start loads
+- old: — · status: current · owner: no · date: 2026-11-12 · normative: node/dex-venue.md#NODE-DEX-20 · superseded-by: —
+
+**Rule.** The node side of [CTR-DEX-32](#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them): bit 29
+clear, every client market is served; set, the listed ones, the others wait for the DEX's own `FeatureDisabled(29)` log; an
+unread bit serves nothing. A market whose check is unread at start is read again each watcher round. A market served late
+gets the start loads (shapes, regulated legs, resting rows, unmined fills); an unread load fails the round.
+**Status.** BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED; tests in `scaas-node/src/dex/venue.rs`
+(`feature_disabled_29_opens_the_waiting_markets`, `a_market_unread_at_start_is_read_again_each_round`,
+`market_rule_follows_bit_29_and_the_factory`).
+**Why.** Fable check of the `ua-mtx-fix2-contracts` fixes: N-1 (the `FeatureDisabled` log never reached the reopen: no `encode_event` branch),
+N-2 (a late market skipped the regulated and book loads), N-3 (a start-time transport error dropped a market until a
+restart).
+**Cost if wrong.** Fail closed either way: a market that should open stays unserved, or a regulated leg is planned without
+its halt and the token reverts the settlement.
+**Source.** CTR-DEX-32 (owner 2026-11-12) and the Fable check of the `ua-mtx-fix2-contracts` fixes (findings N-1..N-3), fixed on the same branch.
+
 ### NODE-DEX-80 — DEX book persisted in ERP
 - old: RS5-2 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-DEX-14
 
@@ -1465,6 +1482,7 @@ Change (2026-11-10, the `ua*` / `mtx*` merge, [CTR-MTX-30](contracts/metatx.md#C
 **Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 181.
 
 Change (owner 2026-11-12, [CTR-MTX-86](contracts/metatx.md#CTR-MTX-86); status: BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED): the job field is `payee_fee` (was `receiver_fee`, refused by name `RECEIVER_FEE_REFUSED`); the rule is unchanged.
+Change (2026-11-12, Fable check of the `ua-mtx-fix2-contracts` fixes, N-4, under the rule "one rule on every chain"; status: BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED): a job carrying `payee_fee` is refused by name (`PAYEE_FEE_REFUSED`, was free text) and `receiver_fee` `RECEIVER_FEE_REFUSED` on every family, before any build: the EVM lanes in `work_from_job`, the other adapters in `step_once` (they ignored both fields and would have relayed the job without the payee's authorization); the payee fee is an EVM entry only, the other families have none. Tests `adapter::tests::payee_fee_fields_are_refused_on_every_family`, `outbox_jobs_are_normalized_and_keyed_by_the_token_digest`.
 ### NODE-MESH-18 — UA intents in scaas-intent/1.3
 - old: R316 · status: current · owner: no · date: 2026-10-06 · normative: node/mesh.md#NODE-MESH-18 · superseded-by: —
 
