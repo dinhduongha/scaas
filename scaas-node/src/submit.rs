@@ -407,16 +407,24 @@ impl Submitter {
             };
             // review T4 m2: a rebuilt payload is re-signed by `track`, so it passes the guard too; refused ⇒ that
             // nonce is only ever gap-filled
+            // Fable recheck 5 R5-2: a refusal read while a failover endpoint answered is no verdict: the start fails (and is
+            // retried) as on a transport error, never a gap-fill and `dead`
+            let mark = me.chain.failover_answers();
+            let moved = |me: &Self| me.chain.failover_answers() != mark;
             let work = match work {
                 Some(mut w) => match me.guard.check(&me.chain, &w).await {
                     // group 3f: a replacement re-signs the bytes, so a PQZ debit gets its verdict again; none ⇒ gap-filled only
                     Ok(()) => match me.guard.pqz_fill(&me.chain, &mut w).await {
                         Ok(()) => Some(w),
+                        Err(r) if moved(&me) => anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r:?}", j.job_id))),
                         Err(r) => {
                             warn!(job = j.job_id, nonce = n, "tracked PQZ job without a verdict ({r:?}); its nonce is only gap-filled");
                             None
                         }
                     },
+                    Err(Refusal::Policy(r)) if moved(&me) => {
+                        anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r}", j.job_id)))
+                    }
                     Err(Refusal::Policy(r)) => {
                         warn!(job = j.job_id, nonce = n, "tracked job refused by the guard: {r}; its nonce is only gap-filled");
                         None
@@ -2354,6 +2362,25 @@ pub(crate) mod tests {
                 false => assert!(last["chain_state"] == "dead" && last["error"].as_str().unwrap().contains("gap-filled"), "{last}"),
             }
         }
+    }
+
+    /// Fable recheck 5 R5-2: at a restart, a tracked job refused on a failover endpoint's answer (the first endpoint answers
+    /// `chainUid()` with a transport error, the failover one with another chain's) is no verdict: the lane does not start (it is
+    /// retried), never a gap-fill and `dead`. Control: the same refusal from the first endpoint: only gap-filled.
+    #[tokio::test]
+    async fn a_tracked_job_refused_on_a_failover_answer_fails_the_start() {
+        let tracked = json!([{"job_id": 7, "nonce": 0, "state": "broadcast",
+            "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": job(7)}]);
+        let ok = || Evm { mtx_nonce: Some(0), count: 1, ..Default::default() };
+        let (first, _) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
+        let (other, _) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
+        let e = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.err().expect("no start");
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER") && e.to_string().contains("CHAIN_UID_MISMATCH"), "{e:#}");
+        let (url, _) = fake_evm(Evm { uid: Some(0x25), ..ok() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked, ..Default::default() }).await;
+        let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.unwrap();
+        assert!(s.inflight.get(&0).expect("tracked").work.is_none(), "control: refused on the first endpoint, only gap-filled");
     }
 
     // ------------------------------------------------------------------ CTR-MTX-26 / -27 on EVM (T17)
