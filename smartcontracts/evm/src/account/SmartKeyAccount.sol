@@ -33,9 +33,9 @@ struct AccountSig {
 }
 
 /// @title The multi-key ERC-1271 account of one subject on one EVM chain (CTR-ACC-09…11), on `MetaTxBase`.
-/// @notice ERC-1271 for tokens and the DEX: `isValidSignature(digest, abi.encode(uint256 keyIndex, bytes32[] proof,
-///         bytes sig))` (CTR-ACC-02): an empty `proof` signs the digest, a non-empty one a Merkle root whose leaf is
-///         `batchLeaf(digest)`; P-256 `sig = abi.encode(authenticatorData, clientDataJSON, r, s)` with challenge =
+/// @notice ERC-1271 for tokens and the DEX: `isValidSignature(hash, abi.encode(uint256 keyIndex, bytes32[] proof,
+///         bytes sig))` (CTR-ACC-02) over `digest = erc1271Digest(hash)`, bound to this account and chain: an empty `proof`
+///         signs the digest, a non-empty one a Merkle root whose leaf is `batchLeaf(digest)`; P-256 `sig = abi.encode(authenticatorData, clientDataJSON, r, s)` with challenge =
 ///         base64url(message), secp256k1 `sig` = 65-byte ECDSA (low-s) over the raw message.
 ///
 ///         Key management is a `MetaTransaction` signed by the account itself (CTR-ACC-10): `from = address(this)`
@@ -125,8 +125,22 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
     // ------------------------------------------------------------------ ERC-1271
 
     /// @inheritdoc IERC1271
+    /// @dev Over `erc1271Digest(hash)`, never the raw `hash` (CTR-ACC-02): bound to this account and chain.
     function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4) {
-        return _isValid(hash, signature) ? IERC1271.isValidSignature.selector : _INVALID;
+        return _isValid(erc1271Digest(hash), signature) ? IERC1271.isValidSignature.selector : _INVALID;
+    }
+
+    /// @notice The message a key signs for an ERC-1271 answer over `hash`: `hash` wrapped as `ERC1271Message(bytes32 hash)`
+    ///         in this account's own domain (CTR-ACC-02).
+    function erc1271Digest(bytes32 hash) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, hash)));
+    }
+
+    /// @notice A key's signature over a digest of this account's own domain, unwrapped (CTR-ACC-02): the account itself
+    ///         only (its static self-call), so no outside caller gets an answer over a raw hash.
+    function isValidOwnDigest(bytes32 digest, bytes calldata signature) external view returns (bool) {
+        if (msg.sender != address(this)) revert NotSelf();
+        return _isValid(digest, signature);
     }
 
     // ------------------------------------------------------------------ signed by the account (CTR-ACC-10)
@@ -289,15 +303,15 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
     /// @dev The account is the signer of its own key management (CTR-ACC-10).
     function _selfSender() internal pure override {}
 
-    /// @dev `from == this`: one of the account's keys, through its own `isValidSignature` as a static self-call with
-    ///      uncapped gas (`SigCheck` caps ERC-1271 at 50k; the Solidity P-256 verifier needs about 280k on a chain
-    ///      without the P256VERIFY precompile); anyone else (only `cancelNonce` on their own lane runs for them): EOA or
-    ///      ERC-1271 through `SigCheck`.
+    /// @dev `from == this`: one of the account's keys over the entry's digest itself, already in this account's own domain
+    ///      (no ERC-1271 wrap), through `isValidOwnDigest` as a static self-call with uncapped gas (`SigCheck` caps
+    ///      ERC-1271 at 50k; the Solidity P-256 verifier needs about 280k on a chain without the P256VERIFY precompile; a
+    ///      blob that does not decode is a refusal); anyone else (only `cancelNonce` on their own lane runs for them): EOA
+    ///      or ERC-1271 through `SigCheck`.
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
         if (from != address(this)) return super._requireValidSignature(from, digest, sig);
-        (bool ok, bytes memory ret) =
-            address(this).staticcall(abi.encodeCall(IERC1271.isValidSignature, (digest, sig)));
-        if (!ok || ret.length != 32 || bytes4(ret) != IERC1271.isValidSignature.selector) revert MetaTxBadSignature();
+        (bool ok, bytes memory ret) = address(this).staticcall(abi.encodeCall(this.isValidOwnDigest, (digest, sig)));
+        if (!ok || ret.length != 32 || !abi.decode(ret, (bool))) revert MetaTxBadSignature();
     }
 
     // ------------------------------------------------------------------ private

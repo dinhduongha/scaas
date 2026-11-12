@@ -205,7 +205,8 @@ contract ServicePullTest is UALedgerBase {
         RefServiceEscrow.Deposit memory op = _dep(_pad(address(acct)), "ska");
         MetaTxLib.UAMetaTransfer memory t = _pull(op);
         IUARegistry.UASig memory a;
-        a.signature = abi.encode(uint256(0), new bytes32[](0), _ecdsa(ALICE_PK, tok.mtxTransferDigest(t)));
+        // the key signs the token's digest wrapped in the account's ERC-1271 message (CTR-ACC-02)
+        a.signature = abi.encode(uint256(0), new bytes32[](0), _ecdsa(ALICE_PK, acct.erc1271Digest(tok.mtxTransferDigest(t))));
         vm.prank(REL);
         s.deposit(op, t, a);
         assertEq(tok.balanceOf(address(acct)), 5_000 - AMT);

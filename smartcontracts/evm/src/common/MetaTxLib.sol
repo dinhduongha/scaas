@@ -218,6 +218,11 @@ library MetaTxLib {
         "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
+    /// @dev The ERC-1271 wrap of `SmartKeyAccount` and `MandateWallet` (CTR-ACC-02): a key signs
+    ///      `hashTypedDataV4(keccak256(abi.encode(ERC1271_MESSAGE_TYPEHASH, hash)))` in the wallet's own salted domain, so a
+    ///      signature answers for one wallet on one chain. Pinned by `test_erc1271MessageTypehashIsPinned`.
+    bytes32 internal constant ERC1271_MESSAGE_TYPEHASH = keccak256("ERC1271Message(bytes32 hash)");
+
     /// @notice Đọc cách tính phí từ nửa byte sau của `mode`.
     /// @dev Trả về `FeeMode` để `FeePolicy` dùng nguyên như cũ — enum vẫn là kiểu
     ///      chuẩn tắc của tầng phí, chỉ không còn là một trường riêng trong struct.

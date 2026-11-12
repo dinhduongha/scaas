@@ -119,8 +119,11 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         t.mint(address(acct), 1000);
     }
 
-    function _valid(SmartKeyAccount a, bytes32 digest, bytes memory sig) internal view returns (bool) {
-        return a.isValidSignature(digest, sig) == MAGIC;
+    /// The account's verifier over a raw message (WebAuthn, batch, key checks): `isValidOwnDigest`, the account's own
+    /// self-call. ERC-1271 answers over `erc1271Digest(digest)` (CTR-ACC-02, B P3-2): `test_erc1271IsBoundToTheAccount`.
+    function _valid(SmartKeyAccount a, bytes32 digest, bytes memory sig) internal returns (bool) {
+        vm.prank(address(a));
+        return a.isValidOwnDigest(digest, sig);
     }
 
     /// The account's own `MetaTransaction` on lane 0 (what `mtxExecuteAsOwner` builds).
@@ -204,38 +207,38 @@ contract SmartKeyAccountTest is WebAuthnSoft {
                                            _clientData(D, origin, tail))));
     }
 
-    function test_soft_assertion_valid() public view {
+    function test_soft_assertion_valid() public {
         assertTrue(_valid(acct, D, _pk(0, PASSKEY, D)));
     }
 
-    function test_wrong_challenge() public view {
+    function test_wrong_challenge() public {
         assertFalse(_valid(acct, D, _pk(0, PASSKEY, keccak256("another op"))));
     }
 
-    function test_wrong_origin_and_prefix_origin() public view {
+    function test_wrong_origin_and_prefix_origin() public {
         assertFalse(_valid(acct, D, _withAuth(0x05, "https://evil.example.com", TAIL)));
         assertFalse(_valid(acct, D, _withAuth(0x05, "https://pay.example.com.evil", TAIL)));
     }
 
-    function test_wrong_rp_id_hash() public view {
+    function test_wrong_rp_id_hash() public {
         Assertion memory a = _signAssertion(PASSKEY, abi.encodePacked(sha256("evil.example.com"), bytes1(0x05), uint32(0)),
                                             _clientData(D, ORIGIN, TAIL));
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
     }
 
-    function test_flags() public view {
+    function test_flags() public {
         assertFalse(_valid(acct, D, _withAuth(0x04, ORIGIN, TAIL)), "UP missing");
         assertFalse(_valid(acct, D, _withAuth(0x01, ORIGIN, TAIL)), "UV missing");
         assertTrue(_valid(acct, D, _withAuth(0x1d, ORIGIN, TAIL)), "BE|BS on top of UP|UV");
     }
 
-    function test_high_s_is_refused() public view {
+    function test_high_s_is_refused() public {
         Assertion memory a = _assertion(PASSKEY, D);
         a.s = bytes32(N - uint256(a.s));
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
     }
 
-    function test_tampering() public view {
+    function test_tampering() public {
         Assertion memory a = _assertion(PASSKEY, D);
         a.authData[36] = 0x01;   // sign counter
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
@@ -250,14 +253,14 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
     }
 
-    function test_type_create_is_refused() public view {
+    function test_type_create_is_refused() public {
         bytes memory cd = abi.encodePacked('{"type":"webauthn.create","challenge":"',
             Base64.encodeURL(abi.encodePacked(D)), '","origin":"', ORIGIN, '"', TAIL);
         Assertion memory a = _signAssertion(PASSKEY, abi.encodePacked(sha256(bytes(RP_ID)), bytes1(0x05), uint32(0)), cd);
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
     }
 
-    function test_client_data_layouts() public view {
+    function test_client_data_layouts() public {
         assertTrue(_valid(acct, D, _withAuth(0x05, ORIGIN,
             ',"crossOrigin":false,"other_keys_can_be_added_here":"do not compare clientDataJSON against a template"}')));
         assertTrue(_valid(acct, D, _withAuth(0x05, ORIGIN, "}")), "Safari: origin then }");
@@ -271,7 +274,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     }
 
     /// C1-2: after `,"crossOrigin":false,` the clientDataJSON must still end in `}`.
-    function test_C1_2_unterminatedTailRefused() public view {
+    function test_C1_2_unterminatedTailRefused() public {
         assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, ',"crossOrigin":false,"x":1')));
         assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, ',"crossOrigin":false,')));
     }
@@ -280,7 +283,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     /// `abi.encode(authenticatorData, clientDataJSON, r, s)` byte for byte, as `WebAuthnP256Verifier._fields`. Rows 0–4
     /// and 7 decode, leniently, to the canonical blob's own fields: only the rule refuses them. The two length words are
     /// refused too (a revert of `abi.decode` counts as a refusal: `_ownerCall` / tokens read ERC-1271 by staticcall).
-    function test_webAuthnCanonicalOnly() public view {
+    function test_webAuthnCanonicalOnly() public {
         Assertion memory x = _assertion(PASSKEY, D);
         bytes memory sig = _enc(x);
         assertTrue(_accepts(acct, D, _sig(0, sig)), "canonical");
@@ -308,10 +311,11 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         }
     }
 
-    /// `isValidSignature` read as callers do (staticcall): a revert is a refusal.
-    function _accepts(SmartKeyAccount a, bytes32 digest, bytes memory sig) internal view returns (bool) {
-        (bool ok, bytes memory ret) = address(a).staticcall(abi.encodeCall(IERC1271.isValidSignature, (digest, sig)));
-        return ok && ret.length == 32 && bytes4(ret) == MAGIC;
+    /// The verifier read as the account's own self-call reads it (staticcall): a revert is a refusal.
+    function _accepts(SmartKeyAccount a, bytes32 digest, bytes memory sig) internal returns (bool) {
+        vm.prank(address(a));
+        (bool ok, bytes memory ret) = address(a).staticcall(abi.encodeCall(SmartKeyAccount.isValidOwnDigest, (digest, sig)));
+        return ok && ret.length == 32 && abi.decode(ret, (bool));
     }
 
     /// `abi.encode(x)` without its offset word: length ‖ data ‖ zero padding.
@@ -333,7 +337,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         }
     }
 
-    function test_other_passkey_and_unknown_index_are_refused() public view {
+    function test_other_passkey_and_unknown_index_are_refused() public {
         assertFalse(_valid(acct, D, _pk(0, PASSKEY2, D)));
         assertFalse(_valid(acct, D, _pk(5, PASSKEY, D)));
     }
@@ -372,7 +376,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         assertFalse(_valid(acct, d[0], _sig(0, inner)));
     }
 
-    function test_batch_leaf_is_not_an_inner_node() public view {
+    function test_batch_leaf_is_not_an_inner_node() public {
         bytes32[4] memory d = _ops();
         (bytes32 root, bytes32[][4] memory proofs) = _tree(d);
         bytes32 n01 = Hashes.commutativeKeccak256(acct.batchLeaf(d[0]), acct.batchLeaf(d[1]));
@@ -383,9 +387,10 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     // ------------------------------------------------------------------ token payments (new tree)
 
+    /// `d`: what the account's key signs, the token's digest wrapped in the account's ERC-1271 message (CTR-ACC-02).
     function _payment(address from, bytes32 ref) internal view returns (MetaTxLib.UAMetaTransfer memory x, bytes32 d) {
         x = _tr(from, shop, 400, ref, uint256(ref), RR);
-        d = t.mtxTransferDigest(x);
+        d = SmartKeyAccount(payable(from)).erc1271Digest(t.mtxTransferDigest(x));
     }
 
     function _payWith(MetaTxLib.UAMetaTransfer memory x, bytes memory sig) internal {
@@ -453,7 +458,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         bytes memory sig = _pk(0, PASSKEY, D);
         uint256 g = gasleft();
         assertTrue(_valid(acct, D, sig));
-        emit log_named_uint("isValidSignature, passkey (P256VERIFY under the repo EVM)", g - gasleft());
+        emit log_named_uint("passkey verify (P256VERIFY under the repo EVM)", g - gasleft());
     }
 
     /// L2: on a chain without the P256VERIFY precompile the Solidity verifier needs about 280k, so the account's own
@@ -466,7 +471,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         assertTrue(_valid(acct, D, sig));
         uint256 used = g - gasleft();
         assertGt(used, 100_000, "no precompile: the Solidity verifier ran");
-        emit log_named_uint("isValidSignature, passkey, Solidity P-256 (no precompile)", used);
+        emit log_named_uint("passkey verify, Solidity P-256 (no precompile)", used);
         _ownerCall(abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED))), 0, PASSKEY, true);
         assertEq(acct.keyCount(), 2);
     }
@@ -725,6 +730,36 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         sig = _pk(0, PASSKEY, acct.mtxDigest(m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, m.mode));
         acct.mtxExecute(m, sig);
+    }
+
+    /// CTR-ACC-02 (B P3-2): ERC-1271 answers over `hash` wrapped as `ERC1271Message(bytes32 hash)` in the account's own
+    /// domain, never the raw hash: a key shared by two accounts answers for the one it signed for, on one chain; the raw
+    /// verifier is the account's own self-call only.
+    function test_erc1271IsBoundToTheAccount() public {
+        assertEq(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, keccak256("ERC1271Message(bytes32 hash)"));
+        bytes32 ds = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
+            keccak256("SCaaS SmartKeyAccount"), keccak256("1"), uint256(7622), address(acct), UID_));
+        bytes32 w = keccak256(abi.encodePacked(hex"1901", ds, keccak256(abi.encode(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, D))));
+        assertEq(acct.erc1271Digest(D), w);
+        SmartKeyAccount b = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), address(0))));
+        bytes memory sig = _pk(0, PASSKEY, w);
+        assertEq(acct.isValidSignature(D, sig), MAGIC, "positive control: the wrapped message");
+        assertEq(b.isValidSignature(D, sig), bytes4(0xffffffff), "same key, other account");
+        assertEq(acct.isValidSignature(D, _pk(0, PASSKEY, D)), bytes4(0xffffffff), "the raw hash");
+        assertEq(b.isValidSignature(D, _pk(0, PASSKEY, b.erc1271Digest(D))), MAGIC, "positive control: b's own");
+        bytes memory raw = _pk(0, PASSKEY, D);
+        vm.prank(address(acct));
+        assertTrue(acct.isValidOwnDigest(D, raw), "positive control: the account's own self-call");
+        vm.expectRevert(SmartKeyAccount.NotSelf.selector);
+        acct.isValidOwnDigest(D, raw);
+        vm.chainId(7623);
+        assertEq(acct.isValidSignature(D, sig), bytes4(0xffffffff), "other chain");
+    }
+
+    /// CTR-ACC-02: the ERC-1271 message struct, verbatim (`cast keccak "ERC1271Message(bytes32 hash)"`).
+    function test_erc1271MessageTypehashIsPinned() public pure {
+        assertEq(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, 0xff8bbe299de1266e571c68af5b71b4e716412184ca1bd495927110f9581950cb);
     }
 
     /// CTR-ACC-11, MT-4: `("SCaaS SmartKeyAccount", "1", chainId, account, chain_uid)`, on every clone.

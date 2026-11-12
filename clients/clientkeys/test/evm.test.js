@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
-  hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
+  hashTypedData, hashStruct, erc1271Digest, erc1271TypedData, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCall, addKeyTypedData, executeTypedData, checkOwnerCall, checkPayment,
   keyProofMessage, metaTxTypedData, uaMetaTxTypedData, uaMetaTransferTypedData, checkCall, tradeOrderTypedData, uaTradeOrderTypedData, padId,
   cancelUAOrderTypedData, cancelDexOrderTypedData, invalidateNoncesTypedData, uaInvalidateNoncesTypedData, checkTradeOrder, bidMinFill,
@@ -106,6 +106,27 @@ test('SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_accoun
   assert.equal(hex(accountSignature(0, [], sig)), k.signature);
   const r = secp256k1.Signature.fromBytes(sig.subarray(0, 64), 'compact').addRecoveryBit(sig[64] - 27);
   assert.equal(evmAddress(r.recoverPublicKey(fromHex(k.digest)).toBytes(false)), k.signer_key);
+});
+
+// B P3-2 (CTR-ACC-02): a key signs `erc1271Digest`, the hash wrapped in the wallet's own domain, never the raw hash.
+test('erc1271Digest = forge KAT (AccountKat.t.sol, erc1271_kat.json): SmartKeyAccount and MandateWallet', () => {
+  const k = read('erc1271_kat.json');
+  assert.equal(hex(keccak_256(utf8ToBytes(k.type_string))), k.type_hash);
+  for (const [wallet, row, inner] of [['SmartKeyAccount', k.smart_key_account, (s) => s.subarray(160, 225)],
+    ['MandateWallet', k.mandate_wallet, (s) => s]]) {
+    const args = { wallet, address: row.verifying_contract, chainId: Number(k.chain_id), chainUid: k.salt, hash: k.hash };
+    const d = erc1271Digest(args);
+    assert.equal(hex(d), row.digest, wallet);
+    assert.equal(erc1271TypedData(args).domain.name, row.domain_name);
+    assert.notEqual(hex(erc1271Digest({ ...args, address: '0x' + '11'.repeat(20) })), row.digest, 'bound to the wallet');
+    assert.notEqual(hex(erc1271Digest({ ...args, chainId: 7623 })), row.digest, 'bound to the chain');
+    const sig = inner(fromHex(row.signature));
+    const r = secp256k1.Signature.fromBytes(sig.subarray(0, 64), 'compact').addRecoveryBit(sig[64] - 27);
+    assert.equal(evmAddress(r.recoverPublicKey(d).toBytes(false)), row.signer_key, wallet);
+  }
+  assert.equal(hex(accountSignature(0, [], fromHex(k.smart_key_account.signature).subarray(160, 225))), k.smart_key_account.signature);
+  assert.throws(() => erc1271Digest({ wallet: 'NormalToken', address: k.smart_key_account.verifying_contract, chainId: 7622,
+    chainUid: k.salt, hash: k.hash }), /no ERC-1271 wrap/);
 });
 
 // ua-mtx-merge T3b / T11 (Q6, MD-11): the wallet's one signed entry per op over `UA<Op>`; the flat builders' KATs

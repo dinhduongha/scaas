@@ -3,7 +3,7 @@ export { normalizeMnemonic, wordsToEntropy, seedFromEntropy, deriveKey, signDige
 export { createVault, openVault, enablePrf, needsRewrap, rewrapPin, checkPassphrase, SCRYPT } from './vault.js';
 export { SeedBackup } from './backup.js';
 export {
-  hashTypedData, secpSubjectKey, passkeySubjectKey, accountSignature, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
+  hashTypedData, secpSubjectKey, passkeySubjectKey, accountSignature, erc1271Digest, erc1271TypedData, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
   checkCall, checkOp, checkTradeOrder, checkWrapOrder, checkUAWrapOrder, checkCancel, payLane, uaTradeOrderTypedData, tradeOrderTypedData, cancelUAOrderTypedData,
   cancelUAWrapOrderTypedData, invalidateNoncesTypedData, uaInvalidateNoncesTypedData,
   uaMetaTxTypedData, uaMetaTransferTypedData, padId,

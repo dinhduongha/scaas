@@ -29,8 +29,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         revoke. From `UAMetaTxBase`: the generic `mtxExecute` / `mtxBatch` and the ordered `mtxCancelNonce` on ids.
 ///         A native signer signs with its own key (no registry call); a derived one through `UARegistry`
 ///         (`UALedgerOff` at registry 0). `executeMetaTransaction` refuses every call (MD-11 (b)).
-///         ERC-1271 answers for a native owner (ECDSA), so it also pays by hand with `from = wallet`; a derived owner
-///         gets no answer and acts through `mtxExecute`.
+///         ERC-1271 answers for a native owner (ECDSA over `erc1271Digest(hash)`, bound to this wallet, CTR-ACC-02), so
+///         it also pays by hand with `from = wallet`; a derived owner gets no answer and acts through `mtxExecute`.
 contract MandateWallet is UAMetaTxBase, IERC1271 {
     struct Mandate {
         bytes32 delegate;      // 0 = none or revoked
@@ -230,12 +230,19 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
     }
 
     /// @inheritdoc IERC1271
-    /// @dev A native owner: ECDSA by its address. A derived owner has no ERC-1271 answer (CTR-ACC-12).
+    /// @dev A native owner: ECDSA by its address over `erc1271Digest(hash)`, never the raw `hash` (CTR-ACC-02): bound to
+    ///      this wallet and chain. A derived owner has no ERC-1271 answer (CTR-ACC-12).
     function isValidSignature(bytes32 hash, bytes calldata sig) external view returns (bytes4) {
         if (!UAKinds.inNativeSpace(owner)) return bytes4(0xffffffff);
-        (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, sig);
+        (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(erc1271Digest(hash), sig);
         return err == ECDSA.RecoverError.NoError && rec == address(uint160(uint256(owner)))
             ? IERC1271.isValidSignature.selector : bytes4(0xffffffff);
+    }
+
+    /// @notice The message the owner signs for an ERC-1271 answer over `hash`: `hash` wrapped as
+    ///         `ERC1271Message(bytes32 hash)` in this wallet's own domain (CTR-ACC-02).
+    function erc1271Digest(bytes32 hash) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, hash)));
     }
 
     /// @notice The allowlist (CTR-MTX-19): the base `cancelNonce`, the delegate's two, the owner's four; fee `NONE` only.

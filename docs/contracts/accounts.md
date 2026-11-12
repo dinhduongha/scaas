@@ -2513,12 +2513,16 @@ bytes sig)`. An empty `proof` ⇒ the signed message is the digest; a non-empty 
 OpenZeppelin). A one-item batch signs the digest directly. P-256: `sig = abi.encode(authenticatorData,
 clientDataJSON, r, s)`, challenge = base64url(message). secp256k1: `sig` is a 65-byte ECDSA signature (low-s) over the
 raw message.
-**Limitation (documented 2026-11-11, Fable review B P3-2; no code change).** `SmartKeyAccount.isValidSignature` and
-`MandateWallet`'s ERC-1271 answer over the raw `hash`, not wrapped in the account's own domain (no ERC-7739 nesting). Inside
-SCaaS nothing replays: every signed struct names its `from` and the verifying contract's domain. Outside it, a digest that
-does not name the signer (some third-party order formats) signed by a key is valid for every account that key controls:
-the owner's EOA and its `MandateWallet`, or two `SmartKeyAccount`s that share a key. A client signing for an outside
-protocol through an account checks that the digest binds the account's address; an ERC-7739 wrapper is a later round.
+<a id="erc1271-wrap"></a>**ERC-1271 is bound to the wallet (B P3-2, owner 2026-11-12).** `isValidSignature(hash, sig)` of
+`SmartKeyAccount` and `MandateWallet` (`HederaMandateWallet` too) checks the key's signature over
+`erc1271Digest(hash) = keccak256(0x1901 ‖ domainSeparator ‖ keccak256(abi.encode(keccak256("ERC1271Message(bytes32 hash)"),
+hash)))` in the wallet's own salted domain (`chainId`, `verifyingContract` = the wallet, `salt = chain_uid`), never over
+the raw `hash` (a one-level wrap as Safe's; no ERC-7739 nesting). A key shared by two accounts, or an owner's EOA and its
+`MandateWallet`, answers only for the wallet and chain it signed for. A batch signs the root over the wrapped digests.
+Every caller of `SigCheck`'s ERC-1271 (tokens, DEX, registry, Zether and PQZ envelopes) is unchanged: the wallet wraps; the
+client signs `erc1271Digest` (clientkeys `erc1271Digest` / `erc1271TypedData`, KAT `erc1271_kat.json`). The account's own
+entries (`from = account`, already in its domain) are checked unwrapped through `isValidOwnDigest`, the account's static
+self-call only (`NotSelf` for anyone else).
 
 <a id="recovery"></a>
 <a id="CTR-ACC-03"></a>**CTR-ACC-03** — **Guardian recovery adds a key; it removes none.** The guardian calls
@@ -2553,18 +2557,16 @@ applied by `SCaaSDex` ([CTR-DEX-08](dex.md#CTR-DEX-08)) and to Zether envelopes 
 takes `chain_uid` as a constructor argument and passes it to `new SmartKeyAccount(chainUid)`, so a user's account has a
 different address on each chain and the node and app predict it per chain ([CTR-GEN-05](README.md#CTR-GEN-05)).
 
-**Documented limitation.** `SmartKeyAccount.isValidSignature` accepts any digest signed by any of its keys —
-ERC-1271 digests are not account-wrapped (the ERC-7739 class). SCaaS digests bind `from`/`verifyingContract`, so none
-of ours replay across accounts; a third-party protocol that trusts the same key on two accounts is exposed. Wrapping
-is rejected for now: it would change every 1271 digest, every KAT and every client builder. The same limitation holds for
-`MandateWallet.isValidSignature` (and `HederaMandateWallet`): a native owner's ECDSA over any digest is accepted, not bound
-to the wallet (a derived owner gets no ERC-1271 answer, [CTR-ACC-12](mandates.md#CTR-ACC-12)) (on-chain review W-K; owner 2026-10-19: documented, no wrapping; the delegate cannot use ERC-1271, so the
-mandate caps hold).
+ERC-1271 answers are bound to the wallet ([CTR-ACC-02](#erc1271-wrap); the on-chain review W-K limit, documented by the
+owner on 2026-10-19, is fixed by B P3-2, owner 2026-11-12). The delegate of a `MandateWallet` cannot use ERC-1271, so the
+mandate caps hold; a derived owner gets no ERC-1271 answer ([CTR-ACC-12](mandates.md#CTR-ACC-12)).
 
 | Function | Rule |
 |---|---|
 | `initialize(firstKey, guardian)` | factory only, once |
-| `isValidSignature(digest, sig)` | ERC-1271; [CTR-ACC-02](#CTR-ACC-02) encoding |
+| `isValidSignature(digest, sig)` | ERC-1271 over `erc1271Digest(digest)` ([CTR-ACC-02](#erc1271-wrap)); [CTR-ACC-02](#CTR-ACC-02) encoding |
+| `erc1271Digest(hash)` | view: the message a key signs for an ERC-1271 answer ([CTR-ACC-02](#erc1271-wrap)) |
+| `isValidOwnDigest(digest, sig)` | the account's own static self-call only: its entries' digests, unwrapped |
 | `mtxExecuteAsOwner(data, nonce, validUntil, signature)`, `mtxExecute` | self-call of `addKey`/`removeKey`/`rotateKey`/`setGuardian`/`cancelRecovery`/`execute`, signed as the account; the lane nonce increments before the call |
 | `initiateRecovery` / `completeRecovery` / `cancelRecovery` | [CTR-ACC-03](#CTR-ACC-03) |
 | factory `predict`, `deploy` | idempotent, [CTR-ACC-01](#CTR-ACC-01) |

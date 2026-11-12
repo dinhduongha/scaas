@@ -1,0 +1,10 @@
+[
+ {"id": "ska-1271-raw-hash", "file": "src/account/SmartKeyAccount.sol", "old": "return _isValid(erc1271Digest(hash), signature) ?", "new": "return _isValid(hash, signature) ?", "path": "test/account/SmartKeyAccount.t.sol"},
+ {"id": "ska-wrap-no-domain", "file": "src/account/SmartKeyAccount.sol", "old": "return _hashTypedDataV4(keccak256(abi.encode(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, hash)));", "new": "return keccak256(abi.encode(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, hash));", "path": "test/account/SmartKeyAccount.t.sol"},
+ {"id": "ska-own-digest-not-self-only", "file": "src/account/SmartKeyAccount.sol", "old": "        if (msg.sender != address(this)) revert NotSelf();\n        return _isValid(digest, signature);", "new": "        return _isValid(digest, signature);", "path": "test/account/SmartKeyAccount.t.sol"},
+ {"id": "ska-self-path-wrapped", "file": "src/account/SmartKeyAccount.sol", "old": "abi.encodeCall(this.isValidOwnDigest, (digest, sig))", "new": "abi.encodeCall(this.isValidOwnDigest, (erc1271Digest(digest), sig))", "path": "test/account/SmartKeyAccount.t.sol"},
+ {"id": "ska-self-path-false-accepted", "file": "src/account/SmartKeyAccount.sol", "old": "if (!ok || ret.length != 32 || !abi.decode(ret, (bool))) revert MetaTxBadSignature();", "new": "if (!ok || ret.length != 32) revert MetaTxBadSignature();", "path": "test/account/SmartKeyAccount.t.sol"},
+ {"id": "mw-1271-raw-hash", "file": "src/wallet/MandateWallet.sol", "old": "ECDSA.tryRecover(erc1271Digest(hash), sig)", "new": "ECDSA.tryRecover(hash, sig)", "path": "test/wallet/MandateWalletMerged.t.sol"},
+ {"id": "mw-wrap-no-domain", "file": "src/wallet/MandateWallet.sol", "old": "return _hashTypedDataV4(keccak256(abi.encode(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, hash)));", "new": "return keccak256(abi.encode(MetaTxLib.ERC1271_MESSAGE_TYPEHASH, hash));", "path": "test/account/AccountKat.t.sol"},
+ {"id": "typehash-string", "file": "src/common/MetaTxLib.sol", "old": "keccak256(\"ERC1271Message(bytes32 hash)\")", "new": "keccak256(\"ERC1271Message(bytes32 h)\")", "path": "test/account/SmartKeyAccount.t.sol", "test": "test_erc1271MessageTypehashIsPinned"}
+]

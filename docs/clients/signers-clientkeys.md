@@ -165,7 +165,9 @@ EVM browser wallets are used only through open standards (EIP-1193, EIP-6963, EI
    `eth_getCode` through the wallet's own provider and sends a `wallet_kind` hint: `eoa` ⇒ the signature must recover to
    the wallet as before; `contract` ⇒ the signature is accepted unchecked and the node's simulation (a real
    `isValidSignature`) decides ([INT-ERP-03](../integration.md#INT-ERP-03)). A wrong hint opens no path to funds: an
-   invalid signature cannot execute on chain.
+   invalid signature cannot execute on chain. A key of a `SmartKeyAccount` or a `MandateWallet` owner signs
+   `erc1271Digest({wallet, address, chainId, chainUid, hash})` of the digest, never the digest itself
+   ([accounts.md CTR-ACC-02](../contracts/accounts.md#erc1271-wrap)); the account's own entries are signed as they are.
 
 <a id="CLI-SGN-06"></a>**CLI-SGN-06** — **WalletConnect v2 is a seam behind a configuration flag; no SDK is loaded by the
 core.** A `providerFactories` registry; the WalletConnect option appears only when a project id is configured **and** an

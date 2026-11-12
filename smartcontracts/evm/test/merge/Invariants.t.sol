@@ -305,12 +305,13 @@ contract MergeInvariantsTest is MergeBase {
     /// keccak256 of the deployed code without its CBOR metadata tail, deployed at a fixed address (the immutables hold
     /// `address(this)`), recorded at `ref/pre-ua-mtx-merge` (9a4b8c5a). ua-mtx-merge T3b: the `MandateWallet` and
     /// `HederaMandateWallet` rows left (Q6 builds them in the merged form; `MandateWalletMerged.t.sol`). T66b (controller
-    /// 2026-11-09): the `<X>Core` + flat-face split moved it, 21,003 -> 21,085 B: 0xd201866a…5876 -> this.
+    /// 2026-11-09): the `<X>Core` + flat-face split moved it, 21,003 -> 21,085 B: 0xd201866a…5876 -> 0xbede204d…3962. B P3-2
+    /// (ua-mtx-fix2-contracts): ERC-1271 over `erc1271Digest(hash)`, the self-call through `isValidOwnDigest`: -> this.
     function test_walletsByteIdentical() public {
         bytes32 uid = keccak256("wallet-uid");
         address b = address(0xA002);
         deployCodeTo("SmartKeyAccount.sol:SmartKeyAccount", abi.encode(uid), b);
-        assertEq(_codeHash(b), 0xbede204d12566a090b8389385fe356d6a6ae25485cad9869454d73f367473962, "SmartKeyAccount");
+        assertEq(_codeHash(b), 0x4d73f626937f393ae80fe90a971e5e7db833c3457a8b99afba22a045499a33e1, "SmartKeyAccount");
         // the artifact `deployCodeTo` reads is this contract's (compiled into this test)
         assertGt(type(SmartKeyAccount).creationCode.length, 0);
     }

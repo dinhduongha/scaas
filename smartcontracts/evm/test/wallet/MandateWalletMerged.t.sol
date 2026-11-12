@@ -28,6 +28,7 @@ interface IMandateMerged {
     function mandatePayLane(bytes32 entryRef) external pure returns (uint256);
     function mandateRevokeLane(address token, uint64 epoch_) external pure returns (uint256);
     function isValidSignature(bytes32 hash, bytes calldata sig) external view returns (bytes4);
+    function erc1271Digest(bytes32 hash) external view returns (bytes32);
     function setMandate(address token, bytes32 delegate, uint128 maxPerPayment, uint128 maxPerPeriod, uint64 periodSeconds,
         uint64 expiry) external;
     function setPayee(address token, bytes32 payee, bool allowed) external;
@@ -482,19 +483,23 @@ contract MandateWalletMergedTest is MergeBase {
         assertEq(tok.balanceOf(NPP), 10);
     }
 
-    /// CTR-ACC-12: a derived owner has no ERC-1271 answer, even for a key whose address is its low 160 bits.
+    /// CTR-ACC-12: a derived owner has no ERC-1271 answer, even for a key whose address is its low 160 bits. CTR-ACC-02
+    /// (B P3-2): a native owner's answer is over `erc1271Digest(h)`, this wallet's own domain, never the raw `h`.
     function test_derivedOwnerHasNoErc1271Answer() public {
         bytes32 h = keccak256("anything");
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, h);
-        bytes memory sig = abi.encodePacked(r, s, v);
         IMandateMerged n = _wallet(_pad(alice), REG_L);
+        bytes memory sig = _ecdsa(ALICE_PK, n.erc1271Digest(h));
         assertEq(n.isValidSignature(h, sig), bytes4(0x1626ba7e), "positive control: a native owner's ECDSA");
-        assertEq(n.isValidSignature(h, _sig(BOB_PK, h).signature), bytes4(0xffffffff), "another key");
+        assertEq(n.isValidSignature(h, _ecdsa(BOB_PK, n.erc1271Digest(h))), bytes4(0xffffffff), "another key");
+        assertEq(n.isValidSignature(h, _ecdsa(ALICE_PK, h)), bytes4(0xffffffff), "the raw hash");
+        IMandateMerged n2 = _wallet(_pad(alice), REG_L);
+        assertEq(n2.isValidSignature(h, sig), bytes4(0xffffffff), "same owner, other wallet");
         bytes32 shadow = _pad(alice) | bytes32(uint256(1) << 200);
         IMandateMerged d = _wallet(shadow, REG_L);
-        assertEq(d.isValidSignature(h, sig), bytes4(0xffffffff), "derived owner, its low 160 bits' key");
+        assertEq(d.isValidSignature(h, _ecdsa(ALICE_PK, d.erc1271Digest(h))), bytes4(0xffffffff),
+            "derived owner, its low 160 bits' key");
         IMandateMerged d2 = _wallet(uaP, REG_L);
-        assertEq(d2.isValidSignature(h, sig), bytes4(0xffffffff), "derived owner");
+        assertEq(d2.isValidSignature(h, _ecdsa(ALICE_PK, d2.erc1271Digest(h))), bytes4(0xffffffff), "derived owner");
     }
 
     // ------------------------------------------------------------------ invariant 3: the retired forms
@@ -617,13 +622,14 @@ contract MandateWalletMergedTest is MergeBase {
 
     /// `SmartKeyAccount` keeps its address surface (Q6): its code without the CBOR tail, as at `ref/pre-ua-mtx-merge`.
     /// T66b (controller 2026-11-09): the `<X>Core` + flat-face split of `UAMetaTxBase` / `MetaTxBase` moved it, 21,003 -> 21,085 B:
-    /// 0xd201866a…5876 -> this; its ABI and behaviour unchanged.
+    /// 0xd201866a…5876 -> 0xbede204d…3962; its ABI and behaviour unchanged. B P3-2 (ua-mtx-fix2-contracts): ERC-1271 over
+    /// `erc1271Digest(hash)`, the self-call through `isValidOwnDigest`: 0xbede204d…3962 -> this.
     function test_smartKeyAccountByteIdentical() public {
         address at = address(0xA002);
         deployCodeTo("SmartKeyAccount.sol:SmartKeyAccount", abi.encode(keccak256("wallet-uid")), at);
         bytes memory c = at.code;
         uint256 meta = (uint256(uint8(c[c.length - 2])) << 8 | uint8(c[c.length - 1])) + 2;
         assembly ("memory-safe") { mstore(c, sub(mload(c), meta)) }
-        assertEq(keccak256(c), 0xbede204d12566a090b8389385fe356d6a6ae25485cad9869454d73f367473962);
+        assertEq(keccak256(c), 0x4d73f626937f393ae80fe90a971e5e7db833c3457a8b99afba22a045499a33e1);
     }
 }

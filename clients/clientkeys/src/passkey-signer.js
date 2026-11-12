@@ -1,7 +1,7 @@
 // Lazy-loaded by the portal only when the payer picks "Passkey".
 export * from './webauthn.js';
 export {
-  hashTypedData, passkeySubjectKey, secpSubjectKey, accountSignature, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
+  hashTypedData, passkeySubjectKey, secpSubjectKey, accountSignature, erc1271Digest, erc1271TypedData, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
   checkCall, checkOp, checkTradeOrder, checkWrapOrder, checkUAWrapOrder, checkCancel, payLane, uaTradeOrderTypedData, tradeOrderTypedData, cancelUAOrderTypedData,
   cancelUAWrapOrderTypedData, invalidateNoncesTypedData, uaInvalidateNoncesTypedData,
   uaMetaTxTypedData, uaMetaTransferTypedData, padId,
