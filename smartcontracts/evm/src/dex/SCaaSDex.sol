@@ -207,12 +207,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         emit FeeSplitSet(ppm, t);
     }
 
-    /// @dev SCaaS iff the factory made it from a registered (version ≠ 0), non-deprecated implementation.
+    /// @dev SCaaS iff the factory made it from a registered release (version ≠ 0). Release deprecation is the factory's
+    ///      concern, never read here (owner 2026-11-12): a SCaaS token's leg is trusted to the token's own verify.
     function _classify(address token) private view returns (uint8) {
-        IOpenFactory f = IOpenFactory(FACTORY);
-        if (!f.isToken(token)) return KIND_OUTSIDE;
-        (IOpenFactory.TokenKind k, uint64 v) = f.versionOf(token);
-        return v != 0 && !f.isTokenDeprecated(k, v) ? KIND_SCAAS : KIND_OUTSIDE;
+        (, uint64 v) = IOpenFactory(FACTORY).versionOf(token);
+        return v != 0 ? KIND_SCAAS : KIND_OUTSIDE;
     }
 
     function _pair(address a, address b) private pure returns (bytes32) {

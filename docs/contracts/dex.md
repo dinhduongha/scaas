@@ -900,14 +900,13 @@ input token's) or expiry. Status **BUILT** on EVM: `src/dex/SCaaSDexLiquidityMod
 `src/trade/LiquidityLib.sol`; tests `test/liquidity/` (UNAUDITED; the `mldsa65` two-input fit, `DexLiquidityMldsa.t.sol`,
 signs through `vm.ffi` and runs with `--ffi` and `MLDSA_CLIENTKEYS`: 12,143,505 regular gas within 2^24). Size (owner 2026-11-10, spec §9.3's lever (b)): the
 DEX-domain cancels `mtxCancelOrders`, `mtxInvalidateNonces` and their digest views run in the liquidity module too, behind
-typed stubs (the same rules, [CTR-DEX-18](#CTR-DEX-18)); `SCaaSDex` 32,809 B (its margin 33,594 B), the module 19,055 B; after fix2 (2026-11-12: `rescue`, the live read) 33,238 B and 19,487 B.
-**The trust is read at use** (fix2 2026-11-12, Fable review D P3-4; was a documented limit): the kind stays the
-`setMarket` snapshot ([CTR-DEX-18](#CTR-DEX-18)), but the skip of the DEX's own verify of `h` is decided at use: a SCaaS
-input whose release the factory reports deprecated now (`versionOf`, `isTokenDeprecated`) makes the DEX verify `h` itself,
-as an outside input does, before any pull (its token's `mtxLiquidityPull` still verifies too). A derived signer, whom
-the DEX cannot verify, is refused for such an input (`BadSignature(h)`): fail closed. No re-listing is needed after a
-`deprecateToken`. Test `test_deprecatedRelease_dexVerifiesItself` (`test/liquidity/DexLiquidity.t.sol`). Status **BUILT**
-(branch `ua-mtx-fix2-contracts`).
+typed stubs (the same rules, [CTR-DEX-18](#CTR-DEX-18)); `SCaaSDex` 32,809 B (its margin 33,594 B), the module 19,055 B; after fix2 (2026-11-12: `rescue`, the live read) 33,238 B and 19,487 B; after fix2-dex (the kind at use, no deprecation read, bit 29) 33,061 B and 19,158 B (measured at `a18e9464`: 33,222 B and 19,487 B).
+**Deprecation is not the DEX's** (owner 2026-11-12, superseding the live read of Fable review D P3-4, whose code and test
+are in `smartcontracts/evm/legacy/ua-mtx-fix2-dex/`): the kind is the factory's at use ([CTR-DEX-18](#CTR-DEX-18)), never
+a release's deprecation. A SCaaS input is pulled by its token's `mtxLiquidityPull`, which verifies `h` itself, deprecated
+or not; the DEX verifies `h` itself only when an input is outside or a position is given. Test
+`test_deprecatedRelease_tokenStillVerifies` (`test/liquidity/DexLiquidity.t.sol`). Status **BUILT** (branch
+`ua-mtx-fix2-dex`).
 
 <a id="CTR-DEX-31"></a>**CTR-DEX-31** — **A received position is bound by a signed, listed, read-only reader** (owner
 2026-11-10, Q1 = A). `IPositionReader { manager(); position(id) → (poolId, tickLower, tickUpper, liquidity, encumbered) }`, one

@@ -400,3 +400,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `clients/clientkeys/legacy/ua-mtx-fix2-contracts/`. Not built.
   `src/dex/DexPuller.sol` as it stood at `829006be`: `DexConfig.rescueTo` 0 meant no rescue (`RescueOff()`); superseded
   by CTR-GOV-25 (owner 2026-11-12: 0 is the constant dev address `SCAAS_DEV_RESCUE`). Not built.
+- `ua-mtx-fix2-dex/`: the DEX as it stood at `a18e9464` (`src/dex/SCaaSDex.sol`, `src/dex/SCaaSDexLiquidityModule.sol`) with
+  the release-deprecation reads: `_classify` (SCaaS iff registered **and** not deprecated, a `setMarket` snapshot) and the
+  liquidity path's live read (`_deprecatedNow`, Fable D P3-4: a deprecated input made the DEX verify `h` itself); the tests
+  that held them (`test/liquidity/DexLiquidity.t.sol` `test_deprecatedRelease_dexVerifiesItself`, `test/v2/Dex.t.sol`
+  `test_classification_deprecatedAndUnregisteredAreOutside`, `test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller`)
+  and the mutant specs and results `runs/mutants-d-p3-4*.json`. Superseded by the owner's ruling of 2026-11-12 (the DEX never
+  reads a release's deprecation; CTR-DEX-18, CTR-DEX-30 Changes). Not built.

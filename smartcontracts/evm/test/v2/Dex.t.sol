@@ -561,7 +561,9 @@ contract DexTest is Test {
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(a)));
     }
 
-    function test_classification_deprecatedAndUnregisteredAreOutside() public {
+    /// Owner 2026-11-12: an unregistered token is outside; a deprecated release's token stays SCaaS (the DEX never reads
+    /// deprecation; the earlier "deprecated is outside" test is in `legacy/ua-mtx-fix2-dex/`).
+    function test_classification_unregisteredIsOutside_deprecatedStaysScaas() public {
         address impl = address(new NormalToken(address(f), Catalogue.argsOn(f, IOpenFactory.TokenKind.NORMAL,
             f.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL), ""))); // the env's pinned modules
         address u = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(normalInit("C", "C", 0, 1e6, alice, address(0))), "c");
@@ -572,11 +574,10 @@ contract DexTest is Test {
         vm.stopPrank();
         vm.prank(registrar);
         f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)), "x");
-        assertEq(dex.tokenKind(address(a)), 1); // a snapshot: unchanged until the market is listed again
         vm.prank(admin);
         dex.setMarket(address(a), address(b), true);
-        assertEq(dex.tokenKind(address(a)), 2);
-        assertEq(dex.tokenKind(address(b)), 2);
+        assertEq(dex.tokenKind(address(a)), 1);
+        assertEq(dex.tokenKind(address(b)), 1);
     }
 
     // ------------------------------------------------------------------ CTR-DEX-11: the fee rounds up
@@ -650,22 +651,6 @@ contract DexTest is Test {
 
     function test_gasBurning1271Maker_othersStillSettle() public { _hostileMaker(address(new Burner1271())); }
     function test_returndataBomb1271Maker_othersStillSettle() public { _hostileMaker(address(new Bomb1271())); }
-
-    /// The kind is the DEX's listing, never the leg's: once the version is deprecated and the market listed again, `a`
-    /// and `b` are outside, a leg signed on the token is checked against its `DexOrder` digest, and the fill is pulled
-    /// through the puller (EOAs cannot approve a SCaaS token, CTR-TOK-01, so it fails on the allowance).
-    function test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller() public {
-        vm.prank(registrar);
-        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)), "x");
-        vm.prank(admin);
-        dex.setMarket(address(a), address(b), true);
-        DexLegs.Settlement memory s = _book();
-        bytes32 h = dex.dexOrderDigest(address(a), s.taker.o);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
-        s.taker = _dexLeg(ALICE_PK, address(a), s.taker.o, 1020);
-        // the puller drops the token's revert data (W-O): a fixed error names the token
-        _expectOne(s, abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(a)));
-    }
 
     /// Alice sells 1020 of an outside token (a `DexOrder`, pulled by the puller) against the SCaaS makers of `_book`.
     function test_takerSellsAnOutsideToken_settles() public {

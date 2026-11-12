@@ -12,7 +12,6 @@ import {ITradeToken, ILiquidityPullToken} from "../trade/ITradeToken.sol";
 import {LiquidityLib} from "../trade/LiquidityLib.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
-import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -159,7 +158,7 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
             if (p.pull[i] > o.inputs[i].amount) revert ISCaaSDex.Overfill(h);
             address tk = o.inputs[i].token;
             if (derived && !_ledgerOn(tk)) revert ISCaaSDex.UALegNotLedger(tk);
-            if (_s().kind[tk] != KIND_SCAAS || _deprecatedNow(tk)) verify = true;
+            if (_s().kind[tk] != KIND_SCAAS) verify = true;
         }
         if (derived && o.positionIn != 0) revert ISCaaSDex.UALegNotLedger(o.positionManager);
         if (!UAKinds.inNativeSpace(r.to)) {
@@ -169,18 +168,10 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
             if (o.positionPool != 0) revert ISCaaSDex.UAReceiveNotLedger(o.positionManager);
         }
         if (!derived) r.from = TradeLib.addr(o.from);
-        // the DEX's own verify when anything moves outside the SCaaS tokens' own checks, or when an input's release is
-        // deprecated now (the listing's kind is a snapshot; Fable D P3-4); with live SCaaS inputs only, each token verifies
-        // `h` itself before the route runs
+        // the DEX's own verify when anything moves outside the SCaaS tokens' own checks; with SCaaS inputs only, each
+        // token verifies `h` itself before the route runs (deprecated or not: owner 2026-11-12)
         if (verify && !SigCheck.isValid(r.from, h, p.auth.signature, _cap(r.from))) revert ISCaaSDex.BadSignature(h);
         t.pulled[h] = 1;
-    }
-
-    /// @dev A SCaaS input's release deprecated after its listing (Fable D P3-4): the factory read at use, so the skip of
-    ///      the DEX's own verify never trusts a release the admin has since closed.
-    function _deprecatedNow(address token) private view returns (bool) {
-        (IOpenFactory.TokenKind k, uint64 v) = IOpenFactory(_FACTORY).versionOf(token);
-        return IOpenFactory(_FACTORY).isTokenDeprecated(k, v);
     }
 
     /// @dev Shape codes 1-5 (§6 step 1); returns the plan's tokens: inputs, outputs, extraTokens.
