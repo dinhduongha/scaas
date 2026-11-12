@@ -56,3 +56,20 @@ P2-1 Gov script ERC-7739 | 5c982a89 | 0 | local anvil gov group ok 163/163 txs, 
   MetaTxBadSignature
 P3-1, P3-2 (+ CLOSED_MARKETS), rescueTo constant, singleton rescue, merge of ua-mtx-merge, payee-fee rename | - | - | not
   started on this branch (see the report)
+--- resumed 2026-11-12 (after the pause): A2, the DEX merge, the vault merge, debit_min_gas (b) ---
+A2 CTR-GOV-27 rest of P3-1 | 5f39e11f | 0 | every forge dir at the default set green but research (the then-red
+  debit_min_gas); node --lib 756, clippy clean; clientkeys 330 pass 3 skipped, cast check 108 structs; ua-rs 70;
+  zether-prover typed_ops 7; mutants 14/14 (mutants-a2.json); size gate 0 errors (OpenFactory 35028, T-1 35286)
+merge ua-mtx-fix2-dex 8f4b1b64 | 14bc0e2d | 0 | governance 487, v2 632, liquidity 82 + 1 skipped, ua/UADex* 15, as 355,
+  merge 119, metatx 400, modules 35 (after LegacyDiff's intended DEX differences), fork rc 0; SCaaSDex 34939 (T-1 35386)
+node venue bit 29 + governance_bits row 29 | dabf74db | 0 | node --lib 758, clippy clean; node mutants 5/5
+  (mutants-venue-29.json); clientkeys 331 pass 2 skipped; ua-rs, ua-py, ua-go, ua-cs, ua-dart, ua-c, ua-cxx green;
+  ua-dart-frb, ua-qt not run
+node e2e (merged tree, alone, CAPPED_MEM=6G) | 27845671 | 0 | first run 18 passed 6 failed (named in the commit); after
+  the fixes 24/24 (23 in one run, router_creations 1/1 after its config fields)
+merge ua-mtx-rescue-vault e374704f | 4f84335c | 0 | every forge dir at the default set green but research (the then-red
+  debit_min_gas, 92 pass 1 fail); size gate 0 errors, no row moved
+debit_min_gas (b) | a1b2007a | 0 | measured +44 at each set (7,299,442 / 7,514,728 / 7,727,577 / 7,969,371), pinned
+  7,300,000 / 7,515,000 / 7,728,000 / 7,970,000; mutants 4/4 (mutants-debit-min-gas.json)
+four sets after the pin (at-set.sh) | a1b2007a | 0 | n2304: research 93 + 6 skipped, pqz 455 + 4, ua bound 18; n2048:
+  95 + 4, 456 + 3, 18; n2560: 93 + 6, 451 + 8, 18; n2816: 86 + 13, 446 + 13, 18; no failure at any set
