@@ -704,12 +704,7 @@ impl Venue {
         -> std::result::Result<PlaceReply, VenueError>
     {
         let mark = self.chain.failover_answers();
-        match self.place_checked(sell, wire, signature, auth).await {
-            Err(VenueError::Bad(m)) if self.chain.failover_answers() != mark => {
-                Err(VenueError::Unavailable(crate::adapters::evm::failover_answer(&m)))
-            }
-            r => r,
-        }
+        self.no_verdict_on_failover(mark, self.place_checked(sell, wire, signature, auth).await)
     }
 
     async fn place_checked(&self, sell: Address, wire: &WireOrder, signature: Option<&str>, auth: Option<&Value>)
@@ -899,6 +894,22 @@ impl Venue {
     /// order), `CancelDexOrder` with `signature` in the DEX's (an outside one); out of the book NOW, closed on chain at the
     /// next sync.
     pub async fn cancel(&self, h: B256, signature: Option<&str>, auth: Option<&Value>) -> std::result::Result<(), VenueError> {
+        let mark = self.chain.failover_answers();
+        self.no_verdict_on_failover(mark, self.cancel_checked(h, signature, auth).await)
+    }
+
+    /// Fable recheck 5 R5-4, recheck 6 R6-3: a refusal (400) read while a failover endpoint answered is no verdict: 503
+    /// `FAILOVER_ANSWER`, the client retries (order intake and both cancels).
+    fn no_verdict_on_failover<T>(&self, mark: u64, r: std::result::Result<T, VenueError>) -> std::result::Result<T, VenueError> {
+        match r {
+            Err(VenueError::Bad(m)) if self.chain.failover_answers() != mark => {
+                Err(VenueError::Unavailable(crate::adapters::evm::failover_answer(&m)))
+            }
+            r => r,
+        }
+    }
+
+    async fn cancel_checked(&self, h: B256, signature: Option<&str>, auth: Option<&Value>) -> std::result::Result<(), VenueError> {
         let mut book = self.book.lock().await;
         let r = book.get(h).cloned().ok_or_else(|| bad("order is not in the book"))?;
         let kind = self.kind(r.sell);
@@ -933,6 +944,13 @@ impl Venue {
     pub async fn cancel_all(&self, sell: Address, from: &str, batch: U256, min: U256, signature: Option<&str>, auth: Option<&Value>)
         -> std::result::Result<usize, VenueError>
     {
+        let mark = self.chain.failover_answers();
+        self.no_verdict_on_failover(mark, self.cancel_all_checked(sell, from, batch, min, signature, auth).await)
+    }
+
+    async fn cancel_all_checked(&self, sell: Address, from: &str, batch: U256, min: U256, signature: Option<&str>,
+        auth: Option<&Value>) -> std::result::Result<usize, VenueError>
+    {
         let kind = self.kind(sell);
         let sig = auth_of(kind, signature, auth).map_err(bad)?;
         let outside = kind == KIND_OUTSIDE;
@@ -958,7 +976,9 @@ impl Venue {
         let job_needed = match self.call(self.relayer(), target, call.clone()).await {
             Ok(_) => true,
             Err(SimError::Revert(r)) if r.starts_with("MinNonceNotIncreasing(") => false,
-            Err(e) => return Err(bad(format!("mtxInvalidateNonces refused: {e}"))),
+            Err(SimError::Revert(r)) => return Err(bad(format!("mtxInvalidateNonces refused: {r}"))),
+            // Fable recheck 6 R6-3: the chain did not answer: 503, never the client's 400
+            Err(SimError::Transport(t)) => return Err(down(format!("mtxInvalidateNonces unread: rpc: {t}"))),
         };
         let contract = if outside { "dex" } else { self.contract_of(sell).await? };
         let mut next = book.clone();
@@ -1929,6 +1949,8 @@ mod tests {
         trade_paused: HashMap<Address, u64>,
         /// Fable P2-2: `regulatedConfig` and `listFlagsOf` answer a transport error (an RPC blip).
         lists_down: bool,
+        /// Fable recheck 6 R6-3: `mtxInvalidateNonces` answers a transport error.
+        invalidate_down: bool,
     }
     const REG_REGISTRY: Address = Address::repeat_byte(0xc0);
     type W = Arc<std::sync::Mutex<World>>;
@@ -2011,7 +2033,7 @@ mod tests {
                         let c = IToken::invalidateNoncesDigestCall::abi_decode(&input).unwrap();
                         Ok(hexs(keccak256((c.from, c.batch, c.newMin).abi_encode()).as_slice()))
                     } else if sel == IMtxIds::mtxInvalidateNoncesCall::SELECTOR {
-                        Ok(hexs(&[]))
+                        if w.invalidate_down { Err(json!({"code": -32603, "message": "upstream unavailable"})) } else { Ok(hexs(&[])) }
                     } else if sel == IToken::cancelOrderDigestCall::SELECTOR {
                         Ok(word(U256::from_be_bytes(oh(&IToken::cancelOrderDigestCall::abi_decode(&input).unwrap().o).0)))
                     } else if sel == IToken::eip712DomainCall::SELECTOR {
@@ -2864,6 +2886,42 @@ mod tests {
             let r = v.place(BASE, &WireOrder::from_ua(&ask), None, Some(&auth)).await;
             assert_eq!(r.is_ok(), want, "{registry} {ok}: {:?}", r.err().map(|e| e.to_string()));
         }
+    }
+
+    /// Fable recheck 6 R6-3: a cancel and a cancel-all refused on a failover endpoint's answer (a derived seller's registry read
+    /// as 0) are 503 `FAILOVER_ANSWER`, the order stays; the controls: the same answer on the first endpoint is the client's 400.
+    /// An unread `mtxInvalidateNonces` simulation is 503, never 400.
+    #[tokio::test]
+    async fn a_cancel_refused_on_a_failover_answer_is_503() {
+        let from = B256::repeat_byte(0xa7);
+        let ask = UATradeOrder { from, ..order(Address::ZERO, QUOTE, 10, 20, 1) };
+        let auth = ua_sig_json(&UASig { keyData: Bytes::from_static(&[1, 2]), signature: Bytes::from_static(&[3; 64]), members: vec![] });
+        let booked = |v: &Venue| {
+            let v = v.book.try_lock().map(|mut b| b.insert(Resting { hash: oh(&ask), sell: BASE, remaining: ask.amount, order: ask.clone(),
+                auth: Auth::Ua(ua(Bytes::from_static(&[3; 64]))), seq: 1 }));
+            assert!(v.is_ok());
+        };
+        let id = format!("{from:#x}");
+        let (v, _) = venue(World::default(), vec![]).await;
+        booked(&v);
+        assert!(matches!(v.cancel(oh(&ask), None, Some(&auth)).await, Err(VenueError::Bad(m)) if m == "bad cancel signature"), "control");
+        assert!(matches!(v.cancel_all(BASE, &id, U256::from(1), U256::from(5), None, Some(&auth)).await,
+            Err(VenueError::Bad(m)) if m == "bad invalidate signature"), "control");
+        let (v, _) = on_failover(v, World::default()).await;
+        let e = v.cancel(oh(&ask), None, Some(&auth)).await;
+        assert!(matches!(&e, Err(VenueError::Unavailable(m)) if m.starts_with("FAILOVER_ANSWER")), "{:?}", e.err());
+        let e = v.cancel_all(BASE, &id, U256::from(1), U256::from(5), None, Some(&auth)).await;
+        assert!(matches!(&e, Err(VenueError::Unavailable(m)) if m.starts_with("FAILOVER_ANSWER")), "{:?}", e.err());
+        assert!(in_book(&v.rows().await, &ask), "the order stays");
+        // a native maker, a valid signature, the invalidate simulation unread: 503
+        let maker = PrivateKeySigner::random();
+        let a1 = order(maker.address(), QUOTE, 10, 30, 1);
+        let (v, _) = venue(World { invalidate_down: true, domain: Some("SCaaS MetaToken"), ..Default::default() },
+            vec![(a1.clone(), sig_of(&maker, oh(&a1)))]).await;
+        let digest = keccak256((a1.from, U256::from(1), U256::from(5)).abi_encode());
+        let e = v.cancel_all(BASE, &format!("{:#x}", a1.from), U256::from(1), U256::from(5), None,
+            Some(&ua_sig_json(&ua(sig_of(&maker, digest))))).await;
+        assert!(matches!(&e, Err(VenueError::Unavailable(m)) if m.contains("mtxInvalidateNonces unread")), "{:?}", e.err());
     }
 
     /// A failed fill hands back no more than the chain still has open after the book and the other planned fills.
