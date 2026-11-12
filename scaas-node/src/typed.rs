@@ -274,11 +274,14 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UASetCompliance", "mtxSetCompliance", GR, "bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,E", ""),
     // owner 2026-11-12: the factory's creations through the router (chain-neutral spec §4.4, S3), relayable at fee 0 like every
     // `mtx*`; the config is named JSON (`args.config`), the node encodes it as `initArgs` and fills the signed `initHash`.
-    // `mtxCreateInstance` stays no row: its `initCall` is a class's own initializer call, which the node cannot name (owner's call)
+    // owner 2026-11-12 ("both the generic row and the per-class ones"): `mtxCreateInstance` takes `args.init_call` (bytes, the
+    // contract's `bytes initCall`) or a known class's named `args.config` the node builds it from ([`instance_init_call`])
     ("UACreateToken", "mtxCreateToken", GR, "bytes32 from,address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt,E",
         "E target kind version init!config:TokenConfig salt @"),
     ("UACreateDex", "mtxCreateDex", GR, "bytes32 from,address target,uint64 version,bytes32 initHash,bytes32 salt,E",
         "E target version init!config:DexConfig salt @"),
+    ("UACreateInstance", "mtxCreateInstance", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,bytes32 salt,E",
+        "E target contractClass kind version initcall! salt @"),
     ("UASetChainEntries", "mtxSetChainEntries", GR, "bytes32 from,address target,address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -355,6 +358,9 @@ enum Tok {
     /// `init!name:Struct` (owner 2026-11-12, the creations): the named struct `args.name`, sent ABI-encoded as `bytes`; the
     /// row's `initHash` field is its keccak, filled by the node.
     Init(String, String),
+    /// `initcall!` (owner 2026-11-12, `mtxCreateInstance`): the class's initializer call, `bytes`: `args.init_call` or built from a
+    /// known class's `args.config` ([`instance_init_call`]); the row's `initHash` is its keccak, filled by the node.
+    InitCall,
 }
 
 #[derive(Debug)]
@@ -421,6 +427,9 @@ fn tok(t: &str, sig: Sig) -> Tok {
     if let Some(n) = t.strip_prefix("wrap!") {
         return Tok::WrapAsTrade(n.into());
     }
+    if t == "initcall!" {
+        return Tok::InitCall;
+    }
     if let Some((n, ty)) = t.strip_prefix("init!").and_then(|x| x.split_once(':')) {
         return Tok::Init(n.into(), ty.into());
     }
@@ -475,7 +484,7 @@ fn tok_abi(t: &Tok, fields: &[(String, String)]) -> String {
         Tok::WrapAsTrade(n) => abi_type(if of(n).starts_with("(bytes32") { "UATradeOrder" } else { "TradeOrder" }),
         Tok::Sign(s) => abi_type(sig_type(*s)),
         Tok::Verdict => abi_type("PqzSignedVerdict"),
-        Tok::Init(..) => "bytes".into(),
+        Tok::Init(..) | Tok::InitCall => "bytes".into(),
     }
 }
 
@@ -990,7 +999,61 @@ fn emit(t: &Tok, row: &Row, a: &Assembled) -> Result<Val> {
         Tok::Sign(_) => a.sig.clone().ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
         Tok::Verdict => empty_verdict(),
         Tok::Init(n, _) => Val::Bytes(get(n)?.abi_encode()),
+        Tok::InitCall => get(INIT_CALL)?,
     })
+}
+
+/// Where the built initializer call waits in [`Assembled::vals`] (no struct field has this name).
+const INIT_CALL: &str = "initCall";
+
+/// Owner 2026-11-12: a job's `init_call` is at most this long (a class's initializer takes named, mostly static arguments;
+/// `PqChat`'s is 36 bytes).
+pub const MAX_INIT_CALL: usize = 4096;
+
+/// The classes whose `mtxCreateInstance` a job may name by fields (`args.config`): `(contractClass, kind)`, the initializer.
+pub const INSTANCE_CONFIGS: &[(u16, u16, &str)] = &[(crate::guard::CLASS_PQCHAT, 0, "PqChat initialize(bytes32 owner)")];
+
+/// Owner 2026-11-12 (`mtxCreateInstance`, both forms): the initializer call of a generic creation, either `args.init_call` (bytes,
+/// at most [`MAX_INIT_CALL`]) or built from a known class's named `args.config` ([`INSTANCE_CONFIGS`]), never both. `PqChat`
+/// (class 3, kind 0): `{owner}`, 0 or the creator (`envelope.from`; the instance refuses any other, `PqChatOwnerNotCreator`).
+fn instance_init_call(a: &Map<String, Value>, e: &Map<String, Value>) -> Result<Vec<u8>> {
+    match (a.get("config"), a.get("init_call")) {
+        (Some(_), Some(_)) => bail!("BAD_PAYLOAD: args.config and args.init_call: a creation names one of them"),
+        (None, None) => bail!("BAD_PAYLOAD: args.init_call: missing (or a known class's args.config)"),
+        (None, Some(v)) => {
+            let b = parse("bytes", v, "args.init_call")?.as_bytes().map(<[u8]>::to_vec).unwrap_or_default();
+            if b.len() > MAX_INIT_CALL {
+                bail!("INIT_CALL_TOO_LONG: args.init_call is {} bytes, at most {MAX_INIT_CALL}", b.len());
+            }
+            Ok(b)
+        }
+        (Some(c), None) => {
+            let id = |k: &str| -> Result<u64> {
+                let p = format!("args.{k}");
+                let v = parse("uint16", a.get(k).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?;
+                Ok(v.as_uint().map_or(0, |(u, _)| u.to::<u64>()))
+            };
+            let (class, kind) = (id("contractClass")?, id("kind")?);
+            let c = c.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config: not an object"))?;
+            match (class, kind) {
+                (3, 0) => {
+                    if let Some(k) = c.keys().find(|k| *k != "owner") {
+                        bail!("BAD_PAYLOAD: args.config.{k}: unknown field (PqChat takes owner)");
+                    }
+                    let owner = parse("bytes32", c.get("owner").ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config.owner: missing"))?,
+                        "args.config.owner")?;
+                    let from = parse("bytes32", e.get("from").ok_or_else(|| anyhow!("BAD_PAYLOAD: envelope.from: missing"))?, "envelope.from")?;
+                    let owner = owner.as_fixed_bytes().map(|(b, _)| B256::from_slice(b)).unwrap_or_default();
+                    if !owner.is_zero() && Some(owner.as_slice()) != from.as_fixed_bytes().map(|(b, _)| b) {
+                        bail!("BAD_PAYLOAD: args.config.owner: 0 or the creator (envelope.from), the instance refuses another");
+                    }
+                    alloy::sol! { function initialize(bytes32 ownerUA) external; }
+                    Ok(initializeCall { ownerUA: owner }.abi_encode())
+                }
+                _ => bail!("INSTANCE_CONFIG_UNKNOWN: class {class} kind {kind} has no named config; send args.init_call"),
+            }
+        }
+    }
 }
 
 /// Group 3f (spec §5.1): the empty verdict, every field 0 and an empty `UASig` (what a `PRECOMPILE` token takes).
@@ -1025,7 +1088,9 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
     if let Some(k) = e.keys().find(|k| !in_env(k)) {
         bail!("BAD_PAYLOAD: envelope.{k}: unknown field");
     }
-    if let Some(k) = a.keys().find(|k| in_env(k) || !(pos(&row.fields, k).is_some() || ext.iter().any(|x| x.0 == *k))) {
+    let init_call = row.plan.contains(&Tok::InitCall);
+    if let Some(k) = a.keys().find(|k| in_env(k) || !(pos(&row.fields, k).is_some() || ext.iter().any(|x| x.0 == *k)
+        || (init_call && (*k == "init_call" || *k == "config")))) {
         if matches!(k.as_str(), "data" | "calldata") {
             bail!("HEX_DATA_REFUSED: args.{k}: {} takes explicit named fields", row.entry);
         }
@@ -1043,6 +1108,16 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
         }
         None => None,
     };
+    let init_call = match init_call {
+        true => {
+            if a.contains_key("initHash") {
+                bail!("BAD_PAYLOAD: args.initHash: the node hashes args.init_call (or the call it builds from args.config)");
+            }
+            Some(instance_init_call(a, e)?)
+        }
+        false => None,
+    };
+    let init_hash = init_hash.or_else(|| init_call.as_ref().map(|c| json!(format!("{:#x}", keccak256(c)))));
     let mut vals: Vec<Val> = Vec::new();
     for (ty, n) in &row.fields {
         let (src, p) = match &init_hash {
@@ -1073,6 +1148,9 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
     for (n, ty) in ext {
         let p = format!("args.{n}");
         map.insert(n.to_string(), parse(ty, a.get(n).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?);
+    }
+    if let Some(c) = init_call {
+        map.insert(INIT_CALL.into(), Val::Bytes(c));
     }
     let sig = match (row.sig, sig) {
         (Some(s), Some(v)) => Some(parse(sig_type(s), v, "signature")?),
@@ -1579,10 +1657,10 @@ pub mod testkit {
 
     /// ua-mtx-merge T76: the router's three creations have vector rows; owner 2026-11-12: `UACreateToken` and `UACreateDex` are node
     /// rows taking a named config, which the vector's filler `initArgs` is not, so the walkers over the vector leave them out
-    /// (`creation_rows_encode_the_named_config` pins them); `UACreateInstance` has no node row (`NOT_ROWS`). The three must be in the
-    /// file.
+    /// (`creation_rows_encode_the_named_config` pins them); `UACreateInstance` is walked (its `init_call` is the vector's bytes; the
+    /// named form: `instance_rows_take_init_call_or_a_named_config`). The two must be in the file.
     /// Round 3r (spec §5.6, Q3): the four release approvals too (release management is not a node job, owner 2026-11-10).
-    pub const NO_NODE_ROW: [&str; 7] = ["UACreateToken", "UACreateDex", "UACreateInstance", "UAApproveTokenRelease",
+    pub const NO_NODE_ROW: [&str; 6] = ["UACreateToken", "UACreateDex", "UAApproveTokenRelease",
         "UAApproveDexRelease", "UAApproveRelease", "UARevokeApproval"];
 
     /// Group 3f: the six PQZ debit rows, each taking the node-built `PqzSignedVerdict` last (spec §5.3).
@@ -1617,6 +1695,12 @@ pub mod testkit {
         }
         if let Some(x) = d.get("extra").and_then(Value::as_object) {
             args.extend(x.iter().map(|(k, v)| (k.clone(), v.clone())));
+        }
+        // owner 2026-11-12: a generic creation names its initializer call `init_call`; the node hashes it
+        if row.plan.contains(&Tok::InitCall) {
+            let c = args.remove("initCall").expect("the vector's extra.initCall");
+            args.insert("init_call".into(), c);
+            args.remove("initHash");
         }
         // group 3f: the vector's `PqzSignedVerdict` is the node's to build, never a job's argument
         args.remove("pqzVerdict");
@@ -1689,6 +1773,10 @@ pub mod testkit {
                 Tok::Init(n, ty) => {
                     let v = DynSolType::parse(&abi_type(ty)).unwrap().abi_decode(x.as_bytes().unwrap()).unwrap();
                     args.insert(n.clone(), to_json(ty, &v));
+                    args.remove("initHash");
+                }
+                Tok::InitCall => {
+                    args.insert("init_call".into(), to_json("bytes", x));
                     args.remove("initHash");
                 }
                 Tok::Group(g) => for (n, y) in g.iter().zip(x.as_tuple().unwrap()) {
@@ -1801,7 +1889,8 @@ mod tests {
         // `UASetWrapLimits`, `UASetWrapMember`; round 3r (CTR-GOV-23): -> (97, 131, 130), the router's eleven admin rows (the
         // four release approvals, like the creations, left out by vectors()); round 3s (CTR-GOV-24): -> (100, 134, 133), the
         // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: -> (101, 135, 134), the router's `UASetVerifierFee`
-        assert_eq!((structs, domains, calldata), (101, 135, 134), "every row was walked (the creations and approvals left out by vectors())");
+        // owner 2026-11-12: -> (102, 136, 135), `UACreateInstance` (its `init_call` the vector's bytes)
+        assert_eq!((structs, domains, calldata), (102, 136, 135), "every row was walked (two creations and the approvals left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
@@ -1810,7 +1899,8 @@ mod tests {
         // round 3r (CTR-GOV-23): -> 100, the router's eleven admin rows; round 3s: -> 103, the router's three list / enable rows
         // round 3t: -> 104, `UASetVerifierFee`; owner 2026-11-12: -> 106, `UACreateToken`, `UACreateDex` (their vector rows stay out
         // of the walk: filler `initArgs`, `creation_rows_encode_the_named_config`)
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 106, "101 vector rows, mtxPay, the two invalidations (DEX, token), the two creations");
+        // owner 2026-11-12: -> 107, `UACreateInstance`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 107, "102 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations");
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 32, "the wallet's three flat builders are gone (MD-11 (a))");
@@ -2674,6 +2764,66 @@ mod tests {
                 assemble(row, Some(&env), &eight, Some(&sig), FEE).expect("control: eight legs");
             }
         }
+    }
+
+    /// Owner 2026-11-12 (`mtxCreateInstance`, "both the generic row and the per-class ones"): a creation names `args.init_call`
+    /// (bytes) or a known class's `args.config`, never both; the node hashes the call into the signed `initHash`. The vector row
+    /// `create_config.json` `instance` (forge `test_instanceInitCallKat`): `PqChat`'s named config builds the row's `initCall`,
+    /// byte for byte the raw form's calldata and struct hash. Refused by name: both, neither, a job's `initHash`, a config of a
+    /// class without one, an unknown config field, an owner neither 0 nor the creator, an `init_call` above [`MAX_INIT_CALL`].
+    #[test]
+    fn instance_rows_take_init_call_or_a_named_config() {
+        let raw: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap();
+        let kat: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/factory/create_config.json")).unwrap();
+        let k = &kat["instance"];
+        let o = &raw["ops"]["UACreateInstance"];
+        let d = &o["domains"]["gov_router"];
+        let row = row_of("UACreateInstance", "gov_router");
+        assert_eq!(row.type_string(), o["typeString"].as_str().unwrap());
+        assert_eq!(format!("0x{}", alloy::hex::encode(row.selector)), d["selector"].as_str().unwrap(), "{}", d["abi"]);
+        let mut args = o["message"].as_object().unwrap().clone();
+        let mut env = Map::new();
+        for n in ["from"].into_iter().chain(ENV) {
+            env.insert(n.to_string(), args.remove(n).unwrap());
+        }
+        env.insert("from".into(), k["creator"].clone());
+        args.remove("initHash");
+        args.insert("contractClass".into(), k["contractClass"].clone());
+        args.insert("kind".into(), k["kind"].clone());
+        let sig = json!({"keyData": "0x", "signature": d["signature"], "members": []});
+        let env = Value::Object(env);
+        let z32 = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+        let on = |base: &Map<String, Value>, extra: &[(&str, Value)]| {
+            let mut x = base.clone();
+            x.extend(extra.iter().map(|(n, v)| (n.to_string(), v.clone())));
+            assemble(row, Some(&env), &Value::Object(x), Some(&sig), FEE)
+        };
+        let with = |extra: &[(&str, Value)]| on(&args, extra);
+        let raw_form = with(&[("init_call", k["initCall"].clone())]).unwrap();
+        let named = with(&[("config", k["config"].clone())]).unwrap();
+        assert_eq!((&named.data, named.struct_hash), (&raw_form.data, raw_form.struct_hash), "the named config builds the same call");
+        assert_eq!(raw_form.vals["initHash"], Val::FixedBytes(k["initHash"].as_str().unwrap().parse::<B256>().unwrap(), 32), "initHash");
+        let (_, back, _) = op_from_calldata(row, &named.data);
+        assert_eq!(back["init_call"], k["initCall"], "the calldata carries the vector's initCall");
+        with(&[("config", json!({"owner": z32(0)}))]).expect("control: owner 0");
+        let refused = |extra: &[(&str, Value)]| with(extra).unwrap_err().to_string();
+        let other = json!({"owner": format!("{:#x}", B256::repeat_byte(0x0b))});
+        assert!(refused(&[("config", other)]).contains("args.config.owner: 0 or the creator"));
+        assert!(refused(&[("config", k["config"].clone()), ("init_call", k["initCall"].clone())])
+            .starts_with("BAD_PAYLOAD: args.config and args.init_call"));
+        assert!(refused(&[]).starts_with("BAD_PAYLOAD: args.init_call: missing"));
+        assert!(refused(&[("init_call", k["initCall"].clone()), ("initHash", k["initHash"].clone())])
+            .starts_with("BAD_PAYLOAD: args.initHash: the node hashes"));
+        assert!(refused(&[("config", json!({"owner": z32(0), "admin": z32(0)}))]).contains("args.config.admin: unknown field"));
+        assert!(refused(&[("config", json!("0x00"))]).contains("args.config: not an object"));
+        let long = json!(format!("0x{}", "ab".repeat(MAX_INIT_CALL + 1)));
+        assert!(refused(&[("init_call", long)]).starts_with("INIT_CALL_TOO_LONG"));
+        with(&[("init_call", json!(format!("0x{}", "ab".repeat(MAX_INIT_CALL))))]).expect("control: at the bound");
+        let mut seven = args.clone();
+        seven.insert("contractClass".into(), json!(7));
+        assert!(on(&seven, &[("config", k["config"].clone())]).unwrap_err().to_string()
+            .starts_with("INSTANCE_CONFIG_UNKNOWN: class 7 kind 0"));
+        on(&seven, &[("init_call", k["initCall"].clone())]).expect("control: any class by init_call");
     }
 
     /// CTR-MTX-27: `call` is a named op, not hex: the router's calldata carries its bytes, `callDataHash` their hash, and the

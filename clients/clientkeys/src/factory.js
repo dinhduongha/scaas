@@ -126,3 +126,14 @@ export function creationInitArgs(kind, config) {
   const t = CONFIG[kind] ?? (() => { throw new Error(`no creation config ${kind}`); })();
   return hex(abiEncode([typeOf(t)], [valueOf(t, config, 'config')]));
 }
+
+/** Owner 2026-11-12 (`mtxCreateInstance`, the per-class named form): the initializer call a known generic class takes from its
+ *  named config, the bytes a creation sends as `initCall` (`initHash = keccak256(initCall)`). `PqChat` (class 3, kind 0):
+ *  `initialize(bytes32 owner)`, `owner` 0 or the creator. Any other class: send its `initCall` bytes. */
+export function instanceInitCall(contractClass, kind, config) {
+  if (Number(contractClass) !== 3 || Number(kind) !== 0) throw new Error(`class ${contractClass} kind ${kind}: no named config; send initCall`);
+  const extra = Object.keys(config).filter((k) => k !== 'owner');
+  if (extra.length) throw new Error(`config: no field ${extra.join(', ')}`);
+  if (config.owner === undefined) throw new Error('config.owner: missing');
+  return hex(concatBytes(keccak_256(utf8ToBytes('initialize(bytes32)')).subarray(0, 4), b32(config.owner, 'owner')));
+}

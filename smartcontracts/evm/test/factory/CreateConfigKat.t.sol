@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 
 /// Owner 2026-11-12, Fable recheck 2 P3-7 (NODE-JOB-26): `smartcontracts/vectors/factory/create_config.json` pins a creation's
 /// named config against the contracts' own structs: its `initArgs` is `abi.encode` of `IFactoryToken.TokenConfig` /
@@ -64,6 +65,26 @@ contract CreateConfigKatTest is Test {
         assertEq(vm.parseJsonBytes32(j, ".dex.initHash"), keccak256(d), "dex initHash");
         _namedToken(j, _token());
         _namedDex(j, _dex());
+    }
+
+    /// Owner 2026-11-12 (`mtxCreateInstance`, both forms): the `instance` row is a generic creation of `PqChat` by `creator`; its
+    /// `initCall` is the class's catalogued initializer of the named `config` (`IPqChat.initialize(owner)`), the bytes a job sends
+    /// as `init_call` or the node builds from `config`; `initHash` its keccak.
+    function test_instanceInitCallKat() public {
+        bytes32 creator = _w(0xc1);
+        bytes memory c = abi.encodeCall(IPqChat.initialize, (creator));
+        if (vm.envOr("WRITE_CREATE_CONFIG_KAT", false)) {
+            vm.writeJson(string.concat('"', vm.toString(c), '"'), KAT, ".instance.initCall");
+            vm.writeJson(string.concat('"', vm.toString(keccak256(c)), '"'), KAT, ".instance.initHash");
+        }
+        string memory j = vm.readFile(KAT);
+        assertEq(vm.parseJsonUint(j, ".instance.contractClass"), 3, "class: PqChat (D22)");
+        assertEq(vm.parseJsonUint(j, ".instance.kind"), 0, "kind");
+        assertEq(vm.parseJsonBytes32(j, ".instance.creator"), creator, "creator");
+        assertEq(vm.parseJsonBytes32(j, ".instance.config.owner"), creator, "config.owner");
+        assertEq(vm.parseJsonKeys(j, ".instance.config").length, 1, "config: owner only");
+        assertEq(vm.parseJsonBytes(j, ".instance.initCall"), c, "initCall");
+        assertEq(vm.parseJsonBytes32(j, ".instance.initHash"), keccak256(c), "initHash");
     }
 
     /// The vector's named `config` is the struct, field by field, by the struct's own field names.

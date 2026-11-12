@@ -1,5 +1,5 @@
 {
-  "note": "Owner 2026-11-12, Fable recheck 2 P3-7 (NODE-JOB-26): a creation's named config and the factory's initArgs = abi.encode(config), initHash = keccak256(initArgs). The config is named as node jobs carry it; test/factory/CreateConfigKat.t.sol checks initArgs against the Solidity structs IFactoryToken.TokenConfig and ISCaaSDex.DexConfig field by field (WRITE_CREATE_CONFIG_KAT=true rewrites initArgs and initHash from them); read by scaas-node (typed::tests::creation_rows_encode_the_named_config) and clientkeys (test/typed-ops.test.js: creationInitArgs encodes config to initArgs). No ua-* client builds a creation yet; one that does reads this row. Values are distinct, not a valid token.",
+  "note": "Owner 2026-11-12, Fable recheck 2 P3-7 (NODE-JOB-26): a creation's named config and the factory's initArgs = abi.encode(config), initHash = keccak256(initArgs). The config is named as node jobs carry it; test/factory/CreateConfigKat.t.sol checks initArgs against the Solidity structs IFactoryToken.TokenConfig and ISCaaSDex.DexConfig field by field (WRITE_CREATE_CONFIG_KAT=true rewrites initArgs and initHash from them); read by scaas-node (typed::tests::creation_rows_encode_the_named_config) and clientkeys (test/typed-ops.test.js: creationInitArgs encodes config to initArgs). No ua-* client builds a creation yet; one that does reads this row. Owner 2026-11-12 (mtxCreateInstance, both forms): `instance` is a generic creation of PqChat (class 3, kind 0) by `creator`: its named `config` and the `initCall` the node builds from it (IPqChat.initialize(owner)), the same bytes a job sends as `init_call`; initHash = keccak256(initCall); checked by forge (CreateConfigKat.t.sol test_instanceInitCallKat), read by scaas-node (typed::tests::instance_rows_take_init_call_or_a_named_config) and clientkeys (instanceInitCall). Values are distinct, not a valid token.",
   "token": {
     "config": {
       "name": "Named",
@@ -73,5 +73,15 @@
     },
     "initArgs": "0xadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad00000000000000000000000000000000000000000000000000000000000003e80000000000000000000000007e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000e100000000000000000000000005e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
     "initHash": "0x77cfe1758b06b5c6e51dff6525c34e8280fefdb5d371607a3acf647fcc7092a5"
+  },
+  "instance": {
+    "contractClass": 3,
+    "kind": 0,
+    "creator": "0xc1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+    "config": {
+      "owner": "0xc1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+    },
+    "initCall": "0x9498bd71c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+    "initHash": "0x6b805fdcc00b34dfd6e5d4b6f2526674198b36ab1595a1a293e466e80d03df96"
   }
 }

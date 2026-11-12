@@ -103,6 +103,11 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
 
 /// As [`deploy`]; `zether`: the Zether stack too (`DEPLOY_ZETHER=1`, `deploy.sh`'s `--gas-estimate-multiplier 105`).
 fn deploy_with(rpc: &str, chain_id: u64, holder: Address, zether: bool) -> Value {
+    deploy_env(rpc, chain_id, holder, zether, &[])
+}
+
+/// As [`deploy_with`], with more environment for the script (`DEPLOY_PQCHAT`).
+fn deploy_env(rpc: &str, chain_id: u64, holder: Address, zether: bool, env: &[(&str, &str)]) -> Value {
     let sc = sc();
     let mut cmd = Command::new("forge");
     cmd.current_dir(sc)
@@ -110,6 +115,7 @@ fn deploy_with(rpc: &str, chain_id: u64, holder: Address, zether: bool) -> Value
     if zether {
         cmd.args(["--gas-estimate-multiplier", "105"]).env("DEPLOY_ZETHER", "true");
     }
+    cmd.envs(env.iter().copied());
     let status = cmd
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
@@ -1545,6 +1551,8 @@ alloy::sol! {
     function predictAddress(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt) external view returns (address);
     function isDex(address dex) external view returns (bool);
     function isToken(address token) external view returns (bool);
+    /// `PqChat`'s owner (class 3, kind 0): 0 or its creator.
+    function owner() external view returns (bytes32);
 }
 
 /// Owner 2026-11-12 (every state-changing `mtx*` relayable, fee 0 too): an EOA with no gas signs `mtxCreateDex` and `mtxCreateToken`
@@ -1606,6 +1614,65 @@ async fn router_creations_signed_by_an_eoa() {
         salt: B256::repeat_byte(0x62) }).await;
     assert!(view(&rpc, factory, isDexCall { dex }).await && view(&rpc, dex, listedOnlyCall {}).await, "the DEX, its named config");
     assert!(view(&rpc, factory, isTokenCall { token: tok }).await, "the token");
+    assert_eq!(view(&rpc, router, nonce).await, U256::from(2u64), "two creations on the factory's lane");
+}
+
+/// Owner 2026-11-12 (`mtxCreateInstance`, "both the generic row and the per-class ones"): an EOA with no gas signs two `PqChat`
+/// creations (class 3, kind 0) on the chain's `GovernanceRouter`, relayed at fee 0: one names its `init_call` bytes
+/// (`initialize(0)`), the other the class's named config `{owner: <creator>}`, which the node builds into the call; both instances
+/// stand at the creator's predicted addresses with their owners. The negatives, `dead` with nothing sent (the lane's nonce does
+/// not move): both forms in one job, an owner that is not the creator, an unpublished release (`RELEASE_UNKNOWN`, read from the
+/// factory before the simulation).
+#[tokio::test]
+#[ignore]
+async fn router_instance_creations_signed_by_an_eoa() {
+    let chain_id = 31919;
+    let (_anvil, rpc) = start_anvil(chain_id, 31919).await;
+    let owner = small_key(0x620); // never funded
+    let dep = deploy_env(&rpc, chain_id, owner.address(), false, &[("DEPLOY_PQCHAT", "true")]);
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
+    let factory: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
+    let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    assert!(dep["pqchat_implementation"].is_string(), "PqChat release 1 of (3, 0)");
+    let lane = U256::from_be_slice(factory.as_slice());
+    let z = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+    let me = format!("{:#x}", owner.address().into_word());
+    let op = |args: Value, nonce: u64| signed_op(&owner, json!({"entry": "mtxCreateInstance", "contract": "gov_router",
+        "token": format!("{router:#x}"), "args": args, "envelope": envelope(owner.address(), lane, nonce)}), chain_id, uid);
+    let base = |salt: u8, version: &str| json!({"target": format!("{factory:#x}"), "contractClass": 3, "kind": 0, "version": version,
+        "salt": z(salt)});
+    let with = |mut a: Value, k: &str, v: Value| { a[k] = v; a };
+    let init_zero = json!(format!("0x{}{}", alloy::hex::encode(&alloy::primitives::keccak256("initialize(bytes32)")[..4]), "00".repeat(32)));
+    let raw_op = op(with(base(0x71, "1"), "init_call", init_zero.clone()), 0);
+    let named_op = op(with(base(0x72, "1"), "config", json!({"owner": me})), 1);
+    let both = op(with(with(base(0x73, "1"), "config", json!({"owner": me})), "init_call", init_zero), 2);
+    let stranger = op(with(base(0x74, "1"), "config", json!({"owner": z(0x0b)})), 2);
+    let unpublished = op(with(base(0x75, "9"), "config", json!({"owner": me})), 2);
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let report = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
+    let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-instance".into(),
+        Default::default()).await.unwrap();
+    let nonce = IMtxIds::mtxNonceCall { from: owner.address().into_word(), batch: lane };
+    for (id, op, want) in [(1, both, "BAD_PAYLOAD: args.config and args.init_call"), (2, stranger, "args.config.owner: 0 or the creator"),
+                           (3, unpublished, "RELEASE_UNKNOWN")] {
+        state.lock().unwrap().jobs.push(json!({"id": id, "kind": "ua_metatx", "op": op}));
+        run_outbox(&mut s).await;
+        assert_eq!(report(id)["chain_state"], "dead", "{}", report(id));
+        assert!(report(id)["error"].as_str().unwrap().contains(want), "{want}: {}", report(id));
+    }
+    assert_eq!(view(&rpc, router, nonce.clone()).await, U256::ZERO, "nothing sent");
+    for (id, op) in [(4, raw_op), (5, named_op)] {
+        state.lock().unwrap().jobs.push(json!({"id": id, "kind": "ua_metatx", "op": op}));
+        run_outbox(&mut s).await;
+        assert_eq!(report(id)["chain_state"], "mined", "{}", report(id));
+    }
+    let at = |salt: u8| predictAddressCall { creatorId: owner.address().into_word(), contractClass: 3, kind: 0, salt: B256::repeat_byte(salt) };
+    let (raw_at, named_at) = (view(&rpc, factory, at(0x71)).await, view(&rpc, factory, at(0x72)).await);
+    assert_eq!(view(&rpc, raw_at, ownerCall {}).await, B256::ZERO, "init_call: initialize(0)");
+    assert_eq!(view(&rpc, named_at, ownerCall {}).await, owner.address().into_word(), "the named config: the creator owns it");
     assert_eq!(view(&rpc, router, nonce).await, U256::from(2u64), "two creations on the factory's lane");
 }
 

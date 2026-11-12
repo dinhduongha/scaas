@@ -639,6 +639,29 @@ pub const LIQUIDITY_ORDER_CLOSED: &str = "LIQUIDITY_ORDER_CLOSED";
 /// The signed `validUntil` narrows the job's deadline (`typed.rs`), which the lane checks before simulation. A transport
 /// error is a retry; a token's read that reverts is the answer "no".
 // ponytail: reads per job, no cache; cache the mark per DEX if the reads show up in the lane's latency
+/// Owner 2026-11-12 (`mtxCreateInstance`): the release `(contractClass, kind, version)` is published on the factory (`target`) and
+/// not deprecated, read with `classReleaseOf` before the simulation; refused by name (`dead`), an unread answer back in the queue.
+async fn check_release(chain: &Chain, row: &typed::Row, data: &[u8]) -> Result<(), Refusal> {
+    let bad = |e: anyhow::Error| Refusal::Policy(format!("{e:#}"));
+    let v = typed::call_values(row, data).map_err(bad)?;
+    let n = |i: usize| v.get(i).and_then(|x| x.as_uint()).map_or(0, |(u, _)| u.to::<u64>());
+    let factory = v.get(1).and_then(|x| x.as_address()).unwrap_or_default();
+    let (c, k, ver) = (n(2) as u16, n(3) as u16, n(4));
+    let id = IOpenFactory::ReleaseId { contractClass: c, kind: k, version: ver };
+    let r = chain.call_view(factory, IOpenFactory::classReleaseOfCall { id }).await.map_err(|e| match e {
+        SimError::Revert(r) => Refusal::Policy(format!("RELEASE_UNKNOWN: class {c} kind {k} version {ver}: the factory {factory:#x} \
+            answers no release ({r})")),
+        SimError::Transport(t) => Refusal::Transport(format!("release of class {c} kind {k} version {ver} unread: {t}")),
+    })?;
+    if r.implementation.is_zero() {
+        return Err(Refusal::Policy(format!("RELEASE_UNKNOWN: class {c} kind {k} version {ver} is not published on {factory:#x}")));
+    }
+    if r.deprecated {
+        return Err(Refusal::Policy(format!("RELEASE_DEPRECATED: class {c} kind {k} version {ver} on {factory:#x}")));
+    }
+    Ok(())
+}
+
 async fn check_liquidity(chain: &Chain, w: &Work, max_gas_per_tx: u64) -> Result<(), Refusal> {
     let policy = |m: String| Refusal::Policy(m);
     let call = <ISCaaSDex::mtxLiquidityCall as SolCall>::abi_decode(&w.data)
@@ -1039,6 +1062,9 @@ impl Guard {
         }
         if sel == ISCaaSDex::mtxLiquidityCall::SELECTOR {
             return check_liquidity(chain, w, self.max_gas_per_tx).await;
+        }
+        if row.name == "UACreateInstance" {
+            return check_release(chain, row, &w.data).await;
         }
         Ok(())
     }
@@ -1447,17 +1473,35 @@ mod tests {
     /// `(url, chain config, methods seen)`: an RPC answering every `eth_call` with `chain_uid` (so `chainUid()` binds and
     /// `registry()` is non-zero), every `eth_getCode` empty, no `eth_estimateGas`.
     async fn bound(uid: B256) -> (ChainCfg, Arc<Mutex<Vec<String>>>) {
+        let (cfg, seen, _) = bound_release(uid).await;
+        (cfg, seen)
+    }
+
+    /// [`bound`], and the release `classReleaseOf` answers: `(implementation, deprecated)`, a live one at first; `None`: a revert.
+    async fn bound_release(uid: B256) -> (ChainCfg, Arc<Mutex<Vec<String>>>, Arc<Mutex<Option<(Address, bool)>>>) {
+        let release: Arc<Mutex<Option<(Address, bool)>>> = Arc::new(Mutex::new(Some((Address::repeat_byte(0x1e), false))));
+        let r2 = release.clone();
         let seen: Arc<Mutex<Vec<String>>> = Default::default();
         let s2 = seen.clone();
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<serde_json::Value>| {
-            let s2 = s2.clone();
+            let (s2, now) = (s2.clone(), *r2.lock().unwrap());
             async move {
                 let m = r["method"].as_str().unwrap().to_string();
                 s2.lock().unwrap().push(m.clone());
                 let p = &r["params"][0];
                 let (input, to) = (p["input"].as_str().or(p["data"].as_str()).unwrap_or("0x"), p["to"].as_str().unwrap_or_default().parse().unwrap_or_default());
+                let release = format!("0x{}", alloy::hex::encode(IOpenFactory::classReleaseOfCall::SELECTOR));
                 let result = match m.as_str() {
                     "eth_call" if typed::testkit::domain_answer(input, to).is_some() => serde_json::json!(typed::testkit::domain_answer(input, to)),
+                    // owner 2026-11-12: the release `mtxCreateInstance` names (`bound_release`)
+                    "eth_call" if input.starts_with(&release) => match now {
+                        Some((implementation, deprecated)) => serde_json::json!(format!("0x{}", alloy::hex::encode(
+                            IOpenFactory::classReleaseOfCall::abi_encode_returns(&IOpenFactory::ClassRelease { implementation,
+                                envVersion: 1, envHash: B256::ZERO, usableFrom: 0, deprecated, initSelector: Default::default(),
+                                interfaceId: Default::default() })))),
+                        None => return axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": r["id"],
+                            "error": {"code": 3, "message": "execution reverted", "data": "0x"}})),
+                    },
                     "eth_call" => serde_json::json!(format!("{uid:#x}")),
                     "eth_getCode" => serde_json::json!("0x"),
                     _ => serde_json::Value::Null,
@@ -1468,7 +1512,27 @@ mod tests {
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
-        (ChainCfg { evm_chain_number: 31337, rpc_urls: vec![url], chain_uid: Some(uid), ..Default::default() }, seen)
+        (ChainCfg { evm_chain_number: 31337, rpc_urls: vec![url], chain_uid: Some(uid), ..Default::default() }, seen, release)
+    }
+
+    /// Owner 2026-11-12: `mtxCreateInstance` names a published, live release of the factory, read before the simulation; an
+    /// unpublished one is `RELEASE_UNKNOWN`, a deprecated one `RELEASE_DEPRECATED`, a reverting read `RELEASE_UNKNOWN` (all `dead`).
+    /// Control: the live release passes.
+    #[tokio::test]
+    async fn an_instance_names_a_live_release() {
+        use crate::typed::testkit::{op_of, vectors};
+        let v = vectors();
+        let uid: B256 = v["ops"]["UAUnwrap"]["domains"]["token"]["domain"]["salt"].as_str().unwrap().parse().unwrap();
+        let (cfg, _, release) = bound_release(uid).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let (w, _) = crate::submit::work_of_op(Some(1), &op_of("UACreateInstance", "gov_router", &v).unwrap(), None).unwrap();
+        let g = Guard::new(&ChainCfg { governance_routers: vec![w.to], ..cfg.clone() }, Default::default()).unwrap();
+        g.check(&chain, &w).await.expect("control: a live release");
+        for (now, want) in [(Some((Address::ZERO, false)), "RELEASE_UNKNOWN"), (Some((Address::repeat_byte(0x1e), true)), "RELEASE_DEPRECATED"),
+                            (None, "RELEASE_UNKNOWN")] {
+            *release.lock().unwrap() = now;
+            assert!(matches!(g.check(&chain, &w).await, Err(Refusal::Policy(e)) if e.starts_with(want)), "{want}");
+        }
     }
 
     fn signer() -> alloy::signers::local::PrivateKeySigner {
@@ -1526,7 +1590,8 @@ mod tests {
         // group 3h T61: -> (114, 3, 114), the router's `UASetProofStore`; group 3l: -> (116, 3, 116), the router's two wrap-limit ops
         // round 3r (CTR-GOV-23): -> (127, 3, 127), the router's eleven admin rows; round 3s (CTR-GOV-24): -> (130, 3, 130), the
         // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: -> (131, 3, 131), the router's `UASetVerifierFee`
-        assert_eq!((sent, relayed, refused), (131, 3, 131), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // owner 2026-11-12: -> (132, 3, 132), the router's `UACreateInstance` (its vector row's `init_call`)
+        assert_eq!((sent, relayed, refused), (132, 3, 132), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
@@ -1534,8 +1599,9 @@ mod tests {
         // -> 119, `remove`; ua-mtx-liquidity L6 (79c3501e, moved at L6d): -> 120, `mtxLiquidity`
         // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows; round 3s (CTR-GOV-24): -> 134, the router's three list /
         // enable rows; round 3t: -> 135, `UASetVerifierFee`; owner 2026-11-12: -> 137, `UACreateToken`, `UACreateDex` (no vector
-        // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`)
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 137, "table rows: 105 typed with an entry, 32 plain");
+        // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`); -> 138,
+        // `UACreateInstance`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 138, "table rows: 106 typed with an entry, 32 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1866,8 +1932,8 @@ mod tests {
         ("mtxLiquidityPull", "((bytes32,(address,uint256)[],", "the DEX's liquidity pull (NotLiquidityDex, and no valid digest for any other caller): reached only through the relayed mtxLiquidity (spec 2026-11-10-dex-liquidity.md §11)"),
         ("exchangeOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
         ("settleOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
-        // owner 2026-11-12: `mtxCreateToken` and `mtxCreateDex` are rows (their configs named); the instance's `initCall` is a class's own call
-        ("mtxCreateInstance", "((bytes32,uint256,", "a class's own initializer call (initCall), which the node cannot name: the owner's call (2026-11-12)"),
+        // owner 2026-11-12: `mtxCreateToken`, `mtxCreateDex` and `mtxCreateInstance` are rows (their configs named; the instance's
+        // `init_call` or a known class's named config)
         ("mtxApproveTokenRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
         ("mtxApproveDexRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
         ("mtxApproveRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
@@ -1964,8 +2030,8 @@ mod tests {
         // `mtxSetWrapLimits`, `mtxSetWrapMember`
         // round 3r: -> 47, the eleven admin ops of the factory and the compliance registry (the four approvals in NOT_ROWS)
         // round 3s (CTR-GOV-24): -> 50, `mtxSetAllowed`, `mtxSetDenied`, `mtxEnableFeature`; round 3t: -> 51, `mtxSetVerifierFee`
-        // owner 2026-11-12: -> 53, `mtxCreateToken`, `mtxCreateDex`
-        assert_eq!(router.len(), 53, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the two creations of a token and a DEX; `mtxCreateInstance` and the four release approvals (3r) in NOT_ROWS");
+        // owner 2026-11-12: -> 53, `mtxCreateToken`, `mtxCreateDex`; -> 54, `mtxCreateInstance`
+        assert_eq!(router.len(), 54, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance); the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -2292,9 +2358,10 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // owner 2026-11-12: -> 288, the router's `mtxCreateToken`, `mtxCreateDex`; EXEMPT 200 -> 198
     // owner 2026-11-12 (GUARDIAN): -> 296, the account's eight rows; EXEMPT -> 207, its six self-called operations and its three
     // generic entries; GOVERNED -> 297, its guardian's `initiateRecovery`
-    const ROWED: usize = 296;
+    // owner 2026-11-12 ("both the generic row and the per-class ones"): -> 297, the router's `mtxCreateInstance`; EXEMPT -> 206
+    const ROWED: usize = 297;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
-    const EXEMPT: usize = 207;
+    const EXEMPT: usize = 206;
     const GOVERNED: usize = 297;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).

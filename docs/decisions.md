@@ -771,7 +771,7 @@ Change (2026-11-11, ua-mtx-fix-node, Fable re-check 2 S-1..S-3; controller call;
 ### NODE-JOB-26 — The factory's token and DEX creations are relayable node rows; the config is named, the node encodes initArgs
 - old: — · status: current · owner: yes · date: 2026-11-12 · normative: node/job-api.md#NODE-JOB-26 · superseded-by: —
 
-**Rule.** The router's `mtxCreateToken` and `mtxCreateDex` are node rows of kind `gov_router`, relayable at fee 0 like every state-changing `mtx*`. The job names the creation's config field by field (`args.config`: `IFactoryToken.TokenConfig` or `ISCaaSDex.DexConfig`, a wrapped kind's legs at most 8); the node ABI-encodes it as the factory's `initArgs` and fills the signed `initHash = keccak256(initArgs)`, refusing a job's own `initHash` (`BAD_PAYLOAD`). `mtxCreateInstance` stays no row: its `initCall` is a class's own initializer call, which the node cannot build from named fields; how it is relayed is open (owner's). **UNAUDITED.**
+**Rule.** The router's `mtxCreateToken` and `mtxCreateDex` are node rows of kind `gov_router`, relayable at fee 0 like every state-changing `mtx*`. The job names the creation's config field by field (`args.config`: `IFactoryToken.TokenConfig` or `ISCaaSDex.DexConfig`, a wrapped kind's legs at most 8); the node ABI-encodes it as the factory's `initArgs` and fills the signed `initHash = keccak256(initArgs)`, refusing a job's own `initHash` (`BAD_PAYLOAD`). `mtxCreateInstance`: as it stood here, no row; superseded for that entry by [NODE-JOB-27](node/job-api.md#NODE-JOB-27). **UNAUDITED.**
 
 **Status.** BUILT (branch `ua-mtx-fix2-node`: `typed.rs` rows and the `init!` plan token, `guard.rs` `NOT_ROWS`; tests `typed::tests::creation_rows_encode_the_named_config`, `guard::tests::allow_lists_equal_the_selector_audit_both_directions` (router allow-list 51 -> 53), e2e `router_creations_signed_by_an_eoa`; 5 node mutants killed). Known answer (Fable recheck 2 P3-7): `smartcontracts/vectors/factory/create_config.json`, checked against `IFactoryToken.TokenConfig` and `ISCaaSDex.DexConfig` by forge `CreateConfigKat.t.sol`, read by the node and `clientkeys`; a struct change in Solidity fails there until the vector, the node's `NESTED` rows and the clients follow.
 
@@ -780,6 +780,19 @@ Change (2026-11-11, ua-mtx-fix-node, Fable re-check 2 S-1..S-3; controller call;
 **Cost if wrong.** Without the rows a creator with no gas could not create; with a hex `initArgs` the node would relay a bundle it cannot read.
 
 **Source.** Owner 2026-11-12 (chat, relayed by the controller): the three creations without a node row, "làm" (do it); rule "every state-changing `mtx*` is relayable, fee 0 too".
+
+### NODE-JOB-27 — A generic class's creation is relayable: its init_call bytes, or a known class's named config
+- old: — · status: current · owner: yes · date: 2026-11-12 · normative: node/job-api.md#NODE-JOB-27 · superseded-by: —
+
+**Rule.** The router's `mtxCreateInstance` is a node row of kind `gov_router`, relayable at fee 0, in two forms on the same entry. The generic row: the `UACreateInstance` fields by name (`target`, `contractClass`, `kind`, `version`, `salt`) and `init_call`, bytes, at most 4,096 (`INIT_CALL_TOO_LONG`): a named exception to explicit parameters, mirroring the contract's `bytes initCall` (a class's catalogued initializer; precedent `Interaction.data`). The per-class rows: a known class's named `config`, from which the node builds the call; today `PqChat` (class 3, kind 0), `{owner}`, 0 or the creator, built as `initialize(owner)`. A job names one of `config` and `init_call`, never both (refused by name); a named config of a class without one is `INSTANCE_CONFIG_UNKNOWN`; a job's own `initHash` is refused, the node signs `keccak256(initCall)`. Before the simulation the node reads the release on the factory (`classReleaseOf`): unpublished `RELEASE_UNKNOWN`, deprecated `RELEASE_DEPRECATED`. **UNAUDITED.**
+
+**Status.** BUILT (branch `ua-mtx-fix2-node`: `typed.rs` row and the `initcall!` plan token, `guard.rs` `check_release`, `NOT_ROWS` without the entry, router allow-list 53 -> 54; tests `typed::tests::instance_rows_take_init_call_or_a_named_config`, `guard::tests::an_instance_names_a_live_release`, the vector walks over `typed_ops.json` (its `UACreateInstance` row now walked), e2e `router_instance_creations_signed_by_an_eoa`; known answer: the `instance` row of `smartcontracts/vectors/factory/create_config.json`, forge `test_instanceInitCallKat`, `clientkeys` `instanceInitCall`).
+
+**Why.** Every state-changing `mtx*` is relayable; a class's initializer has its own typed arguments the node cannot know for every class, so the generic form carries the call's bytes as the contract does, and the classes the node knows get named fields.
+
+**Cost if wrong.** Without the row a creator with no gas could not create an instance; with only the raw form a job for a known class would carry a bundle the node cannot read.
+
+**Source.** Owner 2026-11-12 (chat, relayed by the controller): "Làm cả row chung và riêng" (make both the generic row and the per-class ones), with `init_call` as a named exception mirroring `bytes initCall`, the node computing `initHash`, a bounded length, the release published and not deprecated, `config` and `init_call` never both.
 
 ### NODE-JOB-80 — Node talks to ERP only over json/2
 - old: R6 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: ARCH-POS-05, NODE-JOB-06, INT-ERP-16, INT-ERP-18

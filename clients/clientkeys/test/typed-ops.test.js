@@ -16,7 +16,7 @@ import * as zether from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode, word } from '../src/bytes.js';
 import { expectedCall, norm } from '../scripts/typed-ops-expected.mjs';
 import * as reg from '../src/regulated.js';
-import { creationInitArgs } from '../src/factory.js';
+import { creationInitArgs, instanceInitCall } from '../src/factory.js';
 
 const { TYPED_OPS, hashTypedData, hashStruct, checkOp, checkWrapOrder, checkUAWrapOrder, checkTradeOrder, checkCancel, encodeType } = evm;
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url)));
@@ -889,4 +889,21 @@ test('the router creations: the named config vector binds initHash', () => {
   const swapped = { ...K.dex.config, grantDelay: K.dex.config.relayerSharePpm, relayerSharePpm: Number(K.dex.config.grantDelay) };
   assert.notEqual(creationInitArgs('dex', swapped), K.dex.initArgs, 'two fields swapped: other bytes');
   assert.throws(() => creationInitArgs('token', { ...K.token.config, decimals: 256 }), /out of uint8/);
+});
+
+// Owner 2026-11-12 (mtxCreateInstance, both forms): the `instance` row of create_config.json (forge test_instanceInitCallKat, the
+// node's instance_rows_take_init_call_or_a_named_config): PqChat's named config builds the row's initCall, whose keccak is the
+// signed initHash; the router entry carries those bytes and refuses others.
+test('the router creations: the instance row, named config and initCall', () => {
+  const K = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/factory/create_config.json', import.meta.url)));
+  const { contractClass, kind, config, initCall, initHash } = K.instance;
+  assert.equal(instanceInitCall(contractClass, kind, config), initCall);
+  assert.equal(hex(keccak_256(fromHex(initCall))), initHash);
+  const op = TYPED_OPS.UACreateInstance;
+  const d = V.ops.UACreateInstance.domains.gov_router;
+  const td = { types: op.types, primaryType: op.primary, domain: d.domain, message: { ...V.ops.UACreateInstance.message, initHash } };
+  assert.ok(hex(op.call(td, d.signature, { initCall }).data).includes(initCall.slice(2)), 'the calldata carries initCall');
+  assert.throws(() => op.call(td, d.signature, { initCall: d.extra.initCall }), /not the signed initHash/);
+  assert.throws(() => instanceInitCall(7, 0, config), /class 7 kind 0: no named config/);
+  assert.throws(() => instanceInitCall(3, 0, { ...config, admin: 1 }), /no field admin/);
 });
