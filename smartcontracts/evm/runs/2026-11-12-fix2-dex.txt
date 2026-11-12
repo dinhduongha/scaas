@@ -39,3 +39,15 @@ mutants | (this commit) | 0 | 7/7 killed (runs/2026-11-12-fix2-dex/mutants-settl
 size gate | (this commit) | 0 | SCaaSDex 33461 -> 34359 (over the 33,594 notice line, owner-accepted; row moved)
 gas (regular, 6a51c72f -> this) | (this commit) | 0 | mtxSettle 1x1 311153 -> 328318; mtxExchange 293889 -> 296716;
   mtxExchangeBatch 304094 -> 306921; mtxHybrid 1x1 408948 -> 418812, 1x2 483612 -> 500514; mtxLiquidity unchanged
+
+--- no measuring of SCaaS tokens; hybrid option (b) (owner 2026-11-12) ---
+precondition | - | - | one _update / _uaMove body for every kind, _regMove a view check, mtxTrade / restorePulled /
+  transferToUA exact, the regulated tax on pay entries only; test/merge/ScaasExactMoves.t.sol 13 kinds green
+tests | (this commit) | 0 | test/v2 626 (47) then test/v2/Dex*.sol 218 (10) after the last tests; test/ua/UADex*.sol
+  15; test/liquidity 82 + 1 skipped; test/merge 119 (11); test/metatx/T*.sol 139; test/as/FeeLegs 9; test/governance 484
+mutants | (this commit) | 0 | 9/9 killed (runs/2026-11-12-fix2-dex/mutants-scaas-hybrid.json; X5 and H3 killed after
+  their tests were added, first run survived)
+size gate | (this commit) | 0 | SCaaSDex 34359 -> 34893 (row moved; T-1 line 35,386)
+gas (regular, 2e97aded -> this) | (this commit) | 0 | mtxSettle 1x1 328318 -> 314763 (311105 before the outcome rule);
+  mtxExchange 296716 -> 295232; mtxExchangeBatch 306921 -> 305437; mtxHybrid 1x1 418812 -> 411307, 1x2 500514 ->
+  487621; DexMarkets figures (total, one fixture): 1x1 SCaaS-SCaaS 331319, 1x1 with an outside maker 290088

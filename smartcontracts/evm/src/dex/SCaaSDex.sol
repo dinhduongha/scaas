@@ -356,8 +356,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         for (uint256 i; i < n; ++i) _pullLeg(tokenB, makers[i], s.makers[i], submitter);
         _arrived(tokenA, balA, taker, makers, true);
         _arrived(tokenB, balB, taker, makers, false);
-        _pay(s.ref, tokenA, taker, submitter);
-        for (uint256 i; i < n; ++i) _pay(s.ref, tokenB, makers[i], submitter);
+        _pay(s.ref, tokenA, taker, submitter, !makers[0].outside);
+        for (uint256 i; i < n; ++i) _pay(s.ref, tokenB, makers[i], submitter, !taker.outside);
         if (_bal(tokenA) != balA) revert ConservationBroken(tokenA);
         if (_bal(tokenB) != balB) revert ConservationBroken(tokenB);
     }
@@ -367,6 +367,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     ///      taker's receive, each maker's refund), the dust to the last nonzero share, each fee recomputed on its share.
     ///      Exact tokens arrive exactly and change nothing; each payout's floor is measured at `_pay`.
     function _arrived(address token, uint256 bal, Calc memory taker, Calc[] memory makers, bool a) private view {
+        if (!(a ? taker.outside : makers[0].outside)) return; // a SCaaS token arrives exactly (owner 2026-11-12)
         uint256 b = _bal(token);
         if (b < bal) revert ConservationBroken(token);
         uint256 x = b - bal;
@@ -484,6 +485,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function _pull(address sellToken, Calc memory c, bytes calldata sig, IUARegistry.UASig calldata auth, address submitter)
         private
     {
+        // a SCaaS token moves exactly what it is asked (owner 2026-11-12: not measured; test/merge/ScaasExactMoves.t.sol)
+        if (!c.outside) return _pullRaw(sellToken, c, sig, auth, submitter);
         uint256 b = _balOf(sellToken, c.o.from);
         _pullRaw(sellToken, c, sig, auth, submitter);
         uint256 a = _balOf(sellToken, c.o.from);
@@ -506,11 +509,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         DexPuller(_s().puller).pull(sellToken, from, TradeLib.record(o, f, c.h, false));
     }
 
-    function _pay(bytes32 ref, address sellToken, Calc memory c, address submitter) private {
-        // the signed floor (owner 2026-11-12): ⌈sold · receiveAmount / amount⌉ net of its fee, measured at the recipient
+    /// @dev The signed floor (owner 2026-11-12): `⌈sold · receiveAmount / amount⌉` net of its fee on that amount.
+    function _floor(Calc memory c) private pure returns (uint256) {
         uint256 l = Math.mulDiv(c.sold, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
-        (bytes32 to, uint256 relayerShare, uint256 treasuryShare) =
-            _payLeg(sellToken, c, 0, submitter, l - Math.mulDiv(l, c.o.fee, PPM, Math.Rounding.Ceil));
+        return l - Math.mulDiv(l, c.o.fee, PPM, Math.Rounding.Ceil);
+    }
+
+    /// @dev `exact`: the receive token is SCaaS (the other side's kind at use), so its payout is not measured.
+    function _pay(bytes32 ref, address sellToken, Calc memory c, address submitter, bool exact) private {
+        (bytes32 to, uint256 relayerShare, uint256 treasuryShare) = _payLeg(sellToken, c, 0, submitter, _floor(c), exact);
         if (c.ua) {
             emit UALegSettled(ref, c.h, c.o.from, to, c.sold, c.recv - c.fee, c.fee, c.refund, relayerShare,
                 treasuryShare);
@@ -524,7 +531,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     ///      payout to a party is measured around its own transfer (owner 2026-11-12): the recipient's delta at least `min`
     ///      (a book leg: its signed floor; an exchange leg or a hybrid's taker: the floor less the fee, closing review
     ///      C6-4), the refund in full; the fee shares carry no floor.
-    function _payLeg(address sellToken, Calc memory c, uint256 surplus, address submitter, uint256 min)
+    function _payLeg(address sellToken, Calc memory c, uint256 surplus, address submitter, uint256 min, bool exact)
         private returns (bytes32 to, uint256 relayerShare, uint256 treasuryShare)
     {
         DexStorage storage s = _s();
@@ -532,10 +539,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         to = o.destination == 0 ? o.from : o.destination;
         relayerShare = Math.mulDiv(c.fee, s.relayerSharePpm, PPM);
         treasuryShare = c.fee - relayerShare;
-        _sendChecked(o.receiveToken, to, c.recv - c.fee + surplus, min);
+        // a SCaaS token credits exactly what it is sent (owner 2026-11-12): measured for an outside token only
+        if (exact) _sendTo(o.receiveToken, to, c.recv - c.fee + surplus);
+        else _sendChecked(o.receiveToken, to, c.recv - c.fee + surplus, min);
         _send(o.receiveToken, submitter, relayerShare);
         _send(o.receiveToken, s.treasury, treasuryShare);
-        if (c.refund != 0) _sendChecked(sellToken, o.from, c.refund, c.refund);
+        if (c.outside && c.refund != 0) _sendChecked(sellToken, o.from, c.refund, c.refund);
+        else _sendTo(sellToken, o.from, c.refund);
     }
 
     // ------------------------------------------------------------------ exchange path (CTR-DEX-20, -21, -23)
@@ -661,7 +671,22 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         _snap(t);
         _pullLeg(tokenA, taker, p.taker, submitter);
         for (uint256 i; i < makers.length; ++i) _pullLeg(tokenB, makers[i], p.makers[i], submitter);
+        if (makers.length != 0 && makers[0].outside) _bookShort(b, taker);
         _checkPulled(t);
+    }
+
+    /// @dev Hybrid option (b) (owner 2026-11-12): an outside B the makers sell may arrive short (a transfer fee); the
+    ///      taker's share of the book is what arrived (its receive and B's floors lowered by the shortfall, its fee
+    ///      recomputed) and its payout is measured against its signed floor. More than was pulled is refused
+    ///      (`ConservationBroken`); A, sold by the taker into the fixed route, must still arrive exactly.
+    function _bookShort(Tok memory b, Calc memory taker) private view {
+        uint256 want = b.snap + b.sold + b.refunds;
+        uint256 got = _bal(b.token);
+        if (got > want) revert ConservationBroken(b.token);
+        uint256 s = want - got;
+        b.sold -= s;
+        b.floors -= s;
+        _share(taker, taker.recv - s);
     }
 
     /// @dev Spec §4.2 steps 5-7: B's output at least `outsideFloor` (`InsufficientOutput`; the excess is the taker's
@@ -687,8 +712,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             taker.sold -= leftover;
             if (!(restore && taker.ua)) taker.refund += leftover; // a SCaaS leg's restore is its refund (B P2-1)
         }
-        for (uint256 i; i < makers.length; ++i) _pay(p.ref, t[1].token, makers[i], submitter);
-        _payExchange(p.ref, a.token, taker, t[1].excess, submitter);
+        for (uint256 i; i < makers.length; ++i) _pay(p.ref, t[1].token, makers[i], submitter, !taker.outside);
+        _payExchange(p.ref, a.token, taker, t[1].excess, submitter, _floor(taker)); // a book party: its signed floor
         if (restore) _restorePulled(a.token, taker, leftover);
         _conserve(t);
     }
@@ -793,7 +818,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             uint256 share = x.floorsLeft == c[i].recv ? x.excess - x.paid : Math.mulDiv(x.excess, c[i].recv, x.floors);
             x.floorsLeft -= c[i].recv;
             x.paid += share;
-            _payExchange(p.ref, p.legs[i].sellToken, c[i], share, submitter);
+            _payExchange(p.ref, p.legs[i].sellToken, c[i], share, submitter, c[i].recv - c[i].fee);
         }
         _conserve(t);
     }
@@ -818,8 +843,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         }
     }
 
-    function _payExchange(bytes32 ref, address sellToken, Calc memory c, uint256 surplus, address submitter) private {
-        (bytes32 to,,) = _payLeg(sellToken, c, surplus, submitter, c.recv - c.fee);
+    /// @dev `min`: an exchange leg's floor less its fee (C6-4); a hybrid's taker, a book party, its signed floor.
+    function _payExchange(bytes32 ref, address sellToken, Calc memory c, uint256 surplus, address submitter, uint256 min)
+        private
+    {
+        (bytes32 to,,) = _payLeg(sellToken, c, surplus, submitter, min, _scaas(c.o.receiveToken));
         uint256 limit = Math.mulDiv(c.sold, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
         if (c.ua) {
             emit UAExchangeLegSettled(ref, c.h, c.o.from, to, c.sold, c.recv, surplus, c.fee, c.refund, limit);

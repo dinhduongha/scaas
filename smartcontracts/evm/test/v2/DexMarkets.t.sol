@@ -396,4 +396,93 @@ contract DexMarketsTest is UADexBase {
         assertTrue(_settle(ss));
         assertEq(t.balanceOf(alice), 1980 - 19);
     }
+
+    // ------------------------------------------------------------------ hybrid option (b) (owner 2026-11-12)
+
+    /// Alice sells 1000 A for at least `floor` of `t`: dave (outside) sells 800 of `t` at 2000 : 1000 (400 A), the other
+    /// 600 A go to the router for at least 1080 of `t`, which pays `out`.
+    function _hybridBook(address t, uint256 floor) internal returns (ISCaaSDex.HybridPlan memory p) {
+        address pl = dex.puller();
+        vm.prank(dave);
+        IERC20(t).approve(pl, type(uint256).max);
+        ITradeToken.TradeOrder memory m = _nat(dave, address(A), 2000, 1000, 0);
+        p.ref = "hyb";
+        p.taker = _uaLeg(address(A), _ua(_pad(alice), t, 1000, floor, 0), 1000);
+        p.makers = new ISCaaSDex.DexLeg[](1);
+        p.makers[0] = DexLegs.leg0(t, m, _ecdsa(DAVE_PK, dex.dexOrderDigest(t, m)), 800);
+        (p.outsideSell, p.outsideFloor) = (600, 1080);
+    }
+
+    /// The same plan with an exact token (the control: alice gets 800 + 1150), a symmetric 1 % fee token (792 of the book
+    /// arrive, 1139 of the route; alice is sent 1931, credited 1912 >= 1800) and a `transfer`-only fee token (the book
+    /// exact, 1139 of the route; credited 1920 >= 1800). Below the floor: alice signs 1880 and the route pays 1100, she
+    /// would be credited 1863 (symmetric) or 1871 (`transfer`-only): `InsufficientOutput`. Dave gets his 400 A.
+    function test_hybrid_feeTokenOnTheBookLeg_outcomeRule() public {
+        MockERC20 ex = new MockERC20("Exact", "EX", 18);
+        FeeOnTransferERC20 sym = new FeeOnTransferERC20();
+        TransferFeeERC20 tf = new TransferFeeERC20();
+        address[3] memory ts = [address(ex), address(sym), address(tf)];
+        for (uint256 i; i < 3; ++i) {
+            MockERC20(ts[i]).mint(dave, 1e6);
+            MockERC20(ts[i]).mint(address(router), 1e6);
+        }
+        _fresh(0, 0);
+        _hybrid(_hybridBook(address(ex), 1800), _swap(address(A), address(ex), 600, 1150), ""); // the control
+        assertEq(ex.balanceOf(alice), 1950);
+        assertEq(A.balanceOf(dave), 400);
+        _fresh(0, 0);
+        _hybrid(_hybridBook(address(sym), 1800), _swap(address(A), address(sym), 600, 1150), "");
+        assertEq(sym.balanceOf(alice), 1912);
+        assertEq(sym.balanceOf(address(dex)), 0);
+        _fresh(0, 0);
+        _hybrid(_hybridBook(address(sym), 1880), _swap(address(A), address(sym), 600, 1100),
+            abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(sym)));
+        _fresh(0, 0);
+        _hybrid(_hybridBook(address(tf), 1800), _swap(address(A), address(tf), 600, 1150), "");
+        assertEq(tf.balanceOf(alice), 1920);
+        // the taker, a book party, is held to its signed floor (1800), not to its receive less the fee (1880): a route
+        // paying 1100 credits it 1871, which settles
+        _fresh(0, 0);
+        _hybrid(_hybridBook(address(tf), 1800), _swap(address(A), address(tf), 600, 1100), "");
+        assertEq(tf.balanceOf(alice), 1920 + 1871);
+        _fresh(0, 0);
+        _hybrid(_hybridBook(address(tf), 1880), _swap(address(A), address(tf), 600, 1100),
+            abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(tf)));
+    }
+
+    /// The makers receive an outside token with a fee on `transfer` (dave, the taker, sells it): each maker's payout is
+    /// measured against its own signed floor (they are filled at their exact price): `InsufficientOutput`.
+    function test_settle_makersReceiveAFeeToken_measured() public {
+        _fresh(0, 0);
+        TransferFeeERC20 tf = new TransferFeeERC20();
+        tf.mint(dave, 1e6);
+        address p = dex.puller();
+        vm.prank(dave);
+        tf.approve(p, type(uint256).max);
+        ITradeToken.TradeOrder memory t = _nat(dave, address(A), 334, 1000, 0);
+        ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
+        ss[0].ref = "mk";
+        ss[0].taker = DexLegs.leg0(address(tf), t, _ecdsa(DAVE_PK, dex.dexOrderDigest(address(tf), t)), 334);
+        ss[0].makers = new ISCaaSDex.DexLeg[](1);
+        ss[0].makers[0] = _uaLeg(address(A), _ua(_pad(alice), address(tf), 1000, 334, 0), 1000);
+        _expectOne(ss, abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(tf)));
+    }
+
+    /// Gas figures (not pins), the same fixture: `mtxSettle` 1x1 SCaaS against SCaaS (nothing measured), then with an
+    /// outside maker (an exact `MockERC20`, its pull, arrival and payout measured).
+    function test_GAS_settle_outsideMaker() public {
+        _fresh(0, 0);
+        ISCaaSDex.Settlement[] memory s0 = _s(_uaLeg(address(A), _ua(_pad(alice), address(B), 1000, 1900, 3_000), 1000),
+            _uaLeg(address(B), _ua(_pad(bob), address(A), 2000, 1000, 1_000), 2000));
+        vm.prank(RELAYER);
+        dex.mtxSettle(s0);
+        emit log_named_uint("GAS mtxSettle 1x1 SCaaS-SCaaS (total)", vm.lastCallGas().gasTotalUsed);
+        _fresh(0, 0);
+        MockERC20 ex = new MockERC20("Exact", "EX", 18);
+        ex.mint(dave, 1e6);
+        ISCaaSDex.Settlement[] memory ss = _book(address(ex), 2000);
+        vm.prank(RELAYER);
+        dex.mtxSettle(ss);
+        emit log_named_uint("GAS mtxSettle 1x1 outside maker (total)", vm.lastCallGas().gasTotalUsed);
+    }
 }

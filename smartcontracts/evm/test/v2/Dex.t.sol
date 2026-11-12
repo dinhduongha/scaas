@@ -547,8 +547,7 @@ contract DexTest is Test {
         dex.mtxSettle(DexLegs.wire(ss));
         assertEq(b.balanceOf(dest), 1994);
         assertEq(b.balanceOf(alice), 0);
-        // to the DEX itself: refused (owner 2026-11-12: the recipient's own delta is 0, `InsufficientOutput` before
-        // conservation; was `ConservationBroken`)
+        // to the DEX itself: conservation refuses it (a SCaaS payout is not measured, owner 2026-11-12)
         o.destination = address(dex);
         o.nonce = 2;
         s.taker = _leg(ALICE_PK, a, o, 1020);
@@ -557,16 +556,16 @@ contract DexTest is Test {
         s.makers[1].o.nonce = 2;
         s.makers[1] = _leg(CAROL_PK, b, s.makers[1].o, 1000);
         s.taker = _leg(ALICE_PK, a, o, 1020);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(b)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(b)));
     }
 
-    /// Owner 2026-11-12: the recipient's own delta is 0, `InsufficientOutput` before conservation (was `ConservationBroken`).
+    /// A SCaaS payout is not measured (owner 2026-11-12): conservation refuses a destination that is the DEX.
     function test_makerDestinationIsTheDex_refused() public {
         DexLegs.Settlement memory s = _book();
         ITradeToken.TradeOrder memory o = _order(bob, a, 1000, 500, 1_000);
         o.destination = address(dex);
         s.makers[0] = _leg(BOB_PK, b, o, 1000);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(a)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(a)));
     }
 
     /// Owner 2026-11-12: an unregistered token is outside; a deprecated release's token stays SCaaS (the DEX never reads
