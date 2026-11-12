@@ -2587,7 +2587,9 @@ Controller calls (the owner may override): C1 `entryRef` is the full EIP-712 dig
 **Status.** BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED; tests `test/v2/PayeeFee.t.sol` (`test_payeeFeeDigestIsPinned`, `test_oldReceiverFeeNamesHaveNoEntry`), `test/ua/UAPayeeFee.t.sol`, the node's `outbox_jobs_are_normalized_and_keyed_by_the_token_digest`.
 **Why.** The owner's ruling, quoted below: the party that co-signs and pays this fee is the payee, and the names say so. The UA purpose `receiver-fee` was the last "receiver fee" word in code; renaming it follows "'payee' consistently" as read by the build (a byte change: a new purpose tag).
 **Cost if wrong.** A payee's wallet signs a new struct name and a derived payee a new purpose: co-signatures made under the old names fail `MetaTxBadSignature`; job producers send `payee_fee` and the op `UAPayeeFee`; indexers read `UAPayeeFeePaid`.
-**Source.** Owner 2026-11-12, in chat, relayed by the controller: "Rename: `mtxPayReceiverFee` -> `mtxPayWithPayeeFee`; struct `UAReceiverFee` -> `UAPayeeFee` (typehash changes); event `UAReceiverFeePaid` -> `UAPayeeFeePaid`; internal names and 'receiver fee / receiver-pays' wording -> 'payee fee' in code and current docs, 'payee' consistently."
+**Source.** Owner 2026-11-12, in chat, relayed by the controller: "Rename: `mtxPayReceiverFee` -> `mtxPayWithPayeeFee`; struct `UAReceiverFee` -> `UAPayeeFee` (typehash changes); event `UAReceiverFeePaid` -> `UAPayeeFeePaid`; internal names and 'receiver fee / receiver-pays' wording -> 'payee fee' in code and current docs, 'payee' consistently." Owner 2026-11-12, relayed by the controller, on the purpose rename: "giữ tag payee-fee" (keep the payee-fee tag).
+
+Change (owner 2026-11-12, status: BUILT on branch `ua-mtx-fix2-contracts`, UNAUDITED): the UA purpose rename `receiver-fee` -> `payee-fee` (tag `0x37eb8dc3…` -> `0x3e5fd01d…`, commit `0f507e4b`) is kept as built, by the owner's ruling (quoted in the Source line).
 
 ## 18. Contracts — Token wrappers and factory
 
