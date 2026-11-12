@@ -373,10 +373,10 @@ deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each request
 span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms`
 (120 s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0
 refused at start; an endpoint that accepts and never answers fails the read over (Fable recheck 3 R3-4, recheck 4 R4-3; tests
-`a_hung_endpoint_and_the_block_gas_read_fail_over`, `each_log_span_has_its_own_timeout`). An error
-answer counts as a revert when it carries revert data or names a revert; else one naming an execution error is a revert too,
-except a node's own limit by its exact phrase (`execution aborted (timeout = …)`), which is a transport error (Fable recheck 2
-P3-8, recheck 3 R3-6; `an_aborted_execution_is_transport`). The venue's ERC-1271 call uses the same classifier.
+`a_hung_endpoint_and_the_block_gas_read_fail_over`, `each_log_span_has_its_own_timeout`). An error answer is a revert when it carries
+revert data or names a revert, else when it names an execution error, except a node's own limit by its exact phrase (geth's
+`execution aborted (timeout = …)`; Nethermind 2.2.0's names neither; Erigon's, Reth's unverified, a known limit, recheck 4 R4-5):
+transport (recheck 2 P3-8, recheck 3 R3-6; `an_aborted_execution_is_transport`). The venue's ERC-1271 call uses the same classifier.
 
 **Log windows** (Fable recheck R-6; BUILT, `chain::tests::a_log_window_is_chunked_for_an_rpc_that_caps_the_range`). The
 `VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` and the executed-event lookup

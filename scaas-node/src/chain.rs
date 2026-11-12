@@ -71,6 +71,11 @@ pub fn classify(e: &TransportError) -> SimError {
 }
 
 /// A node's own limit on one call, not the EVM's answer: geth's `execution aborted (timeout = 5s)` (`--rpc.evmtimeout`).
+/// Fable recheck 4 R4-5: Nethermind 2.2.0 (the client of this project's chains) answers its own timeout with
+/// `<method> request was canceled due to enabled timeout.` (the fragment from the local `nethermind/nethermind:2.2.0` image's
+/// `Nethermind.JsonRpc.dll`, its error name `Timeout`; the method-name prefix is how the fragment reads, not seen in a run):
+/// neither "revert" nor "execution", so [`classify`] reads it as transport already, no phrase here. Erigon's and Reth's are not
+/// verified (no copy here): one containing "execution" would read as a revert.
 fn node_limit(m: &str) -> bool {
     m.starts_with("execution aborted (timeout = ") && m.ends_with(')')
 }
@@ -895,12 +900,15 @@ pub(crate) mod tests {
         let (rev, _) = fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted"}})).await;
         let (reason, _) = fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted: timeout elapsed"}})).await;
         let (other, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "execution timeout aborted"}})).await;
+        // Fable recheck 4 R4-5: Nethermind 2.2.0's own timeout (its text; the code is not read), transport as it stands
+        let (nethermind, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "eth_call request was canceled due to enabled timeout."}})).await;
         let call = |u: String| async move { chain_of(&[&u]).call_raw(Address::ZERO, Bytes::new()).await };
         assert!(matches!(call(aborted).await, Err(SimError::Transport(_))));
         assert!(matches!(call(exec).await, Err(SimError::Revert(_))), "control: an execution error");
         assert!(matches!(call(rev).await, Err(SimError::Revert(_))), "control: a revert");
         assert!(matches!(call(reason).await, Err(SimError::Revert(_))), "a revert whose reason names a timeout");
         assert!(matches!(call(other).await, Err(SimError::Revert(_))), "not the node's phrase: the EVM's");
+        assert!(matches!(call(nethermind).await, Err(SimError::Transport(_))), "Nethermind's own timeout");
     }
 
     /// NODE-GW-07: the chain's `chain_uid` is its block 0 hash; a configured one that differs refuses the chain.
