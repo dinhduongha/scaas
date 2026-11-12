@@ -2534,7 +2534,7 @@ was made, so `PersonalSign` accepts whatever `hash` the caller passes; it is mea
 an app's EIP-712 digest nor an EIP-191 hash has no supported form. A key shared by two accounts, or an owner's EOA and its
 `MandateWallet`, answers only for the wallet it signed for. In a batch, each leaf is the ERC-7739 message of its operation
 and each operation carries its own suffix. Every caller of `SigCheck`'s ERC-1271 (tokens, DEX, registry, Zether and PQZ
-envelopes) is unchanged: the signature it forwards is longer, the wallet rebuilds. Clients: clientkeys `erc7739TypedData` /
+envelopes) is unchanged: the signature it forwards is longer, the wallet rebuilds. Each caller family is tested with a real `SmartKeyAccount` clone and a real `MandateWallet` (`TypedDataSign` accepted, the raw digest refused; `test_erc7739RealWallets_*`: DEX outside order, router op, registry `UAAuth`, receiver-fee co-signature with the longest type at the 50 k cap, Zether and PQZ relayed shields). Clients: clientkeys `erc7739TypedData` /
 `erc7739Signature`, KAT `erc7739_kat.json` (forge `AccountKat.t.sol`, read by clientkeys).
 The account's own entries (`from = account`, already in its domain) are checked unwrapped through `isValidOwnDigest`, the
 account's static self-call only (`NotSelf` for anyone else). The Safe-style one-level wrap of `be8d0772` is in

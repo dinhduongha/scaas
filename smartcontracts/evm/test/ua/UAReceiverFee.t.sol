@@ -27,6 +27,8 @@ import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
+import {MtxHash} from "../helpers/MtxHash.sol";
 
 /// Receiver-pays on the UA path (metatx.md CTR-MTX-05/06, the `mtxPayReceiverFee` paragraph): the payer's
 /// `UAMetaTransfer` runs untouched through the typed UA pipeline, then the payee — a native id signing the token's
@@ -354,6 +356,35 @@ contract UAReceiverFeeTest is UALedgerBase {
         }
         assertEq(t400.balanceOf(payee), N - 2_000);
         assertEq(t400.balanceOf(FEE_TO), 2_000);
+    }
+
+    /// recheck2 P2-2 (CTR-ACC-02): real wallet payees, a `SmartKeyAccount` clone and a `MandateWallet`, co-sign in ERC-7739
+    /// `TypedDataSign` over `UAReceiverFee` nesting `UAMetaTransfer` (explicit `contentsDescription`, the longest SCaaS type
+    /// a wallet signs here; the `MandateWallet` at the 50 k cap); the raw digest is refused.
+    function test_erc7739RealWallets_receiverFee() public {
+        (address ska, address mw) = Erc7739Kit.wallets(0x7739, chainUidA);
+        _rf7739(ska);
+        _rf7739(mw);
+    }
+
+    function _rf7739(address w) internal {
+        _fund(uaP, N);
+        MetaTxLib.UAMetaTransfer memory t = _pay(uaP, _pad(w), N);
+        bytes32 h = tok.receiverFeeDigest(t, 2_000, FEE_TO, block.timestamp);
+        bytes32 c = keccak256(abi.encode(keccak256(bytes(string.concat(Erc7739Kit.UA_RECEIVER_FEE_OWN,
+            Erc7739Kit.UA_TRANSFER_TYPE))), MtxHash.hashStruct(t), uint256(2_000), FEE_TO, block.timestamp));
+        assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(tok)), c)), h, "the kit rebuilds it");
+        RfArgs memory a = RfArgs(t, UACall.auth(t.from, _sign(uaP, UAKinds.PURPOSE_METATX, tok.mtxTransferDigest(t))), 2_000,
+            FEE_TO, block.timestamp, UACall.auth(t.to, Erc7739Kit.raw(0x7739, w, h)));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        vm.prank(RELAYER);
+        _rfCall(tok, a);
+        string memory ty = string.concat(Erc7739Kit.UA_TRANSFER_TYPE, Erc7739Kit.UA_RECEIVER_FEE_OWN); // sorted by name
+        a.payee = UACall.auth(t.to, Erc7739Kit.sign(0x7739, w, address(tok), "UAReceiverFee", ty,
+            string.concat(ty, "UAReceiverFee"), c));
+        vm.prank(RELAYER);
+        _rfCall(tok, a);
+        assertEq(tok.balanceOf(w), N - 2_000, "positive control: the ERC-7739 co-signature settles");
     }
 
     /// An EIP-7702 delegated payee (CTR-UA-24, owner ruling 2026-10-30 D1): its own key only; the delegate's ERC-1271

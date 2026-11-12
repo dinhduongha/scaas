@@ -15,6 +15,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 
 /// @notice Zether through the one meta-transaction base (CTR-ZTH-34): every confidential op is an allowlisted self-call
@@ -339,6 +340,32 @@ contract ZetherRelayTest is ZetherFixture {
         tok.executeMetaTransaction(m, sig);
         assertEq(tok.balanceOf(address(w)), 0);
         assertTrue(_holds(tok, bob, 3, false));
+    }
+
+    /// recheck2 P2-2 (CTR-ACC-02): real wallets, a `SmartKeyAccount` clone and a `MandateWallet`, relay their own shield in
+    /// ERC-7739 `TypedDataSign` over the token's `MetaTransaction`; the raw digest is refused.
+    function test_erc7739RealWallets_relayShield() public {
+        (address ska, address mw) = Erc7739Kit.wallets(0x7739, ZUID);
+        _shield7739(ska);
+        _shield7739(mw);
+    }
+
+    function _shield7739(address w) internal {
+        _public(tok, w, 3 * SCALE);
+        MetaTxLib.MetaTransaction memory m = _mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3)), 1, RR, 0);
+        (m.from, m.nonce) = (w, tok.mtxNonce(MetaTxLib.pad(w), 1));
+        bytes32 c = MtxHash.hashStruct(m);
+        bytes32 h = MtxDigest.metaTx(address(tok), m);
+        assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(tok)), c)), h, "the kit rebuilds it");
+        bytes memory raw = Erc7739Kit.raw(0x7739, w, h);
+        bytes memory sig = Erc7739Kit.sign(0x7739, w, address(tok), "MetaTransaction", Erc7739Kit.METATX_TYPE,
+            Erc7739Kit.METATX_TYPE, c);
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        tok.executeMetaTransaction(m, raw);
+        vm.prank(relayer);
+        tok.executeMetaTransaction(m, sig);
+        assertEq(tok.balanceOf(w), 0, "positive control: the ERC-7739 shield ran");
     }
 
     /// The envelope binding and digest equal the Rust prover's (`envelope.json`, CTR-ZTH-06/36) through the spec

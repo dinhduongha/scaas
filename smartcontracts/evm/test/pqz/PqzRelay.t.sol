@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {MtxHash} from "../helpers/MtxHash.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {UACall} from "../ua/UACall.sol";
 import {console2} from "forge-std/Test.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
@@ -59,6 +61,32 @@ contract PqzRelayTest is PqzFixture {
             0x3333333333333333333333333333333333333333);
         assertEq(NormalPqzToken(at).chainUid(), PQZ_UID);
         assertEq(NormalPqzToken(at).envelopeBinding(m), 0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33);
+    }
+
+    /// recheck2 P2-2 (CTR-ACC-02): real wallets, a `SmartKeyAccount` clone and a `MandateWallet`, relay a PQZ shield in
+    /// ERC-7739 `TypedDataSign` over the token's `MetaTransaction`; the raw digest is refused.
+    function test_erc7739RealWallets_relayShield() public {
+        (address ska, address mw) = Erc7739Kit.wallets(0x7739, PQZ_UID);
+        _shield7739(ska);
+        _shield7739(mw);
+    }
+
+    function _shield7739(address w) internal {
+        _public(tok, w, 10 * SCALE);
+        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(IConfidentialToken.mtxShield, (alice, 10)), 0, 0);
+        m.from = w;
+        bytes32 c = MtxHash.hashStruct(m);
+        bytes32 h = MtxDigest.metaTx(address(tok), m);
+        assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(tok)), c)), h, "the kit rebuilds it");
+        bytes memory raw = Erc7739Kit.raw(0x7739, w, h);
+        bytes memory sig = Erc7739Kit.sign(0x7739, w, address(tok), "MetaTransaction", Erc7739Kit.METATX_TYPE,
+            Erc7739Kit.METATX_TYPE, c);
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        tok.executeMetaTransaction(m, raw);
+        vm.prank(relayer);
+        tok.executeMetaTransaction(m, sig);
+        assertEq(tok.balanceOf(w), 0, "positive control: the ERC-7739 shield ran");
     }
 
     function test_v1BindingAndFee() public {

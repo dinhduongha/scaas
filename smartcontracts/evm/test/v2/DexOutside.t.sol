@@ -23,6 +23,7 @@ import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 
 /// ERC-1271 wallet that needs ~100 k gas to say "valid": passes under 400 k (a `SmartKeyAccount` clone), not under 50 k.
 contract Work1271 {
@@ -547,6 +548,29 @@ contract DexOutsideTest is Test {
         vm.prank(relayer);
         dex.mtxSettle(DexLegs.wire(ss));
         assertEq(a.balanceOf(address(w)), 1000);
+    }
+
+    /// recheck2 P2-2 (CTR-ACC-02): real wallets, a `SmartKeyAccount` clone and a `MandateWallet` (50 k cap), sign an
+    /// outside order in ERC-7739 `TypedDataSign` over `DexOrder` (nesting `TradeOrder`, implicit); the raw digest is refused.
+    function test_erc7739RealWallets_outsideMaker() public {
+        uint256 pk = 0x7739;
+        (address ska, address mw) = Erc7739Kit.wallets(pk, UID_);
+        address[2] memory ws = [ska, mw];
+        for (uint256 i; i < 2; ++i) {
+            address w = ws[i];
+            _fund(usdc, w);
+            ITradeToken.TradeOrder memory mo = _order(w, address(a), 2000, 1000, 1);
+            bytes32 h = dex.dexOrderDigest(address(usdc), mo);
+            bytes32 c = keccak256(abi.encode(keccak256(bytes(Erc7739Kit.DEX_ORDER_TYPE)), address(usdc), TradeLib.hashStruct(mo)));
+            assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(dex)), c)), h, "the kit rebuilds it");
+            DexLegs.Settlement memory st = _settlement(DexLegs.Leg(address(usdc), mo, Erc7739Kit.raw(pk, w, h), 2000), 10 + i);
+            _expectOne(st, abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
+            st.makers[0].sig = Erc7739Kit.sign(pk, w, address(dex), "DexOrder", Erc7739Kit.DEX_ORDER_TYPE,
+                Erc7739Kit.DEX_ORDER_TYPE, c);
+            vm.prank(relayer);
+            dex.mtxSettle(DexLegs.wire(_one(st)));
+            assertEq(a.balanceOf(w), 1000, "positive control: the ERC-7739 order settles");
+        }
     }
 
     /// 400 k for a clone of this chain's `SmartKeyAccount` implementation, 50 k for any other contract: in settle,

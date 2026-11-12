@@ -31,6 +31,7 @@ import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {regArgs} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 
 /// Reads the router's subject on behalf of a contract that is not the router's live target.
 contract SubjectPeek {
@@ -448,6 +449,50 @@ contract GovRouterTest is GovRouterFixture {
         assertTrue(d.listedOnly(), "SetListedOnly");
         _do(SET_FEE_SPLIT, s, address(d), abi.encode(uint32(500_000), TREASURY));
         assertEq(d.relayerSharePpm(), 500_000, "SetFeeSplit");
+    }
+
+    /// recheck2 P2-2 (CTR-ACC-02): real wallets, a `SmartKeyAccount` clone and a `MandateWallet`, sign a router op
+    /// (`mtxCancelNonce`, `UACancelNonce`) in ERC-7739 `TypedDataSign`, at the router's 50 k cap; the raw digest is refused.
+    function test_erc7739RealWallets_routerOp() public {
+        uint256 pk = 0x7739;
+        (address ska, address mw) = Erc7739Kit.wallets(pk, chainUidA);
+        address[2] memory ws = [ska, mw];
+        for (uint256 i; i < 2; ++i) {
+            address w = ws[i];
+            MetaTxLib.UAEnvelope memory e = _envelope(router, _pad(w), 0);
+            bytes32 c = keccak256(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, e.from, uint256(9), e.batch, e.nonce,
+                e.validUntil, e.mode, address(0), e.fee, address(0)));
+            bytes32 h = keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(router)), c));
+            IUARegistry.UASig memory a;
+            a.signature = Erc7739Kit.raw(pk, w, h);
+            vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+            router.mtxCancelNonce(e, 9, a);
+            a.signature = Erc7739Kit.sign(pk, w, address(router), "UACancelNonce", Erc7739Kit.UA_CANCEL_NONCE_TYPE,
+                Erc7739Kit.UA_CANCEL_NONCE_TYPE, c);
+            router.mtxCancelNonce(e, 9, a);
+            assertEq(router.mtxNonce(_pad(w), 9), 1, "positive control: the ERC-7739 op ran");
+        }
+    }
+
+    /// recheck2 P2-2 (CTR-ACC-02): the registry's native contract path (`requireAuthorized`, ERC-1271 over `uaAuthDigest`)
+    /// with real wallets: ERC-7739 `TypedDataSign` over `UAAuth` passes, the raw `uaAuthDigest` is refused.
+    function test_erc7739RealWallets_registryUAAuth() public {
+        uint256 pk = 0x7739;
+        (address ska, address mw) = Erc7739Kit.wallets(pk, chainUidA);
+        address[2] memory ws = [ska, mw];
+        bytes32 dg = keccak256("operation");
+        for (uint256 i; i < 2; ++i) {
+            bytes32 id = _pad(ws[i]);
+            bytes32 h = preg.uaAuthDigest(id, UAKinds.PURPOSE_METATX, dg);
+            bytes32 c = keccak256(abi.encode(keccak256(bytes(Erc7739Kit.UA_AUTH_TYPE)), id, UAKinds.PURPOSE_METATX, dg));
+            assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(preg)), c)), h, "the kit rebuilds it");
+            IUARegistry.UASig memory a;
+            a.signature = Erc7739Kit.raw(pk, ws[i], h);
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, id));
+            preg.requireAuthorized(id, UAKinds.PURPOSE_METATX, dg, a);
+            a.signature = Erc7739Kit.sign(pk, ws[i], address(preg), "UAAuth", Erc7739Kit.UA_AUTH_TYPE, Erc7739Kit.UA_AUTH_TYPE, c);
+            preg.requireAuthorized(id, UAKinds.PURPOSE_METATX, dg, a); // positive control: no revert
+        }
     }
 
     /// Native ids on the merged `mtx<Op>` (ua-mtx-merge T7, meaning: was the address `mtx<Op>` form): an EOA owner, an EOA
