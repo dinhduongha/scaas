@@ -1,0 +1,41 @@
+Fable check of fix round 2, contracts part (scratchpad findings vault.md V-1..V-5, gov.md GOV-1..GOV-4, dex.md F-1..F-3,
+N-1..N-4), branch ua-mtx-fix2-contracts. Foundry 1.8.5, forge test -j 1 under scripts/capped (4 GB), per directory
+(runs/2026-11-12-fix2-contracts/gate.sh with R=runs/2026-11-12-fix2-check-contracts) and per PQZ set (script/pqz/at-set.sh);
+full output in git-ignored logs. Mutants: runs/2026-11-12-fix2-contracts/mutants.py with
+runs/2026-11-12-fix2-check-contracts/mutants.spec.json. UNAUDITED.
+
+step | commit | rc | counts
+--- full gate, default set n2304-kmax4096, tree of 10a065cf ---
+test/account | 10a065cf | 0 | 58 passed
+test/as | 10a065cf | 0 | 69 suites, 355 passed
+test/confidential | 10a065cf | 0 | 5 passed
+test/factory | 10a065cf | 0 | 2 passed
+test/fork | 10a065cf | 0 | 0 passed, 1 skipped
+test/governance | 10a065cf | 0 | 52 suites, 509 passed
+test/hedera | 10a065cf | 0 | 20 passed
+test/liquidity | 10a065cf | 0 | 82 passed, 1 skipped
+test/merge | 10a065cf | 0 | 11 suites, 119 passed
+test/metatx | 10a065cf | 0 | 36 suites, 400 passed
+test/modules | 10a065cf | 0 | 12 suites, 35 passed
+test/p6f | 10a065cf | 0 | 4 passed
+test/pqchat | 10a065cf | 0 | 99 passed
+test/pqz | 10a065cf | 0 | 40 suites, 455 passed, 4 skipped
+test/pqzh | 10a065cf | 0 | 42 passed
+test/research | 10a065cf | 0 | 93 passed, 6 skipped (test_debitMinGas_isTheCheapestLogDebit passes: debit_min_gas unaffected)
+test/ua | 10a065cf | 0 | 46 suites, 636 passed
+test/v2 | 10a065cf | 0 | 47 suites, 635 passed
+test/wallet | 10a065cf | 0 | 100 passed
+test/wrap | 10a065cf | 0 | 72 passed
+test/zether | 10a065cf | 0 | 27 suites, 336 passed, 4 skipped
+test/{BlsKat,ExpectRevertLint,FeePolicy,HashToCurve,MultiSig}.t.sol | 10a065cf | 0 | 6, 3, 8, 8, 4 passed
+--- other sets (test/pqz) ---
+pqz n2048-kmax1024 | 10a065cf | 0 | 40 suites, 456 passed, 3 skipped
+pqz n2560-kmax16384 | 10a065cf | 0 | 40 suites, 451 passed, 8 skipped
+pqz n2816-kmax65536 | 10a065cf | 0 | 40 suites, 446 passed, 13 skipped
+--- others ---
+size gate | 10a065cf | 0 | 0 errors, 169 contracts after SCaaSDex 34,939 -> 34,981 B (F-3, +42 B; stop line 35,386);
+  OpenFactory 35,040 B (GOV-1; stop line 35,286), RescueVault 3,510 B
+mutants | 10a065cf | 0 | 10/10 killed (mutants.json): V-1 0x0d, V-2 final check, V-3 deployer / address / safeTransfer,
+  GOV-1 directory word, F-2 29 in ENABLEABLE, F-3 surplus dropped (entry and harness), F-1 derived restore 1 short
+clientkeys npm test | 10a065cf | 0 | 336 tests, 333 passed, 0 failed, 3 skipped (rescue-vault.test.js 3/3 on the new KAT)
+docs_check | 10a065cf | 0 | 0 errors; test_docs_check ok
