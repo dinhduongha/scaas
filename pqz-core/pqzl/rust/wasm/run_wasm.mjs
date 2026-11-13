@@ -6,14 +6,17 @@
 import { readFileSync } from 'node:fs';
 
 const [np = 3, nv = 3, rels = 63] = process.argv.slice(2).map(Number);
+// pqz_bench's order (TXB), then the oversize shapes (oversize builds) and R_TXS, R_TXS0
 const ALL = ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR', 'R_TX0', 'R_TXM1', 'R_TXM2', 'R_TXM4', 'R_TXM8', 'R_TXM1_0',
-  'R_TXM2_0', 'R_TXM4_0', 'R_TXM8_0', 'R_TXM16', 'R_TXM16_0'];
+  'R_TXM2_0', 'R_TXM4_0', 'R_TXM8_0'];
 const NKIND = 6;
 const file = process.env.PQZL_WASM_FILE
   || new URL('target/wasm32-unknown-unknown/release/pqzl_wasm.wasm', import.meta.url);
 const { instance } = await WebAssembly.instantiate(readFileSync(file), {});
 const x = instance.exports;
-const NAMES = ALL.slice(0, x.step_nrel());
+const OVER = x.step_nrel() > ALL.length + 2 ? ['R_TXM16', 'R_TXM16_0'] : [];
+const NAMES = [...ALL, ...OVER, 'R_TXS', 'R_TXS0'];
+if (NAMES.length !== x.step_nrel()) throw new Error(`step_nrel ${x.step_nrel()} != ${NAMES.length} names`);
 const out = (o) => console.log(JSON.stringify(o));
 const stats = (name, v) => {
   if (!v.length) return;

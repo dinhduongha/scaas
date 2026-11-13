@@ -28,7 +28,8 @@ fn both(ctx: &mut Ctx, op: u8, stmt: &[u8], proof: &[u8]) -> (bool, bool) {
     })
 }
 
-/// one honest row per relation code (14: the six forms and the eight R_TXM shapes)
+/// one honest row per relation code (`common::ncodes`: the six forms and the eight R_TXM shapes, + R_TXS / R_TXS0 from
+/// the bench on a set without vectors)
 fn per_code() -> Vec<common::Row> {
     let mut out: Vec<common::Row> = Vec::new();
     for r in common::pqzl_rows() {
@@ -36,7 +37,7 @@ fn per_code() -> Vec<common::Row> {
             out.push(r);
         }
     }
-    assert_eq!(out.len(), 14);
+    assert_eq!(out.len(), common::ncodes());
     out
 }
 

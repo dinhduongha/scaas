@@ -12,7 +12,7 @@ use sha3::digest::{ExtendableOutput, Update, XofReader};
 use crate::cs::{self, Comb, Layout, Rel};
 use crate::fft::{Domain, GEN, smooth};
 use crate::fq::{Acc4, EB, F4, Fq, batch_inv};
-use crate::merkle::{H, Tree, depth, keccak, leaf, root_from};
+use crate::merkle::{H, Tree, depth, leaf, root_from};
 use crate::transcript::Tr;
 use crate::{Oom, Wiped, ct, try_vec};
 #[cfg(feature = "bench")]
@@ -900,7 +900,7 @@ mod tests {
     fn max_len_exact_multiproof_tight() {
         let p = Params::proven();
         let (n, t) = (p.n, p.t);
-        let tree = Tree::new((0..n as u32).map(|i| keccak(&[&i.to_be_bytes()])).collect());
+        let tree = Tree::new((0..n as u32).map(|i| crate::merkle::keccak(&[&i.to_be_bytes()])).collect());
         let worst = (1..depth(n)).map(|l| t.min(n.div_ceil(1 << l))).sum::<usize>() + 2 - t;
         // evenly spread columns from the left or (n2304-kmax4096 preset B, n 45,752: the left spread reaches worst - 1) from the
         // right

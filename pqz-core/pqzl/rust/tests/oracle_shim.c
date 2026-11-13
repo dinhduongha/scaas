@@ -566,6 +566,8 @@ pqz_shim_autostable (const uint8_t seed[32], uint32_t dom, int64_t bnd, unsigned
 #include "pqz_ds_params.h"
 #include "pqz_reg_params.h"
 #include "pqz_tx0_params.h"
+#include "pqz_txs0_params.h"
+#include "pqz_txs_params.h"
 #include "pqz_txm20_params.h"
 #include "pqz_txm2_params.h"
 #include "pqz_txm40_params.h"
@@ -633,6 +635,7 @@ params_abdlop (uint64_t **o, abdlop_params_srcptr a)
 }
 
 static const lnp_tbox_params_struct *const P[] = { pqz_reg,   pqz_tx,    pqz_tx0,   pqz_burn,  pqz_ds,   pqz_dr,
+                                                   pqz_txs,   pqz_txs0,
                                                    pqz_txm2,  pqz_txm4,  pqz_txm8,  pqz_txm20, pqz_txm40, pqz_txm80,
 #ifdef PQZ_TXM_OVERSIZE
                                                    pqz_txm16, pqz_txm160,

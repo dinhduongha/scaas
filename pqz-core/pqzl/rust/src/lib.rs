@@ -100,6 +100,10 @@ pub const WASM_MAX_LEGS: usize = if cfg!(feature = "wasm-m8") { TXM_MAX_LEGS } e
 /// the set's PQZL proofSystemId: keccak256 of its set.toml label `pqzl_id` (gen_set.py, rust/set.rs; plan 5h Task 8d:
 /// one id per set, `.../mlwe-d64k<k>-q<log2q>l4/v4`; v3 and v2 are retired, CTR-PQZ-09). The core only hashes it
 pub const PROOF_SYSTEM_ID: [u8; 32] = params::set::PQZL_ID;
+/// the set's PQZL proofSystemId of opening tokens (three-key spec K3-4): keccak256 of set.toml's `pqzl_split_id`; its op 1
+/// is R_TXS / R_TXS0 (the statement's length picks the relation; pqz-stmt ties the forms to the id). The core only
+/// hashes it
+pub const PROOF_SYSTEM_SPLIT_ID: [u8; 32] = params::set::PQZL_SPLIT_ID;
 
 /// The C core's return codes (`pqz_rt.h`, D3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

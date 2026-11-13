@@ -298,11 +298,13 @@ fn le64(b: &[u8]) -> u64 {
     b.iter().take(8).enumerate().fold(0, |a, (i, &x)| a | (x as u64) << (8 * i))
 }
 
-/// The `pqz_test_mutate` relation code of a statement (pqz_int.h: the op, `R_TX0` = 0x81, `R_TXM` =
-/// `PQZ_REL_TXM(log2 M, auditorOn)` = 0x70 | auditorOn << 3 | log2 M).
+/// The `pqz_test_mutate` relation code of a statement (pqz_int.h: the op, `R_TX0` = 0x81, `R_TXS` / `R_TXS0` = 0x41 /
+/// 0xc1, `R_TXM` = `PQZ_REL_TXM(log2 M, auditorOn)` = 0x70 | auditorOn << 3 | log2 M).
 fn rel(s: &stmt::Stmt) -> u8 {
     match (s, s.form()) {
         (_, Some(Form::Transfer0)) => 0x81,
+        (_, Some(Form::TransferSplit)) => 0x41,
+        (_, Some(Form::TransferSplit0)) => 0xc1,
         (_, Some(f)) => f.op(),
         (stmt::Stmt::Multi(m), None) => 0x70 | (m.pk_a.is_some() as u8) << 3 | m.m.trailing_zeros() as u8,
         _ => 0,

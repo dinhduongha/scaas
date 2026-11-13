@@ -81,6 +81,16 @@
    || d' (16 x u8) */
 #define PQZ_TX0_WIT_BYTES (6 * PQZ_N + 2 * 32 + 16 + 16)
 
+/* R_TXS / R_TXS0 (op 1 under PQZL_SPLIT_ID, three-key spec K3-4, CTR-PQZ-04's split randomness): R_TX / R_TX0 with
+   out = u || v_t || v_f || [v_a] || u_f, u_f appended (earlier offsets unchanged). The leg's (r, e1) give u, v_t, [v_a];
+   the sender's own (r_f, e1_f) give u_f = A^T r_f + e1_f and v_f. No length of op 1 equals another's. Witness: s_f
+   (int8) || e_f (int16) || r (int8) || e1 (int16) || r_f (int8) || e1_f (int16) || e2_t, e2_f, [e2_a] (16 x int16 each)
+   || d (16 x u8) || d' (16 x u8) */
+#define PQZ_TXS_STMT_BYTES (PQZ_TX_STMT_BYTES + PQZ_POLYVEC_BYTES)
+#define PQZ_TXS0_STMT_BYTES (PQZ_TX0_STMT_BYTES + PQZ_POLYVEC_BYTES)
+#define PQZ_TXS_WIT_BYTES (PQZ_TX_WIT_BYTES + 3 * PQZ_N)
+#define PQZ_TXS0_WIT_BYTES (PQZ_TX0_WIT_BYTES + 3 * PQZ_N)
+
 /* R_TXM (op 7, OP_TRANSFER_MULTI; P6-ANON plan §3, §4): M legs (a decoy is a leg of amount 0), G randomness groups of
    s legs (leg j in group j / s, v_f in group 0), auditor on (A = 1, one copy v_{a,j} per leg) or off; s = PQZ_S_AUD with
    the auditor (owner 2026-10-25, R0-1: the set's pqz_set.h), 4 without, G = ceil(M / s). The auditor copy of leg j uses

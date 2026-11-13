@@ -96,6 +96,8 @@ fn lengths_and_constants() {
         assert_eq!(f.stmt_len(), n, "{f:?}");
     }
     assert_eq!((Form::Transfer0.wit_len(), Form::Transfer.wit_len()), (6 * N + 96, 6 * N + 128));
+    // R_TXS / R_TXS0 (K3-4): + r_f (int8) and e1_f (int16)
+    assert_eq!((Form::TransferSplit0.wit_len(), Form::TransferSplit.wit_len()), (9 * N + 96, 9 * N + 128));
     assert_eq!((BUNDLE_BYTES, BUNDLE0_BYTES), (16 + pk + 2 * v + 32, 16 + pk + v + 32));
     if SET == "n2048-kmax1024" {
         let want = [83_072, 66_560, 50_048, 50_048, 16_480, 33_184, 33_184, 33_184];

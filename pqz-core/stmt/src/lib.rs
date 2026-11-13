@@ -261,13 +261,14 @@ impl Form {
             }
         }
     }
-    /// PQZL witness bytes of the prover API (pqz.h; R3: not consensus). The split forms take `Transfer`'s witness:
-    /// `seed_leg` and the leg's randomness are derived from the witness seed and the statement (K3-4)
-    // ponytail: provisional until the R_TXS prover lands (step 2c); it fixes the split witness layout there
+    /// PQZL witness bytes of the prover API (pqz.h; R3: not consensus). The split forms (R_TXS / R_TXS0, K3-4) add the
+    /// sender's own `r_f` (int8) and `e1_f` (int16) after the leg's `r`, `e1`: pqz.h `PQZ_TXS_WIT_BYTES`
     pub const fn wit_len(self) -> usize {
         match self {
-            Form::Transfer | Form::TransferSplit => 6 * N + 3 * 32 + 32,
-            Form::Transfer0 | Form::TransferSplit0 => 6 * N + 2 * 32 + 32,
+            Form::Transfer => 6 * N + 3 * 32 + 32,
+            Form::Transfer0 => 6 * N + 2 * 32 + 32,
+            Form::TransferSplit => 9 * N + 3 * 32 + 32,
+            Form::TransferSplit0 => 9 * N + 2 * 32 + 32,
             Form::Burn | Form::Refresh => 6 * N + 32 + 16,
             Form::Register => 3 * N,
             Form::DiscloseSender => 3 * N + 32,

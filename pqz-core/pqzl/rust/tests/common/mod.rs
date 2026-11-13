@@ -47,7 +47,7 @@ pub fn with_id(mut s: Vec<u8>) -> Vec<u8> {
 /// pqz_kat.py OP_BYTE (forms; an R_TXM case name has op 7)
 pub fn op_of(form: &str) -> u8 {
     match form.trim_end_matches('0') {
-        "TRANSFER" => 1,
+        "TRANSFER" | "TRANSFER-SPLIT" => 1,
         "BURN" | "REFRESH" => 2,
         "REGISTER" => 3,
         "DISCLOSE-SENDER" => 4,
@@ -56,10 +56,23 @@ pub fn op_of(form: &str) -> u8 {
     }
 }
 
+/// the relation codes `pqzl_rows` gives: the bench's 16 (R_TXS / R_TXS0 included) on a set without vectors; the vectors'
+/// proof_pqzl.json 14 (its id is PQZL_ID: the split transfer is PQZL_SPLIT_ID's; tests/split.rs proves and verifies it,
+/// C = Rust, at every set)
+pub fn ncodes() -> usize {
+    if vectors_dir().is_some() {
+        14
+    } else {
+        16
+    }
+}
+
 /// the relation code of a form / R_TXM case (pqz_int.h)
 pub fn rel_code(form: &str, case: Option<&str>) -> u8 {
     match form {
         "TRANSFER0" => 0x81,
+        "TRANSFER-SPLIT" => 0x41,
+        "TRANSFER-SPLIT0" => 0xc1,
         "TRANSFER-MULTI" => {
             let mut it = case.expect("R_TXM case")[1..].split('-');
             let m: u8 = it.next().unwrap().parse().unwrap();
@@ -78,7 +91,11 @@ pub fn statements() -> HashMap<String, Vec<u8>> {
         // the op 7 disclosures (R0-1: statement_transfer_multi.json `disclosures`) by case, as the R_TXM rows
         for r in j["rows"].as_array().unwrap().iter().chain(j.get("disclosures").and_then(Value::as_array).into_iter().flatten()) {
             let key = r.get("case").and_then(Value::as_str).unwrap_or_else(|| r["form"].as_str().unwrap());
-            m.insert(key.to_string(), with_id(hex(&r["stmt"])));
+            let mut st = with_id(hex(&r["stmt"]));
+            if key.starts_with("TRANSFER-SPLIT") {
+                st[32..64].copy_from_slice(&pqzl::PROOF_SYSTEM_SPLIT_ID); // R_TXS / R_TXS0 (K3-4)
+            }
+            m.insert(key.to_string(), st);
         }
     }
     m
@@ -148,6 +165,8 @@ fn bench_rows() -> Vec<Row> {
                 "R_REG" => "REGISTER".into(),
                 "R_TX" => "TRANSFER".into(),
                 "R_TX0" => "TRANSFER0".into(),
+                "R_TXS" => "TRANSFER-SPLIT".into(),
+                "R_TXS0" => "TRANSFER-SPLIT0".into(),
                 "R_BURN" => "BURN".into(),
                 "R_DS" => "DISCLOSE-SENDER".into(),
                 "R_DR" => "DISCLOSE-RECEIVER".into(),
