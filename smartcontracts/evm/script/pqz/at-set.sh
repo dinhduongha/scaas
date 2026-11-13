@@ -5,15 +5,45 @@
 # arguments (default: `test --match-path 'test/pqz/*'`) in out/at-set-<set>, cache/at-set-<set>, and restores the
 # committed file (git HEAD) on exit (also on failure, Ctrl-C or hang-up); it refuses to start when that file
 # differs from HEAD. One run per work tree at a time (it edits src/pqz/PqzSet.sol).
-#   scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> [forge args ...]
+#   scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set|others> [sensitive|list|forge args ...]
 #   e.g. scripts/capped smartcontracts/evm/script/pqz/at-set.sh n2560-kmax16384 test --match-path 'test/pqz/*'
+# Named scopes (AGENTS.md "Size the per-set run to the change"):
+#   sensitive  only the set-sensitive tests: test/pqz/*, test/pqzh/*, and every other *.t.sol that reads the set
+#              (PqzSet., a kmax<N> set name, PQZ_SET) or imports a helper that does. For a non-PQZ contract change.
+#   list       print that list and exit (no forge run).
+#   <set> = others  runs the given scope at every set except the committed one, one after another.
 # The tests read the set's vectors (smartcontracts/vectors/pqz[/<set>], PqzSet.NAME) and its self-test / probe hashes.
 set -eu
-[ $# -ge 1 ] || { sed -n '2,10p' "$0"; exit 2; }
+[ $# -ge 1 ] || { sed -n '2,16p' "$0"; exit 2; }
 S=$1
 shift
 EVM=$(cd "$(dirname "$0")/../.." && pwd)
-SRC=$EVM/../../pqz-core/params/sets/$S/PqzSet.sol
+SETS=$EVM/../../pqz-core/params/sets
+# The set-sensitive test files, computed (not hand-listed, so a new set-reading test is never missed).
+sensitive() {
+  cd "$EVM"
+  pat='PqzSet\.|kmax[0-9]|PQZ_SET'
+  helpers=$(grep -rlE "$pat" test --include='*.sol' | grep -v -E '\.t\.sol$|/legacy/' | sed 's|.*/||; s|\.sol$||' | sort -u)
+  {
+    grep -rlE "$pat" test --include='*.t.sol' | grep -v /legacy/
+    for h in $helpers; do grep -rlE "import .*[/\"]$h\.sol" test --include='*.t.sol' | grep -v /legacy/ || true; done
+  } | grep -v -E '^test/pqzh?/' | sort -u
+}
+if [ "${1:-}" = list ]; then echo 'test/pqz/*'; echo 'test/pqzh/*'; sensitive; exit 0; fi
+if [ "${1:-}" = sensitive ]; then
+  shift
+  set -- test --match-path "{test/pqz/*,test/pqzh/*,$(sensitive | paste -sd, -)}" "$@"
+fi
+if [ "$S" = others ]; then
+  COMMITTED=$(sed -n 's/.*string internal constant NAME = "\(.*\)";/\1/p' "$EVM/src/pqz/PqzSet.sol")
+  rc=0
+  for d in "$SETS"/n*-kmax*/; do
+    s=$(basename "$d"); [ "$s" = "$COMMITTED" ] && continue
+    sh "$0" "$s" "$@" || rc=1
+  done
+  exit $rc
+fi
+SRC=$SETS/$S/PqzSet.sol
 DST=$EVM/src/pqz/PqzSet.sol
 [ -f "$SRC" ] || { echo "at-set.sh: no PqzSet.sol for set $S ($SRC)" >&2; exit 2; }
 git -C "$EVM" diff --quiet HEAD -- src/pqz/PqzSet.sol ||
