@@ -2677,12 +2677,18 @@ fn generate() -> (Vec<(String, String)>, bool) {
 }
 
 /// Files in a vectors directory that another writer owns, with the test that checks each (review 3w u5-1): `--check`
-/// names them and passes them over; any other file this generator did not write is `EXTRA` and fails. Keep equal to
-/// `OTHER_WRITERS` in `smartcontracts/vectors/pqz/pqz_kat.py`.
-const OTHER_WRITERS: [(&str, &str); 3] = [
-    ("state.json", "written by forge PqzStateVectors.t.sol, checked by pqz_kat.py check_state and ua-rs"),
-    ("verdict.json", "written by forge PqzVerdictVectors.t.sol, checked by clientkeys pqz-verdict.test.js and scaas-node pqz.rs"),
-    ("verifier_fee.json", "written by forge PqzVerifierFeeVectors.t.sol, checked by clientkeys pqz-verifier-fee.test.js, ua-rs tests/pqzfee.rs and scaas-node pqz.rs"),
+/// names them and passes them over; any other file this generator did not write is `EXTRA` and fails. The third field
+/// is the one set whose directory holds the file (T-05: verdict.json and verifier_fee.json live in pqz/n2304-kmax4096/
+/// only), `None` every set (T-41: state.json at all four); a file at another set is `EXTRA`, a missing one `MISSING`.
+/// Keep equal to `OTHER_WRITERS` in `smartcontracts/vectors/pqz/pqz_kat.py`.
+const OTHER_WRITERS: [(&str, &str, Option<&str>); 3] = [
+    ("state.json", "written by forge PqzStateVectors.t.sol, checked by pqz_kat.py check_state and ua-rs", None),
+    ("verdict.json", "written by forge PqzVerdictVectors.t.sol, checked by clientkeys pqz-verdict.test.js and scaas-node pqz.rs", Some("n2304-kmax4096")),
+    (
+        "verifier_fee.json",
+        "written by forge PqzVerifierFeeVectors.t.sol, checked by clientkeys pqz-verifier-fee.test.js, ua-rs tests/pqzfee.rs and scaas-node pqz.rs",
+        Some("n2304-kmax4096"),
+    ),
 ];
 
 fn main() {
@@ -2722,10 +2728,16 @@ fn main() {
         if !n.ends_with(".json") || files.iter().any(|f| f.0 == n) {
             continue;
         }
-        if let Some((_, by)) = OTHER_WRITERS.iter().find(|o| o.0 == n) {
+        if let Some((_, by, _)) = OTHER_WRITERS.iter().find(|o| o.0 == n && o.2.is_none_or(|s| s == st::SET)) {
             println!("OTHER {n}: {by}");
         } else {
-            println!("EXTRA {n}: not written by this generator");
+            println!("EXTRA {n}: not written by this generator (nor owned by another writer at set {})", st::SET);
+            bad += 1;
+        }
+    }
+    for (n, by, _) in OTHER_WRITERS.iter().filter(|o| o.2.is_none_or(|s| s == st::SET)) {
+        if !dir.join(n).exists() {
+            println!("MISSING {n}: {by}");
             bad += 1;
         }
     }

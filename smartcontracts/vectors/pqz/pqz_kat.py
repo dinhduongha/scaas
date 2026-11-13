@@ -2105,10 +2105,14 @@ CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": ch
             "state.json": check_state}
 
 
-# Files another writer owns and another test checks (review 3w u5-1); state.json also has check_state here. Keep equal to
-# OTHER_WRITERS in pqz-core/ffi/src/bin/pqz-vectors.rs. Any other file without a checker fails.
-OTHER_WRITERS = {"verdict.json": "forge PqzVerdictVectors.t.sol; clientkeys pqz-verdict.test.js, scaas-node pqz.rs",
-                 "verifier_fee.json": "forge PqzVerifierFeeVectors.t.sol; clientkeys pqz-verifier-fee.test.js, ua-rs tests/pqzfee.rs, scaas-node pqz.rs"}
+# Files another writer owns and another test checks (review 3w u5-1), with the one set whose directory holds them (T-05:
+# n2304-kmax4096's pqz/<set>/); state.json also has check_state here and is required at every set (T-41). Keep equal to
+# OTHER_WRITERS in pqz-core/ffi/src/bin/pqz-vectors.rs. Any other file without a checker fails, as does such a file at
+# another set; a missing required file fails (--check on the set's directory).
+OTHER_WRITERS = {"verdict.json": ("n2304-kmax4096", "forge PqzVerdictVectors.t.sol; clientkeys pqz-verdict.test.js, scaas-node pqz.rs"),
+                 "verifier_fee.json": ("n2304-kmax4096", "forge PqzVerifierFeeVectors.t.sol; clientkeys pqz-verifier-fee.test.js, "
+                                                         "ua-rs tests/pqzfee.rs, scaas-node pqz.rs")}
+REQUIRED = ["state.json"] + [n for n, (s, _) in OTHER_WRITERS.items() if s == SET]
 
 # Files whose checker here rebuilds only part of the file (review 3w fix round, the S7 gate's tamper step: 8 of 12
 # changed state.json leaves were not caught); the file's writer and its other readers bind the rest. tamper.py counts
@@ -2126,8 +2130,8 @@ def check_files(paths, log):
     for p in paths:
         name = os.path.basename(p)
         fn = CHECKERS.get(name) or CHECKERS.get(name.split("_")[0] + "_*")
-        if fn is None and name in OTHER_WRITERS:
-            log(f"other {name}: {OTHER_WRITERS[name]}")
+        if fn is None and OTHER_WRITERS.get(name, ("",))[0] == SET:
+            log(f"other {name}: {OTHER_WRITERS[name][1]}")
             continue
         if fn is None:
             bad.append(f"{name}: no checker in pqz_kat.py")
@@ -2151,6 +2155,8 @@ def main(argv):
     elif argv and argv[0] == "--check":
         bad = selftest(log)
         files = argv[1:] or sorted(glob.glob(os.path.join(VEC_DIR, "*.json")))
+        if not argv[1:]:
+            bad += [f"{n}: missing in {SET}'s directory (required)" for n in REQUIRED if not os.path.exists(os.path.join(VEC_DIR, n))]
         log(f"     parameter set {SET} (q = {Q}, n = {N}, K_MAX = {K_MAX:,}{', PQZH' if HAS_PQZH else ', no PQZH'})")
         log(f"     vector files: {len(files)}")
         bad += check_files(files, log)
