@@ -37,7 +37,7 @@ contract RouterPairsTest is GovRouterFixture {
         string[19] memory t = ["uint8,bytes32,bytes32", "uint8,bytes32,bytes32",
             "uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32", "uint8,bytes32,bytes32",
             "uint8,bytes32",
-            "bytes32,bytes32", "", "bytes32", "uint8", "address,uint256", "bytes32,uint256", "address,bytes32", "address,uint96,uint96", "",
+            "bytes32,bytes32", "", "bytes32", "uint8,bytes32", "address,uint256", "bytes32,uint256", "address,bytes32", "address,uint96,uint96", "",
             "", "address,address,bool", "address,bool", "bool", "uint32,address"];
         return t[op];
     }
@@ -145,7 +145,7 @@ contract RouterPairsTest is GovRouterFixture {
             assertEq(t.admin(), bytes32(0), "RenounceAdmin");
         } else if (op == RENOUNCE_ROLE) {
             NormalToken t = _normal(s, s, 0);
-            _m(op, s, address(t), abi.encode(MINT));
+            _m(op, s, address(t), abi.encode(MINT, EnvKit.codeUidOf(address(t))));
             assertFalse(t.hasRole(MINT, s), "RenounceRole");
         } else if (op == OP_MINT) {
             NormalToken t = _normal(s, s, 0);
@@ -377,7 +377,7 @@ contract RouterPairsTest is GovRouterFixture {
         if (bytes(ty).length == 0) return "";
         if (op == GRANT_ROLE || op == REVOKE_ROLE || op == CANCEL_GRANT) return abi.encode(MINT, next, keccak256("a chain word"));
         if (op == DISABLE_FEATURE) return abi.encode(MINT, keccak256("a chain word"));
-        if (op == RENOUNCE_ROLE) return abi.encode(MINT);
+        if (op == RENOUNCE_ROLE) return abi.encode(MINT, keccak256("a chain word"));
         if (op == TRANSFER_ADMIN) return abi.encode(next, keccak256("a chain word"));
         if (op == RENOUNCE_ADMIN) return abi.encode(keccak256("a chain word"));
         if (op == OP_MINT) return abi.encode(BOB, uint256(1));

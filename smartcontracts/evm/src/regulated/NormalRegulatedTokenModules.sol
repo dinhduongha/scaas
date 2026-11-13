@@ -428,8 +428,8 @@ contract NormalRegulatedTokenA is NormalRegulatedTokenCore {
         _renounceAdminBody(chainUid_);
     }
 
-    function renounceRole(uint8 bit) external onlyDelegated {
-        _renounceRoleBody(bit);
+    function renounceRole(uint8 bit, bytes32 chainUid_) external onlyDelegated {
+        _renounceRoleBody(bit, chainUid_);
     }
 
     function rescue(address asset) external onlyDelegated {

@@ -182,8 +182,9 @@ ROW.UASetDenied = { accounts: LISTED, on: true, mode: 0, fee: 0 };
 ROW.UAEnableFeature = { bit: 9 };
 // CTR-GOV-28 (owner 2026-11-13): every admin op of a token, the DEX or a registry names the target's chain word, context A's
 // (the router rows run there), as `UATransferAdmin` does
+// owner 2026-11-13 (renounceRole carries the chain word too): `UARenounceRole`, a holder's own, likewise
 for (const n of ['UAGrantRole', 'UARevokeRole', 'UASetGrant', 'UACancelGrant', 'UADisableFeature', 'UAEnableFeature', 'UAPqzSetVerifier',
-  'UAPqzCancelVerifier', 'UAPqzRevokeVerifier', 'UASetVerifierFee', 'UASetKycProvider', 'UASetCompliance']) {
+  'UAPqzCancelVerifier', 'UAPqzRevokeVerifier', 'UASetVerifierFee', 'UASetKycProvider', 'UASetCompliance', 'UARenounceRole']) {
   ROW[n] = { ...ROW[n], chainUid: contexts.A.chainUid };
 }
 

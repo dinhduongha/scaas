@@ -111,7 +111,7 @@ contract WrappedTest is V2Fixture {
         assertTrue(t.rateAdjustable());
         vm.prank(wrapperOwner);
         t.grantRole(RATE, nid(address(adm)), EnvKit.codeUidOf(address(t)));
-        adm.exec(address(t), abi.encodeCall(t.renounceRole, (RATE)));
+        adm.exec(address(t), abi.encodeCall(t.renounceRole, (RATE, EnvKit.codeUidOf(address(t)))));
         assertFalse(t.hasRole(RATE, nid(address(adm))));
         assertTrue(t.rateAdjustable());
     }
@@ -180,7 +180,7 @@ contract WrappedTest is V2Fixture {
         (address[] memory us, uint256[] memory one) = _two();
         WrappedToken t = _multi(us, one, one, _fixedRate(), bob);
         vm.prank(bob);
-        t.renounceRole(GUARD);
+        t.renounceRole(GUARD, EnvKit.codeUidOf(address(t)));
         vm.prank(bob);
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdt), "x");

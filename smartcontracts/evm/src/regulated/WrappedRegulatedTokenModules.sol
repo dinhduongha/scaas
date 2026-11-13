@@ -417,8 +417,8 @@ contract WrappedRegulatedTokenA is WrappedRegulatedTokenCore {
         _renounceAdminBody(chainUid_);
     }
 
-    function renounceRole(uint8 bit) external onlyDelegated {
-        _renounceRoleBody(bit);
+    function renounceRole(uint8 bit, bytes32 chainUid_) external onlyDelegated {
+        _renounceRoleBody(bit, chainUid_);
     }
 
     function rescueTo() external view onlyDelegated returns (address _p0) {

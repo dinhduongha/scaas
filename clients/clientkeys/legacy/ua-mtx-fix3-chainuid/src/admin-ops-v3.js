@@ -17,4 +17,6 @@ export const ADMIN_OPS_V3 = {
   UASetVerifierFee: { fields: 'address target,uint64 next', on: ON },
   UASetKycProvider: { fields: 'address target,bytes32 provider,bool enabled', on: ON },
   UASetCompliance: { fields: 'address target,bytes32[] accounts,uint64[] flags,uint64[] until', on: ON },
+  // as it stood at baa42a33, before the owner's ruling of 2026-11-13 (renounceRole carries the chain word too)
+  UARenounceRole: { fields: 'address target,uint8 bit', on: ON },
 };

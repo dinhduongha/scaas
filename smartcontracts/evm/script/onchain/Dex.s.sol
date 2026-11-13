@@ -482,7 +482,7 @@ contract Dex is OnchainBase {
         vm.stopBroadcast();
         vm.startBroadcast(k2);
         dex.setFeeSplit{gas: G}(250_000, TREASURY); // a2 uses its grant
-        g.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING);
+        g.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING, IMetaTx(address(g)).chainUid());
         vm.stopBroadcast();
         vm.startBroadcast(k1);
         g.revokeRole{gas: G}(GovernanceBits.LISTING, _pad(a2), IMetaTx(address(g)).chainUid());
@@ -497,7 +497,7 @@ contract Dex is OnchainBase {
         g2.grantRole{gas: G}(GovernanceBits.LISTING, _pad(a3), IMetaTx(address(g2)).chainUid());
         g2.cancelGrant{gas: G}(GovernanceBits.LISTING, _pad(a3), IMetaTx(address(g2)).chainUid());
         g2.disableFeature{gas: G}(GovernanceBits.LISTING, IMetaTx(address(g2)).chainUid());
-        g2.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING);
+        g2.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING, IMetaTx(address(g2)).chainUid());
         g2.renounceAdmin{gas: G}(dex2.chainUid());
         vm.stopBroadcast();
     }

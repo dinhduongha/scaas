@@ -1615,18 +1615,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -4135,18 +4137,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -7177,18 +7181,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -10625,18 +10631,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -14025,18 +14033,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -17851,18 +17861,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -20851,18 +20863,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -23914,18 +23928,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27499,18 +27515,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31490,18 +31508,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35433,18 +35453,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39802,18 +39824,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [

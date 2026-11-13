@@ -635,8 +635,9 @@ contract GovDeployTest is Test {
         // 0xc18b4D5EA8a7d88ed37Da8F26A4c4e521c38C2BA; Fable fix2 GOV-4 (the metadata hash: `IGovernance.renounceAdmin`'s
         // NatSpec): 0xB1218049Db73aF164e688b770DBC05d422624A1a; fix3 CTR-GOV-28 (the twelve admin ops sign and forward the
         // target's `chainUid`, their typehashes; the metadata hash: `IGovernance`, `IRegulatedToken`, `IPqzToken`,
-        // `IComplianceRegistry`): -> this
-        assertEq(router, 0x1C62B8aa42b5c800eFa3BE1a97f62925c0d74a47, "GovernanceRouter");
+        // `IComplianceRegistry`): 0x1C62B8aa42b5c800eFa3BE1a97f62925c0d74a47; fix3 owner 2026-11-13 (`mtxRenounceRole` signs
+        // and forwards the word, `UARenounceRole`'s typehash; the metadata hash: `IGovernance.renounceRole`): -> this
+        assertEq(router, 0xc757ebb994C1c938FF89c948B9b73B4eb0b4c2A0, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

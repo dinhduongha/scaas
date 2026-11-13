@@ -840,7 +840,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forward(_MA);
     }
 
-    function renounceRole(uint8) external {
+    function renounceRole(uint8, bytes32) external {
         _forward(_MA);
     }
 

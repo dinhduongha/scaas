@@ -220,7 +220,7 @@ contract GovIdentityTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, bytes32(0)));
         t.acceptAdmin();
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, bytes32(0)));
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, bytes32(0)));
         t.mint(BOB, 1);
         vm.stopPrank();

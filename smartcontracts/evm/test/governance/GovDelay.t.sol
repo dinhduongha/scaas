@@ -475,7 +475,7 @@ contract GovDelayTest is Test {
         x.total = 50;
         _set(MANAGER, x);
         vm.prank(MANAGER);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         assertEq(_eta(MANAGER), 0);
         assertFalse(t.grantOf(MINT, nid(MANAGER)).barred, "a renounce bars nobody");
     }

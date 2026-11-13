@@ -607,7 +607,7 @@ abstract contract RegCore is Test {
         address who = w % 4 == 0 ? cGov[w % 6] : act == 1 ? hAddr : _owner();
         bytes32 u = EnvKit.codeUidOf(cT);
         bytes memory cd = act == 0 ? abi.encodeCall(IGovernance.revokeRole, (bit, holder, u))
-            : act == 1 ? abi.encodeCall(IGovernance.renounceRole, (bit))
+            : act == 1 ? abi.encodeCall(IGovernance.renounceRole, (bit, u))
             : act == 2 ? abi.encodeCall(IGovernance.disableFeature, (bit, u))
             : act == 3 ? abi.encodeCall(IGovernance.cancelGrant, (bit, act == 3 && w % 2 == 0 ? bytes32(0) : holder, u))
             : abi.encodeCall(IGovernance.grantRole, (22, nid(cGov[4]), u));

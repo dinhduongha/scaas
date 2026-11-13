@@ -378,9 +378,10 @@ test('round 3s: UASetAllowed, UASetDenied, UAEnableFeature', () => {
 
 // CTR-GOV-28 (owner 2026-11-13): every admin op of a token, the DEX or a registry signs the target's chain word as its last op
 // field (`bytes32 chainUid`, before the envelope); the rows carry context A's; another word is another digest.
-test('CTR-GOV-28: the twelve admin ops sign the chain word last', () => {
+// Owner 2026-11-13 (renounceRole carries the chain word too): `UARenounceRole`, a holder's own, the thirteenth.
+test('CTR-GOV-28: the thirteen ops sign the chain word last', () => {
   const ops = ['UAGrantRole', 'UARevokeRole', 'UASetGrant', 'UACancelGrant', 'UADisableFeature', 'UAEnableFeature', 'UAPqzSetVerifier',
-    'UAPqzCancelVerifier', 'UAPqzRevokeVerifier', 'UASetVerifierFee', 'UASetKycProvider', 'UASetCompliance'];
+    'UAPqzCancelVerifier', 'UAPqzRevokeVerifier', 'UASetVerifierFee', 'UASetKycProvider', 'UASetCompliance', 'UARenounceRole'];
   for (const name of ops) {
     const f = TYPED_OPS[name].fields;
     assert.deepEqual([f.at(-8).name, f.at(-8).type], ['chainUid', 'bytes32'], name);

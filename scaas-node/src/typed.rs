@@ -220,7 +220,7 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UATransferAdmin", "mtxTransferAdmin", GR, "bytes32 from,address target,bytes32 newAdmin,bytes32 chainUid,E", ""),
     ("UAAcceptAdmin", "mtxAcceptAdmin", GR, "bytes32 from,address target,E", ""),
     ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
-    ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
+    ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,bytes32 chainUid,E", ""), // CTR-GOV-28, owner 2026-11-13
     ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
     ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),
     ("UADisableWrap", "mtxDisableWrap", GR, "bytes32 from,address target,address leg,bytes32 reason,E", ""),
@@ -2418,7 +2418,7 @@ mod tests {
     fn chain_word_rows_refuse_a_missing_word() {
         let v = vectors();
         let rows: Vec<&str> = TYPED.iter().filter(|r| r.2 == GR && r.3.contains("bytes32 chainUid")).map(|r| r.0).collect();
-        assert_eq!(rows.len(), 23, "{rows:?}");
+        assert_eq!(rows.len(), 24, "{rows:?}"); // owner 2026-11-13: + UARenounceRole
         for op in rows {
             let good = op_of(op, "gov_router", &v).unwrap();
             Op::parse(&good, FEE).unwrap();

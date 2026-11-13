@@ -306,6 +306,8 @@ abstract contract LegacyDiff is Test {
         if (s == bytes4(keccak256("pqzCancelVerifier()"))) return (bytes4(keccak256("pqzCancelVerifier(bytes32)")), 0);
         if (s == bytes4(keccak256("pqzRevokeVerifier()"))) return (bytes4(keccak256("pqzRevokeVerifier(bytes32)")), 0);
         if (s == bytes4(keccak256("setVerifierFee(uint64)"))) return (bytes4(keccak256("setVerifierFee(uint64,bytes32)")), 1);
+        // owner 2026-11-13 (renounceRole carries the chain word too): a holder's own renounce too
+        if (s == bytes4(keccak256("renounceRole(uint8)"))) return (bytes4(keccak256("renounceRole(uint8,bytes32)")), 1);
     }
 
     function _r3Call(bytes memory data) internal view returns (bytes memory out) {

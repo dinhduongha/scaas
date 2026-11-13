@@ -19,7 +19,8 @@ import {nid} from "../helpers/Ids.sol";
 /// word) is refused by name, `ChainUidMismatch(own, sibling)`, nothing written; a stranger is refused `NotAdmin` first (the
 /// admin before the word); the entry's old selector (no word) has no entry; the same call with the clone's own word is the
 /// control. A holder's own `setGrant` of a leaf and a grantor's `revokeRole` of its leaf check the word too, after the
-/// caller. The PQZ verifier setters of 4, 5, 12, 13 on a bare clone stop at the next check after the word
+/// caller. A holder's own `renounceRole` (owner 2026-11-13, renounceRole carries the chain word too): a caller without the bit
+/// `MissingRole` first, the holder's sibling word refused, the role kept; the own word the control. The PQZ verifier setters of 4, 5, 12, 13 on a bare clone stop at the next check after the word
 /// (`PqzVerifyConfigInvalid`: no `OFFCHAIN` configuration), their success with the word is `PqzOffchainEntries.t.sol` /
 /// `PqzVerifierFee.t.sol`. UNAUDITED.
 contract AdminChainWordTest is Test {
@@ -30,6 +31,7 @@ contract AdminChainWordTest is Test {
     address internal constant STRANGER = address(0x5742A9E5);
     bytes32 internal constant H = bytes32(uint256(0x40001));
     bytes32 internal constant L = bytes32(uint256(0x40002));
+    bytes32 internal constant K = bytes32(uint256(0x40003));
 
     // ------------------------------------------------------------------ fixtures (`AdminNames.t.sol`'s)
 
@@ -125,6 +127,16 @@ contract AdminChainWordTest is Test {
         _ok(string.concat(name, " revokeRole"), t, A1, abi.encodeCall(g.revokeRole, (bit, H, UID)));
         assertFalse(g.hasRole(bit, H), string.concat(name, ": revoked with the own word"));
         _ok(string.concat(name, " revokeRole"), t, A1, abi.encodeCall(g.revokeRole, (bit, L, UID)));
+        // renounceRole: the holder's own; a caller without the bit MissingRole first, then the holder's word
+        _ok(string.concat(name, " renounceRole's holder"), t, A1, abi.encodeCall(g.grantRole, (bit, K, UID)));
+        address k = address(uint160(uint256(K)));
+        _refused(string.concat(name, " renounceRole stranger"), t, STRANGER, abi.encodeCall(g.renounceRole, (bit, SIB)),
+            abi.encodeWithSelector(IGovernance.MissingRole.selector, bit, nid(STRANGER)));
+        _refused(string.concat(name, " renounceRole"), t, k, abi.encodeCall(g.renounceRole, (bit, SIB)), _mismatch());
+        assertTrue(g.hasRole(bit, K), string.concat(name, ": nothing renounced"));
+        _noOld(string.concat(name, " renounceRole"), t, "renounceRole(uint8)");
+        _ok(string.concat(name, " renounceRole"), t, k, abi.encodeCall(g.renounceRole, (bit, UID)));
+        assertFalse(g.hasRole(bit, K), string.concat(name, ": renounced with the own word"));
         // disableFeature, one-way
         _refused(string.concat(name, " disableFeature stranger"), t, STRANGER,
             abi.encodeCall(g.disableFeature, (bit, SIB)), _notAdmin(STRANGER));
@@ -242,7 +254,10 @@ contract AdminChainWordTest is Test {
         IGovernance g = IGovernance(t);
         assertTrue(g.hasRole(bit, H), "the holder");
         address h = address(uint160(uint256(H)));
-        _ok("renounceRole proposes", t, h, abi.encodeCall(g.renounceRole, (bit)));
+        _refused("renounceRole, a sibling's word", t, h, abi.encodeCall(g.renounceRole, (bit, SIB)), _mismatch());
+        (uint64 eta0,,,) = g.pendingGrant(bit, H);
+        assertEq(eta0, 0, "nothing proposed");
+        _ok("renounceRole proposes", t, h, abi.encodeCall(g.renounceRole, (bit, UID)));
         (uint64 eta, bytes32 proposer,,) = g.pendingGrant(bit, H);
         assertTrue(eta != 0 && proposer == H, "proposed by the holder");
         _refused("a stranger's cancel", t, STRANGER, abi.encodeCall(g.cancelGrant, (bit, H, SIB)), _notAdmin(STRANGER));

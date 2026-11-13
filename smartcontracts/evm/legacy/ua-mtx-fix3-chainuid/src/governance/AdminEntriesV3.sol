@@ -11,7 +11,9 @@ import {IGovernance} from "../../../../src/governance/IGovernance.sol";
 ///        `pqzCancelVerifier`, `pqzRevokeVerifier`, `setVerifierFee`; on `ComplianceRegistry` `setKycProvider` and
 ///        `setCompliance`; the router's twelve ops and typehashes of the same. Their bodies are those of cac043bc
 ///        (`GovernanceBase.sol`, `RegulatedBase.sol`, `PqzLayer.sol`, `ComplianceRegistry.sol`, `SCaaSDexAdmin.sol`,
-///        `GovernanceRouterBase.sol`, `GovernanceRouter.sol`). Not built. UNAUDITED.
+///        `GovernanceRouterBase.sol`, `GovernanceRouter.sol`). Then a holder's own `renounceRole(uint8)` on the 12 kinds and
+///        `SCaaSDex`, `mtxRenounceRole` and `UARenounceRole` without the word, as they stood at baa42a33 (superseded by the
+///        owner's ruling of 2026-11-13 renounceRole carries the chain word too, CTR-GOV-28). Not built. UNAUDITED.
 interface IAdminEntriesV3 {
     function grantRole(uint8 bit, bytes32 account) external;
     function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) external;
@@ -25,6 +27,7 @@ interface IAdminEntriesV3 {
     function setVerifierFee(uint64 next) external;
     function setKycProvider(bytes32 provider, bool enabled) external;
     function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until) external;
+    function renounceRole(uint8 bit) external; // 0x057c9cb8
     function mtxGrantRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
         IUARegistry.UASig calldata auth) external;
     function mtxRevokeRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
@@ -47,6 +50,8 @@ interface IAdminEntriesV3 {
         IUARegistry.UASig calldata auth) external;
     function mtxSetCompliance(MetaTxLib.UAEnvelope calldata e, address target, bytes32[] calldata accounts,
         uint64[] calldata flags, uint64[] calldata until, IUARegistry.UASig calldata auth) external;
+    function mtxRenounceRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)
+        external; // 0xb0c1c360
 }
 
 library AdminEntriesV3 {
@@ -87,4 +92,7 @@ library AdminEntriesV3 {
     /// `0x0c697df193b5723555deb0270f8f1ef84c57975443e12cbb327dcef4ed923455`
     bytes32 internal constant UA_SET_COMPLIANCE = keccak256(
         "UASetCompliance(bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    /// `0x1a32125783655840c2b0717e59159708af35ca4638bf313676e325dd5029c3e1`
+    bytes32 internal constant UA_RENOUNCE_ROLE = keccak256(
+        "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 }

@@ -351,7 +351,7 @@ contract GovGrantTest is Test {
         _set(MANAGER, _open());
         assertEq(t.holderCount(MINT), 1, "whole to limited counts once");
         vm.prank(MANAGER);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         assertEq(t.holderCount(MINT), 0);
     }
 
@@ -784,7 +784,7 @@ contract GovGrantTest is Test {
         _is(2, 2);
         assertEq(t.grantOf(MINT, nid(OFFICER3)).grantor, bytes32(0));
         vm.prank(OFFICER3);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         _is(1, 1);
         _leaf(OFFICER3, 10);
         vm.prank(MANAGER);
@@ -879,7 +879,7 @@ contract GovGrantTest is Test {
         _revoke(OFFICER);
         _is(1, 1);
         vm.prank(OFFICER2);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         _is(0, 0);
         assertEq(t.grantOf(MINT, nid(OFFICER2)).total, 7, "the record is kept");
         _renounce();
@@ -898,7 +898,7 @@ contract GovGrantTest is Test {
         t.revokeRole(MINT, nid(OFFICER2), EnvKit.codeUidOf(address(t)));
         _is(2, 1);
         vm.prank(OFFICER3);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         _is(1, 1);
         assertEq(t.grantOf(MINT, nid(OFFICER3)).total, 10, "the record is kept");
         assertEq(t.grantOf(MINT, nid(OFFICER3)).grantor, nid(MANAGER));
@@ -976,7 +976,7 @@ contract GovGrantTest is Test {
         assertFalse(t.grantOf(MINT, nid(OFFICER)).barred, "setGrant re-admits");
         _mint(OFFICER, 1);
         vm.prank(OFFICER);
-        t.renounceRole(MINT); // a renounce bars nobody
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t))); // a renounce bars nobody
         _leaf(OFFICER, 10);
         assertEq(t.grantOf(MINT, nid(OFFICER)).grantor, nid(MANAGER));
     }
@@ -986,7 +986,7 @@ contract GovGrantTest is Test {
         _manager(100);
         _leaf(OFFICER, 10);
         vm.prank(OFFICER);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         _revoke(OFFICER);
         assertTrue(t.grantOf(MINT, nid(OFFICER)).barred);
         _is(1, 1);

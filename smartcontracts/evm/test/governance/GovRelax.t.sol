@@ -183,13 +183,13 @@ contract GovRelaxTest is Test {
 
     function test_relaxRenounceTakesTwoCalls() public {
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FORCE, nid(issuer)));
         (,, bytes32 commit,) = a.pendingGrant(FORCE, nid(issuer));
         assertEq(commit, _commit(RENOUNCE, FORCE, nid(issuer)));
         vm.warp(block.timestamp + D);
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FORCE, nid(issuer)));
         assertFalse(a.barred(FORCE, nid(issuer)), "a renounce bars nothing");
     }
@@ -269,7 +269,7 @@ contract GovRelaxTest is Test {
         vm.prank(OWNER);
         a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
         a.disableFeature(PAUSE, EnvKit.codeUidOf(address(a)));
         assertEq(a.features(), FEATURES, "features unchanged");
@@ -324,7 +324,7 @@ contract GovRelaxTest is Test {
     /// owner confirms after `grantDelay` and bars. Negative control: the holder over the owner's live pending still reverts.
     function test_ownerProposesOverHolderPending() public {
         vm.prank(issuer);
-        a.renounceRole(FREEZE);
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
         a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a))); // proposes over the renounce
         assertTrue(a.hasRole(FREEZE, nid(issuer)), "proposal only");
@@ -335,7 +335,7 @@ contract GovRelaxTest is Test {
         assertTrue(live);
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(issuer)));
-        a.renounceRole(FREEZE); // the squat: refused over the owner's proposal
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a))); // the squat: refused over the owner's proposal
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(issuer)));
         a.cancelGrant(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
@@ -369,10 +369,10 @@ contract GovRelaxTest is Test {
     /// The other proposer may still confirm its own pending when the owner does not propose over it (positive control).
     function test_holderConfirmsOwnRenounce() public {
         vm.prank(issuer);
-        a.renounceRole(FREEZE);
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + D);
         vm.prank(issuer);
-        a.renounceRole(FREEZE);
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FREEZE, nid(issuer)));
         assertFalse(a.barred(FREEZE, nid(issuer)));
     }
@@ -485,7 +485,7 @@ contract GovRelaxTest is Test {
         vm.warp(block.timestamp + D);
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(issuer)));
-        a.renounceRole(FREEZE);
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
         a.cancelGrant(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
 
@@ -516,7 +516,7 @@ contract GovRelaxTest is Test {
         vm.prank(OWNER);
         a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
         a.disableFeature(PAUSE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
@@ -532,7 +532,7 @@ contract GovRelaxTest is Test {
         a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FREEZE, nid(issuer)), "the new owner proposes anew");
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FORCE, nid(issuer)), "the holder proposes anew");
         vm.prank(NEXT);
         a.disableFeature(PAUSE, EnvKit.codeUidOf(address(a)));
@@ -558,7 +558,7 @@ contract GovRelaxTest is Test {
 
     function test_cancelByProposer() public {
         vm.prank(issuer);
-        a.renounceRole(FREEZE);
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
         vm.prank(STRANGER);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(STRANGER)));
         a.cancelGrant(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
@@ -573,7 +573,7 @@ contract GovRelaxTest is Test {
         assertEq(eta, 0);
         // positive control: the owner cancels any pending
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
         a.cancelGrant(FORCE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertFalse(_live(FORCE, nid(issuer)));
@@ -601,7 +601,7 @@ contract GovRelaxTest is Test {
         a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FREEZE, nid(issuer)));
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FORCE, nid(issuer)));
         vm.prank(OWNER);
         assertTrue(a.disableApplied(PAUSE));

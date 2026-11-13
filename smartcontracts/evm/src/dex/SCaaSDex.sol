@@ -926,7 +926,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function setGrant(uint8, bytes32, GrantTerms calldata, bytes32) external override { _forward(); }
     function cancelGrant(uint8, bytes32, bytes32) external override { _forward(); }
     function revokeRole(uint8, bytes32, bytes32) external override { _forward(); }
-    function renounceRole(uint8) external override { _forward(); }
+    function renounceRole(uint8, bytes32) external override { _forward(); }
     function disableFeature(uint8, bytes32) external override { _forward(); }
     function transferAdmin(bytes32, bytes32) external override { _forward(); }
     function acceptAdmin() external override { _forward(); }

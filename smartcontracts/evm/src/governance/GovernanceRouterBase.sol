@@ -38,7 +38,7 @@ library GovernanceRouterTypes {
     bytes32 internal constant UA_RENOUNCE_ADMIN = keccak256(
         "UARenounceAdmin(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_RENOUNCE_ROLE = keccak256(
-        "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UARenounceRole(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 
     // ---- the factory's creations (chain-neutral spec §4.4, S3; plan T76): `target` the chain's `OpenFactory`, the
     //      creation's named parameters, `initHash = keccak256(initArgs)` (`initCall` for an instance)
@@ -275,10 +275,12 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
             auth);
     }
 
-    function mtxRenounceRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)
-        external
+    /// @notice The holder's own; the target's chain word signed and forwarded (CTR-GOV-28, owner 2026-11-13).
+    function mtxRenounceRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_RENOUNCE_ROLE, e, target, IGovernance.renounceRole.selector, abi.encode(bit), auth);
+        _ua(GovernanceRouterTypes.UA_RENOUNCE_ROLE, e, target, IGovernance.renounceRole.selector,
+            abi.encode(bit, chainUid), auth);
     }
 
     // ------------------------------------------------------------------ no generic path (governance spec §3.6, B-14)

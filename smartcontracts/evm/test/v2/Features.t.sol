@@ -214,7 +214,7 @@ contract FeaturesTest is Test {
         vm.prank(minter);
         t.mint(alice, 1);                                     // holders keep their role after the owner renounces
         vm.prank(minter);
-        t.renounceRole(1);
+        t.renounceRole(1, EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));
         t.mint(alice, 1);

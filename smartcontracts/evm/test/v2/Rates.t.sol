@@ -193,7 +193,7 @@ contract RatesTest is V2Fixture {
         _propose(101, 100);
         vm.expectEmit(address(t));
         emit IGovernance.RoleRevoked(3, nid(address(adm)), nid(address(adm)));
-        _admin(abi.encodeCall(IGovernance.renounceRole, (3)));
+        _admin(abi.encodeCall(IGovernance.renounceRole, (3, EnvKit.codeUidOf(address(t)))));
         assertFalse(t.hasRole(3, nid(address(adm))));
         assertTrue(t.rateAdjustable());
         (address u,,,) = t.pendingRate();

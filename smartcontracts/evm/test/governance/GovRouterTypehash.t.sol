@@ -82,10 +82,15 @@ contract GovRouterTypehashTest is Test {
             "UARenounceOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), 0x0397c70ed0d09c398e5f2d00425b822788d86a35a074bf84e9438818da053445);
     }
 
+    /// CTR-GOV-28 (owner 2026-11-13, renounceRole carries the chain word too): the target's chain word signed (was
+    /// 0x1a32125783655840c2b0717e59159708af35ca4638bf313676e325dd5029c3e1, without `bytes32 chainUid`; its legacy pin below).
     function test_uaRenounceRoleTypehashIsPinned() public pure {
         assertEq(T.UA_RENOUNCE_ROLE, keccak256(
-                "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_RENOUNCE_ROLE, 0x1a32125783655840c2b0717e59159708af35ca4638bf313676e325dd5029c3e1);
+                "UARenounceRole(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_RENOUNCE_ROLE, 0x74561cb1e1190de99b11489b67a9286153ec5bccd8898fee18b308c24e17f756);
+        assertEq(keccak256(
+                "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x1a32125783655840c2b0717e59159708af35ca4638bf313676e325dd5029c3e1);
     }
 
     function test_uaMintTypehashIsPinned() public pure {

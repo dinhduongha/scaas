@@ -136,8 +136,11 @@ abstract contract GovernanceBaseCore {
         GovernanceLib.revokeRole(bit, account, c, _delayedRelaxBits());
         if (!admin) _govChainWord(chainUid_);
     }
-    function _renounceRoleBody(uint8 bit) internal {
-        GovernanceLib.renounceRole(bit, _govSubject(), _delayedRelaxBits());
+    /// @dev CTR-GOV-28 (owner 2026-11-13): a holder's word before any write; a caller without the bit stays `MissingRole`.
+    function _renounceRoleBody(uint8 bit, bytes32 chainUid_) internal {
+        bytes32 c = _govSubject();
+        if (GovernanceLib.$().roles[bit][c] != 0) _govChainWord(chainUid_);
+        GovernanceLib.renounceRole(bit, c, _delayedRelaxBits());
     }
     /// @dev The entry's body: the admin, then the word (CTR-GOV-28), then the kind's disable (`_disableFeatureBody(bit)`).
     function _disableFeatureBody(uint8 bit, bytes32 chainUid_) internal {
@@ -258,8 +261,8 @@ abstract contract GovernanceBase is GovernanceBaseCore, IGovernance {
         _revokeRoleBody(bit, account, chainUid_);
     }
 
-    function renounceRole(uint8 bit) external override governed {
-        _renounceRoleBody(bit);
+    function renounceRole(uint8 bit, bytes32 chainUid_) external override governed {
+        _renounceRoleBody(bit, chainUid_);
     }
 
     function disableFeature(uint8 bit, bytes32 chainUid_) external virtual override governed {

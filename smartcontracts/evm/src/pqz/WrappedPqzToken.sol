@@ -801,7 +801,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forward(_MA);
     }
 
-    function renounceRole(uint8) external {
+    function renounceRole(uint8, bytes32) external {
         _forward(_MA);
     }
 

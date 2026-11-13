@@ -143,8 +143,9 @@ interface IGovernance is IAdmin {
     function grantRole(uint8 bit, bytes32 account, bytes32 chainUid_) external;
     /// @notice The admin, or a leaf's grantor; the caller, then the word (`ChainUidMismatch`, CTR-GOV-28).
     function revokeRole(uint8 bit, bytes32 account, bytes32 chainUid_) external;
-    /// @notice A holder's own, no word (a role entry, not an admin entry).
-    function renounceRole(uint8 bit) external;
+    /// @notice A holder's own. `MissingRole` for a caller without the bit, then `chainUid_` not this contract's chain word
+    ///         (`ChainUidMismatch`, CTR-GOV-28, owner 2026-11-13), before any write.
+    function renounceRole(uint8 bit, bytes32 chainUid_) external;
     function disableFeature(uint8 bit, bytes32 chainUid_) external;
     /// @notice The admin becomes 0 for good. Refused in order: `NotAdmin`, then `chainUid_` not this contract's chain word
     ///         (`ChainUidMismatch`, Fable recheck-2 P3-1: a native admin's direct call is void on a sibling), then

@@ -17,6 +17,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// T2: tầng 1 `NormalToken` (TW2 §4, R141).
 contract Tier1Test is V2Fixture {
@@ -56,7 +57,7 @@ contract Tier1Test is V2Fixture {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
         t.mint(bob, 1);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), address(this)));
-        t.renounceRole(1);
+        t.renounceRole(1, EnvKit.codeUidOf(address(t)));
     }
 
     function test_renounceMinterIsOneWay() public {
@@ -64,7 +65,7 @@ contract Tier1Test is V2Fixture {
         vm.expectEmit(address(t));
         emit IGovernance.RoleRevoked(1, nid(minter), nid(minter));
         vm.prank(minter);
-        t.renounceRole(1);
+        t.renounceRole(1, EnvKit.codeUidOf(address(t)));
         assertFalse(t.hasRole(1, nid(minter)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));

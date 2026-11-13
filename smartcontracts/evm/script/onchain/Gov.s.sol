@@ -325,9 +325,10 @@ contract Gov is OnchainBase {
             abi.encode(GovernanceBits.MINTABLE, _pad(a2), keccak256(abi.encode(keccak256(bytes(TERMS_T)), gt)), w0));
         vm.broadcast(k2);
         gr.mtxSetGrant(e, t0, GovernanceBits.MINTABLE, _pad(a2), gt, w0, s);
-        (e, s) = _auth(_eoa(k2), _ty("UARenounceRole", "uint8 bit"), t0, abi.encode(GovernanceBits.MINTABLE));
+        (e, s) = _auth(_eoa(k2), _ty("UARenounceRole", "uint8 bit,bytes32 chainUid"), t0,
+            abi.encode(GovernanceBits.MINTABLE, w0));
         vm.broadcast(k2);
-        gr.mtxRenounceRole(e, t0, GovernanceBits.MINTABLE, s); // the limited holder renounces its own grant
+        gr.mtxRenounceRole(e, t0, GovernanceBits.MINTABLE, w0, s); // the limited holder renounces its own grant
         // a grant under grantDelay: the first call proposes, the cancel drops it
         bytes32 wd = IMetaTx(t0d).chainUid();
         (e, s) = _auth(o, _ty("UAGrantRole", "uint8 bit,bytes32 account,bytes32 chainUid"), t0d,

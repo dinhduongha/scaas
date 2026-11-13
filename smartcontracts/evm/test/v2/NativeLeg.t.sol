@@ -41,7 +41,7 @@ contract CoinReentersEveryEntry {
                 PayMetaKit.meta(0)),
             abi.encodeWithSelector(t.grantRole.selector, uint8(1), address(1), bytes32(0)),
             abi.encodeWithSelector(t.revokeRole.selector, uint8(1), address(1), bytes32(0)),
-            abi.encodeWithSelector(t.renounceRole.selector, uint8(1)),
+            abi.encodeWithSelector(t.renounceRole.selector, uint8(1), bytes32(0)),
             abi.encodeWithSelector(t.disableFeature.selector, uint8(1), bytes32(0)),
             abi.encodeWithSelector(t.transferAdmin.selector, address(1), bytes32(0)),
             abi.encodeWithSelector(t.acceptAdmin.selector),

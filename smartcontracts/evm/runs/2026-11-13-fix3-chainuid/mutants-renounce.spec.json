@@ -1,0 +1,10 @@
+[
+ {
+  "id": "F3-15 renounceRole without the holder's word",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        if (GovernanceLib.$().roles[bit][c] != 0) _govChainWord(chainUid_);\n",
+  "new": "",
+  "path": "test/governance/AdminChainWord.t.sol",
+  "test": "test_kind0_NormalToken"
+ }
+]

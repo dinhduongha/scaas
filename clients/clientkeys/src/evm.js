@@ -410,7 +410,7 @@ const OPS = {
   UATransferAdmin: { fields: 'address target,bytes32 newAdmin,bytes32 chainUid', on: ROUTER },
   UAAcceptAdmin: { fields: 'address target', on: ROUTER },
   UARenounceAdmin: { fields: 'address target,bytes32 chainUid', on: ROUTER },
-  UARenounceRole: { fields: 'address target,uint8 bit', on: ROUTER },
+  UARenounceRole: { fields: 'address target,uint8 bit,bytes32 chainUid', on: ROUTER }, // the holder's own (owner 2026-11-13)
   UAMint: { fields: 'address target,address to,uint256 amount', on: ROUTER },
   UAMintToUA: { fields: 'address target,bytes32 to,uint256 amount', on: ROUTER },
   UADisableWrap: { fields: 'address target,address leg,bytes32 reason', on: ROUTER },

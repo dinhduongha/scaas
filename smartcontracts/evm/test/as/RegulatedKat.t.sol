@@ -607,7 +607,7 @@ contract RegulatedKatTest is RegFixture {
             nid(issuer), "", false));
         _back(s);
         vm.prank(issuer);
-        g.renounceRole(GovernanceBits.PAUSE);
+        g.renounceRole(GovernanceBits.PAUSE, EnvKit.codeUidOf(address(g)));
         j = string.concat(j, _commitRow("renounceRole(PAUSE) by its holder: RENOUNCE", GovernanceLib.RENOUNCE, GovernanceBits.PAUSE,
             nid(issuer), "", false));
         _back(s);

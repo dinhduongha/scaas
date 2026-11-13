@@ -209,7 +209,7 @@ abstract contract GovRouterFixture is UARegistryBase {
             Row("TransferAdmin", ",bytes32 newAdmin,bytes32 chainUid", router.mtxTransferAdmin.selector);
         rows[ACCEPT_ADMIN] = Row("AcceptAdmin", "", router.mtxAcceptAdmin.selector);
         rows[RENOUNCE_ADMIN] = Row("RenounceAdmin", ",bytes32 chainUid", router.mtxRenounceAdmin.selector);
-        rows[RENOUNCE_ROLE] = Row("RenounceRole", ",uint8 bit", router.mtxRenounceRole.selector);
+        rows[RENOUNCE_ROLE] = Row("RenounceRole", ",uint8 bit,bytes32 chainUid", router.mtxRenounceRole.selector);
         rows[OP_MINT] = Row("Mint", ",address to,uint256 amount", router.mtxMint.selector);
         rows[MINT_TO_UA] = Row("MintToUA", ",bytes32 to,uint256 amount", router.mtxMintToUA.selector);
         rows[DISABLE_WRAP] = Row("DisableWrap", ",address leg,bytes32 reason", router.mtxDisableWrap.selector);
@@ -416,7 +416,7 @@ contract GovRouterTest is GovRouterFixture {
         assertEq(eta, 0, "CancelGrant");
         _do(REVOKE_ROLE, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
         assertTrue(t.grantOf(MINT, y).barred, "RevokeRole: the owner's revoke bars");
-        _do(RENOUNCE_ROLE, s, address(t), abi.encode(MINT));
+        _do(RENOUNCE_ROLE, s, address(t), abi.encode(MINT, EnvKit.codeUidOf(address(t))));
         assertFalse(t.hasRole(MINT, s), "RenounceRole");
         _do(DISABLE_FEATURE, s, address(t), abi.encode(MINT, EnvKit.codeUidOf(address(t))));
         assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
@@ -725,14 +725,16 @@ contract GovRouterTest is GovRouterFixture {
     /// CTR-GOV-28 (owner 2026-11-13): the router's five governance admin ops sign the target's chain word and forward it; one
     /// signed for a sibling (another word) reaches the target, which refuses it by name, nothing written, the nonce unspent;
     /// a relayer cannot swap the word under a signature (another word, another digest); the own word is the control.
+    /// Owner 2026-11-13 (renounceRole carries the chain word too): `mtxRenounceRole`, the holder's own, likewise.
     function test_governanceOps_siblingWordRefused() public {
         NormalToken t = _normal(eoa, eoa, 0);
         bytes32 u = EnvKit.codeUidOf(address(t));
         bytes32 sib = keccak256("a sibling with the same chain id");
         bytes memory mm = abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, u, sib);
-        uint256[4] memory ops = [GRANT_ROLE, REVOKE_ROLE, CANCEL_GRANT, DISABLE_FEATURE];
-        for (uint256 i; i < 4; ++i) {
-            bytes memory args = ops[i] == DISABLE_FEATURE ? abi.encode(MINT, sib) : abi.encode(MINT, pq, sib);
+        uint256[5] memory ops = [GRANT_ROLE, REVOKE_ROLE, CANCEL_GRANT, DISABLE_FEATURE, RENOUNCE_ROLE];
+        for (uint256 i; i < 5; ++i) {
+            bytes memory args = ops[i] == DISABLE_FEATURE || ops[i] == RENOUNCE_ROLE ? abi.encode(MINT, sib)
+                : abi.encode(MINT, pq, sib);
             bytes memory cd = _op(ops[i], eoa, address(t), args);
             vm.expectRevert(mm);
             _run(cd);
@@ -743,6 +745,12 @@ contract GovRouterTest is GovRouterFixture {
         _run(cdg);
         assertEq(router.mtxNonce(eoa, 0), 0, "nonces unspent");
         assertTrue(t.hasRole(MINT, eoa) && !t.hasRole(MINT, pq), "nothing written");
+        {
+            bytes4 oldSel = bytes4(keccak256("mtxRenounceRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),"
+                "address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+            (bool ok, bytes memory ret) = address(router).call(abi.encodePacked(oldSel, new bytes(32 * 12)));
+            assertTrue(!ok && ret.length == 0, "the old mtxRenounceRole answers");
+        }
         // a word swapped under the signature: another digest, the signer's key does not verify it
         (a,) = _setGrantArgs(MINT, pq, _limited(5), u);
         cdg = _signed(router, SET_GRANT, eoa, 0, address(t), a, w);
@@ -758,7 +766,8 @@ contract GovRouterTest is GovRouterFixture {
         assertTrue(t.hasRole(MINT, pq), "GrantRole");
         _do(CANCEL_GRANT, eoa, address(t), abi.encode(MINT, pq, u));
         _do(REVOKE_ROLE, eoa, address(t), abi.encode(MINT, pq, u));
-        _do(REVOKE_ROLE, eoa, address(t), abi.encode(MINT, eoa, u));
+        _do(RENOUNCE_ROLE, eoa, address(t), abi.encode(MINT, u));
+        assertFalse(t.hasRole(MINT, eoa), "RenounceRole");
         _do(DISABLE_FEATURE, eoa, address(t), abi.encode(MINT, u));
         assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
     }
