@@ -18,7 +18,8 @@ const read = (path) => readFileSync(new URL(path, ROOT), 'utf8');
 const json = (path) => JSON.parse(read(path));
 const V = json('smartcontracts/vectors/typed/typed_ops.json');
 const PQZ = 'smartcontracts/vectors/pqz/';
-const VERDICT_FILE = new URL(`${PQZ}verdict.json`, ROOT);
+// T-05: the forge writer's file of the default build's set, in that set's directory
+const VERDICT_FILE = new URL(`${PQZ}n2304-kmax4096/verdict.json`, ROOT);
 const ZERO = '0x' + '00'.repeat(20);
 const Z32 = '0x' + '00'.repeat(32);
 const k = (s) => hex(keccak_256(utf8ToBytes(s)));
@@ -165,7 +166,9 @@ test('the six signed PQZ entries take PqzSignedVerdict last, after auth; the row
   }
   // the selectors of the contract's own signatures (IPqzToken / PqzLayer / WrappedPqzToken, spec §5.3)
   // group 3h (T59): `bytes32 ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms)
-  const PA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)';
+  // three keys (CTR-PQZ-40): `bytes uFrom` after vAuditor, the two PqzOpening (bytes kemCt, bytes32 nonce, bytes body) last
+  const PA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,'
+    + '(bytes,bytes32,bytes),(bytes,bytes32,bytes))';
   const MA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)';
   const BA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)';
   const tail = `bytes,${UA_SIG},bytes,${UA_SIG},${SIGNED_VERDICT})`;

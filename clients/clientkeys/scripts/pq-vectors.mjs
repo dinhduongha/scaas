@@ -11,6 +11,7 @@ import { seedFromWords } from '../src/seed.js';
 import { PQ_KINDS, pqKeygen, kindTag, uaMessage, signedMessage, signUA, verifyUA, purposeTag, mldsaExpandedKey, pqzKeySeed } from '../src/pq.js';
 import { hex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
 import { pqzOwnTag, pqzMemoHash } from '../src/evm.js';
+import { pqzScopedKeySeed, pqzOpeningMemoHash } from '../src/pqzopen.js';
 
 const M = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
   + 'capable act festival slice deposit sauce coconut afford frown better';
@@ -87,6 +88,18 @@ const memo = hex(keccak_256(utf8ToBytes('scaas 3h memo')).subarray(0, 16)) + hex
 const tag0 = out.ownTag[0].ownTag;
 out.memoHash = [['hash', memo], ['bundle', '0x'], ['burn', '0x']].map(([form, m]) => ({ form, memo: m, ownTag: tag0,
   memoHash: pqzMemoHash(m, tag0) }));
+// the three-key model (spec 2026-11-13 pqz-three-keys K3-2, CLI-SGN-50): the scoped key seeds of (account 0, index 0), class
+// offchain-shared on two chains and offchain-token for two tokens, versions 0 and 1 (pairwise distinct from each other and from
+// `pqzSeeds`); the opening KEM seeds and the sealed openings are pqz-ffi's KAT (smartcontracts/vectors/pqz/opening.json)
+const CHAINS = [hex(kat('chain A')), hex(kat('chain B'))];
+const TOKENS = ['0x5ca00000000000000000000000000000000000a3', '0x5ca00000000000000000000000000000000000a4'];
+out.pqzScopedSeeds = CHAINS.flatMap((chainUid) => [0, 1].flatMap((version) => [undefined, ...TOKENS].map((token) => ({
+  keyClass: token === undefined ? 'offchain-shared' : 'offchain-token', account: 0, index: 0, chainUid, ...(token ? { token } : {}), version,
+  seed32: hex(pqzScopedKeySeed(seed, { account: 0, index: 0, chainUid, token, version })) }))));
+// CTR-PQZ-40: an opening token's op 1 `memoHash = keccak256(memo ‖ ownTag ‖ keccak256(O_t ‖ [O_a]))`, filler openings of 1,648 B
+const op = (i) => concatBytes(...Array.from({ length: 52 }, (_, j) => keccak_256(utf8ToBytes(`scaas three-keys opening ${i} ${j}`)))).subarray(0, 1648);
+out.memoHashOpening = [[op(0)], [op(0), op(1)]].map((os) => ({ form: os.length === 1 ? 'bundle, no auditor' : 'bundle, auditor', memo: '0x',
+  ownTag: tag0, openings: os.map(hex), memoHash: hex(pqzOpeningMemoHash('0x', tag0, os)) }));
 mkdirSync(new URL('../../../smartcontracts/vectors/ua/', import.meta.url), { recursive: true });
 writeFileSync(new URL('../../../smartcontracts/vectors/ua/pq_kat.json', import.meta.url), JSON.stringify(out, null, 2) + '\n');
 console.log('wrote smartcontracts/vectors/ua/pq_kat.json');

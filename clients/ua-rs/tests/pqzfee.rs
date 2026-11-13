@@ -60,7 +60,7 @@ fn typed_ops_set_verifier_fee_row() {
 
 #[test]
 fn verifier_fee_rows() {
-    let v = load("pqz/verifier_fee.json");
+    let v = load("pqz/n2304-kmax4096/verifier_fee.json"); // T-05: in its set's directory
     let rows = v["rows"].as_array().unwrap();
     assert_eq!(rows.len() as u128, num(&v["rowCount"]));
     for r in rows {

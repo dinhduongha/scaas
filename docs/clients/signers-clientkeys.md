@@ -1050,13 +1050,13 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
 
 <a id="pqz-verdict-clients"></a>**PQZ verifier mode in the clients** (group 3f). `clientkeys` builds the `PqzVerdict` digest,
 the empty and the signed `PqzSignedVerdict` and the proof-carrying entries with the verdict last (**BUILT**, T46: `test/pqz-verdict.test.js`, reading
-`smartcontracts/vectors/pqz/verdict.json`); `ua-rs` and its wrappers sign `PqzVerdict` under the `pqz-verdict` purpose like any
+`smartcontracts/vectors/pqz/n2304-kmax4096/verdict.json`); `ua-rs` and its wrappers sign `PqzVerdict` under the `pqz-verdict` purpose like any
 other UA message (**SPECIFIED**, branch `ua-rs-sign`). Contract rule:
 [pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md#pqz-verifier-mode). **The verifier fee** (group 3t,
 [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); **BUILT**): `clientkeys` has the router type `UASetVerifierFee`
 (`typed_ops.json`), `pqzFeeWord({confidentialFee, beneficiaryUA, verifierFee, legs, decoyFee})` for display and the node /
 verifier parity (a witness takes word 256 of the token's statement view, never this sum) and `decodePqzVerifyConfig` with the
-four fee fields (`test/pqz-verifier-fee.test.js` reads `smartcontracts/vectors/pqz/verifier_fee.json`); `ua-rs` `src/pqzfee.rs`
+four fee fields (`test/pqz-verifier-fee.test.js` reads `smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json` (the set's own directory, T-05)); `ua-rs` `src/pqzfee.rs`
 the `UASetVerifierFee` struct hash and digest and `pqz_fee_word` (`tests/pqzfee.rs`). Neither has a `TokenConfig` encoder: the
 creation fields `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed`, `verifierFee`, `verifierFeeMax` are the wizard's when it is
 built.

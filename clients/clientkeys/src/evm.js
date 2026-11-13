@@ -217,8 +217,11 @@ const STRUCTS = Object.fromEntries(Object.entries({
   UAMetaTransfer: transferOf('bytes32'),
   // group 3g (KV-8): `keyVersion`, the debited key version of `fromUA`, after it in the three args structs; group 3h (pqz-proof-path
   // spec §3.2, PP-3): `ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms), `pqzOwnTag` below
+  // the three-key model (CTR-PQZ-38, -40): `uFrom` (the sender's own `u_f`) after `vAuditor`, the two sealed openings last; all
+  // three empty on a token without the opening
   PqzTransferArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,'
-    + 'bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo',
+    + 'bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor',
+  PqzOpening: 'bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed',
   PqzLeg: 'bytes32 ua,bytes v,bytes vAuditor',
   PqzMultiArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,'
     + 'bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo',
@@ -397,6 +400,11 @@ const OPS = {
   // The owner's own signature (purpose `zether-owner`), `ownerSig` of the direct ops and of `UARollOverSigned` / `UASetRollOverMode`.
   ZetherRollOver: { raw: 'bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock', on: ZETHER, entry: 'mtxRollOverSigned',
     call: (m, sig) => [['bytes32', m.ua], ['uint64', m.expectedPendingSeq], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
+  // CTR-PQZ-41: the holder's rollover with skip marks on an opening token (purpose `zether-auth`, as `PqzAuth`); `rollSeq` and
+  // `rolled` from `pqzAccount(ua, keyVersion)`, `entriesHash` over the entries' contents; the call takes neither
+  PqzRollOver: { raw: 'bytes32 ua,uint64 keyVersion,uint64 rollSeq,uint64 rolled,uint64 n,uint64[] skip,bytes32 entriesHash,uint64 validUntilBlock,'
+    + 'bytes32 chainUid', on: PQZ, entry: 'mtxRollOverSigned', call: (m, sig) => [['bytes32', m.ua], ['uint64', m.keyVersion], ['uint64', m.n],
+    ['uint64[]', m.skip], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
   ZetherSetRollOverMode: { raw: 'bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock', on: ZETHER, entry: 'mtxSetRollOverMode',
     call: (m, sig) => [['bytes32', m.ua], ['uint8', m.mode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
   // GovernanceRouter, one per chain (governance spec §3.2, CTR-GOV-15 Change; R14): the closed table, each op `mtx<Op>` over
@@ -642,16 +650,18 @@ export function pqzFeeWord({ confidentialFee = 0, beneficiaryUA = ZERO_ID, verif
   return w;
 }
 
-/** `pqzVerifyConfig()`'s return data (11 static words, round 3t's four appended): the mode, the verifier, fixed, its epoch, a
- *  live pending transfer and its `eta`, the notice period, the verifier fee, its immutable cap, a live pending increase and
- *  its `eta` (a dead one reads 0, 0). Wallets show `verifierFeeMax` as the headline price (Fable P2-2). */
+/** `pqzVerifyConfig()`'s return data (13 static words: round 3t's four appended, then the three-key model's two): the mode, the
+ *  verifier, fixed, its epoch, a live pending transfer and its `eta`, the notice period, the verifier fee, its immutable cap, a
+ *  live pending increase and its `eta` (a dead one reads 0, 0), `pqzOwnKey`, `pqzOpening` (CTR-PQZ-37: the token's key class).
+ *  Wallets show `verifierFeeMax` as the headline price (Fable P2-2). */
 export function decodePqzVerifyConfig(data) {
   const b = asBytes(data);
-  if (b.length !== 11 * 32) refuse('pqzVerifyConfig: 11 words');
+  if (b.length !== 13 * 32) refuse('pqzVerifyConfig: 13 words');
   const w = (i) => BigInt(hex(b.subarray(32 * i, 32 * i + 32)));
   const id = (i) => hex(b.subarray(32 * i, 32 * i + 32));
   return { pqzVerifyMode: Number(w(0)), verifier: id(1), fixed: w(2) !== 0n, pqzVerifierEpoch: Number(w(3)), pending: id(4),
-    eta: w(5), noticePeriod: w(6), verifierFee: w(7), verifierFeeMax: w(8), verifierFeePending: w(9), verifierFeeEta: w(10) };
+    eta: w(5), noticePeriod: w(6), verifierFee: w(7), verifierFeeMax: w(8), verifierFeePending: w(9), verifierFeeEta: w(10),
+    pqzOwnKey: w(11) !== 0n, pqzOpening: w(12) !== 0n };
 }
 
 /** `x.pqzVerdict = {pqzVerdict, sig}` as the entry takes it: required; a verdict needs its signature, an empty one has none. */

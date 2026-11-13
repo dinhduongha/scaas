@@ -3283,7 +3283,7 @@ the split case of [CTR-PQZ-25](#CTR-PQZ-25), the disclosure moves nothing), `tes
 (12, 13: a frozen, KYC-denied or list-denied verifier halts debits while the fee is set, shields land, fee 0 the relief, the
 check before `_pullShieldIn`), the invariants F1–F6 and I-V1–I-V3 (`test/pqz/invariant/PqzFeeInvariants.t.sol`: the pool
 equals `totalShielded · shieldScale`, payouts equal the debited words, no debit above a ghost balance, every landed word the fee
-in force), real proofs at `fee ± 1` (`pqz-core/ffi/tests/fee_word.rs`), the vectors `smartcontracts/vectors/pqz/verifier_fee.json`;
+in force), real proofs at `fee ± 1` (`pqz-core/ffi/tests/fee_word.rs`), the vectors `smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json` (the set's own directory, T-05);
 mutants: `smartcontracts/evm/runs/2026-11-11-ua-mtx-3t/mutants.txt`.
 
 Build order (serial heavy builds, one at a time): parameter and literature spike (estimator, leaky-LWE, per-round

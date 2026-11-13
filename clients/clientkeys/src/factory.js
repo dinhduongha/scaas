@@ -88,7 +88,7 @@ const RATE = [['rateDelay', 'uint32'], ['maxRateStepBps', 'uint16']];
 const CONF = [['auditorKey', 'bytes'], ['shieldScale', 'uint256'], ['maxShielded', 'uint256'], ['confidentialFee', 'uint256'],
   ['disclosureMode', 'uint8'], ['auditorMode', 'uint8'], ['minDecoyFee', 'uint256'], ['pqzVerifyMode', 'uint8'],
   ['pqzVerifierUA', 'bytes32'], ['pqzVerifierFixed', 'bool'], ['proofStore', 'uint8'], ['verifierFee', 'uint64'],
-  ['verifierFeeMax', 'uint64']];
+  ['verifierFeeMax', 'uint64'], ['pqzOwnKey', 'bool'], ['pqzOpening', 'bool']]; // the three-key model (CTR-PQZ-37)
 const REG = [['complianceRegistry', 'address'], ['requiredFlags', 'uint64'], ['deniedFlags', 'uint64'], ['termsHash', 'bytes32'],
   ['taxRecipient', 'bytes32']];
 const CONFIG = {

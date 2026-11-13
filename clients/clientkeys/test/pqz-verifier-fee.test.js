@@ -10,7 +10,8 @@ import { hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
 const ROOT = new URL('../../../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
-const VF = JSON.parse(read('smartcontracts/vectors/pqz/verifier_fee.json'));
+// T-05: the forge writer's file of the default build's set, in that set's directory
+const VF = JSON.parse(read('smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json'));
 const BEN = '0x' + '11'.repeat(32);
 const word = (x) => BigInt(x).toString(16).padStart(64, '0');
 
@@ -46,12 +47,13 @@ test('the direct binding word 544: TAG_DIRECT_MODE_VF folds vf on OFFCHAIN, PREC
   }
 });
 
-test('decodePqzVerifyConfig: the eleven words, the four fee fields appended', () => {
-  const words = [1, 0xabc, 1, 2, 0, 0, 86400, 3, 10, 7, 1800000000].map(word).join('');
+test('decodePqzVerifyConfig: the thirteen words, the four fee fields, then pqzOwnKey and pqzOpening (CTR-PQZ-37)', () => {
+  const words = [1, 0xabc, 1, 2, 0, 0, 86400, 3, 10, 7, 1800000000, 0, 1].map(word).join('');
   const c = evm.decodePqzVerifyConfig('0x' + words);
   assert.deepEqual([c.pqzVerifyMode, c.fixed, c.pqzVerifierEpoch], [1, true, 2]);
   assert.deepEqual([c.verifierFee, c.verifierFeeMax, c.verifierFeePending, c.verifierFeeEta], [3n, 10n, 7n, 1800000000n]);
-  assert.throws(() => evm.decodePqzVerifyConfig('0x' + words.slice(0, 64 * 7)), /11 words/);
+  assert.deepEqual([c.pqzOwnKey, c.pqzOpening], [false, true]);
+  assert.throws(() => evm.decodePqzVerifyConfig('0x' + words.slice(0, 64 * 11)), /13 words/);
 });
 
 test('UASetVerifierFee: the router type string, typehash and entry as GovernanceRouterBase.sol / GovernanceRouter.sol', () => {

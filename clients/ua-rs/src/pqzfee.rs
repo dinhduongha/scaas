@@ -3,7 +3,7 @@
 //! struct hash and digest in the router's domain (`MetaTxLib.canon`'s zeroing of an unbound `relayer` / `feeRecipient`; ua-rs
 //! signs every kind), and a debit's public fee word `txFee + verifierFee + M·d` (display and the node / verifier parity: a
 //! wallet's witness takes word 256 of the token's statement view, never this sum). Pinned by
-//! `smartcontracts/vectors/typed/typed_ops.json` (clientkeys) and `pqz/verifier_fee.json` (its forge writer). The contract
+//! `smartcontracts/vectors/typed/typed_ops.json` (clientkeys) and `pqz/n2304-kmax4096/verifier_fee.json` (its forge writer). The contract
 //! decides; nothing here is a check of record. UNAUDITED.
 use crate::regulated::Envelope;
 use crate::{address_word, keccak, keccak256, word};
