@@ -556,7 +556,9 @@ hybrids settle any pair, listed or not, and the exchange path takes any token. O
 the views (`marketListed`, `tokenKnown`, `tokenKind`) and, on a closed DEX, for trading. The bit is a capability of the
 DEX (no holder) in `DexConfig.features` at creation, lockable by `DexConfig.lockedFeatures`; it is never switched on after
 creation (bit 29 is not one of `enableFeature`'s bits, and the DEX has no `enableFeature`); the admin's
-`disableFeature(29)` opens a closed DEX for good, refused when the bit is locked (`FeatureLocked(29)`). The exchange path is
+`disableFeature(29, chainUid_)` opens a closed DEX for good, refused when the bit is locked (`FeatureLocked(29)`), and by
+the DEX's chain word ([CTR-GOV-28](../decisions.md#CTR-GOV-28): a native admin's direct call made for a sibling with the same
+chain id is void, `ChainUidMismatch`; every governance admin entry of the DEX carries the word). The exchange path is
 open by default too: `DexConfig.listedOnly` is false in every script and example, and `setListedOnly` stays for an
 operator who wants it ([CTR-DEX-23](#CTR-DEX-23)). The kind of every token is the factory's at use
 ([CTR-DEX-18](#CTR-DEX-18)), so an unlisted pair needs no record. Self-trade, the relayer binding and every other check are

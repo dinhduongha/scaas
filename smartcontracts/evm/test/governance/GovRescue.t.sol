@@ -347,7 +347,7 @@ contract GovRescueTest is Test {
         assertEq(foo.balanceOf(TO), 50);
         vm.prank(BOB);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureLocked.selector, GovernanceBits.RESCUABLE));
-        n.disableFeature(GovernanceBits.RESCUABLE); // always locked
+        n.disableFeature(GovernanceBits.RESCUABLE, EnvKit.codeUidOf(address(n))); // always locked
     }
 
     function test_rescueNativeOnNormal() public {

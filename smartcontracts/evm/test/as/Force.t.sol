@@ -9,6 +9,7 @@ import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T28 (regulated-kinds spec §3.3 "forceTransfer", CTR-AS-04, F-08): the issuer moves a frozen subject's public
 /// balance to the record's beneficiary on `_poolMove`, within `maxAmount`, while `RECORD` is active; kinds 8 and 9.
@@ -109,7 +110,7 @@ contract ForceTest is RegFixture {
             vm.prank(issuer);
             _r(t).forceTransfer(r, 1);
             vm.prank(compliance);
-            NormalToken(t).renounceRole(10);
+            NormalToken(t).renounceRole(10, EnvKit.codeUidOf(t));
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, r));
             _r(t).forceTransfer(r, 1);

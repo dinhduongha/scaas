@@ -330,7 +330,7 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forwardView(_MZ);
     }
 
-    function cancelGrant(uint8, bytes32) external {
+    function cancelGrant(uint8, bytes32, bytes32) external {
         _forward(_MA);
     }
 
@@ -366,7 +366,7 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forwardView(_MZ);
     }
 
-    function disableFeature(uint8) external {
+    function disableFeature(uint8, bytes32) external {
         _forward(_MZ);
     }
 
@@ -410,7 +410,7 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forwardView(_MA);
     }
 
-    function grantRole(uint8, bytes32) external {
+    function grantRole(uint8, bytes32, bytes32) external {
         _forward(_MA);
     }
 
@@ -734,7 +734,7 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forward(_MA);
     }
 
-    function renounceRole(uint8) external {
+    function renounceRole(uint8, bytes32) external {
         _forward(_MA);
     }
 
@@ -750,7 +750,7 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forward(_MT);
     }
 
-    function revokeRole(uint8, bytes32) external {
+    function revokeRole(uint8, bytes32, bytes32) external {
         _forward(_MA);
     }
 
@@ -758,7 +758,7 @@ contract WrappedZetherToken is WrappedZetherTokenCore, IWrappedZetherTokenAbi {
         _forwardView(_MZ);
     }
 
-    function setGrant(uint8, bytes32, IGovernance.GrantTerms calldata) external {
+    function setGrant(uint8, bytes32, IGovernance.GrantTerms calldata, bytes32) external {
         _forward(_MA);
     }
 

@@ -90,12 +90,12 @@ contract GovDelayTest is Test {
 
     function _set(address holder, IGovernance.GrantTerms memory g) internal {
         vm.prank(OWNER);
-        t.setGrant(MINT, nid(holder), g);
+        t.setGrant(MINT, nid(holder), g, EnvKit.codeUidOf(address(t)));
     }
 
     function _grant(address holder) internal {
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(holder));
+        t.grantRole(MINT, nid(holder), EnvKit.codeUidOf(address(t)));
     }
 
     /// Propose, wait the delay, confirm.
@@ -145,7 +145,7 @@ contract GovDelayTest is Test {
         assertEq(eta, block.timestamp + D, word);
         assertEq(h, _commit(2, holder, keccak256(abi.encode(x))), word);
         vm.prank(OWNER);
-        t.cancelGrant(MINT, nid(holder));
+        t.cancelGrant(MINT, nid(holder), EnvKit.codeUidOf(address(t)));
     }
 
     /// The edit applies at once: the record holds `x` and no pending is written.
@@ -195,13 +195,13 @@ contract GovDelayTest is Test {
         IGovernance.GrantTerms memory s = _open();
         s.scope = bytes32(uint256(7));
         vm.prank(OWNER);
-        a.setGrant(128, nid(MANAGER), s);
+        a.setGrant(128, nid(MANAGER), s, EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        a.setGrant(128, nid(MANAGER), s);
+        a.setGrant(128, nid(MANAGER), s, EnvKit.codeUidOf(address(a)));
         s.scope = bytes32(uint256(8));
         vm.prank(OWNER);
-        a.setGrant(128, nid(MANAGER), s);
+        a.setGrant(128, nid(MANAGER), s, EnvKit.codeUidOf(address(a)));
         assertEq(a.grantOf(128, nid(MANAGER)).scope, bytes32(uint256(7)), "scope");
         (,,, bool live) = a.pendingGrant(128, nid(MANAGER));
         assertTrue(live, "scope");
@@ -267,7 +267,7 @@ contract GovDelayTest is Test {
         IGovernance.GrantTerms memory l = _open();
         l.total = 10;
         vm.prank(MANAGER);
-        t.setGrant(MINT, nid(OFFICER), l); // the leaf path takes no delay
+        t.setGrant(MINT, nid(OFFICER), l, EnvKit.codeUidOf(address(t))); // the leaf path takes no delay
         assertEq(t.grantOf(MINT, nid(OFFICER)).grantor, nid(MANAGER));
         l.total = 5;
         _set(OFFICER, l);
@@ -307,10 +307,10 @@ contract GovDelayTest is Test {
         y.total = 6;
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, MINT, MANAGER));
-        t.setGrant(MINT, nid(MANAGER), y);
+        t.setGrant(MINT, nid(MANAGER), y, EnvKit.codeUidOf(address(t)));
         vm.prank(OWNER); // `grantRole` is terms 0
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, MINT, MANAGER));
-        t.grantRole(MINT, nid(MANAGER));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         _set(MANAGER, x); // positive control
         assertEq(t.grantOf(MINT, nid(MANAGER)).total, 5);
     }
@@ -321,7 +321,7 @@ contract GovDelayTest is Test {
         vm.warp(eta - 1);
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotReady.selector, MINT, MANAGER, eta));
-        t.grantRole(MINT, nid(MANAGER));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         vm.warp(eta); // positive control: at `eta`
         _grant(MANAGER);
         assertTrue(t.hasRole(MINT, nid(MANAGER)));
@@ -350,7 +350,7 @@ contract GovDelayTest is Test {
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, OWNER));
-        t.grantRole(MINT, nid(MANAGER));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         assertFalse(t.hasRole(MINT, nid(MANAGER)));
     }
 
@@ -363,14 +363,14 @@ contract GovDelayTest is Test {
         assertFalse(_live(MANAGER));
         vm.warp(block.timestamp + D);
         vm.prank(NEXT);
-        t.grantRole(MINT, nid(MANAGER)); // proposes, it does not confirm OWNER's
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t))); // proposes, it does not confirm OWNER's
         assertFalse(t.hasRole(MINT, nid(MANAGER)));
         (, bytes32 proposer,, bool live) = _pending(MANAGER);
         assertEq(proposer, nid(NEXT));
         assertTrue(live);
         vm.warp(block.timestamp + D);
         vm.prank(NEXT);
-        t.grantRole(MINT, nid(MANAGER));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         assertTrue(t.hasRole(MINT, nid(MANAGER)));
     }
 
@@ -434,7 +434,7 @@ contract GovDelayTest is Test {
         _set(MANAGER, x);
         assertTrue(_live(MANAGER));
         vm.prank(OWNER);
-        t.revokeRole(MINT, nid(MANAGER));
+        t.revokeRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         assertEq(_eta(MANAGER), 0);
         assertTrue(t.grantOf(MINT, nid(MANAGER)).barred);
         vm.warp(block.timestamp + D);
@@ -451,11 +451,11 @@ contract GovDelayTest is Test {
         IGovernance.GrantTerms memory l = _open();
         l.total = 10;
         vm.prank(MANAGER);
-        t.setGrant(MINT, nid(OFFICER), l);
+        t.setGrant(MINT, nid(OFFICER), l, EnvKit.codeUidOf(address(t)));
         _set(OFFICER, l); // the owner proposes to make the leaf a root
         uint64 eta = _eta(OFFICER);
         vm.prank(MANAGER);
-        t.revokeRole(MINT, nid(OFFICER));
+        t.revokeRole(MINT, nid(OFFICER), EnvKit.codeUidOf(address(t)));
         assertEq(_eta(OFFICER), eta, "kept");
         assertTrue(_live(OFFICER));
         vm.warp(eta);
@@ -463,7 +463,7 @@ contract GovDelayTest is Test {
         assertTrue(t.hasRole(MINT, nid(OFFICER)));
         assertEq(t.grantOf(MINT, nid(OFFICER)).grantor, bytes32(0), "the root the owner proposed");
         vm.prank(OWNER);
-        t.revokeRole(MINT, nid(MANAGER));
+        t.revokeRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         vm.prank(OFFICER);
         t.mint(TO, 1); // alive without its old parent
     }
@@ -475,7 +475,7 @@ contract GovDelayTest is Test {
         x.total = 50;
         _set(MANAGER, x);
         vm.prank(MANAGER);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         assertEq(_eta(MANAGER), 0);
         assertFalse(t.grantOf(MINT, nid(MANAGER)).barred, "a renounce bars nobody");
     }
@@ -504,21 +504,21 @@ contract GovDelayTest is Test {
         _grant(MANAGER);
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, MANAGER));
-        t.cancelGrant(MINT, nid(MANAGER));
+        t.cancelGrant(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         vm.expectEmit(address(t));
         emit IGovernance.GrantCancelled(MINT, nid(MANAGER), nid(OWNER));
         vm.prank(OWNER);
-        t.cancelGrant(MINT, nid(MANAGER));
+        t.cancelGrant(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         assertEq(_eta(MANAGER), 0, "live, cancelled");
         _grant(MANAGER);
         vm.warp(block.timestamp + 2 * D + 1);
         assertFalse(_live(MANAGER));
         vm.prank(OWNER);
-        t.cancelGrant(MINT, nid(MANAGER));
+        t.cancelGrant(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         assertEq(_eta(MANAGER), 0, "dead, cancelled");
         vm.recordLogs();
         vm.prank(OWNER);
-        t.cancelGrant(MINT, nid(MANAGER));
+        t.cancelGrant(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         assertEq(_cancelled(vm.getRecordedLogs()), 0, "none: a no-op");
         _grant(MANAGER); // a cancelled pending is proposed again
         assertTrue(_live(MANAGER));
@@ -584,13 +584,13 @@ contract GovDelayTest is Test {
         NormalToken n = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "h"));
         assertEq(n.holderCount(MINT), 1);
         vm.startPrank(OWNER);
-        n.grantRole(MINT, nid(MANAGER));
+        n.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(n)));
         assertEq(n.holderCount(MINT), 1);
-        n.grantRole(MINT, nid(OFFICER));
-        n.setGrant(MINT, nid(NEXT), _open());
+        n.grantRole(MINT, nid(OFFICER), EnvKit.codeUidOf(address(n)));
+        n.setGrant(MINT, nid(NEXT), _open(), EnvKit.codeUidOf(address(n)));
         assertEq(n.holderCount(MINT), 1, "two pendings, no holder");
         vm.warp(block.timestamp + D);
-        n.grantRole(MINT, nid(OFFICER));
+        n.grantRole(MINT, nid(OFFICER), EnvKit.codeUidOf(address(n)));
         assertEq(n.holderCount(MINT), 2);
         vm.stopPrank();
     }

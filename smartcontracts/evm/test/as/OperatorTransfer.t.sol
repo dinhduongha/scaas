@@ -15,6 +15,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {StubUARegistry} from "../helpers/Mocks.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T32 (owner 2026-11-05, CTR-GOV-20; regulated-kinds spec §3.1, §3.4; CTR-GOV-08's refusals, CTR-GOV-13): bit 22
 /// `OPERATOR_TRANSFER` on kinds 8 and 9. Any holder (here an EOA clerk), `WHOLE` or `LIMITED` with a daily `perWindow`; the
@@ -54,10 +55,10 @@ contract OperatorTransferTest is RegFixture {
     /// `WHOLE` for `who`: a widening, so proposed, then confirmed after `grantDelay`.
     function _grant(address t, bytes32 who) internal {
         vm.prank(ownerA);
-        NormalToken(t).grantRole(OP, who);
+        NormalToken(t).grantRole(OP, who, EnvKit.codeUidOf(address(NormalToken(t))));
         vm.warp(block.timestamp + GD);
         vm.prank(ownerA);
-        NormalToken(t).grantRole(OP, who);
+        NormalToken(t).grantRole(OP, who, EnvKit.codeUidOf(address(NormalToken(t))));
         assertTrue(NormalToken(t).hasRole(OP, who));
     }
 
@@ -103,10 +104,10 @@ contract OperatorTransferTest is RegFixture {
         for (uint256 i; i < 2; ++i) {
             address t = ts[i];
             vm.prank(ownerA);
-            NormalToken(t).setGrant(OP, nid(pos), g);
+            NormalToken(t).setGrant(OP, nid(pos), g, EnvKit.codeUidOf(address(NormalToken(t))));
             vm.warp(block.timestamp + GD);
             vm.prank(ownerA);
-            NormalToken(t).setGrant(OP, nid(pos), g);
+            NormalToken(t).setGrant(OP, nid(pos), g, EnvKit.codeUidOf(address(NormalToken(t))));
             uint256 day = block.timestamp - block.timestamp % 1 days;
             vm.warp(day + 1 hours);
             vm.startPrank(pos);
@@ -244,10 +245,10 @@ contract OperatorTransferTest is RegFixture {
                 : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), bytes32(uint256(200 + i)));
             if (i == 1) _wrapFor(t, alice, SUPPLY);
             vm.prank(ownerA);
-            NormalToken(t).grantRole(GovernanceBits.MODERATE, nid(mod));
+            NormalToken(t).grantRole(GovernanceBits.MODERATE, nid(mod), EnvKit.codeUidOf(address(NormalToken(t))));
             vm.warp(block.timestamp + GD);
             vm.prank(ownerA);
-            NormalToken(t).grantRole(GovernanceBits.MODERATE, nid(mod));
+            NormalToken(t).grantRole(GovernanceBits.MODERATE, nid(mod), EnvKit.codeUidOf(address(NormalToken(t))));
             assertTrue(NormalToken(t).hasRole(GovernanceBits.MODERATE, nid(mod)), "bit 21 held");
             vm.prank(mod);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, OP, nid(mod)));

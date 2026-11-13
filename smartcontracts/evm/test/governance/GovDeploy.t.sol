@@ -313,7 +313,7 @@ contract GovDeployTest is Test {
         uint64[] memory fl = new uint64[](2);
         uint64[] memory vu = new uint64[](2);
         (a[0], a[1], fl[0], fl[1], vu[0], vu[1]) = (nid(dex), nid(puller), 8, 8, type(uint64).max, type(uint64).max);
-        r.setCompliance(a, fl, vu); // the admin's call (this test is COMPLIANCE_ADMIN)
+        r.setCompliance(a, fl, vu, ZUID); // the admin's call (this test is COMPLIANCE_ADMIN); the registry's word
         for (uint256 i; i < 2; ++i) {
             (uint64 flags, uint64 until, uint32 id) = r.complianceOf(a[i]);
             assertEq(flags, 8, "ELIGIBLE_CONTRACT");
@@ -339,7 +339,7 @@ contract GovDeployTest is Test {
         uint64[] memory fl = new uint64[](1);
         uint64[] memory vu = new uint64[](1);
         (a[0], fl[0], vu[0]) = (account, flags, until);
-        r.setCompliance(a, fl, vu);
+        r.setCompliance(a, fl, vu, EnvKit.regUidOf(address(r)));
     }
 
     /// The `WRAPPED` release is gated as every release (NET-EVM-06, GD-4): one gas below its own need, by name, and nothing of
@@ -368,9 +368,10 @@ contract GovDeployTest is Test {
         // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name;
         // group 3l: 17,808 -> 19,366 B (the five wrap-limit stubs); merge3k (+ ua-mtx-liquidity's `mtxLiquidityPull` stub):
         // 19,366 -> 19,532 B; Fable review fixes 2026-11-11 (B P3-1, B P2-1 in the ERC-20 core): 19,532 -> 19,626 B;
-        // fix2 CTR-GOV-27's Change (`transferAdmin(bytes32,bytes32)`'s stub in the dispatcher): 19,626 -> 19,652 B
-        h.limitCode(19_651);
-        vm.expectRevert(bytes("WrappedToken runtime 19652 B > chain code limit 19651 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // fix2 CTR-GOV-27's Change (`transferAdmin(bytes32,bytes32)`'s stub in the dispatcher): 19,626 -> 19,652 B; fix3
+        // CTR-GOV-28 (the five admin stubs take `chainUid_`): 19,652 -> 19,743 B
+        h.limitCode(19_742);
+        vm.expectRevert(bytes("WrappedToken runtime 19743 B > chain code limit 19742 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 
@@ -632,8 +633,11 @@ contract GovDeployTest is Test {
         // `RescueVault`, admin + rescuer): 0xE8b1c2FFc9E8BC552a266E86e8Bd6046E8E6272A. The merge of e374704f (both):
         // 0xf670956b67F159a1323e12309cD375D28a44d2a3; Fable fix2 V-1 (the vault's ERC-5267 fields 0x0b moved the constant):
         // 0xc18b4D5EA8a7d88ed37Da8F26A4c4e521c38C2BA; Fable fix2 GOV-4 (the metadata hash: `IGovernance.renounceAdmin`'s
-        // NatSpec): -> this
-        assertEq(router, 0xB1218049Db73aF164e688b770DBC05d422624A1a, "GovernanceRouter");
+        // NatSpec): 0xB1218049Db73aF164e688b770DBC05d422624A1a; fix3 CTR-GOV-28 (the twelve admin ops sign and forward the
+        // target's `chainUid`, their typehashes; the metadata hash: `IGovernance`, `IRegulatedToken`, `IPqzToken`,
+        // `IComplianceRegistry`): 0x1C62B8aa42b5c800eFa3BE1a97f62925c0d74a47; fix3 owner 2026-11-13 (`mtxRenounceRole` signs
+        // and forwards the word, `UARenounceRole`'s typehash; the metadata hash: `IGovernance.renounceRole`): -> this
+        assertEq(router, 0xc757ebb994C1c938FF89c948B9b73B4eb0b4c2A0, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

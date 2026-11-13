@@ -423,3 +423,12 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `test_classification_deprecatedAndUnregisteredAreOutside`, `test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller`)
   and the mutant specs and results `runs/mutants-d-p3-4*.json`. Superseded by the owner's ruling of 2026-11-12 (the DEX never
   reads a release's deprecation; CTR-DEX-18, CTR-DEX-30 Changes). Not built.
+- `ua-mtx-fix3-chainuid/`: the direct admin entries without the chain word as they stood at `cac043bc`
+  (`src/governance/AdminEntriesV3.sol`: on the 12 token kinds and `SCaaSDex` `grantRole`, `setGrant`, `cancelGrant`,
+  `revokeRole`, `disableFeature`; `enableFeature` of kinds 8-13; the PQZ verifier setters of kinds 4, 5, 12, 13;
+  `ComplianceRegistry`'s `setKycProvider` and `setCompliance`; the router's twelve ops and typehashes of the same), their
+  selector-audit rows (`test/vectors/selector_audit.json`); the old typed rows in
+  `smartcontracts/vectors/typed/legacy/ua-mtx-fix3-chainuid/`, the clients' old rows in their `legacy/ua-mtx-fix3-chainuid/`.
+  Superseded by CTR-GOV-28 (owner 2026-11-13, every direct admin entry carries the chain word). Then, in the same files, a
+  holder's own `renounceRole(uint8)`, `mtxRenounceRole` and `UARenounceRole` without the word as they stood at `baa42a33`
+  (owner 2026-11-13, renounceRole carries the chain word too; the typed row is in the same legacy `typed_ops.json`). Not built.

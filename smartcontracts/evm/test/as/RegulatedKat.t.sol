@@ -12,6 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// @notice ua-mtx-merge T34 (regulated-kinds spec §3.1, §3.3, §3.6, §5, §7): `smartcontracts/vectors/governance/regulated_kat.json`,
 ///         every row read off a real kind-8 token (`RegFixture`'s `t8`, lists on through `_listed`) and the canonical
@@ -165,7 +166,7 @@ contract RegulatedKatTest is RegFixture {
         uint256 s = vm.snapshotState();
         address att2 = address(0xA772);
         vm.prank(cadmin);
-        creg.setKycProvider(nid(att2), true);
+        creg.setKycProvider(nid(att2), true, EnvKit.regUidOf(address(creg)));
         string[11] memory nm = ["unattested", "KYC", "KYC and SANCTIONED", "SANCTIONED", "ELIGIBLE_CONTRACT, by the admin",
             "ELIGIBLE_CONTRACT and SANCTIONED, by the admin", "KYC lapsed", "KYC, validUntil == now",
             "KYC and SANCTIONED, KYC provider disabled", "SANCTIONED lapsed", "KYC, by the admin"];
@@ -183,7 +184,7 @@ contract RegulatedKatTest is RegFixture {
         _attest(as_[9].id, SANCTIONED, N - 1);
         _attestAs(cadmin, as_[10].id, KYC, max);
         vm.prank(cadmin);
-        creg.setKycProvider(nid(att2), false);
+        creg.setKycProvider(nid(att2), false, EnvKit.regUidOf(address(creg)));
         address[4] memory ts;
         ts[0] = t8;
         ts[1] = _listed(0, KYC, 0, "A");
@@ -582,36 +583,36 @@ contract RegulatedKatTest is RegFixture {
         bytes32 h = nid(address(new Holder()));
         IGovernance g = IGovernance(t8);
         vm.prank(ownerA);
-        g.grantRole(GovernanceBits.FREEZE, h);
+        g.grantRole(GovernanceBits.FREEZE, h, EnvKit.codeUidOf(address(g)));
         j = string.concat('  "commit": [\n', _commitRow("grantRole(FREEZE): GRANT", GovernanceLib.GRANT, GovernanceBits.FREEZE, h, "",
             false));
         _back(s);
         IGovernance.GrantTerms memory t;
         (t.max, t.validUntil) = (type(uint128).max, N + GD - 1);
         vm.prank(ownerA);
-        g.setGrant(GovernanceBits.PAUSE, nid(issuer), t);
+        g.setGrant(GovernanceBits.PAUSE, nid(issuer), t, EnvKit.codeUidOf(address(g)));
         j = string.concat(j, _commitRow("setGrant(PAUSE) ending before now + grantDelay: SET", GovernanceLib.SET, GovernanceBits.PAUSE,
             nid(issuer), _termsJson(t), false));
         _back(s);
         IGovernance.GrantTerms memory w;
         (w.max, w.maxUses, w.delegable) = (type(uint128).max, 10, true);
         vm.prank(ownerA);
-        g.setGrant(GovernanceBits.FREEZE, nid(issuer), w);
+        g.setGrant(GovernanceBits.FREEZE, nid(issuer), w, EnvKit.codeUidOf(address(g)));
         j = string.concat(j, _commitRow("setGrant(FREEZE) delegable, a widening: SET", GovernanceLib.SET, GovernanceBits.FREEZE,
             nid(issuer), _termsJson(w), false));
         _back(s);
         vm.prank(ownerA);
-        g.revokeRole(GovernanceBits.FORCE, nid(issuer));
+        g.revokeRole(GovernanceBits.FORCE, nid(issuer), EnvKit.codeUidOf(address(g)));
         j = string.concat(j, _commitRow("revokeRole(FORCE) by the owner: REVOKE", GovernanceLib.REVOKE, GovernanceBits.FORCE,
             nid(issuer), "", false));
         _back(s);
         vm.prank(issuer);
-        g.renounceRole(GovernanceBits.PAUSE);
+        g.renounceRole(GovernanceBits.PAUSE, EnvKit.codeUidOf(address(g)));
         j = string.concat(j, _commitRow("renounceRole(PAUSE) by its holder: RENOUNCE", GovernanceLib.RENOUNCE, GovernanceBits.PAUSE,
             nid(issuer), "", false));
         _back(s);
         vm.prank(ownerA);
-        g.disableFeature(GovernanceBits.PAUSE);
+        g.disableFeature(GovernanceBits.PAUSE, EnvKit.codeUidOf(address(g)));
         j = string.concat(j, _commitRow("disableFeature(PAUSE): DISABLE, account 0", GovernanceLib.DISABLE, GovernanceBits.PAUSE, 0, "",
             true), "  ]\n");
         _back(s);

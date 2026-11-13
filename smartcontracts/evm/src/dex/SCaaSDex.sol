@@ -922,12 +922,12 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function bitLabel(uint8) external view override returns (BitType t, bytes4 s, string memory l) {
         _forwardView(_MD);
     }
-    function grantRole(uint8, bytes32) external override { _forward(); }
-    function setGrant(uint8, bytes32, GrantTerms calldata) external override { _forward(); }
-    function cancelGrant(uint8, bytes32) external override { _forward(); }
-    function revokeRole(uint8, bytes32) external override { _forward(); }
-    function renounceRole(uint8) external override { _forward(); }
-    function disableFeature(uint8) external override { _forward(); }
+    function grantRole(uint8, bytes32, bytes32) external override { _forward(); }
+    function setGrant(uint8, bytes32, GrantTerms calldata, bytes32) external override { _forward(); }
+    function cancelGrant(uint8, bytes32, bytes32) external override { _forward(); }
+    function revokeRole(uint8, bytes32, bytes32) external override { _forward(); }
+    function renounceRole(uint8, bytes32) external override { _forward(); }
+    function disableFeature(uint8, bytes32) external override { _forward(); }
     function transferAdmin(bytes32, bytes32) external override { _forward(); }
     function acceptAdmin() external override { _forward(); }
     function renounceAdmin(bytes32) external override { _forward(); }

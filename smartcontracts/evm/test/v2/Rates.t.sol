@@ -9,6 +9,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// T2: tỉ lệ cố định / điều chỉnh được, timelock, chỉ admin thực thi, tạm dừng wrap (TW2 §6, R135, R147).
 contract RatesTest is V2Fixture {
@@ -192,7 +193,7 @@ contract RatesTest is V2Fixture {
         _propose(101, 100);
         vm.expectEmit(address(t));
         emit IGovernance.RoleRevoked(3, nid(address(adm)), nid(address(adm)));
-        _admin(abi.encodeCall(IGovernance.renounceRole, (3)));
+        _admin(abi.encodeCall(IGovernance.renounceRole, (3, EnvKit.codeUidOf(address(t)))));
         assertFalse(t.hasRole(3, nid(address(adm))));
         assertTrue(t.rateAdjustable());
         (address u,,,) = t.pendingRate();
@@ -200,7 +201,7 @@ contract RatesTest is V2Fixture {
         vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
         _propose(100, 101);
         vm.prank(wrapperOwner);
-        t.disableFeature(3);
+        t.disableFeature(3, EnvKit.codeUidOf(address(t)));
         (address u2, uint96 n, uint96 d, uint64 eta) = t.pendingRate();
         assertEq(u2, address(0));
         assertEq(n, 0);

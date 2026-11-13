@@ -88,7 +88,7 @@ abstract contract RegFixture is Test {
         cadmin = address(new Holder());
         creg = new ComplianceRegistry(nid(cadmin), address(0), UID);
         vm.prank(cadmin);
-        creg.setKycProvider(nid(attester), true);
+        creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
     }
 
     /// A token of kind 8 (`i == 0`, `SUPPLY` minted to `alice`, who is attested `KYC` first) or 9 (`alice` wraps `SUPPLY`)
@@ -133,7 +133,7 @@ abstract contract RegFixture is Test {
         uint64[] memory vu = new uint64[](1);
         (as_[0], fl[0], vu[0]) = (a, flags, until);
         vm.prank(who);
-        creg.setCompliance(as_, fl, vu);
+        creg.setCompliance(as_, fl, vu, EnvKit.regUidOf(address(creg)));
     }
 
     /// Kind 8: `PAYABLE | MINTABLE | BURNABLE` and the four controls; this test the minter; `SUPPLY` minted to `alice`.
@@ -209,7 +209,7 @@ abstract contract RegFixture is Test {
 
     function _disable(address t, uint8 bit) internal {
         vm.prank(ownerA);
-        NormalToken(t).disableFeature(bit);
+        NormalToken(t).disableFeature(bit, EnvKit.codeUidOf(address(NormalToken(t))));
     }
 
     function _now() internal view returns (uint64) {

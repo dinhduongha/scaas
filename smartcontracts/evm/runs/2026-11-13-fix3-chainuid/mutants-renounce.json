@@ -1,0 +1,8 @@
+[
+ {
+  "id": "F3-15 renounceRole without the holder's word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NormalToken renounceRole: passed] test_kind0_NormalToken() (gas: 1190548)"
+ }
+]

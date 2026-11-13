@@ -1532,7 +1532,7 @@ contract TypedOpsRouterTest is UALedgerBase {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             vm.prank(signer);
-            t.grantRole(_bit(f[i]), _b32(f[i], "account"));
+            t.grantRole(_bit(f[i]), _b32(f[i], "account"), EnvKit.codeUidOf(address(t)));
             _row(f[i]);
             assertFalse(t.hasRole(_bit(f[i]), _b32(f[i], "account")), f[i]);
             assertTrue(t.grantOf(_bit(f[i]), _b32(f[i], "account")).barred, f[i]);
@@ -1563,7 +1563,7 @@ contract TypedOpsRouterTest is UALedgerBase {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 1 hours);
             vm.prank(signer);
-            t.grantRole(_bit(f[i]), _b32(f[i], "account"));
+            t.grantRole(_bit(f[i]), _b32(f[i], "account"), EnvKit.codeUidOf(address(t)));
             (uint64 eta,,,) = t.pendingGrant(_bit(f[i]), _b32(f[i], "account"));
             assertTrue(eta != 0, "proposed");
             _row(f[i]);
@@ -1670,7 +1670,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         string memory op = "UASetWrapMember";
         WrappedToken w = _hybridAt(op, 0x5Ca00000000000000000000000000000000000C3);
         vm.prank(signer);
-        w.grantRole(GovernanceBits.WRAP_LIST, me);
+        w.grantRole(GovernanceBits.WRAP_LIST, me, EnvKit.codeUidOf(address(w)));
         _row(op);
         bytes32 root = 0x8338ae7a3cc0bfc024cc8dc02945ad44a577ebed1c8a715e7136501207e79700; // scaas.wraplimit
         bytes32 slot = keccak256(abi.encode(_b32(op, "account"), uint256(root) + 3));
@@ -1874,7 +1874,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         vm.etch(signer, hex"00");
         t.initialize(nid(address(this)), 1, abi.encode(c));
         vm.etch(signer, "");
-        t.grantRole(GovernanceBits.OPERATOR_TRANSFER, me);
+        t.grantRole(GovernanceBits.OPERATOR_TRANSFER, me, EnvKit.codeUidOf(address(t)));
     }
 
     /// `UARecordOrder`'s order, recorded directly by `who`; its `recordId`.

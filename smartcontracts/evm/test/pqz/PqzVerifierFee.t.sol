@@ -113,7 +113,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     }
 
     function _fee(address t, uint64 next) internal {
-        IPqzToken(t).setVerifierFee(next);
+        IPqzToken(t).setVerifierFee(next, EnvKit.codeUidOf(address(IPqzToken(t))));
     }
 
     function _cfgOf(address t) internal view returns (IPqzToken.PqzVerifyConfig memory) {
@@ -422,7 +422,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     function test_payment_currentVerifierWhilePending() public {
         NormalPqzToken t = _onN("f-pending");
         _shieldOn(t, alice, 100);
-        t.pqzSetVerifier(vB);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         assertEq(_cfgOf(address(t)).pending, vB);
         _run(SINGLE, t, dId);
         assertEq(t.balanceOf(vm.addr(VKEY)), F * SCALE, "the current verifier");
@@ -598,12 +598,13 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "f-router"));
     }
 
-    /// `UASetVerifierFee(from, target, next, …)` signed by `NKEY` for `signedNext`, `signedTarget`.
+    /// `UASetVerifierFee(from, target, next, chainUid, …)` signed by `NKEY` for `signedNext`, `signedTarget` and its chain
+    ///  word (CTR-GOV-28).
     function _routerAuth(GovernanceRouter router, MetaTxLib.UAEnvelope memory u, address signedTarget, uint64 signedNext)
         internal view returns (IUARegistry.UASig memory auth)
     {
         bytes32 sh = keccak256(bytes.concat(abi.encode(GovernanceRouterTypes.UA_SET_VERIFIER_FEE, u.from), abi.encode(signedTarget),
-            abi.encode(signedNext), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+            abi.encode(signedNext, EnvKit.codeUidOf(signedTarget)), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
         (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(router)), sh));
         auth.signature = abi.encodePacked(r, ss, vv);
     }
@@ -612,25 +613,29 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         return MetaTxLib.UAEnvelope(nId, LANE, router.mtxNonce(nId, LANE), block.timestamp + 300, 0, address(0), 0, address(0));
     }
 
-    /// Relayed at fee 0 by a stranger relayer; `next` and `target` bound (B1): another `next` or target under the same
-    /// signature refused, the signed one lands.
+    /// Relayed at fee 0 by a stranger relayer; `next`, `target` and the chain word bound (B1, CTR-GOV-28): another `next`,
+    /// target or word under the same signature refused, the signed one lands.
     function test_router_setVerifierFee() public {
         (GovernanceRouter router, NormalPqzToken t) = _router();
         NormalPqzToken other = _feeToken("f-other", F, CAP, false);
         MetaTxLib.UAEnvelope memory u = _env(router);
         IUARegistry.UASig memory auth = _routerAuth(router, u, address(t), 1);
         vm.prank(address(0x4E1A));
-        (bool ok,) = address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(t), 0, auth)));
+        bytes32 tu = EnvKit.codeUidOf(address(t));
+        (bool ok,) = address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(t), 0, tu, auth)));
         assertFalse(ok, "B1: next bound");
         vm.prank(address(0x4E1A));
-        (ok,) = address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(other), 1, auth)));
+        (ok,) = address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(other), 1, tu, auth)));
         assertFalse(ok, "target bound");
         vm.prank(address(0x4E1A));
-        router.mtxSetVerifierFee(u, address(t), 1, auth);
+        (ok,) = address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(t), 1, ~tu, auth)));
+        assertFalse(ok, "word bound");
+        vm.prank(address(0x4E1A));
+        router.mtxSetVerifierFee(u, address(t), 1, tu, auth);
         assertEq(_cfgOf(address(t)).verifierFee, 1, "relayed at fee 0");
         u = _env(router);
         vm.prank(address(0x4E1A));
-        router.mtxSetVerifierFee(u, address(t), 4, _routerAuth(router, u, address(t), 4));
+        router.mtxSetVerifierFee(u, address(t), 4, tu, _routerAuth(router, u, address(t), 4));
         assertEq(_cfgOf(address(t)).verifierFee, 4, "an increase at notice 0");
     }
 

@@ -242,9 +242,10 @@ test('the verdict is required on every signed PQZ entry; a half verdict is refus
 
 // --- the router's three verifier ops (spec §4.2, §4.3)
 
-const ROUTER_OPS = { UAPqzSetVerifier: ['UA_PQZ_SET_VERIFIER', 'next', 'mtxPqzSetVerifier', `address,bytes32`],
-  UAPqzCancelVerifier: ['UA_PQZ_CANCEL_VERIFIER', '', 'mtxPqzCancelVerifier', 'address'],
-  UAPqzRevokeVerifier: ['UA_PQZ_REVOKE_VERIFIER', '', 'mtxPqzRevokeVerifier', 'address'] };
+// CTR-GOV-28: each signs the token's chain word last (`chainUid`)
+const ROUTER_OPS = { UAPqzSetVerifier: ['UA_PQZ_SET_VERIFIER', ['next', 'chainUid'], 'mtxPqzSetVerifier', `address,bytes32,bytes32`],
+  UAPqzCancelVerifier: ['UA_PQZ_CANCEL_VERIFIER', ['chainUid'], 'mtxPqzCancelVerifier', 'address,bytes32'],
+  UAPqzRevokeVerifier: ['UA_PQZ_REVOKE_VERIFIER', ['chainUid'], 'mtxPqzRevokeVerifier', 'address,bytes32'] };
 
 test('the router\'s PQZ verifier ops: the type strings of GovernanceRouterBase.sol, target first, fee mode NONE, the router domain', () => {
   for (const [name, [constant, own, entry, args]] of Object.entries(ROUTER_OPS)) {
@@ -253,7 +254,7 @@ test('the router\'s PQZ verifier ops: the type strings of GovernanceRouterBase.s
     assert.ok(op, `${name}: no row`);
     assert.equal(op.typeString, s, name);
     assert.equal(op.typehash, k(s), name);
-    assert.deepEqual(op.fields.map((f) => f.name).slice(0, -7), ['from', 'target', ...(own ? [own] : [])], name);
+    assert.deepEqual(op.fields.map((f) => f.name).slice(0, -7), ['from', 'target', ...own], name);
     assert.deepEqual([op.on, op.domains, op.envelope, op.ua, op.entry], [['GovernanceRouter'], ['SCaaS GovernanceRouter'], true, true, entry], name);
     const r = V.ops[name];
     assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
@@ -283,6 +284,7 @@ test('the router\'s PQZ verifier ops: a non-zero unbound relayer or feeRecipient
     assert.equal(hex(evm.hashTypedData(open)), hex(evm.hashTypedData(build({ ...r.message, mode: 0, relayer: ZERO, feeRecipient: ZERO }))), name);
     assert.notEqual(hex(evm.hashTypedData(open)), d.digest, `${name}: the mode is signed`);
     assert.notEqual(hex(evm.hashTypedData(build({ ...r.message, target: JUNK }))), d.digest, `${name}: target is signed`);
+    assert.notEqual(hex(evm.hashTypedData(build({ ...r.message, chainUid: Z32 }))), d.digest, `${name}: the chain word is signed`);
   }
   const r = V.ops.UAPqzSetVerifier;
   const where = { contract: r.domains.gov_router.domain.verifyingContract, chainId: r.domains.gov_router.domain.chainId,

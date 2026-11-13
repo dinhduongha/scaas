@@ -441,7 +441,7 @@ sol! {
         error PqzVerdictRejected();
         error PqzVerdictMismatch(uint8 field);
         // ---- round 3t (CTR-PQZ-36, verifier fee spec §7, §10): the admin's setter, its events and refusals
-        function setVerifierFee(uint64 next) external;
+        function setVerifierFee(uint64 next, bytes32 chainUid_) external; // CTR-GOV-28: + the chain word
         function confidentialFee() external view returns (uint256);
         event VerifierFeeProposed(uint64 current, uint64 next, uint64 eta);
         event VerifierFeeSet(uint64 previous, uint64 next);
@@ -569,7 +569,7 @@ sol! {
         function setAllowed(bytes32[] accounts, bool on) external;
         function setDenied(bytes32[] accounts, bool on) external;
         function listFlagsOf(bytes32 account) external view returns (uint8);
-        function enableFeature(uint8 bit) external;
+        function enableFeature(uint8 bit, bytes32 chainUid_) external; // CTR-GOV-28: + the chain word
         function regulatedConfig() external view returns (RegulatedConfig);
         function freezeOf(bytes32 account) external view returns (FreezeState);
         function isFrozen(bytes32 account) external view returns (bool);
@@ -843,7 +843,8 @@ mod tests {
 
     #[test]
     fn regulated_interface_id_is_the_xor_of_its_functions() {
-        assert_eq!(regulated_interface_id(), [0x78, 0x9e, 0xd7, 0xc4]);
+        // CTR-GOV-28: `enableFeature(uint8)` -> `enableFeature(uint8,bytes32)`: 0x789ed7c4 -> 0xbf2cb59a
+        assert_eq!(regulated_interface_id(), [0xbf, 0x2c, 0xb5, 0x9a]);
     }
 
     /// Group 3g (spec §7.3): the PQZ key-version reverts decode by name and classify; another revert is none of them.

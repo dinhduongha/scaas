@@ -145,37 +145,41 @@ contract GovernanceRouter is GovernanceRouterBase {
     }
 
     /// @notice The admin switches on 8, 9 or 28 at once (spec §5.3).
-    function mtxEnableFeature(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)
-        external
+    function mtxEnableFeature(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_ENABLE_FEATURE, e, target, IRegulatedToken.enableFeature.selector, abi.encode(bit), auth);
+        _ua(T.UA_ENABLE_FEATURE, e, target, IRegulatedToken.enableFeature.selector, abi.encode(bit, chainUid), auth);
     }
 
     // ------------------------------------------------------------------ the PQZ verifier UA (group 3f, spec §4.2, §4.3)
 
     /// @notice The admin proposes, then confirms after the notice period, `next` as a transferable `OFFCHAIN` token's
     ///         verifier; fee mode `NONE`, relayable at fee 0.
-    function mtxPqzSetVerifier(MetaTxLib.UAEnvelope calldata e, address target, bytes32 next, IUARegistry.UASig calldata auth)
-        external
+    function mtxPqzSetVerifier(MetaTxLib.UAEnvelope calldata e, address target, bytes32 next, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_PQZ_SET_VERIFIER, e, target, IPqzToken.pqzSetVerifier.selector, abi.encode(next), auth);
+        _ua(T.UA_PQZ_SET_VERIFIER, e, target, IPqzToken.pqzSetVerifier.selector, abi.encode(next, chainUid), auth);
     }
 
-    function mtxPqzCancelVerifier(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
-        _ua(T.UA_PQZ_CANCEL_VERIFIER, e, target, IPqzToken.pqzCancelVerifier.selector, "", auth);
+    function mtxPqzCancelVerifier(MetaTxLib.UAEnvelope calldata e, address target, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_PQZ_CANCEL_VERIFIER, e, target, IPqzToken.pqzCancelVerifier.selector, abi.encode(chainUid), auth);
     }
 
-    function mtxPqzRevokeVerifier(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
-        _ua(T.UA_PQZ_REVOKE_VERIFIER, e, target, IPqzToken.pqzRevokeVerifier.selector, "", auth);
+    function mtxPqzRevokeVerifier(MetaTxLib.UAEnvelope calldata e, address target, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_PQZ_REVOKE_VERIFIER, e, target, IPqzToken.pqzRevokeVerifier.selector, abi.encode(chainUid), auth);
     }
 
     /// @notice Round 3t (CTR-PQZ-36): the admin sets an `OFFCHAIN` PQZ token's verifier fee (`setVerifierFee`: a decrease at
     ///         once, an increase after the notice period); fee mode `NONE`, relayable at fee 0. `next` the new verifier fee; the
     ///         envelope's `fee` is the relay fee.
-    function mtxSetVerifierFee(MetaTxLib.UAEnvelope calldata e, address target, uint64 next, IUARegistry.UASig calldata auth)
-        external
+    function mtxSetVerifierFee(MetaTxLib.UAEnvelope calldata e, address target, uint64 next, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_VERIFIER_FEE, e, target, IPqzToken.setVerifierFee.selector, abi.encode(next), auth);
+        _ua(T.UA_SET_VERIFIER_FEE, e, target, IPqzToken.setVerifierFee.selector, abi.encode(next, chainUid), auth);
     }
 
     /// @notice Bit 24 `PQZ_PROOF` (group 3h, PQZ proof path spec §5): any holder sets a PQZ token's `proofStore` (`NONE` /
@@ -404,19 +408,20 @@ contract GovernanceRouter is GovernanceRouterBase {
 
     /// @notice `target` a `ComplianceRegistry` whose router this is: its admin enables or disables a KYC provider (a UA id).
     function mtxSetKycProvider(MetaTxLib.UAEnvelope calldata e, address target, bytes32 provider, bool enabled,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_KYC_PROVIDER, e, target, IComplianceRegistry.setKycProvider.selector, abi.encode(provider, enabled), auth);
+        _ua(T.UA_SET_KYC_PROVIDER, e, target, IComplianceRegistry.setKycProvider.selector,
+            abi.encode(provider, enabled, chainUid), auth);
     }
 
     /// @notice The registry's admin (id 0) or an enabled KYC provider (its id) writes rows; each array is signed as the
     ///         `keccak256` of its 32-byte words; `until` each row's `validUntil` (E has its own).
     function mtxSetCompliance(MetaTxLib.UAEnvelope calldata e, address target, bytes32[] calldata accounts,
-        uint64[] calldata flags, uint64[] calldata until, IUARegistry.UASig calldata auth) external
+        uint64[] calldata flags, uint64[] calldata until, bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
         _uaCall(T.UA_SET_COMPLIANCE, e, target, abi.encode(keccak256(abi.encodePacked(accounts)),
-            keccak256(abi.encodePacked(flags)), keccak256(abi.encodePacked(until))),
-            abi.encodeCall(IComplianceRegistry.setCompliance, (accounts, flags, until)), auth);
+            keccak256(abi.encodePacked(flags)), keccak256(abi.encodePacked(until)), chainUid),
+            abi.encodeCall(IComplianceRegistry.setCompliance, (accounts, flags, until, chainUid)), auth);
     }
 
     /// @dev EIP-712 `Env`: the three scalars, each array the `keccak256` of its 32-byte words.

@@ -19,6 +19,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T29 (regulated-kinds spec §3.1 `canReceive`, §3.2 the receiver rows, §5 the call budget; CTR-AS-07): `canReceive`'s
 /// reasons 1-4 agree with `hasFlags`; each receiver row checks its receiver (transfer, mint, wrap, a fee leg's recipient,
@@ -57,10 +58,10 @@ contract ReceiverTest is RegFixture {
             _reason(t, b, false, 2, KYC, SANCTIONED, "expired");
             _attest(b, KYC, MAX);
             vm.prank(cadmin);
-            creg.setKycProvider(nid(attester), false);
+            creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
             _reason(t, b, false, 3, KYC, SANCTIONED, "KYC provider disabled");
             vm.prank(cadmin);
-            creg.setKycProvider(nid(attester), true);
+            creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
             _attest(b, KYC | SANCTIONED, MAX);
             _reason(t, b, false, 4, KYC, SANCTIONED, "denied");
             _attestAs(cadmin, b, ELIGIBLE, MAX);

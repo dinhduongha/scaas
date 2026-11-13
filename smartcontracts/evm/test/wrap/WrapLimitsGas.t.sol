@@ -49,14 +49,18 @@ contract WrapLimitsGasTest is WrapLimitsBase {
         emit log_named_uint("tracked: unwrap later", c4);
         assertEq(b2, a2, "+0: a later wrap with the bits unconfigured");
         assertEq(b4, a4, "+0: a later unwrap with the bits unconfigured");
-        // the pins (group 3l, new): regular gas of the transaction (EIP-8037 state gas apart)
+        // the pins (group 3l, new): regular gas of the transaction (EIP-8037 state gas apart); fix3 CTR-GOV-28 (the admin
+        // entries' selectors move the dispatch tree, nothing in the wrap path): wrap 114,814 -> 114,836, unwrap 113,481 ->
+        // 113,436, tracked 135,718 -> 135,740, 135,855 -> 135,877, 140,032 -> 139,987, 140,446 -> 140,401; fix3 owner
+        // 2026-11-13 (`renounceRole(uint8,bytes32)`: the dispatch tree again): wrap 114,836 -> 114,814, unwrap 113,436 ->
+        // 113,414, tracked 135,740 -> 135,718, 135,877 -> 135,855, 139,987 -> 139,965, 140,401 -> 140,379
         assertEq(a1, 114_814, "off wrap");
-        assertEq(a3, 113_481, "off unwrap");
+        assertEq(a3, 113_414, "off unwrap");
         assertEq(b1, 114_814, "unconfigured wrap");
-        assertEq(b3, 113_481, "unconfigured unwrap");
+        assertEq(b3, 113_414, "unconfigured unwrap");
         assertEq(c1, 135_718, "tracked wrap first");
         assertEq(c2, 135_855, "tracked wrap later");
-        assertEq(c3, 140_032, "tracked unwrap first");
-        assertEq(c4, 140_446, "tracked unwrap later");
+        assertEq(c3, 139_965, "tracked unwrap first");
+        assertEq(c4, 140_379, "tracked unwrap later");
     }
 }

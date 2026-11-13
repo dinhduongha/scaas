@@ -109,25 +109,43 @@ abstract contract GovernanceBaseCore {
         revert IGovernance.FeatureInvalidForKind(bit);
     }
 
-    function _grantRoleBody(uint8 bit, bytes32 account) internal {
-        GovernanceLib.grantRole(bit, account, _govSubject(), _roleBits(), _contractOnlyBits(), _uaRegistry());
+    /// @dev CTR-GOV-28 (owner 2026-11-13): every direct admin entry carries the chain word. An admin-only entry checks the
+    ///      admin, then the word (`_adminOnChain`), before any write. An entry a holder, a grantor or a proposer may call too
+    ///      (`setGrant`, `revokeRole`, `cancelGrant`; `_subjectWord`): the admin's call checks the word before any write; any
+    ///      other caller is checked by `GovernanceLib` first (a stranger `NotAdmin`), then the word, the call reverting whole.
+    function _grantRoleBody(uint8 bit, bytes32 account, bytes32 chainUid_) internal {
+        GovernanceLib.grantRole(bit, account, _adminOnChain(chainUid_), _roleBits(), _contractOnlyBits(), _uaRegistry());
     }
     /// @notice The admin sets any holder's grant, a widening in two calls (spec §1.6); a holder with a `delegable` grant sets
     ///         a narrower leaf at once. Spent is carried.
-    function _setGrantBody(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) internal {
-        (bool leaf, bytes32 parentScope) = GovernanceLib.setGrant(bit, holder, terms, _govSubject(), _roleBits(),
+    function _setGrantBody(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_) internal {
+        (bytes32 c, bool admin) = _subjectWord(chainUid_);
+        (bool leaf, bytes32 parentScope) = GovernanceLib.setGrant(bit, holder, terms, c, _roleBits(),
             _contractOnlyBits(), _scalarBits(), _scopeBits(), _uaRegistry(), _delayedRelaxBits());
         if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert IGovernance.GrantNotNarrower(7);
+        if (!admin) _govChainWord(chainUid_);
     }
 
-    function _cancelGrantBody(uint8 bit, bytes32 account) internal {
-        GovernanceLib.cancelGrant(bit, account, _govSubject());
+    function _cancelGrantBody(uint8 bit, bytes32 account, bytes32 chainUid_) internal {
+        (bytes32 c, bool admin) = _subjectWord(chainUid_);
+        GovernanceLib.cancelGrant(bit, account, c);
+        if (!admin) _govChainWord(chainUid_);
     }
-    function _revokeRoleBody(uint8 bit, bytes32 account) internal {
-        GovernanceLib.revokeRole(bit, account, _govSubject(), _delayedRelaxBits());
+    function _revokeRoleBody(uint8 bit, bytes32 account, bytes32 chainUid_) internal {
+        (bytes32 c, bool admin) = _subjectWord(chainUid_);
+        GovernanceLib.revokeRole(bit, account, c, _delayedRelaxBits());
+        if (!admin) _govChainWord(chainUid_);
     }
-    function _renounceRoleBody(uint8 bit) internal {
-        GovernanceLib.renounceRole(bit, _govSubject(), _delayedRelaxBits());
+    /// @dev CTR-GOV-28 (owner 2026-11-13): a holder's word before any write; a caller without the bit stays `MissingRole`.
+    function _renounceRoleBody(uint8 bit, bytes32 chainUid_) internal {
+        bytes32 c = _govSubject();
+        if (GovernanceLib.$().roles[bit][c] != 0) _govChainWord(chainUid_);
+        GovernanceLib.renounceRole(bit, c, _delayedRelaxBits());
+    }
+    /// @dev The entry's body: the admin, then the word (CTR-GOV-28), then the kind's disable (`_disableFeatureBody(bit)`).
+    function _disableFeatureBody(uint8 bit, bytes32 chainUid_) internal {
+        _adminOnChain(chainUid_);
+        _disableFeatureBody(bit);
     }
     function _disableFeatureBody(uint8 bit) internal virtual {
         GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
@@ -137,15 +155,28 @@ abstract contract GovernanceBaseCore {
     }
     function _acceptAdminBody() internal { GovernanceLib.acceptAdmin(_govSubject()); }
     /// @dev The contract's chain word (`ChainEnvCode.chainUid()` on a factory-made token or DEX): the check of
-    ///      `transferAdmin` and `renounceAdmin`.
+    ///      every direct admin entry (CTR-GOV-27, CTR-GOV-28).
     function _govChainUid() internal view virtual returns (bytes32);
 
-    /// @dev Fable recheck-2 P3-1, CTR-GOV-27: the admin (`NotAdmin`, as every admin entry refuses a stranger first), then
-    ///      `chainUid_` this contract's word (`IAdmin.ChainUidMismatch`), before any write: a native admin's direct
-    ///      `transferAdmin` or `renounceAdmin` made for a sibling with the same chain id is void here. Returns the admin.
-    function _adminOnChain(bytes32 chainUid_) private view returns (bytes32 c) {
+    /// @dev Fable recheck-2 P3-1, CTR-GOV-27, CTR-GOV-28: the admin (`NotAdmin`, as every admin entry refuses a stranger
+    ///      first), then `chainUid_` this contract's word (`IAdmin.ChainUidMismatch`), before any write: a native admin's
+    ///      direct admin entry made for a sibling with the same chain id is void here. Returns the admin.
+    function _adminOnChain(bytes32 chainUid_) internal view returns (bytes32 c) {
         c = _govSubject();
         if (c == 0 || c != GovernanceLib.$().admin) revert IAdmin.NotAdmin(c);
+        _govChainWord(chainUid_);
+    }
+
+    /// @dev CTR-GOV-28, an entry the admin and others may call: the subject, and whether it is the admin; the admin's
+    ///      word is checked here, before any write; another caller's after its own checks (the caller's body).
+    function _subjectWord(bytes32 chainUid_) internal view returns (bytes32 c, bool admin) {
+        c = _govSubject();
+        admin = c != 0 && c == GovernanceLib.$().admin;
+        if (admin) _govChainWord(chainUid_);
+    }
+
+    /// @dev CTR-GOV-28: `chainUid_` this contract's word (`IAdmin.ChainUidMismatch`), the whole check.
+    function _govChainWord(bytes32 chainUid_) internal view {
         bytes32 u = _govChainUid();
         if (chainUid_ != u) revert IAdmin.ChainUidMismatch(u, chainUid_);
     }
@@ -210,28 +241,32 @@ abstract contract GovernanceBase is GovernanceBaseCore, IGovernance {
         return _bitLabelBody(bit);
     }
 
-    function grantRole(uint8 bit, bytes32 account) external override governed {
-        _grantRoleBody(bit, account);
+    function grantRole(uint8 bit, bytes32 account, bytes32 chainUid_) external override governed {
+        _grantRoleBody(bit, account, chainUid_);
     }
 
-    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) external override governed {
-        _setGrantBody(bit, holder, terms);
+    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_)
+        external
+        override
+        governed
+    {
+        _setGrantBody(bit, holder, terms, chainUid_);
     }
 
-    function cancelGrant(uint8 bit, bytes32 account) external override governed {
-        _cancelGrantBody(bit, account);
+    function cancelGrant(uint8 bit, bytes32 account, bytes32 chainUid_) external override governed {
+        _cancelGrantBody(bit, account, chainUid_);
     }
 
-    function revokeRole(uint8 bit, bytes32 account) external override governed {
-        _revokeRoleBody(bit, account);
+    function revokeRole(uint8 bit, bytes32 account, bytes32 chainUid_) external override governed {
+        _revokeRoleBody(bit, account, chainUid_);
     }
 
-    function renounceRole(uint8 bit) external override governed {
-        _renounceRoleBody(bit);
+    function renounceRole(uint8 bit, bytes32 chainUid_) external override governed {
+        _renounceRoleBody(bit, chainUid_);
     }
 
-    function disableFeature(uint8 bit) external virtual override governed {
-        _disableFeatureBody(bit);
+    function disableFeature(uint8 bit, bytes32 chainUid_) external virtual override governed {
+        _disableFeatureBody(bit, chainUid_);
     }
 
     function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external override governed {

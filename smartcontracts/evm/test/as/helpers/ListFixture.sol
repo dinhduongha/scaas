@@ -6,13 +6,14 @@ import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Round 3s's ops (spec 2026-11-10-token-lists.md §6.1, §7) by selector, so the suites compile before the build (red first).
 interface IListOps {
     function setAllowed(bytes32[] calldata accounts, bool on) external;
     function setDenied(bytes32[] calldata accounts, bool on) external;
     function listFlagsOf(bytes32 account) external view returns (uint8);
-    function enableFeature(uint8 bit) external;
+    function enableFeature(uint8 bit, bytes32 chainUid_) external;
 }
 
 /// Round 3s (spec §4, §5, §6; CTR-GOV-24): tokens of kind 8 (`i == 0`) and 9 (`i == 1`) as `RegFixture`'s, with the list bits
@@ -88,7 +89,7 @@ abstract contract ListFixture is RegFixture {
 
     function _enable(address t, uint8 bit) internal {
         vm.prank(ownerA);
-        IListOps(t).enableFeature(bit);
+        IListOps(t).enableFeature(bit, EnvKit.codeUidOf(address(IListOps(t))));
     }
 
     function _flags(address t, bytes32 a) internal view returns (uint8) {

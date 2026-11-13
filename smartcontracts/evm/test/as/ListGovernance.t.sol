@@ -40,12 +40,12 @@ contract ListGovernanceTest is ListFixture {
         return _try(t, cd);
     }
 
-    function _enableCd(uint8 bit) internal pure returns (bytes memory) {
-        return abi.encodeCall(IListOps.enableFeature, (bit));
+    function _enableCd(address t, uint8 bit) internal view returns (bytes memory) {
+        return abi.encodeCall(IListOps.enableFeature, (bit, EnvKit.codeUidOf(t)));
     }
 
-    function _disableCd(uint8 bit) internal pure returns (bytes memory) {
-        return abi.encodeCall(IGovernance.disableFeature, (bit));
+    function _disableCd(address t, uint8 bit) internal view returns (bytes memory) {
+        return abi.encodeCall(IGovernance.disableFeature, (bit, EnvKit.codeUidOf(t)));
     }
 
     function _controls(address t) internal view returns (uint8) {
@@ -77,7 +77,7 @@ contract ListGovernanceTest is ListFixture {
                 assertEq(l[0].topics[2], nid(ownerA));
                 assertEq(NormalToken(t).features() & _bit(bit), _bit(bit));
                 assertEq(_controls(t), uint8(REG_FEATURES >> 5) | uint8(1 << (bit - 5)), "I12");
-                assertEq(_try1(t, ownerA, _enableCd(bit)), ALREADY_SET);
+                assertEq(_try1(t, ownerA, _enableCd(t, bit)), ALREADY_SET);
             }
         }
     }
@@ -87,7 +87,7 @@ contract ListGovernanceTest is ListFixture {
     function test_enable_kyc() public {
         for (uint256 i; i < 2; ++i) {
             address none = _lt(i, 0, 0, bytes32(++salt));
-            assertEq(_try1(none, ownerA, _enableCd(KYC_BIT)), REGISTRY_NOT_SET);
+            assertEq(_try1(none, ownerA, _enableCd(none, KYC_BIT)), REGISTRY_NOT_SET);
             assertEq(NormalToken(none).features() & _bit(KYC_BIT), 0, "the whole call reverted");
             IFactoryToken.TokenConfig memory c = _c(i);
             (c.reg.complianceRegistry, c.reg.deniedFlags) = (address(creg), SANCTIONED);
@@ -109,10 +109,10 @@ contract ListGovernanceTest is ListFixture {
         address t = _lt(0, 0, 0, "o");
         uint8[10] memory bits = [0, 1, 2, 5, 6, 7, 10, 21, 23, 29];
         for (uint256 k; k < bits.length; ++k) {
-            assertEq(_try1(t, ownerA, _enableCd(bits[k])), NOT_ENABLEABLE, "not enableable");
+            assertEq(_try1(t, ownerA, _enableCd(t, bits[k])), NOT_ENABLEABLE, "not enableable");
         }
-        assertEq(_try1(t, bob, _enableCd(ALLOW)), IAdmin.NotAdmin.selector);
-        assertEq(_try1(t, issuer, _enableCd(ALLOW)), IAdmin.NotAdmin.selector);
+        assertEq(_try1(t, bob, _enableCd(t, ALLOW)), IAdmin.NotAdmin.selector);
+        assertEq(_try1(t, issuer, _enableCd(t, ALLOW)), IAdmin.NotAdmin.selector);
         _enable(t, ALLOW); // the control
     }
 
@@ -131,11 +131,11 @@ contract ListGovernanceTest is ListFixture {
                     assertEq(NormalToken(t).lockedFeatures() & _bit(bit), _bit(bit));
                     bytes memory e = abi.encodeWithSelector(IGovernance.FeatureLocked.selector, bit);
                     vm.prank(ownerA);
-                    (bool ok, bytes memory ret) = t.call(_enableCd(bit));
+                    (bool ok, bytes memory ret) = t.call(_enableCd(t, bit));
                     assertFalse(ok);
                     assertEq(ret, e, "enable");
                     vm.prank(ownerA);
-                    (ok, ret) = t.call(_disableCd(bit));
+                    (ok, ret) = t.call(_disableCd(t, bit));
                     assertFalse(ok);
                     assertEq(ret, e, "disable");
                     assertEq(NormalToken(t).features() & _bit(bit), on == 1 ? _bit(bit) : 0);
@@ -152,11 +152,11 @@ contract ListGovernanceTest is ListFixture {
             for (uint8 bit = ALLOW; bit <= DENY; ++bit) {
                 bytes memory e = abi.encodeWithSelector(NOT_DISABLEABLE, bit);
                 vm.prank(ownerA);
-                (bool ok, bytes memory ret) = on.call(_disableCd(bit));
+                (bool ok, bytes memory ret) = on.call(_disableCd(on, bit));
                 assertFalse(ok);
                 assertEq(ret, e);
                 vm.prank(ownerA);
-                (ok, ret) = off.call(_disableCd(bit));
+                (ok, ret) = off.call(_disableCd(off, bit));
                 assertEq(ret, e);
                 assertEq(NormalToken(on).features() & _bit(bit), _bit(bit));
             }
@@ -377,21 +377,21 @@ contract ListGovernanceTest is ListFixture {
             c.grantDelay = 0;
             address t = _new(i, c);
             vm.prank(ownerA);
-            NormalToken(t).grantRole(ALLOW, nid(bob));
+            NormalToken(t).grantRole(ALLOW, nid(bob), EnvKit.codeUidOf(address(NormalToken(t))));
             vm.prank(bob);
             IListOps(t).setAllowed(_one(nid(bob)), true);
             c.lockedFeatures = _bit(ALLOW);
             t = _new(i, c);
             vm.prank(ownerA);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, ALLOW));
-            NormalToken(t).grantRole(ALLOW, nid(bob));
+            NormalToken(t).grantRole(ALLOW, nid(bob), EnvKit.codeUidOf(address(NormalToken(t))));
             vm.prank(ownerA);
-            NormalToken(t).grantRole(DENY, nid(bob)); // 9 unlocked: the control
+            NormalToken(t).grantRole(DENY, nid(bob), EnvKit.codeUidOf(address(NormalToken(t)))); // 9 unlocked: the control
             // with grantDelay one day: the revoke of a list holder at once
             t = _lt(i, _bit(DENY), 0, bytes32(++salt));
             vm.recordLogs();
             vm.prank(ownerA);
-            NormalToken(t).revokeRole(DENY, nid(issuer));
+            NormalToken(t).revokeRole(DENY, nid(issuer), EnvKit.codeUidOf(address(NormalToken(t))));
             Vm.Log[] memory l = vm.getRecordedLogs();
             assertEq(l.length, 1);
             assertEq(l[0].topics[0], IGovernance.RoleRevoked.selector);
@@ -414,10 +414,10 @@ contract ListGovernanceTest is ListFixture {
             c.roles.issuer = 0;
             t = _new(i, c);
             for (uint8 bit = ALLOW; bit <= DENY; ++bit) {
-                assertEq(_try1(t, ownerA, _enableCd(bit)), HOLDER_MISSING);
+                assertEq(_try1(t, ownerA, _enableCd(t, bit)), HOLDER_MISSING);
                 assertEq(NormalToken(t).features() & _bit(bit), 0, "the whole call reverted");
                 vm.prank(ownerA);
-                NormalToken(t).grantRole(bit, nid(bob));
+                NormalToken(t).grantRole(bit, nid(bob), EnvKit.codeUidOf(address(NormalToken(t))));
                 _enable(t, bit);
             }
             c = _bare(i);
@@ -443,10 +443,10 @@ contract ListGovernanceTest is ListFixture {
         vm.startPrank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, uint8(1)));
         NormalToken(t).renounceAdmin(EnvKit.codeUidOf(address(NormalToken(t))));
-        NormalToken(t).revokeRole(1, nid(address(this)));
+        NormalToken(t).revokeRole(1, nid(address(this)), EnvKit.codeUidOf(address(NormalToken(t))));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, DENY));
         NormalToken(t).renounceAdmin(EnvKit.codeUidOf(address(NormalToken(t))));
-        NormalToken(t).revokeRole(DENY, nid(issuer));
+        NormalToken(t).revokeRole(DENY, nid(issuer), EnvKit.codeUidOf(address(NormalToken(t))));
         NormalToken(t).renounceAdmin(EnvKit.codeUidOf(address(NormalToken(t))));
         vm.stopPrank();
         vm.prank(issuer);
@@ -458,6 +458,6 @@ contract ListGovernanceTest is ListFixture {
         _setList(t, ALLOW, nid(bob), true); // the dormant allow list: its holder still edits it
         vm.prank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(ownerA)));
-        IListOps(t).enableFeature(ALLOW);
+        IListOps(t).enableFeature(ALLOW, EnvKit.codeUidOf(address(IListOps(t))));
     }
 }

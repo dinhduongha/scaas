@@ -212,15 +212,15 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("ZetherSetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", "ua mode validUntilBlock @ua"),
     ("PqzAuth", "", P, "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", ""),
     // the `GovernanceRouter`'s closed table (spec §3.2, ua-mtx-merge T7): `mtx<Op>`, `target` the first op word, fee mode `NONE`
-    ("UAGrantRole", "mtxGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
-    ("UARevokeRole", "mtxRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
-    ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
-    ("UACancelGrant", "mtxCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
-    ("UADisableFeature", "mtxDisableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
+    ("UAGrantRole", "mtxGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
+    ("UARevokeRole", "mtxRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
+    ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,E", ""),
+    ("UACancelGrant", "mtxCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
+    ("UADisableFeature", "mtxDisableFeature", GR, "bytes32 from,address target,uint8 bit,bytes32 chainUid,E", ""),
     ("UATransferAdmin", "mtxTransferAdmin", GR, "bytes32 from,address target,bytes32 newAdmin,bytes32 chainUid,E", ""),
     ("UAAcceptAdmin", "mtxAcceptAdmin", GR, "bytes32 from,address target,E", ""),
     ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
-    ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
+    ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,bytes32 chainUid,E", ""), // CTR-GOV-28, owner 2026-11-13
     ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
     ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),
     ("UADisableWrap", "mtxDisableWrap", GR, "bytes32 from,address target,address leg,bytes32 reason,E", ""),
@@ -246,13 +246,13 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UASetTaxRecipient", "mtxSetTaxRecipient", GR, "bytes32 from,address target,bytes32 taxRecipient,E", ""),
     // group 3f (spec §4.2): the owner's verifier transfer of a PQZ token (propose, confirm after the notice), its cancel, the
     // immediate revocation
-    ("UAPqzSetVerifier", "mtxPqzSetVerifier", GR, "bytes32 from,address target,bytes32 next,E", ""),
-    ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", GR, "bytes32 from,address target,E", ""),
-    ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,E", ""),
+    ("UAPqzSetVerifier", "mtxPqzSetVerifier", GR, "bytes32 from,address target,bytes32 next,bytes32 chainUid,E", ""),
+    ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
+    ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     // group 3h (PQZ proof path spec §5): bit 24 `PQZ_PROOF`, a holder's `NONE` / `LOG` from the next debit
     ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,E", ""),
     // round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit
-    ("UASetVerifierFee", "mtxSetVerifierFee", GR, "bytes32 from,address target,uint64 next,E", ""),
+    ("UASetVerifierFee", "mtxSetVerifierFee", GR, "bytes32 from,address target,uint64 next,bytes32 chainUid,E", ""),
     // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds and bit 26's membership
     ("UASetWrapLimits", "mtxSetWrapLimits", GR, "bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,E", ""),
     ("UASetWrapMember", "mtxSetWrapMember", GR, "bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,E", ""),
@@ -260,7 +260,7 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // bit 9's; 1-256 accounts) and the admin's enableFeature of 8, 9 or 28; no token row (governance entries are direct)
     ("UASetAllowed", "mtxSetAllowed", GR, "bytes32 from,address target,bytes32[] accounts,bool on,E", ""),
     ("UASetDenied", "mtxSetDenied", GR, "bytes32 from,address target,bytes32[] accounts,bool on,E", ""),
-    ("UAEnableFeature", "mtxEnableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
+    ("UAEnableFeature", "mtxEnableFeature", GR, "bytes32 from,address target,uint8 bit,bytes32 chainUid,E", ""),
     // round 3r (CTR-GOV-23, spec §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its envs, deprecations, kind
     // switches, directory) and of a `ComplianceRegistry` (its KYC providers, the rows); the four release approvals are no row
     // (release management is not a node job, owner 2026-11-10)
@@ -272,8 +272,8 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UADeprecateRelease", "mtxDeprecateRelease", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason,E", ""),
     ("UASetTokenKindEnabled", "mtxSetTokenKindEnabled", GR, "bytes32 from,address target,uint8 kind,bool on,bytes32 chainUid,E", ""),
     ("UASetClassKindEnabled", "mtxSetClassKindEnabled", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid,E", ""),
-    ("UASetKycProvider", "mtxSetKycProvider", GR, "bytes32 from,address target,bytes32 provider,bool enabled,E", ""),
-    ("UASetCompliance", "mtxSetCompliance", GR, "bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,E", ""),
+    ("UASetKycProvider", "mtxSetKycProvider", GR, "bytes32 from,address target,bytes32 provider,bool enabled,bytes32 chainUid,E", ""),
+    ("UASetCompliance", "mtxSetCompliance", GR, "bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid,E", ""),
     // owner 2026-11-12: the factory's creations through the router (chain-neutral spec §4.4, S3), relayable at fee 0 like every
     // `mtx*`; the config is named JSON (`args.config`), the node encodes it as `initArgs` and fills the signed `initHash`.
     // owner 2026-11-12 ("both the generic row and the per-class ones"): `mtxCreateInstance` takes `args.init_call` (bytes, the
@@ -2418,7 +2418,7 @@ mod tests {
     fn chain_word_rows_refuse_a_missing_word() {
         let v = vectors();
         let rows: Vec<&str> = TYPED.iter().filter(|r| r.2 == GR && r.3.contains("bytes32 chainUid")).map(|r| r.0).collect();
-        assert_eq!(rows.len(), 11, "{rows:?}");
+        assert_eq!(rows.len(), 24, "{rows:?}"); // owner 2026-11-13: + UARenounceRole
         for op in rows {
             let good = op_of(op, "gov_router", &v).unwrap();
             Op::parse(&good, FEE).unwrap();

@@ -118,7 +118,7 @@ fn typed_ops_list_rows() {
         let ds = router_domain_separator(num(&dom["chainId"]) as u64, &b20(&dom["verifyingContract"]), &b32(&dom["salt"]));
         let (e, target) = (envelope(m), b20(&m["target"]));
         let sh = |e: &Envelope| if op == "UAEnableFeature" {
-            enable_feature_struct_hash(e, &target, num(&m["bit"]) as u8)
+            enable_feature_struct_hash(e, &target, num(&m["bit"]) as u8, &b32(&m["chainUid"]))
         } else {
             let accounts: Vec<[u8; 32]> = m["accounts"].as_array().unwrap().iter().map(b32).collect();
             set_list_struct_hash(op == "UASetAllowed", e, &target, &accounts, m["on"].as_bool().unwrap())

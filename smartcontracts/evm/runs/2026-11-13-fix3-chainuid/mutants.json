@@ -1,0 +1,86 @@
+[
+ {
+  "id": "F3-1 the shared word check empty",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NormalToken grantRole: passed] test_kind0_NormalToken() (gas: 163020)"
+ },
+ {
+  "id": "F3-2 admin-only entries skip the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SCaaSDex grantRole: passed] test_dex_SCaaSDex() (gas: 158088)"
+ },
+ {
+  "id": "F3-3 the admin's word skipped on the shared-caller entries",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NormalRegulatedToken setGrant: passed] test_kind8_NormalRegulatedToken() (gas: 414235)"
+ },
+ {
+  "id": "F3-4 a holder's leaf without the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: WrappedToken a holder's leaf: passed] test_kind1_WrappedToken() (gas: 1499295)"
+ },
+ {
+  "id": "F3-5 a grantor's revoke without the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NormalZetherToken a grantor's revoke: passed] test_kind2_NormalZetherToken() (gas: 1745830)"
+ },
+ {
+  "id": "F3-6 a proposer's cancel without the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: the proposer's cancel: passed] test_proposerCancel() (gas: 301905)"
+ },
+ {
+  "id": "F3-7 disableFeature without the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: WrappedZetherToken disableFeature: passed] test_kind3_WrappedZetherToken() (gas: 1089797)"
+ },
+ {
+  "id": "F3-8 enableFeature without the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: WrappedRegulatedToken enableFeature: passed] test_kind9_WrappedRegulatedToken() (gas: 2097158)"
+ },
+ {
+  "id": "F3-9 pqzRevokeVerifier without the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NormalPqzToken pqzRevokeVerifier(): refused by name: 0xbb2bf818 != 0x14767f45000000000000000000000000000000000000000000000000000000000000003a000000000000"
+ },
+ {
+  "id": "F3-10 setVerifierFee: the admin's word skipped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: WrappedPqzRegulatedToken setVerifierFee(uint64): refused by name: 0xbb2bf818 != 0x14767f45000000000000000000000000000000000000000000000000000000000000003"
+ },
+ {
+  "id": "F3-11 setKycProvider without the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: refused] test_kycAndRows_siblingWordRefused() (gas: 361158)"
+ },
+ {
+  "id": "F3-12 setCompliance without the word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: refused] test_kycAndRows_siblingWordRefused() (gas: 403155)"
+ },
+ {
+  "id": "F3-13 the router does not sign setCompliance's word",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: UAUnauthorized(0x9ceb60eaa9f276db91f4697f744ea4e347bee0d842694ef39f0a4cd6f61c5129)] test_binding_SetCompliance() (gas: 8848118)"
+ },
+ {
+  "id": "F3-14 the router forwards no word on mtxGrantRole",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: Error != expected error: MetaTxBadSignature() != ChainUidMismatch(0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc, 0xdf801b8641ddb2a5f"
+ }
+]

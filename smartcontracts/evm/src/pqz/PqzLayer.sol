@@ -244,24 +244,32 @@ abstract contract PqzLayer is MetaTokenBase {
 
     /// @notice The admin's transfer of a transferable `OFFCHAIN` verifier (`PqzStateLib.setVerifier`): propose, then
     ///         confirm after the notice period; through the router as `mtxPqzSetVerifier`.
-    function _pqzSetVerifierBody(bytes32 next) internal {
-        PqzStateLib.setVerifier(next, _govSubject(), _registry());
+    ///         CTR-GOV-28: the admin's word before any write; any other caller is refused by `PqzStateLib` first
+    ///         (`NotProposer`, `NotAdmin`).
+    function _pqzSetVerifierBody(bytes32 next, bytes32 chainUid_) internal {
+        (bytes32 c, bool admin) = _subjectWord(chainUid_);
+        PqzStateLib.setVerifier(next, c, _registry());
+        if (!admin) _govChainWord(chainUid_);
     }
 
-    /// @notice The admin deletes a live pending transfer.
-    function _pqzCancelVerifierBody() internal {
-        PqzStateLib.cancelVerifier(_govSubject());
+    /// @notice The admin deletes a live pending transfer; the admin, then the chain word (CTR-GOV-28).
+    function _pqzCancelVerifierBody(bytes32 chainUid_) internal {
+        PqzStateLib.cancelVerifier(_adminOnChain(chainUid_));
     }
 
-    /// @notice The admin's immediate revocation of a transferable verifier (freeze only, spec §4.3).
-    function _pqzRevokeVerifierBody() internal {
-        PqzStateLib.revokeVerifier(_govSubject());
+    /// @notice The admin's immediate revocation of a transferable verifier (freeze only, spec §4.3); the admin, then the
+    ///         chain word (CTR-GOV-28).
+    function _pqzRevokeVerifierBody(bytes32 chainUid_) internal {
+        PqzStateLib.revokeVerifier(_adminOnChain(chainUid_));
     }
 
     /// @notice Round 3t (CTR-PQZ-36, spec §7.1): the admin's verifier fee (`PqzStateLib.setVerifierFee`), a decrease at once,
     ///         an increase after the notice period; through the router as `mtxSetVerifierFee`.
-    function _setVerifierFeeBody(uint64 next) internal {
-        PqzStateLib.setVerifierFee(next, _govSubject());
+    ///         CTR-GOV-28: the admin's word before any write; any other caller is refused by `PqzStateLib` first.
+    function _setVerifierFeeBody(uint64 next, bytes32 chainUid_) internal {
+        (bytes32 c, bool admin) = _subjectWord(chainUid_);
+        PqzStateLib.setVerifierFee(next, c);
+        if (!admin) _govChainWord(chainUid_);
     }
 
     /// @notice Group 3h (spec §5): bit 24 `PQZ_PROOF`'s power, `use(24)` (no scalar; disabling the bit freezes the value:

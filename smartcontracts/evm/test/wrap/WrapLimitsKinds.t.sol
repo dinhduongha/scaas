@@ -25,6 +25,7 @@ import {RegFixture} from "../as/helpers/RegFixture.sol";
 import {ZetherRegFixture} from "../as/confidential/ZetherRegFixture.sol";
 import {PqzRegFixture} from "../as/confidential/PqzRegFixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 uint256 constant WL_MINT = uint256(1) << GovernanceBits.MINTABLE;
 uint256 constant WL_CONTROLS = GovernanceBits.WRAP_CONTROLS;
@@ -280,7 +281,7 @@ contract WrapLimitsRegulatedTest is RegFixture {
         WrappedToken(payable(t)).setWrapLimits(legs1(address(usd), lim(10, 1 days)), false, false, false);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, uint8(25)));
         vm.prank(ownerA);
-        WrappedToken(payable(t)).disableFeature(25);
+        WrappedToken(payable(t)).disableFeature(25, EnvKit.codeUidOf(address(WrappedToken(payable(t)))));
     }
 }
 

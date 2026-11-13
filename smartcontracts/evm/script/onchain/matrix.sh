@@ -64,7 +64,7 @@ export MATRIX_OUT=$OUTD
 mkdir -p "$OUTD"
 [ -f "$OUTD/coverage.json" ] || cp runs/2026-11-10-ua-mtx-merge-t66b-step5b/coverage.json "$OUTD/coverage.json"
 LOG=$OUTD/matrix-$tgt.log
-GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers views wraplimits}
+GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers rescue views wraplimits}
 T=$(mktemp -d)
 A= CP= P= STAGE=setup
 CS=$(cd ../../pqz-core/nethermind/chain && pwd)
@@ -305,6 +305,13 @@ for g in $GROUPS; do
     fi ;;
   verify) verify verify; continue ;;
   verifiers) step "/$g" "$RPC" "" python3 -I script/onchain/verifiers.py "$tgt" "$RPC" || r=1 ;;
+  # the RescueVault (CTR-GOV-25): local only, its admin and rescuer set to test keys by anvil_setStorageAt (rescue.sh)
+  rescue)
+    if [ "$tgt" != local ]; then
+      res="not run" why="local only: the vault's test admin is set by anvil_setStorageAt"
+    else
+      step "/$g" "$RPC" "$ADDRS" env ONCHAIN_GAS_MULTIPLIER="${ONCHAIN_GAS_MULTIPLIER:-130}" sh script/onchain/rescue.sh "$tgt" || r=1
+    fi ;;
   views) step "/$g" "$RPC" "" python3 -I script/onchain/coverage.py views "$tgt" "$RPC" || r=1 ;;
   # last: it moves the chain's clock by two days (local only; its own outputs, wraplimits.sh)
   wraplimits)

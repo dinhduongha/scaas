@@ -226,18 +226,19 @@ contract Gov is OnchainBase {
         cr = new ComplianceRegistry(_pad(iss), address(gr), bookUid); // this chain's word (CTR-GOV-27)
         _book(address(cr), "ComplianceRegistry");
         require(address(cr).codehash == _dep("compliance_registry").codehash, "compliance code");
-        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a2), true)));
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a2), true, cr.chainUid())));
         bytes32[] memory who = new bytes32[](2);
         uint64[] memory fl = new uint64[](2);
         uint64[] memory until = new uint64[](2);
         (who[0], who[1], fl[0], fl[1], until[0], until[1]) = (_pad(a1), _pad(a3), 1, 1, type(uint64).max, type(uint64).max);
-        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setCompliance, (who, fl, until)));
+        _skaExec(iss, pkI, address(cr), abi.encodeCall(ComplianceRegistry.setCompliance, (who, fl, until, cr.chainUid())));
         bytes32[] memory w2 = new bytes32[](1);
         uint64[] memory f2 = new uint64[](1);
         uint64[] memory u2_ = new uint64[](1);
         (w2[0], f2[0], u2_[0]) = (_pad(a2), 1, uint64(vu + 30 days));
+        bytes32 ru = cr.chainUid(); // the registry's word (CTR-GOV-28)
         vm.broadcast(k2);
-        cr.setCompliance(w2, f2, u2_); // a KYC provider's row
+        cr.setCompliance(w2, f2, u2_, ru); // a KYC provider's row
         IFactoryToken.TokenConfig memory c = _cfg("oGC8", 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.KYC); // round 3s
         (c.initialSupply, c.initialHolder) = (1_000_000, a1);
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.termsHash) = (address(cr), 1, keccak256("onchain terms"));
@@ -252,8 +253,8 @@ contract Gov is OnchainBase {
         // group 3s (CTR-GOV-24, spec §5.2, §15 T8): KYC off (grantDelay 0: at once; a1 the admin) and on again, at once; the
         // attested receiver still receives
         vm.startBroadcast(k1);
-        IGovernance(tc).disableFeature(GovernanceBits.KYC);
-        IRegulatedToken(tc).enableFeature(GovernanceBits.KYC);
+        IGovernance(tc).disableFeature(GovernanceBits.KYC, IMetaTx(tc).chainUid());
+        IRegulatedToken(tc).enableFeature(GovernanceBits.KYC, IMetaTx(tc).chainUid());
         IERC20(tc).transfer{gas: 500_000}(a3, 1);
         vm.stopBroadcast();
     }
@@ -268,17 +269,19 @@ contract Gov is OnchainBase {
         vm.broadcast(k2);
         gr.mtxAcceptAdmin(e, address(cr), s);
         require(cr.admin() == uaD && cr.pendingAdmin() == bytes32(0), "registry: the derived UA is the admin");
-        (e, s) = _auth(d, _ty("UASetKycProvider", "bytes32 provider,bool enabled"), address(cr), abi.encode(_pad(a3), true));
+        bytes32 ru = cr.chainUid(); // the registry's word, signed and forwarded (CTR-GOV-28)
+        (e, s) = _auth(d, _ty("UASetKycProvider", "bytes32 provider,bool enabled,bytes32 chainUid"), address(cr),
+            abi.encode(_pad(a3), true, ru));
         vm.broadcast(k2);
-        gr.mtxSetKycProvider(e, address(cr), _pad(a3), true, s);
+        gr.mtxSetKycProvider(e, address(cr), _pad(a3), true, ru, s);
         bytes32[] memory who = new bytes32[](1);
         uint64[] memory fl = new uint64[](1);
         uint64[] memory until = new uint64[](1);
         (who[0], fl[0], until[0]) = (_pad(a1), 3, type(uint64).max); // an admin row over the earlier admin row
-        (e, s) = _auth(d, _ty("UASetCompliance", "bytes32[] accounts,uint64[] flags,uint64[] until"), address(cr),
-            abi.encode(keccak256(abi.encodePacked(who)), keccak256(abi.encodePacked(fl)), keccak256(abi.encodePacked(until))));
+        (e, s) = _auth(d, _ty("UASetCompliance", "bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid"), address(cr),
+            abi.encode(keccak256(abi.encodePacked(who)), keccak256(abi.encodePacked(fl)), keccak256(abi.encodePacked(until)), ru));
         vm.broadcast(k2);
-        gr.mtxSetCompliance(e, address(cr), who, fl, until, s);
+        gr.mtxSetCompliance(e, address(cr), who, fl, until, ru, s);
     }
 
     // ------------------------------------------------------------------ kind 0 through the router
@@ -307,30 +310,37 @@ contract Gov is OnchainBase {
             bytes.concat(abi.encode(t0), abi.encode(uaD, uint256(100))), e));
         vm.broadcast(k2);
         gr.mtxMintToUA(e, t0, uaD, 100, s);
-        (e, s) = _auth(o, _ty("UAGrantRole", "uint8 bit,bytes32 account"), t0, abi.encode(GovernanceBits.MINTABLE, _pad(a3)));
+        bytes32 w0 = IMetaTx(t0).chainUid(); // the token's chain word: the admin ops sign and forward it (CTR-GOV-28)
+        (e, s) = _auth(o, _ty("UAGrantRole", "uint8 bit,bytes32 account,bytes32 chainUid"), t0,
+            abi.encode(GovernanceBits.MINTABLE, _pad(a3), w0));
         vm.broadcast(k2);
-        gr.mtxGrantRole(e, t0, GovernanceBits.MINTABLE, _pad(a3), s);
-        (e, s) = _auth(o, _ty("UARevokeRole", "uint8 bit,bytes32 account"), t0, abi.encode(GovernanceBits.MINTABLE, _pad(a3)));
+        gr.mtxGrantRole(e, t0, GovernanceBits.MINTABLE, _pad(a3), w0, s);
+        (e, s) = _auth(o, _ty("UARevokeRole", "uint8 bit,bytes32 account,bytes32 chainUid"), t0,
+            abi.encode(GovernanceBits.MINTABLE, _pad(a3), w0));
         vm.broadcast(k2);
-        gr.mtxRevokeRole(e, t0, GovernanceBits.MINTABLE, _pad(a3), s);
+        gr.mtxRevokeRole(e, t0, GovernanceBits.MINTABLE, _pad(a3), w0, s);
         IGovernance.GrantTerms memory gt;
         (gt.min, gt.max, gt.total) = (1, 100, 1_000);
-        (e, s) = _auth(o, string.concat(_ty("UASetGrant", "uint8 bit,bytes32 holder,GrantTerms terms"), TERMS_T), t0,
-            abi.encode(GovernanceBits.MINTABLE, _pad(a2), keccak256(abi.encode(keccak256(bytes(TERMS_T)), gt))));
+        (e, s) = _auth(o, string.concat(_ty("UASetGrant", "uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid"), TERMS_T), t0,
+            abi.encode(GovernanceBits.MINTABLE, _pad(a2), keccak256(abi.encode(keccak256(bytes(TERMS_T)), gt)), w0));
         vm.broadcast(k2);
-        gr.mtxSetGrant(e, t0, GovernanceBits.MINTABLE, _pad(a2), gt, s);
-        (e, s) = _auth(_eoa(k2), _ty("UARenounceRole", "uint8 bit"), t0, abi.encode(GovernanceBits.MINTABLE));
+        gr.mtxSetGrant(e, t0, GovernanceBits.MINTABLE, _pad(a2), gt, w0, s);
+        (e, s) = _auth(_eoa(k2), _ty("UARenounceRole", "uint8 bit,bytes32 chainUid"), t0,
+            abi.encode(GovernanceBits.MINTABLE, w0));
         vm.broadcast(k2);
-        gr.mtxRenounceRole(e, t0, GovernanceBits.MINTABLE, s); // the limited holder renounces its own grant
+        gr.mtxRenounceRole(e, t0, GovernanceBits.MINTABLE, w0, s); // the limited holder renounces its own grant
         // a grant under grantDelay: the first call proposes, the cancel drops it
-        (e, s) = _auth(o, _ty("UAGrantRole", "uint8 bit,bytes32 account"), t0d, abi.encode(GovernanceBits.MINTABLE, _pad(a3)));
+        bytes32 wd = IMetaTx(t0d).chainUid();
+        (e, s) = _auth(o, _ty("UAGrantRole", "uint8 bit,bytes32 account,bytes32 chainUid"), t0d,
+            abi.encode(GovernanceBits.MINTABLE, _pad(a3), wd));
         vm.broadcast(k2);
-        gr.mtxGrantRole(e, t0d, GovernanceBits.MINTABLE, _pad(a3), s);
+        gr.mtxGrantRole(e, t0d, GovernanceBits.MINTABLE, _pad(a3), wd, s);
         (uint64 eta,,,) = IGovernance(t0d).pendingGrant(GovernanceBits.MINTABLE, _pad(a3));
         require(eta != 0, "pending grant");
-        (e, s) = _auth(o, _ty("UACancelGrant", "uint8 bit,bytes32 account"), t0d, abi.encode(GovernanceBits.MINTABLE, _pad(a3)));
+        (e, s) = _auth(o, _ty("UACancelGrant", "uint8 bit,bytes32 account,bytes32 chainUid"), t0d,
+            abi.encode(GovernanceBits.MINTABLE, _pad(a3), wd));
         vm.broadcast(k2);
-        gr.mtxCancelGrant(e, t0d, GovernanceBits.MINTABLE, _pad(a3), s);
+        gr.mtxCancelGrant(e, t0d, GovernanceBits.MINTABLE, _pad(a3), wd, s);
         // ownership: transfer, accept by the new owner, renounce
         bytes32 tu = IMetaTx(t0r).chainUid(); // the token's chain word (CTR-GOV-27)
         (e, s) = _auth(o, _ty("UATransferAdmin", "bytes32 newAdmin,bytes32 chainUid"), t0r, abi.encode(uaD, tu));
@@ -389,9 +399,10 @@ contract Gov is OnchainBase {
         (e, s) = _auth(o, _ty("UADisableWrap", "address leg,bytes32 reason"), t1, abi.encode(address(u), why));
         vm.broadcast(k2);
         gr.mtxDisableWrap(e, t1, address(u), why, s);
-        (e, s) = _auth(o, _ty("UADisableFeature", "uint8 bit"), t0, abi.encode(GovernanceBits.MINTABLE));
+        bytes32 w0 = IMetaTx(t0).chainUid(); // the token's chain word (CTR-GOV-28)
+        (e, s) = _auth(o, _ty("UADisableFeature", "uint8 bit,bytes32 chainUid"), t0, abi.encode(GovernanceBits.MINTABLE, w0));
         vm.broadcast(k2);
-        gr.mtxDisableFeature(e, t0, GovernanceBits.MINTABLE, s);
+        gr.mtxDisableFeature(e, t0, GovernanceBits.MINTABLE, w0, s);
     }
 
     // ------------------------------------------------------------------ kind 8: the powers direct (the roles' accounts call)
@@ -432,18 +443,18 @@ contract Gov is OnchainBase {
         bytes32[] memory l = new bytes32[](2);
         (l[0], l[1]) = (_pad(a2), _pad(a3));
         vm.startBroadcast(k1);
-        IGovernance(t).grantRole(GovernanceBits.DENYLIST, _pad(a1));
+        IGovernance(t).grantRole(GovernanceBits.DENYLIST, _pad(a1), IMetaTx(t).chainUid());
         IRegulatedToken(t).setDenied(d, true);
         if (allow) {
-            IGovernance(t).grantRole(GovernanceBits.ALLOWLIST, _pad(a1));
+            IGovernance(t).grantRole(GovernanceBits.ALLOWLIST, _pad(a1), IMetaTx(t).chainUid());
             IRegulatedToken(t).setAllowed(l, true);
         }
-        IRegulatedToken(t).enableFeature(GovernanceBits.DENYLIST);
+        IRegulatedToken(t).enableFeature(GovernanceBits.DENYLIST, IMetaTx(t).chainUid());
         vm.stopBroadcast();
         if (!allow) {
             _neg(a1, t, abi.encodeCall(IRegulatedToken.setAllowed, (l, true)), IGovernance.MissingRole.selector,
                 string.concat("setAllowed on ", what, " (bit 8 outside the mask: no holder)"));
-            _neg(a1, t, abi.encodeCall(IRegulatedToken.enableFeature, (GovernanceBits.ALLOWLIST)),
+            _neg(a1, t, abi.encodeCall(IRegulatedToken.enableFeature, (GovernanceBits.ALLOWLIST, IMetaTx(t).chainUid())),
                 IGovernance.FeatureInvalidForKind.selector, string.concat("enableFeature(ALLOWLIST) on ", what));
         }
     }
@@ -478,8 +489,9 @@ contract Gov is OnchainBase {
         require(!IRegulatedToken(t).isFrozen(_pad(a2)), "revoke ends the record freeze");
         _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.setTaxRate, (uint32(1_000))));
         _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.setTaxRecipient, (_pad(a1))));
+        bytes32 tu = IMetaTx(t).chainUid(); // the token's chain word (CTR-GOV-28)
         vm.broadcast(k1);
-        IGovernance(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, _pad(a1)); // any holder (bit 22)
+        IGovernance(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, _pad(a1), tu); // any holder (bit 22)
         vm.broadcast(k1);
         IRegulatedToken(t).operatorTransfer(_pad(a2), _pad(a3), 10, _ref());
         vm.broadcast(k1);
@@ -487,7 +499,7 @@ contract Gov is OnchainBase {
         vm.broadcast(k2);
         IRescuable(t).rescue(address(u2)); // anyone, to rescueTo
         vm.broadcast(k1);
-        IGovernance(t).disableFeature(GovernanceBits.PAUSE); // the regulated override clears the control
+        IGovernance(t).disableFeature(GovernanceBits.PAUSE, tu); // the regulated override clears the control
     }
 
     // ------------------------------------------------------------------ kind 9: the powers through the router
@@ -525,17 +537,19 @@ contract Gov is OnchainBase {
         (e, s) = _auth(is_, _ty("UASetTaxRecipient", "bytes32 taxRecipient"), t9, abi.encode(_pad(a1)));
         vm.broadcast(k2);
         gr.mtxSetTaxRecipient{gas: SKA_SIG_GAS}(e, t9, _pad(a1), s);
-        (e, s) = _auth(o, _ty("UAGrantRole", "uint8 bit,bytes32 account"), t9, abi.encode(GovernanceBits.OPERATOR_TRANSFER, _pad(a1)));
+        bytes32 w9 = IMetaTx(t9).chainUid(); // the token's chain word (CTR-GOV-28)
+        (e, s) = _auth(o, _ty("UAGrantRole", "uint8 bit,bytes32 account,bytes32 chainUid"), t9,
+            abi.encode(GovernanceBits.OPERATOR_TRANSFER, _pad(a1), w9));
         vm.broadcast(k2);
-        gr.mtxGrantRole(e, t9, GovernanceBits.OPERATOR_TRANSFER, _pad(a1), s);
+        gr.mtxGrantRole(e, t9, GovernanceBits.OPERATOR_TRANSFER, _pad(a1), w9, s);
         bytes32 r2 = _ref();
         (e, s) = _auth(o, _ty("UAOperatorTransfer", "bytes32 account,bytes32 to,uint256 amount,bytes32 ref"), t9,
             abi.encode(_pad(a2), _pad(a3), uint256(5), r2));
         vm.broadcast(k2);
         gr.mtxOperatorTransfer(e, t9, _pad(a2), _pad(a3), 5, r2, s);
-        (e, s) = _auth(o, _ty("UADisableFeature", "uint8 bit"), t9, abi.encode(GovernanceBits.PAUSE));
+        (e, s) = _auth(o, _ty("UADisableFeature", "uint8 bit,bytes32 chainUid"), t9, abi.encode(GovernanceBits.PAUSE, w9));
         vm.broadcast(k2);
-        gr.mtxDisableFeature(e, t9, GovernanceBits.PAUSE, s);
+        gr.mtxDisableFeature(e, t9, GovernanceBits.PAUSE, w9, s);
         vm.broadcast(k1);
         u2.mint(t9, 33);
         vm.broadcast(k2);
@@ -568,12 +582,13 @@ contract Gov is OnchainBase {
         (e, s) = _auth(du, _ty("UASetDenied", "bytes32[] accounts,bool on"), tl, abi.encode(keccak256(abi.encodePacked(d)), true));
         vm.broadcast(k2);
         gr.mtxSetDenied(e, tl, d, true, s);
-        (e, s) = _auth(du, _ty("UAEnableFeature", "uint8 bit"), tl, abi.encode(GovernanceBits.DENYLIST));
+        bytes32 wl = IMetaTx(tl).chainUid(); // the token's chain word (CTR-GOV-28)
+        (e, s) = _auth(du, _ty("UAEnableFeature", "uint8 bit,bytes32 chainUid"), tl, abi.encode(GovernanceBits.DENYLIST, wl));
         vm.broadcast(k2);
-        gr.mtxEnableFeature(e, tl, GovernanceBits.DENYLIST, s);
-        (e, s) = _auth(du, _ty("UAEnableFeature", "uint8 bit"), tl, abi.encode(GovernanceBits.ALLOWLIST));
+        gr.mtxEnableFeature(e, tl, GovernanceBits.DENYLIST, wl, s);
+        (e, s) = _auth(du, _ty("UAEnableFeature", "uint8 bit,bytes32 chainUid"), tl, abi.encode(GovernanceBits.ALLOWLIST, wl));
         vm.broadcast(k2);
-        gr.mtxEnableFeature(e, tl, GovernanceBits.ALLOWLIST, s);
+        gr.mtxEnableFeature(e, tl, GovernanceBits.ALLOWLIST, wl, s);
         uint256 both = (1 << GovernanceBits.ALLOWLIST) | (1 << GovernanceBits.DENYLIST);
         require(IGovernance(tl).features() & both == both, "router: both lists on");
     }
@@ -661,8 +676,9 @@ contract Gov is OnchainBase {
         _book(_dep("relay_fee_executor"), "RelayFeeExecutor");
         // the inner router op (a1 signs, open relayer: the executor submits it); the fee: 1 unit of t8 from a1
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) =
-            _auth(_eoa(k1), _ty("UAGrantRole", "uint8 bit,bytes32 account"), t8, abi.encode(GovernanceBits.OPERATOR_TRANSFER, _pad(a2)));
-        bytes memory cd = abi.encodeWithSelector(gr.mtxGrantRole.selector, e, t8, GovernanceBits.OPERATOR_TRANSFER, _pad(a2), s);
+            _auth(_eoa(k1), _ty("UAGrantRole", "uint8 bit,bytes32 account,bytes32 chainUid"), t8,
+                abi.encode(GovernanceBits.OPERATOR_TRANSFER, _pad(a2), IMetaTx(t8).chainUid()));
+        bytes memory cd = abi.encodeCall(gr.mtxGrantRole, (e, t8, GovernanceBits.OPERATOR_TRANSFER, _pad(a2), IMetaTx(t8).chainUid(), s));
         uint256 fn = IUALedgerViews(t8).mtxNonce(_pad(a1), 2);
         IUARegistry.UASig memory fs = _relayFeeSig(address(rf), cd, fn);
         vm.broadcast(k2);
@@ -865,7 +881,8 @@ contract Gov is OnchainBase {
         _neg(a1, tc, abi.encodeCall(IERC20.transfer, (address(0xdEaD), 1)), IRegulatedToken.NotEligible.selector,
             "transfer to an account the ComplianceRegistry does not attest (kind 8, KYC)");
         // the guard: a governed entry by a non-owner
-        _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3))), IAdmin.NotAdmin.selector,
+        _neg(a3, t8, abi.encodeCall(IGovernance.grantRole, (GovernanceBits.OPERATOR_TRANSFER, _pad(a3), IMetaTx(t8).chainUid())),
+            IAdmin.NotAdmin.selector,
             "grantRole by a non-owner (kind 8)");
         // a router op signed by another key than its `from`
         MetaTxLib.UAEnvelope memory e = _env(a1, 0, gr.mtxNonce(_pad(a1), 0));
@@ -886,7 +903,7 @@ contract Gov is OnchainBase {
             IOpenFactory.ReleaseUnknown.selector, "mtxCreateInstance with no class release on this factory");
         // the router has no generic path (governance spec §3.6, B-14)
         MetaTxLib.UAMetaTransaction memory um;
-        (um.from, um.data, um.nonce, um.validUntil) = (_pad(a1), abi.encodeCall(IGovernance.grantRole, (1, _pad(a3))), 0, vu);
+        (um.from, um.data, um.nonce, um.validUntil) = (_pad(a1), abi.encodeCall(IGovernance.grantRole, (1, _pad(a3), bytes32(0))), 0, vu);
         IUARegistry.UASig memory none;
         _neg(a2, address(gr), abi.encodeWithSelector(gr.mtxExecute.selector, um, none), IMetaTx.MtxSelectorNotAllowed.selector,
             "router mtxExecute (no generic path)");
@@ -907,8 +924,37 @@ contract Gov is OnchainBase {
             "initialize by another caller than the factory");
         _negListsRouter();
         // compliance: a non-admin, non-provider
-        _neg(a3, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a3), true)), IAdmin.NotAdmin.selector,
+        _neg(a3, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a3), true, cr.chainUid())), IAdmin.NotAdmin.selector,
             "setKycProvider by a non-admin");
+        _chainWords();
+    }
+
+    /// @dev CTR-GOV-27, CTR-GOV-28 (owner 2026-11-13): a sibling chain's word refused by name, each family's own-word call
+    ///      above its control: the ComplianceRegistry (a KYC provider's `setCompliance`; control `_compliance`), the router
+    ///      ops (the registry admin's `mtxSetKycProvider`, control `_complianceRouter`; a holder's `mtxRenounceRole` on
+    ///      `tl`, where the UA uaD holds bit 8 as issuer, control the renounce in `_plain`), the Step 5 factory's direct admin
+    ///      entry when its admin is a native id (control: Misc's own factory, the same code).
+    function _chainWords() internal {
+        bytes32[] memory w = new bytes32[](1);
+        uint64[] memory fl = new uint64[](1);
+        uint64[] memory un = new uint64[](1);
+        (w[0], fl[0], un[0]) = (_pad(a2), 1, uint64(vu + 30 days));
+        _negData(a2, address(cr), abi.encodeCall(ComplianceRegistry.setCompliance, (w, fl, un, SIBLING_WORD)),
+            _wordRefused(cr.chainUid()), "ComplianceRegistry.setCompliance by a KYC provider, a sibling's chain word");
+        Sg memory du = Sg(uaD, kD, 2);
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(du,
+            _ty("UASetKycProvider", "bytes32 provider,bool enabled,bytes32 chainUid"), address(cr), abi.encode(_pad(a3), true, SIBLING_WORD));
+        _negData(a2, address(gr), abi.encodeCall(GovernanceRouter.mtxSetKycProvider, (e, address(cr), _pad(a3), true, SIBLING_WORD, s)),
+            _wordRefused(cr.chainUid()), "router mtxSetKycProvider (the registry admin's op), a sibling's chain word");
+        (e, s) = _auth(du, _ty("UARenounceRole", "uint8 bit,bytes32 chainUid"), tl, abi.encode(GovernanceBits.ALLOWLIST, SIBLING_WORD));
+        _negData(a2, address(gr), abi.encodeWithSelector(gr.mtxRenounceRole.selector, e, tl, GovernanceBits.ALLOWLIST, SIBLING_WORD, s),
+            _wordRefused(IMetaTx(tl).chainUid()), "router mtxRenounceRole (a holder's own, kind 9), a sibling's chain word");
+        bytes32 fa = f.admin();
+        if (fa != 0 && uint256(fa) >> 160 == 0) {
+            _negData(address(uint160(uint256(fa))), address(f), abi.encodeCall(OpenFactory.setTokenKindEnabled,
+                (IOpenFactory.TokenKind.NORMAL, true, SIBLING_WORD)), _wordRefused(f.chainUid()),
+                "OpenFactory.setTokenKindEnabled by its admin, a sibling's chain word");
+        }
     }
 }
 

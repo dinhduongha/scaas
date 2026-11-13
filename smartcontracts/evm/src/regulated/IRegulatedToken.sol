@@ -167,8 +167,9 @@ interface IRegulatedToken {
     function setDenied(bytes32[] calldata accounts, bool on) external;
     /// @notice `ALLOWED` (1) | `DENIED` (2).
     function listFlagsOf(bytes32 account) external view returns (uint8);
-    /// @notice Round 3s (spec §5.2): the admin switches on 8, 9 or 28 at once; 8 and 9 never go off again.
-    function enableFeature(uint8 bit) external;
+    /// @notice Round 3s (spec §5.2): the admin switches on 8, 9 or 28 at once; 8 and 9 never go off again. `NotAdmin`, then
+    ///         `chainUid_` not the token's chain word (`ChainUidMismatch`, CTR-GOV-28).
+    function enableFeature(uint8 bit, bytes32 chainUid_) external;
 
     function regulatedConfig() external view returns (RegulatedConfig memory);
     function freezeOf(bytes32 account) external view returns (FreezeState memory);

@@ -566,7 +566,7 @@ contract WrapLimitsTest is WrapLimitsBase {
     function _disable(WrappedToken w, uint8 bit, bytes memory err) internal {
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(OWNER);
-        w.disableFeature(bit);
+        w.disableFeature(bit, EnvKit.codeUidOf(address(w)));
     }
 
     function _active(uint8 bit) internal pure returns (bytes memory) {
@@ -595,7 +595,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         _grant(w, RED, MERCHANT);
         _disable(w, RED, _active(RED));
         vm.prank(OWNER);
-        w.revokeRole(RED, _pad(MERCHANT));
+        w.revokeRole(RED, _pad(MERCHANT), EnvKit.codeUidOf(address(w)));
         _disable(w, RED, "");
     }
 
@@ -922,7 +922,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         _unwrap(w, MERCHANT, 40); // b = 0, E = 0: no division (P1-3)
         _unwrapRev(w, MERCHANT, 11, _over(2, MERCHANT, 11, 10)); // still bound by the windows
         vm.prank(OWNER);
-        w.revokeRole(RED, _pad(MERCHANT));
+        w.revokeRole(RED, _pad(MERCHANT), EnvKit.codeUidOf(address(w)));
         vm.warp(T0 + DAY + 60);
         _unwrapRev(w, MERCHANT, 1, _aboveNet(MERCHANT, 1, 0)); // revoked: at once
     }
@@ -933,7 +933,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         _toMerchant(w, 100);
         _wrap(w, MERCHANT, 10); // its own E = 10
         vm.prank(OWNER);
-        w.setGrant(RED, _pad(MERCHANT), _terms(20, 0, false));
+        w.setGrant(RED, _pad(MERCHANT), _terms(20, 0, false), EnvKit.codeUidOf(address(w)));
         _unwrap(w, MERCHANT, 30); // 0 < E < q: the excess 20 spends the budget
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(2)));
         vm.prank(MERCHANT);
@@ -945,7 +945,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         _set(w, _cfg1(0, 0, OFF(), OFF(), OFF(), OFF()), true, false, false);
         _toMerchant(w, 100);
         vm.prank(OWNER);
-        w.setGrant(RED, _pad(MERCHANT), _terms(0, uint64(T0 + DAY), false));
+        w.setGrant(RED, _pad(MERCHANT), _terms(0, uint64(T0 + DAY), false), EnvKit.codeUidOf(address(w)));
         _unwrap(w, MERCHANT, 10); // positive control: in time
         vm.warp(T0 + 2 * DAY);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExpired.selector, RED, _pad(MERCHANT)));
@@ -961,12 +961,12 @@ contract WrapLimitsTest is WrapLimitsBase {
         vm.prank(alice);
         w.transfer(leaf, 100);
         vm.prank(OWNER);
-        w.setGrant(RED, _pad(MERCHANT), _terms(1000, 0, true));
+        w.setGrant(RED, _pad(MERCHANT), _terms(1000, 0, true), EnvKit.codeUidOf(address(w)));
         vm.prank(MERCHANT);
-        w.setGrant(RED, _pad(leaf), _terms(500, 0, false));
+        w.setGrant(RED, _pad(leaf), _terms(500, 0, false), EnvKit.codeUidOf(address(w)));
         _unwrap(w, leaf, 10); // positive control
         vm.prank(OWNER);
-        w.revokeRole(RED, _pad(MERCHANT));
+        w.revokeRole(RED, _pad(MERCHANT), EnvKit.codeUidOf(address(w)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(7)));
         vm.prank(leaf);
         w.unwrap(u, 10, leaf, 0);
@@ -976,10 +976,10 @@ contract WrapLimitsTest is WrapLimitsBase {
     function test_r30_bit27IsScalar() public {
         WrappedToken w = _hyb();
         vm.prank(OWNER);
-        w.setGrant(RED, _pad(MERCHANT), _terms(20, 0, false));
+        w.setGrant(RED, _pad(MERCHANT), _terms(20, 0, false), EnvKit.codeUidOf(address(w)));
         vm.expectRevert();
         vm.prank(OWNER);
-        w.setGrant(WLIST, _pad(LISTER), _terms(20, 0, false));
+        w.setGrant(WLIST, _pad(LISTER), _terms(20, 0, false), EnvKit.codeUidOf(address(w)));
     }
 
     // ------------------------------------------------------------------ row 34: hybrid only (R12), kind 1

@@ -168,6 +168,6 @@ abstract contract WrapLimitsBase is UALedgerBase {
 
     function _grant(WrappedToken w, uint8 bit, address who) internal {
         vm.prank(OWNER);
-        w.grantRole(bit, _pad(who));
+        w.grantRole(bit, _pad(who), EnvKit.codeUidOf(address(w)));
     }
 }

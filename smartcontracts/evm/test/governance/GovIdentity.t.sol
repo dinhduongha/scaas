@@ -113,12 +113,12 @@ contract GovIdentityTest is Test {
         assertEq(t.admin(), ISSUER);
         vm.expectEmit(address(t));
         emit IGovernance.RoleGranted(MINT, MINTER, ISSUER);
-        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.grantRole, (MINT, MINTER)));
+        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.grantRole, (MINT, MINTER, EnvKit.codeUidOf(address(t)))));
         assertTrue(t.hasRole(MINT, MINTER));
-        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, MINTER, _limited(5))));
+        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, MINTER, _limited(5), EnvKit.codeUidOf(address(t)))));
         assertEq(t.grantOf(MINT, MINTER).total, 5);
         assertEq(t.grantOf(MINT, MINTER).grantor, bytes32(0), "the owner's grant is a root");
-        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.revokeRole, (MINT, MINTER)));
+        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.revokeRole, (MINT, MINTER, EnvKit.codeUidOf(address(t)))));
         assertFalse(t.hasRole(MINT, MINTER));
         // ownership moves to a native account, then back to another derived UA
         bytes32 alice = bytes32(uint256(uint160(ALICE)));
@@ -134,7 +134,7 @@ contract GovIdentityTest is Test {
         // nobody reaches the derived owner's power directly: no address is its id
         vm.prank(address(uint160(uint256(MINTER))));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(uint256(uint160(uint256(MINTER))))));
-        t.grantRole(MINT, ISSUER);
+        t.grantRole(MINT, ISSUER, EnvKit.codeUidOf(address(t)));
     }
 
     function _limited(uint128 total) internal pure returns (IGovernance.GrantTerms memory g) {
@@ -166,7 +166,7 @@ contract GovIdentityTest is Test {
     function test_nativeCallerIsItsPaddedAddress() public {
         NormalToken t = _normal(bytes32(uint256(uint160(ALICE))), 0);
         vm.prank(ALICE);
-        t.grantRole(MINT, bytes32(uint256(uint160(BOB))));
+        t.grantRole(MINT, bytes32(uint256(uint160(BOB))), EnvKit.codeUidOf(address(t)));
         assertTrue(t.hasRole(MINT, bytes32(uint256(uint160(BOB)))));
         vm.prank(BOB);
         t.mint(BOB, 1);
@@ -181,7 +181,7 @@ contract GovIdentityTest is Test {
         // the transaction's origin is nobody's subject
         vm.prank(BOB, ALICE);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(uint256(uint160(BOB)))));
-        t.grantRole(MINT, bytes32(uint256(uint160(BOB))));
+        t.grantRole(MINT, bytes32(uint256(uint160(BOB))), EnvKit.codeUidOf(address(t)));
     }
 
     /// The router's subject is read only on a call from the router: another caller with a subject set in the router is
@@ -192,11 +192,11 @@ contract GovIdentityTest is Test {
         bytes32 alice = bytes32(uint256(uint160(ALICE)));
         vm.startPrank(ALICE);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, alice));
-        t.grantRole(MINT, alice);
+        t.grantRole(MINT, alice, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, alice));
         t.transferAdmin(alice, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, alice));
-        t.disableFeature(MINT);
+        t.disableFeature(MINT, EnvKit.codeUidOf(address(t)));
         router.set(MINTER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, alice));
         t.mint(ALICE, 1);
@@ -210,17 +210,17 @@ contract GovIdentityTest is Test {
         router.set(0);
         vm.startPrank(address(router));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
-        t.grantRole(MINT, ISSUER);
+        t.grantRole(MINT, ISSUER, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
-        t.revokeRole(MINT, MINTER);
+        t.revokeRole(MINT, MINTER, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
-        t.setGrant(MINT, ISSUER, _limited(1));
+        t.setGrant(MINT, ISSUER, _limited(1), EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, bytes32(0)));
         t.transferAdmin(ISSUER, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, bytes32(0)));
         t.acceptAdmin();
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, bytes32(0)));
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, bytes32(0)));
         t.mint(BOB, 1);
         vm.stopPrank();
@@ -238,11 +238,11 @@ contract GovIdentityTest is Test {
         w.initialize(nid(address(this)), 1, abi.encode(c));
         w = _wrapped(_wrappedCfg(ISSUER));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, RATE, derived));
-        router.run(ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, derived)));
+        router.run(ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, derived, EnvKit.codeUidOf(address(w)))));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, RATE, ISSUER));
-        router.run(ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, ISSUER)));
+        router.run(ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, ISSUER, EnvKit.codeUidOf(address(w)))));
         bytes32 self = bytes32(uint256(uint160(address(this))));
-        router.run(ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, self)));
+        router.run(ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, self, EnvKit.codeUidOf(address(w)))));
         assertTrue(w.hasRole(RATE, self), "a native id with code holds it");
     }
 
@@ -264,14 +264,14 @@ contract GovIdentityTest is Test {
             vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, pools[i]));
             router.run(ISSUER, address(t), abi.encodeCall(IAdmin.transferAdmin, (pools[i], EnvKit.codeUidOf(address(t)))));
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, pools[i]));
-            router.run(ISSUER, address(t), abi.encodeCall(IGovernance.grantRole, (MINT, pools[i])));
+            router.run(ISSUER, address(t), abi.encodeCall(IGovernance.grantRole, (MINT, pools[i], EnvKit.codeUidOf(address(t)))));
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, pools[i]));
-            router.run(ISSUER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, pools[i], _limited(1))));
+            router.run(ISSUER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, pools[i], _limited(1), EnvKit.codeUidOf(address(t)))));
         }
         NormalToken z = _normal(ISSUER, 0);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountZero.selector, MINT));
-        router.run(ISSUER, address(z), abi.encodeCall(IGovernance.grantRole, (MINT, bytes32(0))));
+        router.run(ISSUER, address(z), abi.encodeCall(IGovernance.grantRole, (MINT, bytes32(0), EnvKit.codeUidOf(address(z)))));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountZero.selector, MINT));
-        router.run(ISSUER, address(z), abi.encodeCall(IGovernance.setGrant, (MINT, bytes32(0), _limited(1))));
+        router.run(ISSUER, address(z), abi.encodeCall(IGovernance.setGrant, (MINT, bytes32(0), _limited(1), EnvKit.codeUidOf(address(z)))));
     }
 }

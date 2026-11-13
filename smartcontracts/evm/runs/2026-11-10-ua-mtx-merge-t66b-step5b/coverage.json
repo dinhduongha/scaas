@@ -79,8 +79,8 @@
       "module": "A"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -121,8 +121,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -163,8 +163,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -313,8 +313,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -379,6 +379,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -409,26 +415,20 @@
       "module": "T"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "registry()",
       "sel": "7b103999",
       "mut": "view",
       "module": "K"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -451,14 +451,14 @@
       "module": "T"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -499,8 +499,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -625,8 +625,8 @@
       "module": "A"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -679,8 +679,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -733,8 +733,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -901,8 +901,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -1009,6 +1009,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -1075,26 +1081,20 @@
       "module": "W"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "registry()",
       "sel": "7b103999",
       "mut": "view",
       "module": "K"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -1117,14 +1117,14 @@
       "module": "T"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -1177,8 +1177,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -1387,8 +1387,8 @@
       "module": "Z"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -1441,8 +1441,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -1501,8 +1501,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -1699,8 +1699,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -1837,6 +1837,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -1867,12 +1873,6 @@
       "module": "T"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "registered(bytes32)",
       "sel": "5524d548",
       "mut": "view",
@@ -1885,14 +1885,14 @@
       "module": "K"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -1915,8 +1915,8 @@
       "module": "T"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -1927,8 +1927,8 @@
       "module": "Z"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -1981,8 +1981,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -2149,8 +2149,8 @@
       "module": "Z"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -2215,8 +2215,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "Z"
      },
@@ -2287,8 +2287,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -2503,8 +2503,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -2707,6 +2707,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -2773,12 +2779,6 @@
       "module": "W"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "registered(bytes32)",
       "sel": "5524d548",
       "mut": "view",
@@ -2791,14 +2791,14 @@
       "module": "K"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -2821,8 +2821,8 @@
       "module": "T"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -2833,8 +2833,8 @@
       "module": "Z"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -2899,8 +2899,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -3121,8 +3121,8 @@
       "module": "Q"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -3169,8 +3169,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -3229,8 +3229,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -3439,8 +3439,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -3553,6 +3553,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -3589,8 +3595,8 @@
       "module": "Q"
      },
      {
-      "sig": "pqzCancelVerifier()",
-      "sel": "5204e2d9",
+      "sig": "pqzCancelVerifier(bytes32)",
+      "sel": "baa93a08",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -3619,14 +3625,14 @@
       "module": "Q"
      },
      {
-      "sig": "pqzRevokeVerifier()",
-      "sel": "72e0baaa",
+      "sig": "pqzRevokeVerifier(bytes32)",
+      "sel": "13fc50be",
       "mut": "nonpayable",
       "module": "Q"
      },
      {
-      "sig": "pqzSetVerifier(bytes32)",
-      "sel": "45fbee36",
+      "sig": "pqzSetVerifier(bytes32,bytes32)",
+      "sel": "4874721f",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -3661,26 +3667,20 @@
       "module": "T"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "registry()",
       "sel": "7b103999",
       "mut": "view",
       "module": "K"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -3703,14 +3703,14 @@
       "module": "T"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -3721,8 +3721,8 @@
       "module": "Q"
      },
      {
-      "sig": "setVerifierFee(uint64)",
-      "sel": "e790fb8f",
+      "sig": "setVerifierFee(uint64,bytes32)",
+      "sel": "ceacb175",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -3775,8 +3775,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -3961,8 +3961,8 @@
       "module": "Q"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -4021,8 +4021,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -4093,8 +4093,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -4321,8 +4321,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -4501,6 +4501,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -4543,8 +4549,8 @@
       "module": "Q"
      },
      {
-      "sig": "pqzCancelVerifier()",
-      "sel": "5204e2d9",
+      "sig": "pqzCancelVerifier(bytes32)",
+      "sel": "baa93a08",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -4573,14 +4579,14 @@
       "module": "Q"
      },
      {
-      "sig": "pqzRevokeVerifier()",
-      "sel": "72e0baaa",
+      "sig": "pqzRevokeVerifier(bytes32)",
+      "sel": "13fc50be",
       "mut": "nonpayable",
       "module": "Q"
      },
      {
-      "sig": "pqzSetVerifier(bytes32)",
-      "sel": "45fbee36",
+      "sig": "pqzSetVerifier(bytes32,bytes32)",
+      "sel": "4874721f",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -4645,26 +4651,20 @@
       "module": "W"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "registry()",
       "sel": "7b103999",
       "mut": "view",
       "module": "K"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -4687,14 +4687,14 @@
       "module": "T"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -4705,8 +4705,8 @@
       "module": "Q"
      },
      {
-      "sig": "setVerifierFee(uint64)",
-      "sel": "e790fb8f",
+      "sig": "setVerifierFee(uint64,bytes32)",
+      "sel": "ceacb175",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -4771,8 +4771,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -5023,8 +5023,8 @@
       "module": "W"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -5065,8 +5065,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -5077,8 +5077,8 @@
       "module": "A"
      },
      {
-      "sig": "enableFeature(uint8)",
-      "sel": "68c0006d",
+      "sig": "enableFeature(uint8,bytes32)",
+      "sel": "af726233",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -5131,8 +5131,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -5293,8 +5293,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -5389,6 +5389,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -5419,12 +5425,6 @@
       "module": "T"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
       "sel": "baaf8b3f",
       "mut": "nonpayable",
@@ -5443,14 +5443,14 @@
       "module": "W"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -5479,8 +5479,8 @@
       "module": "W"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -5497,8 +5497,8 @@
       "module": "W"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -5557,8 +5557,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -5707,8 +5707,8 @@
       "module": "W"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -5761,8 +5761,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -5779,8 +5779,8 @@
       "module": "A"
      },
      {
-      "sig": "enableFeature(uint8)",
-      "sel": "68c0006d",
+      "sig": "enableFeature(uint8,bytes32)",
+      "sel": "af726233",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -5839,8 +5839,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -6019,8 +6019,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -6157,6 +6157,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -6223,12 +6229,6 @@
       "module": "W"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
       "sel": "baaf8b3f",
       "mut": "nonpayable",
@@ -6247,14 +6247,14 @@
       "module": "W"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -6283,8 +6283,8 @@
       "module": "W"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -6301,8 +6301,8 @@
       "module": "W"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -6373,8 +6373,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -6607,8 +6607,8 @@
       "module": "W"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -6661,8 +6661,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -6685,8 +6685,8 @@
       "module": "A"
      },
      {
-      "sig": "enableFeature(uint8)",
-      "sel": "68c0006d",
+      "sig": "enableFeature(uint8,bytes32)",
+      "sel": "af726233",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -6745,8 +6745,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -6955,8 +6955,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -7123,6 +7123,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -7153,12 +7159,6 @@
       "module": "T"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
       "sel": "baaf8b3f",
       "mut": "nonpayable",
@@ -7183,14 +7183,14 @@
       "module": "W"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -7219,8 +7219,8 @@
       "module": "W"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -7243,8 +7243,8 @@
       "module": "W"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -7315,8 +7315,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -7507,8 +7507,8 @@
       "module": "W"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -7573,8 +7573,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -7603,8 +7603,8 @@
       "module": "A"
      },
      {
-      "sig": "enableFeature(uint8)",
-      "sel": "68c0006d",
+      "sig": "enableFeature(uint8,bytes32)",
+      "sel": "af726233",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -7669,8 +7669,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -7897,8 +7897,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -8131,6 +8131,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -8197,12 +8203,6 @@
       "module": "W"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
       "sel": "baaf8b3f",
       "mut": "nonpayable",
@@ -8227,14 +8227,14 @@
       "module": "W"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -8263,8 +8263,8 @@
       "module": "W"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -8287,8 +8287,8 @@
       "module": "W"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -8371,8 +8371,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -8617,8 +8617,8 @@
       "module": "W"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -8665,8 +8665,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -8689,8 +8689,8 @@
       "module": "A"
      },
      {
-      "sig": "enableFeature(uint8)",
-      "sel": "68c0006d",
+      "sig": "enableFeature(uint8,bytes32)",
+      "sel": "af726233",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -8749,8 +8749,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -8971,8 +8971,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -9115,6 +9115,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -9151,8 +9157,8 @@
       "module": "Q"
      },
      {
-      "sig": "pqzCancelVerifier()",
-      "sel": "5204e2d9",
+      "sig": "pqzCancelVerifier(bytes32)",
+      "sel": "baa93a08",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -9181,14 +9187,14 @@
       "module": "Q"
      },
      {
-      "sig": "pqzRevokeVerifier()",
-      "sel": "72e0baaa",
+      "sig": "pqzRevokeVerifier(bytes32)",
+      "sel": "13fc50be",
       "mut": "nonpayable",
       "module": "Q"
      },
      {
-      "sig": "pqzSetVerifier(bytes32)",
-      "sel": "45fbee36",
+      "sig": "pqzSetVerifier(bytes32,bytes32)",
+      "sel": "4874721f",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -9223,12 +9229,6 @@
       "module": "T"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
       "sel": "baaf8b3f",
       "mut": "nonpayable",
@@ -9247,14 +9247,14 @@
       "module": "W"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -9283,8 +9283,8 @@
       "module": "W"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -9301,8 +9301,8 @@
       "module": "W"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -9325,8 +9325,8 @@
       "module": "P"
      },
      {
-      "sig": "setVerifierFee(uint64)",
-      "sel": "e790fb8f",
+      "sig": "setVerifierFee(uint64,bytes32)",
+      "sel": "ceacb175",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -9385,8 +9385,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -9595,8 +9595,8 @@
       "module": "W"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -9655,8 +9655,8 @@
       "module": "K"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -9685,8 +9685,8 @@
       "module": "A"
      },
      {
-      "sig": "enableFeature(uint8)",
-      "sel": "68c0006d",
+      "sig": "enableFeature(uint8,bytes32)",
+      "sel": "af726233",
       "mut": "nonpayable",
       "module": "W"
      },
@@ -9751,8 +9751,8 @@
       "module": "A"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -9991,8 +9991,8 @@
       "module": "P"
      },
      {
-      "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
-      "sel": "0de1ca2d",
+      "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+      "sel": "94a190f1",
       "mut": "nonpayable",
       "module": "P"
      },
@@ -10201,6 +10201,12 @@
       "module": "P"
      },
      {
+      "sig": "payeeFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
+      "sel": "48ee392e",
+      "mut": "view",
+      "module": "P"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view",
@@ -10243,8 +10249,8 @@
       "module": "Q"
      },
      {
-      "sig": "pqzCancelVerifier()",
-      "sel": "5204e2d9",
+      "sig": "pqzCancelVerifier(bytes32)",
+      "sel": "baa93a08",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -10273,14 +10279,14 @@
       "module": "Q"
      },
      {
-      "sig": "pqzRevokeVerifier()",
-      "sel": "72e0baaa",
+      "sig": "pqzRevokeVerifier(bytes32)",
+      "sel": "13fc50be",
       "mut": "nonpayable",
       "module": "Q"
      },
      {
-      "sig": "pqzSetVerifier(bytes32)",
-      "sel": "45fbee36",
+      "sig": "pqzSetVerifier(bytes32,bytes32)",
+      "sel": "4874721f",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -10345,12 +10351,6 @@
       "module": "W"
      },
      {
-      "sig": "receiverFeeDigest((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256)",
-      "sel": "7c4fa261",
-      "mut": "view",
-      "module": "P"
-     },
-     {
       "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
       "sel": "baaf8b3f",
       "mut": "nonpayable",
@@ -10369,14 +10369,14 @@
       "module": "W"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable",
       "module": "A"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -10405,8 +10405,8 @@
       "module": "W"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -10423,8 +10423,8 @@
       "module": "W"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -10447,8 +10447,8 @@
       "module": "P"
      },
      {
-      "sig": "setVerifierFee(uint64)",
-      "sel": "e790fb8f",
+      "sig": "setVerifierFee(uint64,bytes32)",
+      "sel": "ceacb175",
       "mut": "nonpayable",
       "module": "Q"
      },
@@ -10519,8 +10519,8 @@
       "module": "K"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable",
       "module": "A"
      },
@@ -10735,8 +10735,8 @@
       "mut": "view"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable"
      },
      {
@@ -10755,8 +10755,8 @@
       "mut": "view"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable"
      },
      {
@@ -10795,8 +10795,8 @@
       "mut": "view"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable"
      },
      {
@@ -10925,18 +10925,23 @@
       "mut": "view"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "rescue(address)",
+      "sel": "839006f2",
+      "mut": "nonpayable"
+     },
+     {
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable"
      },
      {
@@ -10950,8 +10955,8 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable"
      },
      {
@@ -10985,8 +10990,8 @@
       "mut": "view"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable"
      },
      {
@@ -11033,13 +11038,13 @@
       "mut": "view"
      },
      {
-      "sig": "cancelGrant(uint8,bytes32)",
-      "sel": "b73aa8a4",
+      "sig": "cancelGrant(uint8,bytes32,bytes32)",
+      "sel": "f2ecfd14",
       "mut": "nonpayable"
      },
      {
-      "sig": "disableFeature(uint8)",
-      "sel": "45e5ac68",
+      "sig": "disableFeature(uint8,bytes32)",
+      "sel": "07022c47",
       "mut": "nonpayable"
      },
      {
@@ -11063,8 +11068,8 @@
       "mut": "view"
      },
      {
-      "sig": "grantRole(uint8,bytes32)",
-      "sel": "ac0e63c3",
+      "sig": "grantRole(uint8,bytes32,bytes32)",
+      "sel": "8f1ddd97",
       "mut": "nonpayable"
      },
      {
@@ -11103,28 +11108,28 @@
       "mut": "view"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable"
      },
      {
-      "sig": "renounceRole(uint8)",
-      "sel": "057c9cb8",
+      "sig": "renounceRole(uint8,bytes32)",
+      "sel": "c1c5495f",
       "mut": "nonpayable"
      },
      {
-      "sig": "revokeRole(uint8,bytes32)",
-      "sel": "d2dfd8d9",
+      "sig": "revokeRole(uint8,bytes32,bytes32)",
+      "sel": "25f86fe8",
       "mut": "nonpayable"
      },
      {
-      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-      "sel": "e0a44abe",
+      "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+      "sel": "789a7b4b",
       "mut": "nonpayable"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable"
      },
      {
@@ -11201,6 +11206,11 @@
       "sig": "relayRef(address,bytes)",
       "sel": "d7ca9fa4",
       "mut": "view"
+     },
+     {
+      "sig": "rescue(address)",
+      "sel": "839006f2",
+      "mut": "nonpayable"
      }
     ]
    },
@@ -11275,8 +11285,8 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxCancelGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "8fd3fa7a",
+      "sig": "mtxCancelGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "d032bf9d",
       "mut": "nonpayable"
      },
      {
@@ -11305,18 +11315,18 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxDeprecateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "9ae5af48",
+      "sig": "mtxDeprecateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,bytes32,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "868766c5",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxDeprecateRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "ecbb6fd3",
+      "sig": "mtxDeprecateRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,bytes32,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "7b6b34fe",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxDeprecateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "b96218b2",
+      "sig": "mtxDeprecateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,bytes32,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "622f25f4",
       "mut": "nonpayable"
      },
      {
@@ -11325,8 +11335,8 @@
       "mut": "view"
      },
      {
-      "sig": "mtxDisableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "784da8a6",
+      "sig": "mtxDisableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "df0d41dd",
       "mut": "nonpayable"
      },
      {
@@ -11335,8 +11345,8 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxEnableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "2eb8c708",
+      "sig": "mtxEnableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "303d43fb",
       "mut": "nonpayable"
      },
      {
@@ -11360,8 +11370,8 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxGrantRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "782df72d",
+      "sig": "mtxGrantRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "be7402d6",
       "mut": "nonpayable"
      },
      {
@@ -11390,18 +11400,18 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxPqzCancelVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "681afa10",
+      "sig": "mtxPqzCancelVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "d5c14210",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxPqzRevokeVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "42242ae3",
+      "sig": "mtxPqzRevokeVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "e816ad71",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxPqzSetVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "065bf7fd",
+      "sig": "mtxPqzSetVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "690eea59",
       "mut": "nonpayable"
      },
      {
@@ -11410,18 +11420,18 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxPublishClassEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "9d5cabdc",
+      "sig": "mtxPublishClassEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "7c3e5109",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxPublishDexEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "346f3395",
+      "sig": "mtxPublishDexEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "34b475a5",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxPublishTokenEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "8435cd63",
+      "sig": "mtxPublishTokenEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "d8238a06",
       "mut": "nonpayable"
      },
      {
@@ -11430,18 +11440,18 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxRenounceAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "feedac3d",
+      "sig": "mtxRenounceAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "fcdfdb9a",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxRenounceRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "b0c1c360",
+      "sig": "mtxRenounceRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "66ba9505",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxRevokeApproval((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "bb601c83",
+      "sig": "mtxRevokeApproval((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "311cce61",
       "mut": "nonpayable"
      },
      {
@@ -11450,8 +11460,8 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxRevokeRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "a613b9f9",
+      "sig": "mtxRevokeRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "20750247",
       "mut": "nonpayable"
      },
      {
@@ -11465,18 +11475,18 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxSetChainEntries((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "93e812ce",
+      "sig": "mtxSetChainEntries((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32),bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "cead3721",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxSetClassKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "7647477e",
+      "sig": "mtxSetClassKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "bb60d0e7",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxSetCompliance((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32[],uint64[],uint64[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "37a68821",
+      "sig": "mtxSetCompliance((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32[],uint64[],uint64[],bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "c12ef330",
       "mut": "nonpayable"
      },
      {
@@ -11495,13 +11505,13 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxSetGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "6d4750d4",
+      "sig": "mtxSetGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "1d7291db",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxSetKycProvider((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "d4733492",
+      "sig": "mtxSetKycProvider((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "66f015e5",
       "mut": "nonpayable"
      },
      {
@@ -11530,13 +11540,13 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxSetTokenKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "75dd4b79",
+      "sig": "mtxSetTokenKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "a6035c46",
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxSetVerifierFee((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "f0d8cbbf",
+      "sig": "mtxSetVerifierFee((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "280839e6",
       "mut": "nonpayable"
      },
      {
@@ -11550,8 +11560,8 @@
       "mut": "nonpayable"
      },
      {
-      "sig": "mtxTransferAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-      "sel": "a682ea50",
+      "sig": "mtxTransferAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+      "sel": "265abf33",
       "mut": "nonpayable"
      },
      {
@@ -11568,6 +11578,11 @@
       "sig": "registry()",
       "sel": "7b103999",
       "mut": "view"
+     },
+     {
+      "sig": "rescue(address)",
+      "sel": "839006f2",
+      "mut": "nonpayable"
      },
      {
       "sig": "smartKeyCloneHash()",
@@ -11840,6 +11855,11 @@
       "sig": "requirePortable(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
       "sel": "e9e493f5",
       "mut": "view"
+     },
+     {
+      "sig": "rescue(address)",
+      "sel": "839006f2",
+      "mut": "nonpayable"
      },
      {
       "sig": "setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
@@ -12235,18 +12255,18 @@
       "mut": "view"
      },
      {
-      "sig": "deployDexImplementation(uint64,uint16,bytes,bytes)",
-      "sel": "e6186778",
+      "sig": "deployDexImplementation(uint64,uint16,bytes,bytes,bytes32)",
+      "sel": "5408ae9f",
       "mut": "nonpayable"
      },
      {
-      "sig": "deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes)",
-      "sel": "8968d1ae",
+      "sig": "deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes,bytes32)",
+      "sel": "7f5801a8",
       "mut": "nonpayable"
      },
      {
-      "sig": "deployTokenImplementation(uint8,uint64,uint16,bytes,bytes)",
-      "sel": "7d847eae",
+      "sig": "deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)",
+      "sel": "8a69f76c",
       "mut": "nonpayable"
      },
      {
@@ -12255,18 +12275,18 @@
       "mut": "view"
      },
      {
-      "sig": "deprecateDex(uint64,string)",
-      "sel": "6cdba58c",
+      "sig": "deprecateDex(uint64,bytes32,string)",
+      "sel": "bd3707a7",
       "mut": "nonpayable"
      },
      {
-      "sig": "deprecateRelease((uint16,uint16,uint64),string)",
-      "sel": "b25e669e",
+      "sig": "deprecateRelease((uint16,uint16,uint64),bytes32,string)",
+      "sel": "6a168972",
       "mut": "nonpayable"
      },
      {
-      "sig": "deprecateToken(uint8,uint64,string)",
-      "sel": "b7fdb2fa",
+      "sig": "deprecateToken(uint8,uint64,bytes32,string)",
+      "sel": "9b43d4de",
       "mut": "nonpayable"
      },
      {
@@ -12400,18 +12420,18 @@
       "mut": "view"
      },
      {
-      "sig": "publishClassEnv(uint16,uint16,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
-      "sel": "5613516c",
+      "sig": "publishClassEnv(uint16,uint16,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+      "sel": "96a43db9",
       "mut": "nonpayable"
      },
      {
-      "sig": "publishDexEnv(uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
-      "sel": "4e50ab83",
+      "sig": "publishDexEnv(uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+      "sel": "d7c91f07",
       "mut": "nonpayable"
      },
      {
-      "sig": "publishTokenEnv(uint8,uint16,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
-      "sel": "15735a6c",
+      "sig": "publishTokenEnv(uint8,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+      "sel": "b560beb3",
       "mut": "nonpayable"
      },
      {
@@ -12430,28 +12450,33 @@
       "mut": "view"
      },
      {
-      "sig": "renounceAdmin()",
-      "sel": "8bad0c0a",
+      "sig": "renounceAdmin(bytes32)",
+      "sel": "4fa3ed14",
       "mut": "nonpayable"
      },
      {
-      "sig": "revokeApproval(bytes32)",
-      "sel": "15ba5ae7",
+      "sig": "rescue(address)",
+      "sel": "839006f2",
       "mut": "nonpayable"
      },
      {
-      "sig": "setChainEntries(address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32)",
-      "sel": "386ef5b6",
+      "sig": "revokeApproval(bytes32,bytes32)",
+      "sel": "c2b5b001",
       "mut": "nonpayable"
      },
      {
-      "sig": "setClassKindEnabled(uint16,uint16,bool)",
-      "sel": "aaaba5a3",
+      "sig": "setChainEntries((address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32),bytes32)",
+      "sel": "e8779185",
       "mut": "nonpayable"
      },
      {
-      "sig": "setTokenKindEnabled(uint8,bool)",
-      "sel": "bb4aac3a",
+      "sig": "setClassKindEnabled(uint16,uint16,bool,bytes32)",
+      "sel": "dfef53f5",
+      "mut": "nonpayable"
+     },
+     {
+      "sig": "setTokenKindEnabled(uint8,bool,bytes32)",
+      "sel": "2e1ffab8",
       "mut": "nonpayable"
      },
      {
@@ -12470,8 +12495,8 @@
       "mut": "view"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable"
      },
      {
@@ -12600,6 +12625,11 @@
       "sig": "initiateRecovery((uint8,bytes32,bytes32,bytes32,bytes32))",
       "sel": "14c153d9",
       "mut": "nonpayable"
+     },
+     {
+      "sig": "isValidOwnDigest(bytes32,bytes)",
+      "sel": "05e79375",
+      "mut": "view"
      },
      {
       "sig": "isValidSignature(bytes32,bytes)",
@@ -13082,6 +13112,11 @@
       "mut": "view"
      },
      {
+      "sig": "chainUid()",
+      "sel": "860b26d9",
+      "mut": "view"
+     },
+     {
       "sig": "complianceOf(bytes32)",
       "sel": "996ee3f2",
       "mut": "view"
@@ -13112,18 +13147,18 @@
       "mut": "view"
      },
      {
-      "sig": "setCompliance(bytes32[],uint64[],uint64[])",
-      "sel": "7fa569a5",
+      "sig": "setCompliance(bytes32[],uint64[],uint64[],bytes32)",
+      "sel": "2f2e024a",
       "mut": "nonpayable"
      },
      {
-      "sig": "setKycProvider(bytes32,bool)",
-      "sel": "105b99c7",
+      "sig": "setKycProvider(bytes32,bool,bytes32)",
+      "sel": "55939605",
       "mut": "nonpayable"
      },
      {
-      "sig": "transferAdmin(bytes32)",
-      "sel": "e923bc3d",
+      "sig": "transferAdmin(bytes32,bytes32)",
+      "sel": "c0e34c56",
       "mut": "nonpayable"
      }
     ]
@@ -14362,6 +14397,11 @@
       "mut": "pure"
      },
      {
+      "sig": "payeeFeeDigest(bytes32,MetaTxLib.UAMetaTransfer,uint256,address,uint256)",
+      "sel": "8e80a303",
+      "mut": "pure"
+     },
+     {
       "sig": "paymentCount(bytes32)",
       "sel": "5456387b",
       "mut": "view"
@@ -14395,11 +14435,6 @@
       "sig": "preTransferUA(MtxPipelineLib.Ctx,MetaTxLib.UAMetaTransfer,bytes32,uint256,IUARegistry.UASig)",
       "sel": "ef6fb056",
       "mut": "delegatecall"
-     },
-     {
-      "sig": "receiverFeeDigest(bytes32,MetaTxLib.UAMetaTransfer,uint256,address,uint256)",
-      "sel": "61164c6f",
-      "mut": "pure"
      },
      {
       "sig": "requireSignature(MtxPipelineLib.Ctx,address,bytes32,bytes)",
@@ -14651,6 +14686,68 @@
     ]
    }
   },
+  "rescue": {
+   "RescueVault": {
+    "artifact": "RescueVault.sol/RescueVault",
+    "entries": [
+     {
+      "sig": "ROTATE_ADMIN_TYPEHASH()",
+      "sel": "d4ae56f2",
+      "mut": "view"
+     },
+     {
+      "sig": "SET_RESCUER_TYPEHASH()",
+      "sel": "0f61c716",
+      "mut": "view"
+     },
+     {
+      "sig": "admin()",
+      "sel": "f851a440",
+      "mut": "view"
+     },
+     {
+      "sig": "eip712Domain()",
+      "sel": "84b0196e",
+      "mut": "view"
+     },
+     {
+      "sig": "rescuer()",
+      "sel": "38a63183",
+      "mut": "view"
+     },
+     {
+      "sig": "rotateAdmin(uint64,bytes32,bytes)",
+      "sel": "5a3d29e5",
+      "mut": "nonpayable"
+     },
+     {
+      "sig": "rotateAdminDigest(uint64,bytes32)",
+      "sel": "cd1aa886",
+      "mut": "view"
+     },
+     {
+      "sig": "seq()",
+      "sel": "6857ab40",
+      "mut": "view"
+     },
+     {
+      "sig": "setRescuer(uint64,address,bytes)",
+      "sel": "239e0417",
+      "mut": "nonpayable"
+     },
+     {
+      "sig": "setRescuerDigest(uint64,address)",
+      "sel": "79d33280",
+      "mut": "view"
+     },
+     {
+      "sig": "withdraw(address,uint256,address)",
+      "sel": "69328dec",
+      "mut": "nonpayable"
+     }
+    ]
+   }
+  },
   "pqchat": {
    "PqChat": {
     "artifact": "PqChat.sol/PqChat",
@@ -14839,6 +14936,11 @@
       "sig": "replies(bytes32,uint256,uint256)",
       "sel": "5ff564c7",
       "mut": "view"
+     },
+     {
+      "sig": "rescue(address)",
+      "sel": "839006f2",
+      "mut": "nonpayable"
      },
      {
       "sig": "scoreOf(bytes32)",

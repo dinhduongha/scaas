@@ -10,6 +10,8 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {StubUARegistry} from "../helpers/Mocks.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 
 /// Round 3s, spec 2026-11-10-token-lists.md §5.3, §6.2, §13 (3), (6): `mtxSetAllowed`, `mtxSetDenied`, `mtxEnableFeature` on
 /// the chain's `GovernanceRouter`, fee mode `NONE` at fee 0, sent by a stranger relayer; the binding matrix (B1-B3): each
@@ -84,10 +86,12 @@ contract ListRouterTest is ListFixture {
             SIG, ")"), e, target, as_, on, a);
     }
 
-    function _enableCd(MetaTxLib.UAEnvelope memory e, address target, uint8 bit, IUARegistry.UASig memory a)
+    /// `u` the target's chain word, the op's last field (CTR-GOV-28).
+    function _enableCd(MetaTxLib.UAEnvelope memory e, address target, uint8 bit, bytes32 u, IUARegistry.UASig memory a)
         internal pure returns (bytes memory)
     {
-        return abi.encodeWithSignature(string.concat("mtxEnableFeature(", ENV, ",address,uint8,", SIG, ")"), e, target, bit, a);
+        return abi.encodeWithSignature(string.concat("mtxEnableFeature(", ENV, ",address,uint8,bytes32,", SIG, ")"), e, target,
+            bit, u, a);
     }
 
     function _send(bytes memory cd) internal returns (bool ok) {
@@ -136,15 +140,23 @@ contract ListRouterTest is ListFixture {
         assertEq(_listMatrix(false), 6);
     }
 
-    /// B3: `UAEnableFeature`: `target`, `bit`.
+    /// B3: `UAEnableFeature`: `target`, `bit`, `chainUid` (CTR-GOV-28: a sibling's word signed reaches the token, which
+    /// refuses it by name).
     function test_binding_EnableFeature() public {
-        string memory ty = string.concat("UAEnableFeature(bytes32 from,address target,uint8 bit", TAIL);
+        string memory ty = string.concat("UAEnableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid", TAIL);
         MetaTxLib.UAEnvelope memory e = _env();
-        IUARegistry.UASig memory a = _auth(ty, e, t, abi.encode(uint8(DENY)));
-        assertFalse(_send(_enableCd(e, other, DENY, a)), "target");
-        assertFalse(_send(_enableCd(e, t, ALLOW, a)), "bit");
+        bytes32 u = EnvKit.codeUidOf(t);
+        IUARegistry.UASig memory a = _auth(ty, e, t, abi.encode(uint8(DENY), u));
+        assertFalse(_send(_enableCd(e, other, DENY, u, a)), "target");
+        assertFalse(_send(_enableCd(e, t, ALLOW, u, a)), "bit");
+        assertFalse(_send(_enableCd(e, t, DENY, ~u, a)), "chainUid");
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        IUARegistry.UASig memory as_ = _auth(ty, e, t, abi.encode(uint8(DENY), sib));
+        vm.prank(STRANGER);
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, u, sib));
+        router.mtxEnableFeature(e, t, DENY, sib, as_);
         assertEq(router.mtxNonce(s, 0), e.nonce, "no nonce spent");
-        assertTrue(_send(_enableCd(e, t, DENY, a)), "the control");
+        assertTrue(_send(_enableCd(e, t, DENY, u, a)), "the control");
         assertEq(NormalToken(t).features() & (1 << DENY), 1 << DENY);
         assertEq(NormalToken(other).features() & (1 << DENY), 0);
     }
@@ -160,8 +172,9 @@ contract ListRouterTest is ListFixture {
         vm.prank(alice);
         IERC20(t).transfer(bob, 1); // the list off: the row is dormant
         e = _env();
-        string memory ty = string.concat("UAEnableFeature(bytes32 from,address target,uint8 bit", TAIL);
-        assertTrue(_send(_enableCd(e, t, DENY, _auth(ty, e, t, abi.encode(uint8(DENY))))));
+        string memory ty = string.concat("UAEnableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid", TAIL);
+        bytes32 u = EnvKit.codeUidOf(t);
+        assertTrue(_send(_enableCd(e, t, DENY, u, _auth(ty, e, t, abi.encode(uint8(DENY), u)))));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(DENIED_ERR, nid(bob)));
         IERC20(t).transfer(bob, 1);

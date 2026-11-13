@@ -2115,11 +2115,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             "setTaxRate(uint32)", "setTaxRecipient(bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
             PAY_WITH_TAX,
             // round 3s (CTR-GOV-24): the lists (bits 8, 9; on 10-13 setAllowed's row holds, no holder can exist) and the enable
-            "setAllowed(bytes32[],bool)", "setDenied(bytes32[],bool)", "enableFeature(uint8)"];
+            "setAllowed(bytes32[],bool)", "setDenied(bytes32[],bool)", "enableFeature(uint8,bytes32)"];
         assert_eq!(added.keys().map(|s| s.as_str()).collect::<std::collections::BTreeSet<_>>(), controls.into_iter().collect(), "{kind}");
         for (s, c) in added.iter().filter(|(s, _)| s.as_str() != PAY_WITH_TAX) {
             assert!(c.starts_with("BIT(") || (c.as_str() == "OWN_BALANCE" && s.starts_with("payWithTax("))
-                || (c.as_str() == "ADMIN" && s.as_str() == "enableFeature(uint8)"), "{kind}: {s} is {c}");
+                || (c.as_str() == "ADMIN" && s.as_str() == "enableFeature(uint8,bytes32)"), "{kind}: {s} is {c}");
             for nk in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
                 assert!(row(sel(s), nk).is_none(), "{kind}: the control {s} is a {nk} row");
             }
@@ -2213,7 +2213,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let class = |s: &str| entries.iter().find(|e| e["sig"] == s).map(|e| e["class"].as_str().unwrap().to_string());
         let view = format!("verifyTransferAmount(bytes32,uint256,uint256,uint8,uint64,bytes,{VERDICT_ABI})");
         assert_eq!(sel(&view), [0xe9, 0x74, 0x8a, 0x12], "the forge artifact's selector");
-        for s in ["pqzSetVerifier(bytes32)", "pqzCancelVerifier()", "pqzRevokeVerifier()", view.as_str()] {
+        for s in ["pqzSetVerifier(bytes32,bytes32)", "pqzCancelVerifier(bytes32)", "pqzRevokeVerifier(bytes32)", view.as_str()] {
             if !s.starts_with("verifyTransferAmount") {
                 let c = class(s).unwrap_or_else(|| panic!("{contract}: {s} not in the audit"));
                 assert_ne!(c, "SIGNED", "{contract}: {s} is the owner's own call, relayed through the router only");
@@ -2241,6 +2241,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         pqz_verdict_rows_equal_contract("WrappedPqzRegulatedToken", 12);
     }
 
+    /// CTR-GOV-28: the three verifier ops and the fee op sign the token's `chainUid` last (selectors old -> new: 0x065bf7fd ->
+    /// 0x690eea59, 0x681afa10 -> 0xd5c14210, 0x42242ae3 -> 0xe816ad71, 0xf0d8cbbf -> 0x280839e6).
     /// Group 3f (spec §4.2): the router's three verifier ops (and 3h T61's `UASetProofStore`) are rows of `gov_router` only, over the `UA*` structs the brief names,
     /// their selectors the forge artifact's and the router's `SIGNED` entries in `selector_audit.json`, their vectors in
     /// `typed_ops.json` (struct hash, digest and calldata pinned by `typed_ops_kat_every_entry`); fee mode `NONE` like every router
@@ -2249,18 +2251,18 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     fn router_pqz_verifier_rows() {
         let env = format!("{ENV_UA},");
         let want = [
-            ("UAPqzSetVerifier", "mtxPqzSetVerifier", "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
-                format!("mtxPqzSetVerifier{env}address,bytes32,{UASIG_ABI})"), [0x06, 0x5b, 0xf7, 0xfd]),
-            ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", "UAPqzCancelVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
-                format!("mtxPqzCancelVerifier{env}address,{UASIG_ABI})"), [0x68, 0x1a, 0xfa, 0x10]),
-            ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
-                format!("mtxPqzRevokeVerifier{env}address,{UASIG_ABI})"), [0x42, 0x24, 0x2a, 0xe3]),
+            ("UAPqzSetVerifier", "mtxPqzSetVerifier", "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxPqzSetVerifier{env}address,bytes32,bytes32,{UASIG_ABI})"), [0x69, 0x0e, 0xea, 0x59]),
+            ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", "UAPqzCancelVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxPqzCancelVerifier{env}address,bytes32,{UASIG_ABI})"), [0xd5, 0xc1, 0x42, 0x10]),
+            ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", "UAPqzRevokeVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxPqzRevokeVerifier{env}address,bytes32,{UASIG_ABI})"), [0xe8, 0x16, 0xad, 0x71]),
             // group 3h T61 (PQZ proof path spec §5): bit 24's op, the same router row shape
             ("UASetProofStore", "mtxSetProofStore", "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
                 format!("mtxSetProofStore{env}address,uint8,{UASIG_ABI})"), [0xa6, 0x3e, 0x58, 0x86]),
             // round 3t (CTR-PQZ-36): the admin's verifier fee, the same router row shape
-            ("UASetVerifierFee", "mtxSetVerifierFee", "UASetVerifierFee(bytes32 from,address target,uint64 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
-                format!("mtxSetVerifierFee{env}address,uint64,{UASIG_ABI})"), [0xf0, 0xd8, 0xcb, 0xbf]),
+            ("UASetVerifierFee", "mtxSetVerifierFee", "UASetVerifierFee(bytes32 from,address target,uint64 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxSetVerifierFee{env}address,uint64,bytes32,{UASIG_ABI})"), [0x28, 0x08, 0x39, 0xe6]),
         ];
         let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
         let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();

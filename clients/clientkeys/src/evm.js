@@ -401,15 +401,16 @@ const OPS = {
     call: (m, sig) => [['bytes32', m.ua], ['uint8', m.mode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
   // GovernanceRouter, one per chain (governance spec §3.2, CTR-GOV-15 Change; R14): the closed table, each op `mtx<Op>` over
   // `UA<Op>`, `target` (the governed contract) the first op word, identities `bytes32`, fee mode NONE; no generic path.
-  UAGrantRole: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER },
-  UARevokeRole: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER },
-  UASetGrant: { fields: 'address target,uint8 bit,bytes32 holder,GrantTerms terms', on: ROUTER },
-  UACancelGrant: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER },
-  UADisableFeature: { fields: 'address target,uint8 bit', on: ROUTER },
+  // CTR-GOV-28 (owner 2026-11-13): every admin op names the target's chain word last (`chainUid`), signed and forwarded
+  UAGrantRole: { fields: 'address target,uint8 bit,bytes32 account,bytes32 chainUid', on: ROUTER },
+  UARevokeRole: { fields: 'address target,uint8 bit,bytes32 account,bytes32 chainUid', on: ROUTER },
+  UASetGrant: { fields: 'address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid', on: ROUTER },
+  UACancelGrant: { fields: 'address target,uint8 bit,bytes32 account,bytes32 chainUid', on: ROUTER },
+  UADisableFeature: { fields: 'address target,uint8 bit,bytes32 chainUid', on: ROUTER },
   UATransferAdmin: { fields: 'address target,bytes32 newAdmin,bytes32 chainUid', on: ROUTER },
   UAAcceptAdmin: { fields: 'address target', on: ROUTER },
   UARenounceAdmin: { fields: 'address target,bytes32 chainUid', on: ROUTER },
-  UARenounceRole: { fields: 'address target,uint8 bit', on: ROUTER },
+  UARenounceRole: { fields: 'address target,uint8 bit,bytes32 chainUid', on: ROUTER }, // the holder's own (owner 2026-11-13)
   UAMint: { fields: 'address target,address to,uint256 amount', on: ROUTER },
   UAMintToUA: { fields: 'address target,bytes32 to,uint256 amount', on: ROUTER },
   UADisableWrap: { fields: 'address target,address leg,bytes32 reason', on: ROUTER },
@@ -445,12 +446,12 @@ const OPS = {
   UASetTaxRate: { fields: 'address target,uint32 ratePpm', on: ROUTER },
   UASetTaxRecipient: { fields: 'address target,bytes32 taxRecipient', on: ROUTER },
   // the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the owner's, no bit
-  UAPqzSetVerifier: { fields: 'address target,bytes32 next', on: ROUTER },
-  UAPqzCancelVerifier: { fields: 'address target', on: ROUTER },
-  UAPqzRevokeVerifier: { fields: 'address target', on: ROUTER },
+  UAPqzSetVerifier: { fields: 'address target,bytes32 next,bytes32 chainUid', on: ROUTER },
+  UAPqzCancelVerifier: { fields: 'address target,bytes32 chainUid', on: ROUTER },
+  UAPqzRevokeVerifier: { fields: 'address target,bytes32 chainUid', on: ROUTER },
   // round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit (a decrease at once, an increase after
   // the notice)
-  UASetVerifierFee: { fields: 'address target,uint64 next', on: ROUTER },
+  UASetVerifierFee: { fields: 'address target,uint64 next,bytes32 chainUid', on: ROUTER },
   // bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): `NONE` or `LOG` from the next debit
   UASetProofStore: { fields: 'address target,uint8 next', on: ROUTER },
   // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds (two calls when it relaxes the wrap side
@@ -461,7 +462,7 @@ const OPS = {
   // 9's; 1-256 accounts, signed as the keccak256 of their words) and the admin's enableFeature of 8, 9 or 28
   UASetAllowed: { fields: 'address target,bytes32[] accounts,bool on', on: ROUTER },
   UASetDenied: { fields: 'address target,bytes32[] accounts,bool on', on: ROUTER },
-  UAEnableFeature: { fields: 'address target,uint8 bit', on: ROUTER },
+  UAEnableFeature: { fields: 'address target,uint8 bit,bytes32 chainUid', on: ROUTER },
   // round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its
   // envs, the release approvals of §5.6, the revoke, the deprecations, the kind switches, the directory of §13.3) and of a
   // `ComplianceRegistry` (its KYC providers; the rows by the admin or a provider); `target` the factory or the registry, the
@@ -484,8 +485,8 @@ const OPS = {
     on: ROUTER },
   UASetTokenKindEnabled: { fields: 'address target,uint8 kind,bool on,bytes32 chainUid', on: ROUTER },
   UASetClassKindEnabled: { fields: 'address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid', on: ROUTER },
-  UASetKycProvider: { fields: 'address target,bytes32 provider,bool enabled', on: ROUTER },
-  UASetCompliance: { fields: 'address target,bytes32[] accounts,uint64[] flags,uint64[] until', on: ROUTER },
+  UASetKycProvider: { fields: 'address target,bytes32 provider,bool enabled,bytes32 chainUid', on: ROUTER },
+  UASetCompliance: { fields: 'address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid', on: ROUTER },
   // CTR-GOV-27: the entries one named struct (`ChainEntries`, nested EIP-712), then the factory's chain word
   UASetChainEntries: { fields: 'address target,ChainEntries entries,bytes32 chainUid', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.

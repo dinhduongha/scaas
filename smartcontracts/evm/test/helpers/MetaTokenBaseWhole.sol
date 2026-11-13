@@ -37,8 +37,8 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _bitLabelBody(bit);
     }
 
-    function cancelGrant(uint8 bit, bytes32 account) external governed {
-        _cancelGrantBody(bit, account);
+    function cancelGrant(uint8 bit, bytes32 account, bytes32 chainUid_) external governed {
+        _cancelGrantBody(bit, account, chainUid_);
     }
 
     function cancelNonce(uint256 batch) external nonReentrant {
@@ -57,8 +57,8 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _creatorBody();
     }
 
-    function disableFeature(uint8 bit) external governed {
-        _disableFeatureBody(bit);
+    function disableFeature(uint8 bit, bytes32 chainUid_) external governed {
+        _disableFeatureBody(bit, chainUid_);
     }
 
     function eip712Domain() external view returns (bytes1 _p0, string memory _p1, string memory _p2, uint256 _p3, address _p4, bytes32 _p5, uint256[] memory _p6) {
@@ -81,8 +81,8 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _grantOfBody(bit, holder);
     }
 
-    function grantRole(uint8 bit, bytes32 account) external governed {
-        _grantRoleBody(bit, account);
+    function grantRole(uint8 bit, bytes32 account, bytes32 chainUid_) external governed {
+        _grantRoleBody(bit, account, chainUid_);
     }
 
     function hasRole(uint8 bit, bytes32 account) external view returns (bool _p0) {
@@ -225,8 +225,8 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         _renounceAdminBody(chainUid_);
     }
 
-    function renounceRole(uint8 bit) external governed {
-        _renounceRoleBody(bit);
+    function renounceRole(uint8 bit, bytes32 chainUid_) external governed {
+        _renounceRoleBody(bit, chainUid_);
     }
 
     function rescue(address asset) external nonReentrant {
@@ -241,12 +241,12 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         _restorePulledBody(o, amount);
     }
 
-    function revokeRole(uint8 bit, bytes32 account) external governed {
-        _revokeRoleBody(bit, account);
+    function revokeRole(uint8 bit, bytes32 account, bytes32 chainUid_) external governed {
+        _revokeRoleBody(bit, account, chainUid_);
     }
 
-    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms) external governed {
-        _setGrantBody(bit, holder, terms);
+    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_) external governed {
+        _setGrantBody(bit, holder, terms, chainUid_);
     }
 
     function supportedModes() external pure returns (uint32 _p0) {

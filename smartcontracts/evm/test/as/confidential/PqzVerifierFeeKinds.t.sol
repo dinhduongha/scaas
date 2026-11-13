@@ -17,6 +17,7 @@ import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {UAKinds} from "../../../src/ua/UAKinds.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Round 3t (CTR-PQZ-36, verifier fee spec §6.4, §15 (7); Fable P2-1, owner 2026-11-11 "Giữ cách hiện tại"): on the regulated
 /// PQZ kinds 12 (op 1) and 13 (the unshield-unwrap) the verifier fee is a fee leg (CTR-AS-25): `_regName(verifierPayee())`
@@ -83,7 +84,7 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
 
     function _setFee(uint64 next) internal {
         vm.prank(ownerA);
-        IPqzToken(address(tok)).setVerifierFee(next);
+        IPqzToken(address(tok)).setVerifierFee(next, EnvKit.codeUidOf(address(IPqzToken(address(tok)))));
     }
 
     /// A frozen verifier halts the debit while `vf ≠ 0`; the admin's fee 0 is the relief (at once), then the fee restored
@@ -139,11 +140,11 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
     /// list can leave the verifier unlisted on 12 or 13.
     function test_deniedListVerifier_haltsDebits_shieldsLand_feeZeroRestores() public {
         vm.prank(ownerA);
-        (bool okA, bytes memory rA) = address(tok).call(abi.encodeCall(IRegulatedToken.enableFeature, (GovernanceBits.ALLOWLIST)));
+        (bool okA, bytes memory rA) = address(tok).call(abi.encodeCall(IRegulatedToken.enableFeature, (GovernanceBits.ALLOWLIST, EnvKit.codeUidOf(address(tok)))));
         assertFalse(okA);
         assertEq(rA, abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.ALLOWLIST), "no allow list here");
         vm.prank(ownerA);
-        _r().enableFeature(GovernanceBits.DENYLIST);
+        _r().enableFeature(GovernanceBits.DENYLIST, EnvKit.codeUidOf(address(_r())));
         bytes32[] memory v = new bytes32[](1);
         v[0] = _v();
         vm.prank(issuer);

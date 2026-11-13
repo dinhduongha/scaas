@@ -14,6 +14,7 @@ import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// T3: tầng 3 `WrappedToken` — any-of, reserve theo chân, guardian chỉ tắt wrap (TW2 §8, R136, R147).
 contract MultiTest is V2Fixture {
@@ -186,14 +187,14 @@ contract MultiTest is V2Fixture {
         vm.expectEmit(address(t));
         emit IGovernance.RoleRevoked(4, nid(guardian), nid(guardian));
         vm.prank(guardian);
-        t.renounceRole(4);
+        t.renounceRole(4, EnvKit.codeUidOf(address(t)));
         assertFalse(t.hasRole(4, nid(guardian)));
         vm.prank(guardian);
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
         t.disableWrap(address(usdc), "x");
         vm.prank(guardian);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(4), guardian));
-        t.renounceRole(4);
+        t.renounceRole(4, EnvKit.codeUidOf(address(t)));
     }
 
     // ------------------------------------------------------------------ rates (R147)

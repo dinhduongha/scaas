@@ -48,13 +48,14 @@ fn typed_ops_set_verifier_fee_row() {
         fee_recipient: b20(&m["feeRecipient"]),
     };
     assert_eq!(e.mode, 0, "relayer and fee recipient unbound");
-    let (target, next) = (b20(&m["target"]), num(&m["next"]) as u64);
-    let sh = set_verifier_fee_struct_hash(&e, &target, next);
+    let (target, next, cu) = (b20(&m["target"]), num(&m["next"]) as u64, b32(&m["chainUid"]));
+    let sh = set_verifier_fee_struct_hash(&e, &target, next, &cu);
     assert_eq!(sh, b32(&r["structHash"]));
     assert_eq!(digest(&ds, &sh), b32(&d["digest"]));
     let junk = Envelope { relayer: [0xba; 20], fee_recipient: [0xba; 20], ..e };
-    assert_eq!(digest(&ds, &set_verifier_fee_struct_hash(&junk, &target, next)), b32(&d["digest"]), "unbound: hashed as 0");
-    assert_ne!(set_verifier_fee_struct_hash(&e, &target, next + 1), sh, "next bound");
+    assert_eq!(digest(&ds, &set_verifier_fee_struct_hash(&junk, &target, next, &cu)), b32(&d["digest"]), "unbound: hashed as 0");
+    assert_ne!(set_verifier_fee_struct_hash(&e, &target, next + 1, &cu), sh, "next bound");
+    assert_ne!(set_verifier_fee_struct_hash(&e, &target, next, &[0; 32]), sh, "the chain word bound (CTR-GOV-28)");
 }
 
 #[test]

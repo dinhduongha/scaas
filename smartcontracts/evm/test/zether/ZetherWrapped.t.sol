@@ -31,6 +31,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A leg that calls back into the token when the token pays it out or pulls it (an ERC-777-style hook).
 contract HookLeg is MockERC20 {
@@ -386,7 +387,7 @@ contract ZetherWrappedTest is ZetherFixture {
         w.proposeRate(address(usd), 11, 10);
         (address pu,,,) = w.pendingRate();
         assertEq(pu, address(usd));
-        w.disableFeature(GovernanceBits.RATE_ADJUSTABLE);
+        w.disableFeature(GovernanceBits.RATE_ADJUSTABLE, EnvKit.codeUidOf(address(w)));
         (pu,,,) = w.pendingRate();
         assertEq(pu, address(0), "the pending change is gone");
         assertFalse(w.rateAdjustable());
@@ -528,7 +529,7 @@ contract ZetherWrappedTest is ZetherFixture {
         hook.mint(address(this), SCALE);
         hook.approve(address(z), SCALE);
         bytes[2] memory calls =
-            [abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE)), abi.encodeCall(z.executeRate, ())];
+            [abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE, EnvKit.codeUidOf(address(z)))), abi.encodeCall(z.executeRate, ())];
         for (uint256 i; i < 2; ++i) {
             hook.arm(address(z), calls[i]);
             vm.expectRevert(IMetaTx.Reentrancy.selector);

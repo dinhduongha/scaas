@@ -238,8 +238,8 @@
     "group": "A"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -247,11 +247,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -378,18 +380,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -520,8 +524,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -529,11 +533,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -1609,18 +1615,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -1695,8 +1703,8 @@
     "group": "T"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -1704,11 +1712,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -1719,8 +1729,8 @@
     "group": "A"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -1729,12 +1739,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -2276,8 +2288,8 @@
     "group": "A"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -2285,11 +2297,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -2452,18 +2466,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -2636,8 +2652,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -2645,11 +2661,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -4119,18 +4137,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -4205,8 +4225,8 @@
     "group": "T"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -4214,11 +4234,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -4229,8 +4251,8 @@
     "group": "A"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -4239,12 +4261,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -5157,8 +5181,8 @@
     "group": "Z"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -5166,11 +5190,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -5333,18 +5359,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -5533,8 +5561,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -5542,11 +5570,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -7151,18 +7181,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -7237,8 +7269,8 @@
     "group": "T"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -7246,11 +7278,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -7283,8 +7317,8 @@
     "group": "Z"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -7293,12 +7327,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -8014,8 +8050,8 @@
     "group": "Z"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -8023,11 +8059,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -8226,18 +8264,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "WrappedZetherToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -8468,8 +8508,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -8477,11 +8517,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -10589,18 +10631,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -10675,8 +10719,8 @@
     "group": "T"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -10684,11 +10728,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -10721,8 +10767,8 @@
     "group": "Z"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -10731,12 +10777,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -11731,8 +11779,8 @@
     "group": "Q"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -11740,11 +11788,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -11889,18 +11939,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -12099,8 +12151,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -12108,11 +12160,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -13683,15 +13737,19 @@
     "group": "Q"
    },
    {
-    "sel": "5204e2d9",
-    "sig": "pqzCancelVerifier()",
+    "sel": "baa93a08",
+    "sig": "pqzCancelVerifier(bytes32)",
     "name": "pqzCancelVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IPqzToken"
@@ -13799,15 +13857,19 @@
     "group": "Q"
    },
    {
-    "sel": "72e0baaa",
-    "sig": "pqzRevokeVerifier()",
+    "sel": "13fc50be",
+    "sig": "pqzRevokeVerifier(bytes32)",
     "name": "pqzRevokeVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IPqzToken"
@@ -13817,18 +13879,20 @@
     "group": "Q"
    },
    {
-    "sel": "45fbee36",
-    "sig": "pqzSetVerifier(bytes32)",
+    "sel": "4874721f",
+    "sig": "pqzSetVerifier(bytes32,bytes32)",
     "name": "pqzSetVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 next"
+     "bytes32 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -13969,18 +14033,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -14055,8 +14121,8 @@
     "group": "T"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -14064,11 +14130,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -14079,8 +14147,8 @@
     "group": "A"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -14089,12 +14157,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -14127,18 +14197,20 @@
     "group": "Q"
    },
    {
-    "sel": "e790fb8f",
-    "sig": "setVerifierFee(uint64)",
+    "sel": "ceacb175",
+    "sig": "setVerifierFee(uint64,bytes32)",
     "name": "setVerifierFee",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint64 next"
+     "uint64 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -14942,8 +15014,8 @@
     "group": "Q"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -14951,11 +15023,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -15136,18 +15210,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "WrappedPqzToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -15388,8 +15464,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -15397,11 +15473,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -17377,15 +17455,19 @@
     "group": "Q"
    },
    {
-    "sel": "5204e2d9",
-    "sig": "pqzCancelVerifier()",
+    "sel": "baa93a08",
+    "sig": "pqzCancelVerifier(bytes32)",
     "name": "pqzCancelVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IPqzToken"
@@ -17493,15 +17575,19 @@
     "group": "Q"
    },
    {
-    "sel": "72e0baaa",
-    "sig": "pqzRevokeVerifier()",
+    "sel": "13fc50be",
+    "sig": "pqzRevokeVerifier(bytes32)",
     "name": "pqzRevokeVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IPqzToken"
@@ -17511,18 +17597,20 @@
     "group": "Q"
    },
    {
-    "sel": "45fbee36",
-    "sig": "pqzSetVerifier(bytes32)",
+    "sel": "4874721f",
+    "sig": "pqzSetVerifier(bytes32,bytes32)",
     "name": "pqzSetVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 next"
+     "bytes32 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -17773,18 +17861,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -17859,8 +17949,8 @@
     "group": "T"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -17868,11 +17958,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -17883,8 +17975,8 @@
     "group": "A"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -17893,12 +17985,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -17931,18 +18025,20 @@
     "group": "Q"
    },
    {
-    "sel": "e790fb8f",
-    "sig": "setVerifierFee(uint64)",
+    "sel": "ceacb175",
+    "sig": "setVerifierFee(uint64,bytes32)",
     "name": "setVerifierFee",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint64 next"
+     "uint64 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -19064,8 +19160,8 @@
     "group": "W"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -19073,11 +19169,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -19204,18 +19302,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "NormalRegulatedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -19244,18 +19344,20 @@
     "group": "A"
    },
    {
-    "sel": "68c0006d",
-    "sig": "enableFeature(uint8)",
+    "sel": "af726233",
+    "sig": "enableFeature(uint8,bytes32)",
     "name": "enableFeature",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -19440,8 +19542,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -19449,11 +19551,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -20759,18 +20863,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -20869,8 +20975,8 @@
     "group": "W"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -20878,11 +20984,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -20941,8 +21049,8 @@
     "group": "W"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -20951,12 +21059,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21643,8 +21753,8 @@
     "group": "W"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -21652,11 +21762,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21819,18 +21931,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "WrappedRegulatedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21883,18 +21997,20 @@
     "group": "A"
    },
    {
-    "sel": "68c0006d",
-    "sig": "enableFeature(uint8)",
+    "sel": "af726233",
+    "sig": "enableFeature(uint8,bytes32)",
     "name": "enableFeature",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -22097,8 +22213,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -22106,11 +22222,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -23810,18 +23928,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -23920,8 +24040,8 @@
     "group": "W"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -23929,11 +24049,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -23992,8 +24114,8 @@
     "group": "W"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -24002,12 +24124,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -25065,8 +25189,8 @@
     "group": "W"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -25074,11 +25198,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -25241,18 +25367,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "NormalZetherRegulatedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -25317,18 +25445,20 @@
     "group": "A"
    },
    {
-    "sel": "68c0006d",
-    "sig": "enableFeature(uint8)",
+    "sel": "af726233",
+    "sig": "enableFeature(uint8,bytes32)",
     "name": "enableFeature",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -25535,8 +25665,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -25544,11 +25674,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27383,18 +27515,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27493,8 +27627,8 @@
     "group": "W"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -27502,11 +27636,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27587,8 +27723,8 @@
     "group": "W"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -27597,12 +27733,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -28463,8 +28601,8 @@
     "group": "W"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -28472,11 +28610,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -28675,18 +28815,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "WrappedZetherRegulatedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -28775,18 +28917,20 @@
     "group": "A"
    },
    {
-    "sel": "68c0006d",
-    "sig": "enableFeature(uint8)",
+    "sel": "af726233",
+    "sig": "enableFeature(uint8,bytes32)",
     "name": "enableFeature",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -29011,8 +29155,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -29020,11 +29164,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31362,18 +31508,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31472,8 +31620,8 @@
     "group": "W"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -31481,11 +31629,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31566,8 +31716,8 @@
     "group": "W"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -31576,12 +31726,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -32721,8 +32873,8 @@
     "group": "W"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -32730,11 +32882,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -32879,18 +33033,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "NormalPqzRegulatedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -32965,18 +33121,20 @@
     "group": "A"
    },
    {
-    "sel": "68c0006d",
-    "sig": "enableFeature(uint8)",
+    "sel": "af726233",
+    "sig": "enableFeature(uint8,bytes32)",
     "name": "enableFeature",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -33183,8 +33341,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -33192,11 +33350,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -34947,15 +35107,19 @@
     "group": "Q"
    },
    {
-    "sel": "5204e2d9",
-    "sig": "pqzCancelVerifier()",
+    "sel": "baa93a08",
+    "sig": "pqzCancelVerifier(bytes32)",
     "name": "pqzCancelVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IPqzToken"
@@ -35063,15 +35227,19 @@
     "group": "Q"
    },
    {
-    "sel": "72e0baaa",
-    "sig": "pqzRevokeVerifier()",
+    "sel": "13fc50be",
+    "sig": "pqzRevokeVerifier(bytes32)",
     "name": "pqzRevokeVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IPqzToken"
@@ -35081,18 +35249,20 @@
     "group": "Q"
    },
    {
-    "sel": "45fbee36",
-    "sig": "pqzSetVerifier(bytes32)",
+    "sel": "4874721f",
+    "sig": "pqzSetVerifier(bytes32,bytes32)",
     "name": "pqzSetVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 next"
+     "bytes32 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35283,18 +35453,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35393,8 +35565,8 @@
     "group": "W"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -35402,11 +35574,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35465,8 +35639,8 @@
     "group": "W"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -35475,12 +35649,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35557,18 +35733,20 @@
     "group": "P"
    },
    {
-    "sel": "e790fb8f",
-    "sig": "setVerifierFee(uint64)",
+    "sel": "ceacb175",
+    "sig": "setVerifierFee(uint64,bytes32)",
     "name": "setVerifierFee",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint64 next"
+     "uint64 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -36473,8 +36651,8 @@
     "group": "W"
    },
    {
-    "sel": "b73aa8a4",
-    "sig": "cancelGrant(uint8,bytes32)",
+    "sel": "f2ecfd14",
+    "sig": "cancelGrant(uint8,bytes32,bytes32)",
     "name": "cancelGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -36482,11 +36660,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -36667,18 +36847,20 @@
     "group": "K"
    },
    {
-    "sel": "45e5ac68",
-    "sig": "disableFeature(uint8)",
+    "sel": "07022c47",
+    "sig": "disableFeature(uint8,bytes32)",
     "name": "disableFeature",
     "decl": "WrappedPqzRegulatedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -36777,18 +36959,20 @@
     "group": "A"
    },
    {
-    "sel": "68c0006d",
-    "sig": "enableFeature(uint8)",
+    "sel": "af726233",
+    "sig": "enableFeature(uint8,bytes32)",
     "name": "enableFeature",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -37013,8 +37197,8 @@
     "group": "A"
    },
    {
-    "sel": "ac0e63c3",
-    "sig": "grantRole(uint8,bytes32)",
+    "sel": "8f1ddd97",
+    "sig": "grantRole(uint8,bytes32,bytes32)",
     "name": "grantRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -37022,11 +37206,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39182,15 +39368,19 @@
     "group": "Q"
    },
    {
-    "sel": "5204e2d9",
-    "sig": "pqzCancelVerifier()",
+    "sel": "baa93a08",
+    "sig": "pqzCancelVerifier(bytes32)",
     "name": "pqzCancelVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IPqzToken"
@@ -39298,15 +39488,19 @@
     "group": "Q"
    },
    {
-    "sel": "72e0baaa",
-    "sig": "pqzRevokeVerifier()",
+    "sel": "13fc50be",
+    "sig": "pqzRevokeVerifier(bytes32)",
     "name": "pqzRevokeVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IPqzToken"
@@ -39316,18 +39510,20 @@
     "group": "Q"
    },
    {
-    "sel": "45fbee36",
-    "sig": "pqzSetVerifier(bytes32)",
+    "sel": "4874721f",
+    "sig": "pqzSetVerifier(bytes32,bytes32)",
     "name": "pqzSetVerifier",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 next"
+     "bytes32 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39628,18 +39824,20 @@
     "group": "A"
    },
    {
-    "sel": "057c9cb8",
-    "sig": "renounceRole(uint8)",
+    "sel": "c1c5495f",
+    "sig": "renounceRole(uint8,bytes32)",
     "name": "renounceRole",
     "decl": "GovernanceBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "governed",
     "params": [
-     "uint8 bit"
+     "uint8 bit",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "bit"
+     "bit",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39738,8 +39936,8 @@
     "group": "W"
    },
    {
-    "sel": "d2dfd8d9",
-    "sig": "revokeRole(uint8,bytes32)",
+    "sel": "25f86fe8",
+    "sig": "revokeRole(uint8,bytes32,bytes32)",
     "name": "revokeRole",
     "decl": "GovernanceBase",
     "kept": false,
@@ -39747,11 +39945,13 @@
     "guard": "governed",
     "params": [
      "uint8 bit",
-     "bytes32 account"
+     "bytes32 account",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
-     "account"
+     "account",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39810,8 +40010,8 @@
     "group": "W"
    },
    {
-    "sel": "e0a44abe",
-    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+    "sel": "789a7b4b",
+    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
     "decl": "GovernanceBase",
     "kept": false,
@@ -39820,12 +40020,14 @@
     "params": [
      "uint8 bit",
      "bytes32 holder",
-     "IGovernance.GrantTerms calldata terms"
+     "IGovernance.GrantTerms calldata terms",
+     "bytes32 chainUid_"
     ],
     "names": [
      "bit",
      "holder",
-     "terms"
+     "terms",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39902,18 +40104,20 @@
     "group": "P"
    },
    {
-    "sel": "e790fb8f",
-    "sig": "setVerifierFee(uint64)",
+    "sel": "ceacb175",
+    "sig": "setVerifierFee(uint64,bytes32)",
     "name": "setVerifierFee",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint64 next"
+     "uint64 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [

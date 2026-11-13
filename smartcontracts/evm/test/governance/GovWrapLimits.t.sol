@@ -26,7 +26,7 @@ contract GovWrapLimitsTest is WrapLimitsBase {
     string constant LEG = "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)";
     string constant SET = "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
     string constant MEMBER = "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
-    string constant GRANT = "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+    string constant GRANT = "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
 
     GovernanceRouter internal router;
     WrappedToken internal w;
@@ -120,7 +120,7 @@ contract GovWrapLimitsTest is WrapLimitsBase {
     function test_setWrapMemberThroughTheRouter() public {
         _member(BOB_PK, _pad(bob), uaP, abi.encodeWithSelector(IGovernance.MissingRole.selector, WLIST, _pad(bob)));
         vm.prank(alice);
-        w.grantRole(WLIST, _pad(bob));
+        w.grantRole(WLIST, _pad(bob), EnvKit.codeUidOf(address(w)));
         _member(BOB_PK, _pad(bob), uaP, "");
         IWrappedToken.WrapQuota memory q = w.wrapQuotaOf(uaP, u);
         assertTrue(q.canWrap && q.canUnwrap);
@@ -129,9 +129,10 @@ contract GovWrapLimitsTest is WrapLimitsBase {
     /// Bit 27 needs no op of its own: the router's `mtxGrantRole` grants it.
     function test_redeemerThroughTheRouterGrantOp() public {
         MetaTxLib.UAEnvelope memory e = _env(_pad(alice));
-        bytes memory sig = _ecdsa(ALICE_PK, _digest(GRANT, e, abi.encode(uint8(RED), _pad(MERCHANT))));
+        bytes32 wu = EnvKit.codeUidOf(address(w)); // the token's chain word (CTR-GOV-28)
+        bytes memory sig = _ecdsa(ALICE_PK, _digest(GRANT, e, abi.encode(uint8(RED), _pad(MERCHANT), wu)));
         vm.prank(RELAYER);
-        router.mtxGrantRole(e, address(w), RED, _pad(MERCHANT), UACall.auth(_pad(alice), sig));
+        router.mtxGrantRole(e, address(w), RED, _pad(MERCHANT), wu, UACall.auth(_pad(alice), sig));
         assertTrue(w.hasRole(RED, _pad(MERCHANT)));
         assertTrue(w.wrapQuotaOf(_pad(MERCHANT), u).redeemer);
     }

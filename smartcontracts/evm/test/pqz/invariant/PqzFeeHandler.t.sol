@@ -13,6 +13,7 @@ import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../../helpers/Mocks.sol";
 import {WrappedToken} from "../../../src/metatx/WrappedToken.sol";
 import {UARegistry} from "../../../src/ua/UARegistry.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Round 3t (verifier fee spec §15 (8), controller A3): the handler of F1-F6 and I-V1..I-V3. Three tokens, `toks[0]` a
 /// `PRECOMPILE` kind 4, `toks[1]` an `OFFCHAIN` kind 4 and `toks[2]` an `OFFCHAIN` kind 5 (this handler their admin, the
@@ -277,21 +278,21 @@ contract PqzFeeHandler is PqzOffchainBase {
         t = 1 + t % 2;
         uint64 cur = _vf(t);
         if (cur == 0) return;
-        try IPqzToken(address(toks[t])).setVerifierFee(uint64(to % cur)) { ++feeMoves; } catch {}
+        try IPqzToken(address(toks[t])).setVerifierFee(uint64(to % cur), EnvKit.codeUidOf(address(IPqzToken(address(toks[t]))))) { ++feeMoves; } catch {}
     }
 
     function feePropose(uint256 t, uint256 to) external {
         t = 1 + t % 2;
         IPqzToken.PqzVerifyConfig memory c = toks[t].pqzVerifyConfig();
         if (c.verifierFee == c.verifierFeeMax || c.verifierFeePending != 0) return;
-        try IPqzToken(address(toks[t])).setVerifierFee(uint64(c.verifierFee + 1 + to % (c.verifierFeeMax - c.verifierFee))) {} catch {}
+        try IPqzToken(address(toks[t])).setVerifierFee(uint64(c.verifierFee + 1 + to % (c.verifierFeeMax - c.verifierFee)), EnvKit.codeUidOf(address(IPqzToken(address(toks[t]))))) {} catch {}
     }
 
     function feeConfirm(uint256 t) external {
         t = 1 + t % 2;
         IPqzToken.PqzVerifyConfig memory c = toks[t].pqzVerifyConfig();
         if (c.verifierFeePending == 0 || block.timestamp < c.verifierFeeEta) return;
-        try IPqzToken(address(toks[t])).setVerifierFee(c.verifierFeePending) { ++feeMoves; } catch {}
+        try IPqzToken(address(toks[t])).setVerifierFee(c.verifierFeePending, EnvKit.codeUidOf(address(IPqzToken(address(toks[t]))))) { ++feeMoves; } catch {}
     }
 
     function warp(uint256 s) external {

@@ -11,15 +11,15 @@ use crate::{address_word, keccak, keccak256, word};
 const ENVELOPE: &str =
     "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient";
 
-/// `UASetVerifierFee(…)`.
+/// `UASetVerifierFee(…)`; `chainUid` the token's chain word (CTR-GOV-28).
 pub fn set_verifier_fee_type() -> String {
-    format!("UASetVerifierFee(bytes32 from,address target,uint64 next,{ENVELOPE})")
+    format!("UASetVerifierFee(bytes32 from,address target,uint64 next,bytes32 chainUid,{ENVELOPE})")
 }
 
 /// `hashStruct(UASetVerifierFee)`: `next` the new fee; the envelope's `fee` the relay fee.
-pub fn set_verifier_fee_struct_hash(e: &Envelope, target: &[u8; 20], next: u64) -> [u8; 32] {
+pub fn set_verifier_fee_struct_hash(e: &Envelope, target: &[u8; 20], next: u64, chain_uid: &[u8; 32]) -> [u8; 32] {
     let canon = |bound: bool, a: &[u8; 20]| if bound { address_word(a) } else { [0; 32] };
-    let w = [keccak256(set_verifier_fee_type().as_bytes()), e.from, address_word(target), word(next), e.batch, e.nonce,
+    let w = [keccak256(set_verifier_fee_type().as_bytes()), e.from, address_word(target), word(next), *chain_uid, e.batch, e.nonce,
         e.valid_until, word(e.mode as u64), canon(e.mode & 1 != 0, &e.relayer), e.fee, canon(e.mode & 2 != 0, &e.fee_recipient)];
     keccak(&w.iter().map(|x| &x[..]).collect::<Vec<_>>())
 }
