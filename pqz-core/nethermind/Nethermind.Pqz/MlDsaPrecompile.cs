@@ -10,7 +10,8 @@ namespace Nethermind.Pqz;
 /// empty context; <c>L &lt; PK + SIG</c> ⇒ 32 zero bytes, never a revert; output exactly 32 bytes. Gas = the
 /// schedule's price (≥ EIP-8355's BASE) + 6·⌈max(0, L − PK − SIG)/32⌉. A <see cref="CryptographicException"/> from the
 /// import or the verify is 32 zero bytes too (review W-R, 2026-10-19: EIP-8355 never reverts; no input is known to
-/// raise one, the harness reached none); every other exception stays a failed call (Nethermind's handler).</summary>
+/// raise one, the harness reached none). Any other exception is a fault of this node, never a verdict (D4, review 3w
+/// T-16): <see cref="PqzPrecompile.NodeFault(string, ReadOnlySpan{byte})"/>, exit 120.</summary>
 public static class MlDsa
 {
     public const long Base44 = 6_500, Base65 = 9_000, Base87 = 13_500;
@@ -26,7 +27,7 @@ public static class MlDsa
 
     public static byte[] Verify(MLDsaAlgorithm alg, int pk, int sig, ReadOnlySpan<byte> input) => Verify(alg, pk, sig, input, VerifyPure);
 
-    /// <summary><paramref name="verify"/> is the seam the tests use to raise a <see cref="CryptographicException"/>.</summary>
+    /// <summary><paramref name="verify"/> is the seam the tests use to raise an exception.</summary>
     public static byte[] Verify(MLDsaAlgorithm alg, int pk, int sig, ReadOnlySpan<byte> input, VerifyFn verify)
     {
         byte[] output = new byte[32];
@@ -38,6 +39,11 @@ public static class MlDsa
         catch (CryptographicException e)
         {
             if (PqzPrecompile.Log.IsWarn) PqzPrecompile.Log.Warn($"MLDSA-CRYPTO-EXCEPTION {alg.Name} len={input.Length}: {e.Message}: …00");
+        }
+        catch (Exception e)
+        {
+            PqzPrecompile.NodeFault($"{alg.Name} {e.GetType().Name}: {e.Message}", input);
+            throw; // not reached (NodeFault exits); a failed call, never a verdict
         }
         return output;
     }

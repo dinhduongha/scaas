@@ -44,7 +44,23 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
     public Result<byte[]> Run(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
         Run(inputData.Span, PqzReleaseSpec.ScheduleOf(releaseSpec));
 
+    /// <summary>A managed exception on this path (outside the library's statuses: loading or binding the library, the
+    /// log line) is a fault of this node (D4, review 3w T-16): <see cref="NodeFault(string, ReadOnlySpan{byte})"/>, never
+    /// Nethermind's failed call. <see cref="DllNotFoundException"/> stays Nethermind's own exit 110.</summary>
     public static Result<byte[]> Run(ReadOnlySpan<byte> input, PqzSchedule? s)
+    {
+        try
+        {
+            return RunUnguarded(input, s);
+        }
+        catch (Exception e) when (e is not DllNotFoundException)
+        {
+            NodeFault($"{e.GetType().Name}: {e.Message}", input);
+            throw; // not reached (NodeFault exits)
+        }
+    }
+
+    private static Result<byte[]> RunUnguarded(ReadOnlySpan<byte> input, PqzSchedule? s)
     {
         if (s is null) return Result<byte[]>.Fail("PQZ: no active schedule");
         if (input.Length > PqzNative.MaxInput) return Result<byte[]>.Fail("PQZ: input over MAX_INPUT");
@@ -71,9 +87,13 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
     /// <summary>D4: a fault of this node is never a verdict; stop the process (the block is never sealed or imported,
     /// nothing is marked invalid; a restart re-processes). The same exit path Nethermind takes for a missing
     /// precompile library (110), here 120.</summary>
-    public static void NodeFault(int status, ReadOnlySpan<byte> input)
+    public static void NodeFault(int status, ReadOnlySpan<byte> input) => NodeFault($"status={status}", input);
+
+    /// <summary>D4 with <paramref name="cause"/> in the <c>PQZ-NODE-FAULT</c> line (a library status, or a managed
+    /// exception in a PQZ or ML-DSA call).</summary>
+    public static void NodeFault(string cause, ReadOnlySpan<byte> input)
     {
-        string msg = $"PQZ-NODE-FAULT status={status} keccak={Keccak.Compute(input)} len={input.Length}: a fault of this node, not of the input; exit 120";
+        string msg = $"PQZ-NODE-FAULT {cause} keccak={Keccak.Compute(input)} len={input.Length}: a fault of this node, not of the input; exit 120";
         Console.Error.WriteLine(msg);
         Console.Error.Flush();
         if (Log.IsError) Log.Error(msg);
