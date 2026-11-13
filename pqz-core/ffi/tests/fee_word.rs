@@ -69,6 +69,7 @@ fn debit(id: &Word, form: Form, value: u64, fee: u64) -> (u8, Vec<u8>, Vec<u8>) 
                 v_t: Some(&c.vs[0][..]),
                 v_f: &c.vs[1][..],
                 v_a: None,
+                u_f: None,
             };
             (Stmt::Debit(d).encode().expect("encode"), wit_debit(&kf, &c, &[digits(value), digits(rest)]))
         }
@@ -86,6 +87,7 @@ fn debit(id: &Word, form: Form, value: u64, fee: u64) -> (u8, Vec<u8>, Vec<u8>) 
                 v_t: None,
                 v_f: &c.vs[0][..],
                 v_a: None,
+                u_f: None,
             };
             (Stmt::Debit(d).encode().expect("encode"), wit_debit(&kf, &c, &[digits(rest)]))
         }

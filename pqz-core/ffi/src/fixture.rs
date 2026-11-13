@@ -144,6 +144,7 @@ pub fn cases(id: &Word) -> Option<Vec<Case>> {
             v_t: tr.then(|| &c.vs[0][..]),
             v_f: &c.vs[tr as usize][..],
             v_a: pk_a.map(|_| &c.vs[2][..]),
+            u_f: None,
         };
         Stmt::Debit(d).encode().ok()
     };

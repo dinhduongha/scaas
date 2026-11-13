@@ -276,7 +276,7 @@ const IDS: &[(&str, Word)] = if pqz_ffi::PQZH { &[("pqzl", PQZL_ID), ("pqzh", PQ
 /// another set's PQZL id, keccak256 of n2304-kmax4096's current label: the foreign id of the "other id" rows at a set
 /// without PQZH (review 8d1b M2: its zero PQZH word would repeat the "unknown proofSystemId (zero word)" rows byte for
 /// byte; R0 fix round m7: a live id, the retired ones have their own rows)
-const FOREIGN_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5";
+const FOREIGN_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v6";
 
 /// the "other id" of a negative row (its name and word): the other proof system's id, and at a set without PQZH (PQZL
 /// rows only) another set's PQZL id; both are unknown ids to this set's decoder or verifier
@@ -293,8 +293,9 @@ fn other_id(id: usize) -> (&'static str, Word) {
 }
 
 /// The retired ids of a system (decisions CTR-PQZ-09): PQZL v2 (forgeable, lazer#28; F6 / F9 path B) and v3, PQZH v1
-/// (both replaced by the per-set ids of plan 5h Task 8d), and this set's own PQZL v4 / PQZH v2 of plan 5h Task 8d
-/// (retired by the R0 review fix, 2026-10-25: its label with /v5 -> /v4, /v3 -> /v2); the negative rows "retired <name>
+/// (both replaced by the per-set ids of plan 5h Task 8d), this set's own PQZL v4 / PQZH v2 of plan 5h Task 8d (retired by
+/// the R0 review fix, 2026-10-25) and PQZL v5 / PQZH v3 (retired by the three-key round, spec K3-4b, 2026-11-13): its
+/// label with /v6 -> /v4, /v5 and /v4 -> /v2, /v3; the negative rows "retired <name>
 /// proofSystemId" put each on an honest input of that system, which every verifier must reject as an unknown id
 fn retired_ids(id: usize) -> Vec<(&'static str, Word)> {
     let k = |l: &str| keccak(&[l.as_bytes()]);
@@ -306,7 +307,8 @@ fn retired_ids(id: usize) -> Vec<(&'static str, Word)> {
         let mut v = vec![
             ("PQZL v2", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")),
             ("PQZL v3", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")),
-            ("PQZL v4", prev(st::PQZL_LABEL, "/v5", "/v4")),
+            ("PQZL v4", prev(st::PQZL_LABEL, "/v6", "/v4")),
+            ("PQZL v5", prev(st::PQZL_LABEL, "/v6", "/v5")),
         ];
         // a set without PQZH (n2816-kmax65536) has no PQZH rows: the retired PQZH v1 id goes on its PQZL inputs
         if !st::HAS_PQZH {
@@ -314,7 +316,8 @@ fn retired_ids(id: usize) -> Vec<(&'static str, Word)> {
         }
         v
     } else {
-        vec![("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")), ("PQZH v2", prev(st::PQZH_LABEL, "/v3", "/v2"))]
+        vec![("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")), ("PQZH v2", prev(st::PQZH_LABEL, "/v4", "/v2")),
+             ("PQZH v3", prev(st::PQZH_LABEL, "/v4", "/v3"))]
     }
 }
 
@@ -322,6 +325,8 @@ fn fname(f: Form) -> &'static str {
     match f {
         Form::Transfer => "TRANSFER",
         Form::Transfer0 => "TRANSFER0",
+        Form::TransferSplit => "TRANSFER-SPLIT",
+        Form::TransferSplit0 => "TRANSFER-SPLIT0",
         Form::Burn => "BURN",
         Form::Refresh => "REFRESH",
         Form::Register => "REGISTER",
@@ -622,6 +627,7 @@ fn scenario(fee: u64) -> Scenario {
             v_t: tr.then(|| &e.vs[0][..]),
             v_f: &e.vs[if tr { 1 } else { 0 }],
             v_a: aud.then(|| &e.vs[2][..]),
+            u_f: None,
         };
         let s = Stmt::Debit(d).encode().unwrap();
         st::parse(form.op(), &s).expect("debit statement canonical");
@@ -1391,6 +1397,7 @@ fn debit(kr: &Key, kt: &Key, ka: &Key, t: &[u8], bal: u64, plain: u64, from: u8,
         v_t: Some(&out.vs[0]),
         v_f: &out.vs[1],
         v_a: Some(&out.vs[2]),
+        u_f: None,
     };
     let stmt = Stmt::Debit(d).encode().unwrap();
     let mut wit = kr.wit();
@@ -1503,6 +1510,7 @@ fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
                 v_t: Some(&vs[0]),
                 v_f: &vs[1],
                 v_a: Some(&vs[2]),
+                u_f: None,
             };
             let stmt = Stmt::Debit(d).encode().unwrap();
             let mut kv = vec![("credit", J::from(k)), ("sendCounter", J::from(k)), ("stmt", hx(&stmt)), ("stmt_keccak", ids_keccak(&stmt)), ("rnd32", hx(&rnd))];
