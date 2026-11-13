@@ -164,7 +164,7 @@ for l in open(sys.argv[1]):
 sys.exit(1 if bad else 0)'
 sv() { (cd pqzl && sv/check_sv_fixes.sh); }
 # the guards of fix E (G-1) and of the round-2 memory-safety fixes, at the set (review 3w u1-1)
-ctg() { (cd pqzl && test/ct.sh "gate-$L" 16383 1 1); }
+ctg() { (cd pqzl && PQZ_ARENA_MB=2048 test/ct.sh "gate-$L" 16383 1 1); } # the C side: fnv's arena (every R_TXM shape)
 ubg() { (cd pqzl && test/ub_test.sh "gate-$L"); }
 # pqz-stmt at the set; Ligero's tests at the set where it has PQZH (per-set target, plan 5h Task 8c part 2);
 # --no-fail-fast: one failing test binary must not hide the others (R0 fix round I1)
