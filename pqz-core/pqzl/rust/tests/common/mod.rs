@@ -185,8 +185,9 @@ fn bench_rows() -> Vec<Row> {
     panic!("set {} has no vectors: the rows come from pqzl::bench (features bench, c-oracle)", pqzl::SET)
 }
 
-/// negative.json's PQZL rows as precompile inputs u8(op) || be32(len) || stmt || proof (pqz_kat.py `apply_edits`);
-/// empty for a set without vectors (said once on stderr: the bench's adversarial verifies cover it there)
+/// negative.json's PQZL rows as precompile inputs u8(op) || be32(len) || stmt || proof (pqz_kat.py `apply_edits`),
+/// then its split_rows (three-key spec K3-4: id pqzl_split = the row of proof_pqzl_split.json, statement and proof; id
+/// pqzl as above); empty for a set without vectors (said once on stderr: the bench's adversarial verifies cover it there)
 pub fn negative_inputs() -> Vec<(String, Vec<u8>)> {
     if vectors_dir().is_none() {
         eprintln!("set {}: no negative.json yet (no vectors): no negative-vector rows", pqzl::SET);
@@ -199,15 +200,26 @@ pub fn negative_inputs() -> Vec<(String, Vec<u8>)> {
         let key = r.get("case").and_then(Value::as_str).unwrap_or_else(|| r["form"].as_str().unwrap());
         proofs.insert(key.to_string(), hex(&r["proof"]));
     }
+    let mut split: HashMap<String, (Vec<u8>, Vec<u8>)> = HashMap::new();
+    for r in json("proof_pqzl_split.json")["rows"].as_array().unwrap() {
+        split.insert(r["form"].as_str().unwrap().to_string(), (hex(&r["stmt"]), hex(&r["proof"])));
+    }
+    let srows = j.get("split_rows").and_then(Value::as_array).into_iter().flatten();
     let mut out = Vec::new();
-    for r in j["rows"].as_array().unwrap() {
-        if r["id"] != "pqzl" {
+    for r in j["rows"].as_array().unwrap().iter().chain(srows) {
+        if r["id"] != "pqzl" && r["id"] != "pqzl_split" {
             continue;
         }
         let form = r["form"].as_str().unwrap();
         // an op 7 row or an op 7 disclosure (R0-1) by its case, the other rows by their form
         let key = r.get("case").and_then(Value::as_str).unwrap_or(form);
-        let (mut op, mut s, mut p) = if form == "-" { (0, vec![], vec![]) } else { (op_of(form), st[key].clone(), proofs[key].clone()) };
+        let (mut op, mut s, mut p) = if form == "-" {
+            (0, vec![], vec![])
+        } else if r["id"] == "pqzl_split" {
+            (1, split[form].0.clone(), split[form].1.clone())
+        } else {
+            (op_of(form), st[key].clone(), proofs[key].clone())
+        };
         let (mut lenf, mut raw, mut size) = (None, None, None);
         for e in r["edits"].as_array().unwrap() {
             let (k, v) = e.as_object().unwrap().iter().next().unwrap();

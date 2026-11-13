@@ -9,7 +9,10 @@ the first 16 being PQZL then PQZH in FORMS order), then the op 7 R_TXM rows (P6-
 proof_pqzh.json's 8 (every built (id, M, auditorOn), statements from statement_transfer_multi.json), then the op 7
 disclosures of both ids (R0-1, statement_transfer_multi.json `disclosures`), then the files of
 regress/valid/ (valid inputs from outside the vectors, see README.md). <out>/seeds/precompile/: those inputs, the
-self-test input and every row of negative.json (input rebuilt by pqz_kat.py's apply_edits); seeds/mutate/,
+self-test input and every row of negative.json's rows (input rebuilt by pqz_kat.py's apply_edits); the split transfer
+(three-key spec K3-4, PQZL_SPLIT_ID, which the precompile never serves) goes to the target offchain only:
+<out>/honest_split.bin, proof_pqzl_split.json's honest inputs (the set's own file, at every set), and
+<out>/seeds/offchain/: the honest inputs, the honest split inputs and negative.json's split_rows; seeds/mutate/,
 seeds/codec/: one empty edit script per honest input and mode / codec and selector.
 """
 import os
@@ -57,9 +60,21 @@ with open(os.path.join(out, "honest.bin"), "wb") as f:
         f.write(len(b).to_bytes(4, "big") + b)
 shutil.rmtree(os.path.join(out, "seeds"), ignore_errors=True)  # stale seeds could hold valid proofs the oracle does not know
 neg = [k.apply_edits(r, stmts, proofs) for r in k.load(V, "negative.json")["rows"]]
+sp = {r["form"]: (r["op"], bytes.fromhex(r["stmt"]), bytes.fromhex(r["proof"])) for r in k.load(V, "proof_pqzl_split.json")["rows"]}
+split = [k.precompile_input(*x) for x in sp.values()]
+with open(os.path.join(out, "honest_split.bin"), "wb") as f:
+    for b in split:
+        f.write(len(b).to_bytes(4, "big") + b)
+sneg = [k.apply_edits(r, stmts, proofs, sp[r["form"]] if r["id"] == "pqzl_split" else None)
+        for r in k.load(V, "negative.json").get("split_rows", [])]
 d = os.path.join(out, "seeds", "precompile")
 os.makedirs(d, exist_ok=True)
 for i, b in enumerate(honest + [bytes([6, 0, 0, 0, 0])] + neg):
+    with open(os.path.join(d, f"vec-{i:03}"), "wb") as f:
+        f.write(b)
+d = os.path.join(out, "seeds", "offchain")
+os.makedirs(d, exist_ok=True)
+for i, b in enumerate(honest + split + sneg):
     with open(os.path.join(d, f"vec-{i:03}"), "wb") as f:
         f.write(b)
 # codec: byte 0 = codec + 5 x (honest index >> 4), byte 1 bits 0..3 = honest index & 15 (src/lib.rs pqz_fuzz_codec)
@@ -73,3 +88,5 @@ print(f"seeds.py: {len(honest)} honest inputs -> honest.bin ({n_p6e} P6e, {n_mul
       f"{len(extra)} regress/valid); "
       f"{len(honest) + 1 + len(neg)} precompile seeds ({len(neg)} negative.json rows, "
       f"{sum(r['form'] == 'TRANSFER-MULTI' for r in k.load(V, 'negative.json')['rows'])} of them op 7)")
+print(f"seeds.py: {len(split)} honest split inputs -> honest_split.bin; {len(honest) + len(split) + len(sneg)} offchain seeds "
+      f"({len(sneg)} negative.json split_rows)")

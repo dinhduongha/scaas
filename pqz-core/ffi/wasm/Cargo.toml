@@ -14,6 +14,8 @@ path = "lib.rs"
 
 [dependencies]
 pqz-ffi = { path = "..", default-features = false, features = ["prove"] }
+# the off-chain verifier's entry (verify_offchain: PQZL_SPLIT_ID too), for vectors/replay_wasm.mjs
+pqz-offchain = { path = "../offchain", default-features = false }
 
 # the PQZL backend, forwarded to pqz-ffi (the same default as pqz-ffi's; ../run.sh's PQZL=rust|c picks one alone)
 [features]

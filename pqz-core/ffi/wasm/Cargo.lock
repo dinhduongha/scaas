@@ -362,6 +362,14 @@ name = "pqz-ffi-wasm"
 version = "0.1.0"
 dependencies = [
  "pqz-ffi",
+ "pqz-offchain",
+]
+
+[[package]]
+name = "pqz-offchain"
+version = "0.1.0"
+dependencies = [
+ "pqz-ffi",
 ]
 
 [[package]]

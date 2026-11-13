@@ -187,6 +187,17 @@ fn precompile(input: &[u8]) -> (&'static str, String) {
     (res, reason)
 }
 
+/// pqz-offchain's `verify_offchain` (the off-chain verifier's entry, three-key spec K3-4: PQZL_SPLIT_ID too), the same
+/// steps: that crate depends on pqz-ffi, so this binary cannot call it (vectors/replay_wasm.mjs runs the crate itself)
+fn offchain(input: &[u8]) -> Result<bool, pqz_ffi::NodeFault> {
+    let Ok(d) = pqz_ffi::decode(input) else { return Ok(false) };
+    match d.stmt.proof_system_id() {
+        Some(id) if *id == PQZL_ID || *id == st::PQZL_SPLIT_ID => pqzl::verify_fast(d.op, d.stmt_bytes, d.proof),
+        Some(id) if *id == PQZH_ID => pqz_ffi::pqzh::verify(d.op, d.stmt_bytes, d.proof),
+        _ => Ok(false),
+    }
+}
+
 fn rname(r: Reject) -> String {
     match r {
         Reject::MustBeZero(f) => format!("MustBeZero({f})"),
@@ -802,10 +813,16 @@ fn opening_file() -> (String, String) {
                 ("u_keccak", hx(&keccak(&[&s.leg.u[..]]))),
                 ("v_t", hx(&s.leg.vs[0])),
                 ("coins_t", hx(&op::coins(&s.seed_leg, Role::Recipient, &kem_t))),
+                ("aad_t", hx(&op::aad(&c, &c.to))),
                 ("opening_t", hx(&o_t)),
             ];
             if let Some(o_a) = &o_a {
-                kv.extend([("v_a", hx(&s.leg.vs[1])), ("coins_a", hx(&op::coins(&s.seed_leg, Role::Auditor, &kem_a))), ("opening_a", hx(o_a))]);
+                kv.extend([
+                    ("v_a", hx(&s.leg.vs[1])),
+                    ("coins_a", hx(&op::coins(&s.seed_leg, Role::Auditor, &kem_a))),
+                    ("aad_a", hx(&op::aad(&c, c.auditor.as_ref().expect("auditor")))),
+                    ("opening_a", hx(o_a)),
+                ]);
                 assert_eq!(op::check_auditor(&seed_a, &c), op::AuditorOutcome::Read(d));
             }
             o(kv)
@@ -819,7 +836,8 @@ fn opening_file() -> (String, String) {
          / 0x41). Openings: coins = SHAKE256(SCAAS-PQZ-OPEN-COINS-V1 || seed_leg || u8(role) || keccak256(kemPk))[0..64), \
          ML-KEM-1024 + X25519 of CTR-UA-32 with m = coins[0..32), e = coins[32..64), kek = HKDF-SHA256(ss, -, \
          PQZ/opening/kek/v1), sealedSeed = AES-256-GCM(kek, 0^96, seed_leg, chainUid || token || ua || be8(keyVersion) || \
-         keccak256(u || v)); chainUid 0xC1.., token 0x70.., recipient 0x11.., auditor 0xA0.., key version 0, the readers' \
+         keccak256(P(u) || P(v))) = aad_t / aad_a, P the stored form of the op blob (PqzSet.PACK_BITS = ceil(log2 q) bits per \
+         coefficient, big-endian; CTR-PQZ-40); chainUid 0xC1.., token 0x70.., recipient 0x11.., auditor 0xA0.., key version 0, the readers' \
          opening KEM keys from bip39 seed 0x4D.. (offchain-shared, version 0). openKemSeeds: HKDF-SHA256(bip39 seed, \
          scaas.ua.kem.v1, scaas.kem.pqz-opening.1 || ua || chainUid || be64(v)) for an empty token (offchain-shared), \
          scaas.kem.pqz-opening-token.1 || ua || chainUid || token || be64(v) otherwise, 96 B.",
@@ -831,7 +849,8 @@ fn opening_file() -> (String, String) {
 /// TRANSFER / TRANSFER0 (header, keys, T) under the split id with split randomness: the leg from seed_leg =
 /// enc_leg_seed(seed_enc, toUA, keccak256(pk_t)), the sender's own u_f, v_f from seed_enc; u_f appended. The proofs are
 /// verified here by the specialised and the generic verifier through the decoder (the precompile never serves this id).
-fn split_file(sc: &Scenario) -> (String, String) {
+/// Also returns (form, statement, proof) of each row (the split negative rows' bases).
+fn split_file(sc: &Scenario) -> ((String, String), Vec<(Form, Vec<u8>, Vec<u8>)>) {
     let (kf, kt, ka) = (keygen(SEED_F), keygen(SEED_T), keygen(SEED_A));
     let seed_enc = [0x66u8; 32];
     let to_ua = [0xA2u8; 32]; // the scenario's toUA
@@ -878,7 +897,7 @@ fn split_file(sc: &Scenario) -> (String, String) {
                 objs.push(("pk_a", keyref(&ka)));
             }
             objs.extend([("seed_leg", hx(&seed_leg)), ("leg", leg.json()), ("own", own.json())]);
-            o(vec![
+            let row = o(vec![
                 ("form", J::from(fname(form))),
                 ("op", J::from(form.op())),
                 ("base", o(vec![("file", J::from(sfile(base))), ("form", J::from(fname(base)))])),
@@ -894,10 +913,12 @@ fn split_file(sc: &Scenario) -> (String, String) {
                 ("proof_fnv", J::from(fnv(&p))),
                 ("expect", J::from(true)),
                 ("proof", hx(&p)),
-            ])
+            ]);
+            (row, (form, s, p))
         })
-        .collect();
-    file(
+        .unzip::<J, (Form, Vec<u8>, Vec<u8>), Vec<J>, Vec<_>>();
+    let (rows, bases) = rows;
+    let f = file(
         "proof_pqzl_split.json",
         "PQZL proofs of the split transfer (spec three-key model K3-4, R_TXS / R_TXS0; UNAUDITED) under PQZL_SPLIT_ID \
          (set.json pqzl_split_label), from the core (hedged, CTR-PQZ-19), fixed rnd32: deterministic. base: the \
@@ -912,7 +933,49 @@ fn split_file(sc: &Scenario) -> (String, String) {
             ("params", o(vec![("max_proof", J::from(st::MAX_PROOF_PQZL))])),
             ("rows", J::A(rows)),
         ],
-    )
+    );
+    (f, bases)
+}
+
+/// The split negative rows (three-key spec K3-4; UNAUDITED): (name, base, edits); base Some(i) = the split form of
+/// `splits[i]` (proof_pqzl_split.json, id "pqzl_split"), None = the PQZL TRANSFER (id "pqzl") under PQZL_SPLIT_ID.
+fn split_negatives(splits: &[(Form, Vec<u8>, Vec<u8>)]) -> Vec<(String, Form, Option<usize>, Vec<E>)> {
+    let w = |x: u64| st::u64_word(x).to_vec();
+    let qb = |x: u64| x.to_be_bytes().to_vec();
+    let mut v = Vec::new();
+    for (i, (f, s, p)) in splits.iter().enumerate() {
+        let (n, pl, nm, aud) = (s.len(), p.len(), fname(*f), *f == Form::TransferSplit);
+        let pre = st::HEADER_BYTES + (if aud { 4 } else { 3 }) * PK + 128; // header, pk_f, pk_t, [pk_a], T: u at pre
+        let mut add = |name: String, e: Vec<E>| v.push((format!("{nm}: {name}"), *f, Some(i), e));
+        add("statement length - 1".into(), vec![E::StmtResize(n - 1)]);
+        add("statement length + 1".into(), vec![E::StmtResize(n + 1)]);
+        for op in 2..=5u8 {
+            add(format!("under op {op}"), vec![E::Op(op)]);
+        }
+        add("unknown proofSystemId (zero word)".into(), vec![E::StmtSet(32, vec![0; 32])]);
+        add("PQZL proofSystemId (PQZL_ID never serves the split transfer)".into(), vec![E::StmtSet(32, PQZL_ID.to_vec())]);
+        if pqz_ffi::PQZH {
+            add("PQZH proofSystemId".into(), vec![E::StmtSet(32, PQZH_ID.to_vec())]);
+        }
+        add(format!("auditorOn {} (R6)", 1 - aud as u64), vec![E::StmtSet(448, w(1 - aud as u64))]);
+        add("u_f coefficient 0 = q".into(), vec![E::StmtSet(n - PK, qb(Q))]);
+        add("u_f coefficient 0 low bit flipped".into(), vec![E::StmtFlip(n - PK + 7, 0)]);
+        add("v_f low bit flipped".into(), vec![E::StmtFlip(pre + PK + 2 * 128 - 1, 0)]);
+        add("v_t low bit flipped".into(), vec![E::StmtFlip(pre + PK + 128 - 1, 0)]);
+        add("u and u_f swapped".into(), vec![E::StmtSet(pre, s[n - PK..].to_vec()), E::StmtSet(n - PK, s[pre..pre + PK].to_vec())]);
+        add("proof truncated by 1 byte".into(), vec![E::ProofResize(pl - 1)]);
+        add("proof extended by 1 zero byte".into(), vec![E::ProofResize(pl + 1)]);
+        add("proof byte 0 bit 0 flipped".into(), vec![E::ProofFlip(0, 0)]);
+        add("proof middle byte bit 3 flipped".into(), vec![E::ProofFlip(pl / 2, 3)]);
+        add("proof last byte bit 7 flipped".into(), vec![E::ProofFlip(pl - 1, 7)]);
+        if p[pl - 1] < 0x80 {
+            add("coder padding bit 7 set after the final 1-bit".into(), vec![E::ProofFlip(pl - 1, 7)]);
+        }
+    }
+    for f in [Form::Transfer, Form::Transfer0] {
+        v.push((format!("{}: PQZL_SPLIT_ID (serves only the split transfer)", fname(f)), f, None, vec![E::StmtSet(32, st::PQZL_SPLIT_ID.to_vec())]));
+    }
+    v
 }
 
 fn keygen_file() -> (String, String) {
@@ -2179,7 +2242,8 @@ fn generate() -> (Vec<(String, String)>, bool) {
         ));
     }
     let stmts: Vec<Vec<u8>> = sc.rows.iter().map(|r| r.stmt.clone()).collect();
-    files.push(split_file(&sc));
+    let (sf, splits) = split_file(&sc);
+    files.push(sf);
 
     // proofs: both ids, every form
     let mut proofs: [[Vec<u8>; 8]; 2] = Default::default();
@@ -2414,7 +2478,40 @@ fn generate() -> (Vec<(String, String)>, bool) {
             ("reason", J::from(reason)),
         ]));
     }
-    eprintln!("negative: {} rows ({ndec} decoder, {nver} verifier): {:.1} s", nrows.len(), t0.elapsed().as_secs_f64());
+    // the split rows (three-key spec K3-4; UNAUDITED): the precompile never serves PQZL_SPLIT_ID, so it gives 0 for
+    // the honest split inputs too; the off-chain entry verify_offchain accepts those (the positive control, asserted
+    // here) and must refuse every row
+    for (f, s, p) in &splits {
+        let inp = st::input(f.op(), s, p);
+        assert_eq!(offchain(&inp), Ok(true), "{}: honest split input, off-chain", fname(*f));
+        assert_eq!(precompile(&inp).0, "0", "{}: honest split input, precompile", fname(*f));
+    }
+    let mut srows = Vec::new();
+    for (name, f, base, edits) in split_negatives(&splits) {
+        let input = match base {
+            Some(i) => apply_to(&edits, f.op(), splits[i].1.clone(), splits[i].2.clone(), 0, &proofs, &mp),
+            None => apply(&edits, Some(f), 0, &stmts, &proofs),
+        };
+        let (out, reason) = precompile(&input);
+        assert!(out == "0" || out == "revert", "negative accepted: {name}");
+        assert_eq!(offchain(&input), Ok(false), "split negative accepted off-chain: {name}");
+        if let Ok(d) = pqz_ffi::decode(&input) {
+            assert!(!pqzl::verify_generic(d.op, d.stmt_bytes, d.proof).expect("generic verify"), "{name}: generic verifier");
+        }
+        if reason == "verify" { nver += 1 } else { ndec += 1 }
+        srows.push(o(vec![
+            ("name", J::from(name.as_str())),
+            ("form", J::from(fname(f))),
+            ("id", J::from(if base.is_some() { "pqzl_split" } else { "pqzl" })),
+            ("edits", J::A(edits.iter().map(E::json).collect())),
+            ("input_bytes", J::from(input.len())),
+            ("input_sha3", hx(&<Sha3_256 as sha3::Digest>::digest(&input))),
+            ("expect", J::from(out)),
+            ("offchain", J::from("0")),
+            ("reason", J::from(reason)),
+        ]));
+    }
+    eprintln!("negative: {} rows + {} split rows ({ndec} decoder, {nver} verifier): {:.1} s", nrows.len(), srows.len(), t0.elapsed().as_secs_f64());
     // the disclosure opening's codec (pqz-stmt parse_opening, D15: the one canonical abi.encode(bytes, bytes)); base =
     // the TRANSFER bundle with the PQZL DISCLOSE-SENDER proof
     let ob = st::opening(&sc.bundle, &proofs[0][fidx(Form::DiscloseSender)]);
@@ -2467,8 +2564,12 @@ fn generate() -> (Vec<(String, String)>, bool) {
          fast). reason: the pqz-stmt decoder's Reject (D5, D15, R6), or verify (the decoder accepts \
          and the verifier of the id rejects: PQZL specialised and generic agree). Expected outputs from pqz_precompile (C ABI). \
          openings: the disclosure opening abi.encode(bytes bundle, bytes proof) (TRANSFER bundle, PQZL DISCLOSE-SENDER \
-         proof) with set [offset, hex] / resize edits, and pqz-stmt parse_opening's result (ok or Opening).",
-        vec![("max_input", J::from(st::MAX_INPUT)), ("rows", J::A(nrows)), ("openings", J::A(orows))],
+         proof) with set [offset, hex] / resize edits, and pqz-stmt parse_opening's result (ok or Opening). \
+         split_rows (three-key spec K3-4; UNAUDITED): the same edits on the split transfer (id pqzl_split: the row of \
+         proof_pqzl_split.json, statement and proof) or on the PQZL TRANSFER / TRANSFER0 (id pqzl); expect = the \
+         precompile's output (it never serves PQZL_SPLIT_ID), offchain = pqz-offchain verify_offchain's (0: refused; the \
+         honest split inputs give 1 there).",
+        vec![("max_input", J::from(st::MAX_INPUT)), ("rows", J::A(nrows)), ("split_rows", J::A(srows)), ("openings", J::A(orows))],
     ));
 
     // self-test (D13), as pqz-ffi computes it
@@ -2576,12 +2677,18 @@ fn generate() -> (Vec<(String, String)>, bool) {
 }
 
 /// Files in a vectors directory that another writer owns, with the test that checks each (review 3w u5-1): `--check`
-/// names them and passes them over; any other file this generator did not write is `EXTRA` and fails. Keep equal to
-/// `OTHER_WRITERS` in `smartcontracts/vectors/pqz/pqz_kat.py`.
-const OTHER_WRITERS: [(&str, &str); 3] = [
-    ("state.json", "written by forge PqzStateVectors.t.sol, checked by pqz_kat.py check_state and ua-rs"),
-    ("verdict.json", "written by forge PqzVerdictVectors.t.sol, checked by clientkeys pqz-verdict.test.js and scaas-node pqz.rs"),
-    ("verifier_fee.json", "written by forge PqzVerifierFeeVectors.t.sol, checked by clientkeys pqz-verifier-fee.test.js, ua-rs tests/pqzfee.rs and scaas-node pqz.rs"),
+/// names them and passes them over; any other file this generator did not write is `EXTRA` and fails. The third field
+/// is the one set whose directory holds the file (T-05: verdict.json and verifier_fee.json live in pqz/n2304-kmax4096/
+/// only), `None` every set (T-41: state.json at all four); a file at another set is `EXTRA`, a missing one `MISSING`.
+/// Keep equal to `OTHER_WRITERS` in `smartcontracts/vectors/pqz/pqz_kat.py`.
+const OTHER_WRITERS: [(&str, &str, Option<&str>); 3] = [
+    ("state.json", "written by forge PqzStateVectors.t.sol, checked by pqz_kat.py check_state and ua-rs", None),
+    ("verdict.json", "written by forge PqzVerdictVectors.t.sol, checked by clientkeys pqz-verdict.test.js and scaas-node pqz.rs", Some("n2304-kmax4096")),
+    (
+        "verifier_fee.json",
+        "written by forge PqzVerifierFeeVectors.t.sol, checked by clientkeys pqz-verifier-fee.test.js, ua-rs tests/pqzfee.rs and scaas-node pqz.rs",
+        Some("n2304-kmax4096"),
+    ),
 ];
 
 fn main() {
@@ -2621,10 +2728,16 @@ fn main() {
         if !n.ends_with(".json") || files.iter().any(|f| f.0 == n) {
             continue;
         }
-        if let Some((_, by)) = OTHER_WRITERS.iter().find(|o| o.0 == n) {
+        if let Some((_, by, _)) = OTHER_WRITERS.iter().find(|o| o.0 == n && o.2.is_none_or(|s| s == st::SET)) {
             println!("OTHER {n}: {by}");
         } else {
-            println!("EXTRA {n}: not written by this generator");
+            println!("EXTRA {n}: not written by this generator (nor owned by another writer at set {})", st::SET);
+            bad += 1;
+        }
+    }
+    for (n, by, _) in OTHER_WRITERS.iter().filter(|o| o.2.is_none_or(|s| s == st::SET)) {
+        if !dir.join(n).exists() {
+            println!("MISSING {n}: {by}");
             bad += 1;
         }
     }

@@ -1,6 +1,6 @@
 #!/bin/sh
 # One fuzz campaign (P6e plan Task 10, D12), under scripts/capped, after build.sh:
-#   scripts/capped pqz-core/fuzz/run.sh <target> <seconds> [label]       (target: precompile | mutate | codec)
+#   scripts/capped pqz-core/fuzz/run.sh <target> <seconds> [label]       (target: precompile | mutate | codec | offchain)
 #   PQZ_FUZZ_MODE=pqzl-diff ...: the mode's binaries (build.sh with the same variable): Rust core = C core
 # Fuzzes pqz-core/build/fuzz/<target> on a work corpus plus the committed corpus/<target>/, the regression inputs
 # regress/<target>/ and the run-time seeds (seeds.py, from the frozen vectors smartcontracts/vectors/pqz/), then
@@ -27,11 +27,11 @@ mkdir -p "$W" "$SEEDS" runs "corpus/$T" "regress/$T" "$C"
 export PQZ_SET=${PQZ_SET:-n2304-kmax4096} # build.sh's default; seeds.py (pqz_kat.py) reads the same set
 MI=$(python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))['max_input'])" "../params/sets/$PQZ_SET/set.json")
 [ -n "$MI" ] || { echo "fuzz/run.sh: no max_input in set.json of $PQZ_SET" >&2; exit 2; } # 8c2 re-review N1
-case $T in precompile) ML=$((MI + 4096)) ;; *) ML=512 ;; esac
+case $T in precompile | offchain) ML=$((MI + 4096)) ;; *) ML=512 ;; esac
 # memory: the C core's arenas (mode pqzl-diff: ARENA_SMALL 512 MiB; the C generic verifier's ARENA_BIG = 1 GiB is one
 # malloc of exactly 1024 MiB, which -malloc_limit_mb=1024 reported as an OOM in P6-ANON S5); scripts/capped caps at 4 GB
 LIM="-rss_limit_mb=3072 -malloc_limit_mb=1536"
-export PQZ_FUZZ_HONEST=$B/honest.bin ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1
+export PQZ_FUZZ_HONEST=$B/honest.bin PQZ_FUZZ_SPLIT=$B/honest_split.bin ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1
 python3 -I seeds.py "$B" > "$LOG" 2>&1 || { cat "$LOG"; exit 1; }
 # a work corpus from other honest inputs holds valid proofs the oracle does not know (a false "wrong accept"): drop it
 H=$(sha256sum "$B/honest.bin" | cut -c1-64)

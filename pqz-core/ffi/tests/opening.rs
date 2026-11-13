@@ -327,3 +327,39 @@ fn unreadable_taken() {
     assert!(!taken(3, 5, 4, true)); // marked
     assert!(!taken(5, 5, 5, false)); // still pending
 }
+
+/// The sealed seed's `aad` binds the stored form (CTR-PQZ-40): `keccak256(P(u) ‖ P(v))` with `P` the contract's packing.
+/// `pack` is checked against the contract itself: the first entry of the set's state.json (written by forge
+/// PqzStateVectors from the contract's state; an audited op 1 leg) holds `P(u)` and `P(v_t)` in its op blob
+/// `R = header(16) ‖ P(u) ‖ P(v_t) ‖ …` and the unpacked lanes in its `ct`. Then `aad` = the head ‖ keccak256 of the packed
+/// parts, not of the unpacked lanes.
+#[test]
+fn aad_binds_the_stored_form() {
+    let set = pqz_ffi::stmt::SET;
+    let dir = if set == "n2048-kmax1024" { String::new() } else { format!("{set}/") };
+    let t = std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/pqz/{dir}state.json", env!("CARGO_MANIFEST_DIR"))).expect("state.json");
+    let hexat = |from: usize, key: &str| -> (usize, Vec<u8>) {
+        let pat = format!("\"{key}\": \"0x");
+        let j = from + t[from..].find(&pat).expect(key) + pat.len();
+        let h = &t[j..j + t[j..].find('"').unwrap()];
+        (j, (0..h.len()).step_by(2).map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap()).collect())
+    };
+    let (j, code) = hexat(t.find("\"entries\"").expect("entries"), "code");
+    let (_, ct) = hexat(j, "ct");
+    let r = &code[1..]; // the SSTORE2 STOP byte
+    let (pu, pv) = (opening::pack(&ct[..PK_BYTES]), opening::pack(&ct[PK_BYTES..]));
+    assert_eq!((ct.len(), pu.len() * 64, pv.len() * 64), (PK_BYTES + 128, PK_BYTES * (64 - (Q - 1).leading_zeros() as usize), 128 * (64 - (Q - 1).leading_zeros() as usize)));
+    assert_eq!(&r[16..16 + pu.len()], &pu[..], "{set}: P(u) = the op blob's");
+    assert_eq!(&r[16 + pu.len()..16 + pu.len() + pv.len()], &pv[..], "{set}: P(v_t) = the op blob's");
+    assert_ne!(&r[16..16 + 64], &ct[..64], "the blob does not hold the unpacked lanes");
+    // aad over the packed parts, for both readers
+    let f = Fx::new(true);
+    let c = f.credit();
+    for p in [c.to, c.auditor.unwrap()] {
+        let a = opening::aad(&c, &p);
+        let head = [&CHAIN[..], &f.token, p.ua, &0u64.to_be_bytes()].concat();
+        assert_eq!(a, [&head[..], &opening::keccak(&[&opening::pack(&f.u[..]), &opening::pack(p.v)])].concat());
+        assert_ne!(a[a.len() - 32..], opening::keccak(&[&f.u[..], p.v])[..], "not keccak256 over the unpacked lanes");
+    }
+    eprintln!("aad_binds_the_stored_form ({set}): P(u) {} B, P(v) {} B equal to state.json's op blob", pu.len(), pv.len());
+}

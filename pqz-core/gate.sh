@@ -175,7 +175,7 @@ cargo_tests() { (cd stmt && part cargo/stmt env CARGO_TARGET_DIR="target/$PQZ_SE
 xcheck() { if [ "$PQZ_SET" = $V3 ]; then part xcheck/stark pqzh/xcheck/run.sh || return 1; fi; part xcheck/ligero pqzh/xcheck/ligero.sh; }
 # a smoke run is too short to merge into the committed corpora (the 2 h campaigns'): with PQZ_BUILD_TAG, run.sh merges
 # into build/fuzz-<set>/corpus/ and only reads fuzz/corpus/
-fuzz() { fuzz/build.sh && for t in precompile mutate codec; do part "fuzz/$t" fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done; }
+fuzz() { fuzz/build.sh && for t in precompile mutate codec offchain; do part "fuzz/$t" fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done; }
 
 say "set $PQZ_SET"
 step kat kat

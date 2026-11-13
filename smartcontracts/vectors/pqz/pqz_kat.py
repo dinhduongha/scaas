@@ -1254,6 +1254,13 @@ def check_opening(j, d):
         cmp(bad, f"row {i} leg", (r["u_keccak"], r["v_t"], r.get("v_a")),
             (kec(u).hex(), vs[0].hex(), vs[1].hex() if r["auditorOn"] else None))
         cmp(bad, f"row {i} u_f != u", uf != u, True)
+        # the sealed seed's aad (CTR-PQZ-40): chainUid || token || ua || be8(keyVersion) || keccak256(P(u) || P(v)), P the
+        # stored form of the op blob (pack_stored, the inverse of the unpack check_state checks against the contract's blobs)
+        for role, ua, v in [("t", b"\x11" * 32, vs[0])] + ([("a", b"\xa0" * 32, vs[1])] if r["auditorOn"] else []):
+            head = b"\xc1" * 32 + b"\x70" * 20 + ua + bytes(8)
+            cmp(bad, f"row {i} aad_{role}", r.get(f"aad_{role}"), (head + kec(pack_stored(u) + pack_stored(v))).hex())
+            if r.get(f"aad_{role}") == (head + kec(u + v)).hex():
+                bad.append(f"row {i} aad_{role}: keccak256 over the unpacked lanes, not P(u) || P(v)")
     return bad
 
 
@@ -1580,9 +1587,12 @@ def check_proofs(j, d):
     return bad
 
 
-def apply_edits(r, stmts, proofs):
-    """negative.json: the honest input of (form, id) with the row's edits (see the file's description)."""
-    if r["form"] == "-":
+def apply_edits(r, stmts, proofs, base=None):
+    """negative.json: the honest input of (form, id) with the row's edits (see the file's description); base = (op,
+    stmt, proof) of a split row's own input (proof_pqzl_split.json)."""
+    if base is not None:
+        op, s, p = base
+    elif r["form"] == "-":
         op, s, p = 0, b"", b""
     elif r["form"] == "TRANSFER-MULTI":
         op, s, p = 7, with_id(stmts[r["case"]], IDS[r["id"]]), proofs[r["case"], r["id"]]
@@ -1733,6 +1743,56 @@ def check_negative(j, d):
         cmp(bad, "opening " + r["name"], r["reason"], got)
     if sorted({r["reason"] for r in j["openings"]}) != ["Opening", "ok"]:
         bad.append("openings: need the canonical one and Opening rejections")
+    bad += check_split_negative(j, d, stmts, proofs, honest)
+    return bad
+
+
+def check_split_negative(j, d, stmts, proofs, honest):
+    """negative.json split_rows (three-key spec K3-4; UNAUDITED): the split transfer of proof_pqzl_split.json (id
+    pqzl_split) or the PQZL TRANSFER / TRANSFER0 (id pqzl) with the edits; the precompile gives 0 (or reverts) and so
+    does the off-chain entry (offchain 0); the reason is this decoder's. Required: per split form the length, op, id and
+    proof edits and the u / u_f swap; TRANSFER / TRANSFER0 under PQZL_SPLIT_ID."""
+    bad = []
+    sp = {r["form"]: (r["op"], bytes.fromhex(r["stmt"]), bytes.fromhex(r["proof"]))
+          for r in load(d, "proof_pqzl_split.json")["rows"]}
+    honest = honest | {precompile_input(op, s, p) for op, s, p in sp.values()}
+    names = set()
+    for r in j.get("split_rows", []):
+        if r["name"] in names:
+            bad.append("duplicate split row " + r["name"])
+        names.add(r["name"])
+        if r["id"] == "pqzl_split":
+            base = sp[r["form"]]
+        elif r["id"] == "pqzl" and r["form"] in ("TRANSFER", "TRANSFER0"):
+            base = None
+        else:
+            bad.append(f"{r['name']}: split row of ({r['form']}, {r['id']})")
+            continue
+        b = apply_edits(r, stmts, proofs, base)
+        cmp(bad, r["name"] + " input", (r["input_bytes"], r["input_sha3"]), (len(b), hashlib.sha3_256(b).hexdigest()))
+        if b in honest:
+            bad.append(r["name"] + ": the edits give an honest input")
+        try:
+            decode_input(b)
+            why = "verify"
+        except Rejected as x:
+            why = x.args[0]
+        cmp(bad, r["name"] + " reason", r["reason"], why)
+        cmp(bad, r["name"] + " expect", r["expect"], "revert" if len(b) > MAX_INPUT else "0")
+        cmp(bad, r["name"] + " offchain", r["offchain"], "0")
+    want = [f"TRANSFER{a}: PQZL_SPLIT_ID (serves only the split transfer)" for a in ("", "0")]
+    for f in sp:
+        want += [f"{f}: {x}" for x in ("statement length - 1", "statement length + 1", "unknown proofSystemId (zero word)",
+                                       "PQZL proofSystemId (PQZL_ID never serves the split transfer)",
+                                       "u and u_f swapped", "u_f coefficient 0 low bit flipped", "v_f low bit flipped",
+                                       "proof truncated by 1 byte", "proof extended by 1 zero byte",
+                                       "proof byte 0 bit 0 flipped", "proof middle byte bit 3 flipped",
+                                       "proof last byte bit 7 flipped")]
+        want += [f"{f}: under op {o}" for o in range(2, 6)]
+    if set(want) - names:
+        bad.append(f"split rows missing {sorted(set(want) - names)}")
+    if "verify" not in {r["reason"] for r in j.get("split_rows", [])}:
+        bad.append("split rows: no verifier rejection")
     return bad
 
 
@@ -1973,6 +2033,15 @@ PACK_B = (Q - 1).bit_length()  # PqzSet.PACK_BITS: ceil(log2 q), the stored form
 PKP, VP = PK_BYTES // 32 * PACK_B // 2, V_BYTES // 32 * PACK_B // 2
 
 
+def pack_stored(b):
+    """P46: the be8 lanes of a part as PACK_B bits each, big-endian, concatenated (the contract's stored form)."""
+    n = len(b) // 8
+    x = 0
+    for i in range(n):
+        x = (x << PACK_B) | int.from_bytes(b[8 * i:8 * i + 8], "big")
+    return x.to_bytes(n * PACK_B // 8, "big")
+
+
 def unpack_stored(b):
     """The 64-bit lanes (be8) of a P46-packed part: every PACK_B bits big-endian, one coefficient."""
     x, n = int.from_bytes(b, "big"), len(b) * 8 // PACK_B
@@ -2036,10 +2105,14 @@ CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": ch
             "state.json": check_state}
 
 
-# Files another writer owns and another test checks (review 3w u5-1); state.json also has check_state here. Keep equal to
-# OTHER_WRITERS in pqz-core/ffi/src/bin/pqz-vectors.rs. Any other file without a checker fails.
-OTHER_WRITERS = {"verdict.json": "forge PqzVerdictVectors.t.sol; clientkeys pqz-verdict.test.js, scaas-node pqz.rs",
-                 "verifier_fee.json": "forge PqzVerifierFeeVectors.t.sol; clientkeys pqz-verifier-fee.test.js, ua-rs tests/pqzfee.rs, scaas-node pqz.rs"}
+# Files another writer owns and another test checks (review 3w u5-1), with the one set whose directory holds them (T-05:
+# n2304-kmax4096's pqz/<set>/); state.json also has check_state here and is required at every set (T-41). Keep equal to
+# OTHER_WRITERS in pqz-core/ffi/src/bin/pqz-vectors.rs. Any other file without a checker fails, as does such a file at
+# another set; a missing required file fails (--check on the set's directory).
+OTHER_WRITERS = {"verdict.json": ("n2304-kmax4096", "forge PqzVerdictVectors.t.sol; clientkeys pqz-verdict.test.js, scaas-node pqz.rs"),
+                 "verifier_fee.json": ("n2304-kmax4096", "forge PqzVerifierFeeVectors.t.sol; clientkeys pqz-verifier-fee.test.js, "
+                                                         "ua-rs tests/pqzfee.rs, scaas-node pqz.rs")}
+REQUIRED = ["state.json"] + [n for n, (s, _) in OTHER_WRITERS.items() if s == SET]
 
 # Files whose checker here rebuilds only part of the file (review 3w fix round, the S7 gate's tamper step: 8 of 12
 # changed state.json leaves were not caught); the file's writer and its other readers bind the rest. tamper.py counts
@@ -2057,8 +2130,8 @@ def check_files(paths, log):
     for p in paths:
         name = os.path.basename(p)
         fn = CHECKERS.get(name) or CHECKERS.get(name.split("_")[0] + "_*")
-        if fn is None and name in OTHER_WRITERS:
-            log(f"other {name}: {OTHER_WRITERS[name]}")
+        if fn is None and OTHER_WRITERS.get(name, ("",))[0] == SET:
+            log(f"other {name}: {OTHER_WRITERS[name][1]}")
             continue
         if fn is None:
             bad.append(f"{name}: no checker in pqz_kat.py")
@@ -2082,6 +2155,8 @@ def main(argv):
     elif argv and argv[0] == "--check":
         bad = selftest(log)
         files = argv[1:] or sorted(glob.glob(os.path.join(VEC_DIR, "*.json")))
+        if not argv[1:]:
+            bad += [f"{n}: missing in {SET}'s directory (required)" for n in REQUIRED if not os.path.exists(os.path.join(VEC_DIR, n))]
         log(f"     parameter set {SET} (q = {Q}, n = {N}, K_MAX = {K_MAX:,}{', PQZH' if HAS_PQZH else ', no PQZH'})")
         log(f"     vector files: {len(files)}")
         bad += check_files(files, log)

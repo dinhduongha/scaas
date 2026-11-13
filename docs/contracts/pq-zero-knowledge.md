@@ -672,8 +672,9 @@ override):** an `msig` holder must also be usable — `register` reverts `UAPqzH
 cheapest PQZL debit (burn 1 under LOG) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]),
 **rounded up to the next multiple of 1,000** (owner 2026-11-12 option (b), [CTR-PQZ-12](#CTR-PQZ-12)'s Change;
 `test_debitMinGas_isTheCheapestLogDebit` holds `set >= measured`, a multiple of 1,000, less than 1,000 above; BUILT) —
-7,300,000 at `n2048-kmax1024`, 7,515,000 at `n2304-kmax4096`, 7,728,000 at `n2560-kmax16384`, 7,970,000 at
-`n2816-kmax65536` (measured 7,299,442 / 7,514,728 / 7,727,577 / 7,969,371 on branch `ua-mtx-fix2-contracts`, +44 at each
+7,300,000 at `n2048-kmax1024`, 7,516,000 at `n2304-kmax4096`, 7,729,000 at `n2560-kmax16384`, 7,970,000 at
+`n2816-kmax65536` (owner 2026-11-14, [CTR-PQZ-12](#CTR-PQZ-12)'s Change: measured 7,299,953 / 7,515,239 / 7,728,088 / 7,969,882
+after the three-key build, +511 at each set; before that measured 7,299,442 / 7,514,728 / 7,727,577 / 7,969,371 on branch `ua-mtx-fix2-contracts`, +44 at each
 set: the face selectors `renounceAdmin(bytes32)` and `transferAdmin(bytes32,bytes32)`, the payee-fee rename, the DEX merge;
 the pins were 7,299,398 / 7,514,684 / 7,727,533 / 7,969,327, equal to the measurement), measured before that
 on the body-module build ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30); owner 2026-11-09, T66b spec §11 (j):
