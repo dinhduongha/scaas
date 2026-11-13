@@ -66,8 +66,10 @@ f=0
   echo "\$ nm -D --undefined-only $SO"; nm -D --undefined-only "$SO"
   echo "\$ nm -D --defined-only $SO | grep ' T '"; nm -D --defined-only "$SO" | grep ' T '
   echo "# GMP / MPFR / HEXL names or strings (glic/absence.sh's pattern), libm and float imports"
+  # strings of 6+ characters: a 4-character window of random rodata (e.g. "fGMP" in a table at n2048-kmax1024) is not a
+  # library name; libgmp.so.10 / libmpfr.so.6 give the same hit counts at -n 6 as at -n 4 (623 / 737)
   ZERO "symbols /gmp|mpfr|hexl/i" "$(nm -A "$SO" 2>/dev/null | grep -ciE 'gmp|mpfr|hexl')" || f=1
-  ZERO "strings /gmp|mpfr|hexl/i" "$(strings -a "$SO" | grep -ciE 'gmp|mpfr|hexl')" || f=1
+  ZERO "strings /gmp|mpfr|hexl/i" "$(strings -a -n 6 "$SO" | grep -ciE 'gmp|mpfr|hexl')" || f=1
   ZERO "libm-style imports" "$(nm -D --undefined-only "$SO" | awk '{print $2}' | grep -cE '^(sin|cos|tan|exp|exp2|log|log2|log10|pow|sqrt|floor|ceil|round|fmod|ldexp|frexp)f?(@|$)')" || f=1
   echo "# C smoke test against pqz_ffi.h"
   # the set's precompile input limit (set.json max_input: 393,216 at n2048-kmax1024, 524,288 at the others): c_abi
@@ -92,7 +94,7 @@ f=0
   OUT sha256sum "$W" || f=1
   ls -l "$W" | awk '{print "wasm bytes", $5}'
   echo "\$ llvm-nm-18 --undefined-only $W (imports)"; llvm-nm-18 --undefined-only "$W"
-  ZERO "strings /gmp|mpfr|hexl/i" "$(strings -a "$W" | grep -ciE 'gmp|mpfr|hexl')" || f=1
+  ZERO "strings /gmp|mpfr|hexl/i" "$(strings -a -n 6 "$W" | grep -ciE 'gmp|mpfr|hexl')" || f=1
   /usr/bin/time -v node wasm/run_wasm.mjs "$W" 3 > "$X/wasm.jsonl" 2> "$X/wasm-time.txt"
   r=$?; echo "node rc=$r"; [ $r = 0 ] || f=1; grep -E "wasm run|wasm PQZL|Maximum resident|Elapsed" "$X/wasm-time.txt"
   cp "$X/native.jsonl" "$L-digests-native.jsonl"; cp "$X/wasm.jsonl" "$L-digests-wasm.jsonl"

@@ -141,7 +141,7 @@ fnv() { (cd pqzl && part fnv/c sh -c "./build.sh native > /dev/null && PQZ_ARENA
      --no-default-features --features 'set-$PQZ_SET') &&
     PQZL_WASM_FILE=wasm/target/$PQZ_SET/wasm32-unknown-unknown/release/pqzl_wasm.wasm node wasm/run_wasm.mjs 2 1 65535 > '../../$R-fnv-wasm.jsonl'" &&
   cd ../.. && for x in c rust wasm; do python3 -I -c "$FNVX" "$R-fnv-$x.jsonl" > "$R-fnv-$x.txt" || return 1; done &&
-  test "$(wc -l < "$R-fnv-c.txt")" = 14 && cmp "$R-fnv-c.txt" "$R-fnv-rust.txt" && cmp "$R-fnv-c.txt" "$R-fnv-wasm.txt" &&
+  test "$(wc -l < "$R-fnv-c.txt")" = 16 && cmp "$R-fnv-c.txt" "$R-fnv-rust.txt" && cmp "$R-fnv-c.txt" "$R-fnv-wasm.txt" &&
   cat "$R-fnv-c.txt" && if [ "$CORE_ONLY" = True ] || [ "$(json log2q)" -gt 50 ]; then cwasm; fi); }
 # a core_only set, and a set with log2 q > 50 (n2816-kmax65536, 54: the closest to the C core's PQZ_LOG2Q <= 56 limb
 # bound; it kept this part when it stopped being core_only, plan 5h Task 8d part 1b; pqz-ffi's wasm32 build runs the
@@ -150,7 +150,7 @@ fnv() { (cd pqzl && part fnv/c sh -c "./build.sh native > /dev/null && PQZ_ARENA
 cwasm() { (cd pqzl && part fnv/cwasm sh -c "B=$PB/cwasm ./build.sh wasm > /dev/null &&
     PQZ_WASM_FILE=$PB/cwasm/wasm/pqz.wasm PQZ_ARENA_MB=2048 node test/run_wasm.mjs 2 1 65535 \
     > '../$R-fnv-cwasm.jsonl'") && python3 -I -c "$FNVX" "$R-fnv-cwasm.jsonl" > "$R-fnv-cwasm.txt" &&
-  cmp "$R-fnv-c.txt" "$R-fnv-cwasm.txt" && echo "C core wasm32 = C core native (14 relations)"; }
+  cmp "$R-fnv-c.txt" "$R-fnv-cwasm.txt" && echo "C core wasm32 = C core native (16 relations)"; }
 # one "<rel> <proofs_fnv>" line per relation of a bench's JSON lines (the C / Rust benches print '": ', the wasm32 one
 # '":'); exit 1 if any line reports fails > 0
 FNVX='import json, sys
