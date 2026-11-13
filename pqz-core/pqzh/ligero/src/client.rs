@@ -12,7 +12,7 @@ use pqz_stmt::{
 use crate::cs::Rel;
 use crate::ring::*;
 
-/// the l2 bounds of the samplers (KeyGen / Enc's resampling): CBD(1) vectors, CBD(20) vectors, e2 (v3 36 / 164 / 64)
+/// the l2 bounds of the samplers (KeyGen / Enc's resampling): CBD(1) vectors, CBD(20) vectors, e2 (n2048-kmax1024 36 / 164 / 64)
 const BS: i64 = crate::set::BETA_S as i64;
 const BE: i64 = crate::set::BETA_E as i64;
 const B2: i64 = crate::set::BETA_2 as i64;
@@ -125,6 +125,32 @@ impl Setup {
             Form::Transfer0 => (&self.tx0_stmt, &self.tx0_wit),
         }
     }
+}
+
+/// R_DR as the auditor's disclosure (DISCLOSE-AUDITOR, op 5) of one fresh key: the statement's kind word says window
+/// `w` (kind = 2 + 256 w), the ciphertext's v sits at window `w_ct` (honest: `w_ct = w`); witness (s, e) of the key
+/// (review 3w u2-4).
+pub fn disclose_auditor(w: usize, w_ct: usize) -> (Vec<u8>, Vec<u8>) {
+    let mut rng = Rng::new();
+    let k = keygen(&mut rng);
+    let (r, e1, e2) = (rng.short(N, 1, BS), rng.short(N, 20, BE), rng.short(16, 20, B2));
+    let v = 123_456u64;
+    // v at window w_ct: the first 16 coefficients of (X^-16 w_ct pk)^T r (no wrap: 16 w_ct + 16 <= 64)
+    let pk_w: Vec<Poly> = k.pk.iter().map(|p| xinv(p, 16 * w_ct)).collect();
+    let (u, vs) = encrypt(&[&pk_w], &[digits(v)], &polys(&r), &polys(&e1), &[e2]);
+    let mut st = Form::DiscloseAuditor.op_tag().to_vec();
+    st.extend_from_slice(&PQZH_ID);
+    st.extend((PREFIX..DISC_AMOUNT).map(|i| (i * 7) as u8));
+    st.extend([0u8; 64]);
+    st[DISC_AMOUNT + 24..DISC_AMOUNT + 32].copy_from_slice(&v.to_be_bytes());
+    st[DISC_KIND + 30] = w as u8;
+    st[DISC_KIND + 31] = 2;
+    wr_vec(&mut st, &k.pk);
+    wr_vec(&mut st, &u);
+    wr_v(&mut st, &vs[0]);
+    let mut wit: Vec<u8> = k.s.iter().map(|&x| x as i8 as u8).collect();
+    le16(&mut wit, &k.e);
+    (st, wit)
 }
 
 /// relation names as the benches print them (op 7: R_TXM<M> auditor on, R_TXM<M>_0 off)

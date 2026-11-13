@@ -106,6 +106,10 @@ fn grandom_eq_c() {
         let (r, c) = (rand_grandom(&seed, dom, log2o, n), c_grandom(&seed, dom, log2o, n));
         assert_eq!(r, c, "input {t}: log2o {log2o}, n {n}");
         ok += c.is_ok() as usize;
+        // review 3w u1-2: the masks' sampler refuses log2o >= 24 in both cores (the 128 coefficients are i64::MIN)
+        if let Ok(v) = &c {
+            assert_eq!(v[n as usize..].iter().all(|&x| x == i64::MIN), log2o >= 24, "input {t}: log2o {log2o}");
+        }
     }
     assert_eq!(ok, N - N / 8, "only log2o = 0 fails");
 }

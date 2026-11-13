@@ -7,13 +7,19 @@ use pqzh_ligero::Params;
 /// `const fn`, no floats.
 pub const PARAMS: Params = Params::proven();
 
-/// The Ligero verifier (it catches its own panics; `crate::precompile` catches any other). `Err(NodeFault)` when one
-/// of its buffers could not be reserved (review P-D, as PQZL's `Error::Memory`).
+/// The Ligero verifier. A panic unwinds to `crate::precompile`'s catch (status 3, as PQZL's; review 3w u3-2: Ligero's
+/// `try_verify` caught it itself and the host saw status 0). `Err(NodeFault)` when one of its buffers could not be
+/// reserved (review P-D, as PQZL's `Error::Memory`).
 pub fn verify(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, crate::NodeFault> {
-    pqzh_ligero::try_verify(op, stmt, proof, &PARAMS).map_err(|_| crate::NodeFault)
+    pqzh_ligero::verify_unwinding(op, stmt, proof, &PARAMS).map_err(|_| crate::NodeFault)
 }
 
-/// Ligero's prover (hedged with the statement and witness, D6).
+/// Test hook (feature `test-hooks`): the Ligero verifier panics on entry.
+#[cfg(feature = "test-hooks")]
+pub use pqzh_ligero::ligero::TEST_PANIC;
+
+/// Ligero's prover (hedged with the statement and witness, D6). ARCH-POS-13: its result goes to the key holder only
+/// (`pqzh_ligero::prove`).
 #[cfg(feature = "prove")]
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, &'static str> {
     pqzh_ligero::prove(op, stmt, wit, *rnd32, &PARAMS)
@@ -24,7 +30,7 @@ pub fn max_proof_len_multi(m: usize, aud: bool) -> usize {
     PARAMS.max_proof_len(pqzh_ligero::Rel::Multi { m, aud })
 }
 
-/// Panics the Ligero verifier caught so far (tests).
+/// Panics Ligero's own `try_verify` caught so far (tests; pqz-ffi's path does not go through that catch).
 pub fn verify_panics() -> usize {
     pqzh_ligero::ligero::VERIFY_PANICS.load(std::sync::atomic::Ordering::Relaxed)
 }

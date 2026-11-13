@@ -265,3 +265,29 @@ fn header_matches() {
     assert_eq!(l.split_whitespace().nth(2).unwrap().parse::<usize>().unwrap(), stmt::MAX_PROOF_PQZL);
     assert_eq!(pqz_ffi::pqzl::MAX_PROOF, stmt::MAX_PROOF_PQZL);
 }
+
+/// Review 3w u3-4: `enc_multi` refuses any two equal keys of one statement (`pk_f`, every leg's, `pk_a`), as the
+/// contract's KV-9 `_distinct`; within one group the cores refuse an equal key at an equal window as well, across
+/// groups only `enc_multi`'s rule does. Distinct keys encrypt.
+#[test]
+fn enc_multi_refuses_equal_keys() {
+    let s = stmt::legs_per_group(true);
+    let k: Vec<_> = (1..=(s as u8 + 3)).map(|i| pqzl::keygen(&[i; 32]).unwrap().pk.clone()).collect();
+    let (d, se) = ([1u8; 16], [5u8; 32]);
+    let (f, a) = (&*k[0], &*k[1]);
+    let legs = |ix: &[usize]| ix.iter().map(|&i| (&*k[i], d)).collect::<Vec<_>>();
+    let other: Vec<usize> = (2..s + 3).collect(); // s + 1 distinct leg keys: two groups with the auditor on
+    assert!(pqzl::enc_multi(f, d, &legs(&other), Some(a), &se).is_some(), "distinct keys, two groups");
+    let mut cross = other.clone();
+    cross[s] = cross[0]; // leg s (group 1) = leg 0 (group 0)
+    for (ls, aud, what) in [
+        (legs(&[2, 2]), Some(a), "leg = leg"),
+        (vec![(&*k[2], d), (f, d)], Some(a), "leg = pk_f"),
+        (vec![(&*k[2], d), (a, d)], Some(a), "leg = pk_a"),
+        (legs(&[2, 3]), Some(f), "pk_a = pk_f"),
+        (legs(&[2, 2]), None, "leg = leg, auditor off"),
+        (legs(&cross), Some(a), "leg = leg in another group"),
+    ] {
+        assert!(pqzl::enc_multi(f, d, &ls, aud, &se).is_none(), "{what}");
+    }
+}

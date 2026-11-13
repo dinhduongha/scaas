@@ -1,10 +1,10 @@
-//! F_q, q of the parameter set (`crate::set`, one per build; v3: q = 2^42 - 215), and F_q^4 = F_q[X]/(X^4 - NR) (NR the
+//! F_q, q of the parameter set (`crate::set`, one per build; n2048-kmax1024: q = 2^42 - 215), and F_q^4 = F_q[X]/(X^4 - NR) (NR the
 //! set's smallest non-square: 3 in every set so far). Elements are canonical u64 (< q < 2^L, L = LOG2Q of the set). A
 //! product (< 2^(2L)) is reduced by Barrett (`redx`, PQZL's arith/ntt.rs: x < 2^(2L + 4)); any u128, the lazy sums of
-//! hot loops (at most 2^(128 - 2L) products: 2^44 at v3, 2^28 at L = 50), by `red` (two Barretts).
+//! hot loops (at most 2^(128 - 2L) products: 2^44 at n2048-kmax1024, 2^28 at L = 50), by `red` (two Barretts).
 //! wasm32 has no 64 x 64 -> 128 multiply (u128 products become `__multi3` calls), so there products, F_q^4 products and
 //! the lazy sums use NL limbs of W bits in u64 (`limb`: two 21-bit limbs at L = 42, as before; three of ceil(L / 3)
-//! bits above, 16 at set (a), 17 at 50 bits); the results are the same canonical values, so proofs stay byte-identical
+//! bits above, 16 at n2304-kmax4096, 17 at 50 bits); the results are the same canonical values, so proofs stay byte-identical
 //! with native (unit test `limb_matches_u128`, and the wasm32 runs' FNV). Every reduction is branch-free (review P-B).
 
 use std::ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign};
@@ -12,11 +12,11 @@ use std::ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign};
 use crate::set;
 
 pub const Q: u64 = set::Q;
-/// bits of q - 1 (v3 42)
+/// bits of q - 1 (n2048-kmax1024 42)
 pub(crate) const L: u32 = set::LOG2Q;
 const X: u32 = set::BARX;
 const _: () = assert!(2 * L + 4 == X && L <= 59 && (1u64 << (L - 1)) < Q && Q < (1u64 << L));
-/// bytes per F_q element in proofs (big-endian, canonical): ceil(L / 8), v3 42 bits in 6, set (a) 46 in 6, 50 in 7
+/// bytes per F_q element in proofs (big-endian, canonical): ceil(L / 8), n2048-kmax1024 42 bits in 6, n2304-kmax4096 46 in 6, 50 in 7
 pub const EB: usize = (L as usize).div_ceil(8);
 /// a uniform sample is a word masked to L bits, rejected if >= q (transcript, prover rng, as expand_A)
 pub(crate) const MASK: u64 = (1 << L) - 1;

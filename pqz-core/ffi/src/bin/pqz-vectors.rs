@@ -110,10 +110,10 @@ fn enc(keys: &[&Key], values: &[u64], seed: [u8; 32]) -> Enc {
         recips: keys.iter().map(|k| k.label.clone()).collect(),
         values: values.to_vec(),
         u: c.u.to_vec(),
-        vs: c.vs,
+        vs: c.vs.clone(),
         r: c.r.to_vec(),
         e1: c.e1.to_vec(),
-        e2: c.e2,
+        e2: c.e2.clone(),
         ctr: c.ctr,
     }
 }

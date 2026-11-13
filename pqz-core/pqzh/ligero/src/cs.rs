@@ -10,21 +10,21 @@
 //!   R_TX0  R_TX without the auditor (CTR-PQZ-24, plan D8): rows 1-4, 6, 7, legs t and f only (no pk_a, v_a, e2_a)
 //!   R_BURN R_TX rows 1, 2, 4, 6, 7 with d public (one leg: pk_f, v_f, e2_f, d')
 //!   R_DS   u = A^T r + e1; pk^T r + e2 = v - Delta d (k < 16)
-//!   R_DR   pk = A s + e; u^T s + e' = v - Delta d (k < 16), e' + 2^(EBITS-1) in EBITS bits (v3: + 2^24 in 25)
+//!   R_DR   pk = A s + e; u^T s + e' = v - Delta d (k < 16), e' + 2^(EBITS-1) in EBITS bits (n2048-kmax1024: + 2^24 in 25)
 //!   R_TXM  op 7 (P6-ANON plan §3): R_TX with M receiver legs j (digits d_j) and one randomness group (r_g, e1_g, u_g)
 //!          per s legs (s = S_AUD with the auditor, 4 without: owner 2026-10-25, R0-1), g(j) = j / s, v_f in group 0;
 //!          auditor on: one copy v_{a,j} of every leg under pk_a (digits d_j, group g(j)) at the coefficients
 //!          [16 w, 16 w + 16) of pk_a^T r_g(j), w = j mod s (as the leg pk X^-16w pk_a: `ring::xinv`); row 7 with
 //!          sum_j d_j. R_TX is R_TXM's M = 1 (one builder; op 1 keeps its own bytes). R_DR reads v at the kind word's
 //!          window w (u^T s at [16 w, ..), as X^-16w u).
-//! with every exact l2 bound of pqz-core (BETA_S / BETA_E for CBD(1) / CBD(20) vectors: v3 36 / 164, set (a) 38 / 173;
+//! with every exact l2 bound of pqz-core (BETA_S / BETA_E for CBD(1) / CBD(20) vectors: n2048-kmax1024 36 / 164, n2304-kmax4096 38 / 173;
 //! BETA_2 = 64 for e2) and the bit ranges of the parameter set (M_i < 2^MBITS, c_i + 64 < 2^CBITS, e_T + 2^(EBITS-1) <
-//! 2^EBITS: v3 14 / 11 / 25, set (a) 16 / 13 / 27; `crate::set`). R_TXM
+//! 2^EBITS: n2048-kmax1024 14 / 11 / 25, n2304-kmax4096 16 / 13 / 27; `crate::set`). R_TXM
 //! bounds every e2 vector by 64 (legs, v_f, auditor copies), as R_TX's legs: the owner's rule for op 7 (2026-10-15,
 //! decisions.md CTR-PQZ-03, pre-review X-1; the plan's first draft had one block bound 64 sqrt(M), which this implies).
 //! Honest encryptions (CTR-PQZ-19 resamples each e2 to <= 64) meet it.
 //!
-//! Layout (§3.3). Rows have l slots. A big group (N = k d values of one short vector, v3 2048) has value rows, slot-aligned square
+//! Layout (§3.3). Rows have l slots. A big group (N = k d values of one short vector, n2048-kmax1024 2048) has value rows, slot-aligned square
 //! rows and one row per bit of x + off (off = 2^(bits-1)); the bit decomposition covers every slot of the group's rows
 //! (padding slots hold 0, its square 0 and the bits of off). The small values (e2, digits, M, carries, e_T, e', the l2
 //! slacks) are packed in small value rows, aligned small square rows, and small bit rows that hold their bits
@@ -61,7 +61,7 @@ const COFF: i64 = 64;
 const fn blen(x: usize) -> usize {
     (usize::BITS - x.leading_zeros()) as usize
 }
-/// (bits, off) of a value with |x| <= b: x + 2^blen(b) in blen(b) + 1 bits (v3: 36 -> (7, 64), 164 -> (9, 256), e2's
+/// (bits, off) of a value with |x| <= b: x + 2^blen(b) in blen(b) + 1 bits (n2048-kmax1024: 36 -> (7, 64), 164 -> (9, 256), e2's
 /// 64 -> (8, 128))
 const fn range(b: usize) -> (usize, i64) {
     (blen(b) + 1, 1 << blen(b))
@@ -167,7 +167,7 @@ impl Layout {
     pub fn new(rel: impl Into<Rel>, ell: usize) -> Layout {
         assert!(ell >= 1);
         // big groups (bits, off, B^2) of a CBD(1) / CBD(20) pair; small items (count, bits, off); the l2 slacks
-        // B^2 - ||x||^2 in blen(B^2) bits (v3 11 / 15 / e2 13)
+        // B^2 - ||x||^2 in blen(B^2) bits (n2048-kmax1024 11 / 15 / e2 13)
         let (rs, re, r2) = (range(BETA_S), range(BETA_E), range(BETA_2));
         let se = [(rs.0, rs.1, BS), (re.0, re.1, BE)];
         let sl = [(1, blen(BS as usize), 0), (1, blen(BE as usize), 0)];
@@ -453,7 +453,13 @@ fn l2(v: &[i64]) -> i64 {
 }
 
 // Review P-B: the honest prover's checks run on secret values, so each is a 0 / 1 (or nonzero) word without a branch,
-// OR-ed into one verdict per error, declassified there (`ct::verdict`: the error is the API's public output).
+// OR-ed into one verdict per error, declassified there (`ct::verdict`: the error goes to the prover's caller, the key
+// holder; ARCH-POS-13 keeps it there, `crate::prove`).
+
+/// The one error of every prover failure that depends on a decryption under the witness's key (review 3w u2-3): a
+/// debit whose balance T does not decrypt to digits, carries and e_T in range, and R_DR whose ciphertext is not an
+/// encryption of the amount. One error, one verdict: which part failed is not told apart.
+pub const NOT_DECRYPTABLE: &str = "the ciphertext does not decrypt to the statement under this key";
 
 /// 1 if x > b (|x|, |b| < 2^62)
 fn gt(x: i64, b: i64) -> u64 {
@@ -581,14 +587,9 @@ pub fn witness(rel: impl Into<Rel>, st: &Stmt, wit: &[u8], check: bool) -> Resul
                 (mv[i], et[i], cv[i]) = (m, e, c);
                 cprev = c;
             }
-            if check && ct::verdict(bad_d != 0) {
-                return Err("digits");
-            }
-            if check && ct::verdict(bad_c != 0) {
-                return Err("carry");
-            }
-            if check && ct::verdict(cprev != 0) {
-                return Err("carry out");
+            // digits / M / e_T, carries, carry out: one verdict (they all depend on the decryption of T)
+            if check && ct::verdict(bad_d | bad_c | cprev as u64 != 0) {
+                return Err(NOT_DECRYPTABLE);
             }
             let mut small = Vec::with_capacity(16 * nl + 16 * nd + 64 + 2 * (1 + ng) + nl); // no reallocation
             small.extend(e2.iter().flatten());
@@ -645,7 +646,7 @@ pub fn witness(rel: impl Into<Rel>, st: &Stmt, wit: &[u8], check: bool) -> Resul
             // e' outside [-E, E)
             let bad = small.iter().fold(0u64, |a, &e| a | ((e + EOFF) as u64) >> EBITS);
             if check && ct::verdict(bad != 0) {
-                return Err("not an encryption of amount");
+                return Err(NOT_DECRYPTABLE);
             }
             small.extend([BS - l2(&s), BE - l2(&e)]);
             Ok(Wit { big: vec![take(&mut s), take(&mut e)], small: take(&mut small) })

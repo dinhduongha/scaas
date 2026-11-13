@@ -276,6 +276,12 @@ pub(crate) fn enc_seed(
     if msgs.len() != pks.len() || win.is_some_and(|w| w.len() != pks.len() || w.iter().any(|&x| x >= 4)) {
         return Err(Error::Input);
     }
+    // review 3w u3-4 (the contract's KV-9 `_distinct`): two recipients with the same key at the same window under one
+    // randomness give v_j - v_k = Delta (m_j - m_k) + noise in public: refused (keys and windows are public)
+    let w = |j: usize| win.map_or(0, |w| w[j]);
+    if (1..pks.len()).any(|k| (0..k).any(|j| w(j) == w(k) && pks[j] == pks[k])) {
+        return Err(Error::Input);
+    }
     let mut bad = false;
     for (pk, m) in pks.iter().zip(msgs) {
         if !canonical(&pk[..]) {

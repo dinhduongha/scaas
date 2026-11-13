@@ -952,6 +952,8 @@ impl Ctx {
         };
         let mut hash = h;
         abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, r.p.tbox)?;
+        #[cfg(feature = "test-hooks")]
+        crate::fstrace::rec(6, &hash, 0); // the transcript after the commitment (tA1, tB_): review 3w Codex u1-2
         tbox::verify(&mut hash, &mut f, keys, &mut s)
     }
 
