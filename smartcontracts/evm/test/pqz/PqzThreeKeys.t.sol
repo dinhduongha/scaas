@@ -16,6 +16,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {UACall} from "../ua/UACall.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// @notice The three-key model on the token (spec 2026-11-13 pqz-three-keys, CTR-PQZ-37 .. -41, CTR-UA-43; §14 items 3, 4,
 ///         5, 6, 11, 15, 16, 17, 20, contract side). Four tokens: `pre` class `registry` (`PRECOMPILE`), `c2`
@@ -203,21 +204,40 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         return factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), s);
     }
 
+    /// The refusal on the factory path (owner 2026-11-13: no `OpenFactory` config check; the token's `init` refuses):
+    /// `createToken` reverts `PqzVerifyConfigInvalid` and leaves no instance at the predicted address.
+    function _refused(IFactoryToken.TokenConfig memory c, bytes32 s) internal {
+        address at = factory.predictAddress(nid(address(this)), 1, uint16(uint8(IOpenFactory.TokenKind.NORMAL_PQZ)), s);
+        vm.expectRevert(IPqzToken.PqzVerifyConfigInvalid.selector);
+        _create(c, s);
+        assertEq(at.code.length, 0, "no instance at the predicted address");
+    }
+
     function test_config_invalidCombinations() public {
-        bytes4 bad = IPqzToken.PqzVerifyConfigInvalid.selector;
-        vm.expectRevert(bad);
-        _create(_cfgWith(PqzCore.PRECOMPILE, true, false), "x1");
-        vm.expectRevert(bad);
-        _create(_cfgWith(PqzCore.PRECOMPILE, false, true), "x2");
-        vm.expectRevert(bad);
-        _create(_cfgWith(PqzCore.PRECOMPILE, true, true), "x3");
-        vm.expectRevert(bad); // the registry-key OFFCHAIN form: cannot be created (CTR-PQZ-37)
-        _create(_cfgWith(PqzCore.OFFCHAIN, false, false), "x4");
-        // controls, one flag changed each
-        _create(_cfgWith(PqzCore.PRECOMPILE, false, false), "y1");
-        _create(_cfgWith(PqzCore.OFFCHAIN, true, false), "y2");
-        _create(_cfgWith(PqzCore.OFFCHAIN, false, true), "y3");
-        _create(_cfgWith(PqzCore.OFFCHAIN, true, true), "y4");
+        _refused(_cfgWith(PqzCore.PRECOMPILE, true, false), "x1"); // registry + pqzOwnKey
+        _refused(_cfgWith(PqzCore.PRECOMPILE, false, true), "x2"); // registry + pqzOpening
+        _refused(_cfgWith(PqzCore.PRECOMPILE, true, true), "x3");
+        IFactoryToken.TokenConfig memory c = _cfgWith(PqzCore.PRECOMPILE, false, false);
+        c.conf.pqzVerifierUA = vA; // registry + a verifier
+        _refused(c, "x4");
+        c = _cfgWith(PqzCore.PRECOMPILE, false, false);
+        c.conf.pqzVerifierFixed = true; // registry + fixed
+        _refused(c, "x5");
+        c = _cfgWith(PqzCore.PRECOMPILE, false, false);
+        (c.conf.verifierFee, c.conf.verifierFeeMax) = (0, 1); // registry + a fee cap
+        _refused(c, "x6");
+        _refused(_cfgWith(PqzCore.OFFCHAIN, false, false), "x7"); // the shared key without the opening (ARCH-POS-13)
+        c = _cfgWith(PqzCore.OFFCHAIN, true, false);
+        c.conf.pqzVerifierUA = 0; // OFFCHAIN without a verifier
+        _refused(c, "x8");
+        // controls, one change each: the four classes, each at its predicted address
+        bytes32[4] memory ss = [bytes32("y1"), "y2", "y3", "y4"];
+        IFactoryToken.TokenConfig[4] memory cs = [_cfgWith(PqzCore.PRECOMPILE, false, false),
+            _cfgWith(PqzCore.OFFCHAIN, false, true), _cfgWith(PqzCore.OFFCHAIN, true, false), _cfgWith(PqzCore.OFFCHAIN, true, true)];
+        for (uint256 i; i < 4; ++i) {
+            address at = factory.predictAddress(nid(address(this)), 1, uint16(uint8(IOpenFactory.TokenKind.NORMAL_PQZ)), ss[i]);
+            assertEq(_create(cs[i], ss[i]), at, "the class's instance at the predicted address");
+        }
     }
 
     function _word(address t, uint256 i) internal view returns (uint256) {
@@ -479,8 +499,9 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         c2.disclosureStatement(ref, 0, 3, 1, 0);
         vm.expectRevert(IPqzToken.OpUnsupported.selector);
         c2.disclosureStatement(ref, 0, 3, 2, 0);
+        IPqzToken.PqzSignedVerdict memory sv = _sv(c2, st);
         vm.expectRevert(IPqzToken.OpUnsupported.selector);
-        c2.verifyTransferAmount(ref, 0, 3, 1, 0, VPROOF, _sv(c2, st));
+        c2.verifyTransferAmount(ref, 0, 3, 1, 0, VPROOF, sv);
         // control: opening off, all three kinds
         _shieldOn(c3, alice, 20);
         bytes32 r3 = _send(c3, _op1At(c3, alice, bob, 1, 17, true));
@@ -523,8 +544,8 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         assertEq(s.accUnits, 4, "four entries rolled: the mark counts one unit");
         assertEq(s.rollSeq, 1);
         assertEq(c2.pqzPendingCt(alice, 0, 2).length, PqzCt.CT, "the ciphertext stays");
-        // replay of the same signature: the nonce moved
-        vm.expectRevert(IPqzToken.AuthRejected.selector);
+        // the same call again: the state moved (nothing left to roll)
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.RollOverRange.selector, uint256(4)));
         c2.mtxRollOverSigned(alice, 0, 4, _sk(2), vub, _pqAuth());
         _anyDigest(alice);
         // the next debit proves over `acc` (rolled = pendingCount)
@@ -547,9 +568,15 @@ contract PqzThreeKeysTest is PqzOffchainBase {
     /// §14 items 5, 20: a debit's window skips a marked slot, before and after an un-roll; marks are never cleared.
     function test_roll_marksInWindowsAndUnroll() public {
         _aliceFour(c2);
-        _rollSigned(c2, alice, 0, _sk(2)); // mark only: no rollover
+        uint64 vub = uint64(block.number + 10);
+        _onlyDigest(alice, _rollDigest(c2, alice, 0, 0, _sk(2), vub));
+        c2.mtxRollOverSigned(alice, 0, 0, _sk(2), vub, _pqAuth()); // mark only: no rollover
         assertEq(c2.pqzAccount(alice, 0).rolled, 0);
         assertEq(c2.pqzAccount(alice, 0).rollSeq, 1);
+        // replay (§14 item 4): the same signature, every other input as signed; only `rollSeq` moved
+        vm.expectRevert(IPqzToken.AuthRejected.selector);
+        c2.mtxRollOverSigned(alice, 0, 0, _sk(2), vub, _pqAuth());
+        _anyDigest(alice);
         IPqzToken.PqzTransferArgs memory a = _op1At(c2, alice, bob, 4, 19, false);
         bytes memory st = c2.transferSingleStatement(a, 0);
         assertEq(_slice(st, 640 + 2 * PqzCt.PK, PqzCt.CT), ct.sumMixed(new bytes(PqzCt.CT), _two(c2, 1, 3), _amt(100)),

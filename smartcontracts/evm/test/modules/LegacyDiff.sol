@@ -203,12 +203,28 @@ abstract contract LegacyDiff is Test {
     ///      2026-11-10-token-lists.md §3): `validBits()` of the regulated kinds 8-13 adds bit 28 `KYC`
     ///      (`GovernanceBits.REGULATED`). Round 3t (CTR-PQZ-36, spec 2026-11-11-verifier-fee.md §7.3): `pqzVerifyConfig()` of
     ///      the PQZ kinds 4, 5, 12, 13 appends `verifierFee`, `verifierFeeMax`, `verifierFeePending`, `verifierFeeEta` to the
-    ///      seven old words; a token created without a fee reads 0 for the four. Owner 2026-11-12 (CTR-MTX-86): the old
+    ///      seven old words; a token created without a fee reads 0 for the four. The three-key model (CTR-PQZ-37): then
+    ///      `pqzOwnKey`, `pqzOpening`, both 0 on the differential's tokens (class `registry`). Owner 2026-11-12 (CTR-MTX-86): the old
     ///      `receiverFeeDigest` answer is checked as the digest under the `UAReceiverFee` typehash, then expected under
     ///      `UAPayeeFee`'s (the same members, the same payment hash, domain and arguments).
     function _intended(address token, bytes memory data, Run memory o) internal view returns (bytes memory) {
         if (o.ok && o.ret.length == 7 * 32 && bytes4(data) == bytes4(keccak256("pqzVerifyConfig()"))) {
-            return bytes.concat(o.ret, new bytes(4 * 32));
+            return bytes.concat(o.ret, new bytes(6 * 32));
+        }
+        // the three-key model (CTR-PQZ-41): `pqzAccount` appends `rollSeq` (0: no signed rollover in the differential)
+        if (o.ok && o.ret.length == 10 * 32 && bytes4(data) == bytes4(keccak256("pqzAccount(bytes32,uint64)"))) {
+            return bytes.concat(o.ret, new bytes(32));
+        }
+        // the three-key model (CTR-PQZ-41): the PQZ kinds' allow-list appends `mtxRollOverSigned`, `ABSOLUTE` (fee class 1)
+        if (o.ok && bytes4(data) == bytes4(keccak256("mtxSelectors()")) && _pqzKind(_kindOf(token))) {
+            (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = abi.decode(o.ret, (bytes4[], uint8[], uint8[]));
+            bytes4[] memory s2 = new bytes4[](s.length + 1);
+            uint8[] memory c2 = new uint8[](s.length + 1);
+            uint8[] memory a2 = new uint8[](s.length + 1);
+            for (uint256 i; i < s.length; ++i) (s2[i], c2[i], a2[i]) = (_argsMovedSel(s[i]), c[i], a[i]);
+            (s2[s.length], c2[s.length]) =
+                (bytes4(keccak256("mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")), 1);
+            return abi.encode(s2, c2, a2);
         }
         if (o.ok && o.ret.length == 32 && bytes4(data) == bytes4(0x7c4fa261)) {
             bytes memory args = new bytes(data.length - 4);
@@ -378,7 +394,7 @@ abstract contract LegacyDiff is Test {
             string memory p = string.concat(".rows[", vm.toString(i), "]");
             if (!vm.keyExistsJson(j, p)) break;
             string memory sig = vm.parseJsonString(j, string.concat(p, ".sig"));
-            if (keccak256(bytes(sig)) == keccak256("implementation()")) continue;
+            if (keccak256(bytes(sig)) == keccak256("implementation()") || _argsMoved(sig)) continue;
             bytes memory data = vm.parseJsonBytes(j, string.concat(p, ".data"));
             for (uint256 c; c < callers.length; ++c) _diff(token, oldImpl, callers[c], data, sig);
         }
@@ -395,9 +411,35 @@ abstract contract LegacyDiff is Test {
         while (vm.keyExistsJson(j, string.concat(".rows[", vm.toString(n), "]"))) ++n;
         string memory p = string.concat(".rows[", vm.toString(which % n), "]");
         string memory sig = vm.parseJsonString(j, string.concat(p, ".sig"));
-        vm.assume(keccak256(bytes(sig)) != keccak256("implementation()"));
+        vm.assume(keccak256(bytes(sig)) != keccak256("implementation()") && !_argsMoved(sig));
         bytes memory row = vm.parseJsonBytes(j, string.concat(p, ".data"));
         _diff(token, oldImpl, caller, bytes.concat(bytes4(row), tail), sig);
+    }
+
+    /// @dev The three-key model (CTR-PQZ-38, -40): `PqzTransferArgs` gained `uFrom` and the two openings, so d142b57c's
+    ///      single-transfer entries (direct, commit-reveal, their signed forms, `transferSingleStatement`) have no selector
+    ///      on the new side; they are not comparable and leave the differential. Their new forms are covered by
+    ///      `test/pqz` (`PqzThreeKeys`, the OFFCHAIN and typed suites).
+    function _argsMoved(string memory sig) internal pure returns (bool) {
+        bytes memory s = bytes(sig);
+        bytes memory t = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+        for (uint256 i; i + t.length <= s.length; ++i) {
+            bool m = true;
+            for (uint256 j; j < t.length && m; ++j) m = s[i + j] == t[j];
+            if (m) return true;
+        }
+        return false;
+    }
+
+    /// @dev The two single-transfer selectors `PqzTransferArgs`'s new fields moved (CTR-PQZ-40), old -> new; any other as is.
+    function _argsMovedSel(bytes4 s) internal pure returns (bytes4) {
+        if (s == 0xc92100fe) return 0x8f913be5; // mtxConfidentialTransferSingle
+        if (s == 0x240ecea3) return 0xa4f6024d; // mtxConfidentialTransferSingleCompact
+        return s;
+    }
+
+    function _pqzKind(uint8 k) internal pure returns (bool) {
+        return k == 4 || k == 5 || k == 12 || k == 13;
     }
 
     /// @dev The DEX has no `kind()`: `type(uint8).max` names it.
