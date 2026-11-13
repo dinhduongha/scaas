@@ -166,7 +166,7 @@ test('the six signed PQZ entries take PqzSignedVerdict last, after auth; the row
   }
   // the selectors of the contract's own signatures (IPqzToken / PqzLayer / WrappedPqzToken, spec §5.3)
   // group 3h (T59): `bytes32 ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms)
-  // three keys (CTR-PQZ-40): `bytes uFrom` after vAuditor, the two PqzOpening (bytes kemCt, bytes32 nonce, bytes body) last
+  // three keys (CTR-PQZ-40): `bytes uFrom` after vAuditor, the two PqzOpening (bytes mlkemCt, bytes32 x25519Eph, bytes sealedSeed) last
   const PA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,'
     + '(bytes,bytes32,bytes),(bytes,bytes32,bytes))';
   const MA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)';

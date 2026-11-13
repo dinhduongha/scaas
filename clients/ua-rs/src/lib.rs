@@ -502,3 +502,5 @@ pub mod wraplimit;
 pub mod pqzfee;
 /// Round 3r: the router's 18 admin ops and the factory's release approval keys (CTR-GOV-23).
 pub mod admin;
+/// The PQZ three-key model: the scoped seeds, the opening KEM seed, the leg seed, `memoHash`, `PqzRollOver` (CTR-PQZ-37 .. -41).
+pub mod pqz3k;

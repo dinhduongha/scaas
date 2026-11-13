@@ -1488,6 +1488,19 @@ export function checkPqzDebit(td, { current }) {
   return refuse(`StaleKeyVersion: version ${v} is stale (current ${cur}): migrate it first`);
 }
 
+/** T-13 (KV-9, the contract's `_distinct`): the keys one PQZ statement names, in its order (`pk_f`, then `pk_t` or every leg's,
+ *  then `pk_a` with the auditor on), pairwise distinct before anything is encrypted: equal keys under one randomness cancel the
+ *  masks, and the contract refuses only after the ciphertexts are public. `entries` = [{ ua, key }] (key: the PQZ key bytes).
+ *  Refuses `KeyReused` naming the UA of the later key of the pair, as the contract. */
+export function pqzKeysDistinct(entries) {
+  const seen = new Set();
+  for (const { ua, key } of entries) {
+    const h = hex(keccak_256(fromHex(key)));
+    if (seen.has(h)) refuse(`KeyReused: ${ua} names a key already in this statement`);
+    seen.add(h);
+  }
+}
+
 /** A self-call `MetaTransaction` (CTR-MTX-17), the generic path (TS-D14: a mixed batch, an op with no named entry), that is exactly the call the client built, `call = {contract, data}`:
  *  `verifyingContract` and `data` equal; `data` decoded against the contract's published allowlist `[{selector, name,
  *  feeClass, amountArg}]` (`mtxSelectors()`, pinned per implementation version, CLI-SGN-34); an unknown selector, a

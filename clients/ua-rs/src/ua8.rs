@@ -1173,3 +1173,19 @@ fn auth_ok(id: &[u8; 32], d: &[u8], md: &[u8; 32], slots: &[MemberSig], domain: 
     }
     Ok(acc >= structure.threshold.into())
 }
+
+/// T-13 (KV-9, the contract's `_distinct`): the keys one PQZ statement names, in its order (`pk_f`, then `pk_t` or every
+/// leg's, then `pk_a` with the auditor on), pairwise distinct before anything is encrypted: equal keys under one randomness
+/// cancel the masks, and the contract refuses only after the ciphertexts are public. `entries` = (ua, PQZ key bytes).
+/// `Err(ua)`: `KeyReused`, the UA of the later key of the pair, as the contract names it.
+pub fn pqz_keys_distinct(entries: &[([u8; 32], &[u8])]) -> core::result::Result<(), [u8; 32]> {
+    let mut seen: Vec<[u8; 32]> = Vec::with_capacity(entries.len());
+    for (ua, key) in entries {
+        let h = crate::keccak256(key);
+        if seen.contains(&h) {
+            return Err(*ua);
+        }
+        seen.push(h);
+    }
+    Ok(())
+}
