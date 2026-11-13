@@ -978,6 +978,75 @@ each version fresh, vault and backup keys name `(ua, version, pqzKeyHash)`, and 
 - The version builders refuse a replacement of version 0, a gap (`v ≠ latest + 1`), a version without version 0, and a key
   the UA already holds at another version. This replaces "one PQZ key per UA, ever" above for versions ≥ 1; version 0 stays
   write-once.
+- **Change (owner 2026-11-13, three-key model; SPECIFIED):** this rule is the `registry` key class; the `offchain-shared` and
+  `offchain-token` seeds, the opening KEM key and their vault leaves are [CLI-SGN-50](#CLI-SGN-50).
+
+<a id="CLI-SGN-50"></a>**CLI-SGN-50** — **One PQZ seed per key class, version and (for `offchain-token`) token, and one opening KEM
+key per scoped record, each domain-separated and derived from the wallet seed** (owner 2026-11-13; spec
+[`2026-11-13-pqz-three-keys.md`](../superpowers/specs/2026-11-13-pqz-three-keys.md) K3-2, K3-6b; key classes
+[CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37), records [CTR-UA-43](../contracts/accounts.md#CTR-UA-43)). Status:
+**SPECIFIED** for `clientkeys`, `ua-rs` and every `ua-*`. Extends [CLI-SGN-49](#CLI-SGN-49); the `registry` key is byte for byte
+its rule.
+- `seed32 = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info)`, `pk = KeyGen(seed32)` at the scope's set:
+  `registry` `"scaas.ua.pqz-mlwe.v1" ‖ u32(account) ‖ u32(index) [‖ be64(v) for v ≥ 1]` (unchanged); `offchain-shared`
+  `"scaas.ua.pqz-mlwe.offchain-shared.v1" ‖ u32(account) ‖ u32(index) ‖ chainUid(32) ‖ be64(v)` (the version always, `v = 0`
+  too); `offchain-token` `"scaas.ua.pqz-mlwe.offchain-token.v1" ‖ u32(account) ‖ u32(index) ‖ chainUid(32) ‖ token(20) ‖ be64(v)`.
+  Only the `registry` key stays chain-independent. An `msig` operator draws each class and version fresh.
+- **Opening KEM key** of a scoped record of an opening scope: `openKemSeed = HKDF-SHA256(ikm = BIP-39 seed, salt =
+  "scaas.ua.kem.v1", info, L = 96)` with `info = "scaas.kem.pqz-opening.1" ‖ ua ‖ chainUid(32) ‖ be64(v)` (`offchain-shared`) or
+  `"scaas.kem.pqz-opening-token.1" ‖ ua ‖ chainUid(32) ‖ token(20) ‖ be64(v)` (`offchain-token` with the opening), `v` the
+  record's version; `(ek, dk) = ML-KEM-1024.KeyGen_internal(d = openKemSeed[0:32], z = openKemSeed[32:64])`,
+  `sk_X = openKemSeed[64:96]`, `kemPk = 0x01 ‖ ek ‖ X25519(sk_X, 9)`. It is never given to chat code; the chat KEM key is a
+  different key.
+- Derived only in the key worker; vault leaves `vault:pqz:<class>:<account>:<index>[:<chainUid>[:<token>]]:<v>`, one per version
+  for the opening KEM key beside it. `seed_enc`, the memo key and `ownTag`'s key keep their formulas with `pqzKeySeed` = the seed
+  of the token's class and version.
+- **`ownTag` on an opening token's op 1 covers `u_f`** ([CTR-PQZ-34](../contracts/pq-zero-knowledge.md#CTR-PQZ-34)'s Change).
+- **Key handles carry their class**: a wallet never loads a `registry` or `offchain-shared` secret into a code path that handles
+  an `offchain-token`'s ciphertexts, or the reverse; a mismatch is refused before any arithmetic.
+- KAT rows in `pq_kat.json`: the three classes, two tokens, two chains, versions 0 and 1 give pairwise distinct seeds (`registry`
+  rows unchanged); `openKemSeed` for both classes. Restore test: mnemonic only → the opening KEM keys of versions 0 and 1 equal the
+  stored records and every opening opens.
+
+<a id="CLI-SGN-51"></a>**CLI-SGN-51** — **On an opening token a wallet never applies its PQZ secret to a credit: it re-encrypts
+from the sealed opening and compares bytes; every failure is one outcome, "skip"** (owner 2026-11-13; spec K3-7; opening
+[CTR-PQZ-40](../contracts/pq-zero-knowledge.md#CTR-PQZ-40)). Status: **SPECIFIED**; mandatory in `clientkeys`, `ua-rs` (the only
+signer) and every binding through it; no opening-token "decrypt credit" entry exists in release builds. For a pending entry of
+`(ua, version)` read from state:
+1. TRIVIAL entry: accept (the amount is public).
+2. Read the slot, the blob, the entry's `u`, `v_t`, `[v_a]`, `O_t`, `[O_a]`.
+3. Derive the opening KEM secret of this account's key version ([CLI-SGN-50](#CLI-SGN-50)).
+4. `ss = Decaps(O_t)` (ML-KEM with implicit rejection; an X25519 low-order point is the same outcome, skip, on no separate path);
+   `kek`; open `sealedSeed` with the `aad` of CTR-PQZ-40. Tag fails: skip.
+5. `(r, e1, e2_t, e2_a) = Enc-expand(seed_leg)` with the pinned sampler; the relation's norm bounds must hold, else skip.
+6. `P(Aᵀr + e1)` byte-equal to the stored `u`, else skip.
+7. `w = v_t − pkᵀr − e2_t (mod q)` on the 16 plaintext coefficients with the holder's own `pk` (the token's scope) of that
+   version; every `w_i = Δ·d_i` exactly with `d_i ∈ [0, 16)`, else skip. The amount is `Σ d_i·16^i`.
+8. Recompute `O_t` from `seed_leg` and compare with the stored bytes, else skip.
+9. With the auditor on: `v_a = pk_aᵀr + e2_a + Δ·d` byte-equal with the auditor's key from the registry, and `O_a` recomputed from
+   `seed_leg` and the auditor's opening KEM key of its key version (the blob's `kv` tail) byte-equal to the stored bytes, else
+   skip. So no credit is spendable by an honest wallet while the auditor is blinded.
+10. Accept.
+
+- Inputs are public bytes and the opening KEM secret; `s` is not an input. No error detail, step number or timing class leaves
+  the wallet. The PQZ secret is applied only to the holder's own `(u_f, v_f)` after its `ownTag` verifies, and to a `T` whose
+  every part is that, an accepted credit, a TRIVIAL entry or a marked slot (zero); the prover refuses a window with an
+  unaccepted, unmarked credit **before** the secret is loaded.
+- **Debit**: the wallet picks `p` so that every entry of the window is accepted, TRIVIAL or skip-marked; a failing entry below
+  the wanted `p` is skip-marked first by the signed rollover ([CTR-PQZ-41](../contracts/pq-zero-knowledge.md#CTR-PQZ-41)). A bad
+  unmarked entry inside a materialised `acc` (a wallet fault only): at an index `≥ floor` the wallet debits (a refresh) at
+  `p ≤ index`, which un-rolls `[p, rolled)`, then marks it; below `floor` the wallet stops using that account version, says so
+  locally and does not decrypt.
+- **Restore** from state alone: last debit record → blob → `ownTag` → own balance; then every later entry by the check above.
+- **The auditor tool** runs the same steps with its roles swapped (opens `O_a`, checks `v_a` with its `pk_a`, recomputes `O_t`
+  and `v_t` with the recipient's public key) and never applies `s`. Its outcomes per credit are public and named: `read` (both
+  openings good); `recipient-unreadable` (`O_a` good, `O_t` or `v_t` bad; an honest recipient skips it); `unreadable` (`O_a`
+  fails; an honest recipient skips it too, and the outcome alone says nothing about the recipient); `unreadable, taken` (an
+  `unreadable` or `recipient-unreadable` entry, unmarked, that a recipient-signed rollover or debit has taken: its index is below
+  the account's `rolled` or `floor`). Only `unreadable, taken` shows that the recipient's wallet bypassed the check, and it names
+  both UAs; it is a compliance event for the issuer, with no contract action (owner 2026-11-13).
+- An accepted credit is an honest encryption with the sampler's noise, so `K_MAX·B ≤ E` holds as on `PRECOMPILE`; whether its
+  amount is backed is the verifier's soundness (T27), unchanged.
 
 <a id="pqz-verdict-clients"></a>**PQZ verifier mode in the clients** (group 3f). `clientkeys` builds the `PqzVerdict` digest,
 the empty and the signed `PqzSignedVerdict` and the proof-carrying entries with the verdict last (**BUILT**, T46: `test/pqz-verdict.test.js`, reading

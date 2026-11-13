@@ -682,6 +682,17 @@ position ([indexer-feeds.md](node/indexer-feeds.md)).
    `PqzVerified` name it and its epoch. Not slashable on chain; the response is the containment of
    [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md#verifier-containment).
 
+*Key classes* (owner 2026-11-13, SPECIFIED; [CTR-PQZ-37](contracts/pq-zero-knowledge.md#CTR-PQZ-37)). `pqzVerifyConfig()` also
+answers `pqzOwnKey` and `pqzOpening`. On an **opening token** (`pqzOpening = true`) the only disclosure kind is `SENDER_S`
+(statement under `PQZL_SPLIT_ID`; `RECEIVER_X` and `AUDITOR` revert `OpUnsupported()`): any party holding the leg's seed can
+prove it, so the kind names no party, and it proves the **encrypted amount, not receipt**. To check receipt, also read
+`pqzSkipped(ua, keyVersion, index)` (must be false) and find a later debit of the recipient whose window holds the entry; with an
+auditor, its outcome `read` says the opening was good. A credit is accepted by the recipient's wallet only after the holder check
+([CLI-SGN-51](clients/signers-clientkeys.md#CLI-SGN-51)); the auditor's outcomes `read`, `recipient-unreadable`, `unreadable`
+and `unreadable, taken` are public and named, and `unreadable, taken` (both UAs named) is a compliance event for the issuer.
+An `offchain-token` without the opening keeps the three kinds above and the accepted exposure of its key
+([ARCH-POS-13](decisions.md#ARCH-POS-13)'s Change).
+
 ## 11. Procure-to-pay
 
 <a id="procure-to-pay"></a>

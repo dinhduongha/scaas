@@ -1128,6 +1128,63 @@ KV-1 … KV-5, KV-14). Status: **BUILT on EVM** (`UARegistry` gen 1 and gen 2, p
   `(ua, version)` ([pq-zero-knowledge.md](pq-zero-knowledge.md)). Measured at T51 (history, before the T66b split): deploy gas
   `UARegistryLib` 60.83 M → 63.08 M, `UARegistry` 50.62 M → 53.51 M.
 
+**Change of [CTR-UA-42](#CTR-UA-42) (owner 2026-11-13, three-key model; SPECIFIED):** the records above are the `registry` key
+class ([CTR-PQZ-37](pq-zero-knowledge.md#CTR-PQZ-37)); the per-UA marker `pqzKeyUsed` and `keyOwner` now span the scoped
+records of [CTR-UA-43](#CTR-UA-43) too, so key bytes stored in one class are refused in every other (`UAKeyInUse`).
+
+<a id="CTR-UA-43"></a>**CTR-UA-43** — **Scoped PQZ key records: a record space per `(ua, scope, version)` for the
+`offchain-shared` (scope `address(0)`) and `offchain-token` (scope the token) key classes, each with its own `R_REG` proof and,
+on an opening scope, its own opening KEM key** (owner 2026-11-13; spec
+[`2026-11-13-pqz-three-keys.md`](../superpowers/specs/2026-11-13-pqz-three-keys.md) K3-3). Status: **SPECIFIED** on EVM (a new
+registry generation; nothing deployed is upgraded), UNAUDITED; other families take it with their first `OFFCHAIN` PQZ token.
+
+- **Write.** `setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes pqzKey, bytes32 pqzPopHash, KemKey openKem,
+  uint64 validUntilBlock, UASig sig)`, relayable by anyone, no fee (as `setKemKey`); the entry point is pinned in the vectors.
+  `sig` is the UA's own signature (`members` for an `msig`) over `uaMessage(kind, PURPOSE_PQZ_SCOPED_KEY,
+  typed(UAPqzScopedKeyRecord{bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version, bytes32 pqzKeyHash,
+  bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock}))` (`openKemHash = keccak256(kemPk)` when `openKem` is present,
+  else 0), refused after `validUntilBlock`. Both classes sign this registry's `chainUid` (a record made for another chain is
+  refused); `offchain-shared` signs `token = 0`, `offchain-token` the scope. The UA must be registered with a holder kind of
+  [CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12), and `version == latest(ua, scope) + 1`, the first being 0. **Every version of a
+  scope has version 0's key length** (`UAKeyData(0x0142)` otherwise): a holder's set is fixed per scope at first registration.
+- **Proof.** `storePqzScopedPop(ua, scope, version, pqzPop)`; the `R_REG` message is `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY,
+  digest(ua, keyClass, chainUid, token, version, pqzKeyHash))`, so no proof serves another class, chain, token or version.
+  Scoped proofs are made under **`PQZL_ID`** (the registry's id, PQZL only), never the token's id: `0x0142` verifies them where
+  the precompile exists, and an `OFFCHAIN` token's verifier checks them under `PQZL_ID`. Eligibility and `current` per
+  `(ua, scope)` exactly as [CTR-UA-42](#CTR-UA-42); on an `OFFCHAIN` token [CTR-PQZ-30](pq-zero-knowledge.md#CTR-PQZ-30) applies
+  unchanged. The proof bytes are stored for both classes (owner 2026-11-13).
+- **Opening KEM key.** A scoped record may carry `KemKey openKem {uint8 scheme; bytes mlkemEk; bytes32 x25519}`
+  ([CTR-UA-32](#CTR-UA-32)'s scheme 1 and length checks, 1,601 B stored), signed as `openKemHash`. It is present **if and only if
+  the scope's tokens have the opening on**: always on an `offchain-shared` record (absent: refused); on an `offchain-token` record
+  the registry reads the token's `pqzOpening` (`pqzVerifyConfig()`, one static call to `scope`; a scope that does not answer is
+  refused) and refuses a record that has the key for an opening-off token or lacks it for an opening-on token
+  (`UAPqzOpenKem(scope)`). It is written once with its version, rotates only with that record's version and is read by
+  `pqzOpenKemAt(ua, scope, version)`. It is not a CTR-UA-32 record: the chat KEM key is never used for an opening, and
+  CTR-UA-32 is unchanged.
+- **`msig`.** An `offchain-shared` record for an `msig` is refused at first (`UAPqzHolder`; owner 2026-11-13); an
+  `offchain-token` record for an `msig` is accepted as the holder rule allows, and on an opening-on token it must carry the
+  opening KEM key like any other.
+- **Never the registry key.** The per-UA marker `pqzKeyUsed(ua, pqzKeyHash)` and `keyOwner` span all three record spaces
+  (`UAKeyInUse`).
+- **Views and events.** `pqzScopedKeyOf(ua, scope) → (version, ptr, pqzPopHash, proven)`, `pqzScopedKeyAt(ua, scope, version)`,
+  `pqzScopedKeyLatest(ua, scope)`, `pqzScopedPopOf`, `pqzOpenKemAt`, a per-scope holder list (`count` / `at`, as
+  [CTR-UA-29](#CTR-UA-29)) so a wallet finds a token's holders from state; events `UAPqzScopedKeyAdded`, `UAPqzScopedPopStored`,
+  `UAPqzScopedKeyCurrent`. Nothing is deleted.
+- **Token reads.** Every current and historical PQZ key read of a token uses the token's scope
+  ([CTR-PQZ-30](pq-zero-knowledge.md#CTR-PQZ-30)'s Change); no record: `AccountNotRegistered(ua)`. A holder without the record
+  cannot be credited on that token. Wallets register lazily: the `offchain-shared` key at the first use of any shared-key token
+  of the chain, an `offchain-token` key per token.
+- **Versions and sets.** Each `(ua, scope)` has its own sequence; token state stays per `(ua, version)`
+  ([CTR-PQZ-31](pq-zero-knowledge.md#CTR-PQZ-31)) with the version of the token's scope; rotating one class moves no other, and
+  rotating an `offchain-token` key does not end that token's exposure. `offchain-shared`: one key, hence one set, per holder per
+  chain (a shared-key token of another set answers `AccountNotRegistered`). `offchain-token`: the token's own set; the registry
+  accepts any of the four `PqzCt.PK` lengths and the token checks its own.
+- **Auditor.** The token's `auditorUA` holds a key of the token's class and scope, and on an opening token its record carries
+  the opening KEM key. `offchain-token`: `init` does not check the auditor's key; a transfer with the auditor on reverts
+  `AccountNotRegistered(auditorUA)` until the auditor registers its key for that token (and for ever if it does not): the issuer
+  and the wallet read `pqzScopedKeyOf(auditorUA, token)` first, and the node refuses the job by name (`AUDITOR_KEY_MISSING`,
+  [NODE-JOB-28](../node/job-api.md#NODE-JOB-28)). `AuditorAsParty` unchanged.
+
 <a id="ua-ledger"></a>
 <a id="CTR-UA-18"></a>**CTR-UA-18** — **EVM balances of derived UAs live in a separate `bytes32` ledger in the token base**
 (owner; `_uaBalance[ua]`), never in an address projection; native ids in UA-ledger functions read and write the ERC-20

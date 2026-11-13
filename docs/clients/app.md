@@ -541,6 +541,20 @@ precedes the op's deadline; on kinds 12, 13 with `verifierFee ≠ 0`, a verifier
 `canReceive`, `listFlagsOf`; under a list a verifier not yet listed fails every debit from the first block) and admin 0 with a
 fee ("no relief if the verifier is frozen or loses its KYC").
 
+<a id="pqz-key-class-warnings"></a>**PQZ key classes: the two warnings** (owner 2026-11-13, SPECIFIED;
+[CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37)). The app reads `pqzOwnKey` and `pqzOpening` from
+`pqzVerifyConfig()`, names the class (`registry`, `offchain-shared`, `offchain-token` with or without the sealed opening) and
+shows, before the holder registers a key or shields:
+1. **`offchain-token` without the sealed opening**, before the key for that token is registered (registration is the holder's
+   acceptance), [ARCH-POS-13](../decisions.md#ARCH-POS-13)'s Change's loss sentence word for word: "The loss is the
+   confidentiality, past and future and across key versions, of every amount encrypted to that key in that token: the holder's
+   balance and credits, hence what its counterparties paid it; for the token's auditor key, every audited amount of every holder
+   of that token. Rotating the key does not end the exposure."
+2. **Every opening token** (`offchain-shared`, `offchain-token` with the opening): incoming amounts are as private as the
+   holder's opening KEM key of that chain (or token): whoever gets its secret reads, from state and for all time, every amount
+   paid to that key version; rotating the key covers new credits only. The opening KEM key lives beside the PQZ seed, never in
+   chat software.
+
 ## 10. Screens
 
 <a id="screens"></a><a id="node-screens"></a>

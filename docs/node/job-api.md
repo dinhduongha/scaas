@@ -449,6 +449,26 @@ pending version by name** (group 3g, spec `2026-11-06-pqz-key-versions.md` §7; 
 - **Indexer rows** ([indexer-feeds.md](indexer-feeds.md#pqz-key-version-rows)): `UAPqzKeyAdded` (feed `pqz_pending`),
   `UAPqzPopStored`, `UAPqzKeyCurrent` (feed `pqz_current`), and `Credited` / `Debited` / `PqzRolledOver` with `key_version`.
 
+<a id="NODE-JOB-28"></a>**NODE-JOB-28** — **PQZ jobs on an opening token: named opening fields, the holder-signed rollover,
+and refusals by name** (owner 2026-11-13; spec `2026-11-13-pqz-three-keys.md` §13, §14 item 22; key classes
+[CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37)). Status: **SPECIFIED**. **UNAUDITED.**
+
+- **Key class** is read from the token's `pqzVerifyConfig()` (`pqzOwnKey`, `pqzOpening`); key reads follow the token's scope
+  ([CTR-UA-43](../contracts/accounts.md#CTR-UA-43)).
+- **Fields.** An op 1 on an opening token carries `u_from` (hex of `PqzCt.PK` bytes) and `opening_to` / `opening_auditor`, each
+  `{mlkem_ct, x25519_eph, sealed_seed}` (named, never a hex bundle; `opening_auditor` absent when `auditorOn = 0`); on a token
+  without the opening these fields are refused (`BAD_PAYLOAD`). The signed rollover `mtxRollOverSigned` is a row on both relay
+  paths with `key_version`, `n`, `skip: [u64]` (strictly ascending, length ≤ `ROLL_MAX`, bounded decode by length and depth),
+  `entries_hash`, `valid_until_block` and `owner_sig`; the registry rows `setPqzScopedKey` (with the named `open_kem`) and
+  `storePqzScopedPop`. `guard.rs`, `CALL_TABLE` and `typed.rs` stay equal to the contract's `mtxSelectors` / `_uaAllowed` in both
+  directions. Old hex forms: `HEX_ARGS_REFUSED`.
+- **Refusals.** `ROLLOVER_SIGNED_ONLY`: a public rollover job for an opening token, zero sends; no keeper rollover there.
+  `AUDITOR_KEY_MISSING`: an `offchain-token` transfer with the auditor on while `pqzScopedKeyOf(auditorUA, token)` has no record,
+  refused before any proving. `TX_EXCEEDS_CHAIN_LIMIT`: an op whose regular + state gas the connected chain cannot include
+  (EIP-8037), refused instead of sent.
+- **Operators**: the job shape of op 1 and of the rollover changes on opening tokens; a consumer on the old shape gets
+  `BAD_PAYLOAD` or `ROLLOVER_SIGNED_ONLY`, never a silent `dead`.
+
 <a id="pqz-owntag"></a>**`ownTag` on every PQZ debit** (group 3h, spec `2026-11-06-pqz-proof-path.md`,
 [CTR-PQZ-34](../contracts/pq-zero-knowledge.md#CTR-PQZ-34); **BUILT**, T59 `90d857af`, T63 `39fa296c`). The three PQZ debit
 argument structs carry `ownTag` (`bytes32` hex), a named field of `args`; a job without it (the shape before 3h) is refused at
@@ -1049,7 +1069,7 @@ cancels 2 rps (burst 10).
 | 409 | `IDEMPOTENCY_MISMATCH`, `PREVIOUS_GENERATION_LIVE`, `SUPERSEDED` (all with `uid`), `DUPLICATE_DIGEST`, `DUPLICATE_CALL` (with `uid`), `TOO_LATE` (with `state`, `published`), `CHAIN_HALTED` | [intake](#intake), [cancel](#cancel) |
 | 410 | `CURSOR_EXPIRED` | [indexer-feeds.md#cursors](indexer-feeds.md#cursors) |
 | 413 | `TOO_LARGE` | body > 1 MiB |
-| 422 | `BAD_PAYLOAD`, `HEX_DATA_REFUSED`, `HEX_ARGS_REFUSED`, `PQZ_VERDICT_MISSING`, `PQZ_VERDICT_NOT_EXPECTED`, `PQZ_VERIFIER_UNREACHABLE`, `PQZ_FEE_MISMATCH` ([NODE-JOB-22](#NODE-JOB-22)), `PQZ_KEY_ROTATION_PENDING` ([NODE-JOB-23](#NODE-JOB-23)), `SERVICE_PULL_SHAPE`, `SERVICE_TOKEN_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)), `UNKNOWN_ENTRY`, `ENTRY_AMBIGUOUS`, `OP_KIND_MISMATCH`, `MANDATE_LANE`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
+| 422 | `BAD_PAYLOAD`, `HEX_DATA_REFUSED`, `HEX_ARGS_REFUSED`, `PQZ_VERDICT_MISSING`, `PQZ_VERDICT_NOT_EXPECTED`, `PQZ_VERIFIER_UNREACHABLE`, `PQZ_FEE_MISMATCH` ([NODE-JOB-22](#NODE-JOB-22)), `ROLLOVER_SIGNED_ONLY`, `AUDITOR_KEY_MISSING`, `TX_EXCEEDS_CHAIN_LIMIT` ([NODE-JOB-28](#NODE-JOB-28)), `PQZ_KEY_ROTATION_PENDING` ([NODE-JOB-23](#NODE-JOB-23)), `SERVICE_PULL_SHAPE`, `SERVICE_TOKEN_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)), `UNKNOWN_ENTRY`, `ENTRY_AMBIGUOUS`, `OP_KIND_MISMATCH`, `MANDATE_LANE`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
 | 429 | `RATE_LIMITED`, `QUOTA`, `SPONSOR_BUDGET`, `SPONSOR_RATE`, `SPONSOR_TOO_SHORT` (all three with `policy`), `SUBJECT_THROTTLED` (with `retry_after`) | per key: POST 20 rps (burst 40), GET 10 rps, tombstone-creating cancels 2 rps (burst 10); `Retry-After` |
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost |
 

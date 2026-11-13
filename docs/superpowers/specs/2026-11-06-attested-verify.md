@@ -115,8 +115,14 @@ chain is test-only.
 - **Authorization is unchanged.** Every debit still needs the subject's signature over `PqzAuth`, checked on chain
   ([CTR-PQZ-12](../../contracts/pq-zero-knowledge.md#CTR-PQZ-12)). A dishonest verifier cannot spend a victim's balance: it can
   fabricate a balance under a signing UA it controls and drain the pool through it.
-- **Confidentiality** of honestly formed data is unchanged under the existing assumptions: the verifier sees only public bytes (the
-  statement and the proof), no secret leaves the client. It does not guarantee that outputs of a dishonest verdict are valid
+- **Confidentiality** depends on the token's key class (Change of 2026-11-13, spec
+  [2026-11-13-pqz-three-keys.md](2026-11-13-pqz-three-keys.md) K3-1; [CTR-PQZ-37](../../contracts/pq-zero-knowledge.md#CTR-PQZ-37)).
+  Shared-key token: a holder's keys are not exposed, provided its wallet follows the holder check (K3-7); incoming amounts are
+  as private as the holder's opening KEM key of that chain. Own-key token with the sealed opening: as a shared-key token, with
+  the key and the opening KEM key of that token only. Own-key token without it: whoever controls the token's verifier can
+  recover a key of that token from its holder's public reactions, and every observer learns it; the loss is stated in
+  ARCH-POS-13's Change; no other key is touched. (Before: "unchanged under the existing assumptions: the verifier sees only
+  public bytes (the statement and the proof), no secret leaves the client"; that missed the key recovery by planted credits.) It does not guarantee that outputs of a dishonest verdict are valid
   encryptions, correct auditor copies or recoverable balances. With an auditor on, the verifier learns which ops are audited
   (public on chain anyway; Fable P2-10).
 - **Censorship and delay.** The verifier sees each debit **before inclusion** and can refuse or delay any party's transfers and

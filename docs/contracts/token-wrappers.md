@@ -1075,7 +1075,7 @@ own code limit above 65,536 B.
   `abi.encode(ImplArgs{address[] modules})` on 0–5 and the DEX, `abi.encode(RegulatedImplArgs{bytes32 registryCodehash;
   address[] modules})` on 8–13. The implementation's constructor checks each module: code present and the count
   (`ModuleMissing(i)`), then `kind()`, `moduleGroup()` for its slot, `factory()`, `REGISTRY_CODEHASH()` on 8–13 and
-  `pqzSet()` (the set's self-test hash) on 4, 5, 12, 13 (`ModuleMismatch(i)`); `modules()` lists them. The release's env pins
+  `pqzSet()` (the set's identity: the self-test hash, `SET_DIGEST` once [CTR-PQZ-42](pq-zero-knowledge.md#CTR-PQZ-42) is built) on 4, 5, 12, 13 (`ModuleMismatch(i)`); `modules()` lists them. The release's env pins
   each module's code hash beside the libraries (`LibraryCodeHashMismatch`), and `OpenFactory` refuses a release whose
   `modules()` names an address outside its env (`ModuleNotPinned`; `ModulesUnreadable` when the view fails) on
   `deployTokenImplementation`, `deployDexImplementation`, `createTokenUnregistered` and `deployImplementation`. A module holds no chain
