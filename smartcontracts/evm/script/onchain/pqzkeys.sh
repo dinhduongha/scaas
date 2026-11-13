@@ -32,7 +32,9 @@ for p in setup roll; do
   echo "[$NET/pqzkeys] $p: forge $tc …"
   t0=$(date +%s)
   rm -f "$B/$p-latest.json"
-  ONCHAIN_NET=$NET forge script script/onchain/PqzKeys.s.sol --tc "$tc" --sig "$p()" --rpc-url "$RPC" --broadcast --slow \
+  # the simulation runs the whole script as one call: its ML-DSA verifications and ~600 ops pass foundry.toml's 2^33 budget
+  # (a late CREATE starved); the transactions sent still ask each its own estimate
+  FOUNDRY_GAS_LIMIT=${PQZKEYS_SIM_GAS:-40000000000} ONCHAIN_NET=$NET forge script script/onchain/PqzKeys.s.sol --tc "$tc" --sig "$p()" --rpc-url "$RPC" --broadcast --slow \
     --ffi --sender "$SENDER" --disable-code-size-limit --gas-estimate-multiplier "${ONCHAIN_GAS_MULTIPLIER:-200}" \
     --out out/onchain-pqzkeys --cache-path cache/onchain-pqzkeys > "$T/$p.log" 2>&1 &
   F=$!
