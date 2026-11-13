@@ -91,6 +91,9 @@
       {"label": "PqzBurnLib", "artifact": "PqzBurnLib.sol/PqzBurnLib", "via": ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"]},
       {"label": "PqzTransferLib", "artifact": "PqzTransferLib.sol/PqzTransferLib", "via": ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"]}
     ],
+    "rescue": [
+      {"label": "RescueVault", "artifact": "RescueVault.sol/RescueVault"}
+    ],
     "pqchat": [
       {"label": "PqChat", "artifact": "PqChat.sol/PqChat"},
       {"label": "PqChatTopics", "artifact": "PqChatTopics.sol/PqChatTopics", "via": ["PqChat"]}

@@ -23,6 +23,7 @@ view; a token kind's body module). Each group is one script with its own book (a
 | pq | `pq.py` | `script/pqz/e2e.py` (its own deploy) + kinds 12, 13 + the public entries signed by ML-DSA-65 (PRECOMPILE mode) |
 | pqoff | `pq.py --offchain` | the PQZ `OFFCHAIN` verify mode: fixed / transferable verifier UA, the change through GovernanceRouter, negatives |
 | verifiers, views | `verifiers.py`, `coverage.py views` | every verifier with the vectors; every static-argument view |
+| rescue | `rescue.sh`, `Rescue.s.sol` | local only: the RescueVault (CTR-GOV-25) deployed by `script/DeployRescueVault.s.sol` from the committed `rescue-vault-init.hex` at `RescueLib.SCAAS_DEV_RESCUE`, its admin and rescuer moved to test keys 1 and 2 by `anvil_setStorageAt` (never the real admin's key); `withdraw` of an ERC-20 and the native coin on both branches, `setRescuer` and `rotateAdmin` by the admin's signature submitted by other keys, the refusals (seq, signature, zero rescuer, non-native admin) |
 | pqchat | (slot) | PqChat (plan UA-7): `groups.json` holds the slot; its script plugs in as below |
 | wraplimits | `WrapLimits.s.sol` through `wraplimits.sh` | the wrap and unwrap limits (group 3l, spec 2026-11-10-wrap-limits.md §11) on hybrids of kinds 1, 5, 13 of its own factory (`noticePeriod()` 1 hour; the PQZ kinds `OFFCHAIN`): windows per user and token-wide, the net rule and its decay at day 0, H/2, H, the redeemer's budget, the lists, the router's setters at once and after the notice, the named refusals, the pure-wrap refusal of bits 25-27. Seven forge runs, the chain's clock set between them (local only; last in the default order: it moves the clock two days); its outputs in `runs/2026-11-10-ua-mtx-merge-3l-onchain/` |
 
@@ -50,7 +51,7 @@ RPC_7622=http://127.0.0.1:9 COPY=$PWD/../../scratchpad/onchain-copy sh script/on
 - a fresh anvil (chain 31337, Amsterdam, 200 M block gas, 128 KiB code) with anvil's dev keys, `deploy.sh evm` on it with
   every option (wrapped, regulated, Zether; `DEPLOY_NAME=local-31337-testnet`: `deployments/local-31337-testnet.json`,
   `local-31337-testnet-releases.json`, NET-EVM-13), then tokens, gov, dex, misc,
-  zether, verifiers, views, wraplimits;
+  zether, verifiers, rescue, views, wraplimits;
 - a fresh Nethermind copy under `COPY` (git-ignored; `copy.sh init`, `genesis0 engine-pqz.json`, `copygen.py`: the
   Amsterdam transitions `init`'s chainspec lacks, test keys 0x…01-0x…03, the CREATE2 deployer; then `up`) for pq and
   pqoff, which need its PQZ and ML-DSA precompiles; e2e.py signs for chain id 7622, so the copy keeps it. Its compose

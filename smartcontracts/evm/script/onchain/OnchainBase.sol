@@ -6,6 +6,7 @@ import {DeployBook} from "../DeployBook.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 
 /// @notice T66b Step 5b, the base of every `script/onchain/<Group>.s.sol`: broadcastable (no cheatcode reaches the chain:
 ///         `vm.broadcast` / `vm.startBroadcast` with a key, `vm.sign` off chain, reads of the deploy JSON). Each group
@@ -65,6 +66,14 @@ abstract contract OnchainBase is DeployBook {
     function _negData(address from, address to, bytes memory data, bytes memory expected, string memory what) internal {
         vm.writeLine(_negFile(), string.concat(vm.toString(from), " ", vm.toString(to), " ", vm.toString(data), " ",
             vm.toString(expected), " ", what));
+    }
+
+    /// @dev CTR-GOV-27, CTR-GOV-28: the word of a sibling chain (the same chain id, another genesis), and the refusal of it
+    ///      by name on a contract whose own word is `own` (`IAdmin.ChainUidMismatch(expected, got)`, one error everywhere).
+    bytes32 internal constant SIBLING_WORD = keccak256("scaas.onchain.sibling-chain-word");
+
+    function _wordRefused(bytes32 own) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, own, SIBLING_WORD);
     }
 
     function _negFile() internal view returns (string memory) {

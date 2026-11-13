@@ -926,6 +926,35 @@ contract Gov is OnchainBase {
         // compliance: a non-admin, non-provider
         _neg(a3, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a3), true, cr.chainUid())), IAdmin.NotAdmin.selector,
             "setKycProvider by a non-admin");
+        _chainWords();
+    }
+
+    /// @dev CTR-GOV-27, CTR-GOV-28 (owner 2026-11-13): a sibling chain's word refused by name, each family's own-word call
+    ///      above its control: the ComplianceRegistry (a KYC provider's `setCompliance`; control `_compliance`), the router
+    ///      ops (the registry admin's `mtxSetKycProvider`, control `_complianceRouter`; a holder's `mtxRenounceRole` on
+    ///      `tl`, where the UA uaD holds bit 8 as issuer, control the renounce in `_plain`), the Step 5 factory's direct admin
+    ///      entry when its admin is a native id (control: Misc's own factory, the same code).
+    function _chainWords() internal {
+        bytes32[] memory w = new bytes32[](1);
+        uint64[] memory fl = new uint64[](1);
+        uint64[] memory un = new uint64[](1);
+        (w[0], fl[0], un[0]) = (_pad(a2), 1, uint64(vu + 30 days));
+        _negData(a2, address(cr), abi.encodeCall(ComplianceRegistry.setCompliance, (w, fl, un, SIBLING_WORD)),
+            _wordRefused(cr.chainUid()), "ComplianceRegistry.setCompliance by a KYC provider, a sibling's chain word");
+        Sg memory du = Sg(uaD, kD, 2);
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(du,
+            _ty("UASetKycProvider", "bytes32 provider,bool enabled,bytes32 chainUid"), address(cr), abi.encode(_pad(a3), true, SIBLING_WORD));
+        _negData(a2, address(gr), abi.encodeCall(GovernanceRouter.mtxSetKycProvider, (e, address(cr), _pad(a3), true, SIBLING_WORD, s)),
+            _wordRefused(cr.chainUid()), "router mtxSetKycProvider (the registry admin's op), a sibling's chain word");
+        (e, s) = _auth(du, _ty("UARenounceRole", "uint8 bit,bytes32 chainUid"), tl, abi.encode(GovernanceBits.ALLOWLIST, SIBLING_WORD));
+        _negData(a2, address(gr), abi.encodeWithSelector(gr.mtxRenounceRole.selector, e, tl, GovernanceBits.ALLOWLIST, SIBLING_WORD, s),
+            _wordRefused(IMetaTx(tl).chainUid()), "router mtxRenounceRole (a holder's own, kind 9), a sibling's chain word");
+        bytes32 fa = f.admin();
+        if (fa != 0 && uint256(fa) >> 160 == 0) {
+            _negData(address(uint160(uint256(fa))), address(f), abi.encodeCall(OpenFactory.setTokenKindEnabled,
+                (IOpenFactory.TokenKind.NORMAL, true, SIBLING_WORD)), _wordRefused(f.chainUid()),
+                "OpenFactory.setTokenKindEnabled by its admin, a sibling's chain word");
+        }
     }
 }
 

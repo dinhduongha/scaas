@@ -363,6 +363,9 @@ contract Misc is OnchainBase {
         vm.broadcast(k3);
         address impl = f2.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 2, 4, code, implArgs, uid);
         _book(impl, "NormalToken");
+        // CTR-GOV-27 (a release deploy carries the word): the same deploy with a sibling's word, refused by name (control above)
+        _negData(a3, address(f2), abi.encodeCall(OpenFactory.deployTokenImplementation, (IOpenFactory.TokenKind.NORMAL, 2, 4, code,
+            implArgs, SIBLING_WORD)), _wordRefused(uid), "factory: deployTokenImplementation with a sibling's chain word");
         string memory why = "onchain matrix: deprecated after its use (the msig admin, through the router)";
         (e, a) = _mauth("UADeprecateToken", "uint8 kind,uint64 version,bytes32 chainUid,string reason,", address(f2),
             abi.encode(IOpenFactory.TokenKind.NORMAL, uint64(2), uid, keccak256(bytes(why))));
