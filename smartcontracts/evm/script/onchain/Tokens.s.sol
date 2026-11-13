@@ -627,8 +627,9 @@ contract Tokens is OnchainBase {
         vm.startBroadcast(k1);
         n.grantRole(mb, _pad(a2), IMetaTx(address(n)).chainUid());
         vm.stopBroadcast();
+        bytes32 w = IMetaTx(address(n)).chainUid(); // read before the broadcast (no staticcall after `vm.broadcast`)
         vm.broadcast(k2);
-        n.renounceRole(mb, IMetaTx(address(n)).chainUid());
+        n.renounceRole(mb, w);
         vm.startBroadcast(k1);
         n.grantRole(mb, _pad(a2), IMetaTx(address(n)).chainUid());
         n.revokeRole(mb, _pad(a2), IMetaTx(address(n)).chainUid());

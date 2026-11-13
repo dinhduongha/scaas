@@ -215,6 +215,11 @@ def views(a):
     print(f"views: {n} called, {ok} answered")
 
 
+def _records(out, n):
+    """The record files of net `n`: the run dir's and its groups' own subdirectories (wraplimits writes under its own)."""
+    return glob.glob(os.path.join(out, f"records-{n}-*.jsonl")) + glob.glob(os.path.join(out, "*", f"records-{n}-*.jsonl"))
+
+
 def table(a):
     # fail closed: a net with no book would recount its records unlabelled and write empty runs over the tally
     missing = [n for n in a.net if not glob.glob(os.path.join(EVM, f"deployments/onchain-{n}-*.json"))]
@@ -237,7 +242,7 @@ def table(a):
         for e in c["entries"]:  # recount only the nets asked for; another net's tally stays
             e["runs"] = {k: v for k, v in e.get("runs", {}).items() if k not in a.net}
     for n in a.net:
-        for r in (json.loads(x) for p in sorted(glob.glob(os.path.join(a.out, f"records-{n}-*.jsonl"))) for x in open(p)):
+        for r in (json.loads(x) for p in sorted(_records(a.out, n)) for x in open(p)):
             if r["status"] == 2:
                 continue  # a negative refused as expected: listed in the note, not counted as a call
             hits = [(r.get("label") or books[n].get(r["to"], ""), r["sel"], "outer", r["status"])]
@@ -286,12 +291,12 @@ def note(a):
            "## reached = it also ran inside another call, by the trace (local only); views reached = answered an eth_call)",
            buf.getvalue().rstrip()]
     for n in a.net:
-        recs = [json.loads(x) for p in sorted(glob.glob(os.path.join(a.out, f"records-{n}-*.jsonl"))) for x in open(p)]
+        recs = [json.loads(x) for p in sorted(_records(a.out, n)) for x in open(p)]
         if not recs:
             continue
         out.append(f"\n## {n}: per record file (txs, status 1, the heaviest gasUsed; eth_calls answered; negatives refused as expected)")
         out.append("records | txs | status 1 | max gasUsed | calls ok | negatives")
-        for p in sorted(glob.glob(os.path.join(a.out, f"records-{n}-*.jsonl"))):
+        for p in sorted(_records(a.out, n)):
             rr = [json.loads(x) for x in open(p)]
             t = [r for r in rr if r["tx"]]
             ng = [r for r in rr if r["what"].startswith("negative")]
