@@ -56,7 +56,7 @@ was the literal 393,216 of `n2048-kmax1024`).
 | Address | Name | What it checks | Gas |
 |---|---|---|---|
 | `0x000000000000000000000000000000005caa0f01` | `PQZ` | a proof of either proof system (PQZL or PQZH), through `pqz-ffi`'s C function `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` — the multi-recipient transfer (op 7) also `(M, auditorOn)` from header words 320 / 448 — + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
-| `0x000000000000000000000000000000005caa0012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image); never reverts: a short input or a `CryptographicException` from .NET is `…00` (review W-R) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
+| `0x000000000000000000000000000000005caa0012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image); never reverts: a short input or a `CryptographicException` from .NET is `…00` (review W-R); any other exception in the call is `PQZ-NODE-FAULT` and exit 120, as a managed exception in a `PQZ` call (D4, review 3w T-16) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
 | `0x000000000000000000000000000000005caa0013` | `MLDSA65` | the same for ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
 | `0x000000000000000000000000000000005caa0014` | `MLDSA87` | the same for ML-DSA-87 (CTR-UA-39, owner 2026-11-04); active only under a schedule that carries `mldsa87Gas` | `mldsa87Gas` (optional per schedule, ≥ 13,500; **PROVISIONAL ≈ 102,000**, `MlDsa.Provisional87Gas`, not calibrated: the run waits for the owner) + 6·⌈max(0, L − 7,219)/32⌉ |
 
@@ -217,7 +217,7 @@ image). Changes Nethermind 2.x forced:
 | Nethermind 2.x | Plugin change |
 |---|---|
 | `IPrecompile.BaseGasCost` / `DataGasCost` and the spec provider's block numbers are `ulong` (2.0.0: numeric API types) | gas returns `ulong`; no schedule ⇒ `ulong.MaxValue` (out of gas, as before) |
-| `ReleaseSpec` indexes precompiles by number and throws for an address with a non-zero byte above its low 32 bits ("a precompile number must fit 32 bits") | `PqzReleaseSpec` re-implements `IReleaseSpec.Precompiles` / `IsPrecompile` over its own set; every caller in Nethermind goes through the interface, and the code-info repositories fall back to the provider's dictionary for a number they cannot index. Test `IsPrecompile_finds_the_three_from_T` |
+| `ReleaseSpec` indexes precompiles by number and throws for an address with a non-zero byte above its low 32 bits ("a precompile number must fit 32 bits") | for P6f D3's `0x5caa5000…` addresses `PqzReleaseSpec` re-implemented `IReleaseSpec.Precompiles` / `IsPrecompile` over its own set. The 32-bit addresses (image `2.2.0-pqz4` on) fit Nethermind's own lookup (a number of 64 or more is looked up in the set), so the re-implementation is gone (review 3w T-21; the spec tests pass without it, `runs/2026-11-13-3w-s5-test.txt`). Test `IsPrecompile_finds_the_three_from_T` |
 | The plugin `Init` hook is gone (init steps, #12326): `Init` still compiled and was never called | `PqzStartupCheck` step; test `Startup_checks_are_a_step_before_genesis` (the first `2.2.0-pqz3` build ran a few minutes without `PQZ-START` before this was found, see the run log) |
 | `IJsonSerializer.Deserialize<T>` returns `T?` | `!` in the harness, calibration and tests |
 

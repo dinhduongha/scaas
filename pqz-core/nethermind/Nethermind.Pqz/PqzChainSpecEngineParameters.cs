@@ -79,12 +79,19 @@ public class PqzChainSpecEngineParameters : IChainSpecEngineParameters
         return active;
     }
 
+    private ulong _genesisTimestamp;
+
+    /// <summary>ChainSpecLoader calls this after it loaded the genesis and before any spec provider asks
+    /// <see cref="AddTransitions"/>: keeps the genesis timestamp.</summary>
+    public void ApplyToChainSpec(ChainSpec chainSpec) => _genesisTimestamp = chainSpec.Genesis?.Timestamp ?? 0;
+
     public void AddTransitions(SortedSet<ulong> blockNumbers, SortedSet<ulong> timestamps)
     {
         Validate();
-        // a 0 timestamp (active from a genesis at time 0) is not a fork (EIP-2124; Taiko does the same)
+        // a schedule at or before the genesis timestamp (active from block 0) is not a fork (EIP-2124, review 3w T-38;
+        // Nethermind skips its own *TransitionTimestamp values the same way); the block-number releases carry it
         foreach (PqzSchedule s in Schedules)
-            if (s.Timestamp > 0) timestamps.Add(s.Timestamp);
+            if (s.Timestamp > _genesisTimestamp) timestamps.Add(s.Timestamp);
     }
 
     public void ApplyToReleaseSpec(ReleaseSpec spec, ulong startBlock, ulong? startTimestamp)
