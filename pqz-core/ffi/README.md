@@ -60,6 +60,7 @@ clients only; a native build with `panic = abort` is a compile error.
 | `precompile(&[u8]) -> Result<[u8; 32], Error>` | the same in Rust: `Error::Revert`, `Error::NodeFault`; a caught input-caused panic gives `…00` |
 | `decode(&[u8])` | `pqz_stmt::decode_input` (the crate re-exports `pqz_stmt` as `stmt`) |
 | `verify_input(&[u8]) -> Result<bool, NodeFault>` | decode, then run the id's verifier (ops 1–5 and 7) |
+| `pqz_offchain::verify_offchain(&[u8]) -> Result<bool, NodeFault>` (crate `offchain/`) | the off-chain verifier's entry (three-key spec K3-4; UNAUDITED): `verify_input` plus `PQZL_SPLIT_ID` (the split transfer of opening tokens, `R_TXS` / `R_TXS0`, which the precompile never serves), same decode, same verifiers; an input-caused panic gives `false`. A crate of its own because the plugin's library carries the checksums of this crate's sources in its debug info (an edit here, a comment too, moves `ExpectedLibrarySha256`). Tests: `offchain/tests/offchain.rs`; `vectors/replay_wasm.mjs` (wasm32); `negative.json` `split_rows` |
 | `pqzl::verify_fast` / `pqzl::verify_generic` / `pqzh::verify` | the verifiers, on already-decoded parts. The generic PQZL verifier is only the reference for the differential test; it is never on the precompile path (R5) |
 | `selftest::selftest()`, `selftest::report()` | `OP_SELFTEST` (P6e D13); see "Self-test" below |
 | feature `prove`: `prove(op, stmt, wit, rnd32)` | proves with PQZL (`pqz_prove` / `pqzl::Ctx::prove`) or PQZH (Ligero), chosen by the statement's id; deterministic and hedged (CTR-PQZ-19) |
