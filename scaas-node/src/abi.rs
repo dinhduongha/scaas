@@ -381,9 +381,18 @@ sol! {
         function pqzKeyOf(bytes32 ua) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
         function pqzKeyAt(bytes32 ua, uint64 version) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
         function pqzKeyLatest(bytes32 ua) external view returns (uint64);
+        // the three-key model (K3-3, CTR-UA-43): scoped records, scope 0 (class 2) or the token (class 3); `openKem` the opening
+        // KEM key (present iff the scope's tokens have the opening on)
+        function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes pqzKey, bytes32 pqzPopHash, KemKey openKem,
+            uint64 validUntilBlock, UASig sig) external;
+        function storePqzScopedPop(bytes32 ua, address scope, uint64 version, bytes pqzPop) external;
+        function pqzScopedKeyOf(bytes32 ua, address scope) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzScopedKeyAt(bytes32 ua, address scope, uint64 version) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzScopedKeyLatest(bytes32 ua, address scope) external view returns (uint64);
         event UAPqzPopStored(bytes32 indexed ua, uint64 indexed version, uint8 checkedPqzPop, bytes pqzPop);
         event UAPqzKeyAdded(bytes32 indexed ua, uint64 indexed version, bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes pqzKey, bytes sig);
         event UAPqzKeyCurrent(bytes32 indexed ua, uint64 indexed version);
+        event UAPqzScopedKeyCurrent(bytes32 indexed ua, address indexed scope, uint64 indexed version);
         function acceptMembership(bytes32 ua, MemberSig memberSig) external;
         /// A derived id's authorization under a purpose (CTR-UA-07): reverts `UAUnauthorized(ua)` when it is not one; the venue
         /// asks it for a derived seller's order, as the token's `authorize` does.
@@ -412,9 +421,11 @@ sol! {
             uint32 pqzVerifierEpoch; uint64 validUntil; }
         #[derive(PartialEq, Eq)]
         struct PqzSignedVerdict { PqzVerdict pqzVerdict; UASig sig; }
-        // round 3t (CTR-PQZ-36): + the verifier fee, its immutable cap, a live pending increase and its `eta`
+        // round 3t (CTR-PQZ-36): + the verifier fee, its immutable cap, a live pending increase and its `eta`; the three-key model
+        // (CTR-PQZ-37): + the key class, `pqzOwnKey` and `pqzOpening` (words 11 and 12)
         struct PqzVerifyConfig { uint8 pqzVerifyMode; bytes32 verifier; bool fixed_; uint32 pqzVerifierEpoch; bytes32 pending;
-            uint64 eta; uint64 noticePeriod; uint64 verifierFee; uint64 verifierFeeMax; uint64 verifierFeePending; uint64 verifierFeeEta; }
+            uint64 eta; uint64 noticePeriod; uint64 verifierFee; uint64 verifierFeeMax; uint64 verifierFeePending; uint64 verifierFeeEta;
+            bool pqzOwnKey; bool pqzOpening; }
         function pqzVerifyConfig() external view returns (PqzVerifyConfig memory);
         function proofSystemId() external view returns (bytes32);
         /// The relayed op's binding (`TAG_UA_ENVELOPE`, every envelope field but `data`): the `binding` of the statement views.
@@ -440,6 +451,12 @@ sol! {
         error PqzVerdictRequired();
         error PqzVerdictRejected();
         error PqzVerdictMismatch(uint8 field);
+        // ---- the three-key model (CTR-PQZ-40, -41): a form refused with the opening on, the public rollover there, the marks
+        error OpUnsupported();
+        error RollOverSignedOnly();
+        error SkipRange(uint256 index);
+        error SkipTrivial(uint256 index);
+        event PqzSkipped(bytes32 indexed ua, uint64 indexed keyVersion, uint64 index);
         // ---- round 3t (CTR-PQZ-36, verifier fee spec §7, §10): the admin's setter, its events and refusals
         function setVerifierFee(uint64 next, bytes32 chainUid_) external; // CTR-GOV-28: + the chain word
         function confidentialFee() external view returns (uint256);

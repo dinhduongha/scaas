@@ -113,31 +113,79 @@ async fn no_pending_party(chain: &Chain, w: &Work) -> Result<(), Refusal> {
         Ok(None) => return Ok(()),
         Err(e) => return read("PQZ parties")(e).map_or(Ok(()), Err),
     };
+    // NODE-JOB-28 (CTR-UA-43): the key reads follow the token's scope, as its `_keyOf` / `_keyAtOf`
+    let scope = match crate::pqz::key_scope(chain, w.to).await {
+        Ok((s, _)) => s,
+        Err(e) => return read("pqzVerifyConfig")(e).map_or(Ok(()), Err),
+    };
     for ua in parties {
-        let cur = match chain.call_view(registry, IUARegistry::pqzKeyOfCall { ua }).await {
+        let cur = match scope {
+            None => chain.call_view(registry, IUARegistry::pqzKeyOfCall { ua }).await.map(|c| (c.version, c.ptr)),
+            Some(scope) => chain.call_view(registry, IUARegistry::pqzScopedKeyOfCall { ua, scope }).await.map(|c| (c.version, c.ptr)),
+        };
+        let (cur_version, cur_ptr) = match cur {
             Ok(c) => c,
             Err(e) => match read("pqzKeyOf")(e) { Some(r) => return Err(r), None => continue },
         };
-        let latest = match chain.call_view(registry, IUARegistry::pqzKeyLatestCall { ua }).await {
+        let latest = match scope {
+            None => chain.call_view(registry, IUARegistry::pqzKeyLatestCall { ua }).await,
+            Some(scope) => chain.call_view(registry, IUARegistry::pqzScopedKeyLatestCall { ua, scope }).await,
+        };
+        let latest = match latest {
             Ok(l) => l,
             Err(e) => match read("pqzKeyLatest")(e) { Some(r) => return Err(r), None => continue },
         };
-        if latest <= cur.version || cur.ptr == Address::ZERO {
+        if latest <= cur_version || cur_ptr == Address::ZERO {
             continue;
         }
-        let at = match chain.call_view(registry, IUARegistry::pqzKeyAtCall { ua, version: latest }).await {
+        let at = match scope {
+            None => chain.call_view(registry, IUARegistry::pqzKeyAtCall { ua, version: latest }).await.map(|a| a.ptr),
+            Some(scope) => chain.call_view(registry, IUARegistry::pqzScopedKeyAtCall { ua, scope, version: latest }).await.map(|a| a.ptr),
+        };
+        let at_ptr = match at {
             Ok(a) => a,
             Err(e) => match read("pqzKeyAt")(e) { Some(r) => return Err(r), None => continue },
         };
         let len = |a| async move { chain.code_len(a).await };
-        let (l, c) = match (len(at.ptr).await, len(cur.ptr).await) {
+        let (l, c) = match (len(at_ptr).await, len(cur_ptr).await) {
             (Ok(l), Ok(c)) => (l, c),
             (Err(e), _) | (_, Err(e)) => match read("eth_getCode")(e) { Some(r) => return Err(r), None => continue },
         };
         if l == c {
             return Err(Refusal::Policy(format!("PQZ_KEY_ROTATION_PENDING: {ua:#x} has version {latest} stored and not yet current \
-                (current {}); prove against its current key once version {latest} is current", cur.version)));
+                (current {cur_version}); prove against its current key once version {latest} is current")));
         }
+    }
+    Ok(())
+}
+
+/// NODE-JOB-28 (spec 2026-11-13-pqz-three-keys §3, §7; CTR-PQZ-41): on a token with the opening on, the public rollover
+/// (`UAPqzRollOver`, `mtxRollOver`) is refused `ROLLOVER_SIGNED_ONLY`, zero sends (the token reverts `RollOverSignedOnly`; the
+/// holder signs `mtxRollOverSigned`, row `PqzRollOver`); on an `OFFCHAIN` token a debit with auditor copies whose auditor has no
+/// key of the token's scope is `AUDITOR_KEY_MISSING`, back in the queue (the auditor may register), before anything is sent.
+async fn three_keys(chain: &Chain, w: &Work) -> Result<(), Refusal> {
+    let Some(t) = w.typed.as_ref().filter(|t| t.contract == "pqz") else { return Ok(()) };
+    let rollover = w.data.get(..4).and_then(|s| row(s.try_into().ok()?, "pqz")).is_some_and(|r| r.name == "UAPqzRollOver");
+    if !rollover && !t.pqz_auditor {
+        return Ok(());
+    }
+    let tr = |what: &str, e: SimError| match e {
+        SimError::Transport(e) => Refusal::Transport(format!("{what}: {e}")),
+        SimError::Revert(e) => Refusal::Policy(format!("{what}: {e}")),
+    };
+    let (scope, opening) = crate::pqz::key_scope(chain, w.to).await.map_err(|e| tr("pqzVerifyConfig()", e))?;
+    if rollover && opening {
+        return Err(Refusal::Policy(format!("ROLLOVER_SIGNED_ONLY: {:#x} has the opening on: only its holder rolls over, by the \
+            signed mtxRollOverSigned (row PqzRollOver); no public rollover there", w.to)));
+    }
+    let Some(scope) = scope.filter(|_| t.pqz_auditor) else { return Ok(()) };
+    let registry = chain.call_view(w.to, IUALedger::registryCall {}).await.map_err(|e| tr("registry()", e))?;
+    let auditor = chain.call_view(w.to, IPqzToken::auditorUACall {}).await.map_err(|e| tr("auditorUA()", e))?;
+    let k = chain.call_view(registry, IUARegistry::pqzScopedKeyOfCall { ua: auditor, scope }).await
+        .map_err(|e| tr("pqzScopedKeyOf", e))?;
+    if k.ptr == Address::ZERO {
+        return Err(Refusal::Transport(format!("AUDITOR_KEY_MISSING: the auditor {auditor:#x} of {:#x} has no key of scope {scope:#x} \
+            (pqzScopedKeyOf): a debit with auditor copies cannot land until it registers one", w.to)));
     }
     Ok(())
 }
@@ -257,6 +305,10 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
     if reason.starts_with("AuthRejected") {
         return fee_moved(chain, w, &reason).await.unwrap_or(Verdict::Dead(reason));
     }
+    // NODE-JOB-28: the public rollover on an opening token never lands (the lease-time check names it first, `three_keys`)
+    if reason.starts_with("RollOverSignedOnly") {
+        return Verdict::Dead(format!("ROLLOVER_SIGNED_ONLY: {reason}"));
+    }
     // group 3g (spec §7.3): a stale debit or two equal keys never land, a version above current may become current, a proof
     // built before a party's rotation is `PQZ_KEY_ROTATED`
     match crate::abi::pqz_refusal(&reason) {
@@ -289,6 +341,11 @@ async fn fee_moved(chain: &Chain, w: &Work, reason: &str) -> Option<Verdict> {
         Err(e) => Some(Verdict::Requeue(format!("PQZ_FEE_LOG_UNREAD: {e:#}; {reason}"))),
     }
 }
+
+/// NODE-JOB-28 (spec 2026-11-13-pqz-three-keys §12): an op the connected chain cannot include, by its own limits (the block gas
+/// limit bounds regular + state under EIP-8037; 2^24 regular gas per transaction, EIP-7825; the calldata floor, EIP-7976), is
+/// refused by this name instead of sent. The operator's own `max_gas_per_tx` is not a chain limit and keeps its plain refusal.
+pub const TX_EXCEEDS_CHAIN_LIMIT: &str = "TX_EXCEEDS_CHAIN_LIMIT";
 
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
 /// per-transaction cap ([`total_cap`]: `max_gas_per_tx`, the block gas limit) or that the chain's estimate refuses for
@@ -1059,6 +1116,7 @@ impl Guard {
                 self.require_ua_ledger(chain, w.to).await?;
             }
             no_pending_party(chain, w).await?;
+            three_keys(chain, w).await?;
             // group 3f (spec §11.1): `refuse_shield_when_unserved`, for every consumer
             return self.pqz.check_shield(chain, w).await;
         }
@@ -1337,6 +1395,7 @@ fn list_batch_note(data: &[u8]) -> &'static str {
 }
 
 pub fn over_cap(reason: &str) -> bool {
+    let reason = reason.strip_prefix(TX_EXCEEDS_CHAIN_LIMIT).and_then(|r| r.strip_prefix(": ")).unwrap_or(reason);
     reason.starts_with("gas ") && (reason.contains(" above max_gas_per_tx ") || reason.contains(" above the chain's block gas limit ")
         || reason.contains(" above the 2^24 gas limit of a transaction"))
 }
@@ -1346,7 +1405,7 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
     let floor = calldata_floor(w.data.len());
     if block.amsterdam && floor > MAX_TX_GAS {
         return Err(SimError::Revert(format!(
-            "calldata floor {floor} above the 2^24 regular gas of a transaction ({} B; EIP-7976, EIP-7825)", w.data.len())));
+            "{TX_EXCEEDS_CHAIN_LIMIT}: calldata floor {floor} above the 2^24 regular gas of a transaction ({} B; EIP-7976, EIP-7825)", w.data.len())));
     }
     // ruling R-node: a relayed PQ registration that does not fit one transaction is refused with its own code
     let split = w.meta.is_none() && pq_register(&w.data);
@@ -1364,10 +1423,10 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
         return Err(SimError::Revert(format!("gas {est} above max_gas_per_tx {max}")));
     }
     if est > block.limit {
-        return Err(SimError::Revert(format!("gas {est} above the chain's block gas limit {}{}", block.limit, list_batch_note(&w.data))));
+        return Err(SimError::Revert(format!("{TX_EXCEEDS_CHAIN_LIMIT}: gas {est} above the chain's block gas limit {}{}", block.limit, list_batch_note(&w.data))));
     }
     if !block.amsterdam && est > MAX_TX_GAS {
-        return Err(SimError::Revert(format!("gas {est} above the 2^24 gas limit of a transaction (EIP-7825, before Amsterdam)")));
+        return Err(SimError::Revert(format!("{TX_EXCEEDS_CHAIN_LIMIT}: gas {est} above the 2^24 gas limit of a transaction (EIP-7825, before Amsterdam)")));
     }
     let max = total_cap(max, block);
     let g = if w.meta.is_none() && w.data.get(..4) == Some(&SEL_MTX_SETTLE[..]) {
@@ -1457,6 +1516,8 @@ mod tests {
         assert_eq!(sel("setKemKey", "registry"), U::setKemKeyCall::SELECTOR);
         assert_eq!(sel("storePqzPop", "registry"), U::storePqzPopCall::SELECTOR);
         assert_eq!(sel("setPqzKey", "registry"), U::setPqzKeyCall::SELECTOR);
+        assert_eq!(sel("setPqzScopedKey", "registry"), U::setPqzScopedKeyCall::SELECTOR);
+        assert_eq!(sel("storePqzScopedPop", "registry"), U::storePqzScopedPopCall::SELECTOR);
         assert_eq!(sel("acceptMembership", "registry"), U::acceptMembershipCall::SELECTOR);
         let cast = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(sel("deploy", "factory"), cast("deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)"));
@@ -1604,7 +1665,8 @@ mod tests {
         // round 3r (CTR-GOV-23): -> (127, 3, 127), the router's eleven admin rows; round 3s (CTR-GOV-24): -> (130, 3, 130), the
         // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: -> (131, 3, 131), the router's `UASetVerifierFee`
         // owner 2026-11-12: -> (132, 3, 132), the router's `UACreateInstance` (its vector row's `init_call`)
-        assert_eq!((sent, relayed, refused), (132, 3, 132), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // the three-key model (CTR-PQZ-41): -> (133, 3, 133), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
+        assert_eq!((sent, relayed, refused), (133, 3, 133), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
@@ -1613,8 +1675,8 @@ mod tests {
         // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows; round 3s (CTR-GOV-24): -> 134, the router's three list /
         // enable rows; round 3t: -> 135, `UASetVerifierFee`; owner 2026-11-12: -> 137, `UACreateToken`, `UACreateDex` (no vector
         // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`); -> 138,
-        // `UACreateInstance`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 138, "table rows: 106 typed with an entry, 32 plain");
+        // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 141, "table rows: 107 typed with an entry, 34 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -2374,7 +2436,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // owner 2026-11-12 (GUARDIAN): -> 296, the account's eight rows; EXEMPT -> 207, its six self-called operations and its three
     // generic entries; GOVERNED -> 297, its guardian's `initiateRecovery`
     // owner 2026-11-12 ("both the generic row and the per-class ones"): -> 297, the router's `mtxCreateInstance`; EXEMPT -> 206
-    const ROWED: usize = 297;
+    // the three-key model: -> 303, `mtxRollOverSigned` on the four PQZ kinds (row `PqzRollOver`), the registry's
+    // `setPqzScopedKey` (SIGNED) and `storePqzScopedPop` (PERMISSIONLESS)
+    const ROWED: usize = 303;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 206;
     const GOVERNED: usize = 297;

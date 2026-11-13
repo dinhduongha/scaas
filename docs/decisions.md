@@ -805,7 +805,7 @@ Change (2026-11-11, ua-mtx-fix-node, Fable re-check 2 S-1..S-3; controller call;
 ### NODE-JOB-28 — PQZ jobs on an opening token: named opening fields, the holder-signed rollover, refusals by name
 - old: — · status: current · owner: yes · date: 2026-11-13 · normative: node/job-api.md#NODE-JOB-28 · superseded-by: —
 
-**Rule.** (Summary; normative [job-api.md](node/job-api.md#NODE-JOB-28).) Op 1 carries `u_from`, `opening_to` / `opening_auditor` `{mlkem_ct, x25519_eph, sealed_seed}`; `mtxRollOverSigned` with a bounded `skip`, `entries_hash`, `owner_sig` on both relay paths; scoped key rows; the key class read from `pqzVerifyConfig()`; refusals `ROLLOVER_SIGNED_ONLY`, `AUDITOR_KEY_MISSING`, `TX_EXCEEDS_CHAIN_LIMIT`, zero sends.
+**Rule.** (Summary; normative [job-api.md](node/job-api.md#NODE-JOB-28).) Op 1 carries `uFrom`, `openingTo` / `openingAuditor` `{mlkemCt, x25519Eph, sealedSeed}` (field names as the contract's structs); `mtxRollOverSigned` with a bounded `skip` and the holder's `@ua` signature on both relay paths; scoped key rows; the key class read from `pqzVerifyConfig()`; refusals `ROLLOVER_SIGNED_ONLY`, `AUDITOR_KEY_MISSING`, `TX_EXCEEDS_CHAIN_LIMIT`, zero sends.
 **Status.** SPECIFIED. UNAUDITED.
 **Why.** The node is open: what a token refuses it refuses first by name, and it never sends what cannot land.
 **Cost if wrong.** A keeper rollover or an unfit op would be sent and fail on chain, or a job would go `dead` silently on the old shape.

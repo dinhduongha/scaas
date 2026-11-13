@@ -477,11 +477,13 @@ impl Chain {
         self.code_at(a).await.map(|c| c.len())
     }
 
-    /// Group 3g (spec §7.3): a `UAPqzKeyCurrent` of one of `uas` on `registry` in the last `lookback` blocks.
+    /// Group 3g (spec §7.3): a `UAPqzKeyCurrent` of one of `uas` on `registry` in the last `lookback` blocks; the three-key model
+    /// (CTR-UA-43): or a `UAPqzScopedKeyCurrent` (a class-2 / class-3 token's keys), of any scope (evidence, not proof).
     pub async fn pqz_key_current_since(&self, registry: Address, uas: &[B256], lookback: u64) -> Result<bool> {
         let filter = Filter::new()
             .address(registry)
-            .event_signature(crate::abi::IUARegistry::UAPqzKeyCurrent::SIGNATURE_HASH)
+            .event_signature(vec![crate::abi::IUARegistry::UAPqzKeyCurrent::SIGNATURE_HASH,
+                crate::abi::IUARegistry::UAPqzScopedKeyCurrent::SIGNATURE_HASH])
             .topic1(uas.to_vec());
         Ok(!self.logs_back(filter, lookback).await?.is_empty())
     }

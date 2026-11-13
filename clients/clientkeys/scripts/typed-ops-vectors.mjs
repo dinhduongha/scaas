@@ -83,6 +83,8 @@ const COMMIT_REVEAL = { sealedMemo: '0x' };  // a BUNDLE form carries no memo
 const ROW = {
   UAUnwrap: { wrapped: 1000000, minOut: 990000, recipient: '0x0000000000000000000000000000000000000B0B' },
   UAShield: { toUA: ZETHER_UA, amount: 10 },
+  // CTR-PQZ-41: the skip marks strictly ascending, as the token and the node require (the generic filler gives two decreasing)
+  PqzRollOver: { skip: [92000, 155000] },
   // the delegate a 32-byte id (Q6, CTR-ACC-12), the address of today's row zero-padded
   UASetMandate: { token: '0x5ca00000000000000000000000000000000000b1', delegate: padId('0x00000000000000000000000000000000000000d2'),
     maxPerPayment: 7, maxPerPeriod: 9, periodSeconds: 86400, expiry: 1900000000 },

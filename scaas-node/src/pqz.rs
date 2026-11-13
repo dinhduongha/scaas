@@ -53,6 +53,20 @@ async fn offchain_config(chain: &Chain, token: alloy::primitives::Address) -> Re
     }
 }
 
+/// CTR-PQZ-37 (NODE-JOB-28): the key class of a PQZ token, as its `_keyOf`: `OFFCHAIN` reads scoped keys, scope `token` with
+/// `pqzOwnKey` (class 3) else 0 (class 2); `PRECOMPILE`, or a contract without the view, the registry key (`None`). With the
+/// token's `pqzOpening`.
+pub async fn key_scope(chain: &Chain, token: alloy::primitives::Address)
+    -> Result<(Option<alloy::primitives::Address>, bool), SimError> {
+    match chain.call_view(token, IPqzToken::pqzVerifyConfigCall {}).await {
+        Ok(c) if c.pqzVerifyMode == PQZ_OFFCHAIN =>
+            Ok((Some(if c.pqzOwnKey { token } else { alloy::primitives::Address::ZERO }), c.pqzOpening)),
+        Ok(c) => Ok((None, c.pqzOpening)),
+        Err(SimError::Revert(_)) => Ok((None, false)),
+        Err(e) => Err(e),
+    }
+}
+
 /// Group 3h (NODE-JOB-24): `w` is a PQZ debit (its estimate depends on the token's `proofStore()`).
 pub fn is_debit(w: &Work) -> bool {
     debit_row(w).is_some()
@@ -361,13 +375,14 @@ mod tests {
 
     /// The views the node rebuilds a verdict from are the contract's: the forge artifact's selectors (`out/`, T45's ABI; group 3h
     /// T59: the three args tuples with `ownTag`, the four statement views moved, 0x3a3bb45a -> 0x931415ee, 0xffdee909 -> 0x8a2161ba,
-    /// 0x23a72649 -> 0xda8c9eed, 0xf4834cb9 -> 0x8e4ccf2e).
+    /// 0x23a72649 -> 0xda8c9eed, 0xf4834cb9 -> 0x8e4ccf2e; the three-key model (CTR-PQZ-40): `uFrom` and the two `PqzOpening` in
+    /// `PqzTransferArgs`, 0x931415ee -> 0x50f9be2f).
     #[test]
     fn views_are_the_contracts() {
         assert_eq!(IPqzToken::pqzVerifyConfigCall::SELECTOR, [0xdc, 0x59, 0xc6, 0x6e]);
         assert_eq!(IPqzToken::proofSystemIdCall::SELECTOR, [0x1f, 0x3b, 0x28, 0xf2]);
         assert_eq!(IPqzToken::envelopeBindingCall::SELECTOR, [0x35, 0xad, 0x08, 0xaa]);
-        for (row, sel) in [("UAPqzTransferSingle", [0x93, 0x14, 0x15, 0xee]), ("UAPqzTransferSingleCompact", [0x93, 0x14, 0x15, 0xee]),
+        for (row, sel) in [("UAPqzTransferSingle", [0x50, 0xf9, 0xbe, 0x2f]), ("UAPqzTransferSingleCompact", [0x50, 0xf9, 0xbe, 0x2f]),
             ("UAPqzTransfer", [0x8a, 0x21, 0x61, 0xba]), ("UAPqzTransferCompact", [0x8a, 0x21, 0x61, 0xba]),
             ("UAPqzUnshield", [0xda, 0x8c, 0x9e, 0xed]), ("UAPqzUnshieldUnwrap", [0x8e, 0x4c, 0xcf, 0x2e])] {
             let v = statement_view(row).unwrap_or_else(|| panic!("{row}: no statement view"));
@@ -376,11 +391,11 @@ mod tests {
         assert_eq!(statement_view("UAShield"), None);
     }
 
-    /// Round 3t (spec §10, §12): the node's fee word parity against `smartcontracts/vectors/pqz/verifier_fee.json` (written from
+    /// Round 3t (spec §10, §12): the node's fee word parity against `smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json` (written from
     /// real token ops): every row's word is `txFee + vf + M·d`, and a mismatch names the three terms.
     #[test]
     fn verifier_fee_vectors_and_the_mismatch() {
-        let p = format!("{}/../smartcontracts/vectors/pqz/verifier_fee.json", env!("CARGO_MANIFEST_DIR"));
+        let p = format!("{}/../smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json", env!("CARGO_MANIFEST_DIR"));
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let rows = v["rows"].as_array().unwrap();
         assert_eq!(rows.len() as u64, v["rowCount"].as_u64().unwrap());
@@ -393,12 +408,12 @@ mod tests {
         assert!(m.starts_with("PQZ_FEE_MISMATCH: proved 5, the token's fee word is 7 (txFee 3, verifierFee 2, M·d 2)"), "{m}");
     }
 
-    /// `smartcontracts/vectors/pqz/verdict.json` read by the node (spec §11.3): the node's `PqzVerdict` type is the contract's
+    /// `smartcontracts/vectors/pqz/n2304-kmax4096/verdict.json` read by the node (spec §11.3): the node's `PqzVerdict` type is the contract's
     /// (type string, typehash), every row's struct hash and digest in the token's domain are the vector's, and the EOA verifier's
     /// signature recovers over the registry's `uaAuthDigest` (what the e2e test signs; the node itself signs nothing).
     #[test]
     fn pqz_verdict_vectors_digest() {
-        let p = format!("{}/../smartcontracts/vectors/pqz/verdict.json", env!("CARGO_MANIFEST_DIR"));
+        let p = format!("{}/../smartcontracts/vectors/pqz/n2304-kmax4096/verdict.json", env!("CARGO_MANIFEST_DIR"));
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let ty = "PqzVerdict(address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil)";
         assert_eq!(v["typeString"].as_str(), Some(ty));

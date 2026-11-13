@@ -1171,6 +1171,13 @@ pub(crate) mod tests {
         stmt_fee: Option<u64>,
         /// The statement views revert (the token refuses the op).
         stmt_revert: bool,
+        /// NODE-JOB-28: `pqzVerifyConfig()`'s `pqzOwnKey` and `pqzOpening` (the key class, CTR-PQZ-37).
+        pqz_own_key: bool,
+        pqz_opening: bool,
+        /// NODE-JOB-28: `pqzScopedKeyOf` answers no record (the auditor has no key of the token's scope).
+        scoped_none: bool,
+        /// The scopes `pqzScopedKeyOf` / `pqzScopedKeyLatest` / `pqzScopedKeyAt` were asked for, in order.
+        scopes_asked: Vec<Address>,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1179,7 +1186,7 @@ pub(crate) mod tests {
     /// The PQZ views of the fake token: `pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the four statement views (the forge
     /// artifact's selectors, pinned in `pqz::tests::views_are_the_contracts`).
     // group 3h T59: the four statement views after `ownTag` (pqz.rs `views_are_the_contracts`)
-    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x93, 0x14, 0x15, 0xee],
+    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x50, 0xf9, 0xbe, 0x2f],
         [0x8a, 0x21, 0x61, 0xba], [0xda, 0x8c, 0x9e, 0xed], [0x8e, 0x4c, 0xcf, 0x2e]];
     const PQZ_KEY0: Address = Address::repeat_byte(0xe0);
     const PQZ_KEY1: Address = Address::repeat_byte(0xe1);
@@ -1216,9 +1223,11 @@ pub(crate) mod tests {
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
                 "eth_getLogs" if e.logs_down => Err(err(-32000, "upstream timeout", None)),
-                "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0] == json!(format!("{:#x}",
-                    <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
-                    "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone(), format!("{:#x}", B256::repeat_byte(1)),
+                // the rotation filter asks `UAPqzKeyCurrent` and `UAPqzScopedKeyCurrent` (one topic-0 list); a log of the first
+                "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0].as_array().is_some_and(|t| t.contains(&json!(format!("{:#x}",
+                    <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)))) => Ok(json!([{
+                    "address": p[0]["address"].clone(), "topics": [format!("{:#x}",
+                        <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH), format!("{:#x}", B256::repeat_byte(1)),
                         format!("{:#x}", B256::from(U256::from(1)))],
                     "data": "0x", "blockNumber": "0x9", "blockHash": format!("{:#x}", B256::repeat_byte(9)),
                     "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0", "logIndex": "0x0",
@@ -1291,6 +1300,21 @@ pub(crate) mod tests {
                     } else if sel == crate::abi::IGasPriceOracle::getL1FeeCall::SELECTOR {
                         assert_eq!(p[0]["to"].as_str().map(str::to_lowercase), Some(format!("{:#x}", guard::GAS_PRICE_ORACLE)));
                         e.l1_fee.map(|f| word(U256::from(f))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
+                    } else if sel == crate::abi::IUARegistry::pqzScopedKeyOfCall::SELECTOR {
+                        let c = <crate::abi::IUARegistry::pqzScopedKeyOfCall as alloy::sol_types::SolCall>::abi_decode(
+                            &alloy::hex::decode(&input[2..]).unwrap()).unwrap();
+                        e.scopes_asked.push(c.scope);
+                        let ptr = if e.scoped_none { Address::ZERO } else { PQZ_KEY0 };
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzScopedKeyOfCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzScopedKeyOfReturn { version: 0, ptr, pqzPopHash: B256::ZERO, proven: true })))))
+                    } else if sel == crate::abi::IUARegistry::pqzScopedKeyLatestCall::SELECTOR {
+                        let c = <crate::abi::IUARegistry::pqzScopedKeyLatestCall as alloy::sol_types::SolCall>::abi_decode(
+                            &alloy::hex::decode(&input[2..]).unwrap()).unwrap();
+                        e.scopes_asked.push(c.scope);
+                        Ok(word(U256::from(e.pqz_latest)))
+                    } else if sel == crate::abi::IUARegistry::pqzScopedKeyAtCall::SELECTOR {
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzScopedKeyAtCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzScopedKeyAtReturn { ptr: PQZ_KEY1, pqzPopHash: B256::ZERO, proven: false })))))
                     } else if sel == crate::abi::IUARegistry::pqzKeyOfCall::SELECTOR {
                         Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzKeyOfCall::abi_encode_returns(
                             &crate::abi::IUARegistry::pqzKeyOfReturn { version: 0, ptr: PQZ_KEY0, pqzPopHash: B256::ZERO, proven: true })))))
@@ -1310,7 +1334,8 @@ pub(crate) mod tests {
                                 Some((mode, verifier, epoch)) => Ok(json!(format!("0x{}", alloy::hex::encode(
                                     crate::abi::IPqzToken::pqzVerifyConfigCall::abi_encode_returns(&crate::abi::IPqzToken::PqzVerifyConfig {
                                         pqzVerifyMode: mode, verifier, fixed_: false, pqzVerifierEpoch: epoch, pending: B256::ZERO, eta: 0,
-                                        noticePeriod: 0, verifierFee: e.pqz_vf, verifierFeeMax: 0, verifierFeePending: 0, verifierFeeEta: 0 }))))),
+                                        noticePeriod: 0, verifierFee: e.pqz_vf, verifierFeeMax: 0, verifierFeePending: 0, verifierFeeEta: 0,
+                                        pqzOwnKey: e.pqz_own_key, pqzOpening: e.pqz_opening }))))),
                             }
                         } else if s4 == crate::abi::IPqzToken::proofSystemIdCall::SELECTOR {
                             Ok(json!(format!("{PSID:#x}")))
@@ -1984,7 +2009,12 @@ pub(crate) mod tests {
                 let job: Job = serde_json::from_str(&json!({"id": 3, "kind": if row.ua() { "ua_metatx" } else { "metatx" }, "op": op}).to_string()).unwrap();
                 let w = work_from_job(&job, None).unwrap_or_else(|e| panic!("{name} on {kind}: {e:#}"));
                 let (env, mut args, sig) = op_from_calldata(row, &w.data);
-                for k in ["accSeq", "modeNonce"].iter().filter(|_| matches!(row.name, "ZetherRollOver" | "ZetherSetRollOverMode")) {
+                let off: &[&str] = match row.name {
+                    "ZetherRollOver" | "ZetherSetRollOverMode" => &["accSeq", "modeNonce"],
+                    "PqzRollOver" => &["rollSeq", "rolled", "entriesHash", "chainUid"], // CTR-PQZ-41: the token reads them
+                    _ => &[],
+                };
+                for k in off {
                     if let Some(x) = op["args"].get(*k) {
                         args[*k] = x.clone();
                     }
@@ -2008,7 +2038,8 @@ pub(crate) mod tests {
         // group 3h T61: -> 114, the router's `UASetProofStore`; group 3l: -> 116, the router's two wrap-limit ops
         // round 3r (CTR-GOV-23): -> 127, the router's eleven admin rows; round 3s: -> 130, the router's three list / enable rows
         // round 3t: -> 131, the router's `UASetVerifierFee`; owner 2026-11-12: -> 132, the router's `UACreateInstance`
-        assert_eq!(n, 132, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // the three-key model (CTR-PQZ-41): -> 133, `PqzRollOver`
+        assert_eq!(n, 133, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
@@ -2244,7 +2275,7 @@ pub(crate) mod tests {
         assert_eq!(rpc.lock().unwrap().gas, vec![37_440_000]);
         // the block gas limit binds before max_gas_per_tx (a smaller chain, or the ramp after a reset)
         let (r, rpc) = outcomes(Evm { estimate: Some(31_200_000), block_gas: Some(30_000_000), ..ok() }, vec![job(7)], cap).await;
-        assert!(r[0].0 == "dead" && r[0].1.contains("above the chain's block gas limit 30000000"), "{r:?}");
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TX_EXCEEDS_CHAIN_LIMIT: gas 31200000 above the chain's block gas limit 30000000"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         // the padded limit stops at the block gas limit, never below the estimate
         let (_, rpc) = outcomes(Evm { estimate: Some(31_200_000), block_gas: Some(32_000_000), ..ok() }, vec![job(7)], cap).await;
@@ -2261,7 +2292,7 @@ pub(crate) mod tests {
         assert_eq!((deploy(261_924).len(), deploy(261_892).len()), (261_924, 261_892));
         let fac = move |c: &mut ChainCfg| { c.max_gas_per_tx = 64_000_000; c.ua_registry = Some(af); };
         let (r, rpc) = outcomes(ok(), vec![call_job(9, af, deploy(261_924))], fac).await;
-        assert!(r[0].0 == "dead" && r[0].1.starts_with("calldata floor 16778136 above the 2^24 regular gas"), "{r:?}");
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TX_EXCEEDS_CHAIN_LIMIT: calldata floor 16778136 above the 2^24 regular gas"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         let (r, _) = outcomes(ok(), vec![call_job(9, af, deploy(261_892))], fac).await;
         assert_eq!(states_of(&r).last().copied(), Some("broadcast"), "{r:?}");
@@ -2277,7 +2308,7 @@ pub(crate) mod tests {
         let cap = |c: &mut ChainCfg| c.max_gas_per_tx = 64_000_000;
         // Osaka: an estimate over 2^24 is refused, a large one under it is padded to 2^24 at most
         let (r, rpc) = outcomes(Evm { estimate: Some(31_200_000), osaka: true, ..ok() }, vec![job(7)], cap).await;
-        assert!(r[0].0 == "dead" && r[0].1.contains("above the 2^24 gas limit of a transaction"), "{r:?}");
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TX_EXCEEDS_CHAIN_LIMIT: gas ") && r[0].1.contains("above the 2^24 gas limit of a transaction"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         let (r, rpc) = outcomes(Evm { estimate: Some(15_000_000), osaka: true, ..ok() }, vec![job(7)], cap).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
@@ -2731,6 +2762,62 @@ pub(crate) mod tests {
             let (r, _) = outcomes(e, vec![pqz_job(7)], |_| {}).await;
             assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         }
+    }
+
+    /// The public rollover job (`UAPqzRollOver`, `mtxRollOver`) from typed_ops.json, its subject a derived UA, on `TOKEN`.
+    fn pqz_rollover_job(id: i64) -> Value {
+        let v = crate::typed::testkit::vectors();
+        let row = crate::typed::testkit::row_of("UAPqzRollOver", "pqz");
+        let (env, args, sig) = crate::typed::testkit::split(row, "UAPqzRollOver", "pqz", &v);
+        let mut env = env.unwrap();
+        env["from"] = json!(format!("{:#x}", B256::repeat_byte(0xab)));
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": row.entry, "contract": "pqz", "token": format!("{TOKEN:#x}"),
+            "envelope": env, "args": args, "auth": sig.unwrap()}})
+    }
+
+    /// NODE-JOB-28 (spec 2026-11-13-pqz-three-keys §14 item 22): the public rollover on a token with the opening on is refused
+    /// `ROLLOVER_SIGNED_ONLY`, `dead`, zero sends, nothing simulated; the same job on a token without the opening, `OFFCHAIN` or
+    /// `PRECOMPILE`, goes.
+    #[tokio::test]
+    async fn public_rollover_on_an_opening_token_is_signed_only() {
+        let (r, rpc) = outcomes(Evm { pqz_opening: true, ..offchain() }, vec![pqz_rollover_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("ROLLOVER_SIGNED_ONLY: "), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert!(!rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"), "refused before any simulation");
+        for e in [offchain(), Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() }] {
+            let (r, _) = outcomes(e, vec![pqz_rollover_job(7)], |_| {}).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        }
+    }
+
+    /// NODE-JOB-28: an `OFFCHAIN` debit with auditor copies whose auditor has no key of the token's scope (class 3: the token,
+    /// class 2: 0) is `AUDITOR_KEY_MISSING`, back in the queue (the auditor may register), zero sends; with the key it goes on to the
+    /// verdict. The key reads of the token (the parties' too, `no_pending_party`) all ask the token's scope (CTR-UA-43).
+    #[tokio::test]
+    async fn auditor_without_a_scoped_key_is_named() {
+        let mut j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        j["op"]["args"]["args"]["vAuditor"] = json!(format!("0x{}", "a1".repeat(32)));
+        for (own, scope) in [(true, TOKEN), (false, Address::ZERO)] {
+            let (r, rpc) = outcomes(Evm { pqz_own_key: own, scoped_none: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("AUDITOR_KEY_MISSING: "), "{r:?}");
+            let e = rpc.lock().unwrap();
+            assert!(e.sent.is_empty());
+            assert!(!e.scopes_asked.is_empty() && e.scopes_asked.iter().all(|s| *s == scope), "class {}: {:?}", 3 - u8::from(!own), e.scopes_asked);
+        }
+        let (r, rpc) = outcomes(Evm { pqz_own_key: true, ..offchain() }, vec![j], |_| {}).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert!(rpc.lock().unwrap().scopes_asked.iter().all(|s| *s == TOKEN));
+    }
+
+    /// NODE-JOB-28 (CTR-UA-43): on a class-3 token the pending-version check reads the scoped records of the token, never the
+    /// registry key: a receiver with a scoped version stored above current is `PQZ_KEY_ROTATION_PENDING`.
+    #[tokio::test]
+    async fn rotation_pending_reads_the_tokens_scope() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (r, rpc) = outcomes(Evm { pqz_own_key: true, pqz_latest: 1, ..offchain() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_KEY_ROTATION_PENDING: "), "{r:?}");
+        let e = rpc.lock().unwrap();
+        assert!(e.sent.is_empty() && !e.scopes_asked.is_empty() && e.scopes_asked.iter().all(|s| *s == TOKEN), "{:?}", e.scopes_asked);
     }
 
     /// Group 3g (spec §7.3): `ProofRejected` after an indexed `UAPqzKeyCurrent` of a party is `PQZ_KEY_ROTATED`, the simulation
@@ -3389,7 +3476,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             pqzVerifierEpoch: 2, validUntil: until });
         assert_eq!(v.sig, ua_sig(&verdict_auth(0x7e)), "the job's signature, as it named it");
         // the statement view: the job's own `args` and the binding the token gave for its envelope
-        let st = e.views.iter().find(|i| i[..4] == [0x93, 0x14, 0x15, 0xee]).expect("transferSingleStatement asked");
+        let st = e.views.iter().find(|i| i[..4] == [0x50, 0xf9, 0xbe, 0x2f]).expect("transferSingleStatement asked");
         let ty = alloy::dyn_abi::DynSolType::parse(&format!("({},bytes32)", crate::typed::abi_of("PqzTransferArgs"))).unwrap();
         let got = ty.abi_decode_params(&st[4..]).unwrap();
         let want = crate::typed::parse("PqzTransferArgs", &j["op"]["args"]["args"], "args").unwrap();
