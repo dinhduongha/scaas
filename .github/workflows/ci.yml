@@ -2,6 +2,7 @@
 # Mirrors the local commands:
 #   contract-evm:  per PQZ set (matrix n2048-kmax1024, n2304-kmax4096, n2560-kmax16384, n2816-kmax65536): script/pqz/at-set.sh <set> test;
 #                  once, in the n2304-kmax4096 cell (the committed set, so its at-set run is the default-set `forge test`):
+#                  python3 -I ../../pqz-core/params/sets/gen_set.py --all --check (PqzSet.sol and every generated file equal set.toml's);
 #                  forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas); FOUNDRY_PROFILE=scaas-testnet forge build;
 #                  T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json; python3 ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json
 #   contract-<family>: smartcontracts/scripts/test.sh <family> (unit and in-process tests; localnet e2e stays local), toolchains as local:
@@ -15,7 +16,9 @@
 #   contract-cosmos:   test.sh cosmos (cargo test)
 #   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
-#   pqz:           in pqz-core at PQZ_SET n2304-kmax4096: pqzl/build.sh native, kat/check.py (KAT); pqzl/check_tbox_fixes.sh, sv/check_sv_fixes.sh;
+#   pqz:           in pqz-core: params/sets/gen_set.py --all --check, pqzl/params/to_rust.py --check (generated files in sync);
+#                  sh gate-controls.sh (the gate scripts' negative controls, stubs only);
+#                  at PQZ_SET n2304-kmax4096: pqzl/build.sh native, kat/check.py (KAT); pqzl/check_tbox_fixes.sh, sv/check_sv_fixes.sh;
 #                  ffi pqz-vectors --check, smartcontracts/vectors/pqz/pqz_kat.py --check, ffi/vectors/tamper.py; cargo test --release (stmt, pqzh/ligero, ffi);
 #                  fuzz smoke (fuzz/run.sh precompile, mutate, codec: 60 s each on the committed corpora)
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths;
@@ -131,6 +134,11 @@ jobs:
         run: |
           ../../scripts/evm_libs.sh install
           ../../scripts/evm_libs.sh check
+      # the committed PqzSet.sol and every other generated file equal set.toml's (review 3w u5-2: set.toml changes in
+      # contract rounds, where the core gate does not run)
+      - name: gen_set.py --all --check
+        if: matrix.set == 'n2304-kmax4096'
+        run: python3 -I ../../pqz-core/params/sets/gen_set.py --all --check
       - name: forge test at ${{ matrix.set }} (at-set.sh)
         run: script/pqz/at-set.sh ${{ matrix.set }} test
       # the registry's gas bounds (msig at verifyBudget, stored-member bound, T-GAS) hold cold: every call its own tx
@@ -425,6 +433,10 @@ jobs:
             pqz-core/ffi
             pqz-core/stmt
             pqz-core/pqzh/ligero
+      - name: generated files in sync (gen_set.py --all --check, to_rust.py --check)
+        run: python3 -I params/sets/gen_set.py --all --check && python3 -I pqzl/params/to_rust.py --check
+      - name: gate scripts fail on a failing check (gate-controls.sh)
+        run: sh gate-controls.sh
       - name: build (native) and KAT 19/19
         run: |
           cd pqzl && ./build.sh native

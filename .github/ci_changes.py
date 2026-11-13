@@ -37,7 +37,7 @@ JOBS = {
     # the directories the pqz job builds and tests (pqzl, ffi, stmt, pqzh/ligero, params, fuzz); pqz-core/nethermind/ (chain
     # scripts, the C# plugin), artifact/, glic/, research/, runs/ and the top-level gate scripts are run on the owner's machine
     'pqz': ['pqz-core/pqzl/', 'pqz-core/ffi/', 'pqz-core/stmt/', 'pqz-core/pqzh/', 'pqz-core/params/', 'pqz-core/fuzz/',
-            'smartcontracts/vectors/pqz/'] + RT,
+            'pqz-core/gate-controls.sh', 'smartcontracts/vectors/pqz/'] + RT,
     'zether-prover': ['clients/zether-prover/', 'smartcontracts/evm/', 'smartcontracts/vectors/'] + RT,
     'ua-rs': ['clients/ua-rs/', 'smartcontracts/'] + RT,
     'ua-cxx': ['clients/ua-cxx/', 'clients/ua-rs/', 'smartcontracts/vectors/'] + RT,

@@ -48,6 +48,9 @@ def mutate(x):
 
 fails = total = 0
 for name in sorted(f for f in os.listdir(D) if f.endswith(".json")):
+    if name in kat.OTHER_WRITERS:  # another writer's file, checked by its own tests (pqz_kat.py OTHER_WRITERS)
+        print(f"{name}: skipped ({kat.OTHER_WRITERS[name]})")
+        continue
     j = json.load(open(os.path.join(D, name)))
     ls = list(leaves(j))
     picks = sorted({ls[i * len(ls) // N] for i in range(N)})

@@ -11,8 +11,10 @@
 # runs/gate/last-<set> is each set's latest run, `gate.sh --last <set>` re-runs that one (concurrent gates).
 # PQZ_SET: the parameter set (owner 2026-10-21: pqz-core/params/sets/<set>/, one set per library build; default
 # n2304-kmax4096, the frozen v3 set is n2048-kmax1024); named in the summary.
-# Steps: KAT 19/19 (against the set's upstream LaZer golden file), check_tbox_fixes, check_sv_fixes, the PQZL
-# differential (SV vs generic, z21), C = Rust = wasm32 on the bench proofs (fnv), the vectors job (pqz-vectors --check,
+# Steps: KAT 19/19 (against the set's upstream LaZer golden file), check_tbox_fixes, check_sv_fixes, ct (the
+# constant-time check of both provers under valgrind, pqzl/test/ct.sh: the 14 bench relations once each and one round of
+# KeyGen / Enc / Dec, 0 secret-dependent reports; review 3w u1-1), ub (the C core under UBSan + ASan,
+# pqzl/test/ub_test.sh, parts a .. h), the PQZL differential (SV vs generic, z21), C = Rust = wasm32 on the bench proofs (fnv), the vectors job (pqz-vectors --check,
 # pqz_kat.py --check, tamper, pqz-ffi selftest vectors, wasm32 replay), the pqz-ffi job (tests, symbol scans, native =
 # wasm32 digests), cargo test of pqz-stmt and Ligero, the PQZH cross-checks (C = Rust statement / witness bytes: the
 # STARK backup's at n2048-kmax1024, Ligero's at every set with PQZH), the fuzz targets (build, then
@@ -161,6 +163,9 @@ for l in open(sys.argv[1]):
             print(j["rel"], j["proofs_fnv"])
 sys.exit(1 if bad else 0)'
 sv() { (cd pqzl && sv/check_sv_fixes.sh); }
+# the guards of fix E (G-1) and of the round-2 memory-safety fixes, at the set (review 3w u1-1)
+ctg() { (cd pqzl && test/ct.sh "gate-$L" 16383 1 1); }
+ubg() { (cd pqzl && test/ub_test.sh "gate-$L"); }
 # pqz-stmt at the set; Ligero's tests at the set where it has PQZH (per-set target, plan 5h Task 8c part 2);
 # --no-fail-fast: one failing test binary must not hide the others (R0 fix round I1)
 cargo_tests() { (cd stmt && part cargo/stmt env CARGO_TARGET_DIR="target/$PQZ_SET" cargo test --release --offline --no-fail-fast --no-default-features --features "set-$PQZ_SET") &&
@@ -176,6 +181,8 @@ say "set $PQZ_SET"
 step kat kat
 step tbox tbox
 step sv sv
+step ct ctg
+step ub ubg
 step diff diffs
 step fnv fnv
 if [ "$CORE_ONLY" = True ]; then
