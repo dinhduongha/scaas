@@ -8,7 +8,7 @@ q = 1125899864532089              # 2^50 - 42,310,535 (owner ruling Q1, 2026-10-
 pqz_delta = 1.00366               # e-s1.txt
 s_aud = 4                         # legs per randomness group of an audited R_TXM (owner 2026-10-25, R0-1 direction 2: the hint study
                                   # pqzl/params/anon/hints-s.txt, 32 s_aud worst-case hints); without the auditor groups of 4
-kmlwe_min = 39                    # e-s1.txt (p16k: codegen's default rank 38 gives dual_hybrid 446 / 447)
+kmlwe_min = 39                    # e-s1.txt (the research record's codegen default rank 38 gives dual_hybrid 446 / 447)
 pqzh = true                       # PQZH (Ligero over this q) is built for this set
 pqzh_value = false                # no PQZH value token (init refuses PQZH_ID; registration and disclosure only): no PQZH debit fits one transaction under EIP-7976 (C2-1; owner 2026-10-27)
 max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB (decisions 2026-10-20 O8, 2026-10-21 (7); the node reads it, pqz_max_input())

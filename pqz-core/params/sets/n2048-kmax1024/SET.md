@@ -1,4 +1,4 @@
-# Parameter set `n2048-kmax1024` (the P6 parameters; not recommended; frozen until the R0 review fix, 2026-10-25)
+# Parameter set `n2048-kmax1024` (the P6 parameters; not recommended; frozen until the R0 review fix of 2026-10-25, not since)
 
 **Not recommended** (owner 2026-10-25): this set runs under the owner's exception to the β ≥ 450 bar — op 7's
 shared randomness at 64 worst-case hints reaches DDGR20 451.92 but dual_hybrid − offset only 443.92 / 444.92 [estimate]
@@ -18,7 +18,7 @@ feature, of `pqz-ffi`'s default build until 8d part 1 (now `n2304-kmax4096`) and
 | `K_MAX` | 1,024 credits between refreshes; digit sums `M_i` 14 bits, carries 11 bits, `e_T` / `e'` + 2^24 in 25 bits |
 | norm bounds | β_s 36 (CBD(1)), β_e 164 (CBD(20)), β_2 64; B_FRESH 11,872 |
 | proof MLWE rank (`kmlwe_min`) | 33 (LaZer's default, `set.toml` since the R0 review fix; `e-s1.txt`, the set's first: every one of the 14 specs meets MSIS β 452–461, hiding MLWE uSVP 470, dual_hybrid 462 / 464 at `pqz_delta` 1.00366) |
-| encryption, no hints | uSVP β 476 (2^139.0 classical / 2^126.1 quantum) |
+| encryption, no hints | uSVP β 476 (2^139.0 classical / 2^126.1 quantum); full estimate 2^136.1 classical / 2^124.3 quantum (dual_hybrid β 466 / 469) (`pqzl/params/estimator.txt` §1, "PQZ enc") |
 | encryption with hints (op 7 groups) | since the R0 review fix (R0-1, `s_aud` = 2: audited R_TXM groups of 2 legs, 4 without): 64 worst-case hints in both cases, DDGR20 β 451.92, dual_hybrid − offset 443.92 / 444.92 classical / quantum [estimate] (`pqzl/params/anon/hints-s.txt`): the owner exception widened to dual_hybrid ≈ 444 (2026-10-25). Before the fix (groups of 4 + the auditor copy at coefficients 0..15, 80 hints) the recorded exception was DDGR20 446.0 with "dual_hybrid on the hinted instance not measured" (CTR-PQZ-03, 2026-10-15); the hint study then measured dual_hybrid − offset 437.97 / 438.97 there (review finding F-6: the exception is the dual figure, ≈ 444 now) |
 | proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5")` = `0xc752e7f5…c6cdfe` (R0 review fix 2026-10-25; v4 `0x19fad50a…9a326d` retired); PQZH `keccak256("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3")` = `0x56293621…a7df5d` (R0 review fix; v2 `0x9d945089…a7dca4` retired) (set.toml `pqzl_id` / `pqzh_id`; plan 5h Task 8d, the one bump of Task 8: controller proposal, decisions CTR-PQZ-09); was v3 `0x8079d65b…16baef`, retired |
 | owner approval | P6 (CTR-PQZ-03); the v3 id since the Fiat–Shamir fix (CTR-PQZ-09 F6), its own v4 id since plan 5h Task 8d, v5 since the R0 review fix; kept frozen as the reference set (owner 2026-10-21) until the R0 fix regenerated its reg / dr / audited txm headers (2026-10-25) |

@@ -16,7 +16,7 @@ plan 5h Task 8d part 1b; its contracts build and pass their suites since 8d part
 | Δ | ⌊q / 2^22⌋ = 2^32 − 1 = 4,294,967,295 (odd) |
 | `K_MAX` | 65,536; digit sums `M_i` 20 bits, carries 17 bits, `e_T` / `e'` + 2^30 in 31 bits |
 | norm bounds | β_s 42 (CBD(1)), β_e 189 (CBD(20)), β_2 64; B_FRESH 15,940; worst case 65,535 · B_FRESH = 1,044,627,900 < E = 2^30 (margin 1.03), mint margin 3.08 (`aprime/aprime.txt`) |
-| proof MLWE rank (`kmlwe_min`) | **42** (`e-s1.txt`: every one of the 14 specs meets MSIS β 454–478, hiding MLWE uSVP 477–483, dual_hybrid 462 / 463 at `pqz_delta` 1.00366). The aprime record's 41 checked MSIS / uSVP only; at 41 dual_hybrid is 447 / 448 < 450 (`make.sh` e_s1 stop, 2026-10-23) |
+| proof MLWE rank (`kmlwe_min`) | **42** (`e-s1.txt`: every one of the 14 specs meets MSIS β 454–478, hiding MLWE uSVP 477–483, dual_hybrid 462 / 463 at `pqz_delta` 1.00366). The research record's (`pqzl/params/aprime/`) 41 checked MSIS / uSVP only; at 41 dual_hybrid is 447 / 448 < 450 (`make.sh` e_s1 stop, 2026-10-23) |
 | encryption, no hints | uSVP β 520; full estimate 2^149.3 classical / 2^135.9 quantum (dual_hybrid β 511 / 512) (`aprime/aprime.txt`) |
 | encryption with hints (op 7 groups) | since the R0 review fix (R0-1, `s_aud` = 4: 128 worst-case hints with the auditor): DDGR20 β 483.09, dual_hybrid − offset 475.09 / 478.09 [estimate] (`pqzl/params/anon/hints-s.txt`); was 496.79 at 80 (`aprime/aprime.txt`) |
 | e_s0 | budget, exactness of every norm proof (14 relations) and Fiat–Shamir rounds (λ = 4 read from the headers: 216.00 bits; the final challenge from the η-filtered set the cores sample since the R0 review fix, R0-C3: P = 0.9143, 2/\|C\| = 2^-129.67): MET (`e-s0.txt`) |

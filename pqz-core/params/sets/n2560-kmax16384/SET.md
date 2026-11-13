@@ -22,7 +22,7 @@ derived (see [`../README.md`](../README.md)).
 | stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits; `PqzSet.sol` `PACK_BITS`; built in 8d part 2: stored `ct` 16,100 B (64-bit lanes 20,608), `acc` 504 slots |
 | PQZH | built (plan 5h Task 8c part 2): THE preset's radices and n / k (n 32,756, k 817) with t = 122 (owner 2026-10-23), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; debit bounds 303,412–305,120 B exceed 262,144 → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB)** (decisions CTR-PQZ-10; first for this set only, since 2026-10-25 every PQZH set's), in `pqz-stmt` with `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |
 | `ROLL_MAX` | 64 (`set.toml` `roll_max` → `PqzSet.ROLL_MAX`, plan 5h Task 8d part 2b; below) |
-| LaZer codegen headers | byte-identical to the p16k record's (`pqzl/params/p16k/`, the 12 relations it has) until the R0 review fix, which regenerated reg / dr (`Bprime` 8, R0-C2; `9ac573ad`) |
+| LaZer codegen headers | byte-identical to the research record's (`pqzl/params/p16k/`, the 12 relations it has) until the R0 review fix, which regenerated reg / dr (`Bprime` 8, R0-C2; `9ac573ad`) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |
 
 ## Conditions for this set to work on a chain

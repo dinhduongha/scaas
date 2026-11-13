@@ -1,6 +1,6 @@
 {
  "set": "n2048-kmax1024",
- "description": "the v3 parameters (frozen until the R0 review fix 2026-10-25; own ids since plan 5h Task 8d)",
+ "description": "the P6 parameters (frozen until the R0 review fix 2026-10-25, not since; own ids since plan 5h Task 8d)",
  "approval": {
   "date": "2026-10-07",
   "what": "CTR-PQZ-03 (lattice parameters at or above Kyber-512); the v3 proofSystemId since the Fiat-Shamir fix (CTR-PQZ-09 F6); kept frozen as the reference set (owner 2026-10-21)"
