@@ -93,3 +93,60 @@ test('memoHash covers the openings (CTR-PQZ-40): keccak256(memo ‖ ownTag ‖ k
   const b = o.bytes.slice(); b[0] ^= 1;
   assert.notEqual(hex(pqzOpeningMemoHash('0x', tag, [b])), a, 'a swapped opening moves the word');
 });
+
+// Owner ruling 2026-11-14 (CLI-SGN-51's Change; spec §13, §14.18): the key handle opens and checks, never decrypts; a credit of
+// another class, scope or version is refused before anything of it is read.
+test('pqzKeyHandle: no decrypt and no secret on its surface; the opening path works; another class or scope refused first', async () => {
+  const { pqzKeyHandle } = await import('../src/pqzopen.js');
+  const at = { chainUid: CU[0], ua: '0x' + '11'.repeat(32), version: 0 };
+  const h2 = pqzKeyHandle(SEED, { kind: 'offchain-shared', ...at });
+  const h3 = pqzKeyHandle(SEED, { kind: 'offchain-token', token: TOK[0], opening: true, ...at });
+  const h3off = pqzKeyHandle(SEED, { kind: 'offchain-token', token: TOK[0], opening: false, ...at });
+  const h1 = pqzKeyHandle(SEED, { kind: 'registry', ...at });
+  for (const h of [h1, h2, h3, h3off]) {
+    assert.deepEqual(Object.keys(h).sort(), ['check', 'kind', 'open', 'openKem', 'scope', 'version'], h.kind);
+    assert.ok(Object.isFrozen(h));
+    assert.ok(!('decrypt' in h) && !('seed' in h) && !('dk' in h), 'no decrypt, no secret');
+  }
+  // the opening path (positive control): sealed to the handle's key, opened, handed to the binding's check
+  const seedLeg = fromHex('0x' + '5e'.repeat(32));
+  const aad = fromHex('0x' + '0a'.repeat(40));
+  const credit = (h, kind, scope, extra = {}) => {
+    const o = sealOpening({ seedLeg, role: 0, kemPk: h.openKem, aad });
+    return { kind, scope, version: 0, opening: o.bytes, aad, ...extra };
+  };
+  const c2 = credit(h2, 'offchain-shared', '0x' + '00'.repeat(20));
+  assert.equal(hex(h2.open(c2)), hex(seedLeg));
+  let seen = null;
+  assert.equal(h2.check(c2, (s) => { seen = s; return 42n; }), 42n);
+  assert.equal(hex(seen), hex(seedLeg), 'the check gets seed_leg');
+  assert.equal(h2.check({ ...c2, aad: fromHex('0x0b') }, () => { throw new Error('not reached'); }), null, 'a failing tag: skip');
+  const c3 = credit(h3, 'offchain-token', TOK[0]);
+  assert.equal(hex(h3.open(c3)), hex(seedLeg), 'class 3 with the opening');
+  // refused before anything of the credit is read: a getter counts the reads of `opening`
+  const watched = (c) => {
+    let reads = 0;
+    const w = { ...c };
+    Object.defineProperty(w, 'opening', { get() { reads += 1; return c.opening; }, enumerable: true });
+    return { w, reads: () => reads };
+  };
+  const cases = [
+    [h2, { ...c3 }, 'a class-2 handle given a class-3 credit'],
+    [h3, { ...c2 }, 'a class-3 handle given a class-2 credit'],
+    [h1, { ...c3 }, 'a class-1 handle given a class-3 credit'],
+    [h1, { ...c2 }, 'a class-1 handle given a class-2 credit'],
+    [h3, { ...c3, scope: TOK[1] }, 'a class-3 handle given another token\'s credit'],
+    [h2, { ...c2, version: 1 }, 'another key version'],
+    [h3off, { ...c3 }, 'class 3 without the opening'],
+  ];
+  for (const [h, c, what] of cases) {
+    const { w, reads } = watched(c);
+    assert.throws(() => h.open(w), /Refusing/, what);
+    assert.throws(() => h.check(w, () => 1n), /Refusing/, what);
+    assert.equal(reads(), 0, `${what}: nothing read`);
+  }
+  const { w, reads } = watched(c2);
+  assert.equal(hex(h2.open(w)), hex(seedLeg));
+  assert.equal(reads(), 1, 'the control reads it');
+  assert.throws(() => pqzKeyHandle(SEED, { kind: 'offchain-shared', opening: false, ...at }), /always carries the opening/);
+});

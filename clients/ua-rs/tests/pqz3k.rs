@@ -94,3 +94,46 @@ fn roll_over_struct_hash_equals_typed_ops() {
         &a(&m["entriesHash"]), n(&m["validUntilBlock"]), &a(&m["chainUid"]));
     assert_eq!(h, a::<32>(&r["structHash"]));
 }
+
+/// Owner ruling 2026-11-14 (CLI-SGN-51's Change; spec §13, §14.18): the handle's one entry is the binding's holder check; a
+/// credit of another class, scope or key version (and any credit on a handle without the opening) is refused before the check
+/// runs; the check gets this record's opening KEM seed; `Debug` shows no secret.
+#[test]
+fn key_handle_checks_never_decrypts() {
+    use pqz3k::{KeyClass as K, OpeningCredit, PqzKeyHandle, Refused};
+    let seed = [7u8; 64];
+    let (ua, cu, t1, t2) = ([0x11u8; 32], [0xc1u8; 32], [0xa1u8; 20], [0xa2u8; 20]);
+    let h2 = PqzKeyHandle::new(&seed, K::OffchainShared, &ua, &cu, None, 0, true).unwrap();
+    let h3 = PqzKeyHandle::new(&seed, K::OffchainToken, &ua, &cu, Some(&t1), 0, true).unwrap();
+    let h3off = PqzKeyHandle::new(&seed, K::OffchainToken, &ua, &cu, Some(&t1), 0, false).unwrap();
+    let h1 = PqzKeyHandle::new(&seed, K::Registry, &ua, &cu, None, 0, false).unwrap();
+    let (o, aad) = ([0u8; 1648], [0u8; 8]);
+    let c = |class, scope, version| OpeningCredit { class, scope, version, opening: &o, aad: &aad };
+    // the positive controls: the check runs with this record's opening KEM seed
+    let mut ran = 0;
+    let want2 = pqz3k::open_kem_seed(&seed, &ua, &cu, None, 0);
+    assert_eq!(h2.check(&c(K::OffchainShared, [0; 20], 0), |s, _| { ran += 1; (s == &want2).then_some(5u128) }), Ok(Some(5)));
+    let want3 = pqz3k::open_kem_seed(&seed, &ua, &cu, Some(&t1), 0);
+    assert_eq!(h3.check(&c(K::OffchainToken, t1, 0), |s, _| { ran += 1; (s == &want3).then_some(6u128) }), Ok(Some(6)));
+    assert_eq!(h2.check(&c(K::OffchainShared, [0; 20], 0), |_, _| { ran += 1; None::<u128> }), Ok(None), "skip");
+    assert_eq!(ran, 3);
+    // refused before the check runs
+    let cases: [(&PqzKeyHandle, OpeningCredit, &str); 7] = [
+        (&h2, c(K::OffchainToken, t1, 0), "a class-2 handle given a class-3 credit"),
+        (&h3, c(K::OffchainShared, [0; 20], 0), "a class-3 handle given a class-2 credit"),
+        (&h1, c(K::OffchainToken, t1, 0), "a class-1 handle given a class-3 credit"),
+        (&h1, c(K::OffchainShared, [0; 20], 0), "a class-1 handle given a class-2 credit"),
+        (&h3, c(K::OffchainToken, t2, 0), "another token"),
+        (&h2, c(K::OffchainShared, [0; 20], 1), "another key version"),
+        (&h3off, c(K::OffchainToken, t1, 0), "class 3 without the opening"),
+    ];
+    for (h, cr, what) in cases.iter() {
+        assert_eq!(h.check(cr, |_, _| -> Option<u128> { panic!("{what}: the check ran") }), Err(Refused), "{what}");
+    }
+    // a handle's construction refuses the impossible classes; Debug shows no secret
+    assert_eq!(PqzKeyHandle::new(&seed, K::OffchainShared, &ua, &cu, None, 0, false).err(), Some(Refused));
+    assert_eq!(PqzKeyHandle::new(&seed, K::Registry, &ua, &cu, None, 0, true).err(), Some(Refused));
+    assert_eq!(PqzKeyHandle::new(&seed, K::OffchainToken, &ua, &cu, None, 0, true).err(), Some(Refused));
+    let d = format!("{h2:?}");
+    assert!(d.contains("opening: true") && !d.contains("open_kem_seed"), "{d}");
+}

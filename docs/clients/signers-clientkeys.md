@@ -1028,6 +1028,10 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
    skip. So no credit is spendable by an honest wallet while the auditor is blinded.
 10. Accept.
 
+- **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; BUILT in `clientkeys` `pqzKeyHandle` and `ua-rs`
+  `pqz3k::PqzKeyHandle`): "no bare class-2 decrypt" is enforced here, in the clients, not in pqz-ffi. A handle holds one record's
+  opening KEM secret, never the PQZ key seed, and has no decrypt; it opens and hands the opening to the binding's check of the
+  steps above. A credit of another class, scope or key version is refused before anything of it is read.
 - Inputs are public bytes and the opening KEM secret; `s` is not an input. No error detail, step number or timing class leaves
   the wallet. The PQZ secret is applied only to the holder's own `(u_f, v_f)` after its `ownTag` verifies, and to a `T` whose
   every part is that, an accepted credit, a TRIVIAL entry or a marked slot (zero); the prover refuses a window with an

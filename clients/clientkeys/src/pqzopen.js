@@ -112,3 +112,51 @@ export function pqzOpeningMemoHash(memo, ownTag, openings) {
   const os = concatBytes(...openings.map((o) => asBytes(o, 1648, 'opening')));
   return keccak_256(concatBytes(asBytes(memo ?? '0x', undefined, 'memo'), asBytes(ownTag, 32, 'ownTag'), keccak_256(os)));
 }
+
+const ZERO20 = '0x' + '00'.repeat(20);
+const KINDS = ['registry', 'offchain-shared', 'offchain-token'];
+const refuse = (why) => { throw new Error(`Refusing: ${why}.`); };
+const sameHex = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+/** Owner ruling 2026-11-14 (CLI-SGN-51's Change; spec §13 "no bare class-2 decrypt", §14.18): the wallet's handle of one PQZ
+ *  key class and scope. It holds the opening KEM secret of its record only (K3-6b), never the PQZ key seed: no method decrypts a
+ *  ciphertext or returns a secret. `kind`: `registry` (class 1), `offchain-shared` (class 2, always with the opening),
+ *  `offchain-token` (class 3, `opening` its token's flag). `open(credit)` opens a credit's sealed opening to `seed_leg` (`null`:
+ *  skip); `check(credit, verify)` opens it and hands `seed_leg` to `verify(seedLeg, credit)`, the binding's K3-7 holder check
+ *  (pqz-ffi `check_recipient`: Enc-expand, `u`, `w = Δ·d`, `O_t` recomputed), whose amount or `null` it returns. A credit of
+ *  another class, scope or key version, or any credit on a handle without the opening, is refused (thrown) before anything of
+ *  it is read. `credit` = `{ kind, scope, version, opening, aad }` (`scope` the token, the zero address for class 2). */
+export function pqzKeyHandle(seed, { kind, chainUid, token, ua, version, opening = kind === 'offchain-shared' }) {
+  if (!KINDS.includes(kind)) refuse(`unknown key class ${kind}`);
+  if (kind === 'offchain-shared' && !opening) refuse('class offchain-shared always carries the opening');
+  if (kind === 'registry' && opening) refuse('class registry carries no opening');
+  const scope = kind === 'offchain-token' ? hex20(asBytes(token, 20, 'token')) : ZERO20;
+  const v = BigInt(version);
+  let kemPk = null;
+  let secret = null; // the opening KEM secret: in this closure only
+  if (opening) {
+    const k = openKemKey(openKemSeed(seed, { ua, chainUid, token: kind === 'offchain-token' ? token : undefined, version }));
+    ({ kemPk } = k);
+    secret = { dk: k.dk, x25519Secret: k.x25519Secret };
+  }
+  const own = (c) => {
+    if (!opening) refuse(`class ${kind} without the opening has no credit to open`);
+    if (c?.kind !== kind || !sameHex(c?.scope ?? '', scope) || BigInt(c?.version ?? -1) !== v) {
+      refuse(`the credit is of another key class, scope or version than this ${kind} handle`);
+    }
+  };
+  const open = (credit) => {
+    own(credit);
+    return openOpening({ opening: credit.opening, kemPk, dk: secret.dk, x25519Secret: secret.x25519Secret, aad: credit.aad });
+  };
+  return Object.freeze({
+    kind, scope, version: v, openKem: kemPk,
+    open,
+    check(credit, verify) {
+      const seedLeg = open(credit);
+      return seedLeg === null ? null : verify(seedLeg, credit) ?? null;
+    },
+  });
+}
+
+const hex20 = (b) => '0x' + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');

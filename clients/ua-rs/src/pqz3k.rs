@@ -84,3 +84,95 @@ pub fn roll_over_struct_hash(ua: &[u8; 32], key_version: u64, roll_seq: u64, rol
     keccak(&[&keccak(&[ROLL_OVER_TYPE.as_bytes()]), ua, &w64(key_version), &w64(roll_seq), &w64(rolled), &w64(n), &keccak(&[&sk]),
         entries_hash, &w64(valid_until_block), chain_uid])
 }
+
+/// A PQZ key class (CTR-PQZ-37): `registry` (class 1), `offchain-shared` (class 2), `offchain-token` (class 3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyClass {
+    Registry,
+    OffchainShared,
+    OffchainToken,
+}
+
+/// A credit as the wallet reads it from state for the holder check: its key class and scope (the token; zero for class 2),
+/// the holder's key version, the stored opening and its `aad` (CTR-PQZ-40), and what the binding's check reads besides.
+pub struct OpeningCredit<'a> {
+    pub class: KeyClass,
+    pub scope: [u8; 20],
+    pub version: u64,
+    pub opening: &'a [u8],
+    pub aad: &'a [u8],
+}
+
+/// A credit of another class, scope or key version than the handle's, or any credit on a handle without the opening.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Refused;
+
+/// Owner ruling 2026-11-14 (CLI-SGN-51's Change; spec §13 "no bare class-2 decrypt", §14.18): the wallet's handle of one PQZ
+/// key class and scope. It holds its record's opening KEM seed only (K3-6b), never the PQZ key seed: no method decrypts a
+/// ciphertext or returns a secret. Its one entry, [`PqzKeyHandle::check`], refuses a credit of another class, scope or version
+/// before the binding's check runs, then hands the opening KEM seed and the credit to that check (pqz-ffi
+/// `opening::check_recipient`: open, Enc-expand, `u`, `w = Δ·d`, `O_t` recomputed; `None` is skip).
+pub struct PqzKeyHandle {
+    class: KeyClass,
+    scope: [u8; 20],
+    version: u64,
+    open_kem_seed: Option<[u8; 96]>,
+}
+
+impl PqzKeyHandle {
+    /// `token`: class 3's token (`None` otherwise); `opening`: always on class 2, never on class 1, the token's flag on class 3.
+    pub fn new(seed: &[u8; 64], class: KeyClass, ua: &[u8; 32], chain_uid: &[u8; 32], token: Option<&[u8; 20]>, version: u64,
+        opening: bool) -> Result<Self, Refused>
+    {
+        let scope = match (class, token) {
+            (KeyClass::OffchainToken, Some(t)) => *t,
+            (KeyClass::OffchainToken, None) | (_, Some(_)) => return Err(Refused),
+            _ => [0u8; 20],
+        };
+        if (class == KeyClass::OffchainShared && !opening) || (class == KeyClass::Registry && opening) {
+            return Err(Refused);
+        }
+        let open_kem_seed = opening.then(|| open_kem_seed(seed, ua, chain_uid, token, version));
+        Ok(Self { class, scope, version, open_kem_seed })
+    }
+
+    pub fn class(&self) -> KeyClass {
+        self.class
+    }
+
+    pub fn scope(&self) -> [u8; 20] {
+        self.scope
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    /// The holder check of `credit` by the binding's `check(open_kem_seed, credit)`; `Err(Refused)` before it runs when the
+    /// credit is not this handle's (class, scope, version) or the handle has no opening.
+    pub fn check<T>(&self, credit: &OpeningCredit, check: impl FnOnce(&[u8; 96], &OpeningCredit) -> Option<T>)
+        -> Result<Option<T>, Refused>
+    {
+        let s = self.open_kem_seed.as_ref().ok_or(Refused)?;
+        if credit.class != self.class || credit.scope != self.scope || credit.version != self.version {
+            return Err(Refused);
+        }
+        Ok(check(s, credit))
+    }
+}
+
+impl core::fmt::Debug for PqzKeyHandle {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PqzKeyHandle").field("class", &self.class).field("scope", &self.scope).field("version", &self.version)
+            .field("opening", &self.open_kem_seed.is_some()).finish()
+    }
+}
+
+impl Drop for PqzKeyHandle {
+    fn drop(&mut self) {
+        if let Some(s) = self.open_kem_seed.as_mut() {
+            s.fill(0);
+            core::hint::black_box(s); // keep the wipe
+        }
+    }
+}

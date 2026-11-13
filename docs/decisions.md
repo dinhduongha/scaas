@@ -9257,6 +9257,8 @@ in CLI-SGN-40).
 **Cost if wrong.** A wallet that decrypts a credit with its secret is a decryption oracle for whoever controls the token's verifier.
 **Source.** Owner rulings of 2026-11-13 (verbatim on CTR-PQZ-37's Source line), here (1) "Đồng ý mô hình 3 khóa." [the three-key model] and (10) "Q8, Q9 đồng ý theo đề xuất." [Q9: the stated auditor guarantee and the compliance event]; spec `superpowers/specs/2026-11-13-pqz-three-keys.md` K3-7, §14; reviews Fable `20261113-09-fable-fable5.2-high-spec-three-keys.md` (S-1 … S-19) and Codex `20261113-13-codex-gpt-6.1-sol-medium-spec-three-keys.md` (C-1 … C-6), kept outside the repository.
 
+**Change (owner 2026-11-14, "no bare class-2 decrypt" is enforced in the clients, not in pqz-ffi; BUILT in `clientkeys` and `ua-rs`).** The owner's ruling of 2026-11-14 on spec §13: the rule "no bare class-2 decrypt" is enforced in the clients, not in pqz-ffi. The wallet's key handle of a class (`clientkeys` `pqzKeyHandle`, `ua-rs` `pqz3k::PqzKeyHandle`) holds its record's opening KEM secret only, never the PQZ key seed, and exposes no decrypt of a ciphertext: it opens a credit's sealed opening and hands `seed_leg` (`clientkeys`) or the opening KEM seed (`ua-rs`) to the binding's holder check (pqz-ffi `opening::check_recipient`) and nothing else. A credit of another class, scope or key version than the handle's, and any credit on a handle without the opening, is refused before anything of it is read (spec §14.18); tests with positive controls in `clientkeys` `test/pqz-three-keys.test.js` and `ua-rs` `tests/pqz3k.rs`.
+
 ### CLI-SGN-80 — Vault PIN scrypt N=2^15
 - old: RS4-8(scrypt) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CLI-SGN-21
 
