@@ -3,8 +3,9 @@
 input file per set, one generic generator). From sets/<set>/set.toml (n, k_max, q, pqz_delta, kmlwe_min, description,
 approval, max_input, roll_max, [pqzh_preset], the proofSystemId labels pqzl_id / pqzh_id: the only place these values are written) this writes every derived file of the set:
 
-  <rel>_params.sage   the LaZer codegen specs of the 14 PQZL relations (reg, tx, tx0, burn, ds, dr, R_TXM M = 2 / 4 / 8
-                      with and without the auditor, G = ceil(M / 4) randomness groups, and the bench-only M = 16)
+  <rel>_params.sage   the LaZer codegen specs of the 16 PQZL relations (reg, tx, tx0, the split transfer txs / txs0 of
+                      PQZL_SPLIT_ID, burn, ds, dr, R_TXM M = 2 / 4 / 8 with and without the auditor, G = ceil(M / 4)
+                      randomness groups, and the bench-only M = 16)
   pqz_set.h           every parameter-dependent constant of the C core outside LaZer's codegen headers
   rust/set.rs         the same for the Rust crates (pqzl, pqz-stmt, pqzh-ligero; `#[path]` per cargo feature set-<set>);
                       a set with pqz-stmt (not core_only) also MAX_PROOF_PQZH, MAX_INPUT (plan 5h Task 8c part 2),
@@ -331,7 +332,7 @@ def rs_text(name):
 
 # ---------------------------------------------------------------- the LaZer codegen specs (was the set's gen_pa.py)
 def specs(name):
-    """the 14 <rel>_params.sage of the set: the production shapes of n2048-kmax1024 (pqzl/params/*.sage), the bit widths
+    """the 16 <rel>_params.sage of the set: the production shapes of n2048-kmax1024 (pqzl/params/*.sage), the bit widths
     and norm bounds of the set, log2q rounded down as pqzl/params/n-study/gen_specs.py (LaZer's D loop hangs otherwise),
     pqz_delta / kmlwe_min from set.toml (e_s1's results; no kmlwe_min = LaZer's default hiding rank)."""
     t, b, cs = consts(name)
@@ -384,6 +385,12 @@ def specs(name):
     spec("tx", f"R_TX: s_f, e_f, r, e1 ({k} polys each), e2_t, e2_f, e2_a; {tx_bits} bits (d 64, d' 64, M 16x{m}, "
          f"c 15x{m - 3}, e_T 16x{eb})", ks, Bs, 3, tx_bits, 64, ("e2_t, ", "e2"))
     spec("tx0", f"R_TX0 (auditor off): R_TX without e2_a; {tx_bits} bits", ks, Bs, 2, tx_bits, 64, ("e2_t, ", "e2"))
+    # PQZL_SPLIT_ID's op 1 (three-key spec K3-4, CTR-PQZ-04's split randomness): the leg's (r, e1) for u, v_t, v_a and
+    # the sender's own (r_f, e1_f) for u_f, v_f; two randomness groups, the bits of R_TX
+    ks2, Bs2 = debit(2)
+    spec("txs", f"R_TXS: s_f, e_f, r, e1, r_f, e1_f ({k} polys each), e2_t, e2_f, e2_a; {tx_bits} bits (as R_TX)", ks2, Bs2,
+         3, tx_bits, 64, ("e2_t, ", "e2"))
+    spec("txs0", f"R_TXS0 (auditor off): R_TXS without e2_a; {tx_bits} bits", ks2, Bs2, 2, tx_bits, 64, ("e2_t, ", "e2"))
     spec("burn", f"R_BURN / REFRESH: s_f, e_f, r, e1, e2_f; {tx_bits - 64} bits (d public)", ks, Bs, 1, tx_bits - 64,
          64, ("e2_f, ", "e2"))
     spec("ds", f"R_DS: s1 = r, e1 ({k} polys each), e2_t", [k, k], [bs, be], 1, 0, 64, ("e2_t, ", "e2"))
@@ -692,7 +699,8 @@ def files(names):
 
 
 # the files a set directory may hold: set.toml, the docs, gen_set.py's, codegen's, to_rust.py's and make.sh's outputs
-RELS = ("reg", "tx", "tx0", "burn", "ds", "dr", "txm2", "txm20", "txm4", "txm40", "txm8", "txm80", "txm16", "txm160")
+RELS = ("reg", "tx", "tx0", "txs", "txs0", "burn", "ds", "dr", "txm2", "txm20", "txm4", "txm40", "txm8", "txm80", "txm16",
+        "txm160")
 SET_FILES = {"set.toml", "SET.md", "PQZH.md", "pqz_set.h", "PqzSet.sol", "set.json", "codegen.txt", "codegen-check.txt",
              "e-s0.txt", "e-s1.txt", "lazer-3330e48-kat.json", "lazer-3330e48-kat-build.txt", "rust/set.rs", "rust/mod.rs"}
 SET_FILES |= {f"{r}_params.sage" for r in RELS} | {f"pqz_{r}_params.h" for r in RELS} | {f"rust/{r}.rs" for r in RELS}
@@ -766,7 +774,7 @@ def bind(name):
                      r"D = (\d+), gamma = (\d+), lambda = (\d+), MSIS beta (\d+), MLWE uSVP beta (\d+), dual_hybrid (\d+) "
                      r"/ (\d+), codegen proof size ~(\d+) B\)$", rd("e-s1.txt"), re.M)
     if sorted(x[0] for x in es1) != sorted(RELS):
-        out.append(f"e-s1.txt: result lines for {sorted(x[0] for x in es1)}, not the 14 relations")
+        out.append(f"e-s1.txt: result lines for {sorted(x[0] for x in es1)}, not the {len(RELS)} relations")
     for r, dl, km, kmsis, m2, D, gamma, lam, *beta, proof in es1:
         h = hs.get(r)
         got = (float(dl), int(km), int(kmsis), int(m2), int(D), int(gamma), int(lam), int(proof))
@@ -776,7 +784,7 @@ def bind(name):
     cg = rd("codegen.txt")
     rows = {r: (int(b), x) for r, b, x in re.findall(r"^== (\w+): (\d+) B, sha256 ([0-9a-f]{16})$", cg, re.M)}
     if not cg.startswith("LaZer ") or not cg.splitlines()[0].endswith(f"; set {name}") or sorted(rows) != sorted(RELS):
-        out.append(f"codegen.txt: not the 14 relations of set {name}")
+        out.append(f"codegen.txt: not the {len(RELS)} relations of set {name}")
     for r, (b, x) in rows.items():
         p = os.path.join(d, f"pqz_{r}_params.h")
         raw = open(p, "rb").read() if os.path.exists(p) else b""
@@ -792,7 +800,7 @@ DIGESTS = os.path.join(HERE, "id-digests.json")
 
 def digests(name):
     """{label: sha256 hex} of the set's proof systems: PQZL the set constants (pqz_set.h's), pqz_delta, kmlwe_min and the
-    14 codegen headers; PQZH the set constants and the [pqzh_preset] (radices, n, k, t, generator, non-square)"""
+    16 codegen headers; PQZH the set constants and the [pqzh_preset] (radices, n, k, t, generator, non-square)"""
     t, _, cs = consts(name)
     c = {k: v for k, v, s, _ in cs if s is None}
     h = hashlib.sha256(json.dumps(c | {"pqz_delta": t["pqz_delta"], "kmlwe_min": t.get("kmlwe_min")}, sort_keys=True).encode())
@@ -893,6 +901,8 @@ def selfcheck():
         assert "m1 = 79\n" in s["dr"] and "m1 = 73\n" in s["ds"] and "m1 = 72\n" in s["reg"] and "log2q = 45\n" in s["tx"]
         assert "m1 = 168\n" in s["txm40"] and "m1 = 248\n" in s["txm80"] and "nbin = 23\n" in s["txm8"]
         assert "m1 = 244\n" in s["txm4"] and "m1 = 328\n" in s["txm8"] and "Bprime = 8\n" in s["dr"]  # s_aud = 3 (R0-1)
+        # R_TXS: R_TX + (r_f, e1_f) (72 polys); R_TXS0 one e2 block fewer
+        assert "m1 = 235\n" in s["txs"] and "m1 = 234\n" in s["txs0"] and "nbin = 16\n" in s["txs"]
 
 
 if __name__ == "__main__":

@@ -3,14 +3,14 @@
 #   pqz-core/params/sets/make.sh <set> <step> [step ...]     or     make.sh <set> all
 # Steps (each runnable alone; `all` runs them in this order and stops at the first failing step, printing its name and
 # log; a step the set does not have is printed as "skipped (reason)"):
-#   specs   gen_set.py <set>: the 14 LaZer codegen specs, pqz_set.h, rust/set.rs, set.json, PqzSet.sol, the crates'
+#   specs   gen_set.py <set>: the 16 LaZer codegen specs, pqz_set.h, rust/set.rs, set.json, PqzSet.sol, the crates'
 #           per-set feature lists                                                       (stdlib, seconds)
 #   e_s1    lattice-estimator check of every spec (pqzl/params/n-study/e_s1_n.sage, pinned Sage image): MSIS beta,
 #           hiding MLWE uSVP and dual_hybrid >= 450 -> <set>/e-s1.txt (only a complete run whose check passes replaces
 #           it); every spec's pqz_delta / kmlwe_min must be set.toml's: if not (or missing), stop and print the values to
 #           put into set.toml                                                                      (heavy, capped)
-#   codegen LaZer 3330e48 codegen of the 14 specs into <set>/.codegen/, moved to <set>/pqz_<rel>_params.h and
-#           <set>/codegen.txt only when all 14 succeed (a failure leaves the committed headers untouched); a set with
+#   codegen LaZer 3330e48 codegen of the 16 specs into <set>/.codegen/, moved to <set>/pqz_<rel>_params.h and
+#           <set>/codegen.txt only when all 16 succeed (a failure leaves the committed headers untouched); a set with
 #           `frozen = true` (none since 2026-10-25; was n2048-kmax1024) is compared byte for byte instead -> <set>/codegen-check.txt (capped)
 #   rust    pqzl/params/to_rust.py <set>: the headers' Rust form <set>/rust/<rel>.rs and the crate's params/mod.rs
 #   e_s0    e_s0_set.py: the set's budget checks, exactness of the norm proofs per relation, FS rounds -> <set>/e-s0.txt
@@ -39,7 +39,7 @@ S=$1
 shift
 D=$HERE/$S
 [ -f "$D/set.toml" ] || { echo "make.sh: no $D/set.toml" >&2; exit 2; }
-RELS="reg tx tx0 burn ds dr txm2 txm20 txm4 txm40 txm8 txm80 txm16 txm160"
+RELS="reg tx tx0 txs txs0 burn ds dr txm2 txm20 txm4 txm40 txm8 txm80 txm16 txm160"
 tomlget() { python3 -I -c "import tomllib, sys; t = tomllib.load(open(sys.argv[1], 'rb')); print(t.get(sys.argv[2], ''))" "$D/set.toml" "$1"; }
 CORE_ONLY=$(tomlget core_only)
 FROZEN=$(tomlget frozen)
@@ -65,8 +65,8 @@ d = sys.argv[1]
 t = tomllib.load(open(os.path.join(d, "set.toml"), "rb"))
 got = re.findall(r"^=> \S*?(\w+)_params\.sage: pqz_delta = ([\d.]+), kmlwe_min = (\d+)", open(os.path.join(d, ".e-s1.txt.new")).read(), re.M)
 deltas, kmlwes = {float(x[1]) for x in got}, {int(x[2]) for x in got}
-if len(got) != 14:
-    sys.exit(f"e_s1: {len(got)} of 14 specs have a result line (see .e-s1.txt.new)")
+if len(got) != 16:
+    sys.exit(f"e_s1: {len(got)} of 16 specs have a result line (see .e-s1.txt.new)")
 want = (min(deltas), max(kmlwes))  # one set-wide value: the smallest pqz_delta and the largest rank any spec needs
 if (t.get("pqz_delta"), t.get("kmlwe_min")) != want:
     sys.exit(f"e_s1: set.toml must say pqz_delta = {want[0]}, kmlwe_min = {want[1]} (per spec: {got}); "

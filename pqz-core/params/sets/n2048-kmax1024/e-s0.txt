@@ -37,6 +37,8 @@ txm40    151    279.3   18   5.64e+04   2.54e+04   18.83        37.66       37.4
 txm4     219    350.1   18   7.07e+04   2.54e+04   19.16        38.31       38.29  OK
 txm80    223    350.5   22  7.078e+04   2.54e+04   19.16        38.32       38.32  OK
 txm8     359    460.4   22  9.298e+04  5.079e+04   19.55        39.10       39.40  OK
+txs0     209    306.2   15  6.182e+04   2.54e+04   18.96        37.92       38.03  OK
+txs      210    312.8   15  6.316e+04   2.54e+04   18.99        37.99       38.07  OK
 binary rows: largest reconstructed integer 2^25 (e_T + E) < q: OK
 row 7 terms |M_i + c_(i-1) - d'_i - d_i - 16 c_i| < 2^15 < q: OK
 R_DR: e' + E in 25 bits, Delta d + e' < q: OK
@@ -62,5 +64,7 @@ R4 txm40   c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-12
 R4 txm4    c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
 R4 txm80   c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
 R4 txm8    c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txs0    c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txs     c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
 
-GATE (n2048-kmax1024: set checks, exactness and FS rounds of 14 relations): MET
+GATE (n2048-kmax1024: set checks, exactness and FS rounds of 16 relations): MET

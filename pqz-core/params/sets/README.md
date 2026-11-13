@@ -356,7 +356,7 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 | `pqzh_set.rs` | a set with PQZH: q − 1's factors, generator, F_q^4 non-residue, radices, the Ligero preset (n, k, t) | `gen_set.py` |
 | `pqzh_set_fallback.rs`, `pqzh_set_spike_b.rs` | `n2304-kmax4096` only, hand-written research files kept as they are (plan 5h Task 8c part 1b): THE preset for fallback A (pqzh-ligero feature `fallback-retry`, never in production) and the superseded t = 119 spike (not compiled) | by hand |
 | `PqzSet.sol` | the set's Solidity constants, **read by every PQZ contract since plan 5h Task 8d part 2** (`PqzCt`, `PqzCore`, `PqzSafety`, `PqzKeyVerifier`): sizes, q, Δ, `K_MAX`, `PACK_BITS` (P46), `ROLL_MAX` (`set.toml` `roll_max`, plan 5h Task 8d part 2b), `PQZL_ID`, `HAS_PQZH` / `PQZH_ID` (the zero word without PQZH), `ZERO_HASH` (the packed `Trivial(0)`), from the set's vectors (zero words until the set has them) the precompile's `SELFTEST` hash and `PqzKeyVerifier`'s `PROBE_PQZL` / `PROBE_PQZH`, and the file-level `PQZ_ACC_WORDS` (the packed `acc` slots; Solidity takes no library member as an array length); `PQZ_SOL_INSTALL=1 make.sh <set> sol` copies it to `smartcontracts/evm/src/pqz/` (committed: `n2304-kmax4096`) | `gen_set.py` (reads the set's `selftest.json`, `statement_register.json`, `proof_*.json`) |
-| `<rel>_params.sage` | LaZer codegen specs of the 14 relations (reg, tx, tx0, burn, ds, dr, txm2 / 20 / 4 / 40 / 8 / 80, bench-only txm16 / 160) | `gen_set.py` (`n2048-kmax1024`'s have the shapes of `pqzl/params/*.sage`, the record) |
+| `<rel>_params.sage` | LaZer codegen specs of the 16 relations (reg, tx, tx0, txs, txs0 (the split transfer of `PQZL_SPLIT_ID`, three-key spec K3-4), burn, ds, dr, txm2 / 20 / 4 / 40 / 8 / 80, bench-only txm16 / 160) | `gen_set.py` (`n2048-kmax1024`'s have the shapes of `pqzl/params/*.sage`, the record) |
 | `pqz_<rel>_params.h`, `codegen.txt` | LaZer codegen headers and the codegen log (`codegen-check.txt` for a set with `frozen = true`: the regenerated headers byte-identical; none since 2026-10-25, was `n2048-kmax1024`) | `make.sh <set> codegen` (LaZer 3330e48, pinned Sage image) |
 | `rust/<rel>.rs`, `rust/mod.rs` | the headers' Rust form | `pqzl/params/to_rust.py` (`make.sh <set> rust`) |
 | `e-s1.txt` | lattice-estimator check of every spec (MSIS β, hiding MLWE uSVP and dual_hybrid ≥ 450) | `pqzl/params/n-study/e_s1_n.sage` |
@@ -372,7 +372,7 @@ D, gamma, λ, proof size; β ≥ 450), and `codegen.txt`'s sizes and sha256 pref
 reach the proven regime's floor (n ≥ 4k, t ≥ the exact minimum: 121 / 119 / 121 at the three PQZH sets).
 
 [`id-digests.json`](id-digests.json) maps each `proofSystemId` label to a sha256 of what it fixes (PQZL: the set
-constants, `pqz_delta`, `kmlwe_min`, the 14 headers; PQZH: the set constants and the preset). `gen_set.py` adds a row
+constants, `pqz_delta`, `kmlwe_min`, the 16 headers; PQZH: the set constants and the preset). `gen_set.py` adds a row
 when a label first appears with consistent records and never rewrites one: when the parameters move under a label in
 the table, a write refuses and `--check` fails ("parameters changed under label X: bump the version").
 

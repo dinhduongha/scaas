@@ -86,8 +86,8 @@ def rel(spec):
 
 
 RELS = [rel(p) for p in sorted(glob.glob(os.path.join(SD, "*_params.sage")))]
-if len(RELS) != 14:
-    print(f"the set has {len(RELS)} relation specs, not 14: MISS")
+if len(RELS) != 16:  # reg, tx, tx0, txs, txs0 (K3-4), burn, ds, dr, the R_TXM shapes
+    print(f"the set has {len(RELS)} relation specs, not 16: MISS")
     ok = False
 
 hr(f"0. Set {SET}: n = {k * d}, K_MAX = {K_MAX:,}, q = {q} (pqz_set.h; pq-zero-knowledge.md §4.3)")

@@ -20,3 +20,5 @@ pub(crate) mod txm4;
 pub(crate) mod txm40;
 pub(crate) mod txm8;
 pub(crate) mod txm80;
+pub(crate) mod txs;
+pub(crate) mod txs0;
