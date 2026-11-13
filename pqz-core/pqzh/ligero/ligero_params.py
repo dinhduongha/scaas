@@ -363,6 +363,12 @@ class Lay:
         self.sl_s, self.sl_e = bl(c['BETA_S']**2), bl(c['BETA_E']**2)
         self.e2_bits, self.sl_2 = bl(c['BETA_2']) + 1, bl(c['BETA_2']**2)
         self.m_bits, self.c_bits, self.et_bits = c['MBITS'], c['CBITS'], c['EBITS']
+        # op 7 randomness groups (review 3w Codex u5-3; R0-1): S_AUD legs per group with the auditor, 4 without
+        self.s_aud = c['S_AUD']
+
+    def groups(self, m, aud):
+        """pqz-stmt groups(M, aud): ceil(M / S_AUD) with the auditor, ceil(M / 4) without"""
+        return -(-m // (self.s_aud if aud else 4))
 
 
 def rows_set(p, rel, ell):
@@ -390,7 +396,7 @@ def rows_own_set(p, rel, ell):
         bigs, smalls = se, [(16, p.et_bits)] + sl
     else:
         _, m, aud = rel
-        pairs = 1 + (m + 3) // 4
+        pairs = 1 + p.groups(m, aud)
         bigs, smalls = se * pairs, debit(m + 1 + aud * m, m, pairs)
     nr = -(-p.N // ell)
     small = 2 * -(-sum(c for c, _ in smalls) // ell) + -(-sum(c * b for c, b in smalls) // ell)
@@ -454,7 +460,7 @@ def stmt_set(p, rel):
         legs = {'tx': 3, 'tx0': 2, 'burn': 1}[name]
         return h + legs * pk + (pk + v) + pk + legs * v
     _, m, aud = rel
-    return h + (1 + m + aud) * pk + (pk + v) + (m + 3) // 4 * pk + v * (m + 1) + aud * v * m
+    return h + (1 + m + aud) * pk + (pk + v) + p.groups(m, aud) * pk + v * (m + 1) + aud * v * m
 
 
 def pad32(n):
@@ -482,7 +488,7 @@ def calldata(p, rel, proof):
     if name == 'burn':
         return relayed(tail(160 + pk + v, head=224)), 'relayed mtxExecute (op 2)'
     _, m, aud = rel
-    out = pk * ((m + 3) // 4) + v * (m + 1) + (v * m if aud else 0)
+    out = pk * p.groups(m, aud) + v * (m + 1) + (v * m if aud else 0)
     return relayed(tail(224 + 16 + 32 * m + out)), 'relayed mtxExecute (op 7)'
 
 
@@ -565,6 +571,8 @@ def main_set(name):
         b, st = bound_set(p, rel, n, k, t), stmt_set(p, rel)
         inp = 5 + st + b
         cr = cs.get(label(rel))
+        if cr and rel[0] == 'txm' and rel[2] and p.s_aud != 4:
+            cr = None  # the crate size runs predate R0-1's S_AUD groups (2026-10-25): the vectors check below instead
         if cr:
             assert (cr['max_proof_len'], cr['stmt_bytes'], cr['rows_m']) == (b, st, rows_set(p, rel, ell)), (rel, cr)
             checked += 1
@@ -572,8 +580,23 @@ def main_set(name):
         print(f"| {label(rel)} | {rows_set(p, rel, ell)} | {b:,} | {'yes' if b <= mp else 'NO'} | {st:,} | "
               f"{inp:,} | {'yes' if inp <= mi else 'no'} / {'yes' if inp <= MAX_INPUT_8D else 'NO'} | "
               f"{cr['max_proof_len'] if cr else '-'} | {snd if snd is not None else ('not built' if cr else '-')} |")
-    print(f'\nmodel = crate on {checked} relations ({cf or "no crate build of this set yet"}); op 7 M = 8: G = 2, not a '
-          f'built PQZH shape\n')
+    # review 3w Codex u5-3: the op 7 shapes against the set's committed PQZH vectors (statement bytes and the verifier
+    # bound proof_pqzh.json records per case); before S_AUD the audited M = 4 bound was understated
+    vf = os.path.join(HERE, '..', '..', '..', 'smartcontracts', 'vectors', 'pqz', *([] if name == 'n2048-kmax1024' else [name]),
+                      'proof_pqzh.json')
+    nv = 0
+    if os.path.exists(vf):
+        sb = {r['case']: r['stmt_bytes'] for r in
+              json.load(open(os.path.join(os.path.dirname(vf), 'statement_transfer_multi.json')))['rows']}
+        for r in json.load(open(vf))['rows']:
+            mm = re.fullmatch(r'M(\d+)-(on|off)', r.get('case', ''))
+            if r['form'] == 'TRANSFER-MULTI' and mm:
+                rel = ('txm', int(mm.group(1)), int(mm.group(2) == 'on'))
+                got = (bound_set(p, rel, n, k, t), stmt_set(p, rel))
+                assert got == (r['max_proof_len'], sb[r['case']]), (rel, got, r['max_proof_len'], sb[r['case']])
+                nv += 1
+    print(f'\nmodel = crate on {checked} relations ({cf or "no crate build of this set yet"}); model = vectors on {nv} op 7 '
+          f'shapes ({os.path.relpath(vf, HERE) if nv else "no PQZH vectors"}); op 7 M = 8: not a built PQZH shape\n')
     print(f'## One transaction (EIP-7976: 15,000 + 64 x calldata bytes <= the regular-gas cap; at 2^24: <= {TX_LIMIT:,} B)\n')
     print('Calldata through the token / registry (Task 7b ABI model, inputs16k.py, pk = 8 N) with the proof at its bound; '
           'the precompile input itself is built in memory (only a direct call carries it as calldata).\n')

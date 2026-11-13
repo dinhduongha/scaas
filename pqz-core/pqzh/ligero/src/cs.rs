@@ -195,6 +195,9 @@ impl Layout {
             Rel::Form(Form::Burn | Form::Refresh) => ([se, se].concat(), debit(1, 0, 2), 5),
             Rel::Form(Form::DiscloseSender) => (se.to_vec(), [vec![e2(1)], sl.to_vec(), vec![s2]].concat(), 1),
             Rel::Form(Form::DiscloseReceiver | Form::DiscloseAuditor) => (se.to_vec(), [vec![et], sl.to_vec()].concat(), 1),
+            // K3-4: the split transfer is PQZL_SPLIT_ID's (PQZL only, OFFCHAIN tokens); form_of never yields it and
+            // pqz-stmt refuses it under PQZH_ID
+            Rel::Form(Form::TransferSplit | Form::TransferSplit0) => panic!("PQZH has no split transfer (K3-4)"),
             // legs j, f, [a_j]; pairs (s_f, e_f), (r_g, e1_g) for g < G
             Rel::Multi { m, aud } => {
                 let pairs = 1 + groups(m, aud);

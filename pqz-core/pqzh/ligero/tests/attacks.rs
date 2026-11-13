@@ -147,7 +147,16 @@ fn other_ids_and_length_bound_rejected() {
             if t == Form::Refresh.op_tag() {
                 st2[HDR_AMOUNT..HDR_AMOUNT + 64].fill(0);
             }
+            // T-36: the kind word's low byte is the form's OpeningKind (RECEIVER_X 1, AUDITOR 2)
+            if let Some(k) = FORMS.iter().find(|g| g.op_tag() == t).and_then(|g| g.opening_kind()) {
+                st2[32 * 8 + 31] = k as u8;
+            }
             assert!(cs::parse(op, &st2).is_some(), "{}", rel_name(f));
+            if op == OP_DISCLOSE_RECEIVER {
+                // and only it: the other op 5 form's byte is refused
+                st2[32 * 8 + 31] ^= 3;
+                assert!(cs::parse(op, &st2).is_none(), "{} kind byte of the other form", rel_name(f));
+            }
         }
         let max = pp.max_proof_len(f);
         assert!(pf.len() <= max && pp.proof_len_ok(f, max) && !pp.proof_len_ok(f, max + 1));

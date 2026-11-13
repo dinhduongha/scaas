@@ -12,7 +12,7 @@ use sha3::digest::{ExtendableOutput, Update, XofReader};
 use crate::cs::{self, Comb, Layout, Rel};
 use crate::fft::{Domain, GEN, smooth};
 use crate::fq::{Acc4, EB, F4, Fq, batch_inv};
-use crate::merkle::{H, Tree, depth, keccak, root_from};
+use crate::merkle::{H, Tree, depth, keccak, leaf, root_from};
 use crate::transcript::Tr;
 use crate::{Oom, Wiped, ct, try_vec};
 #[cfg(feature = "bench")]
@@ -397,7 +397,7 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
         }
         b
     };
-    let tree = Tree::new((0..n).map(|j| keccak(&[&salts[j], &col(j)])).collect());
+    let tree = Tree::new((0..n).map(|j| leaf(&salts[j], &col(j))).collect());
     let root = tree.root();
     ct::public(&root); // the commitment (b1)
 
@@ -666,7 +666,7 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<Option<
         for e in b.chunks(EB) {
             c.push(ok!(Fq::get(e)));
         }
-        leaves.push((j, keccak(&[salt, b])));
+        leaves.push((j, leaf(salt, b)));
         cols.push(c);
     }
     if ok!(root_from(leaves, depth(n), || rd.take(32).map(|h| h.try_into().unwrap()))) != root || !rd.0.is_empty() {

@@ -365,14 +365,18 @@ printv(
     f"protocol is simulatable under MLWE({kmlwe},{kmsis+l+lmbda/2+256/d + approx_proof * 256/d + 2},[-{nu},{nu}])")  # XXX extended MLWE - yes because stdev 2 is bimodal?
 
 # check knowledge-soundness conditions ([1], theorem 6.4.3)
-t = mp.sqrt(1 - mp.log(2 ** (-KAPPA)) / mpf(128))  # Figure 6.3 [1]
-Barp = mpf(2) * mp.sqrt(256/26) * t * stdev3
+# review R0-C5 / Codex 3w u5-4 (three-key round): Barp from the verifier's own z3 bound, Bz3sqr (T = 1.64; lnp-tbox.c
+# rejects only l2(z3)^2 > Bz3sqr), not from t = sqrt(1 + ln 2) (1.26x smaller); the upsilon no-wrap check over all Z
+# terms of the one accumulated equation (sqrt(Z d), not sqrt(d)). pqz-core/params/sets/ks_check.py checks the same
+# inequalities on the committed headers.
+Bz3sqr = floor((T*stdev3*sqrt(256)) ** 2)
+Barp = mpf(2) * mp.sqrt(mpf(Bz3sqr)) / mp.sqrt(26)
 psi = mpf(2) * gamma4 * mp.sqrt(377*2*KAPPA)  # ~ gamma4 * 621.33
 if not q >= 41 * nex * d * Barp:
     err("protocol not knowledge-sound: cannot use lemma 3.2.5")
 if not q > Barp ** 2 + Barp * sqrt(nbin * d):
     err("protocol not knowledge-sound: cannot prove Ps1 * s1 + Pm * m + f has binary coefficients")
-if not q > Barp ** 2 + Barp * sqrt(d):
+if not q > Barp ** 2 + Barp * sqrt(Z * d):
     err(
         "protocol not knowledge-sound: cannot prove theta[1], ..., theta[Z] have binary coefficients")
 for i in range(len(B)):

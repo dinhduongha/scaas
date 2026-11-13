@@ -123,6 +123,7 @@ impl Setup {
             Form::DiscloseSender => (&self.ds_stmt, &self.ds_wit),
             Form::DiscloseReceiver | Form::DiscloseAuditor => (&self.dr_stmt, &self.dr_wit),
             Form::Transfer0 => (&self.tx0_stmt, &self.tx0_wit),
+            Form::TransferSplit | Form::TransferSplit0 => panic!("PQZH has no split transfer (K3-4)"),
         }
     }
 }
@@ -160,6 +161,8 @@ pub fn rel_name(r: impl Into<Rel>) -> String {
             Form::Register => "R_REG",
             Form::Transfer => "R_TX",
             Form::Transfer0 => "R_TX0",
+            Form::TransferSplit => "R_TXS",
+            Form::TransferSplit0 => "R_TXS0",
             Form::Burn | Form::Refresh => "R_BURN",
             Form::DiscloseSender => "R_DS",
             Form::DiscloseReceiver | Form::DiscloseAuditor => "R_DR",
