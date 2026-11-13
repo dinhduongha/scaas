@@ -4943,8 +4943,18 @@
    "error": ""
   },
   {
+   "sig": "setPqzScopedKey(bytes32,address,uint64,bytes,bytes32,(uint8,bytes,bytes32),uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "storePqzPop(bytes32,uint64,bytes)",
    "class": "PERMISSIONLESS(stores the proof bytes whose hash the UA signed in its record, once, after the proof verifies)",
+   "error": ""
+  },
+  {
+   "sig": "storePqzScopedPop(bytes32,address,uint64,bytes)",
+   "class": "PERMISSIONLESS(stores the proof bytes whose hash the UA signed in its scoped record, once, after the proof verifies)",
    "error": ""
   }
  ],

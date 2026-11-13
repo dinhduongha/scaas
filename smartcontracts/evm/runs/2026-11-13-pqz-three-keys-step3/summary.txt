@@ -1,0 +1,32 @@
+pqz-three-keys step 3 (registry, scoped PQZ key records, K3-3). Foundry 1.8.5, forge test -j 1 under scripts/capped (4 GB),
+per directory (gate.sh here); full output in git-ignored logs. Default set n2304-kmax4096. UNAUDITED.
+
+step | commit | rc | counts
+test/ua (after pin moves) | this | 0 | 47 suites, 670 passed, 0 failed
+test/governance (after pin moves) | this | 0 | 53 suites, 525 passed
+test/pqz (after plus_zero_gas re-record) | this | 0 | 40 suites, 455 passed, 4 skipped
+test/as | this | 0 | 69 suites, 357 passed
+test/v2 | this | 0 | 47 suites, 635 passed
+test/merge | this | 0 | 11 suites, 119 passed
+test/metatx | this | 0 | 36 suites, 400 passed
+test/zether | this | 0 | 27 suites, 336 passed, 4 skipped
+test/wrap | this | 0 | 10 suites, 72 passed
+test/pqchat | this | 0 | 9 suites, 99 passed
+test/account | this | 0 | 4 suites, 58 passed
+test/wallet | this | 0 | 6 suites, 100 passed
+test/liquidity | this | 0 | 8 suites, 82 passed, 1 skipped
+test/hedera | this | 0 | 2 suites, 20 passed
+test/pqzh | this | 0 | 3 suites, 42 passed
+test/research | this | 0 | 6 suites, 93 passed, 6 skipped
+test/modules | this | 0 | 12 suites, 35 passed (out/t66b-legacy built here)
+test/{BlsKat,ExpectRevertLint,FeePolicy,HashToCurve,MultiSig} | this | 0 | 5 suites, 29 passed
+test/factory, confidential, fork, p6f, vectors | this | 0 | no suite runs without its env
+isolate test/ua/{UAGas,UARegistryGroups} | this | 0 | 2 suites, 22 passed
+size gate | this | 0 after rows moved | UARegistry 31,134; UARegistryAuxLib 26,652; UARegistryCoreLib 33,729
+at-set n2048-kmax1024 PqzScopedKeys | this | 0 | 34 passed (UA8 at the other sets: NOT RUN, paused)
+mutants (21, scratch script) | this | all red | expiry, msig-class2, version, length-per-scope, marker read/write, popHash zero,
+  openKem presence / bool / short / word index, class, chainUid, proof verify / owner / purpose, pop hash, never-down,
+  eligible-length, portable purpose (CoreLib), current read (registry face)
+gas (n2304-kmax4096, isolate): setPqzScopedKey class 2 v0 (key 18,432 B + openKem) 1,336,216 regular / 31,412,430 state;
+  class 3 opening-off v0 1,235,864 / 28,679,850; storePqzScopedPop with a 32 B stand-in proof 177,028 / 821,610 (a real
+  R_REG proof: as storePqzPop); pqzScopedKeyOf 7,802 (pqzKeyOf 7,774)

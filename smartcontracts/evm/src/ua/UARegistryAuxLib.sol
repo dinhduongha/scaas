@@ -7,6 +7,8 @@ import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
 import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
+import {IUAPopVerifier} from "./IUAVerifier.sol";
+import {PqzSet} from "../pqz/PqzSet.sol";
 
 /// @title `UARegistry`'s auxiliary library (T66b 3.1b, owner 2026-11-09, spec 2026-11-09-t66b-library-organisation.md §11 (f)):
 ///        the key writes after registration: the ML-DSA expanded-key cache, the PQZ key proof and versions (`storePqzPop`,
@@ -192,16 +194,7 @@ library UARegistryAuxLib {
         IUARegistry.UASig calldata sig) external
     {
         UAStore.Layout storage s = UAStore.layout();
-        bool host = _host(ua);
-        uint16 kind;
-        bytes memory d;
-        if (host) {
-            (kind, d,,,) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);
-        } else {
-            IUARegistry.Record memory r = s.records[ua];
-            kind = r.kind;
-            (d,) = UAStore.registration(ua, r.keyPtr);
-        }
+        (uint16 kind, bytes memory d, bool host) = _holderOf(ua);
         _core(abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector, kind, d, ua, host));
         _pqzNext(ua, version, host);
         bytes32 h = UARegistryCoreLib._pqzKeyHash(pqzKey);
@@ -219,6 +212,202 @@ library UARegistryAuxLib {
         s.pqzKeyUsed[ua][h] = true;
         s.pqzVersions[ua].latest = version;
         emit IUARegistry.UAPqzKeyAdded(ua, version, h, pqzPopHash, pqzKey, stored);
+    }
+
+    /// The record `setPqzKey` / `setPqzScopedKey` sign for (`_host`'s rule): its kind and key data, here or in gen 1 on a host.
+    function _holderOf(bytes32 ua) private view returns (uint16 kind, bytes memory d, bool host) {
+        host = _host(ua);
+        if (host) {
+            (kind, d,,,) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);
+        } else {
+            IUARegistry.Record memory r = UAStore.layout().records[ua];
+            kind = r.kind;
+            (d,) = UAStore.registration(ua, r.keyPtr);
+        }
+    }
+
+    // ----- the PQZ three-key model: scoped PQZ key records (spec 2026-11-13-pqz-three-keys K3-3) -----
+
+    /// `IPqzToken.pqzVerifyConfig()` and the word of its static `PqzVerifyConfig` tuple that holds `pqzOpening`: the
+    /// thirteenth (index 12), after `pqzOwnKey` (index 11) appended behind `verifierFeeEta` (K3-1).
+    bytes4 private constant PQZ_VERIFY_CONFIG = bytes4(keccak256("pqzVerifyConfig()"));
+    uint256 private constant OPENING_WORD = 12 * 32;
+
+    /// The calldata-free part of a `setPqzScopedKey` (stack): the record's kind and key data, host, key hash, opening KEM key.
+    struct Scoped {
+        uint16 kind;
+        bytes d;
+        bool host;
+        bytes32 h;
+        bytes kemPk;
+    }
+
+    /// `IUARegistry.setPqzScopedKey` (K3-3), its check order.
+    function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash,
+        IUARegistry.KemKey calldata openKem, uint64 validUntilBlock, IUARegistry.UASig calldata sig) external
+    {
+        if (block.number > validUntilBlock) revert IUARegistry.UAPqzRecordExpired(ua);
+        Scoped memory c;
+        (c.kind, c.d, c.host) = _holderOf(ua);
+        _core(abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector, c.kind, c.d, ua, c.host));
+        // ruling 9 (owner 2026-11-13): no `msig` holds the shared key at first
+        if (scope == address(0) && c.kind == UAKinds.MSIG) revert IUARegistry.UAPqzHolder(ua);
+        c.h = _scopedNext(ua, scope, version, pqzKey, c.host);
+        if (pqzPopHash == 0 || pqzPopHash == UARegistryCoreLib.EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
+        c.kemPk = UAKinds.kemPk(openKem);
+        if ((c.kemPk.length != 0) != _opening(scope)) revert IUARegistry.UAPqzOpenKem(scope);
+        if (c.kemPk.length != 0) UARegistryCoreLib._checkKemPk(c.kemPk);
+        bytes32 rd = UAKinds.pqzScopedKeyRecordDigest(ua, _class(scope), _chainUid(), scope, version, c.h, pqzPopHash,
+            c.kemPk.length == 0 ? bytes32(0) : keccak256(c.kemPk), validUntilBlock);
+        if (!_portableOk(c.kind, c.d, ua, UAKinds.PURPOSE_PQZ_SCOPED_KEY, rd, sig)) revert IUARegistry.UAUnauthorized(ua);
+        UAStore.Layout storage s = UAStore.layout();
+        s.scopedKey[ua][scope][version].ptr = SSTORE2.write(pqzKey);
+        s.scopedPopHash[ua][scope][version] = pqzPopHash;
+        if (c.kemPk.length != 0) s.scopedOpenKem[ua][scope][version] = SSTORE2.write(c.kemPk);
+        s.pqzKeyUsed[ua][c.h] = true;
+        s.scopedVersions[ua][scope].latest = version;
+        emit IUARegistry.UAPqzScopedKeyAdded(
+            ua, scope, version, c.h, pqzPopHash, pqzKey, openKem, validUntilBlock, _portableBytes(sig)
+        );
+    }
+
+    /// K3-3's sequence and key checks: `version == latest + 1`, the first 0 (`UAPqzKeyVersion`); a set's length and version 0's
+    /// length (`UAKeyData(0x0142)`, review S-5: a holder's set is fixed per scope); key bytes in no record space of the UA
+    /// (`pqzKeyUsed`, a host's gen 1 too; `UAKeyInUse(h, ua)`). Returns the key hash.
+    function _scopedNext(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, bool host)
+        private
+        view
+        returns (bytes32 h)
+    {
+        UAStore.Layout storage s = UAStore.layout();
+        address p0 = s.scopedKey[ua][scope][0].ptr;
+        if (version != (p0 == address(0) ? 0 : s.scopedVersions[ua][scope].latest + 1)) {
+            revert IUARegistry.UAPqzKeyVersion(ua, version);
+        }
+        h = UARegistryCoreLib._pqzKeyHash(pqzKey);
+        if (p0 != address(0) && pqzKey.length + 1 != p0.code.length) revert IUARegistry.UAKeyData(UAKinds.PQZ_MLWE);
+        if (s.pqzKeyUsed[ua][h] || (host && IUARegistry(UARegistryCoreLib._pred()).pqzKeyUsed(ua, h))) {
+            revert IUARegistry.UAKeyInUse(h, ua);
+        }
+    }
+
+    /// Does `scope`'s record carry the opening KEM key? Scope 0 (class `offchain-shared`): always. A token: its `pqzOpening`,
+    /// read by one static call of `pqzVerifyConfig()`; no answer, a short one or a word other than 0 / 1: `UAPqzOpenKem`.
+    function _opening(address scope) private view returns (bool) {
+        if (scope == address(0)) return true;
+        (bool ok, bytes memory r) = scope.staticcall(abi.encodeWithSelector(PQZ_VERIFY_CONFIG));
+        if (!ok || r.length < OPENING_WORD + 32) revert IUARegistry.UAPqzOpenKem(scope);
+        uint256 w;
+        assembly ("memory-safe") {
+            w := mload(add(r, add(32, OPENING_WORD)))
+        }
+        if (w > 1) revert IUARegistry.UAPqzOpenKem(scope);
+        return w == 1;
+    }
+
+    /// `keyClass` of a scope: 2 `offchain-shared` (scope 0), 3 `offchain-token`.
+    function _class(address scope) private pure returns (uint8) {
+        return scope == address(0) ? 2 : 3;
+    }
+
+    function _chainUid() private view returns (bytes32) {
+        return IUARegistry(address(this)).chainUid();
+    }
+
+    /// `IUARegistry.storePqzScopedPop` (K3-3): `storePqzPop`'s rule on the scoped record space.
+    function storePqzScopedPop(bytes32 ua, address scope, uint64 version, bytes calldata pqzPop) external {
+        UAStore.Layout storage s = UAStore.layout();
+        if (pqzPop.length == 0 || keccak256(pqzPop) != s.scopedPopHash[ua][scope][version]) {
+            revert IUARegistry.UAPqzPopHash(ua);
+        }
+        if (s.scopedPop[ua][scope][version].length != 0) return;
+        bytes memory key = SSTORE2.read(s.scopedKey[ua][scope][version].ptr);
+        s.scopedPop[ua][scope][version] = SSTORE2.writeChunks(pqzPop);
+        bool proven = _scopedProve(ua, scope, version, key, pqzPop);
+        emit IUARegistry.UAPqzScopedPopStored(ua, scope, version, UAStore.checked(proven), pqzPop);
+        if (proven || key.length == PqzSet.PK) _scopedCurrent(ua, scope, version);
+    }
+
+    /// Where slot 0x0142 has a verifier: `R_REG` over the scoped message (`UAPoP`), then one owner per proven key across every
+    /// record space (K3-3 "never the registry key"; `UAKeyInUse`), `keyOwner`, `proven`. False without the verifier.
+    function _scopedProve(bytes32 ua, address scope, uint64 version, bytes memory key, bytes calldata pqzPop)
+        private
+        returns (bool)
+    {
+        uint256 cfg = UARegistryCoreLib._cfgPqz();
+        if (uint160(cfg) == 0) return false;
+        bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key);
+        bytes32 m = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_SCOPED_KEY,
+            UAKinds.pqzScopedKeyDigest(ua, _class(scope), _chainUid(), scope, version, h));
+        bytes memory data = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, key, m, pqzPop);
+        if (!UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true)) revert IUARegistry.UAPoP();
+        bytes32 owner = UARegistryCoreLib._keyOwner(h);
+        if (owner != 0) revert IUARegistry.UAKeyInUse(h, owner);
+        UAStore.Layout storage s = UAStore.layout();
+        s.keyOwner[h] = ua;
+        s.scopedKey[ua][scope][version].proven = true;
+        return true;
+    }
+
+    /// An eligible scoped version: the scope's holder list once per UA, then `current` when at or above it (never down).
+    function _scopedCurrent(bytes32 ua, address scope, uint64 version) private {
+        UAStore.Layout storage s = UAStore.layout();
+        UAStore.PqzVersions storage vs = s.scopedVersions[ua][scope];
+        if (!vs.listed) {
+            uint256 n = s.scopedCount[scope];
+            s.scopedAt[scope][n] = ua;
+            s.scopedCount[scope] = n + 1;
+            vs.listed = true;
+        }
+        if (version < vs.current) return;
+        vs.current = version;
+        emit IUARegistry.UAPqzScopedKeyCurrent(ua, scope, version);
+    }
+
+    /// A gen-1 record read on a gen 2 that is not the PQZ host: the scoped views forward it (as `pqzKeyOf`).
+    function _away(bytes32 ua) private view returns (bool) {
+        return UARegistryCoreLib._elsewhere(ua) && uint160(UARegistryCoreLib._cfgPqz()) == 0;
+    }
+
+    function pqzScopedKeyLatest(bytes32 ua, address scope) external returns (uint64) {
+        if (_away(ua)) return IUARegistry(UARegistryCoreLib._pred()).pqzScopedKeyLatest(ua, scope);
+        return UAStore.layout().scopedVersions[ua][scope].latest;
+    }
+
+    function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external returns (bytes memory) {
+        if (_away(ua)) return IUARegistry(UARegistryCoreLib._pred()).pqzScopedPopOf(ua, scope, version);
+        return SSTORE2.readChunks(UAStore.layout().scopedPop[ua][scope][version]);
+    }
+
+    function pqzOpenKemAt(bytes32 ua, address scope, uint64 version) external returns (IUARegistry.KemKey memory k) {
+        if (_away(ua)) return IUARegistry(UARegistryCoreLib._pred()).pqzOpenKemAt(ua, scope, version);
+        address p = UAStore.layout().scopedOpenKem[ua][scope][version];
+        if (p == address(0)) return k;
+        bytes memory pk = SSTORE2.read(p); // scheme 1 (1 B) ‖ ek (1,568 B) ‖ x25519 (32 B)
+        (k.scheme, k.mlkemEk, k.x25519) = (uint8(pk[0]), UAStore.cut(pk, 1, 1568), bytes32(UAStore.word(pk, 1569)));
+    }
+
+    function pqzScopedCount(address scope) external returns (uint256) {
+        return UAStore.layout().scopedCount[scope];
+    }
+
+    function pqzScopedAt(address scope, uint256 i) external returns (bytes32) {
+        if (i >= UAStore.layout().scopedCount[scope]) revert IUARegistry.UAIndex(UAKinds.PQZ_MLWE, i);
+        return UAStore.layout().scopedAt[scope][i];
+    }
+
+    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+        bytes32 pqzKeyHash) external pure returns (bytes32)
+    {
+        return UAKinds.pqzScopedKeyDigest(ua, keyClass, chainUid, token, version, pqzKeyHash);
+    }
+
+    function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+        bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32)
+    {
+        return UAKinds.pqzScopedKeyRecordDigest(
+            ua, keyClass, chainUid, token, version, pqzKeyHash, pqzPopHash, openKemHash, validUntilBlock
+        );
     }
 
     /// KV-1 (R2, O6): version 0 is write-once (`UAPqzKeySet` once the UA has one, here or, on a host, in gen 1); a version

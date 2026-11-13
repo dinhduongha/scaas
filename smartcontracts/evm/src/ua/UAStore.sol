@@ -77,6 +77,18 @@ library UAStore {
         /// at registration and never again (0: an empty `pop`, or any other kind). `accepted` (15) adds the later acceptances; their
         /// difference is what accepted later (`popSlotsOf`). It lives with the record (gen 2 forwards gen 1's).
         mapping(bytes32 ua => uint256) popSlots;
+        /// 20–26. The PQZ three-key model (spec 2026-11-13-pqz-three-keys K3-3): the scoped PQZ key records `(ua, scope,
+        /// version)`, `scope` 0 for class `offchain-shared`, the token for class `offchain-token`, beside the unchanged class-1
+        /// records (2, 7, 8, 17); each written once. 20 the key (`ptr`, `proven`; `added` unused), 21 its proof hash, 22 its
+        /// `R_REG` proof bytes, 23 its opening KEM key `kemPk` (SSTORE2, 0 = none), 24 `latest` / `current` / `listed` per
+        /// `(ua, scope)`, 25 / 26 the per-scope holder list (a UA once per scope, at its first eligible version).
+        mapping(bytes32 ua => mapping(address scope => mapping(uint64 version => PqzKey))) scopedKey;
+        mapping(bytes32 ua => mapping(address scope => mapping(uint64 version => bytes32))) scopedPopHash;
+        mapping(bytes32 ua => mapping(address scope => mapping(uint64 version => address[]))) scopedPop;
+        mapping(bytes32 ua => mapping(address scope => mapping(uint64 version => address))) scopedOpenKem;
+        mapping(bytes32 ua => mapping(address scope => PqzVersions)) scopedVersions;
+        mapping(address scope => uint256) scopedCount;
+        mapping(address scope => mapping(uint256 i => bytes32 ua)) scopedAt;
     }
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;

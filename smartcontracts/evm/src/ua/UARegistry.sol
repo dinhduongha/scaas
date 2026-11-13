@@ -449,6 +449,72 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _s.pqzKeyUsed[ua][pqzKeyHash] || (_elsewhere(ua) && IUARegistry(predecessor).pqzKeyUsed(ua, pqzKeyHash));
     }
 
+    // ----- the PQZ three-key model: scoped PQZ key records (spec 2026-11-13-pqz-three-keys K3-3) -----
+
+    /// What a class-2 / class-3 PQZ token reads (the hot path, here as `pqzKeyOf`): the current scoped version of `(ua, scope)`.
+    function pqzScopedKeyOf(bytes32 ua, address scope)
+        external
+        view
+        returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven)
+    {
+        if (_elsewhere(ua) && !_pqzHost()) return IUARegistry(predecessor).pqzScopedKeyOf(ua, scope);
+        version = _s.scopedVersions[ua][scope].current;
+        UAStore.PqzKey memory k = _s.scopedKey[ua][scope][version];
+        (ptr, pqzPopHash, proven) = (k.ptr, _s.scopedPopHash[ua][scope][version], k.proven);
+    }
+
+    function pqzScopedKeyAt(bytes32 ua, address scope, uint64 version)
+        external
+        view
+        returns (address ptr, bytes32 pqzPopHash, bool proven)
+    {
+        if (_elsewhere(ua) && !_pqzHost()) return IUARegistry(predecessor).pqzScopedKeyAt(ua, scope, version);
+        UAStore.PqzKey memory k = _s.scopedKey[ua][scope][version];
+        return (k.ptr, _s.scopedPopHash[ua][scope][version], k.proven);
+    }
+
+    function pqzScopedKeyLatest(bytes32 ua, address scope) external view returns (uint64) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedKeyLatest.selector, 0);
+    }
+
+    function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external view returns (bytes memory) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedPopOf.selector, 0);
+    }
+
+    function pqzOpenKemAt(bytes32 ua, address scope, uint64 version) external view returns (KemKey memory) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzOpenKemAt.selector, 0);
+    }
+
+    function pqzScopedCount(address scope) external view returns (uint256) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedCount.selector, 0);
+    }
+
+    function pqzScopedAt(address scope, uint256 i) external view returns (bytes32) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedAt.selector, 0);
+    }
+
+    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid_, address token, uint64 version,
+        bytes32 pqzKeyHash) external pure returns (bytes32)
+    {
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedKeyDigest.selector);
+    }
+
+    function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid_, address token, uint64 version,
+        bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32)
+    {
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedKeyRecordDigest.selector);
+    }
+
+    function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash,
+        KemKey calldata openKem, uint64 validUntilBlock, UASig calldata sig) external
+    {
+        _lib(address(UARegistryAuxLib), UARegistryAuxLib.setPqzScopedKey.selector, _s.records[ua].kind);
+    }
+
+    function storePqzScopedPop(bytes32 ua, address scope, uint64 version, bytes calldata pqzPop) external {
+        _lib(address(UARegistryAuxLib), UARegistryAuxLib.storePqzScopedPop.selector, 0);
+    }
+
     function checkedOf(bytes32 ua) external view returns (uint8 pop, uint8 pqzPop, uint8 kem) {
         bool proven;
         if (_elsewhere(ua)) {

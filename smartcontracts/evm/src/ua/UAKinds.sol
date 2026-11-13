@@ -74,6 +74,10 @@ library UAKinds {
     /// UA-7 (spec 2026-10-25-ua7-pq-e2e-sessions P7, O1; plan T66a): a `PqChat` record's purpose, portable (domain "SCaaS PqChat", no
     /// chain), checked by the registry's `requirePortable`; never a registry record's (`pop`, `kem`, `pqz-key`) and the reverse.
     bytes32 internal constant PURPOSE_PQCHAT = keccak256("scaas.ua.purpose.pqchat.v1");
+    /// The PQZ three-key model (spec 2026-11-13-pqz-three-keys K3-3): a scoped PQZ key record's purpose, portable domain with
+    /// the chain inside the record (`UAPqzScopedKeyRecord.chainUid`); its `R_REG` proves under it with kind 0x0142 over typed
+    /// `UAPqzScopedKey`. Never a `pop`, `kem`, `pqz-key` or `pqchat` signature, and the reverse.
+    bytes32 internal constant PURPOSE_PQZ_SCOPED_KEY = keccak256("scaas.ua.purpose.pqz-scoped-key.v1");
     /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8): the portable domain `EIP712Domain(string name,string
     /// version)` = ("SCaaS UA Portable", "1"), no chain id, verifying contract or salt (a record registers a UA on every
     /// chain, CTR-UA-07); `kind` is `uint16` (its name: `name(kind)`, the registry's `kindName`).
@@ -97,6 +101,14 @@ library UAKinds {
         "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"
     );
     bytes32 internal constant UA_MEMBERSHIP_TYPEHASH = keccak256("UAMembership(bytes32 ua,bytes32 member)");
+    /// K3-3: a scoped PQZ key (`keyClass` 2 `offchain-shared`, `token` 0; 3 `offchain-token`, `token` the scope) and the UA's
+    /// signed record of it (`openKemHash = keccak256(kemPk)` of the opening KEM key, 0 without one).
+    bytes32 internal constant UA_PQZ_SCOPED_KEY_TYPEHASH = keccak256(
+        "UAPqzScopedKey(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash)"
+    );
+    bytes32 internal constant UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH = keccak256(
+        "UAPqzScopedKeyRecord(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash,bytes32 pqzPopHash,bytes32 openKemHash,uint64 validUntilBlock)"
+    );
     /// First byte of `kemPk` = the KEM scheme id (CTR-UA-32). Scheme 1 = ML-KEM-1024 + X25519; 2 (ML-KEM-1024 + HQC +
     /// X25519, after FIPS 207) is reserved and refused until enabled.
     uint8 internal constant KEM_SCHEME_MLKEM1024_X25519 = 1;
@@ -383,6 +395,35 @@ library UAKinds {
     {
         bytes32 k = keccak256(abi.encode(UA_PQZ_KEY_VERSION_TYPEHASH, ua, version, pqzKeyHash));
         return portableDigest(keccak256(abi.encode(UA_PQZ_KEY_VERSION_RECORD_TYPEHASH, k, pqzPopHash)));
+    }
+
+    /// typed(`UAPqzScopedKey`): what a scoped key's `R_REG` proves over, as `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, ·)` (K3-3).
+    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version, bytes32 pqzKeyHash)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return portableDigest(
+            keccak256(abi.encode(UA_PQZ_SCOPED_KEY_TYPEHASH, ua, keyClass, chainUid, token, version, pqzKeyHash))
+        );
+    }
+
+    /// typed(`UAPqzScopedKeyRecord`): what `setPqzScopedKey`'s `sig` signs, as `uaMessage(kind, PURPOSE_PQZ_SCOPED_KEY, ·)` (K3-3).
+    function pqzScopedKeyRecordDigest(
+        bytes32 ua,
+        uint8 keyClass,
+        bytes32 chainUid,
+        address token,
+        uint64 version,
+        bytes32 pqzKeyHash,
+        bytes32 pqzPopHash,
+        bytes32 openKemHash,
+        uint64 validUntilBlock
+    ) internal pure returns (bytes32) {
+        return portableDigest(keccak256(abi.encode(
+            UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH, ua, keyClass, chainUid, token, version, pqzKeyHash, pqzPopHash, openKemHash,
+            validUntilBlock
+        )));
     }
 
     /// typed(`UAMembership{ua, member}`): what `member` signs to accept its place in the `msig` `ua` (CTR-UA-37).

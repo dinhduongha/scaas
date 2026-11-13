@@ -376,8 +376,9 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         bytes memory ds = _msigKey(2, m);
         bytes32 mu = UARegistry(at).registerMsig(UACall.structure(ds), _none(), new IUARegistry.MemberSig[](0), "");
         uint256 used = vm.lastCallGas().gasTotalUsed;
-        emit log_string(string.concat("GAS|registerMsig regular|143284|", vm.toString(used)));
-        assertLe(used, 143284 + SLACK, "registerMsig");
+        emit log_string(string.concat("GAS|registerMsig regular|143464|", vm.toString(used)));
+        // pqz-three-keys step 3 (K3-3): 143,284 -> 143,464 (+180, the registry face dispatches eleven more selectors)
+        assertLe(used, 143464 + SLACK, "registerMsig");
         UARegistry(at).acceptMembership(mu, _acceptEoaSig(ds, ALICE));
         UARegistry(at).acceptMembership(mu, _acceptKeySig(ds, 0x0101, _key(0x0101)));
         bytes32 md = _memberDigest(mu, UAKinds.PURPOSE_METATX, DIGEST);

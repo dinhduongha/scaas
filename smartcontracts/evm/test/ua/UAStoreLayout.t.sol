@@ -30,13 +30,22 @@ contract UAStoreProbe {
         s.pqzVersions[u] = UAStore.PqzVersions(0x82, 0x83, true); // 17
         s.pqzKeyUsed[u][bytes32(uint256(0x84))] = true; // 18
         s.popSlots[u] = 0x85; // 19 (CTR-UA-33 Change 2026-11-08, plan T66a)
+        address sc = address(0x5C09E); // the three-key model's scoped records (K3-3), keyed (ua, scope, version)
+        s.scopedKey[u][sc][5] = UAStore.PqzKey(address(0x86), true, false); // 20
+        s.scopedPopHash[u][sc][5] = bytes32(uint256(0x87)); // 21
+        s.scopedPop[u][sc][5].push(address(0x88)); // 22
+        s.scopedOpenKem[u][sc][5] = address(0x89); // 23
+        s.scopedVersions[u][sc] = UAStore.PqzVersions(0x8a, 0x8b, true); // 24
+        s.scopedCount[sc] = 0x8c; // 25
+        s.scopedAt[sc][7] = u; // 26
     }
 }
 
 /// The active pin of the registry's storage (spec 2026-11-06-pqz-key-versions §2.3, Codex: `UARegistrySplit.t.sol`, which
 /// `UAStore`'s comment named, lives under `legacy/` and is no gate). Every slot number of `UAStore.Layout`, the nested
 /// PQZ mappings keyed `(ua, version)` (2, 7, 8, 9), the retired placeholders 13 and 14 (R2), `PqzVersions` (17: `latest`
-/// in bytes 0–7, `current` 8–15, `listed` byte 16), `pqzKeyUsed` (18) and `popSlots` (19, plan T66a: slots 0–18 unmoved, 19 appended).
+/// in bytes 0–7, `current` 8–15, `listed` byte 16), `pqzKeyUsed` (18) and `popSlots` (19, plan T66a: slots 0–18 unmoved, 19 appended);
+/// the three-key model's scoped PQZ key records 20–26 (spec 2026-11-13-pqz-three-keys K3-3: slots 0–19 unmoved, 20–26 appended).
 /// Moves only old → new in a commit.
 contract UAStoreLayoutTest is Test {
     using stdJson for string;
@@ -48,6 +57,10 @@ contract UAStoreLayoutTest is Test {
     }
 
     function _mm(bytes32 k1, uint256 k2, uint256 slot) internal pure returns (bytes32) {
+        return keccak256(abi.encode(k2, _m(k1, slot)));
+    }
+
+    function _mm2(bytes32 k1, bytes32 k2, uint256 slot) internal pure returns (bytes32) {
         return keccak256(abi.encode(k2, _m(k1, slot)));
     }
 
@@ -80,6 +93,14 @@ contract UAStoreLayoutTest is Test {
         assertEq(_at(a, _m(U, 17)), uint256(0x82) | uint256(0x83) << 64 | 1 << 128, "17 pqzVersions: latest, current, listed");
         assertEq(_at(a, keccak256(abi.encode(uint256(0x84), _m(U, 18)))), 1, "18 pqzKeyUsed[ua][pqzKeyHash]");
         assertEq(_at(a, _m(U, 19)), 0x85, "19 popSlots");
+        bytes32 sc = bytes32(uint256(0x5C09E));
+        assertEq(_at(a, keccak256(abi.encode(uint256(5), _mm2(U, sc, 20)))), uint256(0x86) | 1 << 160, "20 scopedKey[ua][scope][version]");
+        assertEq(_at(a, keccak256(abi.encode(uint256(5), _mm2(U, sc, 21)))), 0x87, "21 scopedPopHash");
+        assertEq(_at(a, keccak256(abi.encode(uint256(5), _mm2(U, sc, 22)))), 1, "22 scopedPop (length)");
+        assertEq(_at(a, keccak256(abi.encode(uint256(5), _mm2(U, sc, 23)))), 0x89, "23 scopedOpenKem");
+        assertEq(_at(a, _mm2(U, sc, 24)), uint256(0x8a) | uint256(0x8b) << 64 | 1 << 128, "24 scopedVersions");
+        assertEq(_at(a, _m(sc, 25)), 0x8c, "25 scopedCount");
+        assertEq(_at(a, keccak256(abi.encode(uint256(7), _m(sc, 26)))), uint256(U), "26 scopedAt");
     }
 
     /// The registry keeps `UAStore.Layout` at slot 0 (its only state variable): the probe's slots are the registry's.

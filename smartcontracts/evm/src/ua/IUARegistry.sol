@@ -154,6 +154,18 @@ interface IUARegistry is IERC5267 {
     /// `PURPOSE_MEMBERSHIP`, an acceptance. `sig`: the exact bytes whose `keccak256` `memberSigHashOf(ua, index)` returns, the slot's `sig`
     /// or an `msig` member's `abi.encode(InnerSig[])`. State keeps the hashes only: a copy rebuilds the `pop` from these events.
     event UAMemberSig(bytes32 indexed ua, bytes32 indexed member, uint16 index, bytes32 purpose, bytes sig);
+    /// K3-3: scoped PQZ key version `version` of `(ua, scope)` added by `setPqzScopedKey`, with the call's bytes (the record is
+    /// copyable from the log: key, opening KEM key or the empty one, `validUntilBlock`, `sig` as `setPqzKey` stores it).
+    event UAPqzScopedKeyAdded(
+        bytes32 indexed ua, address indexed scope, uint64 indexed version, bytes32 pqzKeyHash, bytes32 pqzPopHash,
+        bytes pqzKey, KemKey openKem, uint64 validUntilBlock, bytes sig
+    );
+    /// K3-3: the `R_REG` proof of scoped version `version` stored (`storePqzScopedPop`), `checkedPqzPop` as `UAPqzPopStored`'s.
+    event UAPqzScopedPopStored(
+        bytes32 indexed ua, address indexed scope, uint64 indexed version, uint8 checkedPqzPop, bytes pqzPop
+    );
+    /// K3-3: version `version` became the current scoped key of `(ua, scope)` (CTR-UA-42's eligibility, per scope).
+    event UAPqzScopedKeyCurrent(bytes32 indexed ua, address indexed scope, uint64 indexed version);
 
     error UAKindDisabled(uint16 kind); // not enabled in this generation (incl. kinds a predecessor offers)
     error UAKeyData(uint16 kind); // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
@@ -184,6 +196,12 @@ interface IUARegistry is IERC5267 {
     /// Group 3g (KV-1): `setPqzKey` of a version v ≥ 1 without version 0, or other than `latest + 1` (a gap, a stored
     /// version); on a gen-2 host `latest` is the larger of both generations'.
     error UAPqzKeyVersion(bytes32 ua, uint64 version);
+    /// K3-3: a scoped record's opening KEM key against its scope: absent on a class-2 record (scope 0), present for a
+    /// class-3 token whose `pqzOpening` is off or absent for one whose `pqzOpening` is on, or a scope that does not answer
+    /// `pqzVerifyConfig()`.
+    error UAPqzOpenKem(address scope);
+    /// K3-3: `setPqzScopedKey` after the record's `validUntilBlock`.
+    error UAPqzRecordExpired(bytes32 ua);
 
     function generation() external view returns (uint8); // 1 or 2
     function predecessor() external view returns (address);
@@ -316,6 +334,58 @@ interface IUARegistry is IERC5267 {
     /// not committed (`UAKemVersion`) → the key: scheme 1 (`UAKemScheme`), 1,601 B assembled (`UAKemKeyLength`) →
     /// signature (`UAUnauthorized`; version 0: a non-empty `sig`) / version 0 the committed hash (`UAKemKeyHash`).
     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external;
+    /// Anyone, no fee (the PQZ three-key model, K3-3): scoped PQZ key version `version` of `(ua, scope)`, written once; `scope`
+    /// 0 is class `offchain-shared` (one key per holder per chain), a token address class `offchain-token` (one key per holder
+    /// and token). `sig` (`signature`, or `members` for an `msig`; never `keyData`) over `uaMessage(kind, PURPOSE_PQZ_SCOPED_KEY,
+    /// pqzScopedKeyRecordDigest(ua, keyClass, chainUid(), scope, version, pqzKeyHash, pqzPopHash, openKemHash,
+    /// validUntilBlock))`, `keyClass` 2 for scope 0 else 3, `openKemHash = keccak256(kemPk)` of `openKem` or 0 without one.
+    /// The record space is apart from `setPqzKey`'s; the per-UA marker `pqzKeyUsed` and `keyOwner` span both. Check order:
+    /// past `validUntilBlock` (`UAPqzRecordExpired`) → an id this registry does not hold (`UAUnauthorized`, as `setPqzKey`) →
+    /// holder (`UAKindDisabled(0x0142)`, `UAPqzHolder` with the `msig` debit bound; an `msig` on scope 0: `UAPqzHolder`) →
+    /// `version == pqzScopedKeyLatest(ua, scope) + 1`, the first 0 (`UAPqzKeyVersion`) → the key's length, a set's, and every
+    /// version of a scope version 0's (`UAKeyData(0x0142)`) → the key repeated in any record space of the UA (`UAKeyInUse(h,
+    /// ua)`) → a zero or `keccak256("")` `pqzPopHash` (`UAPqzPopHash`) → `openKem` present iff the scope's tokens have the
+    /// opening on (scope 0 always; a token by one static call of its `pqzVerifyConfig()`, its `pqzOpening`) (`UAPqzOpenKem`),
+    /// then scheme 1 and 1,601 B (`UAKemScheme`, `UAKemKeyLength`) → signature (`UAUnauthorized`; another chain's record
+    /// fails here). The key is stored unproven; its `R_REG` comes by `storePqzScopedPop`. `UAPqzScopedKeyAdded`.
+    function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash,
+        KemKey calldata openKem, uint64 validUntilBlock, UASig calldata sig) external;
+    /// Anyone (K3-3, as `storePqzPop`): the `R_REG` proof of scoped version `version`; `UAPqzPopHash` for empty bytes or bytes
+    /// that do not hash to the record's `pqzPopHash` (also no record); a no-op once stored. The bytes are stored (CTR-PQZ-30)
+    /// and, where slot 0x0142 has a verifier, checked over `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, pqzScopedKeyDigest(ua,
+    /// keyClass, chainUid(), scope, version, pqzKeyHash))` (`UAPoP`), then one owner per proven key across every record space
+    /// (`UAKeyInUse`), `keyOwner`, `proven`. Eligible as CTR-UA-42 (proven, or without the verifier this build's set length):
+    /// the version becomes current when it is at or above `current` (`UAPqzScopedKeyCurrent`), and the UA joins the scope's
+    /// holder list at its first eligible version. `UAPqzScopedPopStored`.
+    function storePqzScopedPop(bytes32 ua, address scope, uint64 version, bytes calldata pqzPop) external;
+    /// K3-3: the current scoped version of `(ua, scope)` (0 when none is eligible), its key pointer, proof hash and `proven`;
+    /// what a class-2 (scope 0) or class-3 (scope = the token) PQZ token reads instead of `pqzKeyOf`. Gen 2 forwards a gen-1
+    /// record unless it is the PQZ host (as `pqzKeyOf`).
+    function pqzScopedKeyOf(bytes32 ua, address scope)
+        external
+        view
+        returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+    /// Any stored scoped version (zero for none); `pqzKeyAt`'s shape.
+    function pqzScopedKeyAt(bytes32 ua, address scope, uint64 version)
+        external
+        view
+        returns (address ptr, bytes32 pqzPopHash, bool proven);
+    /// The highest stored scoped version (clients sign `latest + 1`; 0 also when none: `pqzScopedKeyAt(ua, scope, 0)` tells).
+    function pqzScopedKeyLatest(bytes32 ua, address scope) external view returns (uint64);
+    /// Scoped version `version`'s stored `R_REG` proof bytes ("" none).
+    function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external view returns (bytes memory);
+    /// The opening KEM key of scoped version `version` (K3-3, K3-6b): the empty `KemKey` when the record has none.
+    function pqzOpenKemAt(bytes32 ua, address scope, uint64 version) external view returns (KemKey memory);
+    /// The per-scope holder list (as CTR-UA-29): the number of UAs with an eligible scoped key of `scope` in this
+    /// generation, and the `i`-th (`UAIndex(0x0142, i)` past the end).
+    function pqzScopedCount(address scope) external view returns (uint256);
+    function pqzScopedAt(address scope, uint256 i) external view returns (bytes32);
+    /// typed(`UAPqzScopedKey`): what a scoped key's `R_REG` proves over (K3-3).
+    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+        bytes32 pqzKeyHash) external pure returns (bytes32);
+    /// typed(`UAPqzScopedKeyRecord`): what `setPqzScopedKey`'s `sig` signs (K3-3).
+    function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+        bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32);
     /// CTR-UA-37. Anyone submits, the member signs: slot `memberSig.index` of the `msig` `ua` accepts its place. A native member
     /// signs the typed `UAMembership{ua, member}` itself (`eth_signTypedData_v4`) or answers ERC-1271 over it; a derived member signs
     /// `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, typed))` under `member`; an `msig` member by a threshold of its own

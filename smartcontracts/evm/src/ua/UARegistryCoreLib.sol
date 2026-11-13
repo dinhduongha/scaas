@@ -598,12 +598,13 @@ library UARegistryCoreLib {
         return UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
     }
 
-    /// The portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3; PQCHAT, UA-7 O1): any other purpose reverts `UAUnauthorized`
-    /// (writes stay on `requireAuthorized`, UAAuth for native members).
+    /// The portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3; PQCHAT, UA-7 O1; PQZ_SCOPED_KEY, the three-key model
+    /// K3-3, its record names the chain): any other purpose reverts `UAUnauthorized` (writes stay on `requireAuthorized`, UAAuth
+    /// for native members).
     function _portablePurpose(bytes32 ua, bytes32 purpose) internal pure {
         if (
             purpose != UAKinds.PURPOSE_POP_V2 && purpose != UAKinds.PURPOSE_KEM && purpose != UAKinds.PURPOSE_PQZ_KEY
-                && purpose != UAKinds.PURPOSE_PQCHAT
+                && purpose != UAKinds.PURPOSE_PQCHAT && purpose != UAKinds.PURPOSE_PQZ_SCOPED_KEY
         ) revert IUARegistry.UAUnauthorized(ua);
     }
 
