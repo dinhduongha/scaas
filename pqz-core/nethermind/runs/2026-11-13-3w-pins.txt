@@ -1,0 +1,8 @@
+# review 3w fix round, T-19: per-set libpqz_ffi.so pins after the S2+S3 ffi / core changes (pqz-3w-fix b5ffca74)
+# scripts/capped docker build -f Dockerfile --build-arg PQZ_SET=<set> --target ffi-export -o bin/ffi-out-<set> <repo root>
+set | commit | rc | libpqz_ffi.so sha256 (was)
+n2048-kmax1024 | b5ffca74 | 0 | a991ab8cc5d279c7ce77ea625ac780ee8d75214ba6e77043286023546fe0bea1 (1800cae7…eeb4)
+n2304-kmax4096 | b5ffca74 | 0 | 2e98d3a63387256a94c7fb48db1e1fe3a3d6eaadd78032a4922b662af9f357f3 (dd0e7668…5601)
+n2560-kmax16384 | b5ffca74 | 0 | fe23ef15d38bcac91e289b4c0b994dd9a846d7dd6708f92dfdfe9e7147b86d1b (5d113f32…8cb6)
+n2816-kmax65536 | b5ffca74 | 0 | 165325eb4abb286a968371d385fe181eba3f22363fd1944780fb55583cedd2da (17947f64…8fb7)
+ExpectedHash (OP_SELFTEST) unchanged: no vector, id or self-test change.
