@@ -2,9 +2,9 @@
 //! including what the vectors and the keys KAT never feed: short vectors over the whole i8 / i16 range, digits up to
 //! 255 and non-canonical pk / u / v coefficients (up to 2^64 - 1) into `encrypt` / `decrypt_raw`, which check nothing,
 //! and non-canonical ciphertexts and keys into `dec` / `enc_seed`, which reject them.
-use pqzl::c_oracle::{c_dec_win, c_decrypt_raw_win, c_enc_group_seed, c_enc_seed_win, c_encrypt_win, c_keygen,
+use pqzl::c_oracle::{c_dec_win, c_decrypt_raw_win, c_enc_group_seed, c_enc_leg_seed, c_enc_seed_win, c_encrypt_win, c_keygen,
                      c_keypair_from_secret};
-use pqzl::{dec_win, decrypt_raw_win, enc_group_seed, enc_seed, enc_seed_win, encrypt, encrypt_win, keygen,
+use pqzl::{dec_win, decrypt_raw_win, enc_group_seed, enc_leg_seed, enc_seed, enc_seed_win, encrypt, encrypt_win, keygen,
            keypair_from_secret, CT_BYTES, POLYVEC_BYTES, V_BYTES};
 
 const N: usize = 200;
@@ -140,6 +140,8 @@ fn keygen_enc_dec_eq_c() {
 
         let g = [0, 1, rnd.next() as u32][it % 3];
         assert_eq!(enc_group_seed(&se, g), c_enc_group_seed(&se, g), "enc_group_seed {it} g {g}");
+        let (ua, ph): ([u8; 32], [u8; 32]) = (core::array::from_fn(|_| rnd.next() as u8), core::array::from_fn(|_| rnd.next() as u8));
+        assert_eq!(enc_leg_seed(&se, &ua, &ph), c_enc_leg_seed(&se, &ua, &ph), "enc_leg_seed {it}");
     }
     println!("keygen_enc_dec_eq_c: {ok} encryptions, {rejected} rejected inputs, all equal");
     assert!(ok >= N / 2 && rejected >= N / 20, "ok {ok}, rejected {rejected}");

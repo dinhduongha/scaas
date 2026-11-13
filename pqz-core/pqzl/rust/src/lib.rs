@@ -363,6 +363,12 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
     keys::enc_group_seed(seed_enc, g)
 }
 
+/// `pqz_enc_leg_seed`: an opening token's leg seed (spec K3-4), SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) ||
+/// toUA || keccak256(pk_t))[0..32); `pkt_hash` = keccak256(pk_t).
+pub fn enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
+    keys::enc_leg_seed(seed_enc, to_ua, pkt_hash)
+}
+
 /// `pqz_encrypt`: encryption with chosen short vectors (no norm check).
 pub fn encrypt(
     pks: &[&[u8; POLYVEC_BYTES]],

@@ -321,6 +321,16 @@ pub(crate) fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
     out
 }
 
+/// `pqz_enc_leg_seed` (opening tokens, spec K3-4): the leg's seed, SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) ||
+/// toUA || keccak256(pk_t))[0..32). Enc from it ([`enc_seed`] with recipients pk_t, then pk_a) draws the leg's r, e1,
+/// e2_t, e2_a; the sender's own v_f stays under Enc from seed_enc (split randomness). One-way: it reveals nothing of
+/// seed_enc. `pkt_hash` = keccak256 of pk_t's bytes (the caller's: no keccak in this crate).
+pub(crate) fn enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    Stream::new(&[b"SCAAS-PQZ-ENC-LEG-V1", seed_enc, &0u32.to_be_bytes(), to_ua, pkt_hash]).squeeze(&mut out);
+    out
+}
+
 /// `pqz_decrypt_raw_win`: w_i = centre(v_i - (u^T s)_{16 win + i}) (no canonical check, as C; win < 4, R0-1)
 /// (`u`: POLYVEC_BYTES, `v`: V_BYTES)
 pub(crate) fn decrypt_raw(s: &[i8; N], u: &[u8], v: &[u8], win: usize) -> Result<[i64; 16], Error> {

@@ -67,6 +67,7 @@ clients only; a native build with `panic = abort` is a compile error.
 | features `pqzl-rust` + `pqzl-c` together: `pqzl::c::*` | the C core next to the Rust one (`pqzl::`), for differential tests and the fuzz mode `pqzl-diff` |
 | feature `prove`: `fixture::{wit_key, wit_debit, wit_ds, cases, digest_lines}` | the witness layouts of the prover API (R3), and one honest instance of every form, built from seeds (for the tests, the bench, the wasm32 run and the vector generator of P6e Task 11) |
 | feature `prove`: `fixture::{wit_multi, multi_case, multi_cases, recipients_hash}`, `pqzl::{enc_group_seed, enc_multi}`, `memo::{seal, open}` | the multi-recipient transfer (`R_TXM`, op 7; P6-ANON S3): encryption per group of legs (P6-ANON D13: group seeds; first the legs, then `pk_f`, then the auditor copies), the `R_TXM` witness layout, `recipientsHash`, the sender memo of spec §5.4; one honest case per built (M, auditorOn) of each id |
+| feature `prove`: `pqzl::enc_leg_seed`, `opening::{leg_seed, enc_split, coins, seal, open_kem_seed, open_kem_pk, check_recipient, check_auditor, taken}` | opening tokens (spec three-key model K3-4, K3-6, K3-6b, K3-7; UNAUDITED): the leg seed and split randomness of op 1, the deterministic sealed opening (CTR-UA-32's hybrid KEM + one-shot AES-256-GCM), the opening KEM seed, and the holder check / auditor tool, which take public bytes and the opening KEM seed only (never the PQZ secret) and give one outcome per failure; `opening.json` in the vectors. Tests: `tests/opening.rs` |
 
 ## Inside
 

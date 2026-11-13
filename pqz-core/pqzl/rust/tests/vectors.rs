@@ -2,7 +2,7 @@
 //! keygen.json, enc.json (rows, the trivial ciphertext and the Add / Sub ops), matrix.json, the R_TXM group seeds,
 //! and Enc's input errors. Codec part (feature `test-hooks`): every PQZL proof decodes and re-encodes to itself.
 //! Verify part: every PQZL proof verifies; negative.json's PQZL rows and the cheating fixtures are rejected.
-use pqzl::{dec, enc_group_seed, enc_seed, keygen, keypair_from_secret, Ctx, Error, CT_BYTES, POLYVEC_BYTES};
+use pqzl::{dec, enc_group_seed, enc_leg_seed, enc_seed, keygen, keypair_from_secret, Ctx, Error, CT_BYTES, POLYVEC_BYTES};
 use std::path::PathBuf;
 use serde_json::Value;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
@@ -202,6 +202,23 @@ fn enc_group_seed_eq_shake() {
             assert_eq!(got, want, "seed_enc {i} g {g}");
         }
     }
+}
+
+/// The leg seed of an opening token (spec K3-4): SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) || toUA ||
+/// keccak256(pk_t))[0..32); each input moves it.
+#[test]
+fn enc_leg_seed_eq_shake() {
+    let (se, ua, ph) = ([3u8; 32], [5u8; 32], [9u8; 32]);
+    let mut h = Shake256::default();
+    for p in [&b"SCAAS-PQZ-ENC-LEG-V1"[..], &se, &[0; 4], &ua, &ph] {
+        h.update(p);
+    }
+    let mut want = [0u8; 32];
+    h.finalize_xof().read(&mut want);
+    assert_eq!(enc_leg_seed(&se, &ua, &ph), want);
+    assert_ne!(enc_leg_seed(&[4; 32], &ua, &ph), want);
+    assert_ne!(enc_leg_seed(&se, &[6; 32], &ph), want);
+    assert_ne!(enc_leg_seed(&se, &ua, &[8; 32]), want);
 }
 
 /// pqz_enc_seed: a pk coefficient >= q or a digit > 15 -> Input; pqz_dec: a ct coefficient >= q -> Input

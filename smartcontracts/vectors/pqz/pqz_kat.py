@@ -1235,6 +1235,26 @@ def check_enc(j, d):
     return bad
 
 
+def check_opening(j, d):
+    """opening.json (spec three-key model K3-4): seed_leg and the split Enc rebuilt here; the KEM rows (coins, openings,
+    openKemSeeds: ML-KEM-1024 + X25519 + AES-256-GCM) are pqz-vectors --check's and clientkeys' / ua-rs's."""
+    bad = []
+    for i, r in enumerate(j["rows"]):
+        pk_t = key(r["seed_t"])[0]
+        cmp(bad, f"row {i} pk_t_keccak", r["pk_t_keccak"], kec(pk_t).hex())
+        sl = shake256(b"SCAAS-PQZ-ENC-LEG-V1" + bytes.fromhex(r["seed_enc"]) + bytes(4) + bytes.fromhex(r["toUA"]) + kec(pk_t), 32)
+        cmp(bad, f"row {i} seed_leg", r["seed_leg"], sl.hex())
+        val = lambda ds: sum(x * 16 ** k for k, x in enumerate(ds))
+        uf, vf, _ = enc_of({"seed_enc": r["seed_enc"], "recipients": [r["seed_f"]], "values": [val(r["digits_f"])]})
+        cmp(bad, f"row {i} own", (r["u_f_keccak"], r["v_f"]), (kec(uf).hex(), vf[0].hex()))
+        rec = [r["seed_t"]] + ([r["seed_a"]] if r["auditorOn"] else [])
+        u, vs, _ = enc_of({"seed_enc": sl.hex(), "recipients": rec, "values": [val(r["digits"])] * len(rec)})
+        cmp(bad, f"row {i} leg", (r["u_keccak"], r["v_t"], r.get("v_a")),
+            (kec(u).hex(), vs[0].hex(), vs[1].hex() if r["auditorOn"] else None))
+        cmp(bad, f"row {i} u_f != u", uf != u, True)
+    return bad
+
+
 def check_statement(j, d):
     bad = []
     for r in j["rows"]:
@@ -1959,7 +1979,7 @@ def check_state(j, d):
     return bad
 
 
-CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": check_cbd, "keygen.json": check_keygen, "enc.json": check_enc,
+CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": check_cbd, "keygen.json": check_keygen, "enc.json": check_enc, "opening.json": check_opening,
             "statement_*": check_statement, "proof_*": check_proofs, "negative.json": check_negative,
             "selftest.json": check_selftest, "fee0.json": check_fee0, "worstcase_noise.json": check_worstcase,
             "state.json": check_state}
@@ -1973,7 +1993,10 @@ OTHER_WRITERS = {"verdict.json": "forge PqzVerdictVectors.t.sol; clientkeys pqz-
 # Files whose checker here rebuilds only part of the file (review 3w fix round, the S7 gate's tamper step: 8 of 12
 # changed state.json leaves were not caught); the file's writer and its other readers bind the rest. tamper.py counts
 # them but requires only that some change is caught.
-PARTIAL_CHECKERS = {"state.json": "check_state rebuilds T, accHash, entryRef and the leg ciphertexts from the raw words; "
+PARTIAL_CHECKERS = {"opening.json": "check_opening rebuilds seed_leg and the split Enc; the KEM rows (coins, openings, "
+                                    "openKemSeeds) are pqz-vectors --check's (a second generation, byte for byte) and the "
+                                    "clients' (clientkeys, ua-rs)",
+                    "state.json": "check_state rebuilds T, accHash, entryRef and the leg ciphertexts from the raw words; "
                                   "the rest (layout, noneHeaders, records, block numbers) is forge PqzStateVectors.t.sol's "
                                   "(test_noneHeaderRows reads it back) and ua-rs tests/facade_pqz_state.rs's"}
 

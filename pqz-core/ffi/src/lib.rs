@@ -49,6 +49,8 @@ const _: () = assert!(!PQZH || pqz_stmt::HAS_PQZH, "feature pqzh at a set withou
 pub mod fixture;
 #[cfg(feature = "prove")]
 pub mod memo;
+#[cfg(feature = "prove")]
+pub mod opening;
 #[cfg_attr(not(feature = "pqzh"), path = "pqzh_none.rs")]
 pub mod pqzh;
 pub mod pqzl;

@@ -185,6 +185,10 @@ int pqz_enc_seed_win (const uint8_t *const pks[], unsigned int npk, const uint8_
    (PQZ_TXM_LPG (A) legs per group), then (group 0) pk_f, then the group's auditor copies at windows 0, 1, ... (the
    leg's position in its group), in that order. Pure hashing: no pqz_init needed. */
 void pqz_enc_group_seed (const uint8_t seed_enc[32], unsigned g, uint8_t out[32]);
+/* Opening tokens (spec K3-4, split randomness): the leg seed SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) ||
+   to_ua || pkt_hash)[0..32), pkt_hash = keccak256(pk_t); pqz_enc_seed with recipients pk_t, then pk_a encrypts the
+   leg from it, pqz_enc_seed of pk_f alone from seed_enc the sender's own v_f. Pure hashing: no pqz_init needed. */
+void pqz_enc_leg_seed (const uint8_t seed_enc[32], const uint8_t to_ua[32], const uint8_t pkt_hash[32], uint8_t out[32]);
 /* Dec of ct = u || v: M_i = round(w_i / Delta), noise_i = w_i - Delta M_i; value = sum M_i 16^i (the caller's) */
 int pqz_dec (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16],
              int64_t noise[16]);

@@ -235,6 +235,23 @@ pqz_enc_group_seed (const uint8_t seed_enc[32], unsigned g, uint8_t out[32])
   stream_clear (&b);
 }
 
+/* leg seed of an opening token (spec K3-4): SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) || to_ua ||
+   pkt_hash)[0..32), pkt_hash = keccak256(pk_t) (the caller's) */
+void
+pqz_enc_leg_seed (const uint8_t seed_enc[32], const uint8_t to_ua[32], const uint8_t pkt_hash[32], uint8_t out[32])
+{
+  static const uint8_t z4[4] = { 0, 0, 0, 0 };
+  bits_t b;
+  shake256_init (b.st);
+  shake256_absorb (b.st, (const uint8_t *)"SCAAS-PQZ-ENC-LEG-V1", 20);
+  shake256_absorb (b.st, seed_enc, 32);
+  shake256_absorb (b.st, z4, 4);
+  shake256_absorb (b.st, to_ua, 32);
+  shake256_absorb (b.st, pkt_hash, 32);
+  shake256_squeeze (b.st, out, 32);
+  stream_clear (&b);
+}
+
 int
 pqz_dec (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16], int64_t noise[16])
 {
