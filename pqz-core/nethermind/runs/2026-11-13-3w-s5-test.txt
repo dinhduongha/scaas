@@ -1,0 +1,20 @@
+pqz-3w-fix S5 (review 3w T-16, T-18, T-19, T-21, T-38, T-39): the plugin tests at the fix tree, 2026-11-13.
+run-tests.sh in the pinned SDK image (Ubuntu 26.04.1, OpenSSL 3.5.5, SDK 10.0.402), set n2304-kmax4096, under scripts/capped.
+Full output in the git-ignored runs/2026-11-13-3w-s5-*.log.
+
+Library under test: libpqz_ffi.so and the fault-hook library built (host cargo, --release --offline) from
+`git archive cd68fe6a` (the branch head before S5, without the S2/S3 work in progress), corpus from the same tree
+(877 inputs: 43 honest, 795 negative, 30 flip, 8 fee0, 1 selftest). Library sha256 15cbf49a…a002 (a host build, not the
+Dockerfile's reproducible one; the per-set ExpectedLibrarySha256 pins are not rebuilt here, see T-19 in the triage).
+
+step | commit | rc | counts
+fix tree | ce196670 (plugin sources = b8d6363a) | 0 | 56/56 passed
+mutant A: MlDsa.Verify without the non-crypto catch | 39ef4bad - catch | 1 | 55/56; Another_exception_is_a_node_fault: exit 134 (unhandled), expected 120
+mutant B: AddTransitions skips only timestamp 0 | b8d6363a with `> 0` | 1 | 55/56; A_schedule_at_a_nonzero_genesis_timestamp_is_no_transition: transitions < null, 500000, 1000000 >
+probe C: PqzReleaseSpec without the IReleaseSpec.Precompiles / IsPrecompile override | 39ef4bad + T-38 - override | 0 | 56/56 (the override is unneeded; removed in b8d6363a)
+Calibrate build (T-18, compile only, not run) | ce196670 | 0 | 0 warnings
+
+New tests: MlDsaTests.Another_exception_is_a_node_fault (Harness child `mldsa-fault`: PQZ-NODE-FAULT ML-DSA-65
+InvalidOperationException: seam …, exit 120), SpecTests.A_schedule_at_a_nonzero_genesis_timestamp_is_no_transition.
+Removed: the in-process `Assert.Throws<InvalidOperationException>` of A_cryptographic_exception_is_the_failure_word (an
+exception other than CryptographicException now exits the process).
