@@ -22,8 +22,21 @@ test/modules | this | 0 | 12 suites, 35 passed (out/t66b-legacy built here)
 test/{BlsKat,ExpectRevertLint,FeePolicy,HashToCurve,MultiSig} | this | 0 | 5 suites, 29 passed
 test/factory, confidential, fork, p6f, vectors | this | 0 | no suite runs without its env
 isolate test/ua/{UAGas,UARegistryGroups} | this | 0 | 2 suites, 22 passed
-size gate | this | 0 after rows moved | UARegistry 31,134; UARegistryAuxLib 26,652; UARegistryCoreLib 33,729
-at-set n2048-kmax1024 PqzScopedKeys | this | 0 | 34 passed (UA8 at the other sets: NOT RUN, paused)
+size gate | this | 0 after rows moved | UARegistry 31,134; UARegistryAuxLib 26,652; UARegistryCoreLib 33,729 (library notice
+    line 33,903, T-1 35,694; owner 2026-11-13: "UARegistryCoreLib => chỉ khi vượt giới hạn mới báo. Vượt cảnh báo không sao."
+    — report only past the limit, passing the notice line is fine)
+--- other sets (script/pqz/at-set.sh <set>, one run at a time, PqzSet.sol restored after each; the set-sensitive tests this
+    step touches: test/ua/{UARegistryUA8,PqzScopedKeys,UAStoreLayout}, test/governance/{PlusZero,SelectorAudit},
+    test/pqz/invariant/ProofPathInvariants) ---
+atset n2048-kmax1024 | this | 1 | 14 suites, 152 passed, 4 failed: UARegistryUA8 88/88, PqzScopedKeys 34/34, UAStoreLayout 2/2,
+    SelectorAudit Plain 4/4 + Zether 2/2, PlusZero Plain 8/8 + Zether 8/8 + Router 2/2, HookSeats Plain 2/2 + Zether 2/2
+atset n2560-kmax16384 | this | 1 | the same: 152 passed, 4 failed
+atset n2816-kmax65536 | this | 1 | the same: 152 passed, 4 failed
+  The 4 failures at each other set are setUp() UAPqzProbe() of the PQZ-fixture suites (HookSeatsPqz, PlusZeroPqz,
+  SelectorAuditPqz, ProofPathInvariants): step 2a (2e1a28b4) moved the proofSystemIds in pqz-core/params/sets/<set>/PqzSet.sol
+  and left SELFTEST / PROBE_PQZL at 0 until step 2 regenerates the vectors, so PqzKeyVerifier refuses its probe at deploy.
+  Not this step's code; they re-run when the vectors land. No gas row was over its pin at any set: the other-set UA8 rows
+  moved by the default-set delta in 954126d1 hold (UARegistryUA8 88/88 at every set), no GAS_REPIN needed.
 mutants (21, scratch script) | this | all red | expiry, msig-class2, version, length-per-scope, marker read/write, popHash zero,
   openKem presence / bool / short / word index, class, chainUid, proof verify / owner / purpose, pop hash, never-down,
   eligible-length, portable purpose (CoreLib), current read (registry face)
