@@ -16,7 +16,7 @@ import {MockERC20} from "../../test/helpers/Mocks.sol";
 ///         real admin's). `withdraw` of an ERC-20 and of the native coin on both branches (the rescuer with `to` != 0 pays
 ///         `to`; anyone else, the admin, or `to` == 0 pays the rescuer); `setRescuer` and `rotateAdmin` by the admin's
 ///         EIP-712 signature, each submitted by another key; the refusals listed for `coverage.py neg`. CTR-GOV-26: a stray
-///         balance on the chain singletons (the Step 5 factory and GovernanceRouter) and on a DEX made here with `rescueTo`
+///         balance on the chain singletons (the Step 5 factory, GovernanceRouter, UARegistry, RelayFeeRouter) and on a DEX made here with `rescueTo`
 ///         0, swept by anyone's `rescue(asset)` into this vault. UNAUDITED.
 contract Rescue is OnchainBase {
     uint256 constant G = 1_000_000;
@@ -53,26 +53,28 @@ contract Rescue is OnchainBase {
         _book(t, "MockERC20");
     }
 
-    /// CTR-GOV-26: 1000 of the token sent to the factory, the router and a new DEX (its puller's `rescueTo` 0: the vault);
-    /// key 3 (anyone) sweeps each by `rescue(t)`; the vault gains 3000.
+    /// CTR-GOV-26: 1000 of the token sent to the factory, the governance router, the registry, the relay fee router and a
+    /// new DEX (its puller's `rescueTo` 0: the vault); key 3 (anyone) sweeps each by `rescue(t)`; the vault gains 5000.
     function _singletons() internal {
         OpenFactory f = OpenFactory(_dep("token_factory"));
         address gr = _dep("governance_router");
         _book(address(f), "OpenFactory");
         _book(gr, "GovernanceRouter");
+        _book(_dep("ua_registry"), "UARegistry");
+        _book(_dep("relay_fee_router"), "RelayFeeRouter");
         bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, address(0x7EA5), false, 0, address(0), 0, 0));
         vm.broadcast(k1);
         address d = f.createDex(1, cfg, _salt("rescue-dex"));
         _book(d, "SCaaSDex");
-        address[3] memory xs = [address(f), gr, d];
+        address[5] memory xs = [address(f), gr, _dep("ua_registry"), _dep("relay_fee_router"), d];
         uint256 b = IERC20(t).balanceOf(address(V));
-        for (uint256 i; i < 3; ++i) {
+        for (uint256 i; i < 5; ++i) {
             vm.broadcast(k1);
             IERC20(t).transfer{gas: G}(xs[i], 1000);
             vm.broadcast(k3);
             IRescuable(xs[i]).rescue{gas: G}(t);
         }
-        require(IERC20(t).balanceOf(address(V)) == b + 3000, "the singletons' strays reach the vault");
+        require(IERC20(t).balanceOf(address(V)) == b + 5000, "the singletons' strays reach the vault");
     }
 
     /// Both branches, ERC-20 and native: the balance that rises is checked (never the sender's, which pays gas).

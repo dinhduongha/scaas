@@ -64,7 +64,7 @@ export MATRIX_OUT=$OUTD
 mkdir -p "$OUTD"
 [ -f "$OUTD/coverage.json" ] || cp runs/2026-11-10-ua-mtx-merge-t66b-step5b/coverage.json "$OUTD/coverage.json"
 LOG=$OUTD/matrix-$tgt.log
-GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers rescue views wraplimits}
+GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers pqchat rescue views wraplimits}
 T=$(mktemp -d)
 A= CP= P= STAGE=setup
 CS=$(cd ../../pqz-core/nethermind/chain && pwd)
@@ -265,6 +265,10 @@ if [ -n "$SCOPE" ]; then
       step "/$g" "" "" ../../scripts/capped forge build "script/onchain/$G.s.sol" --out "out/onchain-$g" \
         --cache-path "cache/onchain-$g" || fail "forge build $G.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
+    pqchat)
+      step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqChat.s.sol --out out/onchain-pqchat \
+        --cache-path cache/onchain-pqchat || fail "forge build PqChat.s.sol"
+      say "/$g" "compiled (${SECS}s)" ;;
     zether)
       step "/$g" "" "" ../../scripts/capped env FOUNDRY_OUT=out/onchain-zether FOUNDRY_CACHE_PATH=cache/onchain-zether \
         forge build script/ZetherE2E.s.sol script/onchain/ZetherMore.s.sol script/onchain/build/ZetherRegE2E.s.sol \
@@ -290,6 +294,11 @@ for g in $GROUPS; do
     [ "$g" != tokens ] || { m=200; f=--ffi; }  # tokens: the ML-DSA-65 keys and signatures by node (vm.ffi)
     step "/$g" "$RPC" "$ADDRS" env ONCHAIN_GAS_MULTIPLIER="${ONCHAIN_GAS_MULTIPLIER:-$m}" \
       sh script/onchain/run.sh "$tgt" "$G" --tc "$G" $f || r=1 ;;
+  # PqChat (plan 3c T95): its release from the deploy (DEPLOY_PQCHAT) or made by the script with the deployer key; the
+  # ML-DSA-65 members' keys and signatures by node (vm.ffi)
+  pqchat)
+    step "/$g" "$RPC" "$ADDRS" env ONCHAIN_GAS_MULTIPLIER="${ONCHAIN_GAS_MULTIPLIER:-130}" \
+      sh script/onchain/run.sh "$tgt" PqChat --tc PqChatOnchain --ffi || r=1 ;;
   zether)
     step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" PRIVATE_KEY="$ONCHAIN_K1" sh script/onchain/zether.sh || r=1 ;;
   pq|pqoff)
