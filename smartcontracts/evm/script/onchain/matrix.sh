@@ -62,9 +62,11 @@ tgt=${2:?target}
 OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix}
 export MATRIX_OUT=$OUTD
 mkdir -p "$OUTD"
-[ -f "$OUTD/coverage.json" ] || cp runs/2026-11-10-ua-mtx-merge-t66b-step5b/coverage.json "$OUTD/coverage.json"
+# the entry list (coverage.py gen at pqz-three-keys step 7c: the scoped registry, mtxRollOverSigned, pqzSkipped, the moved
+# PqzTransferArgs selectors), never an earlier list
+[ -f "$OUTD/coverage.json" ] || cp runs/2026-11-14-pqz-three-keys-7c/coverage.json "$OUTD/coverage.json"
 LOG=$OUTD/matrix-$tgt.log
-GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers pqchat rescue views wraplimits}
+GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers pqchat rescue pqzkeys views wraplimits}
 T=$(mktemp -d)
 A= CP= P= STAGE=setup
 CS=$(cd ../../pqz-core/nethermind/chain && pwd)
@@ -265,6 +267,10 @@ if [ -n "$SCOPE" ]; then
       step "/$g" "" "" ../../scripts/capped forge build "script/onchain/$G.s.sol" --out "out/onchain-$g" \
         --cache-path "cache/onchain-$g" || fail "forge build $G.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
+    pqzkeys)
+      step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqzKeys.s.sol --out out/onchain-pqzkeys \
+        --cache-path cache/onchain-pqzkeys || fail "forge build PqzKeys.s.sol"
+      say "/$g" "compiled (${SECS}s)" ;;
     pqchat)
       step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqChat.s.sol --out out/onchain-pqchat \
         --cache-path cache/onchain-pqchat || fail "forge build PqChat.s.sol"
@@ -322,6 +328,13 @@ for g in $GROUPS; do
       step "/$g" "$RPC" "$ADDRS" env ONCHAIN_GAS_MULTIPLIER="${ONCHAIN_GAS_MULTIPLIER:-130}" sh script/onchain/rescue.sh "$tgt" || r=1
     fi ;;
   views) step "/$g" "$RPC" "" python3 -I script/onchain/coverage.py views "$tgt" "$RPC" || r=1 ;;
+  # the PQZ three-key model (spec 2026-11-13-pqz-three-keys §15.2): two forge runs, the blocks between mined (local only)
+  pqzkeys)
+    if [ "$tgt" != local ]; then
+      res="not run" why="local only: the run mines the blocks its rollovers wait for"
+    else
+      step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" sh script/onchain/pqzkeys.sh || r=1
+    fi ;;
   # last: it moves the chain's clock by two days (local only; its own outputs, wraplimits.sh)
   wraplimits)
     if [ "$tgt" != local ]; then
