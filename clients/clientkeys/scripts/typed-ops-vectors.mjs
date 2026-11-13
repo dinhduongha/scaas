@@ -83,6 +83,8 @@ const COMMIT_REVEAL = { sealedMemo: '0x' };  // a BUNDLE form carries no memo
 const ROW = {
   UAUnwrap: { wrapped: 1000000, minOut: 990000, recipient: '0x0000000000000000000000000000000000000B0B' },
   UAShield: { toUA: ZETHER_UA, amount: 10 },
+  // CTR-PQZ-41: the skip marks strictly ascending, as the token and the node require (the generic filler gives two decreasing)
+  PqzRollOver: { skip: [92000, 155000] },
   // the delegate a 32-byte id (Q6, CTR-ACC-12), the address of today's row zero-padded
   UASetMandate: { token: '0x5ca00000000000000000000000000000000000b1', delegate: padId('0x00000000000000000000000000000000000000d2'),
     maxPerPayment: 7, maxPerPeriod: 9, periodSeconds: 86400, expiry: 1900000000 },
@@ -130,6 +132,9 @@ ROW.UAPqzTransferSingle = { args: COMMIT_REVEAL };
 const RELEASE_3H = new Set(['UAPqzTransferSingle', 'UAPqzTransferSingleCompact', 'UAPqzTransfer', 'UAPqzTransferCompact', 'UAPqzUnshield',
   'UAPqzUnshieldUnwrap']);
 for (const n of RELEASE_3H) ROW[n] = { ...ROW[n], mode: 0, fee: 0 };
+// The three-key model (CTR-PQZ-38, -40, -41): `PqzTransferArgs` gains `uFrom` and the two openings (the two single-transfer rows
+// move), and the holder's `PqzRollOver` is new; those rows are tagged `"release": "three-keys"`.
+const RELEASE_3K = new Set(['UAPqzTransferSingle', 'UAPqzTransferSingleCompact', 'PqzRollOver']);
 // The regulated controls (regulated-kinds spec §3.1, ua-mtx-merge T34): values a kind-8 token at `target` takes at
 // REG_NOW (TypedOps.t.sol's regulated rows): one record runs through them, recorded by `UARecordOrder`, backing `UAFreeze`,
 // moved under by `UAForceTransfer`, ended by `UARevokeOrder`; `UAOperatorTransfer` moves the record's subject's units.
@@ -226,7 +231,7 @@ function extraOf(name, td, at) {
 const ops = {};
 for (const [name, op] of Object.entries(TYPED_OPS)) {
   // a per-kind row of one struct name (group 3g: `UAPqzRollOver`) names its EIP-712 primary type
-  const row = { ...(op.primary !== name ? { primaryType: op.primary } : {}), ...(RELEASE_3H.has(name) ? { release: '3h' } : {}),
+  const row = { ...(op.primary !== name ? { primaryType: op.primary } : {}), ...(RELEASE_3K.has(name) ? { release: 'three-keys' } : RELEASE_3H.has(name) ? { release: '3h' } : {}),
     typeString: op.typeString, typehash: op.typehash, on: op.on, types: op.types, domains: {} };
   const message = sample(name, op);
   const relay = name === 'UARelayFee' ? { token: CONTRACT.token, chainId: contexts.A.chainId, chainUid: contexts.A.chainUid, router: ROUTER,
@@ -271,7 +276,9 @@ const out = {
     + 'proofs or ciphertexts. `extra`: what the entry takes unsigned (`meta`: the `PayMeta` a pay entry takes last, pay-meta-tax T41; '
     + '`pqzVerdict`: the `PqzSignedVerdict` a PQZ entry takes last, after the signature, the empty one of a PRECOMPILE token, group 3f). '
     + '`release: "3h"` (group 3h, pqz-proof-path spec §9.3, C9): a row of a format 3h moved (the six PQZ debits gain `ownTag`); those rows '
-    + 'leave the relayer and the fee recipient unbound at fee 0 (mode 0), 0 in the message and the calldata.',
+    + 'leave the relayer and the fee recipient unbound at fee 0 (mode 0), 0 in the message and the calldata. `release: "three-keys"` '
+    + '(spec 2026-11-13 pqz-three-keys, CTR-PQZ-38, -40, -41): `PqzTransferArgs` gains `uFrom` and the two `PqzOpening`s (the two single '
+    + 'transfers, fee 0 and unbound as their 3h rows), `PqzRollOver` is new (the holder\'s signed rollover, purpose `zether-auth`).',
   version: 1, context: 'A', key: { private: hex(be(nativeSk, 32)), address: FROM, ua: hex(nativeUa) }, ops,
 };
 mkdirSync(OUT, { recursive: true });

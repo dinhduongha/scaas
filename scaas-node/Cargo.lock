@@ -4200,6 +4200,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "curve25519-dalek",
  "ed25519-dalek",
+ "hmac 0.12.1",
  "k256",
  "ml-dsa",
  "p256",

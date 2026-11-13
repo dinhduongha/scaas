@@ -541,7 +541,9 @@ modules 28.7–31.4 KB; `PqzTransferLib` 24,731 B; ceiling 64 KiB. The changes (
 will pass the notice line. Rule for the build: put bodies in the linked libraries first (`PqzStateLib`,
 `PqzTransferLib`; `LinkClosure` release pins move), measure, and **stop and report sizes to the owner before any
 module split or size lever**. `size-baseline.json` moves only with the reason. `UARegistry` / `UARegistryLib` grow by
-the scoped records: measured in the same report. `OpenFactory` gains one config check.
+the scoped records: measured in the same report. `OpenFactory` gains no config check (owner 2026-11-13, decisions.md
+CTR-PQZ-37): the token's `init` already refuses every invalid key-class / opening combination, and `OpenFactory` has
+about 246 B left before its line.
 
 ## 13. Byte formats that move (all in one round)
 

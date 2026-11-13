@@ -2,7 +2,10 @@
 // own `types` and `message`, with no code of src/: test/typed-ops.test.js (its own decoder) and scripts/typed-ops-cast-check.mjs
 // (`cast`) compare decoded calldata with this, so a swapped parameter cannot pass as a round trip. Group 3h: the PQZ args' `ownTag`.
 const G = (p) => [p.x0, p.x1, p.y0, p.y1];
-const pqzArgsSingle = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt, t.ownTag, t.u, t.vTo, t.vFrom, t.vAuditor, t.sealedMemo];
+// the three-key model (CTR-PQZ-38, -40): `uFrom` after `vAuditor`, the two openings `(mlkemCt, x25519Eph, sealedSeed)` last
+const pqzOpening = (o) => [o.mlkemCt, o.x25519Eph, o.sealedSeed];
+const pqzArgsSingle = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt, t.ownTag, t.u, t.vTo, t.vFrom,
+  t.vAuditor, t.uFrom, t.sealedMemo, pqzOpening(t.openingTo), pqzOpening(t.openingAuditor)];
 const pqzArgsMulti = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.decoyFee, t.salt, t.ownTag, t.u,
   t.legs.map((l) => [l.ua, l.v, l.vAuditor]), t.vFrom, t.sealedMemo];
 const pqzBurn = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.ownTag, t.u, t.vFrom];
@@ -73,6 +76,8 @@ const OTHER = {
   CancelUAWrapOrder: (m, s) => [tradeTuple(asTrade(m.order)), ['0x', s, []]],
   CancelDexOrder: (m, s) => [[[m.order.sellToken, tradeTuple(m.order.order)]], [s]],
   ZetherRollOver: (m, s) => [m.ua, m.expectedPendingSeq, m.validUntilBlock, ['0x', s, []]],
+  // CTR-PQZ-41: the call takes the signed n and skip; `rollSeq`, `rolled`, `entriesHash` and `chainUid` the contract reads
+  PqzRollOver: (m, s) => [m.ua, m.keyVersion, m.n, m.skip, m.validUntilBlock, ['0x', s, []]],
   ZetherSetRollOverMode: (m, s) => [m.ua, m.mode, m.validUntilBlock, ['0x', s, []]],
 };
 const ACCOUNT = new Set(['AddKey', 'RemoveKey', 'RotateKey', 'SetGuardian', 'CancelRecovery']);

@@ -190,7 +190,7 @@ contract Tokens is OnchainBase {
 
     // ------------------------------------------------------------------ token configs
 
-    function _label(uint8 kind) internal pure returns (string memory) {
+    function _label(uint8 kind) internal pure virtual returns (string memory) {
         if (kind == 0) return "NormalToken";
         if (kind == 1) return "WrappedToken";
         if (kind == 2) return "NormalZetherToken";
@@ -209,7 +209,7 @@ contract Tokens is OnchainBase {
         return kind >= 8;
     }
 
-    function _base(uint8 kind, string memory sym) internal view returns (IFactoryToken.TokenConfig memory c) {
+    function _base(uint8 kind, string memory sym) internal view virtual returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol, c.decimals) = (string.concat("Onchain ", _label(kind)), sym, 6);
         c.admin = _pad(a1);
         if (_zether(kind)) c.conf = IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 2, 0, 0, 0, 0, 0, false, 0, 0, 0, false, false);
@@ -223,7 +223,7 @@ contract Tokens is OnchainBase {
         c.roles.issuer = _pad(a1);
     }
 
-    function _create(uint8 kind, IFactoryToken.TokenConfig memory c, string memory what) internal returns (address x) {
+    function _create(uint8 kind, IFactoryToken.TokenConfig memory c, string memory what) internal virtual returns (address x) {
         vm.broadcast(k1);
         x = f.createToken(IOpenFactory.TokenKind(kind), 1, abi.encode(c), _salt(what));
         _book(x, _label(kind));
@@ -248,7 +248,7 @@ contract Tokens is OnchainBase {
         _gov();
     }
 
-    function _normalOnly() internal {
+    function _normalOnly() internal virtual {
         vm.startBroadcast(k1);
         NormalToken(t).mint(a1, 1_000);
         NormalToken(t).mintToUA(uaD, 100);
@@ -627,8 +627,9 @@ contract Tokens is OnchainBase {
         vm.startBroadcast(k1);
         n.grantRole(mb, _pad(a2), IMetaTx(address(n)).chainUid());
         vm.stopBroadcast();
+        bytes32 w = IMetaTx(address(n)).chainUid(); // read before the broadcast (no staticcall after `vm.broadcast`)
         vm.broadcast(k2);
-        n.renounceRole(mb, IMetaTx(address(n)).chainUid());
+        n.renounceRole(mb, w);
         vm.startBroadcast(k1);
         n.grantRole(mb, _pad(a2), IMetaTx(address(n)).chainUid());
         n.revokeRole(mb, _pad(a2), IMetaTx(address(n)).chainUid());

@@ -475,8 +475,10 @@ contract PqzPairsTest is PqzNamedBase {
         // proof-carrying selectors): -> 0xd8bbf337; T60: `proofStore()`: -> 0x191d0352; T61: `setProofStore`: -> 0x3fef18ca; round 3t
         // (CTR-PQZ-36): `setVerifierFee(uint64)` 0xe790fb8f: -> 0xd87fe345 (= 0x3fef18ca ^ 0xe790fb8f; `pqzVerifyConfig()`'s return
         // does not enter the id); fix3 CTR-GOV-28: the four verifier setters take `chainUid_` (`pqzSetVerifier(bytes32,bytes32)`,
-        // `pqzCancelVerifier(bytes32)`, `pqzRevokeVerifier(bytes32)`, `setVerifierFee(uint64,bytes32)`): -> 0x757d0753
-        assertEq(type(IPqzToken).interfaceId, bytes4(0x757d0753), "IPqzToken");
+        // `pqzCancelVerifier(bytes32)`, `pqzRevokeVerifier(bytes32)`, `setVerifierFee(uint64,bytes32)`): -> 0x757d0753; the
+        // three-key model (CTR-PQZ-38, -40, -41): `PqzTransferArgs` + `uFrom` and the openings (the two single-transfer
+        // selectors), `mtxRollOverSigned`, `pqzSkipped`: -> 0x0eb5f5eb
+        assertEq(type(IPqzToken).interfaceId, bytes4(0x0eb5f5eb), "IPqzToken");
         assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector, "IPqzWrappedToken");
     }

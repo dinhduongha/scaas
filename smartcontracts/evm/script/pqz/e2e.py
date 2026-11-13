@@ -1097,9 +1097,11 @@ def verdict_rows():
     test/pqz/PqzVerdictVectors.t.sol): the typehash, `PURPOSE_PQZ_VERDICT`, the token's domain separator, every row's struct
     hash and digest, and `ecdsa` by the vector's EOA key over a row's `uaAuthDigest` = its signature. Skipped, with a note,
     while the file is not written."""
-    path = os.path.join(ROOT, "smartcontracts/vectors/pqz/verdict.json")
+    # T-05: the forge writer's file of the run's set, in that set's directory (the n2048-kmax1024 one at pqz/)
+    rel = "smartcontracts/vectors/pqz/" + ("" if K.SET == "n2048-kmax1024" else K.SET + "/") + "verdict.json"
+    path = os.path.join(ROOT, rel)
     if not os.path.exists(path):
-        log("note  smartcontracts/vectors/pqz/verdict.json not written yet (WRITE_VERDICT_VECTORS=true forge test "
+        log(f"note  {rel} not written yet (WRITE_VERDICT_VECTORS=true forge test "
             "--match-contract PqzVerdictVectorsTest): the verdict digest check skipped")
         return
     V = json.load(open(path))

@@ -373,9 +373,11 @@ contract GovProofBitTest is PqzOffchainBase {
         }
     }
 
-    // keccak256(abi.encode(mtxSelectors().selectors)) at 6dbb5d3d (T60), before bit 24: 10 entries on 4 and 12, 18 on 5 and 13
-    bytes32 internal constant MTX_SELECTORS_4 = 0xf6b2b0249c9faf7bac2d7443099d69a3b581d327aea7bee34feb215a043327e7;
-    bytes32 internal constant MTX_SELECTORS_5 = 0x2138d643ab3bd760acfaa297443ccb3bac0b302e96c3063baf82c791e828687e;
+    // keccak256(abi.encode(mtxSelectors().selectors)) at 6dbb5d3d (T60), before bit 24: 10 entries on 4 and 12, 18 on 5 and 13;
+    // the three-key model (CTR-PQZ-40, -41): the two single-transfer selectors move (`PqzTransferArgs`) and `mtxRollOverSigned`
+    // is appended, 11 / 19: 4 0xf6b2b024… -> 0x7af66375…, 5 0x2138d643… -> 0xeb88d7e0…
+    bytes32 internal constant MTX_SELECTORS_4 = 0x7af66375a489083c22331c992edb126d2234e82ee5f26d10915bf2370531619d;
+    bytes32 internal constant MTX_SELECTORS_5 = 0xeb88d7e0190996fd39d24638f13302395d2454b08ccdf39841ec4cbd676940df;
     bytes32 internal constant MTX_SELECTORS_12 = MTX_SELECTORS_4;
     bytes32 internal constant MTX_SELECTORS_13 = MTX_SELECTORS_5;
 }

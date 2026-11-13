@@ -1369,3 +1369,14 @@ fn check_group_kinds() {
     }
     assert_eq!(n, 20);
 }
+
+/// T-13 (KV-9): one case per pair kind (duplicate leg, leg = pk_f, leg = pk_a), each naming the later UA; the control passes.
+#[test]
+fn t13_pqz_keys_distinct() {
+    let (f, t1, t2, a) = ([0xf1u8; 32], [0xa1u8; 32], [0xa2u8; 32], [0xadu8; 32]);
+    let (kf, k1, k2, ka) = ([1u8; 64], [2u8; 64], [3u8; 64], [4u8; 64]);
+    assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &k1[..]), (t2, &k2[..]), (a, &ka[..])]), Ok(()));
+    assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &k1[..]), (t2, &k1[..]), (a, &ka[..])]), Err(t2), "duplicate leg");
+    assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &kf[..])]), Err(t1), "leg = pk_f");
+    assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &k1[..]), (a, &k1[..])]), Err(a), "leg = pk_a");
+}

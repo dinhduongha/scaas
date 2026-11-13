@@ -63,7 +63,9 @@ const NESTED: &[(&str, &str)] = &[
     ("ZetherBurn", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom"),
     // group 3g (KV-8): every PQZ debit names its key version after `fromUA`; group 3h (pqz-proof-path spec §3.2, §10): the holder's
     // `ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms), a named field like every other
-    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
+    // the three-key model (CTR-PQZ-38, -40): `uFrom` after `vAuditor`, the two sealed openings last (all empty without the opening)
+    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor"),
+    ("PqzOpening", "bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed"),
     ("PqzLeg", "bytes32 ua,bytes v,bytes vAuditor"),
     ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
     ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom"),
@@ -114,7 +116,7 @@ const NESTED: &[(&str, &str)] = &[
     ("TokenRoles", "bytes32 minter,bytes32 rateAdmin,bytes32 guardian,bytes32 issuer,bytes32 compliance"),
     ("TokenLeg", "address underlying,uint256 num,uint256 den"),
     ("TokenRate", "uint32 rateDelay,uint16 maxRateStepBps"),
-    ("ConfidentialConfig", "bytes auditorKey,uint256 shieldScale,uint256 maxShielded,uint256 confidentialFee,uint8 disclosureMode,uint8 auditorMode,uint256 minDecoyFee,uint8 pqzVerifyMode,bytes32 pqzVerifierUA,bool pqzVerifierFixed,uint8 proofStore,uint64 verifierFee,uint64 verifierFeeMax"),
+    ("ConfidentialConfig", "bytes auditorKey,uint256 shieldScale,uint256 maxShielded,uint256 confidentialFee,uint8 disclosureMode,uint8 auditorMode,uint256 minDecoyFee,uint8 pqzVerifyMode,bytes32 pqzVerifierUA,bool pqzVerifierFixed,uint8 proofStore,uint64 verifierFee,uint64 verifierFeeMax,bool pqzOwnKey,bool pqzOpening"),
     ("RegulatedParams", "address complianceRegistry,uint64 requiredFlags,uint64 deniedFlags,bytes32 termsHash,bytes32 taxRecipient"),
     ("TokenConfig", "string name,string symbol,uint8 decimals,uint256 features,uint256 lockedFeatures,bytes32 admin,TokenRoles roles,uint256 initialSupply,address initialHolder,TokenLeg[] legs,TokenRate rate,ConfidentialConfig conf,uint64 grantDelay,address rescueTo,uint256 maxSupply,RegulatedParams reg"),
     ("DexConfig", "bytes32 admin,uint32 relayerSharePpm,address treasury,bool listedOnly,uint64 grantDelay,address rescueTo,uint256 features,uint256 lockedFeatures"),
@@ -209,6 +211,9 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("CancelUAWrapOrder", "mtxCancelOrder", T, "UAWrapOrder order", "wrap!order @"),
     ("CancelDexOrder", "mtxCancelOrders", D, "DexOrder order", "[order] [@]"),
     ("ZetherRollOver", "mtxRollOverSigned", Z, "bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock", "ua expectedPendingSeq validUntilBlock @ua"),
+    // CTR-PQZ-41: the holder's rollover with skip marks on an opening token; the call takes the signed n and skip, the token reads
+    // `rollSeq`, `rolled`, `entriesHash` and `chainUid` itself
+    ("PqzRollOver", "mtxRollOverSigned", P, "bytes32 ua,uint64 keyVersion,uint64 rollSeq,uint64 rolled,uint64 n,uint64[] skip,bytes32 entriesHash,uint64 validUntilBlock,bytes32 chainUid", "ua keyVersion n skip validUntilBlock @ua"),
     ("ZetherSetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", "ua mode validUntilBlock @ua"),
     ("PqzAuth", "", P, "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", ""),
     // the `GovernanceRouter`'s closed table (spec §3.2, ua-mtx-merge T7): `mtx<Op>`, `target` the first op word, fee mode `NONE`
@@ -312,6 +317,9 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     // group 3g (KV-1): the PQZ key record of `version` (0: the key registered without one, R2 write-once)
     ("storePqzPop", REG, "bytes32 ua,uint64 version,bytes pqzPop"),
     ("setPqzKey", REG, "bytes32 ua,uint64 version,bytes pqzKey,bytes32 pqzPopHash,UASig sig"),
+    // the three-key model (K3-3, CTR-UA-43): a scoped record (scope 0 class 2, the token class 3) and its stored `R_REG` proof
+    ("setPqzScopedKey", REG, "bytes32 ua,address scope,uint64 version,bytes pqzKey,bytes32 pqzPopHash,KemKey openKem,uint64 validUntilBlock,UASig sig"),
+    ("storePqzScopedPop", REG, "bytes32 ua,address scope,uint64 version,bytes pqzPop"),
     ("acceptMembership", REG, "bytes32 ua,MemberSig memberSig"),
     ("mtxSettle", D, "Settlement[] s"),
     ("mtxExchange", D, "ExchangePlan p,Interaction[] interactions"),
@@ -663,6 +671,23 @@ fn list_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
     let n = pos(fields, "accounts").map_or(usize::MAX, |i| arr_len(&vals[i]));
     if n == 0 || n > LIST_MAX_BATCH {
         bail!("BAD_PAYLOAD: args.accounts: 1 to {LIST_MAX_BATCH} accounts (ListBatchInvalid)");
+    }
+    Ok(())
+}
+
+/// CTR-PQZ-41 (NODE-JOB-28): the signed rollover's `skip` marks, strictly ascending, at most `ROLL_MAX_ANY` (the largest `ROLL_MAX`
+/// of any set, n2048-kmax1024's 96; the token checks its own set's, the range and that each marks a credit), refused by name
+/// before any simulation.
+const ROLL_MAX_ANY: usize = 96;
+
+fn skip_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let skip: Vec<U256> = pos(fields, "skip").and_then(|i| vals[i].as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_uint().map(|x| x.0)).collect()).unwrap_or_default();
+    if skip.len() > ROLL_MAX_ANY {
+        bail!("BAD_PAYLOAD: args.skip: at most {ROLL_MAX_ANY} marks (RollOverRange)");
+    }
+    if skip.windows(2).any(|w| w[0] >= w[1]) {
+        bail!("BAD_PAYLOAD: args.skip: strictly ascending (SkipRange)");
     }
     Ok(())
 }
@@ -1135,6 +1160,9 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
     }
     if row.name == "UASetAllowed" || row.name == "UASetDenied" {
         list_bounds(&row.fields, &vals)?;
+    }
+    if row.name == "PqzRollOver" {
+        skip_bounds(&row.fields, &vals)?;
     }
     if row.typed {
         normalize(&row.fields, &mut vals, fee_recipient)?;
@@ -1892,7 +1920,8 @@ mod tests {
         // four release approvals, like the creations, left out by vectors()); round 3s (CTR-GOV-24): -> (100, 134, 133), the
         // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: -> (101, 135, 134), the router's `UASetVerifierFee`
         // owner 2026-11-12: -> (102, 136, 135), `UACreateInstance` (its `init_call` the vector's bytes)
-        assert_eq!((structs, domains, calldata), (102, 136, 135), "every row was walked (two creations and the approvals left out by vectors())");
+        // the three-key model (CTR-PQZ-41): -> (103, 137, 136), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
+        assert_eq!((structs, domains, calldata), (103, 137, 136), "every row was walked (two creations and the approvals left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
@@ -1902,10 +1931,12 @@ mod tests {
         // round 3t: -> 104, `UASetVerifierFee`; owner 2026-11-12: -> 106, `UACreateToken`, `UACreateDex` (their vector rows stay out
         // of the walk: filler `initArgs`, `creation_rows_encode_the_named_config`)
         // owner 2026-11-12: -> 107, `UACreateInstance`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 107, "102 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations");
+        // the three-key model (CTR-PQZ-41): -> 108, `PqzRollOver`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 108, "103 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations");
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 32, "the wallet's three flat builders are gone (MD-11 (a))");
+        // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 34, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 
     /// Group 3g (KV-10): the rollover is one row per kind (Zether's form kept; the PQZ one with `keyVersion`, its EIP-712 struct
@@ -1927,6 +1958,26 @@ mod tests {
             o.as_object_mut().unwrap().remove("struct");
             assert_eq!(Op::parse(&o, FEE).unwrap().row.name, name, "{kind}");
         }
+    }
+
+    /// NODE-JOB-28 (spec 2026-11-13-pqz-three-keys §14 item 22): the signed rollover's `skip` at the length and depth bounds:
+    /// 96 ascending marks pass, 97 are refused, as are a descending pair, a repeated mark and a nested array, all by name and
+    /// before any chain read; the vector row itself passes.
+    #[test]
+    fn rollover_signed_skip_bounds() {
+        let v = vectors();
+        let base = op_of("PqzRollOver", "pqz", &v).unwrap();
+        assert_eq!(Op::parse(&base, FEE).unwrap().row.name, "PqzRollOver");
+        let with = |skip: Value| { let mut o = base.clone(); o["args"]["skip"] = skip; Op::parse(&o, FEE) };
+        let marks = |n: u64| Value::Array((0..n).map(|i| json!((10 + 2 * i).to_string())).collect());
+        assert!(with(marks(96)).is_ok(), "ROLL_MAX_ANY marks pass");
+        assert!(with(json!([])).is_ok(), "no mark");
+        for (bad, why) in [(marks(97), "at most 96"), (json!(["7", "5"]), "strictly ascending"), (json!(["5", "5"]), "strictly ascending")] {
+            let e = with(bad).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD: args.skip") && e.contains(why), "{e}");
+        }
+        let e = with(json!([["5"]])).unwrap_err().to_string();
+        assert!(e.starts_with("BAD_PAYLOAD"), "a nested array: {e}");
     }
 
     /// ua-mtx-merge fix (the clientkeys `checkOp` finding, same class): a row whose struct name is not its row name
@@ -2304,8 +2355,11 @@ mod tests {
                 let (env, args, sig) = op_from_calldata(row, &base.data);
                 assert_eq!(env.as_ref(), op.get("envelope"), "{name}");
                 let mut back = args.as_object().unwrap().clone();
+                // signed, not on the wire (the token reads them): Zether's `accSeq` / `modeNonce`; the PQZ rollover's `rollSeq`,
+                // `rolled`, `entriesHash`, `chainUid` (CTR-PQZ-41)
+                let off = if name == "PqzRollOver" { &["rollSeq", "rolled", "entriesHash", "chainUid"][..] } else { &["accSeq", "modeNonce"][..] };
                 for (k, x) in op["args"].as_object().unwrap() {
-                    if k == "accSeq" || k == "modeNonce" {
+                    if off.contains(&k.as_str()) {
                         back.insert(k.clone(), x.clone());
                     }
                 }
@@ -2327,7 +2381,8 @@ mod tests {
                     // a nudge the parser refuses (a mode bit) sends nothing
                     let Ok(m) = moved else { continue };
                     walked += 1;
-                    let digest_only = matches!(row.name, "ZetherRollOver" | "ZetherSetRollOverMode") && m.data == base.data;
+                    // signed, not on the wire: the token reads them (Zether's sequence words; the PQZ rollover's, CTR-PQZ-41)
+                    let digest_only = matches!(row.name, "ZetherRollOver" | "ZetherSetRollOverMode" | "PqzRollOver") && m.data == base.data;
                     assert!(digest_only || (m.typed.struct_hash != base.typed.struct_hash) == (m.data != base.data),
                         "{name}: {l} moved one output only");
                 }

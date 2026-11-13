@@ -11,6 +11,8 @@ sha3 = "0.10"
 k256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa", "schnorr", "hash2curve"] }
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa"] }
 sha2 = "=0.10.9"
+# the three-key model's HKDF-SHA256 (src/pqz3k.rs; the version already in the lockfile)
+hmac = "=0.12.1"
 curve25519-dalek = "4"
 ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["fast"] }
 ark-ff = "0.5"

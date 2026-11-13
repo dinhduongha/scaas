@@ -1001,6 +1001,7 @@ dependencies = [
  "frost-core",
  "frost-secp256k1",
  "hex",
+ "hmac 0.12.1",
  "k256",
  "ml-dsa",
  "p256",

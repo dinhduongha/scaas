@@ -455,11 +455,13 @@ and refusals by name** (owner 2026-11-13; spec `2026-11-13-pqz-three-keys.md` §
 
 - **Key class** is read from the token's `pqzVerifyConfig()` (`pqzOwnKey`, `pqzOpening`); key reads follow the token's scope
   ([CTR-UA-43](../contracts/accounts.md#CTR-UA-43)).
-- **Fields.** An op 1 on an opening token carries `u_from` (hex of `PqzCt.PK` bytes) and `opening_to` / `opening_auditor`, each
-  `{mlkem_ct, x25519_eph, sealed_seed}` (named, never a hex bundle; `opening_auditor` absent when `auditorOn = 0`); on a token
-  without the opening these fields are refused (`BAD_PAYLOAD`). The signed rollover `mtxRollOverSigned` is a row on both relay
-  paths with `key_version`, `n`, `skip: [u64]` (strictly ascending, length ≤ `ROLL_MAX`, bounded decode by length and depth),
-  `entries_hash`, `valid_until_block` and `owner_sig`; the registry rows `setPqzScopedKey` (with the named `open_kem`) and
+- **Fields** (field names as the contract's structs, like every PQZ field: `ownTag`, `vAuditor`). An op 1 on an opening token
+  carries `uFrom` (hex of `PqzCt.PK` bytes) and `openingTo` / `openingAuditor`, each `PqzOpening` `{mlkemCt, x25519Eph,
+  sealedSeed}` (named, never a hex bundle; `openingAuditor` empty when `auditorOn = 0`); on a token without the opening these
+  fields are empty, else the token refuses (`BadPayload`). The signed rollover `mtxRollOverSigned` (row `PqzRollOver`) is a row on
+  both relay paths with `ua`, `keyVersion`, `n`, `skip: [u64]` (strictly ascending, length ≤ `ROLL_MAX`, bounded decode by
+  length and depth), `validUntilBlock` and the holder's `@ua` signature; the token reads `rollSeq`, `rolled`, `entriesHash` and
+  `chainUid` itself; the registry rows `setPqzScopedKey` (with the named `openKem`) and
   `storePqzScopedPop`. `guard.rs`, `CALL_TABLE` and `typed.rs` stay equal to the contract's `mtxSelectors` / `_uaAllowed` in both
   directions. Old hex forms: `HEX_ARGS_REFUSED`.
 - **Refusals.** `ROLLOVER_SIGNED_ONLY`: a public rollover job for an opening token, zero sends; no keeper rollover there.

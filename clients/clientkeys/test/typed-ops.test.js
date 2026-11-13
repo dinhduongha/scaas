@@ -47,6 +47,8 @@ const PLAN = {
   UAPayeeFee: '0x8a3955a6…6a16c7ca', UARelayFee: '0x220269b9…e493e43ea5', UAWrapOrder: '0x2a01cb57…fc04533c',
   CancelUAOrder: '0x47eb46c7…a1eaeba', CancelUAWrapOrder: '0x7679e176…2326d9d', CancelDexOrder: '0xcc35e105…f433c6',
   ZetherRollOver: '0x52e2c8f8…71768b1e', ZetherSetRollOverMode: '0x5f5a4ffa…4d55e09d', PqzAuth: '0x380b0de6…42644e6f',
+  // the three-key model (CTR-PQZ-41): the holder's signed rollover, PqzCore.ROLL_OVER_TYPEHASH (PqzThreeKeys.t.sol's pin)
+  PqzRollOver: '0x1517899d…625c41cb',
   UACancelNonce: '0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54',
   UASetMandate: '0x77cac4912d9b5ea899e4894cd527290f239809543c0a3604b89ef74796d88492',
   UASetPayee: '0xf0fb362dece88eadf659a55ed5c2606877293dbd69f9bb7eba806da921a77dc4',
@@ -60,7 +62,9 @@ const PLAN = {
 
 // Appendix X.4, the nested strings verbatim.
 const E = 'uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient';
-const TA = 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)';
+// the three-key model (CTR-PQZ-38, -40): `uFrom` and the two `PqzOpening`s, the nested type first (sorted)
+const TA = 'PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)'
+  + 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)';
 const LEG = 'PqzLeg(bytes32 ua,bytes v,bytes vAuditor)';
 const MA = 'PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)';
 const BA = 'PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom)';
@@ -175,8 +179,11 @@ test('kept unchanged: the type strings the plan freezes', () => {
 
 test('the table covers every allowlisted entry of every contract, one row per op, and only them', () => {
   const count = (contract, ua) => Object.values(TYPED_OPS).filter((o) => o.envelope && o.ua === ua && o.on.includes(contract)).length;
+  // the three-key model (CTR-PQZ-41): the PQZ kinds' `mtxRollOverSigned` carries the holder's own signature and is relayed on
+  // the generic paths only; its row is the raw `PqzRollOver`, no envelope row
+  const generic = (contract) => (/Pqz/.test(contract) ? 1 : 0);
   for (const [contract, addressN] of Object.entries(ADDRESS_ENTRIES)) {
-    assert.equal(count(contract, false) + count(contract, true), mtxSelectorCount(contract), contract);
+    assert.equal(count(contract, false) + count(contract, true) + generic(contract), mtxSelectorCount(contract), contract);
     assert.equal(count(contract, false), addressN, contract);
   }
   // ua-mtx-merge T11 (MD-7): 112 − 45 retired − the wallet's five address ops (Q6) + its six `UA<Op>` = 68; `UACancelNonce` an
@@ -189,8 +196,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // group 3h T61: + the router's `UASetProofStore` (bit 24): 87, 77
   // group 3l: + the router's `UASetWrapLimits`, `UASetWrapMember`: 89, 79
   // round 3r: + the router's fifteen admin ops of the factory and a compliance registry: 104, 94
-  // round 3s: + the router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`: 107, 97; round 3t: + `UASetVerifierFee`: 108, 98
-  assert.equal(Object.keys(TYPED_OPS).length, 108);
+  // round 3s: + the router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`: 107, 97; round 3t: + `UASetVerifierFee`: 108, 98;
+  // the three-key model: + the raw `PqzRollOver`: 109, 98
+  assert.equal(Object.keys(TYPED_OPS).length, 109);
   assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 98);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
@@ -600,7 +608,8 @@ test('an unbound relayer or feeRecipient is signed as 0 and shown as unbound: ev
     relayer: ZERO, feeRecipient: ZERO } }))));
   // group 3h (plan T59): the six PQZ debit rows of release 3h leave both open (mode 0x20), given a non-zero relayer above; every
   // other row binds its relayer (the open case of a token op is the mode-0 burn above)
-  const open3h = rows().filter(([, x]) => x.release === '3h').length;
+  // the three-key model: the two single transfers moved again (release "three-keys"), open as before
+  const open3h = rows().filter(([, x]) => x.release === '3h' || (x.release === 'three-keys' && x.message.mode !== undefined)).length;
   assert.equal(open3h, 6, 'the six 3h rows');
   // round 3r: `UAApproveTokenRelease` leaves both open too (mode 0), given a non-zero relayer and fee recipient above
   assert.equal(TYPED_OPS.UAApproveTokenRelease && V.ops.UAApproveTokenRelease.message.mode, 0);

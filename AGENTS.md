@@ -103,6 +103,9 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - Any change to a transcript or relation means a new `proofSystemId`, new vectors in every client, and a full gate.
 - Full gate (`PQZ_SET=<set> scripts/capped pqz-core/gate.sh`, hours per set): only when `pqzl`, `pqzh/ligero/src`, `stmt`, `ffi/src` or set
   parameters change. It resumes per step; read `runs/gate/last` first. Otherwise run the affected steps.
+- **Gate once, on the final core tree.** Any edit to the paths above, the gate scripts or the files its steps read (harnesses, vectors,
+  `negative.json`) restarts the gate. Before starting it, walk every remaining step of the plan and pull those edits forward, gate-script
+  counts included (e.g. the relation count). Contract, client and node work runs beside it. A run on an older tree is only a scout.
 - The C core is an oracle, not production; `pqz-ffi` defaults to Rust.
 - No timing or gas calibration without asking: other heavy work skews it.
 - Reproducing a digest in a client means zeroing unbound `relayer` / `feeRecipient` like `MetaTxLib.canon`. Vectors already canonical do not

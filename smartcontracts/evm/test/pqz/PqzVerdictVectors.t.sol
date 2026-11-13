@@ -17,7 +17,16 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 contract PqzVerdictVectorsTest is Test {
     using stdJson for string;
 
-    string internal constant OUT = "../vectors/pqz/verdict.json";
+    /// T-05 (owner 2026-11-13, CTR-PQZ-37's Change): the file of the build's set in that set's own directory,
+    /// `pqz/verdict.json` at `n2048-kmax1024`, `pqz/<set>/verdict.json` at every other set (as `state.json`).
+    function _rel() internal pure returns (string memory) {
+        return keccak256(bytes(PqzSet.NAME)) == keccak256("n2048-kmax1024") ? "pqz/verdict.json"
+            : string.concat("pqz/", PqzSet.NAME, "/verdict.json");
+    }
+
+    function _out() internal pure returns (string memory) {
+        return string.concat("../vectors/", _rel());
+    }
     address internal constant TOKEN = 0x7A7a7A7a7a7a7a7A7a7a7a7A7a7A7A7A7A7A7a7A;
     address internal constant REGISTRY = 0x5ca5000000000000000000000000000000000001;
     uint256 internal constant CHAIN_ID = 7622;
@@ -117,7 +126,7 @@ contract PqzVerdictVectorsTest is Test {
         vm.serializeBytes32(g, "salt", CHAIN_UID);
         string memory reg = vm.serializeBytes32(g, "separator", _sep("SCaaS UARegistry", "1", REGISTRY));
         string memory t = "top";
-        vm.serializeString(t, "file", "pqz/verdict.json");
+        vm.serializeString(t, "file", _rel());
         vm.serializeString(t, "description",
             "Group 3f (PQZ verifier mode spec 5.1, 11.3): PqzVerdict struct hashes and digests in a PqzToken domain over the (stmt_keccak, proof_keccak) pairs of proof_pqzl.json (REGISTER left out), and the EOA verifier's 65-byte ECDSA UASig.signature over the registry's uaAuthDigest(ua, PURPOSE_PQZ_VERDICT, digest). statementHash = keccak256 of the statement bytes the token's views return; proofHash = keccak256 of the proof bytes. UNAUDITED.");
         vm.serializeString(t, "generator", "smartcontracts/evm/test/pqz/PqzVerdictVectors.t.sol (WRITE_VERDICT_VECTORS=true)");
@@ -136,17 +145,18 @@ contract PqzVerdictVectorsTest is Test {
         out = vm.replace(vm.serializeString(t, "rows", "__ROWS__"), '"__ROWS__"', arr);
     }
 
-    /// The file is the default build's set's (`set`); another set's build (`script/pqz/at-set.sh`) skips the pin.
+    /// The file of the build's set (`set`); a set without one (`script/pqz/at-set.sh`) skips the pin.
     function test_verdictVectors() public {
         bool write = vm.envOr("WRITE_VERDICT_VECTORS", false);
-        if (!write && keccak256(bytes(vm.readFile(OUT).readString(".set"))) != keccak256(bytes(PqzSet.NAME))) vm.skip(true);
+        if (!write && !vm.exists(_out())) vm.skip(true);
+        if (!write) assertEq(vm.readFile(_out()).readString(".set"), PqzSet.NAME, "the file in its set's directory");
         Row[] memory rows = _rows();
         assertGt(rows.length, 10);
         if (write) {
-            vm.writeJson(_json(rows), OUT);
+            vm.writeJson(_json(rows), _out());
             return;
         }
-        string memory pin = vm.readFile(OUT);
+        string memory pin = vm.readFile(_out());
         assertEq(pin.readBytes32(".typehash"), PqzCore.VERDICT_TYPEHASH, "typehash");
         assertEq(pin.readBytes32(".purposeTag"), UAKinds.PURPOSE_PQZ_VERDICT, "purpose");
         assertEq(pin.readBytes32(".proofSystemId"), PqzSet.PQZL_ID, "the build's set");

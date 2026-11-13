@@ -7,7 +7,7 @@
 //! by the repo's deploy script (`script/Deploy.s.sol`, which builds `out/`); the PQZ release (kind 4, `deps = [0]`: no PQZ
 //! precompile on anvil) with its libraries and body modules on that factory; a token naming the service's key as its
 //! transferable verifier; two `fndsa512` holders with PQZ keys of this set and stored proof bytes. pqz-ffi is faked (`…01`
-//! for every input): no prover here and no `R_REG` proof of these keys; `tests/service.rs` runs it real on the vector rows.
+//! for every input `pqz_ffi::decode` accepts, T-14): no prover here and no `R_REG` proof of these keys; `tests/service.rs` runs it real on the vector rows.
 //! What this run shows: the views, argument tuples (`ownTag`), registry reads and the locally built `UAAuth` digest of the
 //! service are the contracts', and the token accepts the verdict on chain (`PqzVerified` over exactly the statement and
 //! proof). It also checks every selector of `abi.rs` against the built ABI. UNAUDITED.
@@ -365,7 +365,14 @@ rate_per_minute = 1000
 "{release}" = "{set}"
 "#, set = pqz_ffi::stmt::SET)).unwrap();
     // no prover and no R_REG proof of these keys here: pqz-ffi answers …01 (tests/service.rs runs it real)
-    let pqz: Pqz = Arc::new(|_: &[u8]| Ok(VALID));
+    // T-14 (Fable u3-5): the fake still answers `…01`, but only for an input the real decoder accepts: every statement the token
+    // built and the service framed reaches `pqz_ffi::decode` (op byte, lengths, the id), so a framing drift fails here
+    let pqz: Pqz = Arc::new(|input: &[u8]| {
+        if let Err(e) = pqz_ffi::decode(input) {
+            panic!("T-14: pqz_ffi::decode refuses the service's input ({} B): {e:?}", input.len());
+        }
+        Ok(VALID)
+    });
     let rpc_nodes = Rpc::connect(&cfg.rpc_urls, CHAIN_ID).await.unwrap();
     check_pins(&rpc_nodes, &cfg).await.expect("the registry's generation() and chainUid() are the pinned ones (Fable R-4)");
     let svc = Arc::new(Service::new(Arc::new(rpc_nodes), pqz, signer.clone(), &cfg));

@@ -33,6 +33,7 @@ contract CreateConfigKatTest is Test {
         (c.conf.disclosureMode, c.conf.auditorMode, c.conf.minDecoyFee) = (1, 2, 6);
         (c.conf.pqzVerifyMode, c.conf.pqzVerifierUA, c.conf.pqzVerifierFixed) = (1, _w(0x99), true);
         (c.conf.proofStore, c.conf.verifierFee, c.conf.verifierFeeMax) = (1, 7, 9);
+        (c.conf.pqzOwnKey, c.conf.pqzOpening) = (true, true); // the three-key model (CTR-PQZ-37)
         (c.grantDelay, c.rescueTo, c.maxSupply) = (3600, _a(0x5e), 5000);
         c.reg = IFactoryToken.RegulatedParams(_a(0xc0), 3, 4, _w(0x7e), _w(0x7a));
     }
@@ -126,6 +127,8 @@ contract CreateConfigKatTest is Test {
         assertEq(vm.parseJsonUint(j, string.concat(p, "conf.proofStore")), c.conf.proofStore);
         assertEq(vm.parseJsonUint(j, string.concat(p, "conf.verifierFee")), c.conf.verifierFee);
         assertEq(vm.parseJsonUint(j, string.concat(p, "conf.verifierFeeMax")), c.conf.verifierFeeMax);
+        assertEq(vm.parseJsonBool(j, string.concat(p, "conf.pqzOwnKey")), c.conf.pqzOwnKey);
+        assertEq(vm.parseJsonBool(j, string.concat(p, "conf.pqzOpening")), c.conf.pqzOpening);
         assertEq(vm.parseJsonUint(j, string.concat(p, "grantDelay")), c.grantDelay);
         assertEq(vm.parseJsonAddress(j, string.concat(p, "rescueTo")), c.rescueTo);
         assertEq(vm.parseJsonUint(j, string.concat(p, "maxSupply")), c.maxSupply);

@@ -880,11 +880,12 @@ fn views_are_the_contracts() {
     assert_eq!(T::proofSystemIdCall::SELECTOR, hex!("1f3b28f2"));
 }
 
-/// `smartcontracts/vectors/pqz/verdict.json` (the contracts' forge writer): the verifier's digest and signature.
-
+/// `smartcontracts/vectors/pqz/<set>/verdict.json` (the contracts' forge writer; T-05: the set's own directory, `pqz/` for
+/// n2048-kmax1024): the verifier's digest and signature.
 #[test]
 fn verdict_vectors() {
-    let v = json_file("verdict.json");
+    let dir = if stmt::SET == "n2048-kmax1024" { String::new() } else { format!("{}/", stmt::SET) };
+    let v = json_file(&format!("{dir}verdict.json"));
     assert_eq!(v["set"], stmt::SET);
     assert_eq!(word(&v["typehash"]), keccak256(PqzVerdict::eip712_encode_type().as_bytes()));
     assert_eq!(word(&v["purposeTag"]), purpose_pqz_verdict());

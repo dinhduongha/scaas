@@ -1,0 +1,25 @@
+pqz-three-keys step 5 (vector rows of contract formats) on 2f5efd73 + this commit, n2304-kmax4096, per-directory forge gate (gate.sh, capped, -j 1)
+dir | rc | counts
+test/pqz | 0 | 484 passed, 4 skipped
+test/research | 1 | 92 passed, 1 failed, 6 skipped: PqzProofStoreGas test_debitMinGas_isTheCheapestLogDebit, set.toml debit_min_gas 7,515,000 < the LOG burn's relayed regular gas 7,515,239 (was 7,514,728 measured at fix2; step 4 +511; masked at step 4 by the UAPqzProbe setUp failure). Set parameter: the owner's.
+test/factory | 0 | 2 passed
+test/ua | 0 | 670 passed
+test/governance | 0 | 525 passed
+test/metatx | 0 | 400 passed
+test/as | 0 | 357 passed
+test/confidential | 0 | 5 passed
+test/v2 | 0 | 635 passed
+test/wallet | 0 | 100 passed
+test/zether | 0 | 336 passed, 4 skipped
+test/modules | 0 | 35 passed
+test/merge | 0 | 119 passed
+test/wrap | 0 | 72 passed
+test/pqchat | 0 | 99 passed
+test/account | 0 | 58 passed
+test/liquidity | 0 | 82 passed, 1 skipped
+test/hedera | 0 | 20 passed
+test/pqzh | 0 | 42 passed
+test/fork | 0 | 1 skipped
+test/p6f | 0 | 4 passed
+state.json (T-41) | 0 | STATE_VECTORS=1 at-set.sh at n2048, n2560, n2816: written; a second write byte-identical; PqzStateVectors 2/2 at each set
+clientkeys | 0 | node --test: 343 tests, 340 passed, 3 skipped (no vendored bundle x2; cast: with foundry on PATH 34/34); typed-ops-cast-check: 109 structs, 143 digests, 142 calldatas equal to cast's

@@ -24,9 +24,10 @@ contract GroupsTest is Test {
     /// (kind 13 restates it from the wrapped layer: its W holds it); on 12 (owner 2026-11-13) without the three wrap-only
     /// entries at the end (`unshieldUnwrapStatement`, `unwrapBinding`, `underlyings`).
     // round 3t: + setVerifierFee (gen_faces.py S_SETTERS)
-    string[34] internal sNames = ["auditorMode", "auditorUA", "burnStatement", "confidentialFee", "disclosureMode",
+    // the three-key model (CTR-PQZ-41): + `pqzSkipped`
+    string[35] internal sNames = ["auditorMode", "auditorUA", "burnStatement", "confidentialFee", "disclosureMode",
         "disclosureStatement", "envelopeBinding", "maxShielded", "minDecoyFee", "pqzAcc", "pqzAccount", "pqzCancelVerifier",
-        "pqzDebitRecord", "pqzEntryBlob", "pqzPending", "pqzPendingCt", "pqzRevokeVerifier", "pqzSetVerifier",
+        "pqzDebitRecord", "pqzEntryBlob", "pqzPending", "pqzPendingCt", "pqzSkipped", "pqzRevokeVerifier", "pqzSetVerifier",
         "pqzVerifyConfig", "precompile", "proofStore", "proofSystemId", "setProofStore", "setVerifierFee", "shieldScale", "totalShielded",
         "transferCiphertextHash", "transferEntry", "transferSingleStatement", "transferStatement", "verifier",
         "unshieldUnwrapStatement", "unwrapBinding", "underlyings"];

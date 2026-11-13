@@ -666,8 +666,9 @@ fn plain_rows_match_the_forge_abi() {
             n += 1;
         }
     }
-    assert_eq!(n, 32, "32 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
-        30 -> 32: the DEX's mtxLiquidity (CTR-DEX-30) and PqChat's remove (UA-7 P48))");
+    assert_eq!(n, 34, "34 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
+        30 -> 32: the DEX's mtxLiquidity (CTR-DEX-30) and PqChat's remove (UA-7 P48); 32 -> 34: the registry's setPqzScopedKey, \
+        storePqzScopedPop (K3-3))");
 }
 
 /// The `UAEnvelope` of a native signer `from` (its padded id) on lane `batch` at `nonce`, fee 0, open relayer.
@@ -1587,7 +1588,7 @@ async fn router_creations_signed_by_an_eoa() {
                 "initialSupply": "1000", "initialHolder": format!("{:#x}", owner.address()), "legs": [], "rate": {"rateDelay": 0, "maxRateStepBps": 0},
                 "conf": {"auditorKey": "0x", "shieldScale": "0", "maxShielded": "0", "confidentialFee": "0", "disclosureMode": 0, "auditorMode": 0,
                     "minDecoyFee": "0", "pqzVerifyMode": 0, "pqzVerifierUA": z(0), "pqzVerifierFixed": false, "proofStore": 0, "verifierFee": "0",
-                    "verifierFeeMax": "0"},
+                    "verifierFeeMax": "0", "pqzOwnKey": false, "pqzOpening": false},
                 "grantDelay": "0", "rescueTo": a(0), "maxSupply": "0",
                 "reg": {"complianceRegistry": a(0), "requiredFlags": "0", "deniedFlags": "0", "termsHash": z(0), "taxRecipient": z(0)}}},
         "envelope": envelope(owner.address(), lane, 1)}), chain_id, uid);
@@ -1698,7 +1699,8 @@ alloy::sol! {
     // group 3h T60 (pqz-proof-path spec §4.1): `proofStore` (0 NONE, 1 LOG; 0 for every other kind)
     struct ConfidentialConfig { bytes auditorKey; uint256 shieldScale; uint256 maxShielded; uint256 confidentialFee; uint8 disclosureMode;
         uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; uint8 proofStore;
-        uint64 verifierFee; uint64 verifierFeeMax; } // round 3t (CTR-PQZ-36): the verifier fee and its cap (0 off)
+        uint64 verifierFee; uint64 verifierFeeMax; // round 3t (CTR-PQZ-36): the verifier fee and its cap (0 off)
+        bool pqzOwnKey; bool pqzOpening; } // the three-key model (CTR-PQZ-37): the key class (false, false off PQZ)
     /// Regulated-kinds spec §2.4 (plan T25): the regulated kinds' (8-13) only; a plain kind refuses any set field.
     #[derive(Default)]
     struct RegulatedParams { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash;
@@ -2397,9 +2399,16 @@ async fn pqz_rotation_on_anvil() {
 
 mod pqz3f {
     alloy::sol! {
-        // group 3h (T59): `ownTag` after `salt`
+        // group 3h (T59): `ownTag` after `salt`; the three-key model (CTR-PQZ-40): `uFrom` after `vAuditor`, the two openings last
+        #[derive(Default)]
+        struct PqzOpening { bytes mlkemCt; bytes32 x25519Eph; bytes sealedSeed; }
         struct PqzTransferArgs { uint64 p; uint256 validUntilBlock; uint256 shieldIn; bytes32 fromUA; uint64 keyVersion; bytes32 toUA;
-            bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
+            bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes uFrom;
+            bytes sealedMemo; PqzOpening openingTo; PqzOpening openingAuditor; }
+        // K3-3 (CTR-UA-43): what a scoped key record signs (`setPqzScopedKey` / `storePqzScopedPop`: the node's `IUARegistry`)
+        function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+            bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32);
+        function chainUid() external view returns (bytes32);
         function transferSingleStatement(PqzTransferArgs t, bytes32 binding) external view returns (bytes);
         function pqzRevokeVerifier(bytes32 chainUid_) external; // CTR-GOV-28: the token's chain word
         function setTokenKindEnabled(uint8 kind, bool on, bytes32 chainUid) external;
@@ -2538,6 +2547,23 @@ impl PqHolder {
         me
     }
 
+    /// K3-3: its scoped version 0 for `scope` (class 3, the token; the opening off: no KEM key), signed under
+    /// `PURPOSE_PQZ_SCOPED_KEY` over the registry's `pqzScopedKeyRecordDigest`, then the proof bytes stored.
+    async fn register_scoped(&self, rpc: &str, registry: Address, deployer: &PrivateKeySigner, scope: Address, pqz_key: Vec<u8>,
+        pqz_pop: Vec<u8>) {
+        let kh = view(rpc, registry, pqz3f::keyHashOfCall { kind: 0x0142, keyData: pqz_key.clone().into() }).await;
+        let (ph, uid) = (keccak256(&pqz_pop), view(rpc, registry, pqz3f::chainUidCall {}).await);
+        let rd = view(rpc, registry, pqz3f::pqzScopedKeyRecordDigestCall { ua: self.ua, keyClass: 3, chainUid: uid, token: scope,
+            version: 0, pqzKeyHash: kh, pqzPopHash: ph, openKemHash: B256::ZERO, validUntilBlock: u64::MAX }).await;
+        let sig = self.sign(rpc, registry, b"scaas.ua.purpose.pqz-scoped-key.v1", rd).await;
+        use scaas_node::abi::IUARegistry as R;
+        let no_kem = R::KemKey { scheme: 0, mlkemEk: Bytes::new(), x25519: B256::ZERO };
+        send(rpc, deployer, registry, R::setPqzScopedKeyCall { ua: self.ua, scope, version: 0, pqzKey: pqz_key.into(), pqzPopHash: ph,
+            openKem: no_kem, validUntilBlock: u64::MAX, sig: UASig { keyData: Bytes::new(), signature: sig.into(), members: vec![] } }
+            .abi_encode()).await;
+        send(rpc, deployer, registry, R::storePqzScopedPopCall { ua: self.ua, scope, version: 0, pqzPop: pqz_pop.into() }.abi_encode()).await;
+    }
+
     /// The Falcon signature over the registry's `uaMessage(fndsa512, purpose, digest)`.
     async fn sign(&self, rpc: &str, registry: Address, purpose: &[u8], digest: B256) -> Vec<u8> {
         use pqcrypto_falcon::falconpadded512 as falcon;
@@ -2610,7 +2636,8 @@ async fn offchain_stack_vf(chain_id: u64, vf: u64) -> OffchainStack {
     let c = TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         owner: deployer.address().into_word(), initialSupply: U256::from(1_000_000u64), initialHolder: deployer.address(),
         conf: ConfidentialConfig { shieldScale: U256::from(1u8), maxShielded: U256::from(1u64 << 40), pqzVerifyMode: 1,
-            pqzVerifierUA: verifier.address().into_word(), pqzVerifierFixed: false, verifierFee: vf, verifierFeeMax: vf, ..Default::default() },
+            pqzVerifierUA: verifier.address().into_word(), pqzVerifierFixed: false, verifierFee: vf, verifierFeeMax: vf,
+            pqzOwnKey: true, ..Default::default() }, // class 3 (CTR-PQZ-37), the opening off: the holders' records scoped to the token
         ..Default::default() };
     let token = create(&rpc, &deployer, factory, createTokenCall { kind: 4, version: ver, initArgs: c.abi_encode().into(),
         salt: B256::repeat_byte(0x3f) }.abi_encode()).await;
@@ -2629,9 +2656,19 @@ async fn offchain_stack_vf(chain_id: u64, vf: u64) -> OffchainStack {
     let hexb = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
     let pop = hexb(&row("registrations", &format!("mldsa65/{name}"))["pqzPop"]);
     let from = PqHolder::register(&rpc, registry, &deployer, hexb(&row("pqzKeyRecords", &format!("fndsa512/{name}"))["pqzKey"]), pop.clone()).await;
-    let to = PqHolder::register(&rpc, registry, &deployer, hexb(&row("pqzKeyRecords", &format!("mldsa87/{name}"))["pqzKey"]), pop).await;
+    let (key_a, key_b) = (hexb(&row("pqzKeyRecords", &format!("fndsa512/{name}"))["pqzKey"]), hexb(&row("pqzKeyRecords", &format!("mldsa87/{name}"))["pqzKey"]));
+    let to = PqHolder::register(&rpc, registry, &deployer, key_b.clone(), pop.clone()).await;
+    // class 3 (K3-3): each holder's version 0 scoped to the token, the other's portable key (a key is unique per UA, `pqzKeyUsed`;
+    // pk_f != pk_t, KV-9), the proof bytes stored unchecked (no 0x0142 verifier on anvil)
+    from.register_scoped(&rpc, registry, &deployer, token, key_b, pop.clone()).await;
+    to.register_scoped(&rpc, registry, &deployer, token, key_a, pop).await;
     let uid = pr.get_block_by_number(0.into()).await.unwrap().unwrap().header.hash;
     OffchainStack { _anvil: anvil, rpc, chain_id, uid, registry, token, verifier, from, to, pk_len: constant("PK"), v_len: constant("V") }
+}
+
+/// The empty `PqzOpening` (a token with the opening off; CTR-PQZ-40).
+fn no_opening() -> Value {
+    json!({"mlkemCt": "0x", "x25519Eph": format!("{:#x}", B256::ZERO), "sealedSeed": "0x"})
 }
 
 impl OffchainStack {
@@ -2650,7 +2687,8 @@ impl OffchainStack {
         let t = pqz3f::PqzTransferArgs { p: 0, validUntilBlock: U256::from(block + 200), shieldIn: U256::ZERO, fromUA: self.from.ua,
             keyVersion: 0, toUA: self.to.ua, beneficiaryUA: B256::ZERO, salt: alloy::primitives::FixedBytes([0x5a; 16]), ownTag: own_tag,
             u: lanes(self.pk_len, 1).into(), vTo: lanes(self.v_len, 1).into(), vFrom: lanes(self.v_len, 1).into(),
-            vAuditor: Bytes::new(), sealedMemo: Bytes::new() };
+            vAuditor: Bytes::new(), uFrom: Bytes::new(), sealedMemo: Bytes::new(), openingTo: Default::default(),
+            openingAuditor: Default::default() };
         let until = now() + 600;
         let m = UAMetaTransaction { from: self.from.ua, data: Bytes::new(), batch: U256::ZERO, nonce: U256::from(nonce),
             validUntil: U256::from(until), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO };
@@ -2661,7 +2699,8 @@ impl OffchainStack {
         let h = |b: &[u8]| format!("0x{}", alloy::hex::encode(b));
         let args = json!({"p": "0", "validUntilBlock": (block + 200).to_string(), "shieldIn": "0", "fromUA": format!("{:#x}", self.from.ua),
             "keyVersion": "0", "toUA": format!("{:#x}", self.to.ua), "beneficiaryUA": format!("{:#x}", B256::ZERO), "salt": h(&[0x5a; 16]),
-            "ownTag": format!("{own_tag:#x}"), "u": h(&t.u), "vTo": h(&t.vTo), "vFrom": h(&t.vFrom), "vAuditor": "0x", "sealedMemo": "0x"});
+            "ownTag": format!("{own_tag:#x}"), "u": h(&t.u), "vTo": h(&t.vTo), "vFrom": h(&t.vFrom), "vAuditor": "0x", "uFrom": "0x",
+            "sealedMemo": "0x", "openingTo": no_opening(), "openingAuditor": no_opening()});
         let envelope = json!({"from": format!("{:#x}", self.from.ua), "batch": "0", "nonce": nonce.to_string(), "validUntil": until.to_string(),
             "mode": 0, "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
         let mut op = json!({"entry": "mtxConfidentialTransferSingle", "contract": "pqz", "token": format!("{:#x}", self.token),

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IRescuable} from "../../src/governance/IRescuable.sol";
 import {OnchainBase} from "./OnchainBase.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -139,6 +140,7 @@ contract PqChatOnchain is OnchainBase {
         _sessions();
         _messages();
         _topics();
+        _rescue();
         _writeBook();
     }
 
@@ -247,6 +249,15 @@ contract PqChatOnchain is OnchainBase {
     /// @dev Member `i`'s portable signature over the typed digest `d` (`uaMessage(ML65, PURPOSE_PQCHAT, d)`).
     function _sigOf(uint256 i, bytes32 d) internal returns (IUARegistry.UASig memory s) {
         s.signature = _mlRaw(seeds[i], reg.uaMessage(ML65, UAKinds.PURPOSE_PQCHAT, d));
+    }
+
+    /// @dev CTR-GOV-26: a stray 10 of `tok` on the instance, swept by anyone's `rescue` to `RescueLib.SCAAS_DEV_RESCUE`.
+    function _rescue() internal {
+        vm.broadcast(k1);
+        IERC20(tok).transfer(address(chat), 10);
+        vm.broadcast(k3);
+        IRescuable(address(chat)).rescue(tok);
+        require(IERC20(tok).balanceOf(address(chat)) == 0, "PqChat.rescue");
     }
 
     function _token() internal {
