@@ -608,7 +608,8 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
   - **PQZH Ligero v1** (`pqz-core/pqzh/ligero/src/transcript.rs`): a Keccak-256 chain, `state =
     keccak256("SCAAS-PQZH-LIGERO-V1" ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt)`; `absorb(x)`: `state = keccak256(state ‖ x)`;
     squeeze: `keccak256(state ‖ 0xff ‖ be64(ctr))` (`ctr` from 0 after each absorb) gives four 8-byte big-endian
-    words, first word first; an `F_q` element is a word masked to 42 bits, drawn again if `≥ q`; an index in
+    words, first word first; an `F_q` element is a word masked to the set's `LOG2Q` bits (42 at `n2048-kmax1024`, 46 at
+    `n2304-kmax4096`, 50 at `n2560-kmax16384`), drawn again if `≥ q`; an index in
     `[0, n)` is a word masked to `2^⌈log2 n⌉ − 1`, drawn again if `≥ n`. Order: absorb the Merkle root; draw `a_i`,
     `b_i` (one `F_{q^4}` per witness row each), `c_lin`, `c_quad`, `ρ`, `r_t` (one per multiplication triple); absorb
     the bytes of `w ‖ q ‖ h`; grinding: `keccak256(state ‖ "PoW" ‖ be64(nonce))` must start with 16 zero bits; absorb
@@ -1898,7 +1899,7 @@ address as 12 zero bytes ‖ address).
 | Word | Offset | Field | Decoder rule |
 |---|---|---|---|
 | 0 | 0 | `opTag` | the op's (table above) |
-| 1 | 32 | `proofSystemId` | PQZL v3 or PQZH Ligero v1 |
+| 1 | 32 | `proofSystemId` | the set's PQZL or PQZH id ([proof systems](#serialization), per set) |
 | 2–5 | 64, 96, 128, 160 | `chainId`, `token`, `registry`, `fromUA` | hashed |
 | 6 | 192 | `toUA` | BURN, REFRESH: 0; transfers: hashed |
 | 7 | 224 | `beneficiaryUA` | hashed |
@@ -2005,8 +2006,9 @@ exactly the bytes consumed (no trailing byte); `≤ 98,304` B, which also keeps 
 **PQZH proof (Ligero v1)** (`ligero.rs`). Parameters fixed by the id (the set's preset, `set.json` `pqzh_preset`), never
 read from the proof: `n = 32,756`, `k = 817`, `ℓ = 695`, `t = 121` at `n2048-kmax1024`; 45,752 / 952 / 831 / 120 at
 `n2304-kmax4096`; 32,756 / 817 / 694 / 122 at `n2560-kmax16384`; 16 grinding bits (`Params::proven()`, every op); `m` witness rows per form
-(`cs::Layout`) plus 12 blinding rows. `F_q` element: 6 bytes, `< q`; `F_{q^4} = F_q[X]/(X^4 − 3)`: 4 `F_q` elements,
-`X^0` first (24 B).
+(`cs::Layout`) plus 12 blinding rows. `F_q` element: `EB = ⌈LOG2Q / 8⌉` bytes, `< q` (6 at `n2048-kmax1024` and
+`n2304-kmax4096`, 7 at `n2560-kmax16384`); `F_{q^4} = F_q[X]/(X^4 − 3)`: 4 `F_q` elements, `X^0` first (`4·EB` bytes:
+24 / 24 / 28).
 
 ```text
 proof = root (32)
@@ -2071,9 +2073,11 @@ scripts in plan 5h Task 8d part 1, the contracts in part 2); they replace P6f D3
 on 22776 (P6f D3, controller proposal, owner may override). They come from a Nethermind **plugin** `Nethermind.Pqz`
 (no Nethermind patch: P6f D1) in the image `scaas/nethermind-pqz:1.39.0-pqz<n>` (built locally, never pushed: D13).
 **Status mapping (D4):** `pqz-ffi` status 0 ⇒ the 32 bytes; 1 ⇒ a failed call (all gas, the §9.1 revert); 3 ⇒ `…00`
-plus a `PQZ-INPUT-PANIC keccak(input)` warning; 2, 4 or any other ⇒ `PQZ-NODE-FAULT` (critical) and the process exits
-with code 120 — the block in progress is never sealed or imported and nothing is marked invalid; a restart
-re-processes it. **v1 runs only on our Nethermind chain** (owner). Other chains (customer-run Besu/geth/reth, public chains)
+plus a `PQZ-INPUT-PANIC keccak(input)` warning (a panic in either verifier, PQZL or PQZH: review 3w u3-2); 2, 4 or any
+other ⇒ `PQZ-NODE-FAULT` (critical) and the process exits with code 120 — the block in progress is never sealed or
+imported and nothing is marked invalid; a restart re-processes it. The same exit for a managed exception in the
+plugin's `PQZ` path outside the library's statuses and, in an ML-DSA call, any exception but `CryptographicException`
+(which is `…00`, ruling W-R) (review 3w u4-1). **v1 runs only on our Nethermind chain** (owner). Other chains (customer-run Besu/geth/reth, public chains)
 run PQZ without a client port in `OFFCHAIN` mode ([CTR-PQZ-27](#CTR-PQZ-27)); **no client ports in v1**. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
 call serially on one worker thread, only for a fixed stack), no floating point, no CPU-feature-dependent
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
