@@ -403,7 +403,10 @@
       "verifierFeePending",
       "verifierFeeEta",
       "verifierFeeProposer",
-      "verifierFeeProposerGeneration"
+      "verifierFeeProposerGeneration",
+      "pqzOwnKey",
+      "pqzOpening",
+      "acct[U][7].rollSeq"
     ],
     "slots": [
       0,
@@ -453,7 +456,10 @@
       20,
       20,
       21,
-      22
+      22,
+      0,
+      0,
+      8
     ],
     "inner": [
       0,
@@ -503,7 +509,10 @@
       0,
       0,
       0,
-      0
+      0,
+      0,
+      0,
+      2
     ],
     "bytes": [
       0,
@@ -553,7 +562,10 @@
       16,
       24,
       0,
-      0
+      0,
+      24,
+      25,
+      8
     ],
     "widths": [
       20,
@@ -603,7 +615,10 @@
       8,
       8,
       32,
-      4
+      4,
+      1,
+      1,
+      8
     ],
     "encodings": [
       "inplace",
@@ -633,6 +648,9 @@
       "inplace",
       "bytes",
       "bytes",
+      "inplace",
+      "inplace",
+      "inplace",
       "inplace",
       "inplace",
       "inplace",
@@ -703,7 +721,10 @@
       0,
       0,
       0,
-      0
+      0,
+      0,
+      0,
+      7
     ]
   },
   "zether": {

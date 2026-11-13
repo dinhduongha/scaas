@@ -264,8 +264,12 @@ def full_register_fits(to, data):
 # ABI (`abi_check`); the signed forms are `NAMED`.
 # group 3g T52: `uint64 keyVersion` after `fromUA` in the three args structs; group 3h T59: `bytes32 ownTag` after `salt` (op 1,
 # op 7) and after `beneficiaryUA` (the burn forms)
-TRANSFER_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)"  # IPqzToken.PqzTransferArgs
-TRANSFER_T = ("t", ["w"] * 9 + ["b"] * 5)
+# three-key model (CTR-PQZ-38, -40): `bytes uFrom` after `vAuditor`, then `sealedMemo`, then the two `PqzOpening`s
+# (mlkemCt, x25519Eph, sealedSeed); all empty on a token without the opening (this script's tokens)
+TRANSFER_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes))"  # IPqzToken.PqzTransferArgs
+OPENING_T = ("t", ["b", "w", "b"])
+TRANSFER_T = ("t", ["w"] * 9 + ["b"] * 6 + [OPENING_T, OPENING_T])
+NO_OPENING = [b"", 0, b""]
 MULTI_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)"  # PqzMultiArgs, PqzLeg
 MULTI_T = ("t", ["w"] * 9 + [("a", "b"), ("a", ("t", ["w", "b", "b"])), "b", "b"])
 BURN_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)"  # PqzBurnArgs
@@ -310,7 +314,7 @@ ACCT = ["pendingCount", "rolled", "floor", "cleared", "accBlob", "accUnits", "fl
 EVL_S, UEVL_S = "(address,uint256,uint256,uint256,uint32,address,uint256,address)", "(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)"
 EVL_T = ("t", ["w"] * 8)
 EVL_F = "from batch nonce validUntil mode relayer fee feeRecipient".split()
-TRANSFER_F = "p validUntilBlock shieldIn fromUA keyVersion toUA beneficiaryUA salt ownTag u vTo vFrom vAuditor sealedMemo".split()
+TRANSFER_F = "p validUntilBlock shieldIn fromUA keyVersion toUA beneficiaryUA salt ownTag u vTo vFrom vAuditor uFrom sealedMemo openingTo openingAuditor".split()
 MULTI_F = "p validUntilBlock shieldIn fromUA keyVersion beneficiaryUA decoyFee salt ownTag u legs vFrom sealedMemo".split()
 BURN_F = "p validUntilBlock shieldIn fromUA keyVersion beneficiaryUA ownTag u vFrom".split()
 # group 3h T59 (pqz-proof-path spec §3.1): the holder's tag of its own debit; the contract checks no value, so this script sends
@@ -510,9 +514,9 @@ UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)
 # the PQZ kinds 4, 5); `owner` and the five `roles` are UA ids (bytes32, a native account's address padded: the same word as
 # the address it was, CTR-GOV-01 Change)
 # (group 3f: `conf` ends pqzVerifyMode, pqzVerifierUA, pqzVerifierFixed; group 3h T60: then proofStore; round 3t: then
-# verifierFee, verifierFeeMax)
+# verifierFee, verifierFeeMax; three-key model: then pqzOwnKey, pqzOpening)
 CFG = ("t", ["b", "b", "w", "w", "w", "w", ("t", ["w"] * 5), "w", "w", ("a", ("t", ["w", "w", "w"])), ("t", ["w", "w"]),
-             ("t", ["b"] + ["w"] * 12), "w", "w", "w", ("t", ["w"] * 5)])
+             ("t", ["b"] + ["w"] * 14), "w", "w", "w", ("t", ["w"] * 5)])
 # IFactoryToken.Env (plan 5g-Z2; chain-neutral releases, plan T71: the factory fills its own chainUid and router):
 # registry, smartKeyAccountImpl, hedera, deps, params, libs, libCodeHashes
 ENV = ("t", ["w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w"), ("a", "w")])
@@ -1533,8 +1537,11 @@ def run(kd, kr, ke):
         mode = [1, pad(sd.addr), 0] if ZERO_DEP else [0, 0, 0]
         mode += [PROOF_STORE if store is None else store]  # group 3h T60: proofStore, NONE unless --proof-store log
         mode += [0, 0]  # round 3t: verifierFee, verifierFeeMax (no fee: the e2e's OFFCHAIN verifier is its own deployer)
+        # three-key model (CTR-PQZ-37): pqzOwnKey, pqzOpening; OFFCHAIN without the opening is class offchain-token, whose
+        # holders need records of the token (ponytail: --zero-dep registers none yet; step 7c's matrix covers the classes)
+        mode += [1, 0] if ZERO_DEP else [0, 0]
         c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, issuer, 0], supply, holder, legs, [0, 0],
-             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] + mode if conf else [b""] + [0] * 12, 0, 0, 0, [0, 0, 0, 0, 0]]
+             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] + mode if conf else [b""] + [0] * 14, 0, 0, 0, [0, 0, 0, 0, 0]]
         # plan 5g-Z2: initArgs = abi.encode(TokenConfig), opaque to the factory; the verifier is the release's
         data = cd("createToken(uint8,uint64,bytes,bytes32)", ["w", "w", "b", "w"], kind, 1, encs([CFG], [c]), kc(salt))
         r = sd.send(fac, data, f"createToken {sym} (kind {kind})")
@@ -1794,7 +1801,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     blen = K.CT_BYTES + K.V_BYTES * (2 if aud_on else 1)
     v3 = K.PK_BYTES + K.V_BYTES  # `out` = u ‖ v_t ‖ v_f ‖ [v_a]
     hdr = lambda out: [p, 10**9, shield_in, frm.ua, kv_of(frm), to.ua, ben_ua, salt + bytes(16), OWN_TAG, out[:K.PK_BYTES], out[K.PK_BYTES:v3],  # noqa: E731
-                       out[v3:v3 + K.V_BYTES], out[v3 + K.V_BYTES:], sealed]
+                       out[v3:v3 + K.V_BYTES], out[v3 + K.V_BYTES:], b"", sealed, NO_OPENING, NO_OPENING]
     view = lambda t: dec_bytes(call(tok, cd(API["singleStmt"], [TRANSFER_T, "w"], t, binding)))  # noqa: E731
     st0 = view(hdr(probe(blen)))
     fee = fee_word(st0)

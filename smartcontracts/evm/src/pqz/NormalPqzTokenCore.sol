@@ -82,9 +82,9 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
     ///         `ABSOLUTE` (incl. the rollover and `mtxPrepareAcc`).
     function _mtxSelectorsBody() internal pure virtual override(MetaTxBaseCore, NormalTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](10);
-        c = new uint8[](10);
-        a = new uint8[](10);
+        s = new bytes4[](11);
+        c = new uint8[](11);
+        a = new uint8[](11);
         (s[0], c[0]) = (IMetaTx.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (BURN_SELECTOR, FEE_CLASS_AMOUNT);
         (s[2], c[2]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
@@ -95,6 +95,7 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
         (s[7], c[7]) = (IPqzToken.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
         (s[8], c[8]) = (IPqzToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
         (s[9], c[9]) = (IPqzToken.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
+        (s[10], c[10]) = (IPqzToken.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE); // CTR-PQZ-41
     }
 
     function _mtxRule(bytes4 sel) internal view virtual override(MetaTxBaseCore, NormalTokenCore) returns (MtxRule memory) {

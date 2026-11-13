@@ -61,6 +61,14 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
         n = _newToken(keccak256(abi.encode("vf-n", scale, vf)));
         w = NormalPqzToken(address(_newWrapped(keccak256(abi.encode("vf-w", scale, vf)))));
         (vMode, vUA, vFee, vFeeMax) = (0, bytes32(0), 0, 0);
+        // the other legs' `offchain-token` records of both tokens (CTR-UA-43): scaffolding, unmetered (twelve 18 KB records
+        // per block would exhaust the test's gas; the rows record payouts, not gas)
+        vm.pauseGasMetering();
+        for (uint256 j = 2; j < 8; ++j) {
+            _scoped(lg[j], address(n), _spk(++keySeed), false);
+            _scoped(lg[j], address(w), _spk(++keySeed), false);
+        }
+        vm.resumeGasMetering();
         n.mint(address(this), 1000 * scale);
         n.mtxShield(alice, 1000);
         MockERC20 u = MockERC20(WrappedPqzToken(payable(address(w))).underlyings()[0]);

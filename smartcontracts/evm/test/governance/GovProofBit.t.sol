@@ -191,7 +191,7 @@ contract GovProofBitTest is PqzOffchainBase {
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL, 1, _plain(), type(NormalToken).creationCode);
         vm.prank(registrar);
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL, true, EnvKit.uidOf(address(factory)));
-        c.conf = IFactoryToken.ConfidentialConfig("", 0, 0, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig("", 0, 0, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, BIT));
         factory.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "plain-24");
     }

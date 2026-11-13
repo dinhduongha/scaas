@@ -19,7 +19,10 @@ interface IPqzToken is IConfidentialToken {
     ///         64-bit lanes. `vAuditor` empty: auditor off. `sealedMemo` the memo after its clear salt, 41 bytes on
     ///         commit-reveal (the memo is `salt ‖ sealedMemo`), else empty. `ownTag` (group 3h, pqz-proof-path spec §3,
     ///         PP-3): the holder's tag of its own `(u, v_f)`, computed by its client, stored in the op blob's tail and bound
-    ///         by `memoHash = keccak256(memo ‖ ownTag)`; the contract checks no value.
+    ///         by `memoHash = keccak256(memo ‖ ownTag)`; the contract checks no value. On an opening token (`pqzOpening`,
+    ///         CTR-PQZ-37 .. -40): `uFrom` the sender's own `u_f` (`PK` bytes, its own randomness group), `openingTo` the
+    ///         sealed opening to `toUA`, `openingAuditor` to the auditor when `vAuditor` is set, and `memoHash =
+    ///         keccak256(memo ‖ ownTag ‖ keccak256(O_t ‖ [O_a]))`; elsewhere all three empty (`BadPayload`).
     struct PqzTransferArgs {
         uint64 p;
         uint256 validUntilBlock;
@@ -34,7 +37,19 @@ interface IPqzToken is IConfidentialToken {
         bytes vTo;
         bytes vFrom;
         bytes vAuditor;
+        bytes uFrom;
         bytes sealedMemo;
+        PqzOpening openingTo;
+        PqzOpening openingAuditor;
+    }
+
+    /// @notice A sealed opening (CTR-PQZ-40): the hybrid KEM ciphertext to the reader's opening KEM key (`mlkemCt` 1,568 B,
+    ///         `x25519Eph`) and `sealedSeed` (48 B), the leg seed under AES-256-GCM. Stored as `mlkemCt ‖ x25519Eph ‖
+    ///         sealedSeed` (1,648 B) in the op blob; the contract checks lengths only. Empty: every field empty or 0.
+    struct PqzOpening {
+        bytes mlkemCt;
+        bytes32 x25519Eph;
+        bytes sealedSeed;
     }
 
     /// @notice An op 7 leg: its UA with its parts. `vAuditor` empty on every leg (auditor off) or on none.
@@ -115,6 +130,8 @@ interface IPqzToken is IConfidentialToken {
         uint64 verifierFeeMax;
         uint64 verifierFeePending;
         uint64 verifierFeeEta;
+        bool pqzOwnKey; // the three-key model (CTR-PQZ-37): word 11
+        bool pqzOpening; // word 12, read by the UA registry for a class `offchain-token` record (CTR-UA-43)
     }
 
     /// @notice `amount` and `recipient` of the signed `mtxUnshield`: one calldata struct keeps those two
@@ -141,6 +158,7 @@ interface IPqzToken is IConfidentialToken {
         uint64 sendCounter;
         bytes32 accHash;
         uint64 lastDebit;
+        uint64 rollSeq; // CTR-PQZ-41: the next signed rollover's `rollSeq` (opening tokens)
     }
 
     /// @notice `pqzDebitRecord` (group 3h, pqz-proof-path spec §2.2, PP-2): the debit of `(ua, counter)` as recorded:
@@ -168,8 +186,19 @@ interface IPqzToken is IConfidentialToken {
     event Debited(bytes32 indexed ua, uint64 keyVersion, uint64 rolled, uint64 floor, address blob);
     /// @notice A rollover of `(ua, keyVersion)` (group 3g, in place of the shared `RolledOver`).
     event PqzRolledOver(bytes32 indexed ua, uint64 indexed keyVersion, uint64 rolled, uint32 accUnits, bytes32 accHash);
+    /// @notice CTR-PQZ-41: pending entry `index` of `(ua, keyVersion)` skip-marked by its holder's signed rollover.
+    event PqzSkipped(bytes32 indexed ua, uint64 indexed keyVersion, uint64 index);
 
     error BadInit();
+    /// @notice CTR-PQZ-39 / CTR-PQZ-14's Change: an op the token's class does not offer (op 7 and the `RECEIVER_X` / `AUDITOR`
+    ///         disclosures on an opening token; the signed rollover on a token without the opening).
+    error OpUnsupported();
+    /// @notice CTR-PQZ-41: the public rollover on an opening token (only its holder rolls, `mtxRollOverSigned`).
+    error RollOverSignedOnly();
+    /// @notice CTR-PQZ-41: a skip index not strictly ascending or outside `[rolled, pendingCount)`.
+    error SkipRange(uint256 index);
+    /// @notice CTR-PQZ-41: a skip index naming a TRIVIAL entry (public amount, never marked).
+    error SkipTrivial(uint256 index);
     /// @notice `init` with the PQZH proof system at a set without PQZH value tokens (`PqzSet.PQZH_VALUE`): no debit of
     ///         such a token fits one transaction (C2-1; owner 2026-10-27, C0-2).
     error PqzhValueUnsupported();
@@ -314,7 +343,8 @@ interface IPqzToken is IConfidentialToken {
     ///         `LOG`; the current value is a no-op (no event). Through the router as `mtxSetProofStore`.
     function setProofStore(uint8 next) external;
     /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, for every `i <
-    ///         pendingCount` (group 3h PP-1: kept for good); 0 for an unwritten index.
+    ///         pendingCount` (group 3h PP-1: kept for good); 0 for an unwritten index. Bit 63 of `block` is the skip mark
+    ///         (CTR-PQZ-41): the creation block is `block & (2^63 − 1)`.
     function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view returns (uint256);
     /// @notice The `acc` ciphertext of `(ua, keyVersion)` from state.
     function pqzAcc(bytes32 ua, uint64 keyVersion) external view returns (bytes memory);
@@ -327,6 +357,16 @@ interface IPqzToken is IConfidentialToken {
     function mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n) external;
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent; plan 5h D8), per key version.
     function mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half) external;
+    /// @notice CTR-PQZ-41, on an opening token only (`OpUnsupported` elsewhere): the holder's rollover of `n` entries of
+    ///         `(ua, keyVersion)` (`n = 0`: marks only) with the skip marks `skip` (strictly ascending, in `[rolled,
+    ///         pendingCount)`, credits), signed by `ua` (`ownerSig`, purpose `zether-auth`) over the typed `PqzRollOver`
+    ///         in the token's domain: `rollSeq` and `rolled` from state, `entriesHash` over the entries' contents. Anyone
+    ///         submits; relayed on both paths with any fee, 0 included.
+    function mtxRollOverSigned(bytes32 ua, uint64 keyVersion, uint64 n, uint64[] calldata skip, uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig) external;
+    /// @notice CTR-PQZ-41: whether pending entry `index` of `(ua, keyVersion)` carries the skip mark (bit 63 of its
+    ///         `pqzPending` slot's block field).
+    function pqzSkipped(bytes32 ua, uint64 keyVersion, uint64 index) external view returns (bool);
     /// @notice Group 3f (spec §4.2-§4.4): the owner's verifier transfer (propose, confirm after the notice), its cancel,
     ///         the immediate revocation; the verifier's configuration. `chainUid_` the token's chain word (`ChainUidMismatch`,
     ///         CTR-GOV-28), checked after the caller (`NotProposer`, `NotAdmin`) and before any write.

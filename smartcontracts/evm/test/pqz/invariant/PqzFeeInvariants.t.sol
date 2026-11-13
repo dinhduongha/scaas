@@ -58,10 +58,12 @@ contract PqzFeeInvariantsTest is PqzOffchainBase {
         (vMode, vUA, vFixed, vFee, vFeeMax) = (PqzCore.OFFCHAIN, vA, false, FEE0, CAP);
         NormalPqzToken off = NormalPqzToken(fN.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             abi.encode(_cfg(uint256(1) << 40)), "fee-off"));
+        _holders(address(off));
         IFactoryToken.TokenConfig memory cw = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed, vFee, vFeeMax) = (0, bytes32(0), false, 0, 0);
         _factory = fN;
         WrappedPqzToken offW = _wrappedOn(cw);
+        _holders(address(offW));
         _public(pre, address(h), 1_000_000 * SCALE);
         _public(off, address(h), 1_000_000 * SCALE);
         h.setTokens(pre, off, offW);

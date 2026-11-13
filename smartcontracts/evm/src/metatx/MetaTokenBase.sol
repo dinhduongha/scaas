@@ -171,7 +171,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         if (conf && (c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0
             || c.confidentialFee != 0 || c.disclosureMode != 0 || c.auditorMode != 0 || c.minDecoyFee != 0
             || c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0
-            || c.verifierFee != 0 || c.verifierFeeMax != 0)) {
+            || c.verifierFee != 0 || c.verifierFeeMax != 0 || c.pqzOwnKey || c.pqzOpening)) {
             revert IFactoryToken.ConfigFieldForOtherKind(4);
         }
     }

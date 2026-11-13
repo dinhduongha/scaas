@@ -205,6 +205,14 @@ contract FactoryZetherTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
         g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
         c.conf.verifierFeeMax = 0;
+        // the three-key model (CTR-PQZ-37): the key-class flags are the PQZ kinds' too
+        c.conf.pqzOwnKey = true;
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        (c.conf.pqzOwnKey, c.conf.pqzOpening) = (false, true);
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        c.conf.pqzOpening = false;
         assertTrue(g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a") != address(0), "control: all 0");
     }
 

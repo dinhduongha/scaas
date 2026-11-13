@@ -37,6 +37,7 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
         IFactoryToken.TokenConfig memory c = _regCfg();
         (vMode, vUA, vFixed, vFee, vFeeMax) = (0, bytes32(0), false, 0, 0);
         tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(c), "pr-fee"));
+        _holders(address(tok)); // the OFFCHAIN token's class `offchain-token`: its holders' records (CTR-UA-43)
         w = WrappedPqzToken(payable(address(tok)));
         _shieldTo(alice, BAL);
     }

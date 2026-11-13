@@ -27,7 +27,7 @@ abstract contract PqzVerdictKinds is PqzRegFixture {
     string internal constant VERDICT_T =
         "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
     string internal constant TARGS_T =
-        "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+        "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes))";
     string internal constant BARGS_T = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)";
 
     function _has(bytes4 sel) internal view returns (bool found) {
@@ -72,6 +72,7 @@ abstract contract PqzVerdictKinds is PqzRegFixture {
         IFactoryToken.TokenConfig memory c = _regCfg();
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
         tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(c), "pr-off"));
+        _holders(address(tok)); // the OFFCHAIN token's class `offchain-token`: its holders' records (CTR-UA-43)
         w = WrappedPqzToken(payable(address(tok)));
     }
 

@@ -103,6 +103,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         _setNext(0, 0, false, 0, 0);
         t = NormalPqzToken(fN.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), s));
+        _holders(address(t));
     }
 
     function _wrapShield(WrappedPqzToken t, uint256 units) internal {
@@ -596,6 +597,7 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         IFactoryToken.TokenConfig memory c = _offCfg(F, CAP);
         c.admin = nId;
         t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "f-router"));
+        _holders(address(t));
     }
 
     /// `UASetVerifierFee(from, target, next, chainUid, …)` signed by `NKEY` for `signedNext`, `signedTarget` and its chain
@@ -794,6 +796,14 @@ contract PqzVerifierFeeZetherTest is ZetherFixture {
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
         factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z-cap");
         c.conf.verifierFeeMax = 0;
+        // the three-key model (CTR-PQZ-37): the key-class flags are the PQZ kinds' (Zether ≠ PQZ)
+        c.conf.pqzOwnKey = true;
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z-own");
+        (c.conf.pqzOwnKey, c.conf.pqzOpening) = (false, true);
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z-open");
+        c.conf.pqzOpening = false;
         assertTrue(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z-none") != address(0));
     }
 }

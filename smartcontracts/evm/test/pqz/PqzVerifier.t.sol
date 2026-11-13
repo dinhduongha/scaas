@@ -47,9 +47,10 @@ contract PqzVerifierTest is PqzOffchainBase {
     }
 
     /// An OFFCHAIN token with verifier `v` on the factory `f` (owner: this test).
-    function _tok(OpenFactory f, bytes32 v, bool fixed_) internal returns (NormalPqzToken) {
-        return NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfgOf(v, fixed_, me)),
+    function _tok(OpenFactory f, bytes32 v, bool fixed_) internal returns (NormalPqzToken t) {
+        t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfgOf(v, fixed_, me)),
             keccak256(abi.encode(v, fixed_, gasleft()))));
+        _holders(address(t));
     }
 
     function _tryCreate(bytes32 v) internal returns (bool ok, bytes memory err) {

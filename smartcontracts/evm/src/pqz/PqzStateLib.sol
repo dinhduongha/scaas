@@ -17,6 +17,7 @@ import {GovernanceLib} from "../governance/GovernanceLib.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {IAdmin} from "../governance/IAdmin.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /// @title init, shield, rollover, prepare-acc and the state views (the account state; D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
@@ -66,8 +67,10 @@ library PqzStateLib {
         uint8 m = c.pqzVerifyMode;
         if (m > PqzCore.OFFCHAIN) revert IPqzToken.PqzVerifyModeInvalid(m);
         bool off = m == PqzCore.OFFCHAIN;
-        if (off ? c.pqzVerifierUA == 0
-                : (c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.verifierFee != 0 || c.verifierFeeMax != 0)) {
+        // CTR-PQZ-37: `PRECOMPILE` neither flag; `OFFCHAIN` the shared key with the opening, or its own key either way
+        if (off ? (c.pqzVerifierUA == 0 || (!c.pqzOwnKey && !c.pqzOpening))
+                : (c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.verifierFee != 0 || c.verifierFeeMax != 0
+                    || c.pqzOwnKey || c.pqzOpening)) {
             revert IPqzToken.PqzVerifyConfigInvalid();
         }
         if (c.verifierFee > c.verifierFeeMax) revert IPqzToken.VerifierFeeAboveMax(c.verifierFee, c.verifierFeeMax);
@@ -77,11 +80,13 @@ library PqzStateLib {
         // group 3h (PP-4): `NONE` or `LOG`, any other value refused
         if (c.proofStore > PqzCore.LOG) revert IPqzToken.ProofStoreInvalid(c.proofStore);
         s.proofStore = c.proofStore;
+        (s.pqzOwnKey, s.pqzOpening) = (c.pqzOwnKey, c.pqzOpening);
         // C2-3 / C2-4: an auditor is required whenever the mode is not NONE, and its key must be usable (`_keyPtr`, the
-        // mode's check; the zero id is never registered)
-        if (aud.length == 32) PqzCore._keyPtr(registry, a);
+        // mode's check by the token's class; the zero id is never registered). Class `offchain-token`: no record of the token
+        // can exist before its creation, so not checked here (CTR-UA-43; a transfer refuses until the auditor registers)
+        if (aud.length == 32 && !c.pqzOwnKey) PqzCore._keyPtr(registry, a);
         if (off) {
-            s.psid = PqzSet.PQZL_ID;
+            s.psid = c.pqzOpening ? PqzSet.PQZL_SPLIT_ID : PqzSet.PQZL_ID; // CTR-PQZ-38
             s.pqzVerifierUA = c.pqzVerifierUA;
             s.pqzVerifierShape = PqzCore.verifierShape(registry, c.pqzVerifierUA, true);
             s.pqzVerifierFixed = c.pqzVerifierFixed;
@@ -252,6 +257,7 @@ library PqzStateLib {
         if (_live(s, g)) (c.pending, c.eta) = (s.pqzPendingVerifier, s.eta);
         (c.verifierFee, c.verifierFeeMax) = (s.verifierFee, s.verifierFeeMax);
         if (_feeLive(s, g)) (c.verifierFeePending, c.verifierFeeEta) = (s.verifierFeePending, s.verifierFeeEta);
+        (c.pqzOwnKey, c.pqzOpening) = (s.pqzOwnKey, s.pqzOpening);
     }
 
     /// @dev The admin first (a stranger learns nothing of the configuration), then an `OFFCHAIN` token with a transferable
@@ -310,9 +316,76 @@ library PqzStateLib {
     ///         `prepareAcc`'s (a rollover needs both prepared halves, `AccNotPrepared`, and a key once eligible stays so), not
     ///         repeated here: the registry read would put `ROLL_MAX` at n2560-kmax16384 over its 0.75 · 2^24 bound.
     function rollOver(bytes32 ua, uint64 v, uint256 n) public {
+        if (PqzCore.$().pqzOpening) revert IPqzToken.RollOverSignedOnly(); // CTR-PQZ-41: only the holder rolls
         if (n == 0 || n > PqzCore.ROLL_MAX) revert IPqzToken.RollOverRange(n);
         (uint64 nr, uint32 units, bytes32 h) = _roll(PqzCore.$().acct[ua][v], ua, n);
         emit IPqzToken.PqzRolledOver(ua, v, nr, units, h);
+    }
+
+    /// @notice CTR-PQZ-41, an opening token's rollover: `ua`'s own signature (`requireAuthorized`, purpose `zether-auth`, an
+    ///         `msig` by its quorum) over the typed `PqzRollOver` in the token's domain, `rollSeq` and `rolled` the state's,
+    ///         `entriesHash` recomputed from state over the contents of the `n` entries from `rolled` and of each skipped one
+    ///         (`entryHash`): a reorg or an un-roll in between is `AuthRejected`. Then each `skip` index (strictly ascending,
+    ///         in `[rolled, pendingCount)`, a credit; `SkipRange`, `SkipTrivial`) gets the skip mark, never cleared
+    ///         (`PqzSkipped` each), then, for `n > 0`, `rollOver`'s rules and body (`PqzRolledOver`). `n = 0` with no skip:
+    ///         `RollOverRange(0)`. `rollSeq + 1` on every accepted call.
+    function rollOverSigned(PqzCore.Env memory e, bytes32 ua, uint64 v, uint64 n, uint64[] calldata skip,
+        uint64 validUntilBlock, IUARegistry.UASig calldata sig) public
+    {
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        if (!s.pqzOpening) revert IPqzToken.OpUnsupported();
+        if (block.number > validUntilBlock) revert IPqzToken.Expired(validUntilBlock);
+        if (n > PqzCore.ROLL_MAX || (n == 0 && skip.length == 0)) revert IPqzToken.RollOverRange(n);
+        if (skip.length > PqzCore.ROLL_MAX) revert IPqzToken.RollOverRange(skip.length);
+        PqzCore.Account storage a = s.acct[ua][v];
+        PqzCore.requireHolder(e.registry, ua, _rollDigest(e, a, ua, v, n, skip, validUntilBlock), sig);
+        a.rollSeq += 1;
+        for (uint256 j; j < skip.length; ++j) {
+            a.pending[skip[j]] |= PqzCore.SKIP;
+            emit IPqzToken.PqzSkipped(ua, v, skip[j]);
+        }
+        if (n != 0) {
+            (uint64 nr, uint32 units, bytes32 hh) = _roll(a, ua, n);
+            emit IPqzToken.PqzRolledOver(ua, v, nr, units, hh);
+        }
+    }
+
+    /// @dev The `PqzRollOver` digest from state (the skip list checked on the way: `SkipRange`, `SkipTrivial`).
+    function _rollDigest(PqzCore.Env memory e, PqzCore.Account storage a, bytes32 ua, uint64 v, uint64 n,
+        uint64[] calldata skip, uint64 validUntilBlock) private view returns (bytes32)
+    {
+        return MessageHashUtils.toTypedDataHash(e.domainSeparator, keccak256(bytes.concat(
+            abi.encode(PqzCore.ROLL_OVER_TYPEHASH, ua, v, a.rollSeq, a.rolled, n),
+            abi.encode(keccak256(abi.encodePacked(skip)), _entriesHash(a, n, skip), validUntilBlock, e.chainUid))));
+    }
+
+    /// @dev `entriesHash = keccak256(h(rolled) ‖ … ‖ h(rolled + n − 1) ‖ h(skip_0) ‖ …)`.
+    function _entriesHash(PqzCore.Account storage a, uint64 n, uint64[] calldata skip) private view returns (bytes32) {
+        uint64 r = a.rolled;
+        uint64 pc = a.pendingCount;
+        if (r + n > pc) revert IPqzToken.RollOverRange(n);
+        bytes32[] memory h = new bytes32[](n + skip.length);
+        for (uint256 k; k < n; ++k) h[k] = entryHash(a, r + k);
+        for (uint256 j; j < skip.length; ++j) {
+            uint64 i = skip[j];
+            if (i < r || i >= pc || (j != 0 && i <= skip[j - 1])) revert IPqzToken.SkipRange(i);
+            if (uint16(a.pending[i] >> 64) == 0) revert IPqzToken.SkipTrivial(i);
+            h[n + j] = entryHash(a, i);
+        }
+        return keccak256(abi.encodePacked(h));
+    }
+
+    /// @notice CTR-PQZ-41: `h(i) = keccak256(abi.encode(i, slot_i with the skip mark cleared, the code hash of slot_i's blob
+    ///         or 0 for a TRIVIAL entry))`, the contents of entry `i` a signed rollover binds.
+    function entryHash(PqzCore.Account storage a, uint256 i) internal view returns (bytes32) {
+        uint256 e = a.pending[uint64(i)] & ~PqzCore.SKIP;
+        bytes32 c = uint16(e >> 64) == 0 ? bytes32(0) : address(uint160(e >> 96)).codehash;
+        return keccak256(abi.encode(i, e, c));
+    }
+
+    /// @notice CTR-PQZ-41: the skip mark of pending entry `i` of `(ua, v)`.
+    function skipped(bytes32 ua, uint64 v, uint64 i) public view returns (bool sk) {
+        (, sk) = PqzCore.slotBlock(PqzCore.$().acct[ua][v].pending[i]);
     }
 
     /// @dev `rollOver`'s body on the account (a frame of its own for the stack): the new `rolled`, `accUnits`, `accHash`.

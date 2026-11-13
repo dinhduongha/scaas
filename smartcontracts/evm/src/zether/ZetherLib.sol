@@ -260,7 +260,7 @@ library ZetherLib {
         // spec §4.1, C8): `proofStore` too, in the same check (no Zether body moves); round 3t (CTR-PQZ-36): the verifier fee
         // and its cap too
         if (c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0 || c.verifierFee != 0
-            || c.verifierFeeMax != 0) {
+            || c.verifierFeeMax != 0 || c.pqzOwnKey || c.pqzOpening) {
             revert IFactoryToken.ConfigFieldForOtherKind(4);
         }
         // the release's verifier must run here (an absent precompile answers success with empty output; moved from the

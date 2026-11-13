@@ -99,6 +99,7 @@ contract NamespaceProbe is UAMetaTxBase {
         // group 3h T58 (pqz-proof-path spec §2.2, §6): the account's `lastDebit`, the debit record appended
         (qa.lastDebit, q.debitRec[U][7]) = (0xdd, PqzCore.DebitRecord(0xde, 0xdf));
         q.proofStore = 1; // group 3h T60: byte 23 of slot 0
+        (q.pqzOwnKey, q.pqzOpening, qa.rollSeq) = (true, true, 0xb7); // the three-key model: bytes 24, 25 of slot 0; beside lastDebit
         // round 3t (CTR-PQZ-36, verifier fee spec §4): slots 20-22 appended
         (q.verifierFee, q.verifierFeeMax, q.verifierFeePending, q.verifierFeeEta) = (0xb1, 0xb2, 0xb3, 0xb4);
         (q.verifierFeeProposer, q.verifierFeeProposerGeneration) = (bytes32(uint256(0xb5)), 0xb6);
@@ -337,6 +338,9 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("verifierFeeEta", 0, 0, 0xb4, 8));
         f = _more(f, F("verifierFeeProposer", 0, 0, 0xb5, 32));
         f = _more(f, F("verifierFeeProposerGeneration", 0, 0, 0xb6, 4));
+        f = _more(f, F("pqzOwnKey", 0, 0, 1, 1));
+        f = _more(f, F("pqzOpening", 0, 0, 1, 1));
+        f = _more(f, F("acct[U][7].rollSeq", u, 0, 0xb7, 8));
         _ns(address(p), "pqz", "scaas.pqz", f);
         f = new F[](25);
         f[0] = F("verifier", 0, 0, a, 20);

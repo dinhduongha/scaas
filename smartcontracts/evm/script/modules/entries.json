@@ -12716,8 +12716,8 @@
     "group": "Q"
    },
    {
-    "sel": "cef7ab1f",
-    "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "45285b7a",
+    "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingle",
     "decl": "PqzLayer",
     "kept": false,
@@ -12748,8 +12748,8 @@
     "group": "Q"
    },
    {
-    "sel": "c92100fe",
-    "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "8f913be5",
+    "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingle",
     "decl": "PqzLayer",
     "kept": false,
@@ -12778,8 +12778,8 @@
     "group": "Q"
    },
    {
-    "sel": "7e3baaca",
-    "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "d099e806",
+    "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingleCompact",
     "decl": "PqzLayer",
     "kept": false,
@@ -12810,8 +12810,8 @@
     "group": "Q"
    },
    {
-    "sel": "240ecea3",
-    "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "a4f6024d",
+    "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingleCompact",
     "decl": "PqzLayer",
     "kept": false,
@@ -13186,6 +13186,38 @@
      "ua",
      "keyVersion",
      "n"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "90f3eb07",
+    "sig": "mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+    "name": "mtxRollOverSigned",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 n",
+     "uint64[] calldata skip",
+     "uint64 validUntilBlock",
+     "IUARegistry.UASig calldata ownerSig"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "n",
+     "skip",
+     "validUntilBlock",
+     "ownerSig"
     ],
     "returns": "",
     "ifaces": [
@@ -13823,6 +13855,32 @@
      "i"
     ],
     "returns": "uint256 _p0",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "2d73ee4a",
+    "sig": "pqzSkipped(bytes32,uint64,uint64)",
+    "name": "pqzSkipped",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 index"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "index"
+    ],
+    "returns": "bool _p0",
     "ifaces": [
      "IPqzToken"
     ],
@@ -14474,8 +14532,8 @@
     "group": "K"
    },
    {
-    "sel": "931415ee",
-    "sig": "transferSingleStatement((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes32)",
+    "sel": "50f9be2f",
+    "sig": "transferSingleStatement((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes32)",
     "name": "transferSingleStatement",
     "decl": "PqzLayer",
     "kept": false,
@@ -16091,8 +16149,8 @@
     "group": "Q"
    },
    {
-    "sel": "cef7ab1f",
-    "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "45285b7a",
+    "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingle",
     "decl": "PqzLayer",
     "kept": false,
@@ -16123,8 +16181,8 @@
     "group": "Q"
    },
    {
-    "sel": "c92100fe",
-    "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "8f913be5",
+    "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingle",
     "decl": "PqzLayer",
     "kept": false,
@@ -16153,8 +16211,8 @@
     "group": "Q"
    },
    {
-    "sel": "7e3baaca",
-    "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "d099e806",
+    "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingleCompact",
     "decl": "PqzLayer",
     "kept": false,
@@ -16185,8 +16243,8 @@
     "group": "Q"
    },
    {
-    "sel": "240ecea3",
-    "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "a4f6024d",
+    "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingleCompact",
     "decl": "PqzLayer",
     "kept": false,
@@ -16561,6 +16619,38 @@
      "ua",
      "keyVersion",
      "n"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "90f3eb07",
+    "sig": "mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+    "name": "mtxRollOverSigned",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 n",
+     "uint64[] calldata skip",
+     "uint64 validUntilBlock",
+     "IUARegistry.UASig calldata ownerSig"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "n",
+     "skip",
+     "validUntilBlock",
+     "ownerSig"
     ],
     "returns": "",
     "ifaces": [
@@ -17549,6 +17639,32 @@
     "group": "Q"
    },
    {
+    "sel": "2d73ee4a",
+    "sig": "pqzSkipped(bytes32,uint64,uint64)",
+    "name": "pqzSkipped",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 index"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "index"
+    ],
+    "returns": "bool _p0",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
     "sel": "03ccd4f0",
     "sig": "pqzPendingCt(bytes32,uint64,uint64)",
     "name": "pqzPendingCt",
@@ -18356,8 +18472,8 @@
     "group": "K"
    },
    {
-    "sel": "931415ee",
-    "sig": "transferSingleStatement((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes32)",
+    "sel": "50f9be2f",
+    "sig": "transferSingleStatement((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes32)",
     "name": "transferSingleStatement",
     "decl": "PqzLayer",
     "kept": false,
@@ -33950,8 +34066,8 @@
     "group": "Q"
    },
    {
-    "sel": "cef7ab1f",
-    "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "45285b7a",
+    "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingle",
     "decl": "PqzLayer",
     "kept": false,
@@ -33982,8 +34098,8 @@
     "group": "Q"
    },
    {
-    "sel": "c92100fe",
-    "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "8f913be5",
+    "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingle",
     "decl": "PqzLayer",
     "kept": false,
@@ -34012,8 +34128,8 @@
     "group": "Q"
    },
    {
-    "sel": "7e3baaca",
-    "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "d099e806",
+    "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingleCompact",
     "decl": "PqzLayer",
     "kept": false,
@@ -34044,8 +34160,8 @@
     "group": "Q"
    },
    {
-    "sel": "240ecea3",
-    "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "a4f6024d",
+    "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingleCompact",
     "decl": "PqzLayer",
     "kept": false,
@@ -34450,6 +34566,38 @@
      "ua",
      "keyVersion",
      "n"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "90f3eb07",
+    "sig": "mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+    "name": "mtxRollOverSigned",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 n",
+     "uint64[] calldata skip",
+     "uint64 validUntilBlock",
+     "IUARegistry.UASig calldata ownerSig"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "n",
+     "skip",
+     "validUntilBlock",
+     "ownerSig"
     ],
     "returns": "",
     "ifaces": [
@@ -35193,6 +35341,32 @@
      "i"
     ],
     "returns": "uint256 _p0",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "2d73ee4a",
+    "sig": "pqzSkipped(bytes32,uint64,uint64)",
+    "name": "pqzSkipped",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 index"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "index"
+    ],
+    "returns": "bool _p0",
     "ifaces": [
      "IPqzToken"
     ],
@@ -36028,8 +36202,8 @@
     "group": "K"
    },
    {
-    "sel": "931415ee",
-    "sig": "transferSingleStatement((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes32)",
+    "sel": "50f9be2f",
+    "sig": "transferSingleStatement((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes32)",
     "name": "transferSingleStatement",
     "decl": "PqzLayer",
     "kept": false,
@@ -37868,8 +38042,8 @@
     "group": "Q"
    },
    {
-    "sel": "cef7ab1f",
-    "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "45285b7a",
+    "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingle",
     "decl": "PqzLayer",
     "kept": false,
@@ -37900,8 +38074,8 @@
     "group": "Q"
    },
    {
-    "sel": "c92100fe",
-    "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "8f913be5",
+    "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingle",
     "decl": "PqzLayer",
     "kept": false,
@@ -37930,8 +38104,8 @@
     "group": "Q"
    },
    {
-    "sel": "7e3baaca",
-    "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "d099e806",
+    "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingleCompact",
     "decl": "PqzLayer",
     "kept": false,
@@ -37962,8 +38136,8 @@
     "group": "Q"
    },
    {
-    "sel": "240ecea3",
-    "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+    "sel": "a4f6024d",
+    "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
     "name": "mtxConfidentialTransferSingleCompact",
     "decl": "PqzLayer",
     "kept": false,
@@ -38368,6 +38542,38 @@
      "ua",
      "keyVersion",
      "n"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "90f3eb07",
+    "sig": "mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+    "name": "mtxRollOverSigned",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 n",
+     "uint64[] calldata skip",
+     "uint64 validUntilBlock",
+     "IUARegistry.UASig calldata ownerSig"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "n",
+     "skip",
+     "validUntilBlock",
+     "ownerSig"
     ],
     "returns": "",
     "ifaces": [
@@ -39462,6 +39668,32 @@
     "group": "Q"
    },
    {
+    "sel": "2d73ee4a",
+    "sig": "pqzSkipped(bytes32,uint64,uint64)",
+    "name": "pqzSkipped",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 index"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "index"
+    ],
+    "returns": "bool _p0",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
     "sel": "03ccd4f0",
     "sig": "pqzPendingCt(bytes32,uint64,uint64)",
     "name": "pqzPendingCt",
@@ -40453,8 +40685,8 @@
     "group": "K"
    },
    {
-    "sel": "931415ee",
-    "sig": "transferSingleStatement((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes32)",
+    "sel": "50f9be2f",
+    "sig": "transferSingleStatement((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes32)",
     "name": "transferSingleStatement",
     "decl": "PqzLayer",
     "kept": false,

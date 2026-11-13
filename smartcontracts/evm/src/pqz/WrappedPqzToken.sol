@@ -302,7 +302,7 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         if (ITokenModule(m).kind() != uint8(IOpenFactory.TokenKind.WRAPPED_PQZ) || ITokenModule(m).moduleGroup() != group || ITokenModule(m).factory() != FACTORY) {
             revert ModuleMismatch(i);
         }
-        if (ITokenModule(m).pqzSet() != PqzSet.SELFTEST) revert ModuleMismatch(i);
+        if (ITokenModule(m).pqzSet() != PqzSet.SET_DIGEST) revert ModuleMismatch(i);
     }
 
     /// The module of group `g` inside a `pure` stub (S2): an immutable read is not `pure`, so the reader is cast, as the stubs are.
@@ -605,6 +605,10 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
         _forward(_MQ);
     }
 
+    function mtxRollOverSigned(bytes32, uint64, uint64, uint64[] calldata, uint64, IUARegistry.UASig calldata) external {
+        _forward(_MQ);
+    }
+
     function mtxSelectors() external pure returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a) {
         _forwardPure(_modulePure(3));
     }
@@ -742,6 +746,10 @@ contract WrappedPqzToken is WrappedPqzTokenCore, IWrappedPqzTokenAbi {
     }
 
     function pqzPending(bytes32, uint64, uint64) external view returns (uint256 _p0) {
+        _forwardView(_MS);
+    }
+
+    function pqzSkipped(bytes32, uint64, uint64) external view returns (bool _p0) {
         _forwardView(_MS);
     }
 

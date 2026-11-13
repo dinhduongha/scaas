@@ -2802,6 +2802,11 @@ PqzOpening openingTo;        // to toUA's opening KEM key
 PqzOpening openingAuditor;   // to auditorUA's; empty when auditorOn = 0
 ```
 
+`PqzTransferArgs` field order: `…, bytes vAuditor, bytes uFrom, bytes sealedMemo, PqzOpening openingTo, PqzOpening
+openingAuditor` (`uFrom` the sender's `u_f`, [CTR-PQZ-38](#CTR-PQZ-38)); an empty opening has every field empty or 0. Its typed
+form adds `PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)`, so its typehash and those of the signed single
+transfers move for every class.
+
 - **Deterministic from `seed_leg`**: `coins = SHAKE256("SCAAS-PQZ-OPEN-COINS-V1" ‖ seed_leg ‖ u8(role) ‖ keccak256(kemPk))[0..64)`,
   `role` 0 recipient, 1 auditor, `kemPk` the reader's 1,601-byte opening KEM key from its scoped record of the token's scope at
   the key version the leg is encrypted to; `m = coins[0..32)` is the ML-KEM-1024 encapsulation randomness, `e = coins[32..64)` the
@@ -2834,7 +2839,9 @@ PqzOpening openingAuditor;   // to auditorUA's; empty when auditorOn = 0
   accepted call; `rolled` the state value signed against; `entriesHash` binds contents, not positions:
   `h(i) = keccak256(abi.encode(i, slot_i with the skip bit cleared, codehash of slot_i's blob or 0 for a TRIVIAL entry))`,
   `entriesHash = keccak256(h(rolled) ‖ … ‖ h(rolled + n − 1) ‖ h(skip_0) ‖ …)`; the contract recomputes it from state and any
-  difference is `AuthRejected`. The typehash is pinned; the storage layout pin moves.
+  difference is `AuthRejected`. The typehash is pinned; the storage layout pin moves. A wallet reads `rollSeq` as the last
+  field of `pqzAccount(ua, keyVersion)` (`AccountState.rollSeq`); a signed rollover on a token without the opening reverts
+  `OpUnsupported()`, as op 7 and the `RECEIVER_X` / `AUDITOR` disclosures on an opening token do.
 - `skip`: strictly ascending absolute pending indices, length `≤ ROLL_MAX`, each in `[rolled, pendingCount)` and a credit
   (`SkipRange(index)`, `SkipTrivial(index)`). Each named slot gets the **skip mark**, bit 63 of the slot's `block` field, never
   cleared. One accessor returns `(block, skipped)` and every reader goes through it (`_window`'s `ROLL_AGE` test, `_trivial`'s

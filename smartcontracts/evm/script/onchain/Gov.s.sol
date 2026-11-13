@@ -463,7 +463,7 @@ contract Gov is OnchainBase {
         internal returns (address t)
     {
         IFactoryToken.TokenConfig memory c = _regCfg(sym, wrapped);
-        if (zether) c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0);
+        if (zether) c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
         t = _create(kind, c, label);
         if (wrapped) {
             vm.startBroadcast(k1);

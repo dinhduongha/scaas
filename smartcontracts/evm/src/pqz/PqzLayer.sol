@@ -49,10 +49,11 @@ interface IPqzDisclosureStatement {
 ///         signed overload (`UAEnvelope` first, `UASig` last; ua-mtx-merge R36) for native and derived ids, which runs it
 ///         through the ticket self-call, so the op's body and the statement's binding are the generic path's.
 abstract contract PqzLayer is MetaTokenBase {
-    /// @notice The PQZ parameter set this code was built at: its self-test hash (`PqzSet.SELFTEST`, rewritten by `at-set.sh`).
-    ///         Every body module of a PQZ kind answers it, and the implementation's constructor compares it (T66b, Fable P2-A).
+    /// @notice The PQZ parameter set this code was built at: `PqzSet.SET_DIGEST`, the keccak of the set's whole generated
+    ///         constant block (CTR-PQZ-42, T-26; rewritten by `at-set.sh`). Every body module of a PQZ kind answers it, and
+    ///         the implementation's constructor compares it (T66b, Fable P2-A).
     function pqzSet() public pure returns (bytes32) {
-        return PqzSet.SELFTEST;
+        return PqzSet.SET_DIGEST;
     }
 
     // The address signed forms (`Envelope` + `bytes sig`) and their typehashes are in legacy/ua-mtx-merge/ (R36): the
@@ -64,10 +65,10 @@ abstract contract PqzLayer is MetaTokenBase {
         "UAPrepareAcc(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 half,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
     bytes32 private constant UA_TRANSFER_SINGLE_TYPEHASH = keccak256(
-        "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
+        "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)"
     );
     bytes32 private constant UA_TRANSFER_SINGLE_COMPACT_TYPEHASH = keccak256(
-        "UAPqzTransferSingleCompact(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
+        "UAPqzTransferSingleCompact(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)"
     );
     bytes32 private constant UA_TRANSFER_TYPEHASH = keccak256(
         "UAPqzTransfer(bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzLeg(bytes32 ua,bytes v,bytes vAuditor)PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)"
@@ -116,7 +117,7 @@ abstract contract PqzLayer is MetaTokenBase {
         PqzCore.PqzStorage storage s = PqzCore.$();
         PqzCore.Account storage a = s.acct[ua][keyVersion];
         return IPqzToken.AccountState(a.pendingCount, a.rolled, a.floor, a.cleared, a.accBlob, a.accUnits, a.flags,
-            s.sendCounter[ua], a.accHash, a.lastDebit);
+            s.sendCounter[ua], a.accHash, a.lastDebit, a.rollSeq);
     }
 
     /// @notice Group 3h (PP-2): the record of `ua`'s debit `counter` (`PqzViewLib.debitRecord`; spec §8 lever 1).
@@ -234,7 +235,8 @@ abstract contract PqzLayer is MetaTokenBase {
     {
         try IPqzDisclosureStatement(address(this)).disclosureStatement(entryRef, leg, amount, kind, keyVersion) returns (bytes memory r) { st = r; }
         catch (bytes memory err) {
-            if (err.length == 0 || bytes4(err) == IPqzToken.KeyVersionUnknown.selector) assembly ("memory-safe") {
+            if (err.length == 0 || bytes4(err) == IPqzToken.KeyVersionUnknown.selector
+                || bytes4(err) == IPqzToken.OpUnsupported.selector) assembly ("memory-safe") {
                 revert(add(err, 32), mload(err))
             }
         }
@@ -506,6 +508,18 @@ abstract contract PqzLayer is MetaTokenBase {
         PqzStateLib.rollOver(ua, keyVersion, n);
     }
 
+    /// @notice CTR-PQZ-41: the holder's signed rollover with skip marks (opening tokens; `PqzStateLib.rollOverSigned`).
+    function _mtxRollOverSignedBody(bytes32 ua, uint64 keyVersion, uint64 n, uint64[] calldata skip, uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig) internal
+    {
+        PqzStateLib.rollOverSigned(_envOf(0), ua, keyVersion, n, skip, validUntilBlock, ownerSig);
+    }
+
+    /// @notice CTR-PQZ-41: the skip mark of pending entry `index` of `(ua, keyVersion)`.
+    function _pqzSkippedBody(bytes32 ua, uint64 keyVersion, uint64 index) internal view returns (bool) {
+        return PqzStateLib.skipped(ua, keyVersion, index);
+    }
+
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent), per key version.
     function _mtxPrepareAccBody(bytes32 ua, uint64 keyVersion, uint256 half) internal {
         PqzStateLib.prepareAcc(ua, keyVersion, half, _registry());
@@ -599,13 +613,15 @@ abstract contract PqzLayer is MetaTokenBase {
     }
 
     /// @dev The PQZ ops of both kinds (CTR-PQZ-21): allowlisted `ABSOLUTE` on both paths, never batched; includes the
-    ///      permissionless `mtxRollOver` / `mtxPrepareAcc` (relayed, owner 2026-10-20; the fee may be 0).
+    ///      permissionless `mtxRollOver` / `mtxPrepareAcc` (relayed, owner 2026-10-20; the fee may be 0) and the holder's
+    ///      `mtxRollOverSigned` (CTR-PQZ-41, any fee, 0 included).
     function _isPqzOp(bytes4 sel) internal pure virtual returns (bool) {
         return sel == IConfidentialToken.mtxShield.selector || sel == IPqzToken.mtxConfidentialTransfer.selector
             || sel == IPqzToken.mtxConfidentialTransferCompact.selector
             || sel == IPqzToken.mtxConfidentialTransferSingle.selector
             || sel == IPqzToken.mtxConfidentialTransferSingleCompact.selector || sel == IPqzToken.mtxUnshield.selector
-            || sel == IPqzToken.mtxRollOver.selector || sel == IPqzToken.mtxPrepareAcc.selector;
+            || sel == IPqzToken.mtxRollOver.selector || sel == IPqzToken.mtxPrepareAcc.selector
+            || sel == IPqzToken.mtxRollOverSigned.selector;
     }
 
     function _batchable(bytes4 sel) internal view virtual override returns (bool) {

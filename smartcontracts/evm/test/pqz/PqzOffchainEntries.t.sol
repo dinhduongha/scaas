@@ -168,7 +168,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     string internal constant VERDICT_T =
         "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
     string internal constant TARGS_T =
-        "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+        "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes))";
     string internal constant MARGS_T =
         "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
     string internal constant BARGS_T = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)";
@@ -240,7 +240,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         MetaTxLib.UAEnvelope memory u = _u(nId, address(off));
         bytes memory st = off.transferSingleStatement(a, _tag(address(off), u));
         bytes32 th = keccak256(
-            "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)");
+            "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)");
         bytes32 sh = keccak256(bytes.concat(abi.encode(th, u.from), abi.encode(_hashT(a), keccak256(VPROOF), keccak256("")),
             abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
         (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(off)), sh));
@@ -257,7 +257,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         uint256 snap = vm.snapshotState();
         vm.prank(address(0x4E1A));
         (bool ok,) = address(off).call(c1);
-        assertTrue(ok, "the pre-3f struct (3h: + ownTag), verdict 1");
+        assertTrue(ok, "the struct without the verdict (3h: + ownTag; three-key model: + uFrom and the openings), verdict 1");
         vm.revertToState(snap);
         vm.prank(address(0x4E1A));
         (ok,) = address(off).call(c2);
@@ -337,6 +337,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
         c.admin = nid(address(this));
         off = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-owned"));
+        _holders(address(off));
         _shieldOn(off, alice, 100);
         (bytes32 ref, bytes memory st) = _sent(7);
         IPqzToken.PqzSignedVerdict memory sv = _sv(off, st);

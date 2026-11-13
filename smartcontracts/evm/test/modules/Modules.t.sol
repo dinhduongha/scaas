@@ -85,7 +85,7 @@ contract ModulesTest is Test {
                 _refused(k, c, abi.encodeWithSelector(MetaTokenBase.ModuleMismatch.selector, 2));
             }
             if (k == 4 || k == 5 || k == 12 || k == 13) { // every module answers this set; one of another set is refused
-                for (uint256 i; i < n; ++i) assertEq(ITokenModule(ms[i]).pqzSet(), PqzSet.SELFTEST);
+                for (uint256 i; i < n; ++i) assertEq(ITokenModule(ms[i]).pqzSet(), PqzSet.SET_DIGEST); // CTR-PQZ-42 (T-26)
                 for (uint256 i; i < n; ++i) {
                     c = _copy(ms);
                     c[i] = _otherSet(ms[i]);
@@ -131,11 +131,14 @@ contract ModulesTest is Test {
         assertEq(rows, 59, "every module of the twelve kinds");
     }
 
-    /// @dev `m`'s runtime with its set's self-test hash changed, at a new address: a module answering another PQZ set and
-    ///      nothing else different (P2-A's case, a module built at another set).
+    /// @dev `m`'s runtime with its set identity changed, at a new address: a module answering another PQZ set and nothing
+    ///      else different (P2-A's case, a module built at another set). CTR-PQZ-42 (T-26, owner 2026-11-13, decisions.md): the
+    ///      identity is `SET_DIGEST`, the keccak of the whole generated constant block, so a
+    ///      module of a set that differs in any constant (not only the self-test hash) is refused; with `SELFTEST` as the
+    ///      identity this patch would leave `pqzSet()` unchanged and the module accepted.
     function _otherSet(address m) internal returns (address a) {
         bytes memory code = m.code;
-        bytes32 h = PqzSet.SELFTEST;
+        bytes32 h = PqzSet.SET_DIGEST;
         uint256 hits;
         for (uint256 i; i + 32 <= code.length; ++i) {
             bytes32 w;
@@ -147,7 +150,7 @@ contract ModulesTest is Test {
                 ++hits;
             }
         }
-        assertGt(hits, 0, "the set's self-test hash is in the module's code");
+        assertGt(hits, 0, "the set's digest is in the module's code");
         a = address(uint160(uint256(keccak256(abi.encode("t66b.other-set", m)))));
         vm.etch(a, code);
         assertTrue(ITokenModule(a).pqzSet() != h);

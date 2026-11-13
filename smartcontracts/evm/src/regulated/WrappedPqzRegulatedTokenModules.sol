@@ -678,6 +678,10 @@ contract WrappedPqzRegulatedTokenQ is WrappedPqzRegulatedTokenCore {
         _mtxRollOverBody(ua, keyVersion, n);
     }
 
+    function mtxRollOverSigned(bytes32 ua, uint64 keyVersion, uint64 n, uint64[] calldata skip, uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig) external onlyDelegated {
+        _mtxRollOverSignedBody(ua, keyVersion, n, skip, validUntilBlock, ownerSig);
+    }
+
     function mtxShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
         return _mtxShieldBody(e, toUA, amount, auth);
     }
@@ -788,6 +792,10 @@ contract WrappedPqzRegulatedTokenS is WrappedPqzRegulatedTokenCore {
 
     function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view onlyDelegated returns (uint256 _p0) {
         return _pqzPendingBody(ua, keyVersion, i);
+    }
+
+    function pqzSkipped(bytes32 ua, uint64 keyVersion, uint64 index) external view onlyDelegated returns (bool _p0) {
+        return _pqzSkippedBody(ua, keyVersion, index);
     }
 
     function pqzPendingCt(bytes32 ua, uint64 keyVersion, uint64 i) external view onlyDelegated returns (bytes memory _p0) {

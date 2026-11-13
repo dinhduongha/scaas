@@ -178,7 +178,7 @@ def face(k):
     if REG(k):
         checks += '\n        if (ITokenModule(m).COMPLIANCE_REGISTRY_CODEHASH() != COMPLIANCE_REGISTRY_CODEHASH) revert ModuleMismatch(i);'
     if PQZ(k):
-        checks += '\n        if (ITokenModule(m).pqzSet() != PqzSet.SELFTEST) revert ModuleMismatch(i);'
+        checks += '\n        if (ITokenModule(m).pqzSet() != PqzSet.SET_DIGEST) revert ModuleMismatch(i);'
     stubs = []
     for e in E['kinds'][k]:
         if e['kept']:

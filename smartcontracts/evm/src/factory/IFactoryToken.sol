@@ -107,6 +107,12 @@ interface IFactoryToken {
         /// verifier fee each proof-carrying debit pays to the current verifier UA, in the fee word's unit, and its immutable cap.
         uint64 verifierFee;
         uint64 verifierFeeMax;
+        /// `*_PQZ` kinds only (the three-key model, CTR-PQZ-37; every other kind requires both false), immutable: the key
+        /// class and the sealed opening. `PRECOMPILE`: both false (class `registry`). `OFFCHAIN`: `pqzOwnKey` false and
+        /// `pqzOpening` true (class `offchain-shared`), or `pqzOwnKey` true with `pqzOpening` either way (class
+        /// `offchain-token`). Any other combination: `PqzVerifyConfigInvalid`.
+        bool pqzOwnKey;
+        bool pqzOpening;
     }
 
     /// @notice Regulated-kinds spec §2.4: the regulated kinds' (8-13) only; a plain kind (0-5) refuses any set field
