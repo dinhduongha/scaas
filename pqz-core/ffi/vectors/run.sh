@@ -5,8 +5,8 @@
 # write: regenerate smartcontracts/vectors/pqz/*.json, then rebuild (the self-test compiles in the REGISTER proofs).
 # Then: pqz-vectors --check (a second generation, byte for byte; every proof and negative input through
 # pqz_precompile, the generic PQZL verifier agreeing), pqz_kat.py --check (independent Python), tamper.py (each
-# checker catches changed leaves), pqz-ffi's tests (selftest_vectors: the compiled-in proofs), the wasm32 replay (same
-# proof bytes, valid). Exit 1 if any step fails.
+# checker catches changed leaves), pqz-ffi's tests (selftest_vectors: the compiled-in proofs), pqz-offchain's tests
+# (offchain/), the wasm32 replay (same proof bytes, valid). Exit 1 if any step fails.
 set -u
 cd "$(dirname "$0")/.."
 . ../resume.sh # under gate.sh: a check that passed at this tree is skipped; builds always run (owner 2026-10-23)
@@ -43,6 +43,10 @@ step check sh -c "/usr/bin/time -v $TD/release/pqz-vectors --check > $R-check.tx
 step pqz_kat sh -c "/usr/bin/time -f '%M KB' python3 -I ../../smartcontracts/vectors/pqz/pqz_kat.py --check > $R-pqz-kat.txt 2>&1"
 step tamper sh -c "python3 -I vectors/tamper.py > $R-tamper.txt 2>&1"
 step ffi-test sh -c "cargo test --release --offline $BF --features prove,test-hooks -- --test-threads 4 > $R-ffi-test.txt 2>&1"
+# pqz-offchain (three-key spec K3-4): the off-chain verifier's entry, its own crate (the plugin's library stays pqz-ffi's);
+# its tests read the set's vectors (split inputs, cross-id re-labelling)
+if [ -z "$BF" ]; then OBF=; else OBF="--no-default-features --features pqz-ffi/pqzl-${PQZL:-rust},pqz-ffi/set-$S"; fi
+step offchain-test sh -c "(cd offchain && cargo test --release --offline $OBF -- --test-threads 4 --nocapture) > $R-offchain-test.txt 2>&1"
 step wasm-build sh -c "(cd wasm && CARGO_TARGET_DIR=$WT cargo build --release --offline $BF --target wasm32-unknown-unknown) >> $R-build.txt 2>&1"
 step wasm-replay sh -c "node vectors/replay_wasm.mjs $WT/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm $V > $R-wasm.txt 2>&1"
 (cd $V && wc -c *.json README.md) > "$R-sizes.txt"
@@ -51,6 +55,7 @@ grep -h -e "pqz-vectors" -e "DIFF" -e "EXTRA" -e "self-test proofs" "$R-check.tx
 grep -h -e "^pqz_kat" -e "^FAIL" -e " KB" "$R-pqz-kat.txt"
 tail -1 "$R-tamper.txt"
 grep -h -e "^test result" -e FAILED "$R-ffi-test.txt"
+grep -h -e "^test result" -e FAILED -e "cross_id" "$R-offchain-test.txt"
 tail -1 "$R-wasm.txt"
 echo "run.sh $1: $([ $fail = 0 ] && echo ok || echo FAILED)"
 exit $fail

@@ -13,6 +13,11 @@ publish = false
 [dependencies]
 pqz-ffi = { path = "..", default-features = false }
 
+# tests only (cross-id test: proofs re-proved under PQZL_SPLIT_ID, vector rows read as JSON); never in a normal build
+[dev-dependencies]
+pqz-ffi = { path = "..", default-features = false, features = ["prove"] }
+serde_json = "1"
+
 # default: pqz-ffi's (Rust PQZL core, set n2304-kmax4096); another set: --no-default-features --features
 # pqz-ffi/pqzl-rust,pqz-ffi/set-<set>; a crate that picks the set itself depends on this one with default-features = false
 [features]
