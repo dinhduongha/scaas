@@ -69,6 +69,7 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     bytes32 internal carolSeed;
     bytes32 internal bob;
     bytes32 internal carol;
+    bytes32 internal mu; // a PQ-eligible msig of bob and carol (threshold 1; bob signs)
     address internal c2; // kind 4, class 2 (scope 0, the opening)
     address internal c3o; // kind 4, class 3 with the opening
     address internal c3; // kind 4, class 3 without the opening
@@ -99,6 +100,19 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
 
     function _uaSig(bytes32 seed, bytes32 purpose, bytes32 digest) internal returns (IUARegistry.UASig memory s) {
         s.signature = _mlBy(seed, IUARegistry(registry).uaMessage(ML65, purpose, digest));
+    }
+
+    /// The msig's `UASig`: slot `_bobSlot()` (bob, an accepted member) under `member` over `memberDigest(mu, uaMessage(msig,
+    /// purpose, digest))` (CTR-UA-37).
+    function _msigSig(bytes32 purpose, bytes32 digest) internal returns (IUARegistry.UASig memory s) {
+        bytes32 md = UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, purpose, digest));
+        s.members = new IUARegistry.MemberSig[](1);
+        (s.members[0].index, s.members[0].sig) =
+            (_bobSlot(), _mlBy(bobSeed, IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_MEMBER, md)));
+    }
+
+    function _bobSlot() internal view returns (uint16) {
+        return uint256(bob) < uint256(carol) ? 0 : 1;
     }
 
     function _seedOf(bytes32 ua) internal view returns (bytes32) {
@@ -451,6 +465,7 @@ contract PqzKeysSetup is PqzKeysKit {
         _registerMl();
         (bobSeed, bob) = _holder("bob");
         (carolSeed, carol) = _holder("carol");
+        _msig();
         _factory();
         _publicLayer();
         _trades();
@@ -479,6 +494,29 @@ contract PqzKeysSetup is PqzKeysKit {
         IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 1);
         require(IUARegistry(registry).register{gas: 56_000_000}(ML65, pk, none, pop, "") == ua, "holder UA");
         vm.stopBroadcast();
+    }
+
+    /// A PQ-eligible msig (two ML-DSA-65 members, bob and carol, ids ascending, threshold 1, no classical weight): its PoP
+    /// bob's member signature over the registration digest (CTR-UA-37), then bob's membership accepted (the slot it signs with).
+    function _msig() internal {
+        (bytes32 m0, bytes32 m1) = uint256(bob) < uint256(carol) ? (bob, carol) : (carol, bob);
+        IUARegistry.MsigStructure memory st;
+        st.threshold = 1;
+        st.members = new IUARegistry.MsigMember[](2);
+        (st.members[0], st.members[1]) = (IUARegistry.MsigMember(ML65, m0, 1), IUARegistry.MsigMember(ML65, m1, 1));
+        bytes memory d = abi.encodePacked(uint16(1), uint16(2), ML65, m0, uint16(1), ML65, m1, uint16(1));
+        mu = UAKinds.uaOf(UAKinds.MSIG, d);
+        bytes32 rd = UAKinds.registrationDigest(mu, UAKinds.MSIG, 0, UAKinds.kemRecordHash(mu, 0, bytes("")), 0);
+        IUARegistry.MemberSig[] memory pop = _msigSig(UAKinds.PURPOSE_POP_V2, rd).members;
+        IUARegistry.UAAttrs memory none;
+        vm.broadcast(k1);
+        require(IUARegistry(registry).registerMsig{gas: 56_000_000}(st, none, pop, "") == mu, "msig UA");
+        bytes32 md = UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP,
+            UAKinds.membershipDigest(mu, bob)));
+        IUARegistry.MemberSig memory ms;
+        (ms.index, ms.sig) = (_bobSlot(), _mlBy(bobSeed, IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_MEMBER, md)));
+        vm.broadcast(k1);
+        IUARegistry(registry).acceptMembership{gas: 56_000_000}(mu, ms);
     }
 
     // ------------------------------------------------------------------ the factory: kinds 4, 5, 12, 13 on deps [0]
@@ -820,6 +858,7 @@ contract PqzKeysSetup is PqzKeysKit {
         bytes memory kp = UAKinds.kemPk(k);
         RecDigest memory r = RecDigest(ua, scope, v, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), keccak256(pop),
             kp.length == 0 ? bytes32(0) : keccak256(kp), vub, uid);
+        if (ua == mu) return _msigSig(UAKinds.PURPOSE_PQZ_SCOPED_KEY, _rd(r));
         return _uaSig(_seedOf(ua), UAKinds.PURPOSE_PQZ_SCOPED_KEY, _rd(r));
     }
 
@@ -853,6 +892,9 @@ contract PqzKeysSetup is PqzKeysKit {
         require(IUARegistry(registry).pqzScopedKeyLatest(bob, c3o) == 0 && IUARegistry(registry).pqzScopedCount(c3) == 3, "scoped");
         address[6] memory ts = [c2, c3o, c3, t5, t12, t13];
         for (uint256 i; i < 6; ++i) _life(ts[i], i);
+        // the msig on a class-3 token with the opening: its record with the opening KEM key, then a credit to it
+        _scoped(mu, c3o, 0, true);
+        _send1(c3o, _op1(c3o, carol, mu, 0x7f11), false); // from carol: bob's `rolled` stays below run 2's mark
         address[4] memory ns = [c3, t5, t12, t13];
         for (uint256 i; i < 4; ++i) _namedLife(ns[i], 0x7a00 + 0x100 * i);
         _wrapShield(t5);
@@ -1111,6 +1153,10 @@ contract PqzKeysSetup is PqzKeysKit {
             "class 3 opening off: record with openKem");
         _recNeg(RecNeg(bob, c3, c3, false, sib, vub, pk), unauth, "class 3 opening off: another chainUid");
         _recNeg(RecNeg(bob, t5, c3, false, uid, vub, pk), unauth, "class 3: the record of another token");
+        _recNeg(RecNeg(mu, address(0), address(0), true, uid, vub, pk), abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, mu),
+            "class 2: an msig holds no shared key (ruling 9)");
+        _recNeg(RecNeg(mu, c3o, c3o, false, uid, vub, pk), abi.encodeWithSelector(IUARegistry.UAPqzOpenKem.selector, c3o),
+            "class 3 opening on: the msig's record without openKem");
         // the public rollover on an opening token, the signed one without the opening
         _neg(a2, c2, abi.encodeCall(IPqzToken.mtxRollOver, (uaM, 0, 1)), IPqzToken.RollOverSignedOnly.selector,
             "c2: the public rollover with the opening on");
