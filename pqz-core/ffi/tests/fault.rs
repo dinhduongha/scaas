@@ -3,7 +3,8 @@
 //! `Err(NodeFault)` / status 4 with `out` untouched, never …00; after the fault is gone the same inputs verify again.
 //! The Rust backend (review round 2, the port's deferred minors): a counting allocator (this test binary's) denies the
 //! `Ctx` allocation and, end to end through the precompile, the core's cache allocations (`Error::Memory`): status 4;
-//! the panic path (hook `TEST_PANIC`): `…00`, status 3, the `Ctx` dropped and rebuilt.
+//! the panic path (hook `TEST_PANIC`): `…00`, status 3, the `Ctx` dropped and rebuilt. PQZH (hook `pqzh::TEST_PANIC`):
+//! a panic in the Ligero verifier is `…00` with status 3 too.
 use std::sync::atomic::Ordering::Relaxed;
 
 use pqz_ffi::*;
@@ -54,6 +55,16 @@ fn node_faults_are_status_4() {
     }
     pqzl::TEST_FAIL_WORKER.store(false, Relaxed);
     assert_eq!(precompile(&input), Ok(VALID));
+    // a panic inside the Ligero verifier reaches the precompile's catch: …00 with status 3, as PQZL's (review 3w
+    // u3-2: Ligero's own catch made it status 0); then the same input VALID
+    #[cfg(feature = "pqzh")]
+    if let Some(i) = &pqzh_input {
+        pqzh::TEST_PANIC.store(true, Relaxed);
+        assert_eq!(precompile(i), Ok(INVALID), "panic in the Ligero verifier");
+        assert_eq!(c_abi(i), (PQZ_FFI_INTERNAL, INVALID), "panic in the Ligero verifier: status 3");
+        pqzh::TEST_PANIC.store(false, Relaxed);
+        assert_eq!(c_abi(i), (PQZ_FFI_OK, VALID), "after the Ligero panic");
+    }
     let st = precompile(&[6, 0, 0, 0, 0]).unwrap();
     assert_eq!(st, selftest::report().unwrap().hash);
     eprintln!(

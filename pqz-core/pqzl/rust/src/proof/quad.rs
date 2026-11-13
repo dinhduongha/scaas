@@ -139,6 +139,8 @@ fn verify(
     enc.urandom(core::slice::from_mut(&mut v), q, log2q)?;
     enc.urandom(&mut *w1, &dc.m, dc.log2m)?;
     let cseed = hash2(hash, &enc.end()?);
+    #[cfg(feature = "test-hooks")]
+    crate::fstrace::rec(8, &cseed, 0); // the final challenge's seed (after t, v, w1): review 3w Codex u1-2
     // PQZ (R0-C3): the eta-filtered challenge (none of CHAL_TRIES samples passes: reject)
     let mut ok = match Poly::urandom_challenge(p.omega, p.log2omega, p.eta, &cseed)? {
         Some(mut c2) => Poly::eq(c, &mut c2),
@@ -221,13 +223,15 @@ fn prove(
     let (km, m1, m2, l, lext) = (p.kmsis as usize, p.m1 as usize, p.m2 as usize, p.l as usize, p.lext as usize);
     let m2r = m2 - km;
     let (q, log2q) = (&p.ring.q, p.ring.log2q);
-    let (mut y1, mut y2) = (PolyVec::new(m1)?, PolyVec::new(m2)?);
+    // s, the mask seed and c s1, c s2 are cleared on every exit (Wiped, fix B); since review 3w u1-3 also the masks
+    // y1, y2 (a rejected try's z), their copy y, the products R2 y, R2 s, B y21 and w = w1 gamma + w0, as C's
+    // pqz_arena_wipe_release
+    let (mut y1, mut y2) = (Wiped(PolyVec::new(m1)?), Wiped(PolyVec::new(m2)?));
     let (mut cs1, mut cs2) = (Wiped(PolyVec::new(m1)?), Wiped(PolyVec::new(m2)?));
     let n = 2 * (m1 + l);
-    let (mut r2y, mut tmp, mut tmp2) = (PolyVec::new(n)?, PolyVec::new(n)?, PolyVec::new(l)?);
-    // s, the mask seed and c s1, c s2 are cleared on every exit (Wiped, fix B)
-    let (mut y, mut s) = (PolyVec::new(n)?, Wiped(PolyVec::new(n)?));
-    let (mut wv, mut w1, mut w0) = (PolyVec::new(km)?, PolyVec::new(km)?, PolyVec::new(km)?);
+    let (mut r2y, mut tmp, mut tmp2) = (Wiped(PolyVec::new(n)?), Wiped(PolyVec::new(n)?), Wiped(PolyVec::new(l)?));
+    let (mut y, mut s) = (Wiped(PolyVec::new(n)?), Wiped(PolyVec::new(n)?));
+    let (mut wv, mut w1, mut w0) = (Wiped(PolyVec::new(km)?), Wiped(PolyVec::new(km)?), Wiped(PolyVec::new(km)?));
 
     // s = (<s1>, <m>)
     polyvec::set(&mut s.sub(0, m1, 2), &**s1);
@@ -320,7 +324,7 @@ fn prove(
         if p.rej1 != 0 {
             polyvec::fromcrt(&mut *y1);
             polyvec::fromcrt(&mut *cs1);
-            let rej = rej_standard(&mut st, &coeffvec(&y1)?, &coeffvec(&cs1)?, &p.scm1, &p.stdev1sqr)?;
+            let rej = rej_standard(&mut st, &Wiped(coeffvec(&y1)?), &Wiped(coeffvec(&cs1)?), &p.scm1, &p.stdev1sqr)?;
             let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
                 continue;
@@ -329,7 +333,7 @@ fn prove(
         if p.rej2 != 0 {
             polyvec::fromcrt(&mut *y2);
             polyvec::fromcrt(&mut *cs2);
-            let (z2, c2) = (coeffvec(&y2)?, coeffvec(&cs2)?);
+            let (z2, c2) = (Wiped(coeffvec(&y2)?), Wiped(coeffvec(&cs2)?));
             // rej2 is 1 or 2 (C's ASSERT; 2 in every relation): 2 is Rej1 with sigma2 (P6-D2; upstream rej_bimodal with
             // stdev1sqr, review D-2)
             let rej = if p.rej2 == 1 {

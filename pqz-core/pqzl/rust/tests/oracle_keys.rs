@@ -144,3 +144,30 @@ fn keygen_enc_dec_eq_c() {
     println!("keygen_enc_dec_eq_c: {ok} encryptions, {rejected} rejected inputs, all equal");
     assert!(ok >= N / 2 && rejected >= N / 20, "ok {ok}, rejected {rejected}");
 }
+
+/// Review 3w u3-4 (the contract's KV-9): an equal key at an equal window in one encryption is refused by both cores
+/// (`Input`); the same key at two windows (the auditor's copies) and two keys at one window are encrypted; Rust = C.
+#[test]
+fn enc_seed_refuses_an_equal_key_at_an_equal_window() {
+    let (a, b) = (keygen(&[1; 32]).unwrap().pk, keygen(&[2; 32]).unwrap().pk);
+    let m = [[3u8; 16]; 3];
+    let se = [9u8; 32];
+    for (pks, win, ok) in [
+        (vec![&*a, &*b], vec![0u8, 0], true),
+        (vec![&*a, &*a], vec![0, 0], false),
+        (vec![&*a, &*a], vec![0, 1], true),
+        (vec![&*a, &*b, &*a], vec![0, 0, 0], false),
+        (vec![&*b, &*a, &*a], vec![0, 1, 1], false),
+    ] {
+        let n = pks.len();
+        let r = enc_seed_win(&pks, &win[..n], &m[..n], &se);
+        let c = c_enc_seed_win(&pks, Some(&win[..n]), &m[..n], &se);
+        assert_eq!(r.is_ok(), ok, "Rust, windows {:?}", &win[..n]);
+        assert_eq!(c.is_ok(), ok, "C, windows {:?}", &win[..n]);
+        if !ok {
+            assert_eq!((r.err(), c.err()), (Some(pqzl::Error::Input), Some(pqzl::Error::Input)));
+        } else if win[..n].iter().all(|&w| w == 0) {
+            assert_eq!(enc_seed(&pks, &m[..n], &se).is_ok(), ok);
+        }
+    }
+}

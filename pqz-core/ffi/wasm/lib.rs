@@ -85,6 +85,14 @@ pub unsafe extern "C" fn precompile_v(input: *const u8, n: u32) -> u32 {
     }
 }
 
+/// The largest PQZL op 7 M this module proves (`pqz_ffi::pqzl::WASM_PQZL_MAX_LEGS`: the C backend's per-set
+/// `C_WASM_MAX_LEGS`, the Rust backend's 8); `vectors/replay_wasm.mjs` verifies the native proof above it and expects the
+/// prover's refusal (review 3w Codex u3-2).
+#[no_mangle]
+pub extern "C" fn pqzl_max_legs() -> u32 {
+    pqz_ffi::pqzl::WASM_PQZL_MAX_LEGS as u32
+}
+
 /// P6-ANON S3: wasm32 refuses to prove PQZL op 7 above `WASM_PQZL_MAX_LEGS` (C backend per set, set.toml `[pqzl_c] wasm_max_legs`; Rust backend 8): 1 if
 /// `prove` of a PQZL (M = 8, auditor on) statement gives `Statement(Legs)` before any core work (the C backend), 0
 /// otherwise (the Rust backend proves M = 8). `vectors/replay_wasm.mjs` reads it.

@@ -54,6 +54,7 @@ Claude workflow. "Independent" and "external" in this file mean outside the proj
 | 2026-10-30 | `main` `2b162239` | EIP-7702 exposure | read-only audit | owner rulings D1-D5, EIP-7702 off | built on `ua8`, `no7702` | [eip7702-audit](eip7702-audit-2026-10-30.md) |
 | 2026-11-01 | `zether-msm` `6fed9881` | merged-MSM Zether verifier | Claude Opus: 8 lenses, 3 verifiers per finding, about 95 executed attacks | sound and complete; highest finding low | §3.4 | [zether-msm-crypto-review](zether-msm-crypto-review.md) |
 | 2026-11-02 | `typed-signing` `11eb80b5`, base `462edf66` | whole branch: EIP-712 across all reproducers, one accepted form per operation, allow-lists, interactions, cryptographic binding of the changed Zether, PQZ and UA code | Fable, read-only, nothing run | ready with fixes: no Critical, 1 Important, 2 Minor | §3.6 | *local:* `.superpowers/sdd/2026-10-31-typed-signing/review-CRV.md` |
+| 2026-11-13 | `ua-mtx-merge` `cac043bc` | pqz-core: PQZL, PQZH + stmt, ffi + wasm32, plugin, params and vectors | Fable 5.2 (u1–u5), Codex gpt-6.1-sol (u1–u4) | 1 P1 (OFFCHAIN, owner design), 4 P2, 25 P3, 11 nit | §3.7; fix round `pqz-3w-fix` | §3.7 |
 
 ### 2.2 Reviews inside feature rounds
 
@@ -141,6 +142,21 @@ input, so any other stack must be probed.
 Contract seams and the cryptographic binding were clean as read. This was one model reading, not an audit: soundness of the proof
 systems and the parameter sets was out of scope, and `e2e.py` sections 5b and 6b, `msig` `pqzAuth` on a real registry, flat wallet
 jobs through a lane and the Hedera 64-byte path on a named entry remain unverified on a chain.
+
+### 3.7 pqz-core review 3w, 2026-11-13
+
+Fable 5.2 (u1–u5) and Codex gpt-6.1-sol (u1–u4; u5 not run) at `ua-mtx-merge` `cac043bc`: 41 issues, P1 1, P2 4, P3 25,
+nit 11; no forgery, no soundness break of either verifier. Fix round on branch `pqz-3w-fix` (UNAUDITED), record and
+negative controls: [fix-round.md](../../pqz-core/research/code-review-2026-11-13/fix-round.md).
+
+| Id | Severity | Finding | Status |
+|---|---|---|---|
+| u2-2 | **P1** | `OFFCHAIN` mode: a dishonest verifier can plant crafted credits whose debit is a decryption-failure signal (ARCH-POS-13) | owner ruling: a separate design (three-key model), not in this round |
+| u3-1 | P2 | the gate's `ffi` and `fuzz` steps could not fail | fixed: real statuses, `gate-controls.sh` |
+| u2-1 | P2 | four Ligero verifier checks had no test that could fail | fixed: cheating prover, `verify_reason` |
+| u1-1 | P2 | `ct.sh` / `ub_test.sh` in no gate | fixed: gate steps `ct`, `ub`, per set |
+| u5-1 | P2 | vector checkers red on files other writers own | fixed (checker part); moving `verdict.json` / `verifier_fee.json`: contracts round |
+| P3 / nit | P3 | prover wiping (Rust masks, `pqz-ffi`), sampler tripwire, opaque prover error, PQZH panic status, equal keys in one encryption, generator bindings, plugin node faults and docs | fixed; T-14, T-26, T-41 (contracts / clients), T-40 (vector rows), T-17, T-35, T-36 (owner) deferred |
 
 ## 4. Standing verification
 

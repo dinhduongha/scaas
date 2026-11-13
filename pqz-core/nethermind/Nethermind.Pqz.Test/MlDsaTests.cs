@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -173,11 +174,27 @@ public class MlDsaTests
             byte[] good = UaRows().First(r => r.valid && r.input.Length == pk + sig + 32).input;
             Assert.That(MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => throw new CryptographicException("seam")), Is.EqualTo(Word(false)));
             Assert.That(MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => true), Is.EqualTo(Word(true)), "the seam decides the word");
-            Assert.Throws<InvalidOperationException>(() => MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => throw new InvalidOperationException("seam")),
-                "only CryptographicException is caught");
             byte[] ff = [.. Enumerable.Repeat((byte)0xff, pk + sig), .. new byte[32]];
             Assert.That(run(ff), Is.EqualTo(Word(false)), "all-0xff pk and signature: false");
         }
+    }
+
+    /// <summary>Review 3w T-16 (D4): any other exception in the verify (here <see cref="InvalidOperationException"/>
+    /// through the seam) is a fault of this node: <c>PQZ-NODE-FAULT</c> and exit 120 in a child process, never a word and
+    /// never Nethermind's failed call.</summary>
+    [Test]
+    public void Another_exception_is_a_node_fault()
+    {
+        string harness = Path.Combine(AppContext.BaseDirectory, "Harness.dll");
+        ProcessStartInfo psi = new("dotnet", [harness, "mldsa-fault"]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        using Process p = Process.Start(psi)!;
+        string err = p.StandardError.ReadToEnd();
+        string outp = p.StandardOutput.ReadToEnd();
+        p.WaitForExit();
+        TestContext.Progress.WriteLine($"mldsa fault child: exit {p.ExitCode}; stdout: {outp.Trim()}; stderr: {err.Trim()}");
+        Assert.That(p.ExitCode, Is.EqualTo(PqzPrecompile.ExitCode));
+        Assert.That(err, Does.Contain("PQZ-NODE-FAULT ").And.Contain("InvalidOperationException: seam"));
+        Assert.That(outp, Does.Not.Contain("must not happen"));
     }
 
     /// <summary>Review R4-C4: the start-up known-answer set gives (1, then seven 0) per level through the precompile

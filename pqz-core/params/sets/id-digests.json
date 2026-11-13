@@ -1,0 +1,9 @@
+{
+ "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5": "33b1974756c943742ebec3b6b3f54e168979b25f8aade3804cd2d493389e9bd8",
+ "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5": "cc83ffe0ed8b922fd1310401110ed3571487c95c369b1138774f360aa59b9086",
+ "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5": "8ff8f33808a53c95bd2402d7d2f0acf6ab07f9df82ecb294d5c1eae38c118ca7",
+ "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5": "da47c043b50ae000a918b134ce9d064b6714776e3c90befb6c3219c1d1b6f0e0",
+ "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3": "1d3f422e874a5d65f868cf079147631077cea2ebb11ec8f18dd64ab860abcaf8",
+ "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3": "a76182cee5fa92497fe5c8a20888967680d5291b3cc5fa95f085a5f7959df962",
+ "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3": "ede1027ec1160e7aa822fe1139101662eda859b7738c4f297f5960e223431c5b"
+}

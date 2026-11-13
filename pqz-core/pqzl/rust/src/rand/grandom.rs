@@ -112,8 +112,14 @@ pub(crate) fn grandom(r: &mut [i64], log2o: u32, seed: &[u8; 32], dom: u64) -> R
     Ok(())
 }
 
-/// `polyvec_grandom (r, log2o, seed, dom)`: element i with counter i + 1
+/// `polyvec_grandom (r, log2o, seed, dom)`: element i with counter i + 1. The prover's masks only: `log2o >= 24` is
+/// refused (`Error::Internal`, as C; review 3w u1-2), since `grandom` then gives every coefficient of a polynomial the
+/// same sample and z1 = y1 + c s1 would give the witness away; every set's relations stay below 21 (gen_set.py and
+/// to_rust.py assert it), so no proof changes.
 pub(crate) fn polyvec_grandom<R: Pv + ?Sized>(r: &mut R, log2o: u32, seed: &[u8; 32], dom: u32) -> Result<(), Error> {
+    if log2o >= 24 {
+        return Err(Error::Internal);
+    }
     for i in 0..r.len() {
         *r.at(i) = Poly::grandom(log2o, seed, (dom as u64) << 32 | (i as u64 + 1))?;
     }

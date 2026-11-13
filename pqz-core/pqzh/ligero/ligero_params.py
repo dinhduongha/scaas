@@ -310,16 +310,24 @@ BLIND_B, DIGEST = 12, 32
 
 
 def read_rs(path):
-    """`pub(crate) const NAME: T = value;` lines of a generated / hand-written set file"""
+    """`pub(crate) const NAME: T = value;` lines of a generated / hand-written set file: strings, booleans, integers
+    (decimal or hex, `_` separators) and arrays of them, `[x; n]` too (review 3w u5-6: `PQZH: bool`, the hex ids)"""
     out = {}
-    for name, v in re.findall(r'pub\(crate\) const (\w+): [^=]+= ([^;]+);', open(path).read()):
+    for name, v in re.findall(r'pub\(crate\) const (\w+): [^=]+= ("[^"]*"|\[[^\]]*\]|&\[[^\]]*\]|[^;]+);', open(path).read()):
         v = v.strip()
         if v.startswith('"'):
             out[name] = v.strip('"')
+        elif v in ('true', 'false'):
+            out[name] = v == 'true'
         elif v.startswith('&[') or v.startswith('['):
-            out[name] = [int(x.replace('_', '')) for x in v.strip('&[]').split(',') if x.strip()]
+            body = v.strip('&[]')
+            if ';' in body:
+                x, n = body.split(';')
+                out[name] = [int(x, 0)] * int(n)
+            else:
+                out[name] = [int(x, 0) for x in body.split(',') if x.strip()]
         else:
-            out[name] = int(v.replace('_', ''))
+            out[name] = int(v, 0)
     return out
 
 
@@ -544,8 +552,8 @@ def main_set(name):
           f'N2 = {n2}; {gen} H_n and H_k disjoint ({gen}^lcm(n, k) != 1)\n')
     print('## Soundness (the preset; per-query factor depends on n, k only)\n')
     qb = t * -math.log2(fac) + POW
-    print(f'- query: t = {t} x {-math.log2(fac):.4f} + {POW} grinding = {qb:.2f} bits (v3 128.50); field terms grow '
-          f'with q: |F_q^4| = 2^{4 * math.log2(q):.1f} (v3 2^168.0); the crate\'s per-relation totals: '
+    print(f'- query: t = {t} x {-math.log2(fac):.4f} + {POW} grinding = {qb:.2f} bits (n2048-kmax1024 128.50); field terms grow '
+          f'with q: |F_q^4| = 2^{4 * math.log2(q):.1f} (n2048-kmax1024 2^168.0); the crate\'s per-relation totals: '
           f'`ligero_kat sizes` (runs/c8-*-sizes.jsonl, runs/c8b-*-sizes.jsonl)\n')
     cf, cs = crate_sizes(name)
     print('## Sizes per form [model] (exact verifier bound = the largest proof the verifier parses)\n')
@@ -587,8 +595,8 @@ def main_set(name):
           'R_TXM4 bounds, radices of the crate and with the small primes of q - 1 it does not use\n' % PMAX)
     print('| radices | relation | n | k | t | l | rows m | proof bound B | <= {mp:,} | prover products |'.format(mp=mp))
     print('|---|---|---|---|---|---|---|---|---|---|')
-    v3r = PQZH_DEFAULT['RADICES']  # the v3 radices (the fallback preset's) next to the set's own
-    for rs in ([v3r] if v3r != rad else []) + [rad] + ([sorted(rad + extra)] if extra else []):
+    r0 = PQZH_DEFAULT['RADICES']  # n2048-kmax1024's radices (the fallback preset's) next to the set's own
+    for rs in ([r0] if r0 != rad else []) + [rad] + ([sorted(rad + extra)] if extra else []):
         sm = smooth_of(rs)
         for rel in (('tx',), ('txm', 4, 1)):
             res = []
@@ -624,7 +632,7 @@ def main_set(name):
         if not rows or rows[0].get('set') != name:
             continue
         h = rows[0]
-        rs = rad if h['n'] == n and h['k'] == k else PQZH_DEFAULT['RADICES']  # THE preset: the v3 radices
+        rs = rad if h['n'] == n and h['k'] == k else PQZH_DEFAULT['RADICES']  # THE preset: n2048-kmax1024's radices
         for r in rows[1:]:
             if r['rel'] in ('R_REG', 'R_TX', 'R_TXM4'):
                 mf = prover_fft_set(p, by_label[r['rel']], h['n'], h['k'], h['t'], h['n2'], rs)

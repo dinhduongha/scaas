@@ -154,6 +154,16 @@ pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[PQ
   return rc;
 }
 
+/* 1 if the n bytes are equal (public data: no constant-time need; no libc in the library objects) */
+static int
+same_bytes (const uint8_t *a, const uint8_t *b, size_t n)
+{
+  for (size_t i = 0; i < n; i++)
+    if (a[i] != b[i])
+      return 0;
+  return 1;
+}
+
 int
 pqz_enc_seed_win (const uint8_t *const pks[], unsigned npk, const uint8_t win[], const uint8_t msgs[][16],
                   const uint8_t seed_enc[32], uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES], int8_t r[PQZ_N],
@@ -165,6 +175,11 @@ pqz_enc_seed_win (const uint8_t *const pks[], unsigned npk, const uint8_t win[],
     {
       if (!canonical (pks[k], PQZ_POLYVEC_BYTES) || (win != NULL && win[k] >= 4))
         return PQZ_ERR_INPUT;
+      /* review 3w u3-4 (the contract's KV-9 _distinct): two recipients with the same key at the same window under one
+         randomness give v_j - v_k = Delta (m_j - m_k) + noise in public: refused (keys and windows are public) */
+      for (unsigned j = 0; j < k; j++)
+        if ((win == NULL || win[j] == win[k]) && same_bytes (pks[j], pks[k], PQZ_POLYVEC_BYTES))
+          return PQZ_ERR_INPUT;
       for (unsigned i = 0; i < 16; i++)
         bad |= msgs[k][i] > 15; /* review E: the digits are secret, only the verdict is public */
     }

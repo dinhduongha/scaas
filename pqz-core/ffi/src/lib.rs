@@ -185,7 +185,7 @@ pub enum ProveError {
     Statement(Reject),
     /// PQZL: the core's error code (pqz_rt.h: 1 internal, 2 arena / memory, 3 input, 4 rejection cap; -1 node fault)
     Pqzl(i32),
-    /// PQZH: Ligero's message
+    /// PQZH: Ligero's message (every decryption-dependent failure is the one `pqzh_ligero::cs::NOT_DECRYPTABLE`)
     Pqzh(&'static str),
     /// a panic below (caught)
     Panic,
@@ -194,7 +194,14 @@ pub enum ProveError {
 /// Prove `stmt` (op `op`) with the prover-API witness `wit` (pqz.h layouts, [`fixture`]) and 32 bytes of CSPRNG
 /// output; the proof system is the statement's `proofSystemId`. On wasm32 a PQZL op 7 statement with M >
 /// `pqzl::WASM_PQZL_MAX_LEGS` is refused (`Statement(Reject::Legs)`). Deterministic in its inputs (both provers hedge
-/// `rnd32` with the statement and the witness, CTR-PQZ-19). Panics are caught.
+/// `rnd32` with the statement and the witness, CTR-PQZ-19). Panics are caught on native builds; wasm32 builds with
+/// `panic = "abort"`, so there a panic traps the instance and the cores' clearing guards (`Wiped`) do not run: the
+/// embedder must drop the instance and its memory after a trap (review 3w u3-7).
+///
+/// ARCH-POS-13 (no decryption oracle): whether a debit or an R_DR proof succeeds depends on the decryption of a
+/// ciphertext in the statement under the witness's key. The result (proof, error, or only success or failure) goes to
+/// the key holder only, never to whoever chose the ciphertext; PQZL fails with one code, PQZH with one message for
+/// every decryption-dependent failure (review 3w u2-3).
 #[cfg(feature = "prove")]
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, ProveError> {
     let st = pqz_stmt::parse(op, stmt).map_err(ProveError::Statement)?;

@@ -110,10 +110,10 @@ fn enc(keys: &[&Key], values: &[u64], seed: [u8; 32]) -> Enc {
         recips: keys.iter().map(|k| k.label.clone()).collect(),
         values: values.to_vec(),
         u: c.u.to_vec(),
-        vs: c.vs,
+        vs: c.vs.clone(),
         r: c.r.to_vec(),
         e1: c.e1.to_vec(),
-        e2: c.e2,
+        e2: c.e2.clone(),
         ctr: c.ctr,
     }
 }
@@ -2396,6 +2396,15 @@ fn generate() -> (Vec<(String, String)>, bool) {
     (files, stale)
 }
 
+/// Files in a vectors directory that another writer owns, with the test that checks each (review 3w u5-1): `--check`
+/// names them and passes them over; any other file this generator did not write is `EXTRA` and fails. Keep equal to
+/// `OTHER_WRITERS` in `smartcontracts/vectors/pqz/pqz_kat.py`.
+const OTHER_WRITERS: [(&str, &str); 3] = [
+    ("state.json", "written by forge PqzStateVectors.t.sol, checked by pqz_kat.py check_state and ua-rs"),
+    ("verdict.json", "written by forge PqzVerdictVectors.t.sol, checked by clientkeys pqz-verdict.test.js and scaas-node pqz.rs"),
+    ("verifier_fee.json", "written by forge PqzVerifierFeeVectors.t.sol, checked by clientkeys pqz-verifier-fee.test.js, ua-rs tests/pqzfee.rs and scaas-node pqz.rs"),
+];
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let check = args.first().is_some_and(|a| a == "--check");
@@ -2430,7 +2439,12 @@ fn main() {
     }
     for e in std::fs::read_dir(&dir).unwrap() {
         let n = e.unwrap().file_name().into_string().unwrap();
-        if n.ends_with(".json") && !files.iter().any(|f| f.0 == n) {
+        if !n.ends_with(".json") || files.iter().any(|f| f.0 == n) {
+            continue;
+        }
+        if let Some((_, by)) = OTHER_WRITERS.iter().find(|o| o.0 == n) {
+            println!("OTHER {n}: {by}");
+        } else {
             println!("EXTRA {n}: not written by this generator");
             bad += 1;
         }

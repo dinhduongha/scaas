@@ -1719,8 +1719,8 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     for (k = 0; k < LAMBDA; k++)
       {
         unsigned col = 0;
-        memset (&acc, 0, sizeof acc); /* nex <= 550 terms (R_TXM, 16 legs with the auditor, X-1 blocks, at
-                                         n2816-kmax65536; 460 at n2304-kmax4096): |.| < 550 2^98 < 2^108 */
+        memset (&acc, 0, sizeof acc); /* nex terms (R_TXM M = 16 audited: up to 690 at n2048-kmax1024,
+                                         pqz_txm16_params.h): |.| < 2^10 2^98 = 2^108 */
 #define W3MAC(slot)                                                                                          \
   do                                                                                                         \
     {                                                                                                        \

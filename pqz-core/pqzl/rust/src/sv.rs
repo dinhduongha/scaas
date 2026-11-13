@@ -650,6 +650,9 @@ const SVZ: usize = 3 + 2 * SVG + 2 * SVL;
 const SVPR: usize = 2 + 2 * SVL;
 /// binary polys
 const SVBIN: usize = (BITS_BURN + 64 * SVL).div_ceil(64);
+// the evaluation sum (SVPR + SVBIN products of 64 terms, c up to 2^9) stays < 2^(2L + 22), gen_set.py's NP rule's
+// assumption (C pqz_sv.c's third assertion; review 3w u1-4, R1-C6 / R2-C6)
+const _: () = assert!((SVPR + SVBIN) * 64 * 512 <= 1 << 22);
 const MB: usize = set::MBITS as usize;
 const CB: usize = set::CBITS as usize;
 const EB: usize = set::EBITS as usize;
@@ -929,7 +932,8 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
     s.inv4 = int_modq(&p.inv4);
     ok &= mulq(s.inv2, 2) == 1 && mulq(s.inv4, 4) == 1 && s.qm1 == Q - 1;
     // lnp_quad_verify: ||z1||^2 <= floor(2 m1 d 962 2^(2 log2stdev1) / 400) = floor(t 2^(2 log2stdev1 - 4) / 25)
-    // (400 = 2^4 25; exact); the 2^-4 keeps t 2^(2 log2stdev1 - 4) < 2^63 at log2stdev1 19 (R_TXM M = 8, 16)
+    // (400 = 2^4 25; exact); the 2^-4 keeps t 2^(2 log2stdev1 - 4) < 2^63 up to log2stdev1 20 (R_TXM M = 16 at
+    // n2048-kmax1024, the bench-only shape; 19 in every production shape), the limit `setup` accepts
     let t = 2 * s.mq as u64 * DEG as u64 * 962;
     let l1 = qm.log2stdev1;
     ok &= (2..=20).contains(&l1) && t < 1 << (67 - 2 * l1);
@@ -1530,7 +1534,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         jl_fold(&mut vr, s.nex * DEG, v3, &hash0, 0, &mut rows)?;
         for k in 0..LAMBDA {
             let mut col = 0;
-            let mut acc = ACC0; // nex <= 426 terms (R_TXM, 16 legs, X-1 blocks): |.| < 426 2^90
+            let mut acc = ACC0; // nex terms (R_TXM M = 16 audited: up to 690, pqz_txm16_params.h): |.| < 2^10 2^90
             let mut w3mac = |sl: usize, acc: &mut Acc| {
                 let mut a = [0i64; DEG];
                 for j in 0..DEG {
@@ -1718,7 +1722,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     acc_mul(&mut qa, &wc2, &ar.fwd(&ar.red(&ra)), pr);
     let v = ar.red(&qa); // |.| < 2^97
 
-    // ---- w = A1 z1 + A2' z21 - c 2^D tA1 (|.| < (mq + m2r + 1) 2^90 <= 472 2^90), w1 = UseHint (hint, w) ----
+    // ---- w = A1 z1 + A2' z21 - c 2^D tA1 (|.| < (mq + m2r + 1) 2^90 < 2^10 2^90: 736 at n2048-kmax1024 M = 16), w1 = UseHint (hint, w) ----
     let mut w1 = vz(DEG * km, 0i64)?;
     let mut wl = vz(DEG * km, 0i64)?;
     lz_get(&mut ta1, &f.t_a1);

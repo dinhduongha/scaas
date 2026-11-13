@@ -370,11 +370,11 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
         let et = wv - DELTA * m;
         let s = m + cprev - dp[i] - d[i] - ((t.fee >> (4 * i)) & 15) as i64;
         if check && (s % 16 != 0 || d[i] > 15 || dp[i] > 15 || !(0..1 << 14).contains(&m) || !(-(1 << 24)..1 << 24).contains(&et)) {
-            return Err("digits");
+            return Err(NOT_DECRYPTABLE);
         }
         let c = s / 16;
         if check && !(-64..1984).contains(&c) {
-            return Err("carry");
+            return Err(NOT_DECRYPTABLE);
         }
         let row = &mut rows[i];
         for x in 0..4 {
@@ -402,10 +402,14 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
         cprev = c;
     }
     if check && cprev != 0 {
-        return Err("carry out");
+        return Err(NOT_DECRYPTABLE);
     }
     Ok(finish(poly, vec![mv], Some((digit, rows)), Some(w)))
 }
+
+/// One error for every prover failure that depends on the decryption of T (review 3w u2-3, as pqzh-ligero's
+/// `cs::NOT_DECRYPTABLE`; ARCH-POS-13: the result goes to the key holder only).
+pub const NOT_DECRYPTABLE: &str = "the ciphertext does not decrypt to the statement under this key";
 
 pub fn build(op: u8, stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Result<Built, &'static str> {
     match op {

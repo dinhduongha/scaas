@@ -91,10 +91,11 @@ impl Params {
         Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven: true, johnson: true }
     }
 
-    /// THE preset (owner 2026-10-14 (a)): proven, radix 431, n = 32,756, k = 817, t = 121, l = 695, every op, the same
-    /// in every parameter set (pqzh_set.rs; plan 5h Task 8c: the domains exist for every set's q and the soundness
-    /// depends on n, k only); the parameter model's `Params::new(32756, 817, true)` (unit test `proven_is_the_model`),
-    /// written out so that the production build has no float code
+    /// The set's proven preset (pqzh_set.rs `PRESET_N / K / T`; review 3w u2-5): THE preset of the owner's 2026-10-14 (a),
+    /// proven, radix 431, n = 32,756, k = 817, t = 121, l = 695, every op, at n2048-kmax1024 (t = 122 at
+    /// n2560-kmax16384); preset B, n = 45,752, k = 952, t = 120, at n2304-kmax4096. The parameter model's
+    /// `Params::new(n, k, true)` (unit test `proven_is_the_model`), written out so that the production build has no
+    /// float code
     pub const fn proven() -> Params {
         use crate::set::{PRESET_K, PRESET_N, PRESET_T};
         Params { n: PRESET_N, k: PRESET_K, ell: PRESET_K - PRESET_T - 1, t: PRESET_T, pow_bits: POW_BITS, proven: true, johnson: false }
@@ -266,12 +267,16 @@ fn draw(tr: &mut Tr, m: usize, ntri: usize) -> Result<Draw, Oom> {
     Ok((a, b, cl, cq, rho, r))
 }
 
+/// Proves `stmt` with the witness. ARCH-POS-13 (no decryption oracle): for a debit and for R_DR the statement carries a
+/// ciphertext (`u, v` or the balance `T`) and whether the prover succeeds depends on its decryption under the witness's
+/// key, so the result (the proof, the error, or only success or failure, and its timing) goes to the key holder only,
+/// never to whoever supplied the ciphertext. The decryption-dependent failures share one error, [`cs::NOT_DECRYPTABLE`].
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
     let rel = cs::rel_of(op, stmt).ok_or("op")?;
     prove_inner(op, stmt, wit, rnd, p, true, prover_limit(p, rel))
 }
 
-/// The prover's length limit: the verifier's bound; fallback A (feature `fallback-retry`, set (a) with THE preset): also
+/// The prover's length limit: the verifier's bound; fallback A (feature `fallback-retry`, n2304-kmax4096 with THE preset): also
 /// at most MAX_PROOF_PQZH for the production preset (the one the precompile gates; the bench's reference presets keep
 /// their bound), so the prover re-proves (fresh masks and salts) while a proof is longer. The length is a function of
 /// the transcript's query indices alone, so the rejection keeps zero knowledge (the simulator rejection-samples the same
@@ -292,6 +297,28 @@ pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Param
     prove_inner(op, stmt, wit, rnd, p, false, p.max_proof_len(rel))
 }
 
+/// A test-only cheating prover (review 3w u2-1): one deviation from the honest protocol per verifier check, so that
+/// each check is the deciding one in some test (`verify_reason`). The PoW check needs none: prove with
+/// `pow_bits` 0, verify with the preset.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cheat {
+    /// every committed row value + 1 (the committed rows are not the rows w was computed from): the proximity check
+    Proximity,
+    /// q + X (same sum over H_k, not the combination): the per-column linear check
+    LinearColumn,
+    /// u_lin with sum over H_k nonzero (honest witness): the linear sum check
+    LinearBlind,
+    /// one bit slot holding 2 and the next 0 (the bit decomposition still sums to the value), h from the division:
+    /// the quadratic check
+    Quadratic,
+}
+
+/// [`Cheat`]'s prover (tests and `bench` only: not in the production build)
+#[cfg(any(test, feature = "bench"))]
+pub fn prove_cheat(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, cheat: Cheat) -> Result<Vec<u8>, &'static str> {
+    prove_once(op, stmt, wit, p, false, &mut Rng::new(rnd, op, stmt, wit), Some(cheat))
+}
+
 /// Proves; if the proof is longer than `limit` (the verifier's bound) it proves again with the RNG stream continued
 /// (fresh masks and salts, so a fresh commitment, columns and multiproof), up to ATTEMPTS times (plan Task 9). A guard:
 /// every proof is <= max_len_exact by construction (fixed polynomials, <= t distinct columns, the largest multiproof),
@@ -299,7 +326,7 @@ pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Param
 fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, check: bool, limit: usize) -> Result<Vec<u8>, &'static str> {
     let mut rng = Rng::new(rnd, op, stmt, wit);
     for _ in 0..ATTEMPTS {
-        let pf = prove_once(op, stmt, wit, p, check, &mut rng)?;
+        let pf = prove_once(op, stmt, wit, p, check, &mut rng, None)?;
         if pf.len() <= limit {
             return Ok(pf);
         }
@@ -309,12 +336,20 @@ fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, check
 
 /// Every secret buffer is wiped on every exit (review P-C); the values that become public by design are marked for
 /// the constant-time check where they do (review P-B, `ct::public`): the root, w, q, h, the opened columns.
-fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mut Rng) -> Result<Vec<u8>, &'static str> {
+/// `cheat`: always `None` outside tests and `bench` (the deviations are compiled there only).
+fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mut Rng, cheat: Option<Cheat>) -> Result<Vec<u8>, &'static str> {
+    #[cfg(not(any(test, feature = "bench")))]
+    let _ = cheat;
     let st = cs::parse(op, stmt).ok_or("statement")?;
     let rel = cs::rel_of(op, stmt).ok_or("op")?;
     let lay = Layout::new(rel, p.ell);
     let w = cs::witness(rel, &st, wit, check)?;
-    let rows = Wiped(cs::rows(&lay, &w));
+    #[allow(unused_mut)]
+    let mut rows = Wiped(cs::rows(&lay, &w));
+    #[cfg(any(test, feature = "bench"))]
+    if cheat == Some(Cheat::Quadratic) {
+        cheat_bit(&lay, &mut rows);
+    }
     let (n, k, ell, m) = (p.n, p.k, p.ell, lay.m);
     let (hk, hn, h2) = (Domain::new(k), Domain::new(n), Domain::new(p.n2()));
 
@@ -337,14 +372,23 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
     let ul: Wiped<P4> = Wiped(std::array::from_fn(|_| {
         let mut v = rng.vec(d2);
         v[0] = -v[k];
+        #[cfg(any(test, feature = "bench"))]
+        if cheat == Some(Cheat::LinearBlind) {
+            v[0] += Fq::ONE;
+        }
         take(v)
     }));
     let h0: Wiped<P4> = Wiped(std::array::from_fn(|_| take(rng.vec(d2 - ell))));
     let uq: Wiped<P4> = Wiped(std::array::from_fn(|s| mul_poly(&z, &h0[s])));
 
     // commit: rows evaluated on the coset 3 H_n; leaf j = keccak(salt_j || column j)
-    let enc =
+    #[allow(unused_mut)]
+    let mut enc =
         Wiped(pc.iter().chain(u0.iter()).chain(ul.iter()).chain(uq.iter()).map(|c| hn.coset_fft(c, GEN)).collect::<Vec<_>>());
+    #[cfg(any(test, feature = "bench"))]
+    if cheat == Some(Cheat::Proximity) {
+        enc[0].iter_mut().for_each(|x| *x += Fq::ONE);
+    }
     let salts: Wiped<Vec<H>> = Wiped((0..n).map(|_| rng.salt()).collect());
     let col = |j: usize| {
         let mut b = Wiped(Vec::with_capacity((m + BLIND) * EB));
@@ -406,7 +450,12 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
         Wiped(std::array::from_fn(|s| h2.ifft(&Wiped(e.iter().map(|v| v.0[s]).collect::<Vec<_>>()))))
     };
     let qc = ifft4(&qe);
-    let qp: Vec<F4> = (0..d2).map(|i| get4(&qc, i) + get4(&ul, i)).collect();
+    #[allow(unused_mut)]
+    let mut qp: Vec<F4> = (0..d2).map(|i| get4(&qc, i) + get4(&ul, i)).collect();
+    #[cfg(any(test, feature = "bench"))]
+    if cheat == Some(Cheat::LinearColumn) {
+        qp[1] += F4::ONE; // sum over H_k of X is 0 (k > 1)
+    }
     ct::public(&qp[..]); // a proof field (b2)
     if check && (qp[0] + qp[k]) * Fq(k as u64) != comb.rhs {
         return Err("linear constraints");
@@ -458,6 +507,22 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
     Ok(out)
 }
 
+/// [`Cheat::Quadratic`]: in big group 0, the first slot whose bits j, j + 1 are 0, 1 gets 2, 0 (the same weighted sum)
+#[cfg(any(test, feature = "bench"))]
+fn cheat_bit(lay: &Layout, rows: &mut [Vec<Fq>]) {
+    let b = &lay.big[0];
+    for c in 0..lay.ell {
+        for j in 0..b.bits - 1 {
+            let (x, y) = (b.brow(j, 0), b.brow(j + 1, 0));
+            if rows[x][c] == Fq::ZERO && rows[y][c] == Fq::ONE {
+                (rows[x][c], rows[y][c]) = (Fq(2), Fq::ZERO);
+                return;
+            }
+        }
+    }
+    panic!("cheat_bit: no slot with bits 0, 1");
+}
+
 struct Rd<'a>(&'a [u8]);
 impl<'a> Rd<'a> {
     fn take(&mut self, n: usize) -> Option<&'a [u8]> {
@@ -484,9 +549,41 @@ impl<'a> Rd<'a> {
 /// Panics caught by `verify` (diagnostics; wasm32 aborts on panic instead).
 pub static VERIFY_PANICS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// The check that rejected a proof (review 3w u2-1: tests assert which check decides; `verify_reason`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Why {
+    /// op, length, statement or proof bytes not decodable
+    Malformed,
+    Pow,
+    Merkle,
+    /// sum over H_k of q against r^T b
+    LinearSum,
+    Proximity,
+    /// q against the combination, per opened column
+    LinearColumn,
+    Quadratic,
+}
+
+/// Test hook (feature `test-hooks`, never in a production build): the verifier panics on entry (pqz-ffi's fault test:
+/// a PQZH panic reaches pqz-ffi's catch, status 3).
+#[cfg(feature = "test-hooks")]
+pub static TEST_PANIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// true = valid; anything else (malformed, wrong length, failed check, panic, out of memory) = false
 pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
     try_verify(op, stmt, proof, p) == Ok(true)
+}
+
+/// [`try_verify`] without its catch: a panic unwinds to the caller, which must catch it itself (pqz-ffi's
+/// `precompile`, review 3w u3-2: a panic there is reported as status 3 with the input's hash, as PQZL's).
+pub fn verify_unwinding(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, Oom> {
+    verify_inner(op, stmt, proof, p).map(|w| w.is_none())
+}
+
+/// The check that rejected the proof, `None` if valid (tests and `bench` only).
+#[cfg(any(test, feature = "bench"))]
+pub fn verify_reason(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<Option<Why>, Oom> {
+    verify_inner(op, stmt, proof, p)
 }
 
 /// [`verify`] with out-of-memory kept apart (review P-D, as PQZL's `Ctx::try_verify`): `Ok(verdict)`, or `Err(Oom)`
@@ -494,21 +591,24 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
 /// the domains, the challenges, the linear test's combination vectors, the per-column evaluation buffers) could not
 /// be reserved: a fault of the machine, not of the input, which pqz-ffi reports as `NodeFault`. Not covered (still an
 /// abort on allocation failure): the decoded statement polynomials (no larger than the statement the caller already
-/// holds), the layout tables (a few KB), the shared matrix A (512 KiB, built once per process at first use, `cs.rs`), and allocations
-/// inside std / sha3.
+/// holds), the layout tables (a few KB), the shared matrix A (K x K polynomials of the set's q, built once per process
+/// at first use, `cs.rs`), the small per-proof buffers of at most t entries or a few rows (the query indices, the Merkle
+/// leaves and the multiproof's working layer, `merkle.rs`; the own-vector list; `cs::comb`'s weight powers, `own`,
+/// `beta`, `ones` and the per-constraint `gam` lists: a few KB each), and allocations inside std / sha3 (review 3w
+/// u2-6).
 pub fn try_verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, Oom> {
-    std::panic::catch_unwind(|| verify_inner(op, stmt, proof, p)).unwrap_or_else(|_| {
+    std::panic::catch_unwind(|| verify_unwinding(op, stmt, proof, p)).unwrap_or_else(|_| {
         VERIFY_PANICS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(false)
     })
 }
 
-/// the value, or the verdict false
+/// the value, or the verdict `Malformed`
 macro_rules! ok {
     ($e:expr) => {
         match $e {
             Some(v) => v,
-            None => return Ok(false),
+            None => return Ok(Some(Why::Malformed)),
         }
     };
 }
@@ -522,10 +622,15 @@ fn eval4(c: &[F4], xp: &[Fq]) -> F4 {
     a.get()
 }
 
-fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, Oom> {
+/// `Ok(None)` = valid, `Ok(Some(check))` = rejected by that check
+fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<Option<Why>, Oom> {
+    #[cfg(feature = "test-hooks")]
+    if TEST_PANIC.load(std::sync::atomic::Ordering::Relaxed) {
+        panic!("pqzh-ligero test hook TEST_PANIC");
+    }
     let rel = ok!(cs::rel_of(op, stmt));
     if !p.proof_len_ok(rel, proof.len()) {
-        return Ok(false);
+        return Ok(Some(Why::Malformed));
     }
     let st = ok!(cs::parse(op, stmt));
     let lay = Layout::new(rel, p.ell);
@@ -544,7 +649,7 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, O
     let (ca, cb, cl, cq, rho, rq) = draw(&mut tr, m, lay.triples.len())?;
     tr.absorb(polys);
     if !tr.pow_ok(u64::from_be_bytes(ok!(nonce.try_into().ok())), p.pow_bits) {
-        return Ok(false);
+        return Ok(Some(Why::Pow));
     }
     tr.absorb(nonce);
     let mut idx: Vec<usize> = (0..p.t).map(|_| tr.index(n)).collect();
@@ -565,13 +670,13 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, O
         cols.push(c);
     }
     if ok!(root_from(leaves, depth(n), || rd.take(32).map(|h| h.try_into().unwrap()))) != root || !rd.0.is_empty() {
-        return Ok(false);
+        return Ok(Some(Why::Merkle));
     }
 
     // linear test: sum over H_k of q = k (q_0 + q_k) = r^T b
     let comb: Comb = cs::comb(&lay, &st, rho)?;
     if (qp[0] + qp[k]) * Fq(k as u64) != comb.rhs {
-        return Ok(false);
+        return Ok(Some(Why::LinearSum));
     }
     let (hk, hn) = (Domain::try_new(k)?, Domain::try_new(n)?);
     let own: Vec<(usize, &Vec<F4>)> = comb.own.iter().enumerate().filter_map(|(i, v)| v.as_ref().map(|v| (i, v))).collect();
@@ -602,7 +707,7 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, O
             sb.add(&cb[i], u[i]);
         }
         if we != sa.get() + sb.get() * xp[k - 1] + cl * bl + cq * bq + b0 {
-            return Ok(false);
+            return Ok(Some(Why::Proximity));
         }
 
         // Lagrange basis of H_k at eta: L_c = omega^c (eta^k - 1) / (k (eta - omega^c)); Z_zeta(eta) on the way
@@ -630,7 +735,7 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, O
         }
         let ones_at = lc.iter().fold(Fq::ZERO, |a, &l| a + l);
         if qe != acc + r_at(&beta) * sbeta.get() + sones.get() * ones_at + bl {
-            return Ok(false);
+            return Ok(Some(Why::LinearColumn));
         }
 
         // quadratic
@@ -639,14 +744,14 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, O
             qa.add(&rq[t], u[x] * u[y] - u[z]);
         }
         if he * zeta != qa.get() + bq {
-            return Ok(false);
+            return Ok(Some(Why::Quadratic));
         }
     }
-    Ok(true)
+    Ok(None)
 }
 
 // ---- research spike (plan 5h Task 8c spike A, 2026-10-22; throwaway, kept as the record): a prover limit below the
-// verifier's bound (MAX_PROOF_PQZH at set (a)) and what the proof length depends on. Feature `bench` only. ----
+// verifier's bound (MAX_PROOF_PQZH at n2304-kmax4096) and what the proof length depends on. Feature `bench` only. ----
 
 /// honest proving with `limit` (as `prove_inner`), returning every attempt's proof (the last one is the accepted one
 /// when it is <= limit)
@@ -655,7 +760,7 @@ pub fn spike_prove_attempts(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &
     let mut rng = Rng::new(rnd, op, stmt, wit);
     let mut out = Vec::new();
     for _ in 0..ATTEMPTS {
-        let pf = prove_once(op, stmt, wit, p, true, &mut rng)?;
+        let pf = prove_once(op, stmt, wit, p, true, &mut rng, None)?;
         let ok = pf.len() <= limit;
         out.push(pf);
         if ok {
@@ -765,7 +870,7 @@ mod tests {
     #[cfg(feature = "bench")]
     #[test]
     fn proven_is_the_model() {
-        // the model's t (128 bits of query and grinding) is the least; a set may take more (set (a) preset B: 120 over
+        // the model's t (128 bits of query and grinding) is the least; a set may take more (n2304-kmax4096 preset B: 120 over
         // the model's 119, owner 2026-10-22)
         let m = Params::new(crate::set::PRESET_N, crate::set::PRESET_K, true);
         let t = crate::set::PRESET_T;
@@ -797,7 +902,7 @@ mod tests {
         let (n, t) = (p.n, p.t);
         let tree = Tree::new((0..n as u32).map(|i| keccak(&[&i.to_be_bytes()])).collect());
         let worst = (1..depth(n)).map(|l| t.min(n.div_ceil(1 << l))).sum::<usize>() + 2 - t;
-        // evenly spread columns from the left or (set (a) preset B, n 45,752: the left spread reaches worst - 1) from the
+        // evenly spread columns from the left or (n2304-kmax4096 preset B, n 45,752: the left spread reaches worst - 1) from the
         // right
         let left: Vec<usize> = (0..t).map(|i| i * n / t).collect();
         let mut right: Vec<usize> = (0..t).map(|i| n - 1 - i * n / t).collect();
@@ -963,8 +1068,8 @@ mod tests {
     fn prover_retries_over_limit() {
         let s = crate::client::setup();
         let (op, st, w, p) = (pqz_stmt::OP_REGISTER, &s.reg_stmt, &s.reg_wit, Params::proven());
-        // the seed (of 1..=4) with the longest proof, so that a shorter one is a likely retry (v3: seed 1 already is;
-        // set (a)'s seed 1 proof was shorter than its 16 retries)
+        // the seed (of 1..=4) with the longest proof, so that a shorter one is a likely retry (n2048-kmax1024: seed 1 already is;
+        // n2304-kmax4096's seed 1 proof was shorter than its 16 retries)
         let rnd = (1..=4u8).max_by_key(|&x| prove(op, st, w, [x; 32], &p).unwrap().len()).unwrap();
         let a = prove_inner(op, st, w, [rnd; 32], &p, true, p.max_proof_len(Form::Register)).unwrap();
         assert_eq!(a, prove(op, st, w, [rnd; 32], &p).unwrap());

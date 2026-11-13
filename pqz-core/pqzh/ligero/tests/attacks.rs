@@ -520,3 +520,49 @@ fn evm_fixtures() {
         assert!(!verify(op, &rd(&format!("neg-{n}.stmt")), &rd(&format!("neg-{n}.proof")), &Params::preset(op, false, true)), "{n}");
     }
 }
+
+/// Review 3w u2-1: each of the verifier's checks is the deciding one for some cheating prover (`prove_cheat`, one
+/// deviation each; PoW: proved with pow_bits 0), so removing any one of them turns this test red. The honest proof
+/// (positive control) verifies.
+#[test]
+fn every_check_decides_a_cheat() {
+    use pqzh_ligero::{Cheat, Why, prove_cheat, verify_reason};
+    let s = setup();
+    let pp = Params::proven();
+    for f in [Form::Register, Form::Transfer] {
+        let (op, (st, w)) = (f.op(), s.rel(f));
+        let honest = prove(op, st, w, [3; 32], &pp).unwrap();
+        assert_eq!(verify_reason(op, st, &honest, &pp), Ok(None), "{}: honest", rel_name(f));
+        let nopow = prove(op, st, w, [3; 32], &Params { pow_bits: 0, ..pp }).unwrap();
+        assert_eq!(verify_reason(op, st, &nopow, &pp), Ok(Some(Why::Pow)), "{}: no grinding", rel_name(f));
+        for (c, why) in [
+            (Cheat::Proximity, Why::Proximity),
+            (Cheat::LinearColumn, Why::LinearColumn),
+            (Cheat::LinearBlind, Why::LinearSum),
+            (Cheat::Quadratic, Why::Quadratic),
+        ] {
+            let pf = prove_cheat(op, st, w, [3; 32], &pp, c).unwrap();
+            assert_eq!(verify_reason(op, st, &pf, &pp), Ok(Some(why)), "{}: {c:?}", rel_name(f));
+        }
+    }
+}
+
+/// Review 3w u2-4: R_DR as DISCLOSE-AUDITOR at every window w < S_AUD verifies; a ciphertext at window w' under a
+/// statement that says w != w' is rejected, and by the linear sum check (the relation reads the window, not only the
+/// transcript).
+#[test]
+fn disclose_auditor_every_window() {
+    use pqzh_ligero::client::disclose_auditor;
+    use pqzh_ligero::pqz_stmt::S_AUD;
+    use pqzh_ligero::{Why, verify_reason};
+    let (op, pp) = (OP_DISCLOSE_RECEIVER, Params::proven());
+    for w in 0..S_AUD {
+        let (st, wit) = disclose_auditor(w, w);
+        let pf = prove(op, &st, &wit, [4; 32], &pp).unwrap();
+        assert_eq!(verify_reason(op, &st, &pf, &pp), Ok(None), "window {w}");
+        let (st, wit) = disclose_auditor(w, (w + 1) % S_AUD);
+        assert!(prove(op, &st, &wit, [4; 32], &pp).is_err(), "window {w}: the honest prover refuses");
+        let pf = prove_unchecked(op, &st, &wit, [4; 32], &pp).unwrap();
+        assert_eq!(verify_reason(op, &st, &pf, &pp), Ok(Some(Why::LinearSum)), "statement window {w}, ciphertext {}", (w + 1) % S_AUD);
+    }
+}

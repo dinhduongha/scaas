@@ -195,9 +195,12 @@ static class Cal
 
         // ML-DSA: ACVP external cases (pk ‖ sig ‖ msg: valid only with the empty context), EIP-8355 and the UA rows
         JsonObject ext = JsonNode.Parse(File.ReadAllText(Path.Combine(uaDir, "pq_external.json")))!.AsObject();
-        long[] mlGas = new long[2];
-        foreach (var (lvl, pk, sig, bas) in new[] { (44, MlDsa.Pk44, MlDsa.Sig44, MlDsa.Base44), (65, MlDsa.Pk65, MlDsa.Sig65, MlDsa.Base65) })
+        // review 3w T-18: level 87 too, so a schedule written here keeps MLDSA87 (a schedule without mldsa87Gas drops it)
+        long[] mlGas = new long[3];
+        var levels = new[] { (44, MlDsa.Pk44, MlDsa.Sig44, MlDsa.Base44), (65, MlDsa.Pk65, MlDsa.Sig65, MlDsa.Base65), (87, MlDsa.Pk87, MlDsa.Sig87, MlDsa.Base87) };
+        for (int lv = 0; lv < levels.Length; lv++)
         {
+            var (lvl, pk, sig, bas) = levels[lv];
             List<byte[]> ins = [];
             foreach (JsonNode? c in ext["acvp_mldsa"]!["cases"]!.AsArray())
             {
@@ -206,10 +209,11 @@ static class Cal
                 if (p.Length != pk) continue;
                 ins.Add([.. p, .. Convert.FromHexString(((string)c["sig"]!)[2..]), .. m[(2 + m[1])..]]);
             }
-            List<double> t = Time(ins, N, x => (lvl == 44 ? MlDsa44Precompile.Instance.Run(x, null!) : MlDsa65Precompile.Instance.Run(x, null!)).IsSuccess);
+            if (ins.Count == 0) throw new InvalidOperationException($"ML-DSA-{lvl}: no ACVP external inputs");
+            List<double> t = Time(ins, N, x => (lvl switch { 44 => MlDsa44Precompile.Instance.Run(x, null!), 65 => MlDsa65Precompile.Instance.Run(x, null!), _ => MlDsa87Precompile.Instance.Run(x, null!) }).IsSuccess);
             double p99 = Pct(t, 0.99);
             long cal = 1000L * (long)Math.Ceiling(6000 * p99 / tEc / 1000);
-            mlGas[lvl == 44 ? 0 : 1] = Math.Max(bas, cal);
+            mlGas[lv] = Math.Max(bas, cal);
             W($"ML-DSA-{lvl}: {ins.Count} ACVP inputs, p50 {F(Pct(t, 0.5))} ms, p99 {F(p99)} ms ⇒ calibrated {cal:N0}, EIP-8355 BASE {bas:N0} ⇒ mldsa{lvl}Gas {Math.Max(bas, cal):N0}");
         }
 
@@ -226,6 +230,7 @@ static class Cal
                 ["selftestGas"] = minGas,
                 ["mldsa44Gas"] = mlGas[0],
                 ["mldsa65Gas"] = mlGas[1],
+                ["mldsa87Gas"] = mlGas[2],
             }),
         };
         File.WriteAllText(Path.Combine(outDir, $"{label}-engine-pqz.json"), engine.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");

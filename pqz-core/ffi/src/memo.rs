@@ -20,7 +20,7 @@ pub const fn memo_len(m: usize) -> usize {
     18 + 40 * m
 }
 
-fn stream(key_seed: &[u8], header: &[Word; 20], salt: &[u8], len: usize) -> Option<Vec<u8>> {
+fn stream(key_seed: &[u8], header: &[Word; 20], salt: &[u8], len: usize) -> Option<Clear<Vec<u8>>> {
     let ctr = u32::try_from(word_u64(&header[H_SEND_COUNTER])?).ok()?;
     let info = [
         &b"PQZ/memo/v1"[..],
@@ -31,11 +31,22 @@ fn stream(key_seed: &[u8], header: &[Word; 20], salt: &[u8], len: usize) -> Opti
         salt,
     ]
     .concat();
-    let mut key = [0u8; 32];
-    Hkdf::<Sha256>::new(None, key_seed).expand(&info, &mut key).ok()?;
-    let mut ks = vec![0u8; len];
-    Hkdf::<Sha256>::from_prk(&key).ok()?.expand(b"PQZ/memo/ks/v1", &mut ks).ok()?;
+    // the memo key decrypts every memo of this counter: cleared on every exit (review 3w u3-3)
+    let mut key = Clear([0u8; 32]);
+    Hkdf::<Sha256>::new(None, key_seed).expand(&info, &mut key.0).ok()?;
+    let mut ks = Clear(vec![0u8; len]);
+    Hkdf::<Sha256>::from_prk(&key.0).ok()?.expand(b"PQZ/memo/ks/v1", &mut ks.0).ok()?;
     Some(ks)
+}
+
+/// A memo secret (the key, the keystream, the plaintext legs) cleared on drop (review 3w u3-3; best effort, as
+/// `crate::pqzl::clear`)
+struct Clear<T: AsMut<[u8]>>(T);
+
+impl<T: AsMut<[u8]>> Drop for Clear<T> {
+    fn drop(&mut self) {
+        crate::pqzl::clear(self.0.as_mut());
+    }
 }
 
 /// The memo of a transfer with `legs` = `(a_j, toUA_j)` in leg order under `header` (its salt, chainUid, token,
@@ -43,15 +54,16 @@ fn stream(key_seed: &[u8], header: &[Word; 20], salt: &[u8], len: usize) -> Opti
 /// expand, at most 255 · 32 = 8,160 B, and M = 204 needs 2 + 40·M = 8,162 B; review R4-C8; op 7 builds M ≤ 8).
 pub fn seal(key_seed: &[u8], header: &[Word; 20], aud: bool, legs: &[(u64, Word)]) -> Option<Vec<u8>> {
     let m = u8::try_from(legs.len()).ok().filter(|&m| m > 0)?;
-    let mut plain = vec![aud as u8, m];
+    let mut plain = Clear(Vec::with_capacity(memo_len(legs.len()) - 16)); // no reallocation: one buffer to clear
+    plain.0.extend_from_slice(&[aud as u8, m]);
     for (a, ua) in legs {
-        plain.extend_from_slice(&a.to_be_bytes());
-        plain.extend_from_slice(ua);
+        plain.0.extend_from_slice(&a.to_be_bytes());
+        plain.0.extend_from_slice(ua);
     }
     let salt = &header[H_SALT][16..];
-    let ks = stream(key_seed, header, salt, plain.len())?;
+    let ks = stream(key_seed, header, salt, plain.0.len())?;
     let mut memo = salt.to_vec();
-    memo.extend(plain.iter().zip(&ks).map(|(p, k)| p ^ k));
+    memo.extend(plain.0.iter().zip(&ks.0).map(|(p, k)| p ^ k));
     Some(memo)
 }
 
@@ -63,12 +75,12 @@ pub fn open(key_seed: &[u8], header: &[Word; 20], memo: &[u8]) -> Option<(bool, 
         return None;
     }
     let ks = stream(key_seed, header, &memo[..16], memo.len() - 16)?;
-    let plain: Vec<u8> = memo[16..].iter().zip(&ks).map(|(c, k)| c ^ k).collect();
-    let (flags, m) = (plain[0], plain[1] as usize);
+    let plain = Clear(memo[16..].iter().zip(&ks.0).map(|(c, k)| c ^ k).collect::<Vec<u8>>());
+    let (flags, m) = (plain.0[0], plain.0[1] as usize);
     if flags > 1 || memo_len(m) != memo.len() {
         return None;
     }
-    let legs = plain[2..]
+    let legs = plain.0[2..]
         .chunks_exact(40)
         .map(|c| (u64::from_be_bytes(c[..8].try_into().unwrap_or_default()), c[8..].try_into().unwrap_or_default()))
         .collect();

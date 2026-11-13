@@ -20,7 +20,23 @@ using Nethermind.Serialization.Json;
 //   Harness run   <ffiDir> <corpus.jsonl> <repoRoot> [--minutes N] [--threads 8] [--seed S]
 //   Harness fault <hooksDir> <corpus.jsonl>        (test child: status 4 through PqzPrecompile.Run ⇒ exit 120)
 //   Harness panic <hooksDir> <corpus.jsonl>        (test child: status 3 through PqzPrecompile.Run ⇒ …00, exit 0)
-return args.Length > 0 && args[0] == "fault" ? Fault.Exec(args) : args.Length > 0 && args[0] == "panic" ? Panic.Exec(args) : Run.Exec(args);
+//   Harness mldsa-fault                            (test child: a non-crypto exception in MlDsa.Verify ⇒ exit 120)
+return args.Length > 0 && args[0] == "fault" ? Fault.Exec(args) : args.Length > 0 && args[0] == "panic" ? Panic.Exec(args)
+    : args.Length > 0 && args[0] == "mldsa-fault" ? MlDsaFault.Exec() : Run.Exec(args);
+
+/// <summary>Review 3w T-16 (D4): an exception other than <see cref="CryptographicException"/> inside an ML-DSA verify,
+/// raised through the <see cref="MlDsa.VerifyFn"/> seam, is <c>PQZ-NODE-FAULT</c> and exit 120, never a word.</summary>
+static class MlDsaFault
+{
+    public static int Exec()
+    {
+        byte[] input = new byte[MlDsa.Pk65 + MlDsa.Sig65 + 32];
+        Console.WriteLine("mldsa fault child: the seam throws InvalidOperationException");
+        byte[] o = MlDsa.Verify(MLDsaAlgorithm.MLDsa65, MlDsa.Pk65, MlDsa.Sig65, input, (_, _, _, _) => throw new InvalidOperationException("seam"));
+        Console.WriteLine($"mldsa fault child: returned {Convert.ToHexStringLower(o)} (must not happen)");
+        return 1;
+    }
+}
 
 static class Shared
 {

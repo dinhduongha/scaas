@@ -96,3 +96,45 @@ fn fs_bind() {
     println!("VERDICT: P6-FS Fiat-Shamir binding (lazer#28) {} ({} failed checks of {checks})", if fails.is_empty() { "ok" } else { "FAIL" }, fails.len());
     assert!(fails.is_empty(), "P6-FS binding failed: {fails:?}");
 }
+
+/// Review 3w Codex u1-2 (R1-C8's remaining dependencies), the generic verifier: tA1 (kind 11) moves the transcript
+/// after the commitment (trace kind 6); ty3, ty4, tbeta (kind 10 at their tB index) move the seed of R, R' (kind 4);
+/// t (kind 10 at its tB index) and w1 (through the hint, kind 8) move the final challenge's seed (kind 8). The
+/// honest proof verifies (positive control). v cannot be changed alone through a proof field (the verifier recomputes
+/// it from z, t and c), so its absorption is bound by C = Rust proof equality and the vectors, not here.
+#[test]
+fn fs_bind_commitment_r_and_final_seeds() {
+    let rows = common::pqzl_rows();
+    let mut ctx = Ctx::new();
+    let mut fails = Vec::new();
+    for code in CODES {
+        let r = rows.iter().find(|r| r.code == code).unwrap_or_else(|| panic!("a row of relation {code:#x}"));
+        let honest = ctx.prove(r.op, &r.stmt, &r.wit, &r.rnd32).expect("honest proof");
+        fs_trace_take();
+        let ok = ctx.verify(r.op, &r.stmt, &honest);
+        let hon = fs_trace_take();
+        assert!(ok, "{}: honest proof rejected", r.name);
+        let (nb, ti) = pqzl::test_tb_layout(code).expect("tB layout");
+        assert!(nb >= 10 && ti >= 9 && ti < nb, "{}: tB {nb} polys, t at {ti}", r.name);
+        // (name, mutation kind, r1, trace kind): r2 = 0x105 (coefficient 5, sign +)
+        for (mn, k, r1, t) in
+            [("tA1", 11, 0x300, 6), ("ty3", 10, 0, 4), ("ty4", 10, 4, 4), ("tbeta", 10, 8, 4), ("t", 10, ti as u64, 8), ("hint (w1)", 8, 0, 8)]
+        {
+            let p = test_mutate(code, &honest, k, r1, 0x105).unwrap().expect("mutation re-encodes");
+            assert_ne!(p, honest, "{}: mutation {mn} changed nothing", r.name);
+            let _ = ctx.verify(r.op, &r.stmt, &p);
+            let mt = fs_trace_take();
+            let res = match (seed(&hon, t), seed(&mt, t)) {
+                (Some(a), Some(b)) if a != b => "differ",
+                (Some(_), Some(_)) => "EQUAL (FAIL)",
+                _ => "MISSING (FAIL)",
+            };
+            println!("P6-FS {} verify {mn}-mutated kind {t}: {res}", r.name);
+            if res != "differ" {
+                fails.push(format!("{} {mn} kind {t} {res}", r.name));
+            }
+        }
+    }
+    assert!(fails.is_empty(), "binding failed: {fails:?}");
+}
+

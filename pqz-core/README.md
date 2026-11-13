@@ -590,7 +590,7 @@ The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the rec
 
 | Want to… | Run |
 |---|---|
-| run the full gate A / B checklist at one set (KAT, fix checks, differential, C = Rust = wasm32, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, PQZH cross-checks, fuzz smoke) | `[PQZ_SET=<set>] scripts/capped pqz-core/gate.sh [<label>]` (resumes an interrupted run; `--last` re-runs the latest) |
+| run the full gate A / B checklist at one set (KAT, fix checks, the provers' constant-time check `ct` and the C core's sanitizer run `ub`, differential, C = Rust = wasm32, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, PQZH cross-checks, fuzz smoke; `sh pqz-core/gate-controls.sh`: the negative controls of its scripts) | `[PQZ_SET=<set>] scripts/capped pqz-core/gate.sh [<label>]` (resumes an interrupted run; `--last` re-runs the latest) |
 | build PQZL (native + wasm) | `[PQZ_SET=<set>] pqzl/build.sh all` |
 | check the PQZL arithmetic against upstream LaZer | `pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json`, then `python3 -I pqzl/kat/check.py params/sets/<set>/lazer-3330e48-kat.json pqzl/build/native/kat-pqz.json` (must print 19/19) |
 | test PQZH | `(cd pqzh/ligero && cargo test --release --offline [--features set-<set>])` |

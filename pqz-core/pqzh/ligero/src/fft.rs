@@ -1,15 +1,16 @@
-//! Mixed-radix FFT over F_q on subgroups H_n of order n | 4 * 2 * 19 * 43 * 431 (the set's radices, pqzh_set.rs: 2, 19,
-//! 43 and 431 in every set so far, all dividing q - 1; owner decision 2026-10-14: the radix-431 stage for longer codes). Each radix-r stage is a direct r-point DFT with lazy
+//! Mixed-radix FFT over F_q on subgroups H_n of order n | 4 * the product of the set's radices (pqzh_set.rs, all dividing
+//! q - 1: 2, 19, 43, 431 at n2048-kmax1024 and n2560-kmax16384; 2, 7, 17, 19, 43, 431 at n2304-kmax4096; owner decision
+//! 2026-10-14: the radix-431 stage for longer codes). Each radix-r stage is a direct r-point DFT with lazy
 //! u128 accumulation (r + 1 products per point and stage), decimation in time, natural order in and out.
 
 use crate::Wiped;
 use crate::fq::{Fq, Q, cnt, red};
 
-/// the set's generator of F_q^* (3 in every set so far)
+/// the set's generator of F_q^* (pqzh_set.rs)
 pub const GEN: Fq = Fq(crate::set::GEN);
 /// stage order, outermost first: the largest radix is the deepest stage (it sees the zero padding)
 pub const RADICES: &[usize] = &crate::set::RADICES;
-/// the largest domain: 2^3 * 19 * 43 * 431 (4 * the product of the radices)
+/// the largest domain: 4 * the product of the set's radices
 const NMAX: usize = {
     let (mut p, mut i) = (4, 0);
     while i < RADICES.len() {

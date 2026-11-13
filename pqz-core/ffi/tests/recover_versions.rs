@@ -35,12 +35,13 @@ fn view(l: &[(Pk, [u8; 16])]) -> Vec<(&Pk, [u8; 16])> {
 /// the legs, the sender and the auditor have; only each `v` under the key it names differs.
 #[test]
 fn noise_draws_do_not_depend_on_a_key() {
-    let (a, b) = (keys(0x21, 4), keys(0x52, 4));
+    // pk_f, pk_a and every leg distinct (review 3w u3-4: `enc_multi` refuses equal keys, as the contract's KV-9)
+    let (a, b) = (keys(0x21, 10), keys(0x52, 10));
     let seed = [0x3c; 32];
     for aud in [false, true] {
         for m in [1usize, 2, 3, 4, 5, 8] {
             let amounts: Vec<[u8; 16]> = (0..m).map(|j| digits(1000 + j as u64)).collect();
-            let legs = |ks: &[Key]| -> Vec<(Pk, [u8; 16])> { (0..m).map(|j| (*ks[j % ks.len()].pk, amounts[j])).collect() };
+            let legs = |ks: &[Key]| -> Vec<(Pk, [u8; 16])> { (0..m).map(|j| (*ks[2 + j].pk, amounts[j])).collect() };
             let (la, lb) = (legs(&a), legs(&b));
             let x = enc(&a[0].pk, digits(7), &view(&la), aud.then_some(&*a[1].pk), &seed);
             let y = enc(&b[0].pk, digits(7), &view(&lb), aud.then_some(&*b[1].pk), &seed);
@@ -89,12 +90,14 @@ fn recover(m: usize, n_versions: u8) -> usize {
     let stored = enc(&sender[w_true].pk, d_f, &legs, Some(&*auditor[0].pk), &seed_enc(&sender_seeds[w_true], &salt));
 
     let mut trials = 0;
-    // 1. the sender's version: `u_0` depends on no receiver key, so the match names w; any key in the other seats
-    let any: Vec<(&Pk, [u8; 16])> = (0..m).map(|j| (&*sender[0].pk, d[j])).collect();
+    // 1. the sender's version: `u_0` depends on no receiver key, so the match names w; any key in the other seats, distinct
+    // (review 3w u3-4: `enc_multi` refuses two equal keys of one statement, as the contract's KV-9): placeholder keys
+    let (dummies, dummy_a) = (keys(0x33, m as u8), keys(0x35, 1).remove(0));
+    let any: Vec<(&Pk, [u8; 16])> = (0..m).map(|j| (&*dummies[j].pk, d[j])).collect();
     let mut w_found = None;
     for (w, s) in sender_seeds.iter().enumerate() {
         trials += 1;
-        let c = enc(&sender[0].pk, d_f, &any, Some(&*sender[0].pk), &seed_enc(s, &salt));
+        let c = enc(&sender[0].pk, d_f, &any, Some(&*dummy_a.pk), &seed_enc(s, &salt));
         if c.groups[0].u == stored.groups[0].u {
             assert!(w_found.is_none());
             w_found = Some(w);
@@ -108,7 +111,7 @@ fn recover(m: usize, n_versions: u8) -> usize {
         let x = match_version(r, &stored.v[j], &mut trials, |pk| {
             let mut one = any.clone();
             one[j].0 = pk;
-            enc(&sender[w_true].pk, d_f, &one, Some(&*sender[0].pk), &seed).v[j]
+            enc(&sender[w_true].pk, d_f, &one, Some(&*dummy_a.pk), &seed).v[j]
         });
         got.push(x.expect("a leg's version"));
     }

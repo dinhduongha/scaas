@@ -16,8 +16,7 @@ pqzh-ligero's `set-<set>` feature and `src/set.rs` branch, the ligero wasm featu
 | `n2560-kmax16384` | 2560, 40 | 2^50 − 42,310,535 | 16,384 | approved 2026-10-20 as the Task 8 set, superseded as the default by `n2304-kmax4096` 2026-10-21: shippable for customer chains; full vectors + gate | [SET.md](n2560-kmax16384/SET.md) |
 | `n2816-kmax65536` | 2816, 44 | 2^54 − 327 | 65,536 | research record `pqzl/params/aprime/`, owner 2026-10-21 core only; **owner 2026-10-24: a full PQZL set for customers** (pqz-stmt, precompile, vectors, gate since plan 5h Task 8d part 1b; contracts in 8d part 2); **no PQZH** (none of the current Ligero radices divides q − 1; a radix-1,789 preset is unexplored, not in scope) | [SET.md](n2816-kmax65536/SET.md) |
 
-Older notes and plans use short names for these sets: "the v3 set" / "the frozen set" = `n2048-kmax1024`, "set (a)" = `n2304-kmax4096`, "16k" = `n2560-kmax16384`,
-"A′" = `n2816-kmax65536`; new text uses the directory names only.
+Older notes and plans may name a set by a plan or study label; text uses the directory names only.
 
 ## What a set fixes: cryptography first, cost follows (owner question 2026-10-23)
 
@@ -365,7 +364,17 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 | `lazer-3330e48-kat.json` | upstream LaZer golden arithmetic KAT at the set's q (the gate's `kat` step: pqz-core = upstream) | `pqzl/kat/build-lazer-dump.sh` |
 | `SET.md`, `PQZH.md` | the set's numbers, approval, conditions; PQZH's preset, sizes and the conditions for a chain to run it | by hand |
 
-`gen_set.py --all --check` (the gate's `rust` step) fails on a file in a set directory that is not in this table.
+`gen_set.py --all --check` (the gate's `rust` step) fails on a file in a set directory that is not in this table. It
+also binds the records the generator does not write (review 3w): each header's comment block to its spec (q, `m1`,
+exact-l2 dimensions and bounds, `nbin`, `Bprime`, MLWE dimension = `kmlwe_min`, MSIS root Hermite factor ≤ `pqz_delta`)
+and every `log2stdev` < 24 (also `to_rust.py`), the `=>` lines of `e-s1.txt` to `set.toml` and the headers (kmsis, m2,
+D, gamma, λ, proof size; β ≥ 450), and `codegen.txt`'s sizes and sha256 prefixes to the headers. `[pqzh_preset]` must
+reach the proven regime's floor (n ≥ 4k, t ≥ the exact minimum: 121 / 119 / 121 at the three PQZH sets).
+
+[`id-digests.json`](id-digests.json) maps each `proofSystemId` label to a sha256 of what it fixes (PQZL: the set
+constants, `pqz_delta`, `kmlwe_min`, the 14 headers; PQZH: the set constants and the preset). `gen_set.py` adds a row
+when a label first appears with consistent records and never rewrites one: when the parameters move under a label in
+the table, a write refuses and `--check` fails ("parameters changed under label X: bump the version").
 
 Vectors: `smartcontracts/vectors/pqz/` for `n2048-kmax1024`,
 `smartcontracts/vectors/pqz/<set>/` for every other set (`pqz-ffi/vectors/run.sh`, `PQZ_SET=<set>`).

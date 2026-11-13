@@ -781,7 +781,8 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
     let qe = p.quad_eval.quad_eval;
     let lambda = p.quad_eval.lambda as usize;
     let (q, log2q) = (&tb.ring.q, tb.ring.log2q);
-    if tb.l != 0 || s.es.len() != p.z as usize || f.h.len() != lambda / 2 {
+    // nex, nprime > 0 in every relation (review 3w u1-5: `sz_z3`'s y3 loop is bounded by loff4, upstream)
+    if tb.l != 0 || s.es.len() != p.z as usize || f.h.len() != lambda / 2 || p.nex == 0 || p.nprime == 0 {
         return Err(Error::Internal); // the forms pqz_rel.c passes (module doc)
     }
     let (mut a1, mut a2) = accs(p)?;
@@ -792,6 +793,8 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
         return Ok(false);
     }
     let cseed = *hash;
+    #[cfg(feature = "test-hooks")]
+    crate::fstrace::rec(4, &cseed, 0); // the seed of R, R' (after ty3, ty4, tbeta): review 3w Codex u1-2
     hash_z34(hash, &f.z3, &f.z4, p)?;
     for h in f.h.iter_mut() {
         if !(h.get_coeff(0).eqzero() && h.get_coeff(D / 2).eqzero()) {
@@ -873,7 +876,7 @@ fn intvec(v: &[i64]) -> Result<IntVec, Error> {
 /// sums are the same integers
 fn r_times(s: &[i64], seed: &[u8; 32], roff: u64) -> Result<Vec<i64>, Error> {
     let mut ri = vec_of(s.len(), |_| 0i8)?;
-    let mut r = vec_of(256, |_| 0i64)?;
+    let mut r = Wiped(vec_of(256, |_| 0i64)?); // linear forms of the witness: cleared on an error exit (review 3w u1-3)
     for (i, x) in r.iter_mut().enumerate() {
         brandom(&mut ri, 1, seed, roff + i as u64)?;
         for (&rj, &sj) in ri.iter().zip(s) {
@@ -882,7 +885,7 @@ fn r_times(s: &[i64], seed: &[u8; 32], roff: u64) -> Result<Vec<i64>, Error> {
             }
         }
     }
-    Ok(r)
+    Ok(r.take(Vec::new()))
 }
 
 /// `_lnp_tbox_compute_z34`: z3 = y3 + beta3 R s3, z4 = y4 + beta4 R' s4 (s3 = (Ps s1, Es s1, upsilon), s4 = Ds s1),
@@ -909,7 +912,9 @@ fn compute_z34(
     // the witness part s1[m1..] and Es·s1 / Ds·s1 (review G-2, fix B)
     let mut s3 = Wiped(PolyVec::new(nex)?);
     let mut s4 = Wiped(PolyVec::new(nprime)?);
-    let (mut y3, mut y4) = (PolyVec::new(w)?, PolyVec::new(w)?);
+    // the masks, a rejected try's z3, z4 and the images R s3, R' s4 (256 linear forms of the witness each): cleared on
+    // every exit (review 3w u1-3, as C's pqz_arena_wipe_release)
+    let (mut y3, mut y4) = (Wiped(PolyVec::new(w)?), Wiped(PolyVec::new(w)?));
     polyvec::set_zero(&mut m.sub(l + 2 * w, 1, 1)); // beta
 
     let mut loff = 0;
@@ -950,7 +955,7 @@ fn compute_z34(
     let mut dom = 2u32;
     let (mut rbits, mut nrbits) = (0u8, 0u32);
     let (mut beta3, mut beta4) = (0i64, 0i64);
-    let (mut z3v, mut z4v) = (Vec::new(), Vec::new());
+    let (mut z3v, mut z4v) = (Wiped(Vec::new()), Wiped(Vec::new()));
     let mut tries = 0;
     let cseed = loop {
         if tries >= REJ_MAX {
@@ -1019,32 +1024,32 @@ fn compute_z34(
         enc.urandom(&mut f.t_b.sub(l + loff, 1, 1), q, log2q)?;
         let cseed = hash2(hash, &enc.end()?);
 
-        let mut rs3 = Vec::new();
+        let mut rs3 = Wiped(Vec::new());
         if nex > 0 {
             let s3c = Wiped(coeffs_i64(&mut s3)?);
-            z3v = coeffs_i64(&mut y3)?;
-            rs3 = r_times(&s3c, &cseed, 0)?;
+            *z3v = coeffs_i64(&mut y3)?;
+            *rs3 = r_times(&s3c, &cseed, 0)?;
             if !cheat_skips_s3() {
-                z3v.iter_mut().zip(&rs3).for_each(|(z, &r)| *z += beta3 * r);
+                z3v.iter_mut().zip(rs3.iter()).for_each(|(z, &r)| *z += beta3 * r);
             }
         }
-        let mut rs4 = Vec::new();
+        let mut rs4 = Wiped(Vec::new());
         if nprime > 0 {
             let s4c = Wiped(coeffs_i64(&mut s4)?);
-            z4v = coeffs_i64(&mut y4)?;
-            rs4 = r_times(&s4c, &cseed, 256)?;
-            z4v.iter_mut().zip(&rs4).for_each(|(z, &r)| *z += beta4 * r);
+            *z4v = coeffs_i64(&mut y4)?;
+            *rs4 = r_times(&s4c, &cseed, 256)?;
+            z4v.iter_mut().zip(rs4.iter()).for_each(|(z, &r)| *z += beta4 * r);
         }
         // rejection sampling (rej3 = rej4 = 2 in every relation: bimodal)
         if nex > 0 && p.rej3 != 0 && !cheat_skips_s3() {
-            let rej = rej_bimodal(&mut rstate, &intvec(&z3v)?, &intvec(&rs3)?, &p.scm3, &p.stdev3sqr)?;
+            let rej = rej_bimodal(&mut rstate, &Wiped(intvec(&z3v)?), &Wiped(intvec(&rs3)?), &p.scm3, &p.stdev3sqr)?;
             let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
                 continue;
             }
         }
         if nprime > 0 && p.rej4 != 0 {
-            let rej = rej_bimodal(&mut rstate, &intvec(&z4v)?, &intvec(&rs4)?, &p.scm4, &p.stdev4sqr)?;
+            let rej = rej_bimodal(&mut rstate, &Wiped(intvec(&z4v)?), &Wiped(intvec(&rs4)?), &p.scm4, &p.stdev4sqr)?;
             let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
                 continue;
@@ -1089,7 +1094,8 @@ pub(crate) fn prove(
     let m2r = (tb.m2 - tb.kmsis) as usize;
     let (np, n_) = dims(p);
     let loff = if p.nprime > 0 { 256 / D } else { 0 } + if p.nex > 0 { 256 / D } else { 0 };
-    if l != 0 || s.es.len() != z || p.nex + p.nprime == 0 {
+    // nex, nprime > 0 in every relation (review 3w u1-5: `sz_z3`'s y3 loop is bounded by loff4, upstream)
+    if l != 0 || s.es.len() != z || p.nex == 0 || p.nprime == 0 {
         return Err(Error::Internal); // the forms pqz_rel.c passes (module doc)
     }
 
