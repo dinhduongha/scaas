@@ -328,14 +328,23 @@ fn negative_rows_reject() {
     // The R0 review fix (2026-10-25): + 16 "retired PQZL v4 proofSystemId" rows, + 4 kind-word rows (decoder Kind), + 6
     // op 7 disclosure rows (3 auditor disclosures x {another window, window S_AUD}; the window-shift rows need
     // S_AUD > 1); the coder-padding rows as the new proofs' last bytes give them
+    // Three-key step 2 (a3c5bc37, PQZL v6 / PQZH v4 ids; this pin was not moved then): + 16 "retired PQZL v5
+    // proofSystemId" rows (8 forms + 8 op 7 shapes), and the coder-padding rows as the v6 proofs' last bytes give them:
+    // n2048-kmax1024 409 -> 427 (+ 16, padding + 3 - 1: M1-off, M1-on, M2-off in, M4-off out), n2304-kmax4096 410 -> 428
+    // (+ 16, padding + 2: M1-on, M2-on), n2560-kmax16384 410 -> 425 (+ 16, padding + 2 - 3: BURN, M4-on in; REFRESH,
+    // TRANSFER0, TRANSFER out), n2816-kmax65536 428 -> 441 (+ 16, padding - 3: M1-off, REGISTER, TRANSFER0 out).
+    // Split rows (negative.json split_rows, three-key spec K3-4): + 44 at a PQZH set, + 42 at n2816-kmax65536: per split
+    // form (TRANSFER-SPLIT, TRANSFER-SPLIT0) length +- 1, op 2..5, zero / PQZL / [PQZH] id, auditorOn, u_f = q, u_f, v_f
+    // and v_t bit flips, u / u_f swapped, 5 proof edits (19, 20 with PQZH) plus the coder-padding row (every set's split
+    // proofs end below 0x80: + 1 each), and TRANSFER / TRANSFER0 under PQZL_SPLIT_ID (+ 2)
     let want = match pqzl::SET {
-        "n2048-kmax1024" => 409,
-        "n2304-kmax4096" => 410,
-        "n2560-kmax16384" => 410,
+        "n2048-kmax1024" => 427 + 44,
+        "n2304-kmax4096" => 428 + 44,
+        "n2560-kmax16384" => 425 + 44,
         // full PQZL set since 5h Task 8d part 1b, PQZL only. Against n2560-kmax16384's 384: + 16 "retired PQZH v1
         // proofSystemId" rows on its PQZL inputs, + 1 coder-padding row ("coder padding bit 7 set after the final 1-bit",
-        // 15 here, 14 there: the proofs' last bytes) = 401; R0 fix as above: 428
-        "n2816-kmax65536" => 428,
+        // 15 here, 14 there: the proofs' last bytes) = 401; R0 fix as above: 428; three-key step 2 and split rows as above
+        "n2816-kmax65536" => 441 + 42,
         s => panic!("no negative.json row count recorded for set {s}"),
     };
     assert_eq!(rows.len(), want);

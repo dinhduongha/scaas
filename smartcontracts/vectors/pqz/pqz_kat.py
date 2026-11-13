@@ -1580,9 +1580,12 @@ def check_proofs(j, d):
     return bad
 
 
-def apply_edits(r, stmts, proofs):
-    """negative.json: the honest input of (form, id) with the row's edits (see the file's description)."""
-    if r["form"] == "-":
+def apply_edits(r, stmts, proofs, base=None):
+    """negative.json: the honest input of (form, id) with the row's edits (see the file's description); base = (op,
+    stmt, proof) of a split row's own input (proof_pqzl_split.json)."""
+    if base is not None:
+        op, s, p = base
+    elif r["form"] == "-":
         op, s, p = 0, b"", b""
     elif r["form"] == "TRANSFER-MULTI":
         op, s, p = 7, with_id(stmts[r["case"]], IDS[r["id"]]), proofs[r["case"], r["id"]]
@@ -1733,6 +1736,56 @@ def check_negative(j, d):
         cmp(bad, "opening " + r["name"], r["reason"], got)
     if sorted({r["reason"] for r in j["openings"]}) != ["Opening", "ok"]:
         bad.append("openings: need the canonical one and Opening rejections")
+    bad += check_split_negative(j, d, stmts, proofs, honest)
+    return bad
+
+
+def check_split_negative(j, d, stmts, proofs, honest):
+    """negative.json split_rows (three-key spec K3-4; UNAUDITED): the split transfer of proof_pqzl_split.json (id
+    pqzl_split) or the PQZL TRANSFER / TRANSFER0 (id pqzl) with the edits; the precompile gives 0 (or reverts) and so
+    does the off-chain entry (offchain 0); the reason is this decoder's. Required: per split form the length, op, id and
+    proof edits and the u / u_f swap; TRANSFER / TRANSFER0 under PQZL_SPLIT_ID."""
+    bad = []
+    sp = {r["form"]: (r["op"], bytes.fromhex(r["stmt"]), bytes.fromhex(r["proof"]))
+          for r in load(d, "proof_pqzl_split.json")["rows"]}
+    honest = honest | {precompile_input(op, s, p) for op, s, p in sp.values()}
+    names = set()
+    for r in j.get("split_rows", []):
+        if r["name"] in names:
+            bad.append("duplicate split row " + r["name"])
+        names.add(r["name"])
+        if r["id"] == "pqzl_split":
+            base = sp[r["form"]]
+        elif r["id"] == "pqzl" and r["form"] in ("TRANSFER", "TRANSFER0"):
+            base = None
+        else:
+            bad.append(f"{r['name']}: split row of ({r['form']}, {r['id']})")
+            continue
+        b = apply_edits(r, stmts, proofs, base)
+        cmp(bad, r["name"] + " input", (r["input_bytes"], r["input_sha3"]), (len(b), hashlib.sha3_256(b).hexdigest()))
+        if b in honest:
+            bad.append(r["name"] + ": the edits give an honest input")
+        try:
+            decode_input(b)
+            why = "verify"
+        except Rejected as x:
+            why = x.args[0]
+        cmp(bad, r["name"] + " reason", r["reason"], why)
+        cmp(bad, r["name"] + " expect", r["expect"], "revert" if len(b) > MAX_INPUT else "0")
+        cmp(bad, r["name"] + " offchain", r["offchain"], "0")
+    want = [f"TRANSFER{a}: PQZL_SPLIT_ID (serves only the split transfer)" for a in ("", "0")]
+    for f in sp:
+        want += [f"{f}: {x}" for x in ("statement length - 1", "statement length + 1", "unknown proofSystemId (zero word)",
+                                       "PQZL proofSystemId (PQZL_ID never serves the split transfer)",
+                                       "u and u_f swapped", "u_f coefficient 0 low bit flipped", "v_f low bit flipped",
+                                       "proof truncated by 1 byte", "proof extended by 1 zero byte",
+                                       "proof byte 0 bit 0 flipped", "proof middle byte bit 3 flipped",
+                                       "proof last byte bit 7 flipped")]
+        want += [f"{f}: under op {o}" for o in range(2, 6)]
+    if set(want) - names:
+        bad.append(f"split rows missing {sorted(set(want) - names)}")
+    if "verify" not in {r["reason"] for r in j.get("split_rows", [])}:
+        bad.append("split rows: no verifier rejection")
     return bad
 
 
