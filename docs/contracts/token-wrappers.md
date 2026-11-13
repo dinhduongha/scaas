@@ -1113,7 +1113,7 @@ own code limit above 65,536 B.
 | **R** | 12 | regulated only (8–13): the regulated layer's 14 entries (freeze, pause, force and operator transfers, orders, `canReceive`, `regulatedConfig`, the kind's `disableFeature`) | `RegulatedLib`, `GovernanceLib`; `WrappedLib` on 9, 11, 13 |
 | **Z** | 5 | Zether (2, 3, 10, 11) | `ZetherLib`, `ZetherWrappedLib` |
 | **Q** | 6 | PQZ (4, 5, 12, 13): the ops and their verdict entries | `PqzTransferLib`, `PqzBurnLib`, `PqzStateLib`, `PqzViewLib`, `PqzWrappedLib` |
-| **S** | 8 | on 5 and 13: the PQZ state, setters and views (Q split by the rule below; named Q2 until 2026-11-10) | the PQZ libraries |
+| **S** | 8 | on 5, 12 and 13: the PQZ state, setters and views (Q split by the rule below; named Q2 until 2026-11-10; on 12 since owner 2026-11-13) | the PQZ libraries |
 | **D** | 10 | the DEX's 22 governance entries (`SCaaSDexGovernanceModule`) | `GovernanceLib` |
 | **L** | 11 | the DEX's liquidity entries `mtxLiquidity` and `liquidityOrderDigest` (`SCaaSDexLiquidityModule`, [CTR-DEX-30](dex.md#CTR-DEX-30)); `mtxLiquidity`'s stub is an S1 variant (the DEX's `nonReentrant` around a DELEGATECALL with a normal return) | — |
 
@@ -1133,10 +1133,10 @@ are in [decisions.md](../decisions.md#ctr-tok-30--body-modules-every-body-but-th
 | 9 `WrappedRegulatedToken` | 23,250 | 29,378 | 20,170 | 21,369 | 27,239 | 11,999 | | | |
 | 10 `NormalZetherRegulatedToken` | 20,773 | 29,960 | 18,701 | 25,217 | | 11,778 | 23,880 | | |
 | 11 `WrappedZetherRegulatedToken` | 26,992 | 30,507 | 20,170 | 18,502 | 28,229 | 11,999 | 28,912 | | |
-| 12 `NormalPqzRegulatedToken` | 22,710 | 30,177 | 18,750 | 28,158 | | 11,820 | | 32,423 | |
+| 12 `NormalPqzRegulatedToken` (branch `pqz-three-keys`, 2026-11-13) | 23,543 | 30,458 | 18,971 | 28,824 | | 13,557 | | 24,018 | 19,388 |
 | 13 `WrappedPqzRegulatedToken` | 29,795 | 30,783 | 20,219 | 18,608 | 28,420 | 12,048 | | 29,490 | 19,038 |
 
-58 token modules (55 before 2026-11-10: 9, 11, 13 split W into W and R) and the DEX's D (6,459 B; `SCaaSDex` 32,991 B at T66b 4.4). Liquidity (ua-mtx-liquidity, measured,
+59 token modules (58 before 2026-11-13: kind 12 splits Q into Q and S, owner 2026-11-13, Q 33,633 -> 24,018 B, S 19,388 B, the face 23,368 -> 23,543 B; 55 before 2026-11-10: 9, 11, 13 split W into W and R) and the DEX's D (6,459 B; `SCaaSDex` 32,991 B at T66b 4.4). Liquidity (ua-mtx-liquidity, measured,
 [CTR-DEX-30](dex.md#CTR-DEX-30)): T 17,418-20,219 B per kind (+3.1-3.2 KB: `mtxLiquidityPull`), A +27 B, the faces +154-181 B,
 `SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B (fix2 2026-11-12: 19,487 B and 33,238 B). **Which entry runs where** (`script/modules/entries.json`, the
 generator's input; a kind has the subset it declares):
@@ -1151,17 +1151,17 @@ generator's input; a kind has the subset it declares):
 | R (8–13) | `canReceive`, `disableFeature`, `forceTransfer`, `freeze`, `freezeOf`, `isFrozen`, `operatorTransfer`, `order`, `pause`, `recordOrder`, `regulatedConfig`, `revokeOrder`, `unfreeze`, `unpause` |
 | Z | `accountState`, `auditorKey`, `auditorMode`, `burnVerifier`, `confidentialFee`, `curve`, `disableFeature`, `disclosure`, `disclosureMode`, `envelopeBinding`, `executeRate`, `maxDecryptableShielded`, `minDecoyFee`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferSingle`, `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode`, `mtxShield`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxWrapShield`, `registered`, `rescue`, `sendCounter`, `shieldScale`, `totalShielded`, `transferEntry`, `transferMemo`, `underlyings`, `verifier` |
 | Q | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disableFeature`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `executeRate`, `maxShielded`, `minDecoyFee`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferSingle`, `mtxConfidentialTransferSingleCompact`, `mtxPrepareAcc`, `mtxRollOver`, `mtxShield`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxWrapShield`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `rescue`, `setProofStore`, `setVerifierFee`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `verifier`, `verifyTransferAmount` |
-| S (5, 13) | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `maxShielded`, `minDecoyFee`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `setProofStore`, `setVerifierFee`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `underlyings`, `unshieldUnwrapStatement`, `unwrapBinding`, `verifier` |
+| S (5, 12, 13) | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `maxShielded`, `minDecoyFee`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `setProofStore`, `setVerifierFee`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `underlyings`, `unshieldUnwrapStatement`, `unwrapBinding`, `verifier` |
 
-An entry in two rows runs in the module of the kind's own override: `setVerifierFee` (group 3t, [CTR-PQZ-36](pq-zero-knowledge.md#CTR-PQZ-36)) in Q on 4, 12, in S on 5, 13; `disableFeature` in A on 0, 2, 4, in W on 1, in R on
+An entry in two rows runs in the module of the kind's own override: `setVerifierFee` (group 3t, [CTR-PQZ-36](pq-zero-knowledge.md#CTR-PQZ-36)) in Q on 4, in S on 5, 12, 13; `disableFeature` in A on 0, 2, 4, in W on 1, in R on
 8–13, in Z on 3, in Q on 5; `mint`, `mintToUA` in A on the normal kinds, in W on the wrapped ones; `rescue`, `underlyings` in A on
 0, 2, 4, 8, 10, 12, in W on 1, 9, 11, 13, in Z on 3, in Q on 5; `executeRate` in W on 1, 9, in Z on 3, 11, in Q on 5, 13; the
-confidential entries in Z on the Zether kinds and in Q on the PQZ kinds. On 5 and 13 every PQZ `view` / `pure` entry but
-`verifyTransferAmount`, and the four setters, run in S (5's `underlyings` too; 13's runs in W).
+confidential entries in Z on the Zether kinds and in Q on the PQZ kinds. On 5, 12 and 13 every PQZ `view` / `pure` entry but
+`verifyTransferAmount`, and the four setters, run in S (5's `underlyings` too; 13's runs in W; 12 has no wrap entries).
 
 - **Splitting rule and growth (owner 2026-11-09, T66b spec §11 (b), (e), (g)).** A module that passes 33,780 B of runtime
   (≈ 57 M asked; hard line 35,570 B ≈ 60 M) splits along its domains and never forwards to its sibling: Q into the ops and
-  their verdicts (Q) and the state, setters and views (S, Q2 until 2026-11-10), built on 5 and 13; P into the pipeline and named transfers (P)
+  their verdicts (Q) and the state, setters and views (S, Q2 until 2026-11-10), built on 5, 12 and 13 (12 by the owner's ruling of 2026-11-13, ahead of its line); P into the pipeline and named transfers (P)
   and pay with the relay fee (P2), on no kind today (the largest P 30,783 B); A into A and G, the governance entries, when
   A passes the line; the DEX's D the same. A later governance version grows `GovernanceLib` first (14,513 B; lines 33,903 B
   and 35,694 B). The byte lines are fitted estimates; the asked gas decides. **Ask first** (owner 2026-11-11,

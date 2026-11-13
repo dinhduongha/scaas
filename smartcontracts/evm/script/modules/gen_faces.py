@@ -23,7 +23,9 @@ E = json.load(open('script/modules/entries.json'))
 # the PQZ ops and their verdict entries (Q) and the PQZ state, setters and views (S; Q2 until owner 2026-11-10).
 S_SETTERS = {'pqzSetVerifier', 'pqzCancelVerifier', 'pqzRevokeVerifier', 'setProofStore', 'setVerifierFee'}  # 3t: + setVerifierFee
 S_VERDICTS = {'verifyTransferAmount'}
-SPLITS = {'WrappedPqzToken': {'Q'}, 'WrappedPqzRegulatedToken': {'Q'}}
+SPLITS = {'WrappedPqzToken': {'Q'}, 'WrappedPqzRegulatedToken': {'Q'},
+          # owner 2026-11-13 (CTR-TOK-30 Change): kind 12 splits Q like kind 13, ahead of the notice line (headroom for 3zb / 3zc)
+          'NormalPqzRegulatedToken': {'Q'}}
 # Owner 2026-11-10 (CTR-TOK-30's Change, the body modules by function): W holds the wrap entries only and R the regulated
 # layer's entries only, on every kind. R's entries are the regulated layer's (`RegulatedBase` and the kind's `disableFeature`):
 # the entries.json `W` group of kind 8, whose W held nothing else. On 8, 10, 12 every W entry moves to R (W renamed R); on 9,

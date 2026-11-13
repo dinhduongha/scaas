@@ -127,7 +127,8 @@ contract ModulesTest is Test {
             }
         }
         // owner 2026-11-10 (group 3p): 55 -> 58, kinds 9, 11, 13 split W into W (wrap) and R (regulated)
-        assertEq(rows, 58, "every module of the twelve kinds");
+        // owner 2026-11-13 (three-key round): 58 -> 59, kind 12 splits Q into Q and S like kind 13
+        assertEq(rows, 59, "every module of the twelve kinds");
     }
 
     /// @dev `m`'s runtime with its set's self-test hash changed, at a new address: a module answering another PQZ set and

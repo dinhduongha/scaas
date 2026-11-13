@@ -96,12 +96,13 @@ function kindModuleNames(uint8 kind) pure returns (string[] memory n) {
         return n;
     }
     if (kind == 12) {
-        n = new string[](5);
+        n = new string[](6);
         n[0] = "NormalPqzRegulatedTokenModules.sol:NormalPqzRegulatedTokenP";
         n[1] = "NormalPqzRegulatedTokenModules.sol:NormalPqzRegulatedTokenT";
         n[2] = "NormalPqzRegulatedTokenModules.sol:NormalPqzRegulatedTokenA";
         n[3] = "NormalPqzRegulatedTokenModules.sol:NormalPqzRegulatedTokenQ";
-        n[4] = "NormalPqzRegulatedTokenModules.sol:NormalPqzRegulatedTokenR";
+        n[4] = "NormalPqzRegulatedTokenModules.sol:NormalPqzRegulatedTokenS";
+        n[5] = "NormalPqzRegulatedTokenModules.sol:NormalPqzRegulatedTokenR";
         return n;
     }
     if (kind == 13) {

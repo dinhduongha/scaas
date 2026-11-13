@@ -253,23 +253,25 @@ interface INormalPqzRegulatedTokenAbi {
 
 /// @title NormalPqzRegulatedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
 ///        ledger and the identity views (`NormalPqzRegulatedTokenCore`); every other entry forwards its calldata to the module of its group by
-///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, Q PQZ, R regulated). UNAUDITED.
+///        DELEGATECALL (P the signed pipeline, named transfers and pay, T trade, A admin: governance, init, tables, token meta, Q PQZ, S the PQZ state, setters and views, R regulated). UNAUDITED.
 contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegulatedTokenAbi {
     address private immutable _MP;
     address private immutable _MT;
     address private immutable _MA;
     address private immutable _MQ;
+    address private immutable _MS;
     address private immutable _MR;
 
-    /// @param implArgs `abi.encode(RegulatedImplArgs(...))`: the modules in the order P, T, A, Q, R (`modules()`).
+    /// @param implArgs `abi.encode(RegulatedImplArgs(...))`: the modules in the order P, T, A, Q, S, R (`modules()`).
     constructor(address factory_, bytes memory implArgs) NormalPqzRegulatedTokenCore(factory_, _coreArgs(implArgs)) {
         RegulatedImplArgs memory a = abi.decode(implArgs, (RegulatedImplArgs));
-        if (a.modules.length != 5) revert ModuleMissing(a.modules.length);
+        if (a.modules.length != 6) revert ModuleMissing(a.modules.length);
         _MP = _module(a.modules, 0, 1);
         _MT = _module(a.modules, 1, 2);
         _MA = _module(a.modules, 2, 3);
         _MQ = _module(a.modules, 3, 6);
-        _MR = _module(a.modules, 4, 12);
+        _MS = _module(a.modules, 4, 8);
+        _MR = _module(a.modules, 5, 12);
     }
 
     function _coreArgs(bytes memory implArgs) private pure returns (bytes memory) {
@@ -295,6 +297,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         if (g == 2) return _MT;
         if (g == 3) return _MA;
         if (g == 6) return _MQ;
+        if (g == 8) return _MS;
         return _MR;
     }
 
@@ -308,8 +311,8 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function modules() external view returns (address[] memory m) {
-        m = new address[](5);
-        (m[0], m[1], m[2], m[3], m[4]) = (_MP, _MT, _MA, _MQ, _MR);
+        m = new address[](6);
+        (m[0], m[1], m[2], m[3], m[4], m[5]) = (_MP, _MT, _MA, _MQ, _MS, _MR);
     }
 
     function GOV_ROUTER() external view returns (address _p0) {
@@ -325,11 +328,11 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function auditorMode() external view returns (ZetherTypes.AuditorMode _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function auditorUA() external view returns (bytes32 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function bitLabel(uint8) external view returns (IGovernance.BitType _p0, bytes4 _p1, string memory _p2) {
@@ -341,7 +344,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function burnStatement(IPqzToken.PqzBurnArgs calldata, uint256, bytes32, bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function canReceive(bytes32) external view returns (bool ok, uint8 reason) {
@@ -365,7 +368,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function confidentialFee() external view returns (uint256 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function creator() external view returns (address _p0) {
@@ -377,11 +380,11 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function disclosureStatement(bytes32, uint256, uint256, uint8, uint64) external view returns (bytes memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function eip712Domain() external view returns (bytes1 _p0, string memory _p1, string memory _p2, uint256 _p3, address _p4, bytes32 _p5, uint256[] memory _p6) {
@@ -393,7 +396,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function envelopeBinding(MetaTxLib.UAMetaTransaction calldata) external view returns (bytes32 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata, bytes calldata) external returns (bool _p0) {
@@ -461,7 +464,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function maxShielded() external view returns (uint256 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function metaPayId(MetaTxLib.PayMeta calldata) external pure returns (bytes32 _p0) {
@@ -469,7 +472,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function minDecoyFee() external view returns (uint256 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function minNonce(bytes32, uint256) external view returns (uint256 _p0) {
@@ -677,55 +680,55 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function pqzAcc(bytes32, uint64) external view returns (bytes memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function pqzAccount(bytes32, uint64) external view returns (IPqzToken.AccountState memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function pqzCancelVerifier(bytes32) external {
-        _forward(_MQ);
+        _forward(_MS);
     }
 
     function pqzDebitRecord(bytes32, uint64) external view returns (IPqzToken.DebitRecordView memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function pqzEntryBlob(bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function pqzPending(bytes32, uint64, uint64) external view returns (uint256 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function pqzPendingCt(bytes32, uint64, uint64) external view returns (bytes memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function pqzRevokeVerifier(bytes32) external {
-        _forward(_MQ);
+        _forward(_MS);
     }
 
     function pqzSetVerifier(bytes32, bytes32) external {
-        _forward(_MQ);
+        _forward(_MS);
     }
 
     function pqzVerifyConfig() external view returns (IPqzToken.PqzVerifyConfig memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function precompile() external view returns (address _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function proofStore() external view returns (uint8 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function proofSystemId() external view returns (bytes32 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function pulled(bytes32) external view returns (uint256 _p0) {
@@ -781,7 +784,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function setProofStore(uint8) external {
-        _forward(_MQ);
+        _forward(_MS);
     }
 
     function setTaxRate(uint32) external {
@@ -793,11 +796,11 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function setVerifierFee(uint64, bytes32) external {
-        _forward(_MQ);
+        _forward(_MS);
     }
 
     function shieldScale() external view returns (uint256 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function supportedModes() external pure returns (uint32 _p0) {
@@ -813,7 +816,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function totalShielded() external view returns (uint256 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function tradeOrderDigest(ITradeToken.UATradeOrder calldata) external view returns (bytes32 _p0) {
@@ -825,19 +828,19 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function transferCiphertextHash(bytes32) external view returns (bytes32 _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function transferEntry(bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function transferSingleStatement(IPqzToken.PqzTransferArgs calldata, bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function transferStatement(IPqzToken.PqzMultiArgs calldata, bytes32) external view returns (bytes memory _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function underlyings() external view returns (address[] memory us) {
@@ -861,7 +864,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
     }
 
     function verifier() external view returns (address _p0) {
-        _forwardView(_MQ);
+        _forwardView(_MS);
     }
 
     function verifyTransferAmount(bytes32, uint256, uint256, uint8, uint64, bytes calldata) external view returns (bool _p0) {

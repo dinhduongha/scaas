@@ -485,42 +485,6 @@ contract NormalPqzRegulatedTokenQ is NormalPqzRegulatedTokenCore {
         return 6;
     }
 
-    function auditorMode() external view onlyDelegated returns (ZetherTypes.AuditorMode _p0) {
-        return _auditorModeBody();
-    }
-
-    function auditorUA() external view onlyDelegated returns (bytes32 _p0) {
-        return _auditorUABody();
-    }
-
-    function burnStatement(IPqzToken.PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes32 binding) external view onlyDelegated returns (bytes memory _p0) {
-        return _burnStatementBody(b, amount, recipient, binding);
-    }
-
-    function confidentialFee() external view onlyDelegated returns (uint256 _p0) {
-        return _confidentialFeeBody();
-    }
-
-    function disclosureMode() external view onlyDelegated returns (ZetherTypes.DisclosureMode _p0) {
-        return _disclosureModeBody();
-    }
-
-    function disclosureStatement(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion) external view onlyDelegated returns (bytes memory _p0) {
-        return _disclosureStatementBody(entryRef, leg, amount, kind, keyVersion);
-    }
-
-    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view onlyDelegated returns (bytes32 _p0) {
-        return _envelopeBindingBody(m);
-    }
-
-    function maxShielded() external view onlyDelegated returns (uint256 _p0) {
-        return _maxShieldedBody();
-    }
-
-    function minDecoyFee() external view onlyDelegated returns (uint256 _p0) {
-        return _minDecoyFeeBody();
-    }
-
     function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth, IPqzToken.PqzSignedVerdict calldata pqzVerdict) external onlyDelegated returns (bytes32 _p0) {
         return _mtxConfidentialTransferBody(e, t, proof, pqzAuth, accHint, auth, pqzVerdict);
     }
@@ -583,6 +547,62 @@ contract NormalPqzRegulatedTokenQ is NormalPqzRegulatedTokenCore {
 
     function mtxUnshield(IPqzToken.PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) external onlyDelegated {
         _mtxUnshieldBody(b, amount, recipient, proof, pqzAuth, accHint, pqzVerdict);
+    }
+
+    function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion, bytes calldata proof) external view onlyDelegated returns (bool _p0) {
+        return _verifyTransferAmountBody(entryRef, leg, amount, kind, keyVersion, proof);
+    }
+
+    function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion, bytes calldata proof, IPqzToken.PqzSignedVerdict calldata pqzVerdict) external view onlyDelegated returns (bool _p0) {
+        return _verifyTransferAmountBody(entryRef, leg, amount, kind, keyVersion, proof, pqzVerdict);
+    }
+}
+
+/// @title NormalPqzRegulatedTokenS: the body module S of NormalPqzRegulatedToken (the PQZ state, setters and views; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
+///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
+///        storage only its core's (M6). UNAUDITED.
+contract NormalPqzRegulatedTokenS is NormalPqzRegulatedTokenCore {
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
+    constructor(address factory_, bytes memory args) NormalPqzRegulatedTokenCore(factory_, args) {}
+
+    function moduleGroup() external pure returns (uint8) {
+        return 8;
+    }
+
+    function auditorMode() external view onlyDelegated returns (ZetherTypes.AuditorMode _p0) {
+        return _auditorModeBody();
+    }
+
+    function auditorUA() external view onlyDelegated returns (bytes32 _p0) {
+        return _auditorUABody();
+    }
+
+    function burnStatement(IPqzToken.PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes32 binding) external view onlyDelegated returns (bytes memory _p0) {
+        return _burnStatementBody(b, amount, recipient, binding);
+    }
+
+    function confidentialFee() external view onlyDelegated returns (uint256 _p0) {
+        return _confidentialFeeBody();
+    }
+
+    function disclosureMode() external view onlyDelegated returns (ZetherTypes.DisclosureMode _p0) {
+        return _disclosureModeBody();
+    }
+
+    function disclosureStatement(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion) external view onlyDelegated returns (bytes memory _p0) {
+        return _disclosureStatementBody(entryRef, leg, amount, kind, keyVersion);
+    }
+
+    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view onlyDelegated returns (bytes32 _p0) {
+        return _envelopeBindingBody(m);
+    }
+
+    function maxShielded() external view onlyDelegated returns (uint256 _p0) {
+        return _maxShieldedBody();
+    }
+
+    function minDecoyFee() external view onlyDelegated returns (uint256 _p0) {
+        return _minDecoyFeeBody();
     }
 
     function pqzAcc(bytes32 ua, uint64 keyVersion) external view onlyDelegated returns (bytes memory _p0) {
@@ -671,14 +691,6 @@ contract NormalPqzRegulatedTokenQ is NormalPqzRegulatedTokenCore {
 
     function verifier() external view onlyDelegated returns (address _p0) {
         return _verifierBody();
-    }
-
-    function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion, bytes calldata proof) external view onlyDelegated returns (bool _p0) {
-        return _verifyTransferAmountBody(entryRef, leg, amount, kind, keyVersion, proof);
-    }
-
-    function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion, bytes calldata proof, IPqzToken.PqzSignedVerdict calldata pqzVerdict) external view onlyDelegated returns (bool _p0) {
-        return _verifyTransferAmountBody(entryRef, leg, amount, kind, keyVersion, proof, pqzVerdict);
     }
 }
 

@@ -380,6 +380,10 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   (`(regular + state) × 1.05`, `smartcontracts/evm/runs/2026-11-10-ua-mtx-3p/summary.txt`): R 20.17–20.62 M, W of 9, 11, 13
   46.07 / 47.73 / 48.05 M, S 30.95 / 32.34 M, the faces of 9, 11, 13 39.52 / 45.80 / 50.51 M plus the factory frame; every
   module of every kind within 60 M, regular × 1.05 < 2^24.
+- **Kind 12 splits Q (owner 2026-11-13, [CTR-TOK-30](../contracts/token-wrappers.md#CTR-TOK-30)).** A release of kind 12 deploys
+  one more module, S (the PQZ state, setters and views), beside Q, as kind 13 does. Measured asked gas (probe
+  `smartcontracts/evm/runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol`): Q 40.67 M, S 32.92 M, the face 40.03 M plus the
+  factory frame; regular × 1.05 < 2^24.
 - <a id="NET-EVM-11"></a>**NET-EVM-11 — Every deploy transaction carries an explicit gas limit within the block.** `deploy.sh evm`
   simulates `Deploy.s.sol` (nothing sent), then `script/DeploySend.s.sol` sends its plan in order, each transaction's limit
   `(regular + state) × 1.05` measured on the RPC's fork and capped at the RPC's block gas limit; one that needs more refuses

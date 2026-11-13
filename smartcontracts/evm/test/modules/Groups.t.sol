@@ -6,7 +6,7 @@ import {kindModuleNames, deployKindModules, kindImplArgs} from "../../script/Kin
 import {regArgs} from "../helpers/Catalogue.sol";
 
 /// Owner 2026-11-10 (CTR-TOK-30's Change, the body modules by function): W holds the wrap entries only, R the regulated
-/// layer's entries only (8-13), S the PQZ state, setters and views (5, 13; was Q2). Pins which module holds which entry, and
+/// layer's entries only (8-13), S the PQZ state, setters and views (5, 12, 13; was Q2; 12 since owner 2026-11-13). Pins which module holds which entry, and
 /// that every stub of every face forwards to the module that declares its entry (each module's code replaced, after the
 /// face's constructor checked it, by one that answers its own index).
 contract GroupsTest is Test {
@@ -20,15 +20,16 @@ contract GroupsTest is Test {
     string[18] internal rNames = ["canReceive", "disableFeature", "enableFeature", "forceTransfer", "freeze", "freezeOf",
         "isFrozen", "listFlagsOf", "operatorTransfer", "order", "pause", "recordOrder", "regulatedConfig", "revokeOrder",
         "setAllowed", "setDenied", "unfreeze", "unpause"];
-    /// S on 5 and 13: the PQZ state, the four setters and the views but `verifyTransferAmount`; on 13 without `underlyings`
-    /// (kind 13 restates it from the wrapped layer: its W holds it).
+    /// S on 5, 12 and 13: the PQZ state, the four setters and the views but `verifyTransferAmount`; on 13 without `underlyings`
+    /// (kind 13 restates it from the wrapped layer: its W holds it); on 12 (owner 2026-11-13) without the three wrap-only
+    /// entries at the end (`unshieldUnwrapStatement`, `unwrapBinding`, `underlyings`).
     // round 3t: + setVerifierFee (gen_faces.py S_SETTERS)
     string[34] internal sNames = ["auditorMode", "auditorUA", "burnStatement", "confidentialFee", "disclosureMode",
         "disclosureStatement", "envelopeBinding", "maxShielded", "minDecoyFee", "pqzAcc", "pqzAccount", "pqzCancelVerifier",
         "pqzDebitRecord", "pqzEntryBlob", "pqzPending", "pqzPendingCt", "pqzRevokeVerifier", "pqzSetVerifier",
         "pqzVerifyConfig", "precompile", "proofStore", "proofSystemId", "setProofStore", "setVerifierFee", "shieldScale", "totalShielded",
-        "transferCiphertextHash", "transferEntry", "transferSingleStatement", "transferStatement", "unshieldUnwrapStatement",
-        "unwrapBinding", "verifier", "underlyings"];
+        "transferCiphertextHash", "transferEntry", "transferSingleStatement", "transferStatement", "verifier",
+        "unshieldUnwrapStatement", "unwrapBinding", "underlyings"];
 
     function create(bytes memory init) external returns (address a) {
         assembly ("memory-safe") {
@@ -116,19 +117,19 @@ contract GroupsTest is Test {
         }
     }
 
-    /// S holds exactly the PQZ state, setters and views on 5 and 13, and Q none of them; no other kind has S.
+    /// S holds exactly the PQZ state, setters and views on 5, 12 and 13, and Q none of them; no other kind has S.
     function test_g_stateEntriesRunInS() public view {
         for (uint256 x; x < kinds.length; ++x) {
             uint8 k = kinds[x];
             uint256 s = _find(k, "S");
-            if (k != 5 && k != 13) {
+            if (k != 5 && k != 12 && k != 13) {
                 assertEq(s, type(uint256).max, string.concat(faces[k], ": no S"));
                 continue;
             }
             assertTrue(s != type(uint256).max, string.concat(faces[k], ": S"));
             string[] memory ss = _entries(kindModuleNames(k)[s]);
             string[] memory qs = _entries(kindModuleNames(k)[_find(k, "Q")]);
-            uint256 want = k == 5 ? sNames.length : sNames.length - 1;
+            uint256 want = k == 5 ? sNames.length : k == 13 ? sNames.length - 1 : sNames.length - 3;
             assertEq(ss.length, want, string.concat(faces[k], "S: the state, setters and views and no other"));
             for (uint256 i; i < want; ++i) {
                 assertTrue(_has(ss, sNames[i]), string.concat(faces[k], "S: ", sNames[i]));
