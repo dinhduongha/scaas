@@ -85,6 +85,21 @@ pub unsafe extern "C" fn precompile_v(input: *const u8, n: u32) -> u32 {
     }
 }
 
+/// `pqz_offchain::verify_offchain` on the input (the off-chain verifier's entry: also PQZL_SPLIT_ID, three-key spec K3-4): 1 =
+/// accepted, 0 = refused, 2 = a node fault
+///
+/// # Safety
+/// `input` / `n` is a readable buffer as [`sl`] requires (from `alloc`).
+#[no_mangle]
+pub unsafe extern "C" fn offchain_v(input: *const u8, n: u32) -> u32 {
+    // SAFETY: the caller's contract above
+    match pqz_offchain::verify_offchain(unsafe { sl(input, n) }) {
+        Ok(true) => 1,
+        Ok(false) => 0,
+        Err(_) => 2,
+    }
+}
+
 /// The largest PQZL op 7 M this module proves (`pqz_ffi::pqzl::WASM_PQZL_MAX_LEGS`: the C backend's per-set
 /// `C_WASM_MAX_LEGS`, the Rust backend's 8); `vectors/replay_wasm.mjs` verifies the native proof above it and expects the
 /// prover's refusal (review 3w Codex u3-2).
