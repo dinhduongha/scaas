@@ -813,10 +813,16 @@ fn opening_file() -> (String, String) {
                 ("u_keccak", hx(&keccak(&[&s.leg.u[..]]))),
                 ("v_t", hx(&s.leg.vs[0])),
                 ("coins_t", hx(&op::coins(&s.seed_leg, Role::Recipient, &kem_t))),
+                ("aad_t", hx(&op::aad(&c, &c.to))),
                 ("opening_t", hx(&o_t)),
             ];
             if let Some(o_a) = &o_a {
-                kv.extend([("v_a", hx(&s.leg.vs[1])), ("coins_a", hx(&op::coins(&s.seed_leg, Role::Auditor, &kem_a))), ("opening_a", hx(o_a))]);
+                kv.extend([
+                    ("v_a", hx(&s.leg.vs[1])),
+                    ("coins_a", hx(&op::coins(&s.seed_leg, Role::Auditor, &kem_a))),
+                    ("aad_a", hx(&op::aad(&c, c.auditor.as_ref().expect("auditor")))),
+                    ("opening_a", hx(o_a)),
+                ]);
                 assert_eq!(op::check_auditor(&seed_a, &c), op::AuditorOutcome::Read(d));
             }
             o(kv)
@@ -830,7 +836,8 @@ fn opening_file() -> (String, String) {
          / 0x41). Openings: coins = SHAKE256(SCAAS-PQZ-OPEN-COINS-V1 || seed_leg || u8(role) || keccak256(kemPk))[0..64), \
          ML-KEM-1024 + X25519 of CTR-UA-32 with m = coins[0..32), e = coins[32..64), kek = HKDF-SHA256(ss, -, \
          PQZ/opening/kek/v1), sealedSeed = AES-256-GCM(kek, 0^96, seed_leg, chainUid || token || ua || be8(keyVersion) || \
-         keccak256(u || v)); chainUid 0xC1.., token 0x70.., recipient 0x11.., auditor 0xA0.., key version 0, the readers' \
+         keccak256(P(u) || P(v))) = aad_t / aad_a, P the stored form of the op blob (PqzSet.PACK_BITS = ceil(log2 q) bits per \
+         coefficient, big-endian; CTR-PQZ-40); chainUid 0xC1.., token 0x70.., recipient 0x11.., auditor 0xA0.., key version 0, the readers' \
          opening KEM keys from bip39 seed 0x4D.. (offchain-shared, version 0). openKemSeeds: HKDF-SHA256(bip39 seed, \
          scaas.ua.kem.v1, scaas.kem.pqz-opening.1 || ua || chainUid || be64(v)) for an empty token (offchain-shared), \
          scaas.kem.pqz-opening-token.1 || ua || chainUid || token || be64(v) otherwise, 96 B.",

@@ -172,8 +172,32 @@ pub struct Credit<'a> {
     pub auditor: Option<Party<'a>>,
 }
 
-fn aad(c: &Credit, p: &Party) -> Vec<u8> {
-    let h = keccak(&[&c.u[..], &p.v[..]]);
+/// The stored form `P` of a ciphertext part (the contract's packing, `PqzSet.PACK_BITS`, P46): each be8 lane (a
+/// coefficient `< q`) as `PACK_BITS = ceil(log2 q)` bits, big-endian, concatenated. `lanes.len()` is a multiple of 8 and
+/// the bit count a multiple of 8 (every part here: `u` of `PK_BYTES`, `v` of 128 bytes).
+pub fn pack(lanes: &[u8]) -> Vec<u8> {
+    let b = 64 - (crate::stmt::Q - 1).leading_zeros() as usize;
+    let n = lanes.len() / 8;
+    assert!(lanes.len() == 8 * n && (n * b) % 8 == 0, "pack: whole lanes and bytes");
+    let mut out = Vec::with_capacity(n * b / 8);
+    let (mut acc, mut bits) = (0u128, 0usize);
+    for i in 0..n {
+        let x = u64::from_be_bytes(lanes[8 * i..8 * i + 8].try_into().expect("8 bytes"));
+        acc = (acc << b) | (x as u128 & ((1u128 << b) - 1));
+        bits += b;
+        while bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+        acc &= (1u128 << bits) - 1;
+    }
+    out
+}
+
+/// The sealed seed's `aad` (CTR-PQZ-40): `chainUid ‖ token(20) ‖ ua ‖ be8(keyVersion) ‖ keccak256(P(u) ‖ P(v))`, `P` the
+/// stored form ([`pack`]) the reader finds in the op blob, with the reader's `ua`, `keyVersion` and `v`.
+pub fn aad(c: &Credit, p: &Party) -> Vec<u8> {
+    let h = keccak(&[&pack(&c.u[..]), &pack(&p.v[..])]);
     [&c.chain_uid[..], c.token, p.ua, &p.key_version.to_be_bytes(), &h].concat()
 }
 

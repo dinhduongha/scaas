@@ -1254,6 +1254,13 @@ def check_opening(j, d):
         cmp(bad, f"row {i} leg", (r["u_keccak"], r["v_t"], r.get("v_a")),
             (kec(u).hex(), vs[0].hex(), vs[1].hex() if r["auditorOn"] else None))
         cmp(bad, f"row {i} u_f != u", uf != u, True)
+        # the sealed seed's aad (CTR-PQZ-40): chainUid || token || ua || be8(keyVersion) || keccak256(P(u) || P(v)), P the
+        # stored form of the op blob (pack_stored, the inverse of the unpack check_state checks against the contract's blobs)
+        for role, ua, v in [("t", b"\x11" * 32, vs[0])] + ([("a", b"\xa0" * 32, vs[1])] if r["auditorOn"] else []):
+            head = b"\xc1" * 32 + b"\x70" * 20 + ua + bytes(8)
+            cmp(bad, f"row {i} aad_{role}", r.get(f"aad_{role}"), (head + kec(pack_stored(u) + pack_stored(v))).hex())
+            if r.get(f"aad_{role}") == (head + kec(u + v)).hex():
+                bad.append(f"row {i} aad_{role}: keccak256 over the unpacked lanes, not P(u) || P(v)")
     return bad
 
 
@@ -2024,6 +2031,15 @@ def check_worstcase(j, d):
 # ---------------------------------------------------------------- state.json (ua-rs-sign T15e; no-decryption-oracle spec §4.4)
 PACK_B = (Q - 1).bit_length()  # PqzSet.PACK_BITS: ceil(log2 q), the stored form (P46)
 PKP, VP = PK_BYTES // 32 * PACK_B // 2, V_BYTES // 32 * PACK_B // 2
+
+
+def pack_stored(b):
+    """P46: the be8 lanes of a part as PACK_B bits each, big-endian, concatenated (the contract's stored form)."""
+    n = len(b) // 8
+    x = 0
+    for i in range(n):
+        x = (x << PACK_B) | int.from_bytes(b[8 * i:8 * i + 8], "big")
+    return x.to_bytes(n * PACK_B // 8, "big")
 
 
 def unpack_stored(b):
