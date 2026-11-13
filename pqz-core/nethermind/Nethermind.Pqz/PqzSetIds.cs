@@ -8,13 +8,13 @@ namespace Nethermind.Pqz;
 public static class PqzSetIds
 {
 #if PQZ_SET_N2048_KMAX1024
-    public const string PqzlId = "c752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe", PqzhId = "56293621ce64083ca3165d7972b4108a1195f7bf41f1918df6d6d4da1da7df5d";
+    public const string PqzlId = "a626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee", PqzhId = "3cf01f8334f4a200471100233fa0d85944e60830d1dc8873577a31d4dff58439";
 #elif PQZ_SET_N2304_KMAX4096
-    public const string PqzlId = "ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e", PqzhId = "046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead";
+    public const string PqzlId = "41852bdcad5a49d19e7a054f1a658373a97126e7db09bd8f51aaab8d19a504fc", PqzhId = "13c3adfc75c8afc38883b91793de43f4c22bcdd9c12da1af04b64c893fed70d6";
 #elif PQZ_SET_N2560_KMAX16384
-    public const string PqzlId = "eacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882", PqzhId = "c93f3bdd8f3f503e22e60a2815b7ca685778509a2cfd380d6d954e68ec3f3662";
+    public const string PqzlId = "53aa68704b996ebee81c257c513ea3c114ed04137b5e8b1ba94cfc95e3d83841", PqzhId = "4b2d2ff295d42a34f415c1c99a0df73b68a59496ff97168335c380b90a9a9ba7";
 #elif PQZ_SET_N2816_KMAX65536
-    public const string PqzlId = "a801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9", PqzhId = "";
+    public const string PqzlId = "7a3e76790c331d1ff5b7b8e9897e876dc11773afed874fcd65c145aeba1da28f", PqzhId = "";
 #else
 #error "unknown PqzSet (MSBuild -p:PqzSet=<set>, a directory of pqz-core/params/sets)"
 #endif

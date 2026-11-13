@@ -54,20 +54,19 @@ fn build(form: Form, o: &Objs, id: &Word) -> Vec<u8> {
             let mut words = Disclose::words(form, id);
             words[2] = u64_word(22776);
             words[DW_AMOUNT] = u64_word(123_456);
-            words[DW_KIND] = u64_word(2);
             Stmt::Disclose(Disclose { form, words, pk: &o.pk, u: &o.u, v: &o.v1 })
         }
         _ => {
             let mut header = Debit::header(form, id);
             header[H_FEE] = u64_word(7);
             header[H_AMOUNT] = u64_word(if form == Form::Burn { 99 } else { 0 });
-            if matches!(form, Form::Transfer | Form::Transfer0) {
+            if form.transfer() {
                 header[H_SALT][16..].copy_from_slice(&[0xA5; 16]);
                 header[H_TO] = [0x77; 32];
             } else if form == Form::Burn {
                 header[H_RECIPIENT] = u64_word(0xBEEF);
             }
-            let (tr, aud) = (matches!(form, Form::Transfer | Form::Transfer0), form == Form::Transfer);
+            let (tr, aud) = (form.transfer(), form.audited());
             Stmt::Debit(Debit {
                 form,
                 header,
@@ -79,6 +78,7 @@ fn build(form: Form, o: &Objs, id: &Word) -> Vec<u8> {
                 v_t: tr.then_some(&o.v1[..]),
                 v_f: &o.v2,
                 v_a: aud.then_some(&o.v3[..]),
+                u_f: form.split().then_some(&o.pk2[..]),
             })
         }
     };
@@ -124,7 +124,8 @@ fn lengths_and_constants() {
     }
     assert_eq!(MAX_INPUT, 524_288); // every set since the R0 review fix (owner 2026-10-25; n2048-kmax1024 was 393,216)
     assert_eq!(max_proof(&[0; 32]), None);
-    assert_eq!(RETIRED_IDS.len(), 11); // PQZL v2, v3, the four v4; PQZH v1, the three v2; the STARK backup's
+    // PQZL v2, v3, the four v4, the four v5; PQZH v1, the three v2, the three v3; the STARK backup's
+    assert_eq!(RETIRED_IDS.len(), 18);
     for id in retired() {
         assert_eq!(max_proof(&id), None);
     }
@@ -143,14 +144,19 @@ fn retired() -> impl Iterator<Item = Word> {
 fn other_sets_ids_refused() {
     let o = objs();
     let mine: Vec<_> = ALL_IDS.iter().filter(|(s, _, _)| *s == SET).map(|(_, k, id)| (*k, *id)).collect();
-    let want: &[(&str, Word)] = if HAS_PQZH { &[("pqzl", PQZL_ID), ("pqzh", PQZH_ID)] } else { &[("pqzl", PQZL_ID)] };
+    let want: &[(&str, Word)] = if HAS_PQZH {
+        &[("pqzl", PQZL_ID), ("pqzl_split", PQZL_SPLIT_ID), ("pqzh", PQZH_ID)]
+    } else {
+        &[("pqzl", PQZL_ID), ("pqzl_split", PQZL_SPLIT_ID)]
+    };
     assert_eq!(mine, want, "this set's ids in ALL_IDS");
     let others: Vec<_> = ALL_IDS.iter().filter(|(s, _, _)| *s != SET).collect();
     assert!(others.len() >= 5, "{} other ids", others.len());
     for (s, k, id) in others {
-        assert!(*id != PQZL_ID && *id != PQZH_ID, "{s} {k}");
+        assert!(*id != PQZL_ID && *id != PQZH_ID && *id != PQZL_SPLIT_ID, "{s} {k}");
         assert_eq!(max_proof(id), None, "{s} {k}");
-        for f in FORMS {
+        assert!(forms(id).is_empty(), "{s} {k}");
+        for f in FORMS.iter().chain(&SPLIT_FORMS).copied() {
             assert_eq!(parse(f.op(), &build(f, &o, id)).err(), Some(Reject::ProofSystemId), "{s} {k} {f:?}");
         }
         assert_eq!(parse_multi(&build_multi(id, 2, true, 0)).err(), Some(Reject::ProofSystemId), "{s} {k} op 7");
@@ -161,9 +167,9 @@ fn other_sets_ids_refused() {
 #[test]
 fn retired_ids_refused() {
     let o = objs();
-    assert!(!retired().any(|r| r == PQZL_ID || r == PQZH_ID) && PQZL_ID != PQZH_ID);
+    assert!(!retired().any(|r| r == PQZL_ID || r == PQZH_ID || r == PQZL_SPLIT_ID) && PQZL_ID != PQZH_ID);
     for id in retired() {
-        for f in FORMS {
+        for f in FORMS.iter().chain(&SPLIT_FORMS).copied() {
             assert_eq!(parse(f.op(), &build(f, &o, &id)).err(), Some(Reject::ProofSystemId), "{f:?}");
         }
         for (m, aud) in [(1, true), (4, false)] {
@@ -185,6 +191,90 @@ fn round_trip_every_form_both_ids() {
             assert_eq!(s.proof_system_id(), Some(&id));
             assert_eq!(s.encode().unwrap(), b, "{f:?}: encode(parse(x)) != x");
         }
+    }
+    for f in SPLIT_FORMS {
+        let b = build(f, &o, &PQZL_SPLIT_ID);
+        assert_eq!(b.len(), f.stmt_len(), "{f:?}");
+        let s = parse(f.op(), &b).unwrap_or_else(|e| panic!("split {f:?}: {e:?}"));
+        assert_eq!((s.form(), s.proof_system_id()), (Some(f), Some(&PQZL_SPLIT_ID)));
+        assert_eq!(s.encode().unwrap(), b, "split {f:?}: encode(parse(x)) != x");
+    }
+}
+
+/// K3-4: `PQZL_SPLIT_ID` serves the split transfer, burn, refresh and the sender disclosure, and nothing else; the
+/// other ids never serve the split transfer. Positive controls: the round trips above.
+#[test]
+fn split_id_serves_its_forms_only() {
+    let o = objs();
+    assert_eq!(forms(&PQZL_SPLIT_ID), &SPLIT_FORMS[..]);
+    assert_eq!(forms(&PQZL_ID), &FORMS[..]);
+    assert_eq!(max_proof(&PQZL_SPLIT_ID), Some(MAX_PROOF_PQZL));
+    assert!(built_legs(&PQZL_SPLIT_ID).is_empty());
+    assert!(PQZL_SPLIT_ID != PQZL_ID && PQZL_SPLIT_ID != PQZH_ID);
+    assert!(PQZL_SPLIT_LABEL.ends_with("/split-v1") && PQZL_LABEL.ends_with("/v6"));
+    let refused = [
+        (Form::Transfer, Reject::Length), // an R_TX-length op 1 is no split length
+        (Form::Transfer0, Reject::Length),
+        (Form::Register, Reject::ProofSystemId), // R_REG: scoped proofs are made under PQZL_ID (K3-3)
+        (Form::DiscloseReceiver, Reject::ProofSystemId), // R_DR (§8: one disclosure kind on opening tokens)
+        (Form::DiscloseAuditor, Reject::ProofSystemId),
+    ];
+    for (f, want) in refused {
+        assert!(!SPLIT_FORMS.contains(&f));
+        assert_eq!(parse(f.op(), &build(f, &o, &PQZL_SPLIT_ID)).err(), Some(want), "{f:?} under the split id");
+    }
+    assert_eq!(parse_multi(&build_multi(&PQZL_SPLIT_ID, 1, true, 0)).err(), Some(Reject::ProofSystemId), "op 7");
+    // a split statement under PQZL_ID / PQZH_ID: no op 1 length of theirs
+    for id in ids() {
+        for f in [Form::TransferSplit, Form::TransferSplit0] {
+            let b = build(f, &o, &PQZL_SPLIT_ID);
+            assert_eq!(parse(OP_TRANSFER, &with(&b, 32, &id)).err(), Some(Reject::Length), "{f:?} under {id:x?}");
+        }
+    }
+    // the precompile input: the split id's register refused, its transfer accepted with a proof up to MAX_PROOF_PQZL
+    let rg = with(&build(Form::Register, &o, &PQZL_ID), 32, &PQZL_SPLIT_ID);
+    assert_eq!(decode_input(&input(3, &rg, &[1])).err(), Some(Reject::ProofSystemId));
+    let ts = build(Form::TransferSplit, &o, &PQZL_SPLIT_ID);
+    assert!(decode_input(&input(1, &ts, &[1])).is_ok());
+    // encode: u_f exactly on the split forms
+    let mut d = match parse(OP_TRANSFER, &ts).unwrap() {
+        Stmt::Debit(d) => d,
+        _ => panic!(),
+    };
+    assert_eq!(d.u_f, Some(&o.pk2[..]));
+    d.u_f = None;
+    assert_eq!(Stmt::Debit(d.clone()).encode().err(), Some(Reject::Length));
+    d.form = Form::Transfer;
+    d.u_f = Some(&o.pk2[..]);
+    assert_eq!(Stmt::Debit(d).encode().err(), Some(Reject::Length));
+}
+
+/// K3-4 (pinned): the op 1 lengths of the two PQZL ids never collide, so the length picks the form under each id; the
+/// split forms append `u_f` and keep every earlier offset
+#[test]
+fn split_lengths_pinned() {
+    let o = objs();
+    let op1 = [Form::Transfer, Form::Transfer0, Form::TransferSplit, Form::TransferSplit0].map(Form::stmt_len);
+    for i in 0..4 {
+        for j in i + 1..4 {
+            assert_ne!(op1[i], op1[j], "op 1 lengths {i} / {j}");
+        }
+    }
+    assert_eq!(Form::TransferSplit.stmt_len(), Form::Transfer.stmt_len() + PK_BYTES);
+    assert_eq!(Form::TransferSplit0.stmt_len(), Form::Transfer0.stmt_len() + PK_BYTES);
+    let want = match SET {
+        "n2048-kmax1024" => (99_456, 82_944),
+        "n2304-kmax4096" => (111_744, 93_184),
+        "n2560-kmax16384" => (124_032, 103_424),
+        "n2816-kmax65536" => (136_320, 113_664),
+        s => panic!("no pinned split lengths for {s}"),
+    };
+    assert_eq!((Form::TransferSplit.stmt_len(), Form::TransferSplit0.stmt_len()), want);
+    for (f, g) in [(Form::Transfer, Form::TransferSplit), (Form::Transfer0, Form::TransferSplit0)] {
+        let (a, b) = (build(f, &o, &PQZL_ID), build(g, &o, &PQZL_SPLIT_ID));
+        assert_eq!(a[..32], b[..32]);
+        assert_eq!(a[64..], b[64..a.len()], "{g:?}: earlier offsets moved");
+        assert_eq!(&b[a.len()..], &o.pk2[..], "{g:?}: u_f last");
     }
 }
 
@@ -251,6 +341,15 @@ fn every_d15_r6_rule_rejects() {
         ("AUDITOR kind window 255", 5, with(&da, 256 + 30, &[0xff]), Reject::Kind),
         ("kind word >= 2^16", 5, with(&da, 256 + 29, &[1]), Reject::Kind),
         ("kind word >= 2^64", 4, with(&ds, 256, &[1]), Reject::Kind),
+        // T-36: the low byte is the form's OpeningKind (SENDER_S 0, RECEIVER_X 1, AUDITOR 2); positive controls: the
+        // round trips (each form with its own byte) and the AUDITOR windows below
+        ("SENDER_S low byte 1", 4, with(&ds, 256 + 31, &[1]), Reject::Kind),
+        ("SENDER_S low byte 2", 4, with(&ds, 256 + 31, &[2]), Reject::Kind),
+        ("RECEIVER_X low byte 0", 5, with(&dr, 256 + 31, &[0]), Reject::Kind),
+        ("RECEIVER_X low byte 2", 5, with(&dr, 256 + 31, &[2]), Reject::Kind),
+        ("AUDITOR low byte 1 (window 1)", 5, with(&da, 256 + 30, &[1, 1]), Reject::Kind),
+        ("AUDITOR low byte 0", 5, with(&da, 256 + 31, &[0]), Reject::Kind),
+        ("AUDITOR low byte 3", 5, with(&da, 256 + 31, &[3]), Reject::Kind),
         ("transfer amount >= 2^64 (decoder stricter than R_TX)", 1, with(&t, 288, &[1]), Reject::Amount),
         ("salt word top byte set", 1, with(&t, 576, &[1]), Reject::Salt),
         ("salt word byte 15 set (R_TX0)", 1, with(&t0, 591, &[0x80]), Reject::Salt),
@@ -290,9 +389,12 @@ fn every_d15_r6_rule_rejects() {
         assert_eq!(parse(op, &b).err(), Some(want), "{what}");
     }
     assert_eq!(parse(6, &[]), Ok(Stmt::SelfTest));
-    // the AUDITOR windows below S_AUD are accepted (R0-1)
+    // the AUDITOR windows below S_AUD are accepted (R0-1), with the AUDITOR byte 2 (T-36)
     for w in 0..S_AUD {
-        assert!(parse(5, &with(&da, 256 + 30, &[w as u8])).is_ok(), "AUDITOR window {w}");
+        assert!(parse(5, &with(&da, 256 + 30, &[w as u8, 2])).is_ok(), "AUDITOR window {w}");
+    }
+    for (f, b) in [(Form::DiscloseSender, &ds), (Form::DiscloseReceiver, &dr), (Form::DiscloseAuditor, &da)] {
+        assert_eq!(b[256 + 31] as u64, f.opening_kind().unwrap(), "{f:?}'s builder byte");
     }
 }
 
@@ -514,6 +616,7 @@ fn multi_m1_body_is_op1_body() {
             v_t: Some(s.v(0)),
             v_f: s.v_f,
             v_a: s.v_a(0),
+            u_f: None,
         };
         let op1 = Stmt::Debit(d).encode().unwrap();
         assert!(parse(OP_TRANSFER, &op1).is_ok());

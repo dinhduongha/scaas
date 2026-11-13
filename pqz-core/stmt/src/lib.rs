@@ -7,7 +7,9 @@
 //! only for BURN), the `salt` word = 16 zero bytes ‖ salt (CTR-PQZ-19; pqz-core only hashes it, so this decoder is
 //! where it is enforced), `auditorOn` equal to what the length says (op 1: 83,072 B auditor on = 1, 66,560 B off =
 //! 0; R6), the header words §7.7 / §7.5 fix to 0 for the form (`zero_words`), the opTag of the op, a known
-//! `proofSystemId`.
+//! `proofSystemId` that serves the form (three-key spec K3-4: `PQZL_SPLIT_ID` serves only the split transfer, burn,
+//! refresh and the sender disclosure; `PQZL_ID` / `PQZH_ID` every other form and never the split transfer), and the
+//! disclosure `kind` word's low byte equal to the form's `OpeningKind` (T-36).
 //! For every accepted input `encode(parse(x)) == x`.
 //!
 //! Op 7 `OP_TRANSFER_MULTI` (`R_TXM`, P6-ANON plan §4, D6, R4) has its own decoder `parse_multi` and builder
@@ -84,7 +86,8 @@ pub const H_MEMO_HASH: usize = 19;
 /// §7.9 disclosure words: opTag, proofSystemId, chainId, chainUid, token, registry, entryRef, amount, kind. `kind` =
 /// OpeningKind + 256 w (owner 2026-10-25, R0-1): w the window of the disclosed v — 0 for SENDER_S / RECEIVER_X, the
 /// auditor copy's j mod S_AUD for AUDITOR (the auditor's v of R_TXM leg j sits at coefficients [16 w, 16 w + 16) of
-/// pk_a^T r_g); the relations read w, the low byte is hashed only
+/// pk_a^T r_g); the relations read w. The low byte is the form's `OpeningKind` (`Form::opening_kind`: SENDER_S 0,
+/// RECEIVER_X 1, AUDITOR 2), checked by the decoder since the three-key round (T-36, review 3w u3-6)
 pub const DISC_WORDS: usize = 9;
 pub const DW_AMOUNT: usize = 7;
 pub const DW_KIND: usize = 8;
@@ -117,18 +120,24 @@ const fn nib(c: u8) -> u8 {
 }
 
 /// PQZL's id at this set: keccak256 of set.toml's `pqzl_id` (gen_set.py, rust/set.rs; one id per set, CTR-PQZ-09 / D23;
-/// `.../mlwe-d64k<k>-q<log2q>l4/v5` since the R0 review fix, 2026-10-25). The retired ids (gen_set.py RETIRED: PQZL v2
-/// `0x2e07e6ed…798c2f`, forgeable, F9 path B; v3 `0x8079d65b…16baef`; the per-set v4 of plan 5h Task 8d; PQZH v1
-/// `0x0a47a768…2fead4`, the per-set v2, the STARK backup's) and every other set's ids are unknown ids here
-/// (`Reject::ProofSystemId`).
+/// `.../mlwe-d64k<k>-q<log2q>l4/v6` since the three-key round, 2026-11-13, K3-4b). The retired ids (gen_set.py RETIRED:
+/// PQZL v2 `0x2e07e6ed…798c2f`, forgeable, F9 path B; v3 `0x8079d65b…16baef`; the per-set v4 of plan 5h Task 8d and v5
+/// of the R0 review fix; PQZH v1 `0x0a47a768…2fead4`, the per-set v2 and v3, the STARK backup's) and every other set's
+/// ids are unknown ids here (`Reject::ProofSystemId`). Serves every form but the split transfer.
 pub const PQZL_ID: Word = set::PQZL_ID;
 /// the string `PQZL_ID` hashes (a test of pqzh-ligero recomputes the keccak256)
 pub const PQZL_LABEL: &str = set::PQZL_LABEL;
+/// PQZL's id of opening tokens at this set (three-key spec K3-4, `pqzOpening = true`; set.toml `pqzl_split_id`,
+/// `.../split-v1`): the split transfer (`R_TXS`, [`SPLIT_FORMS`]), burn, refresh and the sender disclosure only; the
+/// same PQZL library and `MAX_PROOF`. Never the precompile's (OFFCHAIN tokens only); no op 7 under it.
+pub const PQZL_SPLIT_ID: Word = set::PQZL_SPLIT_ID;
+/// the string `PQZL_SPLIT_ID` hashes
+pub const PQZL_SPLIT_LABEL: &str = set::PQZL_SPLIT_LABEL;
 /// whether this set has PQZH (set.toml `pqzh`; `n2816-kmax65536` has none: none of the current Ligero radices divides
 /// its q − 1). Without it this codec knows no PQZH id: `PQZH_ID` is the zero word and refused like any unknown id
 /// (`Reject::ProofSystemId`)
 pub const HAS_PQZH: bool = set::PQZH;
-/// PQZH's id at this set: keccak256 of set.toml's `pqzh_id` (`.../ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v3`);
+/// PQZH's id at this set: keccak256 of set.toml's `pqzh_id` (`.../ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v4`);
 /// the zero word at a set without PQZH (`HAS_PQZH`), never accepted there
 pub const PQZH_ID: Word = set::PQZH_ID;
 /// the string `PQZH_ID` hashes
@@ -151,9 +160,26 @@ fn is_pqzh(id: &[u8]) -> bool {
     HAS_PQZH && id == PQZH_ID
 }
 
+/// whether `id` is one of the ids this codec knows (PQZL, PQZL split, this set's PQZH)
+fn known(id: &[u8]) -> bool {
+    id == PQZL_ID || id == PQZL_SPLIT_ID || is_pqzh(id)
+}
+
+/// The forms `id` serves (K3-4): [`SPLIT_FORMS`] for `PQZL_SPLIT_ID`, [`FORMS`] for `PQZL_ID` and this set's PQZH id
+/// (op 7 too: `built_legs`), none for another id.
+pub fn forms(id: &Word) -> &'static [Form] {
+    if *id == PQZL_SPLIT_ID {
+        &SPLIT_FORMS
+    } else if *id == PQZL_ID || is_pqzh(id) {
+        &FORMS
+    } else {
+        &[]
+    }
+}
+
 /// `MAX_PROOF(id)`; `None` for an id this codec does not know
 pub fn max_proof(id: &Word) -> Option<usize> {
-    if *id == PQZL_ID {
+    if *id == PQZL_ID || *id == PQZL_SPLIT_ID {
         Some(MAX_PROOF_PQZL)
     } else if is_pqzh(id) {
         Some(MAX_PROOF_PQZH)
@@ -162,12 +188,17 @@ pub fn max_proof(id: &Word) -> Option<usize> {
     }
 }
 
-/// The statement forms: op 1 has two (by length), op 2 two and op 5 two (by opTag).
+/// The statement forms: op 1 has two per id (by length), op 2 two and op 5 two (by opTag).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Form {
     Transfer,
     /// transfer without the auditor (CTR-PQZ-24, D8)
     Transfer0,
+    /// the split transfer of an opening token (`R_TXS`, three-key spec K3-4; `PQZL_SPLIT_ID` only): `Transfer`'s
+    /// statement with `u_f` appended (the sender's `v_f` under its own randomness `(r_f, e1_f)`)
+    TransferSplit,
+    /// the split transfer without the auditor
+    TransferSplit0,
     Burn,
     Refresh,
     Register,
@@ -176,6 +207,7 @@ pub enum Form {
     DiscloseAuditor,
 }
 
+/// the forms of `PQZL_ID` and `PQZH_ID`
 pub const FORMS: [Form; 8] = [
     Form::Transfer,
     Form::Transfer0,
@@ -187,10 +219,14 @@ pub const FORMS: [Form; 8] = [
     Form::DiscloseAuditor,
 ];
 
+/// the forms of `PQZL_SPLIT_ID` (K3-4: `R_TXS`, `R_BURN` / refresh, `R_DS`; no register, no receiver or auditor
+/// disclosure, no op 7)
+pub const SPLIT_FORMS: [Form; 5] = [Form::TransferSplit, Form::TransferSplit0, Form::Burn, Form::Refresh, Form::DiscloseSender];
+
 impl Form {
     pub const fn op(self) -> u8 {
         match self {
-            Form::Transfer | Form::Transfer0 => OP_TRANSFER,
+            Form::Transfer | Form::Transfer0 | Form::TransferSplit | Form::TransferSplit0 => OP_TRANSFER,
             Form::Burn | Form::Refresh => OP_BURN,
             Form::Register => OP_REGISTER,
             Form::DiscloseSender => OP_DISCLOSE_SENDER,
@@ -200,7 +236,7 @@ impl Form {
     /// `keccak256("SCAAS-PQZ-OP-<NAME>-V1")`
     pub const fn op_tag(self) -> Word {
         match self {
-            Form::Transfer | Form::Transfer0 => {
+            Form::Transfer | Form::Transfer0 | Form::TransferSplit | Form::TransferSplit0 => {
                 hex32("ef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414")
             }
             Form::Burn => hex32("7383374d83fbb89f84ee079bff7a2742e4acb70f64b0b1e2ef40c34fb4cc1407"),
@@ -216,6 +252,8 @@ impl Form {
         match self {
             Form::Transfer => HEADER_BYTES + 3 * PK_BYTES + CT_BYTES + PK_BYTES + 3 * V_BYTES, // 83,072
             Form::Transfer0 => HEADER_BYTES + 2 * PK_BYTES + CT_BYTES + PK_BYTES + 2 * V_BYTES, // 66,560
+            Form::TransferSplit => Form::Transfer.stmt_len() + PK_BYTES,                       // 99,456
+            Form::TransferSplit0 => Form::Transfer0.stmt_len() + PK_BYTES,                     // 82,944
             Form::Burn | Form::Refresh => HEADER_BYTES + PK_BYTES + 2 * CT_BYTES,              // 50,048
             Form::Register => 3 * 32 + PK_BYTES,                                                // 16,480
             Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor => {
@@ -223,11 +261,13 @@ impl Form {
             }
         }
     }
-    /// PQZL witness bytes of the prover API (pqz.h; R3: not consensus)
+    /// PQZL witness bytes of the prover API (pqz.h; R3: not consensus). The split forms take `Transfer`'s witness:
+    /// `seed_leg` and the leg's randomness are derived from the witness seed and the statement (K3-4)
+    // ponytail: provisional until the R_TXS prover lands (step 2c); it fixes the split witness layout there
     pub const fn wit_len(self) -> usize {
         match self {
-            Form::Transfer => 6 * N + 3 * 32 + 32,
-            Form::Transfer0 => 6 * N + 2 * 32 + 32,
+            Form::Transfer | Form::TransferSplit => 6 * N + 3 * 32 + 32,
+            Form::Transfer0 | Form::TransferSplit0 => 6 * N + 2 * 32 + 32,
             Form::Burn | Form::Refresh => 6 * N + 32 + 16,
             Form::Register => 3 * N,
             Form::DiscloseSender => 3 * N + 32,
@@ -235,7 +275,29 @@ impl Form {
         }
     }
     fn debit(self) -> bool {
-        matches!(self, Form::Transfer | Form::Transfer0 | Form::Burn | Form::Refresh)
+        self.transfer() || matches!(self, Form::Burn | Form::Refresh)
+    }
+    /// op 1, either id
+    pub const fn transfer(self) -> bool {
+        matches!(self, Form::Transfer | Form::Transfer0 | Form::TransferSplit | Form::TransferSplit0)
+    }
+    /// op 1 with the auditor (`pk_a`, `v_a`)
+    pub const fn audited(self) -> bool {
+        matches!(self, Form::Transfer | Form::TransferSplit)
+    }
+    /// the split transfer (`u_f`)
+    pub const fn split(self) -> bool {
+        matches!(self, Form::TransferSplit | Form::TransferSplit0)
+    }
+    /// the disclosure `kind` word's low byte (`ITransferDisclosure.OpeningKind`; T-36): SENDER_S 0, RECEIVER_X 1,
+    /// AUDITOR 2; `None` for a form that is no disclosure
+    pub const fn opening_kind(self) -> Option<u64> {
+        match self {
+            Form::DiscloseSender => Some(0),
+            Form::DiscloseReceiver => Some(1),
+            Form::DiscloseAuditor => Some(2),
+            _ => None,
+        }
     }
     fn disclose(self) -> bool {
         matches!(self, Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor)
@@ -273,8 +335,8 @@ pub enum Reject {
     Opening,
     /// op 7: the `M` word is not one of the id's built leg counts
     Legs,
-    /// disclosure: the `kind` word is not `OpeningKind + 256 w` with w = 0 (SENDER_S, RECEIVER_X) or w < S_AUD
-    /// (AUDITOR), R0-1
+    /// disclosure: the `kind` word is not `OpeningKind + 256 w` with the form's `OpeningKind` (T-36) and w = 0
+    /// (SENDER_S, RECEIVER_X) or w < S_AUD (AUDITOR), R0-1
     Kind,
 }
 
@@ -283,7 +345,9 @@ pub enum Reject {
 /// burn has no auditor). Checked after the scalars, the salt form and `auditorOn` (P6e D15, controller 2026-10-14).
 pub fn zero_words(form: Form) -> &'static [(usize, &'static str)] {
     match form {
-        Form::Transfer | Form::Transfer0 => &[(H_AMOUNT, "amount"), (H_RECIPIENT, "recipient")],
+        Form::Transfer | Form::Transfer0 | Form::TransferSplit | Form::TransferSplit0 => {
+            &[(H_AMOUNT, "amount"), (H_RECIPIENT, "recipient")]
+        }
         Form::Burn => &[(H_TO, "toUA"), (H_AUDITOR_ON, "auditorOn"), (H_SALT, "salt")],
         Form::Refresh => &[
             (H_TO, "toUA"),
@@ -382,7 +446,8 @@ pub struct Register<'a> {
     pub pk: &'a [u8],
 }
 
-/// `R_TX` / `R_TX0` / `R_BURN` (BURN, REFRESH): §7.7 header ‖ `pk_f ‖ [pk_t] ‖ [pk_a] ‖ T ‖ u ‖ [v_t] ‖ v_f ‖ [v_a]`.
+/// `R_TX` / `R_TX0` / `R_TXS` / `R_BURN` (BURN, REFRESH): §7.7 header ‖ `pk_f ‖ [pk_t] ‖ [pk_a] ‖ T ‖ u ‖ [v_t] ‖ v_f ‖
+/// [v_a] ‖ [u_f]` (`u_f` exactly on the split forms, K3-4: appended, earlier offsets unchanged).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Debit<'a> {
     pub form: Form,
@@ -396,6 +461,8 @@ pub struct Debit<'a> {
     pub v_t: Option<&'a [u8]>,
     pub v_f: &'a [u8],
     pub v_a: Option<&'a [u8]>,
+    /// the split transfer's `u_f = A^T r_f + e1_f` (`PQZL_SPLIT_ID`; `None` on every other form)
+    pub u_f: Option<&'a [u8]>,
 }
 
 /// `R_DS` / `R_DR` (§7.9): 9 words ‖ `pk ‖ u ‖ v`.
@@ -425,7 +492,7 @@ impl<'a> Debit<'a> {
         let mut h = [[0u8; 32]; 20];
         h[H_OPTAG] = form.op_tag();
         h[H_ID] = *id;
-        if form == Form::Transfer {
+        if form.audited() {
             h[H_AUDITOR_ON] = u64_word(1);
         }
         h
@@ -439,11 +506,13 @@ impl<'a> Debit<'a> {
 }
 
 impl<'a> Disclose<'a> {
-    /// The words for `form` with opTag and proofSystemId set (the rest zero).
+    /// The words for `form` with opTag, proofSystemId and the `kind` word's low byte (`OpeningKind`, window 0) set
+    /// (the rest zero).
     pub fn words(form: Form, id: &Word) -> [Word; DISC_WORDS] {
         let mut w = [[0u8; 32]; DISC_WORDS];
         w[0] = form.op_tag();
         w[1] = *id;
+        w[DW_KIND] = u64_word(form.opening_kind().unwrap_or(0));
         w
     }
     pub fn amount(&self) -> u64 {
@@ -501,12 +570,13 @@ impl<'a> Stmt<'a> {
                 obj(&mut out, d.v, V_BYTES)?;
             }
             Stmt::Debit(d) => {
-                let (tr, aud) = (matches!(d.form, Form::Transfer | Form::Transfer0), d.form == Form::Transfer);
+                let (tr, aud) = (d.form.transfer(), d.form.audited());
                 if !d.form.debit()
                     || d.pk_t.is_some() != tr
                     || d.v_t.is_some() != tr
                     || d.pk_a.is_some() != aud
                     || d.v_a.is_some() != aud
+                    || d.u_f.is_some() != d.form.split()
                 {
                     return Err(Reject::Length);
                 }
@@ -521,15 +591,18 @@ impl<'a> Stmt<'a> {
                 for o in [d.v_t, Some(d.v_f), d.v_a].into_iter().flatten() {
                     obj(&mut out, o, V_BYTES)?;
                 }
+                if let Some(o) = d.u_f {
+                    obj(&mut out, o, PK_BYTES)?;
+                }
             }
         }
         Ok(out)
     }
 }
 
-/// Decode the statement of `op` with every D15 / R6 rule, in the order of `pqz_kat.py parse` (opTag, id, length,
-/// scalars, salt, auditorOn, zero words, coefficients), so both name the same reason; op 7 by `parse_multi`. Borrows
-/// `stmt`; allocates nothing.
+/// Decode the statement of `op` with every D15 / R6 rule, in the order of `pqz_kat.py parse` (opTag, a known id, op 1's
+/// form by length under that id, the id serves the form, length, scalars, kind, salt, auditorOn, zero words,
+/// coefficients), so both name the same reason; op 7 by `parse_multi`. Borrows `stmt`; allocates nothing.
 pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
     if op == OP_SELFTEST {
         return if stmt.is_empty() { Ok(Stmt::SelfTest) } else { Err(Reject::Op) };
@@ -548,14 +621,22 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
         .find(|f| f.op() == op && f.op_tag()[..] == *tag && *f != Form::Transfer0)
         .ok_or(Reject::OpTag)?;
     let id = &stmt[n.min(32)..n.min(64)];
-    if id != PQZL_ID && !is_pqzh(id) {
+    if !known(id) {
         return Err(Reject::ProofSystemId);
     }
-    // op 1: the form by length (R6)
+    let split = id == PQZL_SPLIT_ID;
+    // op 1: the form by length (R6), each id its own pair (K3-4: the lengths never collide, pinned in the tests)
     let form = match form {
+        Form::Transfer if split && n == Form::TransferSplit0.stmt_len() => Form::TransferSplit0,
+        Form::Transfer if split => Form::TransferSplit,
         Form::Transfer if n == Form::Transfer0.stmt_len() => Form::Transfer0,
         f => f,
     };
+    // K3-4: PQZL_SPLIT_ID serves SPLIT_FORMS only, the other ids FORMS only
+    let id: &Word = id.try_into().map_err(|_| Reject::ProofSystemId)?;
+    if !forms(id).contains(&form) {
+        return Err(Reject::ProofSystemId);
+    }
     if n != form.stmt_len() {
         return Err(Reject::Length);
     }
@@ -575,9 +656,13 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
             if word_u64(&words[DW_AMOUNT]).is_none() {
                 return Err(Reject::Amount);
             }
-            // kind = OpeningKind + 256 w < 2^16: w = 0 but for AUDITOR, w < S_AUD there (R0-1)
+            // kind = OpeningKind + 256 w < 2^16: the form's OpeningKind (T-36); w = 0 but for AUDITOR, w < S_AUD
+            // there (R0-1)
             let wmax = if form == Form::DiscloseAuditor { S_AUD } else { 1 };
-            if !matches!(word_u64(&words[DW_KIND]), Some(k) if k >> 16 == 0 && ((k >> 8) as usize) < wmax) {
+            let ok = form.opening_kind();
+            if !matches!(word_u64(&words[DW_KIND]), Some(k) if k >> 16 == 0 && ((k >> 8) as usize) < wmax
+                && Some(k & 0xff) == ok)
+            {
                 return Err(Reject::Kind);
             }
             let body = &stmt[32 * DISC_WORDS..];
@@ -606,7 +691,7 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
             if header[H_SALT][..16].iter().any(|&b| b != 0) {
                 return Err(Reject::Salt);
             }
-            let (tr, aud) = (matches!(form, Form::Transfer | Form::Transfer0), form == Form::Transfer);
+            let (tr, aud) = (form.transfer(), form.audited());
             if tr && word_u64(&header[H_AUDITOR_ON]) != Some(aud as u64) {
                 return Err(Reject::AuditorOn);
             }
@@ -633,7 +718,8 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
             let v_t = if tr { Some(take(V_BYTES)) } else { None };
             let v_f = take(V_BYTES);
             let v_a = if aud { Some(take(V_BYTES)) } else { None };
-            Ok(Stmt::Debit(Debit { form, header, pk_f, pk_t, pk_a, t, u, v_t, v_f, v_a }))
+            let u_f = if form.split() { Some(take(PK_BYTES)) } else { None };
+            Ok(Stmt::Debit(Debit { form, header, pk_f, pk_t, pk_a, t, u, v_t, v_f, v_a, u_f }))
         }
     }
 }

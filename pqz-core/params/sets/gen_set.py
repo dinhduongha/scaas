@@ -96,16 +96,26 @@ RETIRED |= {lab: keccak256(lab.encode()).hex() for lab in (
     "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4", "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2",
     "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2",
     "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2")}
+# the R0-fix ids (PQZL v5, PQZH v3), retired by the three-key round (2026-11-13, K3-4b: T-35 / T-36; by chain reset only)
+RETIRED |= {lab: keccak256(lab.encode()).hex() for lab in (
+    "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5", "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5", "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5",
+    "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5", "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3",
+    "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3",
+    "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3")}
 
 
 def ids(name):
-    """{"pqzl": (label, id), "pqzh": (label, id)} of the set (no pqzh for a set without pqzh = true): keccak256 of set.toml's
-    pqzl_id / pqzh_id labels. A label names the parameters it fixes (PQZL d64k<k>-q<log2q>, PQZH fq<log2q>-n<n>k<k>t<t>
-    of [pqzh_preset]), so a label that no longer matches its set fails here"""
+    """{"pqzl": (label, id), "pqzl_split": (label, id), "pqzh": (label, id)} of the set (no pqzh for a set without
+    pqzh = true): keccak256 of set.toml's pqzl_id / pqzl_split_id / pqzh_id labels. pqzl_split is PQZL_SPLIT_ID, the id of
+    opening tokens (three-key spec K3-4: R_TXS, burn / refresh, R_DS; OFFCHAIN only, never the precompile's). A label
+    names the parameters it fixes (PQZL d64k<k>-q<log2q>, PQZH fq<log2q>-n<n>k<k>t<t> of [pqzh_preset]), so a label that
+    no longer matches its set fails here"""
     t = load(name)
     k, L = t["n"] // 64, (t["q"] - 1).bit_length()
-    out = {"pqzl": t["pqzl_id"]}
-    assert f"/mlwe-d64k{k}-q{L}l4/" in out["pqzl"], f"{name}: pqzl_id {out['pqzl']} does not name d64k{k}-q{L}"
+    out = {"pqzl": t["pqzl_id"], "pqzl_split": t["pqzl_split_id"]}
+    for s in ("pqzl", "pqzl_split"):
+        assert f"/mlwe-d64k{k}-q{L}l4/" in out[s], f"{name}: {s}_id {out[s]} does not name d64k{k}-q{L}"
+    assert out["pqzl_split"].rsplit("/", 1)[1].startswith("split-"), f"{name}: pqzl_split_id {out['pqzl_split']} is no split-v<n>"
     if t.get("pqzh"):
         out["pqzh"] = t["pqzh_id"]
         p = t["pqzh_preset"]
@@ -279,6 +289,8 @@ def c_text(name):
     if "pqzh" in i:
         out.append(f"/* PQZH's proofSystemId = keccak256(\"{i['pqzh'][0]}\") (the C side writes it only in test tools) */")
         out.append(f"#define PQZ_PQZH_ID {c_bytes(i['pqzh'][1])}")
+    out.append(f"/* PQZL_SPLIT_ID = keccak256(\"{i['pqzl_split'][0]}\"): opening tokens' id (R_TXS; test tools only) */")
+    out.append(f"#define PQZ_PROOF_SYSTEM_SPLIT_ID {c_bytes(i['pqzl_split'][1])}")
     out += ["", "#endif", ""]
     return "\n".join(out)
 
@@ -399,7 +411,9 @@ def lengths(k):
     return {"pk": pk, "v": v, "ct": pk + v, "header": h,
             "stmt": {"TRANSFER": h + 5 * pk + 4 * v, "TRANSFER0": h + 4 * pk + 3 * v, "BURN": h + 3 * pk + 2 * v,
                      "REFRESH": h + 3 * pk + 2 * v, "REGISTER": 96 + pk, "DISCLOSE-SENDER": 288 + 2 * pk + v,
-                     "DISCLOSE-RECEIVER": 288 + 2 * pk + v, "DISCLOSE-AUDITOR": 288 + 2 * pk + v},
+                     "DISCLOSE-RECEIVER": 288 + 2 * pk + v, "DISCLOSE-AUDITOR": 288 + 2 * pk + v,
+                     # PQZL_SPLIT_ID's op 1 (three-key spec K3-4): TRANSFER / TRANSFER0 with u_f appended
+                     "TRANSFER-SPLIT": h + 6 * pk + 4 * v, "TRANSFER-SPLIT0": h + 5 * pk + 3 * v},
             "bundle": 16 + pk + 2 * v + 32, "bundle0": 16 + pk + v + 32}
 
 
@@ -439,8 +453,8 @@ def sol_vectors(name):
     st = bytes.fromhex(rd("statement_register.json")["rows"][0]["stmt"])
     # each proof system's vectors under its id: the statements' PQZL id, and every proof_<sys>.json's proof_system_id
     # (review 3w u5-7: a PQZH bump alone left a probe over a proof never made under the new id)
-    other = [s.upper() for s, (_, h) in ids(name).items()
-             if (s == "pqzl" and st[32:64] != h) or rd(f"proof_{s}.json")["proof_system_id"] != h.hex()]
+    other = [s.upper() for s, (_, h) in ids(name).items() if s != "pqzl_split"
+             and ((s == "pqzl" and st[32:64] != h) or rd(f"proof_{s}.json")["proof_system_id"] != h.hex())]
     if other:
         # the vectors are another id's (an id bump before `make.sh <set> vectors`): no hashes yet, never silently
         # (review R0 fix round m12): a warning here, and main() fails --check
@@ -515,6 +529,8 @@ def sol_text(name):
             ("CT", ln["ct"], "ciphertext u || v bytes"),
             ("STMT_TRANSFER", ln["stmt"]["TRANSFER"], "op 1 statement, auditor on"),
             ("STMT_TRANSFER0", ln["stmt"]["TRANSFER0"], "op 1 statement, auditor off"),
+            ("STMT_TRANSFER_SPLIT", ln["stmt"]["TRANSFER-SPLIT"], "op 1 statement under PQZL_SPLIT_ID (R_TXS, u_f appended; K3-4), auditor on"),
+            ("STMT_TRANSFER_SPLIT0", ln["stmt"]["TRANSFER-SPLIT0"], "op 1 statement under PQZL_SPLIT_ID, auditor off"),
             ("STMT_BURN", ln["stmt"]["BURN"], "op 2 statement (burn / refresh)"),
             ("STMT_REGISTER", ln["stmt"]["REGISTER"], "op 3 statement"),
             ("STMT_DISCLOSE", ln["stmt"]["DISCLOSE-SENDER"], "op 4 / 5 statement"),
@@ -537,6 +553,9 @@ def sol_text(name):
     i = ids(name)
     lab, h = i["pqzl"]
     out.append(f"    /// PQZL's proofSystemId: keccak256(\"{lab}\")\n    bytes32 internal constant PQZL_ID = 0x{h.hex()};")
+    lab, h = i["pqzl_split"]
+    out.append(f"    /// PQZL_SPLIT_ID, the id of opening tokens (pqzOpening; R_TXS split randomness; OFFCHAIN only, never the\n"
+               f"    /// precompile's): keccak256(\"{lab}\")\n    bytes32 internal constant PQZL_SPLIT_ID = 0x{h.hex()};")
     has = "pqzh" in i
     out.append(f"    /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): {'true' if has else 'false: PQZH_ID is the zero word, never accepted'}\n"
                f"    bool internal constant HAS_PQZH = {'true' if has else 'false'};")
@@ -556,6 +575,10 @@ def sol_text(name):
     out.append("    /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,\n"
                "    /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)\n"
                f"    bytes32 internal constant PROBE_PQZL = 0x{sv[1].hex()};\n    bytes32 internal constant PROBE_PQZH = 0x{sv[2].hex()};")
+    out.append("    /// the build's set identity (T-26, review 3w u5-4; owner 2026-11-13): keccak256 of the generated constant block,\n"
+               "    /// gen_set.py set_digest: every `<type> [internal ]constant <NAME> = <value>;` of this file but SET_DIGEST, in\n"
+               "    /// file order, as `<type> <NAME> = <value>` joined by one newline (PQZ_ACC_WORDS included)\n"
+               f"    bytes32 internal constant SET_DIGEST = 0x{bytes(32).hex()};")
     out += ["", "    /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f",
             "    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)",
             "    function multiLen(uint256 m, bool aud) internal pure returns (uint256) {",
@@ -566,7 +589,27 @@ def sol_text(name):
             "// The slots of a materialised `acc` under P46 (owner 2026-10-21): CT / 32 words of four coefficients, each packed into",
             "// 4 * PACK_BITS / 8 bytes, in 32-byte slots. At file level: Solidity takes no library member as an array length.",
             f"uint256 constant PQZ_ACC_WORDS = {acc_words(name)};", ""]
-    return "\n".join(out)
+    s = "\n".join(out)
+    return s.replace(f"SET_DIGEST = 0x{bytes(32).hex()};", f"SET_DIGEST = 0x{set_digest(s).hex()};")
+
+
+# T-26 (review 3w u5-4; owner 2026-11-13 "Đồng ý, gộp 5 lỗi class (b) vào round 3 khoá."): SET_DIGEST names the whole
+# generated constant block, so a body module built from an earlier PqzSet.sol of the same set (another id, S_AUD,
+# ROLL_MAX, debit bound, vectors) is told apart. The block: every constant declaration of the file (library and file
+# level) in file order, SET_DIGEST excluded, each as "<type> <NAME> = <value>" (the value's text as written, digit
+# separators included), joined by "\n"; SET_DIGEST = keccak256 of that UTF-8 text.
+CONST_RE = re.compile(r"^\s*(\w+) (?:internal )?constant (\w+) = (.+);$", re.M)
+
+
+def set_digest(sol):
+    """keccak256 of the constant block of a PqzSet.sol text (SET_DIGEST excluded)"""
+    return keccak256("\n".join(f"{ty} {nm} = {v}" for ty, nm, v in CONST_RE.findall(sol) if nm != "SET_DIGEST").encode())
+
+
+def digest_ok(sol):
+    """whether a PqzSet.sol text's SET_DIGEST is its constant block's (a constant edited without the digest fails)"""
+    m = re.search(r"SET_DIGEST = 0x([0-9a-f]{64});", sol)
+    return bool(m) and m.group(1) == set_digest(sol).hex()
 
 
 # ---------------------------------------------------------------- the Rust crates' per-set wiring
@@ -757,7 +800,7 @@ def digests(name):
         p = os.path.join(HERE, name, f"pqz_{r}_params.h")
         h.update(f"\n{r}\n".encode() + (open(p, "rb").read() if os.path.exists(p) else b"missing"))
     i = ids(name)
-    out = {i["pqzl"][0]: h.hexdigest()}
+    out = {i["pqzl"][0]: h.hexdigest(), i["pqzl_split"][0]: h.hexdigest()}  # one PQZL library: the same parameters
     if "pqzh" in i:
         _, gen, nr, rad, n, k, tq, _ = pqzh_preset(name)
         ph = c | {"radices": rad, "n": n, "k": k, "t": tq, "gen": gen, "nr": nr}
@@ -809,6 +852,10 @@ def main(argv):
         diff += [os.path.relpath(p, REPO) for s in names for p in stray(s)]
         diff += [f"{s} (vectors under another id: zero SELFTEST / PROBE_*)" for s in STALE]
         diff += moved + [x for s in names for x in bind(s)]
+        # T-26: every committed PqzSet.sol carries its own constant block's SET_DIGEST
+        for p in [os.path.join(HERE, s, "PqzSet.sol") for s in names] + [SOL_EVM]:
+            if os.path.exists(p) and not digest_ok(open(p, encoding="utf-8").read()):
+                diff.append(f"{os.path.relpath(p, REPO)} (SET_DIGEST is not its constant block's)")
     print("gen_set.py%s: %d sets, %d files%s" % (" --check" if check else "", len(names), len(fs) + check,
                                                  (", differ: " + " ".join(diff)) if diff else ""))
     return 1 if diff else 0
@@ -824,6 +871,16 @@ def selfcheck():
     assert (c["K"], c["Q"], c["LOG2Q"], c["DELTA"], c["MBITS"], c["CBITS"], c["EBITS"]) == (32, 4398046510889, 42, 2**26 - 1, 14, 11, 25)
     assert (c["BETA_S"], c["BETA_E"], c["ZETA"], c["INVZ3"]) == (36, 164, 3367489746414, 1030556764475)
     assert lengths(32)["stmt"]["TRANSFER"] == 83_072 and lengths(32)["bundle"] == 16_688
+    assert lengths(32)["stmt"]["TRANSFER-SPLIT"] == 99_456 and lengths(32)["stmt"]["TRANSFER-SPLIT0"] == 82_944  # K3-4
+    # T-26: SET_DIGEST covers every constant; one edited constant (value, name or type), or a dropped one, fails; the
+    # digest line itself and the comments do not count
+    sol = sol_text(N2048)
+    assert digest_ok(sol) and len(CONST_RE.findall(sol)) >= 30
+    for a, b in (("S_AUD = 2;", "S_AUD = 3;"), ("ROLL_MAX = ", "ROLL_MAX = 1"), ("uint16 internal constant DELTA_P_MAX",
+                 "uint256 internal constant DELTA_P_MAX"), ("PQZ_ACC_WORDS = ", "PQZ_ACC_WORDS = 9"),
+                 ("bool internal constant PQZH_VALUE = true;", "bool internal constant PQZH_VALUE = false;")):
+        assert a in sol and not digest_ok(sol.replace(a, b, 1)), a
+    assert digest_ok(sol.replace("/// the modulus", "/// q"))
     # n2048-kmax1024's spec shapes are pqzl/params/*.sage's (the record its first headers were made from)
     s = specs(N2048)
     assert "m1 = 146\n" in s["tx"] and "nbin = 15\n" in s["tx"] and "m1 = 223\n" in s["txm80"] and "nbin = 22\n" in s["txm8"]

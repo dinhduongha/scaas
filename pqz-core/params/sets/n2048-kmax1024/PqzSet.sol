@@ -38,6 +38,10 @@ library PqzSet {
     uint256 internal constant STMT_TRANSFER = 83_072;
     /// op 1 statement, auditor off
     uint256 internal constant STMT_TRANSFER0 = 66_560;
+    /// op 1 statement under PQZL_SPLIT_ID (R_TXS, u_f appended; K3-4), auditor on
+    uint256 internal constant STMT_TRANSFER_SPLIT = 99_456;
+    /// op 1 statement under PQZL_SPLIT_ID, auditor off
+    uint256 internal constant STMT_TRANSFER_SPLIT0 = 82_944;
     /// op 2 statement (burn / refresh)
     uint256 internal constant STMT_BURN = 50_048;
     /// op 3 statement
@@ -51,22 +55,29 @@ library PqzSet {
     /// the largest `deltaP` of a PQZ debit record, K_MAX - 1 (a first debit's p; later debits K_MAX - 2): a uint16, so a
     /// set whose K_MAX - 1 exceeds 65,535 fails the build
     uint16 internal constant DELTA_P_MAX = 1_023;
-    /// PQZL's proofSystemId: keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5")
-    bytes32 internal constant PQZL_ID = 0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe;
+    /// PQZL's proofSystemId: keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v6")
+    bytes32 internal constant PQZL_ID = 0xa626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee;
+    /// PQZL_SPLIT_ID, the id of opening tokens (pqzOpening; R_TXS split randomness; OFFCHAIN only, never the
+    /// precompile's): keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/split-v1")
+    bytes32 internal constant PQZL_SPLIT_ID = 0x953512b6ca1f8fa48f1d528d2a8adef99ca3b78c50cd6e0ea573ad85e38f49c0;
     /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): true
     bool internal constant HAS_PQZH = true;
     /// PQZH value tokens (set.toml pqzh_value; owner 2026-10-27, C0-2): `init` refuses PQZH_ID unless true; the holder-kind rule applies
     bool internal constant PQZH_VALUE = true;
-    /// PQZH's proofSystemId: keccak256("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3")
-    bytes32 internal constant PQZH_ID = 0x56293621ce64083ca3165d7972b4108a1195f7bf41f1918df6d6d4da1da7df5d;
+    /// PQZH's proofSystemId: keccak256("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v4")
+    bytes32 internal constant PQZH_ID = 0x3cf01f8334f4a200471100233fa0d85944e60830d1dc8873577a31d4dff58439;
     /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS (10,836 zero bytes: a new account's `acc`, P46)
     bytes32 internal constant ZERO_HASH = 0x1f6df2124f23e486a7a49fa2b618393f03edacce43c3f4a67fed3700704b83a5;
     /// the precompile's OP_SELFTEST answer at this set (smartcontracts/vectors/pqz/selftest.json hash; 0: no vectors yet)
-    bytes32 internal constant SELFTEST = 0x37c45f201c3f7a8f4dd3c84df85176f85f574d31a0209435761b1056519bfa9d;
+    bytes32 internal constant SELFTEST = 0x0000000000000000000000000000000000000000000000000000000000000000;
     /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,
     /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)
-    bytes32 internal constant PROBE_PQZL = 0xbc19b2cb54c0372463e8ca50a68aa775c76d79da3f5379889c3c720433b9ddfd;
-    bytes32 internal constant PROBE_PQZH = 0x91138cd46cb48c00708dcac6488b73794ed4437225307a526dedeb074dd864f9;
+    bytes32 internal constant PROBE_PQZL = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    bytes32 internal constant PROBE_PQZH = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    /// the build's set identity (T-26, review 3w u5-4; owner 2026-11-13): keccak256 of the generated constant block,
+    /// gen_set.py set_digest: every `<type> [internal ]constant <NAME> = <value>;` of this file but SET_DIGEST, in
+    /// file order, as `<type> <NAME> = <value>` joined by one newline (PQZ_ACC_WORDS included)
+    bytes32 internal constant SET_DIGEST = 0x68967dd4515a00ac937f20e04e47e5278a7dfe4c31527407e158835682c1a5c0;
 
     /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f
     /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)

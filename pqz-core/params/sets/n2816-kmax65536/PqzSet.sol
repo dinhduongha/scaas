@@ -38,6 +38,10 @@ library PqzSet {
     uint256 internal constant STMT_TRANSFER = 113_792;
     /// op 1 statement, auditor off
     uint256 internal constant STMT_TRANSFER0 = 91_136;
+    /// op 1 statement under PQZL_SPLIT_ID (R_TXS, u_f appended; K3-4), auditor on
+    uint256 internal constant STMT_TRANSFER_SPLIT = 136_320;
+    /// op 1 statement under PQZL_SPLIT_ID, auditor off
+    uint256 internal constant STMT_TRANSFER_SPLIT0 = 113_664;
     /// op 2 statement (burn / refresh)
     uint256 internal constant STMT_BURN = 68_480;
     /// op 3 statement
@@ -51,8 +55,11 @@ library PqzSet {
     /// the largest `deltaP` of a PQZ debit record, K_MAX - 1 (a first debit's p; later debits K_MAX - 2): a uint16, so a
     /// set whose K_MAX - 1 exceeds 65,535 fails the build
     uint16 internal constant DELTA_P_MAX = 65_535;
-    /// PQZL's proofSystemId: keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5")
-    bytes32 internal constant PQZL_ID = 0xa801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9;
+    /// PQZL's proofSystemId: keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v6")
+    bytes32 internal constant PQZL_ID = 0x7a3e76790c331d1ff5b7b8e9897e876dc11773afed874fcd65c145aeba1da28f;
+    /// PQZL_SPLIT_ID, the id of opening tokens (pqzOpening; R_TXS split randomness; OFFCHAIN only, never the
+    /// precompile's): keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/split-v1")
+    bytes32 internal constant PQZL_SPLIT_ID = 0xf4dcd2f646d99936b73878c9b3767af0ecc3161ac63b431e4a1e170c86c257fb;
     /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): false: PQZH_ID is the zero word, never accepted
     bool internal constant HAS_PQZH = false;
     /// PQZH value tokens (set.toml pqzh_value; owner 2026-10-27, C0-2): `init` refuses PQZH_ID unless true; the holder-kind rule applies
@@ -62,11 +69,15 @@ library PqzSet {
     /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS (19,116 zero bytes: a new account's `acc`, P46)
     bytes32 internal constant ZERO_HASH = 0xa42ada50b294e23016b521f6058aec3d96141779bc8e65388c1187fd87cbd7d9;
     /// the precompile's OP_SELFTEST answer at this set (smartcontracts/vectors/pqz/n2816-kmax65536/selftest.json hash; 0: no vectors yet)
-    bytes32 internal constant SELFTEST = 0x1e69e3cd195ff67983e603a8ea969e73e6edcd70f4ac04fa4e5d75c09ddee740;
+    bytes32 internal constant SELFTEST = 0x0000000000000000000000000000000000000000000000000000000000000000;
     /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,
     /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)
-    bytes32 internal constant PROBE_PQZL = 0xcd16d7031072f72597227f8a9239960093f6dad19d0f3fdc0031a8d395fd488a;
+    bytes32 internal constant PROBE_PQZL = 0x0000000000000000000000000000000000000000000000000000000000000000;
     bytes32 internal constant PROBE_PQZH = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    /// the build's set identity (T-26, review 3w u5-4; owner 2026-11-13): keccak256 of the generated constant block,
+    /// gen_set.py set_digest: every `<type> [internal ]constant <NAME> = <value>;` of this file but SET_DIGEST, in
+    /// file order, as `<type> <NAME> = <value>` joined by one newline (PQZ_ACC_WORDS included)
+    bytes32 internal constant SET_DIGEST = 0x03f086574ae20374e0dfc504d5b7b8057ec26be94a7883f64a638b3b1a432e08;
 
     /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f
     /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)
