@@ -1900,6 +1900,13 @@ CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": ch
 OTHER_WRITERS = {"verdict.json": "forge PqzVerdictVectors.t.sol; clientkeys pqz-verdict.test.js, scaas-node pqz.rs",
                  "verifier_fee.json": "forge PqzVerifierFeeVectors.t.sol; clientkeys pqz-verifier-fee.test.js, ua-rs tests/pqzfee.rs, scaas-node pqz.rs"}
 
+# Files whose checker here rebuilds only part of the file (review 3w fix round, the S7 gate's tamper step: 8 of 12
+# changed state.json leaves were not caught); the file's writer and its other readers bind the rest. tamper.py counts
+# them but requires only that some change is caught.
+PARTIAL_CHECKERS = {"state.json": "check_state rebuilds T, accHash, entryRef and the leg ciphertexts from the raw words; "
+                                  "the rest (layout, noneHeaders, records, block numbers) is forge PqzStateVectors.t.sol's "
+                                  "(test_noneHeaderRows reads it back) and ua-rs tests/facade_pqz_state.rs's"}
+
 
 def check_files(paths, log):
     bad = []
