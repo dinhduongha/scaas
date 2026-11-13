@@ -432,3 +432,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   Superseded by CTR-GOV-28 (owner 2026-11-13, every direct admin entry carries the chain word). Then, in the same files, a
   holder's own `renounceRole(uint8)`, `mtxRenounceRole` and `UARenounceRole` without the word as they stood at `baa42a33`
   (owner 2026-11-13, renounceRole carries the chain word too; the typed row is in the same legacy `typed_ops.json`). Not built.
+- `pqz-three-keys/`: the PQZ layer as it stood at `91fa54c2`, before the three-key model (spec
+  `docs/superpowers/specs/2026-11-13-pqz-three-keys.md`, CTR-PQZ-37 .. -41, CTR-UA-43; owner 2026-11-13): an `OFFCHAIN` token
+  read every holder's, the auditor's and the disclosure owner's key from the registry PQZ key (`pqzKeyOf` / `pqzKeyAt`, the
+  path exposed to the decryption oracle T-01), op 1 shared one randomness `(r, e1)` between the credit and the sender's
+  `v_f`, every rollover was public. `src/pqz/{PqzCore,PqzStateLib,PqzLayer,IPqzToken,PqzTransferLib,PqzViewLib}.sol` and
+  `src/factory/IFactoryToken.sol` (`ConfidentialConfig` without `pqzOwnKey` / `pqzOpening`). Superseded by the key
+  classes (`registry`, `offchain-shared`, `offchain-token`): no `OFFCHAIN` token on the registry key can be created. Not built.
