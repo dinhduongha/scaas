@@ -69,15 +69,15 @@ library PqzSet {
     /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS (10,836 zero bytes: a new account's `acc`, P46)
     bytes32 internal constant ZERO_HASH = 0x1f6df2124f23e486a7a49fa2b618393f03edacce43c3f4a67fed3700704b83a5;
     /// the precompile's OP_SELFTEST answer at this set (smartcontracts/vectors/pqz/selftest.json hash; 0: no vectors yet)
-    bytes32 internal constant SELFTEST = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    bytes32 internal constant SELFTEST = 0x37c45f201c3f7a8f4dd3c84df85176f85f574d31a0209435761b1056519bfa9d;
     /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,
     /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)
-    bytes32 internal constant PROBE_PQZL = 0x0000000000000000000000000000000000000000000000000000000000000000;
-    bytes32 internal constant PROBE_PQZH = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    bytes32 internal constant PROBE_PQZL = 0x15148e88013f80a7c3880085cdd25bba968a2d1da44b87a074adb01f4c354567;
+    bytes32 internal constant PROBE_PQZH = 0xdae0fca878f009cf355174cd2fb5422f132ec576cba0ebd93f4d8f2a49dea252;
     /// the build's set identity (T-26, review 3w u5-4; owner 2026-11-13): keccak256 of the generated constant block,
     /// gen_set.py set_digest: every `<type> [internal ]constant <NAME> = <value>;` of this file but SET_DIGEST, in
     /// file order, as `<type> <NAME> = <value>` joined by one newline (PQZ_ACC_WORDS included)
-    bytes32 internal constant SET_DIGEST = 0x68967dd4515a00ac937f20e04e47e5278a7dfe4c31527407e158835682c1a5c0;
+    bytes32 internal constant SET_DIGEST = 0x3f08a7e820f3df3cfa06ab6abb673baffc8cecd0f56ba0e3646d9d51973248fc;
 
     /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f
     /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)

@@ -215,7 +215,8 @@ pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8
         }
     }
     catch_unwind(|| {
-        if id == PQZL_ID {
+        // PQZL_SPLIT_ID (three-key spec K3-4): the PQZL library, its split forms (pqz-stmt ties forms to the id)
+        if id == PQZL_ID || id == pqz_stmt::PQZL_SPLIT_ID {
             pqzl::prove(op, stmt, wit, rnd32).map_err(ProveError::Pqzl)
         } else {
             pqzh::prove(op, stmt, wit, rnd32).map_err(ProveError::Pqzh)

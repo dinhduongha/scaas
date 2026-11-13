@@ -69,15 +69,15 @@ library PqzSet {
     /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS (19,116 zero bytes: a new account's `acc`, P46)
     bytes32 internal constant ZERO_HASH = 0xa42ada50b294e23016b521f6058aec3d96141779bc8e65388c1187fd87cbd7d9;
     /// the precompile's OP_SELFTEST answer at this set (smartcontracts/vectors/pqz/n2816-kmax65536/selftest.json hash; 0: no vectors yet)
-    bytes32 internal constant SELFTEST = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    bytes32 internal constant SELFTEST = 0x1e69e3cd195ff67983e603a8ea969e73e6edcd70f4ac04fa4e5d75c09ddee740;
     /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,
     /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)
-    bytes32 internal constant PROBE_PQZL = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    bytes32 internal constant PROBE_PQZL = 0xf2981c7b24bbe39d5484291232a35251377c85b74ea707efac155388bf053963;
     bytes32 internal constant PROBE_PQZH = 0x0000000000000000000000000000000000000000000000000000000000000000;
     /// the build's set identity (T-26, review 3w u5-4; owner 2026-11-13): keccak256 of the generated constant block,
     /// gen_set.py set_digest: every `<type> [internal ]constant <NAME> = <value>;` of this file but SET_DIGEST, in
     /// file order, as `<type> <NAME> = <value>` joined by one newline (PQZ_ACC_WORDS included)
-    bytes32 internal constant SET_DIGEST = 0x03f086574ae20374e0dfc504d5b7b8057ec26be94a7883f64a638b3b1a432e08;
+    bytes32 internal constant SET_DIGEST = 0xb10a418d2a544607c55969537fae868abfafff52940a765a0e6bc051198d3f9f;
 
     /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f
     /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)

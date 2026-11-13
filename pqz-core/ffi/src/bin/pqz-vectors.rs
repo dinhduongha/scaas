@@ -827,6 +827,94 @@ fn opening_file() -> (String, String) {
     )
 }
 
+/// proof_pqzl_split.json (spec three-key model K3-4, PQZL_SPLIT_ID's op 1 R_TXS / R_TXS0; UNAUDITED): the scenario's
+/// TRANSFER / TRANSFER0 (header, keys, T) under the split id with split randomness: the leg from seed_leg =
+/// enc_leg_seed(seed_enc, toUA, keccak256(pk_t)), the sender's own u_f, v_f from seed_enc; u_f appended. The proofs are
+/// verified here by the specialised and the generic verifier through the decoder (the precompile never serves this id).
+fn split_file(sc: &Scenario) -> (String, String) {
+    let (kf, kt, ka) = (keygen(SEED_F), keygen(SEED_T), keygen(SEED_A));
+    let seed_enc = [0x66u8; 32];
+    let to_ua = [0xA2u8; 32]; // the scenario's toUA
+    let (v, bp) = (123_456u64, 1_000_000 + 1_000 - 123_456 - 7); // scenario(7)'s value and new balance
+    let seed_leg = pqzl::enc_leg_seed(&seed_enc, &to_ua, &keccak(&[&kt.pk]));
+    let own = enc(&[&kf], &[bp], seed_enc);
+    let rows = [(Form::TransferSplit, Form::Transfer), (Form::TransferSplit0, Form::Transfer0)]
+        .into_iter()
+        .map(|(form, base)| {
+            let aud = form == Form::TransferSplit;
+            let leg = if aud { enc(&[&kt, &ka], &[v, v], seed_leg) } else { enc(&[&kt], &[v], seed_leg) };
+            let b = with_id(&sc.rows[fidx(base)].stmt, &st::PQZL_SPLIT_ID);
+            let pre = st::HEADER_BYTES + (if aud { 4 } else { 3 }) * PK + 128; // header, pk_f, pk_t, [pk_a], T
+            let mut s = b[..pre].to_vec();
+            s.extend_from_slice(&leg.u);
+            s.extend_from_slice(&leg.vs[0]);
+            s.extend_from_slice(&own.vs[0]);
+            if aud {
+                s.extend_from_slice(&leg.vs[1]);
+            }
+            s.extend_from_slice(&own.u);
+            assert_eq!(st::parse(form.op(), &s).expect("split statement canonical").form(), Some(form));
+            let mut w = kf.wit();
+            w.extend(leg.wit(&[]));
+            w.extend(own.wit(&[]));
+            le16(&mut w, &leg.e2[0]);
+            le16(&mut w, &own.e2[0]);
+            if aud {
+                le16(&mut w, &leg.e2[1]);
+            }
+            w.extend(digits(v));
+            w.extend(digits(bp));
+            assert_eq!((s.len(), w.len()), (form.stmt_len(), form.wit_len()), "{}", fname(form));
+            let rnd = [0x90 + aud as u8; 32];
+            let p = prove(&st::PQZL_SPLIT_ID, form.op(), &s, &w, &rnd);
+            let inp = st::input(form.op(), &s, &p);
+            let d = pqz_ffi::decode(&inp).expect("split input decodes");
+            assert_eq!(d.stmt.form(), Some(form));
+            assert!(pqzl::verify_fast(form.op(), &s, &p).expect("verify_fast"), "{}: specialised verifier", fname(form));
+            assert!(pqzl::verify_generic(form.op(), &s, &p).expect("verify_generic"), "{}: generic verifier", fname(form));
+            eprintln!("pqzl_split {:16} proof {:6} B", fname(form), p.len());
+            let mut objs = vec![("pk_f", keyref(&kf)), ("pk_t", keyref(&kt))];
+            if aud {
+                objs.push(("pk_a", keyref(&ka)));
+            }
+            objs.extend([("seed_leg", hx(&seed_leg)), ("leg", leg.json()), ("own", own.json())]);
+            o(vec![
+                ("form", J::from(fname(form))),
+                ("op", J::from(form.op())),
+                ("base", o(vec![("file", J::from(sfile(base))), ("form", J::from(fname(base)))])),
+                ("toUA", hx(&to_ua)),
+                ("objects", o(objs)),
+                ("stmt", hx(&s)),
+                ("stmt_keccak", hx(&keccak(&[&s]))),
+                ("wit", hx(&w)),
+                ("wit_keccak", hx(&keccak(&[&w]))),
+                ("rnd32", hx(&rnd)),
+                ("proof_bytes", J::from(p.len())),
+                ("proof_keccak", hx(&keccak(&[&p]))),
+                ("proof_fnv", J::from(fnv(&p))),
+                ("expect", J::from(true)),
+                ("proof", hx(&p)),
+            ])
+        })
+        .collect();
+    file(
+        "proof_pqzl_split.json",
+        "PQZL proofs of the split transfer (spec three-key model K3-4, R_TXS / R_TXS0; UNAUDITED) under PQZL_SPLIT_ID \
+         (set.json pqzl_split_label), from the core (hedged, CTR-PQZ-19), fixed rnd32: deterministic. base: the \
+         scenario's TRANSFER / TRANSFER0 row, whose header (bytes 32..63 = PQZL_SPLIT_ID), pk_f, pk_t, [pk_a] and T \
+         the statement keeps; out = u || v_t || v_f || [v_a] || u_f: the leg's u, v_t, v_a = Enc([pk_t, pk_a], \
+         [value, value], seed_leg), seed_leg = SHAKE256(SCAAS-PQZ-ENC-LEG-V1 || seed_enc || be4(0) || toUA || \
+         keccak256(pk_t))[0..32) (objects.leg.seed_enc), the sender's u_f, v_f = Enc([pk_f], [new balance], seed_enc) \
+         (objects.own). wit (pqz.h PQZ_TXS_WIT_BYTES; R3): s_f || e_f || r || e1 || r_f || e1_f || e2_t || e2_f || \
+         [e2_a] || d || d'. Validity: pqz-vectors (specialised and generic verifier); the precompile serves PQZL_ID only.",
+        vec![
+            ("proof_system_id", hx(&st::PQZL_SPLIT_ID)),
+            ("params", o(vec![("max_proof", J::from(st::MAX_PROOF_PQZL))])),
+            ("rows", J::A(rows)),
+        ],
+    )
+}
+
 fn keygen_file() -> (String, String) {
     let rows = KEYGEN_SEEDS
         .iter()
@@ -2091,6 +2179,7 @@ fn generate() -> (Vec<(String, String)>, bool) {
         ));
     }
     let stmts: Vec<Vec<u8>> = sc.rows.iter().map(|r| r.stmt.clone()).collect();
+    files.push(split_file(&sc));
 
     // proofs: both ids, every form
     let mut proofs: [[Vec<u8>; 8]; 2] = Default::default();

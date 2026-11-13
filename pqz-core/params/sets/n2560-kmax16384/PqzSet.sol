@@ -69,15 +69,15 @@ library PqzSet {
     /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS (16,100 zero bytes: a new account's `acc`, P46)
     bytes32 internal constant ZERO_HASH = 0xdb188caf390e435cf86da66b12d3313c7eeae1c9315e249ce459f39b595b88e5;
     /// the precompile's OP_SELFTEST answer at this set (smartcontracts/vectors/pqz/n2560-kmax16384/selftest.json hash; 0: no vectors yet)
-    bytes32 internal constant SELFTEST = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    bytes32 internal constant SELFTEST = 0xfb14244dbd6a4ca4c44f673ef878937d2437f164246260ef45f427a9f98de1cb;
     /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,
     /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)
-    bytes32 internal constant PROBE_PQZL = 0x0000000000000000000000000000000000000000000000000000000000000000;
-    bytes32 internal constant PROBE_PQZH = 0x0000000000000000000000000000000000000000000000000000000000000000;
+    bytes32 internal constant PROBE_PQZL = 0x68a18820d1ffa6104ba2ea5cb7e0f0f484972fb7d777d22a950d263698074fd3;
+    bytes32 internal constant PROBE_PQZH = 0x7f857f9de41804895f9a6482505e79fbf6207126e972374de2acfbde80ff094a;
     /// the build's set identity (T-26, review 3w u5-4; owner 2026-11-13): keccak256 of the generated constant block,
     /// gen_set.py set_digest: every `<type> [internal ]constant <NAME> = <value>;` of this file but SET_DIGEST, in
     /// file order, as `<type> <NAME> = <value>` joined by one newline (PQZ_ACC_WORDS included)
-    bytes32 internal constant SET_DIGEST = 0x1bc5b39ac4ec89fa1de2535b9a062283bfcf9048520055040022d2c30637ec5c;
+    bytes32 internal constant SET_DIGEST = 0x3b81c722417c12e5e3749360580376883fd48ecb8c64cee5f05f53644982a1a8;
 
     /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f
     /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)
