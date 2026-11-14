@@ -204,7 +204,7 @@ abstract contract ZetherFixture is Test {
 
     /// @dev `units` public units to `to`.
     function _public(NormalZetherToken t, address to, uint256 units) internal virtual {
-        NormalZetherToken(address(t)).mint(to, units);
+        NormalZetherToken(address(t)).mint(to, units, EnvKit.codeUidOf(address(t)));
         minted[address(t)] += units;
     }
 

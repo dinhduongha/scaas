@@ -28,6 +28,7 @@ import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 import {MockERC20} from "../../test/helpers/Mocks.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Group `wraplimits` (group 3l T104; spec 2026-11-10-wrap-limits.md §11): the wrap and unwrap limits on hybrids of
 ///         kinds 1, 5 and 13 (the PQZ kinds in the `OFFCHAIN` verify mode: no PQZ precompile on the local chain), released by
@@ -262,10 +263,11 @@ abstract contract WrapLimitsKit is OnchainBase {
 
     function _setLimitsData(uint256 i, uint256 which) internal view returns (bytes memory) {
         (IWrappedToken.WrapLegLimits[] memory legs, bool n_, bool wl_, bool ul_) = _cfg(which);
+        bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word (CTR-GOV-28)
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(
-            "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,",
-            TAIL, LEG_T, LIMIT_T), tk[i], abi.encode(_legsHash(legs), n_, wl_, ul_));
-        return abi.encodeCall(GovernanceRouter.mtxSetWrapLimits, (e, tk[i], legs, n_, wl_, ul_, s));
+            "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,",
+            TAIL, LEG_T, LIMIT_T), tk[i], abi.encode(_legsHash(legs), n_, wl_, ul_, u));
+        return abi.encodeCall(GovernanceRouter.mtxSetWrapLimits, (e, tk[i], legs, n_, wl_, ul_, u, s));
     }
 
     function _setLimits(uint256 i, uint256 which, string memory kind) internal {
@@ -282,10 +284,11 @@ abstract contract WrapLimitsKit is OnchainBase {
     }
 
     function _memberData(uint256 i, bytes32 who, bool canWrap, bool canUnwrap) internal view returns (bytes memory) {
+        bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word (CTR-GOV-28)
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(
-            "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,", TAIL), tk[i],
-            abi.encode(who, canWrap, canUnwrap));
-        return abi.encodeCall(GovernanceRouter.mtxSetWrapMember, (e, tk[i], who, canWrap, canUnwrap, s));
+            "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,", TAIL), tk[i],
+            abi.encode(who, canWrap, canUnwrap, u));
+        return abi.encodeCall(GovernanceRouter.mtxSetWrapMember, (e, tk[i], who, canWrap, canUnwrap, u, s));
     }
 
     function _role(uint256 i, uint8 bit, address who, bool grant) internal {
@@ -466,7 +469,7 @@ contract WrapLimits is WrapLimitsKit {
     function _p1(uint256 i) internal {
         address t = tk[i];
         (IWrappedToken.WrapLegLimits[] memory legs, bool n_, bool wl_, bool ul_) = _cfg(0);
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapLimits, (legs, n_, wl_, ul_)), false,
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapLimits, (legs, n_, wl_, ul_, IMetaTx(t).chainUid())), false,
             _row("setWrapLimits direct (first, at once)", i, "configuration 0"));
         _wrap(k2, i, 100, "wrap (tracked, first use)");
         // relayed: key 1 signs, key 2 (at its own cap) submits; the signer's quota counts
@@ -547,11 +550,11 @@ contract WrapLimits is WrapLimitsKit {
         (, , bool wl2,,,,,) = IWrappedToken(t).wrapLimits();
         require(wl2, "p3: the wrapper list on");
         _member(i, a2, true, true);
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a1), true, true)), false,
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a1), true, true, IMetaTx(t).chainUid())), false,
             _row("setWrapMember direct", i, vm.toString(a1)));
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a4), false, true)), false,
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a4), false, true, IMetaTx(t).chainUid())), false,
             _row("setWrapMember direct", i, vm.toString(a4)));
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a3), false, true)), false,
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a3), false, true, IMetaTx(t).chainUid())), false,
             _row("setWrapMember direct", i, vm.toString(a3)));
         _wrap(k1, i, 10, "wrap (tracked, listed)");
         _setLimits(i, 3, "router mtxSetWrapLimits (unwrap looser: at once)");
@@ -612,9 +615,11 @@ contract WrapLimits is WrapLimitsKit {
         _save(zero + 30);
     }
 
-    /// p6 (the decay row's H): E is 0; the redeemer revoked through the router, at once.
+    /// p6 (the decay row's H): E is 0; the redeemer revoked through the router, at once. Round 3zc (CTR-GOV-30) on two more
+    /// tokens per kind (`_caps`): the counter and the wrap cap on a pure wrap, the hybrid's cap set direct.
     function p6() external {
         _start("p6", true);
+        for (uint256 i; i < 3; ++i) _caps(i);
         for (uint256 i; i < 3; ++i) {
             IWrappedToken.WrapQuota memory q = _qt(i, a4);
             // b after the H/2 unwrap: 80 Q at E = 50 Q, 79 Q at E = 49 Q (a minute later on that token)
@@ -626,5 +631,51 @@ contract WrapLimits is WrapLimitsKit {
             _nx(a3, i, _unwrapData(a3, 1), _aboveNet(a3, 1), "the revoked redeemer: UnwrapAboveNetWrapped");
         }
         _save(0);
+    }
+
+    function _wrapped(address t) internal view returns (uint256) {
+        return IWrappedToken(t).totalWrapped();
+    }
+
+    /// @dev A pure wrap P with bit 31 (grantDelay 0): `setMaxWrapSupply(200 Q)` direct, at once; `totalWrapped()` after a
+    ///      wrap (100 Q), an unwrap (30 Q), a signature wrap (`mtxWrapLeg` signed by key 1, sent by key 2, 50 Q) and a wrap to
+    ///      the cap (80 Q), each equal to `totalSupply()`; one unit more refused (`MaxWrapSupplyExceeded`, its arguments
+    ///      fixed). A hybrid H with bit 31: `setMaxSupply` direct, at once.
+    function _caps(uint256 i) internal {
+        uint8 sc = GovernanceBits.SUPPLY_CAP_ADJUSTABLE;
+        IFactoryToken.TokenConfig memory c = _tokenCfg(i, uint256(1) << sc, false);
+        c.symbol = string.concat("oWC", _h(i));
+        address t = abi.decode(_tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind(
+            _kind(i)), 1, abi.encode(c), _salt(string.concat("caps", _h(i))))), false, _row("factory createToken", i,
+            "pure wrap, bit 31")), (address));
+        _book(t, _label(i));
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setMaxWrapSupply, (200 * Q, IMetaTx(t).chainUid())), false,
+            _row("setMaxWrapSupply direct (at once)", i, "pure wrap, 200 Q"));
+        require(IWrappedToken(t).maxWrapSupply() == 200 * Q, "caps: the wrap cap set");
+        _tx(k1, address(usd), 0, abi.encodeWithSelector(APPROVE, t, type(uint256).max), false, _row("fund approve", i, vm.toString(a1)));
+        _tx(k2, address(usd), 0, abi.encodeWithSelector(APPROVE, t, type(uint256).max), false, _row("fund approve", i, vm.toString(a2)));
+        _call(k2, t, _wrapData(100), _row("wrap (counted)", i, string.concat(vm.toString(a2), " wraps 100 Q, pure wrap")));
+        require(_wrapped(t) == 100 * Q && IERC20(t).totalSupply() == 100 * Q, "caps: after a wrap");
+        _call(k2, t, _unwrapData(a2, 30), _row("unwrap (counted)", i, string.concat(vm.toString(a2), " unwraps 30 Q, pure wrap")));
+        require(_wrapped(t) == 70 * Q && IERC20(t).totalSupply() == 70 * Q, "caps: after an unwrap");
+        MetaTxLib.Envelope memory e = _aenv(a1, 13, IUALedgerViews(t).mtxNonce(_pad(a1), 13));
+        bytes memory sg = _ecdsa(k1, _namedA(t, WRAP_LEG, abi.encode(address(usd), 50 * Q), e));
+        _tx(k2, t, 0, abi.encodeCall(IWrappedToken.mtxWrapLeg, (e, address(usd), 50 * Q, sg)), false,
+            _row("mtxWrapLeg relayed (counted)", i, string.concat("signed by ", vm.toString(a1), ", 50 Q, pure wrap")));
+        require(_wrapped(t) == 120 * Q && IERC20(t).totalSupply() == 120 * Q, "caps: after a signature wrap");
+        _call(k2, t, _wrapData(80), _row("wrap (counted, to the cap)", i, string.concat(vm.toString(a2), " wraps 80 Q, pure wrap")));
+        require(_wrapped(t) == 200 * Q && IERC20(t).totalSupply() == _wrapped(t), "caps: at the cap, totalWrapped == totalSupply");
+        _log(i, string.concat("caps P ", vm.toString(t), " totalWrapped ", vm.toString(_wrapped(t)), " = totalSupply, cap 200 Q"));
+        _negData(a2, t, _wrapData(1), abi.encodeWithSelector(IWrappedToken.MaxWrapSupplyExceeded.selector, 201 * Q, 200 * Q),
+            string.concat("wraplimits p6 ", _h(i), ": a wrap one quantum over maxWrapSupply: MaxWrapSupplyExceeded"));
+        c = _tokenCfg(i, uint256(1) << sc, true);
+        c.symbol = string.concat("oWCH", _h(i));
+        t = abi.decode(_tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind(_kind(i)), 1,
+            abi.encode(c), _salt(string.concat("capsH", _h(i))))), false, _row("factory createToken", i, "hybrid, bit 31")),
+            (address));
+        _book(t, _label(i));
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setMaxSupply, (2e30, IMetaTx(t).chainUid())), false,
+            _row("setMaxSupply direct (at once)", i, "hybrid, 1e30 -> 2e30"));
+        require(IWrappedToken(t).maxSupply() == 2e30, "caps: the hybrid's cap set");
     }
 }

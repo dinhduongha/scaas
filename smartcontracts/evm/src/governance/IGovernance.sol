@@ -116,6 +116,8 @@ interface IGovernance is IAdmin {
     error NotProposer(uint8 bit, bytes32 account, bytes32 proposer);
     /// @notice One id would hold both `FORCE` (6) and `RECORD` (10) (CTR-AS-03): `bit` is the one being granted.
     error RoleConflict(uint8 bit, bytes32 account);
+    /// @notice Two exclusive flags set at creation (CTR-GOV-29: `BURNER` 30 with `BURNABLE` 2).
+    error FeatureConflict(uint8 bit, uint8 other);
 
     function features() external view returns (uint256);
     function lockedFeatures() external view returns (uint256);

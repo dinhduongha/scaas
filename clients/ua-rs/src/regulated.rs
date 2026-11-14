@@ -11,16 +11,17 @@ const ENVELOPE: &str =
     "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient";
 
 /// The eight ops (spec §3.1) and their params after `bytes32 from,address target`, the direct entry's in order; in
-/// `UAOperatorTransfer` the moved account is `account`, `from` the signer (CTR-GOV-20 Change, owner 2026-11-06).
+/// `UAOperatorTransfer` the moved account is `account`, `from` the signer (CTR-GOV-20 Change, owner 2026-11-06). The Change of
+/// CTR-GOV-28 in round 3zb + 3zc (O6, owner 2026-11-13): each signs the token's chain word last (`chainUid`, one more word).
 pub const REGULATED_OPS: [(&str, &str); 8] = [
-    ("UAFreeze", "bytes32 account,bytes32 ref,bytes32 recordId"),
-    ("UAUnfreeze", "bytes32 account,bytes32 ref"),
-    ("UAForceTransfer", "bytes32 recordId,uint256 amount"),
-    ("UAPause", "bytes32 ref,uint64 until"),
-    ("UAUnpause", "bytes32 ref"),
-    ("UARecordOrder", "bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil"),
-    ("UARevokeOrder", "bytes32 recordId,bytes32 reasonRef"),
-    ("UAOperatorTransfer", "bytes32 account,bytes32 to,uint256 amount,bytes32 ref"),
+    ("UAFreeze", "bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid"),
+    ("UAUnfreeze", "bytes32 account,bytes32 ref,bytes32 chainUid"),
+    ("UAForceTransfer", "bytes32 recordId,uint256 amount,bytes32 chainUid"),
+    ("UAPause", "bytes32 ref,uint64 until,bytes32 chainUid"),
+    ("UAUnpause", "bytes32 ref,bytes32 chainUid"),
+    ("UARecordOrder", "bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid"),
+    ("UARevokeOrder", "bytes32 recordId,bytes32 reasonRef,bytes32 chainUid"),
+    ("UAOperatorTransfer", "bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid"),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -192,15 +193,20 @@ pub fn enableable(features: u64, locked: u64, valid: u64, admin: bool, registry:
     if registry { e } else { e & !(1 << 28) }
 }
 
-/// `UASetAllowed` (`allow`) or `UASetDenied`: bit 8's or bit 9's holder, 1-256 accounts, at once.
+/// `UASetAllowed` (`allow`) or `UASetDenied`: bit 8's or bit 9's holder, 1-256 accounts, at once; `chainUid` the token's chain
+/// word (the Change of CTR-GOV-28 in round 3zb + 3zc).
 pub fn set_list_type(allow: bool) -> String {
-    format!("{}(bytes32 from,address target,bytes32[] accounts,bool on,{ENVELOPE})", if allow { "UASetAllowed" } else { "UASetDenied" })
+    format!("{}(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,{ENVELOPE})",
+        if allow { "UASetAllowed" } else { "UASetDenied" })
 }
 
 /// `hashStruct(UASetAllowed | UASetDenied)`: `accounts` as EIP-712 hashes an array (`keccak256` of its words).
-pub fn set_list_struct_hash(allow: bool, e: &Envelope, target: &[u8; 20], accounts: &[[u8; 32]], on: bool) -> [u8; 32] {
+pub fn set_list_struct_hash(allow: bool, e: &Envelope, target: &[u8; 20], accounts: &[[u8; 32]], on: bool, chain_uid: &[u8; 32])
+    -> [u8; 32]
+{
     let words = keccak(&accounts.iter().map(|a| &a[..]).collect::<Vec<_>>());
-    crate::wraplimit::struct_hash(keccak256(set_list_type(allow).as_bytes()), e, target, &[words, crate::wraplimit::bool_word(on)])
+    crate::wraplimit::struct_hash(keccak256(set_list_type(allow).as_bytes()), e, target,
+        &[words, crate::wraplimit::bool_word(on), *chain_uid])
 }
 
 /// `UAEnableFeature`: the admin switches on 8, 9 or 28; `chainUid` the token's chain word (CTR-GOV-28).

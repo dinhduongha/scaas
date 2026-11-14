@@ -449,8 +449,8 @@ contract WrappedTokenW is WrappedTokenCore {
         _addReserveBody(u, amount);
     }
 
-    function cancelRate() external onlyDelegated {
-        _cancelRateBody();
+    function cancelRate(bytes32 chainUid_) external onlyDelegated {
+        _cancelRateBody(chainUid_);
     }
 
     function collateralValue() external view onlyDelegated returns (uint256 _p0) {
@@ -461,12 +461,12 @@ contract WrappedTokenW is WrappedTokenCore {
         _disableFeatureBody(bit, chainUid_);
     }
 
-    function disableWrap(address u, bytes32 reason) external onlyDelegated {
-        _disableWrapBody(u, reason);
+    function disableWrap(address u, bytes32 reason, bytes32 chainUid_) external onlyDelegated {
+        _disableWrapBody(u, reason, chainUid_);
     }
 
-    function executeRate() external onlyDelegated {
-        _executeRateBody();
+    function executeRate(bytes32 chainUid_) external onlyDelegated {
+        _executeRateBody(chainUid_);
     }
 
     function legOf(address u) external view onlyDelegated returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled) {
@@ -481,12 +481,16 @@ contract WrappedTokenW is WrappedTokenCore {
         return _maxSupplyBody();
     }
 
-    function mint(address to, uint256 amount) external onlyDelegated {
-        _mintBody(to, amount);
+    function maxWrapSupply() external view onlyDelegated returns (uint256 _p0) {
+        return _maxWrapSupplyBody();
     }
 
-    function mintToUA(bytes32 to, uint256 amount) external onlyDelegated {
-        _mintToUABody(to, amount);
+    function mint(address to, uint256 amount, bytes32 chainUid_) external onlyDelegated {
+        _mintBody(to, amount, chainUid_);
+    }
+
+    function mintToUA(bytes32 to, uint256 amount, bytes32 chainUid_) external onlyDelegated {
+        _mintToUABody(to, amount, chainUid_);
     }
 
     function mtxAddReserve(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig) external onlyDelegated returns (bytes memory _p0) {
@@ -521,6 +525,10 @@ contract WrappedTokenW is WrappedTokenCore {
         return _pendingRateBody();
     }
 
+    function pendingSupplyCaps() external view onlyDelegated returns (uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive) {
+        return _pendingSupplyCapsBody();
+    }
+
     function previewUnwrap(address u, uint256 wrapped) external view onlyDelegated returns (uint256 out, uint256 burned) {
         return _previewUnwrapBody(u, wrapped);
     }
@@ -529,8 +537,8 @@ contract WrappedTokenW is WrappedTokenCore {
         return _previewWrapBody(u, amount);
     }
 
-    function proposeRate(address u, uint96 num, uint96 den) external onlyDelegated {
-        _proposeRateBody(u, num, den);
+    function proposeRate(address u, uint96 num, uint96 den, bytes32 chainUid_) external onlyDelegated {
+        _proposeRateBody(u, num, den, chainUid_);
     }
 
     function rateAdjustable() external view onlyDelegated returns (bool _p0) {
@@ -545,12 +553,28 @@ contract WrappedTokenW is WrappedTokenCore {
         _rescueBody(asset);
     }
 
-    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList) external onlyDelegated {
-        _setWrapLimitsBody(legs, netUnwrap, wrapList, unwrapList);
+    function reserveValue() external view onlyDelegated returns (uint256 _p0) {
+        return _reserveValueBody();
     }
 
-    function setWrapMember(bytes32 account, bool canWrap, bool canUnwrap) external onlyDelegated {
-        _setWrapMemberBody(account, canWrap, canUnwrap);
+    function setMaxSupply(uint256 newMaxSupply, bytes32 chainUid_) external onlyDelegated {
+        _setMaxSupplyBody(newMaxSupply, chainUid_);
+    }
+
+    function setMaxWrapSupply(uint256 newMaxWrapSupply, bytes32 chainUid_) external onlyDelegated {
+        _setMaxWrapSupplyBody(newMaxWrapSupply, chainUid_);
+    }
+
+    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 chainUid_) external onlyDelegated {
+        _setWrapLimitsBody(legs, netUnwrap, wrapList, unwrapList, chainUid_);
+    }
+
+    function setWrapMember(bytes32 account, bool canWrap, bool canUnwrap, bytes32 chainUid_) external onlyDelegated {
+        _setWrapMemberBody(account, canWrap, canUnwrap, chainUid_);
+    }
+
+    function totalWrapped() external view onlyDelegated returns (uint256 _p0) {
+        return _totalWrappedBody();
     }
 
     function underlying() external view onlyDelegated returns (address _p0) {

@@ -10,6 +10,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A contract party: it holds the token and pays several recipients in one call (spec A21, Fable R-5: a `Distribution`-like
 /// payout reverts as a whole when one recipient is blocked by a list).
@@ -113,9 +114,9 @@ contract ListsTest is ListFixture {
             (address t, uint8 bit) = _each(k);
             _block(t, bit, b);
             vm.expectRevert(_err(bit, b));
-            NormalToken(t).mint(bob, 1);
+            NormalToken(t).mint(bob, 1, EnvKit.codeUidOf(address(t)));
             _open(t, bit, b);
-            NormalToken(t).mint(bob, 1);
+            NormalToken(t).mint(bob, 1, EnvKit.codeUidOf(address(t)));
         }
     }
 
@@ -189,12 +190,12 @@ contract ListsTest is ListFixture {
             _freeze(t, a);
             _block(t, bit, a);
             vm.prank(issuer);
-            _r(t).forceTransfer(r, 10); // the blocked subject: not checked
+            _r(t).forceTransfer(r, 10, EnvKit.codeUidOf(t)); // the blocked subject: not checked
             assertEq(IERC20(t).balanceOf(bob), 10);
             _block(t, bit, b);
             vm.prank(issuer);
             vm.expectRevert(_err(bit, b));
-            _r(t).forceTransfer(r, 10);
+            _r(t).forceTransfer(r, 10, EnvKit.codeUidOf(t));
         }
     }
 

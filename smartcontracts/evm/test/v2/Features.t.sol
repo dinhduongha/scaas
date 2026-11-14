@@ -106,21 +106,21 @@ contract FeaturesTest is Test {
         NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, minter, 0));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), alice));
-        t.mint(alice, 1);
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
-        t.mint(alice, 5);
+        t.mint(alice, 5, EnvKit.codeUidOf(address(t)));
         assertEq(t.balanceOf(alice), 5);
         vm.prank(ownerA);
         t.disableFeature(1, EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
-        t.mint(alice, 1);
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));
     }
 
     function test_mint_withoutTheFlag_fixedSupply() public {
         NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 7));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
-        t.mint(alice, 1);
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));
         assertEq(t.totalSupply(), 7);
     }
 
@@ -202,7 +202,7 @@ contract FeaturesTest is Test {
         emit IGovernance.RoleGranted(1, nid(minter), nid(ownerA));
         t.grantRole(1, nid(minter), EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
-        t.mint(alice, 3);
+        t.mint(alice, 3, EnvKit.codeUidOf(address(t)));
         vm.prank(ownerA);
         t.transferAdmin(nid(address(0x0B)), EnvKit.codeUidOf(address(t)));
         vm.prank(address(0x0B));
@@ -212,12 +212,12 @@ contract FeaturesTest is Test {
         t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
         vm.prank(minter);
-        t.mint(alice, 1);                                     // holders keep their role after the owner renounces
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));                                     // holders keep their role after the owner renounces
         vm.prank(minter);
         t.renounceRole(1, EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));
-        t.mint(alice, 1);
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));
     }
 
     function test_adminFunctionsAreNeverSelfCalls() public {

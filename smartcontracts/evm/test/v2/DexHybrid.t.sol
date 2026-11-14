@@ -16,6 +16,7 @@ import {MockRouter, MockExecutor, Hostile} from "./DexExchange.t.sol";
 import {FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {HybridHarness} from "../helpers/HybridHarness.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A stand-in `o.dex` for `restorePulled` (DX7): pulls an order through the token's `mtxTrade` / `uaTrade` and gives
 /// part of it back, in one call or in separate ones (each top-level call of a test is its own transaction).
@@ -264,8 +265,8 @@ contract DexHybridTest is UADexBase {
     function test_hybrid_marketNotListed() public {
         dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0,
             address(0), 1 << 29, 0)), "closed"));
-        dex.setMarket(address(A), address(B), true);
-        dex.setMarket(address(A), address(B), false);
+        dex.setMarket(address(A), address(B), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(A), address(B), false, EnvKit.codeUidOf(address(dex)));
         _expect(_base(), _route(600, 1150),
             abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(A), address(B)));
     }
@@ -529,12 +530,12 @@ contract DexHybridTest is UADexBase {
         vm.prank(RELAYER);
         vm.expectRevert(_err(ISCaaSDex.TargetNotListed.selector, address(e)));
         dex.mtxHybridVia(p, address(e), abi.encode(int256(0)));
-        dex.setListedOnly(true);
+        dex.setListedOnly(true, EnvKit.codeUidOf(address(dex)));
         ISCaaSDex.HybridPlan memory q = _base();
         vm.prank(RELAYER);
         vm.expectRevert(_err(ISCaaSDex.TargetNotListed.selector, address(e)));
         dex.mtxHybridVia(q, address(e), abi.encode(int256(0)));
-        dex.setExchangeTarget(address(e), true);
+        dex.setExchangeTarget(address(e), true, EnvKit.codeUidOf(address(dex)));
         vm.prank(RELAYER);
         dex.mtxHybridVia(p, address(e), abi.encode(int256(0)));
         assertEq(A.balanceOf(bob), 399);
@@ -940,7 +941,7 @@ contract DexHybridTest is UADexBase {
         address puller = dex.puller();
         vm.prank(dave);
         fot.approve(puller, type(uint256).max);
-        dex.setMarket(address(A), address(fot), true);
+        dex.setMarket(address(A), address(fot), true, EnvKit.codeUidOf(address(dex)));
         vm.prank(alice);
         A.transfer(address(router), 1000);
         // the taker sells it

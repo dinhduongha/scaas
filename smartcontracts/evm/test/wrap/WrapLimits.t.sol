@@ -51,11 +51,11 @@ contract WrapLimitsTest is WrapLimitsBase {
         assertEq(und.balanceOf(address(w)), 0, "nothing pulled");
         _grant(w, WLIST, LISTER);
         vm.prank(LISTER);
-        w.setWrapMember(_pad(bob), true, false);
+        w.setWrapMember(_pad(bob), true, false, EnvKit.codeUidOf(address(w)));
         _wrap(w, bob, 10); // positive control
         // the payer, never the receiver: an unlisted payer into a listed UA is refused
         vm.prank(LISTER);
-        w.setWrapMember(uaP, true, true);
+        w.setWrapMember(uaP, true, true, EnvKit.codeUidOf(address(w)));
         _fundW(w, alice, 10);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapperNotListed.selector, _pad(alice)));
         vm.prank(alice);
@@ -73,20 +73,20 @@ contract WrapLimitsTest is WrapLimitsBase {
         _unwrapRev(w, alice, 10, abi.encodeWithSelector(IWrappedToken.UnwrapperNotListed.selector, _pad(alice)));
         _grant(w, WLIST, LISTER);
         vm.prank(LISTER);
-        w.setWrapMember(_pad(bob), false, true);
+        w.setWrapMember(_pad(bob), false, true, EnvKit.codeUidOf(address(w)));
         // a listed recipient does not help
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapperNotListed.selector, _pad(alice)));
         vm.prank(alice);
         w.unwrap(u, 10, bob, 0);
         vm.prank(LISTER);
-        w.setWrapMember(_pad(alice), false, true);
+        w.setWrapMember(_pad(alice), false, true, EnvKit.codeUidOf(address(w)));
         _unwrap(w, alice, 10); // positive control
         // a derived UA is read as itself
         vm.prank(alice);
         w.transferToUA(uaP, 50);
         _uaUnwrap(w, uaP, 10, abi.encodeWithSelector(IWrappedToken.UnwrapperNotListed.selector, uaP));
         vm.prank(LISTER);
-        w.setWrapMember(uaP, false, true);
+        w.setWrapMember(uaP, false, true, EnvKit.codeUidOf(address(w)));
         _uaUnwrap(w, uaP, 10, "");
         assertEq(und.balanceOf(bob), 10);
     }
@@ -169,7 +169,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         else a[0].unwrapLong = x;
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapLimitInvalid.selector, u, limit));
         vm.prank(OWNER);
-        w.setWrapLimits(a, false, false, false);
+        w.setWrapLimits(a, false, false, false, EnvKit.codeUidOf(address(w)));
     }
 
     /// Row 6, row 32 (R26's bounds): a period of whole minutes in [1, 2^20 − 1] when a part is on, else 0; `perUser ≤ 2^19 − 1`.
@@ -290,7 +290,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         _set(w, _cfg1(0, 0, L(10, 0, DAY), OFF(), OFF(), OFF()), true, false, false);
         _wrap(w, bob, 10); // a reserve to unwrap from
         vm.prank(MINTER);
-        w.mint(alice, 100);
+        w.mint(alice, 100, EnvKit.codeUidOf(address(w)));
         IWrappedToken.WrapQuota memory q = _q(w, alice);
         assertEq(q.netWrapped, 0);
         assertEq(q.wrapShort.left, 10);
@@ -436,7 +436,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         assertTrue(live);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotReady.selector, WL, bytes32(0), eta));
         vm.prank(OWNER);
-        w.setWrapLimits(_cfg1(0, 0, L(100, 0, 2 * DAY), OFF(), OFF(), OFF()), false, false, false);
+        w.setWrapLimits(_cfg1(0, 0, L(100, 0, 2 * DAY), OFF(), OFF(), OFF()), false, false, false, EnvKit.codeUidOf(address(w)));
         vm.warp(eta);
         _ws(w, L(100, 0, 2 * DAY)); // confirmed
         assertEq(_perUser(w, 0), 100);
@@ -474,7 +474,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         w.acceptAdmin();
         vm.warp(eta);
         vm.prank(next);
-        w.setWrapLimits(_cfg1(0, 0, L(100, 0, DAY), OFF(), OFF(), OFF()), false, false, false);
+        w.setWrapLimits(_cfg1(0, 0, L(100, 0, DAY), OFF(), OFF(), OFF()), false, false, false, EnvKit.codeUidOf(address(w)));
         assertEq(_perUser(w, 0), 50, "proposed again under the new generation, not applied");
     }
 
@@ -554,12 +554,12 @@ contract WrapLimitsTest is WrapLimitsBase {
         IWrappedToken.WrapLegLimits[] memory a = _cfg1(37, 0, OFF(), OFF(), OFF(), OFF());
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapUnitInvalid.selector, u, uint8(37)));
         vm.prank(OWNER);
-        w.setWrapLimits(a, false, false, false);
+        w.setWrapLimits(a, false, false, false, EnvKit.codeUidOf(address(w)));
         _set(w, _cfg1(2, 0, OFF(), OFF(), OFF(), OFF()), false, false, false);
         a = _cfg1(3, 0, OFF(), OFF(), OFF(), OFF());
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapUnitInvalid.selector, u, uint8(3)));
         vm.prank(OWNER);
-        w.setWrapLimits(a, false, false, false);
+        w.setWrapLimits(a, false, false, false, EnvKit.codeUidOf(address(w)));
         _set(w, _cfg1(2, 0, L(1, 0, DAY), OFF(), OFF(), OFF()), false, false, false); // the same unit passes
     }
 
@@ -604,23 +604,23 @@ contract WrapLimitsTest is WrapLimitsBase {
         IWrappedToken.WrapLegLimits[] memory a = _cfg1(0, 0, L(1, 0, DAY), OFF(), OFF(), OFF());
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, WL));
         vm.prank(OWNER);
-        w.setWrapLimits(a, false, false, false);
+        w.setWrapLimits(a, false, false, false, EnvKit.codeUidOf(address(w)));
         a = _cfg1(0, 0, OFF(), OFF(), OFF(), OFF());
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, WL));
         vm.prank(OWNER);
-        w.setWrapLimits(a, true, false, false);
+        w.setWrapLimits(a, true, false, false, EnvKit.codeUidOf(address(w)));
         _set(w, a, false, true, false); // positive control: the list alone
         assertEq(_ctl(w, 0), WrappedLib.CTL_WLIST, "no tracking without bit 25");
         w = _hybWith(1 | (uint256(1) << GovernanceBits.MINTABLE) | (uint256(1) << WL), u, 1);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, WLIST));
         vm.prank(OWNER);
-        w.setWrapLimits(a, false, false, true);
+        w.setWrapLimits(a, false, false, true, EnvKit.codeUidOf(address(w)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, WLIST, _pad(OWNER)));
         vm.prank(OWNER);
-        w.setWrapMember(_pad(bob), true, true); // no holder of bit 26 can exist without it
+        w.setWrapMember(_pad(bob), true, true, EnvKit.codeUidOf(address(w))); // no holder of bit 26 can exist without it
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, _pad(bob)));
         vm.prank(bob);
-        w.setWrapLimits(a, false, false, false);
+        w.setWrapLimits(a, false, false, false, EnvKit.codeUidOf(address(w)));
     }
 
     /// Row 19: the normal kind refuses the three bits (kind 0 here; the confidential and regulated kinds in WrapLimitsKinds).
@@ -664,7 +664,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         a[0].underlying = address(und2);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapLegMismatch.selector, 0, address(und2)));
         vm.prank(OWNER);
-        w.setWrapLimits(a, true, false, false);
+        w.setWrapLimits(a, true, false, false, EnvKit.codeUidOf(address(w)));
     }
 
     function test_r21_copiesOnEveryLeg() public {

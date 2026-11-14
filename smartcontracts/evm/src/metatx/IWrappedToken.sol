@@ -84,6 +84,11 @@ interface IWrappedToken {
     event WrapLimitsProposed(bytes32 indexed by, uint64 eta, WrapLegLimits[] legs, bool netUnwrap, bool wrapList,
         bool unwrapList);
     event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
+    /// @notice Round 3zc (CTR-GOV-30): a cap change proposed (applies at `eta`, in `[eta, eta + grantDelay]`) or applied.
+    event MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta);
+    event MaxSupplySet(bytes32 indexed by, uint256 oldMaxSupply, uint256 newMaxSupply);
+    event MaxWrapSupplyProposed(bytes32 indexed by, uint256 maxWrapSupply, uint64 eta);
+    event MaxWrapSupplySet(bytes32 indexed by, uint256 oldMaxWrapSupply, uint256 newMaxWrapSupply);
 
     error UnderlyingInvalid(address u);
     error DecimalsUnreadable(address u);
@@ -145,6 +150,15 @@ interface IWrappedToken {
     error WrapControlActive(uint8 bit);
     /// @notice An unwrap check with no subject (`holder == 0`) on a token with a wrap control on.
     error WrapSubjectZero();
+    /// @notice Round 3zc (CTR-GOV-30): a wrap would bring `totalWrapped()` to `totalWrapped` above a non-zero `maxWrapSupply`.
+    error MaxWrapSupplyExceeded(uint256 totalWrapped, uint256 maxWrapSupply);
+    /// @notice Creation: a non-zero `maxWrapSupply` above a non-zero `maxSupply`.
+    error MaxWrapSupplyInvalid();
+    /// @notice A cap change's floors, checked at its apply against the state then.
+    error MaxSupplyBelowSupply(uint256 maxSupply, uint256 totalSupply);
+    error MaxSupplyBelowWrapCap(uint256 maxSupply, uint256 maxWrapSupply);
+    error MaxWrapSupplyBelowWrapped(uint256 maxWrapSupply, uint256 totalWrapped);
+    error MaxWrapSupplyAboveMaxSupply(uint256 maxWrapSupply, uint256 maxSupply);
 
     function wrap(uint256 amount) external payable returns (uint256 minted);
     function wrap(address underlying, uint256 amount) external payable returns (uint256 minted);
@@ -179,19 +193,28 @@ interface IWrappedToken {
         uint256 minOut, IUARegistry.UASig calldata auth) external returns (bytes memory);
     function mtxUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address underlying, uint256 wrapped, bytes32 to, uint256 minOut,
         IUARegistry.UASig calldata auth) external returns (bytes memory);
-    /// @notice A hybrid's issuer (spec §5.2): `MINTABLE` and its holder, under `maxSupply`, into a public balance.
-    function mint(address to, uint256 amount) external;
-    function mintToUA(bytes32 to, uint256 amount) external;
-    function disableWrap(address underlying, bytes32 reason) external;
-    function proposeRate(address underlying, uint96 num, uint96 den) external;
-    function cancelRate() external;
-    function executeRate() external;
+    /// @notice A hybrid's issuer (spec §5.2): `MINTABLE` and its holder, under `maxSupply`, into a public balance. Every role
+    ///         holder's direct entry names the token's chain word `chainUid_` (CTR-GOV-28 Change, round 3zb + 3zc): a holder
+    ///         with another word is refused (`ChainUidMismatch`) before any write; a caller without the power keeps its
+    ///         refusal of before.
+    function mint(address to, uint256 amount, bytes32 chainUid_) external;
+    function mintToUA(bytes32 to, uint256 amount, bytes32 chainUid_) external;
+    function disableWrap(address underlying, bytes32 reason, bytes32 chainUid_) external;
+    function proposeRate(address underlying, uint96 num, uint96 den, bytes32 chainUid_) external;
+    function cancelRate(bytes32 chainUid_) external;
+    function executeRate(bytes32 chainUid_) external;
     /// @notice Group 3l (§6): the owner's limits of every leg (in leg order), the net rule and the two lists; a wrap-side
     ///         relaxation or an unwrap-side tightening waits the factory's `noticePeriod()` (two calls), the rest applies
-    ///         at once. Reached through `GovernanceRouter`.
-    function setWrapLimits(WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList) external;
+    ///         at once. Reached through `GovernanceRouter`. The admin, then the chain word (CTR-GOV-28), before any write.
+    function setWrapLimits(WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 chainUid_)
+        external;
     /// @notice Bit 26's holder: `account`'s membership of the wrapper and unwrapper lists, at once.
-    function setWrapMember(bytes32 account, bool canWrap, bool canUnwrap) external;
+    function setWrapMember(bytes32 account, bool canWrap, bool canUnwrap, bytes32 chainUid_) external;
+    /// @notice Round 3zc (CTR-GOV-30), bit 31: the admin changes a hybrid's `maxSupply` (never to 0) or any wrapped kind's
+    ///         `maxWrapSupply` (0: no wrap cap), both directions, after the token's `grantDelay` in two calls of the same
+    ///         value (the first proposes; a `grantDelay` of 0 applies at once); the floors checked at the apply.
+    function setMaxSupply(uint256 newMaxSupply, bytes32 chainUid_) external;
+    function setMaxWrapSupply(uint256 newMaxWrapSupply, bytes32 chainUid_) external;
 
     function underlying() external view returns (address);
     function underlyings() external view returns (address[] memory);
@@ -200,6 +223,14 @@ interface IWrappedToken {
     function collateralValue() external view returns (uint256);
     /// @notice The hybrid's cap on `totalSupply()`, wraps included; 0 = not a hybrid, fully backed (spec §5.5).
     function maxSupply() external view returns (uint256);
+    /// @notice Round 3zc (CTR-GOV-30): the wrap cap (0 = none) and the wrapped units outstanding through wraps, all legs.
+    function maxWrapSupply() external view returns (uint256);
+    function totalWrapped() external view returns (uint256);
+    /// @notice Σ ⌊reserve_i · q_i⌋ over the legs (`collateralValue()`'s sum), to compare with `totalSupply()`.
+    function reserveValue() external view returns (uint256);
+    /// @notice The pending cap changes; `…Live` false past the window, after a change of admin, or with bit 31 not set.
+    function pendingSupplyCaps() external view returns (uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive,
+        uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive);
     function previewWrap(address u, uint256 amount) external view returns (uint256 minted, uint256 used);
     function previewUnwrap(address u, uint256 wrapped) external view returns (uint256 out, uint256 burned);
     function rateAdjustable() external view returns (bool);

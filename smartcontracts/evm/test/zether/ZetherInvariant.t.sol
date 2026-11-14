@@ -20,6 +20,7 @@ import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol"
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Random shield / wrap-shield / transfer / roll-over / unshield / unshield-unwrap / unwrap / rate-change sequences on one
 /// `WRAPPED_ZETHER` token (legs 1:1 and 3/7, rate-adjustable, bn254, no auditor), real proofs; the plaintext balances
@@ -260,10 +261,10 @@ contract ZetherHandler is ZetherFixture {
         // Down rounds up: a floored down-step at bps = maxRateStepBps overshoots it (RateStepTooLarge).
         uint256 nn = up ? sn * (10_000 + bps) / 10_000 : (sn * (10_000 - bps) + 9_999) / 10_000;
         if (nn == 0 || nn > type(uint96).max || sd > type(uint96).max) return;
-        w.proposeRate(address(leg[l]), uint96(nn), uint96(sd));
+        w.proposeRate(address(leg[l]), uint96(nn), uint96(sd), EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 2 days);
-        try w.executeRate() {} catch {
-            w.cancelRate();
+        try w.executeRate(EnvKit.codeUidOf(address(w))) {} catch {
+            w.cancelRate(EnvKit.codeUidOf(address(w)));
         }
         require(w.collateralValue() >= w.totalSupply(), "rate broke the invariant");
     }

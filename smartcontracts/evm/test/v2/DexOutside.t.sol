@@ -131,6 +131,24 @@ contract Reenter {
     }
 }
 
+/// Round 3zb + 3zc (O8, Fable F-3): the four power entries now in SCaaSDexGovernanceModule, called from inside a settlement
+/// (a hook token's pull): each stub runs the guard before the module, so each is refused `ReentrancyGuardReentrantCall`
+/// (a stub on `_forwardRaw` would reach the module's role check instead). Its own hook: the settlement's gas stays as above.
+contract ReenterPowers {
+    ISCaaSDex immutable dex;
+    bytes4[] public errs;
+    constructor(ISCaaSDex d) { dex = d; }
+    function n() external view returns (uint256) { return errs.length; }
+    function hook() external {
+        if (errs.length != 0) return;
+        bytes32 u = bytes32(0);
+        try dex.setMarket(address(1), address(2), true, u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setExchangeTarget(address(1), true, u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setListedOnly(true, u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setFeeSplit(1, address(1), u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+    }
+}
+
 /// Outside-token legs (CTR-DEX-18, -22, -08, -02): the same `TradeOrder` signed in the DEX's domain as `DexOrder`, the
 /// token's checks run by the DEX on its own state, the fill pulled through the `DexPuller` under the party's allowance
 /// to the puller, `ESCROW` refused, cancels per DEX, the ERC-1271 cap by codehash, a bounded `MatchFailed` reason, a
@@ -167,7 +185,7 @@ contract DexOutsideTest is Test {
 
     function _list(MockERC20 t) internal returns (MockERC20) {
         vm.prank(admin);
-        dex.setMarket(address(a), address(t), true);
+        dex.setMarket(address(a), address(t), true, EnvKit.codeUidOf(address(dex)));
         return t;
     }
 
@@ -403,7 +421,7 @@ contract DexOutsideTest is Test {
     function test_noReturnValueToken_settles() public {
         NoReturnERC20 t = new NoReturnERC20();
         vm.prank(admin);
-        dex.setMarket(address(a), address(t), true);
+        dex.setMarket(address(a), address(t), true, EnvKit.codeUidOf(address(dex)));
         t.mint(dave, 5000);
         address p = dex.puller();
         vm.prank(dave);
@@ -421,7 +439,7 @@ contract DexOutsideTest is Test {
     function test_fallbackOnlyToken_isOutside_andFails() public {
         address fb = address(new FallbackOnly());
         vm.prank(admin);
-        dex.setMarket(address(a), fb, true);
+        dex.setMarket(address(a), fb, true, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.tokenKind(fb), 2);
         DexLegs.Settlement[] memory ss = _one(_settlement(_dave(fb, 1, 2000), 1));
         vm.prank(relayer);
@@ -451,7 +469,7 @@ contract DexOutsideTest is Test {
     function test_returnbombToken_reasonIsBounded_othersSettle() public {
         address bomb = address(new BombERC20());
         vm.prank(admin);
-        dex.setMarket(address(a), bomb, true);
+        dex.setMarket(address(a), bomb, true, EnvKit.codeUidOf(address(dex)));
         DexLegs.Settlement[] memory ss = _two(
             _settlement(_dave(bomb, 1, 2000), 1), _settlement(_dave(address(usdc), 2, 2000), 2));
         vm.recordLogs();
@@ -776,6 +794,22 @@ contract DexOutsideTest is Test {
         assertEq(r.errs(3), ISCaaSDex.NotSelf.selector);
         assertEq(r.errs(4), guard);
         assertEq(r.errs(5), guard);
+    }
+
+    /// Round 3zb + 3zc (O8, Fable F-3): the four moved power entries, re-entered during a pull, each refused by the guard.
+    function test_hookTokenReentry_powerEntriesRefused() public {
+        HookERC20 hk = new HookERC20();
+        _list(MockERC20(address(hk)));
+        _fund(MockERC20(address(hk)), dave);
+        ReenterPowers r = new ReenterPowers(ISCaaSDex(address(dex)));
+        hk.setHook(address(r));
+        DexLegs.Settlement[] memory ss = _one(_settlement(_dave(address(hk), 1, 2000), 1));
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
+        assertTrue(ok[0]);
+        assertEq(r.n(), 4);
+        bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
+        for (uint256 i; i < 4; ++i) assertEq(r.errs(i), guard, "a power entry inside a settlement (O8)");
     }
 
     /// `SigCheckGasStarved` raised by a SCaaS token's own check (Path A taker that is a `SmartKeyAccount` clone, so the

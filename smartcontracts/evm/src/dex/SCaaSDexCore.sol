@@ -105,6 +105,25 @@ abstract contract SCaaSDexCore {
         return v != 0;
     }
 
+    /// @dev A market's key, either order (CTR-TOK-30 Change, O8: one definition for the DEX and its governance module).
+    function _pair(address a, address b) internal pure returns (bytes32) {
+        return a < b ? keccak256(abi.encode(a, b)) : keccak256(abi.encode(b, a));
+    }
+
+    /// @dev The fee split (`initialize` in the DEX, `setFeeSplit` in the governance module): `address(this)` is the DEX on
+    ///      both sides (DELEGATECALL).
+    function _setFeeSplit(DexStorage storage s, uint32 ppm, address t) internal {
+        if (ppm > PPM || (ppm < PPM && (t == address(0) || t == address(this)))) revert ISCaaSDex.FeeSplitInvalid(ppm, t);
+        s.relayerSharePpm = ppm;
+        s.treasury = t;
+        emit ISCaaSDex.FeeSplitSet(ppm, t);
+    }
+
+    /// @dev The `tokenKind` view's record: `_scaas` at `setMarket`; every decision reads `_scaas` at use.
+    function _classify(address token) internal view returns (uint8) {
+        return _scaas(token) ? KIND_SCAAS : KIND_OUTSIDE;
+    }
+
     /// @dev A SCaaS token (the factory at use) whose UA ledger is on.
     function _ledgerOn(address token) internal view returns (bool) {
         return _scaas(token) && IUALedger(token).registry() != address(0);

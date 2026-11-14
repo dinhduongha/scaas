@@ -57,7 +57,7 @@ contract Sweeper7702Test is MandateFixture {
         u.approve(address(wt), 100);
         wt.wrap(100);
         vm.stopPrank();
-        t.mint(owner, 500);
+        t.mint(owner, 500, EnvKit.codeUidOf(address(t)));
         vm.etch(owner, abi.encodePacked(hex"ef0100", address(sweeper))); // the phished authorization
     }
 
@@ -73,7 +73,7 @@ contract Sweeper7702Test is MandateFixture {
         _swept(address(v), abi.encodeCall(IERC20Payment.payWithFee, (attacker, 1_000, FeeMode.NONE, 0, address(0),
             PayMetaKit.ref(0), PayMetaKit.meta(0))));
         _swept(address(v), abi.encodeCall(IERC20.approve, (address(sweeper), 1_000)));
-        _swept(address(v), abi.encodeCall(NormalToken.mint, (attacker, 1e9)));
+        _swept(address(v), abi.encodeCall(NormalToken.mint, (attacker, 1e9, EnvKit.codeUidOf(address(v)))));
         _swept(address(v), abi.encodeCall(IAdmin.transferAdmin, (nid(attacker), EnvKit.codeUidOf(address(v)))));
         _swept(address(v), abi.encodeCall(IMetaTx.cancelNonce, (0)));
         _swept(address(wt), abi.encodeWithSignature("unwrap(uint256,address)", 100, attacker));

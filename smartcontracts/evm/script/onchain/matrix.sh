@@ -62,9 +62,9 @@ tgt=${2:?target}
 OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix}
 export MATRIX_OUT=$OUTD
 mkdir -p "$OUTD"
-# the entry list (coverage.py gen at pqz-three-keys step 7c: the scoped registry, mtxRollOverSigned, pqzSkipped, the moved
-# PqzTransferArgs selectors), never an earlier list
-[ -f "$OUTD/coverage.json" ] || cp runs/2026-11-14-pqz-three-keys-7c/coverage.json "$OUTD/coverage.json"
+# the entry list (coverage.py gen at burner-wrap-caps, round 3zb + 3zc: the BURNER bit, the supply caps' setters, views and
+# router ops, the holder entries with the chain word; was pqz-three-keys step 7c's), never an earlier list
+[ -f "$OUTD/coverage.json" ] || cp runs/2026-11-15-burner-wrap-caps-entries/coverage.json "$OUTD/coverage.json"
 LOG=$OUTD/matrix-$tgt.log
 GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers pqchat rescue pqzkeys pqzwallet views wraplimits}
 T=$(mktemp -d)

@@ -78,10 +78,10 @@ contract GovDexHolder {
 
     function hook() external {
         if (errs.length != 0) return;
-        try dex.setMarket(address(0x51), address(0x52), true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setExchangeTarget(address(0x53), true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setListedOnly(true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setFeeSplit(0, address(0xAA)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setMarket(address(0x51), address(0x52), true, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setExchangeTarget(address(0x53), true, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setListedOnly(true, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setFeeSplit(0, address(0xAA), EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
     }
 }
 
@@ -151,13 +151,13 @@ contract GovGrantTest is Test {
 
     function _mint(address who, uint256 v) internal {
         vm.prank(who);
-        t.mint(TO, v);
+        t.mint(TO, v, EnvKit.codeUidOf(address(t)));
     }
 
     function _refused(address who, uint256 v, bytes memory err) internal {
         vm.prank(who);
         vm.expectRevert(err);
-        t.mint(TO, v);
+        t.mint(TO, v, EnvKit.codeUidOf(address(t)));
     }
 
     function _ex(uint8 field) internal pure returns (bytes memory) {
@@ -223,7 +223,7 @@ contract GovGrantTest is Test {
         _set(MANAGER, g);
         vm.prank(MANAGER);
         vm.expectRevert(_ex(1));
-        t.mintToUA(bytes32(uint256(1) << 200), 6);
+        t.mintToUA(bytes32(uint256(1) << 200), 6, EnvKit.codeUidOf(address(t)));
     }
 
     function test_editNeverRefreshesABudget() public {
@@ -374,7 +374,7 @@ contract GovGrantTest is Test {
         vm.stopPrank();
         assertEq(l.admin(), bytes32(0));
         vm.prank(MANAGER);
-        l.mint(TO, 1);
+        l.mint(TO, 1, EnvKit.codeUidOf(address(l)));
     }
 
     function test_renounceWithADisabledBitsHolder() public {
@@ -525,7 +525,7 @@ contract GovGrantTest is Test {
         assertEq(n.admin(), bytes32(0));
         assertTrue(n.hasRole(MINT, nid(MANAGER)));
         vm.prank(MANAGER);
-        n.mint(TO, 1);
+        n.mint(TO, 1, EnvKit.codeUidOf(address(n)));
     }
 
     function _wrapped(bytes32 salt) internal returns (WrappedToken) {
@@ -562,7 +562,7 @@ contract GovGrantTest is Test {
         vm.warp(block.timestamp + 2 hours);
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExpired.selector, GovernanceBits.WRAP_DISABLEABLE, MANAGER));
-        w.disableWrap(address(usd), bytes32(uint256(1)));
+        w.disableWrap(address(usd), bytes32(uint256(1)), EnvKit.codeUidOf(address(w)));
     }
 
     function test_dexPowerIsBound() public {
@@ -574,13 +574,13 @@ contract GovGrantTest is Test {
         vm.prank(OWNER);
         d.setGrant(GovernanceBits.LISTING, nid(MANAGER), g, EnvKit.codeUidOf(address(d)));
         vm.startPrank(MANAGER);
-        d.setListedOnly(true);
+        d.setListedOnly(true, EnvKit.codeUidOf(address(d)));
         vm.expectRevert(_ex(5));
-        d.setListedOnly(false);
+        d.setListedOnly(false, EnvKit.codeUidOf(address(d)));
         vm.stopPrank();
         vm.prank(OFFICER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.FEE_ROUTING, OFFICER));
-        d.setFeeSplit(0, address(0xAA));
+        d.setFeeSplit(0, address(0xAA), EnvKit.codeUidOf(address(d)));
     }
 
     /// The DELEGATECALLs of the current call to `GovernanceLib` with selector `sel`.
@@ -647,7 +647,7 @@ contract GovGrantTest is Test {
         NormalToken a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a"));
         GovHookERC20 hk = new GovHookERC20();
         vm.prank(address(h));
-        d.setMarket(address(a), address(hk), true);
+        d.setMarket(address(a), address(hk), true, EnvKit.codeUidOf(address(d)));
         vm.prank(address(h));
         d.grantRole(GovernanceBits.LISTING, bytes32(uint256(0x52)), EnvKit.codeUidOf(address(d))); // control: outside a settlement it runs
         hk.mint(vm.addr(DAVE_PK), 1e6);
@@ -678,7 +678,7 @@ contract GovGrantTest is Test {
         NormalToken a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a"));
         GovHookERC20 hk = new GovHookERC20();
         vm.prank(address(h));
-        d.setMarket(address(a), address(hk), true); // control: outside a settlement it runs
+        d.setMarket(address(a), address(hk), true, EnvKit.codeUidOf(address(d))); // control: outside a settlement it runs
         hk.mint(vm.addr(DAVE_PK), 1e6);
         address puller = d.puller();
         vm.prank(vm.addr(DAVE_PK));
@@ -1028,9 +1028,9 @@ contract GovGrantTest is Test {
         d.setGrant(GovernanceBits.LISTING, nid(MANAGER), g, EnvKit.codeUidOf(address(d)));
         (g.maxUses, g.delegable) = (1, false);
         vm.startPrank(MANAGER);
-        d.setListedOnly(true);
+        d.setListedOnly(true, EnvKit.codeUidOf(address(d)));
         d.setGrant(GovernanceBits.LISTING, nid(OFFICER), g, EnvKit.codeUidOf(address(d))); // positive control: one use left
-        d.setListedOnly(false);
+        d.setListedOnly(false, EnvKit.codeUidOf(address(d)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(5)));
         d.setGrant(GovernanceBits.LISTING, nid(OFFICER2), g, EnvKit.codeUidOf(address(d)));
         vm.stopPrank();
@@ -1136,7 +1136,7 @@ contract GovGrantTest is Test {
         (g.min, g.total, g.perWindow, g.window, g.validUntil, g.maxUses) = (1, 1e6, 1e5, 1 days, uint64(block.timestamp + 365 days), 1000);
         _set(MANAGER, g);
         _mint(MANAGER, 1);
-        _gas("mint limited, every bound, second use", MANAGER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1)));
+        _gas("mint limited, every bound, second use", MANAGER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1, EnvKit.codeUidOf(address(t)))));
     }
 
     function test_gas_mintLeaf() public {
@@ -1148,6 +1148,6 @@ contract GovGrantTest is Test {
         vm.prank(MANAGER);
         t.setGrant(MINT, nid(OFFICER), l, EnvKit.codeUidOf(address(t)));
         _mint(OFFICER, 1);
-        _gas("mint leaf, parent debited, second use", OFFICER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1)));
+        _gas("mint leaf, parent debited, second use", OFFICER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1, EnvKit.codeUidOf(address(t)))));
     }
 }

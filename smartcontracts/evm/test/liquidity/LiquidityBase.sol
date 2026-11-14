@@ -63,15 +63,15 @@ abstract contract LiquidityBase is Test {
         b.transfer(carol, 1e9);
         vm.stopPrank();
         vm.startPrank(admin);
-        dex.setMarket(address(a), address(b), true);
-        dex.setMarket(address(usdc), address(b), true);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(usdc), address(b), true, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         v2f = new MockV2Factory();
         pair = MockV2LiquidityPair(v2f.createPair(address(a), address(b)));
         posm = new MockPositionManagerV4();
         reader = new V4PositionReader(address(posm));
         vm.prank(admin);
-        dex.setExchangeTarget(address(reader), true);
+        dex.setExchangeTarget(address(reader), true, EnvKit.codeUidOf(address(dex)));
     }
 
     // ------------------------------------------------------------------ orders

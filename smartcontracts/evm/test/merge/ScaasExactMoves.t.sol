@@ -14,6 +14,7 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IRig, KindRig, PlainRig, PqzRig, ZetherRig, Tk} from "../metatx/helpers/KindRigs.sol";
 import {RegRig, ZetherRegRig, PqzRegRig} from "../metatx/helpers/RegKindRigs.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Fable fix2 F-1: the regulated rigs with a funded derived UA (`uaD`), and kind 8 with `TAX` on at 1 %.
 contract ExactRegRig is RegRig {
@@ -23,7 +24,7 @@ contract ExactRegRig is RegRig {
         c.reg.taxRecipient = nid(address(0x7A0));
         address tt = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "tax8");
         vm.prank(issuer);
-        IRegulatedToken(tt).setTaxRate(10_000);
+        IRegulatedToken(tt).setTaxRate(10_000, EnvKit.codeUidOf(address(tt)));
         require(IRegulatedToken(tt).taxConfig().effectivePpm == 10_000, "the rate");
         tks.push(Tk("NORMAL_REGULATED_TAX", tt, ALICE_PK, alice, BOB_PK, bob, address(0xFEE), relayer, 0, 0, address(0), address(0), 0, 0));
         for (uint256 i; i < tks.length; ++i) {

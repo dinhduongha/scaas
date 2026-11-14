@@ -307,7 +307,7 @@ library ZetherLib {
     {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.legs.length != 0) revert IFactoryToken.ConfigFieldForOtherKind(2);
-        if (cfg.maxSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
+        if (cfg.maxSupply != 0 || cfg.maxWrapSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
         if (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0) revert IFactoryToken.ConfigFieldForOtherKind(3);
         requireRegOfKind(kind, cfg.reg);
         TokenStore.TokenStorage storage t = TokenStore.$();

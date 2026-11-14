@@ -54,7 +54,7 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
         uint256 pool = tok.balanceOf(MetaTxLib.SHIELD_POOL);
         vm.startStateDiffRecording();
         vm.prank(CLERK);
-        _r().operatorTransfer(alice, nid(BENEFICIARY), 20_000, REF);
+        _r().operatorTransfer(alice, nid(BENEFICIARY), 20_000, REF, EnvKit.codeUidOf(address(_r())));
         assertEq(_pqzAccesses(alice, true), 0, "operatorTransfer reads and writes no PQZ state (I8)");
 
         assertEq(tok.balanceOfUA(alice), PUBLIC - 20_000, "the public balance");
@@ -71,9 +71,9 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
         uint256 shielded = tok.totalShielded();
         vm.prank(CLERK);
         vm.expectRevert();
-        _r().operatorTransfer(alice, nid(BENEFICIARY), PUBLIC + 1, REF);
+        _r().operatorTransfer(alice, nid(BENEFICIARY), PUBLIC + 1, REF, EnvKit.codeUidOf(address(_r())));
         vm.prank(CLERK);
-        _r().operatorTransfer(alice, nid(BENEFICIARY), PUBLIC, REF); // the control
+        _r().operatorTransfer(alice, nid(BENEFICIARY), PUBLIC, REF, EnvKit.codeUidOf(address(_r()))); // the control
         assertEq(tok.totalShielded(), shielded);
     }
 }

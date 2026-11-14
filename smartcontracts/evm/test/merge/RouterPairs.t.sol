@@ -44,6 +44,11 @@ contract RouterPairsTest is GovRouterFixture {
 
     function _sel(uint256 op, string memory env, string memory sig) internal view returns (bytes4) {
         string memory ty = _types(op);
+        // round 3zb + 3zc (CTR-GOV-28 Change): the merged entries from `OP_MINT` on take the target's chain word last; the
+        // retired address forms keep their old parameters
+        if (op >= OP_MINT && keccak256(bytes(env)) == keccak256(bytes(ENV_UA))) {
+            ty = bytes(ty).length == 0 ? "bytes32" : string.concat(ty, ",bytes32");
+        }
         return bytes4(keccak256(bytes(string.concat("mtx", rows[op].name, "(", env, ",address",
             bytes(ty).length == 0 ? "" : ",", ty, ",", sig, ")"))));
     }
@@ -87,6 +92,10 @@ contract RouterPairsTest is GovRouterFixture {
         bytes memory words) internal view returns (bytes memory)
     {
         MetaTxLib.UAEnvelope memory e = _envelope(r, from, batch);
+        if (op >= OP_MINT) { // the target's chain word, the op's last field (CTR-GOV-28 Change)
+            args = bytes.concat(args, abi.encode(EnvKit.codeUidOf(target)));
+            words = bytes.concat(words, abi.encode(EnvKit.codeUidOf(target)));
+        }
         bytes memory tail = _tail(abi.encode(_auth(from, _mDigest(r, op, e, target, words))));
         return _cd(_merged(op), e, target, args, tail);
     }
@@ -362,6 +371,10 @@ contract RouterPairsTest is GovRouterFixture {
         (bool ok, bytes memory ret) = address(router).call(_cd(_old(op), e, target, args, _tail(abi.encode(oldSig))));
         assertFalse(ok, rows[op].name);
         assertEq(ret.length, 0, rows[op].name);
+        if (op >= OP_MINT) { // the merged entry takes the target's chain word last (CTR-GOV-28 Change); any word for AnyTarget
+            args = bytes.concat(args, abi.encode(keccak256("a chain word")));
+            words = bytes.concat(words, abi.encode(keccak256("a chain word")));
+        }
         IUARegistry.UASig memory a;
         a.signature = oldSig;
         (ok, ret) = address(router).call(_cd(_merged(op), e, target, args, _tail(abi.encode(a))));

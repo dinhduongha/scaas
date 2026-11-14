@@ -474,7 +474,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(tok.totalShielded(), 0);
         vm.prank(address(0xBAD));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.MINTABLE, address(0xBAD)));
-        NormalZetherToken(address(tok)).mint(address(0xBAD), 1);
+        NormalZetherToken(address(tok)).mint(address(0xBAD), 1, EnvKit.codeUidOf(address(tok)));
     }
 
     /// CTR-TOK-01 (MT-3) on the public side of a Zether token: only contracts grant and spend allowances.

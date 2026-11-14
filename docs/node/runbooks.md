@@ -309,7 +309,7 @@ negative rebase, confiscation, bug):
 
 Depeg on a multi-underlying leg (external price signal):
 
-1. Guardian submits `disableWrap(u, reason)` **privately** (private relay or builder bundle), never through the public
+1. Guardian submits `disableWrap(u, reason, chainUid_)` (the token's `chainUid()` from build 3zb + 3zc, SPECIFIED, [integration.md](../integration.md#holder-chain-word)) **privately** (private relay or builder bundle), never through the public
    mempool or an open-mesh job.
 2. Exits stay open; no re-enable exists (a new token if the leg must return). RA cancels pending rate changes during the
    incident (`RateDecreaseWithDisabledLeg` blocks decreases anyway).
@@ -331,12 +331,12 @@ Depeg on a multi-underlying leg (external price signal):
 
 <a id="rb-13-regulator-order"></a>Regulated token:
 
-1. Legal validates the order. CO records it: `recordOrder(orderId, docHash, subject, beneficiary, maxAmount)` from the
+1. Legal validates the order. CO records it: `recordOrder(orderId, docHash, subject, beneficiary, maxAmount, freezeUntil, chainUid_)` from the
    compliance multisig (optionally submitted as a `call` job by the issuer's namespace, through its role-holder
    contract).
 2. IS asks NO in writing for a silence of `ScaasForcedTransfer` with matchers `chain` **and `token`** for the planned
    window; NO creates it (the other tokens keep paging).
-3. IS: `freeze(subject, ref)`, then `forceTransfer(recordId, amount)` ≤ `maxAmount`; `unfreeze` when the order says
+3. IS: `freeze(subject, ref, recordId, chainUid_)`, then `forceTransfer(recordId, amount, chainUid_)` ≤ `maxAmount`; `unfreeze` when the order says
    so; CO `revokeOrder` stops further execution.
 4. `OrderRecorded` without a matching internal record (`ScaasWatchedEvent`) ⇒ compliance key compromise: CO revokes the
    record, rotates the multisig signer, IS refuses execution.

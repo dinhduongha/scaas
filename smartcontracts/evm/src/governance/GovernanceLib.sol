@@ -41,6 +41,7 @@ library GovernanceLib {
         bytes32 guardian;    // WRAP_DISABLEABLE
         bytes32 issuer;      // each set bit of FREEZE / FORCE / PAUSE (5-7), contract only, an `msig` UA too (RK-1); 8, 9 (any holder)
         bytes32 compliance;  // RECORD (bit 10), contract only, an `msig` UA too
+        bytes32 burner;      // BURNER (bit 30, CTR-GOV-29), any holder; the twin of `minter`
     }
 
     /// @notice A bit's holders, leaves included, and its live roots (`grantor == 0`): `holderCount` is `holders`, the
@@ -101,6 +102,10 @@ library GovernanceLib {
         if (grantDelay > MAX_GRANT_DELAY) revert IGovernance.GrantDelayTooLong(grantDelay);
         uint256 bad = features & ~valid;
         if (bad != 0) revert IGovernance.FeatureInvalidForKind(_lowest(bad));
+        // CTR-GOV-29: `BURNER` and `BURNABLE` exclusive (bit 2 always locked, 30 never enabled: no later switch)
+        if (features & _bit(GovernanceBits.BURNER) != 0 && features & _bit(GovernanceBits.BURNABLE) != 0) {
+            revert IGovernance.FeatureConflict(GovernanceBits.BURNER, GovernanceBits.BURNABLE);
+        }
         if ((features & _bit(GovernanceBits.RESCUABLE) == 0 && rescueTo != address(0)) || rescueTo == address(this) || rescueTo == MetaTxLib.UA_POOL
             || rescueTo == MetaTxLib.SHIELD_POOL) revert IRescuable.RescueConfigInvalid();
         // a lock holds a set bit on; only 8, 9, 28, where valid, may be locked off (round 3s, spec §5.3)
@@ -111,6 +116,7 @@ library GovernanceLib {
         s.grantDelay = grantDelay;
         if (features & _bit(GovernanceBits.RESCUABLE) != 0) s.rescueTo = RescueLib.to(rescueTo);
         if (roles.minter != 0) _grant(s, GovernanceBits.MINTABLE, roles.minter, 0, roleBits, contractOnly, uaRegistry);
+        if (roles.burner != 0) _grant(s, GovernanceBits.BURNER, roles.burner, 0, roleBits, contractOnly, uaRegistry);
         if (roles.rateAdmin != 0) {
             _grant(s, GovernanceBits.RATE_ADJUSTABLE, roles.rateAdmin, 0, roleBits, contractOnly, uaRegistry);
         }

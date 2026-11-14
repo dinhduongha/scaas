@@ -87,7 +87,7 @@ Each item kind is one token created through `OpenFactory.createToken` (`NORMAL` 
 | Field | Value | Why |
 |---|---|---|
 | `decimals` | `0` | one unit is one item |
-| `features` | `MINTABLE` and `BURNABLE` | any item can be produced and consumed by some recipe; set both for every kind, even one that is only an input today, so you can add recipes later without new tokens |
+| `features` | `MINTABLE` and `BURNABLE` | any item can be produced and consumed by some recipe; set both for every kind, even one that is only an input today, so you can add recipes later without new tokens. If players must not destroy items themselves, use `BURNER` (bit 30) instead of `BURNABLE`, with the recipe contract as `roles.burner`: only a holder of the role burns, and only what it holds ([CTR-GOV-29](../decisions.md#CTR-GOV-29); BUILT, build 3zb + 3zc) |
 | `lockedFeatures` | your choice | lock a flag to promise players it can never be removed |
 | `owner` | the game's admin account, as a UA id (a plain account's address, or a post-quantum key or `msig` that acts through the chain's `GovernanceRouter`) | it grants and revokes the minter role |
 | `roles.minter` | the recipe contract (or your admin first) | more minters can be added later with `grantRole(MINTABLE, …)` — the role is a set, not a single holder |
@@ -104,8 +104,8 @@ What it does, for one `craft(recipeId, times)` call signed by the player:
 1. Check the recipe exists, is active, its conditions hold (cooldown, limits, dates) and any catalyst is held.
 2. Take the inputs: the player's signed transfers of `times × amount` of each input item to the recipe contract
    (meta-transaction transfers, so the player pays no gas).
-3. Burn the inputs it now holds (`burn`, allowed because every item kind is `BURNABLE`).
-4. Mint `times × amount` of each output item to the player (`mint`, allowed because the contract holds the minter role).
+3. Burn the inputs it now holds (`burn`, allowed because every item kind is `BURNABLE`, or because the contract holds `BURNER`).
+4. Mint `times × amount` of each output item to the player (`mint(to, amount, chainUid_)`, allowed because the contract holds the minter role; from build 3zb + 3zc the contract passes the token's `chainUid()`, [integration.md](../integration.md#holder-chain-word)).
 5. Emit an event with the recipe id and the amounts, so the game and indexers update inventories.
 
 All five steps run in one transaction: if anything fails, nothing changes. Several recipes in a row ("craft Stone Axe ×3,

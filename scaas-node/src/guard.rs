@@ -282,6 +282,19 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
     if crate::abi::wrap_limit_refusal(&reason).is_some() {
         return Verdict::Requeue(format!("WRAP_LIMIT_REFUSED: {reason}"));
     }
+    // round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §4): a wrap or a mint above a cap (an unwrap or a cap change lifts
+    // it), a cap setter before its `eta` (`GrantNotReady(31, …)`, the clock lifts it) or under a floor at its apply (supply or
+    // the other setter lifts it); `MaxSupplyInvalid`, `MaxWrapSupplyInvalid` and `FeatureNotSet(31)` stay `dead` by name below
+    if crate::abi::supply_cap_refusal(&reason).is_some_and(|(_, liftable)| liftable)
+        || crate::abi::gov_word(&reason, "GrantNotReady", "bit") == Some(SUPPLY_CAP_ADJUSTABLE)
+    {
+        return Verdict::Requeue(format!("SUPPLY_CAP_REFUSED: {reason}"));
+    }
+    // round 3zb (CTR-GOV-29, spec §4; NODE-LANE-09's class): a burner's or a minter's grant window spent (`GrantExhausted(3)`):
+    // the next window lifts it. Every other grant refusal (the job's own subject lacks the power) stays `dead` by name.
+    if crate::abi::gov_word(&reason, "GrantExhausted", "field") == Some(GRANT_WINDOW) && window_op(&w.data) {
+        return Verdict::Requeue(format!("GRANT_WINDOW_REFUSED: {reason}"));
+    }
     // group 3f (spec §11.1): a PQZ verifier mode refusal by name, never `dead` while the op may land with another verdict; a
     // `PqzVerdictMismatch` after a party's indexed `UAPqzKeyCurrent` is `PQZ_KEY_ROTATED` (T55)
     if let Some((name, liftable)) = crate::abi::pqz_verdict_refusal(&reason) {
@@ -322,6 +335,18 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
         },
         None => Verdict::Dead(reason),
     }
+}
+
+/// Governance bit 31 `SUPPLY_CAP_ADJUSTABLE` (CTR-GOV-30): its setters' pending refusal is `GrantNotReady(31, 0, eta)`.
+const SUPPLY_CAP_ADJUSTABLE: u8 = 31;
+/// `GrantExhausted`'s field 3: the grant's `perWindow` spent in the current window.
+const GRANT_WINDOW: u8 = 3;
+
+/// The ops whose window refusal the next window lifts (spec 2026-11-13-burner-wrap-caps.md §4): a token's `mtxBurn` (bit 30) and
+/// the router's `mtxMint`, `mtxMintToUA` (bit 1), by the job's selector.
+fn window_op(data: &[u8]) -> bool {
+    data.get(..4).is_some_and(|s| typed::rows().iter()
+        .any(|r| matches!(r.name, "UABurn" | "UAMint" | "UAMintToUA") && r.sent[..] == *s))
 }
 
 /// The `field` of a `decode_revert` string `PqzVerdictMismatch(PqzVerdictMismatch { field: N })`, parsed whole (Fable E N-11: never
@@ -1382,8 +1407,9 @@ async fn pull_digest(chain: &Chain, token: Address, struct_hash: B256) -> Result
 /// meta-tx gets at least the ERC-1271 floor.
 /// NODE-JOB-24: a refusal of [`gas`] for the lane's per-transaction cap (`max_gas_per_tx`, the block gas limit, 2^24 before
 /// Amsterdam), not for the calldata floor or a revert of the call itself.
-/// The router's list edits (spec 2026-11-10-token-lists.md §6.2): `mtxSetAllowed`, `mtxSetDenied`.
-const SEL_LIST_EDITS: [[u8; 4]; 2] = [[0x06, 0xb9, 0x8e, 0x72], [0x1d, 0x28, 0x8f, 0xdc]];
+/// The router's list edits (spec 2026-11-10-token-lists.md §6.2): `mtxSetAllowed`, `mtxSetDenied`, with the target's chain
+/// word (CTR-GOV-28 Change, round 3zb + 3zc; were 0x06b98e72, 0x1d288fdc without it).
+const SEL_LIST_EDITS: [[u8; 4]; 2] = [[0x6c, 0x83, 0x2e, 0xcf], [0xf8, 0xd9, 0xf1, 0xf3]];
 
 /// Round 3s (spec §6.1, §14; Fable P3-4): a list edit's estimate above the chain's block gas limit is refused by name, before
 /// sending: a smaller batch fits (256 new rows ≈ 31 M with the verification).
@@ -1666,7 +1692,8 @@ mod tests {
         // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: -> (131, 3, 131), the router's `UASetVerifierFee`
         // owner 2026-11-12: -> (132, 3, 132), the router's `UACreateInstance` (its vector row's `init_call`)
         // the three-key model (CTR-PQZ-41): -> (133, 3, 133), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
-        assert_eq!((sent, relayed, refused), (133, 3, 133), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // round 3zc (CTR-GOV-30): -> (135, 3, 135), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
+        assert_eq!((sent, relayed, refused), (135, 3, 135), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
@@ -1676,7 +1703,8 @@ mod tests {
         // enable rows; round 3t: -> 135, `UASetVerifierFee`; owner 2026-11-12: -> 137, `UACreateToken`, `UACreateDex` (no vector
         // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`); -> 138,
         // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 141, "table rows: 107 typed with an entry, 34 plain");
+        // round 3zc (CTR-GOV-30): -> 143, the router's two cap setters
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 143, "table rows: 109 typed with an entry, 34 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1704,7 +1732,10 @@ mod tests {
             "mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)", "mtxRevoke(address,uint64,uint256,bytes)",
             "mtxExecuteAsOwnerRaw(bytes,uint256,uint256,bytes)",
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-            "transferAdmin(bytes32,bytes32)", "setListedOnly(bool)"] {
+            "transferAdmin(bytes32,bytes32)", "setListedOnly(bool)",
+            // round 3zb + 3zc: the direct entries with the chain word (governed, relayed through the router only) and the cap setters
+            "mint(address,uint256,bytes32)", "setListedOnly(bool,bytes32)", "setMaxSupply(uint256,bytes32)",
+            "setMaxWrapSupply(uint256,bytes32)"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
                 let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
@@ -1713,6 +1744,33 @@ mod tests {
                 assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("CALL_TARGET_REFUSED")), "{s} on {kind}: {e:?}");
             }
         }
+        // the Change of CTR-GOV-28 in round 3zb + 3zc: the 25 router ops' old shapes (without the chain word, their calldata in
+        // vectors/typed/legacy/burner-wrap-caps/) are no row: refused by name on a listed router; a job naming one without
+        // `chainUid` is `BAD_PAYLOAD` (`typed::tests::chain_word_rows_refuse_a_missing_word`)
+        let old = format!("{}/../smartcontracts/vectors/typed/legacy/burner-wrap-caps/typed_ops.json", env!("CARGO_MANIFEST_DIR"));
+        let old: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(old).unwrap()).unwrap();
+        let mut moved = 0;
+        for (name, o) in old["ops"].as_object().unwrap() {
+            let Some(d) = o["domains"].get("gov_router") else { continue };
+            // the six rows `typed::testkit::vectors()` leaves out (`NO_NODE_ROW`, unchanged since 3fa153e4), not moved shapes of
+            // this round: `UACreateToken` / `UACreateDex` are node rows built from a named config, which the vector's filler
+            // `initArgs` is not (pinned by `typed::tests::creation_rows_encode_the_named_config`); the four release approvals
+            // are no node job by the owner's ruling (decisions.md CTR-GOV-23 "Release management is not a node job", `NOT_ROWS`; job-api.md, the router row)
+            if typed::testkit::NO_NODE_ROW.contains(&name.as_str()) {
+                continue;
+            }
+            if v["ops"][name]["typehash"] == o["typehash"] {
+                continue;
+            }
+            let data = alloy::hex::decode(d["calldata"].as_str().unwrap()).unwrap();
+            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "gov_router", domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+                derived_signer: false, derived_side: false };
+            let w = Work { job_id: Some(1), to: target, data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) };
+            let e = g.check(&chain, &w).await.unwrap_err();
+            assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("CALL_TARGET_REFUSED")), "the old {name}: {e:?}");
+            moved += 1;
+        }
+        assert_eq!(moved, 25, "the old shapes walked");
     }
 
     /// Item of the lane, not of `Typed`: after `fill_digest` a payee fee is keyed by its outer digest and `classify` compares
@@ -2105,8 +2163,9 @@ mod tests {
         // `mtxSetWrapLimits`, `mtxSetWrapMember`
         // round 3r: -> 47, the eleven admin ops of the factory and the compliance registry (the four approvals in NOT_ROWS)
         // round 3s (CTR-GOV-24): -> 50, `mtxSetAllowed`, `mtxSetDenied`, `mtxEnableFeature`; round 3t: -> 51, `mtxSetVerifierFee`
-        // owner 2026-11-12: -> 53, `mtxCreateToken`, `mtxCreateDex`; -> 54, `mtxCreateInstance`
-        assert_eq!(router.len(), 54, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance); the four release approvals (3r) in NOT_ROWS");
+        // owner 2026-11-12: -> 53, `mtxCreateToken`, `mtxCreateDex`; -> 54, `mtxCreateInstance`; round 3zc (CTR-GOV-30): -> 56,
+        // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` (the 25 ops of the Change of CTR-GOV-28 moved selector in place)
+        assert_eq!(router.len(), 56, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance); the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -2170,14 +2229,15 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             assert_eq!(k.get(s), Some(c), "{kind}: {s} keeps {base}'s class");
         }
         let added: std::collections::BTreeMap<&String, &String> = k.iter().filter(|(s, _)| !b.contains_key(*s)).collect();
-        let controls = ["freeze(bytes32,bytes32,bytes32)", "unfreeze(bytes32,bytes32)", "forceTransfer(bytes32,uint256)",
-            "pause(bytes32,uint64)", "unpause(bytes32)", "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
-            "revokeOrder(bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+        // the Change of CTR-GOV-28 in round 3zb + 3zc (O6): every control takes the token's chain word last
+        let controls = ["freeze(bytes32,bytes32,bytes32,bytes32)", "unfreeze(bytes32,bytes32,bytes32)", "forceTransfer(bytes32,uint256,bytes32)",
+            "pause(bytes32,uint64,bytes32)", "unpause(bytes32,bytes32)", "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
+            "revokeOrder(bytes32,bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
             // pay-meta-tax T39 / T40: bit 23's two powers, the direct payWithTax (the caller's own balance), mtxPayWithTax
-            "setTaxRate(uint32)", "setTaxRecipient(bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
+            "setTaxRate(uint32,bytes32)", "setTaxRecipient(bytes32,bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
             PAY_WITH_TAX,
             // round 3s (CTR-GOV-24): the lists (bits 8, 9; on 10-13 setAllowed's row holds, no holder can exist) and the enable
-            "setAllowed(bytes32[],bool)", "setDenied(bytes32[],bool)", "enableFeature(uint8,bytes32)"];
+            "setAllowed(bytes32[],bool,bytes32)", "setDenied(bytes32[],bool,bytes32)", "enableFeature(uint8,bytes32)"];
         assert_eq!(added.keys().map(|s| s.as_str()).collect::<std::collections::BTreeSet<_>>(), controls.into_iter().collect(), "{kind}");
         for (s, c) in added.iter().filter(|(s, _)| s.as_str() != PAY_WITH_TAX) {
             assert!(c.starts_with("BIT(") || (c.as_str() == "OWN_BALANCE" && s.starts_with("payWithTax("))
@@ -2319,9 +2379,10 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 format!("mtxPqzCancelVerifier{env}address,bytes32,{UASIG_ABI})"), [0xd5, 0xc1, 0x42, 0x10]),
             ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", "UAPqzRevokeVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
                 format!("mtxPqzRevokeVerifier{env}address,bytes32,{UASIG_ABI})"), [0xe8, 0x16, 0xad, 0x71]),
-            // group 3h T61 (PQZ proof path spec §5): bit 24's op, the same router row shape
-            ("UASetProofStore", "mtxSetProofStore", "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
-                format!("mtxSetProofStore{env}address,uint8,{UASIG_ABI})"), [0xa6, 0x3e, 0x58, 0x86]),
+            // group 3h T61 (PQZ proof path spec §5): bit 24's op, the same router row shape; the Change of CTR-GOV-28 in round
+            // 3zb + 3zc: + the chain word (0xa63e5886 -> 0x3b127180)
+            ("UASetProofStore", "mtxSetProofStore", "UASetProofStore(bytes32 from,address target,uint8 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxSetProofStore{env}address,uint8,bytes32,{UASIG_ABI})"), [0x3b, 0x12, 0x71, 0x80]),
             // round 3t (CTR-PQZ-36): the admin's verifier fee, the same router row shape
             ("UASetVerifierFee", "mtxSetVerifierFee", "UASetVerifierFee(bytes32 from,address target,uint64 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
                 format!("mtxSetVerifierFee{env}address,uint64,bytes32,{UASIG_ABI})"), [0x28, 0x08, 0x39, 0xe6]),
@@ -2348,7 +2409,10 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     /// Group 3l (wrap limits spec 2026-11-10 §9): the router's two ops on the hybrids are rows of `gov_router` only, over the
     /// `UA*` structs the spec names (the leg array's referenced types in EIP-712 order), their selectors the forge artifact's and
     /// `SIGNED` entries of the router in `selector_audit.json`, their vectors in `typed_ops.json`; no token row moves (the
-    /// tokens' `setWrapLimits` / `setWrapMember` are governed, never on a token's allow-list).
+    /// tokens' `setWrapLimits` / `setWrapMember` are governed, never on a token's allow-list). The Change of CTR-GOV-28 in round
+    /// 3zb + 3zc (O5, O6): both sign the token's chain word last (selectors old -> new: `mtxSetWrapLimits` 0x6178483c ->
+    /// 0x6564fc04, `mtxSetWrapMember` 0x3c0ed776 -> 0x438aef3c); round 3zc (CTR-GOV-30): the admin's two cap setters, the same
+    /// row shape (`mtxSetMaxSupply` 0xf1d24225, `mtxSetMaxWrapSupply` 0xd60e02f5).
     #[test]
     fn router_wrap_limit_rows() {
         let env = format!("{ENV_UA},");
@@ -2356,11 +2420,17 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let refs = "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)";
         let want = [
             ("UASetWrapLimits", "mtxSetWrapLimits",
-                format!("UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient){refs}"),
-                format!("mtxSetWrapLimits{env}address,{leg}[],bool,bool,bool,{UASIG_ABI})"), [0x61, 0x78, 0x48, 0x3c]),
+                format!("UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient){refs}"),
+                format!("mtxSetWrapLimits{env}address,{leg}[],bool,bool,bool,bytes32,{UASIG_ABI})"), [0x65, 0x64, 0xfc, 0x04]),
             ("UASetWrapMember", "mtxSetWrapMember",
-                "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)".to_string(),
-                format!("mtxSetWrapMember{env}address,bytes32,bool,bool,{UASIG_ABI})"), [0x3c, 0x0e, 0xd7, 0x76]),
+                "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)".to_string(),
+                format!("mtxSetWrapMember{env}address,bytes32,bool,bool,bytes32,{UASIG_ABI})"), [0x43, 0x8a, 0xef, 0x3c]),
+            ("UASetMaxSupply", "mtxSetMaxSupply",
+                "UASetMaxSupply(bytes32 from,address target,uint256 maxSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)".to_string(),
+                format!("mtxSetMaxSupply{env}address,uint256,bytes32,{UASIG_ABI})"), [0xf1, 0xd2, 0x42, 0x25]),
+            ("UASetMaxWrapSupply", "mtxSetMaxWrapSupply",
+                "UASetMaxWrapSupply(bytes32 from,address target,uint256 maxWrapSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)".to_string(),
+                format!("mtxSetMaxWrapSupply{env}address,uint256,bytes32,{UASIG_ABI})"), [0xd6, 0x0e, 0x02, 0xf5]),
         ];
         let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
         let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
@@ -2381,24 +2451,75 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         }
     }
 
+    /// The Change of CTR-GOV-28 in round 3zb + 3zc (O3, O5, O6, spec 2026-11-13-burner-wrap-caps.md §3.5, §3.8, §3.9, §4): every
+    /// role holder's direct entry and the admin's `setWrapLimits` take the chain word last, keep their class in
+    /// `selector_audit.json` (the old forms gone), and are no row of any kind (relayed through the router only); the two new cap
+    /// setters are `ADMIN` on the six wrapped kinds, never on a token's allow-list.
+    #[test]
+    fn chain_word_entries_are_governed_and_no_row() {
+        let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
+        let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let class = |c: &str, s: &str| audit[c].as_array().unwrap_or_else(|| panic!("{c}")).iter().find(|e| e["sig"] == s)
+            .map(|e| e["class"].as_str().unwrap().to_string());
+        let leg = "(address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))";
+        let limits = format!("setWrapLimits({leg}[],bool,bool,bool,bytes32)");
+        let any_token = [("mint(address,uint256,bytes32)", "BIT(1)"), ("mintToUA(bytes32,uint256,bytes32)", "BIT(1)")];
+        let wrapped = [("disableWrap(address,bytes32,bytes32)", "BIT(4)"), ("proposeRate(address,uint96,uint96,bytes32)", "BIT(3)"),
+            ("cancelRate(bytes32)", "BIT(3)"), ("executeRate(bytes32)", "BIT(3)"), ("setWrapMember(bytes32,bool,bool,bytes32)", "BIT(26)"),
+            (limits.as_str(), "ADMIN"), ("setMaxSupply(uint256,bytes32)", "ADMIN"), ("setMaxWrapSupply(uint256,bytes32)", "ADMIN")];
+        let dex = [("setMarket(address,address,bool,bytes32)", "BIT(11)"), ("setExchangeTarget(address,bool,bytes32)", "BIT(11)"),
+            ("setListedOnly(bool,bytes32)", "BIT(11)"), ("setFeeSplit(uint32,address,bytes32)", "BIT(12)")];
+        let gone = ["mint(address,uint256)", "mintToUA(bytes32,uint256)", "disableWrap(address,bytes32)", "cancelRate()",
+            "executeRate()", "setWrapMember(bytes32,bool,bool)", "setProofStore(uint8)", "setMarket(address,address,bool)",
+            "setFeeSplit(uint32,address)"];
+        let mut checked = vec![];
+        for (c, _) in AUDIT_KINDS.iter().filter(|(c, k)| matches!(*k, "token" | "zether" | "pqz") && c.ends_with("Token")) {
+            let mut want: Vec<(&str, &str)> = any_token.to_vec();
+            if c.starts_with("Wrapped") {
+                want.extend(wrapped.iter().copied());
+            }
+            for (s, cl) in &want {
+                assert_eq!(class(c, s).as_deref(), Some(*cl), "{c}: {s}");
+            }
+            assert_eq!(class(c, "setMaxSupply(uint256,bytes32)").is_some(), c.starts_with("Wrapped"), "{c}: the cap setters on the wrapped kinds only");
+            checked.extend(want.iter().map(|(s, _)| s.to_string()));
+            for s in gone {
+                assert_eq!(class(c, s), None, "{c}: the old {s}");
+            }
+        }
+        assert_eq!(AUDIT_KINDS.iter().filter(|(c, _)| c.starts_with("Wrapped") && c.ends_with("Token")).count(), 6);
+        for (s, cl) in dex {
+            assert_eq!(class("SCaaSDex", s).as_deref(), Some(cl), "SCaaSDex: {s}");
+            checked.push(s.to_string());
+        }
+        let sel = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
+        for s in &checked {
+            for k in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
+                assert!(row(sel(s), k).is_none(), "{s} is a {k} row");
+            }
+        }
+    }
+
     /// Group 3h T61 / T63 (spec §10): bit 24's router op both directions: `UASetProofStore` is a row of `gov_router` only, its
     /// selector the forge artifact's and a `SIGNED` entry of the router in `selector_audit.json`; the token's own
     /// `setProofStore(uint8)` (`BIT(24)` on the four PQZ kinds) is no row on any kind (relayed through the router only).
     #[test]
     fn proof_store_router_row_equal_contract() {
-        let sig = format!("mtxSetProofStore{ENV_UA},address,uint8,{UASIG_ABI})");
+        // the Change of CTR-GOV-28 in round 3zb + 3zc: + the chain word (router 0xa63e5886 -> 0x3b127180; direct
+        // `setProofStore(uint8)` -> `setProofStore(uint8,bytes32)`)
+        let sig = format!("mtxSetProofStore{ENV_UA},address,uint8,bytes32,{UASIG_ABI})");
         let r = typed::testkit::row_of("UASetProofStore", "gov_router");
         assert_eq!((r.entry, r.contracts), ("mtxSetProofStore", &["gov_router"][..]));
-        assert_eq!(r.selector, [0xa6, 0x3e, 0x58, 0x86], "the forge artifact's {sig}");
+        assert_eq!(r.selector, [0x3b, 0x12, 0x71, 0x80], "the forge artifact's {sig}");
         assert_eq!(alloy::primitives::keccak256(sig.as_bytes())[..4], r.selector[..]);
         assert_eq!(row(r.sent, "gov_router").map(|x| x.name), Some("UASetProofStore"));
         let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
         let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let class = |c: &str, s: &str| audit[c].as_array().unwrap().iter().find(|e| e["sig"] == s).map(|e| e["class"].as_str().unwrap().to_string());
         assert_eq!(class("GovernanceRouter", &sig).as_deref(), Some("SIGNED"));
-        let direct = alloy::primitives::keccak256(b"setProofStore(uint8)");
+        let direct = alloy::primitives::keccak256(b"setProofStore(uint8,bytes32)");
         for c in ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"] {
-            assert_eq!(class(c, "setProofStore(uint8)").as_deref(), Some("BIT(24)"), "{c}");
+            assert_eq!(class(c, "setProofStore(uint8,bytes32)").as_deref(), Some("BIT(24)"), "{c}");
         }
         for k in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
             assert!(row(direct[..4].try_into().unwrap(), k).is_none(), "setProofStore is a {k} row");
@@ -2438,10 +2559,13 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // owner 2026-11-12 ("both the generic row and the per-class ones"): -> 297, the router's `mtxCreateInstance`; EXEMPT -> 206
     // the three-key model: -> 303, `mtxRollOverSigned` on the four PQZ kinds (row `PqzRollOver`), the registry's
     // `setPqzScopedKey` (SIGNED) and `storePqzScopedPop` (PERMISSIONLESS)
-    const ROWED: usize = 303;
+    // round 3zb + 3zc: -> 305, the router's `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`; GOVERNED 297 -> 309, `setMaxSupply`,
+    // `setMaxWrapSupply` (ADMIN) on each of the six wrapped kinds (expected from the contracts; the 25 ops of the Change of
+    // CTR-GOV-28 and their direct entries moved selector in place, their classes kept)
+    const ROWED: usize = 305;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 206;
-    const GOVERNED: usize = 297;
+    const GOVERNED: usize = 309;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {
@@ -3042,10 +3166,12 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     /// any other call does not. The selectors are the router's (spec §7).
     #[test]
     fn list_batch_over_block_limit_named() {
-        let mut cd = vec![0x06, 0xb9, 0x8e, 0x72];
+        let mut cd = vec![0x6c, 0x83, 0x2e, 0xcf];
         assert!(list_batch_note(&cd).contains("LIST_BATCH_TOO_LARGE"));
-        cd[..4].copy_from_slice(&[0x1d, 0x28, 0x8f, 0xdc]);
+        cd[..4].copy_from_slice(&[0xf8, 0xd9, 0xf1, 0xf3]);
         assert!(list_batch_note(&cd).contains("LIST_BATCH_TOO_LARGE"));
+        // the old shapes (without the chain word) are no list edit any more
+        assert_eq!(list_batch_note(&[0x06, 0xb9, 0x8e, 0x72]), "", "the old mtxSetAllowed");
         assert_eq!(list_batch_note(&[0x2e, 0xb8, 0xc7, 0x08]), "", "mtxEnableFeature: no batch");
         let rows = typed::testkit::vectors();
         for (op, sel) in [("UASetAllowed", SEL_LIST_EDITS[0]), ("UASetDenied", SEL_LIST_EDITS[1])] {

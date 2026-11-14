@@ -46,7 +46,7 @@ contract PayeeFeeTest is Test {
         address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         t = NormalToken(EnvKit.clone(impl, EnvKit.env(UID, address(0), address(0), false)));
         t.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
-        t.mint(payer, 1_000e6);
+        t.mint(payer, 1_000e6, EnvKit.codeUidOf(address(t)));
     }
 
     function _pay(address to, uint256 value) internal view returns (MetaTxLib.UAMetaTransfer memory) {

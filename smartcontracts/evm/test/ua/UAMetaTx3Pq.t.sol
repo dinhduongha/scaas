@@ -156,7 +156,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             assertEq(MtxHash.hashStruct(t), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
             assertEq(tok.mtxTransferDigest(t), digest);
             bytes memory auth = vm.parseJsonBytes(pj, string.concat(r, "auth"));
-            tok.mint(address(this), t.value + t.fee);
+            tok.mint(address(this), t.value + t.fee, EnvKit.codeUidOf(address(tok)));
             tok.transferToUA(t.from, t.value + t.fee);
             vm.prank(t.relayer);
             uint256 g = gasleft();
@@ -180,7 +180,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
     /// pay-meta-tax T41: the row carries its `PayMeta` (the entry's last parameter; `entryRef` its commitment).
     function test_payeeFee_twoMldsa65_underCap() public {
         (MetaTxLib.UAMetaTransfer memory t, uint256 fee, bytes memory cd) = _payeeFeeRow(_pj(), ".metatx3.payeeFee[0].");
-        tok.mint(address(this), t.value);
+        tok.mint(address(this), t.value, EnvKit.codeUidOf(address(tok)));
         tok.transferToUA(t.from, t.value);
         (uint256 std, uint256 floor) = _calldataGas(cd);
         vm.prank(t.relayer);

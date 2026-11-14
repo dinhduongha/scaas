@@ -6,6 +6,7 @@ import {ZetherRegFixture} from "./ZetherRegFixture.sol";
 import {IZetherToken} from "../../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Plan T30 (regulated-kinds spec §3.3, §4.3; CTR-GOV-17, never lose ciphertext; I8): on kinds 10 and 11 `FORCE` moves the
 /// subject's public balance only. A frozen Zether UA holding a public (UA-ledger) balance and a shielded one is forced:
@@ -59,17 +60,17 @@ abstract contract ZetherForceSuite is ZetherRegFixture {
         vm.revertToState(snap);
 
         vm.prank(compliance);
-        _r().recordOrder(keccak256("order"), keccak256("document"), aId, nid(BENEFICIARY), PUBLIC, uint64(block.timestamp + 10 days));
+        _r().recordOrder(keccak256("order"), keccak256("document"), aId, nid(BENEFICIARY), PUBLIC, uint64(block.timestamp + 10 days), EnvKit.codeUidOf(address(_r())));
         bytes32 rid = keccak256(abi.encode(keccak256("order"), aId, nid(BENEFICIARY)));
         vm.prank(issuer);
-        _r().freeze(aId, REF, rid);
+        _r().freeze(aId, REF, rid, EnvKit.codeUidOf(address(_r())));
 
         IZetherToken.AccountState memory before = tok.accountState(alice.ua);
         uint256 shielded = tok.totalShielded();
         uint256 pool = tok.balanceOf(SHIELD_POOL_);
         vm.startStateDiffRecording();
         vm.prank(issuer);
-        _r().forceTransfer(rid, 20_000);
+        _r().forceTransfer(rid, 20_000, EnvKit.codeUidOf(address(_r())));
         assertEq(_shieldedAccesses(), 0, "FORCE reads and writes no shielded state (I8)");
 
         assertEq(tok.balanceOfUA(aId), PUBLIC - 20_000, "the subject's public balance");

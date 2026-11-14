@@ -232,8 +232,8 @@ interface ISCaaSDex {
     /// @notice Factory only, in the clone's creating call, on a clone carrying its env (`IFactoryToken.EnvMissing`);
     ///         `creatorId` the creator's UA id (S3); `initArgs = abi.encode(DexConfig)` (plan 5g-Z2).
     function initialize(bytes32 creatorId, uint64 version, bytes calldata initArgs) external;
-    function setMarket(address base, address quote, bool listed) external;
-    function setFeeSplit(uint32 relayerSharePpm, address treasury) external;
+    function setMarket(address base, address quote, bool listed, bytes32 chainUid_) external;
+    function setFeeSplit(uint32 relayerSharePpm, address treasury, bytes32 chainUid_) external;
     function mtxSettle(Settlement[] calldata s) external returns (bool[] memory ok);
     /// @notice Outside-token orders (CTR-DEX-18, CTR-DEX-02): closed or bad-signature items are skipped.
     function mtxCancelOrders(DexOrder[] calldata orders, bytes[] calldata sigs) external;
@@ -266,8 +266,8 @@ interface ISCaaSDex {
     function mtxLiquidity(LiquidityPlan calldata p, Interaction[] calldata interactions) external;
     /// @notice `h` of a liquidity order in this DEX's domain; no guard (a token's capability check reads it mid-plan).
     function liquidityOrderDigest(ITradeToken.LiquidityOrder calldata o) external view returns (bytes32);
-    function setExchangeTarget(address target, bool listed) external;
-    function setListedOnly(bool on) external;
+    function setExchangeTarget(address target, bool listed, bytes32 chainUid_) external;
+    function setListedOnly(bool on, bytes32 chainUid_) external;
 
     function dexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) external view returns (bytes32);
     /// @notice `CancelDexOrder(DexOrder order)`: the digest `mtxCancelOrders` checks.

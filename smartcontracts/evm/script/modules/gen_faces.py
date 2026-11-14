@@ -141,6 +141,20 @@ REG3S_ERRORS = [f'    error {e};' for e in ['NotAllowed(bytes32 account)', 'Deni
 # Fable recheck-2 P3-1 (owner 2026-11-12), CTR-GOV-27: the refusal of `renounceAdmin(chainUid_)` and `transferAdmin(newAdmin,
 # chainUid_)` (`IAdmin`, raised by the governance module)
 GOV_P31_ERRORS = ['    error ChainUidMismatch(bytes32 expected, bytes32 got);']
+# Round 3zb + 3zc (spec 2026-11-13-burner-wrap-caps.md §1, §3.6; CTR-GOV-29, CTR-GOV-30): `GovernanceLib.init`'s exclusivity
+# refusal on every kind; the supply caps' events and errors (`WrappedLib`) on the wrapped kinds
+B3ZB_ERRORS = ['    error FeatureConflict(uint8 bit, uint8 other);']
+W3ZC_EVENTS = [
+    '    event MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta);',
+    '    event MaxSupplySet(bytes32 indexed by, uint256 oldMaxSupply, uint256 newMaxSupply);',
+    '    event MaxWrapSupplyProposed(bytes32 indexed by, uint256 maxWrapSupply, uint64 eta);',
+    '    event MaxWrapSupplySet(bytes32 indexed by, uint256 oldMaxWrapSupply, uint256 newMaxWrapSupply);',
+]
+W3ZC_ERRORS = [f'    error {e};' for e in [
+    'MaxWrapSupplyExceeded(uint256 totalWrapped, uint256 maxWrapSupply)', 'MaxWrapSupplyInvalid()',
+    'MaxSupplyBelowSupply(uint256 maxSupply, uint256 totalSupply)', 'MaxSupplyBelowWrapCap(uint256 maxSupply, uint256 maxWrapSupply)',
+    'MaxWrapSupplyBelowWrapped(uint256 maxWrapSupply, uint256 totalWrapped)',
+    'MaxWrapSupplyAboveMaxSupply(uint256 maxWrapSupply, uint256 maxSupply)']]
 
 
 def abi_iface(k):
@@ -153,9 +167,9 @@ def abi_iface(k):
     er = [f'    error {x["name"]}(' + ', '.join(_abi_t(i) + (f' {i["name"]}' if i['name'] else '') for i in x['inputs']) + ');'
           for x in d['error']]
     if k.startswith('Wrapped'):  # group 3l (wrap limits spec §7): what `WrappedLib` raises and emits since the split
-        ev += W3L_EVENTS
-        er += W3L_ERRORS
-    er += GOV_P31_ERRORS
+        ev += W3L_EVENTS + W3ZC_EVENTS
+        er += W3L_ERRORS + W3ZC_ERRORS
+    er += GOV_P31_ERRORS + B3ZB_ERRORS
     if REG(k):
         er += REG3R_ERRORS + REG3S_ERRORS
         ev += REG3S_EVENTS

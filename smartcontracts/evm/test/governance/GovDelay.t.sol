@@ -162,7 +162,7 @@ contract GovDelayTest is Test {
         assertFalse(t.hasRole(MINT, nid(MANAGER)), "proposed, not granted");
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, MANAGER));
-        t.mint(TO, 1);
+        t.mint(TO, 1, EnvKit.codeUidOf(address(t)));
         vm.warp(block.timestamp + D);
         _grant(MANAGER);
         assertTrue(t.hasRole(MINT, nid(MANAGER)));
@@ -287,11 +287,11 @@ contract GovDelayTest is Test {
         assertTrue(_live(MANAGER));
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(2)));
-        t.mint(TO, 6);
+        t.mint(TO, 6, EnvKit.codeUidOf(address(t)));
         vm.warp(block.timestamp + D);
         _grant(MANAGER);
         vm.prank(MANAGER);
-        t.mint(TO, 6);
+        t.mint(TO, 6, EnvKit.codeUidOf(address(t)));
         _grant(MANAGER); // `WHOLE`: a no-op, nothing proposed
         assertEq(_eta(MANAGER), 0);
     }
@@ -465,7 +465,7 @@ contract GovDelayTest is Test {
         vm.prank(OWNER);
         t.revokeRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         vm.prank(OFFICER);
-        t.mint(TO, 1); // alive without its old parent
+        t.mint(TO, 1, EnvKit.codeUidOf(address(t))); // alive without its old parent
     }
 
     function test_renounceDeletesThePending() public {
@@ -571,8 +571,8 @@ contract GovDelayTest is Test {
         (uint64 eta,,,) = d.pendingGrant(GovernanceBits.LISTING, nid(OWNER));
         assertEq(eta, 0, "nothing proposed");
         vm.startPrank(OWNER);
-        d.setListedOnly(true);
-        d.setFeeSplit(0, address(0xBB));
+        d.setListedOnly(true, EnvKit.codeUidOf(address(d)));
+        d.setFeeSplit(0, address(0xBB), EnvKit.codeUidOf(address(d)));
         vm.stopPrank();
         assertEq(d.treasury(), address(0xBB));
     }

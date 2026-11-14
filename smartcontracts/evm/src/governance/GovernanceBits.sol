@@ -52,6 +52,16 @@ library GovernanceBits {
     ///      default, set and locked at creation only (`DexConfig.features` / `lockedFeatures`), never enabled later; the
     ///      admin's `disableFeature` opens the markets for good unless locked.
     uint8 internal constant CLOSED_MARKETS = 29;
+    /// @dev Round 3zb (spec 2026-11-13-burner-wrap-caps.md §1, CTR-GOV-29, owner 2026-11-13): a power with a scalar (the
+    ///      amount burnt), on the Normal kinds 0, 2, 4, 8, 10, 12; any holder. Only a holder burns, only its own balance,
+    ///      within its grant (`burn`, `mtxBurn`, the generic `mtxExecute` burn; never the confidential unshield). Exclusive
+    ///      with `BURNABLE` at creation (`FeatureConflict(30, 2)`); never enabled later; the admin's `disableFeature` stops
+    ///      every burn for good unless locked.
+    uint8 internal constant BURNER = 30;
+    /// @dev Round 3zc (spec §3, CTR-GOV-30, owner 2026-11-13): a capability on the wrapped kinds 1, 3, 5, 9, 11, 13: the
+    ///      admin may change `maxSupply` (a hybrid's) and `maxWrapSupply`, each after `grantDelay` (`setMaxSupply`,
+    ///      `setMaxWrapSupply`); unset, or disabled (one-way), both caps are fixed for good. Never enabled later.
+    uint8 internal constant SUPPLY_CAP_ADJUSTABLE = 31;
     /// @dev The bits `enableFeature` may switch on (spec §5.2): 8, 9, 28, each only where the kind's mask holds it and not
     ///      locked. 8 and 9 are never disabled (`FeatureNotDisableable`). No plain kind's mask holds them.
     uint256 internal constant ENABLEABLE = (1 << ALLOWLIST) | (1 << DENYLIST) | (1 << KYC);
@@ -78,18 +88,20 @@ library GovernanceBits {
     // the regulated kinds 8-13 hold them (CTR-AS-17, CTR-GOV-03, CTR-GOV-24), and bit 22 (CTR-GOV-20).
     /// @dev `RESCUABLE` on every token kind (spec §6.2, CTR-GOV-06): set at creation, always locked;
     ///      `rescueTo` comes only with it, and 0 there stores `SCAAS_DEV_RESCUE` (CTR-GOV-25).
-    uint256 internal constant NORMAL_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE);
+    uint256 internal constant NORMAL_BITS =
+        (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE) | (1 << BURNER);
     /// @dev `MINTABLE` makes a hybrid (spec §5.2, CTR-GOV-12): set at creation iff `maxSupply != 0`.
     uint256 internal constant WRAPPED_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE)
-        | (1 << RESCUABLE) | WRAP_CONTROLS;
+        | (1 << RESCUABLE) | WRAP_CONTROLS | (1 << SUPPLY_CAP_ADJUSTABLE);
     /// @dev The masks of each kind (spec §1.2): the bits with a holder, those whose holder must have code, those whose power
-    ///      passes the number it acts on (B-09), those whose power reads `use`'s scope (B-10). Every token kind: scalar bit 1,
-    ///      no scope.
-    uint256 internal constant NORMAL_ROLES = 1 << MINTABLE;
+    ///      passes the number it acts on (B-09), those whose power reads `use`'s scope (B-10). Every token kind: scalar bits 1
+    ///      and 30, no scope.
+    uint256 internal constant NORMAL_ROLES = (1 << MINTABLE) | (1 << BURNER);
     uint256 internal constant WRAPPED_ROLES =
         (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE) | (1 << WRAP_LIST) | (1 << REDEEMER);
     uint256 internal constant WRAPPED_CONTRACT_ONLY = 1 << RATE_ADJUSTABLE;
-    uint256 internal constant TOKEN_SCALAR = 1 << MINTABLE;
+    /// @dev Bit 30 is inert on the wrapped kinds: not in their role mask, a grant there is `NoSuchRole`.
+    uint256 internal constant TOKEN_SCALAR = (1 << MINTABLE) | (1 << BURNER);
 
     uint256 internal constant DEX_BITS = (1 << LISTING) | (1 << FEE_ROUTING);
     /// @dev The DEX's valid bits: its two powers and the capability `CLOSED_MARKETS`.

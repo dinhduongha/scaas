@@ -92,7 +92,7 @@ contract UATradeVectorsTest is UARegistryBase {
         dex = SCaaSDex(at);
         vm.prank(address(kf));
         dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0, address(0), 0, 0)));
-        dex.setMarket(address(A), address(B), true);
+        dex.setMarket(address(A), address(B), true, EnvKit.codeUidOf(address(dex)));
         vm.warp(1_800_000_000);
     }
 

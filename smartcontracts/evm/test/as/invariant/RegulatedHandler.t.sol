@@ -523,8 +523,8 @@ abstract contract RegCore is Test {
     function listEdit(uint256 i, bool deny, bool on) external {
         bytes32[] memory one = new bytes32[](1);
         one[0] = _id(i);
-        _op(K_LIST, cGov[2], deny ? abi.encodeCall(IRegulatedToken.setDenied, (one, on))
-            : abi.encodeCall(IRegulatedToken.setAllowed, (one, on)));
+        _op(K_LIST, cGov[2], deny ? abi.encodeCall(IRegulatedToken.setDenied, (one, on, EnvKit.codeUidOf(cT)))
+            : abi.encodeCall(IRegulatedToken.setAllowed, (one, on, EnvKit.codeUidOf(cT))));
     }
 
     /// The admin switches a list on, at once (bit 8 on 10-13: `FeatureInvalidForKind`).
@@ -538,12 +538,12 @@ abstract contract RegCore is Test {
         bytes32 a = _id(i);
         bytes32 rec = backed && cRecs.length != 0 ? cRecs[r % cRecs.length] : bytes32(0);
         if (rec != 0) a = IRegulatedToken(cT).order(rec).subject;
-        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (a, CREF, rec)));
+        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (a, CREF, rec, EnvKit.codeUidOf(cT))));
     }
 
     function unfreeze(uint256 i) external {
         pLower = _id(i);
-        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.unfreeze, (_id(i), CREF)));
+        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.unfreeze, (_id(i), CREF, EnvKit.codeUidOf(cT))));
     }
 
     /// A record of `s` for `b` (a pool or the token now and then, which `recordOrder` refuses: spec §3.3).
@@ -555,7 +555,7 @@ abstract contract RegCore is Test {
         max = bound(max, 0, 1000);
         uint64 fu = uint64(block.timestamp + bound(days_, 0, 90) * 1 days);
         bytes32 orderId = keccak256(abi.encode(cRecs.length, odd));
-        if (_op(K_CTRL, cGov[3], abi.encodeCall(IRegulatedToken.recordOrder, (orderId, keccak256("doc"), sub, ben, max, fu)))) {
+        if (_op(K_CTRL, cGov[3], abi.encodeCall(IRegulatedToken.recordOrder, (orderId, keccak256("doc"), sub, ben, max, fu, EnvKit.codeUidOf(cT))))) {
             cRecs.push(keccak256(abi.encode(orderId, sub, ben)));
         }
     }
@@ -564,7 +564,7 @@ abstract contract RegCore is Test {
         if (cRecs.length == 0) return;
         bytes32 rec = cRecs[r % cRecs.length];
         pLower = IRegulatedToken(cT).order(rec).subject;
-        _op(K_CTRL, cGov[3], abi.encodeCall(IRegulatedToken.revokeOrder, (rec, CREF)));
+        _op(K_CTRL, cGov[3], abi.encodeCall(IRegulatedToken.revokeOrder, (rec, CREF, EnvKit.codeUidOf(cT))));
     }
 
     function forceTransfer(uint256 r, uint256 amount) external {
@@ -572,25 +572,25 @@ abstract contract RegCore is Test {
         bytes32 rec = cRecs[r % cRecs.length];
         // half the time the record-backed freeze first (T4), so a force has a frozen subject to act on
         bytes32 sub = IRegulatedToken(cT).order(rec).subject;
-        if (r % 2 == 0 && !_fz(sub)) _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (sub, CREF, rec)));
+        if (r % 2 == 0 && !_fz(sub)) _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (sub, CREF, rec, EnvKit.codeUidOf(cT))));
         pRec = rec;
         pOrder = IRegulatedToken(cT).order(rec);
         pRecActive = IRegulatedToken(cT).regulatedConfig().controls & 32 != 0 && _roots(10) != 0;
         pDiff = cConf;
-        _op(K_FORCE, cGov[2], abi.encodeCall(IRegulatedToken.forceTransfer, (rec, bound(amount, 0, 300))));
+        _op(K_FORCE, cGov[2], abi.encodeCall(IRegulatedToken.forceTransfer, (rec, bound(amount, 0, 300), EnvKit.codeUidOf(cT))));
     }
 
     function pause(uint256 secs) external {
-        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.pause, (CREF, uint64(block.timestamp + bound(secs, 0, 8 days)))));
+        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.pause, (CREF, uint64(block.timestamp + bound(secs, 0, 8 days)), EnvKit.codeUidOf(cT))));
     }
 
     function unpause() external {
-        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.unpause, (CREF)));
+        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.unpause, (CREF, EnvKit.codeUidOf(cT))));
     }
 
     function operatorTransfer(uint256 i, uint256 j, uint256 amount) external {
         pDiff = cConf;
-        _op(K_OPER, cGov[4], abi.encodeCall(IRegulatedToken.operatorTransfer, (_id(i), _id(j), bound(amount, 0, 300), CREF)));
+        _op(K_OPER, cGov[4], abi.encodeCall(IRegulatedToken.operatorTransfer, (_id(i), _id(j), bound(amount, 0, 300), CREF, EnvKit.codeUidOf(cT))));
     }
 
     // ------------------------------------------------------------------ the relaxation calls (spec §3.6)
@@ -749,7 +749,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         if (which == 0) {
             bytes32 to = _id(j);
             if (uint256(to) >> 160 != 0) to = nid(carol);
-            _op(K_MOVE, address(this), abi.encodeCall(NormalToken.mint, (address(uint160(uint256(to))), amount)));
+            _op(K_MOVE, address(this), abi.encodeCall(NormalToken.mint, (address(uint160(uint256(to))), amount, EnvKit.codeUidOf(cT))));
         } else {
             usd.mint(address(this), amount);
             _op(K_MOVE, address(this), abi.encodeWithSignature("wrap(uint256)", amount));

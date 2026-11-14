@@ -398,7 +398,8 @@ contract KindPairsTest is UALedgerBase {
     function test_kindPairInterfaceIdsArePinned() public pure {
         // group 3l (wrap limits spec §7): + setWrapLimits, setWrapMember, wrapLimits, wrapQuotaOf, wrapQuotaTotal:
         // 0xa84f2937 -> 0x24c296a1 (the XOR of the five selectors)
-        assertEq(type(IWrappedToken).interfaceId, bytes4(0x24c296a1), "IWrappedToken");
+        // round 3zb + 3zc (CTR-GOV-28 Change, CTR-GOV-30: the chain word on mint, mintToUA, disableWrap, the rate entries, setWrapLimits, setWrapMember; setMaxSupply, setMaxWrapSupply and the four views): 0x24c296a1 -> 0xab54992e
+        assertEq(type(IWrappedToken).interfaceId, bytes4(0xab54992e), "IWrappedToken");
         assertEq(type(ITradeToken).interfaceId, bytes4(0xe393854e), "ITradeToken");
     }
 }

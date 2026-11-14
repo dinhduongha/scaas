@@ -15,6 +15,7 @@ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Người nhận có hook (ERC-777): trong lúc unwrap không gas đang chạy, đọc nonce, số dư của người ký và của người
 /// nhận phí, gọi `transfer` của wrapper (không có guard), hoặc thử vào lại một hàm có guard.
@@ -245,11 +246,11 @@ contract UnwrapOpTest is V2Fixture {
         RateAdminForwarder adm = new RateAdminForwarder();
         WrappedToken a = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
         _wrapFor(a, usdc, alice, 100);
-        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101, 100)));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101, 100, EnvKit.codeUidOf(address(a)))));
         _run(address(a), _op(50, shop, 50));
         assertEq(usdc.balanceOf(shop), 50);
         vm.warp(block.timestamp + 7 days);
-        adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, ()));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(a)))));
         MetaTxLib.MetaTransaction memory m = _op(50, shop, 50);
         m.batch = 10;
         _runRevert(address(a), m, abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 49, 50));

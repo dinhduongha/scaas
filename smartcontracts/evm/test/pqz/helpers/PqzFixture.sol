@@ -262,7 +262,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     }
 
     function _public(NormalPqzToken t, address to, uint256 units) internal {
-        NormalPqzToken(address(t)).mint(to, units);
+        NormalPqzToken(address(t)).mint(to, units, EnvKit.codeUidOf(address(t)));
         minted += units;
     }
 

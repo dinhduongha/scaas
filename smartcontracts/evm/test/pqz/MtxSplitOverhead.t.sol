@@ -10,6 +10,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// metatx-split T5 (spec §3.6, §10 R9; owner variant A 2026-10-21): the split's relayed overhead must not grow with the
 /// envelope's `data` size. For each accepted fee-UA kind (ECDSA address path, `mldsa65` and `fndsa512` on `uaExecute`) the
@@ -61,7 +62,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
         fnFee2 = UACall.register(reg, UAKinds.FNDSA512, fpk, UACall.attrs("", 0, ""), new bytes(666), "");
-        NormalPqzToken(address(tok)).mintToUA(fnFee2, 1000);
+        NormalPqzToken(address(tok)).mintToUA(fnFee2, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         bytes32 mlFee = feeUA;
         for (uint256 k; k < 3; ++k) {

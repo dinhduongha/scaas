@@ -7,6 +7,9 @@ import {SigCheck} from "../common/SigCheck.sol";
 import {GovernanceBaseCore} from "../governance/GovernanceBase.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
+import {ISCaaSDex} from "./ISCaaSDex.sol";
+import {SCaaSDexCore} from "./SCaaSDexCore.sol";
 
 /// @title The DEX's governance hooks (T66b, spec 2026-11-09-t66b-library-organisation.md §4.2, owner 2026-11-09 ruling (a)):
 ///        one definition, inherited by `SCaaSDex` and by its governance module `SCaaSDexGovernanceModule`, so a governance
@@ -44,10 +47,11 @@ abstract contract SCaaSDexGovernance is ReentrancyGuardTransient, GovernanceBase
 }
 
 /// @title SCaaSDexGovernanceModule: the DEX's governance module (named D until owner ruling R7, 2026-11-10; T66b, spec §4.2,
-///        owner 2026-11-09 ruling (a)): its 22 governance entries, reached only by DELEGATECALL from the DEX's stubs (M2;
-///        `validBits` is `pure` and reads nothing), no guard of its own (the stub's `_forward` holds it, M3), no state of its
-///        own (M6). UNAUDITED.
-contract SCaaSDexGovernanceModule is SCaaSDexGovernance {
+///        owner 2026-11-09 ruling (a)): its 26 entries (22 governance; the four powers `setMarket`, `setExchangeTarget`,
+///        `setListedOnly`, `setFeeSplit` since round 3zb + 3zc, O8, CTR-TOK-30 Change), reached only by DELEGATECALL from the DEX's
+///        stubs (M2; `validBits` is `pure` and reads nothing), no guard of its own (the stub's `_forward` holds it, M3), no
+///        state of its own (M6): it writes `scaas.dex` and `scaas.governance` at the DEX's slots. UNAUDITED.
+contract SCaaSDexGovernanceModule is SCaaSDexGovernance, SCaaSDexCore {
     /// @notice A module-face entry called other than by DELEGATECALL from its DEX (M2).
     error NotDelegated();
 
@@ -122,4 +126,51 @@ contract SCaaSDexGovernanceModule is SCaaSDexGovernance {
     }
     function acceptAdmin() external onlyDelegated { _acceptAdminBody(); }
     function renounceAdmin(bytes32 chainUid_) external onlyDelegated { _renounceAdminBody(chainUid_); }
+
+    // ------------------------------------------------------------------ the powers (O8, CTR-TOK-30 Change; bodies moved verbatim)
+
+    /// @dev The DEX's factory: this module's immutable, equal to the DEX's (its constructor checks `factory()`).
+    function _factoryAt() internal view override returns (address) { return _FACTORY; }
+
+    /// @dev A power: the holder's chain word (CTR-GOV-28 Change, `_holderOnChain`) before the use and any write.
+    function _power(uint8 bit, bytes32 chainUid_) private returns (DexStorage storage) {
+        GovernanceUse.use(bit, _holderOnChain(bit, chainUid_), 0);
+        return _s();
+    }
+
+    /// @notice Lists or delists the pair and records each token's kind from the factory (never from a leg).
+    function setMarket(address base, address quote, bool listed, bytes32 chainUid_) external onlyDelegated {
+        DexStorage storage s = _power(GovernanceBits.LISTING, chainUid_);
+        if (base == quote || base == address(0) || quote == address(0)) revert ISCaaSDex.BadMarket(base, quote); // C6-9
+        bytes32 k = _pair(base, quote);
+        if (s.listed[k] != listed) {
+            s.listed[k] = listed;
+            if (listed) {
+                ++s.listings[base];
+                ++s.listings[quote];
+            } else {
+                --s.listings[base];
+                --s.listings[quote];
+            }
+        }
+        s.kind[base] = _classify(base);
+        s.kind[quote] = _classify(quote);
+        emit ISCaaSDex.MarketSet(base, quote, listed);
+    }
+
+    function setFeeSplit(uint32 relayerSharePpm_, address treasury_, bytes32 chainUid_) external onlyDelegated {
+        _setFeeSplit(_power(GovernanceBits.FEE_ROUTING, chainUid_), relayerSharePpm_, treasury_);
+    }
+
+    /// @notice Lists or delists an interaction target or an executor (CTR-DEX-23).
+    function setExchangeTarget(address target, bool listed, bytes32 chainUid_) external onlyDelegated {
+        _power(GovernanceBits.LISTING, chainUid_).exchangeTarget[target] = listed;
+        emit ISCaaSDex.ExchangeTargetSet(target, listed);
+    }
+
+    /// @notice DEX-wide listed-only mode for the exchange path (CTR-DEX-23); a leg's `LISTED_POOLS` asks the same.
+    function setListedOnly(bool on, bytes32 chainUid_) external onlyDelegated {
+        _power(GovernanceBits.LISTING, chainUid_).listedOnly = on;
+        emit ISCaaSDex.ListedOnlySet(on);
+    }
 }

@@ -341,7 +341,7 @@ interface IPqzToken is IConfidentialToken {
     function proofStore() external view returns (uint8);
     /// @notice Group 3h (spec §5, O10): a holder of bit 24 `PQZ_PROOF` sets the mode the next debit runs under, `NONE` <->
     ///         `LOG`; the current value is a no-op (no event). Through the router as `mtxSetProofStore`.
-    function setProofStore(uint8 next) external;
+    function setProofStore(uint8 next, bytes32 chainUid_) external;
     /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, for every `i <
     ///         pendingCount` (group 3h PP-1: kept for good); 0 for an unwritten index. Bit 63 of `block` is the skip mark
     ///         (CTR-PQZ-41): the creation block is `block & (2^63 − 1)`.

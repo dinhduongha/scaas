@@ -452,7 +452,7 @@ envelope, `msg.value` bound to the authorization, relayer reimbursed) was the ot
 | Implementation | Self-call selector | Fee class |
 |---|---|---|
 | every token | `cancelNonce(uint256)` | `ABSOLUTE` |
-| `NormalToken` | `burn(uint256)` | `AMOUNT(0)` |
+| `NormalToken` | `burn(uint256)` (gated in the body by the token's burn mode: `BURNABLE`, or under bit 30 `BURNER` only a holder's own balance within its grant, [CTR-GOV-29](../decisions.md#CTR-GOV-29); BUILT, build 3zb + 3zc; the selector, `UABurn` and the allow-lists unchanged, no chain word) | `AMOUNT(0)` |
 | `WrappedToken` | `wrap(uint256)` (fee from minted units; reverts `UnderlyingRequired` unless one leg) | `ABSOLUTE` |
 | | `unwrap(uint256,address,uint256)` (reverts `UnderlyingRequired` unless one leg) | `AMOUNT(0)` |
 | | `wrap(address,uint256)` | `ABSOLUTE` |
@@ -473,7 +473,7 @@ allowlisted, so one transfer has one encoding and one digest. `WrappedToken`'s t
 second digest and no `minOut`). **Never allowlisted:**
 `approve` and `transferFrom` (contract accounts approve and spend through their own call path,
 [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); every role function — `mint`, `mintToUA`, the `IGovernance` functions (`grantRole`, `revokeRole`, `renounceRole`, `setGrant`, `cancelGrant`, `disableFeature`, the ownership functions), `proposeRate`,
-`cancelRate`, `executeRate`, `disableWrap`, the DEX's `setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit` (a governance operation is no allow-list row on a governed contract, pinned by the selector audit `test/vectors/selector_audit.json`, governance T13 `d8f2e492`; role holders act through their own
+`cancelRate`, `executeRate`, `disableWrap`, the DEX's `setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit`, and the wrapped kinds' `setMaxSupply` / `setMaxWrapSupply` (build 3zb + 3zc, SPECIFIED; from that round every one of these direct role entries takes a trailing `chainUid_`, [CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change, which moves their selectors but adds no allow-list row) (a governance operation is no allow-list row on a governed contract, pinned by the selector audit `test/vectors/selector_audit.json`, governance T13 `d8f2e492`; role holders act through their own
 contract, or a gas-less or derived UA through the chain's `GovernanceRouter`, whose own `mtxSelectors()` is empty ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)), [NODE-JOB-01](../node/job-api.md#NODE-JOB-01); a signature check would skip a minter contract's caps or a
 Safe's guards; the holder still acts gaslessly through its own contract account, [CTR-UA-27](accounts.md#CTR-UA-27)); `transfer` and `pay` (they are `MetaTransfer`s); `payWithFee` and `payWithFeeToUA` (they charge their own fee); `mtxExecute`, its alias and every other `mtx…` entry
 (no nesting); `initialize`; views; Zether `mtxRollOverSigned`/`mtxSetRollOverMode` (they carry their

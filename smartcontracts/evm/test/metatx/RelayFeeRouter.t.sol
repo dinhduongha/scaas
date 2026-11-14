@@ -91,7 +91,7 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
         ml = _mldsaUA(7);
-        tok.mintToUA(ml, 1_000);
+        tok.mintToUA(ml, 1_000, EnvKit.codeUidOf(address(tok)));
         target = new MtxRegistryMock("SCaaS TestRegistry", PQZ_UID);
         router = new RelayFeeRouter();
         exec = router.EXECUTOR();
@@ -588,7 +588,7 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         address tgt = vm.parseJsonAddress(j, msgField("UARelayFee", "target"));
         vm.etch(tgt, hex"00");
         address payer = vm.parseJsonAddress(j, ".key.address");
-        tok.mint(payer, 1_000);
+        tok.mint(payer, 1_000, EnvKit.codeUidOf(address(tok)));
         _relayFeeRowHasNoEntry(vm.readFile(TYPED_OPS_LEGACY), at);
         string memory op = "UARelayFee";
         checkRow(j, op, "token");

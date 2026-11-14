@@ -109,12 +109,12 @@ abstract contract RegulatedBase is MetaTokenBase {
 
     // ------------------------------------------------------------------ the lists (round 3s, spec §6)
 
-    function _setAllowedBody(bytes32[] calldata accounts, bool on) internal {
-        RegulatedLib.setList(GovernanceBits.ALLOWLIST, RegulatedLib.ALLOWED, accounts, on, _govSubject());
+    function _setAllowedBody(bytes32[] calldata accounts, bool on, bytes32 chainUid_) internal {
+        RegulatedLib.setList(GovernanceBits.ALLOWLIST, RegulatedLib.ALLOWED, accounts, on, _holderOnChain(GovernanceBits.ALLOWLIST, chainUid_));
     }
 
-    function _setDeniedBody(bytes32[] calldata accounts, bool on) internal {
-        RegulatedLib.setList(GovernanceBits.DENYLIST, RegulatedLib.DENIED, accounts, on, _govSubject());
+    function _setDeniedBody(bytes32[] calldata accounts, bool on, bytes32 chainUid_) internal {
+        RegulatedLib.setList(GovernanceBits.DENYLIST, RegulatedLib.DENIED, accounts, on, _holderOnChain(GovernanceBits.DENYLIST, chainUid_));
     }
 
     function _listFlagsOfBody(bytes32 account) internal view returns (uint8) {
@@ -122,52 +122,54 @@ abstract contract RegulatedBase is MetaTokenBase {
     }
 
     // ------------------------------------------------------------------ the controls (spec §3.1): thin stubs
+    // CTR-GOV-28 Change (round 3zb + 3zc): every holder's entry names the chain word, checked (`_holderOnChain`) before the
+    // library's role check and any write; a caller without the bit keeps the library's refusal.
 
-    function _freezeBody(bytes32 account, bytes32 ref, bytes32 recordId) internal {
-        RegulatedLib.freeze(account, ref, recordId, _govSubject());
+    function _freezeBody(bytes32 account, bytes32 ref, bytes32 recordId, bytes32 chainUid_) internal {
+        RegulatedLib.freeze(account, ref, recordId, _holderOnChain(GovernanceBits.FREEZE, chainUid_));
     }
 
-    function _unfreezeBody(bytes32 account, bytes32 ref) internal {
-        RegulatedLib.unfreeze(account, ref, _govSubject());
+    function _unfreezeBody(bytes32 account, bytes32 ref, bytes32 chainUid_) internal {
+        RegulatedLib.unfreeze(account, ref, _holderOnChain(GovernanceBits.FREEZE, chainUid_));
     }
 
     /// @notice The library checks the record and counts it; the token checks the beneficiary as a receiver (`R`, a derived
     ///         one registered SIGNING) and moves the public balance on `_poolMove` (no hook: the subject is frozen,
     ///         CTR-GOV-08 Change).
-    function _forceTransferBody(bytes32 recordId, uint256 amount) internal {
-        (bytes32 from, bytes32 to) = RegulatedLib.forceTransfer(recordId, amount, _govSubject());
+    function _forceTransferBody(bytes32 recordId, uint256 amount, bytes32 chainUid_) internal {
+        (bytes32 from, bytes32 to) = RegulatedLib.forceTransfer(recordId, amount, _holderOnChain(GovernanceBits.FORCE, chainUid_));
         _listed(to); // never `L(from)`: the remedy reaches a blocked subject (round 3s, spec §4.3)
         _eligible(to);
         MtxPipelineLib._checkTo(_registry(), to);
         _poolMove(from, to, amount);
     }
 
-    function _pauseBody(bytes32 ref, uint64 until) internal {
-        RegulatedLib.pause(ref, until, _govSubject());
+    function _pauseBody(bytes32 ref, uint64 until, bytes32 chainUid_) internal {
+        RegulatedLib.pause(ref, until, _holderOnChain(GovernanceBits.PAUSE, chainUid_));
     }
 
-    function _unpauseBody(bytes32 ref) internal {
-        RegulatedLib.unpause(ref, _govSubject());
+    function _unpauseBody(bytes32 ref, bytes32 chainUid_) internal {
+        RegulatedLib.unpause(ref, _holderOnChain(GovernanceBits.PAUSE, chainUid_));
     }
 
     function _recordOrderBody(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount,
-        uint64 freezeUntil) internal {
-        RegulatedLib.recordOrder(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil, _govSubject());
+        uint64 freezeUntil, bytes32 chainUid_) internal {
+        RegulatedLib.recordOrder(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil, _holderOnChain(GovernanceBits.RECORD, chainUid_));
     }
 
-    function _revokeOrderBody(bytes32 recordId, bytes32 reasonRef) internal {
-        RegulatedLib.revokeOrder(recordId, reasonRef, _govSubject());
+    function _revokeOrderBody(bytes32 recordId, bytes32 reasonRef, bytes32 chainUid_) internal {
+        RegulatedLib.revokeOrder(recordId, reasonRef, _holderOnChain(GovernanceBits.RECORD, chainUid_));
     }
 
     /// @notice Bit 23 (pay-meta-tax spec §6.2): the one PERCENT rate; the factory's `noticePeriod()` read by the library
     ///         from the `FACTORY` passed here, after the holder check (F-20).
-    function _setTaxRateBody(uint32 ratePpm) internal {
-        RegulatedLib.setTaxRate(ratePpm, FACTORY, _govSubject());
+    function _setTaxRateBody(uint32 ratePpm, bytes32 chainUid_) internal {
+        RegulatedLib.setTaxRate(ratePpm, FACTORY, _holderOnChain(GovernanceBits.TAX, chainUid_));
     }
 
     /// @notice Bit 23: the tax recipient, at once (Q4); the library's checks, then `R` here (F-15).
-    function _setTaxRecipientBody(bytes32 taxRecipient) internal {
-        RegulatedLib.setTaxRecipient(taxRecipient, _govSubject(), _registry());
+    function _setTaxRecipientBody(bytes32 taxRecipient, bytes32 chainUid_) internal {
+        RegulatedLib.setTaxRecipient(taxRecipient, _holderOnChain(GovernanceBits.TAX, chainUid_), _registry());
         _eligible(taxRecipient);
     }
 
@@ -214,8 +216,8 @@ abstract contract RegulatedBase is MetaTokenBase {
     }
 
     /// @notice The library refuses and `use`s; the move is `_uaMove`, hooked, so `P`, `F(from)` and `R(to)` apply (§3.4).
-    function _operatorTransferBody(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) internal {
-        RegulatedLib.operatorTransfer(from, to, amount, ref, _govSubject(), _registry());
+    function _operatorTransferBody(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 chainUid_) internal {
+        RegulatedLib.operatorTransfer(from, to, amount, ref, _holderOnChain(GovernanceBits.OPERATOR_TRANSFER, chainUid_), _registry());
         _uaMove(from, to, amount);
     }
 

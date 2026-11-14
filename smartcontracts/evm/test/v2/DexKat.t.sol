@@ -57,7 +57,7 @@ contract DexKatTest is Test {
         // the outside token at its vector address (T66b: the body modules this setUp deploys move the test's nonces)
         usdc = MockERC20(vm.parseJsonAddress(vm.readFile(OUT), ".outside_token"));
         deployCodeTo("Mocks.sol:MockERC20", abi.encode("USD Coin", "USDC", uint8(6)), address(usdc));
-        dex.setMarket(address(a), address(usdc), true);
+        dex.setMarket(address(a), address(usdc), true, EnvKit.codeUidOf(address(dex)));
         usdc.mint(dave, 1e9);
         address p = dex.puller();
         vm.prank(dave);

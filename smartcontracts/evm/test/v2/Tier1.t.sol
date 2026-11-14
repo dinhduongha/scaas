@@ -40,11 +40,11 @@ contract Tier1Test is V2Fixture {
     function test_onlyMinterMints() public {
         NormalToken t = _normal(address(this), 0, minter);
         vm.prank(minter);
-        t.mint(bob, 7);
+        t.mint(bob, 7, EnvKit.codeUidOf(address(t)));
         assertEq(t.balanceOf(bob), 7);
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), bob));
-        t.mint(bob, 1);
+        t.mint(bob, 1, EnvKit.codeUidOf(address(t)));
     }
 
     /// P1c: "zero minter means fixed supply" is now "no `MINTABLE` flag".
@@ -55,7 +55,7 @@ contract Tier1Test is V2Fixture {
         NormalToken t = NormalToken(_clone(normalImpl, address(this), new address[](0), abi.encode(c)));
         vm.prank(address(0));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
-        t.mint(bob, 1);
+        t.mint(bob, 1, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), address(this)));
         t.renounceRole(1, EnvKit.codeUidOf(address(t)));
     }
@@ -69,7 +69,7 @@ contract Tier1Test is V2Fixture {
         assertFalse(t.hasRole(1, nid(minter)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));
-        t.mint(bob, 1);
+        t.mint(bob, 1, EnvKit.codeUidOf(address(t)));
     }
 
     function test_holderBurnsOwnBalance() public {

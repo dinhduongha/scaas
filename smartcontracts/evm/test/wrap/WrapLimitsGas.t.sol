@@ -53,14 +53,18 @@ contract WrapLimitsGasTest is WrapLimitsBase {
         // entries' selectors move the dispatch tree, nothing in the wrap path): wrap 114,814 -> 114,836, unwrap 113,481 ->
         // 113,436, tracked 135,718 -> 135,740, 135,855 -> 135,877, 140,032 -> 139,987, 140,446 -> 140,401; fix3 owner
         // 2026-11-13 (`renounceRole(uint8,bytes32)`: the dispatch tree again): wrap 114,836 -> 114,814, unwrap 113,436 ->
-        // 113,414, tracked 135,740 -> 135,718, 135,877 -> 135,855, 139,987 -> 139,965, 140,401 -> 140,379
-        assertEq(a1, 114_814, "off wrap");
-        assertEq(a3, 113_414, "off unwrap");
-        assertEq(b1, 114_814, "unconfigured wrap");
-        assertEq(b3, 113_414, "unconfigured unwrap");
-        assertEq(c1, 135_718, "tracked wrap first");
-        assertEq(c2, 135_855, "tracked wrap later");
-        assertEq(c3, 139_965, "tracked unwrap first");
-        assertEq(c4, 140_379, "tracked unwrap later");
+        // 113,414, tracked 135,740 -> 135,718, 135,877 -> 135,855, 139,987 -> 139,965, 140,401 -> 140,379; round 3zc (CTR-GOV-30,
+        // the counter `totalWrapped` and the cap `maxWrapSupply`, two new slots of `scaas.underlying`): a wrap +14,531 to
+        // +14,547 (a cold read-modify-write of `totalWrapped` and a cold read of `maxWrapSupply`), an unwrap +12,497 to
+        // +12,513 (the read-modify-write of `totalWrapped`; the unwrap reads no cap): wrap 114,814 -> 129,361, unwrap
+        // 113,414 -> 125,927, tracked 135,718 -> 150,249, 135,855 -> 150,386, 139,965 -> 152,462, 140,379 -> 152,876
+        assertEq(a1, 129_361, "off wrap");
+        assertEq(a3, 125_927, "off unwrap");
+        assertEq(b1, 129_361, "unconfigured wrap");
+        assertEq(b3, 125_927, "unconfigured unwrap");
+        assertEq(c1, 150_249, "tracked wrap first");
+        assertEq(c2, 150_386, "tracked wrap later");
+        assertEq(c3, 152_462, "tracked unwrap first");
+        assertEq(c4, 152_876, "tracked unwrap later");
     }
 }

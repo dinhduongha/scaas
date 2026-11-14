@@ -199,19 +199,19 @@ contract Dex is OnchainBase {
     /// The DEX owner's own entries before the trades: markets, the fee split, listed targets (listed-only is set in `_gov`).
     function _admin() internal {
         vm.startBroadcast(k1);
-        dex.setMarket{gas: G}(A, B, true);
-        dex.setMarket{gas: G}(A, address(usdc), true);
-        dex.setMarket{gas: G}(W, B, true);
-        dex.setMarket{gas: G}(R, A, true);
+        dex.setMarket{gas: G}(A, B, true, dex.chainUid());
+        dex.setMarket{gas: G}(A, address(usdc), true, dex.chainUid());
+        dex.setMarket{gas: G}(W, B, true, dex.chainUid());
+        dex.setMarket{gas: G}(R, A, true, dex.chainUid());
         // group 3s (spec 2026-11-10-token-lists.md §4.4, §15 T8): R's allow list, written while off by a1's issuer seat: both
         // traders, the DEX and its puller listed like anyone else; then switched on at once (`FeatureEnabled(8)`)
         bytes32[] memory listed = new bytes32[](4);
         (listed[0], listed[1], listed[2], listed[3]) = (_pad(a1), _pad(a2), _pad(address(dex)), _pad(_puller()));
-        IRegulatedToken(R).setAllowed{gas: G}(listed, true);
+        IRegulatedToken(R).setAllowed{gas: G}(listed, true, IMetaTx(R).chainUid());
         IRegulatedToken(R).enableFeature{gas: G}(GovernanceBits.ALLOWLIST, IMetaTx(R).chainUid());
-        dex.setFeeSplit{gas: G}(300_000, TREASURY);
-        dex.setExchangeTarget{gas: G}(address(router), true);
-        dex.setExchangeTarget{gas: G}(address(exec), true);
+        dex.setFeeSplit{gas: G}(300_000, TREASURY, dex.chainUid());
+        dex.setExchangeTarget{gas: G}(address(router), true, dex.chainUid());
+        dex.setExchangeTarget{gas: G}(address(exec), true, dex.chainUid());
         vm.stopBroadcast();
     }
 
@@ -371,8 +371,9 @@ contract Dex is OnchainBase {
         dexO = _dex(0, CLOSED, "dexO");
         require(IGovernance(address(dexC)).features() & CLOSED != 0 && IGovernance(address(dexO)).features() & CLOSED != 0,
             "closed at creation");
+        bytes32 wc = dexC.chainUid();
         vm.broadcast(k1);
-        dexC.setMarket{gas: G}(A, B, true);
+        dexC.setMarket{gas: G}(A, B, true, wc);
         dex = dexC;
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](2);
         ss[0] = _one("cw", _leg(A, _o(_pad(a1), W, 1000, 1000, 0), k1, 1000), _leg(W, _o(_pad(a2), A, 1000, 1000, 0), k2, 1000));
@@ -547,8 +548,8 @@ contract Dex is OnchainBase {
     function _kind(uint8 n, string memory label) internal {
         address x = _kindToken(n, label);
         vm.startBroadcast(k1);
-        dex.setMarket{gas: G}(x, A, true);
-        dex.setMarket{gas: G}(x, B, true);
+        dex.setMarket{gas: G}(x, A, true, dex.chainUid());
+        dex.setMarket{gas: G}(x, B, true, dex.chainUid());
         vm.stopBroadcast();
         _kindSettle(x, n);
         _kindHybrid(x, n);
@@ -623,12 +624,12 @@ contract Dex is OnchainBase {
         g.grantRole{gas: G}(GovernanceBits.LISTING, _pad(a2), IMetaTx(address(g)).chainUid());
         vm.stopBroadcast();
         vm.startBroadcast(k2);
-        dex.setFeeSplit{gas: G}(250_000, TREASURY); // a2 uses its grant
+        dex.setFeeSplit{gas: G}(250_000, TREASURY, dex.chainUid()); // a2 uses its grant
         g.renounceRole{gas: G}(GovernanceBits.FEE_ROUTING, IMetaTx(address(g)).chainUid());
         vm.stopBroadcast();
         vm.startBroadcast(k1);
         g.revokeRole{gas: G}(GovernanceBits.LISTING, _pad(a2), IMetaTx(address(g)).chainUid());
-        dex.setListedOnly{gas: G}(true); // after the trades: with it every interaction target (the token of an approve too) is listed
+        dex.setListedOnly{gas: G}(true, dex.chainUid()); // after the trades: with it every interaction target (the token of an approve too) is listed
         g.transferAdmin{gas: G}(_pad(a2), dex.chainUid());
         vm.stopBroadcast();
         vm.broadcast(k2);
@@ -675,7 +676,7 @@ contract Dex is OnchainBase {
         _neg(a2, A, abi.encodeCall(ITradeToken.mtxTrade, (o, _uaSig(""), ITradeToken.TradeFill(1000, 1900, 0, a2))),
             ITradeToken.NotDex.selector, "mtxTrade called by a non-DEX");
         // dex2's LISTING is off: a market cannot be set
-        _neg(a1, address(dex2), abi.encodeCall(ISCaaSDex.setMarket, (A, B, true)), IGovernance.FeatureNotSet.selector,
+        _neg(a1, address(dex2), abi.encodeCall(ISCaaSDex.setMarket, (A, B, true, dex2.chainUid())), IGovernance.FeatureNotSet.selector,
             "setMarket on dex2 after disableFeature(LISTING)");
     }
 }

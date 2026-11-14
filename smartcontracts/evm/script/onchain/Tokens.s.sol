@@ -32,7 +32,9 @@ import {OnchainForwarder} from "./OnchainForwarder.sol";
 ///         the per-leg and `…ToUA` entries, the rate and the guardian). The regulated kinds 8-11 carry `KYC` on the Step 5
 ///         ComplianceRegistry and `TAX`. A secp256k1 UA registered on the Step 5 registry receives the `…ToUA` entries; an
 ///         ML-DSA-65 UA (keys by script/pqz/mldsa.mjs through `vm.ffi`: run with `--ffi`) signs a relayed `mtxTransfer` and
-///         an `mtxTransferWithFee` on every kind.
+///         an `mtxTransferWithFee` on every kind. Round 3zb + 3zc: W1 carries bit 31 (its two caps set by the admin, at
+///         once); a `BURNER` token of kinds 0 and 8 (`_burner`: the seat, a UA holder's `mtxBurn`, a limited grant, the
+///         refusals, `disableFeature(30)`).
 ///         Not here (other streams): the confidential layers (Zether, PQZ), the regulated controls, the trade entries.
 ///         UNAUDITED.
 contract Tokens is OnchainBase {
@@ -69,7 +71,9 @@ contract Tokens is OnchainBase {
     address router;
     address registry;
     address compliance;
-    bytes32 uaD; // a secp256k1 UA on the Step 5 registry (a receiver only)
+    bytes32 uaD; // a secp256k1 UA on the Step 5 registry (a receiver; the BURNER token's UA holder)
+    uint256 kD; // its key
+    bytes keyD; // its key data (x ‖ y): its UASig carries it
     bytes32 uaM; // an ML-DSA-65 UA on the Step 5 registry: the PQ signer of a relayed transfer on every kind
     bytes32 mlSeed;
     MockERC20 m1; // W1's leg
@@ -103,6 +107,8 @@ contract Tokens is OnchainBase {
         _throwaway();
         uint8[4] memory ws = [uint8(1), 3, 9, 11];
         for (uint256 i; i < 4; ++i) _wrappedKind(ws[i]);
+        _burner(0);
+        _burner(8);
         _negatives();
         _writeBook();
     }
@@ -134,6 +140,7 @@ contract Tokens is OnchainBase {
         uint256 kd = uint256(keccak256(abi.encode(runSalt, "derived"))) % (type(uint128).max) + 1;
         Vm.Wallet memory w = vm.createWallet(kd);
         bytes memory keyData = abi.encodePacked(w.publicKeyX, w.publicKeyY);
+        (kD, keyD) = (kd, keyData);
         uint16 kind = UAKinds.SECP256K1;
         bytes32 ua = UAKinds.uaOf(kind, keyData);
         bytes32 rd = UAKinds.registrationDigest(ua, kind, 0, UAKinds.kemRecordHash(ua, 0, bytes("")), 0);
@@ -250,8 +257,8 @@ contract Tokens is OnchainBase {
 
     function _normalOnly() internal virtual {
         vm.startBroadcast(k1);
-        NormalToken(t).mint(a1, 1_000);
-        NormalToken(t).mintToUA(uaD, 100);
+        NormalToken(t).mint(a1, 1_000, IMetaTx(t).chainUid());
+        NormalToken(t).mintToUA(uaD, 100, IMetaTx(t).chainUid());
         NormalToken(t).burn(10);
         vm.stopBroadcast();
         MetaTxLib.UAEnvelope memory e = _env(a1, 8, _nonce(8));
@@ -283,7 +290,8 @@ contract Tokens is OnchainBase {
     function _wrappedKind(uint8 kind) internal {
         // W1: one MockERC20 leg 1:1, a hybrid (MINTABLE, maxSupply), rescuable
         IFactoryToken.TokenConfig memory c = _base(kind, "oW1");
-        c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.MINTABLE | 1 << GovernanceBits.RESCUABLE;
+        c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.MINTABLE | 1 << GovernanceBits.RESCUABLE
+            | uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE;
         c.roles.minter = _pad(a1);
         (c.maxSupply, c.rescueTo) = (1e30, a3);
         c.legs = new IFactoryToken.Leg[](1);
@@ -293,9 +301,13 @@ contract Tokens is OnchainBase {
         _w1();
         _common();
         vm.startBroadcast(k1);
-        WrappedToken(payable(t)).mint(a1, 1_000);
-        WrappedToken(payable(t)).mintToUA(uaD, 100);
+        WrappedToken(payable(t)).mint(a1, 1_000, IMetaTx(t).chainUid());
+        WrappedToken(payable(t)).mintToUA(uaD, 100, IMetaTx(t).chainUid());
+        // round 3zc (CTR-GOV-30), bit 31 at grantDelay 0: both caps by the admin, at once
+        WrappedToken(payable(t)).setMaxSupply(2e30, IMetaTx(t).chainUid());
+        WrappedToken(payable(t)).setMaxWrapSupply(1e29, IMetaTx(t).chainUid());
         vm.stopBroadcast();
+        require(IWrappedToken(t).maxSupply() == 2e30 && IWrappedToken(t).maxWrapSupply() == 1e29, "caps at once");
         if (_regulated(kind)) _tax();
         _gov();
         // W2: two legs (a MockERC20 and the kind-0 SCaaS ledger token), rate admin `fR`, guardian test key 1
@@ -378,16 +390,16 @@ contract Tokens is OnchainBase {
     /// @dev Propose and cancel, propose again (left pending: `executeRate` waits the 2-day delay, a negative below), then
     ///      the guardian disables the MockERC20 leg's wrap (one-way).
     function _w2Rate() internal {
-        bytes memory prop = abi.encodeCall(WrappedToken.proposeRate, (address(m2), uint96(1001), uint96(1000)));
+        bytes memory prop = abi.encodeCall(WrappedToken.proposeRate, (address(m2), uint96(1001), uint96(1000), IMetaTx(t).chainUid()));
         vm.startBroadcast(k1);
         fR.forwardCall(t, prop);
-        fR.forwardCall(t, abi.encodeCall(WrappedToken.cancelRate, ()));
+        fR.forwardCall(t, abi.encodeCall(WrappedToken.cancelRate, (IMetaTx(t).chainUid())));
         fR.forwardCall(t, prop);
-        WrappedToken(payable(t)).disableWrap(address(m2), keccak256("scaas.onchain.disable"));
+        WrappedToken(payable(t)).disableWrap(address(m2), keccak256("scaas.onchain.disable"), IMetaTx(t).chainUid());
         vm.stopBroadcast();
         if (k == 1) {
             (,,, uint64 eta) = WrappedToken(payable(t)).pendingRate();
-            _neg(a1, address(fR), abi.encodeCall(OnchainForwarder.forwardCall, (t, abi.encodeCall(WrappedToken.executeRate, ()))),
+            _neg(a1, address(fR), abi.encodeCall(OnchainForwarder.forwardCall, (t, abi.encodeCall(WrappedToken.executeRate, (IMetaTx(t).chainUid())))),
                 IWrappedToken.RateChangeNotReady.selector, string.concat("executeRate before the 2-day delay (eta ",
                 vm.toString(eta), ")"));
         }
@@ -594,10 +606,10 @@ contract Tokens is OnchainBase {
     function _tax() internal {
         NormalRegulatedToken r = NormalRegulatedToken(t);
         vm.startBroadcast(k1);
-        r.setTaxRate(10_000); // 1 %; a rise waits noticePeriod(), 0 on this factory
+        r.setTaxRate(10_000, IMetaTx(t).chainUid()); // 1 %; a rise waits noticePeriod(), 0 on this factory
         // a fixed limit: RegulatedBase refuses the registry check below COMPLIANCE_REGISTRY_GAS x 64/63 + margin left
         // (ComplianceRegistryGasStarved(50000, 54362) at forge's simulated 51,440 x 2.00 on a fresh anvil): gasUsed is not that floor
-        r.setTaxRecipient{gas: 500_000}(_pad(a3));
+        r.setTaxRecipient{gas: 500_000}(_pad(a3), IMetaTx(t).chainUid());
         vm.stopBroadcast();
         IRegulatedToken.TaxConfig memory tc = r.taxConfig();
         require(tc.effectivePpm == 10_000, "tax rate");
@@ -636,8 +648,9 @@ contract Tokens is OnchainBase {
         n.setGrant(mb, _pad(a3), g, IMetaTx(address(n)).chainUid());
         n.cancelGrant(mb, _pad(a2), IMetaTx(address(n)).chainUid());
         vm.stopBroadcast();
+        bytes32 wn = IMetaTx(address(n)).chainUid();
         vm.broadcast(k3);
-        n.mint(a3, 10); // the limited holder: `useLimited`
+        n.mint(a3, 10, wn); // the limited holder: `useLimited`
         bytes32 nu = n.chainUid(); // the token's chain word (CTR-GOV-27)
         vm.broadcast(k1);
         n.transferAdmin(_pad(a2), nu);
@@ -671,6 +684,76 @@ contract Tokens is OnchainBase {
         require(n.admin() == 0, "renounced");
     }
 
+    // ------------------------------------------------------------------ BURNER (round 3zb, CTR-GOV-29), kinds 0 and 8
+
+    /// @dev Two tokens of `kind` with bit 30 (`BURNABLE` off), the seat test key 1's native id. B: the seat burns; the
+    ///      derived UA uaD, granted bit 30, burns its UA balance by `mtxBurn` (`UABurn` signed through the registry, relayed
+    ///      by key 2); key 3 holds a limited grant (100 per call, 1,000 in all) and burns within it; the negatives on B's final state:
+    ///      key 3 beyond its grant (`GrantExhausted(1)`), key 2 with a balance and no role (`MissingRole(30, id)`). Bx: the
+    ///      seat burns, then the admin's `disableFeature(30)`; every burn refused after (`FeatureNotSet(2)`: no `BURNABLE`
+    ///      either, spec §2.1).
+    function _burner(uint8 kind) internal {
+        _burnerLive(kind);
+        _burnerOff(kind);
+    }
+
+    function _burnerCfg(uint8 kind, string memory sym) internal view returns (IFactoryToken.TokenConfig memory c) {
+        c = _base(kind, sym);
+        c.features = 1 << GovernanceBits.PAYABLE | uint256(1) << GovernanceBits.BURNER;
+        c.roles.burner = _pad(a1);
+        (c.initialSupply, c.initialHolder) = (1e9, a1);
+        if (_regulated(kind)) _reg(c);
+    }
+
+    function _burnerLive(uint8 kind) internal {
+        uint8 b30 = GovernanceBits.BURNER;
+        NormalToken b = NormalToken(_create(kind, _burnerCfg(kind, "oB"), string.concat("burner", vm.toString(kind))));
+        IGovernance.GrantTerms memory g;
+        (g.max, g.total) = (100, 1_000); // spentTotal is kept only under a total
+        bytes32 w = IMetaTx(address(b)).chainUid();
+        vm.startBroadcast(k1);
+        b.burn(10);
+        IERC20(address(b)).transfer(a2, 1_000);
+        IERC20(address(b)).transfer(a3, 1_000);
+        b.transferToUA(uaD, 1_000);
+        b.grantRole(b30, uaD, w);
+        b.setGrant(b30, _pad(a3), g, w);
+        vm.stopBroadcast();
+        MetaTxLib.UAEnvelope memory e;
+        (e.from, e.batch, e.nonce, e.validUntil) = (uaD, 1, b.mtxNonce(uaD, 1), vu);
+        IUARegistry.UASig memory s;
+        (s.keyData, s.signature) = (keyD, _ecdsa(kD, UAKinds.uaMessage(UAKinds.SECP256K1, UAKinds.PURPOSE_METATX,
+            _named(address(b), UA_BURN, abi.encode(uint256(50)), e))));
+        vm.broadcast(k2);
+        b.mtxBurn(e, 50, s);
+        vm.broadcast(k3);
+        b.burn(100); // within the limited grant
+        require(b.balanceOfUA(uaD) == 950 && b.grantOf(b30, _pad(a3)).spentTotal == 100
+            && b.totalSupply() == 1e9 - 160, "BURNER: three burns");
+        _negData(a3, address(b), abi.encodeCall(NormalToken.burn, (uint256(101))),
+            abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(1)),
+            string.concat("burn beyond a limited bit-30 grant (kind ", vm.toString(kind), "): GrantExhausted(1)"));
+        _negData(a2, address(b), abi.encodeCall(NormalToken.burn, (uint256(1))),
+            abi.encodeWithSelector(IGovernance.MissingRole.selector, b30, _pad(a2)),
+            string.concat("burn by a non-holder with a balance (kind ", vm.toString(kind), "): MissingRole(30, id)"));
+    }
+
+    function _burnerOff(uint8 kind) internal {
+        NormalToken x = NormalToken(_create(kind, _burnerCfg(kind, "oBx"), string.concat("burnerx", vm.toString(kind))));
+        bytes32 w = IMetaTx(address(x)).chainUid();
+        vm.startBroadcast(k1);
+        x.burn(1); // the control
+        x.disableFeature(GovernanceBits.BURNER, w);
+        vm.stopBroadcast();
+        bytes memory off = abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.BURNABLE);
+        _negData(a1, address(x), abi.encodeCall(NormalToken.burn, (uint256(1))), off,
+            string.concat("the seat's burn after disableFeature(30) (kind ", vm.toString(kind), "): FeatureNotSet(2)"));
+        MetaTxLib.UAEnvelope memory e = _env(a1, 1, x.mtxNonce(_pad(a1), 1));
+        IUARegistry.UASig memory s = _sig(k1, _named(address(x), UA_BURN, abi.encode(uint256(1)), e));
+        _negData(a1, address(x), abi.encodeCall(NormalToken.mtxBurn, (e, 1, s)), off,
+            string.concat("the seat's mtxBurn after disableFeature(30) (kind ", vm.toString(kind), "): FeatureNotSet(2)"));
+    }
+
     // ------------------------------------------------------------------ negatives (eth_call on the final state)
 
     function _negatives() internal {
@@ -681,7 +764,7 @@ contract Tokens is OnchainBase {
             IMetaTx.MetaTxBadSignature.selector, "mtxTransfer signed by another key");
         _neg(a2, t, abi.encodeCall(IERC20.transferFrom, (a1, a2, 1)), IERC20MetaTx.CallerNotContract.selector,
             "transferFrom by an EOA (CTR-TOK-01)");
-        _neg(a2, t8, abi.encodeCall(NormalToken.mint, (a2, 1)), IGovernance.MissingRole.selector,
+        _neg(a2, t8, abi.encodeCall(NormalToken.mint, (a2, 1, IMetaTx(t8).chainUid())), IGovernance.MissingRole.selector,
             "mint by a non-minter (kind 8, MINTABLE set)");
         // a wrapped-only selector on a NORMAL clone: no stub, no fallback, so the empty revert (the dispatcher refuses it)
         vm.writeLine(_negFile(), string.concat(vm.toString(a2), " ", vm.toString(t), " ",

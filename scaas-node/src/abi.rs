@@ -568,23 +568,24 @@ sol! {
         error TaxExceedsAmount(uint256 tax, uint256 amount);
         error TaxMismatch(uint256 expected, uint256 got);
         error TaxRecipientIsPayee();
-        function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external;
-        function unfreeze(bytes32 account, bytes32 ref) external;
-        function forceTransfer(bytes32 recordId, uint256 amount) external;
-        function pause(bytes32 ref, uint64 until) external;
-        function unpause(bytes32 ref) external;
+        // the Change of CTR-GOV-28 in round 3zb + 3zc (O6): every role holder's direct entry takes the token's chain word last
+        function freeze(bytes32 account, bytes32 ref, bytes32 recordId, bytes32 chainUid_) external;
+        function unfreeze(bytes32 account, bytes32 ref, bytes32 chainUid_) external;
+        function forceTransfer(bytes32 recordId, uint256 amount, bytes32 chainUid_) external;
+        function pause(bytes32 ref, uint64 until, bytes32 chainUid_) external;
+        function unpause(bytes32 ref, bytes32 chainUid_) external;
         function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount,
-            uint64 freezeUntil) external;
-        function revokeOrder(bytes32 recordId, bytes32 reasonRef) external;
-        function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external;
-        function setTaxRate(uint32 ratePpm) external;
-        function setTaxRecipient(bytes32 taxRecipient) external;
+            uint64 freezeUntil, bytes32 chainUid_) external;
+        function revokeOrder(bytes32 recordId, bytes32 reasonRef, bytes32 chainUid_) external;
+        function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 chainUid_) external;
+        function setTaxRate(uint32 ratePpm, bytes32 chainUid_) external;
+        function setTaxRecipient(bytes32 taxRecipient, bytes32 chainUid_) external;
         function taxConfig() external view returns (TaxConfig);
         function mtxPayWithTax(UAMetaTransfer t, uint8 taxMode, uint256 tax, UASig auth, PayMeta meta) external returns (bool);
         function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef, PayMeta meta)
             external returns (bool);
-        function setAllowed(bytes32[] accounts, bool on) external;
-        function setDenied(bytes32[] accounts, bool on) external;
+        function setAllowed(bytes32[] accounts, bool on, bytes32 chainUid_) external;
+        function setDenied(bytes32[] accounts, bool on, bytes32 chainUid_) external;
         function listFlagsOf(bytes32 account) external view returns (uint8);
         function enableFeature(uint8 bit, bytes32 chainUid_) external; // CTR-GOV-28: + the chain word
         function regulatedConfig() external view returns (RegulatedConfig);
@@ -618,6 +619,24 @@ sol! {
         error UnwrapperNotListed(bytes32 account);
         error WrapControlNeedsHybrid(uint8 bit);
         error WrapSubjectZero();
+    }
+
+    /// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.4-§3.6, §4): the wrapped kinds' supply-cap refusals, decoded
+    /// by name ([`supply_cap_refusal`]): a wrap or a mint above a cap, a cap setter's floors at its apply, the shape refusals.
+    #[derive(Debug)]
+    interface ISupplyCaps {
+        error MaxSupplyExceeded(uint256 supply, uint256 maxSupply);
+        error MaxWrapSupplyExceeded(uint256 totalWrapped, uint256 maxWrapSupply);
+        error MaxSupplyBelowSupply(uint256 maxSupply, uint256 totalSupply);
+        error MaxSupplyBelowWrapCap(uint256 maxSupply, uint256 maxWrapSupply);
+        error MaxWrapSupplyBelowWrapped(uint256 maxWrapSupply, uint256 totalWrapped);
+        error MaxWrapSupplyAboveMaxSupply(uint256 maxWrapSupply, uint256 maxSupply);
+        error MaxSupplyInvalid();
+        error MaxWrapSupplyInvalid();
+        event MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta);
+        event MaxSupplySet(bytes32 indexed by, uint256 oldMaxSupply, uint256 newMaxSupply);
+        event MaxWrapSupplyProposed(bytes32 indexed by, uint256 maxWrapSupply, uint64 eta);
+        event MaxWrapSupplySet(bytes32 indexed by, uint256 oldMaxWrapSupply, uint256 newMaxWrapSupply);
     }
 
     /// ERC-165 (`MetaTokenBase.supportsInterface`): a regulated kind answers [`regulated_interface_id`], kinds 0-5 do not (M-10).
@@ -688,6 +707,7 @@ sol! {
         error GrantExhausted(uint8 field);
         error GrantExpired(uint8 bit, bytes32 holder);
         error GrantBarred(uint8 bit, bytes32 account);
+        error FeatureConflict(uint8 bit, uint8 other);
     }
 }
 
@@ -735,6 +755,25 @@ pub fn wrap_limit_refusal(reason: &str) -> Option<&'static str> {
     const LIFTABLE: [&str; 5] = ["WrapLimitExceeded", "WrapCapExceeded", "UnwrapAboveNetWrapped", "WrapperNotListed", "UnwrapperNotListed"];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
     LIFTABLE.into_iter().find(|n| *n == name)
+}
+
+/// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §4's verdict table): a supply-cap refusal by name and whether a later
+/// block may lift it (`true`: a wrap or a mint above a cap, which an unwrap or a cap change lifts; a setter's floor at its apply,
+/// which supply or the other setter lifts; `false`: the shape refusals `MaxSupplyInvalid`, `MaxWrapSupplyInvalid`, never). The
+/// node keeps a liftable one `queued` with `SUPPLY_CAP_REFUSED: <named error>`. `reason` is a `decode_revert` string.
+pub fn supply_cap_refusal(reason: &str) -> Option<(&'static str, bool)> {
+    const LIFTABLE: [&str; 6] = ["MaxSupplyExceeded", "MaxWrapSupplyExceeded", "MaxSupplyBelowSupply", "MaxSupplyBelowWrapCap",
+        "MaxWrapSupplyBelowWrapped", "MaxWrapSupplyAboveMaxSupply"];
+    const FINAL: [&str; 2] = ["MaxSupplyInvalid", "MaxWrapSupplyInvalid"];
+    let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
+    LIFTABLE.into_iter().find(|n| *n == name).map(|n| (n, true)).or_else(|| FINAL.into_iter().find(|n| *n == name).map(|n| (n, false)))
+}
+
+/// A governance error's word `key` (`bit`, `field`) in a `decode_revert` string `Name(Name { key: N, … })` of the error `name`,
+/// parsed whole (`bit: 31` is not bit 3).
+pub fn gov_word(reason: &str, name: &str, key: &str) -> Option<u8> {
+    let rest = reason.strip_prefix(name)?.strip_prefix('(')?.split_once(&format!("{key}: "))?.1;
+    rest[..rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len())].parse().ok()
 }
 
 /// What a PQZ token's key-version refusal means for a job (group 3g, spec §7.3), from a `decode_revert` string.
@@ -807,6 +846,9 @@ pub fn decode_revert(data: &[u8]) -> String {
     if let Ok(e) = IGovernance::IGovernanceErrors::abi_decode(data) {
         return format!("{e:?}");
     }
+    if let Ok(e) = ISupplyCaps::ISupplyCapsErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
     if let Ok(e) = IComplianceRegistry::IComplianceRegistryErrors::abi_decode(data) {
         return format!("{e:?}");
     }
@@ -860,8 +902,10 @@ mod tests {
 
     #[test]
     fn regulated_interface_id_is_the_xor_of_its_functions() {
-        // CTR-GOV-28: `enableFeature(uint8)` -> `enableFeature(uint8,bytes32)`: 0x789ed7c4 -> 0xbf2cb59a
-        assert_eq!(regulated_interface_id(), [0xbf, 0x2c, 0xb5, 0x9a]);
+        // CTR-GOV-28: `enableFeature(uint8)` -> `enableFeature(uint8,bytes32)`: 0x789ed7c4 -> 0xbf2cb59a; its Change in round
+        // 3zb + 3zc (the twelve regulated entries take the holder's chain word): 0xbf2cb59a -> 0xc28996b2, the forge artifact's
+        // methodIdentifiers XORed
+        assert_eq!(regulated_interface_id(), [0xc2, 0x89, 0x96, 0xb2]);
     }
 
     /// Group 3g (spec §7.3): the PQZ key-version reverts decode by name and classify; another revert is none of them.

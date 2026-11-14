@@ -42,16 +42,16 @@ contract PauseTest is RegFixture {
             address t = _ks()[i];
             vm.startPrank(issuer);
             vm.expectRevert(IRegulatedToken.RefRequired.selector);
-            _r(t).pause(0, until);
+            _r(t).pause(0, until, EnvKit.codeUidOf(t));
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.PauseTooLong.selector, until));
-            _r(t).pause(REF, until + 1);
+            _r(t).pause(REF, until + 1, EnvKit.codeUidOf(t));
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.PauseTooLong.selector, until));
-            _r(t).pause(REF, _now());
+            _r(t).pause(REF, _now(), EnvKit.codeUidOf(t));
             vm.expectEmit(t);
             emit IRegulatedToken.Paused(REF, until);
-            _r(t).pause(REF, until);
+            _r(t).pause(REF, until, EnvKit.codeUidOf(t));
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.PauseCooldown.selector, until + 7 days));
-            _r(t).pause(REF, _now() + 1);
+            _r(t).pause(REF, _now() + 1, EnvKit.codeUidOf(t));
             vm.stopPrank();
             IRegulatedToken.RegulatedConfig memory c = _r(t).regulatedConfig();
             assertEq(c.pausedUntil, until);
@@ -62,7 +62,7 @@ contract PauseTest is RegFixture {
             vm.warp(until + 7 days - 1);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.PauseCooldown.selector, until + 7 days));
-            _r(t).pause(REF, _now() + 1);
+            _r(t).pause(REF, _now() + 1, EnvKit.codeUidOf(t));
             vm.warp(until + 7 days);
             _pause(t, _now() + 1); // the control
             vm.warp(1_800_000_000);
@@ -75,13 +75,13 @@ contract PauseTest is RegFixture {
             address t = _ks()[i];
             vm.prank(issuer);
             vm.expectRevert(IRegulatedToken.NotPaused.selector);
-            _r(t).unpause(REF);
+            _r(t).unpause(REF, EnvKit.codeUidOf(t));
             _pause(t, until);
             vm.warp(_now() + 1 days);
             vm.expectEmit(t);
             emit IRegulatedToken.Unpaused(REF);
             vm.prank(issuer);
-            _r(t).unpause(REF);
+            _r(t).unpause(REF, EnvKit.codeUidOf(t));
             IRegulatedToken.RegulatedConfig memory c = _r(t).regulatedConfig();
             assertEq(c.pausedUntil, _now());
             assertEq(c.pauseCooldownUntil, _now() + 7 days);
@@ -110,7 +110,7 @@ contract PauseTest is RegFixture {
             ap.approve(t, address(f));
             if (t == t8) {
                 vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
-                NormalToken(t).mint(bob, 1);
+                NormalToken(t).mint(bob, 1, EnvKit.codeUidOf(address(t)));
                 vm.prank(alice);
                 NormalToken(t).burn(10);
             } else {

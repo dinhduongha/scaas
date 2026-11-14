@@ -241,7 +241,7 @@ contract UAPayeeFeeTest is UALedgerBase {
         IFactoryToken.TokenConfig memory c = normalInit("NP", "NP", 6, 0, address(0), address(this));
         c.features = (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
         np.initialize(nid(address(this)), 1, abi.encode(c));
-        np.mintToUA(uaP, 10);
+        np.mintToUA(uaP, 10, EnvKit.codeUidOf(address(np)));
         t = _pay(uaP, uaE, 10);
         t.batch = np.payLane(t.entryRef);
         _call(np, t, 1, FEE_TO, until, abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));
@@ -341,7 +341,7 @@ contract UAPayeeFeeTest is UALedgerBase {
         NormalToken t400 =
             NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(impl), false)));
         t400.initialize(nid(address(this)), 1, abi.encode(normalInit("S", "S", 6, 0, address(0), address(this))));
-        t400.mintToUA(uaP, 2 * N);
+        t400.mintToUA(uaP, 2 * N, EnvKit.codeUidOf(address(t400)));
         NormalToken[2] memory ts = [tok, t400];
         _fund(uaP, N);
         for (uint256 i; i < 2; ++i) {

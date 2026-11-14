@@ -118,7 +118,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         t = NormalToken(_clone(address(impl), address(this), new address[](0),
             abi.encode(normalInit("Points", "PTS", 0, 0, address(this), address(this)))));
         acct = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), GUARDIAN)));
-        t.mint(address(acct), 1000);
+        t.mint(address(acct), 1000, EnvKit.codeUidOf(address(t)));
     }
 
     /// The account's verifier over a raw message (WebAuthn, batch, key checks): `isValidOwnDigest`, the account's own
@@ -431,7 +431,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     function test_seed_first_account_pays() public {
         SmartKeyAccount a = SmartKeyAccount(payable(fac.deploy(_seedKey(SEED), address(0))));
-        t.mint(address(a), 500);
+        t.mint(address(a), 500, EnvKit.codeUidOf(address(t)));
         (MetaTxLib.UAMetaTransfer memory x, bytes32 d) = _payment(address(a), keccak256("s1"));
         _payWith(x, _ecdsa(0, SEED, d));
         assertEq(t.balanceOf(shop), 400);
@@ -439,7 +439,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     function test_signature_for_one_account_does_not_pay_from_another() public {
         SmartKeyAccount b = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), address(0))));
-        t.mint(address(b), 1000);
+        t.mint(address(b), 1000, EnvKit.codeUidOf(address(t)));
         (, bytes32 dA) = _payment(address(acct), keccak256("x"));
         (MetaTxLib.UAMetaTransfer memory xB,) = _payment(address(b), keccak256("x"));
         bytes memory sig = _w(xB, _pk(0, PASSKEY, dA));

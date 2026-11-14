@@ -58,9 +58,9 @@ abstract contract UADexBase is UALedgerBase {
         address puller = dex.puller();
         vm.prank(dave);
         usdc.approve(puller, type(uint256).max);
-        dex.setMarket(address(A), address(B), true);
-        dex.setMarket(address(A), address(usdc), true);
-        dex.setMarket(address(A), address(C), true);
+        dex.setMarket(address(A), address(B), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(A), address(usdc), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(A), address(C), true, EnvKit.codeUidOf(address(dex)));
         vm.prank(alice);
         A.transferToUA(uaP, 100_000);
         vm.prank(bob);

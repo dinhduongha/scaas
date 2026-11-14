@@ -89,7 +89,7 @@ contract WrapLimitsZetherTest is ZetherFixture {
         WrappedZetherToken w = _token(WL_CONTROLS, true, "h");
         IWrappedToken.WrapLegLimits[] memory a = legs1(address(usd), lim(30, 1 days));
         a[0].unitExp = 4; // a quantum is SCALE raw units: 30 per window
-        WrappedToken(payable(address(w))).setWrapLimits(a, false, false, false);
+        WrappedToken(payable(address(w))).setWrapLimits(a, false, false, false, EnvKit.codeUidOf(address(address(w))));
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(w), type(uint256).max);
         w.mtxWrapShield(address(usd), 30 * SCALE, ZetherTypes.UA.unwrap(alice.ua));
@@ -119,7 +119,7 @@ contract WrapLimitsZetherTest is ZetherFixture {
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(w), type(uint256).max);
         w.wrap(address(usd), 50 * SCALE); // a public wrap: the reserve, credited to this test's public id
-        WrappedToken(payable(address(w))).setWrapLimits(legs1(address(usd), lim(0, 0)), true, false, false);
+        WrappedToken(payable(address(w))).setWrapLimits(legs1(address(usd), lim(0, 0)), true, false, false, EnvKit.codeUidOf(address(address(w))));
         IZetherToken.ZetherBurn memory b;
         (b.yFrom.x0, b.yFrom.x1) = (bytes32(uint256(1)), bytes32(uint256(2)));
         bytes32 sender = ZetherTypes.UA.unwrap(ZetherTypes.toUA(abi.encode(b.yFrom)));
@@ -179,7 +179,7 @@ contract WrapLimitsPqzTest is PqzFixture {
         WrappedPqzToken w = _token(WL_CONTROLS, true, "h");
         IWrappedToken.WrapLegLimits[] memory a = legs1(address(usd), lim(30, 1 days));
         a[0].unitExp = 4;
-        WrappedToken(payable(address(w))).setWrapLimits(a, false, false, false);
+        WrappedToken(payable(address(w))).setWrapLimits(a, false, false, false, EnvKit.codeUidOf(address(address(w))));
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(w), type(uint256).max);
         w.mtxWrapShield(address(usd), 30 * SCALE, alice);
@@ -208,7 +208,7 @@ contract WrapLimitsPqzTest is PqzFixture {
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(w), type(uint256).max);
         w.wrap(address(usd), 50 * SCALE);
-        WrappedToken(payable(address(w))).setWrapLimits(legs1(address(usd), lim(0, 0)), true, false, false);
+        WrappedToken(payable(address(w))).setWrapLimits(legs1(address(usd), lim(0, 0)), true, false, false, EnvKit.codeUidOf(address(address(w))));
         bytes32 bad = bytes32(uint256(0xBAD));
         assertEq(_unshieldUnwrap(w, bad), abi.encodeWithSelector(IWrappedToken.UnwrapAboveNetWrapped.selector, address(usd),
             bad, 10 * SCALE, 0));
@@ -258,7 +258,7 @@ contract WrapLimitsRegulatedTest is RegFixture {
         IWrappedToken.WrapLegLimits[] memory a = legs1(address(usd), lim(0, 0));
         a[0].unwrapShort = lim(10, 1 days);
         vm.prank(ownerA);
-        WrappedToken(payable(t)).setWrapLimits(a, false, false, false);
+        WrappedToken(payable(t)).setWrapLimits(a, false, false, false, EnvKit.codeUidOf(address(t)));
         _freeze(t, nid(alice));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapLimitExceeded.selector, address(usd), uint8(2), nid(alice),
             50, 10));
@@ -278,7 +278,7 @@ contract WrapLimitsRegulatedTest is RegFixture {
     function test_r18_disableRefusedOnKind9() public {
         address t = _hyb9(WL_CONTROLS, "h");
         vm.prank(ownerA);
-        WrappedToken(payable(t)).setWrapLimits(legs1(address(usd), lim(10, 1 days)), false, false, false);
+        WrappedToken(payable(t)).setWrapLimits(legs1(address(usd), lim(10, 1 days)), false, false, false, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, uint8(25)));
         vm.prank(ownerA);
         WrappedToken(payable(t)).disableFeature(25, EnvKit.codeUidOf(address(WrappedToken(payable(t)))));

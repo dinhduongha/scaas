@@ -18,6 +18,7 @@ import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IPqzToken, IPqzWrappedToken} from "../../src/pqz/IPqzToken.sol";
 import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// The merged PQZ entries of ua-mtx-merge T5 (R36), called by their own signatures: this file compiles on the tree before
 /// T5 too, so each test is red there on its own (plan T5 step 3).
@@ -120,7 +121,7 @@ contract PqzPairsTest is PqzNamedBase {
         _public(tok, signer, 100 * SCALE);
         nId = MetaTxLib.pad(signer);
         dId = _mldsaUA(9);
-        NormalPqzToken(address(tok)).mintToUA(dId, 40 * SCALE);
+        NormalPqzToken(address(tok)).mintToUA(dId, 40 * SCALE, EnvKit.codeUidOf(address(tok)));
         minted += 40 * SCALE;
         _mockOp(1, 0);
         _mockOp(2, 0);
@@ -478,7 +479,8 @@ contract PqzPairsTest is PqzNamedBase {
         // `pqzCancelVerifier(bytes32)`, `pqzRevokeVerifier(bytes32)`, `setVerifierFee(uint64,bytes32)`): -> 0x757d0753; the
         // three-key model (CTR-PQZ-38, -40, -41): `PqzTransferArgs` + `uFrom` and the openings (the two single-transfer
         // selectors), `mtxRollOverSigned`, `pqzSkipped`: -> 0x0eb5f5eb
-        assertEq(type(IPqzToken).interfaceId, bytes4(0x0eb5f5eb), "IPqzToken");
+        // round 3zb + 3zc (CTR-GOV-28 Change, CTR-GOV-30: setProofStore with the holder's chain word): 0x0eb5f5eb -> 0x7c82cf40
+        assertEq(type(IPqzToken).interfaceId, bytes4(0x7c82cf40), "IPqzToken");
         assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector, "IPqzWrappedToken");
     }

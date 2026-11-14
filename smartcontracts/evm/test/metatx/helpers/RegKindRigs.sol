@@ -78,7 +78,7 @@ contract ZetherRegRig is ZetherFixture, KindRig {
         address signer = vm.addr(RIG_SK);
         address t = factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1,
             abi.encode(regulate(_cfg(true, uint256(1) << 40), issuer, compliance, false, address(0))), "zr10");
-        NormalZetherRegulatedToken(t).mint(signer, 20_000_000);
+        NormalZetherRegulatedToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
         tks.push(Tk("NORMAL_ZETHER_REGULATED", t, RIG_SK, signer, 0xB0B, vm.addr(0xB0B), address(0xFEE), address(0xBEEF), 0, 0, address(0), address(0), 0, 0));
         address w = factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1,
             abi.encode(regulate(_cfg(true, uint256(1) << 40), issuer, compliance, true, address(usd))), "zr11");
@@ -107,7 +107,7 @@ contract PqzRegRig is PqzFixture, KindRig {
         address signer = vm.addr(RIG_SK);
         address t = factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1,
             abi.encode(regulate(_cfg(uint256(1) << 40), issuer, compliance, false, address(0))), "pr12");
-        NormalPqzRegulatedToken(t).mint(signer, 20_000_000);
+        NormalPqzRegulatedToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
         tks.push(Tk("NORMAL_PQZ_REGULATED", t, RIG_SK, signer, 0xB0B, vm.addr(0xB0B), address(0xFEE), address(0xBEEF), 0, 0, address(0), address(0), 0, 0));
         address w = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1,
             abi.encode(regulate(_cfg(uint256(1) << 40), issuer, compliance, true, address(usd))), "pr13");

@@ -1264,3 +1264,9 @@ payerSig	renamed	the ua* / mtx* merge (CTR-MTX-30): the payer's signature is a U
 payeeSig	renamed	the ua* / mtx* merge (CTR-MTX-30): the payee's co-signature is a UASig, payeeAuth of mtxPayWithPayeeFee: contracts/metatx.md#CTR-MTX-05
 Each payment request is payable at most once	obsolete	withdrawn by owner O3, O11 (pay-meta-tax, 2026-11-10): one entryRef takes several payments, the lane a client convention: decisions.md#CTR-MTX-03 (its Change of 2026-11-10), contracts/metatx.md#CTR-MTX-31
 1.39	obsolete	the SCaaS testnet client version of 2026-10-07 (Nethermind 1.39); the current client is in the SCaaS testnet table: networks/evm.md
+disableWrap(underlying, reason)	renamed	the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc): the guardian's entry takes the chain word, `disableWrap(underlying, reason, chainUid_)`: contracts/token-wrappers.md#CTR-TOK-07
+mint(to, amount)	renamed	the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc): the minter's entry takes the chain word, `mint(to, amount, chainUid_)`: contracts/token-wrappers.md#CTR-TOK-09
+disableWrap(address u, bytes32 reason)	renamed	the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc): `disableWrap(address u, bytes32 reason, bytes32 chainUid_)`: contracts/token-wrappers.md#CTR-TOK-07
+disableWrap(u, reason)	renamed	the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc): the guardian passes the token's chain word, `disableWrap(u, reason, chainUid_)`: node/runbooks.md#rb-11-wrapper-shortfall-or-depeg
+recordOrder(orderId, docHash, subject, beneficiary, maxAmount)	renamed	the regulated build added freezeUntil, the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc) the chain word: contracts/asset-suite.md#23-interface
+freeze(subject, ref)	renamed	the regulated build added recordId, the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc) the chain word, `freeze(subject, ref, recordId, chainUid_)`: contracts/asset-suite.md#23-interface

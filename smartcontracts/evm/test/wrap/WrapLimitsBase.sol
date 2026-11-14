@@ -106,7 +106,7 @@ abstract contract WrapLimitsBase is UALedgerBase {
 
     function _set(WrappedToken w, IWrappedToken.WrapLegLimits[] memory a, bool net, bool wrapList, bool unwrapList) internal {
         vm.prank(OWNER);
-        w.setWrapLimits(a, net, wrapList, unwrapList);
+        w.setWrapLimits(a, net, wrapList, unwrapList, EnvKit.codeUidOf(address(w)));
     }
 
     /// The tracking on with nothing else (the first configuration, every limit off).

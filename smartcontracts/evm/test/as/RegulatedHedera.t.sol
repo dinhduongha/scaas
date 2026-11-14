@@ -12,6 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MockHederaAccountService, MockHts} from "../hedera/HederaMocks.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T28 (regulated-kinds spec §6.1: kinds 8 and 9 on Hedera, `IS_HEDERA`): the same releases on a Hedera env (chain
 /// 296, the account service and HTS stand-ins of `HederaV2.t.sol`): `FREEZE` and `PAUSE` hold on a native Hedera account's
@@ -81,7 +82,7 @@ contract RegulatedHederaTest is RegFixture {
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
             IERC20(t).transfer(bob, 1);
             vm.prank(issuer);
-            _r(t).unpause(REF);
+            _r(t).unpause(REF, EnvKit.codeUidOf(t));
             vm.prank(relayer);
             NormalToken(t).mtxExecuteTransfer(x, s);
             assertEq(IERC20(t).balanceOf(bob), 10);

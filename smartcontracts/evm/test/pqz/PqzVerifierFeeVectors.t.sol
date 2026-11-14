@@ -20,6 +20,7 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Round 3t (verifier fee spec §12): the writer and the check of `smartcontracts/vectors/pqz/verifier_fee.json`, read by
 /// clientkeys, ua-rs, the node and the verifier service. Rows from real token ops (proofs mocked; the verifier's real ECDSA
@@ -78,7 +79,7 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
             _scoped(lg[j], address(w), _spk(++keySeed), false);
         }
         vm.resumeGasMetering();
-        n.mint(address(this), 1000 * scale);
+        n.mint(address(this), 1000 * scale, EnvKit.codeUidOf(address(n)));
         n.mtxShield(alice, 1000);
         MockERC20 u = MockERC20(WrappedPqzToken(payable(address(w))).underlyings()[0]);
         u.mint(address(this), 1000 * scale);

@@ -270,9 +270,9 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
 
     function _fund(bytes32 id, uint256 amount) internal {
         if (UAKinds.inNativeSpace(id)) {
-            tok.mint(address(uint160(uint256(id))), amount);
+            tok.mint(address(uint160(uint256(id))), amount, EnvKit.codeUidOf(address(tok)));
         } else {
-            tok.mint(address(this), amount);
+            tok.mint(address(this), amount, EnvKit.codeUidOf(address(tok)));
             tok.transferToUA(id, amount);
         }
     }

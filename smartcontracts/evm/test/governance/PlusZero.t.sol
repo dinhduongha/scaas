@@ -219,7 +219,7 @@ contract PlusZeroZetherTest is PlusZeroRows, ZetherFixture {
         _stack();
         _users();
         nz = address(_newToken(false, "pz"));
-        NormalZetherToken(nz).mint(_pzSigner(), 1_000_000);
+        NormalZetherToken(nz).mint(_pzSigner(), 1_000_000, EnvKit.codeUidOf(address(nz)));
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
@@ -268,7 +268,7 @@ contract PlusZeroPqzTest is PlusZeroRows, PqzFixture {
     function setUp() public {
         _stack();
         np = address(_newToken("pz"));
-        NormalPqzToken(np).mint(_pzSigner(), 1_000_000);
+        NormalPqzToken(np).mint(_pzSigner(), 1_000_000, EnvKit.codeUidOf(address(np)));
         _releaseWrapped();
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
@@ -1039,7 +1039,7 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
         _expect(address(wp), H_PAYER, _pad(address(this)), 0, 0);
         wp.wrapToUA(address(tok), 1, uaP);
         _arm(address(wp), H_PAYER);
-        tok.mint(address(this), 10);
+        tok.mint(address(this), 10, EnvKit.codeUidOf(address(tok)));
         tok.approve(address(wp), 10);
         wp.wrap(address(tok), 10);
         // mtxWrapOrder: o.from when the destination is another id, before the pull; the submitter's fee after it

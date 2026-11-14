@@ -17,6 +17,7 @@ import {SmartKeyAccount, SubjectKey, KeyKind, AccountSig} from "../../src/accoun
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 // The fields of each struct before `E`, for the JSON a wallet is handed.
 string constant F_FROM = '{"name":"from","type":"address"}';
@@ -412,7 +413,7 @@ contract NamedHederaMandateTest is MandateFixture {
         MockHederaAccountService(HAS).setEdKey(edOwner, vm.addr(ED_KEY));
         MockHederaAccountService(HAS).setEdKey(edDel, vm.addr(ED_DEL));
         hw = new HederaMandateWallet(_id(edOwner), UID_, address(0));
-        t.mint(address(hw), 1_000);
+        t.mint(address(hw), 1_000, EnvKit.codeUidOf(address(t)));
     }
 
     function _ed(uint256 k, bytes32 d) internal pure returns (IUARegistry.UASig memory s) {

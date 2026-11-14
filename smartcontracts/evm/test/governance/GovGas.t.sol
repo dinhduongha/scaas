@@ -114,7 +114,7 @@ contract GovGasNormal is GovRows {
 
     /// A whole-shape holder: `use` pays one feature read and one role read, no call (B-26).
     function test_mintWholeShape() public {
-        _row("NormalToken mint whole-shape", m, G_MINTER, abi.encodeWithSignature("mint(address,uint256)", G_TO, 1));
+        _row("NormalToken mint whole-shape", m, G_MINTER, abi.encodeWithSignature("mint(address,uint256,bytes32)", G_TO, 1, EnvKit.codeUidOf(m)));
     }
 
     function test_createToken() public {

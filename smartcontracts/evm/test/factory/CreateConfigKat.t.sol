@@ -23,6 +23,7 @@ contract CreateConfigKatTest is Test {
         c.roles.guardian = _w(0x03);
         c.roles.issuer = _w(0x04);
         c.roles.compliance = _w(0x05);
+        c.roles.burner = _w(0x06); // round 3zb (CTR-GOV-29): the sixth seat
         (c.initialSupply, c.initialHolder) = (1000, _a(0x40));
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(_a(0x11), 1, 2);
@@ -35,6 +36,7 @@ contract CreateConfigKatTest is Test {
         (c.conf.proofStore, c.conf.verifierFee, c.conf.verifierFeeMax) = (1, 7, 9);
         (c.conf.pqzOwnKey, c.conf.pqzOpening) = (true, true); // the three-key model (CTR-PQZ-37)
         (c.grantDelay, c.rescueTo, c.maxSupply) = (3600, _a(0x5e), 5000);
+        c.maxWrapSupply = 4000; // round 3zc (CTR-GOV-30): after `maxSupply`
         c.reg = IFactoryToken.RegulatedParams(_a(0xc0), 3, 4, _w(0x7e), _w(0x7a));
     }
 
@@ -103,6 +105,7 @@ contract CreateConfigKatTest is Test {
         assertEq(vm.parseJsonBytes32(j, string.concat(p, "roles.guardian")), c.roles.guardian);
         assertEq(vm.parseJsonBytes32(j, string.concat(p, "roles.issuer")), c.roles.issuer);
         assertEq(vm.parseJsonBytes32(j, string.concat(p, "roles.compliance")), c.roles.compliance);
+        assertEq(vm.parseJsonBytes32(j, string.concat(p, "roles.burner")), c.roles.burner);
         assertEq(vm.parseJsonUint(j, string.concat(p, "initialSupply")), c.initialSupply);
         assertEq(vm.parseJsonAddress(j, string.concat(p, "initialHolder")), c.initialHolder);
         for (uint256 i; i < c.legs.length; ++i) {
@@ -132,6 +135,7 @@ contract CreateConfigKatTest is Test {
         assertEq(vm.parseJsonUint(j, string.concat(p, "grantDelay")), c.grantDelay);
         assertEq(vm.parseJsonAddress(j, string.concat(p, "rescueTo")), c.rescueTo);
         assertEq(vm.parseJsonUint(j, string.concat(p, "maxSupply")), c.maxSupply);
+        assertEq(vm.parseJsonUint(j, string.concat(p, "maxWrapSupply")), c.maxWrapSupply);
         assertEq(vm.parseJsonAddress(j, string.concat(p, "reg.complianceRegistry")), c.reg.complianceRegistry);
         assertEq(vm.parseJsonUint(j, string.concat(p, "reg.requiredFlags")), c.reg.requiredFlags);
         assertEq(vm.parseJsonUint(j, string.concat(p, "reg.deniedFlags")), c.reg.deniedFlags);

@@ -133,8 +133,8 @@ contract UniswapForkTest is Test {
         assertEq(block.chainid, 1);
         ex = new UniswapExecutor(address(dex), V3_FACTORY, V3_POOL_INIT_CODE_HASH, POOL_MANAGER);
         vm.startPrank(admin);
-        dex.setMarket(WETH, USDC, true);
-        dex.setMarket(address(tok), WETH, true);
+        dex.setMarket(WETH, USDC, true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(tok), WETH, true, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         _fund(WETH, dave, 10 ether);
         _fund(WETH, erin, 10 ether);

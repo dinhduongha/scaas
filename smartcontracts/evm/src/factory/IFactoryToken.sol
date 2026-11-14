@@ -146,11 +146,12 @@ interface IFactoryToken {
         address rescueTo;            // spec §6.2: with `RESCUABLE` only (0 there: SCAAS_DEV_RESCUE, CTR-GOV-25), immutable;
                                      // never the token or a pool
         uint256 maxSupply;           // WRAPPED* only, spec §5.2: the hybrid's cap, with `MINTABLE` only; 0 = no hybrid
+        uint256 maxWrapSupply;       // WRAPPED* only, CTR-GOV-30: the wrap cap, 0 = none; <= maxSupply when that is not 0
         RegulatedParams reg;         // *_REGULATED (8-13) only
     }
 
-    /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf, 5 maxSupply,
-    ///         6 reg).
+    /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf, 5 maxSupply /
+    ///         maxWrapSupply, 6 reg).
     error ConfigFieldForOtherKind(uint8 field);
 
     /// @notice Called by the factory only, in the same call as the clone's creation, on a clone carrying its env

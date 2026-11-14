@@ -173,7 +173,7 @@ abstract contract OrderRows is Test {
         address at = vm.parseJsonAddress(j, domainField(op, _kind(), "domain.verifyingContract"));
         _at(address(_normalKind()), at);
         u = NormalToken(at);
-        u.mint(signer, amount);
+        u.mint(signer, amount, EnvKit.codeUidOf(address(u)));
         _at(address(_wrappedKind(at)), wrapper);
         w = WrappedToken(wrapper);
     }
@@ -256,7 +256,7 @@ abstract contract OrderRows is Test {
         j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row retired
         NormalToken t = _normalKind();
         address from = vm.parseJsonAddress(j, _f("RelayFee", "from"));
-        t.mint(from, FUNDS);
+        t.mint(from, FUNDS, EnvKit.codeUidOf(address(t)));
         address payee = vm.parseJsonAddress(j, _f("RelayFee", "payee"));
         uint256 value = _u(_f("RelayFee", "value"));
         (address tgt, bytes32 cdh) = _callOf("RelayFee");
@@ -271,7 +271,7 @@ abstract contract OrderRows is Test {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         bytes32 from = vm.parseJsonBytes32(j, _f("UARelayFee", "from"));
-        t.mint(address(uint160(uint256(from))), FUNDS);
+        t.mint(address(uint160(uint256(from))), FUNDS, EnvKit.codeUidOf(address(t)));
         bytes32 payee = vm.parseJsonBytes32(j, _f("UARelayFee", "payee"));
         uint256 value = _u(_f("UARelayFee", "value"));
         (address tgt, bytes32 cdh) = _callOf("UARelayFee");
@@ -305,7 +305,7 @@ abstract contract OrderRows is Test {
         swap(cd, _sigOf(op), onChain(j, op, address(t)));
         assertEq(bytes4(cd), IMetaTokenV2.mtxPayWithPayeeFee.selector, "the row names the merged mtx entry");
         deployCodeTo("WalletMocks.sol:Mock1271Wallet", abi.encode(vm.parseJsonAddress(j, ".key.address")), address(uint160(uint256(x.to))));
-        t.mint(address(uint160(uint256(x.from))), FUNDS * 100);
+        t.mint(address(uint160(uint256(x.from))), FUNDS * 100, EnvKit.codeUidOf(address(t)));
         vm.prank(x.relayer);
         (bool ok, bytes memory ret) = address(t).call(cd);
         assertTrue(ok, vm.toString(ret));

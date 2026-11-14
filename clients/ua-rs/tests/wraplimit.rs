@@ -58,23 +58,53 @@ fn typed_ops_wrap_limit_rows() {
         let d = &r["domains"]["gov_router"];
         let dom = &d["domain"];
         let ds = router_domain_separator(num(&dom["chainId"]) as u64, &b20(&dom["verifyingContract"]), &b32(&dom["salt"]));
-        let (e, target) = (envelope(m), b20(&m["target"]));
-        let sh = |e: &Envelope| if op == "UASetWrapLimits" {
+        let (e, target, word) = (envelope(m), b20(&m["target"]), b32(&m["chainUid"]));
+        let sh_at = |e: &Envelope, cu: &[u8; 32]| if op == "UASetWrapLimits" {
             let legs: Vec<WrapLegLimits> = m["legs"].as_array().unwrap().iter().map(|l| WrapLegLimits {
                 underlying: b20(&l["underlying"]), unit_exp: num(&l["unitExp"]) as u8, decay_days: num(&l["decayDays"]) as u16,
                 wrap_short: limit(&l["wrapShort"]), wrap_long: limit(&l["wrapLong"]), unwrap_short: limit(&l["unwrapShort"]),
                 unwrap_long: limit(&l["unwrapLong"]),
             }).collect();
             set_wrap_limits_struct_hash(e, &target, &legs, m["netUnwrap"].as_bool().unwrap(), m["wrapList"].as_bool().unwrap(),
-                m["unwrapList"].as_bool().unwrap())
+                m["unwrapList"].as_bool().unwrap(), cu)
         } else {
             set_wrap_member_struct_hash(e, &target, &b32(&m["account"]), m["canWrap"].as_bool().unwrap(),
-                m["canUnwrap"].as_bool().unwrap())
+                m["canUnwrap"].as_bool().unwrap(), cu)
         };
+        let sh = |e: &Envelope| sh_at(e, &word);
         assert_eq!(sh(&e), b32(&r["structHash"]), "{op}");
         assert_eq!(digest(&ds, &sh(&e)), b32(&d["digest"]), "{op}");
         let unbound = Envelope { fee_recipient: [0xba; 20], ..e };
         assert_eq!(digest(&ds, &sh(&unbound)), b32(&d["digest"]), "{op}: an unbound feeRecipient hashes as 0");
+        // the Change of CTR-GOV-28 in round 3zb + 3zc: the token's chain word, context A's, signed
+        assert_eq!(word, b32(&dom["salt"]), "{op}: context A's word");
+        assert_ne!(sh_at(&e, &[0; 32]), sh(&e), "{op}: the chain word is signed");
+    }
+}
+
+/// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.7): the admin's two cap setters, struct hash and digest of each
+/// `typed_ops.json` row; the rows leave the relayer and the fee recipient unbound (mode 0): a non-zero value in both hashes as 0.
+#[test]
+fn typed_ops_cap_rows() {
+    use scaas_ua::wraplimit::{set_cap_struct_hash, set_cap_type};
+    let v = load("typed/typed_ops.json");
+    for (op, wrap, cap) in [("UASetMaxSupply", false, "maxSupply"), ("UASetMaxWrapSupply", true, "maxWrapSupply")] {
+        let r = &v["ops"][op];
+        assert_eq!(set_cap_type(wrap), r["typeString"].as_str().unwrap(), "{op}");
+        let m = &r["message"];
+        let d = &r["domains"]["gov_router"];
+        let dom = &d["domain"];
+        let ds = router_domain_separator(num(&dom["chainId"]) as u64, &b20(&dom["verifyingContract"]), &b32(&dom["salt"]));
+        let (e, target, value, word) = (envelope(m), b20(&m["target"]), uint_word(&m[cap]), b32(&m["chainUid"]));
+        let sh = set_cap_struct_hash(wrap, &e, &target, &value, &word);
+        assert_eq!(sh, b32(&r["structHash"]), "{op}");
+        assert_eq!(digest(&ds, &sh), b32(&d["digest"]), "{op}");
+        assert_eq!(e.mode, 0, "{op}: relayer and fee recipient unbound");
+        let junk = Envelope { relayer: [0xbb; 20], fee_recipient: [0xba; 20], ..e };
+        assert_eq!(set_cap_struct_hash(wrap, &junk, &target, &value, &word), sh, "{op}: unbound, hashed as 0");
+        assert_ne!(set_cap_struct_hash(wrap, &e, &target, &[0; 32], &word), sh, "{op}: the cap is signed");
+        assert_ne!(set_cap_struct_hash(wrap, &e, &target, &value, &[0; 32]), sh, "{op}: the chain word is signed");
+        assert_ne!(set_cap_struct_hash(!wrap, &e, &target, &value, &word), sh, "{op}: the other setter is another struct");
     }
 }
 
@@ -121,7 +151,7 @@ fn typed_ops_list_rows() {
             enable_feature_struct_hash(e, &target, num(&m["bit"]) as u8, &b32(&m["chainUid"]))
         } else {
             let accounts: Vec<[u8; 32]> = m["accounts"].as_array().unwrap().iter().map(b32).collect();
-            set_list_struct_hash(op == "UASetAllowed", e, &target, &accounts, m["on"].as_bool().unwrap())
+            set_list_struct_hash(op == "UASetAllowed", e, &target, &accounts, m["on"].as_bool().unwrap(), &b32(&m["chainUid"]))
         };
         assert_eq!(sh(&e), b32(&r["structHash"]), "{op}");
         assert_eq!(digest(&ds, &sh(&e)), b32(&d["digest"]), "{op}");

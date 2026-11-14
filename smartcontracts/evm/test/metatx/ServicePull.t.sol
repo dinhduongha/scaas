@@ -182,7 +182,7 @@ contract ServicePullTest is UALedgerBase {
         bytes32 ua = UACall.register(lreg, UAKinds.MSIG, d, _none(), "", "");
         lreg.acceptMembership(ua, _acceptEoaSig(d, ALICE_PK));
         lreg.acceptMembership(ua, _acceptEoaSig(d, BOB_PK));
-        tok.mintToUA(ua, 10_000);
+        tok.mintToUA(ua, 10_000, EnvKit.codeUidOf(address(tok)));
         RefServiceEscrow.Deposit memory op = _dep(ua, "msig");
         MetaTxLib.UAMetaTransfer memory t = _pull(op);
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, tok.mtxTransferDigest(t));
@@ -203,7 +203,7 @@ contract ServicePullTest is UALedgerBase {
     function test_positive_smartKeyAccount() public {
         SmartKeyAccount acct = SmartKeyAccount(payable(new SmartKeyAccountFactory(chainUidA).deploy(
             SubjectKey(KeyKind.SECP256K1, _pad(alice), 0, 0, 0), address(0xD00D))));
-        tok.mint(address(acct), 5_000);
+        tok.mint(address(acct), 5_000, EnvKit.codeUidOf(address(tok)));
         RefServiceEscrow.Deposit memory op = _dep(_pad(address(acct)), "ska");
         MetaTxLib.UAMetaTransfer memory t = _pull(op);
         IUARegistry.UASig memory a;
@@ -742,11 +742,11 @@ contract ServicePullRegTest is RegFixture {
         RefServiceEscrow svc = new RefServiceEscrow(t);
         _deposit(ALICE_PK, svc, _dep(alice, "e"));
         vm.prank(clerk);
-        _r(t).operatorTransfer(nid(alice), nid(bob), 1, REF);
+        _r(t).operatorTransfer(nid(alice), nid(bob), 1, REF, EnvKit.codeUidOf(t));
         assertEq(IERC20(t).balanceOf(bob), 1);
         vm.prank(clerk);
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OperatorTargetRefused.selector, nid(address(svc))));
-        _r(t).operatorTransfer(nid(address(svc)), nid(bob), 1, REF);
+        _r(t).operatorTransfer(nid(address(svc)), nid(bob), 1, REF, EnvKit.codeUidOf(t));
         assertEq(IERC20(t).balanceOf(address(svc)), AMT);
     }
 
@@ -780,7 +780,7 @@ contract ServicePullRegTest is RegFixture {
         bytes32 rid = _order(t8, "sp-force", nid(address(svc)), nid(address(0xBE)), 600, _now() + 30 days);
         _freezeRecord(t8, nid(address(svc)), rid);
         vm.prank(issuer);
-        _r(t8).forceTransfer(rid, 600);
+        _r(t8).forceTransfer(rid, 600, EnvKit.codeUidOf(t8));
         _unfreeze(t8, nid(address(svc)));
         assertEq(svc.owed() - IERC20(t8).balanceOf(address(svc)), 600, "shortfall = forced");
         svc.release(r1);

@@ -192,6 +192,19 @@ for (const n of ['UAGrantRole', 'UARevokeRole', 'UASetGrant', 'UACancelGrant', '
   'UAPqzCancelVerifier', 'UAPqzRevokeVerifier', 'UASetVerifierFee', 'UASetKycProvider', 'UASetCompliance', 'UARenounceRole']) {
   ROW[n] = { ...ROW[n], chainUid: contexts.A.chainUid };
 }
+// Round 3zc (CTR-GOV-30): the admin's two supply caps, a hybrid's `maxSupply` and its wrap cap below it; both leave the relayer
+// and the fee recipient unbound at fee 0 (mode 0): 0 in the message, as `MetaTxLib.canon` hashes them, and test/typed-ops.test.js
+// and ua-rs sign them again with a non-zero value in both.
+ROW.UASetMaxSupply = { maxSupply: 1000000000, mode: 0, fee: 0 };
+ROW.UASetMaxWrapSupply = { maxWrapSupply: 500000000, mode: 0, fee: 0 };
+// The Change of CTR-GOV-28 in round 3zb + 3zc (O5, O6, owner 2026-11-13): every op of a role holder, `UASetWrapLimits` and the two
+// cap setters name the target's chain word too, context A's
+for (const n of ['UAMint', 'UAMintToUA', 'UADisableWrap', 'UAProposeRate', 'UACancelRate', 'UAExecuteRate', 'UASetMarket',
+  'UASetExchangeTarget', 'UASetListedOnly', 'UASetFeeSplit', 'UAFreeze', 'UAUnfreeze', 'UAForceTransfer', 'UAPause', 'UAUnpause',
+  'UARecordOrder', 'UARevokeOrder', 'UASetTaxRate', 'UASetTaxRecipient', 'UASetProofStore', 'UAOperatorTransfer', 'UASetWrapLimits',
+  'UASetWrapMember', 'UASetAllowed', 'UASetDenied', 'UASetMaxSupply', 'UASetMaxWrapSupply']) {
+  ROW[n] = { ...ROW[n], chainUid: contexts.A.chainUid };
+}
 
 function sample(name, op) {
   const own = {};

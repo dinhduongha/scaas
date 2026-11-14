@@ -523,7 +523,22 @@ the implementation's allowlist ([CLI-SGN-34](signers-clientkeys.md#CLI-SGN-34));
 <a id="contract-roles"></a><a id="CLI-APP-18"></a>**CLI-APP-18** — **Contract-held roles get calldata, not transactions.**
 `rateAdmin` must be a contract, so rate operations are emitted as **Safe Transaction Builder JSON** (`{to, value: "0",
 data}`) or `MultiSig.sol` submit data, never as an EIP-681 link (an EOA sender reverts); the guardian acts directly. Issuer
-wizards build Safe transactions the same way.
+wizards build Safe transactions the same way. From build 3zb + 3zc (SPECIFIED) every such call carries the token's
+`chainUid()` as its last argument ([integration.md](../integration.md#holder-chain-word)).
+
+<a id="burn-and-caps"></a>**Burn button and supply caps** (BUILT, build 3zb + 3zc, branch `burner-wrap-caps`). **Burn:** the app shows a burn action when bit 2 `BURNABLE` is set; else when bit 30 `BURNER` is set and
+`hasRole(30, id)` is true for the signing id; never on bit 2 alone, because a `BURNER` token whose bit 30 was disabled answers
+`FeatureNotSet(2)` though it never had bit 2 ([CTR-GOV-29](../decisions.md#CTR-GOV-29)). A `LIMITED` burner sees its grant
+(`grantOf(30, id)`) before signing. **Caps:** on a wrapped token the app reads `maxSupply()`, `maxWrapSupply()`,
+`totalWrapped()`, `reserveValue()` and `pendingSupplyCaps()`; the disclosure sentences come from `governance_bits.json`, where
+the wrap-cap sentence (`sentences.wrapCap`) is selected by `maxWrapSupply() != 0`, not by a bit, as the hybrid sentence is
+selected by `maxSupply() != 0`; its bracket "fixed" or "the admin can change it: see bit 31" follows bit 31. A wrap above
+`maxWrapSupply − totalWrapped` is refused before signing; a live pending cap change is shown with its value and `eta`
+([supply caps](../contracts/token-wrappers.md#supply-caps)).
+**Staging** (2026-11-15): the rows 30 and 31 and `sentences.wrapCap` are in `governance_bits.json` and every client's bit table
+reads them (ua-rs and its wrappers, ua-py, ua-go, ua-cs, ua-dart, clientkeys: bits 0-31), but no client prints the governance
+sentences yet, so the `wrapCap` selection (as the `hybrid` one) has no client home; the app that prints them implements both
+selections with a vector case each (spec `2026-11-13-burner-wrap-caps.md` §4). SPECIFIED for the app.
 
 <a id="pqz-verifier-display"></a>**PQZ tokens in `OFFCHAIN` mode** (SPECIFIED; contract rule
 [CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)). The app reads `pqzVerifyConfig()` and shows the mode, the

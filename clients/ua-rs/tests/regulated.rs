@@ -84,7 +84,7 @@ fn typed_ops_regulated_rows() {
     assert!(type_string("UAMint").is_none());
     let e = envelope(&v["ops"]["UAPause"]["message"]);
     assert_eq!(struct_hash("UAPause", &e, &[0; 20], &[[0; 32]]), Err(RouterOpError::Params));
-    assert_eq!(struct_hash("UAPause", &e, &[0; 20], &[[0; 32], [1; 32]]), Err(RouterOpError::Range), "a uint64 over 64 bits");
+    assert_eq!(struct_hash("UAPause", &e, &[0; 20], &[[0; 32], [1; 32], [0; 32]]), Err(RouterOpError::Range), "a uint64 over 64 bits");
     assert_eq!(struct_hash("UAMint", &e, &[0; 20], &[]), Err(RouterOpError::UnknownOp));
 }
 

@@ -43,7 +43,7 @@ const TAG: B256 = B256::repeat_byte(0x7a);
 mod t {
     alloy::sol! {
         #[derive(Default)]
-        struct Roles { bytes32 minter; bytes32 rateAdmin; bytes32 guardian; bytes32 issuer; bytes32 compliance; }
+        struct Roles { bytes32 minter; bytes32 rateAdmin; bytes32 guardian; bytes32 issuer; bytes32 compliance; bytes32 burner; }
         #[derive(Default)]
         struct Leg { address underlying; uint256 num; uint256 den; }
         #[derive(Default)]
@@ -59,7 +59,7 @@ mod t {
         #[derive(Default)]
         struct TokenConfig { string name; string symbol; uint8 decimals; uint256 features; uint256 lockedFeatures; bytes32 owner;
             Roles roles; uint256 initialSupply; address initialHolder; Leg[] legs; RateConfig rate; ConfidentialConfig conf;
-            uint64 grantDelay; address rescueTo; uint256 maxSupply; RegulatedParams reg; }
+            uint64 grantDelay; address rescueTo; uint256 maxSupply; uint256 maxWrapSupply; RegulatedParams reg; }
         struct FactoryEnv { address registry; address smartKeyAccountImpl; bool hedera; address[] deps; bytes32[] params;
             address[] libs; bytes32[] libCodeHashes; }
         struct ImplArgs { address[] modules; }

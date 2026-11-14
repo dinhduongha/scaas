@@ -73,15 +73,15 @@
     {"name": "both lists: listFlags 3", "controls": 63, "listFlags": 3, "ok": false, "reason": 6}
   ],
   "enableable": [
-    {"name": "kind 8, the base", "features": 0, "lockedFeatures": 0, "valid": 283248615, "admin": true, "registry": true, "enableable": 268436224},
-    {"name": "kind 8, 8 set", "features": 256, "lockedFeatures": 0, "valid": 283248615, "admin": true, "registry": true, "enableable": 268435968},
-    {"name": "kind 8, 9 locked off", "features": 0, "lockedFeatures": 512, "valid": 283248615, "admin": true, "registry": true, "enableable": 268435712},
-    {"name": "kind 8, 28 locked off", "features": 0, "lockedFeatures": 268435456, "valid": 283248615, "admin": true, "registry": true, "enableable": 768},
-    {"name": "kind 8, no registry", "features": 0, "lockedFeatures": 0, "valid": 283248615, "admin": true, "registry": false, "enableable": 768},
-    {"name": "kind 8, admin 0", "features": 0, "lockedFeatures": 0, "valid": 283248615, "admin": false, "registry": true, "enableable": 0},
-    {"name": "kind 12 (no bit 8)", "features": 0, "lockedFeatures": 0, "valid": 300025575, "admin": true, "registry": true, "enableable": 268435968},
-    {"name": "kind 0 (no regulated bit)", "features": 0, "lockedFeatures": 0, "valid": 131079, "admin": true, "registry": true, "enableable": 0},
-    {"name": "kind 8, all set", "features": 268436224, "lockedFeatures": 0, "valid": 283248615, "admin": true, "registry": true, "enableable": 0}
+    {"name": "kind 8, the base", "features": 0, "lockedFeatures": 0, "valid": 1356990439, "admin": true, "registry": true, "enableable": 268436224},
+    {"name": "kind 8, 8 set", "features": 256, "lockedFeatures": 0, "valid": 1356990439, "admin": true, "registry": true, "enableable": 268435968},
+    {"name": "kind 8, 9 locked off", "features": 0, "lockedFeatures": 512, "valid": 1356990439, "admin": true, "registry": true, "enableable": 268435712},
+    {"name": "kind 8, 28 locked off", "features": 0, "lockedFeatures": 268435456, "valid": 1356990439, "admin": true, "registry": true, "enableable": 768},
+    {"name": "kind 8, no registry", "features": 0, "lockedFeatures": 0, "valid": 1356990439, "admin": true, "registry": false, "enableable": 768},
+    {"name": "kind 8, admin 0", "features": 0, "lockedFeatures": 0, "valid": 1356990439, "admin": false, "registry": true, "enableable": 0},
+    {"name": "kind 12 (no bit 8)", "features": 0, "lockedFeatures": 0, "valid": 1373767399, "admin": true, "registry": true, "enableable": 268435968},
+    {"name": "kind 0 (no regulated bit)", "features": 0, "lockedFeatures": 0, "valid": 1073872903, "admin": true, "registry": true, "enableable": 0},
+    {"name": "kind 8, all set", "features": 268436224, "lockedFeatures": 0, "valid": 1356990439, "admin": true, "registry": true, "enableable": 0}
   ],
   "freeze": [
     {"name": "an issuer-only freeze of an account never frozen", "rule": "T1", "token": "0x46b050c2abafa34dfd42de4e58a06fdeea2657b5", "account": "0x00000000000000000000000000000000000000000000000000000000000000f1", "now": "1800000000", "controls": 39,

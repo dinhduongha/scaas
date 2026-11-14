@@ -1700,6 +1700,60 @@ pub(crate) mod tests {
         assert!(st == "dead" && e.starts_with("MetaTxBadNonce("), "control: {st}: {e}");
     }
 
+    /// Round 3zb + 3zc (spec 2026-11-13-burner-wrap-caps.md §4's verdict table), through the one classifier on vector jobs whose
+    /// subject nonce is unspent: a wrap or a mint above a cap, a cap setter before its `eta` or under a floor at its apply are
+    /// `SUPPLY_CAP_REFUSED`, back in the queue; a burner's or a minter's spent window `GRANT_WINDOW_REFUSED`; the shape refusals,
+    /// bit 31 off and the burn refusals of the job's own subject `dead` by name. Controls: `GrantNotReady` of another bit, a
+    /// window refusal on an op that is no burn and no mint.
+    #[tokio::test]
+    async fn supply_cap_and_grant_window_verdicts() {
+        use crate::abi::{decode_revert, IGovernance as G, ISupplyCaps as C};
+        use crate::guard::{revert_verdict, Verdict};
+        use crate::typed::testkit::{op_of, vectors};
+        use alloy::sol_types::SolError;
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let chain = Chain::with_signer(&test_cfg(&url), PrivateKeySigner::random()).unwrap();
+        let v = vectors();
+        let (u, b) = (U256::from(5), B256::repeat_byte(0xb1));
+        for (name, kind, err, want) in [
+            ("Wrap", "token", C::MaxWrapSupplyExceeded { totalWrapped: u, maxWrapSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxWrapSupplyExceeded("),
+            ("Wrap", "token", C::MaxSupplyExceeded { supply: u, maxSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyExceeded("),
+            ("UAMint", "gov_router", C::MaxSupplyExceeded { supply: u, maxSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyExceeded("),
+            ("UASetMaxSupply", "gov_router", G::GrantNotReady { bit: 31, account: B256::ZERO, eta: 9 }.abi_encode(), "SUPPLY_CAP_REFUSED: GrantNotReady("),
+            ("UASetMaxSupply", "gov_router", C::MaxSupplyBelowSupply { maxSupply: u, totalSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyBelowSupply("),
+            ("UASetMaxSupply", "gov_router", C::MaxSupplyBelowWrapCap { maxSupply: u, maxWrapSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyBelowWrapCap("),
+            ("UASetMaxWrapSupply", "gov_router", C::MaxWrapSupplyBelowWrapped { maxWrapSupply: u, totalWrapped: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxWrapSupplyBelowWrapped("),
+            ("UASetMaxWrapSupply", "gov_router", C::MaxWrapSupplyAboveMaxSupply { maxWrapSupply: u, maxSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxWrapSupplyAboveMaxSupply("),
+            ("UABurn", "token", G::GrantExhausted { field: 3 }.abi_encode(), "GRANT_WINDOW_REFUSED: GrantExhausted("),
+            ("UAMint", "gov_router", G::GrantExhausted { field: 3 }.abi_encode(), "GRANT_WINDOW_REFUSED: GrantExhausted("),
+            ("UAMintToUA", "gov_router", G::GrantExhausted { field: 3 }.abi_encode(), "GRANT_WINDOW_REFUSED: GrantExhausted("),
+        ] {
+            let w = work_of_op(Some(1), &op_of(name, kind, &v).unwrap(), None).unwrap().0;
+            let r = revert_verdict(&chain, &w, decode_revert(&err)).await;
+            assert!(matches!(&r, Verdict::Requeue(e) if e.starts_with(want)), "{name}: {r:?}");
+        }
+        for (name, kind, err, want) in [
+            ("UASetMaxSupply", "gov_router", G::FeatureNotSet { bit: 31 }.abi_encode(), "FeatureNotSet("),
+            ("UASetMaxSupply", "gov_router", C::MaxSupplyInvalid {}.abi_encode(), "MaxSupplyInvalid"),
+            ("UASetMaxWrapSupply", "gov_router", C::MaxWrapSupplyInvalid {}.abi_encode(), "MaxWrapSupplyInvalid"),
+            ("UASetMaxSupply", "gov_router", G::GrantNotReady { bit: 3, account: b, eta: 9 }.abi_encode(), "GrantNotReady("),
+            ("UABurn", "token", G::MissingRole { bit: 30, account: b }.abi_encode(), "MissingRole("),
+            ("UABurn", "token", G::FeatureNotSet { bit: 2 }.abi_encode(), "FeatureNotSet("),
+            ("UABurn", "token", G::FeatureNotSet { bit: 30 }.abi_encode(), "FeatureNotSet("),
+            ("UABurn", "token", G::GrantExpired { bit: 30, holder: b }.abi_encode(), "GrantExpired("),
+            ("UABurn", "token", G::GrantExhausted { field: 0 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 1 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 2 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 5 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 7 }.abi_encode(), "GrantExhausted("),
+            ("UASetGrant", "gov_router", G::GrantExhausted { field: 3 }.abi_encode(), "GrantExhausted("),
+        ] {
+            let w = work_of_op(Some(1), &op_of(name, kind, &v).unwrap(), None).unwrap().0;
+            let r = revert_verdict(&chain, &w, decode_revert(&err)).await;
+            assert!(matches!(&r, Verdict::Dead(e) if e.starts_with(want)), "{name}: {r:?}");
+        }
+    }
+
     /// As `Frozen`: `ComplianceRegistryUnavailable` (the token's bounded registry call failed) is a refusal, named, never `dead`.
     #[tokio::test]
     async fn registry_unavailable_is_refusal() {
@@ -2038,8 +2092,9 @@ pub(crate) mod tests {
         // group 3h T61: -> 114, the router's `UASetProofStore`; group 3l: -> 116, the router's two wrap-limit ops
         // round 3r (CTR-GOV-23): -> 127, the router's eleven admin rows; round 3s: -> 130, the router's three list / enable rows
         // round 3t: -> 131, the router's `UASetVerifierFee`; owner 2026-11-12: -> 132, the router's `UACreateInstance`
-        // the three-key model (CTR-PQZ-41): -> 133, `PqzRollOver`
-        assert_eq!(n, 133, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // the three-key model (CTR-PQZ-41): -> 133, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 135, the router's
+        // `UASetMaxSupply`, `UASetMaxWrapSupply`
+        assert_eq!(n, 135, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the

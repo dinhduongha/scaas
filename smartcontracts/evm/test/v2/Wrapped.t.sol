@@ -96,14 +96,14 @@ contract WrappedTest is V2Fixture {
         RateAdminForwarder adm = new RateAdminForwarder();
         WrappedToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(0)));
         vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
-        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
+        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100, EnvKit.codeUidOf(address(t)))));
         vm.prank(wrapperOwner);
         t.grantRole(RATE, nid(address(adm)), EnvKit.codeUidOf(address(t)));
-        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
+        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100, EnvKit.codeUidOf(address(t)))));
         vm.prank(wrapperOwner);
         t.revokeRole(RATE, nid(address(adm)), EnvKit.codeUidOf(address(t)));
         vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
-        adm.exec(address(t), abi.encodeCall(t.cancelRate, ()));
+        adm.exec(address(t), abi.encodeCall(t.cancelRate, (EnvKit.codeUidOf(address(t)))));
         // revoking leaves the pending change and the rate as they are
         (address u,,, uint64 eta) = t.pendingRate();
         assertEq(u, address(usdc));
@@ -119,7 +119,7 @@ contract WrappedTest is V2Fixture {
     function test_disableRateAdjustable_cancelsThePendingChange_andFixesTheRate() public {
         RateAdminForwarder adm = new RateAdminForwarder();
         WrappedToken t = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
-        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
+        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100, EnvKit.codeUidOf(address(t)))));
         usdc.mint(alice, 10);
         vm.prank(alice);
         usdc.approve(address(t), 10);
@@ -138,9 +138,9 @@ contract WrappedTest is V2Fixture {
         vm.prank(alice);
         t.wrap(10);
         vm.expectRevert(IWrappedToken.RateFixed.selector);
-        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100)));
+        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 101, 100, EnvKit.codeUidOf(address(t)))));
         vm.expectRevert(IWrappedToken.RateFixed.selector);
-        adm.exec(address(t), abi.encodeCall(t.executeRate, ()));
+        adm.exec(address(t), abi.encodeCall(t.executeRate, (EnvKit.codeUidOf(address(t)))));
     }
 
     function test_disableRateAdjustable_withNothingPending_emitsNoCancel() public {
@@ -159,21 +159,21 @@ contract WrappedTest is V2Fixture {
         WrappedToken t = _multi(us, one, one, _fixedRate(), bob); // an EOA guardian is allowed
         vm.prank(alice);
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
-        t.disableWrap(address(usdt), "x");
+        t.disableWrap(address(usdt), "x", EnvKit.codeUidOf(address(t)));
         vm.expectEmit(address(t));
         emit IWrappedToken.WrapDisabled(address(usdt), nid(bob), "depeg");
         vm.prank(bob);
-        t.disableWrap(address(usdt), "depeg");
+        t.disableWrap(address(usdt), "depeg", EnvKit.codeUidOf(address(t)));
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapDisabledFor.selector, address(usdt)));
-        t.disableWrap(address(usdt), "again");
+        t.disableWrap(address(usdt), "again", EnvKit.codeUidOf(address(t)));
         // a disabled flag stops the role: the guardian keeps the role but has no power
         vm.prank(wrapperOwner);
         t.disableFeature(GUARD, EnvKit.codeUidOf(address(t)));
         assertTrue(t.hasRole(GUARD, nid(bob)));
         vm.prank(bob);
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
-        t.disableWrap(address(usdc), "late");
+        t.disableWrap(address(usdc), "late", EnvKit.codeUidOf(address(t)));
     }
 
     function test_guardianRenounces() public {
@@ -183,7 +183,7 @@ contract WrappedTest is V2Fixture {
         t.renounceRole(GUARD, EnvKit.codeUidOf(address(t)));
         vm.prank(bob);
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
-        t.disableWrap(address(usdt), "x");
+        t.disableWrap(address(usdt), "x", EnvKit.codeUidOf(address(t)));
     }
 
     // ------------------------------------------------------------------ single-asset ABI (CTR-TOK-07)
@@ -226,7 +226,7 @@ contract WrappedTest is V2Fixture {
         usdc.mint(address(this), 1_000);
         usdc.approve(address(t), 1_000);
         t.wrap(1_000);
-        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 3, 7)));
+        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 3, 7, EnvKit.codeUidOf(address(t)))));
         for (uint256 i; i < 12; ++i) assertEq(vm.load(address(t), bytes32(uint256(NS_TOKEN) + i)), tokBefore[i]);
         bytes32 leg0 = keccak256(abi.encode(uint256(0), NS_UNDERLYING));
         assertEq(address(uint160(uint256(vm.load(address(t), leg0)))), address(usdc));

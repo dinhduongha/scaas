@@ -41,7 +41,7 @@ const CONF = {
   // group 3l (wrap limits spec §9): the leg array is the call's array of tuples, each limit a nested tuple
   SetWrapLimits: (m) => [m.target, m.legs.map((l) => [l.underlying, l.unitExp, l.decayDays,
     ...['wrapShort', 'wrapLong', 'unwrapShort', 'unwrapLong'].map((k) => [l[k].perUser, l[k].tokenWide, l[k].period])]),
-  m.netUnwrap, m.wrapList, m.unwrapList],
+  m.netUnwrap, m.wrapList, m.unwrapList, m.chainUid],
   // the factory's creations (ua-mtx-merge T76): the struct signs `initHash`, the call takes the bytes (`extra`)
   // round 3r: the three publishes take the `Env` tuple; the class approval its words as one static struct (`ReleaseApproval`)
   // CTR-GOV-27: the factory's chain word after the static fields, before `env`; `setChainEntries` takes one named struct

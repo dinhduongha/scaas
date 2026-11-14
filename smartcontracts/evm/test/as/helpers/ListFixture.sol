@@ -10,8 +10,8 @@ import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Round 3s's ops (spec 2026-11-10-token-lists.md §6.1, §7) by selector, so the suites compile before the build (red first).
 interface IListOps {
-    function setAllowed(bytes32[] calldata accounts, bool on) external;
-    function setDenied(bytes32[] calldata accounts, bool on) external;
+    function setAllowed(bytes32[] calldata accounts, bool on, bytes32 chainUid_) external;
+    function setDenied(bytes32[] calldata accounts, bool on, bytes32 chainUid_) external;
     function listFlagsOf(bytes32 account) external view returns (uint8);
     function enableFeature(uint8 bit, bytes32 chainUid_) external;
 }
@@ -69,8 +69,8 @@ abstract contract ListFixture is RegFixture {
     /// `issuer` writes `a`'s flag of `bit` (8 the allow list, 9 the deny list).
     function _setList(address t, uint8 bit, bytes32 a, bool on) internal {
         vm.prank(issuer);
-        if (bit == ALLOW) IListOps(t).setAllowed(_one(a), on);
-        else IListOps(t).setDenied(_one(a), on);
+        if (bit == ALLOW) IListOps(t).setAllowed(_one(a), on, EnvKit.codeUidOf(t));
+        else IListOps(t).setDenied(_one(a), on, EnvKit.codeUidOf(t));
     }
 
     /// Under the list `bit`, `a` cannot move (`ALLOW`: unlisted; `DENY`: denied) / can move again.

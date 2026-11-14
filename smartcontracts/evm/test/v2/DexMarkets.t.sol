@@ -128,7 +128,7 @@ contract DexMarketsTest is UADexBase {
         assertEq(dex.features(), GovernanceBits.DEX_BITS | CLOSED);
         ISCaaSDex.Settlement[] memory ss = _book();
         _expectOne(ss, abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(A), address(B)));
-        dex.setMarket(address(A), address(B), true);
+        dex.setMarket(address(A), address(B), true, EnvKit.codeUidOf(address(dex)));
         assertTrue(_settle(ss));
     }
 

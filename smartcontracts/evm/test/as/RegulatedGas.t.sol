@@ -17,8 +17,8 @@ contract RegulatedGasTest is ListFixture {
     uint256 constant PIN_LISTS = 57_525;
     uint256 constant PIN_KYC = 61_902;
     uint256 constant PIN_KYC_LIST = 66_510;
-    uint256 constant PIN_MTX_LISTS = 97_144;
-    uint256 constant PIN_MTX_FEE_LISTS = 120_629;
+    uint256 constant PIN_MTX_LISTS = 97_256;
+    uint256 constant PIN_MTX_FEE_LISTS = 120_741;
     /// T9 (no regulated transfer pin existed before; spec §14's estimates: lists +4.6 k over no control, measured; KYC +9.0 k,
     /// KYC with a list +13.6 k): measured at 298ddc5b, Foundry 1.8.5, the token's frame gas. Stacked gate (3r + 3s + 3t): the
     /// two `mtxExecuteTransfer` rows 97,074 -> 97,075 and 120,471 -> 120,472, from round 3t's two `ConfidentialConfig` fields
@@ -30,7 +30,11 @@ contract RegulatedGasTest is ListFixture {
     /// tree, nothing in the transfer path): the transfer rows 52,867 -> 52,844, 57,503 -> 57,480, 61,880 -> 61,857, 66,488 ->
     /// 66,465; the `mtxExecuteTransfer` rows 97,144 -> 97,166 and 120,629 -> 120,651. Fix3 owner 2026-11-13
     /// (`renounceRole(uint8,bytes32)`: the dispatch tree again, nothing in the transfer path): 52,844 -> 52,889, 57,480 ->
-    /// 57,525, 61,857 -> 61,902, 66,465 -> 66,510; 97,166 -> 97,144, 120,651 -> 120,629.
+    /// 57,525, 61,857 -> 61,902, 66,465 -> 66,510; 97,166 -> 97,144, 120,651 -> 120,629. Round 3zb + 3zc (CTR-GOV-28 Change:
+    /// module P's `setTaxRate` / `setTaxRecipient` take the chain word, their selectors move P's dispatch tree): the two
+    /// `mtxExecuteTransfer` rows 97,144 -> 97,256 and 120,629 -> 120,741 (the token's frame +111 = P's dispatch of
+    /// `mtxExecuteTransfer` +111, measured by a bare-selector call; the same calls and frames otherwise, `ecrecover` 3,000
+    /// both); the four transfer rows unchanged.
     bool constant PINNED = true;
 
     uint256 nonce;
