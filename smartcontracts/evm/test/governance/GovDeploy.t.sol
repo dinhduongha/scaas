@@ -647,8 +647,8 @@ contract GovDeployTest is Test {
         // 0x454bdF0b754A318ebA96d50689FB14762a255Aeb; burner-wrap-caps (round 3zb + 3zc: the chain word on 25 holder ops,
         // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`, CTR-GOV-28 Change, CTR-GOV-30): 0xA243e3F1a8bBc3659ac69b5AE0A571b1CF0a5E1D;
         // msig-members, CTR-UA-44 (TODO 3ze; the metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code
-        // unchanged): 0x25e38E5af7B8aeF469B92cc357f56F46898FCe70. The merge pre-reset4 (both): -> this
-        assertEq(router, 0xA243e3F1a8bBc3659ac69b5AE0A571b1CF0a5E1D, "GovernanceRouter");
+        // unchanged): 0x25e38E5af7B8aeF469B92cc357f56F46898FCe70. The merge pre-reset4 (both; the metadata hash): -> this
+        assertEq(router, 0xEf29EBaCe18B161338a8a0f8cF34839b233127F9, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
