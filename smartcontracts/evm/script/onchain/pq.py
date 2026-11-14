@@ -154,6 +154,28 @@ def extra(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     mine(pq, sd, E.Sender(2), U, aud, DEC, tusd, fac, D)  # key 2: e2e's relayer key; its own Sender is done by now
 
 
+HOLDERS, PQX = [], [None]  # section 10's holders (each own-key OFFCHAIN token gets their records, `records`) and its prover
+P_SCOPED = E.kc(b"scaas.ua.purpose.pqz-scoped-key.v1")
+REC_S = "pqzScopedKeyRecordDigest(bytes32,uint8,bytes32,address,uint64,bytes32,bytes32,bytes32,uint64)"
+SET_SCOPED = f"setPqzScopedKey(bytes32,address,uint64,bytes,bytes32,(uint8,bytes,bytes32),uint64,{E.UASIG_S})"
+
+
+def records(pq, sd, tok, xs):
+    """CTR-PQZ-37 / K3-3: on an OFFCHAIN token with its own key (class 3 `offchain-token`, no opening) each holder's record of
+    the token: a fresh PQZ key of its own (the registry key's bytes are refused `UAKeyInUse`), no opening KEM key, signed by
+    the holder's ML-DSA key over `pqzScopedKeyRecordDigest`; no proof stored (OFFCHAIN reads an unproven record). e2e's ops
+    on the token then use that key (`E.SCOPED`, `E.at_tok`)."""
+    vub = int(_rpc0("eth_blockNumber", []), 16) + 10_000
+    for x in xs:
+        pk, s_, e_, _ = E.K.keygen(E.kc("pq.py scoped/", x.ua + bytes.fromhex(tok[2:])))
+        ph = E.kc(b"pq.py scoped pop " + x.ua + bytes.fromhex(tok[2:]))
+        kh = E.kc(E.kc(b"scaas.ua.group.pqz-mlwe.v1") + pk)
+        d = E.words(E.call(E.REG[0], E.cd(REC_S, ["w"] * 9, x.ua, 3, E.CTX[1], tok, 0, kh, ph, E.ZERO32, vub)))[0]
+        sd.send(E.REG[0], E.cd(SET_SCOPED, ["w", "w", "w", "b", "w", ("t", ["w", "b", "w"]), "w", E.UASIG_T], x.ua, tok, 0, pk,
+                               ph, [0, b"", E.ZERO32], vub, E.ua_sig(pq, x, P_SCOPED, d)), f"setPqzScopedKey {x.name} of {tok[:10]}…")
+        E.SCOPED[(x.ua, tok.lower())] = (pk, s_, e_)
+
+
 def create_cfg(sd, fac, kind, name, sym, legs, feat, salt, conf=None, reg=None, issuer=0):
     """`createToken` on e2e's factory with e2e's `TokenConfig` encoding (its `create`), plus the regulated params."""
     c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, issuer, 0], 0, 0, legs, [0, 0],
@@ -163,6 +185,8 @@ def create_cfg(sd, fac, kind, name, sym, legs, feat, salt, conf=None, reg=None, 
     lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower())
     t = "0x" + lg["topics"][1][-40:]
     E.log(f"      {sym} at {t}")
+    if conf and conf[7] == 1 and conf[13] == 1:  # OFFCHAIN, its own key: the holders' records of it
+        records(PQX[0], sd, t, HOLDERS)
     return t
 
 
@@ -377,6 +401,10 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     alice, bob = U["alice"], U["bob"]
     sr, s3 = E.Sender(2), E.Sender(3)
     E.log("\n## 10. (T66b Step 5b) the PQZ OFFCHAIN verify mode: fixed and transferable verifiers, the verifier change, negatives")
+    HOLDERS[:], PQX[0] = [alice, bob, aud, DEC[0]], pq
+    for k in ("pqUSD", "pqW"):  # e2e's --zero-dep tokens (own key): the holders' records first
+        if k in D.addr:
+            records(pq, sd, D.addr[k], HOLDERS)
 
     def conf(fixed):
         # proofStore, verifierFee, verifierFeeMax 0; pqzOwnKey 1, pqzOpening 0: OFFCHAIN as e2e's --zero-dep tokens (CTR-PQZ-37)
