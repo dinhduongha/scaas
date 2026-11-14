@@ -966,6 +966,10 @@ only. **UNAUDITED.**
 its apply (owner O4), and its floors are checked at the apply: anyone who wraps above the pending value before `eta` and holds
 through the window makes the apply revert (`MaxSupplyBelowSupply` / `MaxWrapSupplyBelowWrapped`), and the minter's mint does the
 same to `maxSupply`. The admin's remedies, before or during the delay:
+A cap setter's job that waits `queued` (`GrantNotReady(31, …)` before `eta`, or a floor at the apply) is the admin's own
+signed op and still lands later: if the admin meanwhile proposes another value, the held op then lands as a new proposal of
+its own value and replaces it, restarting the clock. Before proposing another value, cancel the held op's nonce
+(`mtxCancelNonce` on the router's lane).
 
 | Token | At once |
 |---|---|

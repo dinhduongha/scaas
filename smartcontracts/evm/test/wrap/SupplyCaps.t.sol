@@ -11,6 +11,7 @@ import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -39,6 +40,30 @@ contract ReaderLeg {
         balanceOf[msg.sender] -= v;
         balanceOf[to] += v;
         return true;
+    }
+}
+
+/// A leg whose `mtxTrade` re-enters the wrapper (Fable F-4): a second wrap, an unwrap and the cap setter from inside a
+/// signature wrap, each recorded by its revert selector; then it delivers `amount`.
+contract ReenterLeg {
+    mapping(address => uint256) public balanceOf;
+    bytes4[] public errs;
+    address public u;
+
+    function decimals() external pure returns (uint8) { return 0; }
+
+    function setU(address u_) external { u = u_; }
+
+    function n() external view returns (uint256) { return errs.length; }
+
+    function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata)
+        external
+    {
+        WrappedToken w = WrappedToken(payable(msg.sender));
+        try w.wrap(u, 1) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try w.unwrap(u, 1, address(this), 0) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try w.setMaxWrapSupply(0, bytes32(0)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        balanceOf[o.dex] += o.amount;
     }
 }
 
@@ -586,6 +611,45 @@ contract SupplyCapsTest is WrapLimitsBase {
         _set(w, a, false, false, false); // the control, the own word
         (got,,,,,,,) = w.wrapLimits();
         assertEq(got[0].wrapShort.perUser, 10);
+    }
+
+    // ------------------------------------------------------------------ Fable review fixes (F-4, F-11)
+
+    /// F-4: the token's guard refuses a wrap, an unwrap and the cap setter from inside a signature wrap's leg call, so the
+    /// counter written after the leg (spec §3.4) never misses an in-flight wrap; the counter stays within the cap.
+    function test_sigWrapLegCannotReenter() public {
+        ReenterLeg leg = new ReenterLeg();
+        WrappedToken w = _tok(1, address(leg), 1, 100, 0);
+        leg.setU(address(leg));
+        ITradeToken.UAWrapOrder memory o = _order(w, 60, 1);
+        o.relayer = address(0);
+        IUARegistry.UASig memory none;
+        w.mtxWrapOrder(address(leg), o, none);
+        assertEq(leg.n(), 3);
+        for (uint256 i; i < 3; ++i) assertEq(leg.errs(i), IMetaTx.Reentrancy.selector, "the guard, inside the leg");
+        assertEq(w.totalWrapped(), 60);
+        assertLe(w.totalWrapped(), w.maxWrapSupply());
+    }
+
+    /// F-11 (a): a pending applies at exactly `eta + grantDelay` and is dead one second later.
+    function test_set_windowBoundary() public {
+        WrappedToken w = _tok(HYB | (uint256(1) << SCA), u, 1, 0, 1 hours);
+        _setMW(w, 500);
+        uint256 t0 = block.timestamp;
+        vm.warp(t0 + 2 hours); // eta + grantDelay exactly
+        _setMW(w, 500);
+        assertEq(w.maxWrapSupply(), 500, "applied at the last second of the window");
+        _setMW(w, 400);
+        vm.warp(block.timestamp + 2 hours + 1);
+        _setMW(w, 400); // past the window: proposes again
+        assertEq(w.maxWrapSupply(), 500);
+    }
+
+    /// F-11 (b): with both the wrap cap and a wrap-limit window refusing, the cap is named first (spec §3.4's order).
+    function test_cap_beforeTheWindow() public {
+        WrappedToken w = _tok(HYB | CONTROLS, u, 1, 10, 0);
+        _set(w, _cfg1(0, 0, L(5, 0, 1 days), OFF(), OFF(), OFF()), false, false, false);
+        _wrapRev(w, bob, 11, _overCap(11, 10)); // over the window (5) and over the cap (10)
     }
 }
 

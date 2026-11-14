@@ -61,6 +61,39 @@ contract SupplyCapsKind3Test is ZetherFixture {
     }
 }
 
+/// Fable F-5: a hybrid of kind 3 with bit 31: `setMaxSupply` raises and lowers through the face, the views agree.
+contract SupplyCapsKind3HybridTest is ZetherFixture {
+    MockERC20 internal usd = new MockERC20("USD", "USD", 6);
+
+    function setUp() public {
+        _stack();
+        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        _users();
+    }
+
+    function test_kind3_hybridSetMaxSupplyAndViews() public {
+        IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
+        (c.features, c.admin, c.lockedFeatures) = (1 | (uint256(1) << GovernanceBits.MINTABLE) | SCA_BIT, nid(address(this)), 0);
+        (c.maxSupply, c.maxWrapSupply) = (1000 * SCALE, 100 * SCALE);
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
+        address t = factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "h3");
+        IWrappedToken iw = IWrappedToken(t);
+        bytes32 u = EnvKit.codeUidOf(t);
+        iw.setMaxSupply(2000 * SCALE, u);
+        assertEq(iw.maxSupply(), 2000 * SCALE, "raised");
+        iw.setMaxSupply(500 * SCALE, u);
+        assertEq(iw.maxSupply(), 500 * SCALE, "lowered");
+        usd.mint(address(this), 10 * SCALE);
+        usd.approve(t, type(uint256).max);
+        WrappedZetherToken(payable(t)).mtxWrapShield(address(usd), 10 * SCALE, ZetherTypes.UA.unwrap(alice.ua));
+        assertEq(iw.reserveValue(), iw.collateralValue());
+        assertEq(iw.reserveValue(), 10 * SCALE);
+        (, uint64 e1, bool l1,, uint64 e2, bool l2) = iw.pendingSupplyCaps();
+        assertTrue(e1 == 0 && e2 == 0 && !l1 && !l2, "no delay, no pending");
+    }
+}
+
 contract SupplyCapsKind5Test is PqzFixture {
     MockERC20 internal usd = new MockERC20("USD", "USD", 6);
 
@@ -119,6 +152,29 @@ contract SupplyCapsKind9Test is RegFixture {
     }
 }
 
+/// Fable F-5: a hybrid of kind 9 with bit 31 and the fixture's grantDelay: `setMaxSupply` proposed, then applied.
+contract SupplyCapsKind9HybridTest is RegFixture {
+    function test_kind9_hybridSetMaxSupplyAndViews() public {
+        IFactoryToken.TokenConfig memory c = _cfg9();
+        c.features |= (uint256(1) << GovernanceBits.MINTABLE) | SCA_BIT;
+        (c.maxSupply, c.roles.minter) = (1000, nid(address(this)));
+        address t = f.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "h9");
+        IWrappedToken iw = IWrappedToken(t);
+        bytes32 u = EnvKit.codeUidOf(t);
+        vm.prank(ownerA);
+        iw.setMaxSupply(2000, u);
+        (uint256 p, uint64 eta, bool live,,,) = iw.pendingSupplyCaps();
+        assertTrue(p == 2000 && eta == block.timestamp + GD && live, "proposed");
+        vm.warp(block.timestamp + GD);
+        vm.prank(ownerA);
+        iw.setMaxSupply(2000, u);
+        assertEq(iw.maxSupply(), 2000, "applied");
+        _wrapFor(t, alice, 10);
+        assertEq(iw.reserveValue(), iw.collateralValue());
+        assertEq(iw.totalWrapped(), 10);
+    }
+}
+
 contract SupplyCapsKind11Test is ZetherRegFixture {
     function _isWrapped() internal pure override returns (bool) { return true; }
 
@@ -148,6 +204,20 @@ contract SupplyCapsKind11Test is ZetherRegFixture {
 
 contract SupplyCapsKind13Test is PqzRegFixture {
     function _isWrapped() internal pure override returns (bool) { return true; }
+
+    /// Controller 2026-11-15 (Fable F-5): the regulated PQZ path's own unshield-unwrap (its hooks) leaves the counter by all of
+    /// `amount · shieldScale`, as on kind 5; a pure wrap's counter stays its supply.
+    function test_kind13_unshieldUnwrapCounter() public {
+        _shieldTo(alice, 100);
+        IWrappedToken iw = IWrappedToken(address(tok));
+        uint256 w0 = iw.totalWrapped();
+        assertEq(w0, tok.totalSupply(), "a pure wrap");
+        (bool ok, bytes memory ret) = address(tok).call(_unwrapCall(10, 0));
+        assertTrue(ok, string(ret));
+        assertEq(usd.balanceOf(address(0xD00D)), 10 * SCALE, "paid out");
+        assertEq(iw.totalWrapped(), w0 - 10 * SCALE, "the counter follows the burn from the pool");
+        assertEq(iw.totalWrapped(), tok.totalSupply());
+    }
 
     function test_kind13_capCounterSetter() public {
         IFactoryToken.TokenConfig memory c = _regCfg();

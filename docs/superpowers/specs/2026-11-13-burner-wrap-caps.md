@@ -1,6 +1,8 @@
 # Role `BURNER` (3zb) and wrapped supply caps (3zc) — design
 
-**Status:** BUILT on branch `burner-wrap-caps` (2026-11-15; EVM, node, clients; the other families follow in their rounds), **UNAUDITED**. Was: SPECIFIED, nothing built. Written 2026-11-13 from TODO items 3zb and 3zc (owner rulings of
+**Status:** BUILT on branch `burner-wrap-caps` (2026-11-15; EVM, node, clients; the other families follow in their rounds), **UNAUDITED**. Was: SPECIFIED, nothing built. The section tags and the O-table below keep their SPECIFIED wording as written at design time; every section is built
+as specified except where `docs/decisions.md` (CTR-GOV-29, CTR-GOV-30 and their Changes) says otherwise; the matrix additions of §8
+step 12 run at reset 4. Written 2026-11-13 from TODO items 3zb and 3zc (owner rulings of
 2026-11-13, quoted there verbatim, applied here and not reopened). Read against `ua-mtx-merge` at `cf6f785a`. Order (owner):
 this round runs **after the PQZ three-key round (3za) and before reset 4**, on a branch cut from the merged three-key
 result. The three-key round splits the PQZ regulated ops module and changes the registry, so this spec names modules **by

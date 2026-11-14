@@ -208,10 +208,19 @@ contract HolderChainWordTest is Test {
         if (i <= 1) return true;
         bool wrapped = k % 2 == 1;
         if (i <= 6) return wrapped;
-        if (i == 7) return k == 8 || k == 9; // `ALLOWLIST` is outside the confidential regulated kinds' mask (CTR-GOV-17)
-        if (i <= 18) return k >= 8;
+        if (i <= 18) return k >= 8; // `setAllowed` on 10-13 too: the entry exists; its bit is outside their mask (CTR-GOV-17)
         if (i == 19) return k == 4 || k == 5 || k == 12 || k == 13;
         return false;
+    }
+
+    /// Spec §3.9: mint / mintToUA on every kind, + 5 on the wrapped kinds, + 12 on the regulated, + setProofStore on the PQZ
+    /// kinds; the DEX's 4.
+    function _count(uint8 k) internal pure returns (uint256 c) {
+        if (k == 255) return 4;
+        c = 2;
+        if (k % 2 == 1) c += 5;
+        if (k >= 8) c += 12;
+        if (k == 4 || k == 5 || k == 12 || k == 13) c += 1;
     }
 
     function _token(string memory name, uint8 kind) internal {
@@ -222,11 +231,12 @@ contract HolderChainWordTest is Test {
             uint256 s = vm.snapshotState();
             _entry(name, kind == 255 ? _dex() : _kind(name, kind), es[i]);
             vm.revertToState(s);
-            _limited(name, kind == 255 ? _dex() : _kind(name, kind), es[i]);
+            // no limited grant of `ALLOWLIST` where the bit is outside the kind's mask (10-13: `NoSuchRole(8)`)
+            if (!(i == 7 && kind >= 10)) _limited(name, kind == 255 ? _dex() : _kind(name, kind), es[i]);
             vm.revertToState(s);
             ++n;
         }
-        assertTrue(n != 0, "no entry checked");
+        assertEq(n, _count(kind), "entries walked (spec 3.9 table)");
     }
 
     function test_kind0_NormalToken() public { _token("NormalToken", 0); }
@@ -266,6 +276,22 @@ contract HolderChainWordTest is Test {
         assertEq(abi.decode(b, (uint256)), 7);
     }
 
+    /// Acting controls on bare clones (Fable F-6): with the own word, the holder's `setWrapMember` (kind 1) and `pause`
+    /// (kind 8) act.
+    function test_actingControls() public {
+        address t = _kind("WrappedToken", 1);
+        _seat(t, GovernanceBits.WRAP_LIST);
+        vm.prank(HOLDER);
+        (bool ok, bytes memory ret) = t.call(abi.encodeWithSignature("setWrapMember(bytes32,bool,bool,bytes32)",
+            bytes32(uint256(0xACC)), true, true, UID));
+        assertTrue(ok, string(ret));
+        address r = _kind("NormalRegulatedToken", 8);
+        _seat(r, GovernanceBits.PAUSE);
+        vm.prank(HOLDER);
+        (ok, ret) = r.call(abi.encodeWithSignature("pause(bytes32,uint64,bytes32)", bytes32("ref"), uint64(block.timestamp + 1 days), UID));
+        assertTrue(ok, string(ret));
+    }
+
     // ------------------------------------------------------------------ the DEX's four entries in its module (O8, §3.10)
 
     /// Each acts on the DEX's address, its event emitted from it; a direct call on either module is refused.
@@ -287,12 +313,18 @@ contract HolderChainWordTest is Test {
         ISCaaSDex(d).setMarket(address(0xBA5E), address(0x0907E), true, UID);
         assertTrue(SCaaSDex(payable(d)).marketListed(address(0xBA5E), address(0x0907E)));
         address[] memory ms = SCaaSDex(payable(d)).modules();
-        // the governance module (ms[0]) refuses a direct call by name before its body runs (`onlyDelegated`); the liquidity
-        // module has no such entry
-        vm.prank(HOLDER);
-        (bool ok0, bytes memory r0) = ms[0].call(abi.encodeWithSignature("setListedOnly(bool,bytes32)", false, UID));
-        assertFalse(ok0, "the governance module called directly");
-        assertEq(r0, abi.encodeWithSignature("NotDelegated()"), "NotDelegated, before the body");
+        // the governance module (ms[0]) refuses a direct call of each of the four by name before its body runs
+        // (`onlyDelegated`); the liquidity module has no such entry
+        bytes[4] memory direct = [abi.encodeWithSignature("setListedOnly(bool,bytes32)", false, UID),
+            abi.encodeWithSignature("setMarket(address,address,bool,bytes32)", address(0xBA5E), address(0x0907E), false, UID),
+            abi.encodeWithSignature("setExchangeTarget(address,bool,bytes32)", address(0xE7), false, UID),
+            abi.encodeWithSignature("setFeeSplit(uint32,address,bytes32)", uint32(2), address(0x7EA5), UID)];
+        for (uint256 i; i < 4; ++i) {
+            vm.prank(HOLDER);
+            (bool ok0, bytes memory r0) = ms[0].call(direct[i]);
+            assertFalse(ok0, "the governance module called directly");
+            assertEq(r0, abi.encodeWithSignature("NotDelegated()"), "NotDelegated, before the body");
+        }
         vm.prank(HOLDER);
         (bool ok1,) = ms[1].call(abi.encodeWithSignature("setListedOnly(bool,bytes32)", false, UID));
         assertFalse(ok1, "the liquidity module called directly");

@@ -887,7 +887,9 @@ target,uint256 maxSupply,bytes32 chainUid,…)`) and `mtxSetMaxWrapSupply` (`UAS
 entries (`mint(address,uint256,bytes32)`, `setMaxSupply(uint256,bytes32)`, …) stay governed and are no row of any kind: a holder
 contract sends them itself, or through a `role_holder` `call` job ([integration.md](../integration.md#holder-chain-word)).
 `mtxBurn` (the token's own, `UABurn`) is unchanged and carries no word. Verdicts of these ops and of `mtxBurn` in `BURNER`
-mode: [submit-lanes.md](submit-lanes.md#supply-cap-verdicts).
+mode: [submit-lanes.md](submit-lanes.md#supply-cap-verdicts). A token's generic `mtxExecute` (a `UAMetaTransaction` carrying
+`burn(amount)` or any other call) is no job: it is in `guard.rs`'s `NOT_ROWS` ("a job names its operation"), so the node never
+decodes a generic inner call and a `BURNER` holder's burn is relayed as `mtxBurn` only; its spent-window verdict is that row's.
 
 <a id="NODE-JOB-25"></a><a id="service-kind"></a>**NODE-JOB-25** — **The contract kind `service`: a third-party service pull,
 its entries from operator config, equal to the contract's** (group 3i, spec `2026-11-09-service-pull.md` §8, owner Q1 B 2026-11-09;
