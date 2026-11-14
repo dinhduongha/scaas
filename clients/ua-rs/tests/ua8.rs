@@ -1465,3 +1465,47 @@ fn t13_pqz_keys_distinct() {
     assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &kf[..])]), Err(t1), "leg = pk_f");
     assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &k1[..]), (a, &k1[..])]), Err(a), "leg = pk_a");
 }
+
+/// CTR-UA-44: every record check of an updated `msig` reads its current structure (`check_*_current`): portable.json `msigUpdated`, the
+/// same rows clientkeys verifies. Each valid row fails against the first structure alone (an appended signer, a disabled slot).
+#[cfg(feature = "pq")]
+#[test]
+fn record_checks_read_the_current_structure() {
+    let p = load("portable.json");
+    let u = &p["msigUpdated"];
+    let (ua, first, cur) = (b32(&u["ua"]), bytes(&u["keyData"]), bytes(&u["current"]));
+    let mut en = [0u8; 32];
+    en[16..].copy_from_slice(&u["enabled"].as_str().unwrap().parse::<u128>().unwrap().to_be_bytes());
+    let members = keys(&p);
+    let now: &Current = &|id| (id == ua).then(|| (cur.clone(), en));
+    let none: &Current = &|_| None;
+    let accepted: &Accepted = &|id, i| id != ua || (i < 256 && en[31 - i as usize / 8] >> (i % 8) & 1 == 1);
+    let s: Value = load("structures.json");
+    let c = &s["contexts"]["A"];
+    let domain = Domain { generation: 1, chain_id: num(&c["chainId"]), registry: bytes(&c["registry"]).try_into().unwrap(), chain_uid: b32(&c["chainUid"]) };
+    let rows = arr(u, "rows");
+    assert_eq!(rows.len(), 7);
+    for r in rows {
+        let sig = bytes(r.get("sig").unwrap_or(&r["pop"]));
+        let run = |current: &Current| -> Result<()> {
+            match r["entry"].as_str().unwrap() {
+                "setPqzKey" if num(&r["version"]) == 0 => check_pqz_key_record_current(0x0120, &first, &ua, &bytes(&r["pqzKey"]),
+                    &b32(&r["pqzPopHash"]), &sig, &members, current, Some(accepted)),
+                "setPqzKey" => check_pqz_key_version_record_current(0x0120, &first, &ua, num(&r["version"]), &bytes(&r["pqzKey"]),
+                    &b32(&r["pqzPopHash"]), &sig, &members, current, Some(accepted)),
+                "acceptMembership" => check_membership_current(&first, &ua, &MemberSig { index: num(&r["index"]) as u16, members: vec![], sig: sig.clone() },
+                    &members, current, Some(accepted)),
+                "requireAuthorized" => check_authorization_current(&first, &ua, &b32(&r["purposeTag"]), &b32(&r["digest"]),
+                    &decode_member_sigs(&sig).unwrap(), &domain, &members, current, Some(accepted)),
+                _ => check_registration_current(0x0120, &bytes(&r["keyData"]), &Attrs::default(), &sig, &[], &|id| {
+                    if id == ua { Some((0x0120, first.clone())) } else { members(id) }
+                }, current, Some(accepted)),
+            }
+        };
+        let valid = r["valid"].as_bool().unwrap();
+        assert_eq!(run(now).is_ok(), valid, "{}", r["name"]);
+        if valid {
+            assert!(run(none).is_err(), "{}: the first structure alone", r["name"]);
+        }
+    }
+}

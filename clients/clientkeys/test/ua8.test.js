@@ -14,7 +14,7 @@ import { hashStruct, hashTypedData } from '../src/evm.js';
 import { personalSignDigest } from '../legacy/typed-signing/ua-portable-raw.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
 import * as signers from '../scripts/ua-signers.mjs';
-import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyPqzKeyVersionRecord, verifyMembership, decodeMemberSigs,
+import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyPqzKeyVersionRecord, verifyMembership, verifyAuthorization, decodeMemberSigs,
   encodeMemberSigs, kindVerify } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
@@ -894,6 +894,31 @@ test('verifyRegistration accepts every row and refuses every negative', () => {
     }
   }
   assert.deepEqual([refused, stateful, otherEntry], [64, 4, 1]); // + msig-kem-record (T66a)
+});
+
+test('CTR-UA-44: every record check reads the current structure of an updated msig (ua-rs check_*_current rows)', () => {
+  const U = P.msigUpdated;
+  const now = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData, current: U.current, enabled: U.enabled } : keysOf(id));
+  const first = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData } : keysOf(id));
+  const slots = ua.msigStructure(U.current).members.length;
+  const accepted = (id, i) => id !== U.ua || ((BigInt(U.enabled) >> BigInt(i)) & 1n) === 1n; // every slot accepted; counts iff enabled
+  const domain = { generation: 1, ...JSON.parse(readFileSync(new URL('structures.json', dir), 'utf8')).contexts.A };
+  assert.equal(U.rows.length, 7);
+  for (const r of U.rows) {
+    const row = { ...r, ua: r.ua ?? U.ua };
+    const run = (members) => {
+      if (r.entry === 'setPqzKey' && !r.version) verifyPqzKeyRecord(row, members, accepted);
+      else if (r.entry === 'setPqzKey') verifyPqzKeyVersionRecord(row, members, accepted);
+      else if (r.entry === 'acceptMembership') verifyMembership(row, members, accepted);
+      else if (r.entry === 'requireAuthorized') verifyAuthorization(row, members, domain, accepted);
+      else verifyRegistration({ kind: 0x0120, keyData: r.keyData, attrs: {}, pop: r.pop, pqzPop: '0x' }, members, accepted);
+    };
+    if (r.valid) run(now);
+    else assert.throws(() => run(now), { code: 'UAUnauthorized' }, r.name);
+    // the first structure is never the authority once the registry was updated: each valid row fails against it
+    if (r.valid) assert.throws(() => run(first), (e) => e instanceof ua.UAError, `${r.name}: the first structure`);
+  }
+  assert.ok(slots > ua.msigStructure(U.keyData).members.length, 'an appended slot');
 });
 
 test('verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)', () => {
