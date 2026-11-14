@@ -9,6 +9,10 @@ import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
@@ -66,12 +70,71 @@ contract ZetherMore is ZetherE2E {
         _all(true);
         vm.stopBroadcast();
         _wrapShieldNamed(pk, payer);
+        address tb = _burner(pk, payer);
 
         string memory k = "more";
+        vm.serializeAddress(k, "burner_zether_token", tb);
         vm.serializeAddress(k, "normal_zether_token", tn);
         vm.serializeAddress(k, "wrapped_zether_token", wt);
         string memory j = vm.serializeAddress(k, "underlying_erc20", und);
         _writeBook(bookUid, _bookPath(bookUid, "-zether-more.json"), j);
+    }
+
+    // ------------------------------------------------------------------ BURNER (round 3zb, CTR-GOV-29, O1)
+
+    /// @dev `deployments/onchain-<net>-<script>-neg.txt` (OnchainBase's format: from to data expected what), checked by
+    ///      `coverage.py neg` in zether.sh after the broadcast.
+    function _negFile() internal view returns (string memory) {
+        return string.concat("deployments/onchain-", vm.envOr("NET", string("local")), "-zethermore-neg.txt");
+    }
+
+    /// @dev A Normal Zether token with bit 30 (`BURNABLE` off), the seat the sender (no admin: the bit locked, as
+    ///      GovBurnerKinds' kind-2 token). alice (a Zether UA, no role) is shielded 100 and unshields 30 to the payer, the
+    ///      unshield sent by the payer (an EOA without the role): not gated (O1), `totalSupply()` unchanged. Then the seat's
+    ///      `burn(10)` lowers it by 10; the payer's `burn` (a balance, no role) is the negative `MissingRole(30, id)`.
+    function _burner(uint256 pk, address payer) internal returns (address tb) {
+        tb = _burnerMake(pk, payer);
+        _burnerUse(pk, payer, tb);
+    }
+
+    function _burnerMake(uint256 pk, address payer) internal returns (address tb) {
+        if (vm.exists(_negFile())) vm.removeFile(_negFile());
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals) = ("Zether burner", "zBRN", 6);
+        c.features = 1 << GovernanceBits.PAYABLE | uint256(1) << GovernanceBits.BURNER;
+        c.lockedFeatures = uint256(1) << GovernanceBits.BURNER;
+        c.roles.burner = bytes32(uint256(uint160(me)));
+        (c.initialSupply, c.initialHolder) = (1_000_000, me);
+        c.conf = _conf(); // the burner's conf
+        vm.startBroadcast(pk);
+        tb = fac.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), keccak256(abi.encode(salt, "burner")));
+        console.log(string.concat("      BURNER Zether token at ", vm.toString(tb)));
+        NormalZetherToken(tb).mtxShield(uas[0], 100);
+        NormalZetherToken(tb).mtxRollOver(uas[0], 1);
+        IERC20(tb).transfer(payer, 50);
+        (bool ok,) = payable(payer).call{value: 0.05 ether}(""); // the payer's gas for its unshield
+        require(ok, "fund the payer");
+        vm.stopBroadcast();
+        _expect(tb, 0, 100, 0, "BURNER token: alice shielded 100");
+    }
+
+    function _burnerUse(uint256 pk, address payer, address tb) internal {
+        uint256 s0 = IERC20(tb).totalSupply();
+        bytes memory cd = _cli("proveBurn", _req(tb, 100, string.concat(',"amount":30,', _q("recipient", vm.toString(payer)))))
+            .readBytes(".directCalldata");
+        vm.broadcast(PAYER_PK);
+        (bool ok,) = tb.call(cd);
+        require(ok, "BURNER token: the non-holder's unshield reverted");
+        require(IERC20(tb).totalSupply() == s0 && IERC20(tb).balanceOf(payer) == 80, "BURNER token: unshield not gated, supply kept");
+        _expect(tb, 0, 70, 0, "BURNER token: alice after unshielding 30 (sent by the payer, no role)");
+        vm.broadcast(pk);
+        NormalZetherToken(tb).burn(10);
+        require(IERC20(tb).totalSupply() == s0 - 10, "BURNER token: the seat's burn");
+        console.log("ok    BURNER token: unshield by a non-holder (supply unchanged), the seat's burn(10) (supply -10)");
+        vm.writeLine(_negFile(), string.concat(vm.toString(payer), " ", vm.toString(tb), " ",
+            vm.toString(abi.encodeCall(NormalZetherToken.burn, (uint256(1)))), " ",
+            vm.toString(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.BURNER, bytes32(uint256(uint160(payer))))),
+            " burn by a non-holder with a balance (Zether, BURNER): MissingRole(30, id)"));
     }
 
     // ------------------------------------------------------------------ the sequence on `t`

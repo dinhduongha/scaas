@@ -1,0 +1,16 @@
+On-chain matrix of round 3zb + 3zc, spec §8's zether and pq rows (BURNER on the Normal confidential kinds 2, 10, 4, 12),
+local anvil only, at 3971a3918 with this commit's script/onchain changes, src clean; kinds 4, 12 in the pqzkeys group's
+OFFCHAIN verify mode (no precompile needed). Command, from smartcontracts/evm:
+  CAPPED_SLOTS=4 PORT=18720 MATRIX_OUT=runs/2026-11-15-burner-wrap-caps-matrix-confidential MATRIX_GROUPS="zether pqzkeys" \
+    RPC_7622=http://127.0.0.1:9 sh script/onchain/matrix.sh local
+seeded with a fresh `coverage.py gen` entry list; full output in the git-ignored *.log here. UNAUDITED.
+
+target | group | result
+local | deploy | ok, 106 txs
+local | zether | ok, 176/176 txs, negatives 2/2 (both new)
+local | pqzkeys | ok, 710/710 txs, negatives 29/29 (2 new)
+
+Per kind (2, 10, 4, 12): a token with bit 30 (BURNABLE off) and a roles.burner seat; an unshield (R_BURN / ZetherBurn) by a
+non-holder, sent by a non-holder, succeeds and totalSupply() is unchanged (O1: not gated); the seat's burn(10) lowers
+totalSupply() by 10; a non-holder's burn refused MissingRole(30, id) (the four new negatives). mtxBurn on kinds 0 and 8 is
+the tokens group's (the other run).

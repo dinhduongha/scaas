@@ -6,7 +6,8 @@
 # records for coverage.py. RPC: the node (the local anvil fork through fork.sh, or the SCaaS testnet); NET: local | 7622;
 # the books by the chain's key (NET-EVM-13: a local anvil needs DEPLOY_NAME, matrix.sh sets it);
 # PRIVATE_KEY: the sender (a test key); ZETHER_PARTS (default "plain reg more"): plain = the e2e on kinds 2, 3; reg = its
-# regulated twin on kinds 10, 11; more = ZetherMore.s.sol (the entries the e2e does not reach) and its regulated twin.
+# regulated twin on kinds 10, 11; more = ZetherMore.s.sol (the entries the e2e does not reach; round 3zb's BURNER token,
+# its negative by coverage.py neg) and its regulated twin.
 # From smartcontracts/evm, through scripts/capped, in the foreground:
 #   PORT=18615 ../../scripts/capped script/onchain/fork.sh env NET=local PRIVATE_KEY=… script/onchain/zether.sh
 #   ../../scripts/capped env RPC=http://127.0.0.1:8545 NET=7622 PRIVATE_KEY=… script/onchain/zether.sh
@@ -72,5 +73,10 @@ for s in ZetherE2E:plain:run ZetherRegE2E:reg:run ZetherMore:more:more ZetherReg
   CHAIN=$CHAIN GENESIS=$GENESIS python3 -I script/onchain/zether_reg.py book "$NET" "$n"
   python3 -I script/onchain/coverage.py forge "$NET" "deployments/onchain-$NET-$lc.json" "$B"
   [ "$NET" != local ] || python3 -I script/onchain/coverage.py trace "$NET" "$lc" "$RPC"
+  # the negatives a script listed (ZetherMore's BURNER token, round 3zb), by eth_call on the final state
+  if [ -f "deployments/onchain-$NET-$lc-neg.txt" ]; then
+    python3 -I script/onchain/coverage.py neg "$NET" "$lc" "$RPC" > "$OUTD/$lc-neg-$NET.log" 2>&1 || rc=1
+    grep -E '^BAD|^negatives' "$OUTD/$lc-neg-$NET.log" || true
+  fi
 done
 exit $rc

@@ -57,7 +57,8 @@ import {MockV2Factory, MockV2LiquidityPair} from "../../test/liquidity/Liquidity
 ///         chain (a forge run simulates before it sends: a slot written in the same run would carry another block).
 ///         Ciphertexts and proofs are filler bytes (an `OFFCHAIN` token checks the verifier's verdict, not the proof);
 ///         what a wallet checks of an opening (it opens, the credit is spent; a planted bad credit) needs pqz-ffi and is
-///         the pq group's (pending its three-key path). Test keys only. UNAUDITED.
+///         the pq group's (pending its three-key path). Round 3zb: a `BURNER` token of kinds 4 and 12 (`_burnerPqz`).
+///         Test keys only. UNAUDITED.
 abstract contract PqzKeysKit is Tokens, PqzArgs {
     bytes internal constant VPROOF = hex"c0de";
     uint64 internal constant WIN = 10_000; // validUntilBlock windows: the simulation lags the chain by the run's sends
@@ -473,6 +474,8 @@ contract PqzKeysSetup is PqzKeysKit {
         _registryKeys();
         _regulatedPowers(12);
         _regulatedPowers(13);
+        _burnerPqz(4);
+        _burnerPqz(12);
         uint8[3] memory wk = [uint8(3), 9, 11];
         for (uint256 i; i < 3; ++i) _wrapLimits(wk[i]);
         _registryNegatives();
@@ -938,6 +941,35 @@ contract PqzKeysSetup is PqzKeysKit {
         IPqzToken(t).mtxPrepareAcc(uaM, 0, 0);
         IPqzToken(t).mtxPrepareAcc(uaM, 0, 1);
         vm.stopBroadcast();
+    }
+
+    /// Round 3zb (CTR-GOV-29, O1): a Normal PQZ token of `kind` with bit 30 (`BURNABLE` off), the seat test key 1's native
+    /// id, class 2 with the opening (bob's scope-0 record from `_confidential`). bob (no role) is shielded 50 and unshields 5
+    /// to test key 3, sent by test key 2 (no role either): not gated, `totalSupply()` unchanged; the seat's `burn(10)` lowers
+    /// it by 10; test key 2's `burn` (a balance, no role) is the negative `MissingRole(30, id)`.
+    function _burnerPqz(uint8 kind) internal {
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.admin) = ("Onchain PQZ burner", "oPQB", 6, _pad(a1));
+        c.features = 1 << GovernanceBits.PAYABLE | uint256(1) << GovernanceBits.BURNER;
+        (c.initialSupply, c.initialHolder, c.roles.burner) = (1e15, a1, _pad(a1));
+        c.conf = _conf(false, true);
+        if (kind >= 12) c.reg.termsHash = keccak256("onchain pqzkeys terms");
+        address x = _create(kind, c, string.concat("pqzkeys-burner", vm.toString(kind)));
+        _shield(x, bob, 50);
+        vm.broadcast(k1);
+        IERC20(x).transfer(a2, 1_000);
+        uint256 s0 = IERC20(x).totalSupply();
+        _unshield(x, bob, 5, _pad(a3), 0x7e00 + kind);
+        // 5 confidential units at `_conf`'s scale of 10,000 public units each
+        require(IERC20(x).totalSupply() == s0 && IERC20(x).balanceOf(a3) == 5 * 10_000, "BURNER: the unshield not gated, supply kept");
+        vm.broadcast(k1);
+        NormalPqzToken(x).burn(10);
+        require(IERC20(x).totalSupply() == s0 - 10, "BURNER: the seat's burn");
+        console2.log(string.concat("pqzkeys BURNER kind ", vm.toString(kind), " ", vm.toString(x),
+            ": unshield by a non-holder, supply unchanged; the seat's burn(10), supply -10"));
+        _negData(a2, x, abi.encodeCall(NormalPqzToken.burn, (uint256(1))),
+            abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.BURNER, _pad(a2)),
+            string.concat("burn by a non-holder with a balance (kind ", vm.toString(kind), ", BURNER): MissingRole(30, id)"));
     }
 
     function _label(address t) internal view returns (string memory) {

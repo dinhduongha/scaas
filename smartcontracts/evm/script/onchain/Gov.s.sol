@@ -32,7 +32,8 @@ import {MockERC20} from "../../test/helpers/Mocks.sol";
 ///         powers on kinds 8 (direct, the issuer and compliance roles held by SmartKeyAccounts) and 9 (through the router);
 ///         the lists and `enableFeature` of round 3s on kinds 9-11 direct, and through the router signed by a UA admin (kind 9);
 ///         SmartKeyAccountFactory and every SmartKeyAccount entry (secp256k1 and WebAuthn P-256 keys); an own
-///         ComplianceRegistry (admin a SmartKeyAccount) with an allow-listed kind-8 token. Not here: the router's PQZ setters
+///         ComplianceRegistry (admin a SmartKeyAccount) with an allow-listed kind-8 token; round 3zc's two cap ops on kind-1
+///         hybrids with bit 31 (`_supplyCaps`). Not here: the router's PQZ setters
 ///         (no PQZ kind on the Step 5 factory; the e2e.py factory's PQZ tokens), `mtxCreateInstance` with a class release
 ///         (none on the Step 5 factory: a negative here). UNAUDITED.
 contract Gov is OnchainBase {
@@ -78,6 +79,8 @@ contract Gov is OnchainBase {
     address t9;
     address tc;
     address tl; // kind 9, admin and list holder the UA uaD (`_listsRouter`)
+    address tq; // kind 1 hybrid with bit 31, grantDelay 0 (`_supplyCaps`)
+    address tqd; // the same, grantDelay 1 day
     address dex;
     ComplianceRegistry cr;
     uint256 nref;
@@ -100,6 +103,7 @@ contract Gov is OnchainBase {
         _complianceRouter();
         _plain();
         _wrapped();
+        _supplyCaps();
         _regulatedDirect();
         _regulatedRouter();
         _lists(t9, true, "kind 9");
@@ -404,6 +408,75 @@ contract Gov is OnchainBase {
         (e, s) = _auth(o, _ty("UADisableFeature", "uint8 bit,bytes32 chainUid"), t0, abi.encode(GovernanceBits.MINTABLE, w0));
         vm.broadcast(k2);
         gr.mtxDisableFeature(e, t0, GovernanceBits.MINTABLE, w0, s);
+    }
+
+    // ------------------------------------------------------------------ round 3zc (CTR-GOV-30): the two cap ops by UA signature
+
+    string constant MAXS_F = "uint256 maxSupply,bytes32 chainUid";
+    string constant MAXW_F = "uint256 maxWrapSupply,bytes32 chainUid";
+
+    function _capOp(address t, bool wrap, uint256 v, bytes32 word) internal view returns (bytes memory) {
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) =
+            _auth(_eoa(k1), _ty(wrap ? "UASetMaxWrapSupply" : "UASetMaxSupply", wrap ? MAXW_F : MAXS_F), t, abi.encode(v, word));
+        if (wrap) return abi.encodeCall(GovernanceRouter.mtxSetMaxWrapSupply, (e, t, v, word, s));
+        return abi.encodeCall(GovernanceRouter.mtxSetMaxSupply, (e, t, v, word, s));
+    }
+
+    /// Two kind-1 hybrids with bit 31, admin a1 (a native id, its own key): at `grantDelay` 0 `mtxSetMaxSupply` and
+    /// `mtxSetMaxWrapSupply` apply at once, then `mtxDisableFeature(31)`; at a delay of 1 day each op proposes (the
+    /// negatives: the same op again `GrantNotReady(31, 0, eta)`, a sibling's word `ChainUidMismatch`).
+    function _supplyCaps() internal {
+        IFactoryToken.TokenConfig memory c = _cfg("oGQ", 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.MINTABLE
+            | uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE);
+        c.roles.minter = _pad(a1);
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(address(u), 1, 1);
+        c.maxSupply = 1e15;
+        tq = _create(IOpenFactory.TokenKind.WRAPPED, c, "WrappedToken");
+        (c.symbol, c.grantDelay) = ("oGQd", 1 days);
+        tqd = _create(IOpenFactory.TokenKind.WRAPPED, c, "WrappedToken");
+        bytes32 wq = IMetaTx(tq).chainUid();
+        bytes32 wd = IMetaTx(tqd).chainUid();
+        for (uint256 i; i < 2; ++i) {
+            bool wrap = i == 1;
+            uint256 v = wrap ? 1e12 : 2e15;
+            bytes memory op = _capOp(tq, wrap, v, wq);
+            vm.broadcast(k2);
+            (bool ok,) = address(gr).call(op);
+            require(ok, "cap op at once");
+            op = _capOp(tqd, wrap, v, wd);
+            vm.broadcast(k2);
+            (ok,) = address(gr).call(op);
+            require(ok, "cap op proposed");
+        }
+        require(IWrappedToken(tq).maxSupply() == 2e15 && IWrappedToken(tq).maxWrapSupply() == 1e12, "caps applied at once");
+        (uint256 pm, uint64 em, bool lm, uint256 pw, uint64 ew, bool lw) = IWrappedToken(tqd).pendingSupplyCaps();
+        require(IWrappedToken(tqd).maxSupply() == 1e15 && IWrappedToken(tqd).maxWrapSupply() == 0 && pm == 2e15 && pw == 1e12
+            && lm && lw && em != 0 && ew != 0, "caps proposed");
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) =
+            _auth(_eoa(k1), _ty("UADisableFeature", "uint8 bit,bytes32 chainUid"), tq, abi.encode(GovernanceBits.SUPPLY_CAP_ADJUSTABLE, wq));
+        vm.broadcast(k2);
+        gr.mtxDisableFeature(e, tq, GovernanceBits.SUPPLY_CAP_ADJUSTABLE, wq, s);
+    }
+
+    /// @dev On the final state: the delayed token's ops again before their eta (the selector: the eta moves with the chain's
+    ///      clock), a sibling's word on it, and both ops on the token whose bit 31 is off.
+    function _negSupplyCaps() internal {
+        bytes32 wd = IMetaTx(tqd).chainUid();
+        bytes memory off = abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.SUPPLY_CAP_ADJUSTABLE);
+        for (uint256 i; i < 2; ++i) {
+            bool wrap = i == 1;
+            uint256 v = wrap ? 1e12 : 2e15;
+            string memory op = wrap ? "mtxSetMaxWrapSupply" : "mtxSetMaxSupply";
+            (, uint64 eta,,,,) = IWrappedToken(tqd).pendingSupplyCaps();
+            if (wrap) (,,,, eta,) = IWrappedToken(tqd).pendingSupplyCaps();
+            _neg(a2, address(gr), _capOp(tqd, wrap, v, wd), IGovernance.GrantNotReady.selector,
+                string.concat("router ", op, " again before its eta ", vm.toString(uint256(eta)), " (grantDelay 1 day): GrantNotReady(31)"));
+            _negData(a2, address(gr), _capOp(tqd, wrap, v, SIBLING_WORD), _wordRefused(wd),
+                string.concat("router ", op, ", a sibling's chain word"));
+            _negData(a2, address(gr), _capOp(tq, wrap, v, IMetaTx(tq).chainUid()), off,
+                string.concat("router ", op, " after mtxDisableFeature(31): FeatureNotSet(31)"));
+        }
     }
 
     // ------------------------------------------------------------------ kind 8: the powers direct (the roles' accounts call)
@@ -929,6 +1002,7 @@ contract Gov is OnchainBase {
         _neg(a2, acct, abi.encodeCall(SmartKeyAccount.initialize, (kr, address(0))), SmartKeyAccount.NotFactory.selector,
             "initialize by another caller than the factory");
         _negListsRouter();
+        _negSupplyCaps();
         // compliance: a non-admin, non-provider
         _neg(a3, address(cr), abi.encodeCall(ComplianceRegistry.setKycProvider, (_pad(a3), true, cr.chainUid())), IAdmin.NotAdmin.selector,
             "setKycProvider by a non-admin");

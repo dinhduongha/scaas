@@ -38,6 +38,15 @@ MORE_SUBS = [
     ('"../../src/', '"../../../src/', None),
     ("IZetherStatementsUnwrap", "IZetherRegStatementsUnwrap", None),
     ('"-zether-more.json"', '"-zether-reg-more.json"', 1),
+    # round 3zb: the BURNER token is kind 10 in the twin, with the e2e's KYC config; its negatives in its own file
+    ("IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), keccak256(abi.encode(salt, \"burner\"))",
+     "IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1, abi.encode(c), keccak256(abi.encode(salt, \"burner\"))", 1),
+    ("c.conf = _conf(); // the burner's conf",
+     "c.conf = _conf(); // the burner's conf\n"
+     '        c.reg.complianceRegistry = dep.readAddress(".compliance_registry"); // kind 10, KYC\n'
+     "        (c.features, c.reg.deniedFlags) = (c.features | 1 << GovernanceBits.KYC, 1); // no account is denied\n"
+     '        c.reg.termsHash = keccak256("scaas.onchain.terms");', 1),
+    ('"-zethermore-neg.txt"', '"-zetherregmore-neg.txt"', 1),
 ]
 
 
@@ -79,6 +88,8 @@ def book(net, script):
          e["wrapped_zether_token"]: "WrappedZetherRegulatedToken" if reg else "WrappedZetherToken",
          e["underlying_erc20"]: "MockERC20", d["zether_registry"]: "UARegistry", d["token_factory"]: "OpenFactory",
          d["zether_disclosure"]: "ZetherDisclosure"}
+    if "burner_zether_token" in e:  # round 3zb: ZetherMore's BURNER token
+        b[e["burner_zether_token"]] = "NormalZetherRegulatedToken" if reg else "NormalZetherToken"
     with open(os.path.join(EVM, f"deployments/onchain-{net}-{script.lower()}.json"), "w") as f:
         json.dump(b, f, indent=1)
 
