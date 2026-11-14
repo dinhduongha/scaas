@@ -217,6 +217,7 @@ const fn bit(w: &[u8; 32], i: usize) -> bool {
 /// The signer's policy (MM-13, §5): `version = stored + 1`, the target's own refusals that need no other record (rows 5–8: the slot
 /// count, at most 16 enabled, the stored slots unchanged, weights, one slot per id, no enabled self-slot, the threshold at most the
 /// enabled and accepted weight), a verifier `msig` only with `allow_verifier` (§5.3); then the warnings. `Err(KeyData(..))` for a refusal.
+#[allow(clippy::too_many_arguments)]
 pub fn plan_msig_update(
     s: &MsigUpdateState, ua: &[u8; 32], chain_uid: &[u8; 32], registry: &[u8; 20], target: &MsigStructure, enabled: &[u8; 32],
     valid_until_block: u64, allow_verifier: bool,

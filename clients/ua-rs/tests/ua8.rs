@@ -177,11 +177,14 @@ fn msig_update_rows() {
         assert_eq!(hx(&d), r["digest"], "{}", r["name"]);
         assert_eq!(hx(&m), r["message"], "{}", r["name"]);
         assert_eq!(hx(&md), r["memberDigest"], "{}", r["name"]);
-        let mut j: Value = serde_json::from_str(&scaas_ua::json::msig_update_json(&serde_json::json!({ "ua": r["ua"], "chainUid": r["chainUid"],
-            "registry": r["registry"], "version": r["version"], "threshold": r["threshold"], "members": r["members"], "enabled": r["enabled"],
-            "validUntilBlock": r["validUntilBlock"], "sigs": r["args"]["sigs"] }).to_string()).unwrap()).unwrap();
-        assert_eq!(j["digest"], r["digest"], "{}", r["name"]);
-        assert_eq!(j["args"].take(), r["args"], "{}", r["name"]);
+        #[cfg(feature = "json")]
+        {
+            let mut j: Value = serde_json::from_str(&scaas_ua::json::msig_update_json(&serde_json::json!({ "ua": r["ua"], "chainUid": r["chainUid"],
+                "registry": r["registry"], "version": r["version"], "threshold": r["threshold"], "members": r["members"], "enabled": r["enabled"],
+                "validUntilBlock": r["validUntilBlock"], "sigs": r["args"]["sigs"] }).to_string()).unwrap()).unwrap();
+            assert_eq!(j["digest"], r["digest"], "{}", r["name"]);
+            assert_eq!(j["args"].take(), r["args"], "{}", r["name"]);
+        }
         if let Some(f) = r.get("signedFor") {
             let other = MsigUpdate { chain_uid: b32(&f["chainUid"]), registry: bytes(&f["registry"]).try_into().unwrap(), ..u.clone() };
             assert_ne!(msig_update_digest(&other), d, "{}", r["name"]);
