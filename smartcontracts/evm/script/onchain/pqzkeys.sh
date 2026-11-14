@@ -29,6 +29,10 @@ rc=0 runs=
 for p in setup roll; do
   if [ "$p" = roll ]; then
     for i in 1 2 3 4 5 6; do cast rpc --rpc-url "$RPC" evm_mine > /dev/null; done
+  else
+    # a fresh head: anvil mines on demand, so after a long group before this one (pq on the copy: ~40 min) the latest
+    # block's timestamp is stale, and the simulation's `block.timestamp + 1 hours` (a pause's end) is already past on chain
+    cast rpc --rpc-url "$RPC" evm_mine > /dev/null
   fi
   tc=$TR
   [ "$p" != setup ] || tc=$TS

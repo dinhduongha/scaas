@@ -118,6 +118,23 @@ def pqz_key(ua):
     return k
 
 
+# The three-key model's class 3 (CTR-PQZ-37, `offchain-token`): a holder's own key of one token, (ua, token) -> (pk, s, e);
+# filled by whoever registers the record (pq.py's `records`). A token with no entry reads the registry key (class 1).
+SCOPED = {}
+
+
+def at_tok(u, tok):
+    """`u` as token `tok` sees it: a copy carrying its class-3 key of `tok` when one is registered, else `u` itself."""
+    k = SCOPED.get((u.ua, tok.lower())) if u is not None else None
+    return u if k is None else UA(**{**u.__dict__, "pk": k[0], "s": k[1], "e": k[2]})
+
+
+def tok_key(ua, tok):
+    """The PQZ key `tok` reads for `ua`: its class-3 key of `tok` when registered here, else `pqz_key` (class 1)."""
+    k = SCOPED.get((ua, tok.lower()))
+    return pqz_key(ua) if k is None else k[0]
+
+
 def hb(s):
     return bytes.fromhex(s[2:])
 
@@ -955,7 +972,7 @@ def restore(C, what):
                 T = K.ct_add(T, dec_bytes(call(C.tok, cd("pqzPendingCt(bytes32,uint64,uint64)", ["w", "w", "w"], ua_id, v, i))))
                 w = int(call(C.tok, cd("pqzPending(bytes32,uint64,uint64)", ["w", "w", "w"], ua_id, v, i)), 16)
                 kinds.append("T" if (w >> 64) & 0xFFFF == 0 else "C")  # TRIVIAL (vOff = 0) or a proven credit
-            got += bal(key_at(u, v).s, T)
+            got += bal(at_tok(key_at(u, v), C.tok).s, T)
         check(got == tracked, f"restore {C.name} {u.name}: acc + pending over {kv_of(u) + 1} version(s) "
                               f"[{''.join(kinds)}] decrypt to {got}, tracked {tracked} (latest: rolled {st['rolled']}, "
                               f"pendingCount {st['pendingCount']}, floor {st['floor']}, flags {st['flags']})")
@@ -1806,6 +1823,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     proved over the token's own statement (a `(payload, binding)` view, T read from state); returns (receipt, calldata,
     bundle, (r, e1, e2)). The relayed binding is the envelope's: the view folds the mode itself (D15). `signed`: the named
     relayed entry of that envelope (the Compact one on a COMPACT token)."""
+    frm, to = at_tok(frm, C.tok), at_tok(to, C.tok)
     tok = C.tok
     binding = signed.binding if signed else binding
     stt = C.state(frm)
@@ -1831,7 +1849,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     aud_pk = None
     if aud_on:
         a_ua = bytes.fromhex(call(tok, cd("auditorUA()", []))[2:])
-        aud_pk = pqz_key(a_ua)
+        aud_pk = tok_key(a_ua, tok)
     pks = [to.pk, frm.pk] + ([aud_pk] if aud_on else [])
     vals = [v, rest] + ([v] if aud_on else [])
     r_, e1, e2, _ = K.enc_sample(os.urandom(32), len(pks))
@@ -1895,6 +1913,7 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None, at=None,
     token's own statement; header fee word `txFee + vf + M · decoyFee` (round 3t: the view's word 256; the proof binds the
     decoyFee); returns (receipt, entryRef, bundle, enc). `signed` as in `transfer`. `send=False`: nothing sent, returns
     (None, (args, proof, auth, hint, verdict), None, enc) to re-encode (round 3t: the split case, Fable P1-1)."""
+    frm, legs = at_tok(frm, C.tok), [(at_tok(u, C.tok), a) for u, a in legs]
     tok = C.tok
     binding = signed.binding if signed else ZERO32
     stt = C.state(frm)
@@ -1918,7 +1937,7 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None, at=None,
     assert rest >= 0, (b, legs, fee)
     aud_pk = None
     if aud_on:
-        aud_pk = pqz_key(bytes.fromhex(call(tok, cd("auditorUA()", []))[2:]))
+        aud_pk = tok_key(bytes.fromhex(call(tok, cd("auditorUA()", []))[2:]), tok)
     e = K.enc_multi(frm.pk, K.digits(rest), [(u.pk, K.digits(a)) for u, a in legs], aud_pk, os.urandom(32))
     out = b"".join(e["us"]) + b"".join(e["vs"]) + e["v_f"] + (b"".join(e["v_as"]) if aud_on else b"")
     pl = hdr(out)
@@ -1959,6 +1978,7 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None, at=None,
 def burn(pq, s, C, frm, amount, recipient, what, unwrap=None, signed=None, at=None):
     """Burn / refresh. The recipient is a 32-byte id (UA-5c b): a native address is its zero-padded word. `signed` as in
     `transfer`."""
+    frm = at_tok(frm, C.tok)
     tok = C.tok
     binding = signed.binding if signed else ZERO32
     stt = C.state(frm)
