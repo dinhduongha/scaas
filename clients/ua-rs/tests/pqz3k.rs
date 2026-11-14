@@ -69,6 +69,10 @@ fn scoped_seeds_and_memo_hash() {
 /// pqz3k_kat.json (clientkeys, Fable P2-2; forge PqzClientRows checks it against the contracts): the handle's commitments, `h(i)`
 /// and `entriesHash`, the scoped record digests and messages, the opening blob's fields; `ownTag` over `u_f` opens
 /// `with_secret_own` (and one changed byte of `P(u_f)` does not).
+fn own<'a>(r: &Value, puf: &'a [u8], pvf: &'a [u8]) -> pqz3k::Own<'a> {
+    pqz3k::Own { token: a(&r["token"]), send_counter: n(&r["sendCounter"]) as u32, pu: puf, pvf, own_tag: a(&r["ownTag"]) }
+}
+
 #[test]
 fn client_rows() {
     let k = load("ua/pqz3k_kat.json");
@@ -85,11 +89,9 @@ fn client_rows() {
         let scope = (r["keyClass"] == "offchain-token").then(|| a::<20>(&r["token"]));
         let h = pqz3k::PqzKeyHandle::new(&seed, 0, 0, &ua, &cu, scope.as_ref(), 0, l);
         let (mut puf, pvf) = (b(&r["puf"]), b(&r["pvf"]));
-        let own = |puf: &[u8]| pqz3k::Own { token: a(&r["token"]), send_counter: n(&r["sendCounter"]) as u32, pu: puf, pvf: &pvf,
-            own_tag: a(&r["ownTag"]) };
-        assert_eq!(h.with_secret_own(&own(&puf), |_| 1), Ok(1));
+        assert_eq!(h.with_secret_own(&own(r, &puf, &pvf), |_| 1), Ok(1));
         puf[7] ^= 1;
-        assert_eq!(h.with_secret_own(&own(&puf), |_| 2), Err(pqz3k::Refused::OwnTag), "u_f alone differs");
+        assert_eq!(h.with_secret_own(&own(r, &puf, &pvf), |_| 2), Err(pqz3k::Refused::OwnTag), "u_f alone differs");
         assert_eq!(h.secret_loads(), 1);
     }
     let code = b(&k["entries"]["code"]);
@@ -248,14 +250,13 @@ fn key_handle_gates_the_secret() {
         assert_eq!(h.with_secret_window(&w(marked(SLOT_CREDIT)), |s| s.len()), Ok(32), "the mark landed: the window proves");
         assert_eq!(h.secret_loads(), 1);
         // the acceptance is bound to the handle, the index and the bytes
-        let only = |e: WindowEntry| [e];
-        assert_eq!(other.with_secret_window(&only(w(SLOT_CREDIT)[0]), |_| ()), Err(Refused::Window), "another handle's acceptance");
+        assert_eq!(other.with_secret_window(&[w(SLOT_CREDIT)[0]], |_| ()), Err(Refused::Window), "another handle's acceptance");
         let mut e = w(SLOT_CREDIT)[0];
         e.index = 3;
-        assert_eq!(h.with_secret_window(&only(e), |_| ()), Err(Refused::Window), "another index");
+        assert_eq!(h.with_secret_window(&[e], |_| ()), Err(Refused::Window), "another index");
         let mut e = w(SLOT_CREDIT)[0];
         e.code = Some(bad);
-        assert_eq!(h.with_secret_window(&only(e), |_| ()), Err(Refused::Window), "other bytes");
+        assert_eq!(h.with_secret_window(&[e], |_| ()), Err(Refused::Window), "other bytes");
         assert_eq!(h.secret_loads(), 1);
         // not this handle's credit, or incomplete inputs: refused before the check runs
         let never = |_: &[u8; 96], _: &pqz3k::CheckInput| -> Option<u128> { panic!("the check ran") };
