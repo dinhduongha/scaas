@@ -376,9 +376,10 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         bytes memory ds = _msigKey(2, m);
         bytes32 mu = UARegistry(at).registerMsig(UACall.structure(ds), _none(), new IUARegistry.MemberSig[](0), "");
         uint256 used = vm.lastCallGas().gasTotalUsed;
-        emit log_string(string.concat("GAS|registerMsig regular|143464|", vm.toString(used)));
+        emit log_string(string.concat("GAS|registerMsig regular|145524|", vm.toString(used)));
         // pqz-three-keys step 3 (K3-3): 143,284 -> 143,464 (+180, the registry face dispatches eleven more selectors)
-        assertLe(used, 143464 + SLACK, "registerMsig");
+        // CTR-UA-44 (TODO 3ze): 143,464 -> 145,524 (+2,060: the bound walks the enabled slots, `_signs` per slot, packed arrays)
+        assertLe(used, 145524 + SLACK, "registerMsig");
         UARegistry(at).acceptMembership(mu, _acceptEoaSig(ds, ALICE));
         UARegistry(at).acceptMembership(mu, _acceptKeySig(ds, 0x0101, _key(0x0101)));
         bytes32 md = _memberDigest(mu, UAKinds.PURPOSE_METATX, DIGEST);
@@ -386,7 +387,8 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         sm.members = new IUARegistry.MemberSig[](2);
         sm.members[_indexOf(ds, alice)] = _member(ds, alice, _ecdsa(ALICE, UARegistry(at).uaAuthDigest(alice, UAKinds.PURPOSE_MEMBER, md)));
         sm.members[_indexOf(ds, p)] = _member(ds, p, _sig(_key(0x0101), UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
-        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 52185, SLACK + 2 * MEMBER_LIST_GAS);
+        // CTR-UA-44 (TODO 3ze): 52,185 -> 52,968 (+783: the current structure's pointer and enabled word, once per level)
+        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 52968, SLACK + 2 * MEMBER_LIST_GAS);
     }
 
     /// `requireAuthorized`, every kind and native, stays within +64 of the recorded figures (a code layout's change of JUMPDEST order); an

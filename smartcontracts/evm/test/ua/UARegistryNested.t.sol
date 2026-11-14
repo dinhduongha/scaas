@@ -1102,9 +1102,9 @@ contract UARegistryNestedTest is UARegistryBase {
         m[0] = Member(UAKinds.MSIG, iu, 1);
         m[1] = Member(UAKinds.EVM_EOA, _eoa(PK_B), 1);
         bytes memory du = _msigKey(2, m);
-        uint256 w = 2 * (400_000 + 45_000) + 2_500; // the inner: its natives may be gen 1's clones
+        uint256 w = 2 * (400_000 + 45_000) + 3_500; // the inner: its natives may be gen 1's clones
         w += w / 63 + 5_000; // gen 2's hold over it
-        w += 2 * 45_000 + 2_500 + 50_000; // the outer, gen 2's own native at 50 k: no implementation here
+        w += 2 * 45_000 + 3_500 + 50_000; // the outer, gen 2's own native at 50 k: no implementation here
         UARegistry tight = _deploy(address(0x5cc7), chainUidA, address(reg), false, uint64(w - 1), address(0), true, new UARegistry.KindConfig[](0));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
         UACall.register(tight, UAKinds.MSIG, du, _none(), "", "");

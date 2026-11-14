@@ -744,13 +744,14 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (UAKinds.inNativeSpace(ua)) {
             return auth.keyData.length == 0 && auth.members.length == 0 && _native(ua, purposeTag, digest, auth.signature);
         }
-        Record memory r = _s.records[ua];
-        if (r.kind == 0) return UAStore.via(predecessor, ua, purposeTag, digest, auth);
-        if (r.kind == UAKinds.MSIG) {
+        uint16 kind = _s.records[ua].kind;
+        if (kind == 0) return UAStore.via(predecessor, ua, purposeTag, digest, auth);
+        if (kind == UAKinds.MSIG) {
+            // CTR-UA-44: the current structure (the record's slot is warm: its `keyPtr` costs a warm read, single keys pay nothing)
             return auth.keyData.length == 0 && auth.signature.length == 0
-                && _msig(ua, purposeTag, digest, UAStore.msig(ua, r.keyPtr), auth.members); // CTR-UA-44: the current structure
+                && _msig(ua, purposeTag, digest, UAStore.msig(ua, _s.records[ua].keyPtr), auth.members);
         }
-        return auth.members.length == 0 && _derived(ua, r.kind, purposeTag, digest, auth.keyData, auth.signature);
+        return auth.members.length == 0 && _derived(ua, kind, purposeTag, digest, auth.keyData, auth.signature);
     }
 
     /// A derived id of `kind` (taken from the record, or from the structure for members): key data against the id
@@ -831,9 +832,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (kind == UAKinds.MSIG) {
             if (s.sig.length != 0) return false;
             MemberSig[] memory inner = UAStore.lift(s.members);
-            Record memory r = _s.records[id];
-            if (r.kind == 0) return UAStore.via(predecessor, id, UAKinds.PURPOSE_MEMBER, md, UASig("", "", inner));
-            return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.msig(id, r.keyPtr), inner);
+            if (_s.records[id].kind == 0) return UAStore.via(predecessor, id, UAKinds.PURPOSE_MEMBER, md, UASig("", "", inner));
+            return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.msig(id, _s.records[id].keyPtr), inner);
         }
         if (s.members.length != 0) return false;
         if (!UAKinds.isNative(kind)) return _derived(id, kind, UAKinds.PURPOSE_MEMBER, md, "", s.sig);

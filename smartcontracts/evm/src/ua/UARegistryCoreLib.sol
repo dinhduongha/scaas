@@ -50,8 +50,10 @@ library UARegistryCoreLib {
     uint256 internal constant MSIG_MEMBER_GAS = 45_000;
     /// CTR-UA-37: the accepted bits' cold read, once per authorization and not per member, so a term of `_membersWorst` of its own:
     /// measured +2,236 (`requireAuthorized`, `msig` 2-of-2, 49,634 -> 51,870, `UARegistrySplit.t.sol` `test_gasHotPath`), rounded up.
-    /// Without it a member of 400 k handed to gen 1, at the bound, starves (`test_T_GAS_msigAtBudget`).
-    uint256 internal constant MSIG_ACCEPTED_GAS = 2_500;
+    /// Without it a member of 400 k handed to gen 1, at the bound, starves (`test_T_GAS_msigAtBudget`). CTR-UA-44 (TODO 3ze): and the
+    /// current structure, once per `msig` level (its pointer, the enabled word): measured +783 (`UARegistryCoreLibMsig.t.sol`
+    /// `test_gasHotPath`, 2-of-2, 52,185 -> 52,968); 2,500 -> 3,500 (gen 2 case 1 of `test_T_GAS_msigAtBudget` was 512 short at 2,500).
+    uint256 internal constant MSIG_ACCEPTED_GAS = 3_500;
     /// CTR-UA-44 row 13 (TODO 3ze): what an `updateMsig` costs beyond its authorization (`_membersWorst`), so that a target whose
     /// next update would not fit `TX_GAS_CAP` is refused: `MSIG_UPDATE_GAS` once (intrinsic, the fixed calldata, the nested
     /// DELEGATECALLs, the typed digest, the blob's CREATE and its 45 fixed bytes of EIP-8037 state gas), `MSIG_UPDATE_SLOT_GAS` per

@@ -593,7 +593,8 @@ explorers show listed and accepted apart.
   contract, for any purpose: payments, mandates, roles, orders, keys, records.** A client computes the accepted weight from `msigOf` and `memberAccepted`, shows
   the `msig` as not active, and does not name it as a signer, party, role holder or payer until then. The verify path reads the one
   bitmap slot and never parses `pop`; that cold read, once per authorization and not per member, is its own term of the registration bound,
-  `MSIG_ACCEPTED_GAS = 2,500` (measured +2,236: `requireAuthorized`, `msig` 2-of-2, 49,634 -> 51,870), so an `msig` registered at the bound
+  `MSIG_ACCEPTED_GAS` (measured +2,236: `requireAuthorized`, `msig` 2-of-2, 49,634 -> 51,870; 2,500; with CTR-UA-44's current structure,
+  +783 more, 52,185 -> 52,968: 3,500), so an `msig` registered at the bound
   still authorizes at it. Single-key kinds do not read it.
 - **Scope** (owner 2026-11-02). Built on EVM (`UARegistry`) and on Soroban ([NET-SOR-28](../networks/soroban.md#NET-SOR-28)). NEAR takes the rule in its own UA round: it has
   no registry, and its `msig` counts member weight with no acceptance today (`near/common/src/ua.rs`). Algorand takes the rule in its own UA round: it has no
@@ -683,7 +684,11 @@ Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
   Client rule: at every change sign the same target for each `(chainUid, registry)` that holds or may hold the `msig`, keep the signed
   updates and the key records in one ordered log, and bring a new registry current by replaying them in order. A stored signature of an
   earlier structure was checked when it was written and is not re-judged later.
-- **Gas.** Measured in `test/ua/UARegistryMsigUpdate.t.sol` (`test_gas_updateRowModel`, `test_gas_requireAuthorized`, `--isolate`).
+- **Gas** (measured, `test/ua/UARegistryMsigUpdate.t.sol`, `--isolate`, regular + EIP-8037 state). An update of the same count signed by
+  two EOAs: 3 slots 551,292, 16 slots 1,310,222, 64 slots 4,245,434, 256 slots 16,000,442 (61,209 a slot, about 55 k of it the blob's state
+  gas), so `MSIG_UPDATE_GAS = 400,000`, `MSIG_UPDATE_SLOT_GAS = 62,000`. `requireAuthorized` of a 2-of-3 EOA `msig`, cold frame gas: 44,721
+  never updated, 40,160 updated (the blob's read replaces the registration blob's). The once-per-level term of the bound,
+  `MSIG_ACCEPTED_GAS`, 2,500 -> 3,500 (the current structure's pointer and enabled word, +783 on the 2-of-2 hot path).
 - <a id="msig-update-staging"></a>**Staging** (owner 2026-11-14). EVM first; each other family in its own round. Until then no update exists
   there at all, and **a member disabled on EVM keeps full power on that family**: Soroban (`UaRegistry` reads the stored `Signer(ua)`,
   16-slot `Accepted` bitmap; follow-up `ua-soroban`: `update_msig`, a wider bitmap, a new deployment), NEAR (no registry, `Auth::Msig`
@@ -2511,7 +2516,7 @@ EVM tests:
 | T-V3-3 | `to` unregistered ⇒ revert; `approve`/`trade` in any `ua*` function, native or derived `from` ⇒ `MetaTxUnknownOp`; `FeeRecipientIsPayee` with a padded `feeRecipient` (BUILT, UA-4: `test/ua/UALedger.t.sol`) |
 | T-V3-3b | `to` = a Zether UA (`zether-*`, `pqz-mlwe`) ⇒ `UAKindNotAccepted`; `to` = `UA_POOL` ⇒ `UAPoolNotPayable`; `uaCancelNonce` with a native `ua` ⇒ refused (BUILT, UA-4: `test/ua/UALedger.t.sol`) |
 | T-V3-4 | `--sizes` ≤ 24 576 for every v3 implementation (deferred, owner: Glamsterdam; UA-4 records the sizes in `size-baseline.json` and the gate ratchets them) |
-| T-GAS | `UAGas.t.sol` replaces the estimates above and produces each chain profile's `verifyCap`s; every enabled kind's worst-case verify ≤ its cap ≤ `verifyBudget` (≤ ~50 % for the classical kinds, ≤ 66 % for the PQ kinds); register the PQ-eligible `msig` shapes that hold a PQZ key (`{mldsa65, p256} t=2`, `{mldsa65 ×3} t=2`) on the SCaaS testnet and the hybrid on a precompile-less chain; the PQ treasury on a precompile-less chain is refused; a structure over the bound is refused (PQ part BUILT, P6c: `PqGas.t.sol`, `UARegistryPq.t.sol` — the hybrid authorizes within `verifyBudget`, the treasury is refused at the 5.95 M cap and authorizes within `verifyBudget` at 5,910,000, the largest cap the bound admits with `MSIG_MEMBER_GAS` 45 k and `MSIG_ACCEPTED_GAS` 2,500 (5,911,000 without the latter, 5,921,000 at 35 k, before [CTR-UA-33](#CTR-UA-33)); members burning their whole cap authorize at that bound; the SCaaS testnet precompile shapes with P6g) |
+| T-GAS | `UAGas.t.sol` replaces the estimates above and produces each chain profile's `verifyCap`s; every enabled kind's worst-case verify ≤ its cap ≤ `verifyBudget` (≤ ~50 % for the classical kinds, ≤ 66 % for the PQ kinds); register the PQ-eligible `msig` shapes that hold a PQZ key (`{mldsa65, p256} t=2`, `{mldsa65 ×3} t=2`) on the SCaaS testnet and the hybrid on a precompile-less chain; the PQ treasury on a precompile-less chain is refused; a structure over the bound is refused (PQ part BUILT, P6c: `PqGas.t.sol`, `UARegistryPq.t.sol` — the hybrid authorizes within `verifyBudget`, the treasury is refused at the 5.95 M cap and authorizes within `verifyBudget` at 5,909,000, the largest cap the bound admits with `MSIG_MEMBER_GAS` 45 k and `MSIG_ACCEPTED_GAS` 3,500 (5,910,000 at 2,500, 5,911,000 without the latter, 5,921,000 at 35 k, before [CTR-UA-33](#CTR-UA-33)); members burning their whole cap authorize at that bound; the SCaaS testnet precompile shapes with P6g) |
 
 Off chain: clientkeys — `UAKey` cannot sign raw digests (API test); derivation paths disjoint from native paths (a
 property test over kinds × accounts); `deriveConfKey` refuses other `use`; no BLS-kind key equals a Zether conf scalar;
