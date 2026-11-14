@@ -21,6 +21,9 @@ public static class MlDsa
     /// (<c>runs/2026-11-15-mldsa87-calib.txt</c>; was the PROVISIONAL estimate 102,000). The value <c>add-schedule.py --mldsa87</c>
     /// writes; the plugin itself prices from the schedule, never from this.</summary>
     public const long Calibrated87Gas = 135_000;
+    /// <summary>Calibrated <c>mldsa44Gas</c> from the same two passes (owner 2026-11-15: the higher pass), 59,000 / 58,000
+    /// (was 49,000, P6f 2026-10-15). The value <c>add-schedule.py --mldsa</c> writes; the plugin prices from the schedule.</summary>
+    public const long Calibrated44Gas = 59_000;
 
     public static long Gas(int len, int pk, int sig, long price) => price + 6L * ((Math.Max(0, len - pk - sig) + 31L) / 32);
 

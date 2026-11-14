@@ -15,14 +15,23 @@ pass 1 (23:10:21Z, load 2.14 → 2.69) | 89c366bb | 0 | t_ecMul 0.016 ms (5 medi
 pass 2 (23:10:37Z, load 2.43 → 2.39) | 89c366bb | 0 | t_ecMul 0.016 ms (5 medians 0.016); ML-DSA-87 p50 0.249, p99 0.328 ms ⇒ 123,000 (44: 58,000; 65: 88,000)
 agreement | - | - | 135,000 / 123,000: 9.8 % apart, inside the 15 % re-calibration bound (pq-zero-knowledge.md, measured section): no third pass
 price | - | - | mldsa87Gas = max(pass 1, pass 2) = 135,000 (fs3 Task 13's max of two runs); was PROVISIONAL 102,000 (+32.4 %)
+ML-DSA-44 pass 1 / 2 | 89c366bb | 0 | p50 0.111 / 0.111, p99 0.156 / 0.154 ms ⇒ 59,000 / 58,000 (1.7 % apart)
+ML-DSA-65 pass 1 / 2 | 89c366bb | 0 | p50 0.164 / 0.164, p99 0.266 / 0.234 ms ⇒ 100,000 / 88,000 (13.6 % apart)
+price 44 (owner 2026-11-15) | - | - | mldsa44Gas = the higher pass = 59,000; was 49,000 (+20.4 %)
+price 65 (owner 2026-11-15) | - | - | mldsa65Gas stays 68,000: measured 88,000-100,000 (+29-47 %, over the 15 % bound), deferred to the next
+  pqz-core / set-parameter change and its full gate: at 100,000 it passes the 100,000 fixture cap of the 65 precompile path
+  (forge gas tables: MldsaVerifier.verify got 98,701 gas, UAUnauthorized) and moves debit_min_gas at all four sets (measured
+  with the 65 fee UA at 68,006: n2304-kmax4096 7,515,216 against the pin 7,516,000)
 plugin tests (run-tests.sh, SDK 10.0.402 image, OpenSSL 3.5.5, capped) | this commit | 0 | 56 / 56 passed
 add-schedule.py --check | this commit | 0 | ok
-forge | - | - | not run: no forge test pins the ML-DSA-87 precompile price (forge's EVM has no MLDSA87; the 250,000 cap is T-GAS's)
+forge | - | - | not run: no forge test pins the ML-DSA-87 or ML-DSA-44 precompile price (forge's EVM has no MLDSA87; ML44 in forge is the
+  kind id 0x0130, no stand-in burns its price; the 250,000 cap is T-GAS's)
 
 Pins moved: MlDsa.Provisional87Gas 102_000 → MlDsa.Calibrated87Gas 135_000 (MlDsaTests, SpecTests);
-add-schedule.py PROVISIONAL_MLDSA87_GAS 102_000 → MLDSA87_GAS 135_000 (its --check). Not changed: mldsa44Gas 49,000,
-mldsa65Gas 68,000, every PQZ row, selftestGas, every set parameter, chain/engine-pqz.json (one full Calibrate run's output;
+add-schedule.py PROVISIONAL_MLDSA87_GAS 102_000 → MLDSA87_GAS 135_000 (its --check); mldsa44Gas 49,000 → 59,000:
+MlDsa.Calibrated44Gas 59_000 (MlDsaTests.Calibrated_mldsa44_price: DataGasCost 59,006), add-schedule.py MLDSA44_GAS 59_000
+with --mldsa (writes 44 / 65 / 87 = 59,000 / 68,000 / 135,000; its --check). Not changed: mldsa65Gas 68,000, every PQZ row, selftestGas, every set parameter, chain/engine-pqz.json (one full Calibrate run's output;
 reset 1 added mldsa87Gas with add-schedule.py --mldsa87, which now writes 135,000).
 Sanity: p50 87 / 65 = 0.249 / 0.164 = 1.52, the estimate's ratio (1.5); the excess over 102,000 is the p99 tail, which the
-same passes show at 44 / 65 too (above their live prices by 18-20 % / 29-47 %; reported, not changed). Gas per verify at
+same passes show at 44 / 65 too (above their live prices by 18-20 % / 29-47 %; 44 moved, 65 deferred). Gas per verify at
 135,006 is far below EIP-7825's 16,777,216 and any block limit (EIP-8037: no concern).

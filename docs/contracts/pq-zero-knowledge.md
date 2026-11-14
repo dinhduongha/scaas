@@ -2345,8 +2345,8 @@ estimates below predate this table.
 1.4–2.7 on 8 CPUs, nothing heavy beside it. `t_ecMul` 0.016 ms in both passes. ML-DSA-87 p50 0.249 / 0.249 ms, p99
 0.358 / 0.328 ms ⇒ 135,000 / 123,000 (9.8 % apart, inside the 15 %); `mldsa87Gas` = the larger, **135,000** (was the
 provisional 102,000). The p50 ratio to ML-DSA-65 is 1.52, the estimate's 1.5; the price is above it by the p99 tail, which
-the same passes show for 44 / 65 too (58,000–59,000 / 88,000–100,000 against the live 49,000 / 68,000; those prices are
-not changed here). Summary `pqz-core/nethermind/runs/2026-11-15-mldsa87-calib.txt`.
+the same passes show for 44 / 65 too. ML-DSA-44: p99 0.156 / 0.154 ms ⇒ 59,000 / 58,000, `mldsa44Gas` **59,000** (was
+49,000; owner 2026-11-15, the higher pass). ML-DSA-65 measured 88,000–100,000 in the same passes (over the 15 % bound against 68,000) and stays 68,000: deferred by the owner (2026-11-15) to the next pqz-core / set-parameter change and its full gate, because at 100,000 it passes the 100,000 fixture cap of the 65 precompile path and moves `debit_min_gas` at all four sets. Summary `pqz-core/nethermind/runs/2026-11-15-mldsa87-calib.txt`.
 
 **Measured on the SCaaS testnet (P6g e2e, 2026-10-16, before plan 5h: hashes in state, `acc` and `inline` in calldata; real PQZL proofs, `gasUsed` of the transaction; log
 `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`).** Proofs from `pqz-ffi` (`examples/pqz_prove.rs`): transfer
