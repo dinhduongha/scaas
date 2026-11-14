@@ -1,0 +1,15 @@
+# gate-reds: the final gate's (3fa153e4) red steps re-run at 1ef5b018 (ffi) / ce85a926 (z21diff), branch gate-reds,
+# the gate's env (PQZ_SET = PQZ_BUILD_TAG = the set, PQZ_ARENA_MB=2048 at n2560 / n2816), only the failed parts.
+step | set | commit | rc | counts
+ffi/test (final gate) | n2048-kmax1024, n2304-kmax4096, n2560-kmax16384 | 3fa153e4 | 101 / 101 / 1 | E0425 test-hooks items, E0277 Rel: From<Form> (stale deps/libpqz_ffi.rlib from offchain-test)
+ffi/wasm (final gate) | n2560-kmax16384 | 3fa153e4 | 1 | run/native.jsonl missing: written by ffi/test, which did not compile
+diff/z21diff (final gate) | all four | 3fa153e4 | 139 | NULL Bsq of R_TXS / R_TXS0, before any proof
+vectors/run.sh + ffi/run.sh | n2304-kmax4096 | 1ef5b018 | 0 / 0 | ffi/test 11 result lines, 30 passed, 0 failed; offchain 3 passed; native = wasm32 29 lines
+vectors/run.sh + ffi/run.sh | n2048-kmax1024 | 1ef5b018 | 0 / 0 | ffi/test 11 result lines, 30 passed, 0 failed; offchain 3 passed
+vectors/run.sh + ffi/run.sh | n2560-kmax16384 | ce85a926 | 0 / 0 | ffi/test 11 result lines, 30 passed, 0 failed; offchain 3 passed; native = wasm32 29 lines
+vectors/run.sh + ffi/run.sh | n2816-kmax65536 | ce85a926 | 0 / 0 | ffi/test 11 result lines, 30 passed, 0 failed; offchain 3 passed; native = wasm32 15 lines
+review.sh zdiff 1 + gate grep | n2304-kmax4096 | ce85a926 | 0 / 0 | 470 cases, 0 disagreements, 0 expect_mismatches, 0 prove_errors, both verdicts; R_TXS 28/1, R_TXS0 28/1
+review.sh zdiff 1 + gate grep | n2048-kmax1024 | ce85a926 | 0 / 0 | 472 cases, 0 / 0 / 0, both verdicts; R_TXS 30/1, R_TXS0 30/1
+review.sh zdiff 1 + gate grep | n2560-kmax16384 | ce85a926 | 0 / 0 | 486 cases, 0 / 0 / 0, both verdicts; R_TXS 30/1, R_TXS0 29/1
+review.sh zdiff 1 + gate grep | n2816-kmax65536 | ce85a926 | 0 / 0 | 464 cases, 0 / 0 / 0, both verdicts; R_TXS 13/16, R_TXS0 13/16
+z21diff control: fast verifier's z21 term removed (scratch build), R_TXS + R_TXS0 | n2304-kmax4096 | ce85a926 | 1 | 58 cases, 3 disagreements
