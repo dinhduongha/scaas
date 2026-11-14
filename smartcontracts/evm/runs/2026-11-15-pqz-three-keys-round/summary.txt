@@ -1,0 +1,39 @@
+# pqz-three-keys round summary (spec 2026-11-13-pqz-three-keys; owner 2026-11-14 "Từ giờ làm đi, không cần hỏi lại"),
+# branch pqz-three-keys. Summaries only: each row's own summary file or commit holds its figures; full logs stay local.
+# Not pushed, not merged elsewhere. Everything cryptographic here is UNAUDITED.
+
+## Final pqz-core gate: 3fa153e4, four sets (pqz-core/runs/gate/<set>-summary.txt in the gate worktree)
+## re-run parts: gate-reds 1ef5b0188 (ffi: offchain tests in their own cargo target), ce85a9267 (z21diff: R_TXS / R_TXS0)
+## (pqz-core/runs/gate/gate-reds-summary.txt, merged here at a1646696c)
+step | set | commit | rc | counts
+kat, tbox, sv, ct, ub, fnv, vectors, rust, cargo, xcheck, fuzz | n2048-kmax1024 | 3fa153e4 | 0 | ok each
+kat, tbox, sv, ct, ub, fnv, vectors, rust, cargo, xcheck, fuzz | n2304-kmax4096 | 3fa153e4 | 0 | ok each
+kat, tbox, sv, ct, ub, fnv, vectors, rust, cargo, xcheck, fuzz | n2560-kmax16384 | 3fa153e4 (+ PQZ_ARENA_MB=2048, the sv/diff.sh arena fix 65f0bba6a) | 0 | ok each
+kat, tbox, sv, ct, ub, fnv, vectors, rust, cargo, fuzz | n2816-kmax65536 | 3fa153e4 (+ PQZ_ARENA_MB=2048, as above) | 0 | ok each; xcheck skipped (no PQZH at this set)
+ffi | n2816-kmax65536 | 3fa153e4 | 0 | ok
+ffi (ffi/test, ffi/wasm) | n2048, n2304, n2560 | 3fa153e4 | 101 / 101 / 1 | harness red: stale libpqz_ffi.rlib from offchain-test; n2560 wasm: native.jsonl missing as a consequence
+ffi re-run (vectors/run.sh + ffi/run.sh) | all four | 1ef5b0188 (n2048, n2304), ce85a9267 (n2560, n2816) | 0 | ffi/test 30 passed, 0 failed; offchain 3 passed; native = wasm32
+diff (z21diff) | all four | 3fa153e4 | 139 | harness red: NULL Bsq of R_TXS / R_TXS0, before any proof
+zdiff re-run (review.sh zdiff 1) | n2048 / n2304 / n2560 / n2816 | ce85a9267 | 0 | 472 / 470 / 486 / 464 cases, 0 disagreements, 0 expect mismatches, 0 prove errors
+z21diff positive control (fast verifier's z21 term removed, scratch build) | n2304-kmax4096 | ce85a9267 | 1 | 58 cases, 3 disagreements (the harness can fail)
+
+## The round's steps
+step | commit | rc | counts
+ROLL_MAX by the signed rollover (worst: msig on uaExecute, <= 0.75 * 2^24 regular) | 1081bd0d0 | measured | 96/80/64/32 -> 80/64/48/32 (n2048/n2304/n2560/n2816); CTR-PQZ-41
+Fable round review P1-1, P2-1, P2-2, P3-1..P3-5 applied (P3-4 not taken, rationale in job-api) | b4c4c4a33, 60e48bcf3, ddc479d38 | 0 | see runs/2026-11-14-pqz-three-keys-7b
+§12 cost table at four sets; owner ruling: n2560 / n2816 only for customer chains with larger blocks | 8956324f7 | measured | worst single tx 49.13 M / 54.34 M / 63.40 M / 73.32 M; CTR-PQZ-37
+7b integration: every forge dir at n2304, at-set sensitive at the other three | f51e2822e | 0 | runs/2026-11-14-pqz-three-keys-7b/summary.txt
+size gate (forge build src --sizes, size_gate.py) | 84dfc5f61 | 0 | 0 errors, 170 contracts; notes only (OpenFactory, SCaaSDex above their T-2 lines, within their ceilings)
+verifier (scaas-pqz-verifier) three-key wiring | 342c835e1 | 0 | 29 tests + clippy + anvil
+ua-rs pqz3k (PqzKeyHandle) | 19a35ddae | 0 | 76 tests + clippy; 2 gate mutants killed
+node full suite + e2e | ac95ad065 | 0 | 769 tests, e2e 24/24, clippy clean (ROLL_MAX_ANY 80)
+step 9 mutants + invariants | bd61b015a | 0 | 10/10 forge mutants killed; M1-M5 invariants; client gate mutants killed (runs/2026-11-14-pqz-three-keys-step9)
+image scaas/nethermind-pqz:2.2.0-pqz8 + provisional n2304 engine rows | 44d1c86fa | 0 | library = the reviewed build; 26 rows, factor 1.0
+7c PQ matrix: class 1, OFFCHAIN, pqzkeys, wallet-side rows | 84dfc5f61 | 0 | pq 241/241, pqoff 215/215, pqzkeys 696/696, pqzwallet 35/35 (runs/2026-11-15-pqz-three-keys-matrix-pq/summary.txt)
+local matrix builds the wallet simulator | 0e1654ad6 | - | the fresh-tree pqzwallet red (integration agent, pre-reset4)
+
+## Open (named, not done here)
+- wasm export of pqz-ffi check_recipient (pqz-core ffi/wasm): deferred by the controller to the next pqz-core change; until
+  then a browser wallet cannot hold an opening token.
+- Codex review of the round: only on the owner's word.
+- n2560-kmax16384 / n2816-kmax65536: minimum block gas 63.40 M / 73.32 M per worst transaction (owner 2026-11-14 ruling).
