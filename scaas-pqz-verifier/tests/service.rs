@@ -136,6 +136,10 @@ struct World {
     message: HashMap<(B256, B256), B256>,
     /// what `pqzEntryBlob` answers
     blob: Vec<u8>,
+    /// the token's key class (CTR-PQZ-37): `pqzOwnKey`, `pqzOpening`; its `proofSystemId()` (zero: `PQZL_ID`)
+    own: bool,
+    opening: bool,
+    psid: B256,
     /// how many nodes the chain has (at least one); node `n` is at block `100 + n`
     nodes: usize,
     /// node → how many reads it answers before it stops answering (0: down, its head too)
@@ -231,12 +235,12 @@ impl Chain for Fake {
                 T::burnStatementCall => |_| st(),
                 T::unshieldUnwrapStatementCall => |_| st(),
                 T::disclosureStatementCall => |_| st(),
-                T::proofSystemIdCall => |_| B256::from(stmt::PQZL_ID),
+                T::proofSystemIdCall => |_| if w.psid.is_zero() { B256::from(stmt::PQZL_ID) } else { w.psid },
                 T::auditorUACall => |_| w.auditor,
                 T::pqzEntryBlobCall => |_| Bytes::from(w.blob.clone()),
                 T::pqzVerifyConfigCall => |_| PqzVerifyConfig { pqzVerifyMode: w.mode, verifier: w.verifier, fixed_: false,
                     pqzVerifierEpoch: w.epoch, pending: B256::ZERO, eta: 0, noticePeriod: 0, verifierFee: 0, verifierFeeMax: 0,
-                    verifierFeePending: 0, verifierFeeEta: 0 },
+                    verifierFeePending: 0, verifierFeeEta: 0, pqzOwnKey: w.own, pqzOpening: w.opening },
             }
         }
         if to == REGISTRY || to == ROGUE {
@@ -253,6 +257,18 @@ impl Chain for Fake {
                     None => R::pqzKeyAtReturn { ptr: Address::ZERO, pqzPopHash: B256::ZERO, proven: false },
                 },
                 R::pqzPopOfCall => |c| Bytes::from(at(c.ua, c.version).pop),
+                // the scoped records (K3-3) from the same map: one token, one scope per test
+                R::pqzScopedKeyOfCall => |c| {
+                    let v = w.current.get(&c.ua).copied().unwrap_or(0);
+                    R::pqzScopedKeyOfReturn { version: v, ptr: ptr(c.ua, v), pqzPopHash: at(c.ua, v).pop_hash, proven: false }
+                },
+                R::pqzScopedKeyAtCall => |c| match w.keys.get(&(c.ua, c.version)) {
+                    Some(k) => R::pqzScopedKeyAtReturn { ptr: ptr(c.ua, c.version), pqzPopHash: k.pop_hash, proven: false },
+                    None => R::pqzScopedKeyAtReturn { ptr: Address::ZERO, pqzPopHash: B256::ZERO, proven: false },
+                },
+                R::pqzScopedPopOfCall => |c| Bytes::from(at(c.ua, c.version).pop),
+                R::pqzScopedKeyDigestCall => |c| tagged("scoped", (c.ua, c.keyClass, c.chainUid, c.token, c.version, c.pqzKeyHash)
+                    .abi_encode()),
                 R::pqzKeySigOfCall => |c| Bytes::from(at(c.ua, c.version).sig),
                 R::keyOwnerCall => |c| w.owner.get(&c.keyHash).copied().unwrap_or_default(),
                 R::kindOfCall => |_| 0x0130u16,
@@ -329,6 +345,10 @@ async fn verdict(s: &Svc, req: &Value) -> (u16, Value) {
     post(s, "/v1/pqz-verdict", req.to_string()).await
 }
 
+/// The empty `PqzOpening` (a token without the opening).
+static NO_OPENING: std::sync::LazyLock<Value> =
+    std::sync::LazyLock::new(|| json!({"mlkemCt": "0x", "x25519Eph": B256::ZERO, "sealedSeed": "0x"}));
+
 fn hx(b: &[u8]) -> String {
     hex::encode_prefixed(b)
 }
@@ -340,7 +360,8 @@ fn request(op: Value, st: &[u8], proof: &[u8]) -> Value {
 fn single(from: B256, kv: u64, to: B256) -> Value {
     json!({"entry": "mtxConfidentialTransferSingle", "args": {"p": 0, "validUntilBlock": "100", "shieldIn": "0",
         "fromUA": from, "keyVersion": kv, "toUA": to, "beneficiaryUA": B256::ZERO, "salt": hx(&[0; 16]), "ownTag": TAG, "u": "0x",
-        "vTo": "0x", "vFrom": "0x", "vAuditor": "0x", "sealedMemo": "0x"}})
+        "vTo": "0x", "vFrom": "0x", "vAuditor": "0x", "uFrom": "0x", "sealedMemo": "0x", "openingTo": NO_OPENING.clone(),
+        "openingAuditor": NO_OPENING.clone()}})
 }
 
 /// op 7 to `legs`, the parts at their real sizes (`G` groups of `u`, a `v` and `vAuditor` per leg, the memo)
@@ -362,11 +383,16 @@ fn unshield(from: B256, kv: u64) -> Value {
 /// Signed by this verifier: the verdict exactly the expected one, the signature over the registry's `uaAuthDigest` of
 /// its digest in the token's domain, `validUntil` within the configured minutes.
 fn assert_signed(r: &(u16, Value), statement_hash: B256, proof_hash: B256) {
+    assert_signed_as(r, statement_hash, proof_hash, stmt::PQZL_ID.into());
+}
+
+/// `assert_signed` under the token's `proofSystemId` `psid` (K3-4: `PQZL_SPLIT_ID` on an opening token).
+fn assert_signed_as(r: &(u16, Value), statement_hash: B256, proof_hash: B256, psid: B256) {
     assert_eq!(r.0, 200, "{}", r.1);
     let valid_until = r.1["pqzVerdict"]["validUntil"].as_u64().unwrap();
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
     assert!(valid_until > now && valid_until <= now + 5 * 60, "validUntil {valid_until}");
-    let v = PqzVerdict { token: TOKEN, chainId: U256::from(CHAIN_ID), proofSystemId: stmt::PQZL_ID.into(),
+    let v = PqzVerdict { token: TOKEN, chainId: U256::from(CHAIN_ID), proofSystemId: psid,
         statementHash: statement_hash, proofHash: proof_hash, pqzVerifierEpoch: EPOCH, validUntil: valid_until };
     assert_eq!(r.1["pqzVerdict"], serde_json::to_value(&v).unwrap());
     let sig = &r.1["pqzVerdictSig"];
@@ -568,8 +594,12 @@ async fn refuses_token_config_mismatch() {
     assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
 }
 
+/// The three-key model (K3-3, CTR-PQZ-30 per scope): an `OFFCHAIN` token's key is a scoped record, and its stored `R_REG`
+/// proves over `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, pqzScopedKeyDigest(ua, keyClass, chainUid, scope, version, keyHash))`:
+/// the register row's real proof verifies under class 2 (scope 0); the same record read as class 3 (scope the token), at
+/// version 1, or with another `chainUid` gives another message, `POP_INVALID`.
 #[tokio::test]
-async fn rreg_message_per_path_real_vector() {
+async fn rreg_message_scoped_real_vector() {
     // the register row's key, message and real proof; the burn's own proof faked (no burn by this key in the vectors)
     let reg = &json_file("n2304-kmax4096/statement_register.json")["rows"][0];
     let rst = bytes(&reg["stmt"]);
@@ -579,22 +609,46 @@ async fn rreg_message_per_path_real_vector() {
     st[640..640 + PK].copy_from_slice(&pk);
     let pqz: Pqz = Arc::new(|i: &[u8]| if i[0] == stmt::OP_REGISTER { pqz_ffi::precompile(i) } else { Ok(VALID) });
     let h = pqz_key_hash(&pk);
-    // register: uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(A, kindOf(A), keyHash, kemRecordHash(A, 0, none)))
-    let portable = tagged("portable", (A, 0x0130u16, h, tagged("kem", (A, 0u64).abi_encode())).abi_encode());
-    let w = |sig: &[u8], version: u64| {
+    let purpose = keccak256("scaas.ua.purpose.pqz-scoped-key.v1");
+    let scoped = |class: u8, token: Address, v: u64| tagged("scoped", (A, class, CHAIN_UID, token, v, h).abi_encode());
+    let w = |own: bool, version: u64| {
         let mut w = world(&st, &[]);
-        w.keys.insert((A, version), Key { sig: sig.to_vec(), ..key(&pk, &rproof) });
-        w.message.insert((keccak256("scaas.ua.purpose.pop.v2"), portable), message);
+        w.own = own;
+        w.keys.insert((A, version), key(&pk, &rproof));
+        w.message.insert((purpose, scoped(2, Address::ZERO, 0)), message);
         w
     };
-    let s = service(w(b"", 0), pqz.clone());
+    let s = service(w(false, 0), pqz.clone());
     assert_signed(&verdict(&s, &request(unshield(A, 0), &st, &proof)).await, keccak256(&st), keccak256(&proof));
-    // the same record as a `setPqzKey` key (a stored signature): its message is over UAPqzKey
-    let s = service(w(b"\x01", 0), pqz.clone());
+    // class 3: the token's scope, another digest
+    let s = service(w(true, 0), pqz.clone());
     assert_refused(&verdict(&s, &request(unshield(A, 0), &st, &proof)).await, "POP_INVALID");
-    // as version 1: over UAPqzKeyVersion
-    let s = service(w(b"", 1), pqz);
+    // version 1 of the same scope
+    let s = service(w(false, 1), pqz);
     assert_refused(&verdict(&s, &request(unshield(A, 1), &st, &proof)).await, "POP_INVALID");
+}
+
+/// K3-4: the verdict signs the token's own `proofSystemId`: `PQZL_SPLIT_ID` on an opening token (its split statement, `u_f`
+/// appended), `PQZL_ID` without; a statement of the other id is refused before anything is signed.
+#[tokio::test]
+async fn split_id_follows_the_opening() {
+    let (st0, proof) = vector("TRANSFER", None);
+    let mut st = [st0.clone(), vec![0u8; PK]].concat();
+    st[32..64].copy_from_slice(&stmt::PQZL_SPLIT_ID);
+    let open = |opening: bool, st: &[u8]| {
+        let mut w = world(st, &[A, C]);
+        (w.opening, w.own) = (opening, true);
+        w.psid = B256::from(if opening { stmt::PQZL_SPLIT_ID } else { stmt::PQZL_ID });
+        w
+    };
+    let s = service(open(true, &st), all_valid());
+    let r = verdict(&s, &request(single(A, 0, C), &st, &proof)).await;
+    assert_signed_as(&r, keccak256(&st), keccak256(&proof), stmt::PQZL_SPLIT_ID.into());
+    // the split statement on a token without the opening, the plain one on an opening token: refused
+    let s = service(open(false, &st), all_valid());
+    assert_refused(&verdict(&s, &request(single(A, 0, C), &st, &proof)).await, "PROOF_SYSTEM");
+    let s = service(open(true, &st0), all_valid());
+    assert_refused(&verdict(&s, &request(single(A, 0, C), &st0, &proof)).await, "PROOF_SYSTEM");
 }
 
 #[tokio::test]

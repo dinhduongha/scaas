@@ -21,7 +21,19 @@ alloy::sol! {
         bytes vTo;
         bytes vFrom;
         bytes vAuditor;
+        // the three-key model (CTR-PQZ-38, -40): the sender's `u_f` and the sealed openings (all empty without the opening)
+        bytes uFrom;
         bytes sealedMemo;
+        PqzOpening openingTo;
+        PqzOpening openingAuditor;
+    }
+
+    #[derive(Debug, Default, serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct PqzOpening {
+        bytes mlkemCt;
+        bytes32 x25519Eph;
+        bytes sealedSeed;
     }
 
     #[derive(Debug, serde::Deserialize)]
@@ -108,6 +120,9 @@ alloy::sol! {
         uint64 verifierFeeMax;
         uint64 verifierFeePending;
         uint64 verifierFeeEta;
+        // the three-key model (CTR-PQZ-37): the key class
+        bool pqzOwnKey;
+        bool pqzOpening;
     }
 
     #[derive(Debug)]
@@ -155,5 +170,13 @@ alloy::sol! {
         function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
         function generation() external view returns (uint8);
         function chainUid() external view returns (bytes32);
+        // K3-3 (CTR-UA-43): the scoped records an OFFCHAIN token reads (scope 0 class 2, the token class 3)
+        function pqzScopedKeyOf(bytes32 ua, address scope) external view
+            returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzScopedKeyAt(bytes32 ua, address scope, uint64 version) external view
+            returns (address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external view returns (bytes);
+        function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+            bytes32 pqzKeyHash) external pure returns (bytes32);
     }
 }

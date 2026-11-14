@@ -66,7 +66,9 @@ pub fn pqz_key_hash(key: &[u8]) -> B256 {
 /// Every statement length of this build's set that a token builds (its `STMT_*`: op 1 with and without the auditor,
 /// burn / refresh, the disclosures, op 7 at every built `(M, auditorOn)`); `R_REG`'s is no token's.
 pub fn statement_lengths() -> Vec<usize> {
-    let mut v = vec![Form::Transfer.stmt_len(), Form::Transfer0.stmt_len(), Form::Burn.stmt_len(), Form::DiscloseSender.stmt_len()];
+    let mut v = vec![Form::Transfer.stmt_len(), Form::Transfer0.stmt_len(), Form::Burn.stmt_len(), Form::DiscloseSender.stmt_len(),
+        // the three-key model (K3-4): an opening token's split transfer, `u_f` appended (`PQZL_SPLIT_ID`)
+        Form::TransferSplit.stmt_len(), Form::TransferSplit0.stmt_len()];
     for &m in stmt::built_legs(&stmt::PQZL_ID) {
         v.extend([stmt::multi_len(m, false), stmt::multi_len(m, true)]);
     }
@@ -329,6 +331,20 @@ impl Plan {
     }
 }
 
+/// The key class of an `OFFCHAIN` token (CTR-PQZ-37): its keys are scoped records, scope the token with `pqzOwnKey` (class 3),
+/// else 0 (class 2).
+#[derive(Clone, Copy)]
+struct Scope {
+    at: Address,
+    class: u8,
+}
+
+impl Scope {
+    fn of(cfg: &abi::PqzVerifyConfig, token: Address) -> Self {
+        if cfg.pqzOwnKey { Scope { at: token, class: 3 } } else { Scope { at: Address::ZERO, class: 2 } }
+    }
+}
+
 /// A factory instance of a configured release whose code names the pinned registry and `chainUid`.
 struct Token {
     at: Address,
@@ -501,8 +517,8 @@ impl Service {
         if !statement_lengths().contains(&st.len()) {
             return Err(refuse("STATEMENT_LENGTH", format!("{} B is no {} statement", st.len(), stmt::SET)));
         }
-        if st[32..64] != stmt::PQZL_ID {
-            return Err(refuse("STATEMENT_PROOF_SYSTEM", "the statement's word 32 is not the set's PQZL id"));
+        if st[32..64] != stmt::PQZL_ID && st[32..64] != stmt::PQZL_SPLIT_ID {
+            return Err(refuse("STATEMENT_PROOF_SYSTEM", "the statement's word 32 is not the set's PQZL or PQZL split id"));
         }
         self.on_nodes(|at| self.verdict_at(at, &req, &plan, binding)).await
     }
@@ -536,9 +552,13 @@ impl Service {
         if cfg.pqzVerifierEpoch != req.pqz_verifier_epoch {
             return Err(refuse("EPOCH_MISMATCH", format!("the token's epoch is {}", cfg.pqzVerifierEpoch)));
         }
-        if self.read(at, t.at, IPqzToken::proofSystemIdCall {}).await? != B256::from(stmt::PQZL_ID) {
-            return Err(refuse("PROOF_SYSTEM", "the token's proofSystemId is not the set's PQZL id"));
+        // the token's id (K3-4: PQZL_SPLIT_ID with the opening, PQZL_ID without), the statement's word 32 the same
+        let psid = self.read(at, t.at, IPqzToken::proofSystemIdCall {}).await?;
+        let want = if cfg.pqzOpening { stmt::PQZL_SPLIT_ID } else { stmt::PQZL_ID };
+        if psid != B256::from(want) || st[32..64] != want {
+            return Err(refuse("PROOF_SYSTEM", "the token's proofSystemId and the statement's are not its class's PQZL id"));
         }
+        let scope = Some(Scope::of(&cfg, t.at));
         // the statement the token's own view builds at the current state, byte for byte
         let out = self.chain.call(at.node, at.block, t.at, plan.view(binding).into()).await.map_err(|e| match e {
             ChainError::Revert(d) => refuse("STATEMENT_VIEW_REVERTED", d.to_string()),
@@ -558,10 +578,10 @@ impl Service {
         if self.run(stmt::input(plan.op(), st, &req.proof)).await? != VALID {
             return Err(refuse("VERDICT_ZERO", "pqz-ffi does not accept the proof"));
         }
-        for (ua, version, off) in self.named_keys(at, plan, st, &t).await? {
-            self.check_key(at, ua, version, &st[off..off + PK]).await?;
+        for (ua, version, off) in self.named_keys(at, plan, st, &t, scope).await? {
+            self.check_key(at, ua, scope, version, &st[off..off + PK]).await?;
         }
-        self.sign(&t, keccak256(st), keccak256(&req.proof), cfg.pqzVerifierEpoch).await
+        self.sign(&t, psid, keccak256(st), keccak256(&req.proof), cfg.pqzVerifierEpoch).await
     }
 
     /// Spec §4.2's probe: a verdict over [`PROBE_STATEMENT`] and an empty proof at the token's current epoch, for an
@@ -579,19 +599,27 @@ impl Service {
                 return Err(refuse("NOT_THIS_VERIFIER", format!("{}: verifier {} (a proposal probe says proposal)", t.at,
                     cfg.verifier)));
             }
-            self.sign(&t, keccak256(PROBE_STATEMENT), keccak256(b""), cfg.pqzVerifierEpoch).await
+            let psid = self.read(at, t.at, IPqzToken::proofSystemIdCall {}).await?;
+            self.sign(&t, psid, keccak256(PROBE_STATEMENT), keccak256(b""), cfg.pqzVerifierEpoch).await
         })
         .await
     }
 
-    async fn current(&self, at: At, ua: B256) -> Result<u64, Refusal> {
-        Ok(self.read(at, self.registry, IUARegistry::pqzKeyOfCall { ua }).await?.version)
+    /// The current version of `ua`'s key: on an `OFFCHAIN` token its scoped record of the token's scope (CTR-UA-43), else its
+    /// registry key.
+    async fn current(&self, at: At, ua: B256, scope: Option<Scope>) -> Result<u64, Refusal> {
+        Ok(match scope {
+            Some(s) => self.read(at, self.registry, IUARegistry::pqzScopedKeyOfCall { ua, scope: s.at }).await?.version,
+            None => self.read(at, self.registry, IUARegistry::pqzKeyOfCall { ua }).await?.version,
+        })
     }
 
     /// The keys the statement names, `(ua, version, offset)`: the sender at the args' `keyVersion`, the receiver or every
     /// leg and the auditor at their current version (`PqzCore._receiver`, `_legs`); a disclosure's key owner at its
     /// `keyVersion` (`PqzCore.disclosureBuffer`).
-    async fn named_keys(&self, at: At, plan: &Plan, st: &[u8], t: &Token) -> Result<Vec<(B256, u64, usize)>, Refusal> {
+    async fn named_keys(&self, at: At, plan: &Plan, st: &[u8], t: &Token, scope: Option<Scope>)
+        -> Result<Vec<(B256, u64, usize)>, Refusal>
+    {
         let mut k = match plan {
             Plan::Burn(b, ..) | Plan::Unwrap(b, _) => return Ok(vec![(b.fromUA, b.keyVersion, HEADER)]),
             Plan::Disclose(d) => {
@@ -603,11 +631,11 @@ impl Service {
                 };
                 return Ok(vec![(owner, d.key_version, stmt::DISC_WORDS * 32)]);
             }
-            Plan::Single(a) => vec![(a.fromUA, a.keyVersion, HEADER), (a.toUA, self.current(at, a.toUA).await?, HEADER + PK)],
+            Plan::Single(a) => vec![(a.fromUA, a.keyVersion, HEADER), (a.toUA, self.current(at, a.toUA, scope).await?, HEADER + PK)],
             Plan::Multi(a) => {
                 let mut k = vec![(a.fromUA, a.keyVersion, HEADER)];
                 for l in &a.legs {
-                    let v = self.current(at, l.ua).await?;
+                    let v = self.current(at, l.ua, scope).await?;
                     k.push((l.ua, v, HEADER + k.len() * PK));
                 }
                 k
@@ -615,7 +643,7 @@ impl Service {
         };
         if st[stmt::H_AUDITOR_ON * 32..][..32] == B256::with_last_byte(1)[..] {
             let a = self.read(at, t.at, IPqzToken::auditorUACall {}).await?;
-            let v = self.current(at, a).await?;
+            let v = self.current(at, a, scope).await?;
             k.push((a, v, HEADER + k.len() * PK));
         }
         Ok(k)
@@ -625,7 +653,7 @@ impl Service {
     /// own record across UAs and versions); then once per `(ua, version, pqzKeyHash)`: the record holds `pk`, its `pqzPop`
     /// bytes are stored and hash to its `pqzPopHash` (a hash-only record is refused), and they verify as `R_REG` over
     /// that version's message.
-    async fn check_key(&self, at: At, ua: B256, version: u64, pk: &[u8]) -> Result<(), Refusal> {
+    async fn check_key(&self, at: At, ua: B256, scope: Option<Scope>, version: u64, pk: &[u8]) -> Result<(), Refusal> {
         let registry = self.registry;
         let h = pqz_key_hash(pk);
         let owner = self.read(at, registry, IUARegistry::keyOwnerCall { keyHash: h }).await?;
@@ -635,21 +663,43 @@ impl Service {
         if self.known(ua, version, h)? {
             return Ok(());
         }
-        let rec = self.read(at, registry, IUARegistry::pqzKeyAtCall { ua, version }).await?;
-        if rec.ptr == Address::ZERO {
+        let (ptr, pop_hash) = match scope {
+            Some(s) => {
+                let r = self.read(at, registry, IUARegistry::pqzScopedKeyAtCall { ua, scope: s.at, version }).await?;
+                (r.ptr, r.pqzPopHash)
+            }
+            None => {
+                let r = self.read(at, registry, IUARegistry::pqzKeyAtCall { ua, version }).await?;
+                (r.ptr, r.pqzPopHash)
+            }
+        };
+        if ptr == Address::ZERO {
             return Err(refuse("KEY_NOT_STORED", format!("{ua} version {version}")));
         }
-        if self.code(at, rec.ptr).await?.get(1..) != Some(pk) {
+        if self.code(at, ptr).await?.get(1..) != Some(pk) {
             return Err(refuse("KEY_MISMATCH", format!("{ua} version {version}: the record holds another key")));
         }
-        let pop = self.read(at, registry, IUARegistry::pqzPopOfCall { ua, version }).await?;
+        let pop = match scope {
+            Some(s) => self.read(at, registry, IUARegistry::pqzScopedPopOfCall { ua, scope: s.at, version }).await?,
+            None => self.read(at, registry, IUARegistry::pqzPopOfCall { ua, version }).await?,
+        };
         if pop.is_empty() {
             return Err(refuse("POP_NOT_STORED", format!("{ua} version {version}: only the proof's hash is stored")));
         }
-        if keccak256(&pop) != rec.pqzPopHash {
+        if keccak256(&pop) != pop_hash {
             return Err(refuse("POP_HASH", format!("{ua} version {version}")));
         }
-        let message = self.rreg_message(at, registry, ua, version, h).await?;
+        let message = match scope {
+            // K3-3: what `storePqzScopedPop` checks, `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, pqzScopedKeyDigest(…))`
+            Some(s) => {
+                let d = IUARegistry::pqzScopedKeyDigestCall { ua, keyClass: s.class, chainUid: self.chain_uid, token: s.at,
+                    version, pqzKeyHash: h };
+                let digest = self.read(at, registry, d).await?;
+                let purpose = keccak256("scaas.ua.purpose.pqz-scoped-key.v1");
+                self.read(at, registry, IUARegistry::uaMessageCall { kind: PQZ_MLWE, purposeTag: purpose, digest }).await?
+            }
+            None => self.rreg_message(at, registry, ua, version, h).await?,
+        };
         let rreg = [Form::Register.op_tag().as_slice(), &stmt::PQZL_ID, message.as_slice(), pk].concat();
         if self.run(stmt::input(stmt::OP_REGISTER, &rreg, &pop)).await? != VALID {
             return Err(refuse("POP_INVALID", format!("{ua} version {version}: R_REG does not verify")));
@@ -703,12 +753,12 @@ impl Service {
 
     /// The verdict, its `UAAuth` digest built locally from the pinned chain id, `chainUid` and registry (never a hash an
     /// RPC returned: Fable C-1), the 65-byte low-s signature; logged with the token and both hashes. The only signing path.
-    async fn sign(&self, t: &Token, statement_hash: B256, proof_hash: B256, epoch: u32) -> Result<Signed, Refusal> {
+    async fn sign(&self, t: &Token, psid: B256, statement_hash: B256, proof_hash: B256, epoch: u32) -> Result<Signed, Refusal> {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
         let v = PqzVerdict {
             token: t.at,
             chainId: U256::from(self.chain_id),
-            proofSystemId: stmt::PQZL_ID.into(),
+            proofSystemId: psid,
             statementHash: statement_hash,
             proofHash: proof_hash,
             pqzVerifierEpoch: epoch,

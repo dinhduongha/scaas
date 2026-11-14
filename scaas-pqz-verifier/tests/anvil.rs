@@ -51,7 +51,8 @@ mod t {
         #[derive(Default)]
         struct ConfidentialConfig { bytes auditorKey; uint256 shieldScale; uint256 maxShielded; uint256 confidentialFee;
             uint8 disclosureMode; uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA;
-            bool pqzVerifierFixed; uint8 proofStore; uint64 verifierFee; uint64 verifierFeeMax; }
+            bool pqzVerifierFixed; uint8 proofStore; uint64 verifierFee; uint64 verifierFeeMax;
+            bool pqzOwnKey; bool pqzOpening; } // the three-key model (CTR-PQZ-37)
         #[derive(Default)]
         struct RegulatedParams { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash;
             bytes32 taxRecipient; }
@@ -80,12 +81,20 @@ mod t {
             external pure returns (bytes32);
         function generation() external view returns (uint8);
 
+        #[derive(Default)]
+        struct PqzOpeningT { bytes mlkemCt; bytes32 x25519Eph; bytes sealedSeed; }
         struct PqzTransferArgs { uint64 p; uint256 validUntilBlock; uint256 shieldIn; bytes32 fromUA; uint64 keyVersion;
             bytes32 toUA; bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor;
-            bytes sealedMemo; }
+            bytes uFrom; bytes sealedMemo; PqzOpeningT openingTo; PqzOpeningT openingAuditor; }
         struct InnerSig { uint16 index; bytes sig; }
         struct MemberSig { uint16 index; InnerSig[] members; bytes sig; }
         struct UASig { bytes keyData; bytes signature; MemberSig[] members; }
+        // K3-3 (CTR-UA-43): a scoped key record and its stored proof
+        function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes pqzKey, bytes32 pqzPopHash, KemKeyT openKem,
+            uint64 validUntilBlock, UASig sig) external;
+        function storePqzScopedPop(bytes32 ua, address scope, uint64 version, bytes pqzPop) external;
+        function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+            bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32);
         struct PqzVerdict { address token; uint256 chainId; bytes32 proofSystemId; bytes32 statementHash; bytes32 proofHash;
             uint32 pqzVerifierEpoch; uint64 validUntil; }
         struct PqzSignedVerdict { PqzVerdict pqzVerdict; UASig sig; }
@@ -257,6 +266,20 @@ impl Holder {
         me
     }
 
+    /// K3-3: its scoped version 0 of `token` (class 3, the opening off: no KEM key), signed under `PURPOSE_PQZ_SCOPED_KEY`,
+    /// then the proof bytes stored (unchecked here).
+    async fn register_scoped(&self, rpc: &str, registry: Address, token: Address, pqz_key: Vec<u8>, pop: Vec<u8>) {
+        let kh = pqz_key_hash(&pqz_key);
+        let (ph, uid) = (keccak256(&pop), view(rpc, registry, IUARegistry::chainUidCall {}).await);
+        let rd = view(rpc, registry, t::pqzScopedKeyRecordDigestCall { ua: self.ua, keyClass: 3, chainUid: uid, token, version: 0,
+            pqzKeyHash: kh, pqzPopHash: ph, openKemHash: B256::ZERO, validUntilBlock: u64::MAX }).await;
+        let sig = self.sign(rpc, registry, b"scaas.ua.purpose.pqz-scoped-key.v1", rd).await;
+        send(rpc, registry, t::setPqzScopedKeyCall { ua: self.ua, scope: token, version: 0, pqzKey: pqz_key.into(), pqzPopHash: ph,
+            openKem: t::KemKeyT { scheme: 0, mlkemEk: Bytes::new(), x25519: B256::ZERO }, validUntilBlock: u64::MAX,
+            sig: t::UASig { keyData: Bytes::new(), signature: sig.into(), members: vec![] } }.abi_encode()).await;
+        send(rpc, registry, t::storePqzScopedPopCall { ua: self.ua, scope: token, version: 0, pqzPop: pop.into() }.abi_encode()).await;
+    }
+
     /// The Falcon signature over the registry's `uaMessage(fndsa512, purpose, digest)`.
     async fn sign(&self, rpc: &str, registry: Address, purpose: &[u8], digest: B256) -> Vec<u8> {
         use pqcrypto_falcon::falconpadded512 as falcon;
@@ -382,7 +405,7 @@ rate_per_minute = 1000
     let c = t::TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8),
         owner: deployer().address().into_word(), initialSupply: U256::from(1_000_000u64), initialHolder: deployer().address(),
         conf: t::ConfidentialConfig { shieldScale: U256::from(1u8), maxShielded: U256::from(1u64 << 40), pqzVerifyMode: 1,
-            pqzVerifierUA: svc.ua(), ..Default::default() }, ..Default::default() };
+            pqzVerifierUA: svc.ua(), pqzOwnKey: true, ..Default::default() }, ..Default::default() }; // class 3, opening off
     let token = create(&rpc, factory, t::createTokenCall { kind: 4, version: ver, initArgs: c.abi_encode().into(),
         salt: B256::repeat_byte(0x3f) }.abi_encode()).await;
     let probe = json!({"token": token, "chainId": CHAIN_ID}).to_string();
@@ -396,8 +419,13 @@ rate_per_minute = 1000
     let hexb = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
     let set = pqz_ffi::stmt::SET;
     let pop = hexb(&row("registrations", &format!("mldsa65/{set}"))["pqzPop"]);
-    let from = Holder::register(&rpc, registry, hexb(&row("pqzKeyRecords", &format!("fndsa512/{set}"))["pqzKey"]), pop.clone()).await;
-    let to = Holder::register(&rpc, registry, hexb(&row("pqzKeyRecords", &format!("mldsa87/{set}"))["pqzKey"]), pop).await;
+    let (key_a, key_b) = (hexb(&row("pqzKeyRecords", &format!("fndsa512/{set}"))["pqzKey"]),
+        hexb(&row("pqzKeyRecords", &format!("mldsa87/{set}"))["pqzKey"]));
+    let from = Holder::register(&rpc, registry, key_a.clone(), pop.clone()).await;
+    let to = Holder::register(&rpc, registry, key_b.clone(), pop.clone()).await;
+    // class 3: each holder's version 0 scoped to the token, the other's portable key (a key is unique per UA; pk_f != pk_t)
+    from.register_scoped(&rpc, registry, token, key_b, pop.clone()).await;
+    to.register_scoped(&rpc, registry, token, key_a, pop).await;
 
     // op 1 from `from` to `to`, a direct call (binding 0) with ownTag; the statement from the token's own view
     let block = pr.get_block_number().await.unwrap();
@@ -405,11 +433,13 @@ rate_per_minute = 1000
     let (pk, v) = (pqz_ffi::stmt::PK_BYTES, pqz_ffi::stmt::V_BYTES);
     let args = t::PqzTransferArgs { p: 0, validUntilBlock: U256::from(block + 200), shieldIn: U256::ZERO, fromUA: from.ua,
         keyVersion: 0, toUA: to.ua, beneficiaryUA: B256::ZERO, salt: FixedBytes([0x5a; 16]), ownTag: TAG, u: lanes(pk),
-        vTo: lanes(v), vFrom: lanes(v), vAuditor: Bytes::new(), sealedMemo: Bytes::new() };
+        vTo: lanes(v), vFrom: lanes(v), vAuditor: Bytes::new(), uFrom: Bytes::new(), sealedMemo: Bytes::new(),
+        openingTo: Default::default(), openingAuditor: Default::default() };
     // the service's own argument tuple (abi.rs) asks the token's view
     let ours = abi::PqzTransferArgs { p: 0, validUntilBlock: args.validUntilBlock, shieldIn: U256::ZERO, fromUA: from.ua,
         keyVersion: 0, toUA: to.ua, beneficiaryUA: B256::ZERO, salt: args.salt, ownTag: TAG, u: args.u.clone(),
-        vTo: args.vTo.clone(), vFrom: args.vFrom.clone(), vAuditor: Bytes::new(), sealedMemo: Bytes::new() };
+        vTo: args.vTo.clone(), vFrom: args.vFrom.clone(), vAuditor: Bytes::new(), uFrom: Bytes::new(), sealedMemo: Bytes::new(),
+        openingTo: Default::default(), openingAuditor: Default::default() };
     let stmt = view(&rpc, token, IPqzToken::transferSingleStatementCall { t: ours, binding: B256::ZERO }).await.to_vec();
     let epoch = view(&rpc, token, IPqzToken::pqzVerifyConfigCall {}).await.pqzVerifierEpoch;
     let proof = vec![0x9f; 96];
@@ -417,7 +447,9 @@ rate_per_minute = 1000
         "statement": format!("0x{}", alloy::hex::encode(&stmt)), "proof": format!("0x{}", alloy::hex::encode(&proof)),
         "op": {"entry": "mtxConfidentialTransferSingle", "args": {"p": 0, "validUntilBlock": args.validUntilBlock, "shieldIn": "0",
             "fromUA": from.ua, "keyVersion": 0, "toUA": to.ua, "beneficiaryUA": B256::ZERO, "salt": args.salt, "ownTag": TAG,
-            "u": args.u, "vTo": args.vTo, "vFrom": args.vFrom, "vAuditor": "0x", "sealedMemo": "0x"}}});
+            "u": args.u, "vTo": args.vTo, "vFrom": args.vFrom, "vAuditor": "0x", "uFrom": "0x", "sealedMemo": "0x",
+            "openingTo": {"mlkemCt": "0x", "x25519Eph": B256::ZERO, "sealedSeed": "0x"},
+            "openingAuditor": {"mlkemCt": "0x", "x25519Eph": B256::ZERO, "sealedSeed": "0x"}}}});
     let (status, signed) = post(&app, "/v1/pqz-verdict", req.to_string()).await;
     assert_eq!(status, 200, "verdict: {signed}");
     let pv = &signed["pqzVerdict"];
