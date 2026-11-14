@@ -2885,11 +2885,26 @@ transfers move for every class.
   uses `mtxExecute` or a direct call. Such a holder still advances: each debit takes a window of up to `INLINE_MAX` entries.
   No client code picks `n` today (`ua-rs` `pqz3k`, `clientkeys` build the digest); a wallet that does follows this rule.
 
-**Cost** [estimate, unmeasured; spec §12]: op 1 on an opening token ≈ 44–73 M across the four sets with or without the auditor
-(today + `P(u_f)` + one or two openings at ≈ 2.55 M each); a scoped key record with its stored `R_REG` proof ≈ 71–95 M, once per
-holder per chain (`offchain-shared`) or per `(holder, token)` (`offchain-token`); the signed rollover adds one UA signature
-check and ≈ 5 k per skip mark. A chain must admit regular + state gas of the largest single transaction (EIP-8037); the node
-refuses by name what the connected chain cannot include ([NODE-JOB-28](../node/job-api.md#NODE-JOB-28)).
+**Cost** (measured 2026-11-14, `test/pqz/PqzThreeKeysGas.t.sol` per set; each row ONE transaction, regular | state | sum;
+op 1 and the refresh relayed with fee 7 on `uaExecute`, the costlier path, proof bytes of the set's vectors, ML-DSA-65 at
+68,006 [estimate]; a record's `R_REG` check at the set's provisional op 3 row; UNAUDITED):
+
+| Set | op 1, opening token, auditor off | op 1, opening token, auditor on | op 1, `offchain-token` without the opening, auditor on | refresh, opening token | `setPqzScopedKey` with `openKem` | `storePqzScopedPop` |
+|---|---|---|---|---|---|---|
+| `n2048-kmax1024` | 6.24 M \| 36.88 M \| 43.12 M | 6.51 M \| 39.54 M \| 46.05 M | 4.42 M \| 18.05 M \| 22.47 M | 4.31 M \| 17.40 M \| 21.71 M | 1.48 M \| 28.28 M \| 29.76 M | 5.34 M \| 43.79 M \| 49.13 M |
+| `n2304-kmax4096` | 6.99 M \| 44.54 M \| 51.54 M | 7.12 M \| 47.22 M \| 54.34 M | 4.80 M \| 21.91 M \| 26.71 M | 4.69 M \| 21.23 M \| 25.92 M | 1.62 M \| 31.41 M \| 33.03 M | 5.48 M \| 47.15 M \| 52.63 M |
+| `n2560-kmax16384` | 7.59 M \| 52.99 M \| **60.58 M** | 7.73 M \| 55.68 M \| **63.40 M** | 5.17 M \| 26.15 M \| 31.33 M | 5.06 M \| 25.46 M \| 30.52 M | 1.75 M \| 34.55 M \| 36.29 M | 5.62 M \| 50.46 M \| 56.08 M |
+| `n2816-kmax65536` | 8.27 M \| 62.22 M \| **70.49 M** | 8.40 M \| 64.92 M \| **73.32 M** | 5.59 M \| 30.79 M \| 36.38 M | 5.48 M \| 30.07 M \| 35.55 M | 1.88 M \| 37.68 M \| 39.56 M | 5.81 M \| 55.25 M \| **61.06 M** |
+
+Class 2 and class 3 with the opening cost the same bytes. Regular gas stays under 2^24 everywhere. **Inclusion requirement**
+(EIP-8037: a transaction fits only if regular + state ≤ the block gas limit; the budget reference is a 60 M Ethereum-like block):
+at `n2304-kmax4096` and `n2048-kmax1024` every row fits 60 M; an **opening token at `n2560-kmax16384` needs a chain whose block
+gas limit is at least 63.40 M** (op 1 with the auditor, 63,402,676); **at `n2816-kmax65536` an opening token needs at least
+73.32 M** (op 1 with the auditor, 73,319,716), and **every scoped key record (class 2 or 3, opening or not) needs at least
+61.06 M** for its stored `R_REG` proof (`storePqzScopedPop` 61,057,539). Owner ruling 2026-11-14 (verbatim in
+[decisions.md](../decisions.md#ctr-pqz-37--three-pqz-key-classes-registry-offchain-shared-offchain-token-fixed-at-creation-the-opening-machinery-keyed-on-pqzopening)): `n2560-kmax16384` and `n2816-kmax65536` are only for customer chains with larger blocks; no factory refusal, no design change. The node refuses by name what the connected chain cannot include
+([NODE-JOB-28](../node/job-api.md#NODE-JOB-28) `TX_EXCEEDS_CHAIN_LIMIT`). The signed rollover adds one UA signature check and
+up to `ROLL_MAX` skip marks ([CTR-PQZ-41](#CTR-PQZ-41)).
 
 **Residuals** (accepted by the owner's rulings; spec §10): an `offchain-shared` key rests on a wallet rule (a wallet that
 decrypts a credit with `s` is exposed as before, on the shared key, across that chain's shared-key tokens); incoming

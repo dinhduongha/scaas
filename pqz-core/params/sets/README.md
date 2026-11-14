@@ -332,6 +332,23 @@ fits only a gap of a few KB; the per-set raise always works but changes the chai
 an owner decision recorded in `docs/decisions.md` (CTR-PQZ-10) and in the set's `PQZH.md`; it is written into
 the set's `set.toml` `[pqzh_preset]` (preset, `max_proof`).
 
+## Minimum block gas limit per set (owner 2026-11-14)
+
+Owner ruling 2026-11-14: n2560 and n2816 are only for customer chains with larger blocks (verbatim in `docs/decisions.md`,
+CTR-PQZ-37). Under EIP-8037 a transaction fits only if its regular + state gas is at most the block gas limit; the worst
+single transaction of the three-key build per set (`smartcontracts/evm/test/pqz/PqzThreeKeysGas.t.sol`, measured 2026-11-14;
+the table in `docs/contracts/pq-zero-knowledge.md` CTR-PQZ-37 "Cost"):
+
+| Set | worst single transaction (regular + state) | minimum block gas limit |
+|---|---|---|
+| `n2048-kmax1024` | `storePqzScopedPop` 49,128,102 (op 1 on an opening token with the auditor 46,049,748) | fits 60 M |
+| `n2304-kmax4096` | op 1 on an opening token with the auditor, 54,342,724 | fits 60 M |
+| `n2560-kmax16384` | op 1 on an opening token with the auditor, 63,402,676 | **63.40 M** |
+| `n2816-kmax65536` | op 1 on an opening token with the auditor, 73,319,716; `storePqzScopedPop` 61,057,539 (every scoped class) | **73.32 M** (61.06 M for a scoped key record alone) |
+
+No factory refuses a set by block size; the node refuses by name what the connected chain cannot include
+(`TX_EXCEEDS_CHAIN_LIMIT`).
+
 ## Selecting a set
 
 | Build | How |

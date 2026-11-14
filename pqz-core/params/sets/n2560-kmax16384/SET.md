@@ -27,6 +27,12 @@ derived (see [`../README.md`](../README.md)).
 
 ## Conditions for this set to work on a chain
 
+**Opening tokens (three-key round, measured 2026-11-14, `test/pqz/PqzThreeKeysGas.t.sol`; [CTR-PQZ-37](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-37)):
+an opening token at this set needs a chain whose block gas limit is at least 63.40 M under EIP-8037** (one op 1 with the auditor,
+relayed: 7,725,976 regular + 55,676,700 state = 63,402,676; without the auditor 60,578,780), above a 60 M Ethereum-like block.
+A scoped key record fits it (`setPqzScopedKey` 36,292,108, `storePqzScopedPop` 56,081,285). Owner ruling 2026-11-14 (verbatim in `docs/decisions.md`, CTR-PQZ-37):
+this set is only for customer chains with larger blocks; no factory refusal, no design change.
+
 Measured where marked: plan 5h Task 8d part 2b, forge 1.8.5 under Amsterdam through the real token and registry, the
 `PQZ` precompile at its provisional testnet row (`pqz-core/nethermind/chain/engine-pqz-provisional-n2560.json`, until
 Task 9) + 3 per input word (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2560-kmax16384.txt`; the table in
