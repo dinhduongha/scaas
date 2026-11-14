@@ -196,7 +196,12 @@ test('portable PoP has no chain context', () => {
     assert.equal(hex(ua.deriveUA(x.kind, B(x.keyData))), x.ua, x.name);
     assert.equal(x.kindName, ua.kindInfo(x.kind).name, x.name);
   }
-  assert.doesNotMatch(TEXT, /chainId|chainUid|registry"/);
+  // CTR-UA-44: the one record whose struct names a chain and a registry is `UAMsigUpdate` (one update per registry, in the portable domain);
+  // every other row and type stays chain-free
+  const { msigUpdates, msigUpdated, note, typed: { types: { UAMsigUpdate, ...types }, ...typed }, ...rest } = P;
+  assert.ok(msigUpdates.length && msigUpdated && note && UAMsigUpdate);
+  assert.doesNotMatch(JSON.stringify({ ...rest, typed: { ...typed, types } }), /chainId|chainUid|registry"/);
+  assert.doesNotMatch(JSON.stringify(msigUpdated), /chainId|chainUid|registry"/);
 });
 
 test('registration digest covers the proof hash', () => {
