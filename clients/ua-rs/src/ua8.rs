@@ -177,8 +177,8 @@ pub fn msig_update_message(u: &MsigUpdate) -> Result<([u8; 32], [u8; 32], [u8; 3
 }
 
 /// `UARegistryCoreLib.MSIG_UPDATE_GAS` / `MSIG_UPDATE_SLOT_GAS` (row 13): the projected cost of an update beyond its authorization.
-pub const MSIG_UPDATE_GAS: u64 = 600_000;
-pub const MSIG_UPDATE_SLOT_GAS: u64 = 60_000;
+pub const MSIG_UPDATE_GAS: u64 = 400_000;
+pub const MSIG_UPDATE_SLOT_GAS: u64 = 62_000;
 
 /// What the signer reads before it signs an update on one registry: `msigOf` (`current`), `msigStateOf` (`version`, `enabled`,
 /// `accepted`) of that registry, and what only the caller knows.

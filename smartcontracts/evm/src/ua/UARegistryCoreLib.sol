@@ -56,10 +56,11 @@ library UARegistryCoreLib {
     /// next update would not fit `TX_GAS_CAP` is refused: `MSIG_UPDATE_GAS` once (intrinsic, the fixed calldata, the nested
     /// DELEGATECALLs, the typed digest, the blob's CREATE and its 45 fixed bytes of EIP-8037 state gas), `MSIG_UPDATE_SLOT_GAS` per
     /// slot of the target (its 96 calldata bytes, its 36 blob bytes of state gas, its checks and hashing; an update that appends
-    /// pays its own uniqueness walk on top and fits or not by itself). Measured in `test/ua/UARegistryMsigUpdate.t.sol`
-    /// (`--isolate`), rounded up; see the pins there.
-    uint256 internal constant MSIG_UPDATE_GAS = 600_000;
-    uint256 internal constant MSIG_UPDATE_SLOT_GAS = 60_000;
+    /// pays its own uniqueness walk on top and fits or not by itself). Measured (`test_gas_updateRowModel`, `--isolate`, regular +
+    /// EIP-8037 state, an update of the same count signed by two EOAs): 3 slots 551,292, 16 slots 1,310,222, 64 slots 4,245,434, 256
+    /// slots 16,000,442: 61,209 a slot, 367,665 fixed; rounded up to 62,000 and 400,000 (first figures, 600,000 / 60,000 estimated).
+    uint256 internal constant MSIG_UPDATE_GAS = 400_000;
+    uint256 internal constant MSIG_UPDATE_SLOT_GAS = 62_000;
     /// The bound walkers' levels (CTR-UA-44 MM-14): `INNER` a member `msig`'s own structure; `LENIENT` its own `msig` slots sign
     /// nothing and are left out (an update or a key write over a member that changed since), else they revert
     /// `UAMemberUnknown` (registration, and a slot an update appends or re-enables: `UARegistryAuxLib`'s row 10).

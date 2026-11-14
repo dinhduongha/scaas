@@ -12,6 +12,15 @@ import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {UACall} from "./UACall.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 
+/// The frame gas of one `requireAuthorized` from a contract, every account and slot cold (one transaction).
+contract HotProbe {
+    function cost(UARegistry r, bytes32 ua, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata s) external view returns (uint256 g) {
+        g = gasleft();
+        r.requireAuthorized(ua, purpose, digest, s);
+        g -= gasleft();
+    }
+}
+
 /// CTR-UA-44 (TODO 3ze, owner 2026-11-14: "Không, tắt member cũ, thành viên mới cho phép thêm vào. ua chỉ tính fix 1 lần khi
 /// đăng ký."; "Và vì đi theo chain, thế nên version tiếp theo sẽ là version+1 => không cần nhảy."): `updateMsig` disables old
 /// slots, appends new ones, changes weights and the threshold, one registry at a time; the id stays the first structure's. Each
@@ -28,7 +37,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     uint256 internal constant PE = 0xE0E;
     address internal constant REG_M = 0x5cA0000000000000000000000000000000000002;
     address internal constant REG_G2 = 0x5CA0000000000000000000000000000000000004;
-    address internal constant REG_X = 0x5ca0000000000000000000000000000000000005;
+    address internal constant REG_X = 0x5cA0000000000000000000000000000000000005;
     bytes32 internal constant TX = keccak256("a metatx digest");
     bytes32 internal constant CHAT = keccak256("a pqchat record");
 
@@ -228,9 +237,10 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     }
 
     function _refused(UARegistry x, Up memory u, bytes32[] memory ids, bytes memory err) internal {
-        IUARegistry.MemberSig[] memory s = _upSigs(x, u, ids, x.chainUid(), address(x));
-        vm.expectRevert(err);
-        x.updateMsig(u.ua, u.version, u.st, u.enabled, u.until, s, x.chainUid());
+        bytes32 cu = x.chainUid();
+        IUARegistry.MemberSig[] memory s = _upSigs(x, u, ids, cu, address(x));
+        vm.expectRevert(err); // `chainUid()` read before: the next call is the update
+        x.updateMsig(u.ua, u.version, u.st, u.enabled, u.until, s, cu);
     }
 
     function _append(Up memory u, uint16 kind, bytes32 id, uint16 weight, bool on) internal pure {
@@ -418,15 +428,17 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     function test_weightThenThreshold() public {
         bytes32 ua = _eoa3(r);
         Up memory u = _next(r, ua);
-        u.st.members[_idx(u.st, a)].weight = 2;
+        // `lo` the lower slot of a and b: it signs first, so after it reaches the threshold the chain path refuses the next slot
+        (bytes32 lo, bytes32 hi) = _idx(u.st, a) < _idx(u.st, b) ? (a, b) : (b, a);
+        u.st.members[_idx(u.st, lo)].weight = 2;
         _apply(r, u, _ids(a, b));
-        _authRefused(r, ua, _ids(a, b)); // a alone reaches 2: a and b are no longer minimal on the portable path
-        _authorizes(r, ua, _ids(a));
+        _authRefused(r, ua, _ids(lo, hi)); // lo alone reaches 2: a slot after the threshold, and not minimal on the portable path
+        _authorizes(r, ua, _ids(lo));
         u = _next(r, ua);
         u.st.threshold = 3;
-        _apply(r, u, _ids(a));
-        _authRefused(r, ua, _ids(a));
-        _authorizes(r, ua, _ids(a, b));
+        _apply(r, u, _ids(lo));
+        _authRefused(r, ua, _ids(lo));
+        _authorizes(r, ua, _ids(lo, hi));
     }
 
     /// The last block of `validUntilBlock` passes; one later is `UAMsigExpired`.
@@ -489,8 +501,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     }
 
     function _refusedUnsigned(UARegistry x, Up memory u, bytes memory err) internal {
+        bytes32 cu = x.chainUid();
         vm.expectRevert(err);
-        x.updateMsig(u.ua, u.version, u.st, u.enabled, u.until, new IUARegistry.MemberSig[](0), x.chainUid());
+        x.updateMsig(u.ua, u.version, u.st, u.enabled, u.until, new IUARegistry.MemberSig[](0), cu);
     }
 
     /// MM-13: exactly the stored version + 1: `+ 2`, the stored one, below it and a replay are `UAMsigVersion(ua, stored)`.
@@ -951,12 +964,13 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     /// blob's, and the record's slot is read once either way).
     function test_gas_requireAuthorized() public {
         bytes32 ua = _eoa3(r);
+        HotProbe p = new HotProbe();
         IUARegistry.UASig memory s = _auth(_sigs(r, r.msigOf(ua), ua, _ids(a, b), UAKinds.PURPOSE_METATX, TX, false));
-        uint256 g0 = _gasTotal(address(r), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, TX, s)));
+        uint256 g0 = p.cost(r, ua, UAKinds.PURPOSE_METATX, TX, s);
         Up memory u = _next(r, ua);
         _apply(r, u, _ids(a, b));
         s = _auth(_sigs(r, r.msigOf(ua), ua, _ids(a, b), UAKinds.PURPOSE_METATX, TX, false));
-        uint256 g1 = _gasTotal(address(r), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, TX, s)));
+        uint256 g1 = p.cost(r, ua, UAKinds.PURPOSE_METATX, TX, s);
         emit log_named_uint("requireAuthorized 2-of-3, never updated", g0);
         emit log_named_uint("requireAuthorized 2-of-3, updated", g1);
         assertLe(g1, g0, "an updated msig reads no more");
