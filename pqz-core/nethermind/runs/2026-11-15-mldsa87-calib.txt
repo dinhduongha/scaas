@@ -1,0 +1,28 @@
+# TODO 3zd: ML-DSA-87 gas calibration (owner 2026-11-15: run now, machine idle). Branch mldsa87-calib from pre-reset4 a5cfe748.
+# Method: Calibrate (prices level 87 since review 3w T-18, ce196670) in the calib image, calibrate.sh's docker run
+# (--cpus 4 --memory 4g, n = 1000), no PQZ row (--keys 1-0) and no cold self-test: only the ecMul baseline and the
+# three ML-DSA lines, the method of every earlier mldsa44Gas / mldsa65Gas. gas = 1000*ceil(6000*p99/t_ecMul/1000),
+# max with EIP-8355's base. Step script 2026-11-15-mldsa87-calib-step.sh; full output in the git-ignored
+# runs/mldsa87-calib/pass<n>.log, pass<n>-engine-pqz.log, 2026-11-15-mldsa87-calib-{image,test}.log.
+# Host: AMD Ryzen 5 7235HS, 8 CPUs; before the passes load 1.43 1.48 1.52, no forge / cargo / anvil / dotnet / gate /
+# sage process, the SCaaS testnet stack stopped, other containers < 1 % CPU. Times UTC (2026-11-14 evening = 11-15 local).
+
+step | commit | rc | figures
+fresh-proofs Cargo.lock (calib --locked build refused the stale lock) | 89c366bb | 0 | seeded from pqz-ffi's, every earlier version unchanged
+image 2.2.0-mldsa87 + -calib (CALIB=1 build-image.sh mldsa87, capped) | 89c366bb | 0 | node sha256:04afab87…1def4, calib sha256:d28e4812…b999; library 29c351ec…677c = n2304-kmax4096's ExpectedLibrarySha256; selftest label d6c01fbc…; commit label clean
+dotnet build-server shutdown | - | 0 |
+pass 1 (23:10:21Z, load 2.14 → 2.69) | 89c366bb | 0 | t_ecMul 0.016 ms (5 medians 0.016); ML-DSA-87 p50 0.249, p99 0.358 ms ⇒ 135,000 (44: 59,000; 65: 100,000)
+pass 2 (23:10:37Z, load 2.43 → 2.39) | 89c366bb | 0 | t_ecMul 0.016 ms (5 medians 0.016); ML-DSA-87 p50 0.249, p99 0.328 ms ⇒ 123,000 (44: 58,000; 65: 88,000)
+agreement | - | - | 135,000 / 123,000: 9.8 % apart, inside the 15 % re-calibration bound (pq-zero-knowledge.md, measured section): no third pass
+price | - | - | mldsa87Gas = max(pass 1, pass 2) = 135,000 (fs3 Task 13's max of two runs); was PROVISIONAL 102,000 (+32.4 %)
+plugin tests (run-tests.sh, SDK 10.0.402 image, OpenSSL 3.5.5, capped) | this commit | 0 | 56 / 56 passed
+add-schedule.py --check | this commit | 0 | ok
+forge | - | - | not run: no forge test pins the ML-DSA-87 precompile price (forge's EVM has no MLDSA87; the 250,000 cap is T-GAS's)
+
+Pins moved: MlDsa.Provisional87Gas 102_000 → MlDsa.Calibrated87Gas 135_000 (MlDsaTests, SpecTests);
+add-schedule.py PROVISIONAL_MLDSA87_GAS 102_000 → MLDSA87_GAS 135_000 (its --check). Not changed: mldsa44Gas 49,000,
+mldsa65Gas 68,000, every PQZ row, selftestGas, every set parameter, chain/engine-pqz.json (one full Calibrate run's output;
+reset 1 added mldsa87Gas with add-schedule.py --mldsa87, which now writes 135,000).
+Sanity: p50 87 / 65 = 0.249 / 0.164 = 1.52, the estimate's ratio (1.5); the excess over 102,000 is the p99 tail, which the
+same passes show at 44 / 65 too (above their live prices by 18-20 % / 29-47 %; reported, not changed). Gas per verify at
+135,006 is far below EIP-7825's 16,777,216 and any block limit (EIP-8037: no concern).

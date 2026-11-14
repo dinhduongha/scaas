@@ -591,6 +591,10 @@ by `forge create` (`DeployBase` probes inside forge's EVM, which has no `MLDSA87
 `0x0134`); registry gen 2 `0xFA09Cb12c2bdc0d596Adf25c2D3160F5Ab1083DC` (predecessor the gen-1 `ua_registry`, kinds
 `[(0x0134, verifier, 250,000)]`, the PROVISIONAL cap until T-GAS); `mldsa87` registration on gen 2 status 1, 15,561,167 gas
 (`smartcontracts/evm/runs/2026-11-04-mldsa87-gen2-7622.sh`; summary `smartcontracts/evm/runs/2026-11-04-testnet-reset1-7622.txt`).
+**Calibrated 2026-11-15** (TODO 3zd, owner): `mldsa87Gas` **135,000** (two passes 135,000 / 123,000, the larger;
+`../runs/2026-11-15-mldsa87-calib.txt`). `add-schedule.py --mldsa87` writes it (`MLDSA87_GAS`, was `PROVISIONAL_MLDSA87_GAS`);
+the SCaaS testnet keeps 102,000 until reset 4. The probe of a chain at 135,000 expects 135,006 (the record script
+`../runs/2026-11-04-mldsa87-probe.py` checks 102,006: copy it with the new figure).
 The plan as written before the run:
 
 The plugin of branch `mldsa87` adds `MLDSA87` at `0x000000000000000000000000000000005caa0014` (EIP-8355 layout, ML-DSA-87). The

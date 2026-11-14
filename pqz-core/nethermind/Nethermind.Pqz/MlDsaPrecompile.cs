@@ -16,10 +16,11 @@ public static class MlDsa
 {
     public const long Base44 = 6_500, Base65 = 9_000, Base87 = 13_500;
     public const int Pk44 = 1312, Sig44 = 2420, Pk65 = 1952, Sig65 = 3309, Pk87 = 2592, Sig87 = 4627;
-    /// <summary>PROVISIONAL, not calibrated (CTR-UA-39 Q4, owner 2026-11-04): the spec's estimate for <c>mldsa87Gas</c> by the
-    /// ML-DSA-65 ratio (68,000 at EIP-8355's 9,000 ⇒ ≈ 102,000 at its 13,500). The value a schedule carries until the
-    /// <c>Calibrate</c> run the owner allows measures it; the plugin itself prices from the schedule, never from this.</summary>
-    public const long Provisional87Gas = 102_000;
+    /// <summary>Calibrated <c>mldsa87Gas</c> (CTR-UA-39 Q4; TODO 3zd, owner 2026-11-15): <c>Calibrate</c> in the calib image,
+    /// two passes, p99 0.358 / 0.328 ms at t_ecMul 0.016 ms ⇒ 135,000 / 123,000, the larger
+    /// (<c>runs/2026-11-15-mldsa87-calib.txt</c>; was the PROVISIONAL estimate 102,000). The value <c>add-schedule.py --mldsa87</c>
+    /// writes; the plugin itself prices from the schedule, never from this.</summary>
+    public const long Calibrated87Gas = 135_000;
 
     public static long Gas(int len, int pk, int sig, long price) => price + 6L * ((Math.Max(0, len - pk - sig) + 31L) / 32);
 

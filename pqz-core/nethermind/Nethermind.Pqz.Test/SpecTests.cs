@@ -65,12 +65,12 @@ public class SpecTests
     [Test]
     public void Mldsa87_joins_with_the_schedule_that_carries_its_key()
     {
-        ISpecProvider p = Provider(WithPqz(Schedule(T1), With(Schedule(T2), "mldsa87Gas", MlDsa.Provisional87Gas)));
+        ISpecProvider p = Provider(WithPqz(Schedule(T1), With(Schedule(T2), "mldsa87Gas", MlDsa.Calibrated87Gas)));
         Assert.That(Set(p, T1).Contains(PqzAddresses.MlDsa87), Is.False, "a schedule without the key");
         Assert.That(Three.All(Set(p, T1).Contains));
         Assert.That(Set(p, T2).Contains(PqzAddresses.MlDsa87), "from the schedule with the key");
         Assert.That(p.GetSpec(new ForkActivation(10_000, T2)).IsPrecompile(PqzAddresses.MlDsa87));
-        Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(10_000, T2)))!.MlDsa87Gas, Is.EqualTo(MlDsa.Provisional87Gas));
+        Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(10_000, T2)))!.MlDsa87Gas, Is.EqualTo(MlDsa.Calibrated87Gas));
         Assert.That(new PqzPrecompileProvider().GetPrecompiles().ContainsKey(PqzAddresses.MlDsa87), "the provider knows it");
     }
 
