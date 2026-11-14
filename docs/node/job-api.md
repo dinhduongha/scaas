@@ -467,8 +467,11 @@ and refusals by name** (owner 2026-11-13; spec `2026-11-13-pqz-three-keys.md` §
 - **Refusals.** `ROLLOVER_SIGNED_ONLY`: a public rollover job for an opening token, zero sends; no keeper rollover there.
   `AUDITOR_KEY_MISSING`: an `offchain-token` transfer with the auditor on while `pqzScopedKeyOf(auditorUA, token)` has no record,
   refused before any proving. `TX_EXCEEDS_CHAIN_LIMIT`: an op whose regular + state gas the connected chain cannot include
-  (EIP-8037), refused instead of sent. `PQZ_CONFIG_UNREADABLE` (Fable P3-4): a rollover job, or a debit with auditor copies, on a token whose
-  `pqzVerifyConfig()` reverts: no key class to check against, refused, zero sends (never read as class 1).
+  (EIP-8037), refused instead of sent. A token whose `pqzVerifyConfig()` reverts is a release
+  without the view, class `registry` with the opening off, as every group-3f check reads it (Fable P3-4 proposed a refusal
+  by name; not taken: it would refuse every job on such a release, and the simulation already refuses a public rollover on an
+  opening token, `RollOverSignedOnly` → `ROLLOVER_SIGNED_ONLY`, zero sends; a node that lies about the view is
+  [ARCH-POS-15](../decisions.md#ARCH-POS-15)'s).
 - **Operators**: the job shape of op 1 and of the rollover changes on opening tokens; a consumer on the old shape gets
   `BAD_PAYLOAD` or `ROLLOVER_SIGNED_ONLY`, never a silent `dead`.
 
@@ -1072,7 +1075,7 @@ cancels 2 rps (burst 10).
 | 409 | `IDEMPOTENCY_MISMATCH`, `PREVIOUS_GENERATION_LIVE`, `SUPERSEDED` (all with `uid`), `DUPLICATE_DIGEST`, `DUPLICATE_CALL` (with `uid`), `TOO_LATE` (with `state`, `published`), `CHAIN_HALTED` | [intake](#intake), [cancel](#cancel) |
 | 410 | `CURSOR_EXPIRED` | [indexer-feeds.md#cursors](indexer-feeds.md#cursors) |
 | 413 | `TOO_LARGE` | body > 1 MiB |
-| 422 | `BAD_PAYLOAD`, `HEX_DATA_REFUSED`, `HEX_ARGS_REFUSED`, `PQZ_VERDICT_MISSING`, `PQZ_VERDICT_NOT_EXPECTED`, `PQZ_VERIFIER_UNREACHABLE`, `PQZ_FEE_MISMATCH` ([NODE-JOB-22](#NODE-JOB-22)), `ROLLOVER_SIGNED_ONLY`, `AUDITOR_KEY_MISSING`, `TX_EXCEEDS_CHAIN_LIMIT`, `PQZ_CONFIG_UNREADABLE` ([NODE-JOB-28](#NODE-JOB-28)), `PQZ_KEY_ROTATION_PENDING` ([NODE-JOB-23](#NODE-JOB-23)), `SERVICE_PULL_SHAPE`, `SERVICE_TOKEN_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)), `UNKNOWN_ENTRY`, `ENTRY_AMBIGUOUS`, `OP_KIND_MISMATCH`, `MANDATE_LANE`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
+| 422 | `BAD_PAYLOAD`, `HEX_DATA_REFUSED`, `HEX_ARGS_REFUSED`, `PQZ_VERDICT_MISSING`, `PQZ_VERDICT_NOT_EXPECTED`, `PQZ_VERIFIER_UNREACHABLE`, `PQZ_FEE_MISMATCH` ([NODE-JOB-22](#NODE-JOB-22)), `ROLLOVER_SIGNED_ONLY`, `AUDITOR_KEY_MISSING`, `TX_EXCEEDS_CHAIN_LIMIT` ([NODE-JOB-28](#NODE-JOB-28)), `PQZ_KEY_ROTATION_PENDING` ([NODE-JOB-23](#NODE-JOB-23)), `SERVICE_PULL_SHAPE`, `SERVICE_TOKEN_MISMATCH` ([NODE-JOB-25](#NODE-JOB-25)), `UNKNOWN_ENTRY`, `ENTRY_AMBIGUOUS`, `OP_KIND_MISMATCH`, `MANDATE_LANE`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
 | 429 | `RATE_LIMITED`, `QUOTA`, `SPONSOR_BUDGET`, `SPONSOR_RATE`, `SPONSOR_TOO_SHORT` (all three with `policy`), `SUBJECT_THROTTLED` (with `retry_after`) | per key: POST 20 rps (burst 40), GET 10 rps, tombstone-creating cancels 2 rps (burst 10); `Retry-After` |
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost |
 

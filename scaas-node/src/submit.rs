@@ -2790,18 +2790,6 @@ pub(crate) mod tests {
         }
     }
 
-    /// Fable P3-4: the public rollover on a token whose `pqzVerifyConfig()` reverts has no key class: `PQZ_CONFIG_UNREADABLE`,
-    /// `dead`, zero sends, nothing simulated (it was read as class 1 before); control: the `PRECOMPILE` answer goes.
-    #[tokio::test]
-    async fn rollover_without_a_key_class_is_named() {
-        let (r, rpc) = outcomes(Evm { mtx_nonce: Some(0), ..Default::default() }, vec![pqz_rollover_job(7)], |_| {}).await;
-        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_CONFIG_UNREADABLE: "), "{r:?}");
-        assert!(rpc.lock().unwrap().sent.is_empty());
-        assert!(!rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"), "refused before any simulation");
-        let e = Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
-        assert_eq!(states_of(&outcomes(e, vec![pqz_rollover_job(7)], |_| {}).await.0), ["signed", "broadcast"]);
-    }
-
     /// NODE-JOB-28: an `OFFCHAIN` debit with auditor copies whose auditor has no key of the token's scope (class 3: the token,
     /// class 2: 0) is `AUDITOR_KEY_MISSING`, back in the queue (the auditor may register), zero sends; with the key it goes on to the
     /// verdict. The key reads of the token (the parties' too, `no_pending_party`) all ask the token's scope (CTR-UA-43).

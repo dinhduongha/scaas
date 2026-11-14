@@ -116,8 +116,6 @@ async fn no_pending_party(chain: &Chain, w: &Work) -> Result<(), Refusal> {
     // NODE-JOB-28 (CTR-UA-43): the key reads follow the token's scope, as its `_keyOf` / `_keyAtOf`
     let scope = match crate::pqz::key_scope(chain, w.to).await {
         Ok((s, _)) => s,
-        // a token without the view reads the registry key as before; `three_keys` names a revert where the class decides
-        Err(SimError::Revert(_)) => None,
         Err(e) => return read("pqzVerifyConfig")(e).map_or(Ok(()), Err),
     };
     for ua in parties {
@@ -175,12 +173,7 @@ async fn three_keys(chain: &Chain, w: &Work) -> Result<(), Refusal> {
         SimError::Transport(e) => Refusal::Transport(format!("{what}: {e}")),
         SimError::Revert(e) => Refusal::Policy(format!("{what}: {e}")),
     };
-    // Fable P3-4: a PQZ row whose token does not answer `pqzVerifyConfig()` has no key class: refused by name, never class 1
-    let (scope, opening) = crate::pqz::key_scope(chain, w.to).await.map_err(|e| match e {
-        SimError::Revert(e) => Refusal::Policy(format!("PQZ_CONFIG_UNREADABLE: {:#x}: pqzVerifyConfig() reverted ({e}): no key class \
-            to check a rollover or an auditor key against", w.to)),
-        e => tr("pqzVerifyConfig()", e),
-    })?;
+    let (scope, opening) = crate::pqz::key_scope(chain, w.to).await.map_err(|e| tr("pqzVerifyConfig()", e))?;
     if rollover && opening {
         return Err(Refusal::Policy(format!("ROLLOVER_SIGNED_ONLY: {:#x} has the opening on: only its holder rolls over, by the \
             signed mtxRollOverSigned (row PqzRollOver); no public rollover there", w.to)));
