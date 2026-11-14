@@ -209,7 +209,16 @@ fn msig_update_plan() {
     let (u, warn) = plan_msig_update(&s, &ua, &cu, &reg, &t, &en, 100, false).unwrap();
     assert_eq!(u.version, 5);
     assert!(warn.contains(&MsigUpdateWarning::SlotsLeft(252)) && warn.contains(&MsigUpdateWarning::RotatePqzKey));
-    assert!(warn.contains(&MsigUpdateWarning::ReEnableRather(id(4))));
+    assert!(!warn.iter().any(|x| matches!(x, MsigUpdateWarning::ReEnableRather(_))), "every stored slot enabled: no returning member");
+    let mut part = s.clone();
+    part.enabled[31] = 0b011;
+    let (_, warn) = plan_msig_update(&part, &ua, &cu, &reg, &t, &en, 100, false).unwrap();
+    assert!(warn.contains(&MsigUpdateWarning::ReEnableRather(id(4))), "a disabled stored slot: re-enable rather than append");
+    let mut bad = t.clone();
+    bad.members[3] = MsigMember { kind: 0x0001, id: id(4), weight: 1 }; // a native kind with a derived id (row 7)
+    assert!(plan_msig_update(&s, &ua, &cu, &reg, &bad, &en, 100, false).is_err());
+    bad.members[3] = MsigMember { kind: 0x0141, id: id(4), weight: 1 }; // no member kind (row 7)
+    assert!(plan_msig_update(&s, &ua, &cu, &reg, &bad, &en, 100, false).is_err());
     let refused = |t: &MsigStructure, en: &[u8; 32]| plan_msig_update(&s, &ua, &cu, &reg, t, en, 100, false).is_err();
     t.threshold = 3; // a + b accepted, d not yet
     assert!(refused(&t, &en));
@@ -1507,6 +1516,18 @@ fn record_checks_read_the_current_structure() {
         };
         let valid = r["valid"].as_bool().unwrap();
         assert_eq!(run(now).is_ok(), valid, "{}", r["name"]);
+        // Fable P2-4: a disabled slot is refused off chain from the enabled word alone, whatever `accepted` says (raw bits, or none)
+        if !valid && r["entry"] == "setPqzKey" {
+            let raw: &Accepted = &|_, _| true;
+            let with = |acc: Option<&Accepted>| check_pqz_key_record_current(0x0120, &first, &ua, &bytes(&r["pqzKey"]), &b32(&r["pqzPopHash"]),
+                &sig, &members, now, acc);
+            assert!(with(Some(raw)).is_err() && with(None).is_err(), "{}: the enabled mask", r["name"]);
+        }
+        if !valid && r["entry"] == "requireAuthorized" {
+            let raw: &Accepted = &|_, _| true;
+            assert!(check_authorization_current(&first, &ua, &b32(&r["purposeTag"]), &b32(&r["digest"]), &decode_member_sigs(&sig).unwrap(),
+                &domain, &members, now, Some(raw)).is_err(), "{}: the enabled mask", r["name"]);
+        }
         if valid {
             assert!(run(none).is_err(), "{}: the first structure alone", r["name"]);
         }

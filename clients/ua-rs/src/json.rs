@@ -228,7 +228,7 @@ pub fn msig_update_json(t: &str) -> JsonResult<String> {
         dec.push('0');
     }
     let args = json!({ "ua": hx(&u.ua), "version": u.version, "structure": { "threshold": u.structure.threshold, "members": members },
-        "enabled": dec, "validUntilBlock": u.valid_until_block, "sigs": members_json(&members_in(&v["sigs"])?), "chainUid_": hx(&u.chain_uid) });
+        "enabled": dec, "validUntilBlock": u.valid_until_block, "sigs": members_json(&members_in(&v["sigs"])?), "chainUid": hx(&u.chain_uid) });
     Ok(json!({ "digest": hx(&digest), "message": hx(&message), "memberDigest": hx(&md), "args": args }).to_string())
 }
 

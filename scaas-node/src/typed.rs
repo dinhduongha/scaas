@@ -322,8 +322,8 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("storePqzScopedPop", REG, "bytes32 ua,address scope,uint64 version,bytes pqzPop"),
     ("acceptMembership", REG, "bytes32 ua,MemberSig memberSig"),
     // CTR-UA-44 (TODO 3ze): an `msig`'s structure update on this registry, signed by a quorum of its stored structure; fee 0, anyone
-    // submits (`chainUid_` the registry's word, the contract's parameter name)
-    ("updateMsig", REG, "bytes32 ua,uint64 version,MsigStructure structure,uint256 enabled,uint64 validUntilBlock,MemberSig[] sigs,bytes32 chainUid_"),
+    // submits (`chainUid` the registry's word: the contract's `chainUid_`, the JSON name without the trailing underscore)
+    ("updateMsig", REG, "bytes32 ua,uint64 version,MsigStructure structure,uint256 enabled,uint64 validUntilBlock,MemberSig[] sigs,bytes32 chainUid"),
     ("mtxSettle", D, "Settlement[] s"),
     ("mtxExchange", D, "ExchangePlan p,Interaction[] interactions"),
     ("mtxExchangeVia", D, "ExchangePlan p,address executor,bytes data"),

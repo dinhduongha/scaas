@@ -920,6 +920,11 @@ test('CTR-UA-44: every record check reads the current structure of an updated ms
     };
     if (r.valid) run(now);
     else assert.throws(() => run(now), { code: 'UAUnauthorized' }, r.name);
+    // Fable P2-4: a disabled slot is refused from the enabled word alone, with the raw accepted bits too
+    if (!r.valid && r.entry === 'setPqzKey') assert.throws(() => verifyPqzKeyRecord(row, now, () => true), { code: 'UAUnauthorized' }, r.name);
+    if (!r.valid && r.entry === 'requireAuthorized') {
+      assert.throws(() => verifyAuthorization(row, now, domain, () => true), { code: 'UAUnauthorized' }, r.name);
+    }
     // the first structure is never the authority once the registry was updated: each valid row fails against it
     if (r.valid) assert.throws(() => run(first), (e) => e instanceof ua.UAError, `${r.name}: the first structure`);
   }

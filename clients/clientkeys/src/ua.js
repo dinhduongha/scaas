@@ -569,7 +569,7 @@ export function msigUpdateMessage({ ua, chainUid, registry, version, threshold, 
   const msg = { ua: h32(ua, 'ua'), chainUid: h32(chainUid, 'chainUid'), registry: checksumAddress(hex(sized(registry, 20, 'registry'))),
     version: num(v), threshold: t, members: m, enabled: en.toString(10), validUntilBlock: num(until) };
   const args = { ua: msg.ua, version: num(v), structure: { threshold: t, members: m }, enabled: msg.enabled,
-    validUntilBlock: num(until), chainUid_: msg.chainUid };
+    validUntilBlock: num(until), chainUid: msg.chainUid };
   return { digest, message, memberDigest: memberDigest(ua, message), typedData: portableTypedData('UAMsigUpdate', msg), args };
 }
 

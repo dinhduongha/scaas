@@ -12,6 +12,26 @@ import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {UACall} from "./UACall.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 
+/// A verifier that burns every gas it is given and accepts (the worst a capped member can cost).
+contract Burner {
+    function verify(bytes calldata, bytes32, bytes calldata) external view returns (bool) {
+        while (gasleft() > 1_000) {}
+        return true;
+    }
+
+    function verifyPop(bytes calldata, bytes32, bytes calldata) external view returns (bool) {
+        while (gasleft() > 1_000) {}
+        return true;
+    }
+}
+
+/// Calls `target` giving its frame exactly `gas` (under `--isolate` each probe is its own transaction, all cold).
+contract FrameProbe {
+    function probe(address target, bytes calldata data, uint256 gas) external returns (bool ok) {
+        (ok,) = target.call{gas: gas}(data);
+    }
+}
+
 /// The frame gas of one `requireAuthorized` from a contract, every account and slot cold (one transaction).
 contract HotProbe {
     function cost(UARegistry r, bytes32 ua, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata s) external view returns (uint256 g) {
@@ -766,6 +786,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     function test_refusedNextUpdate() public {
         bytes32 ua = _reg(r, 3, _ids(ml[1], ml[2], ml[3]), _w(3), _ids(ml[1], ml[2], ml[3]));
         uint256 worst = 3 * (UARegistryCoreLib.MSIG_MEMBER_GAS + 400_000) + UARegistryCoreLib.MSIG_ACCEPTED_GAS;
+        worst += 16 * 3 * (192 + 3_328); // Fable P2-1: the quorum's signature calldata, three mldsa65 signatures (3,309 B each)
         uint256 fit = (UARegistryCoreLib.TX_GAS_CAP - UARegistryCoreLib.MSIG_UPDATE_GAS - worst) / UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS;
         assertLt(fit, 256, "row 13 must be able to refuse here: heavier signers if the constants move");
         Up memory u = _next(r, ua);
@@ -775,6 +796,27 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         for (uint256 i; i < fit; ++i) m[i] = u.st.members[i];
         u.st.members = m;
         _apply(r, u, _ids(ml[1], ml[2], ml[3]));
+    }
+
+    /// Row 13's term per enabled `msig` member (Fable P2-2): 2-of-{I, a, b}, I = 1-of-{ml1}; the largest count that fits is taken
+    /// from the pinned constants with that term, one more is refused (without the term it would fit).
+    function test_refusedNextUpdateInner() public {
+        bytes32 i_ = _reg(r, 1, _ids(ml[1]), _w(1), _ids(ml[1]));
+        innerSigners[i_] = _ids(ml[1]);
+        bytes32 ua = _reg(r, 2, _ids(i_, a, b), _w(3), new bytes32[](0));
+        uint256 w = 2 * UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 50_000
+            + (UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 400_000);
+        uint256 calldata_ = 16 * ((192 + 128 + 3_328) + (192 + 1_024));
+        uint256 fit = (UARegistryCoreLib.TX_GAS_CAP - UARegistryCoreLib.MSIG_UPDATE_GAS - w - calldata_ - UARegistryCoreLib.MSIG_UPDATE_INNER_GAS)
+            / UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS;
+        assertLt(fit, 256);
+        Up memory u = _next(r, ua);
+        for (uint256 k = 3; k <= fit; ++k) _append(u, EOA, bytes32(uint256(0x40000 + k)), 1, false);
+        _refused(r, u, _ids(a, b), _slots(fit + 1));
+        IUARegistry.MsigMember[] memory m = new IUARegistry.MsigMember[](fit);
+        for (uint256 k; k < fit; ++k) m[k] = u.st.members[k];
+        u.st.members = m;
+        _apply(r, u, _ids(a, b));
     }
 
     // ----- acceptance, generations, the library -----
@@ -974,5 +1016,112 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         emit log_named_uint("requireAuthorized 2-of-3, never updated", g0);
         emit log_named_uint("requireAuthorized 2-of-3, updated", g1);
         assertLe(g1, g0, "an updated msig reads no more");
+    }
+
+    // ----- Fable P2-3: the verify bound with 256-slot blobs (spec §8 "bound rows with a 256-slot inner msig") -----
+
+    /// The least frame gas `requireAuthorized(ua)` succeeds with, by bisection under `bound`; asserts it fits `bound`.
+    function _least(UARegistry x, bytes32 ua, IUARegistry.UASig memory s, uint256 bound) internal returns (uint256 hi) {
+        FrameProbe p = new FrameProbe();
+        bytes memory call_ = abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, TX, s));
+        assertTrue(p.probe(address(x), call_, bound), "authorizes within verifyBudget");
+        uint256 lo;
+        for (hi = bound; hi - lo > 1;) {
+            uint256 mid = (lo + hi) / 2;
+            if (p.probe(address(x), call_, mid)) hi = mid;
+            else lo = mid;
+        }
+    }
+
+    /// Every signing slot's signature, a real `mldsa65` size (3,309 B), in index order (the burner accepts any bytes).
+    function _burnSigs(UARegistry x, bytes32 ua, bytes32[] memory ids) internal view returns (IUARegistry.MemberSig[] memory s) {
+        IUARegistry.MsigStructure memory st = x.msigOf(ua);
+        s = new IUARegistry.MemberSig[](ids.length);
+        for (uint256 i; i < ids.length; ++i) {
+            if (kindOfId[ids[i]] == UAKinds.MSIG) {
+                IUARegistry.MsigStructure memory ist = x.msigOf(ids[i]);
+                bytes32[] memory who = innerSigners[ids[i]];
+                IUARegistry.InnerSig[] memory l = new IUARegistry.InnerSig[](who.length);
+                for (uint256 j; j < who.length; ++j) l[j] = IUARegistry.InnerSig(_idx(ist, who[j]), new bytes(3309));
+                for (uint256 j = 1; j < l.length; ++j) {
+                    for (uint256 k = j; k > 0 && l[k - 1].index > l[k].index; --k) (l[k - 1], l[k]) = (l[k], l[k - 1]);
+                }
+                s[i] = IUARegistry.MemberSig(_idx(st, ids[i]), l, "");
+            } else {
+                s[i] = IUARegistry.MemberSig(_idx(st, ids[i]), new IUARegistry.InnerSig[](0), new bytes(3309));
+            }
+        }
+        for (uint256 i = 1; i < s.length; ++i) {
+            for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) (s[j - 1], s[j]) = (s[j], s[j - 1]);
+        }
+    }
+
+    /// `n - k` disabled EOA slots appended to `ua` on `x` (version + 1), signed by `ids` (burner verifiers accept any bytes).
+    function _widen(UARegistry x, bytes32 ua, uint256 n, bytes32[] memory ids) internal {
+        Up memory u = _next(x, ua);
+        for (uint256 i = u.st.members.length; i < n; ++i) _append(u, EOA, bytes32(uint256(0x20000 + i)), 1, false);
+        IUARegistry.MemberSig[] memory s = _burnSigs(x, ua, ids);
+        x.updateMsig(ua, u.version, u.st, u.enabled, u.until, s, x.chainUid());
+    }
+
+    /// An outer V = 2-of-{I, ml4} over an inner I = 2-of-{ml1, ml2, ml3}, every member's verifier burning its whole 400 k cap:
+    /// registered at exactly its bound after I grew to 230 slots (row 13 refuses more at these caps), V authorizes within that bound;
+    /// V grown to 230 slots too, again (each level copies its 8,324 B blob). The bound: I's worst 2 x (400 k + 45 k) + 3,500 = 893,500 as V's slot, V's 2 x 45 k +
+    /// 3,500 + 893,500 + 400 k = 1,387,000.
+    function test_gas_wideBlobsAtBound() public {
+        uint256 bound = 1_387_000;
+        Burner burner = new Burner();
+        UARegistry.KindConfig[] memory cfg = new UARegistry.KindConfig[](1);
+        cfg[0] = UARegistry.KindConfig(ML, address(burner), 400_000);
+        UARegistry x = _deploy(REG_X, keccak256("chain x"), address(0), false, uint64(bound), address(0), true, cfg);
+        for (uint256 i = 1; i <= 4; ++i) _register(x, ML, keyOfId[ml[i]]);
+        bytes32 i_ = _pq3(x);
+        innerSigners[i_] = _ids(ml[1], ml[2]);
+        _widen(x, i_, 230, _ids(ml[1], ml[2])); // row 13 admits about 239 at these caps
+        bytes32 v = _reg(x, 2, _ids(i_, ml[4]), _w(2), _ids(i_, ml[4]));
+        uint256 l1 = _least(x, v, _auth(_burnSigs(x, v, _ids(i_, ml[4]))), bound);
+        _widen(x, v, 230, _ids(i_, ml[4]));
+        uint256 l2 = _least(x, v, _auth(_burnSigs(x, v, _ids(i_, ml[4]))), bound);
+        emit log_named_uint("bound (verifyBudget)", bound);
+        emit log_named_uint("least frame gas, inner 230 slots", l1);
+        emit log_named_uint("least frame gas, inner and outer 230 slots", l2);
+    }
+
+    // ----- Fable P2-2: an update over enabled msig members of 256 slots each (what row 13's constants do not walk) -----
+
+    /// The update of an outer with `m` enabled inner msig members, each grown to 250 slots (signed by two EOAs), measured
+    /// against row 13's model `w + MSIG_UPDATE_GAS + n x MSIG_UPDATE_SLOT_GAS`: logged, the margin recorded in CTR-UA-44.
+    function test_gas_updateOverWideInners() public {
+        uint256 m = 4;
+        UARegistry x = _deploy(REG_X, keccak256("chain x"), address(0), false, BUDGET, address(0), true, _cfgsMl(400_000));
+        _members(x);
+        bytes32[] memory outer = new bytes32[](m + 2);
+        for (uint256 k; k < m; ++k) {
+            bytes32 iu = _reg(x, 1, _ids(ml[k + 1]), _w(1), _ids(ml[k + 1]));
+            innerSigners[iu] = _ids(ml[k + 1]);
+            _widenSigned(x, iu, 250, _ids(ml[k + 1]));
+            outer[k] = iu;
+        }
+        (outer[m], outer[m + 1]) = (a, b);
+        uint16[] memory w = _w(m + 2);
+        bytes32 ua = _reg(x, 2, outer, w, new bytes32[](0));
+        Up memory u = _next(x, ua);
+        bytes memory data = abi.encodeCall(IUARegistry.updateMsig,
+            (ua, u.version, u.st, u.enabled, u.until, _upSigs(x, u, _ids(a, b), x.chainUid(), address(x)), x.chainUid()));
+        uint256 total = _gasTotal(address(x), data);
+        // w: 2 x 45 k + 3,500 + two inners of 45 k + 3,500 + 400 k; a: two inner slots of 192 + 128 + 3,328 B (one mldsa65 leaf each)
+        uint256 worst = 2 * UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS
+            + 2 * (UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 400_000);
+        uint256 model = worst + 16 * 2 * (192 + 128 + 3_328) + UARegistryCoreLib.MSIG_UPDATE_GAS
+            + (m + 2) * UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS + m * UARegistryCoreLib.MSIG_UPDATE_INNER_GAS;
+        emit log_named_uint("updateMsig over 4 inner msigs of 250 slots (regular + state)", total);
+        emit log_named_uint("row 13's model for it", model);
+        assertLe(total, model, "row 13 covers the walk over wide inner msigs");
+    }
+
+    function _widenSigned(UARegistry x, bytes32 ua, uint256 n, bytes32[] memory ids) internal {
+        Up memory u = _next(x, ua);
+        for (uint256 i = u.st.members.length; i < n; ++i) _append(u, EOA, bytes32(uint256(0x30000 + i)), 1, false);
+        _apply(x, u, ids);
     }
 }

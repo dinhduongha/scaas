@@ -233,7 +233,8 @@ pub fn plan_msig_update(
     let mut weight = 0u32;
     for (i, m) in target.members.iter().enumerate() {
         let dup = target.members[..i].iter().any(|x| x.id == m.id);
-        if m.weight == 0 || (i >= sn && dup) || (bit(enabled, i) && m.kind == 0x0120 && m.id == *ua) {
+        let appended_bad = i >= sn && (!is_member(m.kind, true) || is_native(m.kind) != (m.id[..12] == [0u8; 12]));
+        if m.weight == 0 || (i >= sn && dup) || appended_bad || (bit(enabled, i) && m.kind == 0x0120 && m.id == *ua) {
             return Err(UAError::KeyData("msig member"));
         }
         if bit(enabled, i) && bit(&s.accepted, i) {
@@ -247,7 +248,10 @@ pub fn plan_msig_update(
         return Err(UAError::KeyData("msig verifier: an update freezes its tokens"));
     }
     let mut w = vec![MsigUpdateWarning::SlotsLeft(256 - n), MsigUpdateWarning::ProjectedGas(MSIG_UPDATE_GAS + n as u64 * MSIG_UPDATE_SLOT_GAS)];
-    w.extend(target.members[sn..].iter().map(|m| MsigUpdateWarning::ReEnableRather(m.id)));
+    // a stored slot is disabled: an appended member may be a returning one, whose old slot should be re-enabled instead
+    if (0..sn).any(|i| !bit(&s.enabled, i)) {
+        w.extend(target.members[sn..].iter().map(|m| MsigUpdateWarning::ReEnableRather(m.id)));
+    }
     if s.holds_pqz_key && (0..n).any(|i| !bit(enabled, i)) {
         w.push(MsigUpdateWarning::RotatePqzKey);
     }
@@ -1093,6 +1097,13 @@ pub(crate) struct Cx<'a> {
     members: &'a Members<'a>,
     current: &'a Current<'a>,
 }
+impl Cx<'_> {
+    /// Slot `index` of the `msig` `id` is enabled on the target registry (CTR-UA-44; never updated: every slot), whatever `accepted`
+    /// answers: the contract masks by `accepted & enabled` itself (Fable P2-4).
+    fn on(&self, id: &[u8; 32], index: u16) -> bool {
+        (self.current)(*id).is_none_or(|(_, en)| index < 256 && en[31 - index as usize / 8] >> (index % 8) & 1 == 1)
+    }
+}
 /// The enabled slots of the CTR-UA-09 bytes `d` only (`enabled` bit i = slot i): what eligibility counts (a disabled slot signs nothing).
 pub fn enabled_only(d: &[u8], enabled: &[u8; 32]) -> Result<Vec<u8>> {
     let s = MsigStructure::from_key_data(d)?;
@@ -1146,7 +1157,7 @@ fn signature_ok(
     let md = member_digest(ua, &message);
     let pop = *purpose == pop_v2_tag();
     for s in &slots {
-        if !(pop || bits.record(ua, s.index)) || !slot_ok(&structure.members[s.index as usize], &keys[s.index as usize], digest, &md, s, cx, bits)? {
+        if !(pop || bits.record(ua, s.index)) || !cx.on(ua, s.index) || !slot_ok(&structure.members[s.index as usize], &keys[s.index as usize], digest, &md, s, cx, bits)? {
             return Ok(false);
         }
     }
@@ -1167,7 +1178,7 @@ fn slot_ok(m: &MsigMember, key: &[u8], digest: &[u8; 32], md: &[u8; 32], s: &Mem
         let inner = inner_digest(&m.id, md)?;
         for x in &s.members {
             let i = x.index as usize;
-            if !bits.slot(&m.id, x.index) || !leaf_ok(&leaves[i], &keys[i], digest, &inner, &x.sig)? {
+            if !bits.slot(&m.id, x.index) || !cx.on(&m.id, x.index) || !leaf_ok(&leaves[i], &keys[i], digest, &inner, &x.sig)? {
                 return Ok(false);
             }
         }
@@ -1401,7 +1412,7 @@ fn auth_ok(id: &[u8; 32], d: &[u8], md: &[u8; 32], slots: &[MemberSig], domain: 
     for s in slots {
         let i = s.index as usize;
         let Some(m) = structure.members.get(i) else { return Ok(false) };
-        if acc >= structure.threshold.into() || s.index < next || !bits.slot(id, s.index) {
+        if acc >= structure.threshold.into() || s.index < next || !bits.slot(id, s.index) || !cx.on(id, s.index) {
             return Ok(false);
         }
         next = s.index + 1;

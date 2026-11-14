@@ -41,7 +41,7 @@ M = [
     ('bound-follows-inner-msig', CORE, '&& (mode != INNER | LENIENT || UAStore.u16(d, 4 + 36 * i) != UAKinds.MSIG);', ';'),
     ('eligibility-follows-inner-msig', CORE, 'if (kind == UAKinds.MSIG && !inner && _pqEligible(', 'if (kind == UAKinds.MSIG && _pqEligible('),
     ('no-stays-pq-eligible', CORE, '        else if (_pqEligible(stored, false)) revert IUARegistry.UAPqzHolder(ua);\n', ''),
-    ('no-row-13', CORE, 'if (w + MSIG_UPDATE_GAS + n * MSIG_UPDATE_SLOT_GAS > TX_GAS_CAP) revert IUARegistry.UAMsigSlots(n);', 'n;'),
+    ('no-row-13', CORE, '(regular > floor ? regular : floor) + MSIG_UPDATE_GAS + n * MSIG_UPDATE_SLOT_GAS > TX_GAS_CAP', 'false'),
     ('registration-reads-msig-keyPtr', STORE, 'SSTORE2.read(vkLength(r.kind) == 0 ? address(0) : r.keyPtr)', 'SSTORE2.read(r.keyPtr)'),
     ('accept-reads-first-structure', CORE, '        bytes memory d = UAStore.msig(ua, r.keyPtr);\n        uint16 index = memberSig.index;',
      '        bytes memory d = UAStore.keyRest(ua);\n        uint16 index = memberSig.index;'),
@@ -49,6 +49,15 @@ M = [
     ('gen2-msigState-not-forwarded', AUX, 'if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).msigStateOf(ua);', ''),
     ('registry-not-in-digest', AUX, 'UAKinds.msigUpdateDigest(ua, u.chainUid, address(this),', 'UAKinds.msigUpdateDigest(ua, u.chainUid, address(0),'),
     ('purpose-tag', 'src/ua/UAKinds.sol', 'keccak256("scaas.ua.purpose.msig-update.v1")', 'keccak256("scaas.ua.purpose.msig-update.v2")'),
+    # Fable review (P2-1, P3-3)
+    ('row-13-without-calldata', CORE, 'uint256 regular = w + 16 * a;', 'uint256 regular = w;'),
+    ('row-13-without-inner-term', CORE, 'w += MSIG_UPDATE_INNER_GAS;', 'w;'),
+    ('gen2-msigOf-not-forwarded', REG, '        if (_elsewhere(ua)) return IUARegistry(predecessor).msigOf(ua);\n', ''),
+    ('gen2-memberAccepted-not-forwarded', REG, '        if (_elsewhere(ua)) return IUARegistry(predecessor).memberAccepted(ua, index);\n', ''),
+    ('chain-inner-reads-first-structure', REG, 'return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.msig(id, _s.records[id].keyPtr), inner);',
+     'return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.keyRest(id), inner);'),
+    ('typehash-field-order', 'src/ua/UAKinds.sol', '"UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,',
+     '"UAMsigUpdate(bytes32 chainUid,bytes32 ua,address registry,uint64 version,'),
 ]
 
 

@@ -246,6 +246,13 @@ const enabledOf = (r) => {
   const en = BigInt(r.enabled);
   return ua.encodeMsig(s.threshold, s.members.filter((_, i) => ((en >> BigInt(i)) & 1n) === 1n));
 };
+/** Slot `index` of the `msig` `id` is enabled on the target registry (CTR-UA-44; never updated: every slot), whatever `accepted` answers:
+ *  the contract masks by accepted and enabled itself (Fable P2-4). */
+const on = (members, id, index) => {
+  const r = members(typeof id === 'string' ? id : hex(toBytes(id)));
+  if (!r || r.kind !== 0x0120 || !r.current || r.enabled === undefined || r.enabled === null) return true;
+  return ((BigInt(r.enabled) >> BigInt(index)) & 1n) === 1n;
+};
 const innerOf = (members) => (id) => {
   const r = members(id);
   return r && (r.kind === 0x0120 ? enabledOf(r) : r.keyData);
@@ -278,7 +285,8 @@ function signatureOk(kind, d, id, purpose, digest, sig, members, a, eligible = d
   const all = ua.msigStructure(d).members;
   const md = ua.memberDigest(id, message);
   const pop = eq(toBytes(purpose), toBytes(ua.POP_V2_TAG));
-  return slots.every((s) => (pop || a.record(hex(toBytes(id)), s.index)) && slotOk(all[s.index], keys[s.index], digest, md, s, members, a));
+  return slots.every((s) => (pop || a.record(hex(toBytes(id)), s.index)) && on(members, id, s.index)
+    && slotOk(all[s.index], keys[s.index], digest, md, s, members, a));
 }
 /** One member's slot: a derived member under `member` over `md`, an `evm-eoa` member over `digest` itself, no list on either; an `msig`
  *  member by its own list, minimal, no `sig`, each leaf one level down an accepted slot of it (`a.slot`) over `innerDigest(id, md)`, `digest`
@@ -290,7 +298,7 @@ function slotOk(m, key, digest, md, s, members, a) {
     const leaves = ua.msigStructure(key).members;
     const keys = memberKeys(key, members);
     const inner = ua.innerDigest(fromHex(m.id), md);
-    return list.every((x) => a.slot(m.id, x.index) && slotOk(leaves[x.index], keys[x.index], digest, inner, x, members, a));
+    return list.every((x) => a.slot(m.id, x.index) && on(members, m.id, x.index) && slotOk(leaves[x.index], keys[x.index], digest, inner, x, members, a));
   }
   return list.length === 0 && leafOk(m, key, md, s.sig, digest);
 }
@@ -372,7 +380,7 @@ function authOk(id, d, md, slots, members, domain, a) {
   let next = 0;
   for (const s of slots) {
     const m = all[s.index];
-    if (acc >= threshold || s.index < next || !m || !a.slot(id, s.index)) return false;
+    if (acc >= threshold || s.index < next || !m || !a.slot(id, s.index) || !on(members, id, s.index)) return false;
     next = s.index + 1;
     const list = s.members ?? [];
     const ok = m.kind === 0x0120 // `lift`: the inner slots carry no list, so a third level has nothing to sign with

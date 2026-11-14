@@ -364,7 +364,7 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   gen 2 emits PQZ events (`UAPqzPopStored`, `UAPqzKeyAdded`) for UAs registered in gen 1, and `UARegistered` only for its own.
   On a gen 2 in front of a gen 1 that enables `0x0142` (the PQZ attachment lives in the oldest generation with the verifier), a non-holder's PQZ key gets `UAKindDisabled(0x0142)` before `UAPqzHolder`
   (the order of the checks is the order of the steps, [§1.8](#registry)).
-- **Relaying** (owner 2026-10-30, ruling R-node; node built on `ua8` in `64c233d4`, `4d4509e7`, `51b0c027`). The node relays all nine writes ([CTR-UA-36](#CTR-UA-36): `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`,
+- **Relaying** (owner 2026-10-30, ruling R-node; node built on `ua8` in `64c233d4`, `4d4509e7`, `51b0c027`). The node relays every registry write ([CTR-UA-36](#CTR-UA-36): `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`,
   `storePqzPop`, `setPqzKey`, `acceptMembership`; and `updateMsig`, [CTR-UA-44](#CTR-UA-44)) as ordinary `call` jobs (`kind = "call"`, target = the registry, calldata): its call table has a row for
   each of the nine selectors under the guard rule `Rule::UaRegistry` — the target must equal the chain's `[[chains]] ua_registry`
   (node config; unset ⇒ all nine are refused `CALL_TARGET_REFUSED`), be bound to this chain (`chainUid()`) and be neither a
@@ -663,11 +663,15 @@ Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
   member is replaced in two updates: append, accept, disable) → the signatures (`UAUnauthorized`) → a slot appended or re-enabled: native
   or registered under its kind, an `msig` member holding no enabled `msig` (`UAMemberUnknown`) → the registration bound of §1.8 step 4 over
   the enabled slots (`UAKeyData(0x0120)`) → the PQZ holder rule: a PQ-eligible target passes the debit bound, and a PQ-eligible `msig` stays
-  PQ-eligible (`UAPqzHolder`) → the next update fits one transaction: `_membersWorst + MSIG_UPDATE_GAS + count × MSIG_UPDATE_SLOT_GAS ≤ 2^24`
+  PQ-eligible (`UAPqzHolder`) → the next update fits one transaction: `max(_membersWorst + 250,000 per enabled msig slot + 16 ×
+  sig bytes, 64 × sig bytes) + MSIG_UPDATE_GAS + count × MSIG_UPDATE_SLOT_GAS ≤ 2^24`, sig bytes the largest quorum's `MemberSig[]`
   (`UAMsigSlots`). `UAMsigUpdated(ua, version, threshold, count, enabled)` is a convenience; state is complete without it.
 - **Two levels where structures are read (MM-14).** A member's structure can change after it is listed. At a member's level its own `msig`
   slots are not followed: classical weight for PQ eligibility, no signer and no cap in the bound; verification already gives them no list.
   Only a slot an update appends or re-enables reverts for a third level; an outer keeps, updates and may disable a member that grew one.
+  Limit (stated, fail closed): such a slot counts as classical weight in the outer's eligibility, so an inner that gains an `msig` slot
+  of enough weight can withdraw the outer's PQ eligibility, and the outer's PQZ key writes are then refused until the slot is disabled.
+  A disabled self-slot may be appended (row 7 refuses only an enabled one); it can never be enabled.
 - **Storage (MM-6, MM-7).** The current structure is one SSTORE2 blob `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ id ‖ u16 weight) ‖
   u256 enabled ‖ u64 version`, its pointer in the record's `keyPtr` (0 = never updated: the registration bytes, every slot enabled, version
   0). No storage slot is added, the layout pin does not move; the meaning of an `msig`'s `keyPtr` does (`recordOf`); `keyOf` stays empty.
@@ -688,7 +692,10 @@ Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
   two EOAs: 3 slots 551,292, 16 slots 1,310,222, 64 slots 4,245,434, 256 slots 16,000,442 (61,209 a slot, about 55 k of it the blob's state
   gas), so `MSIG_UPDATE_GAS = 400,000`, `MSIG_UPDATE_SLOT_GAS = 62,000`. `requireAuthorized` of a 2-of-3 EOA `msig`, cold frame gas: 44,721
   never updated, 40,160 updated (the blob's read replaces the registration blob's). The once-per-level term of the bound,
-  `MSIG_ACCEPTED_GAS`, 2,500 -> 3,500 (the current structure's pointer and enabled word, +783 on the 2-of-2 hot path).
+  `MSIG_ACCEPTED_GAS`, 2,500 -> 3,500 (the current structure's pointer and enabled word, +783 on the 2-of-2 hot path). At the bound with
+  wide blobs (`test_gas_wideBlobsAtBound`, every verifier burning its 400 k cap): an outer over a 230-slot inner, bound 1,387,000, least
+  frame gas 1,302,166; the outer at 230 slots too, 1,301,434. Row 13 refuses more slots than about 239 at these caps. An update over four
+  inner `msig`s of 250 slots each costs 2,590,626 (`test_gas_updateOverWideInners`): hence the 250,000 per enabled `msig` slot.
 - <a id="msig-update-staging"></a>**Staging** (owner 2026-11-14). EVM first; each other family in its own round. Until then no update exists
   there at all, and **a member disabled on EVM keeps full power on that family**: Soroban (`UaRegistry` reads the stored `Signer(ua)`,
   16-slot `Accepted` bitmap; follow-up `ua-soroban`: `update_msig`, a wider bitmap, a new deployment), NEAR (no registry, `Auth::Msig`

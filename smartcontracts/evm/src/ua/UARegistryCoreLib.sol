@@ -63,6 +63,11 @@ library UARegistryCoreLib {
     /// slots 16,000,442: 61,209 a slot, 367,665 fixed; rounded up to 62,000 and 400,000 (first figures, 600,000 / 60,000 estimated).
     uint256 internal constant MSIG_UPDATE_GAS = 400_000;
     uint256 internal constant MSIG_UPDATE_SLOT_GAS = 62_000;
+    /// Row 13, per enabled `msig` slot of the target (Fable P2-2): the bound reads that member's structure three times (`_worst`,
+    /// `_pqEligible`, `_authBytes`), walking every slot of it. Measured (`test_gas_updateOverWideInners`): an update over four inner
+    /// `msig`s of 250 slots each, 2,590,626 against 1,879,236 without this term, 177,848 an inner; rounded up for 256 slots. A
+    /// gen-1 inner on gen 2 (read through `msigOf` + `msigStateOf`) is not measured.
+    uint256 internal constant MSIG_UPDATE_INNER_GAS = 250_000;
     /// The bound walkers' levels (CTR-UA-44 MM-14): `INNER` a member `msig`'s own structure; `LENIENT` its own `msig` slots sign
     /// nothing and are left out (an update or a key write over a member that changed since), else they revert
     /// `UAMemberUnknown` (registration, and a slot an update appends or re-enables: `UARegistryAuxLib`'s row 10).
@@ -520,13 +525,25 @@ library UARegistryCoreLib {
     /// `updateMsig` rows 11–13 (CTR-UA-44) on the target `t` (blob form) of `ua`, `stored` its structure before: the registration
     /// bound over the enabled slots, a member that grew a level since left out (`UAKeyData(0x0120)`, MM-14); the PQZ holder rule
     /// (Q4: a PQ-eligible target passes the debit bound, else the stored one may not have been PQ-eligible; `UAPqzHolder`); the
-    /// next update fits one transaction (`UAMsigSlots`).
+    /// next update fits one transaction (`UAMsigSlots`): its authorization `w` plus the largest quorum's signature calldata `a` at
+    /// 16 gas a byte, or the EIP-7976 floor of 64 a byte over those signatures when it is larger, plus the measured constants (Fable
+    /// P2-1: the signatures' calldata, as `_msigDebit` counts it; a member's 96 B at the floor, 6,144, is within the 6,129 of regular
+    /// gas measured a slot and the rounding of `MSIG_UPDATE_SLOT_GAS`).
     function msigBound(bytes32 ua, bytes memory t, bytes memory stored) external {
         uint256 w = _membersWorst(t, _nativeCap(), true);
         if (_pqEligible(t, false)) _msigDebit(w, t, ua);
         else if (_pqEligible(stored, false)) revert IUARegistry.UAPqzHolder(ua);
         uint256 n = UAStore.u16(t, 2);
-        if (w + MSIG_UPDATE_GAS + n * MSIG_UPDATE_SLOT_GAS > TX_GAS_CAP) revert IUARegistry.UAMsigSlots(n);
+        uint256 a = _authBytes(t, 192);
+        uint256 en = UAStore.enabledOf(t);
+        for (uint256 i; i < n; ++i) {
+            if (en >> i & 1 != 0 && UAStore.u16(t, 4 + 36 * i) == UAKinds.MSIG) w += MSIG_UPDATE_INNER_GAS;
+        }
+        uint256 regular = w + 16 * a;
+        uint256 floor = 64 * a;
+        if ((regular > floor ? regular : floor) + MSIG_UPDATE_GAS + n * MSIG_UPDATE_SLOT_GAS > TX_GAS_CAP) {
+            revert IUARegistry.UAMsigSlots(n);
+        }
     }
 
     /// `_pqzProof` with the proof bytes logged (`storePqzPop`).
