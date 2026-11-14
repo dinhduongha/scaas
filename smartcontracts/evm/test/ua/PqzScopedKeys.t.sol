@@ -36,10 +36,8 @@ contract MockScopeToken {
         uint256 o = own;
         assembly {
             for { let i := 0 } lt(i, n) { i := add(i, 1) } { mstore(mul(i, 32), 0) }
-            if gt(n, 12) {
-                mstore(mul(11, 32), o) // pqzOwnKey
-                mstore(mul(12, 32), w)
-            }
+            if gt(n, 11) { mstore(mul(11, 32), o) } // pqzOwnKey: a 12-word answer carries it, only pqzOpening is missing
+            if gt(n, 12) { mstore(mul(12, 32), w) }
             return(0, mul(n, 32))
         }
     }

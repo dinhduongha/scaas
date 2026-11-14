@@ -1,0 +1,17 @@
+pqz-three-keys step 9 (spec §14.12): mutants, each must turn its named test red; contracts at 1081bd0d0, forge 1.8.5, capped
+mutant | result | test
+inv-skip-adds | KILLED | test/pqz/invariant/PqzMarkInvariants.t.sol 
+inv-mark-lost | KILLED | test/pqz/invariant/PqzMarkInvariants.t.sol 
+inv-mark-extra | KILLED | test/pqz/invariant/PqzMarkInvariants.t.sol 
+inv-rollseq | KILLED | test/pqz/invariant/PqzMarkInvariants.t.sol 
+inv-entry-mask | KILLED | test/pqz/invariant/PqzMarkInvariants.t.sol 
+p33-second-event | KILLED | test/pqz/PqzThreeKeys.t.sol test_roll_secondMarkNoEvent
+p31-own-word | KILLED | test/ua/PqzScopedKeys.t.sol test_class3_scopeMustOwnItsKey_longAnswerRead
+p32-other-set | KILLED | test/ua/PqzScopedKeys.t.sol test_class3_otherSet_becomesCurrent
+p32-scope0 | KILLED | test/ua/PqzScopedKeys.t.sol test_class3_otherSet_becomesCurrent
+p31-short | KILLED | test/ua/PqzScopedKeys.t.sol test_class3_scopeNotAnswering_refused
+p31-short first SURVIVED (the scope mock's 12-word answer carried no pqzOwnKey, so the own-key check refused it first); the mock now writes word 11 for a 12-word answer: KILLED, PqzScopedKeys 36/36 as the control
+step 4's 33 targeted mutants: all killed (pqz-three-keys step 4)
+clientkeys pqzKeyHandle: window gate, ownTag gate, O_t recompute (step 8) -> each KILLED (pqz-three-keys.test.js)
+ua-rs PqzKeyHandle: with_secret_window gate, with_secret_own tag -> each KILLED (tests/pqz3k.rs)
+invariants: PqzMarkInvariants M1-M5, 32 runs x 40 calls, 0 reverts, with the positive control test_handler_reachesEveryPath
