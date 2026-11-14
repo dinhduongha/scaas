@@ -387,14 +387,16 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     function test_neverUpdated() public {
         bytes32 ua = _eoa3(r);
         (uint64 v, uint256 en, uint256 acc) = r.msigStateOf(ua);
-        (assertEq(v, 0), assertEq(en, 7), assertEq(acc, 7));
+        assertEq(v, 0);
+        assertEq(en, 7);
+        assertEq(acc, 7);
         (IUARegistry.Record memory rec,) = r.recordOf(ua);
         assertEq(rec.keyPtr, address(0));
         for (uint256 i; i < 3; ++i) assertTrue(r.memberAccepted(ua, i));
         assertFalse(r.memberAccepted(ua, 3));
         _authorizes(r, ua, _ids(a, b));
         (v, en, acc) = r.msigStateOf(a);
-        (assertEq(v, 0), assertEq(en, 0), assertEq(acc, 0)); // not an msig
+        assertEq(v + en + acc, 0, "not an msig");
     }
 
     /// Re-enable: a slot that accepted before counts at once.
@@ -793,7 +795,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         assertEq(abi.encode(g2.msigOf(ua)), abi.encode(r.msigOf(ua)));
         (uint64 v, uint256 en, uint256 acc) = g2.msigStateOf(ua);
         (uint64 v1, uint256 en1, uint256 acc1) = r.msigStateOf(ua);
-        (assertEq(v, v1), assertEq(en, en1), assertEq(acc, acc1));
+        assertEq(v, v1);
+        assertEq(en, en1);
+        assertEq(acc, acc1);
         for (uint256 k; k < 5; ++k) assertEq(g2.memberAccepted(ua, k), r.memberAccepted(ua, k));
         _authorizes(g2, ua, _ids(a, d));
         _authRefused(g2, ua, _ids(b, c));
