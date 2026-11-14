@@ -676,9 +676,9 @@ fn list_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
 }
 
 /// CTR-PQZ-41 (NODE-JOB-28): the signed rollover's `skip` marks, strictly ascending, at most `ROLL_MAX_ANY` (the largest `ROLL_MAX`
-/// of any set, n2048-kmax1024's 96; the token checks its own set's, the range and that each marks a credit), refused by name
-/// before any simulation.
-const ROLL_MAX_ANY: usize = 96;
+/// of any set, n2048-kmax1024's 80 since the signed rollover's fit (decision 2026-11-14 on CTR-PQZ-41; was 96); the token checks
+/// its own set's, the range and that each marks a credit), refused by name before any simulation.
+const ROLL_MAX_ANY: usize = 80;
 
 fn skip_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
     let skip: Vec<U256> = pos(fields, "skip").and_then(|i| vals[i].as_array())
@@ -1970,9 +1970,9 @@ mod tests {
         assert_eq!(Op::parse(&base, FEE).unwrap().row.name, "PqzRollOver");
         let with = |skip: Value| { let mut o = base.clone(); o["args"]["skip"] = skip; Op::parse(&o, FEE) };
         let marks = |n: u64| Value::Array((0..n).map(|i| json!((10 + 2 * i).to_string())).collect());
-        assert!(with(marks(96)).is_ok(), "ROLL_MAX_ANY marks pass");
+        assert!(with(marks(80)).is_ok(), "ROLL_MAX_ANY marks pass");
         assert!(with(json!([])).is_ok(), "no mark");
-        for (bad, why) in [(marks(97), "at most 96"), (json!(["7", "5"]), "strictly ascending"), (json!(["5", "5"]), "strictly ascending")] {
+        for (bad, why) in [(marks(81), "at most 80"), (json!(["7", "5"]), "strictly ascending"), (json!(["5", "5"]), "strictly ascending")] {
             let e = with(bad).unwrap_err().to_string();
             assert!(e.starts_with("BAD_PAYLOAD: args.skip") && e.contains(why), "{e}");
         }

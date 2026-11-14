@@ -25,7 +25,7 @@ library PqzSet {
     /// legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)
     uint256 internal constant S_AUD = 2;
     /// entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)
-    uint256 internal constant ROLL_MAX = 96;
+    uint256 internal constant ROLL_MAX = 80;
     /// at least the cheapest built PQZL debit form (burn 1), full relayed regular gas on the costlier relay path, uaExecute, rounded up to 1,000 (set.toml debit_min_gas; the UA registry's PQZ holder bound)
     uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_300_000;
     /// pk / u bytes (k polys x 64 be8)
@@ -77,7 +77,7 @@ library PqzSet {
     /// the build's set identity (T-26, review 3w u5-4; owner 2026-11-13): keccak256 of the generated constant block,
     /// gen_set.py set_digest: every `<type> [internal ]constant <NAME> = <value>;` of this file but SET_DIGEST, in
     /// file order, as `<type> <NAME> = <value>` joined by one newline (PQZ_ACC_WORDS included)
-    bytes32 internal constant SET_DIGEST = 0x3f08a7e820f3df3cfa06ab6abb673baffc8cecd0f56ba0e3646d9d51973248fc;
+    bytes32 internal constant SET_DIGEST = 0x842675a774dbc4c6e306f05125ccf18f5679dcc46960286e175ddf2ccdc40011;
 
     /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f
     /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)

@@ -392,6 +392,10 @@ pending entry of `(ua, version)` read from state:
   80 / 48 / 32 / 16 at the four sets [estimate]; the build measures first and brings the figures to the owner; a
   set-parameter change (a second value such as `roll_max_signed`) stays the owner's (owner 2026-11-13). Gas pins
   move old → new in the commit.
+  **Measured and applied (2026-11-14, controller under the owner's standing go):** one `ROLL_MAX`, sized by the signed
+  form through the ML-DSA precompile (`mldsa65` and a 2-of-2 `msig`, both paths): 80 / 64 / 48 / 32 (was 96 / 80 / 64 / 32).
+  The Solidity ML-DSA path fits no multiple of 16 at three sets, so it is a client rule (the largest `n` that fits, through
+  `mtxExecute` or directly), not a second set value; figures and rule in CTR-PQZ-41.
 
 ## 8. Disclosures per class
 

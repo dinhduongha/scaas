@@ -47,7 +47,9 @@ Nothing here was timed (owner rule: no timing runs).
    yet). The plugin's tests pass at this set: 51 / 51 (`run-tests.sh` with `PQZ_SET=n2816-kmax65536`,
    `pqz-core/nethermind/runs/2026-10-26-t8d2b-test-n2816-kmax65536.txt`).
 2. **Contracts built for this set**: wired to `PqzSet.sol` and tested at this set since plan 5h Task 8d part 2a; in part
-   2b `ROLL_MAX` is pinned at **32** (controller proposal, owner may override): the largest multiple of 16 under
+   2b `ROLL_MAX` is pinned at **32**, unchanged by the three-key round (decision 2026-11-14 on CTR-PQZ-41: the holder's signed
+   rollover, worst case `n` entries + `n` skip marks, `mldsa65` / 2-of-2 `msig` through the precompile, fits 32 on both paths,
+   11,698,477 on `mtxExecute` with the `msig`) (controller proposal, owner may override): the largest multiple of 16 under
    0.75 · 2^24 on both relay paths, the relayed full rollover 11,089,680 gas via `mtxExecute`, 11,248,044 via
    `uaExecute` (1,334,868 under; re-measured on the split bytecode, `runs/2026-10-27-metatx-split-gas-n2816-kmax65536.txt`); 48 would be 12,583,604 / 12,741,980, over the cap on both paths after the split (12,583,604 > 12,582,912)
    (`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2816-kmax65536.txt`; the first pin, 48, measured

@@ -801,7 +801,7 @@ parameters; the verifier fee: owner 2026-11-11, [CTR-PQZ-36](#CTR-PQZ-36), group
 - **Cap on `acc`.** A rollover takes `n′ = min(n, K_MAX − 1 − accUnits)` entries and reverts `CapReached(ua)` when
   `n′ = 0`; a debit re-encrypts the balance fresh and resets `accUnits` to 1, so a refresh (a burn of 0, [§7.5](#75-burn-and-refresh))
   frees a full account, which can always refresh with `p = rolled`. Head-of-line: a real credit behind `x` decoys becomes
-  spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 80` at `n2304-kmax4096`: 10,000 queued decoys take 125 rollovers, run by keepers,
+  spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 64` at `n2304-kmax4096`: 10,000 queued decoys take 157 rollovers, run by keepers,
   the owner or a relayer).
 - **Public amounts never become ciphertexts.** `mtxShield` appends (or merges into) a **TRIVIAL entry** of the receiver's
   queue ([§7.3](#73-shield)); a TRIVIAL entry is the ciphertext `u = 0, v = Δ·digits(amount)`: one `K_MAX` unit, zero noise,
@@ -1203,8 +1203,9 @@ leg pays the underlying (a UA recipient: a SCaaS ledger leg through `transferToU
 <a id="rollover-op"></a>
 
 `mtxRollOver(bytes32 ua, uint256 n)` (shared with Zether, [CTR-ZTH-45](zether.md#CTR-ZTH-45); PQZ and Zether differ only in what `n`
-means): anyone; `1 ≤ n ≤ ROLL_MAX` (the set's `PqzSet.ROLL_MAX`: 96 / 80 / 64 / 32 at `n2048-kmax1024` /
-`n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`) (`RollOverRange`); `AccNotPrepared(ua)` until `mtxPrepareAcc` wrote both halves of the
+means): anyone; `1 ≤ n ≤ ROLL_MAX` (the set's `PqzSet.ROLL_MAX`: 80 / 64 / 48 / 32 at `n2048-kmax1024` /
+`n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536` since the three-key round, sized by the holder's signed rollover,
+[CTR-PQZ-41](#CTR-PQZ-41); 96 / 80 / 64 / 32 before) (`RollOverRange`); `AccNotPrepared(ua)` until `mtxPrepareAcc` wrote both halves of the
 account's `acc` words; `CapReached(ua)` when `accUnits ≥ K_MAX − 1`; `n′ = min(n, K_MAX − 1 − accUnits)`; `rolled + n′ ≤
 pendingCount` (`RollOverRange`, no clamp to what is pending); every rolled entry must be at least `ROLL_AGE = 5` blocks old
 (`RollTooYoung(index)`, TRIVIAL entries too). The entries `[rolled, rolled + n′)` are read **from state** (a credit's `u ‖ v`
@@ -1226,8 +1227,10 @@ binds (3,360 B more calldata, the ML-DSA-65 verification at 68,006 [estimate], t
 159,000 gas more per rollover). `PqzStatePinGasTest.test_gas_rollMax_relayedFullTx` asserts the fit on both paths and logs
 the largest fitting multiple of 16 (the linear fit through a `ROLL_MAX / 2` rollover; a larger value needs a build with a
 larger constant, since the token refuses `n > ROLL_MAX`) and the headroom; it stays red-capable: a build at
-`n2304-kmax4096` with `ROLL_MAX` 112 fails it (`mtxExecute` 13,483,008). The values 96 / 80 / 64 / 32 stand (owner
-2026-11-10). Today (T66b tree, Foundry 1.8.5, Amsterdam; `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-rollmax.txt`):
+`n2304-kmax4096` with `ROLL_MAX` 112 fails it (`mtxExecute` 13,483,008). The values 96 / 80 / 64 / 32 stood (owner
+2026-11-10) until the three-key round: the signed rollover of an opening token is costlier (one UA signature, the
+`entriesHash` reads, up to `ROLL_MAX` skip marks), and the one `ROLL_MAX` of a set is now sized by it (80 / 64 / 48 / 32,
+[CTR-PQZ-41](#CTR-PQZ-41)); the tables below are the public rollover's at the values of their dates. Today (T66b tree, Foundry 1.8.5, Amsterdam; `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-rollmax.txt`):
 
 | Set | `ROLL_MAX` | relayed full tx at `ROLL_MAX`, regular: `mtxExecute`; `uaExecute` | per entry | headroom (`uaExecute`) | largest fitting multiple of 16 |
 |---|---|---|---|---|---|
@@ -1618,7 +1621,8 @@ is rebuilt from the one record: `T = prevBlob's (u, v_f) + Σ pending[p − Δp,
 2026-11-09): `lastDebit` sits in the account slot 3g's `sendCounter` left (inner slot 2), which moves `accHash` / pending /
 `accWords` back by one; `deltaP`'s build check is `K_MAX − 1 ≤ 65,535` (`PqzSet.DELTA_P_MAX`): a first debit's `p` reaches
 `K_MAX − 1` by the units rule. **`ROLL_MAX` is open (owner):** a rollover deletes nothing since 3h, so it is cheaper, and
-`ROLL_MAX` (96 / 80 / 64 / 32 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`) is no longer the
+`ROLL_MAX` (96 / 80 / 64 / 32 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536` then; 80 / 64 / 48 /
+32 since the three-key round, [CTR-PQZ-41](#CTR-PQZ-41)) is no longer the
 largest multiple of 16 under 0.75 · 2^24 for a relayed full transaction (the 2026-10-27 rule would give 112 / 96 / 64 / 48); the
 owner ruled the move and reversed it on 2026-11-09, so the values stay until the owner decides. `test_gas_rollMax_relayedFullTx`
 is the one known red at `n2048-kmax1024`, `n2304-kmax4096` and `n2816-kmax65536`.
@@ -2860,9 +2864,26 @@ transfers move for every class.
   ascending, then `PqzRolledOver` when `n > 0`; an index already marked is accepted and emits nothing (Fable P3-3). Nothing
   periodic: a cold wallet checks, marks and rolls when it next spends. `pqzPendingCt` returns a marked entry's ciphertext
   unchanged (it stays in state); a reader that rebuilds `T` applies `pqzSkipped` (a marked slot adds zero), as `_window` does.
-- `ROLL_MAX`: the code bound stays the set's. The fit rule (a relayed full transaction within `0.75 · 2^24`) is re-measured for
-  the signed form on both paths and the figures go to the owner; a set-parameter change (such as a second value
-  `roll_max_signed`) stays the owner's (owner 2026-11-13). Gas pins move old → new in the commit.
+- **`ROLL_MAX`** (decision 2026-11-14, controller under the owner's standing go; measured, `test/pqz/PqzRollSignedGas.t.sol`):
+  the one code bound of the set (`set.toml` `roll_max`), now sized by the signed rollover: the largest multiple of 16 whose
+  relayed full transaction, worst case `n` entries + `n` skip marks each from its own cold blob, an `mldsa65` holder or a
+  2-of-2 `mldsa65` `msig` with ML-DSA through its precompile (68,006 [estimate]), stays within `0.75 · 2^24 = 12,582,912`
+  regular gas on both relay paths (`mtxExecute`; `uaExecute` with an `mldsa65` fee UA; fee 7). The test asserts the fit at
+  `ROLL_MAX` on all four precompile cases.
+
+  | Set | `ROLL_MAX` (was) | costliest case at `ROLL_MAX` (`msig`, `uaExecute`) | at `ROLL_MAX + 16` | Solidity ML-DSA-65 holder (cached key, 5.81 M), `mtxExecute`: largest `n` |
+  |---|---|---|---|---|
+  | `n2048-kmax1024` | 80 (96) | 11,813,484 | 13,155,770 | ≥ 16 (11,942,925 at 16) |
+  | `n2304-kmax4096` | 64 (80) | 11,929,549 | 13,382,678 | 10 (12,523,377; 11: 12,614,149) |
+  | `n2560-kmax16384` | 48 (64) | 11,936,882 | 13,501,299 | none (12,839,303 at 1) |
+  | `n2816-kmax65536` | 32 (32) | 11,809,257 | over (the public rollover alone, 48) | none |
+
+  **Client rule.** On a chain without the ML-DSA precompile the holder's verification runs in Solidity, and `ROLL_MAX` is only
+  the upper bound: the holder's client signs the largest `n` (with its marks) whose relayed transaction fits `0.75 · 2^24`,
+  and where no `n ≥ 1` fits, marks only (`n = 0` rewrites no `acc` word; not measured). A Solidity-ML-DSA holder with a PQ fee UA cannot
+  relay a signed rollover through `uaExecute` at any set (an `fndsa512` fee UA: 14,035,181 at `n = 1`, `n2304-kmax4096`): it
+  uses `mtxExecute` or a direct call. Such a holder still advances: each debit takes a window of up to `INLINE_MAX` entries.
+  No client code picks `n` today (`ua-rs` `pqz3k`, `clientkeys` build the digest); a wallet that does follows this rule.
 
 **Cost** [estimate, unmeasured; spec §12]: op 1 on an opening token ≈ 44–73 M across the four sets with or without the auditor
 (today + `P(u_f)` + one or two openings at ≈ 2.55 M each); a scoped key record with its stored `R_REG` proof ≈ 71–95 M, once per

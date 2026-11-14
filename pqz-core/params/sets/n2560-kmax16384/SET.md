@@ -21,7 +21,7 @@ derived (see [`../README.md`](../README.md)).
 | owner approval | 2026-10-20 (Q1, the Task 8 set), 2026-10-21 (superseded as default by `n2304-kmax4096`; kept shippable) |
 | stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits; `PqzSet.sol` `PACK_BITS`; built in 8d part 2: stored `ct` 16,100 B (64-bit lanes 20,608), `acc` 504 slots |
 | PQZH | built (plan 5h Task 8c part 2): THE preset's radices and n / k (n 32,756, k 817) with t = 122 (owner 2026-10-23), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; debit bounds 303,412–305,120 B exceed 262,144 → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB)** (decisions CTR-PQZ-10; first for this set only, since 2026-10-25 every PQZH set's), in `pqz-stmt` with `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |
-| `ROLL_MAX` | 64 (`set.toml` `roll_max` → `PqzSet.ROLL_MAX`, plan 5h Task 8d part 2b; below) |
+| `ROLL_MAX` | **48** since the three-key round (decision 2026-11-14 on CTR-PQZ-41; item 5); before it 64 (`set.toml` `roll_max` → `PqzSet.ROLL_MAX`, plan 5h Task 8d part 2b; below) |
 | LaZer codegen headers | byte-identical to the research record's (`pqzl/params/p16k/`, the 12 relations it has) until the R0 review fix, which regenerated reg / dr (`Bprime` 8, R0-C2; `9ac573ad`) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |
 
@@ -50,7 +50,7 @@ Task 9) + 3 per input word (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2560-
    without [measured]. Block gas used = max(Σ regular, Σ state) (EIP-8037), so Ethereum mainnet's 60 M block holds two
    op 1 debits of this set and one op 7 M = 8; a transaction needs a block limit ≥ its state gas (the SCaaS testnet:
    200 M); no rule assumes a larger limit. The real cost (state gas is paid) applies on a customer chain.
-5. **`ROLL_MAX` 64** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas on both relay paths;
+5. **`ROLL_MAX` 48** since the three-key round (decision 2026-11-14 on CTR-PQZ-41): the holder's signed rollover sizes it, worst case `n` entries + `n` skip marks, an `mldsa65` or 2-of-2 `mldsa65` `msig` holder through the ML-DSA precompile, both relay paths: 11,936,882 at 48 on `uaExecute` with the `msig`, 13,501,299 at 64 (`test/pqz/PqzRollSignedGas.t.sol`). Before it, **`ROLL_MAX` 64** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas on both relay paths;
    80 gives 13,800,944 / 13,959,296 via `mtxExecute` / `uaExecute`) [measured, linear fit on the split bytecode, `smartcontracts/evm/runs/2026-10-27-metatx-split-gas-n2560-kmax16384.txt:572,581`;
    the pre-split scan: `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2560-kmax16384.txt`; the Task 7b measurement, with the contracts of then, gave 80]. **Tight:** on `uaExecute` (the binding path) 64 is
    only 6,032 gas under the cap (12,576,880 of 12,582,912; the metatx split moved it from 15,281), so the next contract change may move it to 48: re-run the rollscan
