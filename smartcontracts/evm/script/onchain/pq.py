@@ -212,7 +212,7 @@ def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
     # kind 12: BUNDLE, auditor OPTIONAL, PAYABLE | MINTABLE | BURNABLE
     t12 = create_reg(12, "PQZ regulated", "pqR12", [], 0, 2, 1 | 2 | 4, b"t66b-5b-k12")
     C = E.Client(t12, "pqR12")
-    sd.send(t12, E.cd("mint(address,uint256,bytes32)", ["w", "w", "w"], sd.addr, 5_000 * E.SCALE, E.uid(t12)), "pqR12 mint 5,000 public")
+    sd.send(t12, E.cd("mint(address,uint256,bytes32)", ["w", "w", "w"], sd.addr, 5_000 * E.SCALE, E.chain_word(t12)), "pqR12 mint 5,000 public")
     for x, v in ((alice, 400), (bob, 100)):
         sd.send(t12, E.cd(E.API["shield"], ["w", "w"], x.ua, v), f"pqR12 mtxShield({x.name}, {v})")
         C.set_next(bal=[(x, v)], total=v)
@@ -223,7 +223,7 @@ def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
     E.burn(pq, sd, C, alice, 10, sd.addr, "pqR12 unshield alice 10 → deployer")
     E.burn(pq, sd, C, bob, 0, None, "pqR12 refresh bob")
     sg = lambda who: E.Signed(t12, who, pq, sr, E.SCALE)  # noqa: E731
-    sd.send(t12, E.cd("mintToUA(bytes32,uint256,bytes32)", ["w", "w", "w"], alice.ua, 20 * E.SCALE, E.uid(t12)), "pqR12 mintToUA(alice, 20)")
+    sd.send(t12, E.cd("mintToUA(bytes32,uint256,bytes32)", ["w", "w", "w"], alice.ua, 20 * E.SCALE, E.chain_word(t12)), "pqR12 mintToUA(alice, 20)")
     s = sg(alice)
     s.send("Shield", [alice.ua, 9], "pqR12 signed mtxShield(alice, 9), ML-DSA-65")
     C.set_next(bal=[(alice, 9)], total=9)
@@ -260,9 +260,9 @@ def lists(sd, t, nm):
     masks of 10-13, so `setAllowed` is `MissingRole` (no holder can exist) and `enableFeature(8)` `FeatureInvalidForKind`."""
     d = [E.pad("0x" + "00" * 17 + "de41ed")]
     sd.send(t, E.cd("grantRole(uint8,bytes32,bytes32)", ["w"] * 3, 9, E.pad(sd.addr), E.CTX[1]), f"{nm} grantRole(DENYLIST, deployer)")
-    sd.send(t, E.cd("setDenied(bytes32[],bool,bytes32)", [("a", "w"), "w", "w"], d, 1, E.uid(t)), f"{nm} setDenied([0xde41ed], true)")
+    sd.send(t, E.cd("setDenied(bytes32[],bool,bytes32)", [("a", "w"), "w", "w"], d, 1, E.chain_word(t)), f"{nm} setDenied([0xde41ed], true)")
     sd.send(t, E.cd("enableFeature(uint8,bytes32)", ["w", "w"], 9, E.CTX[1]), f"{nm} enableFeature(DENYLIST), at once")
-    neg(sd.addr, t, E.cd("setAllowed(bytes32[],bool,bytes32)", [("a", "w"), "w", "w"], d, 1, E.uid(t)), sel_hex("MissingRole(uint8,bytes32)"),
+    neg(sd.addr, t, E.cd("setAllowed(bytes32[],bool,bytes32)", [("a", "w"), "w", "w"], d, 1, E.chain_word(t)), sel_hex("MissingRole(uint8,bytes32)"),
         f"{nm} setAllowed (bit 8 outside the mask: no holder)")
     neg(sd.addr, t, E.cd("enableFeature(uint8,bytes32)", ["w", "w"], 8, E.CTX[1]), sel_hex("FeatureInvalidForKind(uint8)"), f"{nm} enableFeature(ALLOWLIST)")
 
@@ -279,7 +279,7 @@ def public(pq, sd, sr, alice, bob, toks, tusd, router):
             sd.send(tok, E.cd("wrapToUA(address,uint256,bytes32)", ["w", "w", "w"], tusd, 1_000, alice.ua),
                     f"{nm} wrapToUA(tUSD 1,000, alice)")
         else:
-            sd.send(tok, E.cd("mintToUA(bytes32,uint256,bytes32)", ["w", "w", "w"], alice.ua, 1_000, E.uid(tok)), f"{nm} mintToUA(alice, 1,000)")
+            sd.send(tok, E.cd("mintToUA(bytes32,uint256,bytes32)", ["w", "w", "w"], alice.ua, 1_000, E.chain_word(tok)), f"{nm} mintToUA(alice, 1,000)")
         ml_classical(pq, sr, tok, nm, alice, bob, burn=k not in (1, 5, 13))
         relay_fee(pq, sr, tok, nm, alice, bob, router)
 
@@ -412,7 +412,7 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         return [aud.ua, E.SCALE, E.MAXS, E.FEE, 0, 2, E.MIN_DECOY, 1, E.pad(sd.addr), fixed, 0, 0, 0, 1, 0]
 
     def life(tok, nm, C, transfers=True):
-        sd.send(tok, E.cd("mint(address,uint256,bytes32)", ["w", "w", "w"], sd.addr, 5_000 * E.SCALE, E.uid(tok)), f"{nm} mint 5,000 public")
+        sd.send(tok, E.cd("mint(address,uint256,bytes32)", ["w", "w", "w"], sd.addr, 5_000 * E.SCALE, E.chain_word(tok)), f"{nm} mint 5,000 public")
         for x, v in ((alice, 300), (bob, 100)):
             sd.send(tok, E.cd(E.API["shield"], ["w", "w"], x.ua, v), f"{nm} mtxShield({x.name}, {v})")
             C.set_next(bal=[(x, v)], total=v)
@@ -462,8 +462,8 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     D.addr["pqOF"] = tf
     CF = E.Client(tf, "pqOF")
     life(tf, "pqOF", CF)
-    sd.send(tf, E.cd("setProofStore(uint8,bytes32)", ["w", "w"], 1, E.uid(tf)), "pqOF setProofStore(LOG), direct")
-    router_op("mtxSetProofStore", T_STORE, [tf, 0, E.uid(tf)], ["address", "uint8", "bytes32"], "pqOF mtxSetProofStore(NONE) through the router")
+    sd.send(tf, E.cd("setProofStore(uint8,bytes32)", ["w", "w"], 1, E.chain_word(tf)), "pqOF setProofStore(LOG), direct")
+    router_op("mtxSetProofStore", T_STORE, [tf, 0, E.chain_word(tf)], ["address", "uint8", "bytes32"], "pqOF mtxSetProofStore(NONE) through the router")
     E.check(u(E.call(tf, E.cd("proofStore()", []))) == 0, "pqOF proofStore() = NONE after the router")
     mm = sel_hex("PqzVerdictMismatch(uint8)")
     neg(sd.addr, tf, calldata_with(lambda t, st, p: E.NO_VERDICT, CF, "missing verdict"), mm, "pqOF op 1 without a verdict")
@@ -684,7 +684,7 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
                                                               unwrap=(tusd, 5 * E.SCALE)))
         vid, ref = E.pad(s3.addr), E.kc("scaas.onchain.3t-freeze")
         sd.send(fw, E.cd("forwardCall(address,bytes)", ["w", "b"], t13, E.cd("freeze(bytes32,bytes32,bytes32,bytes32)", ["w"] * 4,
-                                                                                  vid, ref, 0, E.uid(t13))), "pqVF13 freeze the verifier")
+                                                                                  vid, ref, 0, E.chain_word(t13))), "pqVF13 freeze the verifier")
         op1 = lambda what: E.transfer(pq, sd, C13, alice, bob, E.ZERO32, 7, False, what, send=False)[1]  # noqa: E731
         frozen = sel_hex("FeeRecipientFrozen(bytes32)")
         neg(sd.addr, t13, op1("pqVF13 op 1 with a frozen verifier"), frozen, "pqVF13 op 1 while the verifier is frozen, vf set")
@@ -693,7 +693,7 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
                                                               "pqVF13 op 1 at fee 0: lands, the frozen verifier unchecked"))
         set_fee(t13, "pqVF13", VF, "the fee restored (notice 0)", ["VerifierFeeProposed", "VerifierFeeSet"])
         neg(sd.addr, t13, op1("pqVF13 op 1 after the fee restored"), frozen, "pqVF13 op 1: the restored fee halts it again")
-        sd.send(fw, E.cd("forwardCall(address,bytes)", ["w", "b"], t13, E.cd("unfreeze(bytes32,bytes32,bytes32)", ["w"] * 3, vid, ref, E.uid(t13))),
+        sd.send(fw, E.cd("forwardCall(address,bytes)", ["w", "b"], t13, E.cd("unfreeze(bytes32,bytes32,bytes32)", ["w"] * 3, vid, ref, E.chain_word(t13))),
                 "pqVF13 unfreeze the verifier")
         paid(t13, C13, VF, "op 1 after the unfreeze", lambda: E.transfer(pq, sd, C13, alice, bob, E.ZERO32, 7, False,
                                                                          "pqVF13 op 1 after the unfreeze"))

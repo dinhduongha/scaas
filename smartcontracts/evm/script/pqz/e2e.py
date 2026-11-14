@@ -626,7 +626,7 @@ def call(to, data, frm=None):
     return rpc("eth_call", [tx, "latest"])
 
 
-def uid(t):
+def chain_word(t):
     """The contract's own chain word (`chainUid()`): the last argument of every direct role-holder entry (round 3zb)."""
     return words(call(t, cd("chainUid()", [])))[0]
 
@@ -1599,7 +1599,7 @@ def run(kd, kr, ke):
     # -------------------------------------------------------------- 4. the NORMAL_PQZ life cycle with real proofs
     log("\n## 4. NORMAL_PQZ (pqUSD: BUNDLE, auditor FULL): shield, transfer, rollover by count, hint, burn, refresh, disclosure")
     C1 = Client(t1, "pqUSD")
-    sd.send(t1, cd("mint(address,uint256,bytes32)", ["w", "w", "w"], sd.addr, 5_000 * SCALE, uid(t1)), "pqUSD mint 5,000 public")
+    sd.send(t1, cd("mint(address,uint256,bytes32)", ["w", "w", "w"], sd.addr, 5_000 * SCALE, chain_word(t1)), "pqUSD mint 5,000 public")
     sd.send(t1, cd(API["shield"], ["w", "w"], alice.ua, 1_000), "mtxShield(alice, 1,000): no proof, free, into the pool")
     C1.set_next(bal=[(alice, 1_000)], total=1_000)
     C1.commit()
@@ -1661,7 +1661,7 @@ def run(kd, kr, ke):
     # -------------------------------------------------------------- 5. relayed through the generic merged entry (R47)
     log("\n## 5. relayed transfers through mtxExecute(UAMetaTransaction, UASig): an EOA (its own key, a FIXED outer fee, no "
         "registry call) and an mldsa65 fee UA; the proof binds the envelope's UA binding (D15, R36)")
-    sd.send(t1, cd("mint(address,uint256,bytes32)", ["w", "w", "w"], se.addr, 10 * SCALE, uid(t1)), "pqUSD mint 10 public to the envelope signer")
+    sd.send(t1, cd("mint(address,uint256,bytes32)", ["w", "w", "w"], se.addr, 10 * SCALE, chain_word(t1)), "pqUSD mint 10 public to the envelope signer")
     nonce = int.from_bytes(words(call(t1, cd("mtxNonce(bytes32,uint256)", ["w", "w"], pad(se.addr), 0)))[0], "big")
     m = [pad(se.addr), b"", 0, nonce, int(time.time()) + 3600, 0x20, 0, 5 * SCALE, 0]
     b1 = words(call(t1, cd(f"envelopeBinding({UMTX_S})", [MTX], m)))[0]
@@ -1675,7 +1675,7 @@ def run(kd, kr, ke):
     fee_got = int.from_bytes(words(call(t1, cd("balanceOf(address)", ["w"], sr.addr)))[0], "big")
     check(fee_got == 5 * SCALE, f"relayer received the outer fee {fee_got:,}")
 
-    sd.send(t1, cd("mintToUA(bytes32,uint256,bytes32)", ["w", "w", "w"], feeua.ua, 10 * SCALE, uid(t1)), "pqUSD mintToUA(fee UA, 10)")
+    sd.send(t1, cd("mintToUA(bytes32,uint256,bytes32)", ["w", "w", "w"], feeua.ua, 10 * SCALE, chain_word(t1)), "pqUSD mintToUA(fee UA, 10)")
     un = int.from_bytes(words(call(t1, cd("mtxNonce(bytes32,uint256)", ["w", "w"], feeua.ua, 0)))[0], "big")
     m = [feeua.ua, b"", 0, un, int(time.time()) + 3600, 0x20, 0, 2 * SCALE, 0]
     b3 = words(call(t1, cd(f"envelopeBinding({UMTX_S})", [MTX], m)))[0]
@@ -1696,8 +1696,8 @@ def run(kd, kr, ke):
     # -------------------------------------------------------------- 5b. the named signed entries (TS-D14)
     log("\n## 5b. named relayed entries on pqUSD (the merged mtx<entry>, R1): the entry's own UA struct, an EOA's UASig, ML-DSA-65 and msig UASigs, and pqzAuth")
     for ua_, what in ((feeua, "fee UA"), (erin, "erin")):
-        sd.send(t1, cd("mintToUA(bytes32,uint256,bytes32)", ["w", "w", "w"], ua_.ua, 20 * SCALE, uid(t1)), f"pqUSD mintToUA({what}, 20)")
-    sd.send(t1, cd("mint(address,uint256,bytes32)", ["w", "w", "w"], se.addr, 50 * SCALE, uid(t1)), "pqUSD mint 50 public to the envelope signer")  # 5 left from section 5: 30 shielded, about 8 outer fees
+        sd.send(t1, cd("mintToUA(bytes32,uint256,bytes32)", ["w", "w", "w"], ua_.ua, 20 * SCALE, chain_word(t1)), f"pqUSD mintToUA({what}, 20)")
+    sd.send(t1, cd("mint(address,uint256,bytes32)", ["w", "w", "w"], se.addr, 50 * SCALE, chain_word(t1)), "pqUSD mint 50 public to the envelope signer")  # 5 left from section 5: 30 shielded, about 8 outer fees
     se0, fee0 = (int.from_bytes(words(call(t1, c))[0], "big") for c in (cd("balanceOf(address)", ["w"], se.addr), cd("balanceOfUA(bytes32)", ["w"], feeua.ua)))
     ad, ud, md = (lambda who=who: Signed(t1, who, pq, sr, SCALE) for who in (se, feeua, erin))
 
@@ -2254,7 +2254,7 @@ def proof_path(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     alice, bob, carol = U["alice"], U["bob"], U["carol"]
     t3 = create(4, "PQZ proof path", "pqPP", [], 0, 2, 1 | 2 | 4 | (1 << 24), salt=b"pq3", issuer=sd.addr)  # OPTIONAL auditor, bit 24
     C = Client(t3, "pqPP")
-    sd.send(t3, cd("mint(address,uint256,bytes32)", ["w", "w", "w"], sd.addr, 10_000 * SCALE, uid(t3)), "pqPP mint 10,000 public")
+    sd.send(t3, cd("mint(address,uint256,bytes32)", ["w", "w", "w"], sd.addr, 10_000 * SCALE, chain_word(t3)), "pqPP mint 10,000 public")
     for u, v in ((alice, 600), (bob, 200), (carol, 100)):
         sd.send(t3, cd(API["shield"], ["w", "w"], u.ua, v), f"pqPP mtxShield({u.name}, {v})")
         C.set_next(bal=[(u, v)], total=v)
@@ -2286,7 +2286,7 @@ def proof_path(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     rollover(sd, C, alice, 2, "two of alice's three entries")
     carol1 = rotate(pq, sd, reg, C, carol, sk, "pqz-carol-v1")  # a receiver, a leg, then a sender (the migration)
     rotate(pq, sd, reg, C, aud, sk, "pqz-aud-v1")  # the auditor: every later auditor copy at version 1
-    sd.send(t3, cd("setProofStore(uint8,bytes32)", ["w", "w"], 1, uid(t3)), "pqPP setProofStore(LOG): the deployer holds bit 24")
+    sd.send(t3, cd("setProofStore(uint8,bytes32)", ["w", "w"], 1, chain_word(t3)), "pqPP setProofStore(LOG): the deployer holds bit 24")
     check(u_(words(call(t3, cd("proofStore()", [])))[0]) == 1, "pqPP proofStore() = LOG")
     tag("d3")
     st = C.state(alice)
@@ -2303,7 +2303,7 @@ def proof_path(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     tag("d6")
     rc, ref, _, _ = transfer(pq, sd, C, alice, carol1, ZERO32, 7, True, "LOG: op 1 alice→carol/v1 7, auditor/v1 on")
     note("op1", alice, rc, "d6 op 1 to a rotated receiver, rotated auditor, LOG", ref)
-    sd.send(t3, cd("setProofStore(uint8,bytes32)", ["w", "w"], 0, uid(t3)), "pqPP setProofStore(NONE)")
+    sd.send(t3, cd("setProofStore(uint8,bytes32)", ["w", "w"], 0, chain_word(t3)), "pqPP setProofStore(NONE)")
     tag("d7")
     rc, ref, _, _ = transfer(pq, sd, C, carol, carol1, ZERO32, 30, False, "NONE: the migration, op 1 from (carol, 0) to carol/v1")
     note("op1", carol, rc, "d7 migration of a rotated sender, NONE", ref)
