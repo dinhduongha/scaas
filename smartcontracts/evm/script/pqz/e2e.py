@@ -341,6 +341,9 @@ def struct(names, vals):
     d = dict(zip(names, vals))
     if "salt" in d:
         d["salt"] = d["salt"][:16]
+    for k in ("openingTo", "openingAuditor"):  # the three-key model: a PqzOpening is a struct of its own, by name
+        if k in d and not isinstance(d[k], dict):
+            d[k] = dict(zip(("mlkemCt", "x25519Eph", "sealedSeed"), d[k]))
     if "legs" in d:
         d["legs"] = [dict(zip(("ua", "v", "vAuditor"), x)) for x in d["legs"]]
     return d

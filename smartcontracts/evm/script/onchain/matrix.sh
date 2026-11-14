@@ -66,7 +66,7 @@ mkdir -p "$OUTD"
 # PqzTransferArgs selectors), never an earlier list
 [ -f "$OUTD/coverage.json" ] || cp runs/2026-11-14-pqz-three-keys-7c/coverage.json "$OUTD/coverage.json"
 LOG=$OUTD/matrix-$tgt.log
-GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers pqchat rescue pqzkeys views wraplimits}
+GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers pqchat rescue pqzkeys pqzwallet views wraplimits}
 T=$(mktemp -d)
 A= CP= P= STAGE=setup
 CS=$(cd ../../pqz-core/nethermind/chain && pwd)
@@ -271,6 +271,12 @@ if [ -n "$SCOPE" ]; then
       step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqzKeys.s.sol --out out/onchain-pqzkeys \
         --cache-path cache/onchain-pqzkeys || fail "forge build PqzKeys.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
+    pqzwallet)  # the wallet tool (ua-rs's key handle over pqz-ffi) and the script
+      step "/$g" "" "" ../../scripts/capped sh -c "cd script/pqz/wallet && cargo build --release -j 2 --offline" \
+        || fail "cargo build script/pqz/wallet"
+      step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqzWallet.s.sol --out out/onchain-pqzkeys \
+        --cache-path cache/onchain-pqzkeys || fail "forge build PqzWallet.s.sol"
+      say "/$g" "compiled (${SECS}s)" ;;
     pqchat)
       step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqChat.s.sol --out out/onchain-pqchat \
         --cache-path cache/onchain-pqchat || fail "forge build PqChat.s.sol"
@@ -334,6 +340,13 @@ for g in $GROUPS; do
       res="not run" why="local only: the run mines the blocks its rollovers wait for"
     else
       step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" sh script/onchain/pqzkeys.sh || r=1
+    fi ;;
+  # the wallet-side rows of the three-key model (after pqzkeys: its factory and holders), two forge runs, local only
+  pqzwallet)
+    if [ "$tgt" != local ]; then
+      res="not run" why="local only: the run mines the blocks its rollovers wait for"
+    else
+      step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" PQZW=1 sh script/onchain/pqzkeys.sh || r=1
     fi ;;
   # last: it moves the chain's clock by two days (local only; its own outputs, wraplimits.sh)
   wraplimits)
