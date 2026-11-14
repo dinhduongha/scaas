@@ -12,7 +12,8 @@
  * production build.
  *   z21diff [nseeds = 1] [jmax = 31] [mask = 63]  JSON lines (mask: 1 R_REG, 2 R_TX, 4 R_BURN, 8 R_DS, 16 R_DR,
  *                                             32 R_TX0, 64 << t the R_TXM shape TXD[t] of pqz_sv_diff.c: 64 (1, on),
- *                                             128 (2, on), 256 (4, on), 512 (8, on), 1024 .. 8192 the same off);
+ *                                             128 (2, on), 256 (4, on), 512 (8, on), 1024 .. 8192 the same off;
+ *                                             then R_TXS, R_TXS0 at TXS_REL, TXS_REL + 1: 16384, 32768);
  *                                             exit 0 = no disagreement, no expectation mismatch, and both verdicts
  *                                             seen for every relation; PQZ_ARENA_MB as pqz_sv_diff
  */
@@ -34,6 +35,8 @@ extern int64_t pqz_poc_k, pqz_poc_z21sq, pqz_poc_z2sq;
 #include "pqz_reg_params.h"
 #include "pqz_tx0_params.h"
 #include "pqz_tx_params.h"
+#include "pqz_txs0_params.h"
+#include "pqz_txs_params.h"
 #include "pqz_txm20_params.h"
 #include "pqz_txm2_params.h"
 #include "pqz_txm40_params.h"
@@ -44,14 +47,17 @@ extern int64_t pqz_poc_k, pqz_poc_z21sq, pqz_poc_z2sq;
 #include "pqz_txm160_params.h"
 #include "pqz_txm16_params.h"
 #endif
-static const int_struct *const BSQL[NREL] = { pqz_reg_Bsq,  pqz_tx_Bsq,   pqz_burn_Bsq,  pqz_ds_Bsq,
+static const int_struct *const BSQL[] = { pqz_reg_Bsq,  pqz_tx_Bsq,   pqz_burn_Bsq,  pqz_ds_Bsq,
                                           pqz_dr_Bsq,   pqz_tx0_Bsq,  pqz_tx_Bsq,    pqz_txm2_Bsq,
                                           pqz_txm4_Bsq, pqz_txm8_Bsq, pqz_tx0_Bsq,   pqz_txm20_Bsq,
                                           pqz_txm40_Bsq, pqz_txm80_Bsq,
 #ifdef PQZ_TXM_OVERSIZE
                                           pqz_txm16_Bsq, pqz_txm160_Bsq,
 #endif
+                                          pqz_txs_Bsq,  pqz_txs0_Bsq, /* TXS_REL: R_TXS, R_TXS0 */
 };
+/* one Bsq per relation of pqz_sv_diff.c (a missing entry was a NULL read: the gate's SIGSEGV after R_TXS / R_TXS0) */
+_Static_assert (sizeof BSQL / sizeof BSQL[0] == NREL, "z21diff: one Bsq per relation");
 static int64_t BSQ[NREL];
 
 int
@@ -81,6 +87,9 @@ main (int argc, char **argv)
   for (int t = 0; t < NTXD; t++)
     if (mask >> (6 + t) & 1)
       make_txm (t);
+  for (int a = 1; a >= 0; a--) /* R_TXS, R_TXS0: make_tx's transfer under PQZL_SPLIT_ID */
+    if (mask >> (TXS_REL + 1 - a) & 1 && !make_txs (a))
+      return 2;
   for (int rel = 0; rel < NREL; rel++)
     {
       int64_t last = 0;
