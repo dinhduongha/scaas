@@ -266,6 +266,17 @@ TestCase {
         }
     }
 
+    function test_msigUpdateRows() {
+        const rows = vectors.load("portable.json").msigUpdates
+        compare(rows.length, 4)
+        for (const r of rows) {
+            const o = JSON.parse(UaKinds.msigUpdate(JSON.stringify({ ua: r.ua, chainUid: r.chainUid, registry: r.registry, version: r.version,
+                threshold: r.threshold, members: r.members, enabled: r.enabled, validUntilBlock: r.validUntilBlock, sigs: r.args.sigs })))
+            compare([o.digest, o.message, o.memberDigest], [r.digest, r.message, r.memberDigest], r.name)
+            compare(o.args, r.args, r.name)
+        }
+    }
+
     function test_portablePurposes() {
         const pp = vectors.load("portable.json")
         verify(UaKinds.isPortablePurpose(pp.tags.PURPOSE_POP_V2.hash) && UaKinds.isPortablePurpose(pp.tags.PURPOSE_KEM.hash)

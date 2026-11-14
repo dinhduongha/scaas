@@ -934,6 +934,14 @@ pub extern "C" fn scaas_ua_set_pqz_key_args(input: *const c_char, out: *mut c_ch
     json_call(ua::json::set_pqz_key_args_json, input, out, out_len)
 }
 
+/// CTR-UA-44 `updateMsig`, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled, validUntilBlock, sigs}` (`enabled` a
+/// decimal string or number, `sigs` the stored structure's member signatures). Out: `{digest, message, memberDigest, args}`: what a quorum of
+/// the stored structure signs on that one registry, and the named arguments.
+#[no_mangle]
+pub extern "C" fn scaas_ua_msig_update(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::msig_update_json, input, out, out_len)
+}
+
 /// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
 /// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
 #[no_mangle]

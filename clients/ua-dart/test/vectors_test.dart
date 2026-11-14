@@ -326,6 +326,21 @@ void main() {
     }
   });
 
+  test('msig update rows (CTR-UA-44)', () {
+    final rows = (p['msigUpdates'] as List).cast<Map>();
+    expect(rows.length, 4);
+    for (final r in rows) {
+      final members = (r['members'] as List).cast<Map>()
+          .map((m) => (kind: m['kind'] as int, id: _b(m['id']), weight: m['weight'] as int)).toList();
+      final d = msigUpdateDigest(_b(r['ua']), _b(r['chainUid']), _b(r['registry']), r['version'] as int, r['threshold'] as int, members,
+          BigInt.parse(r['enabled'] as String), r['validUntilBlock'] as int);
+      expect(_hx(d), r['digest']);
+      final m = uaMessage(0x0120, purposeTag('msig-update'), d);
+      expect(_hx(m), r['message']);
+      expect(_hx(memberDigest(_b(r['ua']), m)), r['memberDigest']);
+    }
+  });
+
   test('portable typed', () {
     final ty = p['typed'] as Map, dom = ty['domain'] as Map, types = ty['types'] as Map;
     const ds = '0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1';
@@ -343,6 +358,8 @@ void main() {
       'UAPqzKeyVersion': '0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158',
       'UAPqzKeyVersionRecord': '0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5',
       'UAMembership': '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4',
+      'UAMsigUpdate': '0x4f444098cb5d1c5e604d10d13c9c803ac8429ef9938342ded6997343b9c48ac6',
+      'UAMsigMember': '0x49ee2633d577df4283fdcf2546b6c8b72f1e3cddb2449cefdfc6eed31e26a05a',
     };
     expect([types.length, portableTypes.length], [pinned.length, pinned.length]);
     pinned.forEach((name, th) {

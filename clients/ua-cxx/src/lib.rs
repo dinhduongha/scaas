@@ -175,6 +175,7 @@ mod ffi {
         fn registration_args(input: &str) -> Result<String>;
         fn set_kem_key_args(input: &str) -> Result<String>;
         fn set_pqz_key_args(input: &str) -> Result<String>;
+        fn msig_update(input: &str) -> Result<String>;
         fn pay_digest(input: &str) -> Result<String>;
         fn meta_pay_id(input: &str) -> Result<String>;
     }
@@ -411,6 +412,9 @@ fn set_kem_key_args(input: &str) -> R<String> {
 }
 fn set_pqz_key_args(input: &str) -> R<String> {
     guard(|| Ok(ua::json::set_pqz_key_args_json(input)?))
+}
+fn msig_update(input: &str) -> R<String> {
+    guard(|| Ok(ua::json::msig_update_json(input)?))
 }
 fn pay_digest(input: &str) -> R<String> {
     guard(|| Ok(ua::json::pay_digest_json(input)?))

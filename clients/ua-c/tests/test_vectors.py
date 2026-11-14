@@ -88,7 +88,7 @@ for name, res, args in [
     ('replayed_member_sig', st, [u8, sz, u16, u8, sz, P, P]),
     ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
     ('ua_auth_digest', st, [u32, u64, u8, u8, u8, u8, u8, P]), ('member_digest', st, [u8, u8, P]),
-    ('canonical_id', st, [u8, P, P]), ('id_display', st, [u8, u16, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]), ('pay_digest', st, [u8, P, P]), ('meta_pay_id', st, [u8, P, P]),
+    ('canonical_id', st, [u8, P, P]), ('id_display', st, [u8, u16, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]), ('msig_update', st, [u8, P, P]), ('pay_digest', st, [u8, P, P]), ('meta_pay_id', st, [u8, P, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -255,7 +255,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(opt32(L.group_tag, g)), r['GROUP'])
         self.assertIsNone(opt32(L.group_tag, b'nope'))
         self.assertIsNone(opt_text(L.group_tag_string, b'nope'))
-        self.assertEqual(len(K['purposes']), 15)  # 14 purposes, `pop` has v1 and v2
+        self.assertEqual(len(K['purposes']), 16)  # 15 purposes, `pop` has v1 and v2
         for r in K['purposes']:
             self.assertEqual(hx(out32(L.purpose_tag_v, r['purpose'].encode(), r['version'])), r['purposeTag'], r['purpose'])
             if r['version'] == 1:
@@ -713,6 +713,16 @@ class Vectors(unittest.TestCase):
             m = out32(L.ua_message, 0x0120, out32(L.purpose_tag, b'membership'), d)
             self.assertEqual(hx(m), r['message'], r['name'])
             self.assertEqual(hx(out32(L.member_digest, u, m)), r['memberDigest'], r['name'])
+
+    def test_msig_update_rows(self):
+        """CTR-UA-44: every updateMsig row: digest, message, memberDigest and the named arguments."""
+        self.assertEqual(len(PV['msigUpdates']), 4)
+        for r in PV['msigUpdates']:
+            i = {k: r[k] for k in ('ua', 'chainUid', 'registry', 'version', 'threshold', 'members', 'enabled', 'validUntilBlock')}
+            i['sigs'] = r['args']['sigs']
+            o = json.loads(text(L.msig_update, json.dumps(i).encode()))
+            self.assertEqual((o['digest'], o['message'], o['memberDigest'], o['args']), (r['digest'], r['message'], r['memberDigest'], r['args']),
+                             r['name'])
 
     def test_portable_purposes(self):
         def portable(tag):

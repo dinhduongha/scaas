@@ -200,6 +200,8 @@ R_REG proof          = over                         uaMessage(0x0142, PURPOSE_PO
 | `UAPqzKey` | `UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)` | `0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00` |
 | `UAPqzKeyRecord` | `UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)` | `0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567` |
 | `UAMembership` | `UAMembership(bytes32 ua,bytes32 member)` | `0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4` |
+| `UAMsigUpdate` | `UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)` | `0x4f444098cb5d1c5e604d10d13c9c803ac8429ef9938342ded6997343b9c48ac6` |
+| `UAMsigMember` | `UAMsigMember(uint16 kind,bytes32 id,uint16 weight)` | `0x49ee2633d577df4283fdcf2546b6c8b72f1e3cddb2449cefdfc6eed31e26a05a` |
 
 | Record | Signed or proven message | Who |
 |---|---|---|
@@ -209,6 +211,7 @@ R_REG proof          = over                         uaMessage(0x0142, PURPOSE_PO
 | `setPqzKey` | `uaMessage(kind, PURPOSE_PQZ_KEY, typed(UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}))` | PQZ holders ([CTR-UA-16](#CTR-UA-16)) |
 | `R_REG` of a key from `setPqzKey` | `uaMessage(0x0142, PURPOSE_PQZ_KEY, typed(UAPqzKey{ua, pqzKeyHash}))` | pqz prover |
 | `acceptMembership` ([CTR-UA-37](#CTR-UA-37)) | a native member `typed(UAMembership{ua, member})`; a derived member `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, typed(UAMembership{ua, member})))` under `member` | each `msig` member |
+| `updateMsig` ([CTR-UA-44](#CTR-UA-44)) | a native member `typed(UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock})`; a derived member `memberDigest(ua, uaMessage(MSIG, PURPOSE_MSIG_UPDATE, ·))` under `member` | a threshold of the stored structure |
 | Zether PoP (`0x0141`) | Schnorr over `uaMessage(0x0141, PURPOSE_POP_V2, typed(UARegistration{UAPortableRecord{ua, 0x0141, 0, UAKemRecord{ua, 0, 0, 0}}, 0}))` | zether-prover |
 
 `PURPOSE_POP_V2 = keccak256("scaas.ua.purpose.pop.v2")` (the versioned tag `scaas.ua.purpose.pop.v2`; the v1 tag and the
@@ -362,7 +365,7 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   On a gen 2 in front of a gen 1 that enables `0x0142` (the PQZ attachment lives in the oldest generation with the verifier), a non-holder's PQZ key gets `UAKindDisabled(0x0142)` before `UAPqzHolder`
   (the order of the checks is the order of the steps, [§1.8](#registry)).
 - **Relaying** (owner 2026-10-30, ruling R-node; node built on `ua8` in `64c233d4`, `4d4509e7`, `51b0c027`). The node relays all nine writes ([CTR-UA-36](#CTR-UA-36): `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`,
-  `storePqzPop`, `setPqzKey`, `acceptMembership`) as ordinary `call` jobs (`kind = "call"`, target = the registry, calldata): its call table has a row for
+  `storePqzPop`, `setPqzKey`, `acceptMembership`; and `updateMsig`, [CTR-UA-44](#CTR-UA-44)) as ordinary `call` jobs (`kind = "call"`, target = the registry, calldata): its call table has a row for
   each of the nine selectors under the guard rule `Rule::UaRegistry` — the target must equal the chain's `[[chains]] ua_registry`
   (node config; unset ⇒ all nine are refused `CALL_TARGET_REFUSED`), be bound to this chain (`chainUid()`) and be neither a
   registered token nor the token factory ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)). The gateway's `~gateway` sponsor policy is
@@ -532,6 +535,7 @@ arguments (`IUARegistry`, [§1.8](#registry); client builders [CLI-SGN-41](../cl
 | `setPqzKey` | `0x0052c1b5` | `(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, UASig sig)` |
 | `storePqzPop` | `0x7fac161a` | `(bytes32 ua, bytes pqzPop)` |
 | `acceptMembership` | `0x2c1ac986` | `(bytes32 ua, MemberSig memberSig)`: one slot of an `msig`, [CTR-UA-37](#CTR-UA-37) |
+| `updateMsig` | `0x533f2d73` | `(bytes32 ua, uint64 version, MsigStructure structure, uint256 enabled, uint64 validUntilBlock, MemberSig[] sigs, bytes32 chainUid_)`: an `msig`'s members on this registry, [CTR-UA-44](#CTR-UA-44) |
 
 - **Typed keys.** `webauthn-p256` (`0x0100`) and the MuSig2 / FROST kinds (`0x0110`–`0x0113`) register through their typed entry or through
   `register` with the packed key data (owner 2026-10-31): both forms give the same id and run the same `validateKeyData`, and the typed entries are the recommended client
@@ -594,7 +598,8 @@ explorers show listed and accepted apart.
 - **Scope** (owner 2026-11-02). Built on EVM (`UARegistry`) and on Soroban ([NET-SOR-28](../networks/soroban.md#NET-SOR-28)). NEAR takes the rule in its own UA round: it has
   no registry, and its `msig` counts member weight with no acceptance today (`near/common/src/ua.rs`). Algorand takes the rule in its own UA round: it has no
   registry either, and its `msig` counts member weight with no acceptance today (`algorand/contracts/account.py`).
-- **No decline, no leave.** The UA id derives from the structure, so a member cannot be removed.
+- **No decline, no leave.** The UA id derives from the first structure, so a member cannot leave by itself; a quorum disables its slot
+  ([CTR-UA-44](#CTR-UA-44)).
 - **No revoke.** An acceptance cannot be withdrawn: a revoke could drop a held `msig` below its threshold and lock what it holds. The owner
   may add it later.
 - **Generations.** The bits live with the record. A gen-1 record on a gen 2 is settled as `setKemKey` does (UA8-D11): `acceptMembership` there
@@ -627,6 +632,64 @@ explorers show listed and accepted apart.
   **Hashes, not bytes** (owner 2026-11-03) is EVM's too, for now: Soroban keeps the acceptance's bytes in `AcceptSig` (`membership_sig_of`) and an `msig`'s `pop` in its
   record (`registration_of`) until a later round, for every family, after governance, moves an `msig`'s `pop` and acceptances to hashes in state and the bytes in an
   event; a single key keeps its `pop`, on every family. Until then a copy from Soroban to EVM reads the bytes from Soroban's state, a copy from EVM reads them from EVM's events.
+
+<a id="CTR-UA-44"></a>**CTR-UA-44** — **An `msig`'s members change by `updateMsig`, one registry at a time; the id stays the first structure's**
+(owner 2026-11-14, TODO 3ze; [decisions.md](../decisions.md); the spec and its Fable review are kept outside the repository). UNAUDITED. **EVM: BUILT.** Soroban, NEAR and
+Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
+
+- **Identity (MM-1).** The id is `keccak256(TAG(msig) ‖ keyData)` of the structure given to `registerMsig`, on every chain, for ever.
+  `registrationOf(ua).keyData`, `popOf`, `popSlotsOf` keep answering for that first structure; copies to a new registry start from it.
+- **Slots (MM-2, MM-3).** A structure is a list of slots; slot `i`'s `(kind, id)` never changes and is never removed. Old members are
+  **disabled** (a bitmap, bit `i` = slot `i`), new members are **appended** slots that accept by `acceptMembership`
+  ([CTR-UA-37](#CTR-UA-37): per slot, permanent; a disabled slot may accept, a re-enabled slot that accepted counts at once). One `id` has one
+  slot whatever its kind. `weight`, the enabled bit and `threshold` may change. At most 256 slots for the life of the UA on that registry,
+  at most 16 enabled. A slot counts at verify iff it is **enabled and accepted**; a disabled slot's signature fails, a good one included.
+- **The update (MM-4, MM-13).** `updateMsig(ua, version, structure, enabled, validUntilBlock, sigs, chainUid_)`, selector `0x533f2d73`: anyone
+  submits, no fee field (a `call` job at fee 0). `sigs` is a minimal threshold of the **stored** structure's enabled and accepted slots over
+  `typed(UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock})` (`members` an EIP-712 array of
+  `UAMsigMember{kind, id, weight}`; typehashes `0x4f444098…8ac6` and `0x49ee2633…a05a`; portable domain `DS_P`), signed as
+  `requirePortable`'s `msig` arm signs: a native member the typed digest itself (or ERC-1271 over it), a derived member `memberDigest`
+  under `member` with `PURPOSE_MSIG_UPDATE = keccak256("scaas.ua.purpose.msig-update.v1")`, an `msig` member by its own list
+  ([CTR-UA-38](#CTR-UA-38)). It is not a `requirePortable` purpose. `registry` is the registry's own address: a signed update serves exactly
+  one registry, gen 1 and gen 2 of one chain word included. `version` must be the stored version + 1 (0 for a record never updated; owner
+  2026-11-14: per chain, so the next version is version + 1, no jump; verbatim in decisions.md), `block.number ≤ validUntilBlock`.
+  Nothing reads an event; the node has no role beyond relaying the call.
+- **Check order and errors.** `chainUid_` (`ChainUidMismatch(expected, got)`) → `validUntilBlock` (`UAMsigExpired`) → an `msig` held by this
+  registry (`UAUnauthorized`; a gen-1 record on gen 2 too) → `version == stored + 1` (`UAMsigVersion(ua, stored)`) → at least the stored
+  slots, at most 256, no enabled bit past them, at most 16 enabled (`UAMsigSlots`) → stored slots unchanged (`UAMsigSlotChanged(index)`) →
+  weights ≠ 0, an appended slot a member kind with a native kind iff a native-space id, one slot per id, no enabled self-slot
+  (`UAKeyData(0x0120)`) → `threshold ≠ 0` and at most the weight of the target's enabled **and accepted** slots (`UAMsigThreshold`; a
+  member is replaced in two updates: append, accept, disable) → the signatures (`UAUnauthorized`) → a slot appended or re-enabled: native
+  or registered under its kind, an `msig` member holding no enabled `msig` (`UAMemberUnknown`) → the registration bound of §1.8 step 4 over
+  the enabled slots (`UAKeyData(0x0120)`) → the PQZ holder rule: a PQ-eligible target passes the debit bound, and a PQ-eligible `msig` stays
+  PQ-eligible (`UAPqzHolder`) → the next update fits one transaction: `_membersWorst + MSIG_UPDATE_GAS + count × MSIG_UPDATE_SLOT_GAS ≤ 2^24`
+  (`UAMsigSlots`). `UAMsigUpdated(ua, version, threshold, count, enabled)` is a convenience; state is complete without it.
+- **Two levels where structures are read (MM-14).** A member's structure can change after it is listed. At a member's level its own `msig`
+  slots are not followed: classical weight for PQ eligibility, no signer and no cap in the bound; verification already gives them no list.
+  Only a slot an update appends or re-enables reverts for a third level; an outer keeps, updates and may disable a member that grew one.
+- **Storage (MM-6, MM-7).** The current structure is one SSTORE2 blob `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ id ‖ u16 weight) ‖
+  u256 enabled ‖ u64 version`, its pointer in the record's `keyPtr` (0 = never updated: the registration bytes, every slot enabled, version
+  0). No storage slot is added, the layout pin does not move; the meaning of an `msig`'s `keyPtr` does (`recordOf`); `keyOf` stays empty.
+  Old blobs are never freed. A never-updated `msig` reads nothing more on the hot path.
+- **Views.** `msigOf` the current structure, every slot; `memberAccepted(ua, i)` **enabled and accepted** (a change of meaning: a tool that
+  copies acceptances to another registry reads `msigStateOf(ua).accepted` and `memberSigHashOf`); `msigStateOf(ua) → (version, enabled,
+  accepted)` (`0xdaee052e`). Gen 2 forwards each for a gen-1 record, and its constructor probes gen 1 for `msigStateOf` (`UAConfig(0)`).
+- **No forced rotation (MM-5).** An update moves no PQZ key, scoped key or KEM record; a disabled member still knows the `msig`'s PQZ secret
+  keys and can read, never spend. Wallets warn while a slot is disabled and the `msig` holds a PQZ key, and offer the existing rotation.
+  An `msig` that is a token's PQZ verifier changes its shape with any update: its tokens refuse `PqzVerifierChanged` until re-assigned
+  (the frozen-shape rule, [pq-zero-knowledge.md](pq-zero-knowledge.md)); ua-rs builds such an update only when told so.
+- **One update per registry** (owner 2026-11-14: no events, they may be deleted, and no node role; apply per chain, by `chainUid`;
+  verbatim in decisions.md). On a registry with no update the first structure stays in power, and anyone can register the `msig` there from public bytes.
+  Client rule: at every change sign the same target for each `(chainUid, registry)` that holds or may hold the `msig`, keep the signed
+  updates and the key records in one ordered log, and bring a new registry current by replaying them in order. A stored signature of an
+  earlier structure was checked when it was written and is not re-judged later.
+- **Gas.** Measured in `test/ua/UARegistryMsigUpdate.t.sol` (`test_gas_updateRowModel`, `test_gas_requireAuthorized`, `--isolate`).
+- <a id="msig-update-staging"></a>**Staging** (owner 2026-11-14). EVM first; each other family in its own round. Until then no update exists
+  there at all, and **a member disabled on EVM keeps full power on that family**: Soroban (`UaRegistry` reads the stored `Signer(ua)`,
+  16-slot `Accepted` bitmap; follow-up `ua-soroban`: `update_msig`, a wider bitmap, a new deployment), NEAR (no registry, `Auth::Msig`
+  carries the key data, compared by id; needs a stored structure first, follow-up `ua-near`), Algorand (no registry, `ua_of(KIND_MSIG, kd)`
+  from the caller's auth; follow-up `ua-algorand`, separate from NEAR). Funds there are moved, not re-keyed; ua-rs warns at every update
+  when the UA is in use on such a family.
 
 ### 1.5 Keys, purposes, tags
 
@@ -1401,7 +1464,8 @@ compromised EOA: move the funds; compliance freezes stay token-level.
 immutable: key data, members and threshold are in the id. Rotation = a new UA + moving the funds (a transfer, or a
 confidential transfer to the new Zether UA). A stable identity across rotation is `SmartKeyAccount`
 ([CTR-ACC-09](#CTR-ACC-09)) or another native contract account. Immutable records make tokens' view
-of the registry cacheable and the registry admin-free. Membership changes of a corporate `msig` require moving funds.
+of the registry cacheable and the registry admin-free. An `msig`'s members change in place since owner 2026-11-14
+([CTR-UA-44](#CTR-UA-44)): the id stays the first structure's, a quorum disables and appends slots per registry; no funds move.
 (A rotatable "policy" kind — id = hash of the first policy, current policy in the registry with a timelock — was
 rejected for v1: it brings back an admin-like mutable record per account.) The PQZ key attribute is versioned, not rotated in
 place: its holder adds version v + 1 and migrates its balance; nothing is replaced (owner 2026-11-06, [CTR-UA-42](#CTR-UA-42)).
@@ -1547,7 +1611,11 @@ interface IUARegistry is IERC5267 {
     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external;
     /// anyone: slot memberSig.index of the msig ua accepts its place, the member's signature (CTR-UA-37); a no-op once accepted
     function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external;
-    function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);
+    /// anyone: the msig ua's structure on this registry, version = stored + 1, signed by a threshold of the stored one (CTR-UA-44)
+    function updateMsig(bytes32 ua, uint64 version, MsigStructure calldata structure, uint256 enabled, uint64 validUntilBlock,
+        MemberSig[] calldata sigs, bytes32 chainUid_) external;
+    function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);          // CTR-UA-44: enabled and accepted
+    function msigStateOf(bytes32 ua) external view returns (uint64 version, uint256 enabled, uint256 accepted); // CTR-UA-44
     function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32);  // CTR-UA-33 A / CTR-UA-37: keccak256(sig, or abi.encode(InnerSig[]))
     function popSlotsOf(bytes32 ua) external view returns (uint16[] memory index, bytes32[] memory hash);   // CTR-UA-33: the slots that signed the pop
     function smartKeyCloneHash() external view returns (bytes32);                             // 0 for none

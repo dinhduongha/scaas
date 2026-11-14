@@ -197,6 +197,9 @@ std::string setKemKeyArgs(const std::string& input) {
 std::string setPqzKeyArgs(const std::string& input) {
     return jsonCall([&] { return ffi::set_pqz_key_args(input); });
 }
+std::string msigUpdate(const std::string& input) {
+    return jsonCall([&] { return ffi::msig_update(input); });
+}
 std::string payDigest(const std::string& input) {
     return jsonCall([&] { return ffi::pay_digest(input); });
 }

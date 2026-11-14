@@ -707,6 +707,12 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         _refused(x, u, _ids(a, b), _keyData0120());
         u.st.threshold = 2; // 2 × 445 k + 2,500
         _apply(x, u, _ids(a, b));
+        // the bound counts the enabled slots only: the three mldsa65 slots disabled, 3-of-{a, b, c} is 3 × 95 k + 2,500 (with them,
+        // the three lightest would take the 400 k caps: 1,337,500 > 1.3 M)
+        u = _next(x, ua);
+        for (uint256 k = 1; k <= 3; ++k) _set(u, ml[k], false);
+        u.st.threshold = 3;
+        _apply(x, u, _ids(a, b));
     }
 
     /// Row 12 (Q4): a PQ-eligible `msig` stays PQ-eligible; a PQ-eligible target passes the debit bound.

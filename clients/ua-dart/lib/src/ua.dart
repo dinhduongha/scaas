@@ -176,6 +176,10 @@ const portableTypes = {
   'UAPqzKeyVersion': _pqzKeyVersionType,
   'UAPqzKeyVersionRecord': 'UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + _pqzKeyVersionType,
   'UAMembership': 'UAMembership(bytes32 ua,bytes32 member)',
+  // CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
+  'UAMsigUpdate': 'UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,'
+      'uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
+  'UAMsigMember': 'UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
 };
 
 Uint8List portableTypehash(String name) =>
@@ -328,6 +332,23 @@ Uint8List pqzKeyRecordDigest(Uint8List ua, Uint8List pqzKeyHash, Uint8List pqzPo
 /// The typed `UAMembership{ua, member}`: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native member
 /// this digest itself, a derived member `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
 Uint8List membershipDigest(Uint8List ua, Uint8List member) => _typed(hashStruct('UAMembership', [ua, member]));
+
+/// CTR-UA-44: the typed `UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}`, [members]
+/// `(kind, id, weight)` records hashed as an EIP-712 array of `UAMsigMember`, [enabled] the uint256 bitmap (bit i = slot i): what a quorum
+/// of the stored structure signs for `updateMsig` on that one registry, under `uaMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)`.
+Uint8List msigUpdateDigest(Uint8List ua, Uint8List chainUid, Uint8List registry, int version, int threshold,
+    List<({int kind, Uint8List id, int weight})> members, BigInt enabled, int validUntilBlock) {
+  if (enabled < BigInt.zero || enabled.bitLength > 256) throw ArgumentError('enabled must be a uint256');
+  final en = Uint8List(32);
+  var x = enabled;
+  for (var i = 31; i >= 0; i--) {
+    en[i] = (x & BigInt.from(0xff)).toInt();
+    x >>= 8;
+  }
+  final hs = members.map((m) => hashStruct('UAMsigMember', [_word(m.kind), m.id, _word(m.weight)])).toList();
+  return _typed(hashStruct('UAMsigUpdate', [ua, chainUid, _addressWord(registry), _word(version), _word(threshold), _k(hs), en,
+    _word(validUntilBlock)]));
+}
 
 /// The PQZ key record of `setPqzKey` (ruling A1-I1), see [pqzKeyRecordMessage]. [message] is what the UA signs,
 /// [pqzRegMessage] what the key's `R_REG` proves over.
