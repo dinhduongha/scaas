@@ -1004,6 +1004,25 @@ the built kinds 0–4; flags 5–8 are fields, [CTR-AS-17](contracts/asset-suite
 (`OpenFactoryV1`: `createMetaToken`) stays until the node and clientkeys move (P5). Gasless token operations other than transfer and payment are `mtxExecute` self-calls on the token's
 allowlist; role calls such as `mint` stay `call` jobs through the role holder's contract.
 
+<a id="holder-chain-word"></a>**A contract that holds a power passes the token's chain word** (owner 2026-11-13,
+[CTR-GOV-28](decisions.md#CTR-GOV-28)'s Change; BUILT, build 3zb + 3zc, branch `burner-wrap-caps`). Every direct entry a role holder calls takes a trailing `bytes32 chainUid_`: `mint(to, amount, chainUid_)`,
+`mintToUA`, `disableWrap`, `proposeRate` / `cancelRate` / `executeRate`, `setWrapMember`, the regulated controls and list
+writes, the tax setters, `setProofStore`, the DEX's `setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit`; the
+admin's `setWrapLimits`, `setMaxSupply` and `setMaxWrapSupply` too. An issuer's minter contract, a rate-admin timelock, a
+guardian, a Safe that holds a bit: each reads the token's `chainUid()` (or the DEX's) and passes it; a word of another chain
+reverts `ChainUidMismatch(expected, got)` for a holder, so a transaction replayed on a sibling chain with the same chain id
+lands nowhere. The old selectors are gone (test-only chains: no alias); a role-holder contract compiled against the old ABI
+must be rebuilt. A UA holder signs the router op instead, which carries `chainUid` as a signed field
+([node job API](node/job-api.md#holder-chain-word)). `burn` in `BURNER` mode and the unwraps stay without the word.
+
+**Burn and supply caps in an issuer's configuration** (BUILT, build 3zb + 3zc). A `NORMAL*` token chooses its burn mode
+at creation: off, `BURNABLE` (every holder burns its own units) or `BURNER` with `roles.burner` (only a holder of bit 30,
+for example a redemption desk, burns its own units within its grant; [CTR-GOV-29](decisions.md#CTR-GOV-29)). A `WRAPPED*`
+token sets `maxWrapSupply` (0 = none) beside `maxSupply`, and bit 31 if the admin may change either later
+([supply caps](contracts/token-wrappers.md#supply-caps)); an uncapped hybrid uses `maxSupply = 2^256 − 1`. Reconcile the
+reserve with `reserveValue()` against `totalSupply()` and the wrapped share with `totalWrapped()`. The client's burn button
+and the wrap-cap disclosure: [app.md](clients/app.md#burn-and-caps).
+
 ## <a id="data-protection"></a>15. Data protection
 
 <a id="data-protection"></a>

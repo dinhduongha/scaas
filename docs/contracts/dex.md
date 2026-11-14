@@ -535,12 +535,12 @@ production a Safe, a multisig, or a derived UA (a PQ key, an `msig`) acting thro
 `CallerDelegated`, owner ruling D2, 2026-10-30): it clears its delegation first. The order
 `relayer` binding, the settle submitter and solver interaction targets are not checked for a designator (owner rulings D3 /
 D4: open roles and solver-chosen targets, conservation-checked). Holders of bit 11 `LISTING` can do three things: list or delist a market
-(`setMarket(base, quote, listed)`, `base ≠ quote`, neither 0, else `BadMarket(base, quote)` (review C6-9), which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
+(`setMarket(base, quote, listed, chainUid_)`, `base ≠ quote`, neither 0, else `BadMarket(base, quote)` (review C6-9), which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
 `MarketSet(base, quote, listed)`), list or delist an exchange target or
-executor (`setExchangeTarget(target, listed)`; emit `ExchangeTargetSet`), and switch the DEX-wide listed-only mode
-(`setListedOnly(on)`, default off; emit `ListedOnlySet`) ([CTR-DEX-23](#CTR-DEX-23)). Whether a listing is required at all is
+executor (`setExchangeTarget(target, listed, chainUid_)`; emit `ExchangeTargetSet`), and switch the DEX-wide listed-only mode
+(`setListedOnly(on, chainUid_)`, default off; emit `ListedOnlySet`) ([CTR-DEX-23](#CTR-DEX-23)). Whether a listing is required at all is
 bit 29 `CLOSED_MARKETS`, a capability set at creation ([CTR-DEX-32](#CTR-DEX-32)). Holders of bit 12 `FEE_ROUTING` can set the fee split
-(`setFeeSplit(relayerSharePpm, treasury)`, `treasury ∉ {0, DEX}` unless the share is 100 %; emit
+(`setFeeSplit(relayerSharePpm, treasury, chainUid_)`, `treasury ∉ {0, DEX}` unless the share is 100 %; emit
 `FeeSplitSet(relayerSharePpm, treasury)`). `initialize` gives a non-zero owner both bits; a handover needs `revokeRole` for
 the old owner, and a new holder of either bit waits `grantDelay` (two calls, CTR-GOV-04). They change who receives fees and in
 what proportion, **never the amount**: the amount comes only from the signed `fee`. No access to funds, no upgrade, no
@@ -548,6 +548,28 @@ sweep (strays: [CTR-DEX-20](#CTR-DEX-20)'s sweep rule, `SCaaSDex.rescue` and `De
 governance entry has an `mtx*` or `ua*` twin on the DEX: a gas-less owner signs through the router. No timelock on a use of a
 power: there is nothing to wait for — no signed order can be charged more than it signed. Status: **BUILT** on branch `governance` (T3 `7825361b`: bits, guard, `supportsInterface`; T7 `c2525e28`:
 `grantDelay`; T10b `ac29de05`: owner and holders as UA ids; T11 `ea9f4e9d`: the router's DEX ops).
+
+<a id="dex-governance-module"></a>**The four powers: chain word and module** (owner 2026-11-13, O6 and O8; SPECIFIED, round
+3zb + 3zc, branch `burner-wrap-caps`; UNAUDITED). Each of the four power entries takes a trailing
+`bytes32 chainUid_`, the DEX's own word ([CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change): a caller without the bit keeps
+its refusal by name (`MissingRole`, `FeatureNotSet`), a holder with another word gets `ChainUidMismatch` before any write and
+before a `LIMITED` grant is debited (`_power(bit, chainUid_)` = `GovernanceUse.use(bit, _holderOnChain(bit, chainUid_), 0)`).
+The router ops `mtxSetMarket`, `mtxSetExchangeTarget`, `mtxSetListedOnly`, `mtxSetFeeSplit` sign `bytes32 chainUid` as the last
+op field and forward it. The four bodies and `_power` run in `SCaaSDexGovernanceModule` by DELEGATECALL
+([CTR-TOK-30](../decisions.md#ctr-tok-30--body-modules-every-body-but-the-erc-20-core-runs-in-a-delegatecall-module-of-its-kind)'s Change, by the owner's word, not by the size gate); the DEX keeps one explicit stub
+per entry (`_forward()`: the transient guard's check, the DELEGATECALL, the revert and return data verbatim), so the ABI,
+the selectors the router calls, the events' emitter (the DEX) and the storage (`scaas.dex`, `scaas.governance`, at the DEX's
+slots) are unchanged by the move; the module inherits `SCaaSDexCore` for `_pair`, `_setFeeSplit` and `_classify` (one
+definition for both sides) and refuses a direct call (`NotDelegated`). What stays in the main contract: the views
+(`marketListed`, `listedOnly`, …), `initialize` (its `FeeSplitSet`), `rescue`. The module's 26 entries:
+
+| Group | Entries |
+|---|---|
+| governance views | `GOV_ROUTER`, `features`, `lockedFeatures`, `admin`, `pendingAdmin`, `hasRole`, `validBits`, `holderCount`, `grantDelay`, `lastProposedAt`, `pendingGrant`, `grantOf`, `bitLabel` |
+| governance writes | `grantRole`, `setGrant`, `cancelGrant`, `revokeRole`, `renounceRole`, `disableFeature`, `transferAdmin`, `acceptAdmin`, `renounceAdmin` |
+| the powers (build 3zb + 3zc) | `setMarket(address base, address quote, bool listed, bytes32 chainUid_)`, `setExchangeTarget(address target, bool listed, bytes32 chainUid_)`, `setListedOnly(bool on, bytes32 chainUid_)` (bit 11); `setFeeSplit(uint32 relayerSharePpm, address treasury, bytes32 chainUid_)` (bit 12) |
+
+The module's own `moduleGroup()` and `factory()` are not forwarded entries.
 
 <a id="CTR-DEX-32"></a>**CTR-DEX-32** — **Markets are open by default; bit 29 `CLOSED_MARKETS` closes them** (owner 2026-11-12,
 [decisions](../decisions.md#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them)). Off, the default: `mtxSettle` and the

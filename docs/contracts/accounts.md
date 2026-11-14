@@ -1310,7 +1310,7 @@ function _uaMint(bytes32 to, uint256 v) internal;  // ERC20MetaTx: `to` register
 function wrapToUA(address u, uint256 amount, bytes32 to) external payable returns (uint256 minted);
 function unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut) external returns (uint256 out, uint256 burned);
 // NormalToken (and NORMAL_ZETHER): MINTABLE, role minter, as mint
-function mintToUA(bytes32 to, uint256 amount) external;
+function mintToUA(bytes32 to, uint256 amount, bytes32 chainUid_) external;   // the chain word: CTR-GOV-28's Change (BUILT, build 3zb + 3zc)
 // every kind: PAYABLE, as payWithFee
 function payWithFeeToUA(bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient,
                         bytes32 entryRef) external returns (bool);

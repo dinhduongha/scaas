@@ -264,17 +264,22 @@ Storage (namespace `scaas.regulated`, ERC-7201, pinned in `test/v2/layout/namesp
 `IRegulatedToken` (`smartcontracts/evm/src/regulated/IRegulatedToken.sol`). Every control is a **direct entry** on the token,
 `nonReentrant`, gated by `GovernanceUse.use(bit, _govSubject(), scalar)`: a direct contract caller is its native id; a relayed
 holder arrives through the `GovernanceRouter`, which carries one merged entry per control, `mtx<Op>(UAEnvelope, address target,
-<params>, UASig)` signing `UA<Op>` at fee mode `NONE` (relayable at fee 0; no `mtx` twin on the token). Ids are `bytes32`.
+<params>, bytes32 chainUid, UASig)` signing `UA<Op>` at fee mode `NONE` (relayable at fee 0; no `mtx` twin on the token). Ids are `bytes32`.
+**The chain word** (owner 2026-11-13, [CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change; BUILT, build 3zb + 3zc, branch
+`burner-wrap-caps`): every entry below, the list writes `setAllowed` / `setDenied` and the tax setters
+take a trailing `bytes32 chainUid_`, the token's own word: a caller without the bit keeps today's refusal by name, a holder
+with another word gets `ChainUidMismatch` before any write and before a `LIMITED` grant is debited
+(`GovernanceBaseCore._holderOnChain`); the router op signs the word as its last field before `uint256 batch`.
 
 | Op | Direct entry on the token | Bit, holder | Router entry | Event |
 |---|---|---|---|---|
-| Freeze | `freeze(bytes32 account, bytes32 ref, bytes32 recordId)` (`recordId` 0: issuer-only, ≤ 30 d) | 5, issuer | `mtxFreeze` | `AccountFrozen(bytes32 indexed account, bytes32 indexed ref, bytes32 recordId, uint64 until)` |
-| Unfreeze | `unfreeze(bytes32 account, bytes32 ref)` | 5, issuer | `mtxUnfreeze` | `AccountUnfrozen(bytes32 indexed account, bytes32 indexed ref)` |
-| Forced transfer | `forceTransfer(bytes32 recordId, uint256 amount)` | 6, issuer, scalar | `mtxForceTransfer` | `ForcedTransfer(bytes32 indexed recordId, bytes32 indexed from, bytes32 indexed to, uint256 amount)` |
-| Pause, unpause | `pause(bytes32 ref, uint64 until)`, `unpause(bytes32 ref)` | 7, issuer | `mtxPause`, `mtxUnpause` | `Paused(bytes32 indexed ref, uint64 until)`, `Unpaused(bytes32 indexed ref)` |
-| Record order | `recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil)` | 10, compliance | `mtxRecordOrder` | `OrderRecorded(bytes32 indexed recordId, bytes32 indexed orderId, bytes32 indexed subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil, bytes32 documentHash)` |
-| Revoke order | `revokeOrder(bytes32 recordId, bytes32 reasonRef)` (with `RECORD` disabled, the role alone, [CTR-AS-24](#CTR-AS-24)) | 10, compliance | `mtxRevokeOrder` | `OrderRevoked(bytes32 indexed recordId, bytes32 reasonRef)`, and `AccountUnfrozen` when it ends a freeze |
-| Operator transfer | `operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref)`, public balances only | 22, any holder, scalar ([CTR-GOV-20](../decisions.md#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds)) | `mtxOperatorTransfer` (the moved account named `account`) | `OperatorTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount, bytes32 indexed ref)` |
+| Freeze | `freeze(bytes32 account, bytes32 ref, bytes32 recordId, bytes32 chainUid_)` (`recordId` 0: issuer-only, ≤ 30 d) | 5, issuer | `mtxFreeze` | `AccountFrozen(bytes32 indexed account, bytes32 indexed ref, bytes32 recordId, uint64 until)` |
+| Unfreeze | `unfreeze(bytes32 account, bytes32 ref, bytes32 chainUid_)` | 5, issuer | `mtxUnfreeze` | `AccountUnfrozen(bytes32 indexed account, bytes32 indexed ref)` |
+| Forced transfer | `forceTransfer(bytes32 recordId, uint256 amount, bytes32 chainUid_)` | 6, issuer, scalar | `mtxForceTransfer` | `ForcedTransfer(bytes32 indexed recordId, bytes32 indexed from, bytes32 indexed to, uint256 amount)` |
+| Pause, unpause | `pause(bytes32 ref, uint64 until, bytes32 chainUid_)`, `unpause(bytes32 ref, bytes32 chainUid_)` | 7, issuer | `mtxPause`, `mtxUnpause` | `Paused(bytes32 indexed ref, uint64 until)`, `Unpaused(bytes32 indexed ref)` |
+| Record order | `recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil, bytes32 chainUid_)` | 10, compliance | `mtxRecordOrder` | `OrderRecorded(bytes32 indexed recordId, bytes32 indexed orderId, bytes32 indexed subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil, bytes32 documentHash)` |
+| Revoke order | `revokeOrder(bytes32 recordId, bytes32 reasonRef, bytes32 chainUid_)` (with `RECORD` disabled, the role alone, [CTR-AS-24](#CTR-AS-24)) | 10, compliance | `mtxRevokeOrder` | `OrderRevoked(bytes32 indexed recordId, bytes32 reasonRef)`, and `AccountUnfrozen` when it ends a freeze |
+| Operator transfer | `operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 chainUid_)`, public balances only | 22, any holder, scalar ([CTR-GOV-20](../decisions.md#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds)) | `mtxOperatorTransfer` (the moved account named `account`) | `OperatorTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount, bytes32 indexed ref)` |
 
 `recordId = keccak256(abi.encode(orderId, subject, beneficiary))`. Views: `regulatedConfig()` (one struct: `complianceRegistry`,
 `controls`, `requiredFlags`, `deniedFlags`, `termsHash`, `pausedUntil`, `pauseCooldownUntil`), `freezeOf(bytes32)`,
@@ -305,7 +310,7 @@ set and `frozenUntil(a) > now`. `P` = `CTRL_PAUSE` set and `pausedUntil > now`.
 | `approve` (contract callers only) | `P`; `F(from)` (`transferFrom` checks `F(from)` again) |
 | relayer fee (meta-tx fee transfer, `payWithFee`) | `F(feeRecipient)` ⇒ `FeeRecipientFrozen`; `!R(feeRecipient)` |
 | mint (`minter`, wrap) | `P`; `!R(to)` |
-| holder `burn` (tier 1), the burn inside unwrap | `F(from)` (not `P`) |
+| holder `burn` (tier 1; in `BURNER` mode a role holder's own burn, [CTR-GOV-29](../decisions.md#CTR-GOV-29), BUILT, build 3zb + 3zc), the burn inside unwrap | `F(from)` (not `P`) |
 | unwrap (direct, multi, gasless) | `F(from)` via the burn row; a gasless unwrap with a fee during `P` refused at the shape step (`TokenPaused`), because its fee leg is a transfer; the recipient is not checked |
 | `forceTransfer` | the order rules below only (not `P`, not `F(from)`) |
 | `addReserve` (non-hybrid and hybrid wrapper tiers) | unchanged |
@@ -316,6 +321,8 @@ after it, before the self-call or move; `_regMove` re-applies the transfer, mint
 direct paths, self-calls and `mtxTrade`; on the meta-tx path its reads are warm.
 
 ### 2.5 Freeze, order records and forced transfer
+
+The pseudo-code below omits the trailing `chainUid_` of every entry ([§2.3](#23-interface)).
 
 ```
 issuer:     freeze(account, ref, 0)            issuer-only episode: ref ≠ 0; not frozen ⇒ now ≥ issuerCooldownUntil
@@ -593,7 +600,7 @@ beneficiary, or the `OFFCHAIN` verifier fee) the refresh moves value out, so the
 `OFFCHAIN` token with a verifier fee no refresh is open to a frozen or paused sender. Test:
 `test/as/confidential/PqzRefresh.t.sol` (`test_refreshWithFeeChecksTheSender`).
 
-<a id="CTR-AS-31"></a>**CTR-AS-31** — **The allow list and the deny list held in the token** (group 3s, [CTR-GOV-24](../decisions.md#CTR-GOV-24); BUILT, UNAUDITED). `scaas.regulated` +7 `listFlags[bytes32]`: `ALLOWED` 1, `DENIED` 2, one slot per account, written by `setAllowed` / `setDenied` (1–256 accounts, `ListBatchInvalid`, `ListAccountZero`; one `AllowedSet` / `DeniedSet` per account; at once both ways; a holder of bit 8 / 9, any holder, `MissingRole` else, the feature on or off) and by init's row for `initialHolder` under `ALLOWLIST` with an initial supply; `listFlagsOf(account)`. `L(a)`, one `SLOAD` for both lists, refuses `NotAllowed(a)` / `Denied(a)` on every account `F` or `R` checks (senders, payers, meta-tx `from` in `_regPre`, receivers, fee recipients, beneficiaries, a forced transfer's beneficiary, an unshield recipient) and on no other: never a forced transfer's subject, the unwrap recipient, a shielded receiver, a ring member, a leg or its `decoyFee` (I9); order `P`, `F`, `L`, `R`. Contracts are listed like anyone else (the DEX and its puller, wrappers, escrows, `RelayFeeRouter`, fee recipients). `canReceive` answers 5 / 6 first. `enableFeature(8 | 9 | 28)` by the admin, at once (`ListHolderMissing` with no holder root, `ComplianceRegistryNotSet`); 8 and 9 are never disabled (`FeatureNotDisableable`), `KYC` after `grantDelay`; a lock holds 8, 9, 28 on or off; the issuer seat holds each list bit that can still be enabled; `termsHash` is required while one can (the `enableable` predicate). `ALLOWLIST` is outside 10–13. The per-path table, the threats A16–A21 and the invariants I14, I15: spec `superpowers/specs/2026-11-10-token-lists.md` §4.3, §12, §4.5.
+<a id="CTR-AS-31"></a>**CTR-AS-31** — **The allow list and the deny list held in the token** (group 3s, [CTR-GOV-24](../decisions.md#CTR-GOV-24); BUILT, UNAUDITED). `scaas.regulated` +7 `listFlags[bytes32]`: `ALLOWED` 1, `DENIED` 2, one slot per account, written by `setAllowed(accounts, on, chainUid_)` / `setDenied(accounts, on, chainUid_)` (the chain word: [§2.3](#23-interface); 1–256 accounts, `ListBatchInvalid`, `ListAccountZero`; one `AllowedSet` / `DeniedSet` per account; at once both ways; a holder of bit 8 / 9, any holder, `MissingRole` else, the feature on or off) and by init's row for `initialHolder` under `ALLOWLIST` with an initial supply; `listFlagsOf(account)`. `L(a)`, one `SLOAD` for both lists, refuses `NotAllowed(a)` / `Denied(a)` on every account `F` or `R` checks (senders, payers, meta-tx `from` in `_regPre`, receivers, fee recipients, beneficiaries, a forced transfer's beneficiary, an unshield recipient) and on no other: never a forced transfer's subject, the unwrap recipient, a shielded receiver, a ring member, a leg or its `decoyFee` (I9); order `P`, `F`, `L`, `R`. Contracts are listed like anyone else (the DEX and its puller, wrappers, escrows, `RelayFeeRouter`, fee recipients). `canReceive` answers 5 / 6 first. `enableFeature(8 | 9 | 28)` by the admin, at once (`ListHolderMissing` with no holder root, `ComplianceRegistryNotSet`); 8 and 9 are never disabled (`FeatureNotDisableable`), `KYC` after `grantDelay`; a lock holds 8, 9, 28 on or off; the issuer seat holds each list bit that can still be enabled; `termsHash` is required while one can (the `enableable` predicate). `ALLOWLIST` is outside 10–13. The per-path table, the threats A16–A21 and the invariants I14, I15: spec `superpowers/specs/2026-11-10-token-lists.md` §4.3, §12, §4.5.
 
 ### <a id="tax"></a>2.12 Tax on the regulated kinds
 
@@ -618,10 +625,10 @@ expected_tax` and `Σ tax == expected_tax` ([integration.md](../integration.md#p
 `confidential/TaxConfidential.t.sol`, `invariant/PayTaxInvariants.t.sol` (J1–J5).
 
 <a id="CTR-AS-19"></a>**CTR-AS-19** — **One token-wide PERCENT rate: an increase after the factory's notice period, a decrease at
-once; floor rounding** (owner O10, Q3, Q9, pay-meta-tax PT-5). `setTaxRate(uint32 ratePpm)` (bit 23, `≤ 10^6`, else
+once; floor rounding** (owner O10, Q3, Q9, pay-meta-tax PT-5). `setTaxRate(uint32 ratePpm, bytes32 chainUid_)` (bit 23; the chain word: [§2.3](#23-interface); `≤ 10^6`, else
 `TaxRateInvalid`): a matured pending folds in first; a value at or below the effective rate applies at once and clears the
 pending; a higher one waits `eta = now + noticePeriod` (the factory's `noticePeriod()`, 0 possible on a test chain; shown, never
-promised) and a later decrease cancels it. `setTaxRecipient(bytes32)` (bit 23, immediate, Q4): not 0, a pool or the token
+promised) and a later decrease cancels it. `setTaxRecipient(bytes32 taxRecipient, bytes32 chainUid_)` (bit 23, immediate, Q4): not 0, a pool or the token
 (`TaxRecipientInvalid`), a derived id registered SIGNING, not frozen and passing `R` at set time. `taxConfig()` is the one view.
 Storage `scaas.regulated` +5 `taxRecipient`, +6 `TaxRate {ratePpm, pendingPpm, eta}`; `RegulatedParams.taxRecipient ≠ 0` iff
 bit 23 at creation. Router ops `mtxSetTaxRate`, `mtxSetTaxRecipient` (fee 0). **Accepted limitation (O14):** the router's

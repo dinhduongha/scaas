@@ -1179,6 +1179,14 @@ and the amplification over zero-amount single transfers is at most `M − 1` vic
 
 ### 7.5 Burn and refresh
 
+**An unshield is not a burn** (owner O1, [CTR-GOV-29](../decisions.md#CTR-GOV-29); BUILT, build 3zb + 3zc, branch
+`burner-wrap-caps`): the `R_BURN` path (`mtxUnshield`, and the refresh) moves units from `SHIELD_POOL`
+to a recipient, `totalSupply()` does not move, and it is not gated by bit 30 `BURNER`; on a `BURNER` token a shielded holder
+that wants to destroy units unshields to itself and burns under the role check. The flags valid on the PQZ kinds follow
+[CTR-TOK-22](token-wrappers.md#CTR-TOK-22): `MINTABLE` / `BURNABLE` or `BURNER` on `NORMAL_PQZ` (4, 12), `SUPPLY_CAP_ADJUSTABLE`
+on `WRAPPED_PQZ` (5, 13), whose `mtxWrapShield` and `mtxUnshieldUnwrap` move `totalWrapped()` like any wrap and unwrap
+([supply caps](token-wrappers.md#supply-caps)).
+
 `mtxUnshield(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint, uint256 amount, bytes32 recipient)` — the
 same signature as Zether's ([CTR-ZTH-45](zether.md#CTR-ZTH-45)); `beneficiary` must equal the payload's — with `payload = be32(p) ‖
 be32(validUntilBlock) ‖ be32(shieldIn) ‖ fromUA ‖ beneficiaryUA ‖ u' ‖ v_f`. `0 < amount ≤ maxShielded` (burn) or `amount = 0` and
@@ -1341,7 +1349,7 @@ reverts `BeneficiaryMismatch(payload, given)`.
 
 **Since 3h** (BUILT, [CTR-PQZ-33](#CTR-PQZ-33)–[CTR-PQZ-35](#CTR-PQZ-35)): `pqzDebitRecord(ua, k)` → `DebitRecordView(prevBlob, p, deltaP,
 proofStore, shieldIn, keyVersion, prevCounter, hasPrev)` (a narrow record with a predecessor reads `prevCounter = k − 1`);
-`pqzAccount` gains its tenth field `lastDebit`; `proofStore()`; `setProofStore(uint8)`; events `PqzDebitProof(address indexed
+`pqzAccount` gains its tenth field `lastDebit`; `proofStore()`; `setProofStore(uint8)` (`setProofStore(uint8 next, bytes32 chainUid_)` from build 3zb + 3zc, SPECIFIED, [CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change); events `PqzDebitProof(address indexed
 blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes header, bytes proof)` (LOG only: `header` = the verified
 statement[0:640], `proof` = the calldata proof) and `ProofStoreSet(uint8 previous, uint8 next)`. Interface id 0x4c91dc6a →
 0x3fef18ca.
@@ -1640,7 +1648,7 @@ moved), `pq_kat.json`'s `ownTag` and `memoHash` rows.
 its debit ran under. Under LOG every debit (op 1, op 7, burn, refresh, unwrap; PQZL and PQZH; `PRECOMPILE` and `OFFCHAIN`) emits
 one `PqzDebitProof` (the verified header and the calldata proof). A non-PQZ kind refuses a set value (`ConfigFieldForOtherKind(4)`;
 on the Zether kinds a one-condition check, +37 B of `ZetherLib`, the Zether statement, vectors and gas pins unchanged). The
-issuer changes it by `setProofStore(uint8)` under governance bit 24 `PQZ_PROOF`
+issuer changes it by `setProofStore(uint8 next, bytes32 chainUid_)` under governance bit 24 `PQZ_PROOF` (the holder's chain word: BUILT, build 3zb + 3zc; the router's `UASetProofStore` signs `bytes32 chainUid`)
 (CTR-GOV-22 in [decisions.md](../decisions.md)), from the next debit; through the router `mtxSetProofStore` over `UASetProofStore`, fee mode NONE. SSTORE2 for proofs was
 dropped (owner 2026-11-07). `PQZ_DEBIT_MIN_GAS` is measured on the LOG form ([CTR-PQZ-12](#CTR-PQZ-12)).
 

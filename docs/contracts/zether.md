@@ -1299,8 +1299,13 @@ nothing else. **Built (P3)**; every view takes `envelopeBinding` (`transferState
 relays), and `unshieldUnwrapStatement` / `unwrapBinding` serve `mtxUnshieldUnwrap` (controller ruling, pending the owner).
 
 <a id="CTR-ZTH-47"></a>**CTR-ZTH-47** — **Regulated flags are refused on confidential kinds** (owner, T11). The flags
-valid on `NORMAL_ZETHER` / `WRAPPED_ZETHER` are `PAYABLE`, `RESCUABLE`; `MINTABLE` / `BURNABLE` (`NORMAL_ZETHER`);
-`MINTABLE` as a hybrid, `RATE_ADJUSTABLE` / `WRAP_DISABLEABLE` (`WRAPPED_ZETHER`) ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)). The regulated
+valid on `NORMAL_ZETHER` / `WRAPPED_ZETHER` are `PAYABLE`, `RESCUABLE`; `MINTABLE` / `BURNABLE` or `BURNER` (`NORMAL_ZETHER`);
+`MINTABLE` as a hybrid, `RATE_ADJUSTABLE` / `WRAP_DISABLEABLE`, `SUPPLY_CAP_ADJUSTABLE` (`WRAPPED_ZETHER`) ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22);
+bits 30 `BURNER` and 31 `SUPPLY_CAP_ADJUSTABLE` BUILT, build 3zb + 3zc, branch `burner-wrap-caps`). The
+`ZetherBurn` unshield (`mtxUnshield`, and the refresh) is **not a burn**: it moves units from `SHIELD_POOL` to a recipient,
+`totalSupply()` does not move, and it is not gated by `BURNER` (owner O1, [CTR-GOV-29](../decisions.md#CTR-GOV-29)); a shielded
+holder that wants to destroy units unshields to itself and burns under the role check. `mtxWrapShield` and
+`mtxUnshieldUnwrap` move `totalWrapped()` like any wrap and unwrap ([supply caps](token-wrappers.md#supply-caps)). The regulated
 flags 5–9 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`, `DENYLIST`) are refused at creation (`FeatureInvalidForKind`; the token
 validates, not the factory) ([CTR-AS-17](asset-suite.md#CTR-AS-17)). This is the built state, not a permanent rule: the
 regulated confidential kinds (enum ids 10 `NORMAL_ZETHER_REGULATED`, 11 `WRAPPED_ZETHER_REGULATED`, off until published)

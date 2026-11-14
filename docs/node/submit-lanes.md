@@ -537,7 +537,25 @@ check, a simulation revert that a later block may lift on a regulated token (`Fr
 `WrapCapExceeded`, `UnwrapAboveNetWrapped`, `WrapperNotListed`, `UnwrapperNotListed`: a window ends, a member is added, a
 redeemer is granted, a later wrap raises the entitlement) is the same class: `queued` with `WRAP_LIMIT_REFUSED: <error>`,
 never `dead` (BUILT, branch `ua-mtx-wraplimit`, group 3l; wrap limits spec 2026-11-10 §9; [CTR-TOK-31](../contracts/token-wrappers.md#CTR-TOK-31));
-`WrapControlNeedsHybrid`, a creation refusal, is not in it. Such a refusal is no billed failure, so it never counts in the grief
+`WrapControlNeedsHybrid`, a creation refusal, is not in it. <a id="supply-cap-verdicts"></a>Build 3zb + 3zc (BUILT, branch
+`burner-wrap-caps`; the node code `guard::revert_verdict`, test
+`submit::tests::supply_cap_and_grant_window_verdicts`; spec 2026-11-13-burner-wrap-caps.md §4;
+[CTR-GOV-29](../decisions.md#CTR-GOV-29), [CTR-GOV-30](../decisions.md#CTR-GOV-30)) adds two classes, each named:
+
+| Revert | On | Verdict |
+|---|---|---|
+| `MaxWrapSupplyExceeded`, `MaxSupplyExceeded` | any wrap job; `MaxSupplyExceeded` also the minter's `mtxMint` / `mtxMintToUA` | `queued`, `SUPPLY_CAP_REFUSED: <error>`: an unwrap or a cap change lets it land; a wrap larger than a cap that cannot move waits until its deadline |
+| `GrantNotReady(31, …)` | `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` (a pending cap change before its `eta`) | `queued`, `SUPPLY_CAP_REFUSED`: the clock lifts it |
+| `MaxSupplyBelowSupply`, `MaxSupplyBelowWrapCap`, `MaxWrapSupplyBelowWrapped`, `MaxWrapSupplyAboveMaxSupply` | the two setter ops (the floors at the apply) | `queued`, `SUPPLY_CAP_REFUSED`: supply or the other setter lifts it |
+| `FeatureNotSet(31)`, `MaxSupplyInvalid`, `MaxWrapSupplyInvalid` | the setters, a creation | `dead`, by name |
+| `MissingRole(30, from)`, `FeatureNotSet(2)` / `(30)`, `GrantExpired`, `GrantExhausted` fields 0, 1, 2, 5, 7 | `mtxBurn` | `dead`, by name (the job's own subject lacks the power) |
+| `GrantExhausted(3)` (the grant's window spent) | a token's `mtxBurn`; the router's `mtxMint`, `mtxMintToUA` | `queued`, `GRANT_WINDOW_REFUSED: <error>`: the next window lifts it |
+
+Two rows are a **rule change**: before 3zb + 3zc no supply-cap and no grant refusal had a class here, so a wrap or a mint
+above `maxSupply` (`MaxSupplyExceeded`) and a mint whose window was spent went `dead`; now they wait in the queue (expiry or the
+attempt cap ends them). `GrantExhausted(3)`
+on any other op, and `GrantNotReady` of another bit, keep their `dead` verdict. A wrong chain word (`ChainUidMismatch`) on any op
+stays `dead` by name. Such a refusal is no billed failure, so it never counts in the grief
 score ([NODE-LANE-15](#NODE-LANE-15), not built). One classifier holds every class of this section and the PQZ ones
 (`guard::revert_verdict`: `consumed`, back in the queue by name, or `dead`), used by the EVM `Submitter` and by the generic lane
 runner for every EVM-contract family (Hedera), so one rule on every chain (BUILT, Fable review of ua-mtx-merge E N-1; test
