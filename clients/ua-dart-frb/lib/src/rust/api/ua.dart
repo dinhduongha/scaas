@@ -392,6 +392,11 @@ String setKemKeyArgs({required String input}) =>
 String setPqzKeyArgs({required String input}) =>
     ScaasUa.instance.api.crateApiUaSetPqzKeyArgs(input: input);
 
+/// CTR-UA-44 `updateMsig`, JSON in and out. `input`: `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled,
+/// validUntilBlock, sigs}`. Out: `{digest, message, memberDigest, args}`: what a quorum of the stored structure signs on that one registry.
+String msigUpdate({required String input}) =>
+    ScaasUa.instance.api.crateApiUaMsigUpdate(input: input);
+
 /// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
 /// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
 String payDigest({required String input}) =>

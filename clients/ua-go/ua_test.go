@@ -624,7 +624,7 @@ func TestMsigUpdateRows(t *testing.T) {
 		var members []MsigMember
 		for _, m := range r["members"].([]any) {
 			o := m.(obj)
-			members = append(members, MsigMember{kind(o["kind"]), b32(o["id"]), uint16(o["weight"].(float64))})
+			members = append(members, MsigMember{kind(o["kind"]), bs(o["id"]), uint16(o["weight"].(float64))})
 		}
 		e, err := strconv.ParseUint(r["enabled"].(string), 10, 64)
 		if err != nil {

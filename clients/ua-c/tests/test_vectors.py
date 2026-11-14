@@ -570,7 +570,7 @@ class Vectors(unittest.TestCase):
 
     def test_nested_inner(self):
         """The `_with` calls with `inner` ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and record (no KEM key, CTR-UA-32), every
-        eligibility row and every nested PQZ key record reproduce; without `inner` they stay UAMemberUnknown, a third level counts its own msig slots as classical (CTR-UA-44 MM-14). Every
+        eligibility row and every nested PQZ key record reproduce; without `inner` they stay UAMemberUnknown, so does a third level. Every
         memberships row's `stored` turns back into its slot through scaas_ua_replayed_member_sig."""
         regs = NV['registrations']
         inner = json.dumps({r['ua']: r['keyData'] for r in regs if r['kind'] == 0x0120}).encode()
@@ -598,8 +598,8 @@ class Vectors(unittest.TestCase):
             for none in (None, b'', b'null', b'{}'):
                 self.assertEqual(code_of(lambda: eligible(b(r['keyData']), none)), 'UAMemberUnknown', r['reason'])
         third = b(NV['structures'][0]['keyData'])
-        # CTR-UA-44 MM-14: a member's own msig slot is classical weight, never followed; registration still refuses a third level (structures)
-        self.assertTrue(eligible(third, json.dumps({NV['structures'][0]['member']: pq['keyData']}).encode()), 'a third level')
+        self.assertEqual(code_of(lambda: eligible(third, json.dumps({NV['structures'][0]['member']: pq['keyData']}).encode())),
+                         'UAMemberUnknown', 'a third level')
         holders = [r for r in regs + NV['afterAcceptance'] if r['attrs']['kemPk'] != '0x' or r['attrs']['pqzKey'] != '0x']
         self.assertEqual(holders, [])  # CTR-UA-32 (T66a): msig-nested-pq registers without a KEM key (was its one holder row)
         g = holder_with(pq, inner)

@@ -517,7 +517,7 @@ TestCase {
     }
 
     // the With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and record (no KEM key, CTR-UA-32), every eligibility
-    // row and every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, a third level counts its own msig slots as classical (CTR-UA-44 MM-14). Every memberships
+    // row and every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, so does a third level. Every memberships
     // row's stored bytes turn back into its slot through replayedMemberSig
     function test_nested_inner() {
         const n = vectors.load("nested.json")
@@ -551,8 +551,8 @@ TestCase {
         }
         const third = n.structures[0], pq = n.registrations.find(x => x.name === "msig-nested-pq").keyData, t = {}
         t[third.member] = pq
-        // CTR-UA-44 MM-14: a member's own msig slot is classical weight, never followed; registration still refuses a third level (structures)
-        verify(UaKinds.msigPqzEligibleWith(third.keyData, JSON.stringify(t)), "a third level")
+        verify(!UaKinds.msigPqzEligibleWith(third.keyData, JSON.stringify(t)))
+        compare(UaKinds.lastError, "UAMemberUnknown", "a third level")
         for (const bad of ["not json", "[]", JSON.stringify({"0x01": "0x"}), " ".repeat(65537)]) {
             verify(!UaKinds.msigPqzEligibleWith(pq, bad))
             compare(UaKinds.lastError, "UAArgument", bad.slice(0, 12))

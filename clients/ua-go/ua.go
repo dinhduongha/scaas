@@ -614,13 +614,6 @@ func MembershipDigest(ua, member [32]byte) [32]byte {
 
 const msigMemberType = "UAMsigMember(uint16 kind,bytes32 id,uint16 weight)"
 
-// MsigMember is one msig slot (CTR-UA-09).
-type MsigMember struct {
-	Kind   uint16
-	ID     [32]byte
-	Weight uint16
-}
-
 // MsigUpdateDigest (CTR-UA-44) is the typed UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled,
 // validUntilBlock}, members an EIP-712 array of UAMsigMember{kind, id, weight}, enabled the uint256 bitmap (bit i = slot i): what a
 // quorum of the stored structure of the msig ua signs for updateMsig on that one registry, under UAMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)
@@ -628,8 +621,10 @@ type MsigMember struct {
 func MsigUpdateDigest(ua, chainUID [32]byte, registry [20]byte, version uint64, threshold uint16, members []MsigMember, enabled [32]byte,
 	validUntilBlock uint64) [32]byte {
 	hs := make([][]byte, len(members))
-	for i, m := range members {
-		h := HashStruct("UAMsigMember", w32(uint64(m.Kind)), m.ID, w32(uint64(m.Weight)))
+	for i, m := range members { // MsigMember (registry.go): ID is the 32-byte id
+		var id [32]byte
+		copy(id[:], m.ID)
+		h := HashStruct("UAMsigMember", w32(uint64(m.Kind)), id, w32(uint64(m.Weight)))
 		hs[i] = h[:]
 	}
 	var reg [32]byte

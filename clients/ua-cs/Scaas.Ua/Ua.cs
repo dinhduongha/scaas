@@ -240,9 +240,6 @@ public static partial class UA
 
     const string MsigMemberType = "UAMsigMember(uint16 kind,bytes32 id,uint16 weight)";
 
-    /// <summary>One msig slot (CTR-UA-09).</summary>
-    public sealed record MsigMember(ushort Kind, byte[] Id, ushort Weight);
-
     /// <summary>CTR-UA-44: the typed <c>UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}</c>,
     /// <c>members</c> an EIP-712 array of <c>UAMsigMember</c>, <c>enabled</c> the uint256 bitmap as 32 big-endian bytes (bit i = slot i): what a
     /// quorum of the stored structure signs for <c>updateMsig</c> on that one registry, under <c>UAMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)</c>.</summary>

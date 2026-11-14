@@ -618,7 +618,7 @@ static void nested_rows() {
 }
 
 // The With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and record (no KEM key, CTR-UA-32), every eligibility row and
-// every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, a third level counts its own msig slots as classical (CTR-UA-44 MM-14). Every memberships row's stored
+// every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, so does a third level. Every memberships row's stored
 // bytes turn back into its slot through replayedMemberSig.
 static void nested_inner() {
     json n = load("nested.json"), inner = json::object();
@@ -660,8 +660,7 @@ static void nested_inner() {
     auto& third = n["structures"][0];
     std::string pq;
     for (auto& r : n["registrations"]) if (r["name"] == "msig-nested-pq") pq = str(r["keyData"]);
-    // CTR-UA-44 MM-14: a member's own msig slot is classical weight, never followed; registration still refuses a third level (structures)
-    CHECK(msigPqzEligibleWith(bytes(third["keyData"]), json{{str(third["member"]), pq}}.dump()), "a third level");
+    CHECK(code_of([&] { msigPqzEligibleWith(bytes(third["keyData"]), json{{str(third["member"]), pq}}.dump()); }) == "UAMemberUnknown", "a third level");
     for (const auto& bad : std::vector<std::string>{"not json", "[]", "{\"0x01\": \"0x\"}", std::string(65537, ' '), "\xff"})
         CHECK(code_of([&] { msigPqzEligibleWith(bytes(json(pq)), bad); }) == "UAArgument", bad.substr(0, 12));
     CHECK(n["pqzKeyRecords"].size() == 4, "record rows");

@@ -604,7 +604,7 @@ void main() {
   });
 
   // The With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and record (no KEM key, CTR-UA-32), every eligibility row
-  // and every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, a third level counts its own msig slots as classical (CTR-UA-44 MM-14). Every memberships row's
+  // and every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, so does a third level. Every memberships row's
   // stored bytes turn back into its slot through replayedMemberSig.
   test('nested inner', () {
     final n = load('nested.json');
@@ -638,8 +638,8 @@ void main() {
       }
     }
     final third = rows(n, 'structures').first as Map, pq = regs.firstWhere((r) => r['name'] == 'msig-nested-pq')['keyData'] as String;
-    // CTR-UA-44 MM-14: a member's own msig slot is classical weight, never followed; registration still refuses a third level (structures)
-    expect(msigPqzEligibleWith(keyData: bytes(third['keyData']), inner: jsonEncode({third['member']: pq})), isTrue, reason: 'a third level');
+    expect(errCode(() => msigPqzEligibleWith(keyData: bytes(third['keyData']), inner: jsonEncode({third['member']: pq}))), 'UAMemberUnknown',
+        reason: 'a third level');
     for (final bad in ['not json', '[]', jsonEncode({'0x01': '0x'}), ' ' * 65537]) {
       expect(errCode(() => msigPqzEligibleWith(keyData: bytes(pq), inner: bad)), 'UAArgument', reason: bad.length > 12 ? bad.substring(0, 12) : bad);
     }
