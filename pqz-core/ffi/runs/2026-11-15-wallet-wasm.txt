@@ -1,0 +1,20 @@
+# TODO 3zf: the browser wallet's K3-7 holder check (pqz-core/ffi/wallet-wasm + clients/clientkeys/src/pqzopenWasm.js). UNAUDITED.
+# Branch pqz-wallet-wasm from pre-reset4 a5cfe748a. No change to pqz-ffi/src, pqzl, pqzh, stmt or set params: no full gate.
+# Full outputs stayed local (git-ignored wallet-wasm/target/out). Each command under scripts/capped.
+step | commit | rc | counts
+1 worktree + branch pqz-wallet-wasm (ignored inputs copied as real dirs) | a5cfe748a | 0 | -
+2 wallet crate: lib.rs, cases.rs, build.sh, strip-exports.mjs, run.sh | 9f7b01105 | 0 | exports memory input_ptr input_cap out_ptr pk_bytes check_recipient check_auditor; no unsafe
+3 clientkeys loader pqzopenWasm.js, pqzKeyHandle.check(credit, wallet), test/pqz-wallet-wasm.test.js | fd5b5406b | 0 | -
+4 mutants.py | 207a5b2d5 | 0 | -
+5 docs: signers-clientkeys.md #pqz-wallet-wasm, decisions.md CLI-SGN-51 Change, ffi README | ffba31815 | 0 | -
+gate wallet-wasm/run.sh, four sets | ffba31815 | 0 | 22/22 tests; per set 103 cases wasm = native (opening.json's 2 rows field by field + one-change variants), 116 raw malformed frames, 60 loader negatives, handle with a planted u*
+gate wallet-wasm/mutants.py (n2304-kmax4096 + n2048-kmax1024) | 207a5b2d5 | 0 | control ok before and after; 13/13 killed (R1-R8 wrapper, J1-J3 + J5 loader, J4 handle)
+gate clippy wallet crate, native and wasm32, -D warnings | 9f7b01105 | 0 | 0 warnings
+gate clientkeys full suite, without modules | fd5b5406b | 0 | 354 tests, 349 pass, 0 fail, 5 skipped (2 of them: the wallet tests without PQZ_WALLET_DIR)
+gate clientkeys full suite, PQZ_WALLET_DIR set (four sets) | fd5b5406b | 0 | 374 tests, 371 pass, 0 fail, 3 skipped
+gate ffi/run.sh ffi/test + ffi/wasm, n2048-kmax1024 | ffba31815 | 0 | 30 tests ok, 0 failed; native = wasm32 29 lines
+gate ffi/run.sh ffi/test + ffi/wasm, n2304-kmax4096 | 207a5b2d5 | 0 | 30 tests ok, 0 failed; native = wasm32 29 lines
+gate ffi/run.sh ffi/test + ffi/wasm, n2560-kmax16384 | ffba31815 | 0 | 30 tests ok, 0 failed; native = wasm32 29 lines
+gate ffi/run.sh ffi/test + ffi/wasm, n2816-kmax65536 | ffba31815 | 0 | 30 tests ok, 0 failed; native = wasm32 15 lines (no PQZH at this set)
+gate docs_check check / test_docs_check | ffba31815 | 0 | 0 errors, 7 warnings (budgets; signers-clientkeys.md was over budget before), test ok
+# ffi/native and ffi/bench were not run (resume state marked them): nothing they read changed.
