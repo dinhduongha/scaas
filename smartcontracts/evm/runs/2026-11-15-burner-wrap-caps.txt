@@ -26,8 +26,11 @@ ua-c / ua-cxx / ua-qt / ua-dart-frb | final | 0 | 24 / 20 / 29 / 21
 ua-py / ua-go / ua-cs / ua-dart | final | 0 | 29 / 28 / 28 / 29
 script/pqz/e2e.py --self-test | final | 0 | 0 failures
 docs_check.py check / test_docs_check.py | final | 0 | 0 errors (7 page-budget warnings, as before) / ok
+Fable review (no P0 / P1) fixes: tests + docs | 3971a3918 | 0 | DexOutside 30, SupplyCaps 17, SupplyCapsKinds, HolderChainWord, SelectorAudit green
+review-fix mutants | 3971a3918 | 0 | 11/11 killed (round total 80/80); src clean vs HEAD after
+on-chain matrix, local anvil (tokens, gov, views, wraplimits) | 3971a3918 | 0 | 536 / 170 / 3,350 views / 170 txs; negatives 13 / 27 / - / 63
+on-chain matrix, local anvil (zether, pqzkeys) | 3971a3918 | 0 | 176 / 710 txs; negatives 2 / 29
 
 Gas pins old -> new, each cause measured against 3fa153e4 (bare-selector dispatch probe, -vvvv call trees, slot sets):
 see the code commit's message (plus_zero_gas.json, WrapLimitsGas, RegulatedGas, ProofPathInvariants P7 rows).
-Not run here: the full pqz-core gate (no core, statement or set change); the on-chain matrix (local and SCaaS testnet:
-reset 4).
+Not run here: the full pqz-core gate (no core, statement or set change); the on-chain matrix on the SCaaS testnet (reset 4).
