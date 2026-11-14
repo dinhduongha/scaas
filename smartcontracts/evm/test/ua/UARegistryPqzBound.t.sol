@@ -116,7 +116,7 @@ contract UARegistryPqzBoundTest is UARegistryBase {
     }
 
     function _bound(uint256 c, uint256 auth) internal pure returns (uint256) {
-        uint256 w = 2 * (c + 45_000) + (c - 400_000) / 63 + 2_500; // MSIG_ACCEPTED_GAS
+        uint256 w = 2 * (c + 45_000) + (c - 400_000) / 63 + 3_500; // MSIG_ACCEPTED_GAS (3ze: 2,500 -> 3,500)
         return w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * auth;
     }
 

@@ -152,6 +152,100 @@ fn membership_rows() {
     }
 }
 
+fn msig_update_of(r: &Value) -> MsigUpdate {
+    let members = arr(r, "members").iter().map(|m| MsigMember { kind: num(&m["kind"]) as u16, id: b32(&m["id"]), weight: num(&m["weight"]) as u16 });
+    let mut enabled = [0u8; 32];
+    let e: u128 = r["enabled"].as_str().unwrap().parse().unwrap();
+    enabled[16..].copy_from_slice(&e.to_be_bytes());
+    MsigUpdate { ua: b32(&r["ua"]), chain_uid: b32(&r["chainUid"]), registry: bytes(&r["registry"]).try_into().unwrap(), version: num(&r["version"]),
+        structure: MsigStructure { threshold: num(&r["threshold"]) as u16, members: members.collect() }, enabled,
+        valid_until_block: num(&r["validUntilBlock"]) }
+}
+
+/// CTR-UA-44: every `updateMsig` row: the typed digest, the message, `memberDigest`, the JSON surface's named arguments; the negatives
+/// are signed over another chain word's or another registry's digest.
+#[test]
+fn msig_update_rows() {
+    let p = load("portable.json");
+    let rows = arr(&p, "msigUpdates");
+    assert_eq!(rows.len(), 4);
+    assert_eq!(hx(&purpose_tag("msig-update").unwrap()), p["tags"]["PURPOSE_MSIG_UPDATE"]["hash"]);
+    assert!(!is_portable_purpose(&purpose_tag("msig-update").unwrap()), "not a requirePortable purpose");
+    for r in rows {
+        let u = msig_update_of(r);
+        let (d, m, md) = msig_update_message(&u).unwrap();
+        assert_eq!(hx(&d), r["digest"], "{}", r["name"]);
+        assert_eq!(hx(&m), r["message"], "{}", r["name"]);
+        assert_eq!(hx(&md), r["memberDigest"], "{}", r["name"]);
+        #[cfg(feature = "json")]
+        {
+            let mut j: Value = serde_json::from_str(&scaas_ua::json::msig_update_json(&serde_json::json!({ "ua": r["ua"], "chainUid": r["chainUid"],
+                "registry": r["registry"], "version": r["version"], "threshold": r["threshold"], "members": r["members"], "enabled": r["enabled"],
+                "validUntilBlock": r["validUntilBlock"], "sigs": r["args"]["sigs"] }).to_string()).unwrap()).unwrap();
+            assert_eq!(j["digest"], r["digest"], "{}", r["name"]);
+            assert_eq!(j["args"].take(), r["args"], "{}", r["name"]);
+        }
+        if let Some(f) = r.get("signedFor") {
+            let other = MsigUpdate { chain_uid: b32(&f["chainUid"]), registry: bytes(&f["registry"]).try_into().unwrap(), ..u.clone() };
+            assert_ne!(msig_update_digest(&other), d, "{}", r["name"]);
+        }
+    }
+}
+
+/// MM-13 and rows 5–8 off chain: the signer's next version is the stored one + 1, the target's stateless refusals, the warnings; the
+/// ordered log refuses a version step that is not + 1 per registry.
+#[test]
+fn msig_update_plan() {
+    let id = |b: u8| [b; 32];
+    let m = |b: u8| MsigMember { kind: 0x0131, id: id(b), weight: 1 };
+    let mut w = [0u8; 32];
+    w[31] = 0b111;
+    let s = MsigUpdateState { current: MsigStructure { threshold: 2, members: vec![m(1), m(2), m(3)] }, version: 4, enabled: w, accepted: w,
+        holds_pqz_key: true, ..Default::default() };
+    let (ua, cu, reg) = (id(9), id(7), [5u8; 20]);
+    let mut t = MsigStructure { threshold: 2, members: vec![m(1), m(2), m(3), m(4)] };
+    let mut en = [0u8; 32];
+    en[31] = 0b1011; // slot 2 disabled, slot 3 appended
+    let (u, warn) = plan_msig_update(&s, &ua, &cu, &reg, &t, &en, 100, false).unwrap();
+    assert_eq!(u.version, 5);
+    assert!(warn.contains(&MsigUpdateWarning::SlotsLeft(252)) && warn.contains(&MsigUpdateWarning::RotatePqzKey));
+    assert!(!warn.iter().any(|x| matches!(x, MsigUpdateWarning::ReEnableRather(_))), "every stored slot enabled: no returning member");
+    let mut part = s.clone();
+    part.enabled[31] = 0b011;
+    let (_, warn) = plan_msig_update(&part, &ua, &cu, &reg, &t, &en, 100, false).unwrap();
+    assert!(warn.contains(&MsigUpdateWarning::ReEnableRather(id(4))), "a disabled stored slot: re-enable rather than append");
+    let mut bad = t.clone();
+    bad.members[3] = MsigMember { kind: 0x0001, id: id(4), weight: 1 }; // a native kind with a derived id (row 7)
+    assert!(plan_msig_update(&s, &ua, &cu, &reg, &bad, &en, 100, false).is_err());
+    bad.members[3] = MsigMember { kind: 0x0141, id: id(4), weight: 1 }; // no member kind (row 7)
+    assert!(plan_msig_update(&s, &ua, &cu, &reg, &bad, &en, 100, false).is_err());
+    let refused = |t: &MsigStructure, en: &[u8; 32]| plan_msig_update(&s, &ua, &cu, &reg, t, en, 100, false).is_err();
+    t.threshold = 3; // a + b accepted, d not yet
+    assert!(refused(&t, &en));
+    t.threshold = 2;
+    t.members[3].id = id(1); // one slot per id
+    assert!(refused(&t, &en));
+    t.members[3].id = id(4);
+    t.members[1].kind = 0x0130; // a stored slot changed
+    assert!(refused(&t, &en));
+    t.members[1].kind = 0x0131;
+    let mut past = en;
+    past[31] |= 0b10000; // a bit past the slots
+    assert!(refused(&t, &past));
+    assert!(!refused(&t, &en));
+    let v = MsigUpdateState { verifier: true, ..s.clone() };
+    assert!(plan_msig_update(&v, &ua, &cu, &reg, &t, &en, 100, false).is_err(), "a verifier only when told");
+    assert!(plan_msig_update(&v, &ua, &cu, &reg, &t, &en, 100, true).is_ok());
+
+    let mut log = MsigLog::default();
+    let up = |v: u64, r: u8| MsigLogEntry::Update { chain_uid: cu, registry: [r; 20], version: v };
+    log.push(up(1, 1)).unwrap();
+    log.push(MsigLogEntry::Record { purpose: purpose_tag("pqz-key").unwrap(), version: 1 }).unwrap();
+    log.push(up(1, 2)).unwrap();
+    assert!(log.push(up(3, 1)).is_err(), "no jump");
+    log.push(up(2, 1)).unwrap();
+}
+
 /// TS-D1, CTR-UA-37: the six portable typehashes (type strings: primary, then the referenced types sorted by name).
 #[test]
 fn portable_typehashes_pinned() {
@@ -165,6 +259,9 @@ fn portable_typehashes_pinned() {
         ("UAPqzKeyVersion", "0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158"),
         ("UAPqzKeyVersionRecord", "0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5"),
         ("UAMembership", "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4"),
+        // CTR-UA-44 (TODO 3ze): the contract's pins (test/ua/UARegistryMsigUpdate.t.sol)
+        ("UAMsigUpdate", "0x4f444098cb5d1c5e604d10d13c9c803ac8429ef9938342ded6997343b9c48ac6"),
+        ("UAMsigMember", "0x49ee2633d577df4283fdcf2546b6c8b72f1e3cddb2449cefdfc6eed31e26a05a"),
     ];
     assert_eq!(PORTABLE_TYPES.map(|(n, _)| n), want.map(|(n, _)| n));
     assert_eq!(p["typed"]["types"].as_object().unwrap().len(), want.len());
@@ -1379,4 +1476,60 @@ fn t13_pqz_keys_distinct() {
     assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &k1[..]), (t2, &k1[..]), (a, &ka[..])]), Err(t2), "duplicate leg");
     assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &kf[..])]), Err(t1), "leg = pk_f");
     assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &k1[..]), (a, &k1[..])]), Err(a), "leg = pk_a");
+}
+
+/// CTR-UA-44: every record check of an updated `msig` reads its current structure (`check_*_current`): portable.json `msigUpdated`, the
+/// same rows clientkeys verifies. Each valid row fails against the first structure alone (an appended signer, a disabled slot).
+#[cfg(feature = "pq")]
+#[test]
+fn record_checks_read_the_current_structure() {
+    let p = load("portable.json");
+    let u = &p["msigUpdated"];
+    let (ua, first, cur) = (b32(&u["ua"]), bytes(&u["keyData"]), bytes(&u["current"]));
+    let mut en = [0u8; 32];
+    en[16..].copy_from_slice(&u["enabled"].as_str().unwrap().parse::<u128>().unwrap().to_be_bytes());
+    let members = keys(&p);
+    let now: &Current = &|id| (id == ua).then(|| (cur.clone(), en));
+    let none: &Current = &|_| None;
+    let accepted: &Accepted = &|id, i| id != ua || (i < 256 && en[31 - i as usize / 8] >> (i % 8) & 1 == 1);
+    let s: Value = load("structures.json");
+    let c = &s["contexts"]["A"];
+    let domain = Domain { generation: 1, chain_id: num(&c["chainId"]), registry: bytes(&c["registry"]).try_into().unwrap(), chain_uid: b32(&c["chainUid"]) };
+    let rows = arr(u, "rows");
+    assert_eq!(rows.len(), 7);
+    for r in rows {
+        let sig = bytes(r.get("sig").unwrap_or(&r["pop"]));
+        let run = |current: &Current| -> Result<()> {
+            match r["entry"].as_str().unwrap() {
+                "setPqzKey" if num(&r["version"]) == 0 => check_pqz_key_record_current(0x0120, &first, &ua, &bytes(&r["pqzKey"]),
+                    &b32(&r["pqzPopHash"]), &sig, &members, current, Some(accepted)),
+                "setPqzKey" => check_pqz_key_version_record_current(0x0120, &first, &ua, num(&r["version"]), &bytes(&r["pqzKey"]),
+                    &b32(&r["pqzPopHash"]), &sig, &members, current, Some(accepted)),
+                "acceptMembership" => check_membership_current(&first, &ua, &MemberSig { index: num(&r["index"]) as u16, members: vec![], sig: sig.clone() },
+                    &members, current, Some(accepted)),
+                "requireAuthorized" => check_authorization_current(&first, &ua, &b32(&r["purposeTag"]), &b32(&r["digest"]),
+                    &decode_member_sigs(&sig).unwrap(), &domain, &members, current, Some(accepted)),
+                _ => check_registration_current(0x0120, &bytes(&r["keyData"]), &Attrs::default(), &sig, &[], &|id| {
+                    if id == ua { Some((0x0120, first.clone())) } else { members(id) }
+                }, current, Some(accepted)),
+            }
+        };
+        let valid = r["valid"].as_bool().unwrap();
+        assert_eq!(run(now).is_ok(), valid, "{}", r["name"]);
+        // Fable P2-4: a disabled slot is refused off chain from the enabled word alone, whatever `accepted` says (raw bits, or none)
+        if !valid && r["entry"] == "setPqzKey" {
+            let raw: &Accepted = &|_, _| true;
+            let with = |acc: Option<&Accepted>| check_pqz_key_record_current(0x0120, &first, &ua, &bytes(&r["pqzKey"]), &b32(&r["pqzPopHash"]),
+                &sig, &members, now, acc);
+            assert!(with(Some(raw)).is_err() && with(None).is_err(), "{}: the enabled mask", r["name"]);
+        }
+        if !valid && r["entry"] == "requireAuthorized" {
+            let raw: &Accepted = &|_, _| true;
+            assert!(check_authorization_current(&first, &ua, &b32(&r["purposeTag"]), &b32(&r["digest"]), &decode_member_sigs(&sig).unwrap(),
+                &domain, &members, now, Some(raw)).is_err(), "{}: the enabled mask", r["name"]);
+        }
+        if valid {
+            assert!(run(none).is_err(), "{}: the first structure alone", r["name"]);
+        }
+    }
 }

@@ -88,7 +88,7 @@ static void table_groups_purposes_constants() {
         CHECK(hx(*groupTag(g)) == r["GROUP"].get<std::string>(), g);
     }
     CHECK(!groupTag("nope") && !groupTagString("nope"), "unknown group");
-    CHECK(k["purposes"].size() == 15, "purposes size");  // 14 purposes, `pop` has v1 and v2
+    CHECK(k["purposes"].size() == 16, "purposes size");  // 15 purposes, `pop` has v1 and v2
     for (auto& r : k["purposes"]) {
         CHECK(hx(purposeTag(r["purpose"], r["version"].get<uint32_t>())) == r["purposeTag"].get<std::string>(), r["purpose"].get<std::string>());
         if (r["version"] == 1) CHECK(hx(purposeTag(r["purpose"])) == r["purposeTag"].get<std::string>(), r["purpose"].get<std::string>());
@@ -374,6 +374,21 @@ static void membership_rows() {
         Bytes m = uaMessage(0x0120, purposeTag("membership"), d);
         CHECK(m == bytes(r["message"]), "membership message");
         CHECK(memberDigest(u, m) == bytes(r["memberDigest"]), "membership memberDigest");
+    }
+}
+
+// CTR-UA-44: every updateMsig row: digest, message, memberDigest and the named arguments
+static void msig_update_rows() {
+    json p = load("portable.json");
+    CHECK(p["msigUpdates"].size() == 4, "msigUpdates");
+    for (auto& r : p["msigUpdates"]) {
+        json i;
+        for (auto k : {"ua", "chainUid", "registry", "version", "threshold", "members", "enabled", "validUntilBlock"}) i[k] = r[k];
+        i["sigs"] = r["args"]["sigs"];
+        json o = json::parse(msigUpdate(i.dump()));
+        std::string name = r["name"];
+        CHECK(o["digest"] == r["digest"] && o["message"] == r["message"] && o["memberDigest"] == r["memberDigest"], name);
+        CHECK(o["args"] == r["args"], name);
     }
 }
 
@@ -856,7 +871,7 @@ int main(int argc, char** argv) {
         {"table_groups_purposes_constants", table_groups_purposes_constants}, {"valid_rows", valid_rows},
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
-        {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"portable_purposes", portable_purposes},
+        {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"msig_update_rows", msig_update_rows}, {"portable_purposes", portable_purposes},
         {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"nested_inner", nested_inner}, {"set_key_args", set_key_args}, {"pay_rows", pay_rows},
         {"member_sig_hashes", member_sig_hashes}, {"governance_bits_rows", governance_bits_rows}, {"id_display_rows", id_display_rows}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }

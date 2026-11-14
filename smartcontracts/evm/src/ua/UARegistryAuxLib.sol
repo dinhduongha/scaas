@@ -214,16 +214,145 @@ library UARegistryAuxLib {
         emit IUARegistry.UAPqzKeyAdded(ua, version, h, pqzPopHash, pqzKey, stored);
     }
 
-    /// The record `setPqzKey` / `setPqzScopedKey` sign for (`_host`'s rule): its kind and key data, here or in gen 1 on a host.
+    /// The record `setPqzKey` / `setPqzScopedKey` sign for (`_host`'s rule): its kind and key data, here or in gen 1 on a host. An
+    /// `msig`: its **current** structure (CTR-UA-44), gen 1's `msigOf` + `msigStateOf` on a host, never `registrationOf` (a raised
+    /// threshold would be read as the first one).
     function _holderOf(bytes32 ua) private view returns (uint16 kind, bytes memory d, bool host) {
         host = _host(ua);
-        if (host) {
-            (kind, d,,,) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);
-        } else {
-            IUARegistry.Record memory r = UAStore.layout().records[ua];
-            kind = r.kind;
-            (d,) = UAStore.registration(ua, r.keyPtr);
+        IUARegistry.Record memory r = UAStore.layout().records[ua];
+        kind = host ? UARegistryCoreLib._kindOf(ua) : r.kind;
+        if (kind == UAKinds.MSIG) d = UARegistryCoreLib._msigBytes(ua);
+        else if (host) (, d,,,) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);
+        else (d,) = UAStore.registration(ua, r);
+    }
+
+    // ----- `msig` member changes (CTR-UA-44, TODO 3ze, owner 2026-11-14) -----
+
+    /// The calldata-free part of an `updateMsig` (stack): the id, the chain word, the stored structure, the target (typed and as
+    /// its blob), the slots this update appends or re-enables.
+    struct Update {
+        bytes32 ua;
+        bytes32 chainUid;
+        bytes stored;
+        IUARegistry.MsigStructure st;
+        bytes t;
+        uint256 fresh;
+    }
+
+    /// `IUARegistry.updateMsig` (CTR-UA-44), its check order (spec rows 1–13), then the blob (MM-6) behind the record's `keyPtr`
+    /// (MM-7). Nothing reads an event; the id, `registrationOf`, `popOf`, `popSlotsOf` keep the first structure (MM-1).
+    function updateMsig(bytes32 ua, uint64 version, IUARegistry.MsigStructure calldata structure, uint256 enabled,
+        uint64 validUntilBlock, IUARegistry.MemberSig[] calldata sigs, bytes32 chainUid_) external
+    {
+        Update memory u;
+        (u.ua, u.chainUid) = (ua, _chainUid());
+        if (chainUid_ != u.chainUid) revert IUARegistry.ChainUidMismatch(u.chainUid, chainUid_); // 1
+        if (block.number > validUntilBlock) revert IUARegistry.UAMsigExpired(ua); // 2
+        u.stored = _stored(ua, version); // 3, 4
+        u.st = structure;
+        _target(u, enabled); // 5–8
+        u.t = UAStore.blob(u.st, enabled, version);
+        _quorumSigned(u, UAKinds.msigUpdateDigest(ua, u.chainUid, address(this), version, u.st, enabled, validUntilBlock), sigs);
+        _fresh(u); // 10
+        _core(abi.encodeWithSelector(UARegistryCoreLib.msigBound.selector, ua, u.t, u.stored)); // 11–13
+        UAStore.layout().records[ua].keyPtr = SSTORE2.write(u.t);
+        emit IUARegistry.UAMsigUpdated(ua, version, u.st.threshold, uint16(u.st.members.length), enabled);
+    }
+
+    /// Rows 3, 4: an `msig` held here (a gen-1 record on gen 2 too: `UAUnauthorized`, as `acceptMembership`), and `version` =
+    /// the stored one + 1 (MM-13, owner 2026-11-14: no jump; `UAMsigVersion`). Returns the stored structure.
+    function _stored(bytes32 ua, uint64 version) private view returns (bytes memory d) {
+        IUARegistry.Record memory r = UAStore.layout().records[ua];
+        if (r.kind != UAKinds.MSIG) revert IUARegistry.UAUnauthorized(ua);
+        d = UAStore.msig(ua, r.keyPtr);
+        uint64 stored = UAStore.versionOf(d);
+        if (version != stored + 1) revert IUARegistry.UAMsigVersion(ua, stored);
+    }
+
+    /// Rows 5–8 on the target `u.st` / `enabled` against `u.stored`: the slot count, the enabled bits, at most 16 enabled
+    /// (`UAMsigSlots`); every stored slot keeps `kind` and `id` (`UAMsigSlotChanged`); weights ≠ 0, an appended slot a member
+    /// kind with a native kind iff a native-space id, one slot per `id` whatever its kind, no enabled self-slot
+    /// (`UAKeyData(0x0120)`); the threshold ≠ 0 and at most the weight of the enabled and accepted slots (an appended slot has
+    /// not accepted yet; `UAMsigThreshold`). Sets `u.fresh`: the slots appended, or enabled again, here (row 10).
+    function _target(Update memory u, uint256 enabled) private view {
+        IUARegistry.MsigMember[] memory m = u.st.members;
+        uint256 n = m.length;
+        uint256 sn = UAStore.u16(u.stored, 2);
+        uint256 on;
+        for (uint256 b = enabled; b != 0; b &= b - 1) ++on;
+        if (n < sn || n > 256 || (n != 256 && enabled >> n != 0) || on > 16) revert IUARegistry.UAMsigSlots(n);
+        for (uint256 i; i < sn; ++i) {
+            uint256 o = 4 + 36 * i;
+            if (m[i].kind != UAStore.u16(u.stored, o) || m[i].id != bytes32(UAStore.word(u.stored, o + 2))) {
+                revert IUARegistry.UAMsigSlotChanged(uint16(i));
+            }
         }
+        uint256 se = UAStore.enabledOf(u.stored);
+        uint256 accepted = UAStore.layout().accepted[u.ua];
+        uint256 weight;
+        for (uint256 i; i < n; ++i) {
+            IUARegistry.MsigMember memory x = m[i];
+            bool en = enabled >> i & 1 != 0;
+            if (x.weight == 0 || (en && x.kind == UAKinds.MSIG && x.id == u.ua)) revert IUARegistry.UAKeyData(UAKinds.MSIG);
+            if (i >= sn) {
+                if (!UAKinds.isMember(x.kind, true) || UAKinds.isNative(x.kind) != UAKinds.inNativeSpace(x.id)) {
+                    revert IUARegistry.UAKeyData(UAKinds.MSIG);
+                }
+                for (uint256 j; j < i; ++j) {
+                    if (m[j].id == x.id) revert IUARegistry.UAKeyData(UAKinds.MSIG);
+                }
+            }
+            if (i >= sn || (en && se >> i & 1 == 0)) u.fresh |= 1 << i;
+            if (en && accepted >> i & 1 != 0) weight += x.weight;
+        }
+        if (u.st.threshold == 0 || u.st.threshold > weight) revert IUARegistry.UAMsigThreshold(u.ua);
+    }
+
+    /// Row 9: `sigs` reach the **stored** threshold over the stored enabled and accepted slots, minimal, over `typed` (the
+    /// `requirePortable` `msig` arm under `PURPOSE_MSIG_UPDATE`; `UAUnauthorized`).
+    function _quorumSigned(Update memory u, bytes32 typed, IUARegistry.MemberSig[] calldata sigs) private {
+        bytes32 md = UAKinds.memberDigest(u.ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MSIG_UPDATE, typed));
+        bytes memory ok =
+            _core(abi.encodeWithSelector(UARegistryCoreLib.msigOk.selector, u.ua, md, typed, u.stored, sigs));
+        if (!abi.decode(ok, (bool))) revert IUARegistry.UAUnauthorized(u.ua);
+    }
+
+    /// Row 10: a slot appended or enabled again by this update is a member of this profile, native or registered under its kind,
+    /// and an `msig` member holds no enabled `msig` slot now (a third level; `UAMemberUnknown`). A slot already enabled is never
+    /// re-judged here: a member that grew a level since is left out of the bound instead (MM-14).
+    function _fresh(Update memory u) private view {
+        IUARegistry self = IUARegistry(address(this));
+        bool hedera = self.hederaNative();
+        IUARegistry.MsigMember[] memory m = u.st.members;
+        for (uint256 i; u.fresh >> i != 0; ++i) {
+            if (u.fresh >> i & 1 == 0) continue;
+            (uint16 kind, bytes32 id) = (m[i].kind, m[i].id);
+            if (
+                !UAKinds.isMember(kind, hedera) || (!UAKinds.isNative(kind) && self.kindOf(id) != kind)
+                    || (kind == UAKinds.MSIG && _nested(id))
+            ) revert IUARegistry.UAMemberUnknown(id);
+        }
+    }
+
+    /// Does the `msig` `id` hold an enabled `msig` slot (its current structure, here or gen 1's)?
+    function _nested(bytes32 id) private view returns (bool) {
+        bytes memory d = UARegistryCoreLib._msigBytes(id);
+        uint256 en = UAStore.enabledOf(d);
+        uint256 n = UAStore.u16(d, 2);
+        for (uint256 i; i < n; ++i) {
+            if (en >> i & 1 != 0 && UAStore.u16(d, 4 + 36 * i) == UAKinds.MSIG) return true;
+        }
+        return false;
+    }
+
+    /// `IUARegistry.msigStateOf` (CTR-UA-44): run by `_libView`.
+    function msigStateOf(bytes32 ua) external returns (uint64 version, uint256 enabled, uint256 accepted) {
+        if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).msigStateOf(ua);
+        IUARegistry.Record memory r = UAStore.layout().records[ua];
+        if (r.kind != UAKinds.MSIG) return (0, 0, 0);
+        accepted = UAStore.layout().accepted[ua];
+        if (r.keyPtr != address(0)) (enabled, version) = UAStore.trailer(r.keyPtr);
+        else enabled = UAStore.enabledOf(UAStore.keyRest(ua));
     }
 
     // ----- the PQZ three-key model: scoped PQZ key records (spec 2026-11-13-pqz-three-keys K3-3) -----
@@ -453,7 +582,7 @@ library UARegistryAuxLib {
         // UA8-D11 before `_sigOk`: its gen-1 fallback would verify a gen-1 holder's record here (A6 re-review)
         if (r.kind == 0) revert IUARegistry.UAUnauthorized(ua);
         if (!UARegistryCoreLib._kemHolder(r.kind)) revert IUARegistry.UAKemHolder(ua); // CTR-UA-32: an `msig` holds no KEM key
-        (bytes memory d,) = UAStore.registration(ua, r.keyPtr);
+        (bytes memory d,) = UAStore.registration(ua, r);
         // owner 2026-10-31: never overwrite (every version write-once); version 0 only to fill the `register` commit
         if (s.kem[ua][version].length != 0) revert IUARegistry.UAKemVersion(ua, version);
         bytes32 committed = version == 0 ? s.kemCommit[ua].kemPkHash : bytes32(0);

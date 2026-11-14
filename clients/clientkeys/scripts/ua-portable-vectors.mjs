@@ -463,12 +463,90 @@ const nestedBuild = () => ({ note: nestedNote, version: 1, registrations: nested
   return s && r.memberDigest ? { ...r, innerDigests: innerDigests(r, s) } : r;
 }), kemRecords: nestedKem, pqzKeyRecords: nestedPqzKey, memberships: nestedMemberships, afterAcceptance, authorizations, negatives: nestedNegatives, structures, eligibility });
 
+// --- updateMsig (CTR-UA-44, TODO 3ze): one registry per update, version = stored + 1, signed by a quorum of the STORED structure:
+// a native member over the typed digest itself, a derived member over uaMessage(kind, member, memberDigest), an msig member by its own
+// list over innerDigest(member, memberDigest). The target: every slot (stored ones keep kind and id), enabled bit i = slot i ---
+const updMsig = msig('msig-update', 2, [[native, 1], [ml1, 1], [ml2, 1]]);
+const updNested = msig('msig-update-nested', 2, [[pqInner, 1], [ml2, 1]]);
+const slotOf = (s, m) => s.members.find((x) => hex(x.ua) === hex(m.ua)).index;
+function msigUpdateRow(name, s, { disable = [], append = [], threshold }, signers, ctx, signedFor = ctx) {
+  const members = s.members.map((m) => ({ kind: m.kind, id: hex(m.ua), weight: m.weight }))
+    .concat(append.map(([m, w]) => ({ kind: m.kind, id: hex(m.ua), weight: w })));
+  let enabled = (1n << BigInt(members.length)) - 1n;
+  for (const m of disable) enabled &= ~(1n << BigInt(slotOf(s, m)));
+  const f = { ua: s.ua, chainUid: ctx.chainUid, registry: ctx.registry, version: 1, threshold, members, enabled, validUntilBlock: 1000 };
+  const m = ua.msigUpdateMessage(f);
+  const signed = signedFor === ctx ? m : ua.msigUpdateMessage({ ...f, chainUid: signedFor.chainUid, registry: signedFor.registry });
+  const list = s.memberList(B(hex(signed.memberDigest)), B(hex(signed.digest)), signers);
+  const inner = s.members.filter((x) => x.kind === 0x0120).map((x) => ({ member: hex(x.ua), innerDigest: hex(ua.innerDigest(x.ua, m.memberDigest)) }));
+  return { name, ua: hex(s.ua), stored: hex(s.keyData), chainUid: ctx.chainUid, registry: ctx.registry, version: 1, threshold, members,
+    enabled: enabled.toString(10), validUntilBlock: 1000, digest: hex(m.digest), message: hex(m.message), memberDigest: hex(m.memberDigest),
+    ...(inner.length ? { innerDigests: inner } : {}), typedData: m.typedData, signers, sigs: hex(encodeMemberSigs(list)),
+    args: { ...m.args, sigs: ua.uaSig({ members: list }).members },
+    ...(signedFor === ctx ? {} : { signedFor: { chainUid: signedFor.chainUid, registry: signedFor.registry }, error: 'UAUnauthorized' }) };
+}
+const disableAppend = { disable: [ml2], append: [[fn, 1]], threshold: 2 };
+const msigUpdates = [
+  msigUpdateRow('disable-append', updMsig, disableAppend, [slotOf(updMsig, native), slotOf(updMsig, ml1)], contexts.A),
+  msigUpdateRow('nested', updNested, { append: [[fn, 1]], threshold: 2 }, [slotOf(updNested, pqInner), slotOf(updNested, ml2)], contexts.A),
+  // negatives: the same update signed for another chain word (context B), for another registry of the same chain word (context D)
+  msigUpdateRow('signed-for-another-chain', updMsig, disableAppend, [slotOf(updMsig, native), slotOf(updMsig, ml1)], contexts.A, contexts.B),
+  msigUpdateRow('signed-for-another-registry', updMsig, disableAppend, [slotOf(updMsig, native), slotOf(updMsig, ml1)], contexts.A, contexts.D),
+];
+
+// --- the record checks after an update (CTR-UA-44): msig-update after `disable-append` (ml2 disabled, fndsa512 appended and accepted),
+// every record signed by and judged on the CURRENT structure; `current` the CTR-UA-09 bytes msigOf returns, `enabled` msigStateOf's ---
+const updSlots = [...updMsig.members, { ...fn, weight: 1, index: updMsig.members.length }];
+const updEnabled = (1n << BigInt(updSlots.length)) - 1n - (1n << BigInt(slotOf(updMsig, ml2)));
+const updCurrent = ua.encodeMsig(2, updSlots.map((m) => ({ kind: m.kind, id: m.ua, weight: m.weight })));
+const updEligible = ua.encodeMsig(2, updSlots.filter((m) => (updEnabled >> BigInt(m.index)) & 1n).map((m) => ({ kind: m.kind, id: m.ua, weight: m.weight })));
+/** `[{index, members: [], sig}]` of the current slots `who` over `md` (a native leaf over `nativeOver`, the typed digest or UAAuth). */
+const updList = (md, nativeOver, who) => who.map((m) => ({ index: m.index, members: [],
+  sig: ua.isNativeKind(m.kind) ? ecdsa(nativeSk, nativeOver) : m.sign(ua.uaMessage(m.kind, MEMBER, md)) }));
+const updNow = [updSlots.find((m) => m.kind === 0x0001), updSlots[updSlots.length - 1]]; // native + the appended fndsa512
+const updOld = [updSlots[slotOf(updMsig, ml1)], updSlots[slotOf(updMsig, ml2)]].sort((x, y) => x.index - y.index); // ml2 disabled
+const sortSlots = (l) => [...l].sort((x, y) => x.index - y.index);
+const updRecord = (name, who, version) => {
+  const pqzKey = pqzKeyOf(SETS[0], ` msig-update${version ? ` v${version}` : ''}`);
+  const common = { ua: updMsig.ua, keyData: updEligible, pqzKey, pqzPop: pqzPopOf(SETS[0]) };
+  const m = version ? ua.pqzKeyVersionRecordOf(0x0120, { ...common, version }) : ua.pqzKeyRecordMessage(0x0120, common);
+  const list = updList(m.memberDigest, m.recordDigest, sortSlots(who));
+  return { name, entry: 'setPqzKey', version, pqzKey: hex(pqzKey), pqzPopHash: hex(m.pqzPopHash), recordDigest: hex(m.recordDigest),
+    memberDigest: hex(m.memberDigest), sig: hex(encodeMemberSigs(list)), valid: who === updNow };
+};
+const updAccept = (() => {
+  const appended = updSlots[updSlots.length - 1];
+  const r = ua.membershipMessage({ ua: updMsig.ua, member: appended.ua });
+  return { name: 'appended-slot-accepts', entry: 'acceptMembership', index: appended.index, member: hex(appended.ua),
+    sig: hex(appended.sign(ua.uaMessage(appended.kind, MEMBER, r.memberDigest))), valid: true };
+})();
+const updAuthMd = ua.memberDigest(updMsig.ua, ua.uaMessage(0x0120, ua.purposeTag('metatx'), DIGEST));
+const updAuth = (name, who) => ({ name, entry: 'requireAuthorized', purposeTag: hex(ua.purposeTag('metatx')), digest: hex(DIGEST),
+  sig: hex(encodeMemberSigs(updList(updAuthMd, uaAuthMd(updAuthMd), sortSlots(who)))), valid: who === updNow });
+// a registration whose `pop` names the updated msig as a member: its slot signs by the inner's CURRENT quorum
+const updOuter = msig('msig-update-outer', 2, [[updMsig, 1], [ml, 1]]);
+const updOuterRow = (() => {
+  const inner = (id) => (id === hex(updMsig.ua) ? updEligible : null);
+  const m = ua.holderPopMessage(0x0120, { ua: updOuter.ua, keyData: updOuter.keyData, inner });
+  const md = B(hex(m.memberDigest));
+  const typed = B(hex(m.registrationDigest));
+  const list = sortSlots(updOuter.members.map((x) => (x.kind === 0x0120
+    ? { index: x.index, members: updList(ua.innerDigest(updMsig.ua, md), typed, sortSlots(updNow)).map(({ index, sig }) => ({ index, sig })), sig: NONE }
+    : { index: x.index, members: [], sig: x.sign(ua.uaMessage(x.kind, MEMBER, md)) })));
+  return { name: 'outer-pop-by-current-quorum', entry: 'registerMsig', ua: hex(updOuter.ua), keyData: hex(updOuter.keyData),
+    registrationDigest: hex(m.registrationDigest), pop: hex(encodeMemberSigs(list)), valid: true };
+})();
+const msigUpdated = { ua: hex(updMsig.ua), keyData: hex(updMsig.keyData), current: hex(updCurrent), enabled: updEnabled.toString(10),
+  version: 1, rows: [updRecord('pqz-key-by-current-quorum', updNow, 0), updRecord('pqz-key-by-disabled-slot', updOld, 0),
+    updRecord('pqz-key-version-by-current-quorum', updNow, 1), updAccept, updAuth('authorized-by-current-quorum', updNow),
+    updAuth('refused-with-disabled-slot', updOld), updOuterRow] };
+
 const tag = (t) => ({ tag: t, hash: hex(keccak_256(new TextEncoder().encode(t))) });
 const note = [
   'Generated by clients/clientkeys/scripts/ua-portable-vectors.mjs (src/ua.js, @noble/curves 2.4.0, @noble/post-quantum 0.7.1); '
   + 'never edit by hand. UA-8 portable registrations as typed EIP-712 records (typed-signing TS-D1 ... TS-D4): domain '
   + 'EIP712Domain(string name,string version) = ("SCaaS UA Portable", "1"), no chain id, verifying contract or salt (typed.*); '
-  + 'typed(s) = keccak256(0x1901 | typed.domainSeparator | hashStruct(s)); no chain and no registry anywhere.',
+  + 'typed(s) = keccak256(0x1901 | typed.domainSeparator | hashStruct(s)); no chain and no registry anywhere but msigUpdates (CTR-UA-44: one update per registry, below).',
   'KEM keys (CTR-UA-32): kemPk = scheme byte | key; kemScheme 1 = ML-KEM-1024 + X25519, 0x01 | ek (1,568 B) | X25519 pk (32 B) = '
   + 'kemPkLength bytes; scheme 2 (ML-KEM-1024 + HQC + X25519) is reserved and refused (UAKemScheme), as is every other scheme byte; '
   + 'an empty key or a key of another length than its scheme\'s is UAKemKeyLength.',
@@ -534,6 +612,17 @@ const note = [
   + '(record-kind-mismatch) is the kind the pop\'s record names instead of the row\'s. Attribute checks run '
   + 'before the PoP; error is the registry\'s. A proof hash of keccak256("") (an empty proof) is UAPqzPopHash wherever a proof hash is '
   + 'signed, and storePqzPop refuses empty proof bytes.',
+  'msigUpdates (CTR-UA-44): updateMsig(ua, version, structure, enabled, validUntilBlock, sigs, chainUid) on the registry of (chainUid, registry); '
+  + 'stored = the CTR-UA-09 bytes of the stored structure (never updated, version 0); members = every slot of the target, enabled bit i = slot i '
+  + '(decimal); digest = typed(UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}), members an EIP-712 array '
+  + 'of UAMsigMember{kind, id, weight}; message = ua_msg(0x0120, msig-update, digest); memberDigest = keccak256(ua | message); innerDigests: an msig '
+  + 'member\'s keccak256(member | ua_msg(0x0120, member, memberDigest)). sigs = abi.encode(MemberSig[]) by the stored slots `signers`: a native member '
+  + 'over digest, a derived member over ua_msg(kind, member, memberDigest), an msig member by its list over its innerDigest. signedFor: the sigs '
+  + 'are over the same update for another chain word or another registry, refused UAUnauthorized where the row\'s (chainUid, registry) holds it. '
+  + 'msigUpdated (CTR-UA-44): the msig-update record after disable-append, every slot accepted: keyData its first structure (the id), current '
+  + 'msigOf\'s bytes, enabled msigStateOf\'s; each row a record check that reads the current structure (setPqzKey v0 / v1, acceptMembership of '
+  + 'the appended slot, requireAuthorized in context A, the registration of an outer whose pop names the msig), valid or refused UAUnauthorized; '
+  + 'a member is accepted iff enabled.',
 ].join(' ');
 const typedSection = {
   domain: ua.PORTABLE_DOMAIN, domainType: encodeType(ua.PORTABLE_TYPES, 'EIP712Domain'), domainSeparator: hex(ua.portableDomainSeparator()),
@@ -545,9 +634,10 @@ const build = () => ({
   typed: typedSection,
   tags: { PURPOSE_POP_V2: tag('scaas.ua.purpose.pop.v2'), PURPOSE_KEM: tag('scaas.ua.purpose.kem.v1'),
     PURPOSE_PQZ_KEY: tag('scaas.ua.purpose.pqz-key.v1'), PURPOSE_MEMBERSHIP: tag('scaas.ua.purpose.membership.v1'),
+    PURPOSE_MSIG_UPDATE: tag('scaas.ua.purpose.msig-update.v1'),
     PQZ_KEY_GROUP: tag('scaas.ua.group.pqz-mlwe.v1') },
   checked: ua.CHECKED, kemScheme: ua.KEM_SCHEME.mlkem1024X25519, kemPkLength: ua.KEM_PK_LENGTH, sets: PQZ_SETS, registrations, kemRecords, pqzKeyRecords, pqzKeyVersions, memberships, negatives,
-  pqzKeyVersionNegatives,
+  pqzKeyVersionNegatives, msigUpdates, msigUpdated,
 });
 
 /** portable.json's exact text. */

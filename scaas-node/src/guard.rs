@@ -1545,6 +1545,7 @@ mod tests {
         assert_eq!(sel("setPqzScopedKey", "registry"), U::setPqzScopedKeyCall::SELECTOR);
         assert_eq!(sel("storePqzScopedPop", "registry"), U::storePqzScopedPopCall::SELECTOR);
         assert_eq!(sel("acceptMembership", "registry"), U::acceptMembershipCall::SELECTOR);
+        assert_eq!(sel("updateMsig", "registry"), U::updateMsigCall::SELECTOR);
         let cast = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(sel("deploy", "factory"), cast("deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)"));
         assert_eq!(sel("mtxExecuteAsOwner", "account"), cast("mtxExecuteAsOwner(bytes,uint256,uint256,bytes)"));
@@ -1702,9 +1703,9 @@ mod tests {
         // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows; round 3s (CTR-GOV-24): -> 134, the router's three list /
         // enable rows; round 3t: -> 135, `UASetVerifierFee`; owner 2026-11-12: -> 137, `UACreateToken`, `UACreateDex` (no vector
         // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`); -> 138,
-        // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`
-        // round 3zc (CTR-GOV-30): -> 143, the router's two cap setters
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 143, "table rows: 109 typed with an entry, 34 plain");
+        // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`;
+        // round 3zc (CTR-GOV-30): -> 143, the router's two cap setters; CTR-UA-44 (TODO 3ze): -> 144, the registry's `updateMsig`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 144, "table rows: 109 typed with an entry, 35 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -2562,7 +2563,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // round 3zb + 3zc: -> 305, the router's `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`; GOVERNED 297 -> 309, `setMaxSupply`,
     // `setMaxWrapSupply` (ADMIN) on each of the six wrapped kinds (expected from the contracts; the 25 ops of the Change of
     // CTR-GOV-28 and their direct entries moved selector in place, their classes kept)
-    const ROWED: usize = 305;
+    // CTR-UA-44 (TODO 3ze): -> 306, the registry's `updateMsig` (SIGNED)
+    const ROWED: usize = 306;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 206;
     const GOVERNED: usize = 309;

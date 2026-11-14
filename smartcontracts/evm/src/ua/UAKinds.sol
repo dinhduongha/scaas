@@ -78,6 +78,9 @@ library UAKinds {
     /// the chain inside the record (`UAPqzScopedKeyRecord.chainUid`); its `R_REG` proves under it with kind 0x0142 over typed
     /// `UAPqzScopedKey`. Never a `pop`, `kem`, `pqz-key` or `pqchat` signature, and the reverse.
     bytes32 internal constant PURPOSE_PQZ_SCOPED_KEY = keccak256("scaas.ua.purpose.pqz-scoped-key.v1");
+    /// CTR-UA-44 (TODO 3ze, owner 2026-11-14): an `msig`'s structure update (`updateMsig`), signed by a threshold of the stored
+    /// structure; not a `requirePortable` purpose (`_portablePurpose` refuses it), never any other record's signature.
+    bytes32 internal constant PURPOSE_MSIG_UPDATE = keccak256("scaas.ua.purpose.msig-update.v1");
     /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8): the portable domain `EIP712Domain(string name,string
     /// version)` = ("SCaaS UA Portable", "1"), no chain id, verifying contract or salt (a record registers a UA on every
     /// chain, CTR-UA-07); `kind` is `uint16` (its name: `name(kind)`, the registry's `kindName`).
@@ -101,6 +104,12 @@ library UAKinds {
         "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"
     );
     bytes32 internal constant UA_MEMBERSHIP_TYPEHASH = keccak256("UAMembership(bytes32 ua,bytes32 member)");
+    /// CTR-UA-44: the update of an `msig` on one registry (`chainUid`, `registry` = the registry's own address), the full target
+    /// structure (every slot, disabled included, `enabled` bit i = slot i), `version` = stored + 1, signed until `validUntilBlock`.
+    bytes32 internal constant UA_MSIG_UPDATE_TYPEHASH = keccak256(
+        "UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)"
+    );
+    bytes32 internal constant UA_MSIG_MEMBER_TYPEHASH = keccak256("UAMsigMember(uint16 kind,bytes32 id,uint16 weight)");
     /// K3-3: a scoped PQZ key (`keyClass` 2 `offchain-shared`, `token` 0; 3 `offchain-token`, `token` the scope) and the UA's
     /// signed record of it (`openKemHash = keccak256(kemPk)` of the opening KEM key, 0 without one).
     bytes32 internal constant UA_PQZ_SCOPED_KEY_TYPEHASH = keccak256(
@@ -429,6 +438,29 @@ library UAKinds {
     /// typed(`UAMembership{ua, member}`): what `member` signs to accept its place in the `msig` `ua` (CTR-UA-37).
     function membershipDigest(bytes32 ua, bytes32 member) internal pure returns (bytes32) {
         return portableDigest(keccak256(abi.encode(UA_MEMBERSHIP_TYPEHASH, ua, member)));
+    }
+
+    /// typed(`UAMsigUpdate`): what a threshold of the stored structure signs for `updateMsig` (CTR-UA-44), as
+    /// `uaMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)` under `member` (derived members) or itself (native members). `members` hashes as
+    /// an EIP-712 array of structs.
+    function msigUpdateDigest(
+        bytes32 ua,
+        bytes32 chainUid,
+        address registry,
+        uint64 version,
+        IUARegistry.MsigStructure memory s,
+        uint256 enabled,
+        uint64 validUntilBlock
+    ) internal pure returns (bytes32) {
+        IUARegistry.MsigMember[] memory m = s.members;
+        bytes32[] memory h = new bytes32[](m.length);
+        for (uint256 i; i < m.length; ++i) {
+            h[i] = keccak256(abi.encode(UA_MSIG_MEMBER_TYPEHASH, m[i].kind, m[i].id, m[i].weight));
+        }
+        return portableDigest(keccak256(abi.encode(
+            UA_MSIG_UPDATE_TYPEHASH, ua, chainUid, registry, version, s.threshold, keccak256(abi.encodePacked(h)), enabled,
+            validUntilBlock
+        )));
     }
 
     function uaAuthDomainSeparator(uint256 generation, uint256 chainId, address registry, bytes32 chainUid)

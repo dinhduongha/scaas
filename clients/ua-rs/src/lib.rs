@@ -164,7 +164,7 @@ pub const GROUPS: &[&str] = &[
 
 pub const PURPOSES: &[&str] = &[
     "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
-    "vc-anchor", "trade", "kem", "pqz-key", "membership",
+    "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update",
 ];
 
 pub const DOMAIN_TYPE: &str =
@@ -248,8 +248,12 @@ pub fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool> {
     msig_pqz_eligible_with(key_data, &|_| None)
 }
 /// `msig_pqz_eligible` with `inner`, an `msig` member's key data by its id: a member is PQ if its kind is in 0x0130-0x0135, or it is an
-/// `msig` that is PQ-eligible itself; none, or an `inner` that holds an `msig` (two levels only), is `MemberUnknown`.
+/// `msig` that is PQ-eligible itself; none is `MemberUnknown`. CTR-UA-44 MM-14: at that member's own level its `msig` slots are classical
+/// weight, never followed (a member that grew a level since it was listed).
 pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Option<Vec<u8>>) -> Result<bool> {
+    eligible_at(key_data, Some(inner))
+}
+fn eligible_at(key_data: &[u8], inner: Option<&dyn Fn([u8; 32]) -> Option<Vec<u8>>>) -> Result<bool> {
     let u16_at = |o: usize| key_data.get(o..o + 2).map(|s| u16::from_be_bytes([s[0], s[1]]) as usize);
     let bad = || UAError::KeyData("length");
     let count = u16_at(2).ok_or_else(bad)?;
@@ -260,10 +264,13 @@ pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Optio
     for i in 0..count {
         let o = 4 + 36 * i;
         let kind = u16_at(o).ok_or_else(bad)?;
-        let pq = (0x0130..=0x0135).contains(&kind) || (kind == 0x0120 && {
-            let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
-            msig_pqz_eligible(&inner(id).ok_or(UAError::MemberUnknown)?)?
-        });
+        let pq = (0x0130..=0x0135).contains(&kind) || match (kind, inner) {
+            (0x0120, Some(f)) => {
+                let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
+                eligible_at(&f(id).ok_or(UAError::MemberUnknown)?, None)?
+            }
+            _ => false,
+        };
         if !pq {
             classical += u16_at(o + 34).ok_or_else(bad)?;
         }

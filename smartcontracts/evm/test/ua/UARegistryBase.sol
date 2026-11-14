@@ -136,6 +136,9 @@ contract MockPredecessor {
 
     /// Gen 2's constructor probes it too: the `InnerSig` ABI.
     function memberSigHashOf(bytes32, uint256) external pure returns (bytes32) {}
+
+    /// And CTR-UA-44's current-structure words.
+    function msigStateOf(bytes32) external pure returns (uint64, uint256, uint256) {}
 }
 
 abstract contract UARegistryBase is Test {

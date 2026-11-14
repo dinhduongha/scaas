@@ -492,7 +492,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             bytes memory d = _msigKey(uint16(i + 1), m);
             bytes32 ms = UACall.register(regs[i], UAKinds.MSIG, d, _none(), "", "");
             regs[i].acceptMembership(ms, s[0]);
-            uint256 bound = GROUP_CAP + 45_000 + 2_500; // MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS
+            uint256 bound = GROUP_CAP + 45_000 + 3_500; // MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS (3ze: 2,500 -> 3,500)
             if (i == 1) bound += GROUP_CAP / 63 + 5_000; // gen 1's own hold (register step 4)
             (bool ok,) = address(regs[i]).call{gas: bound}(
                 _reqCall(ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s))

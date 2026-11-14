@@ -14,7 +14,7 @@ import { hashStruct, hashTypedData } from '../src/evm.js';
 import { personalSignDigest } from '../legacy/typed-signing/ua-portable-raw.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
 import * as signers from '../scripts/ua-signers.mjs';
-import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyPqzKeyVersionRecord, verifyMembership, decodeMemberSigs,
+import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyPqzKeyVersionRecord, verifyMembership, verifyAuthorization, decodeMemberSigs,
   encodeMemberSigs, kindVerify } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
@@ -44,6 +44,10 @@ const TYPES = {
   UAPqzKeyVersion: [PKV_T, '0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158'],
   UAPqzKeyVersionRecord: ['UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + PKV_T, '0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5'],
   UAMembership: ['UAMembership(bytes32 ua,bytes32 member)', '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4'],
+  // CTR-UA-44 (TODO 3ze): the contract's pins (test/ua/UARegistryMsigUpdate.t.sol)
+  UAMsigUpdate: ['UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,uint256 enabled,uint64 validUntilBlock)'
+    + 'UAMsigMember(uint16 kind,bytes32 id,uint16 weight)', '0x4f444098cb5d1c5e604d10d13c9c803ac8429ef9938342ded6997343b9c48ac6'],
+  UAMsigMember: ['UAMsigMember(uint16 kind,bytes32 id,uint16 weight)', '0x49ee2633d577df4283fdcf2546b6c8b72f1e3cddb2449cefdfc6eed31e26a05a'],
 };
 const TH = Object.fromEntries(Object.entries(TYPES).map(([k, [, t]]) => [k, B(t)]));
 const typedHand = (structHash) => keccak_256(concatBytes(Uint8Array.of(0x19, 0x01), B(DS_P), structHash));
@@ -167,11 +171,12 @@ test('portable PoP has no chain context', () => {
     PURPOSE_KEM: { tag: 'scaas.ua.purpose.kem.v1', hash: hex(h('scaas.ua.purpose.kem.v1')) },
     PURPOSE_PQZ_KEY: { tag: 'scaas.ua.purpose.pqz-key.v1', hash: hex(h('scaas.ua.purpose.pqz-key.v1')) },
     PURPOSE_MEMBERSHIP: { tag: 'scaas.ua.purpose.membership.v1', hash: hex(h('scaas.ua.purpose.membership.v1')) },
+    PURPOSE_MSIG_UPDATE: { tag: 'scaas.ua.purpose.msig-update.v1', hash: hex(h('scaas.ua.purpose.msig-update.v1')) },
     PQZ_KEY_GROUP: { tag: 'scaas.ua.group.pqz-mlwe.v1', hash: hex(h('scaas.ua.group.pqz-mlwe.v1')) },
   });
   assert.deepEqual(P.checked, { none: 0, chain: 1, relayer: 2 });
   assert.equal('KEM_RECORD_TAG' in ua || 'PQZ_KEY_RECORD_TAG' in ua, false, 'the raw record tags are legacy (TS-D3)');
-  assert.deepEqual([ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG, ua.MEMBERSHIP_TAG, ua.GROUP('pqz-mlwe')].map(hex),
+  assert.deepEqual([ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG, ua.MEMBERSHIP_TAG, ua.MSIG_UPDATE_TAG, ua.GROUP('pqz-mlwe')].map(hex),
     Object.values(P.tags).map((t) => t.hash));
   // pqzKeyHash = keyHash(0x0142, pqzKey) = keccak256(PQZ_KEY_GROUP ‖ pqzKey), not a plain keccak of the key
   const k = row('mldsa65/n2048-kmax1024');
@@ -191,7 +196,12 @@ test('portable PoP has no chain context', () => {
     assert.equal(hex(ua.deriveUA(x.kind, B(x.keyData))), x.ua, x.name);
     assert.equal(x.kindName, ua.kindInfo(x.kind).name, x.name);
   }
-  assert.doesNotMatch(TEXT, /chainId|chainUid|registry"/);
+  // CTR-UA-44: the one record whose struct names a chain and a registry is `UAMsigUpdate` (one update per registry, in the portable domain);
+  // every other row and type stays chain-free
+  const { msigUpdates, msigUpdated, note, typed: { types: { UAMsigUpdate, ...types }, ...typed }, ...rest } = P;
+  assert.ok(msigUpdates.length && msigUpdated && note && UAMsigUpdate);
+  assert.doesNotMatch(JSON.stringify({ ...rest, typed: { ...typed, types } }), /chainId|chainUid|registry"/);
+  assert.doesNotMatch(JSON.stringify(msigUpdated), /chainId|chainUid|registry"/);
 });
 
 test('registration digest covers the proof hash', () => {
@@ -471,6 +481,47 @@ test('acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native sig
       const key = P.registrations.find((x) => x.ua === r.member).keyData;
       assert.ok(r.memberKind >= 0x0130 ? sigOk(r.memberKind, key, m, r.sig) : kindVerify(r.memberKind, key, m, r.sig, false), r.name);
     }
+  }
+});
+
+test('updateMsig (CTR-UA-44): every row by hand, the wallet JSON, each signer; the negatives are signed for another chain or registry', () => {
+  assert.equal(P.msigUpdates.length, 4);
+  assert.equal(hex(ua.MSIG_UPDATE_TAG), P.tags.PURPOSE_MSIG_UPDATE.hash);
+  assert.equal(ua.isPortablePurpose(ua.MSIG_UPDATE_TAG), false, 'not a requirePortable purpose');
+  const memberHand = (m) => keccak_256(concatBytes(TH.UAMsigMember, word(m.kind), B(m.id), word(m.weight)));
+  const addr = (a) => concatBytes(new Uint8Array(12), B(a));
+  const digestOf = (r, chainUid, registry) => typedHand(keccak_256(concatBytes(TH.UAMsigUpdate, B(r.ua), B(chainUid), addr(registry),
+    word(r.version), word(r.threshold), keccak_256(concatBytes(...r.members.map(memberHand))), word(BigInt(r.enabled)), word(r.validUntilBlock))));
+  for (const r of P.msigUpdates) {
+    assert.equal(r.digest, hex(digestOf(r, r.chainUid, r.registry)), r.name);
+    assert.equal(hex(hashTypedData(r.typedData)), r.digest, r.name);
+    assert.equal(r.typedData.primaryType, 'UAMsigUpdate', r.name);
+    const m = ua.msigUpdateMessage({ ...r, ua: B(r.ua) });
+    assert.equal(hex(m.digest), r.digest, r.name);
+    assert.equal(hex(m.message), r.message, r.name);
+    assert.equal(hex(m.message), hex(ua.uaMessage(0x0120, ua.MSIG_UPDATE_TAG, B(r.digest))), r.name);
+    assert.equal(r.memberDigest, hex(keccak_256(concatBytes(B(r.ua), B(r.message)))), r.name);
+    assert.deepEqual({ ...m.args, sigs: r.args.sigs }, r.args, r.name);
+    // the stored structure's prefix: stored slots keep kind and id, appended ones follow
+    const stored = ua.msigStructure(r.stored).members;
+    stored.forEach((x, i) => assert.deepEqual([r.members[i].kind, r.members[i].id], [x.kind, x.id], r.name));
+    // each signer over what this row was signed for
+    const signed = r.signedFor ? digestOf(r, r.signedFor.chainUid, r.signedFor.registry) : B(r.digest);
+    const md = keccak_256(concatBytes(B(r.ua), ua.uaMessage(0x0120, ua.MSIG_UPDATE_TAG, signed)));
+    for (const s of decodeMemberSigs(B(r.sigs))) {
+      const x = stored[s.index];
+      if (x.kind === 1) assert.ok(nativeOk(`0x${x.id.slice(26)}`, signed, hex(s.sig)), r.name);
+      else if (x.kind !== 0x0120) assert.ok(sigOk(x.kind, keyOf(x.id), hex(ua.uaMessage(x.kind, ua.purposeTag('member'), md)), hex(s.sig)), r.name);
+      else assert.equal(s.members.length, 2, `${r.name}: the inner's own list`);
+    }
+    if (r.signedFor) {
+      assert.equal(r.error, 'UAUnauthorized', r.name);
+      assert.notEqual(hex(signed), r.digest, `${r.name}: another digest`);
+    }
+  }
+  const nested = P.msigUpdates.find((r) => r.name === 'nested');
+  for (const i of nested.innerDigests) {
+    assert.equal(i.innerDigest, hex(ua.innerDigest(B(i.member), B(nested.memberDigest))));
   }
 });
 
@@ -848,6 +899,36 @@ test('verifyRegistration accepts every row and refuses every negative', () => {
     }
   }
   assert.deepEqual([refused, stateful, otherEntry], [64, 4, 1]); // + msig-kem-record (T66a)
+});
+
+test('CTR-UA-44: every record check reads the current structure of an updated msig (ua-rs check_*_current rows)', () => {
+  const U = P.msigUpdated;
+  const now = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData, current: U.current, enabled: U.enabled } : keysOf(id));
+  const first = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData } : keysOf(id));
+  const slots = ua.msigStructure(U.current).members.length;
+  const accepted = (id, i) => id !== U.ua || ((BigInt(U.enabled) >> BigInt(i)) & 1n) === 1n; // every slot accepted; counts iff enabled
+  const domain = { generation: 1, ...JSON.parse(readFileSync(new URL('structures.json', dir), 'utf8')).contexts.A };
+  assert.equal(U.rows.length, 7);
+  for (const r of U.rows) {
+    const row = { ...r, ua: r.ua ?? U.ua };
+    const run = (members) => {
+      if (r.entry === 'setPqzKey' && !r.version) verifyPqzKeyRecord(row, members, accepted);
+      else if (r.entry === 'setPqzKey') verifyPqzKeyVersionRecord(row, members, accepted);
+      else if (r.entry === 'acceptMembership') verifyMembership(row, members, accepted);
+      else if (r.entry === 'requireAuthorized') verifyAuthorization(row, members, domain, accepted);
+      else verifyRegistration({ kind: 0x0120, keyData: r.keyData, attrs: {}, pop: r.pop, pqzPop: '0x' }, members, accepted);
+    };
+    if (r.valid) run(now);
+    else assert.throws(() => run(now), { code: 'UAUnauthorized' }, r.name);
+    // Fable P2-4: a disabled slot is refused from the enabled word alone, with the raw accepted bits too
+    if (!r.valid && r.entry === 'setPqzKey') assert.throws(() => verifyPqzKeyRecord(row, now, () => true), { code: 'UAUnauthorized' }, r.name);
+    if (!r.valid && r.entry === 'requireAuthorized') {
+      assert.throws(() => verifyAuthorization(row, now, domain, () => true), { code: 'UAUnauthorized' }, r.name);
+    }
+    // the first structure is never the authority once the registry was updated: each valid row fails against it
+    if (r.valid) assert.throws(() => run(first), (e) => e instanceof ua.UAError, `${r.name}: the first structure`);
+  }
+  assert.ok(slots > ua.msigStructure(U.keyData).members.length, 'an appended slot');
 });
 
 test('verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)', () => {

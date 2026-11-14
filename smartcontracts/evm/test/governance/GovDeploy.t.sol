@@ -571,8 +571,9 @@ contract GovDeployTest is Test {
         // 0xd96A3154BD20B4082D430E792e8245910c12F1FD; CTR-GOV-25 Change (the two-role `RescueVault`, admin + rescuer):
         // 0xcc4746baCAFfD3605D7745AB8fE18CA44501f445; Fable fix2 V-1 (the vault's ERC-5267 fields 0x0b moved the constant):
         // 0xBbc8A5561C5d1877a3Cb0Bac6Ca80446BA100F5F; pqz-three-keys step 3 (the metadata hash: `IUARegistry` gains the
-        // scoped PQZ key records, K3-3; its code unchanged): -> this
-        assertEq(rf, 0x7f00524c2b24014C7db703d89c1b16B49B3aEfeF, "RelayFeeRouter");
+        // scoped PQZ key records, K3-3; its code unchanged): 0x7f00524c2b24014C7db703d89c1b16B49B3aEfeF; CTR-UA-44 (TODO 3ze; the
+        // metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code unchanged): -> this
+        assertEq(rf, 0x3a77CAC88eeFa96E89CA64154D20dc8efcaE082C, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -644,7 +645,9 @@ contract GovDeployTest is Test {
         // scoped PQZ key records, K3-3; its code unchanged): 0xCA60e74Eadd0F0A40d9A34b35D611e0Ed3fF572f; pqz-three-keys step 4
         // (the metadata hash: `IPqzToken` gains the opening fields, `mtxRollOverSigned`, `pqzSkipped`; its code unchanged):
         // 0x454bdF0b754A318ebA96d50689FB14762a255Aeb; burner-wrap-caps (round 3zb + 3zc: the chain word on 25 holder ops,
-        // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`, CTR-GOV-28 Change, CTR-GOV-30): -> this
+        // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`, CTR-GOV-28 Change, CTR-GOV-30): 0xA243e3F1a8bBc3659ac69b5AE0A571b1CF0a5E1D;
+        // msig-members, CTR-UA-44 (TODO 3ze; the metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code
+        // unchanged): 0x25e38E5af7B8aeF469B92cc357f56F46898FCe70. The merge pre-reset4 (both): -> this
         assertEq(router, 0xA243e3F1a8bBc3659ac69b5AE0A571b1CF0a5E1D, "GovernanceRouter");
     }
 

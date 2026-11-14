@@ -35,7 +35,8 @@ test('eligibility: an msig member by its own rule, read from its record', () => 
     assert.throws(() => ua.msigPqzEligible(r.keyData), code('UAMemberUnknown'), 'the key data alone does not show it');
   }
   const third = row('msig-nested-pq');
-  assert.throws(() => ua.msigPqzEligible(ua.encodeMsig(1, [{ kind: 0x0120, id: third.ua, weight: 1 }]), () => third.keyData), code('UAMemberUnknown'), 'a third level');
+  // CTR-UA-44 MM-14: a member's own msig slot is classical weight, never followed; registration still refuses a third level (structures)
+  assert.equal(ua.msigPqzEligible(ua.encodeMsig(1, [{ kind: 0x0120, id: third.ua, weight: 1 }]), () => third.keyData), true, 'a third level');
 });
 
 test('registrations: every row verifies, typed list and stored bytes agree, md_I rebuilds', () => {

@@ -294,6 +294,8 @@ public class VectorTests
             ["UAPqzKeyVersion"] = "0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158",
             ["UAPqzKeyVersionRecord"] = "0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5",
             ["UAMembership"] = "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4",
+            ["UAMsigUpdate"] = "0x4f444098cb5d1c5e604d10d13c9c803ac8429ef9938342ded6997343b9c48ac6",
+            ["UAMsigMember"] = "0x49ee2633d577df4283fdcf2546b6c8b72f1e3cddb2449cefdfc6eed31e26a05a",
         };
         Assert.Equal(pinned.Count, ty.GetProperty("types").EnumerateObject().Count());
         Assert.Equal(pinned.Count, UA.PortableTypes.Count);
@@ -371,6 +373,29 @@ public class VectorTests
             var d = UA.MembershipDigest(ua, B(r.GetProperty("member")));
             Assert.Equal(r.GetProperty("digest").GetString(), Hx(d));
             var m = UA.UAMessage(0x0120, UA.PurposeTag("membership"), d);
+            Assert.Equal(r.GetProperty("message").GetString(), Hx(m));
+            Assert.Equal(r.GetProperty("memberDigest").GetString(), Hx(UA.MemberDigest(ua, m)));
+        }
+    }
+
+    /// <summary>CTR-UA-44: every updateMsig row: the typed digest, the message and memberDigest a derived member signs.</summary>
+    [Fact]
+    public void MsigUpdateRows()
+    {
+        var rows = Load("portable.json").GetProperty("msigUpdates");
+        Assert.Equal(4, rows.GetArrayLength());
+        foreach (var r in rows.EnumerateArray())
+        {
+            var ua = B(r.GetProperty("ua"));
+            var members = r.GetProperty("members").EnumerateArray()
+                .Select(m => new UA.MsigMember(m.GetProperty("kind").GetUInt16(), B(m.GetProperty("id")), m.GetProperty("weight").GetUInt16())).ToList();
+            var enabled = new byte[32];
+            var e = System.Numerics.BigInteger.Parse(r.GetProperty("enabled").GetString()!).ToByteArray(isUnsigned: true, isBigEndian: true);
+            e.CopyTo(enabled, 32 - e.Length);
+            var d = UA.MsigUpdateDigest(ua, B(r.GetProperty("chainUid")), B(r.GetProperty("registry")), r.GetProperty("version").GetUInt64(),
+                r.GetProperty("threshold").GetUInt16(), members, enabled, r.GetProperty("validUntilBlock").GetUInt64());
+            Assert.Equal(r.GetProperty("digest").GetString(), Hx(d));
+            var m = UA.UAMessage(0x0120, UA.PurposeTag("msig-update"), d);
             Assert.Equal(r.GetProperty("message").GetString(), Hx(m));
             Assert.Equal(r.GetProperty("memberDigest").GetString(), Hx(UA.MemberDigest(ua, m)));
         }

@@ -418,6 +418,12 @@ pub fn set_kem_key_args(input: String) -> R<String> {
 pub fn set_pqz_key_args(input: String) -> R<String> {
     Ok(scaas_ua::json::set_pqz_key_args_json(&input)?)
 }
+/// CTR-UA-44 `updateMsig`, JSON in and out. `input`: `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled,
+/// validUntilBlock, sigs}`. Out: `{digest, message, memberDigest, args}`: what a quorum of the stored structure signs on that one registry.
+#[frb(sync)]
+pub fn msig_update(input: String) -> R<String> {
+    Ok(scaas_ua::json::msig_update_json(&input)?)
+}
 /// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
 /// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
 #[frb(sync)]

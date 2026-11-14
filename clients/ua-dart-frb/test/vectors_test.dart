@@ -81,7 +81,7 @@ void main() {
       expect(hx(groupTag(group: r['group'])!), r['GROUP']);
     }
     expect(groupTag(group: 'nope'), isNull);
-    expect(rows(k, 'purposes').length, 15); // 14 purposes, `pop` has v1 and v2
+    expect(rows(k, 'purposes').length, 16); // 15 purposes, `pop` has v1 and v2
     for (final r in rows(k, 'purposes')) {
       expect(hx(purposeTagV(purpose: r['purpose'], version: r['version'])), r['purposeTag']);
       if (r['version'] == 1) expect(hx(purposeTag(purpose: r['purpose'])), r['purposeTag']);
@@ -381,6 +381,17 @@ void main() {
       final m = uaMessage(kind: 0x0120, purpose: purposeTag(purpose: 'membership'), digest: d);
       expect(hx(m), r['message']);
       expect(hx(memberDigest(structureUa: ua, uaMsg: m)), r['memberDigest']);
+    }
+  });
+
+  test('msig update rows (CTR-UA-44)', () {
+    expect(rows(pv, 'msigUpdates').length, 4);
+    for (final r in rows(pv, 'msigUpdates')) {
+      final i = {for (final k in ['ua', 'chainUid', 'registry', 'version', 'threshold', 'members', 'enabled', 'validUntilBlock']) k: r[k]};
+      i['sigs'] = r['args']['sigs'];
+      final o = jsonDecode(msigUpdate(input: jsonEncode(i)));
+      expect([o['digest'], o['message'], o['memberDigest']], [r['digest'], r['message'], r['memberDigest']], reason: r['name']);
+      expect(o['args'], r['args'], reason: r['name']);
     }
   });
 
