@@ -9,12 +9,12 @@
       "chainId": 7622,
       "network": "testnet",
       "testnet": true,
-      "chainUid": "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164",
+      "chainUid": "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13",
       "genesisTimestamp": null,
       "sources": [
-        "http://127.0.0.1:8545 (eth_getBlockByNumber 0x0, 2026-10-31)"
+        "http://127.0.0.1:8545 (eth_getBlockByNumber 0x0, 2026-11-15)"
       ],
-      "note": "SCaaS testnet reset 2026-10-31 (plan fs3 Task 13: image 2.2.0-pqz6, calibrated rows, the CREATE2 deployer 0x4e59b448… in the genesis alloc, EIP-7702 off; pqz-core/nethermind/runs/2026-10-31-pqz6-live.txt); before it 0xa17faef4…2ac2 (2026-10-22 reset, genesis gasLimit 200 M). Client test vectors keep the earlier 0x24e43dcb…c464 as a fixed constant (owner 2026-10-22)"
+      "note": "SCaaS testnet reset 4 2026-11-15 (TODO 3zd: image 2.2.0-pqz9, the RescueVault in the genesis alloc, NET-EVM-14, so the state root and the hash move; smartcontracts/evm/runs/2026-11-15-reset4.txt); before it 0xf1f491ab…3164 (2026-10-31 reset: image 2.2.0-pqz6, the CREATE2 deployer 0x4e59b448… in the genesis alloc, EIP-7702 off), 0xa17faef4…2ac2 (2026-10-22 reset, genesis gasLimit 200 M). Client test vectors keep the earlier 0x24e43dcb…c464 as a fixed constant (owner 2026-10-22)"
     },
     {
       "key": "ethereum-mainnet",
