@@ -47,7 +47,7 @@ pub const PORTABLE_DOMAIN_SEPARATOR: [u8; 32] = [
     0xef, 0x22, 0xea, 0x79, 0x1b, 0xce, 0xa9, 0xef, 0xc6, 0x4c, 0xa1,
 ];
 /// The portable structs' EIP-712 `encodeType` (primary, then the referenced types sorted by name); `kind` is `uint16`.
-pub const PORTABLE_TYPES: [(&str, &str); 8] = [
+pub const PORTABLE_TYPES: [(&str, &str); 10] = [
     ("UAKemRecord", "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"),
     ("UAPortableRecord", "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"),
     ("UARegistration", "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)"),
@@ -57,6 +57,9 @@ pub const PORTABLE_TYPES: [(&str, &str); 8] = [
     ("UAPqzKeyVersion", "UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"),
     ("UAPqzKeyVersionRecord", "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"),
     ("UAMembership", "UAMembership(bytes32 ua,bytes32 member)"),
+    // CTR-UA-44 (TODO 3ze): an `msig`'s structure update on one registry
+    ("UAMsigUpdate", "UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)"),
+    ("UAMsigMember", "UAMsigMember(uint16 kind,bytes32 id,uint16 weight)"),
 ];
 /// `keccak256(encodeType)` of a portable struct by name (panics on another name).
 pub fn portable_typehash(name: &str) -> [u8; 32] {
@@ -136,6 +139,155 @@ pub fn pqz_key_record_digest(ua: &[u8; 32], pqz_key_hash: &[u8; 32], pqz_pop_has
 /// `member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
 pub fn membership_digest(ua: &[u8; 32], member: &[u8; 32]) -> [u8; 32] {
     typed(&keccak(&[&portable_typehash("UAMembership"), ua, member]))
+}
+
+// --- `updateMsig` (CTR-UA-44, TODO 3ze, owner 2026-11-14: "Không, tắt member cũ, thành viên mới cho phép thêm vào. ua chỉ tính
+// fix 1 lần khi đăng ký."; "Và vì đi theo chain, thế nên version tiếp theo sẽ là version+1 => không cần nhảy.") ---
+
+/// One `msig` structure update on one registry (`chain_uid`, `registry`): `structure` every slot of the target (stored slots keep
+/// `kind` and `id`, new members appended), `enabled` bit i = slot i (a big-endian uint256), `version` the stored one + 1.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MsigUpdate {
+    pub ua: [u8; 32],
+    pub chain_uid: [u8; 32],
+    pub registry: [u8; 20],
+    pub version: u64,
+    pub structure: MsigStructure,
+    pub enabled: [u8; 32],
+    pub valid_until_block: u64,
+}
+/// The typed `UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}` digest, `members` an EIP-712
+/// array of `UAMsigMember{kind, id, weight}`: what a quorum of the stored structure signs (a native member this digest itself, a derived
+/// member `member_digest(ua, ua_message(MSIG, PURPOSE_MSIG_UPDATE, ·))` under `member`, an `msig` member by its list over
+/// [`inner_digest`]).
+pub fn msig_update_digest(u: &MsigUpdate) -> [u8; 32] {
+    let th = portable_typehash("UAMsigMember");
+    let members: Vec<u8> =
+        u.structure.members.iter().flat_map(|m| keccak(&[&th, &word(m.kind.into()), &m.id, &word(m.weight.into())])).collect();
+    let mut registry = [0u8; 32];
+    registry[12..].copy_from_slice(&u.registry);
+    typed(&keccak(&[&portable_typehash("UAMsigUpdate"), &u.ua, &u.chain_uid, &registry, &word(u.version),
+        &word(u.structure.threshold.into()), &keccak256(&members), &u.enabled, &word(u.valid_until_block)]))
+}
+/// `(digest, message, member_digest)` of an update: `message = ua_message(MSIG, PURPOSE_MSIG_UPDATE, digest)`.
+pub fn msig_update_message(u: &MsigUpdate) -> Result<([u8; 32], [u8; 32], [u8; 32])> {
+    let digest = msig_update_digest(u);
+    let message = ua_message(0x0120, &purpose_tag("msig-update")?, &digest)?;
+    Ok((digest, message, member_digest(&u.ua, &message)))
+}
+
+/// `UARegistryCoreLib.MSIG_UPDATE_GAS` / `MSIG_UPDATE_SLOT_GAS` (row 13): the projected cost of an update beyond its authorization.
+pub const MSIG_UPDATE_GAS: u64 = 600_000;
+pub const MSIG_UPDATE_SLOT_GAS: u64 = 60_000;
+
+/// What the signer reads before it signs an update on one registry: `msigOf` (`current`), `msigStateOf` (`version`, `enabled`,
+/// `accepted`) of that registry, and what only the caller knows.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MsigUpdateState {
+    pub current: MsigStructure,
+    pub version: u64,
+    pub enabled: [u8; 32],
+    pub accepted: [u8; 32],
+    /// `pqzKeyOf` / `pqzScopedKeyOf` hold a key of the `msig` (§5.1).
+    pub holds_pqz_key: bool,
+    /// A token names the `msig` as its PQZ verifier (§5.3): an update freezes it (`PqzVerifierChanged`).
+    pub verifier: bool,
+    /// The UA is in use on a family with no `msig` update yet (Soroban, NEAR, Algorand: §6).
+    pub family_without_update: bool,
+}
+/// The warnings of an update (spec §5), none of them a refusal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MsigUpdateWarning {
+    /// Slots left of the 256 the UA has on this registry for its life, after this update.
+    SlotsLeft(usize),
+    /// The projected cost of the next update beyond its authorization (row 13's constants).
+    ProjectedGas(u64),
+    /// An appended id: re-enable an old slot rather than append (a returning member keeps its slot).
+    ReEnableRather([u8; 32]),
+    /// A slot disabled while the `msig` holds a PQZ key: the disabled member still knows it; rotate (`setPqzKey` at `latest + 1`).
+    RotatePqzKey,
+    /// The `msig` is a PQZ verifier with more than 16 slots: every `OFFCHAIN` check pays its shape per slot.
+    VerifierSlots(usize),
+    /// A member disabled here keeps its power on a family without an update; funds there are moved, not re-keyed.
+    FamilyWithoutUpdate,
+}
+const fn bit(w: &[u8; 32], i: usize) -> bool {
+    w[31 - i / 8] >> (i % 8) & 1 == 1
+}
+/// The signer's policy (MM-13, §5): `version = stored + 1`, the target's own refusals that need no other record (rows 5–8: the slot
+/// count, at most 16 enabled, the stored slots unchanged, weights, one slot per id, no enabled self-slot, the threshold at most the
+/// enabled and accepted weight), a verifier `msig` only with `allow_verifier` (§5.3); then the warnings. `Err(KeyData(..))` for a refusal.
+pub fn plan_msig_update(
+    s: &MsigUpdateState, ua: &[u8; 32], chain_uid: &[u8; 32], registry: &[u8; 20], target: &MsigStructure, enabled: &[u8; 32],
+    valid_until_block: u64, allow_verifier: bool,
+) -> Result<(MsigUpdate, Vec<MsigUpdateWarning>)> {
+    let (n, sn) = (target.members.len(), s.current.members.len());
+    let on = enabled.iter().map(|b| b.count_ones()).sum::<u32>();
+    if n < sn || n > 256 || (n < 256 && (n..256).any(|i| bit(enabled, i))) || on > 16 {
+        return Err(UAError::KeyData("msig slots"));
+    }
+    if s.current.members.iter().zip(&target.members).any(|(a, b)| (a.kind, a.id) != (b.kind, b.id)) {
+        return Err(UAError::KeyData("msig slot changed"));
+    }
+    let mut weight = 0u32;
+    for (i, m) in target.members.iter().enumerate() {
+        let dup = target.members[..i].iter().any(|x| x.id == m.id);
+        if m.weight == 0 || (i >= sn && dup) || (bit(enabled, i) && m.kind == 0x0120 && m.id == *ua) {
+            return Err(UAError::KeyData("msig member"));
+        }
+        if bit(enabled, i) && bit(&s.accepted, i) {
+            weight += u32::from(m.weight);
+        }
+    }
+    if target.threshold == 0 || u32::from(target.threshold) > weight {
+        return Err(UAError::KeyData("msig threshold"));
+    }
+    if s.verifier && !allow_verifier {
+        return Err(UAError::KeyData("msig verifier: an update freezes its tokens"));
+    }
+    let mut w = vec![MsigUpdateWarning::SlotsLeft(256 - n), MsigUpdateWarning::ProjectedGas(MSIG_UPDATE_GAS + n as u64 * MSIG_UPDATE_SLOT_GAS)];
+    w.extend(target.members[sn..].iter().map(|m| MsigUpdateWarning::ReEnableRather(m.id)));
+    if s.holds_pqz_key && (0..n).any(|i| !bit(enabled, i)) {
+        w.push(MsigUpdateWarning::RotatePqzKey);
+    }
+    if s.verifier && n > 16 {
+        w.push(MsigUpdateWarning::VerifierSlots(n));
+    }
+    if s.family_without_update {
+        w.push(MsigUpdateWarning::FamilyWithoutUpdate);
+    }
+    let version = s.version.checked_add(1).ok_or(UAError::KeyData("msig version"))?;
+    let u = MsigUpdate { ua: *ua, chain_uid: *chain_uid, registry: *registry, version, structure: target.clone(), enabled: *enabled,
+        valid_until_block };
+    Ok((u, w))
+}
+
+/// One entry of an `msig`'s ordered log (§5.5): the updates per registry, the key records and the acceptances, in the order they were
+/// signed. A new registry is brought current by replaying them in that order (an update there is valid once its predecessor is applied).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MsigLogEntry {
+    Update { chain_uid: [u8; 32], registry: [u8; 20], version: u64 },
+    /// A `setPqzKey` / `setPqzScopedKey` / PqChat record (its purpose tag) signed by the then-current quorum.
+    Record { purpose: [u8; 32], version: u64 },
+    Acceptance { index: u16 },
+}
+/// The ordered log: [`MsigLog::push`] refuses an update whose version is not that registry's last + 1 (`KeyData("msig version")`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MsigLog(pub Vec<MsigLogEntry>);
+impl MsigLog {
+    pub fn push(&mut self, e: MsigLogEntry) -> Result<()> {
+        if let MsigLogEntry::Update { chain_uid, registry, version } = &e {
+            let last = self.0.iter().rev().find_map(|x| match x {
+                MsigLogEntry::Update { chain_uid: c, registry: r, version: v } if c == chain_uid && r == registry => Some(*v),
+                _ => None,
+            });
+            if *version != last.unwrap_or(0) + 1 {
+                return Err(UAError::KeyData("msig version"));
+            }
+        }
+        self.0.push(e);
+        Ok(())
+    }
 }
 
 /// An `msig` member's key data by its id (see [`msig_pqz_eligible_with`]).
@@ -1141,16 +1293,35 @@ pub fn check_authorization(
     key_data: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], slots: &[MemberSig], domain: &Domain, members: &Members,
     accepted: Option<&Accepted>,
 ) -> Result<()> {
+    check_authorization_current(key_data, ua, purpose, digest, slots, domain, members, &|_| None, accepted)
+}
+/// `id` → the CTR-UA-09 bytes of `msigOf(id)` on the target registry (every slot, disabled ones included), `None` for an `msig` never
+/// updated there (CTR-UA-44): what authorizes. The id is the first structure's, `members` gives it.
+pub type Current<'a> = dyn Fn([u8; 32]) -> Option<Vec<u8>> + 'a;
+/// [`check_authorization`] with two inputs (CTR-UA-44): `key_data` the first structure (`registrationOf`: the id, `pop`, `popSlotsOf`;
+/// [`is_record_of`] applies to it only) and `current` the structures that authorize now, for the record and its `msig` members;
+/// `accepted` that registry's `memberAccepted` (enabled and accepted). The first structure never authorizes once `current` answers.
+#[allow(clippy::too_many_arguments)]
+pub fn check_authorization_current(
+    key_data: &[u8], ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], slots: &[MemberSig], domain: &Domain, members: &Members,
+    current: &Current, accepted: Option<&Accepted>,
+) -> Result<()> {
     if !is_record_of(0x0120, key_data, ua)? {
         return Err(UAError::Unauthorized);
     }
     let md = member_digest(ua, &ua_message(0x0120, purpose, digest)?);
     let bits = Bits::new(accepted);
-    bits.verdict(auth_ok(ua, key_data, &md, slots, domain, members, &bits)?, UAError::Unauthorized)
+    let d = current(*ua).unwrap_or_else(|| key_data.to_vec());
+    bits.verdict(auth_ok(ua, &d, &md, slots, domain, members, current, &bits)?, UAError::Unauthorized)
 }
-fn auth_ok(id: &[u8; 32], d: &[u8], md: &[u8; 32], slots: &[MemberSig], domain: &Domain, members: &Members, bits: &Bits) -> Result<bool> {
+#[allow(clippy::too_many_arguments)]
+fn auth_ok(id: &[u8; 32], d: &[u8], md: &[u8; 32], slots: &[MemberSig], domain: &Domain, members: &Members, current: &Current, bits: &Bits) -> Result<bool> {
     let structure = MsigStructure::from_key_data(d)?;
-    let keys = member_keys(d, members)?;
+    let keys: Vec<Vec<u8>> = member_keys(d, members)?
+        .into_iter()
+        .zip(&structure.members)
+        .map(|(k, m)| if m.kind == 0x0120 { current(m.id).unwrap_or(k) } else { k })
+        .collect();
     let (mut acc, mut next) = (0u32, 0u16);
     for s in slots {
         let i = s.index as usize;
@@ -1162,7 +1333,7 @@ fn auth_ok(id: &[u8; 32], d: &[u8], md: &[u8; 32], slots: &[MemberSig], domain: 
         let ok = if m.kind == 0x0120 {
             // `lift`: the inner slots carry no list, so a third level has nothing to sign with
             let lifted: Vec<MemberSig> = s.members.iter().map(|x| MemberSig { index: x.index, members: vec![], sig: x.sig.clone() }).collect();
-            s.sig.is_empty() && auth_ok(&m.id, &keys[i], &inner_digest(&m.id, md)?, &lifted, domain, members, bits)?
+            s.sig.is_empty() && auth_ok(&m.id, &keys[i], &inner_digest(&m.id, md)?, &lifted, domain, members, current, bits)?
         } else {
             s.members.is_empty() && leaf_ok(m, &keys[i], &ua_auth_digest(domain, &m.id, &purpose_tag("member")?, md), md, &s.sig)?
         };

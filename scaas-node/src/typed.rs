@@ -321,6 +321,9 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("setPqzScopedKey", REG, "bytes32 ua,address scope,uint64 version,bytes pqzKey,bytes32 pqzPopHash,KemKey openKem,uint64 validUntilBlock,UASig sig"),
     ("storePqzScopedPop", REG, "bytes32 ua,address scope,uint64 version,bytes pqzPop"),
     ("acceptMembership", REG, "bytes32 ua,MemberSig memberSig"),
+    // CTR-UA-44 (TODO 3ze): an `msig`'s structure update on this registry, signed by a quorum of its stored structure; fee 0, anyone
+    // submits (`chainUid_` the registry's word, the contract's parameter name)
+    ("updateMsig", REG, "bytes32 ua,uint64 version,MsigStructure structure,uint256 enabled,uint64 validUntilBlock,MemberSig[] sigs,bytes32 chainUid_"),
     ("mtxSettle", D, "Settlement[] s"),
     ("mtxExchange", D, "ExchangePlan p,Interaction[] interactions"),
     ("mtxExchangeVia", D, "ExchangePlan p,address executor,bytes data"),
@@ -633,6 +636,9 @@ fn hash_tuple(name: &str, fields: &[(String, String)], vals: &[Val]) -> B256 {
 /// `msig` has at most 16 members (CTR-UA-09), so a `MemberSig[]` or an `InnerSig[]` has at most 16 slots. The two levels of the type bound the
 /// depth of a decode; this bounds its width: the registry copies a list to memory before its first index check, 16 × 16 at most here.
 const MSIG_MAX_SLOTS: usize = 16;
+/// CTR-UA-44: an `msig` structure has at most 256 slots (`updateMsig`, disabled ones included), 16 at registration (`registerMsig`,
+/// [`register_msig_bounds`]). A `MsigMember` is flat, so this bounds the decode's width; its depth is the type's.
+const MSIG_MAX_MEMBERS: usize = 256;
 /// C9 (spec 2026-11-10-dex-liquidity.md §4.1, §11): at most eight inputs, eight outputs and eight extra tokens per liquidity plan.
 const LIQUIDITY_MAX: usize = 8;
 /// Round 3r (spec §5.4, Fable P3): an `Env`'s bounds, the factory's (`ChainEnvCode.MAX_DEPS`, `MAX_PARAMS`, `MAX_LIBS`), and a
@@ -692,6 +698,18 @@ fn skip_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
     Ok(())
 }
 
+/// `registerMsig`'s structure: at most 16 members (CTR-UA-09), as the registry's `validateKeyData` refuses more.
+fn register_msig_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let n = pos(fields, "structure").map_or(usize::MAX, |i| match &vals[i] {
+        Val::Tuple(t) => arr_len(&t[1]),
+        _ => usize::MAX,
+    });
+    if n > MSIG_MAX_SLOTS {
+        bail!("BAD_PAYLOAD: args.structure.members: more than 16 members");
+    }
+    Ok(())
+}
+
 /// A `UASetCompliance`'s three arrays: one length, at most 256.
 fn compliance_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
     let n: Vec<usize> = ["accounts", "flags", "until"].iter().map(|k| pos(fields, k).map_or(usize::MAX, |i| arr_len(&vals[i]))).collect();
@@ -720,6 +738,9 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
         let a = j.as_array().ok_or_else(|| bad("not an array"))?;
         if matches!(el, "MemberSig" | "InnerSig") && a.len() > MSIG_MAX_SLOTS {
             return Err(bad("more than 16 slots"));
+        }
+        if el == "MsigMember" && a.len() > MSIG_MAX_MEMBERS {
+            return Err(bad("more than 256 members"));
         }
         // CTR-DEX-30 (C9): a liquidity order's inputs and outputs and its plan's extra tokens, at most eight each
         if el == "LiquidityToken" && a.len() > LIQUIDITY_MAX {
@@ -1163,6 +1184,9 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
     }
     if row.name == "PqzRollOver" {
         skip_bounds(&row.fields, &vals)?;
+    }
+    if row.name == "registerMsig" {
+        register_msig_bounds(&row.fields, &vals)?;
     }
     if row.typed {
         normalize(&row.fields, &mut vals, fee_recipient)?;
@@ -1936,7 +1960,8 @@ mod tests {
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 34, "the wallet's three flat builders are gone (MD-11 (a))");
+        // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 35, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 
     /// Group 3g (KV-10): the rollover is one row per kind (Zether's form kept; the PQZ one with `keyVersion`, its EIP-712 struct
@@ -2428,6 +2453,21 @@ mod tests {
         assert_eq!(err(outer(1, inner(17))), "BAD_PAYLOAD: m[0].members: more than 16 slots");
         let bad = Value::Array(vec![json!("not a slot"); 17]);
         assert_eq!(err(bad), "BAD_PAYLOAD: m: more than 16 slots", "before any element is read");
+    }
+
+    /// CTR-UA-44: a structure's members, at most 256 before any element is read (`updateMsig`), and at most 16 for `registerMsig`, refused
+    /// by name before any simulation.
+    #[test]
+    fn msig_members_are_bounded() {
+        let members = |n: usize| Value::Array((0..n).map(|i| json!({"kind": 1, "id": format!("{:#x}", B256::with_last_byte(i as u8)), "weight": 1})).collect());
+        parse("MsigMember[]", &members(256), "m").unwrap();
+        let err = |j: Value| parse("MsigMember[]", &j, "m").unwrap_err().to_string();
+        assert_eq!(err(members(257)), "BAD_PAYLOAD: m: more than 256 members");
+        assert_eq!(err(Value::Array(vec![json!("not a member"); 257])), "BAD_PAYLOAD: m: more than 256 members", "before any element");
+        let f = fields_of("MsigStructure structure");
+        let st = |n: usize| parse("MsigStructure", &json!({"threshold": 1, "members": members(n)}), "s").unwrap();
+        assert!(register_msig_bounds(&f, &[st(16)]).is_ok());
+        assert_eq!(register_msig_bounds(&f, &[st(17)]).unwrap_err().to_string(), "BAD_PAYLOAD: args.structure.members: more than 16 members");
     }
 
     /// The typed bytes a job builds are `abi.encode(MemberSig[])`, the stored form, nested too, and a blob that claims more than it holds

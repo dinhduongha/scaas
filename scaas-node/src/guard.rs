@@ -1519,6 +1519,7 @@ mod tests {
         assert_eq!(sel("setPqzScopedKey", "registry"), U::setPqzScopedKeyCall::SELECTOR);
         assert_eq!(sel("storePqzScopedPop", "registry"), U::storePqzScopedPopCall::SELECTOR);
         assert_eq!(sel("acceptMembership", "registry"), U::acceptMembershipCall::SELECTOR);
+        assert_eq!(sel("updateMsig", "registry"), U::updateMsigCall::SELECTOR);
         let cast = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(sel("deploy", "factory"), cast("deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)"));
         assert_eq!(sel("mtxExecuteAsOwner", "account"), cast("mtxExecuteAsOwner(bytes,uint256,uint256,bytes)"));
@@ -1675,8 +1676,9 @@ mod tests {
         // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows; round 3s (CTR-GOV-24): -> 134, the router's three list /
         // enable rows; round 3t: -> 135, `UASetVerifierFee`; owner 2026-11-12: -> 137, `UACreateToken`, `UACreateDex` (no vector
         // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`); -> 138,
-        // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 141, "table rows: 107 typed with an entry, 34 plain");
+        // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`;
+        // CTR-UA-44 (TODO 3ze): -> 142, the registry's `updateMsig`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 142, "table rows: 107 typed with an entry, 35 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -2438,7 +2440,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // owner 2026-11-12 ("both the generic row and the per-class ones"): -> 297, the router's `mtxCreateInstance`; EXEMPT -> 206
     // the three-key model: -> 303, `mtxRollOverSigned` on the four PQZ kinds (row `PqzRollOver`), the registry's
     // `setPqzScopedKey` (SIGNED) and `storePqzScopedPop` (PERMISSIONLESS)
-    const ROWED: usize = 303;
+    // CTR-UA-44 (TODO 3ze): -> 304, the registry's `updateMsig` (SIGNED)
+    const ROWED: usize = 304;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 206;
     const GOVERNED: usize = 297;

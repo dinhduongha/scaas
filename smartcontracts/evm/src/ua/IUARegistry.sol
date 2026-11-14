@@ -18,7 +18,9 @@ interface IUARegistry is IERC5267 {
     struct Record {
         uint16 kind;
         uint40 registeredAt;
-        address keyPtr; // ≠ 0 only for stored kinds (UA-2c MuSig2/FROST, UA-3 Zether, P6c PQ)
+        /// ≠ 0 for stored kinds (UA-2c MuSig2/FROST, UA-3 Zether, P6c PQ); an `msig` after its first `updateMsig` (CTR-UA-44
+        /// MM-7): the pointer of its current structure blob, never key data (0: never updated)
+        address keyPtr;
         uint40 index; // the UA's position in its kind's list (`uaAt`)
     }
 
@@ -167,6 +169,10 @@ interface IUARegistry is IERC5267 {
     /// K3-3: version `version` became the current scoped key of `(ua, scope)` (CTR-UA-42's eligibility, per scope).
     event UAPqzScopedKeyCurrent(bytes32 indexed ua, address indexed scope, uint64 indexed version);
 
+    /// CTR-UA-44: the `msig` `ua`'s structure on this registry is now version `version` (`count` slots, `enabled` the bitmap).
+    /// Convenience only: state is complete without it (`msigOf`, `msigStateOf`).
+    event UAMsigUpdated(bytes32 indexed ua, uint64 indexed version, uint16 threshold, uint16 count, uint256 enabled);
+
     error UAKindDisabled(uint16 kind); // not enabled in this generation (incl. kinds a predecessor offers)
     error UAKeyData(uint16 kind); // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
     error UAIdInNativeSpace(bytes32 ua);
@@ -202,6 +208,19 @@ interface IUARegistry is IERC5267 {
     error UAPqzOpenKem(address scope);
     /// K3-3: `setPqzScopedKey` after the record's `validUntilBlock`.
     error UAPqzRecordExpired(bytes32 ua);
+    /// CTR-GOV-28: a call's `chainUid_` is not this registry's chain word (`updateMsig`).
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
+    /// CTR-UA-44: `updateMsig` after its `validUntilBlock`.
+    error UAMsigExpired(bytes32 ua);
+    /// CTR-UA-44: `updateMsig` of a version other than the stored one + 1 (`stored`: the stored version, 0 never updated).
+    error UAMsigVersion(bytes32 ua, uint64 stored);
+    /// CTR-UA-44: a target with fewer slots than stored, more than 256, an enabled bit past its slots, more than 16 enabled
+    /// slots, or whose next update would not fit one transaction.
+    error UAMsigSlots(uint256 count);
+    /// CTR-UA-44: a stored slot's `kind` or `id` changed in the target.
+    error UAMsigSlotChanged(uint16 index);
+    /// CTR-UA-44: a target threshold of 0, or above the weight of its enabled and accepted slots.
+    error UAMsigThreshold(bytes32 ua);
 
     function generation() external view returns (uint8); // 1 or 2
     function predecessor() external view returns (address);
@@ -406,12 +425,32 @@ interface IUARegistry is IERC5267 {
     /// 2026-11-03: the slots are in `UAMemberSig`; `msigOf` for the typed structure). A hash-committed KEM key stays in its committed form (`kem` = scheme only, `kemPkHash`), filled or not.
     function registrationOf(bytes32 ua) external view returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs,
         bytes memory pop, bytes memory pqzPop);
-    /// The typed structure of an `msig` (TS-D10); empty (threshold 0, no members) for any other id.
+    /// The typed **current** structure of an `msig` (TS-D10; CTR-UA-44: every slot, disabled ones included, `msigStateOf` says
+    /// which are enabled); empty (threshold 0, no members) for any other id. The id is the first structure's (`registrationOf`),
+    /// never this one's after an update. Gen 2 forwards gen-1 records.
     function msigOf(bytes32 ua) external view returns (MsigStructure memory);
-    /// Has member slot `index` of `ua` agreed (CTR-UA-37: it signed the `pop` here, or `acceptMembership`)? False for a slot
-    /// that is only listed in `msigOf`, for any other id and past the members. Only accepted slots count at verify. Gen 2
-    /// forwards gen-1 records.
+    /// Does member slot `index` of `ua` count at verify: **enabled and accepted** (CTR-UA-37: it signed the `pop` here, or
+    /// `acceptMembership`; CTR-UA-44: and the slot is enabled)? Changed meaning (CTR-UA-44, was: accepted): a tool that copies
+    /// acceptances to another registry reads `msigStateOf(ua).accepted` and `memberSigHashOf`, never this view. False for a
+    /// slot only listed in `msigOf`, a disabled slot, any other id and past the members. Gen 2 forwards gen-1 records.
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);
+    /// CTR-UA-44: the raw words of the `msig` `ua` here: `version` (0 never updated), `enabled` (bit i = slot i), `accepted`
+    /// (CTR-UA-37's bits, never cleared). Zeroes for any other id. Gen 2 forwards gen-1 records.
+    function msigStateOf(bytes32 ua) external view returns (uint64 version, uint256 enabled, uint256 accepted);
+    /// CTR-UA-44 (TODO 3ze, owner 2026-11-14): the `msig` `ua` on this registry becomes `structure` (every slot, disabled ones
+    /// included: stored slots keep `kind` and `id`, new members are appended slots), `enabled` its bitmap, `version` the stored
+    /// one + 1. Anyone submits (fee 0, a `call` job); `sigs` is a threshold of the **stored** structure's enabled and accepted
+    /// slots, minimal, over typed(`UAMsigUpdate{ua, chainUid, registry = this, version, threshold, members, enabled,
+    /// validUntilBlock}`) as `requirePortable`'s `msig` arm signs (native members the typed digest, derived members
+    /// `memberDigest` under `member`, purpose `PURPOSE_MSIG_UPDATE`). The id never changes (the first structure's). Check
+    /// order: `chainUid_` (`ChainUidMismatch`) → `validUntilBlock` (`UAMsigExpired`) → an `msig` held here (`UAUnauthorized`) →
+    /// `version == stored + 1` (`UAMsigVersion`) → slot count, enabled bits, ≤ 16 enabled (`UAMsigSlots`) → stored slots
+    /// unchanged (`UAMsigSlotChanged`) → weights, appended members, one slot per id, no self-slot (`UAKeyData(0x0120)`) →
+    /// threshold ≤ enabled ∧ accepted weight (`UAMsigThreshold`) → signatures (`UAUnauthorized`) → appended or re-enabled
+    /// members registered, an `msig` member flat (`UAMemberUnknown`) → the registration bound (`UAKeyData(0x0120)`) → the PQZ
+    /// holder rule (`UAPqzHolder`) → the next update fits (`UAMsigSlots`). `UAMsigUpdated`.
+    function updateMsig(bytes32 ua, uint64 version, MsigStructure calldata structure, uint256 enabled,
+        uint64 validUntilBlock, MemberSig[] calldata sigs, bytes32 chainUid_) external;
     /// `keccak256` of the signature object of the `msig` `ua`'s slot `index` (CTR-UA-33, CTR-UA-37, owner 2026-11-03): of `sig`, or of an
     /// `msig` member's `abi.encode(InnerSig[])`, the slot's kind says which (`msigOf`): a slot of the `pop` from registration, a slot that
     /// accepted later from `acceptMembership`. The bytes are in that slot's `UAMemberSig`; a copy checks them against this hash. Zero for a slot

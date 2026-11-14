@@ -206,6 +206,19 @@ class Vectors(unittest.TestCase):
             self.assertEqual(hx(m), r['message'], r['name'])
             self.assertEqual(hx(ua.member_digest(u, m)), r['memberDigest'], r['name'])
 
+    def test_msig_update_rows(self):
+        """CTR-UA-44: every updateMsig row: the typed digest, the message and memberDigest a derived member signs."""
+        self.assertEqual(len(P['msigUpdates']), 4)
+        for r in P['msigUpdates']:
+            u = b(r['ua'])
+            members = [(m['kind'], b(m['id']), m['weight']) for m in r['members']]
+            d = ua.msig_update_digest(u, b(r['chainUid']), b(r['registry']), r['version'], r['threshold'], members, int(r['enabled']),
+                                      r['validUntilBlock'])
+            self.assertEqual(hx(d), r['digest'], r['name'])
+            m = ua.ua_message(0x0120, ua.purpose_tag('msig-update'), d)
+            self.assertEqual(hx(m), r['message'], r['name'])
+            self.assertEqual(hx(ua.member_digest(u, m)), r['memberDigest'], r['name'])
+
     def test_portable_typed(self):
         """TS-D1: the domain separator and the five typehashes pinned and re-derived; every row's typedData (the JSON
         eth_signTypedData_v4 signs) hashes to its digest, its message carries the row's words (kind included)."""
@@ -223,7 +236,9 @@ class Vectors(unittest.TestCase):
                   'UAPqzKeyRecord': '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567',
                   'UAPqzKeyVersion': '0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158',
                   'UAPqzKeyVersionRecord': '0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5',
-                  'UAMembership': '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4'}
+                  'UAMembership': '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4',
+                  'UAMsigUpdate': '0x4f444098cb5d1c5e604d10d13c9c803ac8429ef9938342ded6997343b9c48ac6',
+                  'UAMsigMember': '0x49ee2633d577df4283fdcf2546b6c8b72f1e3cddb2449cefdfc6eed31e26a05a'}
         self.assertEqual(set(t['types']), set(pinned))
         self.assertEqual(set(ua.PORTABLE_TYPES), set(pinned))
         for name, th in pinned.items():

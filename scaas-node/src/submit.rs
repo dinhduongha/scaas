@@ -2590,6 +2590,9 @@ pub(crate) mod tests {
             acceptMembershipCall { ua, memberSig: crate::abi::MemberSig { index: 3, members: vec![], sig: b(3309, 36) } }.abi_encode(),
             registerMsigCall { structure: MsigStructure { threshold: 2, members: members(2) }, attrs: attrs(), pop: pops(2),
                 pqzPop: b(pqz_pop, 12) }.abi_encode(),
+            // CTR-UA-44: a structure update, anyone submits (fee 0)
+            updateMsigCall { ua, version: 1, structure: MsigStructure { threshold: 2, members: members(3) }, enabled: U256::from(7u8),
+                validUntilBlock: 1_000, sigs: pops(2), chainUid_: B256::repeat_byte(0x7c) }.abi_encode(),
             // typed-signing R1b (TS-D13): the typed single-key entries (no PQZ / KEM holders: empty attributes)
             registerWebAuthnCall { key: WebAuthnKey { x: B256::repeat_byte(14), y: B256::repeat_byte(15), rpIdHash: B256::repeat_byte(16) },
                 attrs: none(), pop: b(640, 17), pqzPop: Bytes::new() }.abi_encode(),
@@ -2622,6 +2625,10 @@ pub(crate) mod tests {
         assert_eq!(setPqzKeyCall::SELECTOR, [0xbd, 0x97, 0xb6, 0xa1]);
         assert_eq!(acceptMembershipCall::SIGNATURE, "acceptMembership(bytes32,(uint16,(uint16,bytes)[],bytes))");
         assert_eq!(acceptMembershipCall::SELECTOR, [0x2c, 0x1a, 0xc9, 0x86]);
+        // CTR-UA-44: forge `test_msigUpdateTypehashesPinned` pins the same selector
+        assert_eq!(updateMsigCall::SIGNATURE,
+            "updateMsig(bytes32,uint64,(uint16,(uint16,bytes32,uint16)[]),uint256,uint64,(uint16,(uint16,bytes)[],bytes)[],bytes32)");
+        assert_eq!(updateMsigCall::SELECTOR, [0x53, 0x3f, 0x2d, 0x73]);
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (reg, other) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x5f));
         let cfg = move |c: &mut ChainCfg| c.ua_registry = Some(reg);

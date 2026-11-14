@@ -4976,6 +4976,11 @@
    "sig": "storePqzScopedPop(bytes32,address,uint64,bytes)",
    "class": "PERMISSIONLESS(stores the proof bytes whose hash the UA signed in its scoped record, once, after the proof verifies)",
    "error": ""
+  },
+  {
+   "sig": "updateMsig(bytes32,uint64,(uint16,(uint16,bytes32,uint16)[]),uint256,uint64,(uint16,(uint16,bytes)[],bytes)[],bytes32)",
+   "class": "SIGNED",
+   "error": ""
   }
  ],
  "SmartKeyAccountFactory": [

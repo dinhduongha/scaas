@@ -519,6 +519,7 @@ contract UARegistryUA8Test is UARegistryBase {
         assert(IUARegistry.storePqzPop.selector == bytes4(0x9f7be2a3)); // group 3g: 0x7fac161a -> versioned
         assert(IUARegistry.setPqzKey.selector == bytes4(0xbd97b6a1)); // group 3g: 0x0052c1b5 -> versioned
         assert(IUARegistry.acceptMembership.selector == bytes4(0x2c1ac986));
+        assert(IUARegistry.updateMsig.selector == bytes4(0x533f2d73)); // CTR-UA-44 (TODO 3ze)
         assert(IUARegistry.requireAuthorized.selector == bytes4(0x9600639d));
     }
 

@@ -201,6 +201,37 @@ pub fn set_pqz_key_args_json(t: &str) -> JsonResult<String> {
     Ok(json!({ "ua": hx(&ua), "pqzKey": hx(&unhex(&v["pqzKey"])?), "pqzPopHash": hx(&hash), "sig": sig }).to_string())
 }
 
+/// CTR-UA-44 (TODO 3ze): `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled, validUntilBlock, sigs}` →
+/// `{digest, message, memberDigest, args}`: what a quorum of the stored structure signs for `updateMsig` on that one registry, and its
+/// named arguments (clientkeys `msigUpdateMessage`; `enabled` a number or a decimal string, `sigs` the member signatures, absent: none).
+/// At most 256 members (`Argument`).
+pub fn msig_update_json(t: &str) -> JsonResult<String> {
+    let v = parse(t)?;
+    let m = v["members"].as_array().filter(|a| a.len() <= 256).ok_or(Argument)?;
+    let member = |x: &Value| Ok(crate::ua8::MsigMember { kind: u16_of(&x["kind"])?, id: ua_in(&x["id"])?, weight: u16_of(&x["weight"])? });
+    let structure = crate::ua8::MsigStructure { threshold: u16_of(&v["threshold"])?, members: m.iter().map(member).collect::<JsonResult<_>>()? };
+    let u = crate::ua8::MsigUpdate { ua: ua_in(&v["ua"])?, chain_uid: ua_in(&v["chainUid"])?, registry: addr_in(&v["registry"])?,
+        version: small_in(&v["version"])?, structure, enabled: uint_in(&v["enabled"])?, valid_until_block: small_in(&v["validUntilBlock"])? };
+    let (digest, message, md) = crate::ua8::msig_update_message(&u)?;
+    let members: Vec<Value> = u.structure.members.iter().map(|m| json!({ "kind": m.kind, "id": hx(&m.id), "weight": m.weight })).collect();
+    let mut en = u.enabled.to_vec();
+    let mut dec = String::new(); // the uint256 in decimal, as the node's JSON takes it
+    while en.iter().any(|b| *b != 0) {
+        let mut r = 0u32;
+        for b in en.iter_mut() {
+            let x = (r << 8) | u32::from(*b);
+            (*b, r) = ((x / 10) as u8, x % 10);
+        }
+        dec.insert(0, char::from(b'0' + r as u8));
+    }
+    if dec.is_empty() {
+        dec.push('0');
+    }
+    let args = json!({ "ua": hx(&u.ua), "version": u.version, "structure": { "threshold": u.structure.threshold, "members": members },
+        "enabled": dec, "validUntilBlock": u.valid_until_block, "sigs": members_json(&members_in(&v["sigs"])?), "chainUid_": hx(&u.chain_uid) });
+    Ok(json!({ "digest": hx(&digest), "message": hx(&message), "memberDigest": hx(&md), "args": args }).to_string())
+}
+
 /// Group 3g: `setPqzKey(ua, version, pqzKey, pqzPopHash, UASig)`'s named arguments; version 0 is [`set_pqz_key_args_json`]'s row.
 pub fn set_pqz_key_version_args_json(t: &str) -> JsonResult<String> {
     let v = parse(t)?;

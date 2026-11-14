@@ -370,6 +370,9 @@ sol! {
         struct FrostKey { bytes groupKey; uint16 threshold; FrostMember[] members; }
         function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerMsig(MsigStructure structure, UAAttrs attrs, MemberSig[] pop, bytes pqzPop) external returns (bytes32);
+        /// CTR-UA-44: an `msig`'s structure update on this registry (`version` = stored + 1, signed by a quorum of the stored structure).
+        function updateMsig(bytes32 ua, uint64 version, MsigStructure structure, uint256 enabled, uint64 validUntilBlock, MemberSig[] sigs,
+            bytes32 chainUid_) external;
         function registerWebAuthn(WebAuthnKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerMuSig2(uint16 kind, MuSig2Key key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerFrost(uint16 kind, FrostKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
