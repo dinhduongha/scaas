@@ -70,7 +70,7 @@ is always the hard value. Gas is never assumed: Zether-sized transactions do not
 <a id="private-chain"></a><a id="private-7622"></a>
 
 <a id="NET-EVM-02"></a>**NET-EVM-02** — **The private reference chain is chain id 7622; its identity is the pair
-(chain id 7622, genesis hash `0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164` since the 2026-10-31 reset (fs3 Task 13: the CREATE2 deployer in the genesis alloc, EIP-7702 off; `0xa17faef4…2ac2` from 2026-10-22, genesis gas limit 200 M); the client test vectors keep
+(chain id 7622, genesis hash `0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13` since reset 4 (2026-11-15: the RescueVault in the genesis alloc, [NET-EVM-14](#NET-EVM-14); `0xf1f491ab…3164` from the 2026-10-31 reset, fs3 Task 13: the CREATE2 deployer in the genesis alloc, EIP-7702 off; `0xa17faef4…2ac2` from 2026-10-22, genesis gas limit 200 M); the client test vectors keep
 the earlier `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` as a fixed constant), profile
 `scaas-testnet`.** Owner ruling 2026-10-07; the name `scaas-testnet` is owner ruling 2026-10-31 (it replaces the
 2026-10-07 name). Chain id `0x1dc6`; the chain was reset with a new genesis when it moved

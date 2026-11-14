@@ -100,7 +100,7 @@ lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas 
 # private_key = { env = "SCAAS_RELAYER_KEY_7622" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
 # dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/scaas-testnet.json)
-chain_uid = "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164"  # block 0 (evm/chain-uids.json):
+chain_uid = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"  # block 0 (evm/chain-uids.json):
                                                  # a lane whose RPC block 0 differs never starts (NODE-GW-07)
 # account_factory = "0x..."                      # SmartKeyAccountFactory: the only `deploy` call target (unset: refused)
 # token_factory = "0x..."                        # the token factory (OpenFactory): never a call target; its infoOf

@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(HERE, "onchain"))
 import deploybook as d  # noqa: E402
 import basebook  # noqa: E402
 
-SCAAS = (7622, "0xF1F491ABEC46EB7C1784B7FC75A0174171B41831530E510C46B7178C02D63164")  # case does not matter
+SCAAS = (7622, "0x9AE9048BFD6165D6B25290FA9295AD14E38C3E158371B80049D9A554341E5B13")  # case does not matter
 HOODI = (560048, "0xbbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b")
 OTHER = "0x" + "01" * 32
 

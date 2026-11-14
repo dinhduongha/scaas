@@ -22,7 +22,7 @@ contract BookHarness is DeployBook {
 /// header first, then the rest in forge's pretty form; a reader checks `network` against the key's suffix.
 /// `script/test_deploybook.py` is the Python twin.
 contract DeployBookTest is Test {
-    bytes32 constant SCAAS_UID = 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164;
+    bytes32 constant SCAAS_UID = 0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13;
     bytes32 constant HOODI_UID = 0xbbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b;
     BookHarness h;
 
