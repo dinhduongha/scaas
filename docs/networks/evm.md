@@ -212,6 +212,24 @@ and on a chain id that `chain-uids.json` lists more than once the admin's run st
 siblings are configured. Status: **BUILT** on branch `ua-mtx-merge` (T71–T74, `test/v2/ChainNeutral.t.sol`,
 `ChainNeutralFactory.t.sol`; `DeployBase` writes and checks the list).
 
+<a id="NET-EVM-14"></a>**NET-EVM-14** — **Only test networks get the `RescueVault` in the genesis `alloc`; mainnet 22776
+(`scaas-mainnet`) and every `*-mainnet` chain never do.** Owner ruling 2026-11-14; status **BUILT** (vector, patch tool and
+their tests; the SCaaS testnet's reset 4 is the first chain made with it). On the SCaaS testnet the genesis carries the
+`RescueVault` ([CTR-GOV-25](../decisions.md#CTR-GOV-25)) at `RescueLib.SCAAS_DEV_RESCUE`
+`0xd33d17991f57BefB4CcBb3E57c477c10BdE5B465`: its runtime code exactly as the CREATE2 deploy of the committed
+`rescue-vault-init.hex` leaves it (nonce 1), and the storage its constructor would write for admin = the native UA of test key
+`0x…01` (slot 0) and rescuer = test key `0x…02` (slot 1, `seq` 0 in its upper bytes). The account is the vector
+`smartcontracts/vectors/governance/rescue_vault_testnet_alloc.json` (`test_testnetGenesisAlloc` makes and checks it);
+`pqz-core/nethermind/chain/patch-chainspec.py --testnet-reset --rescue-vault-alloc <vector>` adds it and nothing else to the
+accounts. **On `scaas-mainnet` and every `*-mainnet` chain there is no alloc:** the vault comes through the public CREATE2
+deployer `0x4e59b44847b379578588920cA78FbF26c0B4956C` (`script/DeployRescueVault.s.sol`) with the real dev admin of the
+committed init code, counterfactual until needed. The patch tool refuses an alloc for chain id 22776 or for an alloc file
+whose chain key ends in `-mainnet` (`RESCUE_VAULT_ALLOC_MAINNET_REFUSED`, before any other check). The real dev admin never
+signs a `setRescuer` or `rotateAdmin` toward a test key: the vault's signatures are chain-neutral and replay on the vault of
+every chain, mainnet included. Why: the testnet matrix runs the vault's admin rows with test keys only, without the real
+admin's key and without `anvil_setStorageAt`. Cost: the testnet vault is not the other chains' (its admin is a public test
+key, so anyone can take it there; the testnet holds no value), and the alloc moves the testnet's genesis hash.
+
 <a id="pqz-offchain-releases"></a>**PQZ releases for `OFFCHAIN` tokens** (group 3f; contracts and the deploy form BUILT, T44 +
 T45 `2cce490d`). On a chain where `PqzKeyVerifier` cannot be deployed (no `PQZ` precompile, so its constructor self-test
 fails) a PQZ release takes `env.deps = [0]`: only `OFFCHAIN` tokens initialize on it, a `PRECOMPILE` one refuses
