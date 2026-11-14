@@ -272,7 +272,7 @@ if [ -n "$SCOPE" ]; then
         --cache-path cache/onchain-pqzkeys || fail "forge build PqzKeys.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
     pqzwallet)  # the wallet tool (ua-rs's key handle over pqz-ffi) and the script
-      step "/$g" "" "" ../../scripts/capped sh -c "cd script/pqz/wallet && cargo build --release -j 2 --offline" \
+      step "/$g" "" "" ../../scripts/capped sh -c "cd script/pqz/wallet && cargo build --release -j 2" \
         || fail "cargo build script/pqz/wallet"
       step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqzWallet.s.sol --out out/onchain-pqzkeys \
         --cache-path cache/onchain-pqzkeys || fail "forge build PqzWallet.s.sol"
@@ -346,7 +346,12 @@ for g in $GROUPS; do
     if [ "$tgt" != local ]; then
       res="not run" why="local only: the run mines the blocks its rollovers wait for"
     else
-      step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" PQZW=1 sh script/onchain/pqzkeys.sh || r=1
+      # the wallet simulator first (a remote target's compile stage builds it; a local --one runs inside scripts/capped
+      # already, else through it)
+      cgw=$(cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.max" 2> /dev/null || echo max)
+      capw=; [ "$cgw" != max ] || capw=../../scripts/capped
+      step "/$g" "" "" $capw sh -c "cd script/pqz/wallet && cargo build --release -j 2" || r=1
+      [ "$r" != 0 ] || step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" PQZW=1 sh script/onchain/pqzkeys.sh || r=1
     fi ;;
   # last: it moves the chain's clock by two days (local only; its own outputs, wraplimits.sh)
   wraplimits)
