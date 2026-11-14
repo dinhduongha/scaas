@@ -180,7 +180,8 @@ def _ck(fn, **a):
     out = subprocess.run(["node", "--input-type=module", "-e", _PORTABLE_JS, "--", CK], input=json.dumps(a),
                          capture_output=True, text=True)
     if out.returncode:
-        raise RuntimeError(f"clientkeys {fn}: {out.stderr.strip()[-600:]}")
+        err = [x for x in out.stderr.splitlines() if "Error" in x]  # the message, not only the stack's tail
+        raise RuntimeError(f"clientkeys {fn}: {(err[-1] if err else out.stderr.strip()[-600:])[:600]}")
     return out.stdout.strip()
 
 
@@ -344,6 +345,8 @@ def struct(names, vals):
     for k in ("openingTo", "openingAuditor"):  # the three-key model: a PqzOpening is a struct of its own, by name
         if k in d and not isinstance(d[k], dict):
             d[k] = dict(zip(("mlkemCt", "x25519Eph", "sealedSeed"), d[k]))
+            if isinstance(d[k]["x25519Eph"], int):  # NO_OPENING's ABI word 0: the typed field is a bytes32
+                d[k]["x25519Eph"] = d[k]["x25519Eph"].to_bytes(32, "big")
     if "legs" in d:
         d["legs"] = [dict(zip(("ua", "v", "vAuditor"), x)) for x in d["legs"]]
     return d
