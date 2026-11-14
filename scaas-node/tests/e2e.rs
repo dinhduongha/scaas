@@ -738,9 +738,10 @@ alloy::sol! {
     // `owner` a UA id (CTR-GOV-01 Change): a native account's is its address padded to 32 bytes
     struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; uint256 features; uint256 lockedFeatures; }
     function createDex(uint64 version, bytes initArgs, bytes32 salt) external returns (address dex);
-    function setMarket(address base, address quote, bool listed) external;
+    // the Change of CTR-GOV-28 in round 3zb + 3zc (O6): bit 11's direct entry takes the DEX's chain word last
+    function setMarket(address base, address quote, bool listed, bytes32 chainUid_) external;
     function approve(address spender, uint256 value) external returns (bool);
-    function mint(address to, uint256 value) external;
+    function mint(address to, uint256 value) external; // `MockERC20`'s (an outside token), not a SCaaS token's
     function puller() external view returns (address);
     function listedOnly() external view returns (bool);
     struct SubjectKey { uint8 kind; bytes32 x; bytes32 y; bytes32 rpIdHash; bytes32 originHash; }
@@ -798,10 +799,10 @@ async fn dex_order_with_a_ua_trade_order_leg() {
     let treasury = Address::repeat_byte(0x7a);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
         relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
-    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true, chainUid_: uid }.abi_encode()).await;
     let usdc = deploy_outside_token(&rpc, &deployer).await;
     send(&rpc, &deployer, usdc, mintCall { to: dave.address(), value: U256::from(1_000_000_000u64) }.abi_encode()).await;
-    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: usdc, listed: true }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: usdc, listed: true, chainUid_: uid }.abi_encode()).await;
 
     let relayer = key(RELAYER);
     let lane = relayer.address();
@@ -1046,7 +1047,7 @@ async fn dex_fill_below_half_settles_on_anvil() {
     let treasury = Address::repeat_byte(0x7a);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
         relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
-    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true, chainUid_: uid }.abi_encode()).await;
 
     let relayer = key(RELAYER);
     let lane = relayer.address();
@@ -1522,7 +1523,8 @@ async fn router_op_signed_by_an_eoa() {
         salt: B256::repeat_byte(0x60) }.abi_encode()).await;
     assert!(!view(&rpc, dex, listedOnlyCall {}).await);
     let op = signed_op(&owner, json!({"entry": "mtxSetListedOnly", "contract": "gov_router", "token": format!("{router:#x}"),
-        "args": {"target": format!("{dex:#x}"), "on": true},
+        "args": {"target": format!("{dex:#x}"), "on": true,
+            "chainUid": format!("{:#x}", view(&rpc, dex, pqz3f::chainUidCall {}).await)}, // the DEX's chain word (CTR-GOV-28 Change)
         "envelope": envelope(owner.address(), U256::from_be_slice(dex.as_slice()), 0)}), chain_id, uid);
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
@@ -1584,12 +1586,12 @@ async fn router_creations_signed_by_an_eoa() {
     let token_op = signed_op(&owner, json!({"entry": "mtxCreateToken", "contract": "gov_router", "token": format!("{router:#x}"),
         "args": {"target": format!("{factory:#x}"), "kind": 0, "version": "1", "salt": z(0x62),
             "config": {"name": "Relayed", "symbol": "RLY", "decimals": 6, "features": "1", "lockedFeatures": "0", "admin": me,
-                "roles": {"minter": z(0), "rateAdmin": z(0), "guardian": z(0), "issuer": z(0), "compliance": z(0)},
+                "roles": {"minter": z(0), "rateAdmin": z(0), "guardian": z(0), "issuer": z(0), "compliance": z(0), "burner": z(0)},
                 "initialSupply": "1000", "initialHolder": format!("{:#x}", owner.address()), "legs": [], "rate": {"rateDelay": 0, "maxRateStepBps": 0},
                 "conf": {"auditorKey": "0x", "shieldScale": "0", "maxShielded": "0", "confidentialFee": "0", "disclosureMode": 0, "auditorMode": 0,
                     "minDecoyFee": "0", "pqzVerifyMode": 0, "pqzVerifierUA": z(0), "pqzVerifierFixed": false, "proofStore": 0, "verifierFee": "0",
                     "verifierFeeMax": "0", "pqzOwnKey": false, "pqzOpening": false},
-                "grantDelay": "0", "rescueTo": a(0), "maxSupply": "0",
+                "grantDelay": "0", "rescueTo": a(0), "maxSupply": "0", "maxWrapSupply": "0",
                 "reg": {"complianceRegistry": a(0), "requiredFlags": "0", "deniedFlags": "0", "termsHash": z(0), "taxRecipient": z(0)}}},
         "envelope": envelope(owner.address(), lane, 1)}), chain_id, uid);
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
@@ -1689,7 +1691,8 @@ async fn router_instance_creations_signed_by_an_eoa() {
 alloy::sol! {
     // `IFactoryToken` (CTR-TOK-25) and the release calls of `OpenFactory` (plan 5g-Z2); `TokenKind` as its `uint8`
     #[derive(Default)]
-    struct Roles { bytes32 minter; bytes32 rateAdmin; bytes32 guardian; bytes32 issuer; bytes32 compliance; }
+    // round 3zb (CTR-GOV-29): + `burner`, the sixth seat
+    struct Roles { bytes32 minter; bytes32 rateAdmin; bytes32 guardian; bytes32 issuer; bytes32 compliance; bytes32 burner; }
     #[derive(Default)]
     struct Leg { address underlying; uint256 num; uint256 den; }
     #[derive(Default)]
@@ -1708,7 +1711,7 @@ alloy::sol! {
     #[derive(Default)]
     struct TokenConfig { string name; string symbol; uint8 decimals; uint256 features; uint256 lockedFeatures; bytes32 owner; Roles roles;
         uint256 initialSupply; address initialHolder; Leg[] legs; RateConfig rate; ConfidentialConfig conf; uint64 grantDelay;
-        address rescueTo; uint256 maxSupply; RegulatedParams reg; }
+        address rescueTo; uint256 maxSupply; uint256 maxWrapSupply; RegulatedParams reg; } // round 3zc (CTR-GOV-30): + maxWrapSupply
     // chain-neutral releases (CTR-TOK-29, plan T71 / T74): the factory fills its own `chainUid` and router; `params` the
     // class's chain values
     struct FactoryEnv { address registry; address smartKeyAccountImpl; bool hedera; address[] deps; bytes32[] params;
@@ -2213,6 +2216,9 @@ async fn separator(rpc: &str, c: Address) -> B256 {
 async fn issuer_op(rpc: &str, entry: &str, args: Value, issuer: Address, owner: &PrivateKeySigner, router: Address, token: Address,
     nonce: u64) -> Value
 {
+    // the target's chain word, every role holder's op's last field (CTR-GOV-28 Change, round 3zb + 3zc)
+    let mut args = args;
+    args["chainUid"] = json!(format!("{:#x}", view(rpc, token, pqz3f::chainUidCall {}).await));
     let mut op = json!({"entry": entry, "contract": "gov_router", "token": format!("{router:#x}"), "args": args,
         "envelope": envelope(issuer, U256::from_be_slice(token.as_slice()), nonce),
         "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}});
@@ -3025,7 +3031,7 @@ async fn liquidity_pre_checks_on_a_chain() {
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
         relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(),
         salt: B256::repeat_byte(0x11) }.abi_encode()).await;
-    send(&rpc, &deployer, dex, setMarketCall { base: a, quote: b, listed: true }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: a, quote: b, listed: true, chainUid_: uid }.abi_encode()).await;
     let ms = view(&rpc, dex, scaas_node::abi::ISCaaSDex::modulesCall {}).await;
     assert_eq!(ms.len(), 2, "the governance and the liquidity module");
     let mut pair_code = liquidity_mock("MockV2LiquidityPair", false);

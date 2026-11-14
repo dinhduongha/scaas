@@ -64,6 +64,14 @@ library WrappedLib {
         uint56 eta;
     }
 
+    /// @dev Round 3zc (CTR-GOV-30): a proposed cap, live while `eta != 0`, `generation == adminGeneration` and
+    ///      `now <= eta + grantDelay` (the governance layer's `PendingGrant` rule); `value` the cap it applies.
+    struct CapChange {
+        uint256 value;
+        uint64 eta;
+        uint32 generation;
+    }
+
     /// @custom:storage-location erc7201:scaas.underlying
     struct WrappedStorage {
         mapping(uint256 => Leg) legs;
@@ -72,7 +80,11 @@ library WrappedLib {
         uint8 legCount;
         uint32 rateDelay;
         uint16 maxRateStepBps;
-        uint256 maxSupply; // spec §5.2: the hybrid's cap, 0 = not a hybrid; immutable
+        uint256 maxSupply; // spec §5.2: the hybrid's cap, 0 = not a hybrid; changeable under bit 31 (CTR-GOV-30), never to 0
+        uint256 maxWrapSupply; // round 3zc (CTR-GOV-30): the wrap cap, 0 = none
+        uint256 totalWrapped; // the wrapped units outstanding through wraps, all legs: + minted, − burned (saturating)
+        CapChange pendingMaxSupply;
+        CapChange pendingMaxWrapSupply;
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.underlying")) - 1)) & ~bytes32(uint256(0xff))
@@ -203,6 +215,9 @@ library WrappedLib {
             s.maxRateStepBps = rate.maxRateStepBps;
         }
         s.maxSupply = c.maxSupply;
+        // CTR-GOV-30: `maxWrapSupply <= maxSupply` when both are non-zero; `totalWrapped` starts at 0
+        if (c.maxSupply != 0 && c.maxWrapSupply > c.maxSupply) revert IWrappedToken.MaxWrapSupplyInvalid();
+        s.maxWrapSupply = c.maxWrapSupply;
         for (uint256 i; i < n; ++i) _addLeg(s, c.legs[i], adjustable, isHedera);
     }
 
@@ -246,7 +261,9 @@ library WrappedLib {
     /// @notice Pull `amount` from `from` (or take `value` on the native leg), price the measured delta; on a hybrid,
     ///         `supply + minted ≤ maxSupply` (`supply`: the token's `totalSupply()`, read only when capped). Group 3l
     ///         (spec §4): the wrapper list on the payer `from` before the pull, the four limits on the payer and the net
-    ///         credit to `receiver` (0: the payer) on the measured `received` after it.
+    ///         credit to `receiver` (0: the payer) on the measured `received` after it. Round 3zc (CTR-GOV-30): after the
+    ///         hybrid's cap, `totalWrapped + minted <= maxWrapSupply` (0: no wrap cap), and the counter written, before the
+    ///         token's mint (no outside call in between).
     function wrap(uint256 i, uint256 amount, address from, uint256 value, uint256 supply, bytes32 receiver)
         public returns (address u, uint256 received, uint256 minted)
     {
@@ -261,6 +278,7 @@ library WrappedLib {
         minted = Math.mulDiv(received, L.num, L.den);
         if (minted == 0) revert IWrappedToken.WrapTooSmall();
         if (L.capped) _cap(supply, minted);
+        s.totalWrapped = _wrapNext(s, minted);
         if (ctl & CTL_TRACK != 0) _wrapCount(i, u, MetaTxLib.pad(from), receiver, received);
     }
 
@@ -275,6 +293,23 @@ library WrappedLib {
         uint256 max = $().maxSupply;
         uint256 next = Math.saturatingAdd(supply, added);
         if (next > max) revert IWrappedToken.MaxSupplyExceeded(next, max);
+    }
+
+    /// @dev CTR-GOV-30: what `totalWrapped` reaches with `minted` more, refused above a non-zero `maxWrapSupply`
+    ///      (`MaxWrapSupplyExceeded` names the value the wrap would reach, as `MaxSupplyExceeded`). Cannot overflow:
+    ///      `totalWrapped <= totalSupply()`, and the token's mint of `minted` follows.
+    function _wrapNext(WrappedStorage storage s, uint256 minted) private view returns (uint256 next) {
+        next = s.totalWrapped + minted;
+        uint256 max = s.maxWrapSupply;
+        if (max != 0 && next > max) revert IWrappedToken.MaxWrapSupplyExceeded(next, max);
+    }
+
+    /// @dev CTR-GOV-30: an unwrap's burnt units leave `totalWrapped`, saturating at 0 (a hybrid may unwrap minter-minted
+    ///      units).
+    function _unwrapped(uint256 burned) private {
+        WrappedStorage storage s = $();
+        uint256 t = s.totalWrapped;
+        s.totalWrapped = t > burned ? t - burned : 0;
     }
 
     /// @notice Anyone; no mint. Refused on a leg whose wrap is disabled.
@@ -334,6 +369,7 @@ library WrappedLib {
             assembly ("memory-safe") { revert(add(r, 0x20), mload(r)) }
         }
         received = _sigReceived(L, received, o.amount);
+        $().totalWrapped += minted; // CTR-GOV-30: checked in `_sigQuote`, written after the leg's call (spec §3.4)
     }
 
     /// @dev The order the underlying checks: a wrap order is the `UATradeOrder` with `dex == receiveToken == wrappedToken`
@@ -365,13 +401,14 @@ library WrappedLib {
     }
 
     /// @dev `minted = ⌊amount·num/den⌋`, the submitter's `fee = ⌈minted·feePpm/10⁶⌉`; a hybrid's cap on `minted` (the fee is
-    ///      minted too).
+    ///      minted too); the wrap cap on it (CTR-GOV-30), checked here, written by `wrapBySigUA` after the leg's call.
     function _sigQuote(Leg storage L, uint256 amount, uint256 feePpm, uint256 supply)
         private view returns (uint256 minted, uint256 fee)
     {
         minted = Math.mulDiv(amount, L.num, L.den);
         if (minted == 0) revert IWrappedToken.WrapTooSmall();
         if (L.capped) _cap(supply, minted);
+        _wrapNext($(), minted);
         fee = Math.mulDiv(minted, feePpm, 1_000_000, Math.Rounding.Ceil);
     }
 
@@ -427,11 +464,13 @@ library WrappedLib {
     ///         The balance must drop by EXACTLY `out` (a sender-pays fee reverts, CTR-TOK-11). The native coin goes
     ///         with all gas; a recipient that refuses it reverts the unwrap, and an EIP-7702 designator recipient is
     ///         refused (`UnwrapRecipientInvalid`: an EOA must not run code, owner ruling 2026-10-30, D4).
-    ///         Group 3l (spec §4 step 6): `holder`'s count, checked again and written, before `reserve -= out`.
-    function payOut(uint256 i, address recipient, uint256 out, bytes32 holder) public returns (address u) {
+    ///         Group 3l (spec §4 step 6): `holder`'s count, checked again and written, before `reserve -= out`. Round 3zc
+    ///         (CTR-GOV-30): `burned`, the units the caller burnt, leave `totalWrapped`.
+    function payOut(uint256 i, address recipient, uint256 out, uint256 burned, bytes32 holder) public returns (address u) {
         Leg storage L = $().legs[i];
         u = L.token;
         _unwrapCount(L, i, holder, out);
+        _unwrapped(burned);
         L.reserve -= out;
         uint256 before = _balance(u);
         if (u == NATIVE) {
@@ -448,8 +487,8 @@ library WrappedLib {
     ///         `IUALedger(u).transferToUA(to, out)`, which checks `to`. A leg that does not report `IUALedger` by ERC-165
     ///         (the native coin, an outside ERC-20 or HTS token, a SCaaS token with the ledger off) reverts
     ///         `UALegNotLedger` before the reserve or the leg moves; the caller's burn before it is unwound by the
-    ///         revert, atomically. The balance must drop by EXACTLY `out`, as in `payOut`.
-    function payOutToUA(uint256 i, bytes32 to, uint256 out, bytes32 holder) public returns (address u) {
+    ///         revert, atomically. The balance must drop by EXACTLY `out`, as in `payOut`; `burned` as there.
+    function payOutToUA(uint256 i, bytes32 to, uint256 out, uint256 burned, bytes32 holder) public returns (address u) {
         Leg storage L = $().legs[i];
         u = L.token;
         // `u == NATIVE` only skips the probe: `supportsInterface(address(0), …)` is false, so the error is the same
@@ -457,6 +496,7 @@ library WrappedLib {
             revert IUALedger.UALegNotLedger(u);
         }
         _unwrapCount(L, i, holder, out);
+        _unwrapped(burned);
         L.reserve -= out;
         uint256 before = IERC20(u).balanceOf(address(this));
         IUALedger(u).transferToUA(to, out);
@@ -480,13 +520,14 @@ library WrappedLib {
 
     /// @notice The leg payout of an unshield-unwrap (CTR-ZTH-51, UA-5c) to a recipient id, after the caller burnt
     ///         `wrapped`: a native id (its address) by `quoteUnwrap` + `payOut`, a derived UA in leg `i`'s own UA ledger
-    ///         by `quoteUnwrapToUA` + `payOutToUA` (`UALegNotLedger` for an outside leg).
+    ///         by `quoteUnwrapToUA` + `payOutToUA` (`UALegNotLedger` for an outside leg). All of `wrapped` was burnt, so all of
+    ///         it leaves `totalWrapped` (CTR-GOV-30).
     function payOutTo(uint256 i, bytes32 recipient, uint256 wrapped, uint256 minOut, bytes32 holder)
         public returns (uint256 out)
     {
         out = quoteTo(i, recipient, wrapped, minOut, holder);
-        if (UAKinds.inNativeSpace(recipient)) payOut(i, address(uint160(uint256(recipient))), out, holder);
-        else payOutToUA(i, recipient, out, holder);
+        if (UAKinds.inNativeSpace(recipient)) payOut(i, address(uint160(uint256(recipient))), out, wrapped, holder);
+        else payOutToUA(i, recipient, out, wrapped, holder);
     }
 
     // ------------------------------------------------------------------ rescue (CTR-GOV-06, spec §6.2)
@@ -634,6 +675,87 @@ library WrappedLib {
             Leg storage L = s.legs[i];
             c = Math.saturatingAdd(c, _value(L.reserve, L.num, L.den));
         }
+    }
+
+    /// @notice Round 3zc (CTR-GOV-30): `pendingSupplyCaps()`; a pending is shown live only with bit 31 set.
+    function pendingSupplyCaps() public view returns (uint256 pms, uint64 msEta, bool msLive, uint256 pws, uint64 wsEta,
+        bool wsLive)
+    {
+        WrappedStorage storage s = $();
+        bool on = GovernanceLib.hasFeature(GovernanceBits.SUPPLY_CAP_ADJUSTABLE);
+        CapChange storage a = s.pendingMaxSupply;
+        CapChange storage b = s.pendingMaxWrapSupply;
+        (pms, msEta, msLive) = (a.value, a.eta, on && _capLive(a));
+        (pws, wsEta, wsLive) = (b.value, b.eta, on && _capLive(b));
+    }
+
+    // ------------------------------------------------------------------ the supply caps (round 3zc, CTR-GOV-30)
+
+    /// @notice A hybrid's `maxSupply`, by the admin (`caller`, checked with its chain word by the token before): bit 31,
+    ///         the current and the new cap non-zero (`MaxSupplyInvalid`: a hybrid stays a hybrid, a pure wrap has none),
+    ///         after `grantDelay` (`_capDue`), then the floors against the state at the apply: `>= supply` (the token's
+    ///         `totalSupply()`), `>= maxWrapSupply` when that is non-zero.
+    function setMaxSupply(uint256 v, bytes32 caller, uint256 supply) public {
+        GovernanceLib.requireFeature(GovernanceBits.SUPPLY_CAP_ADJUSTABLE);
+        WrappedStorage storage s = $();
+        uint256 old = s.maxSupply;
+        if (old == 0 || v == 0) revert IWrappedToken.MaxSupplyInvalid();
+        if (!_capDue(s.pendingMaxSupply, v)) {
+            emit IWrappedToken.MaxSupplyProposed(caller, v, s.pendingMaxSupply.eta);
+            return;
+        }
+        if (v < supply) revert IWrappedToken.MaxSupplyBelowSupply(v, supply);
+        uint256 w = s.maxWrapSupply;
+        if (w != 0 && v < w) revert IWrappedToken.MaxSupplyBelowWrapCap(v, w);
+        s.maxSupply = v;
+        emit IWrappedToken.MaxSupplySet(caller, old, v);
+    }
+
+    /// @notice Any wrapped kind's `maxWrapSupply` (0 removes the wrap cap), as `setMaxSupply`: bit 31, `grantDelay`, then a
+    ///         non-zero value's floors at the apply: `>= totalWrapped`, `<= maxSupply` when that is non-zero.
+    function setMaxWrapSupply(uint256 v, bytes32 caller) public {
+        GovernanceLib.requireFeature(GovernanceBits.SUPPLY_CAP_ADJUSTABLE);
+        WrappedStorage storage s = $();
+        if (!_capDue(s.pendingMaxWrapSupply, v)) {
+            emit IWrappedToken.MaxWrapSupplyProposed(caller, v, s.pendingMaxWrapSupply.eta);
+            return;
+        }
+        if (v != 0) {
+            uint256 t = s.totalWrapped;
+            if (v < t) revert IWrappedToken.MaxWrapSupplyBelowWrapped(v, t);
+            uint256 m = s.maxSupply;
+            if (m != 0 && v > m) revert IWrappedToken.MaxWrapSupplyAboveMaxSupply(v, m);
+        }
+        uint256 old = s.maxWrapSupply;
+        s.maxWrapSupply = v;
+        emit IWrappedToken.MaxWrapSupplySet(caller, old, v);
+    }
+
+    /// @dev The two-call shape of `GovernanceLib._due` with the token's `grantDelay` (CTR-GOV-30 B): 0 applies at once; a
+    ///      live pending of the same value applies in `[eta, eta + grantDelay]` (before `eta` `GrantNotReady(31, 0, eta)`)
+    ///      and is deleted; anything else (none, dead, another value) proposes, replacing the pending and writing
+    ///      `lastProposedAt` (false).
+    function _capDue(CapChange storage p, uint256 v) private returns (bool) {
+        GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
+        uint64 delay = g.grantDelay;
+        if (delay == 0) return true;
+        if (_capLive(p) && p.value == v) {
+            uint64 eta = p.eta;
+            if (block.timestamp < eta) revert IGovernance.GrantNotReady(GovernanceBits.SUPPLY_CAP_ADJUSTABLE, 0, eta);
+            delete p.value;
+            delete p.eta;
+            delete p.generation;
+            return true;
+        }
+        (p.value, p.eta, p.generation) = (v, uint64(block.timestamp) + delay, g.adminGeneration);
+        g.lastProposedAt = uint64(block.timestamp);
+        return false;
+    }
+
+    function _capLive(CapChange storage p) private view returns (bool) {
+        GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
+        uint256 eta = p.eta;
+        return eta != 0 && p.generation == g.adminGeneration && block.timestamp <= eta + g.grantDelay;
     }
 
     function previewWrap(address u, uint256 amount) public view returns (uint256 minted, uint256 used) {

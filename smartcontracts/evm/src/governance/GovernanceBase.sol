@@ -175,6 +175,15 @@ abstract contract GovernanceBaseCore {
         if (admin) _govChainWord(chainUid_);
     }
 
+    /// @dev CTR-GOV-28 Change (owner 2026-11-13, "(2), gộp vào round 3zb + 3zc."): every direct entry a role holder calls.
+    ///      The subject; if it holds `bit`, its word before any write and before a grant is debited. A caller without the bit
+    ///      is refused by the body, by the name it has today (`MissingRole`, `NotGuardian`, `NotRateAdmin`, …): no existing
+    ///      refusal changes.
+    function _holderOnChain(uint8 bit, bytes32 chainUid_) internal view returns (bytes32 c) {
+        c = _govSubject();
+        if (GovernanceLib.$().roles[bit][c] != 0) _govChainWord(chainUid_);
+    }
+
     /// @dev CTR-GOV-28: `chainUid_` this contract's word (`IAdmin.ChainUidMismatch`), the whole check.
     function _govChainWord(bytes32 chainUid_) internal view {
         bytes32 u = _govChainUid();

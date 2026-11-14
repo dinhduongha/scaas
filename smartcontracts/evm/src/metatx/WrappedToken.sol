@@ -65,6 +65,10 @@ interface IWrappedTokenAbi {
     event WrapLimitsSet(bytes32 indexed by, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
     event WrapLimitsProposed(bytes32 indexed by, uint64 eta, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
     event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
+    event MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta);
+    event MaxSupplySet(bytes32 indexed by, uint256 oldMaxSupply, uint256 newMaxSupply);
+    event MaxWrapSupplyProposed(bytes32 indexed by, uint256 maxWrapSupply, uint64 eta);
+    event MaxWrapSupplySet(bytes32 indexed by, uint256 oldMaxWrapSupply, uint256 newMaxWrapSupply);
     error AdminAccountPool(bytes32 account);
     error AdminHasHolders(uint8 bit);
     error AssociateFailed(int64 responseCode);
@@ -198,7 +202,14 @@ interface IWrappedTokenAbi {
     error WrapControlNeedsHybrid(uint8 bit);
     error WrapControlActive(uint8 bit);
     error WrapSubjectZero();
+    error MaxWrapSupplyExceeded(uint256 totalWrapped, uint256 maxWrapSupply);
+    error MaxWrapSupplyInvalid();
+    error MaxSupplyBelowSupply(uint256 maxSupply, uint256 totalSupply);
+    error MaxSupplyBelowWrapCap(uint256 maxSupply, uint256 maxWrapSupply);
+    error MaxWrapSupplyBelowWrapped(uint256 maxWrapSupply, uint256 totalWrapped);
+    error MaxWrapSupplyAboveMaxSupply(uint256 maxWrapSupply, uint256 maxSupply);
     error ChainUidMismatch(bytes32 expected, bytes32 got);
+    error FeatureConflict(uint8 bit, uint8 other);
 }
 
 /// @title WrappedToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -289,7 +300,7 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MT);
     }
 
-    function cancelRate() external {
+    function cancelRate(bytes32) external {
         _forward(_MW);
     }
 
@@ -309,7 +320,7 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forward(_MW);
     }
 
-    function disableWrap(address, bytes32) external {
+    function disableWrap(address, bytes32, bytes32) external {
         _forward(_MW);
     }
 
@@ -321,7 +332,7 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forward(_MP);
     }
 
-    function executeRate() external {
+    function executeRate(bytes32) external {
         _forward(_MW);
     }
 
@@ -377,6 +388,10 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MW);
     }
 
+    function maxWrapSupply() external view returns (uint256 _p0) {
+        _forwardView(_MW);
+    }
+
     function metaPayId(MetaTxLib.PayMeta calldata) external pure returns (bytes32 _p0) {
         _forwardPure(_modulePure(1));
     }
@@ -385,11 +400,11 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MT);
     }
 
-    function mint(address, uint256) external {
+    function mint(address, uint256, bytes32) external {
         _forward(_MW);
     }
 
-    function mintToUA(bytes32, uint256) external {
+    function mintToUA(bytes32, uint256, bytes32) external {
         _forward(_MW);
     }
 
@@ -533,6 +548,10 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MW);
     }
 
+    function pendingSupplyCaps() external view returns (uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive) {
+        _forwardView(_MW);
+    }
+
     function previewUnwrap(address, uint256) external view returns (uint256 out, uint256 burned) {
         _forwardView(_MW);
     }
@@ -541,7 +560,7 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MW);
     }
 
-    function proposeRate(address, uint96, uint96) external {
+    function proposeRate(address, uint96, uint96, bytes32) external {
         _forward(_MW);
     }
 
@@ -573,6 +592,10 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MA);
     }
 
+    function reserveValue() external view returns (uint256 _p0) {
+        _forwardView(_MW);
+    }
+
     function restorePulled(ITradeToken.UATradeOrder calldata, uint256) external {
         _forward(_MT);
     }
@@ -585,11 +608,19 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forward(_MA);
     }
 
-    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata, bool, bool, bool) external {
+    function setMaxSupply(uint256, bytes32) external {
         _forward(_MW);
     }
 
-    function setWrapMember(bytes32, bool, bool) external {
+    function setMaxWrapSupply(uint256, bytes32) external {
+        _forward(_MW);
+    }
+
+    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata, bool, bool, bool, bytes32) external {
+        _forward(_MW);
+    }
+
+    function setWrapMember(bytes32, bool, bool, bytes32) external {
         _forward(_MW);
     }
 
@@ -599,6 +630,10 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
 
     function supportsInterface(bytes4) external view returns (bool _p0) {
         _forwardView(_MA);
+    }
+
+    function totalWrapped() external view returns (uint256 _p0) {
+        _forwardView(_MW);
     }
 
     function tradeOrderDigest(ITradeToken.UATradeOrder calldata) external view returns (bytes32 _p0) {

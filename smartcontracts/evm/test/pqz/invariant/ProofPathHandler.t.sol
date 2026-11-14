@@ -159,7 +159,7 @@ contract ProofPathHandler is PqzFixture {
 
     function setMode(uint256 m) external {
         uint8 next = uint8(m % 2);
-        try tok.setProofStore(next) {
+        try tok.setProofStore(next, EnvKit.codeUidOf(address(tok))) {
             if (disabled || tok.proofStore() != next) ++badMode; // lands only while the bit is set, and sets what it says
         } catch {
             if (!disabled) ++badMode;

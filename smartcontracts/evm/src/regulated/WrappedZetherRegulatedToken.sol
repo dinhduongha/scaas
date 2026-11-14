@@ -83,6 +83,10 @@ interface IWrappedZetherRegulatedTokenAbi {
     event WrapLimitsSet(bytes32 indexed by, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
     event WrapLimitsProposed(bytes32 indexed by, uint64 eta, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
     event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
+    event MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta);
+    event MaxSupplySet(bytes32 indexed by, uint256 oldMaxSupply, uint256 newMaxSupply);
+    event MaxWrapSupplyProposed(bytes32 indexed by, uint256 maxWrapSupply, uint64 eta);
+    event MaxWrapSupplySet(bytes32 indexed by, uint256 oldMaxWrapSupply, uint256 newMaxWrapSupply);
     event AllowedSet(bytes32 indexed account, bytes32 indexed by, bool on);
     event DeniedSet(bytes32 indexed account, bytes32 indexed by, bool on);
     error AccountNotRegistered(ZetherTypes.UA account);
@@ -271,7 +275,14 @@ interface IWrappedZetherRegulatedTokenAbi {
     error WrapControlNeedsHybrid(uint8 bit);
     error WrapControlActive(uint8 bit);
     error WrapSubjectZero();
+    error MaxWrapSupplyExceeded(uint256 totalWrapped, uint256 maxWrapSupply);
+    error MaxWrapSupplyInvalid();
+    error MaxSupplyBelowSupply(uint256 maxSupply, uint256 totalSupply);
+    error MaxSupplyBelowWrapCap(uint256 maxSupply, uint256 maxWrapSupply);
+    error MaxWrapSupplyBelowWrapped(uint256 maxWrapSupply, uint256 totalWrapped);
+    error MaxWrapSupplyAboveMaxSupply(uint256 maxWrapSupply, uint256 maxSupply);
     error ChainUidMismatch(bytes32 expected, bytes32 got);
+    error FeatureConflict(uint8 bit, uint8 other);
     error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
     error NotAllowed(bytes32 account);
     error Denied(bytes32 account);
@@ -396,7 +407,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MT);
     }
 
-    function cancelRate() external {
+    function cancelRate(bytes32) external {
         _forward(_MW);
     }
 
@@ -424,7 +435,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forward(_MR);
     }
 
-    function disableWrap(address, bytes32) external {
+    function disableWrap(address, bytes32, bytes32) external {
         _forward(_MW);
     }
 
@@ -452,7 +463,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forward(_MP);
     }
 
-    function executeRate() external {
+    function executeRate(bytes32) external {
         _forward(_MZ);
     }
 
@@ -460,11 +471,11 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MA);
     }
 
-    function forceTransfer(bytes32, uint256) external {
+    function forceTransfer(bytes32, uint256, bytes32) external {
         _forward(_MR);
     }
 
-    function freeze(bytes32, bytes32, bytes32) external {
+    function freeze(bytes32, bytes32, bytes32, bytes32) external {
         _forward(_MR);
     }
 
@@ -532,6 +543,10 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MW);
     }
 
+    function maxWrapSupply() external view returns (uint256 _p0) {
+        _forwardView(_MW);
+    }
+
     function metaPayId(MetaTxLib.PayMeta calldata) external pure returns (bytes32 _p0) {
         _forwardPure(_modulePure(1));
     }
@@ -544,11 +559,11 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MT);
     }
 
-    function mint(address, uint256) external {
+    function mint(address, uint256, bytes32) external {
         _forward(_MW);
     }
 
-    function mintToUA(bytes32, uint256) external {
+    function mintToUA(bytes32, uint256, bytes32) external {
         _forward(_MW);
     }
 
@@ -748,7 +763,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forward(_MW);
     }
 
-    function operatorTransfer(bytes32, bytes32, uint256, bytes32) external {
+    function operatorTransfer(bytes32, bytes32, uint256, bytes32, bytes32) external {
         _forward(_MR);
     }
 
@@ -756,7 +771,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MR);
     }
 
-    function pause(bytes32, uint64) external {
+    function pause(bytes32, uint64, bytes32) external {
         _forward(_MR);
     }
 
@@ -800,6 +815,10 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MW);
     }
 
+    function pendingSupplyCaps() external view returns (uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive) {
+        _forwardView(_MW);
+    }
+
     function previewUnwrap(address, uint256) external view returns (uint256 out, uint256 burned) {
         _forwardView(_MW);
     }
@@ -808,7 +827,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MW);
     }
 
-    function proposeRate(address, uint96, uint96) external {
+    function proposeRate(address, uint96, uint96, bytes32) external {
         _forward(_MW);
     }
 
@@ -824,7 +843,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MW);
     }
 
-    function recordOrder(bytes32, bytes32, bytes32, bytes32, uint256, uint64) external {
+    function recordOrder(bytes32, bytes32, bytes32, bytes32, uint256, uint64, bytes32) external {
         _forward(_MR);
     }
 
@@ -852,11 +871,15 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MA);
     }
 
+    function reserveValue() external view returns (uint256 _p0) {
+        _forwardView(_MW);
+    }
+
     function restorePulled(ITradeToken.UATradeOrder calldata, uint256) external {
         _forward(_MT);
     }
 
-    function revokeOrder(bytes32, bytes32) external {
+    function revokeOrder(bytes32, bytes32, bytes32) external {
         _forward(_MR);
     }
 
@@ -868,11 +891,11 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MZ);
     }
 
-    function setAllowed(bytes32[] calldata, bool) external {
+    function setAllowed(bytes32[] calldata, bool, bytes32) external {
         _forward(_MR);
     }
 
-    function setDenied(bytes32[] calldata, bool) external {
+    function setDenied(bytes32[] calldata, bool, bytes32) external {
         _forward(_MR);
     }
 
@@ -880,19 +903,27 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forward(_MA);
     }
 
-    function setTaxRate(uint32) external {
-        _forward(_MP);
-    }
-
-    function setTaxRecipient(bytes32) external {
-        _forward(_MP);
-    }
-
-    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata, bool, bool, bool) external {
+    function setMaxSupply(uint256, bytes32) external {
         _forward(_MW);
     }
 
-    function setWrapMember(bytes32, bool, bool) external {
+    function setMaxWrapSupply(uint256, bytes32) external {
+        _forward(_MW);
+    }
+
+    function setTaxRate(uint32, bytes32) external {
+        _forward(_MP);
+    }
+
+    function setTaxRecipient(bytes32, bytes32) external {
+        _forward(_MP);
+    }
+
+    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata, bool, bool, bool, bytes32) external {
+        _forward(_MW);
+    }
+
+    function setWrapMember(bytes32, bool, bool, bytes32) external {
         _forward(_MW);
     }
 
@@ -914,6 +945,10 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
 
     function totalShielded() external view returns (uint256 _p0) {
         _forwardView(_MZ);
+    }
+
+    function totalWrapped() external view returns (uint256 _p0) {
+        _forwardView(_MW);
     }
 
     function tradeOrderDigest(ITradeToken.UATradeOrder calldata) external view returns (bytes32 _p0) {
@@ -940,11 +975,11 @@ contract WrappedZetherRegulatedToken is WrappedZetherRegulatedTokenCore, IWrappe
         _forwardView(_MW);
     }
 
-    function unfreeze(bytes32, bytes32) external {
+    function unfreeze(bytes32, bytes32, bytes32) external {
         _forward(_MR);
     }
 
-    function unpause(bytes32) external {
+    function unpause(bytes32, bytes32) external {
         _forward(_MR);
     }
 

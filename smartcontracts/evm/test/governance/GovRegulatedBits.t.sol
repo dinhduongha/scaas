@@ -229,7 +229,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         address n = _rCreate(false, _rCfg(false, 1), "n");
         vm.prank(OWNER);
-        d.setMarket(t, n, true);
+        d.setMarket(t, n, true, EnvKit.codeUidOf(address(d)));
         assertEq(d.tokenKind(t), 1, "KIND_SCAAS");
         assertEq(d.tokenKind(n), 1, "control: a NORMAL token");
     }

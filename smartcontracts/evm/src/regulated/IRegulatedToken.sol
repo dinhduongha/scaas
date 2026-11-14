@@ -131,27 +131,27 @@ interface IRegulatedToken {
     error NotPaused();
 
     /// @notice Bit 5, issuer (T1, T2, T4 of spec §3.3).
-    function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external;
+    function freeze(bytes32 account, bytes32 ref, bytes32 recordId, bytes32 chainUid_) external;
     /// @notice Bit 5, issuer (T5).
-    function unfreeze(bytes32 account, bytes32 ref) external;
+    function unfreeze(bytes32 account, bytes32 ref, bytes32 chainUid_) external;
     /// @notice Bit 6, issuer, scalar `amount`: the subject's public balance to the record's beneficiary.
-    function forceTransfer(bytes32 recordId, uint256 amount) external;
+    function forceTransfer(bytes32 recordId, uint256 amount, bytes32 chainUid_) external;
     /// @notice Bit 7, issuer (CTR-AS-06).
-    function pause(bytes32 ref, uint64 until) external;
-    function unpause(bytes32 ref) external;
+    function pause(bytes32 ref, uint64 until, bytes32 chainUid_) external;
+    function unpause(bytes32 ref, bytes32 chainUid_) external;
     /// @notice Bit 10, compliance.
     function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount,
-        uint64 freezeUntil) external;
+        uint64 freezeUntil, bytes32 chainUid_) external;
     /// @notice Bit 10, compliance; with `RECORD` disabled the role alone (T8).
-    function revokeOrder(bytes32 recordId, bytes32 reasonRef) external;
+    function revokeOrder(bytes32 recordId, bytes32 reasonRef, bytes32 chainUid_) external;
     /// @notice Bit 22, any holder, scalar `amount` (CTR-GOV-20): public balances only.
-    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external;
+    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 chainUid_) external;
 
     /// @notice Bit 23, any holder (pay-meta-tax spec §6.2): the one PERCENT rate, `<= 10^6` ppm; a decrease at once, an
     ///         increase after the factory's `noticePeriod()`.
-    function setTaxRate(uint32 ratePpm) external;
+    function setTaxRate(uint32 ratePpm, bytes32 chainUid_) external;
     /// @notice Bit 23: not 0, a pool or the token; a derived id registered SIGNING; not frozen and eligible (`R`).
-    function setTaxRecipient(bytes32 taxRecipient) external;
+    function setTaxRecipient(bytes32 taxRecipient, bytes32 chainUid_) external;
     function taxConfig() external view returns (TaxConfig memory);
     /// @notice Bits 0 (`PAYABLE`) and 23: a payment with its tax, signed `UAPayWithTax` by `t.from` (spec §5.3).
     function mtxPayWithTax(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax, IUARegistry.UASig calldata auth,
@@ -163,8 +163,8 @@ interface IRegulatedToken {
     /// @notice Round 3s (spec §6.1): bit 8's holder writes the allow list, bit 9's the deny list, 1-256 accounts, at once both
     ///         ways; a dormant list (its bit off) too. On 10-13 `setAllowed` exists and always reverts `MissingRole` (bit 8
     ///         is not valid there, so no holder can exist).
-    function setAllowed(bytes32[] calldata accounts, bool on) external;
-    function setDenied(bytes32[] calldata accounts, bool on) external;
+    function setAllowed(bytes32[] calldata accounts, bool on, bytes32 chainUid_) external;
+    function setDenied(bytes32[] calldata accounts, bool on, bytes32 chainUid_) external;
     /// @notice `ALLOWED` (1) | `DENIED` (2).
     function listFlagsOf(bytes32 account) external view returns (uint8);
     /// @notice Round 3s (spec §5.2): the admin switches on 8, 9 or 28 at once; 8 and 9 never go off again. `NotAdmin`, then

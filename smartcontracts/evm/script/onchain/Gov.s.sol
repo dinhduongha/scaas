@@ -298,19 +298,19 @@ contract Gov is OnchainBase {
         IFactoryToken.TokenConfig memory r = _cfg("oG0r", 1 << GovernanceBits.PAYABLE);
         (r.initialSupply, r.initialHolder) = (1_000, a1);
         t0r = _create(IOpenFactory.TokenKind.NORMAL, r, "NormalToken");
+        bytes32 w0 = IMetaTx(t0).chainUid(); // the token's chain word: the admin ops sign and forward it (CTR-GOV-28)
         Sg memory o = _eoa(k1);
         MetaTxLib.UAEnvelope memory e;
         IUARegistry.UASig memory s;
-        (e, s) = _auth(o, _ty("UAMint", "address to,uint256 amount"), t0, abi.encode(a3, uint256(100)));
+        (e, s) = _auth(o, _ty("UAMint", "address to,uint256 amount,bytes32 chainUid"), t0, abi.encode(a3, uint256(100), w0));
         vm.broadcast(k2);
-        gr.mtxMint(e, t0, a3, 100, s);
+        gr.mtxMint(e, t0, a3, 100, w0, s);
         // bound relayer (MODE_RESTRICT_RELAYER): only k2 may submit
         (e.from, e.nonce, e.validUntil, e.mode, e.relayer) = (o.from, gr.mtxNonce(o.from, 0), vu, MetaTxLib.MODE_RESTRICT_RELAYER, a2);
-        s = _signR(o, _named(address(gr), _ty("UAMintToUA", "bytes32 to,uint256 amount"),
-            bytes.concat(abi.encode(t0), abi.encode(uaD, uint256(100))), e));
+        s = _signR(o, _named(address(gr), _ty("UAMintToUA", "bytes32 to,uint256 amount,bytes32 chainUid"),
+            bytes.concat(abi.encode(t0), abi.encode(uaD, uint256(100), w0)), e));
         vm.broadcast(k2);
-        gr.mtxMintToUA(e, t0, uaD, 100, s);
-        bytes32 w0 = IMetaTx(t0).chainUid(); // the token's chain word: the admin ops sign and forward it (CTR-GOV-28)
+        gr.mtxMintToUA(e, t0, uaD, 100, w0, s);
         (e, s) = _auth(o, _ty("UAGrantRole", "uint8 bit,bytes32 account,bytes32 chainUid"), t0,
             abi.encode(GovernanceBits.MINTABLE, _pad(a3), w0));
         vm.broadcast(k2);
@@ -377,28 +377,29 @@ contract Gov is OnchainBase {
         c.rate = IFactoryToken.RateConfig(2 days, 100);
         c.maxSupply = 1e15;
         t1 = _create(IOpenFactory.TokenKind.WRAPPED, c, "WrappedToken");
+        bytes32 w1 = IMetaTx(t1).chainUid(); // the token's chain word (CTR-GOV-28)
         Sg memory o = _eoa(k1);
         Sg memory ra = _skaSg(iss, pkI);
         MetaTxLib.UAEnvelope memory e;
         IUARegistry.UASig memory s;
-        (e, s) = _auth(o, _ty("UAMint", "address to,uint256 amount"), t1, abi.encode(a3, uint256(50)));
+        (e, s) = _auth(o, _ty("UAMint", "address to,uint256 amount,bytes32 chainUid"), t1, abi.encode(a3, uint256(50), w1));
         vm.broadcast(k2);
-        gr.mtxMint(e, t1, a3, 50, s); // the hybrid's mint
-        (e, s) = _auth(ra, _ty("UAProposeRate", "address leg,uint96 num,uint96 den"), t1,
-            abi.encode(address(u), uint96(101), uint96(100)));
+        gr.mtxMint(e, t1, a3, 50, w1, s); // the hybrid's mint
+        (e, s) = _auth(ra, _ty("UAProposeRate", "address leg,uint96 num,uint96 den,bytes32 chainUid"), t1,
+            abi.encode(address(u), uint96(101), uint96(100), w1));
         vm.broadcast(k2);
-        gr.mtxProposeRate{gas: SKA_SIG_GAS}(e, t1, address(u), 101, 100, s);
-        (e, s) = _auth(ra, _ty("UACancelRate", ""), t1, "");
+        gr.mtxProposeRate{gas: SKA_SIG_GAS}(e, t1, address(u), 101, 100, w1, s);
+        (e, s) = _auth(ra, _ty("UACancelRate", "bytes32 chainUid"), t1, abi.encode(w1));
         vm.broadcast(k2);
-        gr.mtxCancelRate{gas: SKA_SIG_GAS}(e, t1, s);
-        (e, s) = _auth(ra, _ty("UAProposeRate", "address leg,uint96 num,uint96 den"), t1,
-            abi.encode(address(u), uint96(101), uint96(100)));
+        gr.mtxCancelRate{gas: SKA_SIG_GAS}(e, t1, w1, s);
+        (e, s) = _auth(ra, _ty("UAProposeRate", "address leg,uint96 num,uint96 den,bytes32 chainUid"), t1,
+            abi.encode(address(u), uint96(101), uint96(100), w1));
         vm.broadcast(k2);
-        gr.mtxProposeRate{gas: SKA_SIG_GAS}(e, t1, address(u), 101, 100, s); // stays pending: executeRate waits rateDelay (2 days), a negative
+        gr.mtxProposeRate{gas: SKA_SIG_GAS}(e, t1, address(u), 101, 100, w1, s); // stays pending: executeRate waits rateDelay (2 days), a negative
         bytes32 why = _ref();
-        (e, s) = _auth(o, _ty("UADisableWrap", "address leg,bytes32 reason"), t1, abi.encode(address(u), why));
+        (e, s) = _auth(o, _ty("UADisableWrap", "address leg,bytes32 reason,bytes32 chainUid"), t1, abi.encode(address(u), why, w1));
         vm.broadcast(k2);
-        gr.mtxDisableWrap(e, t1, address(u), why, s);
+        gr.mtxDisableWrap(e, t1, address(u), why, w1, s);
         bytes32 w0 = IMetaTx(t0).chainUid(); // the token's chain word (CTR-GOV-28)
         (e, s) = _auth(o, _ty("UADisableFeature", "uint8 bit,bytes32 chainUid"), t0, abi.encode(GovernanceBits.MINTABLE, w0));
         vm.broadcast(k2);
@@ -444,15 +445,15 @@ contract Gov is OnchainBase {
         (l[0], l[1]) = (_pad(a2), _pad(a3));
         vm.startBroadcast(k1);
         IGovernance(t).grantRole(GovernanceBits.DENYLIST, _pad(a1), IMetaTx(t).chainUid());
-        IRegulatedToken(t).setDenied(d, true);
+        IRegulatedToken(t).setDenied(d, true, IMetaTx(t).chainUid());
         if (allow) {
             IGovernance(t).grantRole(GovernanceBits.ALLOWLIST, _pad(a1), IMetaTx(t).chainUid());
-            IRegulatedToken(t).setAllowed(l, true);
+            IRegulatedToken(t).setAllowed(l, true, IMetaTx(t).chainUid());
         }
         IRegulatedToken(t).enableFeature(GovernanceBits.DENYLIST, IMetaTx(t).chainUid());
         vm.stopBroadcast();
         if (!allow) {
-            _neg(a1, t, abi.encodeCall(IRegulatedToken.setAllowed, (l, true)), IGovernance.MissingRole.selector,
+            _neg(a1, t, abi.encodeCall(IRegulatedToken.setAllowed, (l, true, IMetaTx(t).chainUid())), IGovernance.MissingRole.selector,
                 string.concat("setAllowed on ", what, " (bit 8 outside the mask: no holder)"));
             _neg(a1, t, abi.encodeCall(IRegulatedToken.enableFeature, (GovernanceBits.ALLOWLIST, IMetaTx(t).chainUid())),
                 IGovernance.FeatureInvalidForKind.selector, string.concat("enableFeature(ALLOWLIST) on ", what));
@@ -474,26 +475,26 @@ contract Gov is OnchainBase {
         vm.broadcast(k1);
         IERC20(t).transfer(a2, 1_000);
         bytes32 r = _ref();
-        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.freeze, (_pad(a3), r, bytes32(0))));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.freeze, (_pad(a3), r, bytes32(0), IMetaTx(t).chainUid())));
         require(IRegulatedToken(t).isFrozen(_pad(a3)), "frozen");
-        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.unfreeze, (_pad(a3), r)));
-        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.pause, (r, uint64(block.timestamp + 1 hours))));
-        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.unpause, (r)));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.unfreeze, (_pad(a3), r, IMetaTx(t).chainUid())));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.pause, (r, uint64(block.timestamp + 1 hours), IMetaTx(t).chainUid())));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.unpause, (r, IMetaTx(t).chainUid())));
         bytes32 oid = _ref();
         _skaExec(cmp, pkC, t, abi.encodeCall(IRegulatedToken.recordOrder,
-            (oid, keccak256("order doc"), _pad(a2), _pad(a3), uint256(100), uint64(block.timestamp + 1 days))));
+            (oid, keccak256("order doc"), _pad(a2), _pad(a3), uint256(100), uint64(block.timestamp + 1 days), IMetaTx(t).chainUid())));
         bytes32 rid = keccak256(abi.encode(oid, _pad(a2), _pad(a3)));
-        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.freeze, (_pad(a2), r, rid)));
-        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.forceTransfer, (rid, uint256(40))));
-        _skaExec(cmp, pkC, t, abi.encodeCall(IRegulatedToken.revokeOrder, (rid, _ref())));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.freeze, (_pad(a2), r, rid, IMetaTx(t).chainUid())));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.forceTransfer, (rid, uint256(40), IMetaTx(t).chainUid())));
+        _skaExec(cmp, pkC, t, abi.encodeCall(IRegulatedToken.revokeOrder, (rid, _ref(), IMetaTx(t).chainUid())));
         require(!IRegulatedToken(t).isFrozen(_pad(a2)), "revoke ends the record freeze");
-        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.setTaxRate, (uint32(1_000))));
-        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.setTaxRecipient, (_pad(a1))));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.setTaxRate, (uint32(1_000), IMetaTx(t).chainUid())));
+        _skaExec(iss, pkI, t, abi.encodeCall(IRegulatedToken.setTaxRecipient, (_pad(a1), IMetaTx(t).chainUid())));
         bytes32 tu = IMetaTx(t).chainUid(); // the token's chain word (CTR-GOV-28)
         vm.broadcast(k1);
         IGovernance(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, _pad(a1), tu); // any holder (bit 22)
         vm.broadcast(k1);
-        IRegulatedToken(t).operatorTransfer(_pad(a2), _pad(a3), 10, _ref());
+        IRegulatedToken(t).operatorTransfer(_pad(a2), _pad(a3), 10, _ref(), tu);
         vm.broadcast(k1);
         u2.mint(t, 77); // a stray asset
         vm.broadcast(k2);
@@ -511,42 +512,44 @@ contract Gov is OnchainBase {
         IWrappedToken(t9).wrap(100_000);
         IERC20(t9).transfer(a2, 1_000);
         vm.stopBroadcast();
+        bytes32 w9 = IMetaTx(t9).chainUid(); // the token's chain word (CTR-GOV-28)
         Sg memory is_ = _skaSg(iss, pkI);
         Sg memory cm = _skaSg(cmp, pkC);
         Sg memory o = _eoa(k1);
         MetaTxLib.UAEnvelope memory e;
         IUARegistry.UASig memory s;
-        bytes32 r = _ref();
-        (e, s) = _auth(is_, _ty("UAFreeze", "bytes32 account,bytes32 ref,bytes32 recordId"), t9, abi.encode(_pad(a3), r, bytes32(0)));
-        vm.broadcast(k2);
-        gr.mtxFreeze{gas: SKA_SIG_GAS}(e, t9, _pad(a3), r, 0, s);
-        (e, s) = _auth(is_, _ty("UAUnfreeze", "bytes32 account,bytes32 ref"), t9, abi.encode(_pad(a3), r));
-        vm.broadcast(k2);
-        gr.mtxUnfreeze{gas: SKA_SIG_GAS}(e, t9, _pad(a3), r, s);
-        uint64 until = uint64(block.timestamp + 1 hours);
-        (e, s) = _auth(is_, _ty("UAPause", "bytes32 ref,uint64 until"), t9, abi.encode(r, until));
-        vm.broadcast(k2);
-        gr.mtxPause{gas: SKA_SIG_GAS}(e, t9, r, until, s);
-        (e, s) = _auth(is_, _ty("UAUnpause", "bytes32 ref"), t9, abi.encode(r));
-        vm.broadcast(k2);
-        gr.mtxUnpause{gas: SKA_SIG_GAS}(e, t9, r, s);
+        { // the stack: r and until end here
+            bytes32 r = _ref();
+            (e, s) = _auth(is_, _ty("UAFreeze", "bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid"), t9, abi.encode(_pad(a3), r, bytes32(0), w9));
+            vm.broadcast(k2);
+            gr.mtxFreeze{gas: SKA_SIG_GAS}(e, t9, _pad(a3), r, 0, w9, s);
+            (e, s) = _auth(is_, _ty("UAUnfreeze", "bytes32 account,bytes32 ref,bytes32 chainUid"), t9, abi.encode(_pad(a3), r, w9));
+            vm.broadcast(k2);
+            gr.mtxUnfreeze{gas: SKA_SIG_GAS}(e, t9, _pad(a3), r, w9, s);
+            uint64 until = uint64(block.timestamp + 1 hours);
+            (e, s) = _auth(is_, _ty("UAPause", "bytes32 ref,uint64 until,bytes32 chainUid"), t9, abi.encode(r, until, w9));
+            vm.broadcast(k2);
+            gr.mtxPause{gas: SKA_SIG_GAS}(e, t9, r, until, w9, s);
+            (e, s) = _auth(is_, _ty("UAUnpause", "bytes32 ref,bytes32 chainUid"), t9, abi.encode(r, w9));
+            vm.broadcast(k2);
+            gr.mtxUnpause{gas: SKA_SIG_GAS}(e, t9, r, w9, s);
+        }
         _routerOrder(cm, is_);
-        (e, s) = _auth(is_, _ty("UASetTaxRate", "uint32 ratePpm"), t9, abi.encode(uint32(500)));
+        (e, s) = _auth(is_, _ty("UASetTaxRate", "uint32 ratePpm,bytes32 chainUid"), t9, abi.encode(uint32(500), w9));
         vm.broadcast(k2);
-        gr.mtxSetTaxRate{gas: SKA_SIG_GAS}(e, t9, 500, s);
-        (e, s) = _auth(is_, _ty("UASetTaxRecipient", "bytes32 taxRecipient"), t9, abi.encode(_pad(a1)));
+        gr.mtxSetTaxRate{gas: SKA_SIG_GAS}(e, t9, 500, w9, s);
+        (e, s) = _auth(is_, _ty("UASetTaxRecipient", "bytes32 taxRecipient,bytes32 chainUid"), t9, abi.encode(_pad(a1), w9));
         vm.broadcast(k2);
-        gr.mtxSetTaxRecipient{gas: SKA_SIG_GAS}(e, t9, _pad(a1), s);
-        bytes32 w9 = IMetaTx(t9).chainUid(); // the token's chain word (CTR-GOV-28)
+        gr.mtxSetTaxRecipient{gas: SKA_SIG_GAS}(e, t9, _pad(a1), w9, s);
         (e, s) = _auth(o, _ty("UAGrantRole", "uint8 bit,bytes32 account,bytes32 chainUid"), t9,
             abi.encode(GovernanceBits.OPERATOR_TRANSFER, _pad(a1), w9));
         vm.broadcast(k2);
         gr.mtxGrantRole(e, t9, GovernanceBits.OPERATOR_TRANSFER, _pad(a1), w9, s);
         bytes32 r2 = _ref();
-        (e, s) = _auth(o, _ty("UAOperatorTransfer", "bytes32 account,bytes32 to,uint256 amount,bytes32 ref"), t9,
-            abi.encode(_pad(a2), _pad(a3), uint256(5), r2));
+        (e, s) = _auth(o, _ty("UAOperatorTransfer", "bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid"), t9,
+            abi.encode(_pad(a2), _pad(a3), uint256(5), r2, w9));
         vm.broadcast(k2);
-        gr.mtxOperatorTransfer(e, t9, _pad(a2), _pad(a3), 5, r2, s);
+        gr.mtxOperatorTransfer(e, t9, _pad(a2), _pad(a3), 5, r2, w9, s);
         (e, s) = _auth(o, _ty("UADisableFeature", "uint8 bit,bytes32 chainUid"), t9, abi.encode(GovernanceBits.PAUSE, w9));
         vm.broadcast(k2);
         gr.mtxDisableFeature(e, t9, GovernanceBits.PAUSE, w9, s);
@@ -556,9 +559,9 @@ contract Gov is OnchainBase {
         IRescuable(t9).rescue(address(u2));
         // the last power on t9: the owner a1 frozen (a negative transfers from it)
         bytes32 r3 = _ref();
-        (e, s) = _auth(is_, _ty("UAFreeze", "bytes32 account,bytes32 ref,bytes32 recordId"), t9, abi.encode(_pad(a1), r3, bytes32(0)));
+        (e, s) = _auth(is_, _ty("UAFreeze", "bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid"), t9, abi.encode(_pad(a1), r3, bytes32(0), w9));
         vm.broadcast(k2);
-        gr.mtxFreeze{gas: SKA_SIG_GAS}(e, t9, _pad(a1), r3, 0, s);
+        gr.mtxFreeze{gas: SKA_SIG_GAS}(e, t9, _pad(a1), r3, 0, w9, s);
     }
 
     /// Group 3s (CTR-GOV-24, spec §5.3, §6.2): the router ops of the lists, signed by a UA admin: a kind-9 token whose admin
@@ -575,14 +578,14 @@ contract Gov is OnchainBase {
         (l[0], l[1]) = (_pad(a1), _pad(a2));
         bytes32[] memory d = new bytes32[](1);
         d[0] = _pad(address(0xDE41ED));
-        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(du, _ty("UASetAllowed", "bytes32[] accounts,bool on"),
-            tl, abi.encode(keccak256(abi.encodePacked(l)), true));
-        vm.broadcast(k2);
-        gr.mtxSetAllowed(e, tl, l, true, s);
-        (e, s) = _auth(du, _ty("UASetDenied", "bytes32[] accounts,bool on"), tl, abi.encode(keccak256(abi.encodePacked(d)), true));
-        vm.broadcast(k2);
-        gr.mtxSetDenied(e, tl, d, true, s);
         bytes32 wl = IMetaTx(tl).chainUid(); // the token's chain word (CTR-GOV-28)
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(du, _ty("UASetAllowed", "bytes32[] accounts,bool on,bytes32 chainUid"),
+            tl, abi.encode(keccak256(abi.encodePacked(l)), true, wl));
+        vm.broadcast(k2);
+        gr.mtxSetAllowed(e, tl, l, true, wl, s);
+        (e, s) = _auth(du, _ty("UASetDenied", "bytes32[] accounts,bool on,bytes32 chainUid"), tl, abi.encode(keccak256(abi.encodePacked(d)), true, wl));
+        vm.broadcast(k2);
+        gr.mtxSetDenied(e, tl, d, true, wl, s);
         (e, s) = _auth(du, _ty("UAEnableFeature", "uint8 bit,bytes32 chainUid"), tl, abi.encode(GovernanceBits.DENYLIST, wl));
         vm.broadcast(k2);
         gr.mtxEnableFeature(e, tl, GovernanceBits.DENYLIST, wl, s);
@@ -597,9 +600,10 @@ contract Gov is OnchainBase {
     function _negListsRouter() internal {
         bytes32[] memory l = new bytes32[](1);
         l[0] = _pad(a3);
+        bytes32 wl = IMetaTx(tl).chainUid(); // the token's chain word (CTR-GOV-28)
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(_eoa(k1),
-            _ty("UASetAllowed", "bytes32[] accounts,bool on"), tl, abi.encode(keccak256(abi.encodePacked(l)), true));
-        _neg(a2, address(gr), abi.encodeCall(GovernanceRouter.mtxSetAllowed, (e, tl, l, true, s)), IGovernance.MissingRole.selector,
+            _ty("UASetAllowed", "bytes32[] accounts,bool on,bytes32 chainUid"), tl, abi.encode(keccak256(abi.encodePacked(l)), true, wl));
+        _neg(a2, address(gr), abi.encodeCall(GovernanceRouter.mtxSetAllowed, (e, tl, l, true, wl, s)), IGovernance.MissingRole.selector,
             "mtxSetAllowed by a UA without bit 8 (kind 9)");
     }
 
@@ -608,23 +612,24 @@ contract Gov is OnchainBase {
         IUARegistry.UASig memory s;
         bytes32 oid = _ref();
         uint64 fu = uint64(block.timestamp + 1 days);
+        bytes32 w9 = IMetaTx(t9).chainUid(); // the token's chain word (CTR-GOV-28)
         (e, s) = _auth(cm, _ty("UARecordOrder",
-            "bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil"), t9,
-            abi.encode(oid, keccak256("order doc"), _pad(a2), _pad(a3), uint256(100), fu));
+            "bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid"), t9,
+            abi.encode(oid, keccak256("order doc"), _pad(a2), _pad(a3), uint256(100), fu, w9));
         vm.broadcast(k2);
-        gr.mtxRecordOrder{gas: SKA_SIG_GAS}(e, t9, oid, keccak256("order doc"), _pad(a2), _pad(a3), 100, fu, s);
+        gr.mtxRecordOrder{gas: SKA_SIG_GAS}(e, t9, oid, keccak256("order doc"), _pad(a2), _pad(a3), 100, fu, w9, s);
         bytes32 rid = keccak256(abi.encode(oid, _pad(a2), _pad(a3)));
         bytes32 r = _ref();
-        (e, s) = _auth(is_, _ty("UAFreeze", "bytes32 account,bytes32 ref,bytes32 recordId"), t9, abi.encode(_pad(a2), r, rid));
+        (e, s) = _auth(is_, _ty("UAFreeze", "bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid"), t9, abi.encode(_pad(a2), r, rid, w9));
         vm.broadcast(k2);
-        gr.mtxFreeze{gas: SKA_SIG_GAS}(e, t9, _pad(a2), r, rid, s);
-        (e, s) = _auth(is_, _ty("UAForceTransfer", "bytes32 recordId,uint256 amount"), t9, abi.encode(rid, uint256(30)));
+        gr.mtxFreeze{gas: SKA_SIG_GAS}(e, t9, _pad(a2), r, rid, w9, s);
+        (e, s) = _auth(is_, _ty("UAForceTransfer", "bytes32 recordId,uint256 amount,bytes32 chainUid"), t9, abi.encode(rid, uint256(30), w9));
         vm.broadcast(k2);
-        gr.mtxForceTransfer{gas: SKA_SIG_GAS}(e, t9, rid, 30, s);
+        gr.mtxForceTransfer{gas: SKA_SIG_GAS}(e, t9, rid, 30, w9, s);
         bytes32 why = _ref();
-        (e, s) = _auth(cm, _ty("UARevokeOrder", "bytes32 recordId,bytes32 reasonRef"), t9, abi.encode(rid, why));
+        (e, s) = _auth(cm, _ty("UARevokeOrder", "bytes32 recordId,bytes32 reasonRef,bytes32 chainUid"), t9, abi.encode(rid, why, w9));
         vm.broadcast(k2);
-        gr.mtxRevokeOrder{gas: SKA_SIG_GAS}(e, t9, rid, why, s);
+        gr.mtxRevokeOrder{gas: SKA_SIG_GAS}(e, t9, rid, why, w9, s);
     }
 
     // ------------------------------------------------------------------ the DEX setters and the factory's creations
@@ -634,21 +639,22 @@ contract Gov is OnchainBase {
         vm.broadcast(k1);
         dex = f.createDex(1, init, _salt("dex"));
         _book(dex, "SCaaSDex");
+        bytes32 wx = IMetaTx(dex).chainUid(); // the DEX's chain word (CTR-GOV-28)
         Sg memory o = _eoa(k1);
         MetaTxLib.UAEnvelope memory e;
         IUARegistry.UASig memory s;
-        (e, s) = _auth(o, _ty("UASetMarket", "address base,address quote,bool listed"), dex, abi.encode(t0, t8, true));
+        (e, s) = _auth(o, _ty("UASetMarket", "address base,address quote,bool listed,bytes32 chainUid"), dex, abi.encode(t0, t8, true, wx));
         vm.broadcast(k2);
-        gr.mtxSetMarket(e, dex, t0, t8, true, s);
-        (e, s) = _auth(o, _ty("UASetExchangeTarget", "address exchangeTarget,bool listed"), dex, abi.encode(address(u), true));
+        gr.mtxSetMarket(e, dex, t0, t8, true, wx, s);
+        (e, s) = _auth(o, _ty("UASetExchangeTarget", "address exchangeTarget,bool listed,bytes32 chainUid"), dex, abi.encode(address(u), true, wx));
         vm.broadcast(k2);
-        gr.mtxSetExchangeTarget(e, dex, address(u), true, s);
-        (e, s) = _auth(o, _ty("UASetListedOnly", "bool on"), dex, abi.encode(true));
+        gr.mtxSetExchangeTarget(e, dex, address(u), true, wx, s);
+        (e, s) = _auth(o, _ty("UASetListedOnly", "bool on,bytes32 chainUid"), dex, abi.encode(true, wx));
         vm.broadcast(k2);
-        gr.mtxSetListedOnly(e, dex, true, s);
-        (e, s) = _auth(o, _ty("UASetFeeSplit", "uint32 relayerSharePpm,address treasury"), dex, abi.encode(uint32(1_000), a1));
+        gr.mtxSetListedOnly(e, dex, true, wx, s);
+        (e, s) = _auth(o, _ty("UASetFeeSplit", "uint32 relayerSharePpm,address treasury,bytes32 chainUid"), dex, abi.encode(uint32(1_000), a1, wx));
         vm.broadcast(k2);
-        gr.mtxSetFeeSplit(e, dex, 1_000, a1, s);
+        gr.mtxSetFeeSplit(e, dex, 1_000, a1, wx, s);
         // the creations: the factory reads the router's subject as the creator
         bytes32 salt = _salt("router dex");
         (e, s) = _auth(o, _ty("UACreateDex", "uint64 version,bytes32 initHash,bytes32 salt"), address(f),
@@ -886,14 +892,14 @@ contract Gov is OnchainBase {
             "grantRole by a non-owner (kind 8)");
         // a router op signed by another key than its `from`
         MetaTxLib.UAEnvelope memory e = _env(a1, 0, gr.mtxNonce(_pad(a1), 0));
-        IUARegistry.UASig memory s = _signR(_eoa(k2), _named(address(gr), _ty("UAMint", "address to,uint256 amount"),
-            abi.encode(t1, a3, uint256(1)), e)); // k2 signs a1's op
-        _neg(a2, address(gr), abi.encodeCall(GovernanceRouter.mtxMint, (e, t1, a3, 1, s)), IMetaTx.MetaTxBadSignature.selector,
+        IUARegistry.UASig memory s = _signR(_eoa(k2), _named(address(gr), _ty("UAMint", "address to,uint256 amount,bytes32 chainUid"),
+            abi.encode(t1, a3, uint256(1), IMetaTx(t1).chainUid()), e)); // k2 signs a1's op
+        _neg(a2, address(gr), abi.encodeCall(GovernanceRouter.mtxMint, (e, t1, a3, 1, IMetaTx(t1).chainUid(), s)), IMetaTx.MetaTxBadSignature.selector,
             "router op whose signature is not its from's");
         // the rate change waits rateDelay (2 days): executeRate refused before its eta
-        (e, s) = _auth(_skaSg(iss, pkI), _ty("UAExecuteRate", ""), t1, "");
+        (e, s) = _auth(_skaSg(iss, pkI), _ty("UAExecuteRate", "bytes32 chainUid"), t1, abi.encode(IMetaTx(t1).chainUid()));
         (,,, uint64 eta) = WrappedPending(t1).pendingRate();
-        _neg(a2, address(gr), abi.encodeCall(GovernanceRouter.mtxExecuteRate, (e, t1, s)), IWrappedToken.RateChangeNotReady.selector,
+        _neg(a2, address(gr), abi.encodeCall(GovernanceRouter.mtxExecuteRate, (e, t1, IMetaTx(t1).chainUid(), s)), IWrappedToken.RateChangeNotReady.selector,
             string.concat("mtxExecuteRate before the eta ", vm.toString(uint256(eta))));
         // no class release on the Step 5 factory
         bytes memory ic = abi.encodeWithSignature("initialize(bytes32,string)", _pad(a1), "note");

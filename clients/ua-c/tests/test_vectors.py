@@ -901,13 +901,13 @@ class Abi(unittest.TestCase):
 
 class GovernanceBits(unittest.TestCase):
     def test_governance_bits_rows(self):
-        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 29 UAArgument (round 3s; CTR-DEX-32)
+        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 31 UAArgument (round 3s; CTR-DEX-32; round 3zb + 3zc)
         (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27, WRAP_LIMIT, WRAP_LIST, REDEEMER)."""
         v = json.loads((VEC.parent / 'governance' / 'governance_bits.json').read_text())
-        self.assertEqual(len(v['bits']), 30)  # round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS
+        self.assertEqual(len(v['bits']), 32)  # round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE
         for row in v['bits']:
             self.assertEqual(json.loads(text(L.governance_bit, row['bit'])), row, row['bit'])
-        for bit in (30, 127, 128, 255):
+        for bit in (32, 127, 128, 255):
             self.assertEqual(code_of(lambda: text(L.governance_bit, bit)), 'UAArgument', bit)
 
     def test_pay_digest_and_meta_pay_id(self):

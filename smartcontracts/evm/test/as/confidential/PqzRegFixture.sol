@@ -174,13 +174,13 @@ abstract contract PqzRegFixture is PqzNamedBase {
 
     function _freeze(bytes32 x) internal {
         vm.prank(issuer);
-        _r().freeze(x, REF, 0);
+        _r().freeze(x, REF, 0, EnvKit.codeUidOf(address(_r())));
     }
 
     function _pause() internal returns (uint64 until) {
         until = uint64(block.timestamp + 1 days);
         vm.prank(issuer);
-        _r().pause(REF, until);
+        _r().pause(REF, until, EnvKit.codeUidOf(address(_r())));
     }
 
     function _attestDenied(bytes32 x) internal {
@@ -188,7 +188,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
             bytes32[] memory one = new bytes32[](1);
             one[0] = x;
             vm.prank(issuer);
-            (bool ok,) = address(tok).call(abi.encodeWithSignature("setDenied(bytes32[],bool)", one, true));
+            (bool ok,) = address(tok).call(abi.encodeWithSignature("setDenied(bytes32[],bool,bytes32)", one, true, EnvKit.codeUidOf(address(tok))));
             require(ok, "setDenied");
             return;
         }

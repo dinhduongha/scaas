@@ -18,6 +18,7 @@ import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {uaDigest, UA_PAY_UNDER_MANDATE, UA_DELEGATE_REVOKE} from "./MandateWalletMerged.t.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A "token" whose `payWithFee` answers false without moving anything.
 contract FalsePayToken {
@@ -46,7 +47,7 @@ abstract contract MandateFixture is V2Fixture {
         vm.warp(1_800_000_000);
         t = _normal(address(this), 0, address(this));
         w = new MandateWallet(_id(owner), UID_, address(0), false);
-        t.mint(address(w), 10_000);
+        t.mint(address(w), 10_000, EnvKit.codeUidOf(address(t)));
         vm.startPrank(owner);
         w.setMandate(address(t), _id(delegate), 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));
         w.setPayee(address(t), _id(npp), true);
@@ -227,7 +228,7 @@ contract MandateWalletTest is MandateFixture {
 
     function test_payee_is_per_token() public {
         NormalToken t2 = _normal(address(this), 0, address(this));
-        t2.mint(address(w), 100);
+        t2.mint(address(w), 100, EnvKit.codeUidOf(address(t2)));
         vm.prank(owner);
         w.setMandate(address(t2), _id(delegate), 10, 10, 1 days, uint64(block.timestamp + 1 days));
         MetaTxLib.UAMetaTransaction memory m = _gen(_id(delegate),
@@ -728,7 +729,7 @@ contract HederaMandateWalletTest is MandateFixture {
         MockHederaAccountService(HAS).setEdKey(edOwner, vm.addr(ED_KEY));
         MockHederaAccountService(HAS).setEdKey(edDel, vm.addr(ED_DEL));
         hw = new HederaMandateWallet(_id(edOwner), UID_, address(0));
-        t.mint(address(hw), 1_000);
+        t.mint(address(hw), 1_000, EnvKit.codeUidOf(address(t)));
     }
 
     function _edAs(uint256 k, bytes32 d) internal pure returns (IUARegistry.UASig memory a) {

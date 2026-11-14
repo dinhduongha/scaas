@@ -335,7 +335,7 @@ contract UALedgerTest is UALedgerBase {
         tok.transfer(POOL, 1);
         vm.stopPrank();
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
-        tok.mint(POOL, 1);
+        tok.mint(POOL, 1, EnvKit.codeUidOf(address(tok)));
         // the pool's balance is never spent outside a UA self-call, nor signed for
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
         vm.prank(POOL);

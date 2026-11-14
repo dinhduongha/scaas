@@ -17,6 +17,7 @@ import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 import {MtxDigest} from "../../helpers/MtxDigest.sol";
 import {PayMetaKit} from "../../helpers/PayMetaKit.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// The handler of the pay-meta-tax invariants (spec §13, plan T43) on one kind 8 token with `TAX` and a notice period: every
 /// pay entry (`mtxPay`, `payWithFee`, `mtxPayWithTax`, `payWithTax`), the two tax powers, time. Each call checks what it
@@ -187,13 +188,13 @@ contract PayTaxHandler is Test {
         uint32 eff = c0.effectivePpm;
         if (c0.eta != 0 && block.timestamp >= c0.eta) (c0.eta, eff) = (0, c0.pendingPpm); // folded first
         vm.prank(issuer);
-        IRegulatedToken(t).setTaxRate(uint32(bound(ppm, 0, 1_000_000)));
+        IRegulatedToken(t).setTaxRate(uint32(bound(ppm, 0, 1_000_000)), EnvKit.codeUidOf(address(t)));
         _j4(eff, c0);
     }
 
     function setRecipient(uint256 k) external {
         vm.prank(issuer);
-        IRegulatedToken(t).setTaxRecipient(nid(recipients[k % 2]));
+        IRegulatedToken(t).setTaxRecipient(nid(recipients[k % 2]), EnvKit.codeUidOf(address(t)));
     }
 
     function warp(uint32 dt) external {

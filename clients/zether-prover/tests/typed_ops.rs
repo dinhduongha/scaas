@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 80] = [
+const NOT_ZETHER: [&str; 83] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "UAPrepareAcc",
     // SmartKeyAccount: signed by its owner's keys, not by a Zether key
@@ -15,6 +15,8 @@ const NOT_ZETHER: [&str; 80] = [
     // PQZ tokens: no PQZ builder in this package (PqzAuth is built by clientkeys, e2e.py and the node)
     "UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact", "UAPqzUnshield",
     "UAPqzUnshieldUnwrap", "PqzAuth", "UAPqzRollOver",
+    // the three-key model (CTR-PQZ-41): the PQZ holder's raw signed rollover, the PQZ token's domain
+    "PqzRollOver",
     // the DEX's domain
     "CancelDexOrder",
     // the GovernanceRouter's domain (governance spec §3.2): the closed table on its merged entries; signed by an admin's or
@@ -41,6 +43,8 @@ const NOT_ZETHER: [&str; 80] = [
     "UAApproveTokenRelease", "UAApproveDexRelease", "UAApproveRelease", "UARevokeApproval",
     // round 3s (CTR-GOV-24): the router's list edits and enableFeature, no Zether statement
     "UASetAllowed", "UASetDenied", "UAEnableFeature",
+    // round 3zc (CTR-GOV-30): the admin's two supply caps on the router
+    "UASetMaxSupply", "UASetMaxWrapSupply",
 ];
 
 fn vector() -> Value {

@@ -30,6 +30,6 @@
   },
   "*": {
     "initialize(*": "the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)",
-    "executeRate()": "waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)"
+    "executeRate(*": "waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)"
   }
 }

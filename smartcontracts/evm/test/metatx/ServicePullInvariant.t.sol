@@ -12,6 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// The fuzzed actions on one `RefServiceEscrow` over a kind-8 token (spec 2026-11-09-service-pull §11 "Invariant fuzz"):
 /// deposits by four native payers (some short of funds), replays of a landed operation on a fresh nonce, releases at any
@@ -147,14 +148,14 @@ contract ServicePullHandler is Test {
         bytes32 orderId = keccak256(abi.encode("sp-inv-order", ++orders));
         vm.prank(compliance);
         IRegulatedToken(t).recordOrder(orderId, keccak256("document"), sid, bytes32(uint256(0xBE)), amount,
-            uint64(block.timestamp + 30 days));
+            uint64(block.timestamp + 30 days), EnvKit.codeUidOf(address(t)));
         bytes32 rid = keccak256(abi.encode(orderId, sid, bytes32(uint256(0xBE))));
         vm.prank(issuer);
-        IRegulatedToken(t).freeze(sid, REF, rid);
+        IRegulatedToken(t).freeze(sid, REF, rid, EnvKit.codeUidOf(address(t)));
         vm.prank(issuer);
-        IRegulatedToken(t).forceTransfer(rid, amount);
+        IRegulatedToken(t).forceTransfer(rid, amount, EnvKit.codeUidOf(address(t)));
         vm.prank(issuer);
-        IRegulatedToken(t).unfreeze(sid, REF);
+        IRegulatedToken(t).unfreeze(sid, REF, EnvKit.codeUidOf(address(t)));
         forced += amount;
         ++forces;
     }

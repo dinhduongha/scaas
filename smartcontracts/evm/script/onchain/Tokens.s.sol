@@ -250,8 +250,8 @@ contract Tokens is OnchainBase {
 
     function _normalOnly() internal virtual {
         vm.startBroadcast(k1);
-        NormalToken(t).mint(a1, 1_000);
-        NormalToken(t).mintToUA(uaD, 100);
+        NormalToken(t).mint(a1, 1_000, IMetaTx(t).chainUid());
+        NormalToken(t).mintToUA(uaD, 100, IMetaTx(t).chainUid());
         NormalToken(t).burn(10);
         vm.stopBroadcast();
         MetaTxLib.UAEnvelope memory e = _env(a1, 8, _nonce(8));
@@ -293,8 +293,8 @@ contract Tokens is OnchainBase {
         _w1();
         _common();
         vm.startBroadcast(k1);
-        WrappedToken(payable(t)).mint(a1, 1_000);
-        WrappedToken(payable(t)).mintToUA(uaD, 100);
+        WrappedToken(payable(t)).mint(a1, 1_000, IMetaTx(t).chainUid());
+        WrappedToken(payable(t)).mintToUA(uaD, 100, IMetaTx(t).chainUid());
         vm.stopBroadcast();
         if (_regulated(kind)) _tax();
         _gov();
@@ -378,16 +378,16 @@ contract Tokens is OnchainBase {
     /// @dev Propose and cancel, propose again (left pending: `executeRate` waits the 2-day delay, a negative below), then
     ///      the guardian disables the MockERC20 leg's wrap (one-way).
     function _w2Rate() internal {
-        bytes memory prop = abi.encodeCall(WrappedToken.proposeRate, (address(m2), uint96(1001), uint96(1000)));
+        bytes memory prop = abi.encodeCall(WrappedToken.proposeRate, (address(m2), uint96(1001), uint96(1000), IMetaTx(t).chainUid()));
         vm.startBroadcast(k1);
         fR.forwardCall(t, prop);
-        fR.forwardCall(t, abi.encodeCall(WrappedToken.cancelRate, ()));
+        fR.forwardCall(t, abi.encodeCall(WrappedToken.cancelRate, (IMetaTx(t).chainUid())));
         fR.forwardCall(t, prop);
-        WrappedToken(payable(t)).disableWrap(address(m2), keccak256("scaas.onchain.disable"));
+        WrappedToken(payable(t)).disableWrap(address(m2), keccak256("scaas.onchain.disable"), IMetaTx(t).chainUid());
         vm.stopBroadcast();
         if (k == 1) {
             (,,, uint64 eta) = WrappedToken(payable(t)).pendingRate();
-            _neg(a1, address(fR), abi.encodeCall(OnchainForwarder.forwardCall, (t, abi.encodeCall(WrappedToken.executeRate, ()))),
+            _neg(a1, address(fR), abi.encodeCall(OnchainForwarder.forwardCall, (t, abi.encodeCall(WrappedToken.executeRate, (IMetaTx(t).chainUid())))),
                 IWrappedToken.RateChangeNotReady.selector, string.concat("executeRate before the 2-day delay (eta ",
                 vm.toString(eta), ")"));
         }
@@ -594,10 +594,10 @@ contract Tokens is OnchainBase {
     function _tax() internal {
         NormalRegulatedToken r = NormalRegulatedToken(t);
         vm.startBroadcast(k1);
-        r.setTaxRate(10_000); // 1 %; a rise waits noticePeriod(), 0 on this factory
+        r.setTaxRate(10_000, IMetaTx(t).chainUid()); // 1 %; a rise waits noticePeriod(), 0 on this factory
         // a fixed limit: RegulatedBase refuses the registry check below COMPLIANCE_REGISTRY_GAS x 64/63 + margin left
         // (ComplianceRegistryGasStarved(50000, 54362) at forge's simulated 51,440 x 2.00 on a fresh anvil): gasUsed is not that floor
-        r.setTaxRecipient{gas: 500_000}(_pad(a3));
+        r.setTaxRecipient{gas: 500_000}(_pad(a3), IMetaTx(t).chainUid());
         vm.stopBroadcast();
         IRegulatedToken.TaxConfig memory tc = r.taxConfig();
         require(tc.effectivePpm == 10_000, "tax rate");
@@ -636,8 +636,9 @@ contract Tokens is OnchainBase {
         n.setGrant(mb, _pad(a3), g, IMetaTx(address(n)).chainUid());
         n.cancelGrant(mb, _pad(a2), IMetaTx(address(n)).chainUid());
         vm.stopBroadcast();
+        bytes32 wn = IMetaTx(address(n)).chainUid();
         vm.broadcast(k3);
-        n.mint(a3, 10); // the limited holder: `useLimited`
+        n.mint(a3, 10, wn); // the limited holder: `useLimited`
         bytes32 nu = n.chainUid(); // the token's chain word (CTR-GOV-27)
         vm.broadcast(k1);
         n.transferAdmin(_pad(a2), nu);
@@ -681,7 +682,7 @@ contract Tokens is OnchainBase {
             IMetaTx.MetaTxBadSignature.selector, "mtxTransfer signed by another key");
         _neg(a2, t, abi.encodeCall(IERC20.transferFrom, (a1, a2, 1)), IERC20MetaTx.CallerNotContract.selector,
             "transferFrom by an EOA (CTR-TOK-01)");
-        _neg(a2, t8, abi.encodeCall(NormalToken.mint, (a2, 1)), IGovernance.MissingRole.selector,
+        _neg(a2, t8, abi.encodeCall(NormalToken.mint, (a2, 1, IMetaTx(t8).chainUid())), IGovernance.MissingRole.selector,
             "mint by a non-minter (kind 8, MINTABLE set)");
         // a wrapped-only selector on a NORMAL clone: no stub, no fallback, so the empty revert (the dispatcher refuses it)
         vm.writeLine(_negFile(), string.concat(vm.toString(a2), " ", vm.toString(t), " ",

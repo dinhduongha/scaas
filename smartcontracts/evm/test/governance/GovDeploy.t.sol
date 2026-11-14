@@ -369,9 +369,10 @@ contract GovDeployTest is Test {
         // group 3l: 17,808 -> 19,366 B (the five wrap-limit stubs); merge3k (+ ua-mtx-liquidity's `mtxLiquidityPull` stub):
         // 19,366 -> 19,532 B; Fable review fixes 2026-11-11 (B P3-1, B P2-1 in the ERC-20 core): 19,532 -> 19,626 B;
         // fix2 CTR-GOV-27's Change (`transferAdmin(bytes32,bytes32)`'s stub in the dispatcher): 19,626 -> 19,652 B; fix3
-        // CTR-GOV-28 (the five admin stubs take `chainUid_`): 19,652 -> 19,743 B
-        h.limitCode(19_742);
-        vm.expectRevert(bytes("WrappedToken runtime 19743 B > chain code limit 19742 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // CTR-GOV-28 (the five admin stubs take `chainUid_`): 19,652 -> 19,743 B; round 3zb + 3zc (the six supply-cap stubs,
+        // the holder entries' chain word, CTR-GOV-28 Change / -30): 19,743 -> 19,988 B
+        h.limitCode(19_987);
+        vm.expectRevert(bytes("WrappedToken runtime 19988 B > chain code limit 19987 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 
@@ -641,8 +642,10 @@ contract GovDeployTest is Test {
         // and forwards the word, `UARenounceRole`'s typehash; the metadata hash: `IGovernance.renounceRole`):
         // 0xc757ebb994C1c938FF89c948B9b73B4eb0b4c2A0; pqz-three-keys step 3 (the metadata hash: `IUARegistry` gains the
         // scoped PQZ key records, K3-3; its code unchanged): 0xCA60e74Eadd0F0A40d9A34b35D611e0Ed3fF572f; pqz-three-keys step 4
-        // (the metadata hash: `IPqzToken` gains the opening fields, `mtxRollOverSigned`, `pqzSkipped`; its code unchanged): -> this
-        assertEq(router, 0x454bdF0b754A318ebA96d50689FB14762a255Aeb, "GovernanceRouter");
+        // (the metadata hash: `IPqzToken` gains the opening fields, `mtxRollOverSigned`, `pqzSkipped`; its code unchanged):
+        // 0x454bdF0b754A318ebA96d50689FB14762a255Aeb; burner-wrap-caps (round 3zb + 3zc: the chain word on 25 holder ops,
+        // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`, CTR-GOV-28 Change, CTR-GOV-30): -> this
+        assertEq(router, 0xA243e3F1a8bBc3659ac69b5AE0A571b1CF0a5E1D, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

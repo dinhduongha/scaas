@@ -17,7 +17,6 @@ import {UAKinds} from "../ua/UAKinds.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {DexPuller} from "./DexPuller.sol";
 import {TokenCall} from "./TokenCall.sol";
-import {GovernanceUse} from "../governance/GovernanceBase.sol";
 import {SCaaSDexGovernance} from "./SCaaSDexAdmin.sol";
 import {SCaaSDexCore} from "./SCaaSDexCore.sol";
 import {ImplArgs, ITokenModule} from "../metatx/ITokenModule.sol";
@@ -158,67 +157,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         return id == type(IERC165).interfaceId || id == type(IGovernance).interfaceId;
     }
 
-    function _power(uint8 bit) private returns (DexStorage storage) {
-        GovernanceUse.use(bit, _govSubject(), 0);
-        return _s();
-    }
-
-    /// @notice Lists or delists the pair and records each token's kind from the factory (never from a leg).
-    function setMarket(address base, address quote, bool listed) external governed {
-        DexStorage storage s = _power(GovernanceBits.LISTING);
-        if (base == quote || base == address(0) || quote == address(0)) revert BadMarket(base, quote); // C6-9
-        bytes32 k = _pair(base, quote);
-        if (s.listed[k] != listed) {
-            s.listed[k] = listed;
-            if (listed) {
-                ++s.listings[base];
-                ++s.listings[quote];
-            } else {
-                --s.listings[base];
-                --s.listings[quote];
-            }
-        }
-        s.kind[base] = _classify(base);
-        s.kind[quote] = _classify(quote);
-        emit MarketSet(base, quote, listed);
-    }
-
-    function setFeeSplit(uint32 relayerSharePpm_, address treasury_) external governed {
-        _setFeeSplit(_power(GovernanceBits.FEE_ROUTING), relayerSharePpm_, treasury_);
-    }
-
-    /// @notice Lists or delists an interaction target or an executor (CTR-DEX-23).
-    function setExchangeTarget(address target, bool listed) external governed {
-        _power(GovernanceBits.LISTING).exchangeTarget[target] = listed;
-        emit ExchangeTargetSet(target, listed);
-    }
-
-    /// @notice DEX-wide listed-only mode for the exchange path (CTR-DEX-23); a leg's `LISTED_POOLS` asks the same.
-    function setListedOnly(bool on) external governed {
-        _power(GovernanceBits.LISTING).listedOnly = on;
-        emit ListedOnlySet(on);
-    }
-
-    function _setFeeSplit(DexStorage storage s, uint32 ppm, address t) private {
-        if (ppm > PPM || (ppm < PPM && (t == address(0) || t == address(this)))) revert FeeSplitInvalid(ppm, t);
-        s.relayerSharePpm = ppm;
-        s.treasury = t;
-        emit FeeSplitSet(ppm, t);
-    }
-
-    /// @dev The `tokenKind` view's record: `_scaas` at `setMarket`; every decision reads `_scaas` at use.
-    function _classify(address token) private view returns (uint8) {
-        return _scaas(token) ? KIND_SCAAS : KIND_OUTSIDE;
-    }
+    // O8 (owner 2026-11-13, "Đồng ý, chuyển sang module trong round 3zb + 3zc"; CTR-TOK-30 Change): the four power entries
+    // (`setMarket`, `setFeeSplit`, `setExchangeTarget`, `setListedOnly`) run in `SCaaSDexGovernanceModule`, by the stubs below
+    // (`_forward`: the guard check, DELEGATECALL, the revert data verbatim); `_pair`, `_setFeeSplit`, `_classify` are
+    // `SCaaSDexCore`'s, one definition for both sides.
 
     function _factoryAt() internal view override returns (address) { return FACTORY; }
 
     /// @dev Bit 29 `CLOSED_MARKETS` (owner 2026-11-12): on, only listed pairs and known tokens trade; off (the default), any.
     function _closed() private view returns (bool) { return GovernanceLib.hasFeature(GovernanceBits.CLOSED_MARKETS); }
-
-    function _pair(address a, address b) private pure returns (bytes32) {
-        return a < b ? keccak256(abi.encode(a, b)) : keccak256(abi.encode(b, a));
-    }
 
     // ------------------------------------------------------------------ views
 
@@ -931,6 +878,12 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function transferAdmin(bytes32, bytes32) external override { _forward(); }
     function acceptAdmin() external override { _forward(); }
     function renounceAdmin(bytes32) external override { _forward(); }
+    /// @notice The powers (CTR-TOK-30 Change, O8): bit 11 `LISTING` (`setMarket`, `setExchangeTarget`, `setListedOnly`), bit 12
+    ///         `FEE_ROUTING` (`setFeeSplit`), each with the holder's chain word (CTR-GOV-28 Change), in module D.
+    function setMarket(address, address, bool, bytes32) external { _forward(); }
+    function setFeeSplit(uint32, address, bytes32) external { _forward(); }
+    function setExchangeTarget(address, bool, bytes32) external { _forward(); }
+    function setListedOnly(bool, bytes32) external { _forward(); }
 
     /// @dev S1: today's `governed` entry: `_guardIn` (on the DEX the transient guard's check), DELEGATECALL of this call's
     ///      calldata to D, its revert data verbatim on failure, `_guardOut`, its return data verbatim (never a modifier

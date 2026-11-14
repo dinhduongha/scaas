@@ -39,22 +39,22 @@ contract RatesTest is V2Fixture {
     }
 
     function _propose(uint96 num, uint96 den) internal {
-        _admin(abi.encodeCall(WrappedToken.proposeRate, (address(usdc), num, den)));
+        _admin(abi.encodeCall(WrappedToken.proposeRate, (address(usdc), num, den, EnvKit.codeUidOf(address(t)))));
     }
 
     function _execute() internal {
-        _admin(abi.encodeCall(WrappedToken.executeRate, ()));
+        _admin(abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(t)))));
     }
 
     function test_fixedRateHasNoSetters() public {
         WrappedToken f = _single(address(usdc), 6, 1, 1, _fixedRate());
         bytes4 e = IWrappedToken.RateFixed.selector;
         vm.expectRevert(e);
-        f.proposeRate(address(usdc), 1, 1);
+        f.proposeRate(address(usdc), 1, 1, EnvKit.codeUidOf(address(f)));
         vm.expectRevert(e);
-        f.cancelRate();
+        f.cancelRate(EnvKit.codeUidOf(address(f)));
         vm.expectRevert(e);
-        f.executeRate();
+        f.executeRate(EnvKit.codeUidOf(address(f)));
     }
 
     function test_proposeExecuteLifecycle() public {
@@ -83,14 +83,14 @@ contract RatesTest is V2Fixture {
     function test_onlyTheAdminProposesCancelsExecutes() public {
         bytes4 e = IWrappedToken.NotRateAdmin.selector;
         vm.expectRevert(e);
-        t.proposeRate(address(usdc), 101, 100);
+        t.proposeRate(address(usdc), 101, 100, EnvKit.codeUidOf(address(t)));
         _propose(101, 100);
         vm.warp(block.timestamp + 7 days);
         vm.prank(alice);
         vm.expectRevert(e);
-        t.executeRate();
+        t.executeRate(EnvKit.codeUidOf(address(t)));
         vm.expectRevert(e);
-        t.cancelRate();
+        t.cancelRate(EnvKit.codeUidOf(address(t)));
     }
 
     function test_onePendingChangeAndCancel() public {
@@ -99,9 +99,9 @@ contract RatesTest is V2Fixture {
         _propose(100, 101);
         vm.expectEmit(address(t));
         emit IWrappedToken.RateChangeCancelled(address(usdc));
-        _admin(abi.encodeCall(WrappedToken.cancelRate, ()));
+        _admin(abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(t)))));
         vm.expectRevert(IWrappedToken.NoRateChangePending.selector);
-        _admin(abi.encodeCall(WrappedToken.cancelRate, ()));
+        _admin(abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(t)))));
         vm.expectRevert(IWrappedToken.NoRateChangePending.selector);
         _execute();
         _propose(100, 101);
@@ -129,7 +129,7 @@ contract RatesTest is V2Fixture {
         assertEq(e, 0);
         _wrap(alice, 1); // not paused
         vm.expectRevert(IWrappedToken.NoRateChangePending.selector);
-        _admin(abi.encodeCall(WrappedToken.cancelRate, ()));
+        _admin(abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(t)))));
         _propose(100, 101); // a new one is allowed
     }
 
@@ -140,9 +140,9 @@ contract RatesTest is V2Fixture {
         vm.expectRevert(IWrappedToken.RateStepTooLarge.selector);
         _propose(9_899, 10_000);
         _propose(101, 100);
-        _admin(abi.encodeCall(WrappedToken.cancelRate, ()));
+        _admin(abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(t)))));
         _propose(99, 100);
-        _admin(abi.encodeCall(WrappedToken.cancelRate, ()));
+        _admin(abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(t)))));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.RateInvalid.selector, 0, 1));
         _propose(0, 1);
     }
@@ -183,9 +183,9 @@ contract RatesTest is V2Fixture {
         usdc.approve(address(big), 1);
         big.wrap(1); // supply > 0, so execute must evaluate the huge leg
         adm.exec(address(big), abi.encodeCall(WrappedToken.proposeRate,
-            (address(usdc), type(uint96).max - 1, 1)));
+            (address(usdc), type(uint96).max - 1, 1, EnvKit.codeUidOf(address(big)))));
         vm.warp(block.timestamp + 7 days);
-        adm.exec(address(big), abi.encodeCall(WrappedToken.executeRate, ()));
+        adm.exec(address(big), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(big)))));
     }
 
     /// D4/D5 (CTR-TOK-06): renouncing the role leaves the rate and the pending change; `disableFeature` cancels it.
@@ -226,7 +226,7 @@ contract RatesTest is V2Fixture {
         usdc.approve(address(t), 1);
         t.addReserve(address(usdc), 1);
         // cancel reopens
-        _admin(abi.encodeCall(WrappedToken.cancelRate, ()));
+        _admin(abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(t)))));
         _wrap(alice, 1);
         // execute reopens
         _propose(101, 100);
@@ -243,7 +243,7 @@ contract RatesTest is V2Fixture {
         c.maxRateStepBps = uint16(v[4]);
         WrappedToken s = _single(address(usdc), 6, v[0], v[1], c);
         if (!_withinRef(v[0], v[1], v[2], v[3], v[4])) vm.expectRevert(IWrappedToken.RateStepTooLarge.selector);
-        adm.exec(address(s), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), uint96(v[2]), uint96(v[3]))));
+        adm.exec(address(s), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), uint96(v[2]), uint96(v[3]), EnvKit.codeUidOf(address(s)))));
     }
 
     function _withinRef(uint256 n0, uint256 d0, uint256 n1, uint256 d1, uint256 bps) internal pure returns (bool) {

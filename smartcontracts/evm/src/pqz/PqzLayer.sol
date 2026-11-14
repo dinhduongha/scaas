@@ -275,9 +275,10 @@ abstract contract PqzLayer is MetaTokenBase {
     }
 
     /// @notice Group 3h (spec §5): bit 24 `PQZ_PROOF`'s power, `use(24)` (no scalar; disabling the bit freezes the value:
-    ///         `FeatureNotSet`), then `PqzStateLib.setProofStore`; through the router as `mtxSetProofStore`.
-    function _setProofStoreBody(uint8 next) internal {
-        GovernanceUse.use(GovernanceBits.PQZ_PROOF, _govSubject(), 0);
+    ///         `FeatureNotSet`), then `PqzStateLib.setProofStore`; through the router as `mtxSetProofStore`. The holder's chain word first
+    ///         (CTR-GOV-28 Change, round 3zb + 3zc).
+    function _setProofStoreBody(uint8 next, bytes32 chainUid_) internal {
+        GovernanceUse.use(GovernanceBits.PQZ_PROOF, _holderOnChain(GovernanceBits.PQZ_PROOF, chainUid_), 0);
         PqzStateLib.setProofStore(next);
     }
 

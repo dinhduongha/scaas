@@ -764,8 +764,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "NormalToken",
     "kept": false,
@@ -773,11 +773,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -788,8 +790,8 @@
     "group": "A"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "NormalToken",
     "kept": false,
@@ -797,11 +799,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -2360,15 +2364,19 @@
     "group": "T"
    },
    {
-    "sel": "eb7ed217",
-    "sig": "cancelRate()",
+    "sel": "a5de55d3",
+    "sig": "cancelRate(bytes32)",
     "name": "cancelRate",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -2490,8 +2498,8 @@
     "group": "W"
    },
    {
-    "sel": "5d6385bc",
-    "sig": "disableWrap(address,bytes32)",
+    "sel": "c221ab6c",
+    "sig": "disableWrap(address,bytes32,bytes32)",
     "name": "disableWrap",
     "decl": "WrappedToken",
     "kept": false,
@@ -2499,11 +2507,13 @@
     "guard": "nonReentrant",
     "params": [
      "address u",
-     "bytes32 reason"
+     "bytes32 reason",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
-     "reason"
+     "reason",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -2558,15 +2568,19 @@
     "group": "P"
    },
    {
-    "sel": "f32f4e51",
-    "sig": "executeRate()",
+    "sel": "f582c903",
+    "sig": "executeRate(bytes32)",
     "name": "executeRate",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -2904,6 +2918,24 @@
     "group": "W"
    },
    {
+    "sel": "86f8d11e",
+    "sig": "maxWrapSupply()",
+    "name": "maxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "dd1982a5",
     "sig": "metaPayId((bytes32,bytes32,bool,uint16,bytes))",
     "name": "metaPayId",
@@ -2950,8 +2982,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "WrappedToken",
     "kept": false,
@@ -2959,11 +2991,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -2974,8 +3008,8 @@
     "group": "W"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "WrappedToken",
     "kept": false,
@@ -2983,11 +3017,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -3965,6 +4001,24 @@
     "group": "W"
    },
    {
+    "sel": "ca6db9af",
+    "sig": "pendingSupplyCaps()",
+    "name": "pendingSupplyCaps",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "2eba6021",
     "sig": "previewUnwrap(address,uint256)",
     "name": "previewUnwrap",
@@ -4013,8 +4067,8 @@
     "group": "W"
    },
    {
-    "sel": "59ec4068",
-    "sig": "proposeRate(address,uint96,uint96)",
+    "sel": "8227dc06",
+    "sig": "proposeRate(address,uint96,uint96,bytes32)",
     "name": "proposeRate",
     "decl": "WrappedToken",
     "kept": false,
@@ -4023,12 +4077,14 @@
     "params": [
      "address u",
      "uint96 num",
-     "uint96 den"
+     "uint96 den",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
      "num",
-     "den"
+     "den",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -4201,6 +4257,24 @@
     "group": "A"
    },
    {
+    "sel": "b3a16872",
+    "sig": "reserveValue()",
+    "name": "reserveValue",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "8c4a5df6",
     "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
     "name": "restorePulled",
@@ -4279,24 +4353,20 @@
     "group": "A"
    },
    {
-    "sel": "8c274876",
-    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-    "name": "setWrapLimits",
+    "sel": "f52a536e",
+    "sig": "setMaxSupply(uint256,bytes32)",
+    "name": "setMaxSupply",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "IWrappedToken.WrapLegLimits[] calldata legs",
-     "bool netUnwrap",
-     "bool wrapList",
-     "bool unwrapList"
+     "uint256 newMaxSupply",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "legs",
-     "netUnwrap",
-     "wrapList",
-     "unwrapList"
+     "newMaxSupply",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -4307,8 +4377,62 @@
     "group": "W"
    },
    {
-    "sel": "e7239da4",
-    "sig": "setWrapMember(bytes32,bool,bool)",
+    "sel": "2370fd3c",
+    "sig": "setMaxWrapSupply(uint256,bytes32)",
+    "name": "setMaxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint256 newMaxWrapSupply",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newMaxWrapSupply",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "491b1fa9",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "7216d0f2",
+    "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
     "name": "setWrapMember",
     "decl": "WrappedToken",
     "kept": false,
@@ -4317,12 +4441,14 @@
     "params": [
      "bytes32 account",
      "bool canWrap",
-     "bool canUnwrap"
+     "bool canUnwrap",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "canWrap",
-     "canUnwrap"
+     "canUnwrap",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -4408,6 +4534,24 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
+   },
+   {
+    "sel": "afad55fd",
+    "sig": "totalWrapped()",
+    "name": "totalWrapped",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
    },
    {
     "sel": "fd773b8b",
@@ -5837,8 +5981,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "NormalToken",
     "kept": false,
@@ -5846,11 +5990,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -5861,8 +6007,8 @@
     "group": "A"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "NormalToken",
     "kept": false,
@@ -5870,11 +6016,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -8122,15 +8270,19 @@
     "group": "T"
    },
    {
-    "sel": "eb7ed217",
-    "sig": "cancelRate()",
+    "sel": "a5de55d3",
+    "sig": "cancelRate(bytes32)",
     "name": "cancelRate",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -8288,8 +8440,8 @@
     "group": "Z"
    },
    {
-    "sel": "5d6385bc",
-    "sig": "disableWrap(address,bytes32)",
+    "sel": "c221ab6c",
+    "sig": "disableWrap(address,bytes32,bytes32)",
     "name": "disableWrap",
     "decl": "WrappedToken",
     "kept": false,
@@ -8297,11 +8449,13 @@
     "guard": "nonReentrant",
     "params": [
      "address u",
-     "bytes32 reason"
+     "bytes32 reason",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
-     "reason"
+     "reason",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -8414,15 +8568,19 @@
     "group": "P"
    },
    {
-    "sel": "f32f4e51",
-    "sig": "executeRate()",
+    "sel": "f582c903",
+    "sig": "executeRate(bytes32)",
     "name": "executeRate",
     "decl": "WrappedZetherToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -8778,6 +8936,24 @@
     "group": "W"
    },
    {
+    "sel": "86f8d11e",
+    "sig": "maxWrapSupply()",
+    "name": "maxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "dd1982a5",
     "sig": "metaPayId((bytes32,bytes32,bool,uint16,bytes))",
     "name": "metaPayId",
@@ -8842,8 +9018,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "WrappedToken",
     "kept": false,
@@ -8851,11 +9027,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -8866,8 +9044,8 @@
     "group": "W"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "WrappedToken",
     "kept": false,
@@ -8875,11 +9053,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -10437,6 +10617,24 @@
     "group": "W"
    },
    {
+    "sel": "ca6db9af",
+    "sig": "pendingSupplyCaps()",
+    "name": "pendingSupplyCaps",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "2eba6021",
     "sig": "previewUnwrap(address,uint256)",
     "name": "previewUnwrap",
@@ -10485,8 +10683,8 @@
     "group": "W"
    },
    {
-    "sel": "59ec4068",
-    "sig": "proposeRate(address,uint96,uint96)",
+    "sel": "8227dc06",
+    "sig": "proposeRate(address,uint96,uint96,bytes32)",
     "name": "proposeRate",
     "decl": "WrappedToken",
     "kept": false,
@@ -10495,12 +10693,14 @@
     "params": [
      "address u",
      "uint96 num",
-     "uint96 den"
+     "uint96 den",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
      "num",
-     "den"
+     "den",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -10695,6 +10895,24 @@
     "group": "A"
    },
    {
+    "sel": "b3a16872",
+    "sig": "reserveValue()",
+    "name": "reserveValue",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "8c4a5df6",
     "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
     "name": "restorePulled",
@@ -10795,24 +11013,20 @@
     "group": "A"
    },
    {
-    "sel": "8c274876",
-    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-    "name": "setWrapLimits",
+    "sel": "f52a536e",
+    "sig": "setMaxSupply(uint256,bytes32)",
+    "name": "setMaxSupply",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "IWrappedToken.WrapLegLimits[] calldata legs",
-     "bool netUnwrap",
-     "bool wrapList",
-     "bool unwrapList"
+     "uint256 newMaxSupply",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "legs",
-     "netUnwrap",
-     "wrapList",
-     "unwrapList"
+     "newMaxSupply",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -10823,8 +11037,62 @@
     "group": "W"
    },
    {
-    "sel": "e7239da4",
-    "sig": "setWrapMember(bytes32,bool,bool)",
+    "sel": "2370fd3c",
+    "sig": "setMaxWrapSupply(uint256,bytes32)",
+    "name": "setMaxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint256 newMaxWrapSupply",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newMaxWrapSupply",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "491b1fa9",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "7216d0f2",
+    "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
     "name": "setWrapMember",
     "decl": "WrappedToken",
     "kept": false,
@@ -10833,12 +11101,14 @@
     "params": [
      "bytes32 account",
      "bool canWrap",
-     "bool canUnwrap"
+     "bool canUnwrap",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "canWrap",
-     "canUnwrap"
+     "canUnwrap",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -10960,6 +11230,24 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
+   },
+   {
+    "sel": "afad55fd",
+    "sig": "totalWrapped()",
+    "name": "totalWrapped",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
    },
    {
     "sel": "fd773b8b",
@@ -12425,8 +12713,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "NormalToken",
     "kept": false,
@@ -12434,11 +12722,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -12449,8 +12739,8 @@
     "group": "A"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "NormalToken",
     "kept": false,
@@ -12458,11 +12748,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -14233,18 +14525,20 @@
     "group": "A"
    },
    {
-    "sel": "26f21b98",
-    "sig": "setProofStore(uint8)",
+    "sel": "54c52133",
+    "sig": "setProofStore(uint8,bytes32)",
     "name": "setProofStore",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 next"
+     "uint8 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -15144,15 +15438,19 @@
     "group": "T"
    },
    {
-    "sel": "eb7ed217",
-    "sig": "cancelRate()",
+    "sel": "a5de55d3",
+    "sig": "cancelRate(bytes32)",
     "name": "cancelRate",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -15292,8 +15590,8 @@
     "group": "Q"
    },
    {
-    "sel": "5d6385bc",
-    "sig": "disableWrap(address,bytes32)",
+    "sel": "c221ab6c",
+    "sig": "disableWrap(address,bytes32,bytes32)",
     "name": "disableWrap",
     "decl": "WrappedToken",
     "kept": false,
@@ -15301,11 +15599,13 @@
     "guard": "nonReentrant",
     "params": [
      "address u",
-     "bytes32 reason"
+     "bytes32 reason",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
-     "reason"
+     "reason",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -15428,15 +15728,19 @@
     "group": "P"
    },
    {
-    "sel": "f32f4e51",
-    "sig": "executeRate()",
+    "sel": "f582c903",
+    "sig": "executeRate(bytes32)",
     "name": "executeRate",
     "decl": "WrappedPqzToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -15790,6 +16094,24 @@
     "group": "W"
    },
    {
+    "sel": "86f8d11e",
+    "sig": "maxWrapSupply()",
+    "name": "maxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "dd1982a5",
     "sig": "metaPayId((bytes32,bytes32,bool,uint16,bytes))",
     "name": "metaPayId",
@@ -15854,8 +16176,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "WrappedToken",
     "kept": false,
@@ -15863,11 +16185,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -15878,8 +16202,8 @@
     "group": "W"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "WrappedToken",
     "kept": false,
@@ -15887,11 +16211,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -17497,6 +17823,24 @@
     "group": "W"
    },
    {
+    "sel": "ca6db9af",
+    "sig": "pendingSupplyCaps()",
+    "name": "pendingSupplyCaps",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "3a458107",
     "sig": "pqzAcc(bytes32,uint64)",
     "name": "pqzAcc",
@@ -17639,32 +17983,6 @@
     "group": "Q"
    },
    {
-    "sel": "2d73ee4a",
-    "sig": "pqzSkipped(bytes32,uint64,uint64)",
-    "name": "pqzSkipped",
-    "decl": "PqzLayer",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "bytes32 ua",
-     "uint64 keyVersion",
-     "uint64 index"
-    ],
-    "names": [
-     "ua",
-     "keyVersion",
-     "index"
-    ],
-    "returns": "bool _p0",
-    "ifaces": [
-     "IPqzToken"
-    ],
-    "vis": "external",
-    "domain": "pqz",
-    "group": "Q"
-   },
-   {
     "sel": "03ccd4f0",
     "sig": "pqzPendingCt(bytes32,uint64,uint64)",
     "name": "pqzPendingCt",
@@ -17729,6 +18047,32 @@
      "chainUid_"
     ],
     "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "2d73ee4a",
+    "sig": "pqzSkipped(bytes32,uint64,uint64)",
+    "name": "pqzSkipped",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 index"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "index"
+    ],
+    "returns": "bool _p0",
     "ifaces": [
      "IPqzToken"
     ],
@@ -17853,8 +18197,8 @@
     "group": "Q"
    },
    {
-    "sel": "59ec4068",
-    "sig": "proposeRate(address,uint96,uint96)",
+    "sel": "8227dc06",
+    "sig": "proposeRate(address,uint96,uint96,bytes32)",
     "name": "proposeRate",
     "decl": "WrappedToken",
     "kept": false,
@@ -17863,12 +18207,14 @@
     "params": [
      "address u",
      "uint96 num",
-     "uint96 den"
+     "uint96 den",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
      "num",
-     "den"
+     "den",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -18041,6 +18387,24 @@
     "group": "A"
    },
    {
+    "sel": "b3a16872",
+    "sig": "reserveValue()",
+    "name": "reserveValue",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "8c4a5df6",
     "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
     "name": "restorePulled",
@@ -18119,18 +18483,68 @@
     "group": "A"
    },
    {
-    "sel": "26f21b98",
-    "sig": "setProofStore(uint8)",
+    "sel": "f52a536e",
+    "sig": "setMaxSupply(uint256,bytes32)",
+    "name": "setMaxSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint256 newMaxSupply",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newMaxSupply",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "2370fd3c",
+    "sig": "setMaxWrapSupply(uint256,bytes32)",
+    "name": "setMaxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint256 newMaxWrapSupply",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newMaxWrapSupply",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "54c52133",
+    "sig": "setProofStore(uint8,bytes32)",
     "name": "setProofStore",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 next"
+     "uint8 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -18165,8 +18579,8 @@
     "group": "Q"
    },
    {
-    "sel": "8c274876",
-    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+    "sel": "491b1fa9",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
     "name": "setWrapLimits",
     "decl": "WrappedToken",
     "kept": false,
@@ -18176,13 +18590,15 @@
      "IWrappedToken.WrapLegLimits[] calldata legs",
      "bool netUnwrap",
      "bool wrapList",
-     "bool unwrapList"
+     "bool unwrapList",
+     "bytes32 chainUid_"
     ],
     "names": [
      "legs",
      "netUnwrap",
      "wrapList",
-     "unwrapList"
+     "unwrapList",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -18193,8 +18609,8 @@
     "group": "W"
    },
    {
-    "sel": "e7239da4",
-    "sig": "setWrapMember(bytes32,bool,bool)",
+    "sel": "7216d0f2",
+    "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
     "name": "setWrapMember",
     "decl": "WrappedToken",
     "kept": false,
@@ -18203,12 +18619,14 @@
     "params": [
      "bytes32 account",
      "bool canWrap",
-     "bool canUnwrap"
+     "bool canUnwrap",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "canWrap",
-     "canUnwrap"
+     "canUnwrap",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -18330,6 +18748,24 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
+   },
+   {
+    "sel": "afad55fd",
+    "sig": "totalWrapped()",
+    "name": "totalWrapped",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
    },
    {
     "sel": "fd773b8b",
@@ -19544,8 +19980,8 @@
     "group": "A"
    },
    {
-    "sel": "6757815b",
-    "sig": "forceTransfer(bytes32,uint256)",
+    "sel": "e0f74d85",
+    "sig": "forceTransfer(bytes32,uint256,bytes32)",
     "name": "forceTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -19553,11 +19989,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -19568,8 +20006,8 @@
     "group": "W"
    },
    {
-    "sel": "883ae631",
-    "sig": "freeze(bytes32,bytes32,bytes32)",
+    "sel": "47020f02",
+    "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
     "name": "freeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -19578,12 +20016,14 @@
     "params": [
      "bytes32 account",
      "bytes32 ref",
-     "bytes32 recordId"
+     "bytes32 recordId",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "ref",
-     "recordId"
+     "recordId",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -19942,8 +20382,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "NormalToken",
     "kept": false,
@@ -19951,11 +20391,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -19966,8 +20408,8 @@
     "group": "A"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "NormalToken",
     "kept": false,
@@ -19975,11 +20417,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -20552,8 +20996,8 @@
     "group": "K"
    },
    {
-    "sel": "3515aee3",
-    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+    "sel": "2a6136f9",
+    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
     "name": "operatorTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -20563,13 +21007,15 @@
      "bytes32 from",
      "bytes32 to",
      "uint256 amount",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "from",
      "to",
      "amount",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -20602,8 +21048,8 @@
     "group": "W"
    },
    {
-    "sel": "c620d896",
-    "sig": "pause(bytes32,uint64)",
+    "sel": "72c1ddda",
+    "sig": "pause(bytes32,uint64,bytes32)",
     "name": "pause",
     "decl": "RegulatedBase",
     "kept": false,
@@ -20611,11 +21057,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 ref",
-     "uint64 until"
+     "uint64 until",
+     "bytes32 chainUid_"
     ],
     "names": [
      "ref",
-     "until"
+     "until",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -20889,8 +21337,8 @@
     "group": "T"
    },
    {
-    "sel": "baaf8b3f",
-    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+    "sel": "9adf3f91",
+    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
     "name": "recordOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -20902,7 +21350,8 @@
      "bytes32 subject",
      "bytes32 beneficiary",
      "uint256 maxAmount",
-     "uint64 freezeUntil"
+     "uint64 freezeUntil",
+     "bytes32 chainUid_"
     ],
     "names": [
      "orderId",
@@ -20910,7 +21359,8 @@
      "subject",
      "beneficiary",
      "maxAmount",
-     "freezeUntil"
+     "freezeUntil",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21067,8 +21517,8 @@
     "group": "T"
    },
    {
-    "sel": "54cfd9f0",
-    "sig": "revokeOrder(bytes32,bytes32)",
+    "sel": "622462ca",
+    "sig": "revokeOrder(bytes32,bytes32,bytes32)",
     "name": "revokeOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -21076,11 +21526,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "bytes32 reasonRef"
+     "bytes32 reasonRef",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "reasonRef"
+     "reasonRef",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21117,8 +21569,8 @@
     "group": "A"
    },
    {
-    "sel": "8817535c",
-    "sig": "setAllowed(bytes32[],bool)",
+    "sel": "f511f37c",
+    "sig": "setAllowed(bytes32[],bool,bytes32)",
     "name": "setAllowed",
     "decl": "RegulatedBase",
     "kept": false,
@@ -21126,11 +21578,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21141,8 +21595,8 @@
     "group": "W"
    },
    {
-    "sel": "db194d97",
-    "sig": "setDenied(bytes32[],bool)",
+    "sel": "095a70d0",
+    "sig": "setDenied(bytes32[],bool,bytes32)",
     "name": "setDenied",
     "decl": "RegulatedBase",
     "kept": false,
@@ -21150,11 +21604,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21193,18 +21649,20 @@
     "group": "A"
    },
    {
-    "sel": "433b79b6",
-    "sig": "setTaxRate(uint32)",
+    "sel": "3bb7cff6",
+    "sig": "setTaxRate(uint32,bytes32)",
     "name": "setTaxRate",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint32 ratePpm"
+     "uint32 ratePpm",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ratePpm"
+     "ratePpm",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21215,18 +21673,20 @@
     "group": "P"
    },
    {
-    "sel": "1a68bfdc",
-    "sig": "setTaxRecipient(bytes32)",
+    "sel": "90da34f9",
+    "sig": "setTaxRecipient(bytes32,bytes32)",
     "name": "setTaxRecipient",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 taxRecipient"
+     "bytes32 taxRecipient",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "taxRecipient"
+     "taxRecipient",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21473,8 +21933,8 @@
     "group": "A"
    },
    {
-    "sel": "1014f5e9",
-    "sig": "unfreeze(bytes32,bytes32)",
+    "sel": "ef25df55",
+    "sig": "unfreeze(bytes32,bytes32,bytes32)",
     "name": "unfreeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -21482,11 +21942,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 account",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21497,18 +21959,20 @@
     "group": "W"
    },
    {
-    "sel": "2f4dae9f",
-    "sig": "unpause(bytes32)",
+    "sel": "0534b026",
+    "sig": "unpause(bytes32,bytes32)",
     "name": "unpause",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -21941,15 +22405,19 @@
     "group": "T"
    },
    {
-    "sel": "eb7ed217",
-    "sig": "cancelRate()",
+    "sel": "a5de55d3",
+    "sig": "cancelRate(bytes32)",
     "name": "cancelRate",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -22071,8 +22539,8 @@
     "group": "W"
    },
    {
-    "sel": "5d6385bc",
-    "sig": "disableWrap(address,bytes32)",
+    "sel": "c221ab6c",
+    "sig": "disableWrap(address,bytes32,bytes32)",
     "name": "disableWrap",
     "decl": "WrappedToken",
     "kept": false,
@@ -22080,11 +22548,13 @@
     "guard": "nonReentrant",
     "params": [
      "address u",
-     "bytes32 reason"
+     "bytes32 reason",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
-     "reason"
+     "reason",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -22163,15 +22633,19 @@
     "group": "P"
    },
    {
-    "sel": "f32f4e51",
-    "sig": "executeRate()",
+    "sel": "f582c903",
+    "sig": "executeRate(bytes32)",
     "name": "executeRate",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -22215,8 +22689,8 @@
     "group": "A"
    },
    {
-    "sel": "6757815b",
-    "sig": "forceTransfer(bytes32,uint256)",
+    "sel": "e0f74d85",
+    "sig": "forceTransfer(bytes32,uint256,bytes32)",
     "name": "forceTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -22224,11 +22698,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -22239,8 +22715,8 @@
     "group": "W"
    },
    {
-    "sel": "883ae631",
-    "sig": "freeze(bytes32,bytes32,bytes32)",
+    "sel": "47020f02",
+    "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
     "name": "freeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -22249,12 +22725,14 @@
     "params": [
      "bytes32 account",
      "bytes32 ref",
-     "bytes32 recordId"
+     "bytes32 recordId",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "ref",
-     "recordId"
+     "recordId",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -22625,6 +23103,24 @@
     "group": "W"
    },
    {
+    "sel": "86f8d11e",
+    "sig": "maxWrapSupply()",
+    "name": "maxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "dd1982a5",
     "sig": "metaPayId((bytes32,bytes32,bool,uint16,bytes))",
     "name": "metaPayId",
@@ -22671,8 +23167,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "WrappedToken",
     "kept": false,
@@ -22680,11 +23176,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -22695,8 +23193,8 @@
     "group": "W"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "WrappedToken",
     "kept": false,
@@ -22704,11 +23202,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -23489,8 +23989,8 @@
     "group": "K"
    },
    {
-    "sel": "3515aee3",
-    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+    "sel": "2a6136f9",
+    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
     "name": "operatorTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -23500,13 +24000,15 @@
      "bytes32 from",
      "bytes32 to",
      "uint256 amount",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "from",
      "to",
      "amount",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -23539,8 +24041,8 @@
     "group": "W"
    },
    {
-    "sel": "c620d896",
-    "sig": "pause(bytes32,uint64)",
+    "sel": "72c1ddda",
+    "sig": "pause(bytes32,uint64,bytes32)",
     "name": "pause",
     "decl": "RegulatedBase",
     "kept": false,
@@ -23548,11 +24050,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 ref",
-     "uint64 until"
+     "uint64 until",
+     "bytes32 chainUid_"
     ],
     "names": [
      "ref",
-     "until"
+     "until",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -23822,6 +24326,24 @@
     "group": "W"
    },
    {
+    "sel": "ca6db9af",
+    "sig": "pendingSupplyCaps()",
+    "name": "pendingSupplyCaps",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "2eba6021",
     "sig": "previewUnwrap(address,uint256)",
     "name": "previewUnwrap",
@@ -23870,8 +24392,8 @@
     "group": "W"
    },
    {
-    "sel": "59ec4068",
-    "sig": "proposeRate(address,uint96,uint96)",
+    "sel": "8227dc06",
+    "sig": "proposeRate(address,uint96,uint96,bytes32)",
     "name": "proposeRate",
     "decl": "WrappedToken",
     "kept": false,
@@ -23880,12 +24402,14 @@
     "params": [
      "address u",
      "uint96 num",
-     "uint96 den"
+     "uint96 den",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
      "num",
-     "den"
+     "den",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -23954,8 +24478,8 @@
     "group": "W"
    },
    {
-    "sel": "baaf8b3f",
-    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+    "sel": "9adf3f91",
+    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
     "name": "recordOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -23967,7 +24491,8 @@
      "bytes32 subject",
      "bytes32 beneficiary",
      "uint256 maxAmount",
-     "uint64 freezeUntil"
+     "uint64 freezeUntil",
+     "bytes32 chainUid_"
     ],
     "names": [
      "orderId",
@@ -23975,7 +24500,8 @@
      "subject",
      "beneficiary",
      "maxAmount",
-     "freezeUntil"
+     "freezeUntil",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -24108,6 +24634,24 @@
     "group": "A"
    },
    {
+    "sel": "b3a16872",
+    "sig": "reserveValue()",
+    "name": "reserveValue",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "8c4a5df6",
     "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
     "name": "restorePulled",
@@ -24132,8 +24676,8 @@
     "group": "T"
    },
    {
-    "sel": "54cfd9f0",
-    "sig": "revokeOrder(bytes32,bytes32)",
+    "sel": "622462ca",
+    "sig": "revokeOrder(bytes32,bytes32,bytes32)",
     "name": "revokeOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -24141,11 +24685,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "bytes32 reasonRef"
+     "bytes32 reasonRef",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "reasonRef"
+     "reasonRef",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -24182,8 +24728,8 @@
     "group": "A"
    },
    {
-    "sel": "8817535c",
-    "sig": "setAllowed(bytes32[],bool)",
+    "sel": "f511f37c",
+    "sig": "setAllowed(bytes32[],bool,bytes32)",
     "name": "setAllowed",
     "decl": "RegulatedBase",
     "kept": false,
@@ -24191,11 +24737,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -24206,8 +24754,8 @@
     "group": "W"
    },
    {
-    "sel": "db194d97",
-    "sig": "setDenied(bytes32[],bool)",
+    "sel": "095a70d0",
+    "sig": "setDenied(bytes32[],bool,bytes32)",
     "name": "setDenied",
     "decl": "RegulatedBase",
     "kept": false,
@@ -24215,11 +24763,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -24258,68 +24808,20 @@
     "group": "A"
    },
    {
-    "sel": "433b79b6",
-    "sig": "setTaxRate(uint32)",
-    "name": "setTaxRate",
-    "decl": "RegulatedBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "nonReentrant",
-    "params": [
-     "uint32 ratePpm"
-    ],
-    "names": [
-     "ratePpm"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IRegulatedToken"
-    ],
-    "vis": "external",
-    "domain": "pay",
-    "group": "P"
-   },
-   {
-    "sel": "1a68bfdc",
-    "sig": "setTaxRecipient(bytes32)",
-    "name": "setTaxRecipient",
-    "decl": "RegulatedBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "nonReentrant",
-    "params": [
-     "bytes32 taxRecipient"
-    ],
-    "names": [
-     "taxRecipient"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IRegulatedToken"
-    ],
-    "vis": "external",
-    "domain": "pay",
-    "group": "P"
-   },
-   {
-    "sel": "8c274876",
-    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-    "name": "setWrapLimits",
+    "sel": "f52a536e",
+    "sig": "setMaxSupply(uint256,bytes32)",
+    "name": "setMaxSupply",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "IWrappedToken.WrapLegLimits[] calldata legs",
-     "bool netUnwrap",
-     "bool wrapList",
-     "bool unwrapList"
+     "uint256 newMaxSupply",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "legs",
-     "netUnwrap",
-     "wrapList",
-     "unwrapList"
+     "newMaxSupply",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -24330,8 +24832,110 @@
     "group": "W"
    },
    {
-    "sel": "e7239da4",
-    "sig": "setWrapMember(bytes32,bool,bool)",
+    "sel": "2370fd3c",
+    "sig": "setMaxWrapSupply(uint256,bytes32)",
+    "name": "setMaxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint256 newMaxWrapSupply",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newMaxWrapSupply",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "3bb7cff6",
+    "sig": "setTaxRate(uint32,bytes32)",
+    "name": "setTaxRate",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint32 ratePpm",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "ratePpm",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
+    "sel": "90da34f9",
+    "sig": "setTaxRecipient(bytes32,bytes32)",
+    "name": "setTaxRecipient",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 taxRecipient",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "taxRecipient",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
+    "sel": "491b1fa9",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "7216d0f2",
+    "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
     "name": "setWrapMember",
     "decl": "WrappedToken",
     "kept": false,
@@ -24340,12 +24944,14 @@
     "params": [
      "bytes32 account",
      "bool canWrap",
-     "bool canUnwrap"
+     "bool canUnwrap",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "canWrap",
-     "canUnwrap"
+     "canUnwrap",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -24449,6 +25055,24 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
+   },
+   {
+    "sel": "afad55fd",
+    "sig": "totalWrapped()",
+    "name": "totalWrapped",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
    },
    {
     "sel": "fd773b8b",
@@ -24610,8 +25234,8 @@
     "group": "W"
    },
    {
-    "sel": "1014f5e9",
-    "sig": "unfreeze(bytes32,bytes32)",
+    "sel": "ef25df55",
+    "sig": "unfreeze(bytes32,bytes32,bytes32)",
     "name": "unfreeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -24619,11 +25243,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 account",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -24634,18 +25260,20 @@
     "group": "W"
    },
    {
-    "sel": "2f4dae9f",
-    "sig": "unpause(bytes32)",
+    "sel": "0534b026",
+    "sig": "unpause(bytes32,bytes32)",
     "name": "unpause",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -25667,8 +26295,8 @@
     "group": "A"
    },
    {
-    "sel": "6757815b",
-    "sig": "forceTransfer(bytes32,uint256)",
+    "sel": "e0f74d85",
+    "sig": "forceTransfer(bytes32,uint256,bytes32)",
     "name": "forceTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -25676,11 +26304,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -25691,8 +26321,8 @@
     "group": "W"
    },
    {
-    "sel": "883ae631",
-    "sig": "freeze(bytes32,bytes32,bytes32)",
+    "sel": "47020f02",
+    "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
     "name": "freeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -25701,12 +26331,14 @@
     "params": [
      "bytes32 account",
      "bytes32 ref",
-     "bytes32 recordId"
+     "bytes32 recordId",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "ref",
-     "recordId"
+     "recordId",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -26101,8 +26733,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "NormalToken",
     "kept": false,
@@ -26110,11 +26742,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -26125,8 +26759,8 @@
     "group": "A"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "NormalToken",
     "kept": false,
@@ -26134,11 +26768,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27182,8 +27818,8 @@
     "group": "K"
    },
    {
-    "sel": "3515aee3",
-    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+    "sel": "2a6136f9",
+    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
     "name": "operatorTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -27193,13 +27829,15 @@
      "bytes32 from",
      "bytes32 to",
      "uint256 amount",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "from",
      "to",
      "amount",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27232,8 +27870,8 @@
     "group": "W"
    },
    {
-    "sel": "c620d896",
-    "sig": "pause(bytes32,uint64)",
+    "sel": "72c1ddda",
+    "sig": "pause(bytes32,uint64,bytes32)",
     "name": "pause",
     "decl": "RegulatedBase",
     "kept": false,
@@ -27241,11 +27879,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 ref",
-     "uint64 until"
+     "uint64 until",
+     "bytes32 chainUid_"
     ],
     "names": [
      "ref",
-     "until"
+     "until",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27519,8 +28159,8 @@
     "group": "T"
    },
    {
-    "sel": "baaf8b3f",
-    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+    "sel": "9adf3f91",
+    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
     "name": "recordOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -27532,7 +28172,8 @@
      "bytes32 subject",
      "bytes32 beneficiary",
      "uint256 maxAmount",
-     "uint64 freezeUntil"
+     "uint64 freezeUntil",
+     "bytes32 chainUid_"
     ],
     "names": [
      "orderId",
@@ -27540,7 +28181,8 @@
      "subject",
      "beneficiary",
      "maxAmount",
-     "freezeUntil"
+     "freezeUntil",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27719,8 +28361,8 @@
     "group": "T"
    },
    {
-    "sel": "54cfd9f0",
-    "sig": "revokeOrder(bytes32,bytes32)",
+    "sel": "622462ca",
+    "sig": "revokeOrder(bytes32,bytes32,bytes32)",
     "name": "revokeOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -27728,11 +28370,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "bytes32 reasonRef"
+     "bytes32 reasonRef",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "reasonRef"
+     "reasonRef",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27791,8 +28435,8 @@
     "group": "Z"
    },
    {
-    "sel": "8817535c",
-    "sig": "setAllowed(bytes32[],bool)",
+    "sel": "f511f37c",
+    "sig": "setAllowed(bytes32[],bool,bytes32)",
     "name": "setAllowed",
     "decl": "RegulatedBase",
     "kept": false,
@@ -27800,11 +28444,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27815,8 +28461,8 @@
     "group": "W"
    },
    {
-    "sel": "db194d97",
-    "sig": "setDenied(bytes32[],bool)",
+    "sel": "095a70d0",
+    "sig": "setDenied(bytes32[],bool,bytes32)",
     "name": "setDenied",
     "decl": "RegulatedBase",
     "kept": false,
@@ -27824,11 +28470,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27867,18 +28515,20 @@
     "group": "A"
    },
    {
-    "sel": "433b79b6",
-    "sig": "setTaxRate(uint32)",
+    "sel": "3bb7cff6",
+    "sig": "setTaxRate(uint32,bytes32)",
     "name": "setTaxRate",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint32 ratePpm"
+     "uint32 ratePpm",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ratePpm"
+     "ratePpm",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -27889,18 +28539,20 @@
     "group": "P"
    },
    {
-    "sel": "1a68bfdc",
-    "sig": "setTaxRecipient(bytes32)",
+    "sel": "90da34f9",
+    "sig": "setTaxRecipient(bytes32,bytes32)",
     "name": "setTaxRecipient",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 taxRecipient"
+     "bytes32 taxRecipient",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "taxRecipient"
+     "taxRecipient",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -28227,8 +28879,8 @@
     "group": "A"
    },
    {
-    "sel": "1014f5e9",
-    "sig": "unfreeze(bytes32,bytes32)",
+    "sel": "ef25df55",
+    "sig": "unfreeze(bytes32,bytes32,bytes32)",
     "name": "unfreeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -28236,11 +28888,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 account",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -28251,18 +28905,20 @@
     "group": "W"
    },
    {
-    "sel": "2f4dae9f",
-    "sig": "unpause(bytes32)",
+    "sel": "0534b026",
+    "sig": "unpause(bytes32,bytes32)",
     "name": "unpause",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -28789,15 +29445,19 @@
     "group": "T"
    },
    {
-    "sel": "eb7ed217",
-    "sig": "cancelRate()",
+    "sel": "a5de55d3",
+    "sig": "cancelRate(bytes32)",
     "name": "cancelRate",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -28955,8 +29615,8 @@
     "group": "W"
    },
    {
-    "sel": "5d6385bc",
-    "sig": "disableWrap(address,bytes32)",
+    "sel": "c221ab6c",
+    "sig": "disableWrap(address,bytes32,bytes32)",
     "name": "disableWrap",
     "decl": "WrappedToken",
     "kept": false,
@@ -28964,11 +29624,13 @@
     "guard": "nonReentrant",
     "params": [
      "address u",
-     "bytes32 reason"
+     "bytes32 reason",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
-     "reason"
+     "reason",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -29105,15 +29767,19 @@
     "group": "P"
    },
    {
-    "sel": "f32f4e51",
-    "sig": "executeRate()",
+    "sel": "f582c903",
+    "sig": "executeRate(bytes32)",
     "name": "executeRate",
     "decl": "WrappedZetherToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -29157,8 +29823,8 @@
     "group": "A"
    },
    {
-    "sel": "6757815b",
-    "sig": "forceTransfer(bytes32,uint256)",
+    "sel": "e0f74d85",
+    "sig": "forceTransfer(bytes32,uint256,bytes32)",
     "name": "forceTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -29166,11 +29832,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -29181,8 +29849,8 @@
     "group": "W"
    },
    {
-    "sel": "883ae631",
-    "sig": "freeze(bytes32,bytes32,bytes32)",
+    "sel": "47020f02",
+    "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
     "name": "freeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -29191,12 +29859,14 @@
     "params": [
      "bytes32 account",
      "bytes32 ref",
-     "bytes32 recordId"
+     "bytes32 recordId",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "ref",
-     "recordId"
+     "recordId",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -29585,6 +30255,24 @@
     "group": "W"
    },
    {
+    "sel": "86f8d11e",
+    "sig": "maxWrapSupply()",
+    "name": "maxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "dd1982a5",
     "sig": "metaPayId((bytes32,bytes32,bool,uint16,bytes))",
     "name": "metaPayId",
@@ -29649,8 +30337,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "WrappedToken",
     "kept": false,
@@ -29658,11 +30346,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -29673,8 +30363,8 @@
     "group": "W"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "WrappedToken",
     "kept": false,
@@ -29682,11 +30372,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31047,8 +31739,8 @@
     "group": "K"
    },
    {
-    "sel": "3515aee3",
-    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+    "sel": "2a6136f9",
+    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
     "name": "operatorTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -31058,13 +31750,15 @@
      "bytes32 from",
      "bytes32 to",
      "uint256 amount",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "from",
      "to",
      "amount",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31097,8 +31791,8 @@
     "group": "W"
    },
    {
-    "sel": "c620d896",
-    "sig": "pause(bytes32,uint64)",
+    "sel": "72c1ddda",
+    "sig": "pause(bytes32,uint64,bytes32)",
     "name": "pause",
     "decl": "RegulatedBase",
     "kept": false,
@@ -31106,11 +31800,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 ref",
-     "uint64 until"
+     "uint64 until",
+     "bytes32 chainUid_"
     ],
     "names": [
      "ref",
-     "until"
+     "until",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31380,6 +32076,24 @@
     "group": "W"
    },
    {
+    "sel": "ca6db9af",
+    "sig": "pendingSupplyCaps()",
+    "name": "pendingSupplyCaps",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "2eba6021",
     "sig": "previewUnwrap(address,uint256)",
     "name": "previewUnwrap",
@@ -31428,8 +32142,8 @@
     "group": "W"
    },
    {
-    "sel": "59ec4068",
-    "sig": "proposeRate(address,uint96,uint96)",
+    "sel": "8227dc06",
+    "sig": "proposeRate(address,uint96,uint96,bytes32)",
     "name": "proposeRate",
     "decl": "WrappedToken",
     "kept": false,
@@ -31438,12 +32152,14 @@
     "params": [
      "address u",
      "uint96 num",
-     "uint96 den"
+     "uint96 den",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
      "num",
-     "den"
+     "den",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31512,8 +32228,8 @@
     "group": "W"
    },
    {
-    "sel": "baaf8b3f",
-    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+    "sel": "9adf3f91",
+    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
     "name": "recordOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -31525,7 +32241,8 @@
      "bytes32 subject",
      "bytes32 beneficiary",
      "uint256 maxAmount",
-     "uint64 freezeUntil"
+     "uint64 freezeUntil",
+     "bytes32 chainUid_"
     ],
     "names": [
      "orderId",
@@ -31533,7 +32250,8 @@
      "subject",
      "beneficiary",
      "maxAmount",
-     "freezeUntil"
+     "freezeUntil",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31688,6 +32406,24 @@
     "group": "A"
    },
    {
+    "sel": "b3a16872",
+    "sig": "reserveValue()",
+    "name": "reserveValue",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "8c4a5df6",
     "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
     "name": "restorePulled",
@@ -31712,8 +32448,8 @@
     "group": "T"
    },
    {
-    "sel": "54cfd9f0",
-    "sig": "revokeOrder(bytes32,bytes32)",
+    "sel": "622462ca",
+    "sig": "revokeOrder(bytes32,bytes32,bytes32)",
     "name": "revokeOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -31721,11 +32457,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "bytes32 reasonRef"
+     "bytes32 reasonRef",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "reasonRef"
+     "reasonRef",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31784,8 +32522,8 @@
     "group": "Z"
    },
    {
-    "sel": "8817535c",
-    "sig": "setAllowed(bytes32[],bool)",
+    "sel": "f511f37c",
+    "sig": "setAllowed(bytes32[],bool,bytes32)",
     "name": "setAllowed",
     "decl": "RegulatedBase",
     "kept": false,
@@ -31793,11 +32531,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31808,8 +32548,8 @@
     "group": "W"
    },
    {
-    "sel": "db194d97",
-    "sig": "setDenied(bytes32[],bool)",
+    "sel": "095a70d0",
+    "sig": "setDenied(bytes32[],bool,bytes32)",
     "name": "setDenied",
     "decl": "RegulatedBase",
     "kept": false,
@@ -31817,11 +32557,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31860,68 +32602,20 @@
     "group": "A"
    },
    {
-    "sel": "433b79b6",
-    "sig": "setTaxRate(uint32)",
-    "name": "setTaxRate",
-    "decl": "RegulatedBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "nonReentrant",
-    "params": [
-     "uint32 ratePpm"
-    ],
-    "names": [
-     "ratePpm"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IRegulatedToken"
-    ],
-    "vis": "external",
-    "domain": "pay",
-    "group": "P"
-   },
-   {
-    "sel": "1a68bfdc",
-    "sig": "setTaxRecipient(bytes32)",
-    "name": "setTaxRecipient",
-    "decl": "RegulatedBase",
-    "kept": false,
-    "mut": "nonpayable",
-    "guard": "nonReentrant",
-    "params": [
-     "bytes32 taxRecipient"
-    ],
-    "names": [
-     "taxRecipient"
-    ],
-    "returns": "",
-    "ifaces": [
-     "IRegulatedToken"
-    ],
-    "vis": "external",
-    "domain": "pay",
-    "group": "P"
-   },
-   {
-    "sel": "8c274876",
-    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
-    "name": "setWrapLimits",
+    "sel": "f52a536e",
+    "sig": "setMaxSupply(uint256,bytes32)",
+    "name": "setMaxSupply",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "IWrappedToken.WrapLegLimits[] calldata legs",
-     "bool netUnwrap",
-     "bool wrapList",
-     "bool unwrapList"
+     "uint256 newMaxSupply",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "legs",
-     "netUnwrap",
-     "wrapList",
-     "unwrapList"
+     "newMaxSupply",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -31932,8 +32626,110 @@
     "group": "W"
    },
    {
-    "sel": "e7239da4",
-    "sig": "setWrapMember(bytes32,bool,bool)",
+    "sel": "2370fd3c",
+    "sig": "setMaxWrapSupply(uint256,bytes32)",
+    "name": "setMaxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint256 newMaxWrapSupply",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newMaxWrapSupply",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "3bb7cff6",
+    "sig": "setTaxRate(uint32,bytes32)",
+    "name": "setTaxRate",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint32 ratePpm",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "ratePpm",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
+    "sel": "90da34f9",
+    "sig": "setTaxRecipient(bytes32,bytes32)",
+    "name": "setTaxRecipient",
+    "decl": "RegulatedBase",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 taxRecipient",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "taxRecipient",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IRegulatedToken"
+    ],
+    "vis": "external",
+    "domain": "pay",
+    "group": "P"
+   },
+   {
+    "sel": "491b1fa9",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+    "name": "setWrapLimits",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "IWrappedToken.WrapLegLimits[] calldata legs",
+     "bool netUnwrap",
+     "bool wrapList",
+     "bool unwrapList",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "legs",
+     "netUnwrap",
+     "wrapList",
+     "unwrapList",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "7216d0f2",
+    "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
     "name": "setWrapMember",
     "decl": "WrappedToken",
     "kept": false,
@@ -31942,12 +32738,14 @@
     "params": [
      "bytes32 account",
      "bool canWrap",
-     "bool canUnwrap"
+     "bool canUnwrap",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "canWrap",
-     "canUnwrap"
+     "canUnwrap",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -32087,6 +32885,24 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
+   },
+   {
+    "sel": "afad55fd",
+    "sig": "totalWrapped()",
+    "name": "totalWrapped",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
    },
    {
     "sel": "fd773b8b",
@@ -32292,8 +33108,8 @@
     "group": "W"
    },
    {
-    "sel": "1014f5e9",
-    "sig": "unfreeze(bytes32,bytes32)",
+    "sel": "ef25df55",
+    "sig": "unfreeze(bytes32,bytes32,bytes32)",
     "name": "unfreeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -32301,11 +33117,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 account",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -32316,18 +33134,20 @@
     "group": "W"
    },
    {
-    "sel": "2f4dae9f",
-    "sig": "unpause(bytes32)",
+    "sel": "0534b026",
+    "sig": "unpause(bytes32,bytes32)",
     "name": "unpause",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -33343,8 +34163,8 @@
     "group": "A"
    },
    {
-    "sel": "6757815b",
-    "sig": "forceTransfer(bytes32,uint256)",
+    "sel": "e0f74d85",
+    "sig": "forceTransfer(bytes32,uint256,bytes32)",
     "name": "forceTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -33352,11 +34172,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -33367,8 +34189,8 @@
     "group": "W"
    },
    {
-    "sel": "883ae631",
-    "sig": "freeze(bytes32,bytes32,bytes32)",
+    "sel": "47020f02",
+    "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
     "name": "freeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -33377,12 +34199,14 @@
     "params": [
      "bytes32 account",
      "bytes32 ref",
-     "bytes32 recordId"
+     "bytes32 recordId",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "ref",
-     "recordId"
+     "recordId",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -33775,8 +34599,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "NormalToken",
     "kept": false,
@@ -33784,11 +34608,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -33799,8 +34625,8 @@
     "group": "A"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "NormalToken",
     "kept": false,
@@ -33808,11 +34634,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -34892,8 +35720,8 @@
     "group": "K"
    },
    {
-    "sel": "3515aee3",
-    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+    "sel": "2a6136f9",
+    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
     "name": "operatorTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -34903,13 +35731,15 @@
      "bytes32 from",
      "bytes32 to",
      "uint256 amount",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "from",
      "to",
      "amount",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -34942,8 +35772,8 @@
     "group": "W"
    },
    {
-    "sel": "c620d896",
-    "sig": "pause(bytes32,uint64)",
+    "sel": "72c1ddda",
+    "sig": "pause(bytes32,uint64,bytes32)",
     "name": "pause",
     "decl": "RegulatedBase",
     "kept": false,
@@ -34951,11 +35781,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 ref",
-     "uint64 until"
+     "uint64 until",
+     "bytes32 chainUid_"
     ],
     "names": [
      "ref",
-     "until"
+     "until",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35537,8 +36369,8 @@
     "group": "T"
    },
    {
-    "sel": "baaf8b3f",
-    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+    "sel": "9adf3f91",
+    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
     "name": "recordOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -35550,7 +36382,8 @@
      "bytes32 subject",
      "bytes32 beneficiary",
      "uint256 maxAmount",
-     "uint64 freezeUntil"
+     "uint64 freezeUntil",
+     "bytes32 chainUid_"
     ],
     "names": [
      "orderId",
@@ -35558,7 +36391,8 @@
      "subject",
      "beneficiary",
      "maxAmount",
-     "freezeUntil"
+     "freezeUntil",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35715,8 +36549,8 @@
     "group": "T"
    },
    {
-    "sel": "54cfd9f0",
-    "sig": "revokeOrder(bytes32,bytes32)",
+    "sel": "622462ca",
+    "sig": "revokeOrder(bytes32,bytes32,bytes32)",
     "name": "revokeOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -35724,11 +36558,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "bytes32 reasonRef"
+     "bytes32 reasonRef",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "reasonRef"
+     "reasonRef",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35765,8 +36601,8 @@
     "group": "A"
    },
    {
-    "sel": "8817535c",
-    "sig": "setAllowed(bytes32[],bool)",
+    "sel": "f511f37c",
+    "sig": "setAllowed(bytes32[],bool,bytes32)",
     "name": "setAllowed",
     "decl": "RegulatedBase",
     "kept": false,
@@ -35774,11 +36610,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35789,8 +36627,8 @@
     "group": "W"
    },
    {
-    "sel": "db194d97",
-    "sig": "setDenied(bytes32[],bool)",
+    "sel": "095a70d0",
+    "sig": "setDenied(bytes32[],bool,bytes32)",
     "name": "setDenied",
     "decl": "RegulatedBase",
     "kept": false,
@@ -35798,11 +36636,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35841,18 +36681,20 @@
     "group": "A"
    },
    {
-    "sel": "26f21b98",
-    "sig": "setProofStore(uint8)",
+    "sel": "54c52133",
+    "sig": "setProofStore(uint8,bytes32)",
     "name": "setProofStore",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 next"
+     "uint8 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35863,18 +36705,20 @@
     "group": "Q"
    },
    {
-    "sel": "433b79b6",
-    "sig": "setTaxRate(uint32)",
+    "sel": "3bb7cff6",
+    "sig": "setTaxRate(uint32,bytes32)",
     "name": "setTaxRate",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint32 ratePpm"
+     "uint32 ratePpm",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ratePpm"
+     "ratePpm",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -35885,18 +36729,20 @@
     "group": "P"
    },
    {
-    "sel": "1a68bfdc",
-    "sig": "setTaxRecipient(bytes32)",
+    "sel": "90da34f9",
+    "sig": "setTaxRecipient(bytes32,bytes32)",
     "name": "setTaxRecipient",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 taxRecipient"
+     "bytes32 taxRecipient",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "taxRecipient"
+     "taxRecipient",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -36289,8 +37135,8 @@
     "group": "A"
    },
    {
-    "sel": "1014f5e9",
-    "sig": "unfreeze(bytes32,bytes32)",
+    "sel": "ef25df55",
+    "sig": "unfreeze(bytes32,bytes32,bytes32)",
     "name": "unfreeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -36298,11 +37144,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 account",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -36313,18 +37161,20 @@
     "group": "W"
    },
    {
-    "sel": "2f4dae9f",
-    "sig": "unpause(bytes32)",
+    "sel": "0534b026",
+    "sig": "unpause(bytes32,bytes32)",
     "name": "unpause",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -36897,15 +37747,19 @@
     "group": "T"
    },
    {
-    "sel": "eb7ed217",
-    "sig": "cancelRate()",
+    "sel": "a5de55d3",
+    "sig": "cancelRate(bytes32)",
     "name": "cancelRate",
     "decl": "WrappedToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -37045,8 +37899,8 @@
     "group": "W"
    },
    {
-    "sel": "5d6385bc",
-    "sig": "disableWrap(address,bytes32)",
+    "sel": "c221ab6c",
+    "sig": "disableWrap(address,bytes32,bytes32)",
     "name": "disableWrap",
     "decl": "WrappedToken",
     "kept": false,
@@ -37054,11 +37908,13 @@
     "guard": "nonReentrant",
     "params": [
      "address u",
-     "bytes32 reason"
+     "bytes32 reason",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
-     "reason"
+     "reason",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -37205,15 +38061,19 @@
     "group": "P"
    },
    {
-    "sel": "f32f4e51",
-    "sig": "executeRate()",
+    "sel": "f582c903",
+    "sig": "executeRate(bytes32)",
     "name": "executeRate",
     "decl": "WrappedPqzToken",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
-    "params": [],
-    "names": [],
+    "params": [
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "chainUid_"
+    ],
     "returns": "",
     "ifaces": [
      "IWrappedToken"
@@ -37257,8 +38117,8 @@
     "group": "A"
    },
    {
-    "sel": "6757815b",
-    "sig": "forceTransfer(bytes32,uint256)",
+    "sel": "e0f74d85",
+    "sig": "forceTransfer(bytes32,uint256,bytes32)",
     "name": "forceTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -37266,11 +38126,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -37281,8 +38143,8 @@
     "group": "W"
    },
    {
-    "sel": "883ae631",
-    "sig": "freeze(bytes32,bytes32,bytes32)",
+    "sel": "47020f02",
+    "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
     "name": "freeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -37291,12 +38153,14 @@
     "params": [
      "bytes32 account",
      "bytes32 ref",
-     "bytes32 recordId"
+     "bytes32 recordId",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "ref",
-     "recordId"
+     "recordId",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -37683,6 +38547,24 @@
     "group": "W"
    },
    {
+    "sel": "86f8d11e",
+    "sig": "maxWrapSupply()",
+    "name": "maxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "dd1982a5",
     "sig": "metaPayId((bytes32,bytes32,bool,uint16,bytes))",
     "name": "metaPayId",
@@ -37747,8 +38629,8 @@
     "group": "T"
    },
    {
-    "sel": "40c10f19",
-    "sig": "mint(address,uint256)",
+    "sel": "1e458bee",
+    "sig": "mint(address,uint256,bytes32)",
     "name": "mint",
     "decl": "WrappedToken",
     "kept": false,
@@ -37756,11 +38638,13 @@
     "guard": "nonReentrant",
     "params": [
      "address to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -37771,8 +38655,8 @@
     "group": "W"
    },
    {
-    "sel": "f6b2d1e0",
-    "sig": "mintToUA(bytes32,uint256)",
+    "sel": "fdee0955",
+    "sig": "mintToUA(bytes32,uint256,bytes32)",
     "name": "mintToUA",
     "decl": "WrappedToken",
     "kept": false,
@@ -37780,11 +38664,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 to",
-     "uint256 amount"
+     "uint256 amount",
+     "bytes32 chainUid_"
     ],
     "names": [
      "to",
-     "amount"
+     "amount",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39193,8 +40079,8 @@
     "group": "K"
    },
    {
-    "sel": "3515aee3",
-    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+    "sel": "2a6136f9",
+    "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
     "name": "operatorTransfer",
     "decl": "RegulatedBase",
     "kept": false,
@@ -39204,13 +40090,15 @@
      "bytes32 from",
      "bytes32 to",
      "uint256 amount",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "from",
      "to",
      "amount",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39243,8 +40131,8 @@
     "group": "W"
    },
    {
-    "sel": "c620d896",
-    "sig": "pause(bytes32,uint64)",
+    "sel": "72c1ddda",
+    "sig": "pause(bytes32,uint64,bytes32)",
     "name": "pause",
     "decl": "RegulatedBase",
     "kept": false,
@@ -39252,11 +40140,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 ref",
-     "uint64 until"
+     "uint64 until",
+     "bytes32 chainUid_"
     ],
     "names": [
      "ref",
-     "until"
+     "until",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39526,6 +40416,24 @@
     "group": "W"
    },
    {
+    "sel": "ca6db9af",
+    "sig": "pendingSupplyCaps()",
+    "name": "pendingSupplyCaps",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "3a458107",
     "sig": "pqzAcc(bytes32,uint64)",
     "name": "pqzAcc",
@@ -39668,32 +40576,6 @@
     "group": "Q"
    },
    {
-    "sel": "2d73ee4a",
-    "sig": "pqzSkipped(bytes32,uint64,uint64)",
-    "name": "pqzSkipped",
-    "decl": "PqzLayer",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "bytes32 ua",
-     "uint64 keyVersion",
-     "uint64 index"
-    ],
-    "names": [
-     "ua",
-     "keyVersion",
-     "index"
-    ],
-    "returns": "bool _p0",
-    "ifaces": [
-     "IPqzToken"
-    ],
-    "vis": "external",
-    "domain": "pqz",
-    "group": "Q"
-   },
-   {
     "sel": "03ccd4f0",
     "sig": "pqzPendingCt(bytes32,uint64,uint64)",
     "name": "pqzPendingCt",
@@ -39758,6 +40640,32 @@
      "chainUid_"
     ],
     "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "2d73ee4a",
+    "sig": "pqzSkipped(bytes32,uint64,uint64)",
+    "name": "pqzSkipped",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 index"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "index"
+    ],
+    "returns": "bool _p0",
     "ifaces": [
      "IPqzToken"
     ],
@@ -39882,8 +40790,8 @@
     "group": "Q"
    },
    {
-    "sel": "59ec4068",
-    "sig": "proposeRate(address,uint96,uint96)",
+    "sel": "8227dc06",
+    "sig": "proposeRate(address,uint96,uint96,bytes32)",
     "name": "proposeRate",
     "decl": "WrappedToken",
     "kept": false,
@@ -39892,12 +40800,14 @@
     "params": [
      "address u",
      "uint96 num",
-     "uint96 den"
+     "uint96 den",
+     "bytes32 chainUid_"
     ],
     "names": [
      "u",
      "num",
-     "den"
+     "den",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -39966,8 +40876,8 @@
     "group": "W"
    },
    {
-    "sel": "baaf8b3f",
-    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+    "sel": "9adf3f91",
+    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
     "name": "recordOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -39979,7 +40889,8 @@
      "bytes32 subject",
      "bytes32 beneficiary",
      "uint256 maxAmount",
-     "uint64 freezeUntil"
+     "uint64 freezeUntil",
+     "bytes32 chainUid_"
     ],
     "names": [
      "orderId",
@@ -39987,7 +40898,8 @@
      "subject",
      "beneficiary",
      "maxAmount",
-     "freezeUntil"
+     "freezeUntil",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40120,6 +41032,24 @@
     "group": "A"
    },
    {
+    "sel": "b3a16872",
+    "sig": "reserveValue()",
+    "name": "reserveValue",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
     "sel": "8c4a5df6",
     "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
     "name": "restorePulled",
@@ -40144,8 +41074,8 @@
     "group": "T"
    },
    {
-    "sel": "54cfd9f0",
-    "sig": "revokeOrder(bytes32,bytes32)",
+    "sel": "622462ca",
+    "sig": "revokeOrder(bytes32,bytes32,bytes32)",
     "name": "revokeOrder",
     "decl": "RegulatedBase",
     "kept": false,
@@ -40153,11 +41083,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 recordId",
-     "bytes32 reasonRef"
+     "bytes32 reasonRef",
+     "bytes32 chainUid_"
     ],
     "names": [
      "recordId",
-     "reasonRef"
+     "reasonRef",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40194,8 +41126,8 @@
     "group": "A"
    },
    {
-    "sel": "8817535c",
-    "sig": "setAllowed(bytes32[],bool)",
+    "sel": "f511f37c",
+    "sig": "setAllowed(bytes32[],bool,bytes32)",
     "name": "setAllowed",
     "decl": "RegulatedBase",
     "kept": false,
@@ -40203,11 +41135,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40218,8 +41152,8 @@
     "group": "W"
    },
    {
-    "sel": "db194d97",
-    "sig": "setDenied(bytes32[],bool)",
+    "sel": "095a70d0",
+    "sig": "setDenied(bytes32[],bool,bytes32)",
     "name": "setDenied",
     "decl": "RegulatedBase",
     "kept": false,
@@ -40227,11 +41161,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32[] calldata accounts",
-     "bool on"
+     "bool on",
+     "bytes32 chainUid_"
     ],
     "names": [
      "accounts",
-     "on"
+     "on",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40270,18 +41206,68 @@
     "group": "A"
    },
    {
-    "sel": "26f21b98",
-    "sig": "setProofStore(uint8)",
+    "sel": "f52a536e",
+    "sig": "setMaxSupply(uint256,bytes32)",
+    "name": "setMaxSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint256 newMaxSupply",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newMaxSupply",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "2370fd3c",
+    "sig": "setMaxWrapSupply(uint256,bytes32)",
+    "name": "setMaxWrapSupply",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "uint256 newMaxWrapSupply",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newMaxWrapSupply",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
+   },
+   {
+    "sel": "54c52133",
+    "sig": "setProofStore(uint8,bytes32)",
     "name": "setProofStore",
     "decl": "PqzLayer",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint8 next"
+     "uint8 next",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "next"
+     "next",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40292,18 +41278,20 @@
     "group": "Q"
    },
    {
-    "sel": "433b79b6",
-    "sig": "setTaxRate(uint32)",
+    "sel": "3bb7cff6",
+    "sig": "setTaxRate(uint32,bytes32)",
     "name": "setTaxRate",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "uint32 ratePpm"
+     "uint32 ratePpm",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ratePpm"
+     "ratePpm",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40314,18 +41302,20 @@
     "group": "P"
    },
    {
-    "sel": "1a68bfdc",
-    "sig": "setTaxRecipient(bytes32)",
+    "sel": "90da34f9",
+    "sig": "setTaxRecipient(bytes32,bytes32)",
     "name": "setTaxRecipient",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 taxRecipient"
+     "bytes32 taxRecipient",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "taxRecipient"
+     "taxRecipient",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40360,8 +41350,8 @@
     "group": "Q"
    },
    {
-    "sel": "8c274876",
-    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool)",
+    "sel": "491b1fa9",
+    "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
     "name": "setWrapLimits",
     "decl": "WrappedToken",
     "kept": false,
@@ -40371,13 +41361,15 @@
      "IWrappedToken.WrapLegLimits[] calldata legs",
      "bool netUnwrap",
      "bool wrapList",
-     "bool unwrapList"
+     "bool unwrapList",
+     "bytes32 chainUid_"
     ],
     "names": [
      "legs",
      "netUnwrap",
      "wrapList",
-     "unwrapList"
+     "unwrapList",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40388,8 +41380,8 @@
     "group": "W"
    },
    {
-    "sel": "e7239da4",
-    "sig": "setWrapMember(bytes32,bool,bool)",
+    "sel": "7216d0f2",
+    "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
     "name": "setWrapMember",
     "decl": "WrappedToken",
     "kept": false,
@@ -40398,12 +41390,14 @@
     "params": [
      "bytes32 account",
      "bool canWrap",
-     "bool canUnwrap"
+     "bool canUnwrap",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
      "canWrap",
-     "canUnwrap"
+     "canUnwrap",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40543,6 +41537,24 @@
     "vis": "public",
     "domain": "erc20-core",
     "group": "K"
+   },
+   {
+    "sel": "afad55fd",
+    "sig": "totalWrapped()",
+    "name": "totalWrapped",
+    "decl": "WrappedToken",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint256 _p0",
+    "ifaces": [
+     "IWrappedToken"
+    ],
+    "vis": "external",
+    "domain": "wrapped",
+    "group": "W"
    },
    {
     "sel": "fd773b8b",
@@ -40790,8 +41802,8 @@
     "group": "W"
    },
    {
-    "sel": "1014f5e9",
-    "sig": "unfreeze(bytes32,bytes32)",
+    "sel": "ef25df55",
+    "sig": "unfreeze(bytes32,bytes32,bytes32)",
     "name": "unfreeze",
     "decl": "RegulatedBase",
     "kept": false,
@@ -40799,11 +41811,13 @@
     "guard": "nonReentrant",
     "params": [
      "bytes32 account",
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
      "account",
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [
@@ -40814,18 +41828,20 @@
     "group": "W"
    },
    {
-    "sel": "2f4dae9f",
-    "sig": "unpause(bytes32)",
+    "sel": "0534b026",
+    "sig": "unpause(bytes32,bytes32)",
     "name": "unpause",
     "decl": "RegulatedBase",
     "kept": false,
     "mut": "nonpayable",
     "guard": "nonReentrant",
     "params": [
-     "bytes32 ref"
+     "bytes32 ref",
+     "bytes32 chainUid_"
     ],
     "names": [
-     "ref"
+     "ref",
+     "chainUid_"
     ],
     "returns": "",
     "ifaces": [

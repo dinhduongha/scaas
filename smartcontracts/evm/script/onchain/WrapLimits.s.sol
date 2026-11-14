@@ -262,10 +262,11 @@ abstract contract WrapLimitsKit is OnchainBase {
 
     function _setLimitsData(uint256 i, uint256 which) internal view returns (bytes memory) {
         (IWrappedToken.WrapLegLimits[] memory legs, bool n_, bool wl_, bool ul_) = _cfg(which);
+        bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word (CTR-GOV-28)
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(
-            "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,",
-            TAIL, LEG_T, LIMIT_T), tk[i], abi.encode(_legsHash(legs), n_, wl_, ul_));
-        return abi.encodeCall(GovernanceRouter.mtxSetWrapLimits, (e, tk[i], legs, n_, wl_, ul_, s));
+            "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,",
+            TAIL, LEG_T, LIMIT_T), tk[i], abi.encode(_legsHash(legs), n_, wl_, ul_, u));
+        return abi.encodeCall(GovernanceRouter.mtxSetWrapLimits, (e, tk[i], legs, n_, wl_, ul_, u, s));
     }
 
     function _setLimits(uint256 i, uint256 which, string memory kind) internal {
@@ -282,10 +283,11 @@ abstract contract WrapLimitsKit is OnchainBase {
     }
 
     function _memberData(uint256 i, bytes32 who, bool canWrap, bool canUnwrap) internal view returns (bytes memory) {
+        bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word (CTR-GOV-28)
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(
-            "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,", TAIL), tk[i],
-            abi.encode(who, canWrap, canUnwrap));
-        return abi.encodeCall(GovernanceRouter.mtxSetWrapMember, (e, tk[i], who, canWrap, canUnwrap, s));
+            "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,", TAIL), tk[i],
+            abi.encode(who, canWrap, canUnwrap, u));
+        return abi.encodeCall(GovernanceRouter.mtxSetWrapMember, (e, tk[i], who, canWrap, canUnwrap, u, s));
     }
 
     function _role(uint256 i, uint8 bit, address who, bool grant) internal {
@@ -466,7 +468,7 @@ contract WrapLimits is WrapLimitsKit {
     function _p1(uint256 i) internal {
         address t = tk[i];
         (IWrappedToken.WrapLegLimits[] memory legs, bool n_, bool wl_, bool ul_) = _cfg(0);
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapLimits, (legs, n_, wl_, ul_)), false,
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapLimits, (legs, n_, wl_, ul_, IMetaTx(t).chainUid())), false,
             _row("setWrapLimits direct (first, at once)", i, "configuration 0"));
         _wrap(k2, i, 100, "wrap (tracked, first use)");
         // relayed: key 1 signs, key 2 (at its own cap) submits; the signer's quota counts
@@ -547,11 +549,11 @@ contract WrapLimits is WrapLimitsKit {
         (, , bool wl2,,,,,) = IWrappedToken(t).wrapLimits();
         require(wl2, "p3: the wrapper list on");
         _member(i, a2, true, true);
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a1), true, true)), false,
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a1), true, true, IMetaTx(t).chainUid())), false,
             _row("setWrapMember direct", i, vm.toString(a1)));
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a4), false, true)), false,
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a4), false, true, IMetaTx(t).chainUid())), false,
             _row("setWrapMember direct", i, vm.toString(a4)));
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a3), false, true)), false,
+        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a3), false, true, IMetaTx(t).chainUid())), false,
             _row("setWrapMember direct", i, vm.toString(a3)));
         _wrap(k1, i, 10, "wrap (tracked, listed)");
         _setLimits(i, 3, "router mtxSetWrapLimits (unwrap looser: at once)");

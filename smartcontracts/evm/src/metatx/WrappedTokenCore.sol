@@ -123,7 +123,7 @@ abstract contract WrappedTokenCore is MetaTokenBase {
         (out, burned) = WrappedLib.quoteUnwrapToUA(i, wrapped, minOut, holder);
         address from = _msgSender();
         _burn(from, burned);
-        WrappedLib.payOutToUA(i, to, out, holder);
+        WrappedLib.payOutToUA(i, to, out, burned, holder);
         emit IWrappedToken.UnwrappedToUA(from, u, to, burned, out);
     }
 
@@ -217,23 +217,23 @@ abstract contract WrappedTokenCore is MetaTokenBase {
         (out, burned) = WrappedLib.quoteUnwrap(i, wrapped, recipient, minOut, holder);
         address from = _msgSender();
         _burn(from, burned);
-        address u = WrappedLib.payOut(i, recipient, out, holder);
+        address u = WrappedLib.payOut(i, recipient, out, burned, holder);
         emit IWrappedToken.Unwrapped(from, u, recipient, burned, out);
     }
 
     // ------------------------------------------------------------------ the hybrid's issuer (spec §5.2, CTR-GOV-12)
 
     /// @notice `MINTABLE` and the `minter` role, under `maxSupply`, into a public balance; no reserve moves. Never
-    ///         allowlisted, as `NormalToken.mint`.
-    function _mintBody(address to, uint256 amount) internal {
-        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+    ///         allowlisted, as `NormalToken.mint`. The holder's chain word first (CTR-GOV-28 Change).
+    function _mintBody(address to, uint256 amount, bytes32 chainUid_) internal {
+        GovernanceUse.use(GovernanceBits.MINTABLE, _holderOnChain(GovernanceBits.MINTABLE, chainUid_), amount);
         WrappedLib.checkMint(totalSupply(), amount);
         _mint(to, amount);
     }
 
     /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28), its public UA balance.
-    function _mintToUABody(bytes32 to, uint256 amount) internal {
-        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+    function _mintToUABody(bytes32 to, uint256 amount, bytes32 chainUid_) internal {
+        GovernanceUse.use(GovernanceBits.MINTABLE, _holderOnChain(GovernanceBits.MINTABLE, chainUid_), amount);
         WrappedLib.checkMint(totalSupply(), amount);
         _uaMint(to, amount);
     }
@@ -245,20 +245,21 @@ abstract contract WrappedTokenCore is MetaTokenBase {
 
     // ------------------------------------------------------------------ roles: guardian, rate admin
 
-    function _disableWrapBody(address u, bytes32 reason) internal {
-        WrappedLib.disableWrap(u, reason, _govSubject());
+    /// @dev CTR-GOV-28 Change: each holder's entry names the chain word (`_holderOnChain`), checked before the library.
+    function _disableWrapBody(address u, bytes32 reason, bytes32 chainUid_) internal {
+        WrappedLib.disableWrap(u, reason, _holderOnChain(GovernanceBits.WRAP_DISABLEABLE, chainUid_));
     }
 
-    function _proposeRateBody(address u, uint96 num, uint96 den) internal {
-        WrappedLib.proposeRate(u, num, den, _govSubject());
+    function _proposeRateBody(address u, uint96 num, uint96 den, bytes32 chainUid_) internal {
+        WrappedLib.proposeRate(u, num, den, _holderOnChain(GovernanceBits.RATE_ADJUSTABLE, chainUid_));
     }
 
-    function _cancelRateBody() internal {
-        WrappedLib.cancelRate(_govSubject());
+    function _cancelRateBody(bytes32 chainUid_) internal {
+        WrappedLib.cancelRate(_holderOnChain(GovernanceBits.RATE_ADJUSTABLE, chainUid_));
     }
 
-    function _executeRateBody() internal virtual {
-        WrappedLib.executeRate(_govSubject(), totalSupply());
+    function _executeRateBody(bytes32 chainUid_) internal virtual {
+        WrappedLib.executeRate(_holderOnChain(GovernanceBits.RATE_ADJUSTABLE, chainUid_), totalSupply());
     }
 
     /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06), once the disable applied;
@@ -283,16 +284,46 @@ abstract contract WrappedTokenCore is MetaTokenBase {
         if (bit >= GovernanceBits.WRAP_LIMIT && bit <= GovernanceBits.REDEEMER) WrappedLib.controlsOff(bit);
     }
 
-    /// @notice The admin's limits (spec §6), the subject from the router (`_govSubject`).
-    function _setWrapLimitsBody(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList)
-        internal
+    /// @notice The admin's limits (spec §6), the subject from the router (`_govSubject`): the admin, then the chain word
+    ///         (CTR-GOV-28, round 3zc O5), before any write and before the library's own checks.
+    function _setWrapLimitsBody(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList,
+        bytes32 chainUid_) internal
     {
-        WrappedLib.setWrapLimits(legs, netUnwrap, wrapList, unwrapList, _govSubject(), FACTORY);
+        WrappedLib.setWrapLimits(legs, netUnwrap, wrapList, unwrapList, _adminOnChain(chainUid_), FACTORY);
     }
 
     /// @notice Bit 26's holder writes a membership, at once.
-    function _setWrapMemberBody(bytes32 account, bool canWrap, bool canUnwrap) internal {
-        WrappedLib.setWrapMember(account, canWrap, canUnwrap, _govSubject());
+    function _setWrapMemberBody(bytes32 account, bool canWrap, bool canUnwrap, bytes32 chainUid_) internal {
+        WrappedLib.setWrapMember(account, canWrap, canUnwrap, _holderOnChain(GovernanceBits.WRAP_LIST, chainUid_));
+    }
+
+    // ------------------------------------------------------------------ the supply caps (round 3zc, CTR-GOV-30)
+
+    /// @notice The admin, then the chain word (CTR-GOV-28), before any write; then `WrappedLib`'s bit 31, shape, delay and
+    ///         floors.
+    function _setMaxSupplyBody(uint256 newMaxSupply, bytes32 chainUid_) internal {
+        WrappedLib.setMaxSupply(newMaxSupply, _adminOnChain(chainUid_), totalSupply());
+    }
+
+    function _setMaxWrapSupplyBody(uint256 newMaxWrapSupply, bytes32 chainUid_) internal {
+        WrappedLib.setMaxWrapSupply(newMaxWrapSupply, _adminOnChain(chainUid_));
+    }
+
+    function _maxWrapSupplyBody() internal view returns (uint256) {
+        return WrappedLib.$().maxWrapSupply;
+    }
+
+    function _totalWrappedBody() internal view returns (uint256) {
+        return WrappedLib.$().totalWrapped;
+    }
+
+    /// @notice The owner's name for `collateralValue()`'s sum (spec §3.6): the same library function.
+    function _reserveValueBody() internal view returns (uint256) {
+        return WrappedLib.collateralValue();
+    }
+
+    function _pendingSupplyCapsBody() internal view returns (uint256, uint64, bool, uint256, uint64, bool) {
+        return WrappedLib.pendingSupplyCaps();
     }
 
     function _wrapLimitsBody() internal view returns (IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList,

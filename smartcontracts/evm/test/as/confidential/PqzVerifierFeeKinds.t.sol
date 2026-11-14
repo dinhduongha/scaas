@@ -149,7 +149,7 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
         bytes32[] memory v = new bytes32[](1);
         v[0] = _v();
         vm.prank(issuer);
-        _r().setDenied(v, true);
+        _r().setDenied(v, true, EnvKit.codeUidOf(address(_r())));
         (bool ok, bytes memory ret) = _do(_debit(0, true));
         assertFalse(ok, "the listed verifier halts the debit");
         assertEq(ret, abi.encodeWithSelector(IRegulatedToken.Denied.selector, _v()));

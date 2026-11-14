@@ -113,12 +113,14 @@ const NESTED: &[(&str, &str)] = &[
     ("WrapLegLimits", "address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong"),
     // owner 2026-11-12 (creations relayable): `IFactoryToken.TokenConfig` (CTR-TOK-25) and `ISCaaSDex.DexConfig` by their field names, read
     // from named JSON; the node ABI-encodes them as the factory's `initArgs` and signs `initHash = keccak256(initArgs)` (`init!`)
-    ("TokenRoles", "bytes32 minter,bytes32 rateAdmin,bytes32 guardian,bytes32 issuer,bytes32 compliance"),
+    // round 3zb (CTR-GOV-29): `burner` the sixth seat; round 3zc (CTR-GOV-30): `maxWrapSupply` after `maxSupply`; a config
+    // without either is refused by name (`args.config.roles.burner: missing`), never filled with a default
+    ("TokenRoles", "bytes32 minter,bytes32 rateAdmin,bytes32 guardian,bytes32 issuer,bytes32 compliance,bytes32 burner"),
     ("TokenLeg", "address underlying,uint256 num,uint256 den"),
     ("TokenRate", "uint32 rateDelay,uint16 maxRateStepBps"),
     ("ConfidentialConfig", "bytes auditorKey,uint256 shieldScale,uint256 maxShielded,uint256 confidentialFee,uint8 disclosureMode,uint8 auditorMode,uint256 minDecoyFee,uint8 pqzVerifyMode,bytes32 pqzVerifierUA,bool pqzVerifierFixed,uint8 proofStore,uint64 verifierFee,uint64 verifierFeeMax,bool pqzOwnKey,bool pqzOpening"),
     ("RegulatedParams", "address complianceRegistry,uint64 requiredFlags,uint64 deniedFlags,bytes32 termsHash,bytes32 taxRecipient"),
-    ("TokenConfig", "string name,string symbol,uint8 decimals,uint256 features,uint256 lockedFeatures,bytes32 admin,TokenRoles roles,uint256 initialSupply,address initialHolder,TokenLeg[] legs,TokenRate rate,ConfidentialConfig conf,uint64 grantDelay,address rescueTo,uint256 maxSupply,RegulatedParams reg"),
+    ("TokenConfig", "string name,string symbol,uint8 decimals,uint256 features,uint256 lockedFeatures,bytes32 admin,TokenRoles roles,uint256 initialSupply,address initialHolder,TokenLeg[] legs,TokenRate rate,ConfidentialConfig conf,uint64 grantDelay,address rescueTo,uint256 maxSupply,uint256 maxWrapSupply,RegulatedParams reg"),
     ("DexConfig", "bytes32 admin,uint32 relayerSharePpm,address treasury,bool listedOnly,uint64 grantDelay,address rescueTo,uint256 features,uint256 lockedFeatures"),
     // round 3r (spec 2026-11-10-admin-not-owner.md §5.4): a release env, the router's three publishes take one (bounded below)
     ("Env", "address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes"),
@@ -216,7 +218,10 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("PqzRollOver", "mtxRollOverSigned", P, "bytes32 ua,uint64 keyVersion,uint64 rollSeq,uint64 rolled,uint64 n,uint64[] skip,bytes32 entriesHash,uint64 validUntilBlock,bytes32 chainUid", "ua keyVersion n skip validUntilBlock @ua"),
     ("ZetherSetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", "ua mode validUntilBlock @ua"),
     ("PqzAuth", "", P, "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", ""),
-    // the `GovernanceRouter`'s closed table (spec §3.2, ua-mtx-merge T7): `mtx<Op>`, `target` the first op word, fee mode `NONE`
+    // the `GovernanceRouter`'s closed table (spec §3.2, ua-mtx-merge T7): `mtx<Op>`, `target` the first op word, fee mode `NONE`;
+    // the Change of CTR-GOV-28 in round 3zb + 3zc (O5, O6, owner 2026-11-13): every op of a role holder and `UASetWrapLimits`
+    // names the target's chain word last too (`chainUid`; a job without it is `BAD_PAYLOAD`, old rows in
+    // legacy/burner-wrap-caps/typed_v3.rs)
     ("UAGrantRole", "mtxGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
     ("UARevokeRole", "mtxRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
     ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,E", ""),
@@ -226,45 +231,49 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UAAcceptAdmin", "mtxAcceptAdmin", GR, "bytes32 from,address target,E", ""),
     ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,bytes32 chainUid,E", ""), // CTR-GOV-28, owner 2026-11-13
-    ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
-    ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),
-    ("UADisableWrap", "mtxDisableWrap", GR, "bytes32 from,address target,address leg,bytes32 reason,E", ""),
-    ("UAProposeRate", "mtxProposeRate", GR, "bytes32 from,address target,address leg,uint96 num,uint96 den,E", ""),
-    ("UACancelRate", "mtxCancelRate", GR, "bytes32 from,address target,E", ""),
-    ("UAExecuteRate", "mtxExecuteRate", GR, "bytes32 from,address target,E", ""),
-    ("UASetMarket", "mtxSetMarket", GR, "bytes32 from,address target,address base,address quote,bool listed,E", ""),
-    ("UASetExchangeTarget", "mtxSetExchangeTarget", GR, "bytes32 from,address target,address exchangeTarget,bool listed,E", ""),
-    ("UASetListedOnly", "mtxSetListedOnly", GR, "bytes32 from,address target,bool on,E", ""),
-    ("UASetFeeSplit", "mtxSetFeeSplit", GR, "bytes32 from,address target,uint32 relayerSharePpm,address treasury,E", ""),
+    ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,bytes32 chainUid,E", ""),
+    ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,bytes32 chainUid,E", ""),
+    ("UADisableWrap", "mtxDisableWrap", GR, "bytes32 from,address target,address leg,bytes32 reason,bytes32 chainUid,E", ""),
+    ("UAProposeRate", "mtxProposeRate", GR, "bytes32 from,address target,address leg,uint96 num,uint96 den,bytes32 chainUid,E", ""),
+    ("UACancelRate", "mtxCancelRate", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
+    ("UAExecuteRate", "mtxExecuteRate", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
+    ("UASetMarket", "mtxSetMarket", GR, "bytes32 from,address target,address base,address quote,bool listed,bytes32 chainUid,E", ""),
+    ("UASetExchangeTarget", "mtxSetExchangeTarget", GR, "bytes32 from,address target,address exchangeTarget,bool listed,bytes32 chainUid,E", ""),
+    ("UASetListedOnly", "mtxSetListedOnly", GR, "bytes32 from,address target,bool on,bytes32 chainUid,E", ""),
+    ("UASetFeeSplit", "mtxSetFeeSplit", GR, "bytes32 from,address target,uint32 relayerSharePpm,address treasury,bytes32 chainUid,E", ""),
     // the controls of the regulated kinds 8-13 (plan T32; regulated-kinds spec §3.1, Q8): the direct entry's parameters;
     // `UAOperatorTransfer` names the moved account `account` (CTR-GOV-20: `from` is the signer). Vectors: plan T34
-    ("UAFreeze", "mtxFreeze", GR, "bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,E", ""),
-    ("UAUnfreeze", "mtxUnfreeze", GR, "bytes32 from,address target,bytes32 account,bytes32 ref,E", ""),
-    ("UAForceTransfer", "mtxForceTransfer", GR, "bytes32 from,address target,bytes32 recordId,uint256 amount,E", ""),
-    ("UAPause", "mtxPause", GR, "bytes32 from,address target,bytes32 ref,uint64 until,E", ""),
-    ("UAUnpause", "mtxUnpause", GR, "bytes32 from,address target,bytes32 ref,E", ""),
-    ("UARecordOrder", "mtxRecordOrder", GR, "bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,E", ""),
-    ("UARevokeOrder", "mtxRevokeOrder", GR, "bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,E", ""),
-    ("UAOperatorTransfer", "mtxOperatorTransfer", GR, "bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,E", ""),
+    ("UAFreeze", "mtxFreeze", GR, "bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid,E", ""),
+    ("UAUnfreeze", "mtxUnfreeze", GR, "bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 chainUid,E", ""),
+    ("UAForceTransfer", "mtxForceTransfer", GR, "bytes32 from,address target,bytes32 recordId,uint256 amount,bytes32 chainUid,E", ""),
+    ("UAPause", "mtxPause", GR, "bytes32 from,address target,bytes32 ref,uint64 until,bytes32 chainUid,E", ""),
+    ("UAUnpause", "mtxUnpause", GR, "bytes32 from,address target,bytes32 ref,bytes32 chainUid,E", ""),
+    ("UARecordOrder", "mtxRecordOrder", GR, "bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid,E", ""),
+    ("UARevokeOrder", "mtxRevokeOrder", GR, "bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,bytes32 chainUid,E", ""),
+    ("UAOperatorTransfer", "mtxOperatorTransfer", GR, "bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid,E", ""),
     // bit 23 `TAX` (pay-meta-tax spec §6.2): the one PERCENT rate, the recipient
-    ("UASetTaxRate", "mtxSetTaxRate", GR, "bytes32 from,address target,uint32 ratePpm,E", ""),
-    ("UASetTaxRecipient", "mtxSetTaxRecipient", GR, "bytes32 from,address target,bytes32 taxRecipient,E", ""),
+    ("UASetTaxRate", "mtxSetTaxRate", GR, "bytes32 from,address target,uint32 ratePpm,bytes32 chainUid,E", ""),
+    ("UASetTaxRecipient", "mtxSetTaxRecipient", GR, "bytes32 from,address target,bytes32 taxRecipient,bytes32 chainUid,E", ""),
     // group 3f (spec §4.2): the owner's verifier transfer of a PQZ token (propose, confirm after the notice), its cancel, the
     // immediate revocation
     ("UAPqzSetVerifier", "mtxPqzSetVerifier", GR, "bytes32 from,address target,bytes32 next,bytes32 chainUid,E", ""),
     ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     // group 3h (PQZ proof path spec §5): bit 24 `PQZ_PROOF`, a holder's `NONE` / `LOG` from the next debit
-    ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,E", ""),
+    ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,bytes32 chainUid,E", ""),
     // round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit
     ("UASetVerifierFee", "mtxSetVerifierFee", GR, "bytes32 from,address target,uint64 next,bytes32 chainUid,E", ""),
     // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds and bit 26's membership
-    ("UASetWrapLimits", "mtxSetWrapLimits", GR, "bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,E", ""),
-    ("UASetWrapMember", "mtxSetWrapMember", GR, "bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,E", ""),
+    ("UASetWrapLimits", "mtxSetWrapLimits", GR, "bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,E", ""),
+    ("UASetWrapMember", "mtxSetWrapMember", GR, "bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,E", ""),
+    // round 3zc (CTR-GOV-30): the admin's two supply caps of the wrapped kinds (bit 31), the propose and the apply the same op
+    // sent twice (two nonces; a landed one is a proposal or an apply, its event tells which)
+    ("UASetMaxSupply", "mtxSetMaxSupply", GR, "bytes32 from,address target,uint256 maxSupply,bytes32 chainUid,E", ""),
+    ("UASetMaxWrapSupply", "mtxSetMaxWrapSupply", GR, "bytes32 from,address target,uint256 maxWrapSupply,bytes32 chainUid,E", ""),
     // round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §6.2, §9): the lists of the regulated kinds 8-13 (bit 8's holder,
     // bit 9's; 1-256 accounts) and the admin's enableFeature of 8, 9 or 28; no token row (governance entries are direct)
-    ("UASetAllowed", "mtxSetAllowed", GR, "bytes32 from,address target,bytes32[] accounts,bool on,E", ""),
-    ("UASetDenied", "mtxSetDenied", GR, "bytes32 from,address target,bytes32[] accounts,bool on,E", ""),
+    ("UASetAllowed", "mtxSetAllowed", GR, "bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,E", ""),
+    ("UASetDenied", "mtxSetDenied", GR, "bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,E", ""),
     ("UAEnableFeature", "mtxEnableFeature", GR, "bytes32 from,address target,uint8 bit,bytes32 chainUid,E", ""),
     // round 3r (CTR-GOV-23, spec §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its envs, deprecations, kind
     // switches, directory) and of a `ComplianceRegistry` (its KYC providers, the rows); the four release approvals are no row
@@ -1921,7 +1930,8 @@ mod tests {
         // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: -> (101, 135, 134), the router's `UASetVerifierFee`
         // owner 2026-11-12: -> (102, 136, 135), `UACreateInstance` (its `init_call` the vector's bytes)
         // the three-key model (CTR-PQZ-41): -> (103, 137, 136), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
-        assert_eq!((structs, domains, calldata), (103, 137, 136), "every row was walked (two creations and the approvals left out by vectors())");
+        // round 3zc (CTR-GOV-30): -> (105, 139, 138), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
+        assert_eq!((structs, domains, calldata), (105, 139, 138), "every row was walked (two creations and the approvals left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
@@ -1931,8 +1941,9 @@ mod tests {
         // round 3t: -> 104, `UASetVerifierFee`; owner 2026-11-12: -> 106, `UACreateToken`, `UACreateDex` (their vector rows stay out
         // of the walk: filler `initArgs`, `creation_rows_encode_the_named_config`)
         // owner 2026-11-12: -> 107, `UACreateInstance`
-        // the three-key model (CTR-PQZ-41): -> 108, `PqzRollOver`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 108, "103 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations");
+        // the three-key model (CTR-PQZ-41): -> 108, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 110, `UASetMaxSupply`,
+        // `UASetMaxWrapSupply`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 110, "105 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations");
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
@@ -2473,7 +2484,8 @@ mod tests {
     fn chain_word_rows_refuse_a_missing_word() {
         let v = vectors();
         let rows: Vec<&str> = TYPED.iter().filter(|r| r.2 == GR && r.3.contains("bytes32 chainUid")).map(|r| r.0).collect();
-        assert_eq!(rows.len(), 24, "{rows:?}"); // owner 2026-11-13: + UARenounceRole
+        // owner 2026-11-13: + UARenounceRole; round 3zb + 3zc: 24 -> 51 (the 25 rows of O5 / O6, the two cap setters)
+        assert_eq!(rows.len(), 51, "{rows:?}");
         for op in rows {
             let good = op_of(op, "gov_router", &v).unwrap();
             Op::parse(&good, FEE).unwrap();

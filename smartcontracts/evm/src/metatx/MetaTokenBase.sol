@@ -165,7 +165,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         requireRegOfKind(kind(), cfg.reg);
         if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert IFactoryToken.ConfigFieldForOtherKind(1);
         if (legs && cfg.legs.length != 0) revert IFactoryToken.ConfigFieldForOtherKind(2);
-        if (legs && cfg.maxSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
+        if (legs && (cfg.maxSupply != 0 || cfg.maxWrapSupply != 0)) revert IFactoryToken.ConfigFieldForOtherKind(5);
         if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert IFactoryToken.ConfigFieldForOtherKind(3);
         IFactoryToken.ConfidentialConfig memory c = cfg.conf;
         if (conf && (c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0

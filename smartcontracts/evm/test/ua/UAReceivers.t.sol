@@ -245,11 +245,11 @@ contract UAReceiversTest is UALedgerBase {
         vm.prank(alice);
         w.wrapToUA(address(und), 100, uaP);
         deal(address(und), address(w), 100);
-        w.disableWrap(address(und2), "depeg");
+        w.disableWrap(address(und2), "depeg", EnvKit.codeUidOf(address(w)));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapDisabledFor.selector, address(und2)));
         vm.prank(alice);
         w.wrapToUA(address(und2), 100, uaP);
-        w.proposeRate(address(und), 101, 100);
+        w.proposeRate(address(und), 101, 100, EnvKit.codeUidOf(address(w)));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(und)));
         vm.prank(alice);
         w.wrapToUA(address(und), 100, uaP);
@@ -309,7 +309,7 @@ contract UAReceiversTest is UALedgerBase {
             NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 0, address(0), address(this))));
         WrappedToken w = _wrapper(address(off));
-        off.mint(address(this), 100);
+        off.mint(address(this), 100, EnvKit.codeUidOf(address(off)));
         off.approve(address(w), 100);
         w.wrap(100);
         w.transfer(alice, 100);
@@ -488,18 +488,18 @@ contract UAReceiversTest is UALedgerBase {
         emit IERC20.Transfer(address(0), POOL, 500);
         vm.expectEmit(address(tok));
         emit IUALedger.UATransfer(bytes32(0), uaP, 500);
-        tok.mintToUA(uaP, 500);
+        tok.mintToUA(uaP, 500, EnvKit.codeUidOf(address(tok)));
         assertEq(tok.balanceOfUA(uaP), 500);
         assertEq(tok.totalSupply(), supply + 500);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.MINTABLE, alice));
         vm.prank(alice);
-        tok.mintToUA(uaP, 1);
+        tok.mintToUA(uaP, 1, EnvKit.codeUidOf(address(tok)));
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
-        tok.mintToUA(_pad(bob), 1);
+        tok.mintToUA(_pad(bob), 1, EnvKit.codeUidOf(address(tok)));
         NormalToken noMint = _normal(1 << GovernanceBits.PAYABLE);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.MINTABLE));
-        noMint.mintToUA(uaP, 1);
-        _relay(address(tok), abi.encodeCall(NormalToken.mintToUA, (uaP, 1)), RR, 0, address(0),
+        noMint.mintToUA(uaP, 1, EnvKit.codeUidOf(address(noMint)));
+        _relay(address(tok), abi.encodeCall(NormalToken.mintToUA, (uaP, 1, EnvKit.codeUidOf(address(tok)))), RR, 0, address(0),
             abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, NormalToken.mintToUA.selector));
     }
 
@@ -623,7 +623,7 @@ contract UAReceiversTest is UALedgerBase {
             "unwrapToUA ledger leg", _gasOf(alice, address(wrpL), 0, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 1_000, uaB, 0))));
         _logPair("payWithFee", _gasOf(alice, address(tok), 0, abi.encodeCall(NormalToken.payWithFee, (bob, 1_000, FeeMode.FIXED, 10, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref")))),
             "payWithFeeToUA", _gasOf(alice, address(tok), 0, abi.encodeCall(NormalToken.payWithFeeToUA, (uaB, 1_000, FeeMode.FIXED, 10, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref")))));
-        _logPair("mint", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mint, (bob, 1_000))),
-            "mintToUA", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mintToUA, (uaB, 1_000))));
+        _logPair("mint", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mint, (bob, 1_000, EnvKit.codeUidOf(address(tok))))),
+            "mintToUA", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mintToUA, (uaB, 1_000, EnvKit.codeUidOf(address(tok))))));
     }
 }

@@ -22,6 +22,7 @@ import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialTok
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {TYPED_OPS, domainOf} from "../metatx/NamedEntry.t.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Task 7b: a stand-in for a precompile with a known price: burns `B` gas, answers 1 (`_precompiles`).
 contract GasBurner {
@@ -135,7 +136,7 @@ contract PqzStatePinGasTest is PqzSlots {
         _fund(tok, _pqzUA(_pk(12), 12), 100); // D19: the pool holds the fees the measured debits pay out
         _public(tok, vm.addr(RKEY), 1000); // the relayed envelopes' signer pays the outer fee (full-tx pins)
         feeUA = _mldsaUA(50); // the ML-DSA relay path's signer (8d2b fix round, review I1 / I2)
-        NormalPqzToken(address(tok)).mintToUA(feeUA, 1000);
+        NormalPqzToken(address(tok)).mintToUA(feeUA, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         _tableSetUp();
         vm.resumeGasMetering();
@@ -888,12 +889,12 @@ contract PqzStatePinGasTest is PqzSlots {
         (hm[0], ha[0]) = _msigHolder(2, 150);
         (hm[1], ha[1]) = _msigHolder(3, 160);
         slhFee = UACall.register(reg, UAKinds.SLHDSA128S, abi.encodePacked(keccak256("slh fee")), UACall.attrs("", 0, ""), new bytes(7_856), "");
-        NormalPqzToken(address(tok)).mintToUA(slhFee, 1000);
+        NormalPqzToken(address(tok)).mintToUA(slhFee, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
         fnFee = UACall.register(reg, UAKinds.FNDSA512, fpk, UACall.attrs("", 0, ""), new bytes(666), "");
-        NormalPqzToken(address(tok)).mintToUA(fnFee, 1000);
+        NormalPqzToken(address(tok)).mintToUA(fnFee, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         _holderSys("pqzl", false);

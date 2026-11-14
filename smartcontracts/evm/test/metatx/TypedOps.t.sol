@@ -269,7 +269,7 @@ contract TypedOpsTest is UALedgerBase {
         string memory op = "Burn";
         MetaTxLib.Envelope memory e = rowEnvelope(j, op);
         uint256 amount = _uint(op, "amount");
-        tok.mint(e.from, SUPPLY);
+        tok.mint(e.from, SUPPLY, EnvKit.codeUidOf(address(tok)));
         rowHasNoEntry(j, op, "token", address(tok), abi.encodeWithSignature(
             "mtxBurn((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)", e, amount, _sigOf(op)));
         assertEq(tok.balanceOf(e.from), SUPPLY);
@@ -281,7 +281,7 @@ contract TypedOpsTest is UALedgerBase {
         MetaTxLib.UAEnvelope memory u = _uaEnv(op);
         uint256 amount = _uint(op, "amount");
         address from = address(uint160(uint256(u.from)));
-        tok.mint(from, SUPPLY);
+        tok.mint(from, SUPPLY, EnvKit.codeUidOf(address(tok)));
         runRowRenamed(j, op, "token", address(tok), abi.encodeCall(NormalToken.mtxBurn, (u, amount, _uaSigOf(op))),
             NormalToken.mtxBurn.selector);
         assertEq(tok.balanceOf(from), SUPPLY - amount - _feeOf(op, amount));
@@ -670,7 +670,7 @@ contract TypedOpsTest is UALedgerBase {
         assertTrue(u.relayer != address(0) && u.feeRecipient != address(0));
         uint256 amount = _uint(op, "amount");
         address from = address(uint160(uint256(u.from)));
-        tok.mint(from, SUPPLY);
+        tok.mint(from, SUPPLY, EnvKit.codeUidOf(address(tok)));
         IUARegistry.UASig memory s;
         s.signature = _burnSig(op, u, amount, u.relayer, u.feeRecipient);
         vm.prank(u.relayer);
@@ -871,7 +871,7 @@ contract TypedOpsTest is UALedgerBase {
         MetaTxLib.UAEnvelope memory u = _uaEnv(op);
         MetaTxLib.Envelope memory e = rowEnvelope2(j, op);
         e.from = address(uint160(uint256(u.from)));
-        tok.mint(e.from, SUPPLY);
+        tok.mint(e.from, SUPPLY, EnvKit.codeUidOf(address(tok)));
         runRowRenamed(j, op, "token", address(tok), abi.encodeCall(NormalToken.mtxBurn, (u, _uint(op, "amount"), _uaSigOf(op))),
             NormalToken.mtxBurn.selector);
         IUARegistry.UASig memory sig;
@@ -931,7 +931,7 @@ contract TypedOpsTest is UALedgerBase {
 
     /// A derived signer's `UASig` goes to the registry as it came (no `bytes` blob on a named `ua*` entry).
     function test_namedUADerivedSigner() public {
-        tok.mintToUA(uaP, 1_000);
+        tok.mintToUA(uaP, 1_000, EnvKit.codeUidOf(address(tok)));
         MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
         bytes32 d = _digest(address(tok), "UABurn(bytes32 from,uint256 amount,", uaP, abi.encode(uint256(100)), e);
         IUARegistry.UASig memory s = UACall.auth(uaP, _authFor(uaP, d));
@@ -972,7 +972,7 @@ contract TypedOpsTest is UALedgerBase {
     }
 
     function test_namedUADerivedUnwrapToUA() public {
-        tok.mint(address(this), 1_000);
+        tok.mint(address(this), 1_000, EnvKit.codeUidOf(address(tok)));
         tok.approve(address(wrpL), 1_000);
         wrpL.wrap(1_000);
         wrpL.transferToUA(uaP, 1_000);
@@ -993,7 +993,7 @@ contract TypedOpsTest is UALedgerBase {
         bytes32 ua = UACall.register(lreg, UAKinds.MSIG, d, _none(), "", "");
         lreg.acceptMembership(ua, _acceptEoaSig(d, ALICE_PK));
         lreg.acceptMembership(ua, _acceptEoaSig(d, BOB_PK));
-        tok.mintToUA(ua, 1_000);
+        tok.mintToUA(ua, 1_000, EnvKit.codeUidOf(address(tok)));
         MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX,
             _digest(address(tok), "UABurn(bytes32 from,uint256 amount,", ua, abi.encode(uint256(100)), e));
@@ -1021,7 +1021,7 @@ contract TypedOpsTest is UALedgerBase {
         m[1] = Member(UAKinds.EVM_EOA, _pad(bob), 1);
         bytes memory d = _msigKey(2, m);
         bytes32 ua = UACall.register(lreg, UAKinds.MSIG, d, _none(), "", "");
-        tok.mintToUA(ua, 1_000);
+        tok.mintToUA(ua, 1_000, EnvKit.codeUidOf(address(tok)));
         MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX,
             _digest(address(tok), "UABurn(bytes32 from,uint256 amount,", ua, abi.encode(uint256(100)), e));
@@ -1073,7 +1073,7 @@ contract TypedOpsTest is UALedgerBase {
         string memory op = "UABurn";
         MetaTxLib.UAEnvelope memory e = _uaEnv(op);
         uint256 amount = _uint(op, "amount");
-        tok.mint(address(uint160(uint256(e.from))), SUPPLY);
+        tok.mint(address(uint160(uint256(e.from))), SUPPLY, EnvKit.codeUidOf(address(tok)));
         IUARegistry.UASig memory sig;
         sig.signature = onChain(j, op, address(tok));
         address signed = e.relayer;
@@ -1198,7 +1198,7 @@ abstract contract ConfidentialRows is Test {
         NormalToken t = _normalKind();
         MetaTxLib.Envelope memory e = rowEnvelope(j, "Burn");
         uint256 amount = vm.parseJsonUint(j, msgField("Burn", "amount"));
-        t.mint(e.from, FUNDS);
+        t.mint(e.from, FUNDS, EnvKit.codeUidOf(address(t)));
         rowHasNoEntry(j, "Burn", k, address(t), abi.encodeWithSignature("mtxBurn((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
             e, amount, vm.parseJsonBytes(j, domainField("Burn", k, "signature"))));
         assertEq(t.balanceOf(e.from), FUNDS);
@@ -1214,7 +1214,7 @@ abstract contract ConfidentialRows is Test {
         uint256 amount = vm.parseJsonUint(j, msgField("UABurn", "amount"));
         IUARegistry.UASig memory s;
         s.signature = vm.parseJsonBytes(j, domainField("UABurn", k, "signature"));
-        t.mint(address(uint160(uint256(e.from))), FUNDS);
+        t.mint(address(uint160(uint256(e.from))), FUNDS, EnvKit.codeUidOf(address(t)));
         runRowRenamed(j, "UABurn", k, address(t), abi.encodeCall(NormalToken.mtxBurn, (e, amount, s)), NormalToken.mtxBurn.selector);
         assertEq(t.mtxNonce(e.from, e.batch), 1);
         assertEq(t.balanceOf(e.feeRecipient), amount * e.fee / 1_000_000);
@@ -1710,7 +1710,7 @@ contract TypedOpsRouterTest is UALedgerBase {
             address leg = address(new MockERC20("Leg", "LEG", 6));
             WrappedToken w = _wrappedAt(f[i], leg);
             vm.prank(signer);
-            w.proposeRate(leg, 101, 100);
+            w.proposeRate(leg, 101, 100, EnvKit.codeUidOf(address(w)));
             _row(f[i]);
             (,,, uint64 eta) = w.pendingRate();
             assertEq(eta, 0, f[i]);
@@ -1727,7 +1727,7 @@ contract TypedOpsRouterTest is UALedgerBase {
             WrappedToken w = _wrappedAt(f[i], leg);
             vm.warp(_uint(f[i], "validUntil") - 2 days);
             vm.prank(signer);
-            w.proposeRate(leg, 101, 100);
+            w.proposeRate(leg, 101, 100, EnvKit.codeUidOf(address(w)));
             vm.warp(_uint(f[i], "validUntil"));
             _row(f[i]);
             (uint96 num, uint96 den,,,) = w.legOf(leg);
@@ -1881,7 +1881,7 @@ contract TypedOpsRouterTest is UALedgerBase {
     function _regRecord(NormalRegulatedToken t, address who) internal returns (bytes32) {
         string memory op = "UARecordOrder";
         bytes memory args = bytes.concat(abi.encode(_b32(op, "orderId"), _b32(op, "documentHash"), _b32(op, "subject")),
-            abi.encode(_b32(op, "beneficiary"), _uint(op, "maxAmount"), _uint(op, "freezeUntil")));
+            abi.encode(_b32(op, "beneficiary"), _uint(op, "maxAmount"), _uint(op, "freezeUntil"), EnvKit.codeUidOf(address(t))));
         vm.prank(who);
         (bool ok,) = address(t).call(bytes.concat(t.recordOrder.selector, args));
         assertTrue(ok, "recordOrder");
@@ -1913,7 +1913,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         string memory op = "UAUnfreeze";
         NormalRegulatedToken t = _regAt(op, true);
         vm.prank(signer);
-        t.freeze(_b32(op, "account"), _b32(op, "ref"), 0);
+        t.freeze(_b32(op, "account"), _b32(op, "ref"), 0, EnvKit.codeUidOf(address(t)));
         assertTrue(t.isFrozen(_b32(op, "account")));
         _row(op);
         assertFalse(t.isFrozen(_b32(op, "account")));
@@ -1925,7 +1925,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         bytes32 rid = _regRecord(t, regOther);
         assertEq(rid, _b32(op, "recordId"));
         vm.prank(signer);
-        t.freeze(_b32("UARecordOrder", "subject"), _b32("UAFreeze", "ref"), rid);
+        t.freeze(_b32("UARecordOrder", "subject"), _b32("UAFreeze", "ref"), rid, EnvKit.codeUidOf(address(t)));
         _row(op);
         assertEq(t.balanceOf(address(uint160(uint256(_b32("UARecordOrder", "beneficiary"))))), _uint(op, "amount"));
         assertEq(t.order(rid).executed, _uint(op, "amount"));
@@ -1942,7 +1942,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         string memory op = "UAUnpause";
         NormalRegulatedToken t = _regAt(op, true);
         vm.prank(signer);
-        t.pause(_b32(op, "ref"), uint64(REG_NOW + 1 days));
+        t.pause(_b32(op, "ref"), uint64(REG_NOW + 1 days), EnvKit.codeUidOf(address(t)));
         _row(op);
         assertEq(t.regulatedConfig().pausedUntil, REG_NOW);
     }
@@ -1997,12 +1997,12 @@ contract TypedOpsRouterTest is UALedgerBase {
         IUARegistry.UASig memory s;
         s.signature = _pauseSig(e, address(t), ref, until, address(0xBA));
         vm.prank(e.relayer);
-        (bool ok,) = router.call(abi.encodeCall(GovernanceRouter.mtxPause, (e, address(t), ref, until, s)));
+        (bool ok,) = router.call(abi.encodeCall(GovernanceRouter.mtxPause, (e, address(t), ref, until, EnvKit.codeUidOf(address(t)), s)));
         assertFalse(ok, "a non-zero unbound fee recipient signed");
         assertEq(GovernanceRouter(router).mtxNonce(me, e.batch), 0);
         s.signature = _pauseSig(e, address(t), ref, until, address(0));
         vm.prank(e.relayer);
-        GovernanceRouter(router).mtxPause(e, address(t), ref, until, s);
+        GovernanceRouter(router).mtxPause(e, address(t), ref, until, EnvKit.codeUidOf(address(t)), s);
         assertEq(t.regulatedConfig().pausedUntil, until);
         assertEq(GovernanceRouter(router).mtxNonce(me, e.batch), 1);
     }
@@ -2010,7 +2010,7 @@ contract TypedOpsRouterTest is UALedgerBase {
     function _pauseSig(MetaTxLib.UAEnvelope memory e, address target, bytes32 ref, uint64 until, address feeTo)
         internal view returns (bytes memory)
     {
-        bytes32 sh = keccak256(bytes.concat(abi.encode(vm.parseJsonBytes32(j, ".ops.UAPause.typehash"), e.from, target, ref, until),
+        bytes32 sh = keccak256(bytes.concat(abi.encode(vm.parseJsonBytes32(j, ".ops.UAPause.typehash"), e.from, target, ref, until, EnvKit.codeUidOf(target)),
             abi.encode(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, feeTo)));
         (uint8 v, bytes32 r, bytes32 ss) = vm.sign(uint256(vm.parseJsonBytes32(j, ".key.private")),
             keccak256(abi.encodePacked(hex"1901", domainOf(router), sh)));

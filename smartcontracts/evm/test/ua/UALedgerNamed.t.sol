@@ -93,7 +93,7 @@ contract UALedgerNamedTest is UALedgerBase {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));
         np.mtxPay(g, UACall.auth(uaP, ""), PayMetaKit.meta("p"));
         // a UAMetaTransfer with `entryRef` set is not gated
-        np.mint(alice, 10);
+        np.mint(alice, 10, EnvKit.codeUidOf(address(np)));
         bytes32 ref = keccak256("p");
         MetaTxLib.UAMetaTransfer memory t = _t(_pad(alice), _pad(bob), 7);
         (t.entryRef, t.batch, t.nonce) = (ref, np.payLane(ref), 0);

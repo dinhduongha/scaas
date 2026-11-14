@@ -219,12 +219,12 @@ contract NormalZetherRegulatedTokenP is NormalZetherRegulatedTokenCore {
         return _payeeFeeDigestBody(t, fee, feeRecipient, validUntil);
     }
 
-    function setTaxRate(uint32 ratePpm) external onlyDelegated {
-        _setTaxRateBody(ratePpm);
+    function setTaxRate(uint32 ratePpm, bytes32 chainUid_) external onlyDelegated {
+        _setTaxRateBody(ratePpm, chainUid_);
     }
 
-    function setTaxRecipient(bytes32 taxRecipient) external onlyDelegated {
-        _setTaxRecipientBody(taxRecipient);
+    function setTaxRecipient(bytes32 taxRecipient, bytes32 chainUid_) external onlyDelegated {
+        _setTaxRecipientBody(taxRecipient, chainUid_);
     }
 
     function supportedModes() external pure returns (uint32 _p0) {
@@ -392,12 +392,12 @@ contract NormalZetherRegulatedTokenA is NormalZetherRegulatedTokenCore {
         return _lockedFeaturesBody();
     }
 
-    function mint(address to, uint256 amount) external onlyDelegated {
-        _mintBody(to, amount);
+    function mint(address to, uint256 amount, bytes32 chainUid_) external onlyDelegated {
+        _mintBody(to, amount, chainUid_);
     }
 
-    function mintToUA(bytes32 to, uint256 amount) external onlyDelegated {
-        _mintToUABody(to, amount);
+    function mintToUA(bytes32 to, uint256 amount, bytes32 chainUid_) external onlyDelegated {
+        _mintToUABody(to, amount, chainUid_);
     }
 
     function mtxBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
@@ -652,12 +652,12 @@ contract NormalZetherRegulatedTokenR is NormalZetherRegulatedTokenCore {
         _enableFeatureBody(bit, chainUid_);
     }
 
-    function forceTransfer(bytes32 recordId, uint256 amount) external onlyDelegated {
-        _forceTransferBody(recordId, amount);
+    function forceTransfer(bytes32 recordId, uint256 amount, bytes32 chainUid_) external onlyDelegated {
+        _forceTransferBody(recordId, amount, chainUid_);
     }
 
-    function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external onlyDelegated {
-        _freezeBody(account, ref, recordId);
+    function freeze(bytes32 account, bytes32 ref, bytes32 recordId, bytes32 chainUid_) external onlyDelegated {
+        _freezeBody(account, ref, recordId, chainUid_);
     }
 
     function freezeOf(bytes32 account) external view onlyDelegated returns (IRegulatedToken.FreezeState memory _p0) {
@@ -672,43 +672,43 @@ contract NormalZetherRegulatedTokenR is NormalZetherRegulatedTokenCore {
         return _listFlagsOfBody(account);
     }
 
-    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external onlyDelegated {
-        _operatorTransferBody(from, to, amount, ref);
+    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 chainUid_) external onlyDelegated {
+        _operatorTransferBody(from, to, amount, ref, chainUid_);
     }
 
     function order(bytes32 recordId) external view onlyDelegated returns (IRegulatedToken.OrderRecord memory _p0) {
         return _orderBody(recordId);
     }
 
-    function pause(bytes32 ref, uint64 until) external onlyDelegated {
-        _pauseBody(ref, until);
+    function pause(bytes32 ref, uint64 until, bytes32 chainUid_) external onlyDelegated {
+        _pauseBody(ref, until, chainUid_);
     }
 
-    function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil) external onlyDelegated {
-        _recordOrderBody(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil);
+    function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil, bytes32 chainUid_) external onlyDelegated {
+        _recordOrderBody(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil, chainUid_);
     }
 
     function regulatedConfig() external view onlyDelegated returns (IRegulatedToken.RegulatedConfig memory _p0) {
         return _regulatedConfigBody();
     }
 
-    function revokeOrder(bytes32 recordId, bytes32 reasonRef) external onlyDelegated {
-        _revokeOrderBody(recordId, reasonRef);
+    function revokeOrder(bytes32 recordId, bytes32 reasonRef, bytes32 chainUid_) external onlyDelegated {
+        _revokeOrderBody(recordId, reasonRef, chainUid_);
     }
 
-    function setAllowed(bytes32[] calldata accounts, bool on) external onlyDelegated {
-        _setAllowedBody(accounts, on);
+    function setAllowed(bytes32[] calldata accounts, bool on, bytes32 chainUid_) external onlyDelegated {
+        _setAllowedBody(accounts, on, chainUid_);
     }
 
-    function setDenied(bytes32[] calldata accounts, bool on) external onlyDelegated {
-        _setDeniedBody(accounts, on);
+    function setDenied(bytes32[] calldata accounts, bool on, bytes32 chainUid_) external onlyDelegated {
+        _setDeniedBody(accounts, on, chainUid_);
     }
 
-    function unfreeze(bytes32 account, bytes32 ref) external onlyDelegated {
-        _unfreezeBody(account, ref);
+    function unfreeze(bytes32 account, bytes32 ref, bytes32 chainUid_) external onlyDelegated {
+        _unfreezeBody(account, ref, chainUid_);
     }
 
-    function unpause(bytes32 ref) external onlyDelegated {
-        _unpauseBody(ref);
+    function unpause(bytes32 ref, bytes32 chainUid_) external onlyDelegated {
+        _unpauseBody(ref, chainUid_);
     }
 }

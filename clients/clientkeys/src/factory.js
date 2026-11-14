@@ -82,7 +82,10 @@ export function releaseApprovalKey(domain, m) {
 
 // Fable recheck 3 R3-7 (NODE-JOB-26): a creation's named config as the factory decodes it, field by field in the Solidity
 // structs' order (IFactoryToken.TokenConfig, GovernanceLib.Roles, ISCaaSDex.DexConfig); `{ of: T }` is `T[]`.
-const ROLES = [['minter', 'bytes32'], ['rateAdmin', 'bytes32'], ['guardian', 'bytes32'], ['issuer', 'bytes32'], ['compliance', 'bytes32']];
+// round 3zb (CTR-GOV-29): `burner` the sixth seat; round 3zc (CTR-GOV-30): `maxWrapSupply` after `maxSupply`. A config without
+// either is refused by name (`config.roles.burner: missing`), never filled with a default.
+const ROLES = [['minter', 'bytes32'], ['rateAdmin', 'bytes32'], ['guardian', 'bytes32'], ['issuer', 'bytes32'], ['compliance', 'bytes32'],
+  ['burner', 'bytes32']];
 const LEG = [['underlying', 'address'], ['num', 'uint256'], ['den', 'uint256']];
 const RATE = [['rateDelay', 'uint32'], ['maxRateStepBps', 'uint16']];
 const CONF = [['auditorKey', 'bytes'], ['shieldScale', 'uint256'], ['maxShielded', 'uint256'], ['confidentialFee', 'uint256'],
@@ -94,7 +97,8 @@ const REG = [['complianceRegistry', 'address'], ['requiredFlags', 'uint64'], ['d
 const CONFIG = {
   token: [['name', 'string'], ['symbol', 'string'], ['decimals', 'uint8'], ['features', 'uint256'], ['lockedFeatures', 'uint256'],
     ['admin', 'bytes32'], ['roles', ROLES], ['initialSupply', 'uint256'], ['initialHolder', 'address'], ['legs', { of: LEG }],
-    ['rate', RATE], ['conf', CONF], ['grantDelay', 'uint64'], ['rescueTo', 'address'], ['maxSupply', 'uint256'], ['reg', REG]],
+    ['rate', RATE], ['conf', CONF], ['grantDelay', 'uint64'], ['rescueTo', 'address'], ['maxSupply', 'uint256'],
+    ['maxWrapSupply', 'uint256'], ['reg', REG]],
   dex: [['admin', 'bytes32'], ['relayerSharePpm', 'uint32'], ['treasury', 'address'], ['listedOnly', 'bool'],
     ['grantDelay', 'uint64'], ['rescueTo', 'address'], ['features', 'uint256'], ['lockedFeatures', 'uint256']],
 };

@@ -138,6 +138,7 @@ interface INormalTokenAbi {
     error ZeroAmount(bytes32 orderHash);
     error ZeroFill(bytes32 orderHash);
     error ChainUidMismatch(bytes32 expected, bytes32 got);
+    error FeatureConflict(uint8 bit, uint8 other);
 }
 
 /// @title NormalToken: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
@@ -293,11 +294,11 @@ contract NormalToken is NormalTokenCore, INormalTokenAbi {
         _forwardView(_MT);
     }
 
-    function mint(address, uint256) external {
+    function mint(address, uint256, bytes32) external {
         _forward(_MA);
     }
 
-    function mintToUA(bytes32, uint256) external {
+    function mintToUA(bytes32, uint256, bytes32) external {
         _forward(_MA);
     }
 

@@ -4,7 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { wrapCredit, wrapDebit, wrapEntitlement, wrapLimitError, WRAP_LIMIT_ERRORS } from '../src/evm.js';
+import { hex, keccak_256, utf8ToBytes } from '../src/bytes.js';
+import { wrapCredit, wrapDebit, wrapEntitlement, wrapLimitError, WRAP_LIMIT_ERRORS, supplyCapError, SUPPLY_CAP_ERRORS } from '../src/evm.js';
 
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/wraplimits/wraplimits.json', import.meta.url), 'utf8'));
 
@@ -40,4 +41,20 @@ test('the wrap-limit errors decode by selector; five are liftable', () => {
   assert.equal(wrapLimitError(sel + w(1)), null, 'a short payload');
   assert.equal(wrapLimitError('0xdeadbeef'), null);
   assert.equal(wrapLimitError(Object.keys(WRAP_LIMIT_ERRORS).find((k) => WRAP_LIMIT_ERRORS[k].name === 'WrapSubjectZero')).liftable, false);
+});
+
+// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.6, §4): the supply-cap errors decode by selector; six are liftable (a
+// wrap or mint above a cap, a setter's floor at its apply), the two shape refusals are not.
+test('the supply-cap errors decode by selector; six are liftable', () => {
+  assert.equal(Object.keys(SUPPLY_CAP_ERRORS).length, 8);
+  assert.deepEqual(Object.values(SUPPLY_CAP_ERRORS).filter((e) => !e.liftable).map((e) => e.name), ['MaxSupplyInvalid', 'MaxWrapSupplyInvalid']);
+  const sel = Object.entries(SUPPLY_CAP_ERRORS).find(([, e]) => e.name === 'MaxWrapSupplyExceeded')[0];
+  assert.equal(sel, hex(keccak_256(utf8ToBytes('MaxWrapSupplyExceeded(uint256,uint256)')).subarray(0, 4)));
+  const w = (x) => BigInt(x).toString(16).padStart(64, '0');
+  const e = supplyCapError(sel + w(1001) + w(1000));
+  assert.deepEqual([e.name, e.liftable, e.args], ['MaxWrapSupplyExceeded', true, { totalWrapped: '1001', maxWrapSupply: '1000' }]);
+  assert.equal(supplyCapError(sel + w(1)), null, 'a short payload');
+  assert.equal(supplyCapError(Object.keys(WRAP_LIMIT_ERRORS)[0] + w(1) + w(2)), null, 'a wrap-limit error is not one');
+  const inv = Object.keys(SUPPLY_CAP_ERRORS).find((k) => SUPPLY_CAP_ERRORS[k].name === 'MaxWrapSupplyInvalid');
+  assert.deepEqual([supplyCapError(inv).name, supplyCapError(inv).liftable], ['MaxWrapSupplyInvalid', false]);
 });

@@ -112,7 +112,7 @@ contract HederaKatTest is Test {
 
         vm.etch(HAS, type(MockHederaAccountService).runtimeCode);
         MockHederaAccountService(HAS).setEdKey(NATIVE, vm.addr(ED_KEY));
-        tok.mint(NATIVE, t.value);
+        tok.mint(NATIVE, t.value, EnvKit.codeUidOf(address(tok)));
         (bytes32 r, bytes32 vs) = vm.signCompact(ED_KEY, digest);
         IUARegistry.UASig memory a;
         a.signature = abi.encodePacked(r, vs);

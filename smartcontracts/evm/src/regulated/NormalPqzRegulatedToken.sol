@@ -242,6 +242,7 @@ interface INormalPqzRegulatedTokenAbi {
     error ZeroRecipient();
     error ZeroU();
     error ChainUidMismatch(bytes32 expected, bytes32 got);
+    error FeatureConflict(uint8 bit, uint8 other);
     error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
     error NotAllowed(bytes32 account);
     error Denied(bytes32 account);
@@ -407,11 +408,11 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forwardView(_MA);
     }
 
-    function forceTransfer(bytes32, uint256) external {
+    function forceTransfer(bytes32, uint256, bytes32) external {
         _forward(_MR);
     }
 
-    function freeze(bytes32, bytes32, bytes32) external {
+    function freeze(bytes32, bytes32, bytes32, bytes32) external {
         _forward(_MR);
     }
 
@@ -479,11 +480,11 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forwardView(_MT);
     }
 
-    function mint(address, uint256) external {
+    function mint(address, uint256, bytes32) external {
         _forward(_MA);
     }
 
-    function mintToUA(bytes32, uint256) external {
+    function mintToUA(bytes32, uint256, bytes32) external {
         _forward(_MA);
     }
 
@@ -635,7 +636,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forward(_MQ);
     }
 
-    function operatorTransfer(bytes32, bytes32, uint256, bytes32) external {
+    function operatorTransfer(bytes32, bytes32, uint256, bytes32, bytes32) external {
         _forward(_MR);
     }
 
@@ -643,7 +644,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forwardView(_MR);
     }
 
-    function pause(bytes32, uint64) external {
+    function pause(bytes32, uint64, bytes32) external {
         _forward(_MR);
     }
 
@@ -743,7 +744,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forwardView(_MT);
     }
 
-    function recordOrder(bytes32, bytes32, bytes32, bytes32, uint256, uint64) external {
+    function recordOrder(bytes32, bytes32, bytes32, bytes32, uint256, uint64, bytes32) external {
         _forward(_MR);
     }
 
@@ -771,7 +772,7 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forward(_MT);
     }
 
-    function revokeOrder(bytes32, bytes32) external {
+    function revokeOrder(bytes32, bytes32, bytes32) external {
         _forward(_MR);
     }
 
@@ -779,11 +780,11 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forward(_MA);
     }
 
-    function setAllowed(bytes32[] calldata, bool) external {
+    function setAllowed(bytes32[] calldata, bool, bytes32) external {
         _forward(_MR);
     }
 
-    function setDenied(bytes32[] calldata, bool) external {
+    function setDenied(bytes32[] calldata, bool, bytes32) external {
         _forward(_MR);
     }
 
@@ -791,15 +792,15 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forward(_MA);
     }
 
-    function setProofStore(uint8) external {
+    function setProofStore(uint8, bytes32) external {
         _forward(_MS);
     }
 
-    function setTaxRate(uint32) external {
+    function setTaxRate(uint32, bytes32) external {
         _forward(_MP);
     }
 
-    function setTaxRecipient(bytes32) external {
+    function setTaxRecipient(bytes32, bytes32) external {
         _forward(_MP);
     }
 
@@ -855,11 +856,11 @@ contract NormalPqzRegulatedToken is NormalPqzRegulatedTokenCore, INormalPqzRegul
         _forwardView(_MA);
     }
 
-    function unfreeze(bytes32, bytes32) external {
+    function unfreeze(bytes32, bytes32, bytes32) external {
         _forward(_MR);
     }
 
-    function unpause(bytes32) external {
+    function unpause(bytes32, bytes32) external {
         _forward(_MR);
     }
 

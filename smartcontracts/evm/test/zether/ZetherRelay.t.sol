@@ -17,6 +17,7 @@ import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// @notice Zether through the one meta-transaction base (CTR-ZTH-34): every confidential op is an allowlisted self-call
 ///         of `mtxExecute` whose statement carries the envelope binding (`ZTX_V1_RELAYED`); a direct call proves with
@@ -298,7 +299,7 @@ contract ZetherRelayTest is ZetherFixture {
         assertEq(bytes4(keccak256(bytes(string.concat("mtxUnshield((uint64,uint64,uint256,bytes32,", p, "),uint256,bytes32,bytes)")))),
             IZetherToken.mtxUnshield.selector);
         bytes[1] memory refused = [
-            abi.encodeCall(NormalToken.mint, (payer, 1))
+            abi.encodeCall(NormalToken.mint, (payer, 1, EnvKit.codeUidOf(address(tok))))
         ];
         for (uint256 i; i < refused.length; ++i) {
             MetaTxLib.MetaTransaction memory m = _mt(refused[i], 100 + i, RR, 0);

@@ -63,6 +63,10 @@ contract NamespaceProbe is UAMetaTxBase {
         w.pending = WrappedLib.PendingRate(0x96, 0x97, 0x98, 0x99);
         (w.legCount, w.rateDelay, w.maxRateStepBps, w.maxSupply) = (0x9a, 0x9b, 0x9c, 0x9d);
         l.ctl = 0x9e; // group 3l (wrap limits spec §5): byte 24 of slot a
+        // round 3zc (CTR-GOV-30): the wrap cap, the counter and the two pending caps, appended
+        (w.maxWrapSupply, w.totalWrapped) = (0x9f, 0xa0);
+        w.pendingMaxSupply = WrappedLib.CapChange(0xa4, 0xa5, 0xa6);
+        w.pendingMaxWrapSupply = WrappedLib.CapChange(0xa7, 0xa8, 0xa9);
         _pokeWrapLimit();
         _ua().balance[bytes32(uint256(0xa1))] = 0xa2;
         _ua().cancelUsed[bytes32(uint256(0xa3))] = true;
@@ -253,6 +257,15 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("legs[1].capped", 1, 0, 1, 1)); // governance T9 (spec §5.2): appended, `reserve` unmoved
         f = _more(f, F("maxSupply", 0, 0, 0x9d, 32));
         f = _more(f, F("legs[1].ctl", 1, 0, 0x9e, 1)); // group 3l: appended, slots b and c unmoved
+        // round 3zc (CTR-GOV-30): appended after `maxSupply`, nothing before them moved
+        f = _more(f, F("maxWrapSupply", 0, 0, 0x9f, 32));
+        f = _more(f, F("totalWrapped", 0, 0, 0xa0, 32));
+        f = _more(f, F("pendingMaxSupply.value", 0, 0, 0xa4, 32));
+        f = _more(f, F("pendingMaxSupply.eta", 0, 0, 0xa5, 8));
+        f = _more(f, F("pendingMaxSupply.generation", 0, 0, 0xa6, 4));
+        f = _more(f, F("pendingMaxWrapSupply.value", 0, 0, 0xa7, 32));
+        f = _more(f, F("pendingMaxWrapSupply.eta", 0, 0, 0xa8, 8));
+        f = _more(f, F("pendingMaxWrapSupply.generation", 0, 0, 0xa9, 4));
         _ns(address(p), "underlying", "scaas.underlying", f);
         _wrapLimitPinned(address(p), u);
         f = new F[](2);

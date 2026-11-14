@@ -14,6 +14,7 @@ import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A leg whose `mtxTrade` (ua-mtx-merge T6: the merged name) delivers `amount + skew` to `o.dex` (no signature, no checks): a lying underlying.
 contract SkewLeg {
@@ -170,7 +171,7 @@ contract MtxWrapTest is V2Fixture {
     function test_mtxWrapOrder_pausedDuringARateChange() public {
         RateAdminForwarder adm = new RateAdminForwarder();
         WrappedToken a = _single(address(u), 0, 3, 1, _adjustable(address(adm)));
-        adm.exec(address(a), abi.encodeCall(a.proposeRate, (address(u), 301, 100)));
+        adm.exec(address(a), abi.encodeCall(a.proposeRate, (address(u), 301, 100, EnvKit.codeUidOf(address(a)))));
         ITradeToken.UAWrapOrder memory o = _order(1000, 3000, 0);
         o.wrappedToken = address(a);
         IUARegistry.UASig memory sig = _sig(o);
@@ -209,7 +210,7 @@ contract MtxWrapTest is V2Fixture {
         address guardian = address(0x6A2D);
         WrappedToken g = _multi(_one(address(u)), _oneU(3), _oneU(1), _fixedRate(), guardian);
         vm.prank(guardian);
-        g.disableWrap(address(u), "depeg");
+        g.disableWrap(address(u), "depeg", EnvKit.codeUidOf(address(g)));
         ITradeToken.UAWrapOrder memory o = _order(1000, 3000, 0);
         o.wrappedToken = address(g);
         IUARegistry.UASig memory sig = _sig(o);

@@ -147,7 +147,7 @@ contract MandateWalletKatTest is MtxKatBase {
         tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
         w = new MandateWallet(MetaTxLib.pad(vm.addr(OWNER_PK)), UID, address(0), false);
-        tok.mint(address(w), 1_000e6);
+        tok.mint(address(w), 1_000e6, EnvKit.codeUidOf(address(tok)));
         vm.startPrank(vm.addr(OWNER_PK));
         w.setMandate(address(tok), MetaTxLib.pad(vm.addr(DELEGATE_PK)), 100e6, 250e6, 1 days, 1_900_000_000);
         w.setPayee(address(tok), MetaTxLib.pad(PAYEE), true);

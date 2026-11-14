@@ -74,9 +74,9 @@ contract Liquidity is OnchainBase {
         _book(address(dex), "SCaaSDex");
         puller = dex.puller();
         vm.startBroadcast(k1);
-        dex.setMarket{gas: G}(A, B, true);
-        dex.setMarket{gas: G}(A, address(usdc), true);
-        dex.setExchangeTarget{gas: G}(address(reader), true);
+        dex.setMarket{gas: G}(A, B, true, dex.chainUid());
+        dex.setMarket{gas: G}(A, address(usdc), true, dex.chainUid());
+        dex.setExchangeTarget{gas: G}(address(reader), true, dex.chainUid());
         usdc.mint(a1, 1e12);
         usdc.approve{gas: G}(puller, type(uint256).max);
         vm.stopBroadcast();

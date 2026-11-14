@@ -91,7 +91,7 @@ contract PlainRig is UALedgerBase, KindRig {
         vm.roll(P_BLOCK);
         address dex = address(new ParityDex());
         // NONE: alice holds 1_000_000; the rig (the minter) tops her up and funds the derived UA
-        tok.mint(alice, 9_000_000);
+        tok.mint(alice, 9_000_000, EnvKit.codeUidOf(address(tok)));
         vm.prank(alice);
         tok.transferToUA(uaP, 2_000_000);
         tks.push(Tk("NORMAL", address(tok), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 0, address(0), dex, 0, 0));
@@ -122,8 +122,8 @@ contract PqzRig is PqzFixture, KindRig {
         address signer = vm.addr(SK);
         // NORMAL_PQZ
         address t = _pClone(address(normalImpl), _cfg(uint256(1) << 40));
-        NormalPqzToken(t).mint(signer, 20_000_000);
-        NormalPqzToken(t).mintToUA(uaD, 2_000_000);
+        NormalPqzToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
+        NormalPqzToken(t).mintToUA(uaD, 2_000_000, EnvKit.codeUidOf(address(t)));
         tks.push(Tk("NORMAL_PQZ", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), uaD, 0, address(0), dex, 0, 0));
         // WRAPPED_PQZ: one 1:1 leg
         MockERC20 usd = new MockERC20("USD", "USD", 6);
@@ -167,7 +167,7 @@ contract ZetherRig is ZetherFixture, KindRig {
         address signer = vm.addr(SK);
         // NORMAL_ZETHER
         address t = _pClone(address(normalImpl), _cfg(true, uint256(1) << 40));
-        NormalZetherToken(t).mint(signer, 20_000_000);
+        NormalZetherToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
         vm.prank(signer);
         NormalToken(t).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
         tks.push(Tk("NORMAL_ZETHER", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 0, address(0), dex, 0, 0));

@@ -71,7 +71,7 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
         uint256 pool = tok.balanceOf(SHIELD_POOL_);
         vm.startStateDiffRecording();
         vm.prank(CLERK);
-        _r().operatorTransfer(aId, nid(BENEFICIARY), 20_000, REF);
+        _r().operatorTransfer(aId, nid(BENEFICIARY), 20_000, REF, EnvKit.codeUidOf(address(_r())));
         assertEq(_shieldedAccesses(), 0, "operatorTransfer reads and writes no shielded state (I8)");
 
         assertEq(tok.balanceOfUA(aId), PUBLIC - 20_000, "the public balance");
@@ -87,9 +87,9 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
     function test_operatorTransferCannotReachShielded() public {
         vm.prank(CLERK);
         vm.expectRevert();
-        _r().operatorTransfer(aId, nid(BENEFICIARY), PUBLIC + 1, REF);
+        _r().operatorTransfer(aId, nid(BENEFICIARY), PUBLIC + 1, REF, EnvKit.codeUidOf(address(_r())));
         vm.prank(CLERK);
-        _r().operatorTransfer(aId, nid(BENEFICIARY), PUBLIC, REF); // the control
+        _r().operatorTransfer(aId, nid(BENEFICIARY), PUBLIC, REF, EnvKit.codeUidOf(address(_r()))); // the control
         assertTrue(_holds(tok, alice, 300, true), "the shielded balance");
     }
 }

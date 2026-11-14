@@ -377,12 +377,12 @@ contract NormalPqzTokenA is NormalPqzTokenCore {
         return _lockedFeaturesBody();
     }
 
-    function mint(address to, uint256 amount) external onlyDelegated {
-        _mintBody(to, amount);
+    function mint(address to, uint256 amount, bytes32 chainUid_) external onlyDelegated {
+        _mintBody(to, amount, chainUid_);
     }
 
-    function mintToUA(bytes32 to, uint256 amount) external onlyDelegated {
-        _mintToUABody(to, amount);
+    function mintToUA(bytes32 to, uint256 amount, bytes32 chainUid_) external onlyDelegated {
+        _mintToUABody(to, amount, chainUid_);
     }
 
     function mtxBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
@@ -629,8 +629,8 @@ contract NormalPqzTokenQ is NormalPqzTokenCore {
         return _proofSystemIdBody();
     }
 
-    function setProofStore(uint8 next) external onlyDelegated {
-        _setProofStoreBody(next);
+    function setProofStore(uint8 next, bytes32 chainUid_) external onlyDelegated {
+        _setProofStoreBody(next, chainUid_);
     }
 
     function setVerifierFee(uint64 next, bytes32 chainUid_) external onlyDelegated {

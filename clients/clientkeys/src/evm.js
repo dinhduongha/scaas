@@ -409,7 +409,8 @@ const OPS = {
     call: (m, sig) => [['bytes32', m.ua], ['uint8', m.mode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
   // GovernanceRouter, one per chain (governance spec §3.2, CTR-GOV-15 Change; R14): the closed table, each op `mtx<Op>` over
   // `UA<Op>`, `target` (the governed contract) the first op word, identities `bytes32`, fee mode NONE; no generic path.
-  // CTR-GOV-28 (owner 2026-11-13): every admin op names the target's chain word last (`chainUid`), signed and forwarded
+  // CTR-GOV-28 (owner 2026-11-13): every admin op names the target's chain word last (`chainUid`), signed and forwarded;
+  // its Change in round 3zb + 3zc (O5, O6): every op of a role holder, `UASetWrapLimits` and the two cap setters too
   UAGrantRole: { fields: 'address target,uint8 bit,bytes32 account,bytes32 chainUid', on: ROUTER },
   UARevokeRole: { fields: 'address target,uint8 bit,bytes32 account,bytes32 chainUid', on: ROUTER },
   UASetGrant: { fields: 'address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid', on: ROUTER },
@@ -419,16 +420,16 @@ const OPS = {
   UAAcceptAdmin: { fields: 'address target', on: ROUTER },
   UARenounceAdmin: { fields: 'address target,bytes32 chainUid', on: ROUTER },
   UARenounceRole: { fields: 'address target,uint8 bit,bytes32 chainUid', on: ROUTER }, // the holder's own (owner 2026-11-13)
-  UAMint: { fields: 'address target,address to,uint256 amount', on: ROUTER },
-  UAMintToUA: { fields: 'address target,bytes32 to,uint256 amount', on: ROUTER },
-  UADisableWrap: { fields: 'address target,address leg,bytes32 reason', on: ROUTER },
-  UAProposeRate: { fields: 'address target,address leg,uint96 num,uint96 den', on: ROUTER },
-  UACancelRate: { fields: 'address target', on: ROUTER },
-  UAExecuteRate: { fields: 'address target', on: ROUTER },
-  UASetMarket: { fields: 'address target,address base,address quote,bool listed', on: ROUTER },
-  UASetExchangeTarget: { fields: 'address target,address exchangeTarget,bool listed', on: ROUTER },
-  UASetListedOnly: { fields: 'address target,bool on', on: ROUTER },
-  UASetFeeSplit: { fields: 'address target,uint32 relayerSharePpm,address treasury', on: ROUTER },
+  UAMint: { fields: 'address target,address to,uint256 amount,bytes32 chainUid', on: ROUTER },
+  UAMintToUA: { fields: 'address target,bytes32 to,uint256 amount,bytes32 chainUid', on: ROUTER },
+  UADisableWrap: { fields: 'address target,address leg,bytes32 reason,bytes32 chainUid', on: ROUTER },
+  UAProposeRate: { fields: 'address target,address leg,uint96 num,uint96 den,bytes32 chainUid', on: ROUTER },
+  UACancelRate: { fields: 'address target,bytes32 chainUid', on: ROUTER },
+  UAExecuteRate: { fields: 'address target,bytes32 chainUid', on: ROUTER },
+  UASetMarket: { fields: 'address target,address base,address quote,bool listed,bytes32 chainUid', on: ROUTER },
+  UASetExchangeTarget: { fields: 'address target,address exchangeTarget,bool listed,bytes32 chainUid', on: ROUTER },
+  UASetListedOnly: { fields: 'address target,bool on,bytes32 chainUid', on: ROUTER },
+  UASetFeeSplit: { fields: 'address target,uint32 relayerSharePpm,address treasury,bytes32 chainUid', on: ROUTER },
   // The factory's creations (chain-neutral spec §4.4, S3; ua-mtx-merge T76): `target` the chain's `OpenFactory`, the signing
   // UA the creator; `initHash = keccak256(initArgs)` (`initCall` for an instance) is signed, the bytes go in `extra`.
   UACreateToken: { fields: 'address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt', on: ROUTER,
@@ -441,18 +442,18 @@ const OPS = {
       ['bytes', initOf(m, x, 'initCall')], ['bytes32', m.salt]] },
   // The regulated kinds' controls (regulated-kinds spec §3.1, ua-mtx-merge T32 / T34): the direct entry's params after
   // `target`; in `UAOperatorTransfer` the moved account is `account`, `from` the signer (CTR-GOV-20 Change, owner 2026-11-06).
-  UAFreeze: { fields: 'address target,bytes32 account,bytes32 ref,bytes32 recordId', on: ROUTER },
-  UAUnfreeze: { fields: 'address target,bytes32 account,bytes32 ref', on: ROUTER },
-  UAForceTransfer: { fields: 'address target,bytes32 recordId,uint256 amount', on: ROUTER },
-  UAPause: { fields: 'address target,bytes32 ref,uint64 until', on: ROUTER },
-  UAUnpause: { fields: 'address target,bytes32 ref', on: ROUTER },
+  UAFreeze: { fields: 'address target,bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid', on: ROUTER },
+  UAUnfreeze: { fields: 'address target,bytes32 account,bytes32 ref,bytes32 chainUid', on: ROUTER },
+  UAForceTransfer: { fields: 'address target,bytes32 recordId,uint256 amount,bytes32 chainUid', on: ROUTER },
+  UAPause: { fields: 'address target,bytes32 ref,uint64 until,bytes32 chainUid', on: ROUTER },
+  UAUnpause: { fields: 'address target,bytes32 ref,bytes32 chainUid', on: ROUTER },
   UARecordOrder: { fields: 'address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,'
-    + 'uint256 maxAmount,uint64 freezeUntil', on: ROUTER },
-  UARevokeOrder: { fields: 'address target,bytes32 recordId,bytes32 reasonRef', on: ROUTER },
-  UAOperatorTransfer: { fields: 'address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref', on: ROUTER },
+    + 'uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid', on: ROUTER },
+  UARevokeOrder: { fields: 'address target,bytes32 recordId,bytes32 reasonRef,bytes32 chainUid', on: ROUTER },
+  UAOperatorTransfer: { fields: 'address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid', on: ROUTER },
   // bit 23 `TAX` (pay-meta-tax spec §6.2): the one PERCENT rate, the recipient
-  UASetTaxRate: { fields: 'address target,uint32 ratePpm', on: ROUTER },
-  UASetTaxRecipient: { fields: 'address target,bytes32 taxRecipient', on: ROUTER },
+  UASetTaxRate: { fields: 'address target,uint32 ratePpm,bytes32 chainUid', on: ROUTER },
+  UASetTaxRecipient: { fields: 'address target,bytes32 taxRecipient,bytes32 chainUid', on: ROUTER },
   // the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the owner's, no bit
   UAPqzSetVerifier: { fields: 'address target,bytes32 next,bytes32 chainUid', on: ROUTER },
   UAPqzCancelVerifier: { fields: 'address target,bytes32 chainUid', on: ROUTER },
@@ -461,15 +462,20 @@ const OPS = {
   // the notice)
   UASetVerifierFee: { fields: 'address target,uint64 next,bytes32 chainUid', on: ROUTER },
   // bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): `NONE` or `LOG` from the next debit
-  UASetProofStore: { fields: 'address target,uint8 next', on: ROUTER },
+  UASetProofStore: { fields: 'address target,uint8 next,bytes32 chainUid', on: ROUTER },
   // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds (two calls when it relaxes the wrap side
   // or tightens the unwrap side) and bit 26's membership
-  UASetWrapLimits: { fields: 'address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList', on: ROUTER },
-  UASetWrapMember: { fields: 'address target,bytes32 account,bool canWrap,bool canUnwrap', on: ROUTER },
+  UASetWrapLimits: { fields: 'address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid',
+    on: ROUTER },
+  UASetWrapMember: { fields: 'address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid', on: ROUTER },
+  // round 3zc (CTR-GOV-30): the admin's two supply caps of the wrapped kinds (bit 31), the propose and the apply the same op
+  // sent twice (two nonces); fee mode NONE
+  UASetMaxSupply: { fields: 'address target,uint256 maxSupply,bytes32 chainUid', on: ROUTER },
+  UASetMaxWrapSupply: { fields: 'address target,uint256 maxWrapSupply,bytes32 chainUid', on: ROUTER },
   // round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §5.3, §6.2): the lists of the regulated kinds 8-13 (bit 8's holder, bit
   // 9's; 1-256 accounts, signed as the keccak256 of their words) and the admin's enableFeature of 8, 9 or 28
-  UASetAllowed: { fields: 'address target,bytes32[] accounts,bool on', on: ROUTER },
-  UASetDenied: { fields: 'address target,bytes32[] accounts,bool on', on: ROUTER },
+  UASetAllowed: { fields: 'address target,bytes32[] accounts,bool on,bytes32 chainUid', on: ROUTER },
+  UASetDenied: { fields: 'address target,bytes32[] accounts,bool on,bytes32 chainUid', on: ROUTER },
   UAEnableFeature: { fields: 'address target,uint8 bit,bytes32 chainUid', on: ROUTER },
   // round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its
   // envs, the release approvals of §5.6, the revoke, the deprecations, the kind switches, the directory of §13.3) and of a
@@ -561,10 +567,14 @@ const PQZ_DEBITS = Object.freeze({ UAPqzTransferSingle: 'single', UAPqzTransferS
 // ------------------------------------------------------------------ the PQZ verdict (group 3f, spec §5)
 
 const VERDICT_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, PqzVerdict: STRUCTS.PqzVerdict };
+/// A table of named errors by selector: `[sig, argument names, liftable]` rows.
+const errorTable = (rows) => Object.freeze(Object.fromEntries(rows.map(([sig, names, liftable]) => ['0x'
+  + hex(keccak_256(utf8ToBytes(sig))).replace(/^0x/, '').slice(0, 8), Object.freeze({ name: sig.slice(0, sig.indexOf('(')), sig, names,
+  liftable })])));
 /// Group 3l (wrap limits spec §7, §9): the wrapped hybrids' wrap-limit errors, by selector. `liftable`: a later block may lift it
 /// (a window ends, a member is added, a redeemer is granted, a later wrap raises the entitlement): the node keeps the job `queued`
 /// with `WRAP_LIMIT_REFUSED`; the creation refusal and the subject check are not. Every argument is one static word.
-export const WRAP_LIMIT_ERRORS = Object.freeze(Object.fromEntries([
+export const WRAP_LIMIT_ERRORS = errorTable([
   ['WrapLimitExceeded(address,uint8,bytes32,uint256,uint256)', ['underlying', 'limit', 'account', 'amount', 'remaining'], true],
   ['WrapCapExceeded(address,uint8,uint256,uint256)', ['underlying', 'limit', 'amount', 'remaining'], true],
   ['UnwrapAboveNetWrapped(address,bytes32,uint256,uint256)', ['underlying', 'account', 'amount', 'entitlement'], true],
@@ -572,14 +582,33 @@ export const WRAP_LIMIT_ERRORS = Object.freeze(Object.fromEntries([
   ['UnwrapperNotListed(bytes32)', ['account'], true],
   ['WrapControlNeedsHybrid(uint8)', ['bit'], false],
   ['WrapSubjectZero()', [], false],
-].map(([sig, names, liftable]) => ['0x' + hex(keccak_256(utf8ToBytes(sig))).replace(/^0x/, '').slice(0, 8),
-  Object.freeze({ name: sig.slice(0, sig.indexOf('(')), sig, names, liftable })])));
+]);
 
 /// `revertData` (hex) decoded as one of `WRAP_LIMIT_ERRORS`, or null: `{ name, liftable, args }`, `args` by name (an address
 /// lower-case hex, a `bytes32` hex, a number a decimal string).
-export function wrapLimitError(revertData) {
+export const wrapLimitError = (revertData) => decodeError(WRAP_LIMIT_ERRORS, revertData);
+
+/// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.4-§3.6, §4): the supply-cap errors of the wrapped kinds, by
+/// selector. `liftable`: an unwrap, a cap change or more supply may lift it (a wrap or a mint above a cap, a setter's floor at
+/// its apply): the node keeps the job `queued` with `SUPPLY_CAP_REFUSED`; the shape refusals are not. A setter's
+/// `GrantNotReady(31, 0, eta)` is the governance layer's error, lifted at `eta`.
+export const SUPPLY_CAP_ERRORS = errorTable([
+  ['MaxWrapSupplyExceeded(uint256,uint256)', ['totalWrapped', 'maxWrapSupply'], true],
+  ['MaxSupplyExceeded(uint256,uint256)', ['supply', 'maxSupply'], true],
+  ['MaxSupplyBelowSupply(uint256,uint256)', ['maxSupply', 'totalSupply'], true],
+  ['MaxSupplyBelowWrapCap(uint256,uint256)', ['maxSupply', 'maxWrapSupply'], true],
+  ['MaxWrapSupplyBelowWrapped(uint256,uint256)', ['maxWrapSupply', 'totalWrapped'], true],
+  ['MaxWrapSupplyAboveMaxSupply(uint256,uint256)', ['maxWrapSupply', 'maxSupply'], true],
+  ['MaxSupplyInvalid()', [], false],
+  ['MaxWrapSupplyInvalid()', [], false],
+]);
+
+/// `revertData` (hex) decoded as one of `SUPPLY_CAP_ERRORS`, or null, as `wrapLimitError`.
+export const supplyCapError = (revertData) => decodeError(SUPPLY_CAP_ERRORS, revertData);
+
+function decodeError(table, revertData) {
   const d = String(revertData).toLowerCase().replace(/^0x/, '');
-  const e = WRAP_LIMIT_ERRORS['0x' + d.slice(0, 8)];
+  const e = table['0x' + d.slice(0, 8)];
   if (!e || d.length !== 8 + 64 * e.names.length) return null;
   const types = e.sig.slice(e.sig.indexOf('(') + 1, -1).split(',').filter(Boolean);
   const args = Object.fromEntries(e.names.map((n, i) => {
@@ -1683,9 +1712,9 @@ export function bidMinBase(minFill, amount, receiveAmount) {
   return (uint(minFill, 'minFill') * uint(receiveAmount, 'the price') + a - 1n) / a;
 }
 
-// The governance bits 0-29 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5; bits 25-27 wrap limits §2; bits 8, 9 the token's lists and 28 KYC, CTR-GOV-24; 29 CLOSED_MARKETS, CTR-DEX-32): name and type. The disclosure sentences are the file's,
+// The governance bits 0-31 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5; bits 25-27 wrap limits §2; bits 8, 9 the token's lists and 28 KYC, CTR-GOV-24; 29 CLOSED_MARKETS, CTR-DEX-32; 30 BURNER, CTR-GOV-29; 31 SUPPLY_CAP_ADJUSTABLE, CTR-GOV-30): name and type. The disclosure sentences are the file's,
 // smartcontracts/vectors/governance/governance_bits.json, which the app reads; test/governance-bits.test.js holds this table to it.
-// Bits 30-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
+// Bits 32-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
 export const GOVERNANCE_BITS = Object.freeze([
   ['PAYABLE', 'capability'], ['MINTABLE', 'power'], ['BURNABLE', 'capability'], ['RATE_ADJUSTABLE', 'power'],
   ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'power'],
@@ -1698,6 +1727,8 @@ export const GOVERNANCE_BITS = Object.freeze([
   ['KYC', 'capability'],
   // CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
   ['CLOSED_MARKETS', 'capability'],
+  // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
+  ['BURNER', 'power'], ['SUPPLY_CAP_ADJUSTABLE', 'capability'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));
 
 // ------------------------------------------------------------------ liquidity orders (CTR-DEX-30, -31; CLI-SGN-49 proposed)

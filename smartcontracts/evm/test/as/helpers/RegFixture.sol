@@ -180,22 +180,22 @@ abstract contract RegFixture is Test {
 
     function _freeze(address t, bytes32 a) internal {
         vm.prank(issuer);
-        _r(t).freeze(a, REF, 0);
+        _r(t).freeze(a, REF, 0, EnvKit.codeUidOf(t));
     }
 
     function _freezeRecord(address t, bytes32 a, bytes32 recordId) internal {
         vm.prank(issuer);
-        _r(t).freeze(a, REF, recordId);
+        _r(t).freeze(a, REF, recordId, EnvKit.codeUidOf(t));
     }
 
     function _unfreeze(address t, bytes32 a) internal {
         vm.prank(issuer);
-        _r(t).unfreeze(a, REF);
+        _r(t).unfreeze(a, REF, EnvKit.codeUidOf(t));
     }
 
     function _pause(address t, uint64 until) internal {
         vm.prank(issuer);
-        _r(t).pause(REF, until);
+        _r(t).pause(REF, until, EnvKit.codeUidOf(t));
     }
 
     /// Records order `orderId` against `subject` for `beneficiary`; returns its `recordId`.
@@ -203,7 +203,7 @@ abstract contract RegFixture is Test {
         internal returns (bytes32)
     {
         vm.prank(compliance);
-        _r(t).recordOrder(orderId, keccak256("document"), subject, beneficiary, maxAmount, freezeUntil);
+        _r(t).recordOrder(orderId, keccak256("document"), subject, beneficiary, maxAmount, freezeUntil, EnvKit.codeUidOf(t));
         return keccak256(abi.encode(orderId, subject, beneficiary));
     }
 

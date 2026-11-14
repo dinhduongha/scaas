@@ -306,19 +306,19 @@ contract ListGovernanceTest is ListFixture {
         for (uint256 k; k < 257; ++k) as_[k] = bytes32(k + 1);
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(BATCH_INVALID, uint256(257)));
-        IListOps(t).setDenied(as_, true);
+        IListOps(t).setDenied(as_, true, EnvKit.codeUidOf(t));
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(BATCH_INVALID, uint256(0)));
-        IListOps(t).setAllowed(new bytes32[](0), true);
+        IListOps(t).setAllowed(new bytes32[](0), true, EnvKit.codeUidOf(t));
         bytes32[] memory z = new bytes32[](2);
         z[0] = bytes32(uint256(7));
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(ACCOUNT_ZERO));
-        IListOps(t).setAllowed(z, true);
+        IListOps(t).setAllowed(z, true, EnvKit.codeUidOf(t));
         assembly ("memory-safe") { mstore(as_, 256) }
         vm.recordLogs();
         vm.prank(issuer);
-        IListOps(t).setDenied(as_, true);
+        IListOps(t).setDenied(as_, true, EnvKit.codeUidOf(t));
         assertEq(vm.getRecordedLogs().length, 256, "one event per account");
         assertEq(_flags(t, bytes32(uint256(256))), DENIED);
     }
@@ -330,7 +330,7 @@ contract ListGovernanceTest is ListFixture {
         (as_[0], as_[1], as_[2]) = (nid(bob), nid(bob), nid(alice));
         vm.recordLogs();
         vm.prank(issuer);
-        IListOps(t).setAllowed(as_, true);
+        IListOps(t).setAllowed(as_, true, EnvKit.codeUidOf(t));
         Vm.Log[] memory l = vm.getRecordedLogs();
         assertEq(l.length, 3);
         for (uint256 k; k < 3; ++k) {
@@ -353,10 +353,10 @@ contract ListGovernanceTest is ListFixture {
             address t = _lt(i, 0, 0, bytes32(++salt));
             vm.prank(bob);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, DENY, nid(bob)));
-            IListOps(t).setDenied(_one(nid(bob)), true);
+            IListOps(t).setDenied(_one(nid(bob)), true, EnvKit.codeUidOf(t));
             vm.prank(bob);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, ALLOW, nid(bob)));
-            IListOps(t).setAllowed(_one(nid(bob)), true);
+            IListOps(t).setAllowed(_one(nid(bob)), true, EnvKit.codeUidOf(t));
             _setList(t, DENY, nid(bob), true); // off: the row is written, nothing is checked
             vm.prank(alice);
             IERC20(t).transfer(bob, 2);
@@ -379,7 +379,7 @@ contract ListGovernanceTest is ListFixture {
             vm.prank(ownerA);
             NormalToken(t).grantRole(ALLOW, nid(bob), EnvKit.codeUidOf(address(NormalToken(t))));
             vm.prank(bob);
-            IListOps(t).setAllowed(_one(nid(bob)), true);
+            IListOps(t).setAllowed(_one(nid(bob)), true, EnvKit.codeUidOf(t));
             c.lockedFeatures = _bit(ALLOW);
             t = _new(i, c);
             vm.prank(ownerA);
@@ -451,7 +451,7 @@ contract ListGovernanceTest is ListFixture {
         vm.stopPrank();
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, DENY, nid(issuer)));
-        IListOps(t).setDenied(_one(nid(bob)), false);
+        IListOps(t).setDenied(_one(nid(bob)), false, EnvKit.codeUidOf(t));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(DENIED_ERR, nid(bob)));
         IERC20(t).transfer(bob, 1);

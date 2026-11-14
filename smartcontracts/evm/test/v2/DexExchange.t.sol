@@ -178,8 +178,8 @@ contract DexExchangeTest is Test {
         vm.prank(bob);
         b.transfer(address(router), 500_000);
         vm.startPrank(admin);
-        dex.setMarket(address(a), address(b), true);
-        dex.setMarket(address(usdc), address(b), true);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(usdc), address(b), true, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
     }
 
@@ -474,7 +474,7 @@ contract DexExchangeTest is Test {
         vm.prank(dave);
         fot.approve(puller, type(uint256).max);
         vm.prank(admin);
-        dex.setMarket(address(fot), address(b), true);
+        dex.setMarket(address(fot), address(b), true, EnvKit.codeUidOf(address(dex)));
         DexLegs.ExchangePlan memory p =
             _plan(_leg(DAVE_PK, address(fot), _order(dave, address(b), 1000, 1000, 0), 1000, 1000));
         _expectExchange(p, _swap(address(fot), address(b), 990, 1000),
@@ -491,7 +491,7 @@ contract DexExchangeTest is Test {
         vm.prank(dave);
         bon.approve(puller, type(uint256).max);
         vm.prank(admin);
-        dex.setMarket(address(bon), address(b), true);
+        dex.setMarket(address(bon), address(b), true, EnvKit.codeUidOf(address(dex)));
         DexLegs.ExchangePlan memory p =
             _plan(_leg(DAVE_PK, address(bon), _order(dave, address(b), 1000, 1900, 0), 1000, 1900));
         _expectExchange(p, _swap(address(bon), address(b), 1001, 2000),
@@ -514,7 +514,7 @@ contract DexExchangeTest is Test {
 
     function test_exchange_forbiddenTargets_theDexAndThePuller() public {
         DexLegs.ExchangePlan memory p = _plan(_alice());
-        _expectExchange(p, _ix(address(dex), abi.encodeCall(ISCaaSDex.setListedOnly, (true))),
+        _expectExchange(p, _ix(address(dex), abi.encodeCall(ISCaaSDex.setListedOnly, (true, EnvKit.codeUidOf(address(dex))))),
             _err(ISCaaSDex.ForbiddenTarget.selector, address(dex)));
         _expectExchange(p, _ix(puller, abi.encodeCall(DexPuller.pull, (address(usdc), dave, 1))),
             _err(ISCaaSDex.ForbiddenTarget.selector, puller));
@@ -668,7 +668,7 @@ contract DexExchangeTest is Test {
             bool via = k & 4 != 0;
             if (mode) {
                 vm.prank(admin);
-                dex.setListedOnly(true);
+                dex.setListedOnly(true, EnvKit.codeUidOf(address(dex)));
             }
             ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 0);
             if (flag) o.flags = 4;
@@ -685,10 +685,10 @@ contract DexExchangeTest is Test {
         if (needsListing) {
             _expectExchange(p, xs, _err(ISCaaSDex.TargetNotListed.selector, address(a)));
             vm.prank(admin);
-            dex.setExchangeTarget(address(a), true);
+            dex.setExchangeTarget(address(a), true, EnvKit.codeUidOf(address(dex)));
             _expectExchange(p, xs, _err(ISCaaSDex.TargetNotListed.selector, address(router)));
             vm.prank(admin);
-            dex.setExchangeTarget(address(router), true);
+            dex.setExchangeTarget(address(router), true, EnvKit.codeUidOf(address(dex)));
         }
         _exchange(p, xs);
     }
@@ -701,7 +701,7 @@ contract DexExchangeTest is Test {
             vm.expectRevert(_err(ISCaaSDex.TargetNotListed.selector, address(e)));
             dex.mtxExchangeVia(DexLegs.wire(p), address(e), data);
             vm.prank(admin);
-            dex.setExchangeTarget(address(e), true);
+            dex.setExchangeTarget(address(e), true, EnvKit.codeUidOf(address(dex)));
         }
         vm.prank(relayer);
         dex.mtxExchangeVia(DexLegs.wire(p), address(e), data);
@@ -716,8 +716,8 @@ contract DexExchangeTest is Test {
         dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0),
             1 << 29, 0)), "closed"));
         vm.startPrank(admin);
-        dex.setMarket(address(a), address(b), true);
-        dex.setMarket(address(usdc), address(b), true);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(usdc), address(b), true, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(c), _order(alice, address(b), 1000, 1900, 0),
             1000, 1900));
@@ -725,8 +725,8 @@ contract DexExchangeTest is Test {
         p = _plan(_leg(ALICE_PK, address(a), _order(alice, address(c), 1000, 1900, 0), 1000, 1900));
         _expectExchange(p, new ISCaaSDex.Interaction[](0), _err(ISCaaSDex.TokenNotKnown.selector, address(c)));
         vm.startPrank(admin);
-        dex.setMarket(address(a), address(b), true); // already listed: no second count
-        dex.setMarket(address(a), address(b), false);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex))); // already listed: no second count
+        dex.setMarket(address(a), address(b), false, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         assertFalse(dex.tokenKnown(address(a)));
         assertTrue(dex.tokenKnown(address(b))); // still a side of USDC/B
@@ -734,7 +734,7 @@ contract DexExchangeTest is Test {
         _expectExchange(_plan(_alice()), new ISCaaSDex.Interaction[](0),
             _err(ISCaaSDex.TokenNotKnown.selector, address(a)));
         vm.prank(admin);
-        dex.setMarket(address(a), address(b), true);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
         assertTrue(dex.tokenKnown(address(a)));
     }
 
@@ -821,16 +821,16 @@ contract DexExchangeTest is Test {
 
     function test_setExchangeTarget_setListedOnly_onlyAdmin() public {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
-        dex.setExchangeTarget(address(router), true);
+        dex.setExchangeTarget(address(router), true, EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
-        dex.setListedOnly(true);
+        dex.setListedOnly(true, EnvKit.codeUidOf(address(dex)));
         vm.startPrank(admin);
         vm.expectEmit(address(dex));
         emit ISCaaSDex.ExchangeTargetSet(address(router), true);
-        dex.setExchangeTarget(address(router), true);
+        dex.setExchangeTarget(address(router), true, EnvKit.codeUidOf(address(dex)));
         vm.expectEmit(address(dex));
         emit ISCaaSDex.ListedOnlySet(true);
-        dex.setListedOnly(true);
+        dex.setListedOnly(true, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         assertTrue(dex.exchangeTarget(address(router)));
         assertTrue(dex.listedOnly());
@@ -871,8 +871,8 @@ contract DexExchangeTest is Test {
     /// Delisting every market of the quote token makes it unknown.
     function test_exchange_delistQuote_makesItUnknown() public {
         vm.startPrank(admin);
-        dex.setMarket(address(a), address(b), false);
-        dex.setMarket(address(usdc), address(b), false);
+        dex.setMarket(address(a), address(b), false, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(usdc), address(b), false, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         assertFalse(dex.tokenKnown(address(b)));
     }

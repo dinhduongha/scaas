@@ -75,15 +75,16 @@ contract ListRouterTest is ListFixture {
     }
 
     function _listType(bool allow) internal pure returns (string memory) {
-        return string.concat(allow ? "UASetAllowed" : "UASetDenied", "(bytes32 from,address target,bytes32[] accounts,bool on",
+        return string.concat(allow ? "UASetAllowed" : "UASetDenied", "(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid",
             TAIL);
     }
 
+    /// @dev The target's chain word after `on` (CTR-GOV-28), read from its clone code.
     function _listCd(bool allow, MetaTxLib.UAEnvelope memory e, address target, bytes32[] memory as_, bool on,
-        IUARegistry.UASig memory a) internal pure returns (bytes memory)
+        IUARegistry.UASig memory a) internal view returns (bytes memory)
     {
-        return abi.encodeWithSignature(string.concat(allow ? "mtxSetAllowed(" : "mtxSetDenied(", ENV, ",address,bytes32[],bool,",
-            SIG, ")"), e, target, as_, on, a);
+        return abi.encodeWithSignature(string.concat(allow ? "mtxSetAllowed(" : "mtxSetDenied(", ENV, ",address,bytes32[],bool,bytes32,",
+            SIG, ")"), e, target, as_, on, EnvKit.codeUidOf(target), a);
     }
 
     /// `u` the target's chain word, the op's last field (CTR-GOV-28).
@@ -108,7 +109,7 @@ contract ListRouterTest is ListFixture {
     function _listMatrix(bool allow) internal returns (uint256 n) {
         MetaTxLib.UAEnvelope memory e = _env();
         bytes32[] memory as_ = _accounts();
-        IUARegistry.UASig memory a = _auth(_listType(allow), e, t, abi.encode(keccak256(abi.encodePacked(as_)), true));
+        IUARegistry.UASig memory a = _auth(_listType(allow), e, t, abi.encode(keccak256(abi.encodePacked(as_)), true, EnvKit.codeUidOf(t)));
         bytes32[] memory el = _accounts();
         el[1] = bytes32(uint256(0xA3));
         bytes32[] memory longer = new bytes32[](3);
@@ -168,7 +169,7 @@ contract ListRouterTest is ListFixture {
         bytes32[] memory one = new bytes32[](1);
         one[0] = nid(bob);
         assertTrue(_send(_listCd(false, e, t, one, true,
-            _auth(_listType(false), e, t, abi.encode(keccak256(abi.encodePacked(one)), true)))));
+            _auth(_listType(false), e, t, abi.encode(keccak256(abi.encodePacked(one)), true, EnvKit.codeUidOf(t))))));
         vm.prank(alice);
         IERC20(t).transfer(bob, 1); // the list off: the row is dormant
         e = _env();

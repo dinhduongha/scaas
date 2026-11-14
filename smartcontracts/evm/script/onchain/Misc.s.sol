@@ -774,13 +774,13 @@ contract Misc is OnchainBase {
         bytes32[] memory one = new bytes32[](1);
         one[0] = _pad(cleared);
         vm.startBroadcast(k1);
-        IRegulatedToken(t).setDenied(two, true);
+        IRegulatedToken(t).setDenied(two, true, IMetaTx(t).chainUid());
         IRegulatedToken(t).enableFeature(GovernanceBits.DENYLIST, IMetaTx(t).chainUid());
         vm.stopBroadcast();
         _neg(a1, t, abi.encodeCall(IERC20.transfer, (denied, 1)), IRegulatedToken.Denied.selector,
             "transfer to an account on the deny list (kind 8, DENYLIST switched on at once)");
         vm.startBroadcast(k1);
-        IRegulatedToken(t).setDenied(one, false);
+        IRegulatedToken(t).setDenied(one, false, IMetaTx(t).chainUid());
         IERC20(t).transfer(cleared, 1);
         vm.stopBroadcast();
     }

@@ -145,10 +145,10 @@ contract GovIdentityTest is Test {
     /// A power's own entry takes the same subject: a derived minter mints through the router, and only there.
     function test_derivedUAMintsThroughTheRouter() public {
         NormalToken t = _normal(ISSUER, MINTER);
-        router.run(MINTER, address(t), abi.encodeCall(NormalToken.mint, (BOB, 7)));
+        router.run(MINTER, address(t), abi.encodeCall(NormalToken.mint, (BOB, 7, EnvKit.codeUidOf(address(t)))));
         assertEq(t.balanceOf(BOB), 7);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, ISSUER));
-        router.run(ISSUER, address(t), abi.encodeCall(NormalToken.mint, (BOB, 1)));
+        router.run(ISSUER, address(t), abi.encodeCall(NormalToken.mint, (BOB, 1, EnvKit.codeUidOf(address(t)))));
     }
 
     /// The DEX's owner is a derived UA: it holds both bits from creation and uses `LISTING` through the router.
@@ -156,9 +156,9 @@ contract GovIdentityTest is Test {
         SCaaSDex d = _dex(ISSUER);
         assertEq(d.admin(), ISSUER);
         assertTrue(d.hasRole(GovernanceBits.LISTING, ISSUER) && d.hasRole(GovernanceBits.FEE_ROUTING, ISSUER));
-        router.run(ISSUER, address(d), abi.encodeCall(SCaaSDex.setListedOnly, (true)));
+        router.run(ISSUER, address(d), abi.encodeCall(SCaaSDex.setListedOnly, (true, EnvKit.codeUidOf(address(d)))));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.LISTING, MINTER));
-        router.run(MINTER, address(d), abi.encodeCall(SCaaSDex.setListedOnly, (false)));
+        router.run(MINTER, address(d), abi.encodeCall(SCaaSDex.setListedOnly, (false, EnvKit.codeUidOf(address(d)))));
     }
 
     /// A direct caller's id is its address padded to 32 bytes, from `msg.sender` (not `tx.origin`): `vm.prank` leaves the
@@ -169,7 +169,7 @@ contract GovIdentityTest is Test {
         t.grantRole(MINT, bytes32(uint256(uint160(BOB))), EnvKit.codeUidOf(address(t)));
         assertTrue(t.hasRole(MINT, bytes32(uint256(uint160(BOB)))));
         vm.prank(BOB);
-        t.mint(BOB, 1);
+        t.mint(BOB, 1, EnvKit.codeUidOf(address(t)));
         assertEq(t.balanceOf(BOB), 1);
         // the same low 160 bits under other top bits is another identity
         bytes32 shadow = bytes32(uint256(uint160(ALICE)) | (uint256(1) << 200));
@@ -199,7 +199,7 @@ contract GovIdentityTest is Test {
         t.disableFeature(MINT, EnvKit.codeUidOf(address(t)));
         router.set(MINTER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, alice));
-        t.mint(ALICE, 1);
+        t.mint(ALICE, 1, EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(t.admin(), ISSUER);
     }
@@ -222,7 +222,7 @@ contract GovIdentityTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, bytes32(0)));
         t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, bytes32(0)));
-        t.mint(BOB, 1);
+        t.mint(BOB, 1, EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
     }
 

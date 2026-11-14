@@ -129,7 +129,7 @@ contract MetaTxGasV2Test is Test {
     /// của WARM đã đốt.
     function _fund(address t) internal {
         address[5] memory holders = [signer, recipient, relayer, address(acct), feeTaker];
-        for (uint256 i; i < 5; ++i) NormalToken(t).mint(holders[i], i == 0 ? 1_000_000 ether : 1 ether);
+        for (uint256 i; i < 5; ++i) NormalToken(t).mint(holders[i], i == 0 ? 1_000_000 ether : 1 ether, EnvKit.codeUidOf(address(t)));
         _execT(t, _mt(0, WARM, 0, 0, address(0)));
     }
 

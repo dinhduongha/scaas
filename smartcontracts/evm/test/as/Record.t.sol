@@ -8,6 +8,7 @@ import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T28 (regulated-kinds spec §3.1, §3.3 T4, T6, T8; RK-4, RK-5, F-02, F-17): `recordOrder`, the record-backed freeze,
 /// `revokeOrder`, and `RECORD` disabled, on kinds 8 and 9.
@@ -29,18 +30,20 @@ contract RecordTest is RegFixture {
             vm.expectEmit(t);
             emit IRegulatedToken.OrderRecorded(id, "o1", a, b, 100, _now() + 90 days, keccak256("document"));
             assertEq(_order(t, "o1", a, b, 100, _now() + 90 days), id);
-            IRegulatedToken.OrderRecord memory o = _r(t).order(id);
-            (bytes32 s, bytes32 be, uint64 fu, bool rv, uint256 mx, uint256 ex) =
-                (o.subject, o.beneficiary, o.freezeUntil, o.revoked, o.maxAmount, o.executed);
-            assertEq(s, a);
-            assertEq(be, b);
-            assertEq(fu, _now() + 90 days);
-            assertFalse(rv);
-            assertEq(mx, 100);
-            assertEq(ex, 0);
+            { // the stack: the record's fields end here
+                IRegulatedToken.OrderRecord memory o = _r(t).order(id);
+                (bytes32 s, bytes32 be, uint64 fu, bool rv, uint256 mx, uint256 ex) =
+                    (o.subject, o.beneficiary, o.freezeUntil, o.revoked, o.maxAmount, o.executed);
+                assertEq(s, a);
+                assertEq(be, b);
+                assertEq(fu, _now() + 90 days);
+                assertFalse(rv);
+                assertEq(mx, 100);
+                assertEq(ex, 0);
+            }
             vm.prank(compliance);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderExists.selector, id));
-            _r(t).recordOrder("o1", keccak256("other document"), a, b, 1, 0);
+            _r(t).recordOrder("o1", keccak256("other document"), a, b, 1, 0, EnvKit.codeUidOf(t));
         }
     }
 
@@ -51,26 +54,26 @@ contract RecordTest is RegFixture {
             address t = _ks()[i];
             vm.startPrank(compliance);
             vm.expectRevert(IRegulatedToken.RefRequired.selector);
-            _r(t).recordOrder(0, "doc", a, b, 1, 0);
+            _r(t).recordOrder(0, "doc", a, b, 1, 0, EnvKit.codeUidOf(t));
             vm.expectRevert(IRegulatedToken.RefRequired.selector);
-            _r(t).recordOrder("o", 0, a, b, 1, 0);
+            _r(t).recordOrder("o", 0, a, b, 1, 0, EnvKit.codeUidOf(t));
             bytes32[4] memory bad = [bytes32(0), nid(MetaTxLib.UA_POOL), nid(MetaTxLib.SHIELD_POOL), nid(t)];
             for (uint256 k; k < 4; ++k) {
                 vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.ForceTargetRefused.selector, bad[k]));
-                _r(t).recordOrder("o", "doc", bad[k], b, 1, 0);
+                _r(t).recordOrder("o", "doc", bad[k], b, 1, 0, EnvKit.codeUidOf(t));
                 vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.ForceTargetRefused.selector, bad[k]));
-                _r(t).recordOrder("o", "doc", a, bad[k], 1, 0);
+                _r(t).recordOrder("o", "doc", a, bad[k], 1, 0, EnvKit.codeUidOf(t));
             }
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.ForceTargetRefused.selector, a));
-            _r(t).recordOrder("o", "doc", a, a, 1, 0);
+            _r(t).recordOrder("o", "doc", a, a, 1, 0, EnvKit.codeUidOf(t));
             bytes32 id = keccak256(abi.encode(bytes32("o"), a, b));
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, id));
-            _r(t).recordOrder("o", "doc", a, b, 0, _now());
-            _r(t).recordOrder("o", "doc", a, b, 0, _now() + 1); // freeze-only
+            _r(t).recordOrder("o", "doc", a, b, 0, _now(), EnvKit.codeUidOf(t));
+            _r(t).recordOrder("o", "doc", a, b, 0, _now() + 1, EnvKit.codeUidOf(t)); // freeze-only
             vm.stopPrank();
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(10), nid(issuer)));
-            _r(t).recordOrder("o2", "doc", a, b, 1, 0);
+            _r(t).recordOrder("o2", "doc", a, b, 1, 0, EnvKit.codeUidOf(t));
         }
     }
 
@@ -100,28 +103,28 @@ contract RecordTest is RegFixture {
             address t = _ks()[i];
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderUnknown.selector, bytes32("nope")));
-            _r(t).freeze(a, REF, "nope");
+            _r(t).freeze(a, REF, "nope", EnvKit.codeUidOf(t));
             bytes32 rb = _order(t, "ob", b, a, 100, _now() + 90 days);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, rb));
-            _r(t).freeze(a, REF, rb); // names bob
+            _r(t).freeze(a, REF, rb, EnvKit.codeUidOf(t)); // names bob
             bytes32 rr = _order(t, "or", a, b, 100, _now() + 90 days);
             vm.prank(compliance);
-            _r(t).revokeOrder(rr, REF);
+            _r(t).revokeOrder(rr, REF, EnvKit.codeUidOf(t));
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, rr));
-            _r(t).freeze(a, REF, rr);
+            _r(t).freeze(a, REF, rr, EnvKit.codeUidOf(t));
             bytes32 rs = _order(t, "os", a, b, 100, _now() + 10 days);
             vm.warp(_now() + 10 days);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, rs));
-            _r(t).freeze(a, REF, rs); // freezeUntil == now
+            _r(t).freeze(a, REF, rs, EnvKit.codeUidOf(t)); // freezeUntil == now
             _freeze(t, a); // issuer-only, until = now + 30 d
             uint64 until = _now() + 30 days;
             bytes32 short = _order(t, "oshort", a, b, 100, until - 1);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.RecordFreezeShorter.selector, until));
-            _r(t).freeze(a, REF, short);
+            _r(t).freeze(a, REF, short, EnvKit.codeUidOf(t));
             bytes32 same = _order(t, "osame", a, b, 100, until);
             _freezeRecord(t, a, same);
             assertEq(_r(t).freezeOf(a).until, until, "freezeUntil == until is accepted");
@@ -142,7 +145,7 @@ contract RecordTest is RegFixture {
             vm.expectEmit(t);
             emit IRegulatedToken.AccountUnfrozen(a, "why");
             vm.prank(compliance);
-            _r(t).revokeOrder(r, "why");
+            _r(t).revokeOrder(r, "why", EnvKit.codeUidOf(t));
             assertFalse(_r(t).isFrozen(a));
             IRegulatedToken.FreezeState memory s = _r(t).freezeOf(a);
             assertEq(s.until, _now());
@@ -152,13 +155,13 @@ contract RecordTest is RegFixture {
             assertTrue(_r(t).order(r).revoked);
             vm.prank(compliance);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, r));
-            _r(t).revokeOrder(r, "why");
+            _r(t).revokeOrder(r, "why", EnvKit.codeUidOf(t));
             vm.prank(compliance);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderUnknown.selector, bytes32("nope")));
-            _r(t).revokeOrder("nope", "why");
+            _r(t).revokeOrder("nope", "why", EnvKit.codeUidOf(t));
             vm.prank(compliance);
             vm.expectRevert(IRegulatedToken.RefRequired.selector);
-            _r(t).revokeOrder(r, 0);
+            _r(t).revokeOrder(r, 0, EnvKit.codeUidOf(t));
         }
     }
 
@@ -174,7 +177,7 @@ contract RecordTest is RegFixture {
             vm.warp(_now() + 30 days);
             _freeze(t, a);
             vm.prank(compliance);
-            _r(t).revokeOrder(r, "why");
+            _r(t).revokeOrder(r, "why", EnvKit.codeUidOf(t));
             assertTrue(_r(t).isFrozen(a), "the issuer-only freeze stands");
             vm.warp(1_800_000_000);
         }
@@ -189,17 +192,17 @@ contract RecordTest is RegFixture {
             _freezeRecord(t, a, r);
             _freeze(t, nid(address(0xCAFE)));
             vm.prank(issuer);
-            _r(t).forceTransfer(r, 10); // the control
+            _r(t).forceTransfer(r, 10, EnvKit.codeUidOf(t)); // the control
             _disable(t, 10);
             assertEq(_r(t).regulatedConfig().controls & (1 << 5), 0, "mirror bit 10 cleared at once");
             assertFalse(_r(t).isFrozen(a), "the record-backed freeze stopped");
             assertTrue(_r(t).isFrozen(nid(address(0xCAFE))), "an issuer-only freeze stands");
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, r));
-            _r(t).forceTransfer(r, 10);
+            _r(t).forceTransfer(r, 10, EnvKit.codeUidOf(t));
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, r));
-            _r(t).freeze(b, REF, r);
+            _r(t).freeze(b, REF, r, EnvKit.codeUidOf(t));
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);
             _freeze(t, a); // T1 replaces a value that no longer counts
@@ -216,15 +219,15 @@ contract RecordTest is RegFixture {
             _disable(t, 10);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(10), nid(issuer)));
-            _r(t).revokeOrder(r, "why");
+            _r(t).revokeOrder(r, "why", EnvKit.codeUidOf(t));
             vm.expectEmit(t);
             emit IRegulatedToken.OrderRevoked(r, "why");
             vm.prank(compliance);
-            _r(t).revokeOrder(r, "why");
+            _r(t).revokeOrder(r, "why", EnvKit.codeUidOf(t));
             assertTrue(_r(t).order(r).revoked);
             vm.prank(compliance);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(10)));
-            _r(t).recordOrder("o2", "doc", a, b, 1, 0);
+            _r(t).recordOrder("o2", "doc", a, b, 1, 0, EnvKit.codeUidOf(t));
         }
     }
 }

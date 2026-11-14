@@ -167,7 +167,7 @@ contract DexOutsideTest is Test {
 
     function _list(MockERC20 t) internal returns (MockERC20) {
         vm.prank(admin);
-        dex.setMarket(address(a), address(t), true);
+        dex.setMarket(address(a), address(t), true, EnvKit.codeUidOf(address(dex)));
         return t;
     }
 
@@ -403,7 +403,7 @@ contract DexOutsideTest is Test {
     function test_noReturnValueToken_settles() public {
         NoReturnERC20 t = new NoReturnERC20();
         vm.prank(admin);
-        dex.setMarket(address(a), address(t), true);
+        dex.setMarket(address(a), address(t), true, EnvKit.codeUidOf(address(dex)));
         t.mint(dave, 5000);
         address p = dex.puller();
         vm.prank(dave);
@@ -421,7 +421,7 @@ contract DexOutsideTest is Test {
     function test_fallbackOnlyToken_isOutside_andFails() public {
         address fb = address(new FallbackOnly());
         vm.prank(admin);
-        dex.setMarket(address(a), fb, true);
+        dex.setMarket(address(a), fb, true, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.tokenKind(fb), 2);
         DexLegs.Settlement[] memory ss = _one(_settlement(_dave(fb, 1, 2000), 1));
         vm.prank(relayer);
@@ -451,7 +451,7 @@ contract DexOutsideTest is Test {
     function test_returnbombToken_reasonIsBounded_othersSettle() public {
         address bomb = address(new BombERC20());
         vm.prank(admin);
-        dex.setMarket(address(a), bomb, true);
+        dex.setMarket(address(a), bomb, true, EnvKit.codeUidOf(address(dex)));
         DexLegs.Settlement[] memory ss = _two(
             _settlement(_dave(bomb, 1, 2000), 1), _settlement(_dave(address(usdc), 2, 2000), 2));
         vm.recordLogs();

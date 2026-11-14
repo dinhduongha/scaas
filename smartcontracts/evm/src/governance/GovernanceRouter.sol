@@ -18,7 +18,8 @@ import {IComplianceRegistry} from "../regulated/IComplianceRegistry.sol";
 ///        of SCaaS whose `GOV_ROUTER` it is. The admin's and a holder's ops come from `GovernanceRouterBase`; here the powers
 ///        of the token kinds (`mint`, `mintToUA`, `disableWrap`, the rate entries; the eight controls of the regulated kinds
 ///        8-13, plan T32; the PQZ verifier UA of the PQZ kinds, group 3f) and of `SCaaSDex` (the market setters, `setFeeSplit`), each one `mtx<Op>(UAEnvelope, …, UASig)`
-///        (ua-mtx-merge T7). Domain
+///        (ua-mtx-merge T7). Every op of a role holder or the admin signs the target's chain word `chainUid` as its last
+///        field and forwards it as the entry's trailing argument (CTR-GOV-28 and its Change of round 3zb + 3zc). Domain
 ///        `("SCaaS GovernanceRouter", "1", chainId, router, chain_uid)`. **UNAUDITED.**
 contract GovernanceRouter is GovernanceRouterBase {
     constructor(bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
@@ -28,120 +29,124 @@ contract GovernanceRouter is GovernanceRouterBase {
     // ------------------------------------------------------------------ the powers on the token kinds
 
     function mtxMint(MetaTxLib.UAEnvelope calldata e, address target, address to, uint256 amount,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_MINT, e, target, IWrappedToken.mint.selector, abi.encode(to, amount), auth);
+        _ua(T.UA_MINT, e, target, IWrappedToken.mint.selector, abi.encode(to, amount, chainUid), auth);
     }
 
     function mtxMintToUA(MetaTxLib.UAEnvelope calldata e, address target, bytes32 to, uint256 amount,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_MINT_TO_UA, e, target, IWrappedToken.mintToUA.selector, abi.encode(to, amount), auth);
+        _ua(T.UA_MINT_TO_UA, e, target, IWrappedToken.mintToUA.selector, abi.encode(to, amount, chainUid), auth);
     }
 
     function mtxDisableWrap(MetaTxLib.UAEnvelope calldata e, address target, address leg, bytes32 reason,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_DISABLE_WRAP, e, target, IWrappedToken.disableWrap.selector, abi.encode(leg, reason), auth);
+        _ua(T.UA_DISABLE_WRAP, e, target, IWrappedToken.disableWrap.selector, abi.encode(leg, reason, chainUid), auth);
     }
 
     function mtxProposeRate(MetaTxLib.UAEnvelope calldata e, address target, address leg, uint96 num, uint96 den,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_PROPOSE_RATE, e, target, IWrappedToken.proposeRate.selector, abi.encode(leg, num, den), auth);
+        _ua(T.UA_PROPOSE_RATE, e, target, IWrappedToken.proposeRate.selector, abi.encode(leg, num, den, chainUid), auth);
     }
 
-    function mtxCancelRate(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
-        _ua(T.UA_CANCEL_RATE, e, target, IWrappedToken.cancelRate.selector, "", auth);
+    function mtxCancelRate(MetaTxLib.UAEnvelope calldata e, address target, bytes32 chainUid, IUARegistry.UASig calldata auth)
+        external
+    {
+        _ua(T.UA_CANCEL_RATE, e, target, IWrappedToken.cancelRate.selector, abi.encode(chainUid), auth);
     }
 
-    function mtxExecuteRate(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
-        _ua(T.UA_EXECUTE_RATE, e, target, IWrappedToken.executeRate.selector, "", auth);
+    function mtxExecuteRate(MetaTxLib.UAEnvelope calldata e, address target, bytes32 chainUid, IUARegistry.UASig calldata auth)
+        external
+    {
+        _ua(T.UA_EXECUTE_RATE, e, target, IWrappedToken.executeRate.selector, abi.encode(chainUid), auth);
     }
 
     // ------------------------------------------------------------------ the controls of the regulated kinds 8-13 (plan T32)
 
     function mtxFreeze(MetaTxLib.UAEnvelope calldata e, address target, bytes32 account, bytes32 ref, bytes32 recordId,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_FREEZE, e, target, IRegulatedToken.freeze.selector, abi.encode(account, ref, recordId), auth);
+        _ua(T.UA_FREEZE, e, target, IRegulatedToken.freeze.selector, abi.encode(account, ref, recordId, chainUid), auth);
     }
 
     function mtxUnfreeze(MetaTxLib.UAEnvelope calldata e, address target, bytes32 account, bytes32 ref,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_UNFREEZE, e, target, IRegulatedToken.unfreeze.selector, abi.encode(account, ref), auth);
+        _ua(T.UA_UNFREEZE, e, target, IRegulatedToken.unfreeze.selector, abi.encode(account, ref, chainUid), auth);
     }
 
     function mtxForceTransfer(MetaTxLib.UAEnvelope calldata e, address target, bytes32 recordId, uint256 amount,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_FORCE_TRANSFER, e, target, IRegulatedToken.forceTransfer.selector, abi.encode(recordId, amount), auth);
+        _ua(T.UA_FORCE_TRANSFER, e, target, IRegulatedToken.forceTransfer.selector, abi.encode(recordId, amount, chainUid), auth);
     }
 
     function mtxPause(MetaTxLib.UAEnvelope calldata e, address target, bytes32 ref, uint64 until,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_PAUSE, e, target, IRegulatedToken.pause.selector, abi.encode(ref, until), auth);
+        _ua(T.UA_PAUSE, e, target, IRegulatedToken.pause.selector, abi.encode(ref, until, chainUid), auth);
     }
 
-    function mtxUnpause(MetaTxLib.UAEnvelope calldata e, address target, bytes32 ref, IUARegistry.UASig calldata auth)
+    function mtxUnpause(MetaTxLib.UAEnvelope calldata e, address target, bytes32 ref, bytes32 chainUid, IUARegistry.UASig calldata auth)
         external
     {
-        _ua(T.UA_UNPAUSE, e, target, IRegulatedToken.unpause.selector, abi.encode(ref), auth);
+        _ua(T.UA_UNPAUSE, e, target, IRegulatedToken.unpause.selector, abi.encode(ref, chainUid), auth);
     }
 
     function mtxRecordOrder(MetaTxLib.UAEnvelope calldata e, address target, bytes32 orderId, bytes32 documentHash,
-        bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil, IUARegistry.UASig calldata auth)
+        bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil, bytes32 chainUid, IUARegistry.UASig calldata auth)
         external
     {
         _ua(T.UA_RECORD_ORDER, e, target, IRegulatedToken.recordOrder.selector,
-            abi.encode(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil), auth);
+            abi.encode(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil, chainUid), auth);
     }
 
     function mtxRevokeOrder(MetaTxLib.UAEnvelope calldata e, address target, bytes32 recordId, bytes32 reasonRef,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_REVOKE_ORDER, e, target, IRegulatedToken.revokeOrder.selector, abi.encode(recordId, reasonRef), auth);
+        _ua(T.UA_REVOKE_ORDER, e, target, IRegulatedToken.revokeOrder.selector, abi.encode(recordId, reasonRef, chainUid), auth);
     }
 
     /// @notice CTR-GOV-20: any holder of bit 22; `account` is the direct entry's `from` (the struct's `from` is the signer).
     function mtxOperatorTransfer(MetaTxLib.UAEnvelope calldata e, address target, bytes32 account, bytes32 to,
-        uint256 amount, bytes32 ref, IUARegistry.UASig calldata auth) external
+        uint256 amount, bytes32 ref, bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_OPERATOR_TRANSFER, e, target, IRegulatedToken.operatorTransfer.selector, abi.encode(account, to, amount, ref),
+        _ua(T.UA_OPERATOR_TRANSFER, e, target, IRegulatedToken.operatorTransfer.selector, abi.encode(account, to, amount, ref, chainUid),
             auth);
     }
 
     /// @notice Bit 23 `TAX` (pay-meta-tax spec §6.2): any holder; fee mode `NONE`, relayable at fee 0.
-    function mtxSetTaxRate(MetaTxLib.UAEnvelope calldata e, address target, uint32 ratePpm, IUARegistry.UASig calldata auth)
+    function mtxSetTaxRate(MetaTxLib.UAEnvelope calldata e, address target, uint32 ratePpm, bytes32 chainUid, IUARegistry.UASig calldata auth)
         external
     {
-        _ua(T.UA_SET_TAX_RATE, e, target, IRegulatedToken.setTaxRate.selector, abi.encode(ratePpm), auth);
+        _ua(T.UA_SET_TAX_RATE, e, target, IRegulatedToken.setTaxRate.selector, abi.encode(ratePpm, chainUid), auth);
     }
 
     function mtxSetTaxRecipient(MetaTxLib.UAEnvelope calldata e, address target, bytes32 taxRecipient,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_TAX_RECIPIENT, e, target, IRegulatedToken.setTaxRecipient.selector, abi.encode(taxRecipient), auth);
+        _ua(T.UA_SET_TAX_RECIPIENT, e, target, IRegulatedToken.setTaxRecipient.selector, abi.encode(taxRecipient, chainUid), auth);
     }
 
     // ------------------------------------------------------------------ the lists (round 3s, spec 2026-11-10-token-lists.md §6.2)
 
     /// @notice Bit 8's holder: `accounts` on (or off) the allow list, at once; the array signed as the `keccak256` of its words.
     function mtxSetAllowed(MetaTxLib.UAEnvelope calldata e, address target, bytes32[] calldata accounts, bool on,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_SET_ALLOWED, e, target, abi.encode(keccak256(abi.encodePacked(accounts)), on),
-            abi.encodeCall(IRegulatedToken.setAllowed, (accounts, on)), auth);
+        _uaCall(T.UA_SET_ALLOWED, e, target, abi.encode(keccak256(abi.encodePacked(accounts)), on, chainUid),
+            abi.encodeCall(IRegulatedToken.setAllowed, (accounts, on, chainUid)), auth);
     }
 
     /// @notice Bit 9's holder: `accounts` on (or off) the deny list, at once.
     function mtxSetDenied(MetaTxLib.UAEnvelope calldata e, address target, bytes32[] calldata accounts, bool on,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_SET_DENIED, e, target, abi.encode(keccak256(abi.encodePacked(accounts)), on),
-            abi.encodeCall(IRegulatedToken.setDenied, (accounts, on)), auth);
+        _uaCall(T.UA_SET_DENIED, e, target, abi.encode(keccak256(abi.encodePacked(accounts)), on, chainUid),
+            abi.encodeCall(IRegulatedToken.setDenied, (accounts, on, chainUid)), auth);
     }
 
     /// @notice The admin switches on 8, 9 or 28 at once (spec §5.3).
@@ -184,10 +189,10 @@ contract GovernanceRouter is GovernanceRouterBase {
 
     /// @notice Bit 24 `PQZ_PROOF` (group 3h, PQZ proof path spec §5): any holder sets a PQZ token's `proofStore` (`NONE` /
     ///         `LOG`, from its next debit); fee mode `NONE`, relayable at fee 0.
-    function mtxSetProofStore(MetaTxLib.UAEnvelope calldata e, address target, uint8 next, IUARegistry.UASig calldata auth)
+    function mtxSetProofStore(MetaTxLib.UAEnvelope calldata e, address target, uint8 next, bytes32 chainUid, IUARegistry.UASig calldata auth)
         external
     {
-        _ua(T.UA_SET_PROOF_STORE, e, target, IPqzToken.setProofStore.selector, abi.encode(next), auth);
+        _ua(T.UA_SET_PROOF_STORE, e, target, IPqzToken.setProofStore.selector, abi.encode(next, chainUid), auth);
     }
 
     // ------------------------------------------------------------------ wrap limits on the hybrids (group 3l, spec 2026-11-10 §9)
@@ -197,17 +202,34 @@ contract GovernanceRouter is GovernanceRouterBase {
     ///         `noticePeriod()`; fee mode `NONE`, relayable at fee 0. The struct words: `target`, the leg array's hash, the
     ///         three flags.
     function mtxSetWrapLimits(MetaTxLib.UAEnvelope calldata e, address target, IWrappedToken.WrapLegLimits[] calldata legs,
-        bool netUnwrap, bool wrapList, bool unwrapList, IUARegistry.UASig calldata auth) external
+        bool netUnwrap, bool wrapList, bool unwrapList, bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _uaCall(T.UA_SET_WRAP_LIMITS, e, target, abi.encode(_legsHash(legs), netUnwrap, wrapList, unwrapList),
-            abi.encodeCall(IWrappedToken.setWrapLimits, (legs, netUnwrap, wrapList, unwrapList)), auth);
+        _uaCall(T.UA_SET_WRAP_LIMITS, e, target, abi.encode(_legsHash(legs), netUnwrap, wrapList, unwrapList, chainUid),
+            abi.encodeCall(IWrappedToken.setWrapLimits, (legs, netUnwrap, wrapList, unwrapList, chainUid)), auth);
+    }
+
+    // ------------------------------------------------------------------ the supply caps (round 3zc, CTR-GOV-30)
+
+    /// @notice The admin's `setMaxSupply` (bit 31, a hybrid's cap): the propose and the apply are the same signed op sent
+    ///         twice (two nonces); fee mode `NONE`, relayable at fee 0.
+    function mtxSetMaxSupply(MetaTxLib.UAEnvelope calldata e, address target, uint256 maxSupply, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_SET_MAX_SUPPLY, e, target, IWrappedToken.setMaxSupply.selector, abi.encode(maxSupply, chainUid), auth);
+    }
+
+    function mtxSetMaxWrapSupply(MetaTxLib.UAEnvelope calldata e, address target, uint256 maxWrapSupply, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_SET_MAX_WRAP_SUPPLY, e, target, IWrappedToken.setMaxWrapSupply.selector, abi.encode(maxWrapSupply, chainUid),
+            auth);
     }
 
     /// @notice Bit 26's holder: `account`'s membership of the wrapper and unwrapper lists, at once.
     function mtxSetWrapMember(MetaTxLib.UAEnvelope calldata e, address target, bytes32 account, bool canWrap, bool canUnwrap,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_WRAP_MEMBER, e, target, IWrappedToken.setWrapMember.selector, abi.encode(account, canWrap, canUnwrap),
+        _ua(T.UA_SET_WRAP_MEMBER, e, target, IWrappedToken.setWrapMember.selector, abi.encode(account, canWrap, canUnwrap, chainUid),
             auth);
     }
 
@@ -229,28 +251,28 @@ contract GovernanceRouter is GovernanceRouterBase {
     // ------------------------------------------------------------------ the powers on the DEX
 
     function mtxSetMarket(MetaTxLib.UAEnvelope calldata e, address target, address base, address quote, bool listed,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_MARKET, e, target, ISCaaSDex.setMarket.selector, abi.encode(base, quote, listed), auth);
+        _ua(T.UA_SET_MARKET, e, target, ISCaaSDex.setMarket.selector, abi.encode(base, quote, listed, chainUid), auth);
     }
 
     function mtxSetExchangeTarget(MetaTxLib.UAEnvelope calldata e, address target, address exchangeTarget, bool listed,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_EXCHANGE_TARGET, e, target, ISCaaSDex.setExchangeTarget.selector, abi.encode(exchangeTarget, listed),
+        _ua(T.UA_SET_EXCHANGE_TARGET, e, target, ISCaaSDex.setExchangeTarget.selector, abi.encode(exchangeTarget, listed, chainUid),
             auth);
     }
 
-    function mtxSetListedOnly(MetaTxLib.UAEnvelope calldata e, address target, bool on, IUARegistry.UASig calldata auth)
+    function mtxSetListedOnly(MetaTxLib.UAEnvelope calldata e, address target, bool on, bytes32 chainUid, IUARegistry.UASig calldata auth)
         external
     {
-        _ua(T.UA_SET_LISTED_ONLY, e, target, ISCaaSDex.setListedOnly.selector, abi.encode(on), auth);
+        _ua(T.UA_SET_LISTED_ONLY, e, target, ISCaaSDex.setListedOnly.selector, abi.encode(on, chainUid), auth);
     }
 
     function mtxSetFeeSplit(MetaTxLib.UAEnvelope calldata e, address target, uint32 relayerSharePpm, address treasury,
-        IUARegistry.UASig calldata auth) external
+        bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _ua(T.UA_SET_FEE_SPLIT, e, target, ISCaaSDex.setFeeSplit.selector, abi.encode(relayerSharePpm, treasury), auth);
+        _ua(T.UA_SET_FEE_SPLIT, e, target, ISCaaSDex.setFeeSplit.selector, abi.encode(relayerSharePpm, treasury, chainUid), auth);
     }
 
     // ------------------------------------------------------------------ the factory's creations (S3)

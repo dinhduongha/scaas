@@ -179,7 +179,7 @@ abstract contract UALedgerBase is UARegistryBase {
 
     /// The same on any wrapper `w` of `tok`, at its rate: returns the units minted (and passed on).
     function _wrapLOn(WrappedToken w, address who, uint256 amount) internal returns (uint256 minted) {
-        tok.mint(address(this), amount);
+        tok.mint(address(this), amount, EnvKit.codeUidOf(address(tok)));
         tok.approve(address(w), amount);
         minted = w.wrap(amount);
         w.transfer(who, minted);

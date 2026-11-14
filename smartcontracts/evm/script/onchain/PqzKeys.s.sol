@@ -345,8 +345,8 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
             vm.startBroadcast(k1);
             IPqzToken(t).pqzSetVerifier(_pad(a3), uid);
             IPqzToken(t).pqzCancelVerifier(uid);
-            IPqzToken(t).setProofStore(1);
-            IPqzToken(t).setProofStore(0);
+            IPqzToken(t).setProofStore(1, uid);
+            IPqzToken(t).setProofStore(0, uid);
             IPqzToken(t).setVerifierFee(2, uid);
             IPqzToken(t).setVerifierFee(0, uid);
             IPqzToken(t).pqzRevokeVerifier(uid);
@@ -365,9 +365,9 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
         (e, s) = _routerAuth("UAPqzCancelVerifier", t, abi.encode(uid));
         vm.broadcast(k2);
         gr.mtxPqzCancelVerifier(e, t, uid, s);
-        (e, s) = _routerAuth("UASetProofStore", t, abi.encode(uint8(1)));
+        (e, s) = _routerAuth("UASetProofStore", t, abi.encode(uint8(1), uid));
         vm.broadcast(k2);
-        gr.mtxSetProofStore(e, t, 1, s);
+        gr.mtxSetProofStore(e, t, 1, uid, s);
         (e, s) = _routerAuth("UASetVerifierFee", t, abi.encode(uint64(2), uid));
         vm.broadcast(k2);
         gr.mtxSetVerifierFee(e, t, 2, uid, s);
@@ -737,8 +737,8 @@ contract PqzKeysSetup is PqzKeysKit {
     function _tradeKind(uint8 n) internal {
         address x = _kindToken(n, "trade");
         vm.startBroadcast(k1);
-        dx.setMarket{gas: GT}(x, pA, true);
-        dx.setMarket{gas: GT}(x, pB, true);
+        dx.setMarket{gas: GT}(x, pA, true, dx.chainUid());
+        dx.setMarket{gas: GT}(x, pB, true, dx.chainUid());
         vm.stopBroadcast();
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
         (ss[0].ref, ss[0].taker) = (keccak256(abi.encode(runSalt, "pqzkeys-kind", n)), _leg(x, _o(_pad(a1), pA, 1000, 1000), k1, 1000));
@@ -774,8 +774,9 @@ contract PqzKeysSetup is PqzKeysKit {
     function _pull(uint8 n) internal {
         address x = _kindToken(n, "pull");
         ISCaaSDex d = _pqzKind(n) ? dx : dxF;
+        bytes32 wd = d.chainUid();
         vm.broadcast(k1);
-        d.setMarket{gas: GT}(x, address(usdl), true);
+        d.setMarket{gas: GT}(x, address(usdl), true, wd);
         vm.broadcast(k1);
         address pair = v2f.createPair{gas: 30_000_000}(x, address(usdl));
         _book(pair, "MockV2LiquidityPair");
@@ -1039,23 +1040,23 @@ contract PqzKeysSetup is PqzKeysKit {
         bytes32 ref = keccak256(abi.encode(runSalt, "pqzkeys-ref", kind));
         bytes32 oid = keccak256(abi.encode(runSalt, "pqzkeys-order", kind));
         bytes32 rid = keccak256(abi.encode(oid, _pad(a2), _pad(a3)));
-        bytes32[] memory d = new bytes32[](1);
-        d[0] = _pad(address(0xDE41ED));
         uint64 now_ = uint64(block.timestamp);
         vm.startBroadcast(k1);
         IERC20(t).transfer(a2, 1_000);
-        fA.forwardCall(t, abi.encodeCall(r.freeze, (_pad(a3), ref, bytes32(0))));
-        fA.forwardCall(t, abi.encodeCall(r.unfreeze, (_pad(a3), ref)));
-        fA.forwardCall(t, abi.encodeCall(r.pause, (ref, now_ + 1 hours)));
-        fA.forwardCall(t, abi.encodeCall(r.unpause, (ref)));
-        fB.forwardCall(t, abi.encodeCall(r.recordOrder, (oid, keccak256("order doc"), _pad(a2), _pad(a3), 100, now_ + 1 days)));
-        fA.forwardCall(t, abi.encodeCall(r.freeze, (_pad(a2), ref, rid)));
-        fA.forwardCall(t, abi.encodeCall(r.forceTransfer, (rid, 40)));
-        fB.forwardCall(t, abi.encodeCall(r.revokeOrder, (rid, ref)));
+        fA.forwardCall(t, abi.encodeCall(r.freeze, (_pad(a3), ref, bytes32(0), uid)));
+        fA.forwardCall(t, abi.encodeCall(r.unfreeze, (_pad(a3), ref, uid)));
+        fA.forwardCall(t, abi.encodeCall(r.pause, (ref, now_ + 1 hours, uid)));
+        fA.forwardCall(t, abi.encodeCall(r.unpause, (ref, uid)));
+        fB.forwardCall(t, abi.encodeCall(IRegulatedToken.recordOrder, (oid, keccak256("order doc"), _pad(a2), _pad(a3), 100, now_ + 1 days, uid)));
+        fA.forwardCall(t, abi.encodeCall(r.freeze, (_pad(a2), ref, rid, uid)));
+        fA.forwardCall(t, abi.encodeCall(r.forceTransfer, (rid, 40, uid)));
+        fB.forwardCall(t, abi.encodeCall(r.revokeOrder, (rid, ref, uid)));
         IGovernance(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, _pad(a1), uid);
-        r.operatorTransfer(_pad(a2), _pad(a3), 10, ref);
+        r.operatorTransfer(_pad(a2), _pad(a3), 10, ref, uid);
+        bytes32[] memory d = new bytes32[](1);
+        d[0] = _pad(address(0xDE41ED));
         IGovernance(t).grantRole(GovernanceBits.DENYLIST, _pad(a1), uid);
-        r.setDenied(d, true);
+        r.setDenied(d, true, uid);
         r.enableFeature(GovernanceBits.DENYLIST, uid);
         vm.stopBroadcast();
     }
@@ -1099,8 +1100,8 @@ contract PqzKeysSetup is PqzKeysKit {
         bytes32 uid = IMetaTx(t).chainUid();
         vm.startBroadcast(k1);
         IGovernance(t).grantRole(GovernanceBits.WRAP_LIST, _pad(a1), uid);
-        IWrappedToken(t).setWrapLimits(l, false, true, false);
-        IWrappedToken(t).setWrapMember(_pad(a2), true, true);
+        IWrappedToken(t).setWrapLimits(l, false, true, false, uid);
+        IWrappedToken(t).setWrapMember(_pad(a2), true, true, uid);
         vm.stopBroadcast();
     }
 

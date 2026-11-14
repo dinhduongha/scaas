@@ -20,6 +20,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Relaying (CTR-PQZ-15 / -21, P6g plan D4): the address path binds the envelope into the statement (header word 17), the
 /// UA path with an `mldsa65` fee UA likewise with its own tag, PQZ selectors are never batched, `PERCENT` is refused.
@@ -161,7 +162,7 @@ contract PqzRelayTest is PqzFixture {
 
     function test_v3FeeUA() public {
         bytes32 fee = _mldsaUA(9);
-        NormalPqzToken(address(tok)).mintToUA(fee, 20 * SCALE + 5);
+        NormalPqzToken(address(tok)).mintToUA(fee, 20 * SCALE + 5, EnvKit.codeUidOf(address(tok)));
         minted += 20 * SCALE + 5;
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fee;
@@ -177,7 +178,7 @@ contract PqzRelayTest is PqzFixture {
         _assertConservation(tok);
 
         // a v3 transfer: the UA binding (its own tag) in the statement; `shieldIn` 2 from the fee UA's own balance
-        NormalPqzToken(address(tok)).mintToUA(fee, 2 * SCALE);
+        NormalPqzToken(address(tok)).mintToUA(fee, 2 * SCALE, EnvKit.codeUidOf(address(tok)));
         minted += 2 * SCALE;
         bytes memory pl = _payload(1, 2, alice, bob, bytes32(0), _out(2, false), "");
         m.data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict()));
@@ -205,7 +206,7 @@ contract PqzRelayTest is PqzFixture {
         tok.mtxBatch(ms, UACall.auths(ms, auths));
         // UA-6: a holder is a signing UA, so alice (registered with her PQZ key in one call) signs an envelope herself;
         // the same envelope under a signature the `mldsa65` precompile rejects is refused (no `authRef`, no foreign signer)
-        NormalPqzToken(address(tok)).mintToUA(alice, 3 * SCALE);
+        NormalPqzToken(address(tok)).mintToUA(alice, 3 * SCALE, EnvKit.codeUidOf(address(tok)));
         minted += 3 * SCALE;
         MetaTxLib.UAMetaTransaction memory h;
         h.from = alice;

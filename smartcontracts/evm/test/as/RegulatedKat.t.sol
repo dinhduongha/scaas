@@ -216,8 +216,8 @@ contract RegulatedKatTest is RegFixture {
                 bytes32[] memory one = new bytes32[](1);
                 one[0] = a;
                 vm.startPrank(issuer);
-                if (fl & 1 != 0) IRegulatedToken(ts[c]).setAllowed(one, true);
-                if (fl & 2 != 0) IRegulatedToken(ts[c]).setDenied(one, true);
+                if (fl & 1 != 0) IRegulatedToken(ts[c]).setAllowed(one, true, EnvKit.codeUidOf(address(ts[c])));
+                if (fl & 2 != 0) IRegulatedToken(ts[c]).setDenied(one, true, EnvKit.codeUidOf(address(ts[c])));
                 vm.stopPrank();
                 assertEq(IRegulatedToken(ts[c]).listFlagsOf(a), fl);
                 j = string.concat(j, _listRow(string.concat(names[c], ": listFlags ", vm.toString(fl)), ts[c], a, fl,
@@ -340,17 +340,17 @@ contract RegulatedKatTest is RegFixture {
     }
 
     function _fz(bytes32 a, bytes32 ref, bytes32 rid) internal view returns (bytes memory, string memory) {
-        return (abi.encodeCall(IRegulatedToken.freeze, (a, ref, rid)), string.concat("{", _kv("fn", _q("freeze")),
+        return (abi.encodeCall(IRegulatedToken.freeze, (a, ref, rid, EnvKit.codeUidOf(t8))), string.concat("{", _kv("fn", _q("freeze")),
             _c("account", _h(a)), _c("ref", _h(ref)), _c("recordId", _h(rid)), "}"));
     }
 
     function _ufz(bytes32 a, bytes32 ref) internal view returns (bytes memory, string memory) {
-        return (abi.encodeCall(IRegulatedToken.unfreeze, (a, ref)), string.concat("{", _kv("fn", _q("unfreeze")),
+        return (abi.encodeCall(IRegulatedToken.unfreeze, (a, ref, EnvKit.codeUidOf(t8))), string.concat("{", _kv("fn", _q("unfreeze")),
             _c("account", _h(a)), _c("ref", _h(ref)), "}"));
     }
 
     function _rv(bytes32 rid, bytes32 reason) internal view returns (bytes memory, string memory) {
-        return (abi.encodeCall(IRegulatedToken.revokeOrder, (rid, reason)), string.concat("{", _kv("fn", _q("revokeOrder")),
+        return (abi.encodeCall(IRegulatedToken.revokeOrder, (rid, reason, EnvKit.codeUidOf(t8))), string.concat("{", _kv("fn", _q("revokeOrder")),
             _c("recordId", _h(rid)), _c("reasonRef", _h(reason)), "}"));
     }
 
@@ -462,7 +462,7 @@ contract RegulatedKatTest is RegFixture {
         _back(s);
         rid = _rec(acct, N + 90 days);
         vm.prank(compliance);
-        _r(t8).revokeOrder(rid, REF);
+        _r(t8).revokeOrder(rid, REF, EnvKit.codeUidOf(t8));
         j = string.concat(j, _freezeRow("a revoked record", "T4", acct, REF, rid,
             _e1("OrderInactive(bytes32)", IRegulatedToken.OrderInactive.selector, rid)));
         _back(s);

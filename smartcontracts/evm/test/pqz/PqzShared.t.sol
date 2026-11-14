@@ -23,6 +23,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {IPqzWrappedToken} from "../../src/pqz/IPqzToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan 5h Task 3b on the PQZ kinds (the precompile mocked): the shared `IConfidentialToken` signature (`beneficiary`
 /// = the payload's, D20), the unshield to a `bytes32` UA recipient (UA-5c (b)), the unshield-unwrap to a UA through a
@@ -197,7 +198,7 @@ contract PqzSharedTest is PqzFixture {
         // the UA envelope
         _fund(tok, alice, 3);
         vm.roll(block.number + ROLL_AGE);
-        NormalPqzToken(address(tok)).mintToUA(fan, 5);
+        NormalPqzToken(address(tok)).mintToUA(fan, 5, EnvKit.codeUidOf(address(tok)));
         minted += 5;
         _relayUA(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1)), 0);
         assertEq(tok.pqzAccount(alice, 0).rolled, 2, "rolled via the UA envelope, fee 0");

@@ -149,7 +149,15 @@
       "maxRateStepBps",
       "legs[1].capped",
       "maxSupply",
-      "legs[1].ctl"
+      "legs[1].ctl",
+      "maxWrapSupply",
+      "totalWrapped",
+      "pendingMaxSupply.value",
+      "pendingMaxSupply.eta",
+      "pendingMaxSupply.generation",
+      "pendingMaxWrapSupply.value",
+      "pendingMaxWrapSupply.eta",
+      "pendingMaxWrapSupply.generation"
     ],
     "slots": [
       0,
@@ -169,7 +177,15 @@
       3,
       0,
       4,
-      0
+      0,
+      5,
+      6,
+      7,
+      8,
+      8,
+      9,
+      10,
+      10
     ],
     "inner": [
       0,
@@ -179,6 +195,14 @@
       1,
       1,
       2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
       0,
       0,
       0,
@@ -209,7 +233,15 @@
       5,
       23,
       0,
-      24
+      24,
+      0,
+      0,
+      0,
+      0,
+      8,
+      0,
+      0,
+      8
     ]
   },
   "uaLedger": {

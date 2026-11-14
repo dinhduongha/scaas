@@ -139,7 +139,7 @@ contract GovProofBitTest is PqzOffchainBase {
         MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(from, LANE, router.mtxNonce(from, LANE), block.timestamp + 300, 0,
             address(0xBEEF), 0, address(0xFEE));
         bytes32 sh = keccak256(bytes.concat(abi.encode(GovernanceRouterTypes.UA_SET_PROOF_STORE, u.from), abi.encode(target),
-            abi.encode(next), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+            abi.encode(next, EnvKit.codeUidOf(target)), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
         IUARegistry.UASig memory auth;
         if (from == nId) {
             (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(router)), sh));
@@ -148,7 +148,7 @@ contract GovProofBitTest is PqzOffchainBase {
             auth = UACall.auth(from, _mlAuth());
         }
         vm.prank(address(0x4E1A));
-        router.mtxSetProofStore(u, target, next, auth);
+        router.mtxSetProofStore(u, target, next, EnvKit.codeUidOf(target), auth);
     }
 
     // ------------------------------------------------------------------ the kinds
@@ -206,7 +206,7 @@ contract GovProofBitTest is PqzOffchainBase {
         if (viaRouter) _routerSet(h, address(t), PqzCore.LOG);
         else {
             vm.prank(address(uint160(uint256(h))));
-            t.setProofStore(PqzCore.LOG);
+            t.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(t)));
         }
         assertEq(t.proofStore(), PqzCore.LOG);
     }
@@ -276,14 +276,14 @@ contract GovProofBitTest is PqzOffchainBase {
         bytes32 stranger = nid(address(0x5742));
         vm.prank(address(0x5742));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, BIT, stranger));
-        t.setProofStore(PqzCore.LOG);
+        t.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(t)));
         NormalPqzToken off = _tok24(4, 0, false, 0);
         vm.prank(vm.addr(NKEY));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, BIT));
-        off.setProofStore(PqzCore.LOG);
+        off.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(off)));
         vm.prank(vm.addr(NKEY));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.ProofStoreInvalid.selector, uint8(2)));
-        t.setProofStore(2);
+        t.setProofStore(2, EnvKit.codeUidOf(address(t)));
         assertEq(t.proofStore(), PqzCore.NONE);
     }
 
@@ -292,18 +292,18 @@ contract GovProofBitTest is PqzOffchainBase {
         NormalPqzToken t = _tok24(5, nId, true, 0);
         vm.recordLogs();
         vm.prank(vm.addr(NKEY));
-        t.setProofStore(PqzCore.NONE);
+        t.setProofStore(PqzCore.NONE, EnvKit.codeUidOf(address(t)));
         assertEq(_setEvents(address(t)), 0, "same value: no event");
         vm.recordLogs();
         vm.prank(vm.addr(NKEY));
-        t.setProofStore(PqzCore.LOG);
+        t.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(t)));
         Vm.Log[] memory ls = vm.getRecordedLogs();
         assertEq(ls.length, 1);
         assertEq(ls[0].topics[0], EV_SET);
         assertEq(ls[0].data, abi.encode(PqzCore.NONE, PqzCore.LOG));
         vm.recordLogs();
         vm.prank(vm.addr(NKEY));
-        t.setProofStore(PqzCore.LOG);
+        t.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(t)));
         assertEq(_setEvents(address(t)), 0, "same value again: no event");
         assertEq(uint8(uint256(vm.load(address(t), PqzCore._STORAGE)) >> 184), PqzCore.LOG, "slot 0 byte 23");
         assertEq(uint8(uint256(vm.load(address(t), PqzCore._STORAGE)) >> 176), 0, "byte 22, pqzVerifyMode, untouched");
@@ -340,7 +340,7 @@ contract GovProofBitTest is PqzOffchainBase {
         IGovernance(address(t)).disableFeature(BIT, EnvKit.codeUidOf(address(IGovernance(address(t)))));
         vm.prank(vm.addr(NKEY));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, BIT));
-        t.setProofStore(mode == PqzCore.NONE ? PqzCore.LOG : PqzCore.NONE);
+        t.setProofStore(mode == PqzCore.NONE ? PqzCore.LOG : PqzCore.NONE, EnvKit.codeUidOf(address(t)));
         assertEq(t.proofStore(), mode, "frozen");
         _debit(t, 0, mode == PqzCore.LOG);
     }

@@ -14,6 +14,7 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Makes a call with a fixed gas limit from inside one transaction (the top-level call keeps the test's gas).
 contract GasCaller {
@@ -78,7 +79,7 @@ contract RegistryFailureTest is RegFixture {
                 _unavailable(alice, t, tr, "transfer");
                 _unavailable(alice, t, pay, "fee leg");
                 if (i == 0) {
-                    _unavailable(address(this), t, abi.encodeCall(NormalToken.mint, (bob, 1)), "mint");
+                    _unavailable(address(this), t, abi.encodeCall(NormalToken.mint, (bob, 1, EnvKit.codeUidOf(t))), "mint");
                     vm.prank(alice);
                     NormalToken(t).burn(1);
                 } else {

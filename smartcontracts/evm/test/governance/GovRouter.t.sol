@@ -60,7 +60,7 @@ contract ProbeTarget {
         reenter = cd;
     }
 
-    function setListedOnly(bool) external {
+    function setListedOnly(bool, bytes32) external { // the DEX's entry with its chain word (CTR-GOV-28 Change)
         seen = router.subject();
         seenByOther = other.peek(router);
         if (reenter.length != 0) {
@@ -210,20 +210,20 @@ abstract contract GovRouterFixture is UARegistryBase {
         rows[ACCEPT_ADMIN] = Row("AcceptAdmin", "", router.mtxAcceptAdmin.selector);
         rows[RENOUNCE_ADMIN] = Row("RenounceAdmin", ",bytes32 chainUid", router.mtxRenounceAdmin.selector);
         rows[RENOUNCE_ROLE] = Row("RenounceRole", ",uint8 bit,bytes32 chainUid", router.mtxRenounceRole.selector);
-        rows[OP_MINT] = Row("Mint", ",address to,uint256 amount", router.mtxMint.selector);
-        rows[MINT_TO_UA] = Row("MintToUA", ",bytes32 to,uint256 amount", router.mtxMintToUA.selector);
-        rows[DISABLE_WRAP] = Row("DisableWrap", ",address leg,bytes32 reason", router.mtxDisableWrap.selector);
+        rows[OP_MINT] = Row("Mint", ",address to,uint256 amount,bytes32 chainUid", router.mtxMint.selector);
+        rows[MINT_TO_UA] = Row("MintToUA", ",bytes32 to,uint256 amount,bytes32 chainUid", router.mtxMintToUA.selector);
+        rows[DISABLE_WRAP] = Row("DisableWrap", ",address leg,bytes32 reason,bytes32 chainUid", router.mtxDisableWrap.selector);
         rows[PROPOSE_RATE] =
-            Row("ProposeRate", ",address leg,uint96 num,uint96 den", router.mtxProposeRate.selector);
-        rows[CANCEL_RATE] = Row("CancelRate", "", router.mtxCancelRate.selector);
-        rows[EXECUTE_RATE] = Row("ExecuteRate", "", router.mtxExecuteRate.selector);
+            Row("ProposeRate", ",address leg,uint96 num,uint96 den,bytes32 chainUid", router.mtxProposeRate.selector);
+        rows[CANCEL_RATE] = Row("CancelRate", ",bytes32 chainUid", router.mtxCancelRate.selector);
+        rows[EXECUTE_RATE] = Row("ExecuteRate", ",bytes32 chainUid", router.mtxExecuteRate.selector);
         rows[SET_MARKET] =
-            Row("SetMarket", ",address base,address quote,bool listed", router.mtxSetMarket.selector);
-        rows[SET_EXCHANGE_TARGET] = Row("SetExchangeTarget", ",address exchangeTarget,bool listed",
+            Row("SetMarket", ",address base,address quote,bool listed,bytes32 chainUid", router.mtxSetMarket.selector);
+        rows[SET_EXCHANGE_TARGET] = Row("SetExchangeTarget", ",address exchangeTarget,bool listed,bytes32 chainUid",
             router.mtxSetExchangeTarget.selector);
-        rows[SET_LISTED_ONLY] = Row("SetListedOnly", ",bool on", router.mtxSetListedOnly.selector);
+        rows[SET_LISTED_ONLY] = Row("SetListedOnly", ",bool on,bytes32 chainUid", router.mtxSetListedOnly.selector);
         rows[SET_FEE_SPLIT] =
-            Row("SetFeeSplit", ",uint32 relayerSharePpm,address treasury", router.mtxSetFeeSplit.selector);
+            Row("SetFeeSplit", ",uint32 relayerSharePpm,address treasury,bytes32 chainUid", router.mtxSetFeeSplit.selector);
     }
 
     // ------------------------------------------------------------------ governed contracts
@@ -295,7 +295,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     function _digest(GovernanceRouter r, uint256 op, MetaTxLib.UAEnvelope memory e, address target,
         bytes memory words) internal view returns (bytes32)
     {
-        bytes32 h = keccak256(bytes.concat(abi.encode(_typehash(op), e.from, target), words,
+        bytes32 h = keccak256(bytes.concat(abi.encode(_typehash(op), e.from, target), words, _word(op, target),
             abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
         return keccak256(abi.encodePacked("\x19\x01", _domain(r), h));
     }
@@ -323,8 +323,23 @@ abstract contract GovRouterFixture is UARegistryBase {
     function _calldata(uint256 op, MetaTxLib.UAEnvelope memory e, address target, bytes memory args,
         bytes memory sigTail) internal view returns (bytes memory)
     {
-        bytes memory head = bytes.concat(abi.encode(e), abi.encode(target), args);
+        bytes memory head = bytes.concat(abi.encode(e), abi.encode(target), args, _sentWord(op, target));
         return bytes.concat(rows[op].sel, head, abi.encode(head.length + 32), sigTail);
+    }
+
+    /// The target's chain word for the ops from `OP_MINT` on, whose words do not carry it (their last field, CTR-GOV-28);
+    ///      empty for the rows before, whose `args` carry it.
+    function _word(uint256 op, address target) internal view returns (bytes memory) {
+        return op >= OP_MINT ? abi.encode(signWord != 0 ? signWord : EnvKit.codeUidOf(target)) : bytes("");
+    }
+
+    /// Round 3zb + 3zc (CTR-GOV-28 Change): the word the struct signs (`signWord`) and the word the call forwards
+    /// (`sendWord`), each the target's own when 0; only the ops from `OP_MINT` on (and the regulated rows) read them.
+    bytes32 internal signWord;
+    bytes32 internal sendWord;
+
+    function _sentWord(uint256 op, address target) internal view returns (bytes memory) {
+        return op >= OP_MINT ? abi.encode(sendWord != 0 ? sendWord : EnvKit.codeUidOf(target)) : bytes("");
     }
 
     /// `abi.encode(x)` of one dynamic value without its leading offset word.
@@ -359,6 +374,13 @@ abstract contract GovRouterFixture is UARegistryBase {
         args = abi.encode(bit, holder, t, u);
         bytes32 th = keccak256(bytes(TERMS));
         words = abi.encode(bit, holder, keccak256(abi.encode(th, t)), u);
+    }
+
+    /// A call whose signature does not cover the forwarded word: refused by the signature check, never by the target's word.
+    function _badSig(bytes memory cd) internal {
+        (bool ok, bytes memory ret) = address(router).call(cd);
+        assertFalse(ok, "a swapped word passed");
+        assertTrue(ret.length >= 4 && bytes4(ret) != IAdmin.ChainUidMismatch.selector, "refused by the signature");
     }
 
     function _run(bytes memory cd) internal {
@@ -772,6 +794,41 @@ contract GovRouterTest is GovRouterFixture {
         assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
     }
 
+    /// Round 3zb + 3zc (CTR-GOV-28 Change, owner 2026-11-13 "(2), gộp vào round 3zb + 3zc."): every role holder's op signs
+    /// the target's word. Signed and sent for a sibling (another word): the target refuses it by name, nothing written, the
+    /// nonce unspent; signed for the own word but sent with another: another digest, `MetaTxBadSignature`; the own word, the
+    /// control, is `_everyOp` (`test_eachOpByNative`).
+    function test_holderOps_siblingWordRefused() public {
+        NormalToken t = _normal(eoa, eoa, 0);
+        WrappedToken wt = _wrapped(eoa, eoa, wallet); // `wallet` holds the contract-only RATE_ADJUSTABLE
+        SCaaSDex d = _dex(eoa);
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        uint256[10] memory ops = [OP_MINT, MINT_TO_UA, DISABLE_WRAP, PROPOSE_RATE, CANCEL_RATE, EXECUTE_RATE, SET_MARKET,
+            SET_EXCHANGE_TARGET, SET_LISTED_ONLY, SET_FEE_SPLIT];
+        for (uint256 i; i < 10; ++i) {
+            uint256 op = ops[i];
+            address target = op <= MINT_TO_UA ? address(t) : op <= EXECUTE_RATE ? address(wt) : address(d);
+            bytes memory args = op == OP_MINT ? abi.encode(BOB, uint256(5)) : op == MINT_TO_UA ? abi.encode(pq, uint256(3))
+                : op == DISABLE_WRAP ? abi.encode(address(usd), bytes32("r"))
+                : op == PROPOSE_RATE ? abi.encode(address(usd), uint96(101), uint96(100))
+                : op == SET_MARKET ? abi.encode(address(usd), address(t), true)
+                : op == SET_EXCHANGE_TARGET ? abi.encode(address(0xE7), true)
+                : op == SET_LISTED_ONLY ? abi.encode(true) : op == SET_FEE_SPLIT ? abi.encode(uint32(500_000), TREASURY)
+                : bytes("");
+            bytes32 from = op >= PROPOSE_RATE && op <= EXECUTE_RATE ? wallet : eoa; // the op's holder
+            (signWord, sendWord) = (sib, sib);
+            bytes memory cd = _op(op, from, target, args);
+            vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, EnvKit.codeUidOf(target), sib));
+            _run(cd);
+            (signWord, sendWord) = (0, sib);
+            _badSig(_op(op, from, target, args));
+            (signWord, sendWord) = (0, 0);
+        }
+        assertEq(router.mtxNonce(eoa, 0) + router.mtxNonce(wallet, 0), 0, "nonces unspent");
+        assertEq(t.balanceOf(BOB), 0, "nothing minted");
+        assertFalse(d.listedOnly(), "nothing set");
+    }
+
     /// A target without code: refused by name, nonce unspent (a call to it would succeed and do nothing).
     function test_targetWithoutCodeRefused() public {
         bytes memory cd = _op(SET_LISTED_ONLY, pq, address(0xC0DE), abi.encode(true));
@@ -967,19 +1024,19 @@ contract GovRouterRegulatedTest is GovRouterFixture {
 
     function setUp() public override {
         super.setUp();
-        reg8[R_FREEZE] = Row("Freeze", ",bytes32 account,bytes32 ref,bytes32 recordId", router.mtxFreeze.selector);
-        reg8[R_UNFREEZE] = Row("Unfreeze", ",bytes32 account,bytes32 ref", router.mtxUnfreeze.selector);
-        reg8[R_FORCE] = Row("ForceTransfer", ",bytes32 recordId,uint256 amount", router.mtxForceTransfer.selector);
-        reg8[R_PAUSE] = Row("Pause", ",bytes32 ref,uint64 until", router.mtxPause.selector);
-        reg8[R_UNPAUSE] = Row("Unpause", ",bytes32 ref", router.mtxUnpause.selector);
+        reg8[R_FREEZE] = Row("Freeze", ",bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid", router.mtxFreeze.selector);
+        reg8[R_UNFREEZE] = Row("Unfreeze", ",bytes32 account,bytes32 ref,bytes32 chainUid", router.mtxUnfreeze.selector);
+        reg8[R_FORCE] = Row("ForceTransfer", ",bytes32 recordId,uint256 amount,bytes32 chainUid", router.mtxForceTransfer.selector);
+        reg8[R_PAUSE] = Row("Pause", ",bytes32 ref,uint64 until,bytes32 chainUid", router.mtxPause.selector);
+        reg8[R_UNPAUSE] = Row("Unpause", ",bytes32 ref,bytes32 chainUid", router.mtxUnpause.selector);
         reg8[R_RECORD] = Row("RecordOrder",
-            ",bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil",
+            ",bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid",
             router.mtxRecordOrder.selector);
-        reg8[R_REVOKE] = Row("RevokeOrder", ",bytes32 recordId,bytes32 reasonRef", router.mtxRevokeOrder.selector);
-        reg8[R_OPERATOR] = Row("OperatorTransfer", ",bytes32 account,bytes32 to,uint256 amount,bytes32 ref",
+        reg8[R_REVOKE] = Row("RevokeOrder", ",bytes32 recordId,bytes32 reasonRef,bytes32 chainUid", router.mtxRevokeOrder.selector);
+        reg8[R_OPERATOR] = Row("OperatorTransfer", ",bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid",
             router.mtxOperatorTransfer.selector);
-        reg8[R_TAX_RATE] = Row("SetTaxRate", ",uint32 ratePpm", router.mtxSetTaxRate.selector);
-        reg8[R_TAX_RECIPIENT] = Row("SetTaxRecipient", ",bytes32 taxRecipient", router.mtxSetTaxRecipient.selector);
+        reg8[R_TAX_RATE] = Row("SetTaxRate", ",uint32 ratePpm,bytes32 chainUid", router.mtxSetTaxRate.selector);
+        reg8[R_TAX_RECIPIENT] = Row("SetTaxRecipient", ",bytes32 taxRecipient,bytes32 chainUid", router.mtxSetTaxRecipient.selector);
     }
 
     /// Kind 8 with `FREEZE`, `FORCE`, `PAUSE`, `RECORD`, `OPERATOR_TRANSFER`; owner `eoa`, no grant delay; `BOB` holds 1,000.
@@ -1010,10 +1067,12 @@ contract GovRouterRegulatedTest is GovRouterFixture {
     /// The signed `mtx<Op>` of `from` for `target`, every op word static (the struct words are the call's).
     function _rcall(uint256 op, bytes32 from, address target, bytes memory args) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _envelope(router, from, 0);
-        bytes32 h = keccak256(bytes.concat(abi.encode(_typehashR(op), e.from, target), args,
+        bytes32 own = EnvKit.codeUidOf(target); // the target's chain word, every row's last field
+        bytes memory signed = bytes.concat(args, abi.encode(signWord != 0 ? signWord : own));
+        bytes32 h = keccak256(bytes.concat(abi.encode(_typehashR(op), e.from, target), signed,
             abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
         bytes32 d = keccak256(abi.encodePacked("\x19\x01", _domain(router), h));
-        bytes memory head = bytes.concat(abi.encode(e), abi.encode(target), args);
+        bytes memory head = bytes.concat(abi.encode(e), abi.encode(target), args, abi.encode(sendWord != 0 ? sendWord : own));
         return bytes.concat(reg8[op].sel, head, abi.encode(head.length + 32), _tail(abi.encode(_auth(e.from, d))));
     }
 
@@ -1054,6 +1113,32 @@ contract GovRouterRegulatedTest is GovRouterFixture {
         _rdo(R_OPERATOR, o, address(t), abi.encode(bob, ben, uint256(5), REF));
         assertEq(t.balanceOf(TREASURY), 35, "OperatorTransfer");
         assertEq(t.balanceOf(BOB), 965);
+    }
+
+    /// Round 3zb + 3zc (CTR-GOV-28 Change): each regulated row signed and sent for a sibling's word is refused by the
+    /// target by name, nothing written; signed for the own word and sent with another, `MetaTxBadSignature`. The controls
+    /// with the own word are the `test_routerRow_*` tests.
+    function test_routerRow_siblingWordRefused() public {
+        NormalRegulatedToken t = _regulated(wallet, msig, wallet);
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        bytes32 bob = _pad(BOB);
+        uint64 day = uint64(block.timestamp + 1 days);
+        bytes[10] memory args = [abi.encode(bob, REF, bytes32(0)), abi.encode(bob, REF), abi.encode(bytes32("r"), uint256(1)),
+            abi.encode(REF, day), abi.encode(REF), abi.encode(bytes32("order"), keccak256("doc"), bob, bob, uint256(1), day),
+            abi.encode(bytes32("r"), bytes32("why")), abi.encode(bob, _pad(TREASURY), uint256(5), REF), abi.encode(uint32(7)),
+            abi.encode(_pad(address(0x7A1)))];
+        bytes32[10] memory who = [wallet, wallet, wallet, wallet, wallet, msig, msig, wallet, wallet, wallet];
+        for (uint256 op; op < 10; ++op) {
+            (signWord, sendWord) = (sib, sib);
+            bytes memory cd = _rcall(op, who[op], address(t), args[op]);
+            vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, EnvKit.codeUidOf(address(t)), sib));
+            _run(cd);
+            (signWord, sendWord) = (0, sib);
+            _badSig(_rcall(op, who[op], address(t), args[op]));
+        }
+        (signWord, sendWord) = (0, 0);
+        assertFalse(t.isFrozen(bob), "nothing written");
+        assertEq(t.balanceOf(BOB), 1000);
     }
 
     /// Each row signed by a contract holder (ERC-1271) and by an `msig` holder.

@@ -15,6 +15,7 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`mtxExecuteTransfer`, the named
 /// `mtxTransfer` / `mtxTransferWithFee`, `mtxBatchTransfer`; any side native or derived, with or without a fee) on the NORMAL
@@ -70,7 +71,7 @@ contract UALedgerHandler is Test {
     function mint(uint256 who, uint256 amount) external {
         amount = bound(amount, 0, 1e12);
         vm.prank(minter);
-        NormalToken(address(tok)).mint(vm.addr(pks[who % 3]), amount);
+        NormalToken(address(tok)).mint(vm.addr(pks[who % 3]), amount, EnvKit.codeUidOf(address(tok)));
         _settle(tok, 0, 1);
     }
 
@@ -186,7 +187,7 @@ contract UALedgerHandler is Test {
     function mintToUA(uint256 ua, uint256 amount) external {
         amount = bound(amount, 0, 1e12);
         vm.prank(minter);
-        NormalToken(address(tok)).mintToUA(uas[ua % 2], amount);
+        NormalToken(address(tok)).mintToUA(uas[ua % 2], amount, EnvKit.codeUidOf(address(tok)));
         _settle(tok, 1, 1);
     }
 
@@ -222,7 +223,7 @@ contract UALedgerHandler is Test {
         uint256 want = amount * n / d;
         if (want == 0) return; // WrapTooSmall
         vm.prank(minter);
-        NormalToken(address(tok)).mint(address(this), amount);
+        NormalToken(address(tok)).mint(address(this), amount, EnvKit.codeUidOf(address(tok)));
         tok.approve(address(wrpL), amount);
         uint256 b0 = _balL(to);
         if (to > 2 && oneStep) {

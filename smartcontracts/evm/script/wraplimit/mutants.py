@@ -70,8 +70,8 @@ M = [
      'test/wrap', W),
     ('disable-27-unchecked', LIB, 'if (GovernanceLib.$().counts[bit].holders != 0) revert IWrappedToken.WrapControlActive(bit);',
      'GovernanceLib.$().counts[bit].holders;', 'test/wrap', W),
-    ('bit25-in-normal-mask', BITS, 'uint256 internal constant NORMAL_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE);',
-     'uint256 internal constant NORMAL_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE) | (1 << 25);',
+    ('bit25-in-normal-mask', BITS, '(1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE) | (1 << BURNER);',
+     '(1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE) | (1 << BURNER) | (1 << 25);',
      'test/wrap', W),
     ('one-quota-across-legs', LIB, '''        mapping(uint256 => uint256) storage m = w.quota[id];
         assembly ("memory-safe") {
@@ -108,8 +108,8 @@ M = [
      'test/wrap', W),
     ('router-limit-type-left-out', RB, '''        "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)"
         "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
-    bytes32 internal constant UA_SET_WRAP_MEMBER''', '''        "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)");
-    bytes32 internal constant UA_SET_WRAP_MEMBER''', 'test/governance', G),
+    // ---- round 3zc (CTR-GOV-30)''', '''        "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)");
+    // ---- round 3zc (CTR-GOV-30)''', 'test/governance', G),
 ]
 
 FORGE = os.path.expanduser('~/.foundry/bin/forge')

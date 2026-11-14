@@ -21,6 +21,7 @@ import {nid} from "../../helpers/Ids.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {WrappedPqzToken} from "../../../src/pqz/WrappedPqzToken.sol";
 import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// The tax rows every confidential regulated kind shares (pay-meta-tax spec §5.1, O8, B-2, B-3, J7): a public pay with tax
 /// works on 10-13 (PERCENT too: `requireConfidentialSafe` does not apply to a public pay), and no confidential op has a tax
@@ -107,7 +108,7 @@ abstract contract TaxPqzRows is PqzRegFixture {
     /// A public pay with tax works (O8), PERCENT included (B-3: `requireConfidentialSafe` does not apply).
     function _payWithTaxOn() internal {
         vm.prank(issuer);
-        IRegulatedToken(address(tok)).setTaxRate(100_000);
+        IRegulatedToken(address(tok)).setTaxRate(100_000, EnvKit.codeUidOf(address(tok)));
         IRegulatedToken(address(tok)).payWithTax(alice, 1_000, 1, 100, PayMetaKit.ref("c1"), PayMetaKit.meta("c1"));
         assertEq(tok.balanceOfUA(alice), 900);
         assertEq(tok.balanceOf(TaxRows.TAX_TO), 100);
@@ -180,7 +181,7 @@ abstract contract TaxZetherRows is ZetherRegFixture {
     /// A public pay with tax works (O8), PERCENT included (B-3: `requireConfidentialSafe` does not apply).
     function _payWithTaxOn() internal {
         vm.prank(issuer);
-        IRegulatedToken(address(tok)).setTaxRate(100_000);
+        IRegulatedToken(address(tok)).setTaxRate(100_000, EnvKit.codeUidOf(address(tok)));
         IRegulatedToken(address(tok)).payWithTax(nid(PAYEE), 1_000, 1, 100, PayMetaKit.ref("z1"), PayMetaKit.meta("z1"));
         assertEq(IERC20(address(tok)).balanceOf(PAYEE), 900);
         assertEq(IERC20(address(tok)).balanceOf(TaxRows.TAX_TO), 100);

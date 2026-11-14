@@ -186,14 +186,17 @@ contract ProofPathInvariantsTest is PqzFixture {
     /// 139,574; fix3 owner 2026-11-13 (`renounceRole(uint8,bytes32)`: the dispatch order) mtxTransfer 83,803 / 83,759 ->
     /// 83,781 / 83,737, transferToUA 69,262 / 69,240 -> 69,240 / 69,329, transfer 46,417 / 46,418 -> 46,484 / 46,506,
     /// uaExecuteTransfer 139,517 / 139,574 -> 139,495 / 139,552; pqz-three-keys step 3 (K3-3: the registry face dispatches
-    /// eleven more selectors, `requireAuthorized` among them) uaExecuteTransfer 139,495 / 139,552 -> 139,537 / 139,594. The test keeps P7's claim as: these
+    /// eleven more selectors, `requireAuthorized` among them) uaExecuteTransfer 139,495 / 139,552 -> 139,537 / 139,594; round
+    /// 3zb + 3zc (the wrapped Zether face's dispatch order: six supply-cap entries, the holder entries' chain word; no slot,
+    /// no call moved, measured against 3fa153e4) mtxTransfer wrapped 83,737 -> 83,846, transferToUA wrapped 69,329 -> 69,239,
+    /// transfer wrapped 46,506 -> 46,484, uaExecuteTransfer wrapped 139,594 -> 139,550. The test keeps P7's claim as: these
     /// rows are the pins.
     function test_P7_zetherPinsUnchanged() public view {
         string memory j = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/plus_zero_gas.json"));
         string[8] memory k = ["mtxTransfer_normalZether", "mtxTransfer_wrappedZether", "transferToUA_normalZether",
             "transferToUA_wrappedZether", "transfer_normalZether", "transfer_wrappedZether", "uaExecuteTransfer_normalZether",
             "uaExecuteTransfer_wrappedZether"];
-        uint256[8] memory at7558 = [uint256(83781), 83737, 69240, 69329, 46484, 46506, 139537, 139594]; // + B P3-1, CTR-GOV-26, -27, -28, CTR-MTX-86, K3-3
+        uint256[8] memory at7558 = [uint256(83781), 83846, 69240, 69239, 46484, 46484, 139537, 139550]; // + B P3-1, CTR-GOV-26, -27, -28, CTR-MTX-86, K3-3, 3zb + 3zc
         for (uint256 i; i < 8; ++i) assertEq(vm.parseJsonUint(j, string.concat(".", k[i])), at7558[i], k[i]);
     }
 }

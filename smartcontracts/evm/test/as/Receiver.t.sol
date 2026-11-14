@@ -100,7 +100,7 @@ contract ReceiverTest is RegFixture {
             bytes memory neBob = abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0));
             if (i == 0) {
                 vm.expectRevert(neBob);
-                NormalToken(t).mint(bob, 1);
+                NormalToken(t).mint(bob, 1, EnvKit.codeUidOf(address(t)));
             } else {
                 usd.mint(bob, 5);
                 vm.startPrank(bob);
@@ -121,10 +121,10 @@ contract ReceiverTest is RegFixture {
             _freeze(t, nid(alice));
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(address(0xBE11)), uint8(0)));
-            IRegulatedToken(t).forceTransfer(rid, 5);
+            IRegulatedToken(t).forceTransfer(rid, 5, EnvKit.codeUidOf(address(t)));
             _attest(nid(address(0xBE11)), KYC, MAX);
             vm.prank(issuer);
-            IRegulatedToken(t).forceTransfer(rid, 5);
+            IRegulatedToken(t).forceTransfer(rid, 5, EnvKit.codeUidOf(address(t)));
             assertEq(IERC20(t).balanceOf(address(0xBE11)), 5);
             _unfreeze(t, nid(alice));
 
@@ -161,7 +161,7 @@ contract ReceiverTest is RegFixture {
             _budget(1, "direct transfer");
             if (i == 0) {
                 _countStart();
-                NormalToken(t).mint(bob, 1);
+                NormalToken(t).mint(bob, 1, EnvKit.codeUidOf(address(t)));
                 _budget(1, "mint");
             } else {
                 usd.mint(bob, 5);
@@ -176,7 +176,7 @@ contract ReceiverTest is RegFixture {
             _freeze(t, nid(alice));
             _countStart();
             vm.prank(issuer);
-            IRegulatedToken(t).forceTransfer(rid, 5);
+            IRegulatedToken(t).forceTransfer(rid, 5, EnvKit.codeUidOf(address(t)));
             _budget(1, "forceTransfer");
             _unfreeze(t, nid(alice));
             _countStart();

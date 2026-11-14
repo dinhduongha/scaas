@@ -166,8 +166,8 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
     }
 
     /// @notice The collateral check of a rate change: `totalSupply()` (the shielded value sits in `SHIELD_POOL`, D19).
-    function _executeRateBody() internal override {
-        WrappedLib.executeRate(_govSubject(), totalSupply());
+    function _executeRateBody(bytes32 chainUid_) internal override {
+        WrappedLib.executeRate(_holderOnChain(GovernanceBits.RATE_ADJUSTABLE, chainUid_), totalSupply());
     }
 
     // ------------------------------------------------------------------ the layer's hooks

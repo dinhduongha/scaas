@@ -57,7 +57,7 @@ contract TaxTest is RegFixture {
 
     function _rate(address t, uint32 ppm) internal {
         vm.prank(issuer);
-        IRegulatedToken(t).setTaxRate(ppm);
+        IRegulatedToken(t).setTaxRate(ppm, EnvKit.codeUidOf(address(t)));
     }
 
     function _cfgOf(address t) internal view returns (IRegulatedToken.TaxConfig memory) {
@@ -81,7 +81,7 @@ contract TaxTest is RegFixture {
         vm.prank(ownerA);
         IGovernance(t).grantRole(GovernanceBits.TAX, nid(clerk), EnvKit.codeUidOf(address(IGovernance(t))));
         vm.prank(clerk);
-        IRegulatedToken(t).setTaxRate(1_000);
+        IRegulatedToken(t).setTaxRate(1_000, EnvKit.codeUidOf(address(t)));
         assertEq(_cfgOf(t).effectivePpm, 1_000);
     }
 
@@ -96,7 +96,7 @@ contract TaxTest is RegFixture {
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "only23");
         assertTrue(IGovernance(t).hasRole(GovernanceBits.TAX, nid(clerk)));
         vm.prank(clerk);
-        IRegulatedToken(t).setTaxRecipient(nid(address(0x7A1)));
+        IRegulatedToken(t).setTaxRecipient(nid(address(0x7A1)), EnvKit.codeUidOf(address(t)));
         assertEq(_cfgOf(t).taxRecipient, nid(address(0x7A1)));
     }
 
@@ -171,11 +171,11 @@ contract TaxTest is RegFixture {
     function test_setTaxRate_boundAndHolder() public {
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TaxRateInvalid.selector, uint32(1_000_001)));
-        IRegulatedToken(t8t).setTaxRate(1_000_001);
+        IRegulatedToken(t8t).setTaxRate(1_000_001, EnvKit.codeUidOf(address(t8t)));
         _rate(t8t, 1_000_000);
         vm.prank(clerk);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.TAX, nid(clerk)));
-        IRegulatedToken(t8t).setTaxRate(1);
+        IRegulatedToken(t8t).setTaxRate(1, EnvKit.codeUidOf(address(t8t)));
     }
 
     // ------------------------------------------------------------------ the recipient (spec §6.2, F-15, F-21)
@@ -183,7 +183,7 @@ contract TaxTest is RegFixture {
     function _recipientRefused(bytes32 r, bytes memory err) internal {
         vm.prank(issuer);
         vm.expectRevert(err);
-        IRegulatedToken(t8t).setTaxRecipient(r);
+        IRegulatedToken(t8t).setTaxRecipient(r, EnvKit.codeUidOf(address(t8t)));
     }
 
     function test_setTaxRecipient_poolRefused() public {
@@ -221,10 +221,10 @@ contract TaxTest is RegFixture {
         bytes32 r = nid(address(0x7A3));
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, r, uint8(0)));
-        IRegulatedToken(t).setTaxRecipient(r);
+        IRegulatedToken(t).setTaxRecipient(r, EnvKit.codeUidOf(address(t)));
         _attest(r, KYC, type(uint64).max); // control
         vm.prank(issuer);
-        IRegulatedToken(t).setTaxRecipient(r);
+        IRegulatedToken(t).setTaxRecipient(r, EnvKit.codeUidOf(address(t)));
     }
 
     function test_setTaxRecipient_paddedNativeAccepted() public {
@@ -232,7 +232,7 @@ contract TaxTest is RegFixture {
         vm.expectEmit(t8t);
         emit IRegulatedToken.TaxRecipientSet(r);
         vm.prank(issuer);
-        IRegulatedToken(t8t).setTaxRecipient(r);
+        IRegulatedToken(t8t).setTaxRecipient(r, EnvKit.codeUidOf(address(t8t)));
         assertEq(_cfgOf(t8t).taxRecipient, r);
     }
 
@@ -690,7 +690,7 @@ contract TaxTest is RegFixture {
             keccak256(vm.parseJsonBytes(j, ".ops.UAPayWithTax.domains.token.calldata")), "the row's calldata");
         uint256 pk = vm.parseJsonUint(j, ".key.private");
         assertEq(x.from, nid(vm.addr(pk)));
-        NormalToken(t8t).mint(vm.addr(pk), x.value); // this test is the kind-8 token's minter
+        NormalToken(t8t).mint(vm.addr(pk), x.value, EnvKit.codeUidOf(address(t8t))); // this test is the kind-8 token's minter
         vm.warp(x.validUntil - 300);
         (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, _taxDigest(t8t, x, mode, tax));
         IUARegistry.UASig memory s;

@@ -134,13 +134,13 @@ contract GovAttackV2Test is Test {
 
     function _mint(address who, uint256 v) internal {
         vm.prank(who);
-        t.mint(TO, v);
+        t.mint(TO, v, EnvKit.codeUidOf(address(t)));
     }
 
     function _refused(address who, uint256 v, bytes memory err) internal {
         vm.prank(who);
         vm.expectRevert(err);
-        t.mint(TO, v);
+        t.mint(TO, v, EnvKit.codeUidOf(address(t)));
     }
 
     function _ex(uint8 field) internal pure returns (bytes memory) {
@@ -165,12 +165,12 @@ contract GovAttackV2Test is Test {
         assertFalse(d.hasRole(MINT, nid(OFFICER)));
         vm.prank(OFFICER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, OFFICER));
-        d.mint(TO, 1);
+        d.mint(TO, 1, EnvKit.codeUidOf(address(d)));
         vm.warp(block.timestamp + 2 days);
         vm.prank(OWNER); // positive control: the confirm
         d.setGrant(MINT, nid(OFFICER), _open(), EnvKit.codeUidOf(address(d)));
         vm.prank(OFFICER);
-        d.mint(TO, type(uint128).max);
+        d.mint(TO, type(uint128).max, EnvKit.codeUidOf(address(d)));
         assertEq(d.balanceOf(TO), type(uint128).max);
     }
 
@@ -300,7 +300,7 @@ contract GovAttackV2Test is Test {
         NormalToken n = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "n"));
         assertEq(n.admin(), bytes32(0));
         vm.prank(MANAGER);
-        n.mint(TO, 1);
+        n.mint(TO, 1, EnvKit.codeUidOf(address(n)));
     }
 
     /// B-07, fixed (spec §1.7): the renounce rule reads live roots. A dead leaf stays listed and counted in `holderCount`, and
@@ -368,9 +368,9 @@ contract GovAttackV2Test is Test {
         vm.prank(OWNER);
         d.setGrant(FEE_ROUTING, nid(MANAGER), g, EnvKit.codeUidOf(address(d)));
         vm.startPrank(MANAGER);
-        d.setFeeSplit(0, address(0xAA));
+        d.setFeeSplit(0, address(0xAA), EnvKit.codeUidOf(address(d)));
         vm.expectRevert(_ex(5));
-        d.setFeeSplit(0, address(0xAA));
+        d.setFeeSplit(0, address(0xAA), EnvKit.codeUidOf(address(d)));
         vm.stopPrank();
     }
 
@@ -386,7 +386,7 @@ contract GovAttackV2Test is Test {
         vm.prank(OWNER); // positive control: the open terms are accepted, and the power runs
         d.setGrant(LISTING, nid(MANAGER), _open(), EnvKit.codeUidOf(address(d)));
         vm.prank(MANAGER);
-        d.setListedOnly(true);
+        d.setListedOnly(true, EnvKit.codeUidOf(address(d)));
     }
 
     /// B-10, fixed (spec §1.5): a `scope` on a power that does not read it is refused; a scoped power refuses scope 0.
@@ -481,9 +481,9 @@ contract GovAttackV2Test is Test {
         assertEq(d.admin(), nid(next));
         vm.prank(next);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, FEE_ROUTING, next));
-        d.setFeeSplit(0, next);
+        d.setFeeSplit(0, next, EnvKit.codeUidOf(address(d)));
         vm.prank(OWNER);
-        d.setFeeSplit(0, evil);
+        d.setFeeSplit(0, evil, EnvKit.codeUidOf(address(d)));
         assertEq(d.treasury(), evil);
     }
 
@@ -537,12 +537,12 @@ contract GovAttackV2Test is Test {
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         WrappedToken w = WrappedToken(payable(f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(c), "w")));
         vm.prank(admin);
-        w.proposeRate(address(usd), 101, 100);
+        w.proposeRate(address(usd), 101, 100, EnvKit.codeUidOf(address(w)));
         vm.prank(OWNER);
         w.revokeRole(GovernanceBits.RATE_ADJUSTABLE, nid(admin), EnvKit.codeUidOf(address(w)));
         vm.prank(OWNER);
         vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
-        w.cancelRate();
+        w.cancelRate(EnvKit.codeUidOf(address(w)));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(usd)));
         w.wrap(address(usd), 1);
     }

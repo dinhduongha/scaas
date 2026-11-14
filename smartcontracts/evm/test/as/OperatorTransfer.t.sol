@@ -64,13 +64,13 @@ contract OperatorTransferTest is RegFixture {
 
     function _op(address t, bytes32 from, bytes32 to, uint256 amount) internal {
         vm.prank(clerk);
-        _r(t).operatorTransfer(from, to, amount, REF);
+        _r(t).operatorTransfer(from, to, amount, REF, EnvKit.codeUidOf(t));
     }
 
     function _refused(address t, bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes memory err) internal {
         vm.prank(clerk);
         vm.expectRevert(err);
-        _r(t).operatorTransfer(from, to, amount, ref);
+        _r(t).operatorTransfer(from, to, amount, ref, EnvKit.codeUidOf(t));
     }
 
     /// The move and its event, native to native, native to derived, derived to derived (the UA ledger), derived to native.
@@ -111,12 +111,12 @@ contract OperatorTransferTest is RegFixture {
             uint256 day = block.timestamp - block.timestamp % 1 days;
             vm.warp(day + 1 hours);
             vm.startPrank(pos);
-            _r(t).operatorTransfer(a, b, 60, REF);
-            _r(t).operatorTransfer(a, b, 40, REF);
+            _r(t).operatorTransfer(a, b, 60, REF, EnvKit.codeUidOf(t));
+            _r(t).operatorTransfer(a, b, 40, REF, EnvKit.codeUidOf(t));
             vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(3)));
-            _r(t).operatorTransfer(a, b, 1, REF);
+            _r(t).operatorTransfer(a, b, 1, REF, EnvKit.codeUidOf(t));
             vm.warp(day + 1 days);
-            _r(t).operatorTransfer(a, b, 100, REF);
+            _r(t).operatorTransfer(a, b, 100, REF, EnvKit.codeUidOf(t));
             vm.stopPrank();
             assertEq(IERC20(t).balanceOf(bob), 200);
         }
@@ -227,10 +227,10 @@ contract OperatorTransferTest is RegFixture {
         for (uint256 i; i < 2; ++i) {
             vm.prank(stranger);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, OP, nid(stranger)));
-            _r(ts[i]).operatorTransfer(a, b, 1, REF);
+            _r(ts[i]).operatorTransfer(a, b, 1, REF, EnvKit.codeUidOf(ts[i]));
             vm.prank(clerk);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, OP));
-            _r(_ks()[i]).operatorTransfer(a, b, 1, REF); // the fixture's tokens carry no bit 22
+            _r(_ks()[i]).operatorTransfer(a, b, 1, REF, EnvKit.codeUidOf(_ks()[i])); // the fixture's tokens carry no bit 22
         }
     }
 
@@ -252,14 +252,14 @@ contract OperatorTransferTest is RegFixture {
             assertTrue(NormalToken(t).hasRole(GovernanceBits.MODERATE, nid(mod)), "bit 21 held");
             vm.prank(mod);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, OP, nid(mod)));
-            _r(t).operatorTransfer(a, b, 1, REF);
+            _r(t).operatorTransfer(a, b, 1, REF, EnvKit.codeUidOf(t));
             (bool ok, bytes memory ret) = t.call(abi.encodeWithSignature("moderatedTransfer(bytes32,bytes32,uint256,bytes32)",
                 a, b, uint256(1), REF));
             assertFalse(ok, "no moderatedTransfer entry");
             assertEq(ret.length, 0, "an unknown selector");
             _grant(t, nid(mod)); // the control: the same contract with bit 22 moves
             vm.prank(mod);
-            _r(t).operatorTransfer(a, b, 1, REF);
+            _r(t).operatorTransfer(a, b, 1, REF, EnvKit.codeUidOf(t));
         }
     }
 
@@ -268,11 +268,11 @@ contract OperatorTransferTest is RegFixture {
         IOpenFactory.TokenKind[2] memory plain = [IOpenFactory.TokenKind.NORMAL, IOpenFactory.TokenKind.WRAPPED];
         for (uint256 i; i < 2; ++i) {
             (bool ok, bytes memory ret) = f.implementationOf(plain[i], 1).call(
-                abi.encodeCall(IRegulatedToken.operatorTransfer, (a, b, 1, REF)));
+                abi.encodeCall(IRegulatedToken.operatorTransfer, (a, b, 1, REF, bytes32(0))));
             assertFalse(ok);
             assertEq(ret.length, 0);
             (ok, ret) = f.implementationOf(IOpenFactory.TokenKind.NORMAL_REGULATED, 1).call(
-                abi.encodeCall(IRegulatedToken.operatorTransfer, (a, b, 1, REF)));
+                abi.encodeCall(IRegulatedToken.operatorTransfer, (a, b, 1, REF, bytes32(0))));
             assertFalse(ok);
             assertGt(ret.length, 0, "the control: the regulated release has the entry (a named refusal)");
         }

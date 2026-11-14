@@ -164,6 +164,7 @@ abstract contract LegacyDiff is Test {
         uint256 snap = vm.snapshotState();
         Run memory n = _run(token, caller, _r3Call(data));
         n.calls = _intendedCalls(token, n.calls);
+        n.writes = _intendedWrites(token, n.writes);
         vm.revertToState(snap);
         vm.etch(token, _withImpl(code, oldImpl));
         Run memory o = _run(token, caller, data);
@@ -246,7 +247,26 @@ abstract contract LegacyDiff is Test {
         if (k >= 8 && k <= 13) b |= uint256(1) << GovernanceBits.KYC;
         if (k == 1 || k == 3 || k == 5 || k == 9 || k == 11 || k == 13) b |= GovernanceBits.WRAP_CONTROLS;
         if (k == type(uint8).max) b |= uint256(1) << GovernanceBits.CLOSED_MARKETS; // the DEX, CTR-DEX-32
+        // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): bit 30 `BURNER` on the Normal kinds, bit 31 `SUPPLY_CAP_ADJUSTABLE` on the
+        // wrapped kinds
+        if (k == 0 || k == 2 || k == 4 || k == 8 || k == 10 || k == 12) b |= uint256(1) << GovernanceBits.BURNER;
+        if (k == 1 || k == 3 || k == 5 || k == 9 || k == 11 || k == 13) b |= uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE;
         return abi.encode(b);
+    }
+
+    /// @dev Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.3): every wrap and unwrap writes the counter
+    ///      `totalWrapped` (`scaas.underlying` + 6), a slot the pre-split release does not have; that one slot of the token
+    ///      leaves the new side's writes. Every other write is compared as before.
+    function _intendedWrites(address token, bytes32[] memory w) internal pure returns (bytes32[] memory out) {
+        bytes32 counter = bytes32(uint256(0x38d6f7edefffa65376a58a6aced8a2c86698d3a0b5d15a785f69ed89d0cd1000) + 6);
+        out = new bytes32[](w.length);
+        uint256 n;
+        for (uint256 i; i + 2 < w.length; i += 3) {
+            if (w[i] == bytes32(uint256(uint160(token))) && w[i + 1] == counter) continue;
+            (out[n], out[n + 1], out[n + 2]) = (w[i], w[i + 1], w[i + 2]);
+            n += 3;
+        }
+        assembly ("memory-safe") { mstore(out, n) }
     }
 
     /// @dev CTR-DEX-32 / CTR-DEX-18 (fix2-dex, owner 2026-11-12): the DEX reads a token's kind from its factory at use
@@ -324,6 +344,53 @@ abstract contract LegacyDiff is Test {
         if (s == bytes4(keccak256("setVerifierFee(uint64)"))) return (bytes4(keccak256("setVerifierFee(uint64,bytes32)")), 1);
         // owner 2026-11-13 (renounceRole carries the chain word too): a holder's own renounce too
         if (s == bytes4(keccak256("renounceRole(uint8)"))) return (bytes4(keccak256("renounceRole(uint8,bytes32)")), 1);
+        // round 3zb + 3zc (CTR-GOV-28): every direct entry of a role holder carries the chain word too (the static ones of
+        // the pre-split release; its tokens had no setAllowed, setDenied, setWrapLimits or setWrapMember)
+        if (s == bytes4(keccak256("mint(address,uint256)"))) return (bytes4(keccak256("mint(address,uint256,bytes32)")), 2);
+        if (s == bytes4(keccak256("mintToUA(bytes32,uint256)"))) {
+            return (bytes4(keccak256("mintToUA(bytes32,uint256,bytes32)")), 2);
+        }
+        if (s == bytes4(keccak256("disableWrap(address,bytes32)"))) {
+            return (bytes4(keccak256("disableWrap(address,bytes32,bytes32)")), 2);
+        }
+        if (s == bytes4(keccak256("proposeRate(address,uint96,uint96)"))) {
+            return (bytes4(keccak256("proposeRate(address,uint96,uint96,bytes32)")), 3);
+        }
+        if (s == bytes4(keccak256("cancelRate()"))) return (bytes4(keccak256("cancelRate(bytes32)")), 0);
+        if (s == bytes4(keccak256("executeRate()"))) return (bytes4(keccak256("executeRate(bytes32)")), 0);
+        if (s == bytes4(keccak256("freeze(bytes32,bytes32,bytes32)"))) {
+            return (bytes4(keccak256("freeze(bytes32,bytes32,bytes32,bytes32)")), 3);
+        }
+        if (s == bytes4(keccak256("unfreeze(bytes32,bytes32)"))) {
+            return (bytes4(keccak256("unfreeze(bytes32,bytes32,bytes32)")), 2);
+        }
+        if (s == bytes4(keccak256("forceTransfer(bytes32,uint256)"))) {
+            return (bytes4(keccak256("forceTransfer(bytes32,uint256,bytes32)")), 2);
+        }
+        if (s == bytes4(keccak256("pause(bytes32,uint64)"))) return (bytes4(keccak256("pause(bytes32,uint64,bytes32)")), 2);
+        if (s == bytes4(keccak256("unpause(bytes32)"))) return (bytes4(keccak256("unpause(bytes32,bytes32)")), 1);
+        if (s == bytes4(keccak256("recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)"))) {
+            return (bytes4(keccak256("recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)")), 6);
+        }
+        if (s == bytes4(keccak256("revokeOrder(bytes32,bytes32)"))) {
+            return (bytes4(keccak256("revokeOrder(bytes32,bytes32,bytes32)")), 2);
+        }
+        if (s == bytes4(keccak256("operatorTransfer(bytes32,bytes32,uint256,bytes32)"))) {
+            return (bytes4(keccak256("operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)")), 4);
+        }
+        if (s == bytes4(keccak256("setTaxRate(uint32)"))) return (bytes4(keccak256("setTaxRate(uint32,bytes32)")), 1);
+        if (s == bytes4(keccak256("setTaxRecipient(bytes32)"))) return (bytes4(keccak256("setTaxRecipient(bytes32,bytes32)")), 1);
+        if (s == bytes4(keccak256("setProofStore(uint8)"))) return (bytes4(keccak256("setProofStore(uint8,bytes32)")), 1);
+        if (s == bytes4(keccak256("setMarket(address,address,bool)"))) {
+            return (bytes4(keccak256("setMarket(address,address,bool,bytes32)")), 3);
+        }
+        if (s == bytes4(keccak256("setFeeSplit(uint32,address)"))) {
+            return (bytes4(keccak256("setFeeSplit(uint32,address,bytes32)")), 2);
+        }
+        if (s == bytes4(keccak256("setExchangeTarget(address,bool)"))) {
+            return (bytes4(keccak256("setExchangeTarget(address,bool,bytes32)")), 2);
+        }
+        if (s == bytes4(keccak256("setListedOnly(bool)"))) return (bytes4(keccak256("setListedOnly(bool,bytes32)")), 1);
     }
 
     function _r3Call(bytes memory data) internal view returns (bytes memory out) {

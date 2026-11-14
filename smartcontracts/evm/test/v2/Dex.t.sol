@@ -74,7 +74,7 @@ contract DexTest is Test {
         b.transfer(carol, 500_000);
         dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0, 0)), "dex"));
         vm.prank(admin);
-        dex.setMarket(address(a), address(b), true);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
     }
 
     // ------------------------------------------------------------------ helpers
@@ -305,8 +305,8 @@ contract DexTest is Test {
         dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0),
             1 << 29, 0)), "closed"));
         vm.startPrank(admin);
-        dex.setMarket(address(a), address(b), true);
-        dex.setMarket(address(a), address(b), false);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(a), address(b), false, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         _expectOne(_book(), abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(a), address(b)));
     }
@@ -315,11 +315,11 @@ contract DexTest is Test {
     function test_C6_9_setMarketGuards() public {
         vm.startPrank(admin);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadMarket.selector, address(a), address(a)));
-        dex.setMarket(address(a), address(a), true);
+        dex.setMarket(address(a), address(a), true, EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadMarket.selector, address(0), address(b)));
-        dex.setMarket(address(0), address(b), true);
+        dex.setMarket(address(0), address(b), true, EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadMarket.selector, address(a), address(0)));
-        dex.setMarket(address(a), address(0), false);
+        dex.setMarket(address(a), address(0), false, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
     }
 
@@ -393,7 +393,7 @@ contract DexTest is Test {
         NormalToken big = NormalToken(
             f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("G", "G", 0, 1 << 251, bob, address(0))), "g"));
         vm.prank(admin);
-        dex.setMarket(address(a), address(big), true);
+        dex.setMarket(address(a), address(big), true, EnvKit.codeUidOf(address(dex)));
         DexLegs.Settlement memory s;
         s.ref = "r";
         s.makers = new DexLegs.Leg[](1);
@@ -526,7 +526,7 @@ contract DexTest is Test {
         assertEq(a.balanceOf(bob), 500);
         assertEq(b.balanceOf(alice), 1000);
         vm.prank(admin);
-        dex.setMarket(address(b), address(a), false);
+        dex.setMarket(address(b), address(a), false, EnvKit.codeUidOf(address(dex)));
         assertFalse(dex.marketListed(address(a), address(b)));
     }
 
@@ -575,14 +575,14 @@ contract DexTest is Test {
             f.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL), ""))); // the env's pinned modules
         address u = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(normalInit("C", "C", 0, 1e6, alice, address(0))), "c");
         vm.startPrank(admin);
-        dex.setMarket(address(a), u, true);
+        dex.setMarket(address(a), u, true, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.tokenKind(u), 2);
         assertEq(dex.tokenKind(address(a)), 1);
         vm.stopPrank();
         vm.prank(registrar);
         f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)), "x");
         vm.prank(admin);
-        dex.setMarket(address(a), address(b), true);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.tokenKind(address(a)), 1);
         assertEq(dex.tokenKind(address(b)), 1);
     }
@@ -664,7 +664,7 @@ contract DexTest is Test {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
         usdc.mint(alice, 5000);
         vm.prank(admin);
-        dex.setMarket(address(usdc), address(b), true);
+        dex.setMarket(address(usdc), address(b), true, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.tokenKind(address(usdc)), 2);
         assertEq(dex.tokenKind(address(b)), 1);
         address p = dex.puller();
@@ -848,25 +848,25 @@ contract DexTest is Test {
         vm.etch(admin, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(admin);
         vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, admin));
-        dex.setFeeSplit(0, treasury);
+        dex.setFeeSplit(0, treasury, EnvKit.codeUidOf(address(dex)));
         vm.etch(admin, "");
         vm.prank(admin);
-        dex.setFeeSplit(0, treasury);
+        dex.setFeeSplit(0, treasury, EnvKit.codeUidOf(address(dex)));
     }
 
     function test_adminOnly_feeSplitBounds() public {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
-        dex.setMarket(address(a), address(b), false);
+        dex.setMarket(address(a), address(b), false, EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(12), address(this)));
-        dex.setFeeSplit(0, treasury);
+        dex.setFeeSplit(0, treasury, EnvKit.codeUidOf(address(dex)));
         vm.startPrank(admin);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.FeeSplitInvalid.selector, 1, address(0)));
-        dex.setFeeSplit(1, address(0));
+        dex.setFeeSplit(1, address(0), EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.FeeSplitInvalid.selector, 1, address(dex)));
-        dex.setFeeSplit(1, address(dex));
+        dex.setFeeSplit(1, address(dex), EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.FeeSplitInvalid.selector, 1_000_001, treasury));
-        dex.setFeeSplit(1_000_001, treasury);
-        dex.setFeeSplit(1_000_000, address(0)); // all to the relayer: no treasury needed
+        dex.setFeeSplit(1_000_001, treasury, EnvKit.codeUidOf(address(dex)));
+        dex.setFeeSplit(1_000_000, address(0), EnvKit.codeUidOf(address(dex))); // all to the relayer: no treasury needed
         vm.stopPrank();
         DexLegs.Settlement[] memory ss = _one(_book());
         vm.prank(relayer);

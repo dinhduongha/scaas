@@ -18,6 +18,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MockV2LiquidityPair, MockPositionManagerV4, MockDistributor, MockShortReader, MockStickyPositions,
     MockReenter, MockFixedReader, MockSwap, MockDigestProbe} from "./LiquidityMocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// `mtxLiquidity` (CTR-DEX-30, -31; spec 2026-11-10-dex-liquidity.md §6, §7, §14): the positive controls of §7.2 and the
 /// negatives L1-L37, each one change from a positive control.
@@ -455,7 +456,7 @@ contract DexLiquidityTest is LiquidityBase {
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.TargetNotListed.selector, address(a)));
         _run(p, _addXs(ADD, ADD, address(dex)));
         vm.prank(admin);
-        dex.setListedOnly(true);
+        dex.setListedOnly(true, EnvKit.codeUidOf(address(dex)));
         p = _addPlan(98_000);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.TargetNotListed.selector, address(a)));
         _run(p, _addXs(ADD, ADD, address(dex)));
@@ -480,7 +481,7 @@ contract DexLiquidityTest is LiquidityBase {
         _run(p, _mintXs(40_000, address(dex)));
         V4PositionReader wrong = new V4PositionReader(address(0x1234)); // listed, another manager
         vm.prank(admin);
-        dex.setExchangeTarget(address(wrong), true);
+        dex.setExchangeTarget(address(wrong), true, EnvKit.codeUidOf(address(dex)));
         o.positionReader = address(wrong);
         p = _plan(o, ALICE_PK, _u2(50_000, 50_000));
         p.positionId = posm.nextId();
@@ -516,7 +517,7 @@ contract DexLiquidityTest is LiquidityBase {
     function test_L23_unreadable() public {
         MockShortReader short = new MockShortReader(address(posm));
         vm.prank(admin);
-        dex.setExchangeTarget(address(short), true);
+        dex.setExchangeTarget(address(short), true, EnvKit.codeUidOf(address(dex)));
         ITradeToken.LiquidityOrder memory o = _mintOrder(40_000);
         o.positionReader = address(short);
         ISCaaSDex.LiquidityPlan memory p = _plan(o, ALICE_PK, _u2(50_000, 50_000));
@@ -727,7 +728,7 @@ contract DexLiquidityTest is LiquidityBase {
         MockStickyPositions sticky = new MockStickyPositions();
         MockFixedReader fr = new MockFixedReader(address(sticky), keccak256("pool"), LO, HI, 5);
         vm.prank(admin);
-        dex.setExchangeTarget(address(fr), true);
+        dex.setExchangeTarget(address(fr), true, EnvKit.codeUidOf(address(dex)));
         ITradeToken.LiquidityOrder memory o = _base();
         o.inputs = _one(_t(address(a), 1_000));
         (o.positionManager, o.positionReader, o.positionPool) = (address(sticky), address(fr), keccak256("pool"));

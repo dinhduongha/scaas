@@ -77,9 +77,9 @@ contract MtxCtxTest is PqzRegistryBase {
         vm.etch(HAS, type(MockHederaAccountService).runtimeCode);
         MockHederaAccountService(HAS).setEdKey(hed, vm.addr(ED_PK));
         u = _mldsaUA(9);
-        tok.mint(alice, 1_000_000);
-        tok.mintToUA(u, 1_000_000);
-        htok.mint(hed, 1_000_000);
+        tok.mint(alice, 1_000_000, EnvKit.codeUidOf(address(tok)));
+        tok.mintToUA(u, 1_000_000, EnvKit.codeUidOf(address(tok)));
+        htok.mint(hed, 1_000_000, EnvKit.codeUidOf(address(htok)));
     }
 
     function _token(address ska, bool hedera) internal returns (NormalToken t) {
@@ -510,7 +510,7 @@ contract MtxCtxTest is PqzRegistryBase {
     function test_minGas_smartKeyAccountMtxExecute() public {
         address acct = fac.deploy(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(uint160(vm.addr(SKA_PK)))), 0, 0, 0),
             address(0x6A2D));
-        tok.mint(acct, 1_000);
+        tok.mint(acct, 1_000, EnvKit.codeUidOf(address(tok)));
         MetaTxLib.MetaTransaction memory m = _mt(acct, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
         bytes32 app = Erc7739Kit.separator(address(tok));
         bytes32 c = MtxHash.hashStruct(m);

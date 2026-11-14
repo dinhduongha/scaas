@@ -151,8 +151,8 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     }
 
     /// @notice The collateral check of a rate change counts the shielded value too.
-    function _executeRateBody() internal override {
-        WrappedLib.executeRate(_govSubject(), totalSupply()); // the shielded value sits in SHIELD_POOL (D19)
+    function _executeRateBody(bytes32 chainUid_) internal override {
+        WrappedLib.executeRate(_holderOnChain(GovernanceBits.RATE_ADJUSTABLE, chainUid_), totalSupply()); // the shielded value sits in SHIELD_POOL (D19)
     }
 
     // ------------------------------------------------------------------ the layer's hooks

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Group 3l (wrap limits spec 2026-11-10-wrap-limits.md §2.1, §6, §9): the `GovernanceRouter`'s two ops on the hybrids of the
 //! wrapped kinds, `UASetWrapLimits` (the leg array hashed as EIP-712 does: the concatenated `WrapLegLimits` struct hashes, each
-//! over its four `WrapLimit` struct hashes) and `UASetWrapMember`, their struct hashes and digests in the router's domain
+//! over its four `WrapLimit` struct hashes) and `UASetWrapMember`, and the admin's two cap setters of round 3zc
+//! (`UASetMaxSupply`, `UASetMaxWrapSupply`, CTR-GOV-30), their struct hashes and digests in the router's domain
 //! (`MetaTxLib.canon`'s zeroing of an unbound `relayer` / `feeRecipient`), and the net-wrapped entitlement as the contract
 //! computes it (a wallet's preview between reads; R23, R24, R26). Pinned by `smartcontracts/vectors/typed/typed_ops.json`
 //! (clientkeys) and `wraplimits/wraplimits.json` (its generator, replayed by forge). The contract decides; nothing here is a
@@ -34,13 +35,26 @@ pub struct WrapLegLimits {
     pub unwrap_long: WrapLimit,
 }
 
-/// `UASetWrapLimits(…)` with its referenced types in EIP-712 order.
+/// `UASetWrapLimits(…)` with its referenced types in EIP-712 order. The Change of CTR-GOV-28 in round 3zb + 3zc (O5, O6, owner
+/// 2026-11-13): both ops sign the token's chain word last (`chainUid`).
 pub fn set_wrap_limits_type() -> String {
-    format!("UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,{ENVELOPE}){WRAP_LEG_LIMITS_TYPE}{WRAP_LIMIT_TYPE}")
+    format!("UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,{ENVELOPE}){WRAP_LEG_LIMITS_TYPE}{WRAP_LIMIT_TYPE}")
 }
 
 pub fn set_wrap_member_type() -> String {
-    format!("UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,{ENVELOPE})")
+    format!("UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,{ENVELOPE})")
+}
+
+/// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.5, §3.7): the admin's `UASetMaxWrapSupply` (`wrap`) or
+/// `UASetMaxSupply`, the new cap and the token's chain word; the propose and the apply are the same op sent twice.
+pub fn set_cap_type(wrap: bool) -> String {
+    let (op, cap) = if wrap { ("UASetMaxWrapSupply", "maxWrapSupply") } else { ("UASetMaxSupply", "maxSupply") };
+    format!("{op}(bytes32 from,address target,uint256 {cap},bytes32 chainUid,{ENVELOPE})")
+}
+
+/// `hashStruct(UASetMaxSupply | UASetMaxWrapSupply)`: `cap` a `uint256` word.
+pub fn set_cap_struct_hash(wrap: bool, e: &Envelope, target: &[u8; 20], cap: &[u8; 32], chain_uid: &[u8; 32]) -> [u8; 32] {
+    struct_hash(keccak256(set_cap_type(wrap).as_bytes()), e, target, &[*cap, *chain_uid])
 }
 
 fn limit_hash(l: &WrapLimit) -> [u8; 32] {
@@ -74,17 +88,18 @@ pub(crate) fn bool_word(b: bool) -> [u8; 32] {
 
 /// `hashStruct(UASetWrapLimits)`.
 pub fn set_wrap_limits_struct_hash(e: &Envelope, target: &[u8; 20], legs: &[WrapLegLimits], net_unwrap: bool, wrap_list: bool,
-    unwrap_list: bool) -> [u8; 32]
+    unwrap_list: bool, chain_uid: &[u8; 32]) -> [u8; 32]
 {
     struct_hash(keccak256(set_wrap_limits_type().as_bytes()), e, target,
-        &[legs_hash(legs), bool_word(net_unwrap), bool_word(wrap_list), bool_word(unwrap_list)])
+        &[legs_hash(legs), bool_word(net_unwrap), bool_word(wrap_list), bool_word(unwrap_list), *chain_uid])
 }
 
 /// `hashStruct(UASetWrapMember)`.
-pub fn set_wrap_member_struct_hash(e: &Envelope, target: &[u8; 20], account: &[u8; 32], can_wrap: bool, can_unwrap: bool)
-    -> [u8; 32]
+pub fn set_wrap_member_struct_hash(e: &Envelope, target: &[u8; 20], account: &[u8; 32], can_wrap: bool, can_unwrap: bool,
+    chain_uid: &[u8; 32]) -> [u8; 32]
 {
-    struct_hash(keccak256(set_wrap_member_type().as_bytes()), e, target, &[*account, bool_word(can_wrap), bool_word(can_unwrap)])
+    struct_hash(keccak256(set_wrap_member_type().as_bytes()), e, target,
+        &[*account, bool_word(can_wrap), bool_word(can_unwrap), *chain_uid])
 }
 
 /// `keccak256(0x1901 ‖ domainSeparator ‖ structHash)`, the router's domain (`regulated::router_domain_separator`).

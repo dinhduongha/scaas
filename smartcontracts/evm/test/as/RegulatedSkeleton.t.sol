@@ -100,7 +100,9 @@ contract RegulatedSkeletonTest is PqzFixture {
         assertEq(c, GovernanceBits.WRAPPED_CONTRACT_ONLY | REG_CONTRACT_ONLY, "9 contract-only");
         // group 3l (CTR-TOK-31, wrap-limits spec R27, 7ba002dc; this suite not run on its branch): + bit 27 `REDEEMER`, scalar on
         // the six wrapped kinds (a redeemer's excess is a use of its grant)
-        assertEq(s, (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22) | (1 << 27), "9 scalar");
+        // round 3zb (spec 2026-11-13-burner-wrap-caps.md §1): + bit 30 `BURNER` through `TOKEN_SCALAR`, inert here (not in
+        // the wrapped kinds' role mask: a grant of 30 is `NoSuchRole(30)`)
+        assertEq(s, (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22) | (1 << 27) | (1 << 30), "9 scalar");
         assertEq(d, (1 << 5) | (1 << 6) | (1 << 7) | (1 << 28), "9 delayed relax: + KYC's disable (round 3s)");
         assertEq(r9.validBits(), v, "9 validBits()");
 
@@ -109,7 +111,7 @@ contract RegulatedSkeletonTest is PqzFixture {
         assertEq(v, GovernanceBits.WRAPPED_BITS | (reg & ~uint256(1 << 8)) | (1 << 24), "13 valid: no ALLOWLIST, bit 24");
         assertEq(r, GovernanceBits.WRAPPED_ROLES | (REG_ROLES & ~uint256(1 << 8)) | (1 << 24), "13 roles: no ALLOWLIST");
         assertEq(c, GovernanceBits.WRAPPED_CONTRACT_ONLY | REG_CONTRACT_ONLY, "13 contract-only");
-        assertEq(s, (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22) | (1 << 27), "13 scalar: bit 27 as on 9");
+        assertEq(s, (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22) | (1 << 27) | (1 << 30), "13 scalar: bits 27, 30 as on 9");
         assertEq(d, (1 << 5) | (1 << 6) | (1 << 7) | (1 << 28), "13 delayed relax");
         assertEq(r13.validBits(), v, "13 validBits()");
     }
@@ -178,7 +180,7 @@ contract RegulatedSkeletonTest is PqzFixture {
         for (uint256 i; i < 2; ++i) {
             IRegulatedToken t = IRegulatedToken(ks[i]);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.OPERATOR_TRANSFER));
-            t.operatorTransfer(bytes32(uint256(1)), bytes32(uint256(6)), 1, bytes32(uint256(2)));
+            t.operatorTransfer(bytes32(uint256(1)), bytes32(uint256(6)), 1, bytes32(uint256(2)), EnvKit.codeUidOf(address(t)));
             (bool ok, uint8 reason) = t.canReceive(bytes32(uint256(1)));
             assertTrue(ok);
             assertEq(reason, 0);
@@ -213,7 +215,7 @@ contract RegulatedSkeletonTest is PqzFixture {
         (c.admin, c.roles.issuer, c.reg.termsHash) = (bytes32(uint256(0xA11)), bytes32(uint256(uint160(iss))), keccak256("t"));
         t = factory.createToken(kind, 1, abi.encode(c), salt);
         vm.prank(iss);
-        IRegulatedToken(t).pause(bytes32(uint256(2)), uint64(block.timestamp + 1 days));
+        IRegulatedToken(t).pause(bytes32(uint256(2)), uint64(block.timestamp + 1 days), EnvKit.codeUidOf(address(t)));
     }
 
     /// Every seat reaches `RegulatedBase` on both kinds (spec §2.2, §3.2), shown by `P` on a paused token: the ledger
