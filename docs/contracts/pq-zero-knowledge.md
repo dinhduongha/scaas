@@ -2093,8 +2093,8 @@ directories → the one directory `smartcontracts/vectors/pqz/` (P6e D9).
 `MLDSA44` at `0x000000000000000000000000000000005caa0012` and `MLDSA65` at `0x000000000000000000000000000000005caa0013`
 (EIP-8355's layout, empty context; [§9.2](#92-precompiles-mldsa44-and-mldsa65)), and `MLDSA87` at
 `0x000000000000000000000000000000005caa0014` from the first schedule that carries the optional `mldsa87Gas` (owner 2026-11-04,
-[CTR-UA-39](accounts.md#CTR-UA-39); plugin BUILT on branch `mldsa87`, price **provisional** ≈ 102,000 until a calibration run the
-owner allows; the roll-out to the SCaaS testnet is the owner's step). These are the 32-bit form (owner
+[CTR-UA-39](accounts.md#CTR-UA-39); plugin BUILT on branch `mldsa87`, price **135,000**, calibrated 2026-11-15 (was the provisional
+estimate ≈ 102,000); the roll-out to the SCaaS testnet is the owner's step). These are the 32-bit form (owner
 2026-10-21, spec `superpowers/specs/2026-10-20-pqz-state-redesign.md` §12 item 9; built in the node plugin and the
 scripts in plan 5h Task 8d part 1, the contracts in part 2); they replace P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` /
 `…0013`, which the SCaaS testnet served until image `2.2.0-pqz4` replaced `2.2.0-pqz3` on 2026-10-25 (with provisional schedule rows until plan 5h Task 9). The addresses lie above `0xffff`
@@ -2308,7 +2308,7 @@ Contracts call it once at construction. Gas does not protect `eth_call`, which c
 so CPU spam through the RPC is bounded by the follower's rate limits, for every op, not only op 6. `MLDSA44` /
 `MLDSA65`: `max(EIP-8355 BASE, calibrated) + 6·⌈max(0, L − PK − SIG) / 32⌉`. `MLDSA87` (CTR-UA-39): the same form, base 13,500,
 `pk` 2,592 B, `sig` 4,627 B; `mldsa87Gas` optional per schedule (a schedule without it leaves the address inactive), its value
-**provisional** (≈ 102,000, `MlDsa.Provisional87Gas`, `add-schedule.py --mldsa87`), not calibrated; the start-up known-answer set
+**135,000**, calibrated 2026-11-15 (`MlDsa.Calibrated87Gas`, `add-schedule.py --mldsa87`; was the provisional ≈ 102,000); the start-up known-answer set
 covers the three levels.
 
 **Measured (P6f Task 6, 2026-10-15, one run, owner):** inside the built image on the chain host (AMD Ryzen 5 7235HS,
@@ -2339,6 +2339,14 @@ EIP-7623 floor). `selftestGas` = **2,567,000**; `OP_SELFTEST` cold p50 / p99 = 9
 processes. ML-DSA p99 0.135 ms (44) / 0.189 ms (65) ⇒ `mldsa44Gas` **49,000**, `mldsa65Gas` **68,000** (EIP-8355 BASE
 6,500 / 9,000 is lower). Re-calibrate before chain 22776 or when a later measurement differs by more than 15 %. The
 estimates below predate this table.
+
+**Measured, `MLDSA87` (TODO 3zd, 2026-11-15, two passes, owner):** the same tool and method in the calib image of the
+`n2304-kmax4096` library `29c351ec…677c` (`--cpus 4`, no PQZ row, 1,000 calls over the 15 ACVP external inputs), host load
+1.4–2.7 on 8 CPUs, nothing heavy beside it. `t_ecMul` 0.016 ms in both passes. ML-DSA-87 p50 0.249 / 0.249 ms, p99
+0.358 / 0.328 ms ⇒ 135,000 / 123,000 (9.8 % apart, inside the 15 %); `mldsa87Gas` = the larger, **135,000** (was the
+provisional 102,000). The p50 ratio to ML-DSA-65 is 1.52, the estimate's 1.5; the price is above it by the p99 tail, which
+the same passes show for 44 / 65 too. ML-DSA-44: p99 0.156 / 0.154 ms ⇒ 59,000 / 58,000, `mldsa44Gas` **59,000** (was
+49,000; owner 2026-11-15, the higher pass). ML-DSA-65 measured 88,000–100,000 in the same passes (over the 15 % bound against 68,000) and stays 68,000: deferred by the owner (2026-11-15) to the next pqz-core / set-parameter change and its full gate, because at 100,000 it passes the 100,000 fixture cap of the 65 precompile path and moves `debit_min_gas` at all four sets. Summary `pqz-core/nethermind/runs/2026-11-15-mldsa87-calib.txt`.
 
 **Measured on the SCaaS testnet (P6g e2e, 2026-10-16, before plan 5h: hashes in state, `acc` and `inline` in calldata; real PQZL proofs, `gasUsed` of the transaction; log
 `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`).** Proofs from `pqz-ffi` (`examples/pqz_prove.rs`): transfer

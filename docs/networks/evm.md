@@ -159,10 +159,11 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   all four as required at that gas, the two failures as subgroup errors (read-only `eth_call`, 2026-11-01).
 - **PQ precompiles on the SCaaS testnet** (P6f, plugin `Nethermind.Pqz`, [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)):
   `PQZ` `0x000000000000000000000000000000005caa0f01` (PQZL and PQZH proofs, per-row gas 1.721–6.242 M + 3 per word,
-  calibrated 2026-10-31), `MLDSA44` `0x000000000000000000000000000000005caa0012` (49,000 + 6 per message word), `MLDSA65`
+  calibrated 2026-10-31), `MLDSA44` `0x000000000000000000000000000000005caa0012` (59,000 + 6 per message word, calibrated 2026-11-15; the SCaaS
+  testnet's chainspec of reset 1 carries 49,000 until reset 4), `MLDSA65`
   `0x000000000000000000000000000000005caa0013` (68,000 + 6 per word) and `MLDSA87` `0x000000000000000000000000000000005caa0014`
-  (102,000 + 6 per word, PROVISIONAL, not calibrated; active only under a schedule that carries `mldsa87Gas`, on the SCaaS
-  testnet from the second schedule of reset 1 of 2026-11-04, [CTR-UA-39](../contracts/accounts.md#CTR-UA-39)), EIP-8355
+  (135,000 + 6 per word, calibrated 2026-11-15; the SCaaS testnet's chainspec of reset 1 of 2026-11-04 carries the provisional
+  102,000 until reset 4; active only under a schedule that carries `mldsa87Gas`, on the SCaaS testnet from the second schedule, [CTR-UA-39](../contracts/accounts.md#CTR-UA-39)), EIP-8355
   layout, empty context; prices frozen in the chainspec's `engine.Pqz`
   ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11); the rows: the plugin README,
   [Prices](../../pqz-core/nethermind/README.md#prices-calibrated-2026-10-31)). Image `2.2.0-pqz7`; images up to
