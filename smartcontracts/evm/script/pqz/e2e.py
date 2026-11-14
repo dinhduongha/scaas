@@ -480,6 +480,8 @@ def enc(t, v):
 
 
 def encs(ts, vs):
+    if len(ts) != len(vs):  # zip would drop the tail: a short struct encodes as garbage (a revert with no data on chain)
+        raise ValueError(f"encs: {len(vs)} values for {len(ts)} types")
     hl = sum(32 if dyn(t) else ssize(t) for t in ts)
     head, tail = b"", b""
     for t, v in zip(ts, vs):

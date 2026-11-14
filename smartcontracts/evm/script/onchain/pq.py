@@ -157,7 +157,7 @@ def extra(pq, sd, reg, create, U, aud, DEC, sk, tusd):
 def create_cfg(sd, fac, kind, name, sym, legs, feat, salt, conf=None, reg=None, issuer=0):
     """`createToken` on e2e's factory with e2e's `TokenConfig` encoding (its `create`), plus the regulated params."""
     c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, issuer, 0], 0, 0, legs, [0, 0],
-         conf or [b""] + [0] * 12, 0, 0, 0, reg or [0, 0, 0, 0, 0]]
+         conf or [b""] + [0] * 14, 0, 0, 0, reg or [0, 0, 0, 0, 0]]
     data = E.cd("createToken(uint8,uint64,bytes,bytes32)", ["w", "w", "b", "w"], kind, 1, E.encs([E.CFG], [c]), E.kc(salt, RUN))
     r = sd.send(fac, data, f"createToken {sym} (kind {kind})")
     lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower())
@@ -177,7 +177,7 @@ def mine(pq, sd, sr, U, aud, DEC, tusd, fac, D):
     cr = D.deploy("ComplianceRegistry", E.encs(["w", "w", "w"], [E.CREATE2_DEPLOYER, 0, E.CTX[1]]), label="ComplianceRegistry")
 
     def create_reg(kind, name, sym, legs, dmode, amode, feat, salt):
-        conf = [aud.ua if amode else b"", E.SCALE, E.MAXS, E.FEE, dmode, amode, E.MIN_DECOY, 0, 0, 0, 0, 0, 0]
+        conf = [aud.ua if amode else b"", E.SCALE, E.MAXS, E.FEE, dmode, amode, E.MIN_DECOY, 0, 0, 0, 0, 0, 0, 0, 0]  # PRECOMPILE: class 1
         # RegulatedLib (round 3s): KYC (bit 28) needs a registry, a registry iff a mask (deniedFlags 1: no account has it),
         # KYC a terms bit (a termsHash)
         t = create_cfg(sd, fac, kind, name, sym, legs, feat | 1 << 28, salt, conf, [cr, 0, 1, E.kc("scaas.onchain.terms"), 0])
