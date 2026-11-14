@@ -379,7 +379,8 @@ def offchain(pq, sd, reg, create, U, aud, DEC, sk, tusd):
     E.log("\n## 10. (T66b Step 5b) the PQZ OFFCHAIN verify mode: fixed and transferable verifiers, the verifier change, negatives")
 
     def conf(fixed):
-        return [aud.ua, E.SCALE, E.MAXS, E.FEE, 0, 2, E.MIN_DECOY, 1, E.pad(sd.addr), fixed, 0, 0, 0]
+        # proofStore, verifierFee, verifierFeeMax 0; pqzOwnKey 1, pqzOpening 0: OFFCHAIN as e2e's --zero-dep tokens (CTR-PQZ-37)
+        return [aud.ua, E.SCALE, E.MAXS, E.FEE, 0, 2, E.MIN_DECOY, 1, E.pad(sd.addr), fixed, 0, 0, 0, 1, 0]
 
     def life(tok, nm, C, transfers=True):
         sd.send(tok, E.cd("mint(address,uint256)", ["w", "w"], sd.addr, 5_000 * E.SCALE), f"{nm} mint 5,000 public")

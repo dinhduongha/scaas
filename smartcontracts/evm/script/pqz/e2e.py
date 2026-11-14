@@ -1700,6 +1700,9 @@ def run(kd, kr, ke):
     C1.commit()
     xfer(erin, bob, ZERO32, 4, True, "mtxConfidentialTransferSingle erin→bob 4, pqzAuth by the members")
     transfer_multi(pq, sd, C1, erin, [(bob, 3), (DEC[4], 0)], ZERO32, True, "named mtxConfidentialTransfer erin→[bob 3, decoy4 0], msig envelope and pqzAuth", signed=md())
+    # the three-key model's class 1 (PRECOMPILE, the registry key): a credit to the msig under its pqz-mlwe key, rolled, decrypted by restore
+    xfer(bob, erin, ZERO32, 2, True, "mtxConfidentialTransferSingle bob→erin 2: a class-1 credit to the msig")
+    rollover(sd, C1, erin, C1.state(erin)["pendingCount"] - C1.state(erin)["rolled"], "erin's credit (the msig)")
     se1, fee1 = (int.from_bytes(words(call(t1, c))[0], "big") for c in (cd("balanceOf(address)", ["w"], se.addr), cd("balanceOfUA(bytes32)", ["w"], feeua.ua)))
     check(se0 - se1 == Signed.spent[t1, pad(se.addr)] + 30 * SCALE, f"envelope signer paid {se0 - se1:,}: its outer fees and its shield")
     check(fee0 - fee1 == Signed.spent[t1, feeua.ua] + 7 * SCALE, f"fee UA paid {fee0 - fee1:,}: its outer fees and its shield")
