@@ -46,7 +46,11 @@ step ffi-test sh -c "cargo test --release --offline $BF --features prove,test-ho
 # pqz-offchain (three-key spec K3-4): the off-chain verifier's entry, its own crate (the plugin's library stays pqz-ffi's);
 # its tests read the set's vectors (split inputs, cross-id re-labelling)
 if [ -z "$BF" ]; then OBF=; else OBF="--no-default-features --features pqz-ffi/pqzl-${PQZL:-rust},pqz-ffi/set-$S"; fi
-step offchain-test sh -c "(cd offchain && cargo test --release --offline $OBF -- --test-threads 4 --nocapture) > $R-offchain-test.txt 2>&1"
+# its own cargo target (<target>-offchain): pqz-ffi is a path crate with a cdylib, so cargo names its rlib
+# deps/libpqz_ffi.rlib without a hash; built here with this workspace's features it overwrote the file that ffi/run.sh's
+# fresh build of pqz-ffi (prove, test-hooks) still pointed at (the final gate's ffi/test E0425 / E0277)
+OT=${CARGO_TARGET_DIR:+$CARGO_TARGET_DIR-offchain}
+step offchain-test sh -c "(cd offchain && env ${OT:+CARGO_TARGET_DIR=$OT} cargo test --release --offline $OBF -- --test-threads 4 --nocapture) > $R-offchain-test.txt 2>&1"
 step wasm-build sh -c "(cd wasm && CARGO_TARGET_DIR=$WT cargo build --release --offline $BF --target wasm32-unknown-unknown) >> $R-build.txt 2>&1"
 step wasm-replay sh -c "node vectors/replay_wasm.mjs $WT/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm $V > $R-wasm.txt 2>&1"
 (cd $V && wc -c *.json README.md) > "$R-sizes.txt"
