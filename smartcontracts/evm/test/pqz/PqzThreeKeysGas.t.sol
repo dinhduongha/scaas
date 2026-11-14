@@ -92,15 +92,29 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
     }
 
     /// `data` on token `t` relayed as a full transaction (fee 7) on one path, measured cold, logged.
+    function _envU() internal view returns (MetaTxLib.UAMetaTransaction memory u) {
+        (u.from, u.validUntil, u.mode, u.fee) = (feeUA, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
+    }
+
+    function _envM() internal view returns (MetaTxLib.MetaTransaction memory m) {
+        (m.from, m.validUntil, m.mode, m.fee) = (vm.addr(RKEY), block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
+    }
+
+    /// The envelope's binding the statement carries (its fields, not its `data`): the token's view for `uaExecute`, the address
+    /// form a client computes for `mtxExecute` (`_addrBinding`).
+    function _binding(NormalPqzToken t, bool ua) internal view returns (bytes32) {
+        return ua ? t.envelopeBinding(_envU()) : _addrBinding(t, _envM());
+    }
+
     function _relayed(NormalPqzToken t, bool ua, bytes memory data, string memory row) internal {
         bytes memory call;
         if (ua) {
-            MetaTxLib.UAMetaTransaction memory u;
-            (u.from, u.data, u.validUntil, u.mode, u.fee) = (feeUA, data, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
+            MetaTxLib.UAMetaTransaction memory u = _envU();
+            u.data = data;
             call = abi.encodeCall(t.mtxExecute, (u, UACall.auth(feeUA, abi.encode(bytes(""), _proof(ML65_SIG)))));
         } else {
-            MetaTxLib.MetaTransaction memory m;
-            (m.from, m.data, m.validUntil, m.mode, m.fee) = (vm.addr(RKEY), data, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
+            MetaTxLib.MetaTransaction memory m = _envM();
+            m.data = data;
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, MtxDigest.metaTx(address(t), m));
             call = abi.encodeWithSignature("executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
                 m, abi.encodePacked(r, s, v));
@@ -125,12 +139,13 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
         }
         uint256 plen = open ? (aud ? _proofLen("TXS", 61_276) : _proofLen("TXS0", 60_957))
             : (aud ? _proofLen("TX", 46_660) : _proofLen("TX0", 46_312));
-        bytes memory proof = _proof(plen);
-        IPqzToken.PqzSignedVerdict memory sv = _sign(t, VKEY, _verdict(t, t.transferSingleStatement(a, 0), proof));
-        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (a, proof, _pqAuth(), "", sv));
         string memory r = string.concat(row, aud ? ", auditor on" : ", auditor off", ", proof ", vm.toString(plen), " B");
-        _relayed(t, false, d, r);
-        _relayed(t, true, d, r);
+        for (uint256 k; k < 2; ++k) _op1Via(t, k == 1, a, _proof(plen), r);
+    }
+
+    function _op1Via(NormalPqzToken t, bool ua, IPqzToken.PqzTransferArgs memory a, bytes memory proof, string memory r) internal {
+        IPqzToken.PqzSignedVerdict memory sv = _sign(t, VKEY, _verdict(t, t.transferSingleStatement(a, _binding(t, ua)), proof));
+        _relayed(t, ua, abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (a, proof, _pqAuth(), "", sv)), r);
     }
 
     function test_gas3k_op1_class2() public {
@@ -154,11 +169,12 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
             _blob(71, PqzCt.CT)));
         uint256 plen = _proofLen("REFRESH", 45_833);
         bytes memory proof = _proof(plen);
-        IPqzToken.PqzSignedVerdict memory sv = _sign(c2, VKEY, _verdict(c2, c2.burnStatement(b, 0, bytes32(0), 0), proof));
-        bytes memory d = abi.encodeCall(IPqzToken.mtxUnshield, (b, 0, bytes32(0), proof, _pqAuth(), "", sv));
         string memory r = string.concat("refresh, class 2, proof ", vm.toString(plen), " B");
-        _relayed(c2, false, d, r);
-        _relayed(c2, true, d, r);
+        for (uint256 k; k < 2; ++k) {
+            bool ua = k == 1;
+            IPqzToken.PqzSignedVerdict memory sv = _sign(c2, VKEY, _verdict(c2, c2.burnStatement(b, 0, bytes32(0), _binding(c2, ua)), proof));
+            _relayed(c2, ua, abi.encodeCall(IPqzToken.mtxUnshield, (b, 0, bytes32(0), proof, _pqAuth(), "", sv)), r);
+        }
     }
 
     /// A scoped key record of a fresh `mldsa65` UA (`setPqzScopedKey`) and its stored `R_REG` proof (`storePqzScopedPop`), each
@@ -169,9 +185,9 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
         (uint256 g1, uint256 s1) = _setRecord(ua, scope, kem, keccak256(pop));
         (uint256 g2, uint256 price) = _storePop(ua, scope, pop);
         string memory head = string.concat("GAS3K ", PqzSet.NAME, " | ", row);
-        console2.log(string.concat(head, " | setPqzScopedKey regular ", vm.toString(g1), " state ", vm.toString(s1)));
+        console2.log(string.concat(head, " | setPqzScopedKey regular with ML-DSA 68,006 ", vm.toString(g1), " state ", vm.toString(s1)));
         console2.log(string.concat(head, " | storePqzScopedPop (proof ", vm.toString(pop.length), " B, op 3 ", vm.toString(price),
-            ") regular ", vm.toString(g2), " state ", vm.toString(lastState)));
+            ") regular with the op 3 row ", vm.toString(g2), " state ", vm.toString(lastState)));
         console2.log(string.concat(head, " | sum total ", vm.toString(g1 + s1 + g2 + lastState)));
     }
 
@@ -186,7 +202,8 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
         (rScope, rKem, rPopHash) = (scope, k, popHash);
         _setCall(ua);
         Vm.Gas memory g = vm.lastCallGas();
-        return (g.gasTotalUsed, uint256(int256(g.gasStateUsed)));
+        // the holder's ML-DSA-65 signature is the fixture's mock here: its price, 68,006 [estimate], added
+        return (g.gasTotalUsed + 68_006, uint256(int256(g.gasStateUsed)));
     }
 
     function _setCall(bytes32 ua) internal {
@@ -196,10 +213,9 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
     function _storePop(bytes32 ua, address scope, bytes memory pop) internal returns (uint256 g, uint256 price) {
         string memory gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         price = gj.readUint(".pqzl['REGISTER'].row") + 3 * ((5 + PqzSet.STMT_REGISTER + pop.length + 31) / 32);
-        vm.clearMockedCalls();
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
-        vm.etch(PQZ, address(new GasBurner(price - 2_900)).code);
-        g = _gasTo(address(reg), abi.encodeCall(reg.storePqzScopedPop, (ua, scope, 0, pop)));
+        // the fixture's mocks stay (the key verifier's self-test answer is a mock): op 3 itself is mocked here and its row price is
+        // added to the reported sum (one precompile call, no other cost depends on it)
+        g = _gasTo(address(reg), abi.encodeCall(reg.storePqzScopedPop, (ua, scope, 0, pop))) + price;
     }
 
     function test_gas3k_record_class2() public {

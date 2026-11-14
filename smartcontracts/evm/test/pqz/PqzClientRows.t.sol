@@ -95,7 +95,7 @@ contract PqzClientRowsTest is PqzOffchainBase {
         uint256 e = t.pqzPending(alice, 0, 0);
         bytes memory d = _slice(address(uint160(e >> 96)).code, 1, _len(2));
         assertEq(address(uint160(e >> 96)).code.length, 1 + _len(2), "the blob's length");
-        uint256 puf = 16 + PqzCt.PKP + 2 * PqzCt.VP + 32 + PqzCt.VP;
+        uint256 puf = 16 + PqzCt.PKP + 2 * PqzCt.VP + 32; // salt, P(u), P(v_t), P(v_a), toUA
         assertEq(bytes32(_slice(d, puf - 32, 32)), alice, "toUA before P(u_f)");
         assertEq(_slice(d, puf, PqzCt.PKP), _packed(a.uFrom), "P(u_f)");
         uint256 oT = puf + PqzCt.PKP + PqzCt.VP;

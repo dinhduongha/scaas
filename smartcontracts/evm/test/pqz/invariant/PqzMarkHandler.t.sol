@@ -60,7 +60,9 @@ contract PqzMarkHandler is PqzOffchainBase {
         a.openingTo = _openingOf(nonce);
         ++nonce;
         uint256 i = t.pqzAccount(holder, 0).pendingCount;
-        try t.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", _sv(t, t.transferSingleStatement(a, 0))) {
+        bytes memory st;
+        try t.transferSingleStatement(a, 0) returns (bytes memory x) { st = x; } catch { return; } // the view refuses too
+        try t.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", _sv(t, st)) {
             if (t.pqzAccount(holder, 0).pendingCount != i + 1) ++bad;
             slot0[i] = t.pqzPending(holder, 0, uint64(i)) & ~uint256(PqzCore.SKIP);
             ct0[i] = t.pqzPendingCt(holder, 0, uint64(i));
@@ -99,7 +101,9 @@ contract PqzMarkHandler is PqzOffchainBase {
         p = bound(p, 0, s.pendingCount);
         IPqzToken.PqzBurnArgs memory b = _bs(bytes.concat(abi.encode(p, block.number + 50, uint256(0), holder, bytes32(0)),
             _blob(nonce++, PqzCt.CT)));
-        try t.mtxUnshield(b, 0, bytes32(0), VPROOF, _pqAuth(), "", _sv(t, t.burnStatement(b, 0, bytes32(0), 0))) {
+        bytes memory st;
+        try t.burnStatement(b, 0, bytes32(0), 0) returns (bytes memory x) { st = x; } catch { return; } // p < floor: PendingRange
+        try t.mtxUnshield(b, 0, bytes32(0), VPROOF, _pqAuth(), "", _sv(t, st)) {
             if (p < s.rolled) ++unrolls;
             ++refreshes;
             (base, baseIdx) = (bytes.concat(b.u, b.vFrom), t.pqzAccount(holder, 0).rolled);
