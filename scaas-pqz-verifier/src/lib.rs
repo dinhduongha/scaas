@@ -266,6 +266,8 @@ pub fn verdict_auth_digest(registry: &Eip712Domain, ua: B256, digest: B256) -> B
     UAAuth { ua, purpose: purpose_pqz_verdict(), digest }.eip712_signing_hash(registry)
 }
 
+// One plan per request, moved once: the size difference of the variants (the opening's fields) costs nothing here.
+#[allow(clippy::large_enum_variant)]
 enum Plan {
     Multi(PqzMultiArgs),
     Single(PqzTransferArgs),

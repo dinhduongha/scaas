@@ -267,7 +267,7 @@ impl Chain for Fake {
                     None => R::pqzScopedKeyAtReturn { ptr: Address::ZERO, pqzPopHash: B256::ZERO, proven: false },
                 },
                 R::pqzScopedPopOfCall => |c| Bytes::from(at(c.ua, c.version).pop),
-                R::pqzScopedKeyDigestCall => |c| tagged("scoped", (c.ua, c.keyClass, c.chainUid, c.token, c.version, c.pqzKeyHash)
+                R::pqzScopedKeyDigestCall => |c| tagged("scoped", (c.ua, u16::from(c.keyClass), c.chainUid, c.token, c.version, c.pqzKeyHash)
                     .abi_encode()),
                 R::pqzKeySigOfCall => |c| Bytes::from(at(c.ua, c.version).sig),
                 R::keyOwnerCall => |c| w.owner.get(&c.keyHash).copied().unwrap_or_default(),
@@ -610,7 +610,7 @@ async fn rreg_message_scoped_real_vector() {
     let pqz: Pqz = Arc::new(|i: &[u8]| if i[0] == stmt::OP_REGISTER { pqz_ffi::precompile(i) } else { Ok(VALID) });
     let h = pqz_key_hash(&pk);
     let purpose = keccak256("scaas.ua.purpose.pqz-scoped-key.v1");
-    let scoped = |class: u8, token: Address, v: u64| tagged("scoped", (A, class, CHAIN_UID, token, v, h).abi_encode());
+    let scoped = |class: u8, token: Address, v: u64| tagged("scoped", (A, u16::from(class), CHAIN_UID, token, v, h).abi_encode());
     let w = |own: bool, version: u64| {
         let mut w = world(&st, &[]);
         w.own = own;
@@ -636,7 +636,7 @@ async fn split_id_follows_the_opening() {
     let mut st = [st0.clone(), vec![0u8; PK]].concat();
     st[32..64].copy_from_slice(&stmt::PQZL_SPLIT_ID);
     let open = |opening: bool, st: &[u8]| {
-        let mut w = world(st, &[A, C]);
+        let mut w = world(st, &[A, C, AUD]); // the TRANSFER row names the auditor's key too
         (w.opening, w.own) = (opening, true);
         w.psid = B256::from(if opening { stmt::PQZL_SPLIT_ID } else { stmt::PQZL_ID });
         w
@@ -953,7 +953,8 @@ async fn start_pins_chain_id() {
 #[test]
 fn views_are_the_contracts() {
     use scaas_pqz_verifier::abi::IPqzToken as T;
-    assert_eq!(T::transferSingleStatementCall::SELECTOR, hex!("931415ee"));
+    // the three-key round: `uFrom` and the two `PqzOpening`s in `PqzTransferArgs`, 0x931415ee -> 0x50f9be2f (the node's pin too)
+    assert_eq!(T::transferSingleStatementCall::SELECTOR, hex!("50f9be2f"));
     assert_eq!(T::transferStatementCall::SELECTOR, hex!("8a2161ba"));
     assert_eq!(T::burnStatementCall::SELECTOR, hex!("da8c9eed"));
     assert_eq!(T::unshieldUnwrapStatementCall::SELECTOR, hex!("8e4ccf2e"));

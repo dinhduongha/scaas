@@ -414,18 +414,24 @@ rate_per_minute = 1000
     assert_eq!(r.1["pqzVerdict"]["statementHash"], json!(keccak256(PROBE_STATEMENT)));
 
     // the holders: real PQZ keys of this set (portable.json), proof bytes stored unchecked
-    let p = read_json(&format!("{}/../vectors/ua/portable.json", sc()));
+    let p = read_json(&format!("{}/../vectors/ua/portable.json", sc())); // the registration's proof bytes (stored unchecked)
     let row = |tb: &str, n: &str| p[tb].as_array().unwrap().iter().find(|r| r["name"] == n).unwrap_or_else(|| panic!("{tb} {n}")).clone();
     let hexb = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
     let set = pqz_ffi::stmt::SET;
     let pop = hexb(&row("registrations", &format!("mldsa65/{set}"))["pqzPop"]);
-    let (key_a, key_b) = (hexb(&row("pqzKeyRecords", &format!("fndsa512/{set}"))["pqzKey"]),
-        hexb(&row("pqzKeyRecords", &format!("mldsa87/{set}"))["pqzKey"]));
-    let from = Holder::register(&rpc, registry, key_a.clone(), pop.clone()).await;
-    let to = Holder::register(&rpc, registry, key_b.clone(), pop.clone()).await;
-    // class 3: each holder's version 0 scoped to the token, the other's portable key (a key is unique per UA; pk_f != pk_t)
-    from.register_scoped(&rpc, registry, token, key_b, pop.clone()).await;
-    to.register_scoped(&rpc, registry, token, key_a, pop).await;
+    // canonical keys of this set (every coefficient below q: the statement the token builds reaches pqz_ffi::decode, T-14):
+    // the R_TX vector's pk_f / pk_t as the class-3 records, its pk_a and the R_REG vector's key as the class-1 keys (the
+    // portable.json keys are random bytes, refused by the decoder)
+    let vdir = if set == "n2048-kmax1024" { format!("{}/../vectors/pqz", sc()) } else { format!("{}/../vectors/pqz/{set}", sc()) };
+    let st = hexb(&read_json(&format!("{vdir}/statement_transfer.json"))["rows"][0]["stmt"]);
+    let reg_pk = hexb(&read_json(&format!("{vdir}/statement_register.json"))["rows"][0]["stmt"])[96..96 + pqz_ffi::stmt::PK_BYTES].to_vec();
+    let at = |i: usize| st[640 + i * pqz_ffi::stmt::PK_BYTES..640 + (i + 1) * pqz_ffi::stmt::PK_BYTES].to_vec();
+    let (key_a, key_b) = (at(0), at(1));
+    let from = Holder::register(&rpc, registry, at(2), pop.clone()).await;
+    let to = Holder::register(&rpc, registry, reg_pk, pop.clone()).await;
+    // class 3: each holder's version 0 scoped to the token (a key is unique per UA and across record spaces)
+    from.register_scoped(&rpc, registry, token, key_a, pop.clone()).await;
+    to.register_scoped(&rpc, registry, token, key_b, pop).await;
 
     // op 1 from `from` to `to`, a direct call (binding 0) with ownTag; the statement from the token's own view
     let block = pr.get_block_number().await.unwrap();
