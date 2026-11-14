@@ -10,10 +10,10 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {MockERC20} from "../../test/helpers/Mocks.sol";
 
-/// @notice Group `rescue` (CTR-GOV-25, spec 2026-11-12-rescue-vault.md), local only, after `rescue.sh`: the vault at
-///         `RescueLib.SCAAS_DEV_RESCUE` (deployed from the committed `rescue-vault-init.hex` by `DeployRescueVault.s.sol`),
-///         its admin set to key 1's native id and its rescuer to key 2 by `anvil_setStorageAt` (test keys only; never the
-///         real admin's). `withdraw` of an ERC-20 and of the native coin on both branches (the rescuer with `to` != 0 pays
+/// @notice Group `rescue` (CTR-GOV-25, spec 2026-11-12-rescue-vault.md), after `rescue.sh`: the vault at
+///         `RescueLib.SCAAS_DEV_RESCUE` with admin key 1's native id and rescuer key 2: locally deployed from the committed
+///         `rescue-vault-init.hex` by `DeployRescueVault.s.sol` and set by `anvil_setStorageAt`; on the SCaaS testnet the
+///         genesis alloc (NET-EVM-14). Test keys only; never the real admin's. `withdraw` of an ERC-20 and of the native coin on both branches (the rescuer with `to` != 0 pays
 ///         `to`; anyone else, the admin, or `to` == 0 pays the rescuer); `setRescuer` and `rotateAdmin` by the admin's
 ///         EIP-712 signature, each submitted by another key; the refusals listed for `coverage.py neg`. CTR-GOV-26: a stray
 ///         balance on the chain singletons (the Step 5 factory, GovernanceRouter, UARegistry, RelayFeeRouter) and on a DEX made here with `rescueTo`
@@ -26,7 +26,7 @@ contract Rescue is OnchainBase {
     function run() external {
         _init("rescue");
         require(address(V).code.length != 0 && V.admin() == _pad(a1) && V.rescuer() == a2 && V.seq() == 0,
-            "the vault at SCAAS_DEV_RESCUE, admin key 1, rescuer key 2, seq 0 (rescue.sh)");
+            "the vault at SCAAS_DEV_RESCUE, admin key 1, rescuer key 2, seq 0 (rescue.sh; the testnet's genesis alloc)");
         _book(address(V), "RescueVault");
         _fund();
         _singletons();

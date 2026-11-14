@@ -277,6 +277,10 @@ if [ -n "$SCOPE" ]; then
       step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqzWallet.s.sol --out out/onchain-pqzkeys \
         --cache-path cache/onchain-pqzkeys || fail "forge build PqzWallet.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
+    rescue)
+      step "/$g" "" "" ../../scripts/capped forge build script/onchain/Rescue.s.sol --out out/onchain-rescue \
+        --cache-path cache/onchain-rescue || fail "forge build Rescue.s.sol"
+      say "/$g" "compiled (${SECS}s)" ;;
     pqchat)
       step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqChat.s.sol --out out/onchain-pqchat \
         --cache-path cache/onchain-pqchat || fail "forge build PqChat.s.sol"
@@ -326,10 +330,11 @@ for g in $GROUPS; do
     fi ;;
   verify) verify verify; continue ;;
   verifiers) step "/$g" "$RPC" "" python3 -I script/onchain/verifiers.py "$tgt" "$RPC" || r=1 ;;
-  # the RescueVault (CTR-GOV-25): local only, its admin and rescuer set to test keys by anvil_setStorageAt (rescue.sh)
+  # the RescueVault (CTR-GOV-25): its admin and rescuer test keys, by anvil_setStorageAt (local) or the genesis alloc
+  # (scaas-testnet, NET-EVM-14); elsewhere its admin is the real dev admin (rescue.sh)
   rescue)
-    if [ "$tgt" != local ]; then
-      res="not run" why="local only: the vault's test admin is set by anvil_setStorageAt"
+    if [ "$tgt" != local ] && [ "$tgt" != scaas-testnet ]; then
+      res="not run" why="local and scaas-testnet only: elsewhere the vault's admin is the real dev admin (NET-EVM-14)"
     else
       step "/$g" "$RPC" "$ADDRS" env ONCHAIN_GAS_MULTIPLIER="${ONCHAIN_GAS_MULTIPLIER:-130}" sh script/onchain/rescue.sh "$tgt" || r=1
     fi ;;
