@@ -54,15 +54,14 @@ async fn offchain_config(chain: &Chain, token: alloy::primitives::Address) -> Re
 }
 
 /// CTR-PQZ-37 (NODE-JOB-28): the key class of a PQZ token, as its `_keyOf`: `OFFCHAIN` reads scoped keys, scope `token` with
-/// `pqzOwnKey` (class 3) else 0 (class 2); `PRECOMPILE`, or a contract without the view, the registry key (`None`). With the
-/// token's `pqzOpening`.
+/// `pqzOwnKey` (class 3) else 0 (class 2); `PRECOMPILE` the registry key (`None`). With the token's `pqzOpening`. A revert of
+/// the view is the caller's to name (Fable P3-4: never a default class).
 pub async fn key_scope(chain: &Chain, token: alloy::primitives::Address)
     -> Result<(Option<alloy::primitives::Address>, bool), SimError> {
     match chain.call_view(token, IPqzToken::pqzVerifyConfigCall {}).await {
         Ok(c) if c.pqzVerifyMode == PQZ_OFFCHAIN =>
             Ok((Some(if c.pqzOwnKey { token } else { alloy::primitives::Address::ZERO }), c.pqzOpening)),
         Ok(c) => Ok((None, c.pqzOpening)),
-        Err(SimError::Revert(_)) => Ok((None, false)),
         Err(e) => Err(e),
     }
 }

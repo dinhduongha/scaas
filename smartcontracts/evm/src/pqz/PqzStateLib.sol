@@ -327,7 +327,7 @@ library PqzStateLib {
     ///         `entriesHash` recomputed from state over the contents of the `n` entries from `rolled` and of each skipped one
     ///         (`entryHash`): a reorg or an un-roll in between is `AuthRejected`. Then each `skip` index (strictly ascending,
     ///         in `[rolled, pendingCount)`, a credit; `SkipRange`, `SkipTrivial`) gets the skip mark, never cleared
-    ///         (`PqzSkipped` each), then, for `n > 0`, `rollOver`'s rules and body (`PqzRolledOver`). `n = 0` with no skip:
+    ///         (`PqzSkipped` each, none for an index already marked), then, for `n > 0`, `rollOver`'s rules and body (`PqzRolledOver`). `n = 0` with no skip:
     ///         `RollOverRange(0)`. `rollSeq + 1` on every accepted call.
     function rollOverSigned(PqzCore.Env memory e, bytes32 ua, uint64 v, uint64 n, uint64[] calldata skip,
         uint64 validUntilBlock, IUARegistry.UASig calldata sig) public
@@ -341,7 +341,9 @@ library PqzStateLib {
         PqzCore.requireHolder(e.registry, ua, _rollDigest(e, a, ua, v, n, skip, validUntilBlock), sig);
         a.rollSeq += 1;
         for (uint256 j; j < skip.length; ++j) {
-            a.pending[skip[j]] |= PqzCore.SKIP;
+            uint256 x = a.pending[skip[j]];
+            if (x & PqzCore.SKIP != 0) continue; // already marked: no second `PqzSkipped` (Fable P3-3)
+            a.pending[skip[j]] = x | PqzCore.SKIP;
             emit IPqzToken.PqzSkipped(ua, v, skip[j]);
         }
         if (n != 0) {

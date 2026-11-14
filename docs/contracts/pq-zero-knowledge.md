@@ -2641,8 +2641,10 @@ start), `chain_uid`, the UA `registry` and its `registry_generation`. It signs o
 `chainUid`), built locally from those pinned values; a hash an RPC or a contract returns is never signed. A token is served
 only if it is an EIP-1167 proxy of a configured release whose code names the pinned registry and `chainUid` (else
 `FOREIGN_REGISTRY`, `FOREIGN_CHAIN_UID`), is `OFFCHAIN`, names this verifier and is at the request's epoch; then the statement
-length and word 32, the token's own view rebuilds the same bytes, `pqz-ffi` answers `…01`, and every named key passes
-[CTR-PQZ-30](#CTR-PQZ-30). The probe signs only the fixed 27-byte probe statement (every statement a token
+length and word 32 (the token's own `proofSystemId`: `PQZL_SPLIT_ID` with the sealed opening, K3-4), the token's own view
+rebuilds the same bytes, `pqz-offchain` (pqz-ffi's verifiers plus `PQZL_SPLIT_ID`, which the precompile never serves)
+answers `…01`, and every named key passes [CTR-PQZ-30](#CTR-PQZ-30) on its scoped record (class 2 scope 0, class 3 the
+token; CTR-UA-43); the verdict carries the token's `proofSystemId`. The probe signs only the fixed 27-byte probe statement (every statement a token
 hashes is at least 640 bytes, so a real debit refuses it `PqzVerdictMismatch(3)`), for an `OFFCHAIN` token naming this verifier,
 or, as a `proposal` probe (§4.2's typo guard of `next`), naming another verifier or none. Reads follow
 [ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover (one node, one block per request, the block by number). **Operator
@@ -2778,7 +2780,11 @@ build** (owner 2026-11-13; spec K3-4, K3-4b). SPECIFIED.
   `scaas/pqz/lnp22/mlwe-d64k<k>-q<log2q>l4/split-v1` (controller naming, owner may override). Under it `pqz-stmt` accepts
   `R_TXS`, `R_BURN` / refresh and `R_DS`, and refuses `R_TX`, `R_TXM`, `R_REG` and `R_DR`; `PQZL_ID` refuses `R_TXS`. The proof
   must fit `MAX_PROOF` (98,304 B) and statement + proof `MAX_INPUT` (524,288 B), measured at the four sets. **The existing ids move
-  too** (owner 2026-11-13): T-36 (the disclosure `kind` low byte tied to the form) is in the shared statement codec, so `PQZL_ID`
+  too** (owner 2026-11-13): T-36 (the disclosure `kind` low byte tied to the form) is in the shared statement codec (the decoder,
+  `pqz-stmt` `parse`, and `pqz_kat.py`; every production entry decodes with it first: `verify_input`, `verify_offchain`, the
+  plugin; the cores' `parse_disc`, Rust and C, and both specialised verifiers only hash the byte, so a caller of
+  `pqzl::verify_fast` alone does not get the tie: the same three-value check moves into `parse_disc` at the next id move,
+  Fable P3-5), so `PQZL_ID`
   takes its next label (`…/v6`, controller naming); T-35 (one-byte role tags between Merkle nodes and transcript absorbs in PQZH's
   Ligero code) moves `PQZH_ID` at every set that has PQZH. Retired labels join `gen_set.py`'s `RETIRED`. Tokens without the
   opening run on the new `PQZL_ID`, and the precompile is rebuilt for it.
@@ -2851,7 +2857,9 @@ transfers move for every class.
   today's rules (`AccNotPrepared`, `CapReached`, `RollTooYoung`, order). A marked slot contributes zero to `_total` and to a
   rollover on every path, un-roll and re-roll included, and counts one unit (`unitsOf(T)` stays index arithmetic). The slot, its
   blob and its ciphertext stay in state ([CTR-PQZ-33](#CTR-PQZ-33)). Events: `PqzSkipped(ua, keyVersion, index)` per mark
-  ascending, then `PqzRolledOver` when `n > 0`. Nothing periodic: a cold wallet checks, marks and rolls when it next spends.
+  ascending, then `PqzRolledOver` when `n > 0`; an index already marked is accepted and emits nothing (Fable P3-3). Nothing
+  periodic: a cold wallet checks, marks and rolls when it next spends. `pqzPendingCt` returns a marked entry's ciphertext
+  unchanged (it stays in state); a reader that rebuilds `T` applies `pqzSkipped` (a marked slot adds zero), as `_window` does.
 - `ROLL_MAX`: the code bound stays the set's. The fit rule (a relayed full transaction within `0.75 · 2^24`) is re-measured for
   the signed form on both paths and the figures go to the owner; a set-parameter change (such as a second value
   `roll_max_signed`) stays the owner's (owner 2026-11-13). Gas pins move old → new in the commit.

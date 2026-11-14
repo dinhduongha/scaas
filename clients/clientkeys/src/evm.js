@@ -1394,7 +1394,9 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
 /** Group 3h (pqz-proof-path spec §3.1, PP-3, C4): a holder's tag of its own debit. `K = HKDF-SHA256(ikm = seed32, salt = "", info =
  *  "PQZ/owntag/v1", 32)`, `seed32` the PQZ key seed of the version debited (`pqzKeySeed`); `ownTag = HMAC-SHA256(K, chainUid(32) ‖
  *  token(20) ‖ fromUA(32) ‖ be32(sendCounter) ‖ keccak256(P(u) ‖ P(v_f)))`, `P` the stored packed form and `u` the debit's `u_0`
- *  (op 1, op 7) or `u'` (burn, refresh, unwrap); `ctHash` may be given for `keccak256(P(u) ‖ P(v_f))`. Authorship, not inclusion:
+ *  (op 1, op 7) or `u'` (burn, refresh, unwrap), and on a token with the sealed opening op 1's `u_f` (spec K3-2: the ciphertext the
+ *  holder later decrypts; `pqzKeyHandle` in src/pqzopen.js checks it before the secret is used); `ctHash` may be given for
+ *  `keccak256(P(u) ‖ P(v_f))`. Authorship, not inclusion:
  *  a match says this seed wrote the bytes, never that they are the latest state. Returns `{ key, message, ownTag }`: `message`
  *  and `ownTag` hex; `key` a fresh `Uint8Array`, SECRET (it recognises every own-tag of this seed version, so whoever holds it
  *  links the holder's debits): never log or store it, wipe it (`key.fill(0)`) when done; only the vector generator reads it. */
@@ -1437,16 +1439,20 @@ export function pqzDebitRecordOf(w0, w1, counter) {
 }
 
 /** Group 3h (spec §3.2): the tail of a PQZ op blob, read from its last byte: `… ‖ P(v_f) ‖ ownTag(32) ‖ be64 kv[0..n) ‖ u8(n)`.
- *  `code` is the SSTORE2 pointer's code (a STOP byte, then the data); `R` is the data before `P(v_f)`. */
-export function pqzBlobTailOf(code) {
+ *  `code` is the SSTORE2 pointer's code (a STOP byte, then the data); `R` is the data before `P(v_f)`. On a token with the
+ *  sealed opening (`opening: true`, CTR-PQZ-40) an op blob is `R ‖ P(u_f) ‖ P(v_f) ‖ O_t ‖ [O_a] ‖ tail`: the `n` openings of
+ *  1,648 B sit between `P(v_f)` and the tail (Fable P2-2). `vfEnd` is where `P(v_f)` ends in either form; `pqzOpeningBlobOf`
+ *  (src/pqzopen.js) reads every field of an opening blob. */
+export function pqzBlobTailOf(code, { opening = false } = {}) {
   const d = asBytes(code).subarray(1);
   const n = d.length ? d[d.length - 1] : 0;
   const tailLen = 33 + 8 * n;
-  if (!d.length || n > 9 || d.length < tailLen) refuse('not a PQZ op blob of release 3h: its tail does not fit');
+  const openingsLen = opening ? 1648 * n : 0;
+  if (!d.length || n > 9 || d.length < tailLen + openingsLen) refuse('not a PQZ op blob of release 3h: its tail does not fit');
   const at = d.length - tailLen;
   const kv = [];
   for (let i = 0; i < n; i++) kv.push(new DataView(d.buffer, d.byteOffset + at + 32 + 8 * i, 8).getBigUint64(0));
-  return { ownTag: hex(d.subarray(at, at + 32)), kv, n, tailLen, dataLen: d.length };
+  return { ownTag: hex(d.subarray(at, at + 32)), kv, n, tailLen, openingsLen, vfEnd: at - openingsLen, dataLen: d.length };
 }
 
 const PQZ_DEBIT_PROOF = hex(keccak_256(utf8ToBytes('PqzDebitProof(address,bytes32,uint64,bytes,bytes)')));

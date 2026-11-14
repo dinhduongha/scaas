@@ -134,10 +134,12 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
         return _gas(call);
     }
 
-    /// One holder kind on one path: a fresh holder per multiple of 16 up to `ROLL_MAX` (`PRE + 2n` credits, `PRE` rolled), then
-    /// each worst-case call measured cold; the largest `n` under `CAP` is the line `fit16`.
-    function _points(string memory name, bool msig_, bool ua, uint256 feeSig) internal {
-        uint256 k = RM / 16;
+    /// One holder kind on one path: a fresh holder per point `n = step, 2·step, …, last` (`PRE + 2n` credits, `PRE` rolled),
+    /// then each worst-case call measured cold; `fit<step>` is the largest `n` of the run whose transaction stays under `CAP`.
+    function _points(string memory name, bool msig_, bool ua, uint256 feeSig, uint256 step, uint256 last)
+        internal returns (uint256 fit)
+    {
+        uint256 k = last / step;
         bytes32[] memory h = new bytes32[](k);
         bytes[] memory a = new bytes[](k);
         bytes memory code = _qm1BlobCode();
@@ -148,7 +150,7 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
                 (h[i], a[i]) = (_mldsaUA(nextSeed++), _single(ML65_SIG));
             }
             _record(h[i], a[i]);
-            _seed(h[i], PRE + 32 * (i + 1), code);
+            _seed(h[i], PRE + 2 * step * (i + 1), code);
         }
         vm.roll(block.number + 100);
         for (uint256 i; i < k; ++i) {
@@ -157,18 +159,23 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
             tok.mtxRollOverSigned(h[i], 0, uint64(PRE), new uint64[](0), uint64(block.number + 1000), UACall.auth(h[i], a[i]));
         }
         string memory head = string.concat("ROLLSIG ", PqzSet.NAME, " | ", name, " | ", ua ? "uaExecute" : "mtxExecute");
-        uint256 fit;
         for (uint256 i; i < k; ++i) {
-            uint256 n = 16 * (i + 1);
+            uint256 n = step * (i + 1);
             bytes memory data = _call(h[i], a[i], n);
             uint256 snap = vm.snapshotState();
             uint256 g = _fullTx(ua, feeSig, data);
             vm.revertToState(snap);
-            if (g <= CAP && fit == n - 16) fit = n;
+            if (g <= CAP && fit == n - step) fit = n;
             console2.log(string.concat(head, " | n ", vm.toString(n), " + ", vm.toString(n), " marks | regular ", vm.toString(g),
                 g <= CAP ? " | fits" : " | OVER"));
         }
-        console2.log(string.concat(head, " | ROLL_MAX ", vm.toString(RM), " | fit16 ", vm.toString(fit)));
+        console2.log(string.concat(head, " | ROLL_MAX ", vm.toString(RM), " | fit", vm.toString(step), " ", vm.toString(fit)));
+    }
+
+    /// The ML-DSA precompile cases: `ROLL_MAX` fits the signed rollover's worst case on this path (the set's `roll_max` is sized
+    /// by them, decision 2026-11-14 on CTR-PQZ-41).
+    function _pinned(string memory name, bool msig_, bool ua, uint256 feeSig) internal {
+        assertEq(_points(name, msig_, ua, feeSig, 16, RM), RM, "ROLL_MAX: the signed rollover's worst case fits on this path");
     }
 }
 
@@ -190,13 +197,13 @@ contract PqzRollSignedGasTest is PqzRollSignedGasBase {
         vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
     }
 
-    function test_rollSigned_mldsa65_mtxExecute() public { _points("mldsa65 (precompile)", false, false, ML65_SIG); }
+    function test_rollSigned_mldsa65_mtxExecute() public { _pinned("mldsa65 (precompile)", false, false, ML65_SIG); }
 
-    function test_rollSigned_mldsa65_uaExecute() public { _points("mldsa65 (precompile)", false, true, ML65_SIG); }
+    function test_rollSigned_mldsa65_uaExecute() public { _pinned("mldsa65 (precompile)", false, true, ML65_SIG); }
 
-    function test_rollSigned_msig_mtxExecute() public { _points("msig 2-of-2 mldsa65 (precompile)", true, false, ML65_SIG); }
+    function test_rollSigned_msig_mtxExecute() public { _pinned("msig 2-of-2 mldsa65 (precompile)", true, false, ML65_SIG); }
 
-    function test_rollSigned_msig_uaExecute() public { _points("msig 2-of-2 mldsa65 (precompile)", true, true, ML65_SIG); }
+    function test_rollSigned_msig_uaExecute() public { _pinned("msig 2-of-2 mldsa65 (precompile)", true, true, ML65_SIG); }
 }
 
 /// @notice A chain without the ML-DSA precompile: the registry's `mldsa65` verifier in Solidity on the cached expanded key, standing
@@ -237,9 +244,11 @@ contract PqzRollSignedGasSolTest is PqzRollSignedGasBase {
         vm.etch(fnSol, address(new SlhStandIn(2_300_000)).code);
     }
 
-    function test_rollSignedSol_mldsa65_mtxExecute() public { _points("mldsa65 (Solidity, cached 5.81 M)", false, false, FN_SIG); }
+    /// Every `n` from 1 to 16 (the client rule of CTR-PQZ-41: without the precompile the holder's client signs the largest `n`
+    /// that fits; reported, not pinned: it depends on the chain's verifier).
+    function test_rollSignedSol_mldsa65_mtxExecute() public { _points("mldsa65 (Solidity, cached 5.81 M)", false, false, FN_SIG, 1, 16); }
 
     function test_rollSignedSol_mldsa65_uaExecute() public {
-        _points("mldsa65 (Solidity, cached 5.81 M), fndsa512 fee UA", false, true, FN_SIG);
+        _points("mldsa65 (Solidity, cached 5.81 M), fndsa512 fee UA", false, true, FN_SIG, 1, 16);
     }
 }

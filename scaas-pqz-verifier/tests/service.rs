@@ -651,6 +651,33 @@ async fn split_id_follows_the_opening() {
     assert_refused(&verdict(&s, &request(single(A, 0, C), &st0, &proof)).await, "PROOF_SYSTEM");
 }
 
+/// K3-4 with a real proof: the TRANSFER-SPLIT row of `proof_pqzl_split.json` verifies through the production entry
+/// [`scaas_pqz_verifier::offchain`] (pqz-offchain) and is signed under `PQZL_SPLIT_ID`; the precompile's entry alone answers
+/// `…00` on the same input (why the service runs pqz-offchain); one flipped proof byte → `VERDICT_ZERO`.
+#[tokio::test]
+async fn signs_real_split_proof() {
+    let f = json_file("n2304-kmax4096/proof_pqzl_split.json");
+    let row = f["rows"].as_array().unwrap().iter().find(|r| r["form"] == "TRANSFER-SPLIT").unwrap();
+    let (st, mut proof) = (bytes(&row["stmt"]), bytes(&row["proof"]));
+    assert_eq!(st[32..64], stmt::PQZL_SPLIT_ID);
+    let input = stmt::input(stmt::OP_TRANSFER, &st, &proof);
+    assert_eq!(scaas_pqz_verifier::offchain(&input).unwrap(), VALID);
+    assert_eq!(pqz_ffi::precompile(&input).unwrap(), pqz_ffi::INVALID);
+    let real: Pqz = Arc::new(|i: &[u8]| if i[0] == stmt::OP_REGISTER { Ok(VALID) } else { scaas_pqz_verifier::offchain(i) });
+    let w = |st: &[u8]| {
+        let mut w = world(st, &[A, B, AUD]);
+        (w.opening, w.own, w.psid) = (true, true, B256::from(stmt::PQZL_SPLIT_ID));
+        w
+    };
+    let s = service(w(&st), real.clone());
+    assert_signed_as(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof),
+        stmt::PQZL_SPLIT_ID.into());
+    let n = proof.len() / 2;
+    proof[n] ^= 1;
+    let s = service(w(&st), real);
+    assert_refused(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, "VERDICT_ZERO");
+}
+
 #[tokio::test]
 async fn disclosure_names_the_leg_owner() {
     // an op blob `salt ‖ u_0 ‖ (v_j ‖ UA_j)_{j<2} ‖ P(v_f) ‖ ownTag ‖ kv(8·2) ‖ u8(2)`, packed at PACK_BITS = q's bit length

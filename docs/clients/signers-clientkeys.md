@@ -1028,10 +1028,39 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
    skip. So no credit is spendable by an honest wallet while the auditor is blinded.
 10. Accept.
 
-- **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; BUILT in `clientkeys` `pqzKeyHandle` and `ua-rs`
-  `pqz3k::PqzKeyHandle`): "no bare class-2 decrypt" is enforced here, in the clients, not in pqz-ffi. A handle holds one record's
-  opening KEM secret, never the PQZ key seed, and has no decrypt; it opens and hands the opening to the binding's check of the
-  steps above. A credit of another class, scope or key version is refused before anything of it is read.
+- **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; Fable review of the round P1-1). Status:
+  **SPECIFIED** until the round's client gates are green: the handle refuses mislabelled credits; it holds the PQZ secret of its
+  record, but no binding in this repository proves through it yet. "No bare class-2 decrypt" is enforced here, in the clients,
+  not in pqz-ffi. `clientkeys` `pqzKeyHandle` and `ua-rs` `pqz3k::PqzKeyHandle`, one per key with the opening
+  (`offchain-shared`, or `offchain-token` of a token with the opening) and key version:
+  - It derives and holds that key's PQZ seed and its opening KEM secret; no member returns either. The scoped seed of a key
+    with the opening is no public export (`pqzScopedKeySeed` / `pqz_scoped_key_seed` removed); only an `offchain-token` key of a
+    token **without** the opening keeps one, `pqzTokenKeySeedWithoutOpening` / `pqz_token_key_seed_without_opening` (the accepted
+    exposure of [CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37)). The KAT reads the handle's
+    `seedCommitment = keccak256(seed32)`.
+  - `check(credit)` reads the blob itself (`pqzOpeningBlobOf` / `pqz3k::opening_blob`), refuses a credit of another token
+    (class 3), recipient or key version, and builds both `aad`s from the blob's own bytes; `clientkeys` runs steps 2–4, 8 and the
+    auditor's opening of step 9 itself, the binding's check (pqz-ffi `opening::check_recipient`) the PQZ arithmetic of steps
+    5–7 and `v_a`; `ua-rs` hands the opening KEM seed and those inputs to the binding's check. The result is an **acceptance**
+    bound to the handle, the index and `h(i)` (slot and blob bytes), or a skip.
+  - The PQZ seed reaches a function only through three gated entries, counted: `withSecretOwn` / `with_secret_own` after the
+    holder's own `ownTag` verifies under the handle's key; `withSecretWindow` / `with_secret_window` when every window entry is
+    skip-marked, TRIVIAL or accepted by this handle with the same index and bytes, else refused before the seed is touched;
+    `withSecretKeygen` / `with_secret_keygen` (the public key and the `R_REG` proof of registration), counted apart.
+  - A browser wallet cannot hold an opening token yet: the wasm module exports no K3-7 arithmetic (`check_recipient`,
+    `check_auditor`), so `clientkeys` alone cannot finish steps 5–7.
+- **A skip is no reason to mark on one read** (Fable P2-1): a mark is irreversible, and the auditor's key and opening KEM key that
+  decide step 9 are bound by nothing the holder signs. A wallet signs a skip mark only for a skip reproduced with the registry
+  reads taken at a finalized block from the node list in strict-majority mode
+  ([ARCH-POS-15](../decisions.md#ARCH-POS-15)) (`pqzMarks` / `PqzKeyHandle::marks` refuse every other skip). Inputs missing or
+  malformed locally (no auditor keys for an audited leg, a blob of another length) are an error before the check, never a
+  skip. `h(i)` is hashed by the wallet from the bytes it checked (`pqzEntryHash` / `pqz3k::entry_hash`), never taken from a
+  node's code-hash answer.
+- **Shared rows** (Fable P2-2): `smartcontracts/vectors/ua/pqz3k_kat.json` (`clientkeys/scripts/pqz3k-vectors.mjs`): the handle's
+  seed commitments, `ownTag` over `u_f`, `h(i)` and `entriesHash`, the `UAPqzScopedKey` / `UAPqzScopedKeyRecord` digests and
+  both messages, and an opening blob with its offsets; read by `clientkeys` and `ua-rs` and checked against the contracts by
+  `test/pqz/PqzClientRows.t.sol`. The K3-7 differential of spec §14.19 between `clientkeys` and `ua-rs` waits for a client that
+  carries steps 5–7; today both hand them to pqz-ffi.
 - Inputs are public bytes and the opening KEM secret; `s` is not an input. No error detail, step number or timing class leaves
   the wallet. The PQZ secret is applied only to the holder's own `(u_f, v_f)` after its `ownTag` verifies, and to a `T` whose
   every part is that, an accepted credit, a TRIVIAL entry or a marked slot (zero); the prover refuses a window with an

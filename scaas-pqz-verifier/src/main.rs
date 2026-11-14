@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     let rpc = Rpc::connect(&cfg.rpc_urls, cfg.chain_id).await?;
     scaas_pqz_verifier::check_pins(&rpc, &cfg).await?;
     let chain_id = cfg.chain_id;
-    let svc = Arc::new(Service::new(Arc::new(rpc), Arc::new(pqz_ffi::precompile), signer, &cfg));
+    let svc = Arc::new(Service::new(Arc::new(rpc), Arc::new(scaas_pqz_verifier::offchain), signer, &cfg));
     tracing::info!(verifier = %svc.ua(), set = pqz_ffi::stmt::SET, chain_id, registry = %cfg.registry, bind = %cfg.bind,
         "scaas-pqz-verifier");
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;

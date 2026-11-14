@@ -8,8 +8,11 @@ import { readFileSync } from 'node:fs';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { hex, fromHex } from '../src/bytes.js';
 import { pqzKeySeed } from '../src/pq.js';
-import { pqzScopedKeySeed, openKemSeed, openKemKey, legSeedOfKeyHash, openingCoins, sealOpening, openOpening, pqzOpeningMemoHash }
-  from '../src/pqzopen.js';
+import { pqzTokenKeySeedWithoutOpening, openKemSeed, openKemKey, legSeedOfKeyHash, openingCoins, sealOpening, openOpening,
+  pqzOpeningMemoHash, pqzKeyHandle, pqzLayout, pqzMarks, pqzOpeningAad, pqzEntryHash, pqzEntriesHash, pqzOpeningBlobOf,
+  pqzScopedKeyMessages, SKIP } from '../src/pqzopen.js';
+import { seedFromWords } from '../src/seed.js';
+import { concatBytes } from '../src/bytes.js';
 
 const ROOT = new URL('../../../', import.meta.url);
 const K = JSON.parse(readFileSync(new URL('smartcontracts/vectors/pqz/opening.json', ROOT), 'utf8'));
@@ -35,18 +38,28 @@ test('leg seed (K3-4) = pqz-ffi; recipient and key inside', () => {
   assert.notEqual(hex(legSeedOfKeyHash(h0(r.seed_enc), h0(r.toUA), '0x' + '00'.repeat(32))), h0(r.seed_leg), 'another key');
 });
 
+const L = pqzLayout(2304, 46);
+
 test('scoped PQZ seeds (K3-2): three classes, two chains, two tokens, versions 0 and 1 pairwise distinct; registry unchanged', () => {
-  const at = { account: 0, index: 0 };
-  const all = [hex(pqzKeySeed(SEED, 0, 0, 0)), hex(pqzKeySeed(SEED, 0, 0, 1))];
+  // the seeds live in the handle; its commitment keccak256(seed32) stands for them (Fable P1-1)
+  const at = { account: 0, index: 0, ua: '0x' + '11'.repeat(32), layout: L };
+  const all = [hex(keccak_256(pqzKeySeed(SEED, 0, 0, 0))), hex(keccak_256(pqzKeySeed(SEED, 0, 0, 1)))];
   for (const chainUid of CU) {
     for (const version of [0, 1]) {
-      all.push(hex(pqzScopedKeySeed(SEED, { ...at, chainUid, version })));
-      for (const token of TOK) all.push(hex(pqzScopedKeySeed(SEED, { ...at, chainUid, token, version })));
+      all.push(pqzKeyHandle(SEED, { ...at, chainUid, version }).seedCommitment());
+      for (const token of TOK) all.push(pqzKeyHandle(SEED, { ...at, chainUid, token, version }).seedCommitment());
     }
   }
   assert.equal(new Set(all).size, all.length);
-  // the class-2 version 0 carries be64(0) (unlike class 1's version 0)
-  assert.notEqual(hex(pqzScopedKeySeed(SEED, { ...at, chainUid: CU[0], version: 0 })), hex(pqzKeySeed(SEED, 0, 0, 0)));
+  // pq_kat.json's rows: the handle (class 2, class 3) and the one raw export (class 3 of a token without the opening)
+  const k = JSON.parse(readFileSync(new URL('smartcontracts/vectors/ua/pq_kat.json', ROOT), 'utf8'));
+  const seed = seedFromWords(k.mnemonic);
+  for (const r of k.pqzScopedSeeds) {
+    const h = pqzKeyHandle(seed, { ...at, chainUid: r.chainUid, token: r.token, version: r.version });
+    assert.equal(h.seedCommitment(), hex(keccak_256(fromHex(r.seed32))), r.keyClass);
+    if (r.token) assert.equal(hex(pqzTokenKeySeedWithoutOpening(seed, { ...at, chainUid: r.chainUid, token: r.token, version: r.version })), r.seed32);
+  }
+  
 });
 
 const fixture = () => {
@@ -94,59 +107,125 @@ test('memoHash covers the openings (CTR-PQZ-40): keccak256(memo ‖ ownTag ‖ k
   assert.notEqual(hex(pqzOpeningMemoHash('0x', tag, [b])), a, 'a swapped opening moves the word');
 });
 
-// Owner ruling 2026-11-14 (CLI-SGN-51's Change; spec §13, §14.18): the key handle opens and checks, never decrypts; a credit of
-// another class, scope or version is refused before anything of it is read.
-test('pqzKeyHandle: no decrypt and no secret on its surface; the opening path works; another class or scope refused first', async () => {
-  const { pqzKeyHandle } = await import('../src/pqzopen.js');
-  const at = { chainUid: CU[0], ua: '0x' + '11'.repeat(32), version: 0 };
-  const h2 = pqzKeyHandle(SEED, { kind: 'offchain-shared', ...at });
-  const h3 = pqzKeyHandle(SEED, { kind: 'offchain-token', token: TOK[0], opening: true, ...at });
-  const h3off = pqzKeyHandle(SEED, { kind: 'offchain-token', token: TOK[0], opening: false, ...at });
-  const h1 = pqzKeyHandle(SEED, { kind: 'registry', ...at });
-  for (const h of [h1, h2, h3, h3off]) {
-    assert.deepEqual(Object.keys(h).sort(), ['check', 'kind', 'open', 'openKem', 'scope', 'version'], h.kind);
-    assert.ok(Object.isFrozen(h));
-    assert.ok(!('decrypt' in h) && !('seed' in h) && !('dk' in h), 'no decrypt, no secret');
+// ------------------------------------------------------------------ pqz3k_kat.json (Fable P2-2; forge PqzClientRows checks it)
+
+test('client rows: handle commitments, ownTag over u_f, h(i) / entriesHash, scoped record messages, the opening blob', async () => {
+  const k = JSON.parse(readFileSync(new URL('smartcontracts/vectors/ua/pqz3k_kat.json', ROOT), 'utf8'));
+  const m = await import('../src/pqzopen.js');
+  assert.ok(!('pqzScopedKeySeed' in m), 'no raw export of a scoped seed with the opening');
+  const seed = seedFromWords(k.mnemonic);
+  const at = { chainUid: k.chainUid, ua: k.ua, layout: k.layout };
+  for (const r of k.handles) assert.equal(pqzKeyHandle(seed, { ...at, token: r.token, version: r.version }).seedCommitment(), r.seedCommitment);
+  for (const r of k.ownTagOpening) {
+    const h = pqzKeyHandle(seed, { ...at, token: r.keyClass === 'offchain-token' ? r.token : undefined, version: r.version });
+    const own = (puf) => ({ token: r.token, sendCounter: r.sendCounter, pu: puf, pvf: r.pvf, ownTag: r.ownTag });
+    assert.equal(h.withSecretOwn(own(r.puf), (s) => s.length), 32);
+    const p = fromHex(r.puf); p[7] ^= 1;
+    assert.throws(() => h.withSecretOwn(own(p), () => 0), /ownTag/, 'u_f alone differs');
+    assert.equal(h.secretLoads, 1);
   }
-  // the opening path (positive control): sealed to the handle's key, opened, handed to the binding's check
-  const seedLeg = fromHex('0x' + '5e'.repeat(32));
-  const aad = fromHex('0x' + '0a'.repeat(40));
-  const credit = (h, kind, scope, extra = {}) => {
-    const o = sealOpening({ seedLeg, role: 0, kemPk: h.openKem, aad });
-    return { kind, scope, version: 0, opening: o.bytes, aad, ...extra };
-  };
-  const c2 = credit(h2, 'offchain-shared', '0x' + '00'.repeat(20));
-  assert.equal(hex(h2.open(c2)), hex(seedLeg));
-  let seen = null;
-  assert.equal(h2.check(c2, (s) => { seen = s; return 42n; }), 42n);
-  assert.equal(hex(seen), hex(seedLeg), 'the check gets seed_leg');
-  assert.equal(h2.check({ ...c2, aad: fromHex('0x0b') }, () => { throw new Error('not reached'); }), null, 'a failing tag: skip');
-  const c3 = credit(h3, 'offchain-token', TOK[0]);
-  assert.equal(hex(h3.open(c3)), hex(seedLeg), 'class 3 with the opening');
-  // refused before anything of the credit is read: a getter counts the reads of `opening`
-  const watched = (c) => {
-    let reads = 0;
-    const w = { ...c };
-    Object.defineProperty(w, 'opening', { get() { reads += 1; return c.opening; }, enumerable: true });
-    return { w, reads: () => reads };
-  };
-  const cases = [
-    [h2, { ...c3 }, 'a class-2 handle given a class-3 credit'],
-    [h3, { ...c2 }, 'a class-3 handle given a class-2 credit'],
-    [h1, { ...c3 }, 'a class-1 handle given a class-3 credit'],
-    [h1, { ...c2 }, 'a class-1 handle given a class-2 credit'],
-    [h3, { ...c3, scope: TOK[1] }, 'a class-3 handle given another token\'s credit'],
-    [h2, { ...c2, version: 1 }, 'another key version'],
-    [h3off, { ...c3 }, 'class 3 without the opening'],
-  ];
-  for (const [h, c, what] of cases) {
-    const { w, reads } = watched(c);
-    assert.throws(() => h.open(w), /Refusing/, what);
-    assert.throws(() => h.check(w, () => 1n), /Refusing/, what);
-    assert.equal(reads(), 0, `${what}: nothing read`);
+  const hs = k.entries.rows.map((r) => {
+    const x = pqzEntryHash(r.index, r.slot, r.code ? k.entries.code : undefined);
+    assert.equal(hex(x), r.h, r.what);
+    return x;
+  });
+  assert.equal(hex(pqzEntriesHash(hs)), k.entries.entriesHash);
+  for (const r of k.scopedKeyRecords) {
+    const x = pqzScopedKeyMessages(r.kind, r);
+    assert.deepEqual([x.keyDigest, x.recordDigest, x.message, x.regMessage].map(hex), [r.keyDigest, r.recordDigest, r.message, r.regMessage]);
   }
-  const { w, reads } = watched(c2);
-  assert.equal(hex(h2.open(w)), hex(seedLeg));
-  assert.equal(reads(), 1, 'the control reads it');
-  assert.throws(() => pqzKeyHandle(SEED, { kind: 'offchain-shared', opening: false, ...at }), /always carries the opening/);
+  const b = pqzOpeningBlobOf(k.openingBlob.code, k.layout);
+  assert.deepEqual(b.at, k.openingBlob.at);
+  assert.deepEqual(b.kv, [0n, 2n]);
+  assert.equal(hex(b.toUA), k.ua);
+  assert.throws(() => pqzOpeningBlobOf(k.openingBlob.code.slice(0, -2), k.layout), /not an opening op 1 blob/);
+});
+
+// ------------------------------------------------------------------ the key handle (Fable P1-1, P2-1; spec §6, §14.1, §14.18)
+
+const UA = '0x' + '11'.repeat(32);
+const at0 = { chainUid: CU[0], ua: UA, version: 0, layout: L };
+const be8 = (v) => { const b = new Uint8Array(8); new DataView(b.buffer).setBigUint64(0, BigInt(v)); return b; };
+const filled = (n, x) => new Uint8Array(n).fill(x);
+const SLOT = '0x' + (BigInt('0x5e' + '00'.repeat(19)) << 96n | 16n << 80n | 200n << 64n | 7n).toString(16).padStart(64, '0');
+const MARKED = '0x' + (BigInt(SLOT) | SKIP).toString(16).padStart(64, '0');
+const TRIV = '0x' + (100n << 96n | 9n).toString(16).padStart(64, '0');
+
+/** An opening op 1 blob's code to `ua` at key version 0 on `token`, `O_t` sealed from `seedLeg` (`sealTo` the recipient's key,
+ *  `junk` a random opening instead), with the auditor's `O_a` when `aud` = `{ ua, kemPk, kv }`. */
+function blob({ h, token, seedLeg, junk = false, wrongSeed = null, aud = null, fill = 1, role = 0 }) {
+  const pu = filled(L.pkp, fill), pvt = filled(L.vp, fill + 1), pva = aud ? filled(L.vp, fill + 2) : new Uint8Array(0);
+  const aadT = pqzOpeningAad({ chainUid: CU[0], token, ua: UA, keyVersion: 0, pu, pv: pvt });
+  const oT = junk ? filled(1648, 9) : sealOpening({ seedLeg: wrongSeed ?? seedLeg, role, kemPk: h.openKem, aad: aadT }).bytes;
+  const oA = aud ? sealOpening({ seedLeg, role: 1, kemPk: aud.kemPk, aad: pqzOpeningAad({ chainUid: CU[0], token, ua: aud.ua,
+    keyVersion: aud.kv, pu, pv: pva }) }).bytes : new Uint8Array(0);
+  const n = aud ? 2 : 1;
+  return concatBytes(Uint8Array.of(0), filled(16, 3), pu, pvt, pva, fromHex(UA), filled(L.pkp, 4), filled(L.vp, 5), oT, oA,
+    filled(32, 6), be8(0), aud ? be8(aud.kv) : new Uint8Array(0), Uint8Array.of(n));
+}
+
+test('pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes', () => {
+  for (const token of [undefined, TOK[0]]) {
+    const h = pqzKeyHandle(SEED, { ...at0, token });
+    const other = pqzKeyHandle(SEED, { ...at0, token, version: 1 });
+    assert.deepEqual(Object.keys(h).sort(), ['check', 'keygens', 'kind', 'openKem', 'scope', 'secretLoads', 'seedCommitment', 'version',
+      'wipe', 'withSecretKeygen', 'withSecretOwn', 'withSecretWindow'].sort());
+    assert.ok(Object.isFrozen(h) && !('decrypt' in h) && !('open' in h), 'no decrypt, no bare open');
+    const seedLeg = filled(32, 0x5e);
+    const tok = TOK[0];
+    const reads1 = { block: 100, finalized: false, strictMajority: false };
+    const credit = (i, code, x = {}) => ({ token: tok, index: i, slot: SLOT, code, reads: reads1, ...x });
+    // positive control: an honest credit; the binding's check gets seed_leg and the handle's own aad
+    const good = blob({ h, token: tok, seedLeg });
+    let seen = null;
+    const ok = h.check(credit(0, good), (s, inp) => { seen = { s, inp }; return 42n; });
+    assert.equal(ok.value, 42n);
+    assert.equal(hex(seen.s), hex(seedLeg));
+    assert.equal(ok.accepted.entryHash, hex(pqzEntryHash(0, SLOT, good)));
+    // the planted probe, three variants: one outcome (skip); the binding never runs on the first, refuses the other two
+    const v1 = h.check(credit(1, blob({ h, token: tok, seedLeg, junk: true, fill: 7 })), () => { throw new Error('ran on junk'); });
+    const v2 = h.check(credit(1, blob({ h, token: tok, seedLeg, wrongSeed: filled(32, 0x77), fill: 7 })), (s) => (s[0] === 0x77 ? null : 1n));
+    const v3 = h.check(credit(1, blob({ h, token: tok, seedLeg, fill: 7 })), () => null); // crafted u*: Enc-expand disagrees
+    // step 8: an opening that opens to the right seed_leg but under other coins (the auditor's role) is not the one K3-6 makes
+    const v4 = h.check(credit(1, blob({ h, token: tok, seedLeg, role: 1, fill: 7 })), () => 1n);
+    for (const v of [v1, v2, v3, v4]) assert.ok(v.skip && v.skip.index === 1n);
+    const bad = blob({ h, token: tok, seedLeg, fill: 7 });
+    const w = (slot1) => [{ index: 0, slot: SLOT, code: good, accepted: ok.accepted }, { index: 1, slot: slot1, code: bad },
+      { index: 2, slot: TRIV }];
+    assert.throws(() => h.withSecretWindow(w(SLOT), () => 0), /neither accepted/, 'an unaccepted unmarked credit');
+    assert.equal(h.secretLoads, 0, 'the secret was never loaded');
+    assert.throws(() => pqzMarks([v1.skip]), /not a reason to mark/, 'a single unfinalized read');
+    assert.deepEqual(pqzMarks([v1, v2, v3].map((v) => ({ ...v.skip, reads: { block: 90, finalized: true, strictMajority: true } }))), [1n]);
+    assert.equal(h.withSecretWindow(w(MARKED), (s) => s.length), 32, 'marked: the window proves');
+    assert.equal(h.secretLoads, 1);
+    assert.throws(() => other.withSecretWindow([w(SLOT)[0]], () => 0), /neither accepted/, 'another handle\'s acceptance');
+    assert.throws(() => h.withSecretWindow([{ ...w(SLOT)[0], index: 3 }], () => 0), /neither accepted/, 'another index');
+    assert.throws(() => h.withSecretWindow([{ ...w(SLOT)[0], code: bad }], () => 0), /neither accepted/, 'other bytes');
+    assert.throws(() => h.withSecretWindow([{ ...w(SLOT)[0], accepted: { ...ok.accepted } }], () => 0), /neither accepted/, 'a copied token');
+    // not this handle's, or incomplete: refused before the check
+    const never = () => { throw new Error('the check ran'); };
+    assert.throws(() => h.check(credit(0, good, { slot: TRIV }), never), /TRIVIAL/);
+    assert.throws(() => h.check(credit(0, good.subarray(0, good.length - 1)), never), /not an opening op 1 blob/);
+    const r = () => h.check(credit(0, good, { token: TOK[1] }), () => 1n);
+    if (token) assert.throws(r, /not this offchain-token handle's/);
+    else assert.ok(r().skip, 'class 2 serves every token; the aad binds the token: another token is a skip');
+    assert.equal(h.withSecretKeygen((s) => s.length), 32);
+    assert.equal(h.keygens, 1);
+    h.wipe();
+    assert.throws(() => h.withSecretKeygen(() => 0), /wiped/);
+  }
+});
+
+test('P2-1: an audited credit checked against the auditor\'s key of another version is a skip that a single read cannot mark', () => {
+  const h = pqzKeyHandle(SEED, at0);
+  const audUA = '0x' + '33'.repeat(32);
+  const aud = (v) => openKemKey(openKemSeed(SEED, { ua: audUA, chainUid: CU[0], version: v })).kemPk;
+  const code = blob({ h, token: TOK[0], seedLeg: filled(32, 0x5e), aud: { ua: audUA, kemPk: aud(0), kv: 0 } });
+  const c = (kemPk, reads) => ({ token: TOK[0], index: 4, slot: SLOT, code, auditor: { ua: audUA, pk: '0x', kemPk }, reads });
+  const one = { block: 100, finalized: false, strictMajority: false };
+  assert.equal(h.check(c(aud(0), one), () => 5n).value, 5n, 'control: the auditor key of the leg\'s version');
+  const s = h.check(c(aud(1), one), () => 5n);
+  assert.ok(s.skip, 'version 1\'s kemPk for a leg sealed to version 0');
+  assert.throws(() => pqzMarks([s.skip]), /not a reason to mark/);
+  assert.throws(() => h.check({ ...c(aud(0), one), auditor: undefined }, () => 5n), /without the auditor's keys/, 'a missing read is an error, not a skip');
 });

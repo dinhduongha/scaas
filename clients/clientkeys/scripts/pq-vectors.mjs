@@ -11,7 +11,9 @@ import { seedFromWords } from '../src/seed.js';
 import { PQ_KINDS, pqKeygen, kindTag, uaMessage, signedMessage, signUA, verifyUA, purposeTag, mldsaExpandedKey, pqzKeySeed } from '../src/pq.js';
 import { hex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
 import { pqzOwnTag, pqzMemoHash } from '../src/evm.js';
-import { pqzScopedKeySeed, pqzOpeningMemoHash } from '../src/pqzopen.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { pqzOpeningMemoHash } from '../src/pqzopen.js';
 
 const M = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
   + 'capable act festival slice deposit sauce coconut afford frown better';
@@ -92,10 +94,16 @@ out.memoHash = [['hash', memo], ['bundle', '0x'], ['burn', '0x']].map(([form, m]
 // offchain-shared on two chains and offchain-token for two tokens, versions 0 and 1 (pairwise distinct from each other and from
 // `pqzSeeds`); the opening KEM seeds and the sealed openings are pqz-ffi's KAT (smartcontracts/vectors/pqz/opening.json)
 const CHAINS = [hex(kat('chain A')), hex(kat('chain B'))];
+// the generator's own K3-2 derivation (the library keeps scoped seeds inside pqzKeyHandle, Fable P1-1): account 0, index 0
+const be = (n, v) => { const b = new Uint8Array(n); let x = BigInt(v); for (let i = n - 1; i >= 0; i--) { b[i] = Number(x & 0xffn); x >>= 8n; } return b; };
+const scopedSeed = (chainUid, token, version) => hkdf(sha256, seed, utf8ToBytes('scaas.ua.pq.v1'), concatBytes(
+  utf8ToBytes(token === undefined ? 'scaas.ua.pqz-mlwe.offchain-shared.v1' : 'scaas.ua.pqz-mlwe.offchain-token.v1'), be(4, 0), be(4, 0),
+  Uint8Array.from(Buffer.from(chainUid.slice(2), 'hex')), token === undefined ? new Uint8Array(0) : Uint8Array.from(Buffer.from(token.slice(2), 'hex')),
+  be(8, version)), 32);
 const TOKENS = ['0x5ca00000000000000000000000000000000000a3', '0x5ca00000000000000000000000000000000000a4'];
 out.pqzScopedSeeds = CHAINS.flatMap((chainUid) => [0, 1].flatMap((version) => [undefined, ...TOKENS].map((token) => ({
   keyClass: token === undefined ? 'offchain-shared' : 'offchain-token', account: 0, index: 0, chainUid, ...(token ? { token } : {}), version,
-  seed32: hex(pqzScopedKeySeed(seed, { account: 0, index: 0, chainUid, token, version })) }))));
+  seed32: hex(scopedSeed(chainUid, token, version)) }))));
 // CTR-PQZ-40: an opening token's op 1 `memoHash = keccak256(memo ‖ ownTag ‖ keccak256(O_t ‖ [O_a]))`, filler openings of 1,648 B
 const op = (i) => concatBytes(...Array.from({ length: 52 }, (_, j) => keccak_256(utf8ToBytes(`scaas three-keys opening ${i} ${j}`)))).subarray(0, 1648);
 out.memoHashOpening = [[op(0)], [op(0), op(1)]].map((os) => ({ form: os.length === 1 ? 'bundle, no auditor' : 'bundle, auditor', memo: '0x',

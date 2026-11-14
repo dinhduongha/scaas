@@ -30,8 +30,22 @@ use chain::{Chain, ChainError};
 
 pub use pqz_ffi::{Word, INVALID, VALID};
 
-/// pqz-ffi's verdict on a precompile input `u8(op) ‖ be32(len) ‖ statement ‖ proof`; in production `pqz_ffi::precompile`.
+/// pqz-ffi's verdict on a precompile input `u8(op) ‖ be32(len) ‖ statement ‖ proof`; in production [`offchain`].
 pub type Pqz = Arc<dyn Fn(&[u8]) -> Result<Word, pqz_ffi::Error> + Send + Sync>;
+
+/// The production [`Pqz`] (three-key spec K3-4): `pqz_offchain::verify_offchain`, the precompile's verifiers plus
+/// `PQZL_SPLIT_ID` (an opening token's split transfer, which the precompile never serves), with the precompile's answers:
+/// `…01` / `…00`, a revert over `MAX_INPUT`, a fault of this node as `NodeFault`. Op 6 (self-test) is `…00` here.
+pub fn offchain(input: &[u8]) -> Result<Word, pqz_ffi::Error> {
+    if input.len() > pqz_ffi::MAX_INPUT {
+        return Err(pqz_ffi::Error::Revert);
+    }
+    match pqz_offchain::verify_offchain(input) {
+        Ok(true) => Ok(VALID),
+        Ok(false) => Ok(INVALID),
+        Err(_) => Err(pqz_ffi::Error::NodeFault),
+    }
+}
 
 /// The probe's statement (spec §4.2, the typo guard before a verifier transfer). No token builds these bytes, so its
 /// verdict fits no operation: every statement a token builds and hashes into `statementHash` is one of the set's
@@ -352,8 +366,9 @@ struct Token {
 
 #[derive(Default)]
 struct Keys {
-    /// `(ua, version, pqzKeyHash)` that passed spec §6 (3g KV-12: never keyed by `ua` alone)
-    ok: HashSet<(B256, u64, B256)>,
+    /// `(ua, scope, version, pqzKeyHash)` that passed spec §6 (3g KV-12: never keyed by `ua` alone; the scope since the three-key
+    /// model, `None` the registry key: a hit never stands for another scope's record, Fable's forward note on the round review)
+    ok: HashSet<(B256, Option<Address>, u64, B256)>,
     /// `pqzKeyHash` → the one `(ua, version)` this verifier accepted it for (single ownership across UAs and versions)
     owner: HashMap<B256, (B256, u64)>,
 }
@@ -364,7 +379,7 @@ impl Keys {
     /// one (Fable C-5).
     // ponytail: the ownership record lives in memory and is lost on restart; persist it if one verifier must keep
     // refusing a key reused across UAs after a restart, or past OWNER_MAX keys
-    fn record(&mut self, ua: B256, version: u64, h: B256) -> Result<(), Refusal> {
+    fn record(&mut self, ua: B256, scope: Option<Address>, version: u64, h: B256) -> Result<(), Refusal> {
         Service::elsewhere(self, ua, version, h)?;
         if !self.owner.contains_key(&h) && self.owner.len() >= OWNER_MAX {
             return Err(refuse("KEY_RECORD_FULL", format!("{OWNER_MAX} keys recorded; restart to start over")));
@@ -372,7 +387,7 @@ impl Keys {
         if self.ok.len() >= CACHE_MAX {
             self.ok.clear();
         }
-        self.ok.insert((ua, version, h));
+        self.ok.insert((ua, scope, version, h));
         self.owner.insert(h, (ua, version));
         Ok(())
     }
@@ -660,7 +675,7 @@ impl Service {
         if owner != B256::ZERO && owner != ua {
             return Err(refuse("KEY_OWNED_ELSEWHERE", format!("key {h} is {owner}'s")));
         }
-        if self.known(ua, version, h)? {
+        if self.known(ua, scope.map(|s| s.at), version, h)? {
             return Ok(());
         }
         let (ptr, pop_hash) = match scope {
@@ -704,7 +719,7 @@ impl Service {
         if self.run(stmt::input(stmt::OP_REGISTER, &rreg, &pop)).await? != VALID {
             return Err(refuse("POP_INVALID", format!("{ua} version {version}: R_REG does not verify")));
         }
-        self.remember(ua, version, h)
+        self.remember(ua, scope.map(|s| s.at), version, h)
     }
 
     fn elsewhere(k: &Keys, ua: B256, version: u64, h: B256) -> Result<(), Refusal> {
@@ -716,14 +731,14 @@ impl Service {
         }
     }
 
-    fn known(&self, ua: B256, version: u64, h: B256) -> Result<bool, Refusal> {
+    fn known(&self, ua: B256, scope: Option<Address>, version: u64, h: B256) -> Result<bool, Refusal> {
         let k = self.keys.lock().unwrap();
         Self::elsewhere(&k, ua, version, h)?;
-        Ok(k.ok.contains(&(ua, version, h)))
+        Ok(k.ok.contains(&(ua, scope, version, h)))
     }
 
-    fn remember(&self, ua: B256, version: u64, h: B256) -> Result<(), Refusal> {
-        self.keys.lock().unwrap().record(ua, version, h)
+    fn remember(&self, ua: B256, scope: Option<Address>, version: u64, h: B256) -> Result<(), Refusal> {
+        self.keys.lock().unwrap().record(ua, scope, version, h)
     }
 
     /// The `R_REG` message of `(ua, version)`, as `storePqzPop` checks it, by the registry's own digest views: v ≥ 1 over
@@ -786,9 +801,9 @@ mod tests {
         let ua = B256::repeat_byte(1);
         k.owner.extend((0..OWNER_MAX as u64).map(|i| (B256::from(U256::from(i)), (ua, 0))));
         let h = B256::repeat_byte(0xee);
-        assert_eq!(k.record(ua, 0, h).unwrap_err().error, "KEY_RECORD_FULL");
+        assert_eq!(k.record(ua, None, 0, h).unwrap_err().error, "KEY_RECORD_FULL");
         assert!(!k.owner.contains_key(&h) && k.ok.is_empty());
-        assert!(k.record(ua, 0, B256::from(U256::from(7u8))).is_ok(), "a recorded key");
+        assert!(k.record(ua, None, 0, B256::from(U256::from(7u8))).is_ok(), "a recorded key");
         assert_eq!(k.owner.len(), OWNER_MAX);
     }
 }

@@ -292,16 +292,23 @@ library UARegistryAuxLib {
     }
 
     /// Does `scope`'s record carry the opening KEM key? Scope 0 (class `offchain-shared`): always. A token: its `pqzOpening`,
-    /// read by one static call of `pqzVerifyConfig()`; no answer, a short one or a word other than 0 / 1: `UAPqzOpenKem`.
+    /// read by one static call of `pqzVerifyConfig()` whose answer is copied up to word 12 and no further (Fable P3-1: a
+    /// hostile scope's long return costs the relayer nothing); no answer, a short one, `pqzOwnKey` (word 11) other than 1 (a
+    /// class-3 record of a token that never reads one) or `pqzOpening` other than 0 / 1: `UAPqzOpenKem`.
     function _opening(address scope) private view returns (bool) {
         if (scope == address(0)) return true;
-        (bool ok, bytes memory r) = scope.staticcall(abi.encodeWithSelector(PQZ_VERIFY_CONFIG));
-        if (!ok || r.length < OPENING_WORD + 32) revert IUARegistry.UAPqzOpenKem(scope);
+        bytes4 sel = PQZ_VERIFY_CONFIG;
+        bool ok;
+        uint256 own;
         uint256 w;
         assembly ("memory-safe") {
-            w := mload(add(r, add(32, OPENING_WORD)))
+            let m := mload(0x40)
+            mstore(m, sel)
+            ok := and(staticcall(gas(), scope, m, 4, m, add(OPENING_WORD, 32)), iszero(lt(returndatasize(), add(OPENING_WORD, 32))))
+            own := mload(add(m, sub(OPENING_WORD, 32)))
+            w := mload(add(m, OPENING_WORD))
         }
-        if (w > 1) revert IUARegistry.UAPqzOpenKem(scope);
+        if (!ok || own != 1 || w > 1) revert IUARegistry.UAPqzOpenKem(scope);
         return w == 1;
     }
 
@@ -325,7 +332,9 @@ library UARegistryAuxLib {
         s.scopedPop[ua][scope][version] = SSTORE2.writeChunks(pqzPop);
         bool proven = _scopedProve(ua, scope, version, key, pqzPop);
         emit IUARegistry.UAPqzScopedPopStored(ua, scope, version, UAStore.checked(proven), pqzPop);
-        if (proven || key.length == PqzSet.PK) _scopedCurrent(ua, scope, version);
+        // a token's scope (class 3): its versions share version 0's length, the token's set (K3-3 "Sets", Fable P3-2), so a key
+        // of another set than this registry's build becomes current too; scope 0 keeps the class-1 rule
+        if (proven || scope != address(0) || key.length == PqzSet.PK) _scopedCurrent(ua, scope, version);
     }
 
     /// Where slot 0x0142 has a verifier: `R_REG` over the scoped message (`UAPoP`), then one owner per proven key across every

@@ -10,11 +10,16 @@ import {UARegistryBase} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
 
 /// A token as the registry sees it for a class-3 record: `pqzVerifyConfig()` answers the static `PqzVerifyConfig` tuple whose
-/// word 12 is `pqzOpening` (K3-1: `pqzOwnKey`, `pqzOpening` appended after `verifierFeeEta`). `words` < 13 answers short;
-/// `opening` any word (2 = not a bool).
+/// word 12 is `pqzOpening` (K3-1: `pqzOwnKey`, `pqzOpening` appended after `verifierFeeEta`). `words` < 13 answers short, more
+/// pads with zero words; `opening` any word (2 = not a bool); `own` word 11 (Fable P3-1: 0 is a token without its own key).
 contract MockScopeToken {
     uint256 public opening;
     uint256 public words = 13;
+    uint256 public own = 1;
+
+    function setOwn(uint256 own_) external {
+        own = own_;
+    }
 
     constructor(uint256 opening_) {
         opening = opening_;
@@ -28,10 +33,11 @@ contract MockScopeToken {
         if (msg.sig != bytes4(keccak256("pqzVerifyConfig()"))) revert("no");
         uint256 n = words;
         uint256 w = opening;
+        uint256 o = own;
         assembly {
             for { let i := 0 } lt(i, n) { i := add(i, 1) } { mstore(mul(i, 32), 0) }
             if gt(n, 12) {
-                mstore(mul(11, 32), 1) // pqzOwnKey
+                mstore(mul(11, 32), o) // pqzOwnKey
                 mstore(mul(12, 32), w)
             }
             return(0, mul(n, 32))
@@ -293,6 +299,24 @@ contract PqzScopedKeysTest is UARegistryBase {
         assertEq(nv.keyOwner(x.h), bytes32(0), "no owner without a proof check");
     }
 
+    /// Fable P3-2: a class-3 key of another set than the registry's build (the token's set) is listed and becomes current on
+    /// its proof bytes, versions 0 and 1, as a key of the build's set; class 2 (scope 0) keeps the set-length rule (control).
+    function test_class3_otherSet_becomesCurrent() public {
+        bytes32 ua = _single(nv, ml1);
+        for (uint64 v; v < 2; ++v) {
+            R memory x = _rec(ua, address(tOn), v, _pkOther(v), true);
+            _set(nv, ml1, x);
+            nv.storePqzScopedPop(ua, address(tOn), v, x.proof);
+            (uint64 cur,,,) = nv.pqzScopedKeyOf(ua, address(tOn));
+            assertEq(cur, v, "current moves with the token's set");
+        }
+        assertEq(nv.pqzScopedCount(address(tOn)), 1, "listed once");
+        R memory y = _rec(ua, address(0), 0, _pkOther(9), true);
+        _set(nv, ml1, y);
+        nv.storePqzScopedPop(ua, address(0), 0, y.proof);
+        assertEq(nv.pqzScopedCount(address(0)), 0, "scope 0: another set's key is not listed");
+    }
+
     /// Rotation (positive control of the version rule): version 1 of the same length, its own opening KEM key; current moves.
     function test_class2_rotation() public {
         bytes32 ua = _single(pv, ml1);
@@ -523,6 +547,20 @@ contract PqzScopedKeysTest is UARegistryBase {
         _setReverts(pv, ml1, _rec(ua, address(t), 0, _pk(0), false), _openErr(address(t)));
         t.setShape(0, 13);
         _set(pv, ml1, _rec(ua, address(t), 0, _pk(0), false)); // control
+    }
+
+    /// Fable P3-1: a class-3 record names a token that reads one: `pqzOwnKey` (word 11) 0 (a class-2 or `PRECOMPILE` token) is
+    /// refused, with its control; a scope answering a 4,000-word tuple is read up to word 12 (accepted; the registry copies no more).
+    function test_class3_scopeMustOwnItsKey_longAnswerRead() public {
+        bytes32 ua = _single(pv, ml1);
+        MockScopeToken t = new MockScopeToken(1);
+        t.setOwn(0);
+        _setReverts(pv, ml1, _rec(ua, address(t), 0, _pk(0), true), _openErr(address(t)));
+        t.setOwn(1);
+        _set(pv, ml1, _rec(ua, address(t), 0, _pk(0), true)); // control
+        MockScopeToken big = new MockScopeToken(1);
+        big.setShape(1, 4_000);
+        _set(pv, ml1, _rec(ua, address(big), 0, _pk(1), true));
     }
 
     /// An `msig` on an opening-on token: with the opening KEM key accepted, without it refused; the same `msig` is credited

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {Vm} from "forge-std/Vm.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {PqzOffchainBase} from "./helpers/PqzOffchainBase.sol";
 import {noVerdict} from "./helpers/PqzVerdicts.sol";
@@ -598,6 +599,25 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         uint256[] memory z = new uint256[](0);
         assertEq(c2.pqzAcc(alice, 0), ct.sumMixed(new bytes(PqzCt.CT), p, z), "re-roll: the mark adds zero again");
         assertTrue(c2.pqzSkipped(alice, 0, 2), "never cleared by a rollover");
+    }
+
+    /// Fable P3-3: marking an index already marked is accepted (the signature binds it) but emits no second `PqzSkipped`;
+    /// control: the first mark's event.
+    function test_roll_secondMarkNoEvent() public {
+        _aliceFour(c2);
+        vm.recordLogs();
+        _rollSigned(c2, alice, 0, _sk(2));
+        assertEq(_skippedLogs(), 1, "control: the first mark");
+        vm.recordLogs();
+        _rollSigned(c2, alice, 0, _sk(2));
+        assertEq(_skippedLogs(), 0, "no second event");
+        assertTrue(c2.pqzSkipped(alice, 0, 2));
+        assertEq(c2.pqzAccount(alice, 0).rollSeq, 2);
+    }
+
+    function _skippedLogs() internal returns (uint256 k) {
+        Vm.Log[] memory l = vm.getRecordedLogs();
+        for (uint256 i; i < l.length; ++i) if (l[i].topics[0] == IPqzToken.PqzSkipped.selector) ++k;
     }
 
     /// §14 item 20: a mark below `rolled` is refused (nothing in `acc` can be marked).

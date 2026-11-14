@@ -9,11 +9,17 @@ signed `PqzVerdict` instead of the precompile's answer. This binary is one such 
 - the token is a proxy of a configured release (release address → parameter set; this build verifies the set of its
   `pqz-ffi` features only, `n2304-kmax4096` by default) whose code names the configured registry and `chainUid`, names
   this verifier, is `OFFCHAIN`, and is at the request's `pqzVerifierEpoch`;
-- the statement has one of the set's lengths and the set's PQZL id in word 32, and the token's own statement view,
-  called with the request's named arguments at the current state, builds exactly these bytes;
-- `pqz-ffi` (byte for byte the precompile) answers `…01`;
+- the statement has one of the set's lengths, and word 32 is the token's own `proofSystemId`: `PQZL_SPLIT_ID` on a token
+  with the sealed opening (its split transfer, `u_f` appended), the set's PQZL id otherwise (three-key spec K3-4); the
+  token's own statement view, called with the request's named arguments at the current state, builds exactly these bytes;
+- `pqz-offchain` answers `…01`: pqz-ffi's verifiers (byte for byte the precompile) plus `PQZL_SPLIT_ID`, which the
+  precompile never serves;
 - every key the statement names passes spec §6 per key version (3g KV-12): its `pqzPop` bytes are stored and hash to
-  its `pqzPopHash`, its `R_REG` proof verifies over that version's message, and no other UA or version owns it.
+  its `pqzPopHash`, its `R_REG` proof verifies over that version's message, and no other UA or version owns it. The
+  keys of an `OFFCHAIN` token are scoped records (CTR-UA-43): scope 0 (class 2) or, with `pqzOwnKey`, the token
+  (class 3), read with `pqzScopedKeyOf` / `pqzScopedKeyAt` / `pqzScopedPopOf`; the `R_REG` message is
+  `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, pqzScopedKeyDigest(ua, class, chainUid, scope, version, keyHash))`.
+- The verdict carries the token's `proofSystemId`.
 
 **What it signs.** One process serves one chain, pinned in its configuration: `chain_id` (the RPC must answer it at start),
 `chain_uid`, and the UA `registry` with its `registry_generation`. The only thing signed is the `UAAuth` digest of a
