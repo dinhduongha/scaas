@@ -551,7 +551,7 @@ def verifier_fee(pq, sd, sr, s3, alice, bob, DEC, aud, tusd, fac, fac2, N, D, li
     E.VERIFIER[0] = s3
 
     def fconf(vf, dmode=0):
-        return [aud.ua, E.SCALE, E.MAXS, E.FEE, dmode, 2, E.MIN_DECOY, 1, E.pad(s3.addr), 0, 0, vf, VMAX]
+        return [aud.ua, E.SCALE, E.MAXS, E.FEE, dmode, 2, E.MIN_DECOY, 1, E.pad(s3.addr), 0, 0, vf, VMAX, 1, 0]  # own key, CTR-PQZ-37
 
     def vcfg(t):
         """`pqzVerifyConfig()`'s round-3t words: verifierFee, verifierFeeMax, verifierFeePending, verifierFeeEta."""
