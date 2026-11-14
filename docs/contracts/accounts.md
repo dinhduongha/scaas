@@ -688,6 +688,10 @@ Algorand: not built, see Staging; Solana, Move, TON and Cosmos have no `msig`.
   Client rule: at every change sign the same target for each `(chainUid, registry)` that holds or may hold the `msig`, keep the signed
   updates and the key records in one ordered log, and bring a new registry current by replaying them in order. A stored signature of an
   earlier structure was checked when it was written and is not re-judged later.
+  The client record checks judge every record of an updated `msig` by its current structure (`msigOf` and `msigStateOf`'s `enabled`,
+  never `registrationOf`): ua-rs `check_*_current`, clientkeys `verify*` with a record answering `current` / `enabled`, the scoped PQZ key
+  record too (K3-3: ua-rs `check_pqz_scoped_key_record_current`, clientkeys `verifyPqzScopedKeyRecord`; vectors `portable.json`
+  `msigUpdated`, `msigScopedKeyRecords`).
 - **Gas** (measured, `test/ua/UARegistryMsigUpdate.t.sol`, `--isolate`, regular + EIP-8037 state). An update of the same count signed by
   two EOAs: 3 slots 551,292, 16 slots 1,310,222, 64 slots 4,245,434, 256 slots 16,000,442 (61,209 a slot, about 55 k of it the blob's state
   gas), so `MSIG_UPDATE_GAS = 400,000`, `MSIG_UPDATE_SLOT_GAS = 62,000`. `requireAuthorized` of a 2-of-3 EOA `msig`, cold frame gas: 44,721

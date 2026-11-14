@@ -1478,6 +1478,46 @@ fn t13_pqz_keys_distinct() {
     assert_eq!(pqz_keys_distinct(&[(f, &kf[..]), (t1, &k1[..]), (a, &k1[..])]), Err(a), "leg = pk_a");
 }
 
+/// K3-3 with CTR-UA-44 (merge note of 3ze with the three-key model): a scoped PQZ key record of an updated `msig` is judged and signed by
+/// its current structure: portable.json `msigScopedKeyRecords`, the same rows clientkeys verifies. The valid row fails against the first
+/// structure alone; a disabled slot is refused from the enabled word whatever `accepted` says.
+#[cfg(feature = "pq")]
+#[test]
+fn scoped_key_records_read_the_current_structure() {
+    let p = load("portable.json");
+    let u = &p["msigScopedKeyRecords"];
+    let (ua, first, cur) = (b32(&u["ua"]), bytes(&u["keyData"]), bytes(&u["current"]));
+    let mut en = [0u8; 32];
+    en[16..].copy_from_slice(&u["enabled"].as_str().unwrap().parse::<u128>().unwrap().to_be_bytes());
+    let members = keys(&p);
+    let now: &Current = &|id| (id == ua).then(|| (cur.clone(), en));
+    let none: &Current = &|_| None;
+    let accepted: &Accepted = &|id, i| id != ua || (i < 256 && en[31 - i as usize / 8] >> (i % 8) & 1 == 1);
+    let raw: &Accepted = &|_, _| true;
+    let rows = arr(u, "rows");
+    assert_eq!(rows.len(), 4);
+    for r in rows {
+        let (key, kem) = (bytes(&r["pqzKey"]), bytes(&r["openKem"]));
+        let rec = ScopedKeyRecord { scope: bytes(&r["scope"]).try_into().unwrap(), chain_uid: b32(&r["chainUid"]), version: num(&r["version"]),
+            pqz_key: &key, pqz_pop_hash: b32(&r["pqzPopHash"]), open_kem: &kem, valid_until_block: num(&r["validUntilBlock"]) };
+        let sig = bytes(&r["sig"]);
+        let run = |current: &Current, acc: &Accepted| check_pqz_scoped_key_record_current(0x0120, &first, &ua, &rec, &sig, &members, current, Some(acc));
+        match r.get("error").and_then(Value::as_str) {
+            None => {
+                assert_eq!(run(now, accepted), Ok(()), "{}", r["name"]);
+                assert!(run(none, accepted).is_err(), "{}: the first structure alone", r["name"]);
+                let mut flip = sig.clone();
+                *flip.last_mut().unwrap() ^= 1;
+                assert!(check_pqz_scoped_key_record_current(0x0120, &first, &ua, &rec, &flip, &members, now, Some(accepted)).is_err());
+            }
+            Some(e) => {
+                assert_eq!(run(now, accepted).map_err(|x| x.code()), Err(e), "{}", r["name"]);
+                assert_eq!(run(now, raw).map_err(|x| x.code()), Err(e), "{}: the enabled mask", r["name"]);
+            }
+        }
+    }
+}
+
 /// CTR-UA-44: every record check of an updated `msig` reads its current structure (`check_*_current`): portable.json `msigUpdated`, the
 /// same rows clientkeys verifies. Each valid row fails against the first structure alone (an appended signer, a disabled slot).
 #[cfg(feature = "pq")]

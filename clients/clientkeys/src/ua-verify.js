@@ -12,6 +12,7 @@ import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { schnorrVerify as zetherVerify } from './zether.js';
 import { PQ_KINDS, pqMessage } from './pq.js';
 import * as ua from './ua.js';
+import { PURPOSE_PQZ_SCOPED_KEY, pqzScopedKeyRecordDigest } from './pqzopen.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode, word } from './bytes.js';
 export const int = (b) => BigInt(hex(b));
 export const B = (h) => fromHex(h);
@@ -359,6 +360,25 @@ export function verifyPqzKeyVersionRecord(row, members, accepted) {
   const { recordDigest } = ua.pqzKeyVersionRecordOf(kind, { ua: row.ua, keyData: eligible ?? keyData, version: row.version, pqzKey: row.pqzKey, pqzPopHash: row.pqzPopHash, inner: innerOf(members) });
   const a = acceptance(accepted);
   verdict(signatureOk(kind, keyData, B(row.ua), ua.PQZ_KEY_TAG, recordDigest, row.sig, members, a, eligible), a, 'UAUnauthorized', row.ua);
+}
+/** A scoped PQZ key record row `{ ua, scope, chainUid, version, pqzKey, pqzPopHash, openKem, validUntilBlock, sig }` as `setPqzScopedKey`
+ *  (K3-3, CTR-UA-43) checks it, without its state (ua-rs `check_pqz_scoped_key_record_current`: the expiry against the block, the
+ *  sequence, `pqzKeyUsed`, the scope's `pqzOpening` and the opening key's form are the chain's): a holder, no `msig` at scope 0 (ruling 9),
+ *  the proof hash, `sig` over `pqzScopedKeyRecordDigest`. `scope` the token (zero: class 2, else 3), `openKem` the opening `kemPk` (`0x`:
+ *  none). An updated `msig` is judged and signed by its current structure (CTR-UA-44, `members` answering `current` / `enabled`). */
+export function verifyPqzScopedKeyRecord(row, members, accepted) {
+  const { kind, keyData, eligible } = recordOf(row, members);
+  const shared = toBytes(row.scope).every((b) => b === 0);
+  if (!ua.isKeyHolder(kind, eligible ?? keyData, innerOf(members)) || (shared && kind === 0x0120)) refuse('UAPqzHolder', row.ua);
+  const pqzKeyHash = ua.pqzKeyHashOf(row.pqzKey);
+  const popHash = toBytes(row.pqzPopHash);
+  if (popHash.every((b) => b === 0) || hex(popHash) === hex(keccak_256(new Uint8Array(0)))) refuse('UAPqzPopHash', row.ua);
+  const kemPk = toBytes(row.openKem ?? '0x');
+  const recordDigest = pqzScopedKeyRecordDigest({ ua: row.ua, keyClass: shared ? 2 : 3, chainUid: row.chainUid, token: row.scope,
+    version: BigInt(row.version), pqzKeyHash, pqzPopHash: popHash, openKemHash: kemPk.length ? keccak_256(kemPk) : new Uint8Array(32),
+    validUntilBlock: BigInt(row.validUntilBlock) });
+  const a = acceptance(accepted);
+  verdict(signatureOk(kind, keyData, B(row.ua), PURPOSE_PQZ_SCOPED_KEY, recordDigest, row.sig, members, a, eligible), a, 'UAUnauthorized', row.ua);
 }
 /** An `msig` row `{ ua, purposeTag, digest, sig }` (`sig` = `abi.encode(MemberSig[])`) as `requireAuthorized(ua, purposeTag, digest,
  *  UASig{0x, 0x, members})` checks it (UARegistry `_msig`, ua-rs `check_authorization`): at both levels strictly increasing accepted slots that

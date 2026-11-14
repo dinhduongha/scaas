@@ -240,7 +240,7 @@ const present = (v) => v !== undefined && v !== null && bytes(v).length > 0;
 const orEmpty = (v) => (v === undefined || v === null ? new Uint8Array(0) : bytes(v));
 
 /** `keyHash(0x0142, pqzKey)`; a key of no parameter set's length is `UAKeyData`. */
-function pqzKeyHashOf(pqzKey) {
+export function pqzKeyHashOf(pqzKey) {
   const k = orEmpty(pqzKey);
   if (!PQZ_KEY_LENGTHS.includes(k.length)) fail('UAKeyData', `PQZ key length ${k.length}`);
   return keyHashOf(0x0142, k);

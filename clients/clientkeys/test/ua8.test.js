@@ -14,7 +14,7 @@ import { hashStruct, hashTypedData } from '../src/evm.js';
 import { personalSignDigest } from '../legacy/typed-signing/ua-portable-raw.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
 import * as signers from '../scripts/ua-signers.mjs';
-import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyPqzKeyVersionRecord, verifyMembership, verifyAuthorization, decodeMemberSigs,
+import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyPqzKeyVersionRecord, verifyPqzScopedKeyRecord, verifyMembership, verifyAuthorization, decodeMemberSigs,
   encodeMemberSigs, kindVerify } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
@@ -198,8 +198,9 @@ test('portable PoP has no chain context', () => {
   }
   // CTR-UA-44: the one record whose struct names a chain and a registry is `UAMsigUpdate` (one update per registry, in the portable domain);
   // every other row and type stays chain-free
-  const { msigUpdates, msigUpdated, note, typed: { types: { UAMsigUpdate, ...types }, ...typed }, ...rest } = P;
-  assert.ok(msigUpdates.length && msigUpdated && note && UAMsigUpdate);
+  // and the scoped PQZ key records of an updated msig (K3-3: a scoped record names its chain word)
+  const { msigUpdates, msigUpdated, msigScopedKeyRecords, note, typed: { types: { UAMsigUpdate, ...types }, ...typed }, ...rest } = P;
+  assert.ok(msigUpdates.length && msigUpdated && msigScopedKeyRecords && note && UAMsigUpdate);
   assert.doesNotMatch(JSON.stringify({ ...rest, typed: { ...typed, types } }), /chainId|chainUid|registry"/);
   assert.doesNotMatch(JSON.stringify(msigUpdated), /chainId|chainUid|registry"/);
 });
@@ -929,6 +930,25 @@ test('CTR-UA-44: every record check reads the current structure of an updated ms
     if (r.valid) assert.throws(() => run(first), (e) => e instanceof ua.UAError, `${r.name}: the first structure`);
   }
   assert.ok(slots > ua.msigStructure(U.keyData).members.length, 'an appended slot');
+});
+
+test('K3-3 with CTR-UA-44: a scoped key record of an updated msig reads its current structure (ua-rs scoped_key_records_read_the_current_structure)', () => {
+  const U = P.msigScopedKeyRecords;
+  const now = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData, current: U.current, enabled: U.enabled } : keysOf(id));
+  const first = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData } : keysOf(id));
+  const accepted = (id, i) => id !== U.ua || ((BigInt(U.enabled) >> BigInt(i)) & 1n) === 1n;
+  assert.equal(U.rows.length, 4);
+  for (const r of U.rows) {
+    const row = { ...r, ua: U.ua };
+    if (!r.error) {
+      verifyPqzScopedKeyRecord(row, now, accepted);
+      assert.throws(() => verifyPqzScopedKeyRecord(row, first, accepted), (e) => e instanceof ua.UAError, `${r.name}: the first structure`);
+      assert.throws(() => verifyPqzScopedKeyRecord({ ...row, validUntilBlock: r.validUntilBlock + 1 }, now, accepted), { code: 'UAUnauthorized' }, r.name);
+    } else {
+      assert.throws(() => verifyPqzScopedKeyRecord(row, now, accepted), { code: r.error }, r.name);
+      assert.throws(() => verifyPqzScopedKeyRecord(row, now, () => true), { code: r.error }, `${r.name}: the enabled mask`);
+    }
+  }
 });
 
 test('verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)', () => {

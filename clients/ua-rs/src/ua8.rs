@@ -1342,6 +1342,45 @@ pub fn check_pqz_key_version_record_current(
     bits.verdict(signature_ok(kind, &d, &e, ua, &purpose_tag("pqz-key")?, &r.record_digest, sig, &cx, &bits)?, UAError::Unauthorized)
 }
 
+/// The fields of a scoped PQZ key record (K3-3, CTR-UA-43), as `setPqzScopedKey` takes them: `scope` the token (zero: class 2
+/// `offchain-shared`, else class 3), `open_kem` the opening KEM key's `kemPk` bytes (empty: none).
+pub struct ScopedKeyRecord<'a> {
+    pub scope: [u8; 20],
+    pub chain_uid: [u8; 32],
+    pub version: u64,
+    pub pqz_key: &'a [u8],
+    pub pqz_pop_hash: [u8; 32],
+    pub open_kem: &'a [u8],
+    pub valid_until_block: u64,
+}
+/// A scoped PQZ key record as `setPqzScopedKey` checks it, without its state (the expiry against the block, the sequence,
+/// `pqzKeyUsed`, the scope's `pqzOpening` and the opening key's form are the chain's): `ua` the id of `key_data`, a holder, no `msig`
+/// at scope 0 (ruling 9), the proof hash, `sig` over [`crate::pqz3k::scoped_key_record_digest`] under `PURPOSE_PQZ_SCOPED_KEY`. An `msig`
+/// is judged and signed by its current structure on the target registry (CTR-UA-44, [`Current`]), as [`check_pqz_key_record_current`].
+#[allow(clippy::too_many_arguments)]
+pub fn check_pqz_scoped_key_record_current(
+    kind: u16, key_data: &[u8], ua: &[u8; 32], r: &ScopedKeyRecord, sig: &[u8], members: &Members, current: &Current, accepted: Option<&Accepted>,
+) -> Result<()> {
+    if !is_record_of(kind, key_data, ua)? {
+        return Err(UAError::Unauthorized);
+    }
+    let cx = Cx { members, current };
+    let (d, e) = if kind == 0x0120 { now_of(ua, key_data, current)? } else { (key_data.to_vec(), key_data.to_vec()) };
+    let shared = r.scope == [0; 20];
+    if !holds(kind, &e, &inner_of(&cx))? || (shared && kind == 0x0120) {
+        return Err(UAError::PqzHolder(kind));
+    }
+    let h = pqz_key_hash_of(r.pqz_key)?;
+    if zero32(&r.pqz_pop_hash) || r.pqz_pop_hash == keccak256(&[]) {
+        return Err(UAError::PqzPopHash);
+    }
+    let kem_hash = if r.open_kem.is_empty() { [0; 32] } else { keccak256(r.open_kem) };
+    let rd = crate::pqz3k::scoped_key_record_digest(ua, if shared { 2 } else { 3 }, &r.chain_uid, &r.scope, r.version, &h,
+        &r.pqz_pop_hash, &kem_hash, r.valid_until_block);
+    let bits = Bits::new(accepted);
+    bits.verdict(signature_ok(kind, &d, &e, ua, &crate::pqz3k::purpose_pqz_scoped_key(), &rd, sig, &cx, &bits)?, UAError::Unauthorized)
+}
+
 /// An acceptance as `accept_membership` / `acceptMembership` checks it, without its state (a slot already accepted is the chain's
 /// no-op), CTR-UA-37: `ua` the id of the `msig` `key_data`, `slot.index` one of its members, the member's signature over
 /// typed(`UAMembership{ua, member}`). One slot, no threshold. `Err` as `check_registration` for a part it cannot check.
