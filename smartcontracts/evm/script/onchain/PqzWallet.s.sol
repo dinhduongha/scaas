@@ -307,6 +307,7 @@ contract PqzWalletRoll is PqzWalletKit {
         (IPqzToken.PqzBurnArgs memory b, bytes memory st) = _refreshArgs(t, 0x9a01);
         string memory o = _wallet(t, st);
         console2.log(string.concat("pqzwallet ", vm.toString(t), " check: ", o));
+        _outcomes(o, ["accepted", "skip", "skip", "skip", "accepted", "skip", "skip", "skip"]);
         require(!vm.parseJsonBool(o, ".window.opened") && vm.parseJsonUint(o, ".secretLoads") == 0, "window refused, no secret");
         _mark(t, vm.parseJsonUintArray(o, ".marks"));
         (b, st) = _refreshArgs(t, 0x9a01);
@@ -315,7 +316,18 @@ contract PqzWalletRoll is PqzWalletKit {
         require(vm.parseJsonBool(o, ".window.opened") && vm.parseJsonUint(o, ".secretLoads") == 1, "window opened once");
         require(vm.parseJsonUint(o, ".window.balance") == want, "the balance decrypted = the accepted amounts");
         _refresh(t, b, st);
-        console2.log(string.concat("pqzwallet ", vm.toString(t), " auditor: ", _audit(t)));
+        o = _audit(t);
+        console2.log(string.concat("pqzwallet ", vm.toString(t), " auditor: ", o));
+        _outcomes(o, ["no auditor leg", "no auditor leg", "no auditor leg", "no auditor leg", "read", "unreadable",
+            "recipient-unreadable", "unreadable"]);
+    }
+
+    function _eq(string memory o, uint256 i, string memory want) internal pure returns (bool) {
+        return keccak256(bytes(vm.parseJsonString(o, string.concat(".entries[", vm.toString(i), "].outcome")))) == keccak256(bytes(want));
+    }
+
+    function _outcomes(string memory o, string[8] memory want) internal pure {
+        for (uint256 i; i < 8; ++i) require(_eq(o, i, want[i]), string.concat("entry ", vm.toString(i), ": ", want[i]));
     }
 
     /// The wallet's marks by dave's signed mark-only rollover (`n = 0`, relayed by test key 2).
@@ -337,5 +349,7 @@ contract PqzWalletRoll is PqzWalletKit {
         _refresh(t, b, st);
         string memory o = _audit(t);
         console2.log(string.concat("pqzwallet ", vm.toString(t), " auditor after a modified wallet: ", o));
+        string[4] memory want = ["no auditor leg", "no auditor leg", "read", "unreadable, taken"];
+        for (uint256 i; i < 4; ++i) require(_eq(o, i, want[i]), want[i]);
     }
 }

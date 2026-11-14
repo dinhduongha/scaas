@@ -240,6 +240,10 @@ fn audit(r: &Value) -> Value {
             out.push(json!({"index": index, "outcome": "not an opening blob"}));
             continue;
         };
+        if b.pva.is_none() {
+            out.push(json!({"index": index, "outcome": "no auditor leg"})); // a credit sent without the auditor (OPTIONAL)
+            continue;
+        }
         let parts = (unpack(b.pu).try_into(), unpack(b.pvt).try_into(), b.pva.map(|p| unpack(p).try_into()));
         let (Ok(u), Ok(v_t), Some(Ok(v_a))) = parts else {
             out.push(json!({"index": index, "outcome": "unreadable"}));
