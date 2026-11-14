@@ -165,23 +165,41 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
     /// a direct transaction; the `PQZ` op 3 at the set's provisional `REGISTER` row.
     function _record(address scope, bool kem, string memory row) internal {
         bytes32 ua = _mldsaUA(90);
+        bytes memory pop = _proof(_proofLen("REG", 30_379));
+        (uint256 g1, uint256 s1) = _setRecord(ua, scope, kem, keccak256(pop));
+        (uint256 g2, uint256 price) = _storePop(ua, scope, pop);
+        string memory head = string.concat("GAS3K ", PqzSet.NAME, " | ", row);
+        console2.log(string.concat(head, " | setPqzScopedKey regular ", vm.toString(g1), " state ", vm.toString(s1)));
+        console2.log(string.concat(head, " | storePqzScopedPop (proof ", vm.toString(pop.length), " B, op 3 ", vm.toString(price),
+            ") regular ", vm.toString(g2), " state ", vm.toString(lastState)));
+        console2.log(string.concat(head, " | sum total ", vm.toString(g1 + s1 + g2 + lastState)));
+    }
+
+    address internal rScope; // the record under measurement (state: the call below is deep enough)
+    IUARegistry.KemKey internal rKem;
+    bytes32 internal rPopHash;
+
+    /// The record's own transaction (`isolate`: a top-level call), read back from `lastCallGas`.
+    function _setRecord(bytes32 ua, address scope, bool kem, bytes32 popHash) internal returns (uint256, uint256) {
         IUARegistry.KemKey memory k;
         if (kem) (k.scheme, k.mlkemEk, k.x25519) = (1, _blob(91, 1568), keccak256("x"));
-        uint256 plen = _proofLen("REG", 30_379);
-        bytes memory pop = _proof(plen);
-        bytes memory key = _spk(++keySeed);
-        uint256 g1 = _gasTo(address(reg), abi.encodeCall(reg.setPqzScopedKey,
-            (ua, scope, 0, key, keccak256(pop), k, type(uint64).max, UACall.auth(ua, _mlAuth()))));
-        uint256 s1 = lastState;
+        (rScope, rKem, rPopHash) = (scope, k, popHash);
+        _setCall(ua);
+        Vm.Gas memory g = vm.lastCallGas();
+        return (g.gasTotalUsed, uint256(int256(g.gasStateUsed)));
+    }
+
+    function _setCall(bytes32 ua) internal {
+        reg.setPqzScopedKey(ua, rScope, 0, _spk(++keySeed), rPopHash, rKem, type(uint64).max, UACall.auth(ua, _mlAuth()));
+    }
+
+    function _storePop(bytes32 ua, address scope, bytes memory pop) internal returns (uint256 g, uint256 price) {
         string memory gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
-        uint256 price = gj.readUint(".pqzl['REGISTER'].row") + 3 * ((5 + PqzSet.STMT_REGISTER + plen + 31) / 32);
+        price = gj.readUint(".pqzl['REGISTER'].row") + 3 * ((5 + PqzSet.STMT_REGISTER + pop.length + 31) / 32);
         vm.clearMockedCalls();
         vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
         vm.etch(PQZ, address(new GasBurner(price - 2_900)).code);
-        uint256 g2 = _gasTo(address(reg), abi.encodeCall(reg.storePqzScopedPop, (ua, scope, 0, pop)));
-        console2.log(string.concat("GAS3K ", PqzSet.NAME, " | ", row, " | setPqzScopedKey regular ", vm.toString(g1), " state ",
-            vm.toString(s1), " | storePqzScopedPop (proof ", vm.toString(plen), " B, op 3 ", vm.toString(price), ") regular ",
-            vm.toString(g2), " state ", vm.toString(lastState), " | sum total ", vm.toString(g1 + s1 + g2 + lastState)));
+        g = _gasTo(address(reg), abi.encodeCall(reg.storePqzScopedPop, (ua, scope, 0, pop)));
     }
 
     function test_gas3k_record_class2() public {

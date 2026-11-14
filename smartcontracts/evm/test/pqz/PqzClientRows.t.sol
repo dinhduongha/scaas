@@ -23,24 +23,37 @@ contract PqzClientRowsTest is PqzOffchainBase {
         j = vm.readFile(string.concat(vm.projectRoot(), "/../vectors/ua/pqz3k_kat.json"));
     }
 
+    struct Rec {
+        bytes32 ua;
+        uint8 cls;
+        bytes32 cu;
+        address t;
+        uint64 v;
+        bytes32 kh;
+    }
+
     function test_scopedKeyRecords() public view {
-        for (uint256 i; i < 3; ++i) {
-            string memory k = string.concat(".scopedKeyRecords[", vm.toString(i), "]");
-            bytes32 ua = j.readBytes32(string.concat(k, ".ua"));
-            uint8 cls = uint8(j.readUint(string.concat(k, ".keyClass")));
-            bytes32 cu = j.readBytes32(string.concat(k, ".chainUid"));
-            address t = j.readAddress(string.concat(k, ".token"));
-            uint64 v = uint64(j.readUint(string.concat(k, ".version")));
-            bytes32 kh = j.readBytes32(string.concat(k, ".pqzKeyHash"));
-            bytes32 kd = UAKinds.pqzScopedKeyDigest(ua, cls, cu, t, v, kh);
-            bytes32 rd = UAKinds.pqzScopedKeyRecordDigest(ua, cls, cu, t, v, kh, j.readBytes32(string.concat(k, ".pqzPopHash")),
-                j.readBytes32(string.concat(k, ".openKemHash")), uint64(j.readUint(string.concat(k, ".validUntilBlock"))));
-            assertEq(kd, j.readBytes32(string.concat(k, ".keyDigest")), "UAPqzScopedKey");
-            assertEq(rd, j.readBytes32(string.concat(k, ".recordDigest")), "UAPqzScopedKeyRecord");
-            uint16 kind = uint16(j.readUint(string.concat(k, ".kind")));
-            assertEq(UAKinds.uaMessage(kind, UAKinds.PURPOSE_PQZ_SCOPED_KEY, rd), j.readBytes32(string.concat(k, ".message")));
-            assertEq(UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_SCOPED_KEY, kd), j.readBytes32(string.concat(k, ".regMessage")));
-        }
+        for (uint256 i; i < 3; ++i) _record(string.concat(".scopedKeyRecords[", vm.toString(i), "]"));
+    }
+
+    function _record(string memory k) internal view {
+        Rec memory r = Rec(j.readBytes32(string.concat(k, ".ua")), uint8(j.readUint(string.concat(k, ".keyClass"))),
+            j.readBytes32(string.concat(k, ".chainUid")), j.readAddress(string.concat(k, ".token")),
+            uint64(j.readUint(string.concat(k, ".version"))), j.readBytes32(string.concat(k, ".pqzKeyHash")));
+        bytes32 kd = UAKinds.pqzScopedKeyDigest(r.ua, r.cls, r.cu, r.t, r.v, r.kh);
+        assertEq(kd, j.readBytes32(string.concat(k, ".keyDigest")), "UAPqzScopedKey");
+        bytes32 rd = _recordDigest(k, r);
+        assertEq(rd, j.readBytes32(string.concat(k, ".recordDigest")), "UAPqzScopedKeyRecord");
+        uint16 kind = uint16(j.readUint(string.concat(k, ".kind")));
+        assertEq(UAKinds.uaMessage(kind, UAKinds.PURPOSE_PQZ_SCOPED_KEY, rd), j.readBytes32(string.concat(k, ".message")));
+        assertEq(UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_SCOPED_KEY, kd), j.readBytes32(string.concat(k, ".regMessage")));
+    }
+
+    function _recordDigest(string memory k, Rec memory r) internal view returns (bytes32) {
+        bytes32 ph = j.readBytes32(string.concat(k, ".pqzPopHash"));
+        bytes32 okh = j.readBytes32(string.concat(k, ".openKemHash"));
+        uint64 vub = uint64(j.readUint(string.concat(k, ".validUntilBlock")));
+        return UAKinds.pqzScopedKeyRecordDigest(r.ua, r.cls, r.cu, r.t, r.v, r.kh, ph, okh, vub);
     }
 
     /// `h(i)` as the token's `entriesHash` builds it: the slot with the mark cleared, the blob's EVM code hash (etched here at the
