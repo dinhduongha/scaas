@@ -46,7 +46,7 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
     /// The ECDSA signer's and the fee UA's balances on the token.
     function _fund(bytes32 f) internal {
         _public(tok, vm.addr(RKEY), 1000);
-        NormalPqzToken(address(tok)).mintToUA(f, 1000);
+        NormalPqzToken(address(tok)).mintToUA(f, 1000, EnvKit.codeUidOf(address(tok))); // round 3zb: the chain word
         minted += 1000;
     }
 

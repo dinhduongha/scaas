@@ -11,6 +11,7 @@ import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -48,7 +49,7 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
         for (uint256 i; i < 3; ++i) {
             _shieldOn(ts[i], bob, 100);
             _public(ts[i], vm.addr(RKEY), 1000);
-            ts[i].mintToUA(feeUA, 1000);
+            ts[i].mintToUA(feeUA, 1000, EnvKit.codeUidOf(address(ts[i]))); // round 3zb: the chain word (CTR-GOV-28 Change)
             minted += 1000;
         }
         vm.roll(block.number + 1);
