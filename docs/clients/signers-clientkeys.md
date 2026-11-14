@@ -1047,8 +1047,31 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
     holder's own `ownTag` verifies under the handle's key; `withSecretWindow` / `with_secret_window` when every window entry is
     skip-marked, TRIVIAL or accepted by this handle with the same index and bytes, else refused before the seed is touched;
     `withSecretKeygen` / `with_secret_keygen` (the public key and the `R_REG` proof of registration), counted apart.
-  - A browser wallet cannot hold an opening token yet: the wasm module exports no K3-7 arithmetic (`check_recipient`,
-    `check_auditor`), so `clientkeys` alone cannot finish steps 5–7.
+- <a id="pqz-wallet-wasm"></a>**The browser wallet's check** (TODO 3zf, owner 2026-11-15). Status: **BUILT**, **UNAUDITED**. A
+  browser wallet holds an opening token through the wallet module: `pqz-core/ffi/wallet-wasm` (pqz-ffi
+  `opening::check_recipient` / `check_auditor` in wasm32, one module per parameter set, built by its `build.sh`; no built `.wasm`
+  is committed) and its loader `clientkeys` `src/pqzopenWasm.js`. It is not the test harness `pqz-core/ffi/wasm` (review P-E).
+  - **Exports**: only `memory`, `input_ptr`, `input_cap`, `out_ptr`, `pk_bytes`, `check_recipient(n)`, `check_auditor(n)`
+    (`strip-exports.mjs` drops pqz-ffi's C ABI from the module). The module owns its buffers: the caller writes a frame of `n`
+    bytes into the module's input; no export takes a caller's pointer; the crate has no `unsafe` code. The frame (named
+    fields, each with its length; `lib.rs` states it) is checked field by field (every fixed field its exact length, the
+    frame's end, the cap, depth 1), and a malformed one is the outcome of a failed check. Every call zeroes the output first
+    and the input (the opening KEM seed) after.
+  - **One outcome per failure, as the Rust API**: the recipient's `null` (skip) or `{ digits, amount }`; the auditor's `read`,
+    `recipient-unreadable`, `unreadable`. A malformed input to the loader (a wrong length, type or key version) is that
+    outcome, never a throw with detail; a trap re-instantiates the module. No error detail or step number leaves
+    ([ARCH-POS-13](../decisions.md#ARCH-POS-13)).
+  - **Loader**: `loadPqzWallet(bytes | WebAssembly.Module)` takes what the caller gives and fetches nothing; it refuses a module
+    whose exports or imports are not the wallet's. `pqzUnpack(P, packBits)` gives the lanes of a stored form.
+  - **Handle**: `pqzKeyHandle(...).check(credit, wallet)` with a wallet of `loadPqzWallet` runs steps 2–4, 8 and the auditor's
+    opening of step 9 as before, then hands its opening KEM seed and the credit read from the blob (`u`, `v` unpacked,
+    `credit.pk` the holder's own PQZ key of that version, the auditor's `pk`) to the module, which runs steps 3–9; the seed goes
+    to no other `verify`. A module of another set than the handle's layout, or a missing `pk`, is an error before the check.
+  - **Tests** (`pqz-core/ffi/wallet-wasm/run.sh`, `mutants.py`; summary `pqz-core/ffi/runs/2026-11-15-wallet-wasm.txt`): at the
+    four sets, `opening.json`'s rows rebuilt natively and checked field by field, every case (the rows and their one-change
+    variants) wasm = native, the raw ABI's and the loader's malformed inputs, the handle with a planted `u*`; 13 mutants of the
+    wrapper, loader and handle, each red. `clientkeys` `test/pqz-wallet-wasm.test.js` is skipped without the built modules
+    (`PQZ_WALLET_DIR`).
 - **A skip is no reason to mark on one read** (Fable P2-1): a mark is irreversible, and the auditor's key and opening KEM key that
   decide step 9 are bound by nothing the holder signs. A wallet signs a skip mark only for a skip reproduced with the registry
   reads taken at a finalized block from the node list in strict-majority mode
