@@ -304,7 +304,8 @@ library UARegistryAuxLib {
         assembly ("memory-safe") {
             let m := mload(0x40)
             mstore(m, sel)
-            ok := and(staticcall(gas(), scope, m, 4, m, add(OPENING_WORD, 32)), iszero(lt(returndatasize(), add(OPENING_WORD, 32))))
+            ok := staticcall(gas(), scope, m, 4, m, add(OPENING_WORD, 32))
+            ok := and(ok, iszero(lt(returndatasize(), add(OPENING_WORD, 32)))) // after the call (Yul evaluates arguments right to left)
             own := mload(add(m, sub(OPENING_WORD, 32)))
             w := mload(add(m, OPENING_WORD))
         }
