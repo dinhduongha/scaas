@@ -30,6 +30,7 @@ MUTANTS = [
     ("J3 isPqzWallet true for any object", LOADER, "export const isPqzWallet = (x) => WALLETS.has(x);",
      "export const isPqzWallet = (x) => typeof x === 'object';"),
     ("J4 the handle's set check dropped", HANDLE, "if (wallet && lanes(b.pu).length !== verify.pkBytes)", "if (false)"),
+    ("J6 the loader does not re-instantiate after a trap", LOADER, "if (e !== SKIP) fresh();", "if (false) fresh();"),
     ("J5 the loader's digits not read on code 1", LOADER, "return r === 1 ? { r, digits:", "return r === 2 ? { r, digits:"),
 ]
 

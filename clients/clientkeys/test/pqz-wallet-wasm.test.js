@@ -188,6 +188,38 @@ for (const set of SETS) {
     console.log(`# ${set}: ${n} loader negatives, one outcome each`);
   });
 
+  test(`${set}: a trap drops the instance: the next call runs on a fresh one and gives the right outcome`, async () => {
+    // a correct module cannot be made to trap from outside, so the test wraps the loader's first instance: once armed, its
+    // checks throw WebAssembly.RuntimeError and keep throwing (a trapped instance's state is not trusted again)
+    const Real = WebAssembly.Instance;
+    let made = 0, armed = false, trapped = false;
+    WebAssembly.Instance = function (m, imports) {
+      const i = new Real(m, imports);
+      if (++made > 1) return i;
+      const trap = (f) => (...a) => { if (armed || trapped) { trapped = true; throw new WebAssembly.RuntimeError('unreachable'); } return f(...a); };
+      return { exports: { ...i.exports, check_recipient: trap(i.exports.check_recipient), check_auditor: trap(i.exports.check_auditor) } };
+    };
+    try {
+      const w = await loadPqzWallet(bytes);
+      const rc = C.cases.find((c) => c.name === 'aud recipient control');
+      const ac = C.cases.find((c) => c.name === 'aud auditor control');
+      assert.equal(outcomeR(w.checkRecipient(rc.openKemSeed, rc.credit)), rc.native, 'control on the first instance');
+      assert.equal(made, 1);
+      armed = true;
+      assert.equal(w.checkRecipient(rc.openKemSeed, rc.credit), null, 'a trap is the one outcome, no throw');
+      assert.ok(trapped);
+      armed = false;
+      assert.equal(made, 2, 'the trapped instance was replaced');
+      assert.equal(outcomeR(w.checkRecipient(rc.openKemSeed, rc.credit)), rc.native, 'the next call: the right outcome');
+      assert.equal(outcomeA(w.checkAuditor(ac.openKemSeed, ac.credit)), ac.native);
+      armed = true; // the auditor side too, on the fresh instance: no wrap there, so no trap and no new instance
+      assert.equal(outcomeA(w.checkAuditor(ac.openKemSeed, ac.credit)), ac.native);
+      assert.equal(made, 2);
+    } finally {
+      WebAssembly.Instance = Real;
+    }
+  });
+
   test(`${set}: pqzKeyHandle.check(credit, wallet): accepted with the module's digits; a planted u* is a skip`, async () => {
     const w = await loadPqzWallet(bytes);
     const BIP39 = fromHex(h0(K.bip39_seed));
