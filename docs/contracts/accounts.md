@@ -1916,7 +1916,15 @@ after the registry's constructor and before the `chainUid()` gate: when the prob
 registry must enable `schnorr-bls12381` 0x0105, `bls12381-minsig` 0x0106 and, except on Hedera (no Zether token can
 exist there, `ZetherLayer`), `zether-bls12381` 0x0141, else the script reverts `gen-1 registry: EIP-2537 kind <k> the
 probe passes is missing` and nothing is broadcast. No `UARegistry` change. A probe whose RPC call fails reports no
-EIP-2537 and the gate requires nothing (the stated rule; owner open question). Soroban (controller call, owner may override; no code): its kinds are
+EIP-2537 and the gate requires nothing (the stated rule; owner open question). **Change (owner 2026-11-15; BUILT on branch
+`reset4`, UNAUDITED):** the same for the chain's own PQ precompiles: when `PqPrecompileProbe` (by `eth_call`, `_pqPrecompiles`)
+finds the `PQZ` self-test answering, the registry must enable `pqz-mlwe` 0x0142, and when an ML-DSA-87 precompile answers the
+KAT probe (0x14 or 0x…5caa0014), `mldsa87` 0x0134, else `gen-1 registry: PQ precompile kind <k> the probe passes is missing`.
+Their verifiers probe those precompiles in their constructors, which forge's EVM lacks, so `deploy.sh evm`'s first step
+(`script/pq_verifiers.py`, e2e.py's builders) deploys them on the real chain by CREATE2 with `DEPLOY_SALT` and hands them to
+`DeployBase` (`PQZ_KEY_VERIFIER`, `MLDSA87_VERIFIER`; caps 4,500,000 and 250,000); a chain whose precompile does not answer
+skips the verifier by name and the gate requires nothing. Tests: `test/ua/UADeploy.t.sol` `test_gen1KindGate_pqKinds`,
+`test/governance/GovDeploy.t.sol` `test_deployPqzPublishesEveryKind`, `test_deployPqzRefusals`. Soroban (controller call, owner may override; no code): its kinds are
 compiled in and it has no generations — a new kind is a new registry deployment with new tokens bound to it
 ([NET-SOR-17](../networks/soroban.md#NET-SOR-17)); the rule there is "a Soroban registry meant to stay (mainnet) is
 deployed from a build carrying every kind built for Soroban at that time" (so after `zether-soroban`). Tests:

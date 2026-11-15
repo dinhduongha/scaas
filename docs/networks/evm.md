@@ -101,7 +101,7 @@ Parameters:
 | Block gas limit | 200,000,000 from genesis (`0xbebc200`, reset 2026-10-22, owner; `TargetBlockGasLimit` 200 M); 16,777,216 before. Per tx: regular gas ≤ 2^24 (EIP-7825), node `max_gas_per_tx` 64 M (owner 2026-10-22) |
 | Finality | depth 1, quorum 1 (single-provider trust, reported as such) |
 | Classical Zether | open (EIP-2537 live, [CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-52), owner ruling 2026-10-31); **deployed 2026-10-31** with `DEPLOY_ZETHER=1` as part of the salt-v2 set (`DEPLOY_SALT` = `keccak256("scaas.deploy.v2")`: UA registry with `zether-bls12381`, OpenFactory with `NORMAL_ZETHER` / `WRAPPED_ZETHER` enabled), e2e passed; addresses and re-run steps in the [RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md#zether-on-the-scaas-testnet-executed-2026-10-31). The phase C set of the same day (salt v1, registry without `zether-bls12381`) is superseded, kept on chain |
-| PQZ | `PRECOMPILE` tokens: the only chain with the `PQZ`, `MLDSA44` and `MLDSA65` precompiles, from the plugin `Nethermind.Pqz`, chainspec `engine.Pqz` (addresses and image: [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10), [chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)). `OFFCHAIN` tokens ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)) need no precompile and run here as on any EVM chain |
+| PQZ | Since reset 4 (2026-11-15): the main factory carries the PQZ releases 4, 5, 12, 13 (`DEPLOY_PQZ=1`) and the gen-1 registry `pqz-mlwe` 0x0142 and `mldsa87` 0x0134 on the verifiers `deploy.sh evm`'s first step built on the chain. `PRECOMPILE` tokens: the only chain with the `PQZ`, `MLDSA44` and `MLDSA65` precompiles, from the plugin `Nethermind.Pqz`, chainspec `engine.Pqz` (addresses and image: [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10), [chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)). `OFFCHAIN` tokens ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)) need no precompile and run here as on any EVM chain |
 
 Operator trap, measured on the earlier chain: **a Nethermind chainspec silently ignores Geth-style keys.** With
 `pragueBlock: 0` (and `londonBlock`, `cancunBlock`) in Geth form, the chain ran pre-London without a warning: the
@@ -408,7 +408,13 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   `(regular + state) × 1.05` measured on the RPC's fork and capped at the RPC's block gas limit; one that needs more refuses
   the plan by name (`TxGasOverBlockLimit`) before anything is sent. Forge's estimate × 1.05 had sent `UARegistryCoreLib` with
   61,800,392 (52,317,793 used on 7622), over a 60 M block; now 56,629,029, and the full deploy (104 transactions) runs on a
-  60 M anvil (`smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-gas.txt`).
+  60 M anvil (`smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-gas.txt`). Change (owner 2026-11-15): before the
+  simulation, `deploy.sh evm` deploys on the real chain the verifiers whose constructors probe its own precompiles
+  (`script/pq_verifiers.py`: `PqzKeyVerifier`, `MldsaVerifier(0x0134)`; by CREATE2 with `DEPLOY_SALT`, each transaction's
+  limit e2e.py's estimate × 1.15 + 50,000 within the block gas limit, each release gated as NET-EVM-06), skipped by name where
+  the precompile does not answer; `DEPLOY_PQZ=1` adds the PQZ releases 4, 5, 12, 13 to the plan
+  ([gen-1 kind gate](../contracts/accounts.md#gen1-kind-gate)). Every line of the run on stdout is short (`[deploy] …`, one
+  per transaction); forge's output goes to a git-ignored log.
 - <a id="NET-EVM-12"></a>**NET-EVM-12 — Every contract a remote deploy leaves on a chain is source-verified on that chain's
   explorer** (owner ruling 2026-11-10; BUILT on branch `ua-mtx-merge`: `smartcontracts/evm/script/onchain/verify.sh` and
   `vcheck.py`, offline tests in `test_vcheck.py`; the Etherscan and Sourcify request shapes are tested offline only, no public

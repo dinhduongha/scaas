@@ -23,6 +23,7 @@ IMG=scaas/nethermind-pqz:2.2.0-pqz9
 OLD=scaas/nethermind-pqz:2.2.0-pqz7
 E=$N/runs/2026-11-15-testnet-reset4-engine-pqz.json
 D=${RESET_D:-20261115}
+TAG=${RESET_TAG:-pre-reset4}  # reset 4b (owner 2026-11-15, the deploy fixed): RESET_TAG=pre-reset4b, same image and chainspec
 LOG=$HERE/reset4.log
 RPC=${RPC_7622:?set RPC_7622 to the SCaaS testnet RPC (no default)}
 A="docker run --rm --memory 256m --cpus 1 -v $L/data:/d alpine:3"
@@ -43,11 +44,12 @@ reset)
   NEW=${NEW:?NEW = the prepared chainspec}
   say "reset $(date -u +%FT%TZ), image $IMG $(docker image inspect $IMG --format '{{.Id}}')"
   cd "$L"
-  run sh -c "cp -p genesis.json genesis.json.bak-pre-reset4-$D && cp -p docker-compose.yml docker-compose.yml.bak-pre-reset4-$D && cp -p config.json config.json.bak-pre-reset4-$D && cp -p config.rpc.json config.rpc.json.bak-pre-reset4-$D"
+  for f in genesis.json docker-compose.yml config.json config.rpc.json; do [ -e "$f.bak-$TAG-$D" ] || cp -p "$f" "$f.bak-$TAG-$D"; done
+  run sha256sum genesis.json "$NEW"
   cp "$NEW" genesis.json
   sed -i "s#image: $OLD#image: $IMG#" docker-compose.yml
   [ "$(grep -c "image: $IMG" docker-compose.yml)" = 2 ] || { say "FAIL compose: not two services on $IMG"; exit 1; }
-  run $A sh -c "for d in nethermind_data nethermind_rpc_data explorer_db_data explorer_app_data; do mv /d/\$d /d/\$d.pre-reset4-$D && mkdir /d/\$d; done; mkdir /d/explorer_app_data/logs /d/explorer_app_data/dets; ls /d"
+  run $A sh -c "for d in nethermind_data nethermind_rpc_data explorer_db_data explorer_app_data; do mv /d/\$d /d/\$d.$TAG-$D && mkdir /d/\$d; done; mkdir /d/explorer_app_data/logs /d/explorer_app_data/dets; ls /d"
   run docker compose up -d sealer
   echo "\$ sealer eth_blockNumber (sidecar)" >> "$LOG"; side mba_chain_sealer eth_blockNumber >> "$LOG" 2>&1
   run docker compose up -d rpc

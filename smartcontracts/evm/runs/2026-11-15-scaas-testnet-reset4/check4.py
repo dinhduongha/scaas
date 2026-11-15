@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-"""SCaaS testnet reset 4: reset 3's check3.py unchanged, (run from smartcontracts/evm, cast on PATH):
+"""SCaaS testnet reset 4: reset 3's check3.py, and every token kind released and enabled, the registry kinds 0x0142 / 0x0134 (run from smartcontracts/evm, cast on PATH):
 the DeploySend broadcast's receipts (count, status, gas asked / used), every address of deployments/scaas-testnet.json has code,
 every row of the release list (Deploy.s.sol's simulation on the RPC's fork) has that runtime code hash on chain, and the
 factory's releases per kind (0-13), the DEX and PqChat (class 3, kind 0). Prints rows; exit 1 on any bad row.
@@ -71,10 +71,18 @@ for k, nm in enumerate(names):
     v = int(cast("call", f, "latestVersion(uint8)(uint64)", str(k)).split()[0])
     en = cast("call", f, "tokenKindEnabled(uint8)(bool)", str(k))
     impl = cast("call", f, "implementationOf(uint8,uint64)(address)", str(k), str(v)) if v else "-"
-    row("kind", k, nm, "latest version", v, "enabled", en, "implementation", impl)
+    good = nm.startswith("RETIRED") or (v >= 1 and en == "true")  # reset 4 (owner 2026-11-15): every token kind released
+    row("kind", k, nm, "latest version", v, "enabled", en, "implementation", impl, "" if good else "BAD: no enabled release")
+    bad += not good
 v = int(cast("call", f, "latestDexVersion()(uint64)").split()[0])
 row("dex", "latest version", v, "implementation", cast("call", f, "dexImplementationOf(uint64)(address)", str(v)) if v else "-")
 v = int(cast("call", f, "latestClassVersion(uint16,uint16)(uint64)", "3", "0").split()[0])
 row("class 3 kind 0 (PqChat)", "latest version", v, "enabled", cast("call", f, "classKindEnabled(uint16,uint16)(bool)", "3", "0"))
-print("check3:", "all checks passed" if not bad else f"{bad} BAD")
+reg = d["ua_registry"]
+for kind, nm in ((0x0142, "pqz-mlwe"), (0x0134, "mldsa87")):  # the gen-1 kind rule (owner 2026-11-15)
+    en = cast("call", reg, "kindEnabled(uint16)(bool)", str(kind))
+    cap = cast("call", reg, "verifyCap(uint16)(uint64)", str(kind)).split()[0]
+    row("registry kind", hex(kind), nm, "enabled", en, "cap", cap, "" if en == "true" else "BAD: missing")
+    bad += en != "true"
+print("check4:", "all checks passed" if not bad else f"{bad} BAD")
 sys.exit(1 if bad else 0)
