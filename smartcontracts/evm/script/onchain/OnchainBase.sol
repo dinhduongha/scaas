@@ -7,6 +7,7 @@ import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IAdmin} from "../../src/governance/IAdmin.sol";
+import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 
 /// @notice T66b Step 5b, the base of every `script/onchain/<Group>.s.sol`: broadcastable (no cheatcode reaches the chain:
 ///         `vm.broadcast` / `vm.startBroadcast` with a key, `vm.sign` off chain, reads of the deploy JSON). Each group
@@ -52,6 +53,16 @@ abstract contract OnchainBase is DeployBook {
     /// @dev An address of the Step 5 deploy JSON.
     function _dep(string memory key) internal view returns (address) {
         return vm.parseJsonAddress(dj, string.concat(".", key));
+    }
+
+    /// @dev Round 3zh (owner 2026-11-15, two paths): true iff the deploy's verifier of ML-DSA kind `kind` (0x0130 / 0x0131 / 0x0134)
+    ///      has no precompile, so the registry verifies it on its expanded-key cache (`cacheExpandedKey` each part before
+    ///      `register`); false on the precompile path, where the cache is refused. A deploy JSON from before 3zh names no ML-DSA
+    ///      verifier: every ML-DSA kind there is on the cache.
+    function _mldsaCache(uint16 kind) internal view returns (bool) {
+        string memory key = kind == 0x0130 ? ".mldsa44_verifier" : kind == 0x0131 ? ".mldsa65_verifier" : ".mldsa87_verifier";
+        if (!vm.keyExistsJson(dj, key)) return true;
+        return MldsaVerifier(vm.parseJsonAddress(dj, key)).PRECOMPILE() == address(0);
     }
 
     /// @dev A negative: `from` calling `to` with `data` must be refused with `expected` (the error selector). The script

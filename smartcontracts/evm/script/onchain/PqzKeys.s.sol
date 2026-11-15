@@ -493,8 +493,10 @@ contract PqzKeysSetup is PqzKeysKit {
         bytes memory pop = _mlBy(seed, IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_POP_V2, rd));
         IUARegistry.UAAttrs memory none;
         vm.startBroadcast(k1);
-        IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 0);
-        IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 1);
+        if (_mldsaCache(ML65)) { // 3zh: the cache path only (a precompile verifier refuses the cache)
+            IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 0);
+            IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 1);
+        }
         require(IUARegistry(registry).register{gas: 56_000_000}(ML65, pk, none, pop, "") == ua, "holder UA");
         vm.stopBroadcast();
     }
