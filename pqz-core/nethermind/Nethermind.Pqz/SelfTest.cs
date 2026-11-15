@@ -13,7 +13,7 @@ public static class SelfTest
 #if PQZ_SET_N2048_KMAX1024
     public const string Set = "n2048-kmax1024", ExpectedHash = "37c45f201c3f7a8f4dd3c84df85176f85f574d31a0209435761b1056519bfa9d", ExpectedLibrarySha256 = "45f6a4f7f10630341530a6ce0d93569d1327c43d3e26fc1ebc7715407e7465f2";
 #elif PQZ_SET_N2304_KMAX4096
-    public const string Set = "n2304-kmax4096", ExpectedHash = "d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d", ExpectedLibrarySha256 = "29c351ec675beeafea4f12324613adc6c1f88e3264c45271dae812d4778a677c";
+    public const string Set = "n2304-kmax4096", ExpectedHash = "d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d", ExpectedLibrarySha256 = "f397d9c172fb4c4381b360fb094c7b0e105a6d2f86ffbc0993c5e5c9453f0f31";
 #elif PQZ_SET_N2560_KMAX16384
     public const string Set = "n2560-kmax16384", ExpectedHash = "fb14244dbd6a4ca4c44f673ef878937d2437f164246260ef45f427a9f98de1cb", ExpectedLibrarySha256 = "8521e49d567f9826cc6086bf6256b0bdbce03988cbd4321ce2b7d994d9aa6aef";
 #elif PQZ_SET_N2816_KMAX65536
