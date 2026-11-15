@@ -770,6 +770,53 @@ export function kemRepair({ ua, kemPkHash, stored, kemPk }) {
   return { ua: record.ua, version: 0, kem: kemKeyOf(kemPk), sig: uaSig() };
 }
 
+// --- the ML-DSA expanded-key cache (CTR-UA-23, NODE-JOB-29; owner 2026-11-15) ---
+
+/** ML-DSA kind -> [FIPS 204 public key length, cache part count] (`PqUA.mldsaParts`: mldsa44 1, mldsa65 2, mldsa87 3). */
+const MLDSA_CACHE = new Map([[0x0130, [1312, 1]], [0x0131, [1952, 2]], [0x0134, [2592, 3]]]);
+const CACHE_SELECTOR = keccak_256(utf8ToBytes('cacheExpandedKey(uint16,bytes,uint256)')).subarray(0, 4);
+
+/** The cache part count of `kind`: 1 / 2 / 3 for mldsa44 / mldsa65 / mldsa87, 0 for every other kind (no cache). */
+export const mldsaCacheParts = (kind) => MLDSA_CACHE.get(Number(kind))?.[1] ?? 0;
+
+/**
+ * One cache part transaction: `cacheExpandedKey(kind, pk, part)` on the registry, a plain call (no signature; the subject or
+ * anyone sends it), as `{ entry, args, data }`: the named fields of the node's `call` job and the calldata for a subject that
+ * sends it itself. Refuses what the registry refuses, by its error names: `UAKeyCache` (a kind with no cache, a part past the
+ * last), `UAKeyData` (a key of the wrong length). Only on a registry without the ML-DSA precompile (the deploy JSON's
+ * `mldsa<x>_path` = `cache`); with a precompile the registry refuses it (`UAKeyCache`). UNAUDITED.
+ */
+export function cacheExpandedKeyCall(kind, pk, part) {
+  const k = Number(kind);
+  const c = MLDSA_CACHE.get(k) ?? fail('UAKeyCache', `0x${k.toString(16).padStart(4, '0')} has no expanded-key cache`);
+  const key = bytes(pk);
+  if (key.length !== c[0]) fail('UAKeyData', `${key.length} bytes, kind 0x${k.toString(16).padStart(4, '0')} takes ${c[0]}`);
+  const n = Number(part);
+  if (!Number.isInteger(n) || n < 0 || n >= c[1]) fail('UAKeyCache', `part ${part}: kind 0x${k.toString(16).padStart(4, '0')} has ${c[1]} part(s)`);
+  const data = concatBytes(CACHE_SELECTOR, word(k), word(96), word(n), word(key.length), key, new Uint8Array(pad32(key.length) - key.length));
+  return { entry: 'cacheExpandedKey', args: { kind: k, pk: hex(key), part: String(n) }, data: hex(data) };
+}
+
+/** Every cache part transaction of `pk`, in part order (`cacheExpandedKeyCall` for parts 0 … count − 1). */
+export function mldsaCacheCalls(kind, pk) {
+  const n = mldsaCacheParts(kind);
+  if (n === 0) fail('UAKeyCache', `0x${Number(kind).toString(16).padStart(4, '0')} has no expanded-key cache`);
+  return Array.from({ length: n }, (_, part) => cacheExpandedKeyCall(kind, pk, part));
+}
+
+/**
+ * The cache-then-register order (CTR-UA-23 MD-3, NODE-JOB-29) on a registry without the ML-DSA precompile: every cache part
+ * of an ML-DSA key, then the registration (`registrationArgs(input)`), then its `kemFill` if any; for any other kind the
+ * registration alone. Each item is `{ entry, args }` (a part also carries `data`), sent in this order, each after the last
+ * landed: `register` reverts `UAKeyNotCached(ua)` while a part is missing.
+ */
+export function cacheThenRegister(input = {}) {
+  const reg = registrationArgs(input);
+  const parts = mldsaCacheParts(input.kind) ? mldsaCacheCalls(input.kind, input.keyData) : [];
+  const fill = reg.kemFill ? [{ entry: 'setKemKey', args: reg.kemFill }] : [];
+  return [...parts, { entry: reg.entry, args: reg.args }, ...fill];
+}
+
 // --- key-data validation (§1.6 "Validation at registration") ---
 
 const SECP_P = secp256k1.Point.Fp.ORDER;
