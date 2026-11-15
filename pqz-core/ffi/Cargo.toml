@@ -28,8 +28,9 @@ hkdf = { version = "=0.12.4", optional = true }
 sha2 = { version = "=0.10.9", optional = true }
 # feature `prove` only: the sealed opening of opening tokens (spec three-key model K3-6, K3-6b, K3-7): CTR-UA-32's
 # scheme 1 (ML-KEM-1024 + X25519, the pins of ua-rs `wallet/kem.rs`: X25519 is curve25519-dalek 4's clamped Montgomery
-# ladder) and UA-7's one-shot AES-256-GCM; no RNG (the coins come from the leg seed)
-ml-kem = { version = "=0.3.4", default-features = false, optional = true }
+# ladder) and UA-7's one-shot AES-256-GCM; no RNG (the coins come from the leg seed). ml-kem's `zeroize`: the
+# decapsulation key is cleared on drop (review 3w-delta U2-1)
+ml-kem = { version = "=0.3.4", default-features = false, features = ["zeroize"], optional = true }
 curve25519-dalek = { version = "4", default-features = false, optional = true }
 aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc"], optional = true }
 

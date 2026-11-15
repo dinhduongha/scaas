@@ -97,9 +97,15 @@ pub fn enc_split(
         return None;
     }
     let own = pl::enc(&[pk_f], &[d_f], seed_enc)?;
-    let seed_leg = leg_seed(seed_enc, to_ua, pk_t);
+    let mut seed_leg = leg_seed(seed_enc, to_ua, pk_t);
     let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(pk_t).chain(pk_a).collect();
-    let leg = pl::enc(&pks, &vec![d; pks.len()], &seed_leg)?;
+    let mut msgs = vec![d; pks.len()];
+    let leg = pl::enc(&pks, &msgs, &seed_leg);
+    msgs.iter_mut().for_each(|m| pl::clear(m)); // the amount's digits (review 3w-delta U2-1)
+    let Some(leg) = leg else {
+        pl::clear(&mut seed_leg); // an error exit before the clearing `Split` exists (U2-1)
+        return None;
+    };
     let s = Split { own, leg, seed_leg };
     (s.own.u != s.leg.u).then_some(s)
 }
@@ -131,8 +137,10 @@ fn sk_x(seed: &[u8; 96]) -> [u8; 32] {
 
 /// `kemPk = 0x01 ‖ ek ‖ X25519(sk_X, 9)` of an opening KEM seed.
 pub fn open_kem_pk(seed: &[u8; 96]) -> Vec<u8> {
-    let ek = dk_of(seed).encapsulation_key().to_bytes();
-    let pk_x = MontgomeryPoint::mul_base_clamped(sk_x(seed)).to_bytes();
+    let ek = dk_of(seed).encapsulation_key().to_bytes(); // the decapsulation key is cleared on drop (ml-kem `zeroize`)
+    let mut skx = sk_x(seed);
+    let pk_x = MontgomeryPoint::mul_base_clamped(skx).to_bytes();
+    pl::clear(&mut skx);
     [&[1u8][..], &ek, &pk_x].concat()
 }
 
@@ -211,23 +219,28 @@ pub fn seal(role: Role, c: &Credit, p: &Party, seed_leg: &[u8; 32]) -> Option<Ve
     let (ek, pk_x) = kem_pk[1..].split_at(EK);
     let ek = Ek::new(&ml_kem::Key::<Ek>::try_from(ek).ok()?).ok()?;
     let pk_x: [u8; 32] = pk_x.try_into().ok()?;
+    // the coins, the ML-KEM message m, the X25519 secret e and ss_X are cleared on every exit after this point
+    // (review 3w-delta U2-1); copies the compiler makes (e and m passed by value) are not reached
     let mut cn = coins(seed_leg, role, kem_pk);
-    let e: [u8; 32] = cn[32..].try_into().ok()?;
-    let ss_x = MontgomeryPoint(pk_x).mul_clamped(e).to_bytes();
-    let big_e = MontgomeryPoint::mul_base_clamped(e).to_bytes();
-    let m = ml_kem::B32::try_from(&cn[..32]).ok()?;
+    let mut e: [u8; 32] = cn[32..].try_into().expect("32 bytes");
+    let mut m = ml_kem::B32::try_from(&cn[..32]).expect("32 bytes");
     pl::clear(&mut cn);
-    if ss_x == [0; 32] {
-        return None;
-    }
-    let (ct, mut ss_m) = ek.encapsulate_deterministic(&m);
-    let mut ss = combine(&ss_m, &ss_x, &big_e, &pk_x);
-    pl::clear(&mut ss_m);
-    let mut k = kek(&ss);
-    pl::clear(&mut ss);
-    let sealed = Aes256Gcm::new_from_slice(&k).expect("32-byte key").encrypt(Nonce::from_slice(&[0; 12]), Payload { msg: seed_leg, aad: &aad(c, p) });
-    pl::clear(&mut k);
-    Some([&ct[..], &big_e, &sealed.ok()?].concat())
+    let mut ss_x = MontgomeryPoint(pk_x).mul_clamped(e).to_bytes();
+    let big_e = MontgomeryPoint::mul_base_clamped(e).to_bytes();
+    pl::clear(&mut e);
+    let out = (ss_x != [0; 32]).then(|| {
+        let (ct, mut ss_m) = ek.encapsulate_deterministic(&m);
+        let mut ss = combine(&ss_m, &ss_x, &big_e, &pk_x);
+        pl::clear(&mut ss_m);
+        let mut k = kek(&ss);
+        pl::clear(&mut ss);
+        let sealed = Aes256Gcm::new_from_slice(&k).expect("32-byte key").encrypt(Nonce::from_slice(&[0; 12]), Payload { msg: seed_leg, aad: &aad(c, p) });
+        pl::clear(&mut k);
+        sealed.ok().map(|s| [&ct[..], &big_e, &s].concat())
+    });
+    pl::clear(&mut m);
+    pl::clear(&mut ss_x);
+    out.flatten()
 }
 
 /// K3-7 steps 3–4: decapsulate `p.opening` with the opening KEM seed and open the sealed seed.
@@ -239,11 +252,14 @@ fn open(seed: &[u8; 96], c: &Credit, p: &Party) -> Option<[u8; 32]> {
     let (eph, sealed) = rest.split_at(32);
     let eph: [u8; 32] = eph.try_into().ok()?;
     let ct = ml_kem::Ciphertext::<MlKem1024>::try_from(ct).ok()?;
-    let mut ss_x = MontgomeryPoint(eph).mul_clamped(sk_x(seed)).to_bytes();
+    let mut skx = sk_x(seed);
+    let mut ss_x = MontgomeryPoint(eph).mul_clamped(skx).to_bytes();
+    pl::clear(&mut skx);
     if ss_x == [0; 32] {
         return None; // a small-order E: the same outcome as any other failure
     }
-    let mut ss_m = dk_of(seed).decapsulate(&ct); // implicit rejection: a wrong ct gives another ss
+    // implicit rejection: a wrong ct gives another ss; the decapsulation key is cleared on drop (ml-kem `zeroize`)
+    let mut ss_m = dk_of(seed).decapsulate(&ct);
     let mut ss = combine(&ss_m, &ss_x, &eph, &p.kem_pk[1 + EK..]);
     pl::clear(&mut ss_m);
     pl::clear(&mut ss_x);
@@ -284,17 +300,21 @@ fn digits(v: &[u8; 128], v0: &[u8; 128]) -> Option<[u8; 16]> {
 fn verify_leg(c: &Credit, seed_leg: &[u8; 32]) -> Option<(Option<[u8; 16]>, Option<[u8; 16]>, bool, bool)> {
     let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(c.to.pk).chain(c.auditor.map(|a| a.pk)).collect();
     // step 5: the pinned sampler (resampled to the relation's norm bounds) with zero messages
-    let exp = pl::enc(&pks, &vec![[0u8; 16]; pks.len()], seed_leg)?;
-    if exp.u[..] != c.u[..] {
-        return None; // step 6: packed bytes, not values mod q
-    }
-    let d_t = digits(c.to.v, &exp.vs[0]); // step 7
-    let o_t = seal(Role::Recipient, c, &c.to, seed_leg).is_some_and(|o| o == c.to.opening); // step 8
-    let (d_a, o_a) = match c.auditor {
-        Some(a) => (digits(a.v, &exp.vs[1]), seal(Role::Auditor, c, &a, seed_leg).is_some_and(|o| o == a.opening)),
-        None => (None, true),
-    };
-    Some((d_t, d_a, o_t, o_a))
+    let mut exp = pl::enc(&pks, &vec![[0u8; 16]; pks.len()], seed_leg)?;
+    // step 6: packed bytes, not values mod q
+    let r = (exp.u[..] == c.u[..]).then(|| {
+        let d_t = digits(c.to.v, &exp.vs[0]); // step 7
+        let o_t = seal(Role::Recipient, c, &c.to, seed_leg).is_some_and(|o| o == c.to.opening); // step 8
+        let (d_a, o_a) = match c.auditor {
+            Some(a) => (digits(a.v, &exp.vs[1]), seal(Role::Auditor, c, &a, seed_leg).is_some_and(|o| o == a.opening)),
+            None => (None, true),
+        };
+        (d_t, d_a, o_t, o_a)
+    });
+    // the zero-message encryptions are the credit's masks (v - v0 = Δ·d): cleared on every exit (review 3w-delta
+    // U2-1); `Enc`'s drop clears r, e1, e2
+    exp.vs.iter_mut().for_each(|v| pl::clear(v));
+    r
 }
 
 /// K3-7 for the recipient, with its opening KEM seed of the key version the leg is encrypted to: the 16 digits of an
