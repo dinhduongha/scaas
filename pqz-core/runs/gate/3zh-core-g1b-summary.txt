@@ -1,0 +1,7 @@
+# gate 3zh-core-g1b (set n2304-kmax4096): 98a3ec51bd40ea8cfce0acbff48cec950f9a039d + uncommitted changes, 2026-11-15T07:55Z
+set n2304-kmax4096
+== vectors
+   ok
+== ffi
+   ok
+gate 3zh-core-g1b (set n2304-kmax4096): PASS

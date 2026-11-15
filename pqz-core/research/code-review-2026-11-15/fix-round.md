@@ -81,33 +81,38 @@ check removed: red. 4 / 4.
 
 **Stopped:** rejection rows in `opening.json` would change a committed vector file: group 2.
 
-## 5. seed_enc — seal-side repeat guard (SPECIFIED, design for the owner's OK; not built)
+## 5. seed_enc — seal-side repeat guard (BUILT; owner 2026-11-15 "Ok, duyệt 5 và 7")
 
 Why: K3-6's coins are `SHAKE256(label ‖ seed_leg ‖ role ‖ keccak256(kemPk))`, so the same `seed_enc` to the same
 recipient gives the same ML-KEM coins, KEK and GCM nonce; a second seal of that `seed_leg` under another `aad` reuses a
 GCM key and nonce (Codex U2 point 2). The same repeat also reuses the PQZ randomness of `u`, `u_f`, `v_f`
 (CTR-PQZ-19), so the guard keys on `seed_enc`, not only on `seed_leg`.
 
-- **What counts as a repeat:** one `seed_enc` presented for a second, different credit. Credit fingerprint =
+**Change** (`ffi/src/opening.rs`, as designed):
+- **Repeat:** one `seed_enc` presented for a second, different credit. Credit fingerprint =
   `keccak256("SCAAS-PQZ-SEAL-GUARD-V1" ‖ chainUid ‖ token ‖ toUA ‖ keccak256(pk_t) ‖ P(u) ‖ P(v_t) ‖ [P(v_a)])`. Not a
-  repeat: the recipient's and the auditor's opening of the same credit, or the same opening again (a retried build of
-  the identical leg).
-- **Scope:** one caller-owned `Sealer` value (per wallet session / process), in memory; no global state, nothing
-  persisted. Across restarts the guarantee stays CTR-PQZ-19's fresh salt with CTR-PQZ-38 (release builds take no
-  caller salt). The table is bounded (4,096 seeds); a full table refuses, it never evicts.
-- **Where it is checked:** `Sealer::seal_leg(seed_enc, to_ua, pk_t, role, credit, party)` derives `seed_leg` itself
-  (K3-4) and checks the table before sealing; the opening is byte-identical to `seal`'s. Plain `seal` stays for the holder
-  check's re-derivation (K3-7 step 8 re-seals on purpose) and the vector generator. The table stores
-  `SHA3-256(label ‖ seed_enc)` and the fingerprint, never `seed_enc`.
-- **Named errors:** `SealError::SeedReused` (another credit under this `seed_enc`), `SealError::Full`,
-  `SealError::Refused` (today's `None`: not scheme 1, bad length, ek >= q, small-order pk_X).
-- **Fail closed:** any repeat, a full table or a refused key gives no opening; the caller rebuilds with a fresh salt.
-- **Tests:** control (recipient and auditor openings of one credit: `Ok`, equal to `seal`); the same opening again:
-  `Ok`, same bytes; the same `seed_enc` for another amount (other `v_t`), another recipient UA, another token:
-  `SeedReused` each; the 4,097th distinct seed: `Full`. Mutants: the fingerprint comparison removed; eviction instead of
-  refusal; `seal_leg` taking a caller `seed_leg` — each must turn a test red.
-- **No format or vector change.** Wiring the wallet builders (`clientkeys` / `pqz-wallet-wasm`, ua-rs) to `Sealer` is
-  the clients' round, not this one.
+  repeat: the recipient's and the auditor's opening of the same credit, or the same opening again.
+- **Scope:** `Sealer`, caller-owned, in memory; no global state, nothing persisted; at most `SEALER_CAP` = 4,096 seeds,
+  then it refuses (never evicts).
+- **Where:** `Sealer::seal_leg(seed_enc, role, credit)` takes the party from the credit (`to`, or its auditor), derives
+  `seed_leg` itself (K3-4) and checks the table before sealing; it stores `SHA3-256("SCAAS-PQZ-SEAL-GUARD-SEED-V1" ‖
+  seed_enc)` and the fingerprint, never `seed_enc`. The opening is byte-identical to `seal`'s; plain `seal` stays for the
+  holder check (K3-7 step 8 re-seals on purpose) and the vector generator.
+- **Errors, all fail closed (no opening):** `SealError::SeedReused`, `SealError::Full`, `SealError::Refused` (`seal`'s
+  own refusals, or no auditor copy for the auditor role). A refusal leaves the table unchanged.
+- **No format or vector change.** Wiring the wallet builders (`clientkeys` / `pqz-wallet-wasm`, ua-rs) to `Sealer` is the
+  clients' round.
+
+**Stated limit (owner 2026-11-15):** it catches a repeat within one process only; a restart forgets. Across processes
+the guarantee stays CTR-PQZ-19's fresh salt with CTR-PQZ-38 (release builds take no caller salt). A deterministic
+per-credit `seed_enc` would close it fully but changes the format: a group 2 candidate, not now.
+
+**Test.** `sealer_refuses_a_repeated_seed_enc`: control (O_t, O_a equal to `seal`'s), the same opening again;
+`SeedReused` for another amount, another recipient UA, another token; the first credit still seals after the refusals;
+`Refused` for no auditor copy and a scheme-2 key; `Full` for the 4,097th seed, a known seed still seals when full.
+
+**Mutants** (`opening_mutants.py`): Se1 the fingerprint comparison removed: red (`another amount`); Se2 eviction when
+full: red (`the 4,097th seed`); Se3 `seed_leg` not the credit's: red (`control: O_t`). 3 / 3, with Ma–Md still 4 / 4.
 
 ## 6. U3h-1 — provisional engine schedules (BUILT)
 
@@ -126,45 +131,45 @@ refused by today's plugin. It is written by the calibration (`calibrate.sh`, Cal
 it needs a calibration run (owner's go) or a provisional copy. README §chain describes it as "PQZL v3 / PQZH v1 ids"
 (stale wording).
 
-## 7. U3h-2 — the plugin's fault boundary (SPECIFIED, design for the owner's OK; not built)
+## 7. U3h-2 — the plugin's fault boundary and exit watchdog (BUILT; owner 2026-11-15 "Ok, duyệt 5 và 7, thêm watchdog")
 
-Today: `MlDsa.Verify` allocates its output and checks the length before its `try`; its `CryptographicException`
-handler logs inside the `catch`, so a throwing logger escapes the sibling `catch (Exception)`; `NodeFault` builds the
-line (Keccak, string formatting), writes stderr and the logger before `Environment.Exit`, and the caller formats
-`e.Message` before `NodeFault` runs. Any of these can throw and reach Nethermind, which makes a failed call of it.
+Before: `MlDsa.Verify` allocated its output and checked the length before its `try`; its `CryptographicException`
+handler logged inside the `catch`, so a throwing logger escaped the sibling `catch (Exception)`; `NodeFault` built the
+line (Keccak, formatting), wrote stderr and the logger before `Environment.Exit`, and the caller formatted `e.Message`
+first. Any of these could throw and reach Nethermind, which makes a failed call of it.
 
-**Order of operations on a fault (both precompiles):**
+**Order of operations on a fault (both precompiles, as built):**
 1. The whole operation is inside one boundary: ML-DSA's output allocation, length check, slicing, import and verify
-   (PQZ's `Run` already wraps `RunUnguarded`, allocation included).
-2. `catch (Exception e)` (PQZ: `when (e is not DllNotFoundException)`, unchanged) calls `NodeFault(where, e, input)`:
-   the cause is built inside `NodeFault`, not by the caller.
-3. `NodeFault`: `try` { cause = `where + e.GetType().Name + ": " + e.Message` (or `status=<n>`), line = `PQZ-NODE-FAULT
-   <cause> keccak=<..> len=<n>: …; exit 120`; stderr write + flush; logger Error } `catch` (anything) { one best-effort
-   constant line `PQZ-NODE-FAULT (diagnostic failed); exit 120` to stderr inside its own empty `catch` } `finally` {
-   `Environment.Exit(120)` }; should `Exit` return or throw, `Environment.FailFast("PQZ-NODE-FAULT")` follows (never
-   returns; its exit code is the runtime's abort code, not 120).
-4. Nothing returns to Nethermind on this path: no word, no failed call.
+   (PQZ's `Run` already wrapped `RunUnguarded`, allocation included).
+2. `catch (Exception e)` (PQZ: `when (e is not DllNotFoundException)`, unchanged) calls `NodeFault(where, e, input)`;
+   the cause is built inside it.
+3. `NodeFault`: `try` { cause, line `PQZ-NODE-FAULT <cause> keccak=<..> len=<n>: …; exit 120`, stderr write + flush,
+   logger Error } `catch` { `FallbackLine` to stderr once, inside its own empty `catch` } `finally` { `Terminate()` }.
+4. `Terminate()`: start the **exit watchdog** — a dedicated background thread (`pqz-exit-watchdog`, not the thread
+   pool) that sleeps `ExitWatchdogMs` = 10,000 ms and then calls `Environment.FailFast(WatchdogLine)` — then
+   `Environment.Exit(120)`; should `Exit` return or throw, `Environment.FailFast` at once. If the thread cannot start,
+   `Exit` still runs.
+5. Nothing returns to Nethermind on this path: no word, no failed call.
 
-**Diagnostic failure:** building the cause or line (a throwing `Message`, Keccak), the stderr write or flush (a
-throwing writer), or the logger: each is caught inside `NodeFault`; termination still happens with exit 120.
+**Diagnostic failure:** a throwing `Message`, Keccak, stderr writer or logger is caught inside `NodeFault`; termination
+still happens with exit 120.
 
-**Exit code:** 120 (unchanged); FailFast only if `Environment.Exit` itself fails.
+**Exit code:** 120. The watchdog's FailFast (a ProcessExit handler that blocks, e.g. on the faulting thread) ends the
+process with the runtime's abort status (134 in the test), not 120: termination within the bound is what it
+guarantees. This closes the T-20 open point "Exit can hang in a ProcessExit handler".
 
-**The owner ruling CryptographicException -> zero word (W-R):** kept. The handler returns the 32 zero bytes; its Warn
-line is wrapped so that a logger exception is swallowed and the word is still returned (the word does not depend on
-the log, so every node gives the same result). Only a non-cryptographic exception is a node fault.
+**W-R kept:** a `CryptographicException` returns the 32 zero bytes; its Warn line is wrapped, so a throwing logger is
+swallowed and the word is unchanged (it does not depend on the log; every node gives the same result).
 
-**Tests (child processes through `Harness`, each next to the existing `mldsa-fault` control):** a throwing logger plus
-the seam's `InvalidOperationException` -> exit 120; a throwing `Console.Error` writer -> exit 120 (stdout has no "must
-not happen"); an exception whose `Message` getter throws -> exit 120 with the fallback line; a throwing logger plus a
-`CryptographicException` -> the zero word, exit 0; the PQZ path's worker fault (hooks library) with a throwing logger
--> exit 120. Mutants: `NodeFault`'s catch removed (the throwing-logger child ends with the runtime's unhandled-exception
-code, not 120); the crypto handler's log guard removed (the child sees an escaped exception, no word). The allocation
-before the `try` has no injection point; it is closed by structure.
+**Tests** (child processes, `Harness mldsa-fault <variant>`, each with its own bound; a child past it is killed and the
+test fails by that bound): `A_failing_diagnostic_still_exits_120` — `logger`, `stderr`, `message` (`FallbackLine` on
+stderr): exit 120 after 40–52 ms, no word; `A_blocking_shutdown_handler_is_ended_by_the_watchdog` — a ProcessExit
+handler that sleeps forever: ended after 10,253 ms (bound 30 s), `WatchdogLine` on stderr, exit 134;
+`A_crypto_exception_with_a_throwing_logger_is_the_zero_word` — exit 0, the zero word; the earlier
+`Another_exception_is_a_node_fault` control stays green. Full suite (`run-tests.sh`, n2304-kmax4096): 63 / 63.
 
-**Open (T-20):** `Environment.Exit` runs `ProcessExit` handlers; if Nethermind's shutdown handler waits on the faulting
-block-processing thread, the node can hang instead of exiting. A hang seals and imports nothing (fail closed), but the
-exit-120 evidence inside a running node is still T-20's drill.
+**Mutants** (`plugin_mutants.py`): see the gate table. The output allocation before the `try` has no injection point; it
+is closed by structure.
 
 ## Gate
 
@@ -185,6 +190,11 @@ Affected steps only (owner: the full gate runs once, later, on the final core tr
 | split mutants | d16c6efd | 0 | 5 / 5 red (M1, M2 generic-only builds) |
 | opening mutants | 2d94da55 | 0 | 4 / 4 red |
 | wipe mutants | d16c6efd | — | 2 / 2 red (z3v, z4v) |
+| vectors (items 5, 7) | 98a3ec51 | 0 | `pqz-vectors --check` 18 files same; pqz_kat ok; tamper 212 / 225; wasm32 replay 63 cases, 0 fails (tree + this note's uncommitted edit) |
+| ffi (items 5, 7) | 98a3ec51 | 0 | tests 33 passed (the Sealer test included), native = wasm32 29 lines; wallet-wasm 8 / 8 |
+| Sealer mutants | 34871de6 | 0 | Se1–Se3 3 / 3 red; Ma–Md re-run 4 / 4 red |
+| plugin full suite (`run-tests.sh`) | 98a3ec51 | 0 | 63 / 63 at n2304-kmax4096 (the 6 new fault-boundary children and the provisional check included) |
+| plugin mutants (`plugin_mutants.py`, ML-DSA tests) | 98a3ec51 | 0 | W1 watchdog not started: red, the blocking child killed by the test's own 30 s bound; F1 the pre-fix NodeFault order: red (logger, stderr, message: 3 failed); C1 the zero word's warning unguarded: red (exit 120, not 0); 3 / 3 |
 
-Not run here (not touched, or the full gate's): ct, ub, diff, cargo (pqz-stmt, Ligero), xcheck, the other three sets, the
-plugin's full suite (it runs with item 7).
+Not run here (not touched, or the full gate's): ct, ub, diff, cargo (pqz-stmt, Ligero), xcheck, the other three sets
+(the plugin's full suite at n2304-kmax4096 only).
