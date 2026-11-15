@@ -144,8 +144,13 @@ jobs:
       - name: gen_set.py --all --check
         if: matrix.set == 'n2304-kmax4096'
         run: python3 -I ../../pqz-core/params/sets/gen_set.py --all --check
+      # test/modules/* compares with the pre-split releases, built here at the committed set only: at another set the
+      # pre-split side must be rebuilt at that set (at-set.sh's `modules` scope, under scripts/capped: local), so the
+      # other cells leave it out
       - name: forge test at ${{ matrix.set }} (at-set.sh)
-        run: script/pqz/at-set.sh ${{ matrix.set }} test
+        run: |
+          if [ "${{ matrix.set }}" = n2304-kmax4096 ]; then script/pqz/at-set.sh ${{ matrix.set }} test
+          else script/pqz/at-set.sh ${{ matrix.set }} test --no-match-path 'test/modules/*'; fi
       # the registry's gas bounds (msig at verifyBudget, stored-member bound, T-GAS) hold cold: every call its own tx
       - name: forge test --isolate (UAGas, UARegistryGroups)
         if: matrix.set == 'n2304-kmax4096'
@@ -369,6 +374,10 @@ jobs:
       - name: clientkeys dependencies for the e2e
         working-directory: clients/clientkeys
         run: npm ci --ignore-scripts
+      # and through zether-cli (relayed_zether_proof_under_the_ua_tag; ZETHER_CLI's default path)
+      - name: zether-cli for the e2e
+        working-directory: clients/zether-prover
+        run: cargo build --release --bin zether-cli
       - name: e2e on anvil
         run: cargo test --test e2e -- --ignored --test-threads=1
 
