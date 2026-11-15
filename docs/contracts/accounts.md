@@ -841,11 +841,11 @@ Derived kinds (registered; `d` = key data):
 | `0x0113` | `frost-bn254` | `Y (64) ‖ u16 t ‖ u16 n ‖ n × (t × C_ik (64) ‖ R_i (64) ‖ μ_i (32))`, 2 ≤ t ≤ n ≤ 16 | `bn254-g1` | DKG PoKs and `Y = Σ C_i0` **and** one FROST(bn254, keccak256) sig by `Y` | as 0x0104 (its H2 is the scaas Schnorr challenge), `Y` from `keyPtr` | EVM |
 | `0x0120` | `msig` | `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)`, ids strictly increasing | — | none of its own; every member registered or native, kind ∈ MEMBER; a member signs with an empty `keyData` (CTR-UA-33) | inside the registry (members via their own kinds) | EVM → all |
 | `0x0121` | *reserved* (was `bls12381-multi`, cut) | — | — | — | — | — |
-| `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`pq_msg`, empty ctx) ([CTR-UA-23](#CTR-UA-23)) | `MldsaVerifier` (BUILT, P6a): an EIP-8355 precompile where probed, else pure Solidity on the registry's cached EIP-8051 expanded key (P6c); `pk` from `keyPtr` | every EVM chain where the measured cap fits (the budget rule; unaudited label, no audit gate, owner ruling 2026-10-31) |
+| `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`pq_msg`, empty ctx) ([CTR-UA-23](#CTR-UA-23)) | `MldsaVerifier` (BUILT, P6a): an EIP-8355 precompile where probed, else pure Solidity on the registry's cached EIP-8051 expanded key (P6c), which `register` needs complete first (`UAKeyNotCached`, owner 2026-11-15); `pk` from `keyPtr` | every EVM chain where the measured cap fits (the budget rule; unaudited label, no audit gate, owner ruling 2026-10-31) |
 | `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | as 0x0130; SCaaS testnet: its `MLDSA65` precompile `0x000000000000000000000000000000005caa0013` (32-bit form, plan 5h Task 8d; live since image `2.2.0-pqz4`, 2026-10-25; the earlier images served `0x5caa500000000000000000000000000000000013`) in the EIP-8355 layout ([CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10); P6f; registry in P6g) | as 0x0130 |
 | `0x0132` | `fndsa512` | `pk` (897: `0x09 ‖ h`) | `fndsa512` | Falcon-512 (specification v1.2, NIST third-round; EIP-8052 SHAKE256 hash-to-point) over `ua_msg`, padded sig 666 B | `FndsaVerifier` (BUILT, P6a), pure Solidity (EIP-8052 has no addresses); `pk` from `keyPtr` | every EVM chain; deployed as 0x0130 |
 | `0x0133` | `slhdsa128s` | `pk` (32) | `slhdsa128s` | SLH-DSA-SHA2-128s (FIPS 205) sign(`pq_msg`, empty ctx), sig 7,856 B | `SlhdsaVerifier` (BUILT, P6a), pure Solidity on SHA-256 `0x02` (no EIP proposes an SLH-DSA precompile); `pk` from `keyPtr` | EVM; the P6 gas gate passed ([CTR-UA-23](#CTR-UA-23)); deployed as 0x0130 |
-| `0x0134` | `mldsa87` | `pk` (2592) | `mldsa87` | ML-DSA-87 sign(`pq_msg`, empty ctx) ([CTR-UA-23](#CTR-UA-23)), sig 4,627 B | `MldsaVerifier(0x0134, …)` (BUILT, branch `mldsa87`): an EIP-8355 precompile only, probed at `0x14` and the SCaaS testnet's `MLDSA87` `0x000000000000000000000000000000005caa0014`; no precompile ⇒ no verifier, the kind disabled (its Solidity verify fails the 66 % rule, [CTR-UA-39](#CTR-UA-39)); no expanded-key cache; `pk` from `keyPtr` | EVM chains with an ML-DSA-87 precompile → other families in their rounds |
+| `0x0134` | `mldsa87` | `pk` (2592) | `mldsa87` | ML-DSA-87 sign(`pq_msg`, empty ctx) ([CTR-UA-23](#CTR-UA-23)), sig 4,627 B | `MldsaVerifier(0x0134, …)` (BUILT, branch `mldsa87`; the cache BUILT on `3zh-mldsa`): an EIP-8355 precompile where probed (`0x14`, the SCaaS testnet's `MLDSA87` `0x000000000000000000000000000000005caa0014`), else pure Solidity on the registry's three-part expanded-key cache ([CTR-UA-39](#CTR-UA-39), owner 2026-11-15); `pk` from `keyPtr` | every EVM chain where the cap fits the 75 % rule (12 M: yes; Hedera's 10.5 M: only with a precompile) → other families in their rounds |
 | `0x0135` | `fndsa1024` | `pk` (1793: `0x0A ‖ h`) | `fndsa1024` | Falcon-1024 (round-3 specification v1.2; SHAKE256 hash-to-point) over `ua_msg`, padded sig 1,280 B ([CTR-UA-40](#CTR-UA-40)) | `FndsaVerifier(0x0135)` (BUILT, branch `mldsa87`), pure Solidity (measured 4.73 M; no EIP defines a Falcon-1024 precompile); `pk` from `keyPtr`; no cache | every EVM chain → other families in their rounds |
 | `0x0140` | *reserved* (was `zether-bn254`; legacy since UA-6, in `smartcontracts/evm/legacy/ua6/`, [CTR-ZTH-32](zether.md#CTR-ZTH-32)) | — | — | — | — | — |
 | `0x0141` | `zether-bls12381` | `Y` (128) | `bls12381-g1` | scaas Schnorr by `x` under the **Zether** Schnorr tag (`SCAAS-ZETHER-SCHNORR-V1`) on `ua_msg` | `ZetherSchnorrBls12381Verifier` (EIP-2537) | EVM (EIP-2537 chains) |
@@ -969,29 +969,92 @@ chains: 12 M ≈ 70 % of 16,777,216; Hedera, 15 M cap: 10.5 M), a constructor im
 **Each kind's verify cap is measured per chain** (worst-case accepting and rejecting input, test T-GAS) and set as a
 constructor immutable `verifyCap[kind]`, also published: e.g. `mldsa65` ≈ 236 k with the SCaaS testnet precompile (`verify` through `MldsaVerifier`, P6f copy), the
 measured Solidity worst case elsewhere. Measured (P6a, `test/ua/PqGas.t.sol`): ML-DSA-44 / -65 11.4 / 18.9 M on the FIPS 204 key, 4.1 / 5.8 M on a stored EIP-8051 expanded key (owner 2026-10-12: the registry stores the FIPS 204 pk; the expanded key is an optional cache it derives itself with `expandKey(pk)`, never one from a caller),
-FN-DSA-512 2.3 M, SLH-DSA 0.79 M (worst case 1.32 M); ed25519 0.17 M (measured, UA-2b: worst 171 k, cap 210 k). Gen-1 caps without a precompile (P6c, `DeployBase`): `mldsa44` 4,250,000 / `mldsa65` 5,950,000 on the cached expanded key (measured `verifyCached` 4.11 / 5.80 M), `fndsa512` 2,500,000, `slhdsa128s` 1,400,000 — each ≤ 50 % of 12 M; `fndsa1024` 5,250,000 (43.75 % of 12 M, 50 % of Hedera's 10.5 M; **provisional** until T-GAS, [CTR-UA-40](#CTR-UA-40)). An enabled PQ kind's measured cap must stay ≤ 66 % of the
-budget (owner ruling 2026-10-31; was ~50 % on public chains; at 66 % a kind is ~46 % of the per-transaction gas), so a later gas repricing cannot push it over after funds are held. **If a measured verifier exceeds that bound
+FN-DSA-512 2.3 M, SLH-DSA 0.79 M (worst case 1.32 M); ed25519 0.17 M (measured, UA-2b: worst 171 k, cap 210 k). Gen-1 caps without a precompile (P6c, `DeployBase`): `mldsa44` 4,250,000 / `mldsa65` 5,950,000 on the cached expanded key (measured `verifyCached` 4.11 / 5.80 M), `fndsa512` 2,500,000, `slhdsa128s` 1,400,000 — each ≤ 50 % of 12 M; `fndsa1024` 5,250,000 (43.75 % of 12 M, 50 % of Hedera's 10.5 M; **provisional** until T-GAS, [CTR-UA-40](#CTR-UA-40)). An enabled PQ kind's measured cap must stay ≤ 75 % of the
+budget (owner 2026-11-15; 66 % by the ruling of 2026-10-31, ~50 % on public chains before; see the Change below), so a later gas repricing cannot push it over after funds are held. **If a measured verifier exceeds that bound
 on a chain, the kind is disabled there (verifier address 0: not registrable), never "registrable but unusable"**: a
 registrable but unusable kind can *receive* and then never spend, locking funds. **`slhdsa128s`** (0x0133, SLH-DSA-SHA2-128s, FIPS 205; owner 2026-10-11, SPECIFIED (P6)) is the hash-based backup if lattice assumptions fall, in line with the Ethereum Foundation's hash-based direction: no EIP proposes an SLH-DSA precompile, so it verifies in pure Solidity on the SHA-256 precompile `0x02` (it probes nothing), and it is **enabled on public chains only after P6 measures its verification gas against the chain's per-transaction cap and `UA_VERIFY_BUDGET`** — measured in P6a: 1.32 M at the worst case any input can force (510 WOTS+ steps on each of the 7 layers), 0.79 M for a valid signature, ≤ 13 % of every chain's budget, so the gate passes and enabling it is a registry deploy parameter. The PQ verifiers are home-written and unaudited and carry the label **UNAUDITED**; an audit is not a deploy gate (owner ruling 2026-10-31): a PQ kind is enabled wherever the budget rule above passes; without an EIP-8355 precompile or a stored expanded key ML-DSA is over budget there, so `slhdsa128s` and `fndsa512` are the practical kinds.
 
-<a id="CTR-UA-39"></a>**CTR-UA-39** — **`mldsa87` (0x0134), ML-DSA-87 (FIPS 204, NIST level V), is enabled only where a precompile
-verifies it** (owner 2026-11-04; [decisions.md](../decisions.md)). BUILT on the EVM (branch `mldsa87`); other families
+**Change (owner 2026-11-15, TODO 3zh; spec `superpowers/specs/2026-11-15-mldsa-precompile-cache.md`, MD-1 … MD-15; BUILT on
+branch `3zh-mldsa`, EVM; UNAUDITED).** Found in reset 4b: the pure-Solidity ML-DSA-65 verify on the FIPS 204 key costs 19.30 M
+regular gas, over EIP-7825's 2^24 = 16,777,216, which Nethermind applies to `eth_call` too (forge and anvil 1.8.5 do not).
+- **75 %** (MD-1): a PQ kind is enabled where its cap ≤ 75 % of the chain's `UA_VERIFY_BUDGET`, integer-exact
+  `cap * 100 <= budget * 75` (12 M: 9,000,000; Hedera 10.5 M: 7,875,000; `DeployBase._pqKindFits`). One rule, no chain named.
+  A check holds `cap + cap / 63 + margin`: at 9.0 M, 7.63 M of 2^24 remain for the operation, not enough for every operation by
+  itself (MD-13 below).
+- **Two paths for ML-DSA** (0x0130, 0x0131, 0x0134; MD-2): the chain's EIP-8355-layout precompile chosen by the verifier's probe,
+  or, without one, the registry's expanded-key cache (`verifyCached`). The uncached FIPS-key verify is never a registry path:
+  measured (forge, `isolate`, regular = `lastCallGas` × 64/63) 11,632,672 (44), **19,299,937 (65)**, **32,553,838 (87)**, the
+  last two over 2^24 (`UARegistryPq.t.sol` `test_mldsaCache_c1_under2p24` pins it). `MldsaVerifier.verify` stays (the
+  precompile path, outside callers).
+- **Cache before register** (MD-3): without a precompile every check of an ML-DSA signature, the PoP included, needs the
+  kind's full cache: `cacheExpandedKey(kind, pk, part)` for every part (anyone, one transaction a part, idempotent, derived
+  on-chain from `pk`), then `register`. An incomplete cache reverts **`UAKeyNotCached(bytes32 ua)`**, in code on every path
+  (`_sigOk` before the PoP; `requireAuthorized`'s `_derived` after the capped call answered false, so the precompile path pays
+  nothing for it and the FIPS-key verify, dearer than every cached cap, never yields a verdict; F-8). With a precompile `cacheExpandedKey` stays refused (`UAKeyCache`).
+- **Parts** (MD-4): `PqUA.mldsaParts` is the one count, read by `MldsaVerifier.expandedKeyParts`, `cacheExpandedKey` and
+  `UAStore.expanded`: `mldsa44` 1 (20,544 B), `mldsa65` 2 (rows 0–2 | 3–5 ‖ tr ‖ t̂1; 15,360 / 21,568 B), `mldsa87` 3 (rows
+  0–2 | 3–5 | 6–7 ‖ tr ‖ t̂1; 21,504 / 21,504 / 22,592 B), each one SSTORE2 blob under EIP-170. `UAStore.ekPtr` is
+  `address[3]` (base + 0, + 1 where they were; base + 2 new; pinned in `test/ua/UAStoreLayout.t.sol`), and
+  `expandedKeyOf(bytes32)` returns `address[3]` (same selector, 96 B instead of 64: a caller decoding two words never sees
+  part 2).
+- **A kind on the cache only where its parts fit** (MD-5, a deploy-time check): every part transaction's least working regular
+  gas × 1.05 < 2^24 and (regular + state) × 1.05 ≤ the chain's block gas limit, from the measured figures (`script/DeployGas.sol`;
+  table below); otherwise the kind gets no verifier. A later cut of the block limit under a part stops new keys of that kind
+  from being cached: fail closed (no registration, so no funds), the chain operator's change.
+- **`MLDSA_PRECOMPILE=on|off`** (MD-6, MD-7, MD-15; a deploy flag, no codegen): `on` (default) = the precompile where the
+  chain's probe passes, else the cache; `off` = the cache on every ML-DSA kind, any `MLDSA<x>_VERIFIER` env refused. With
+  `on` a probe call that fails refuses the deploy by name, never the cache silently; a chain whose probe passes and no
+  precompile verifier was handed in refuses by name. The precompile verifiers are built on the chain by
+  `script/pq_verifiers.py` (deploy.sh evm's first step, 0x0130 / 0x0131 / 0x0134 by CREATE2 with `DEPLOY_SALT`), each checked
+  there by `verify` of its `pq_kat.json` row within `cap + cap / 63` gas, and `DeployBase` takes one only at this build's CREATE2
+  address of `MldsaVerifier(kind, its precompile, pq_kat.json's probe)` (F-6). The deploy JSON records `mldsa_precompile` and
+  per kind `mldsa<x>_verifier` and `mldsa<x>_path` (`precompile <address>` | `cache`).
+- **Caps** (MD-11, F-2): the least multiple of 50,000 at least 30,000 above the least working gas (cold pointers) of the
+  **worst accepting input** — the `pq_kat.json` row, the `pq_signatures.json` PoP and signatures, and
+  `smartcontracts/vectors/ua/mldsa_cache.json`'s 16-signature batch with an accepting signature of exactly ω hints (noble):
+  `mldsa44` 4,250,000 (worst 4,187,757), `mldsa65` 5,950,000 (worst 5,910,464, the ω row), **`mldsa87` 8,850,000** (worst
+  8,772,934, the ω row; the spec's 8,800,000 was from one signature). `PqGas.t.sol` asserts `max + 30,000 <= cap`. ACVP's
+  valid cases verify a longer M' (2.8–7.3 KB) the registry never sees (its M' is always 34 B): checked for their verdict on
+  both paths, outside the cap's input domain. Precompile-path caps (200,000 / 200,000 / 250,000) are placeholders until T-GAS
+  measures them on the SCaaS testnet (spec §6.4).
+- **PQZ holders** (MD-13): the debit bound now covers every holder kind, a single key with its own cap; see
+  [CTR-UA-16](#CTR-UA-16) and [CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12).
+- **Security** (spec §3): the cache adds no forgery path as built — the expanded key is derived on-chain by the verifier from
+  the `pk` whose id the registry stores, never from a caller; the parts are immutable SSTORE2 code starting `0x00`, written by
+  the registry only; refused where a precompile is used, so one registry gives one verdict. Its safety rests on `expandKey` =
+  FIPS 204 (ExpandA, `tr` = H(pk, 64), `NTT(t1·2^d)`): checked byte for byte against an independent reference built from
+  @noble/post-quantum 0.7.1's own XOF128 and NTT (12 keys a level, `MlDsa.t.sol` `test_expandedKey_nobleReference`), ACVP
+  sigVer of all three levels through both paths, every `pq_kat.json` mutation through `verify` and `verifyCached`.
+  **`verifyCached` trusts its pointers: only the registry may rely on its verdict** (MD-10; documented, not restricted in code);
+  its `chunks` is an internal verifier interface (packed pointers the registry wrote).
+
+<a id="CTR-UA-39"></a>**CTR-UA-39** — **`mldsa87` (0x0134), ML-DSA-87 (FIPS 204, NIST level V): a precompile where one verifies it, else the
+registry's three-part expanded-key cache** (owner 2026-11-04; Change 2026-11-15 below; [decisions.md](../decisions.md)). BUILT on the EVM (branch `mldsa87`); other families
 PLANNED. Key data the FIPS 204 `pk` (2,592 B), signature
-4,627 B over `pq_msg` with the empty context, as every ML-DSA kind above. Its pure-Solidity verify does not pass the 66 % rule
-(cap ≈ 8.8 M on a cached expanded key, 31.9 M on the FIPS 204 key), so the kind is **disabled wherever no ML-DSA-87 precompile
-answers the EIP-8355 probe** (`0x14`; the SCaaS testnet's `MLDSA87` `0x000000000000000000000000000000005caa0014`), and it has no
-expanded-key cache. As built: `MldsaVerifier(0x0134, …)` reverts `UAMldsaNoPrecompile` without a probed precompile, so
-`DeployBase` configures it only where `_mldsa87Precompile` finds one (`register` reverts `UAKindDisabled` elsewhere); config slot
-12; cap of the precompile path 250,000, a **provisional estimate** until T-GAS measures it on a chain (the SCaaS testnet deploys the
+4,627 B over `pq_msg` with the empty context, as every ML-DSA kind above. Until 2026-11-15 (the Change below supersedes this
+paragraph's Q1): its pure-Solidity verify did not pass the then 66 % rule (cap ≈ 8.8 M on a cached expanded key, 31.9 M on the FIPS
+204 key), so the kind was disabled wherever no ML-DSA-87 precompile answered the EIP-8355 probe (`0x14`; the SCaaS testnet's
+`MLDSA87` `0x000000000000000000000000000000005caa0014`), with no expanded-key cache, `MldsaVerifier(0x0134, …)` reverting
+`UAMldsaNoPrecompile` without one. Config slot 12; cap of the precompile path 250,000, a **provisional estimate** until T-GAS measures it on a chain (the SCaaS testnet deploys the
 verifier outside `forge script`, as `mldsa65`'s, P6g D15). Where enabled it is a PQZ / KEM holder ([CTR-UA-16](#CTR-UA-16)) and PQ weight in an `msig`
 ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)). EVM first: every other family refuses `0x0134` until its own round.
+**Change (owner 2026-11-15, TODO 3zh; BUILT on branch `3zh-mldsa`, EVM; UNAUDITED).** Old: enabled only through a precompile,
+no cache, `MldsaVerifier(0x0134)` reverting `UAMldsaNoPrecompile` without one (Q1: the Solidity verify failed the 66 % rule).
+New: Q1 rewritten — without a precompile `mldsa87` is on the registry's expanded-key cache in **three parts** (rows 0–2 | 3–5 |
+6–7 ‖ tr ‖ t̂1, 21,504 / 21,504 / 22,592 B; a two-part split's part 0 needed ≈ 74 M of block, three parts ≈ 47.9 M) at the cap
+8,850,000 (73.75 % of 12 M, under [CTR-UA-23](#CTR-UA-23)'s 75 %; off on Hedera's 10.5 M by the rule itself); the verifier is
+constructible without a precompile (the old file in `smartcontracts/evm/legacy/3zh-mldsa/`); `ekPtr` holds three pointers.
+Measured: each part transaction 9.19 / 9.19 / 9.68 M regular (least working 10.08 / 10.08 / 10.62 M), state 33.2 / 33.2 / 34.8 M;
+`register` after the cache 9.09 M; the uncached FIPS-key verify 32.55 M (over 2^24). A cached `mldsa87` is a PQZ holder only
+where MD-13's bound fits the set: at `n2048-kmax1024` and `n2304-kmax4096`, not at `n2560-kmax16384` / `n2816-kmax65536`
+([CTR-UA-16](#CTR-UA-16)). On the precompile the cap stays 250,000 (provisional).
 
 <a id="CTR-UA-40"></a>**CTR-UA-40** — **`fndsa1024` (0x0135), Falcon-1024 (round-3 specification v1.2, NIST level V), is enabled
 on every EVM chain in pure Solidity** (owner 2026-11-04; [decisions.md](../decisions.md)). BUILT on the EVM (branch `mldsa87`);
 other families PLANNED. Key data `pk` (1,793 B) =
 `0x0A ‖ h` (1,024 × 14-bit big-endian coefficients, each `< q`); padded signature 1,280 B = `0x3A ‖ salt (40) ‖ compressed s2`,
 zero-padded, over the 32-byte `ua_msg` with SHAKE256 hash-to-point, accept iff `‖s1‖² + ‖s2‖² ≤ 70,265,242`, as `fndsa512` at
-n = 1,024. The measured verify (4.73 M; 4.93 M at the largest NIST KAT) passes the 66 % rule on 12 M and on Hedera's 10.5 M; cap
+n = 1,024. The measured verify (4.73 M; 4.93 M at the largest NIST KAT) passes the 66 % rule (75 % since 2026-11-15) on 12 M and on Hedera's 10.5 M; cap
 5,250,000, **provisional** until T-GAS measures it. No NTT-key cache, no SCaaS testnet precompile. As built: one verifier code for
 both Falcon sizes, `FndsaVerifier(kind)` (`0x0132` or `0x0135`, any other kind reverts `UAFndsaKind`), the library `Falcon` at
 `logn` 9 / 10 with one 2,048-byte zeta table whose first 512 entries are Falcon-512's; `DeployBase` configures it through
@@ -1147,7 +1210,16 @@ supplied in `register(kind, keyData, attrs, pop, pqzPop)` as `attrs.pqzKey` with
 signer's PoP covers; the `R_REG` proof over the portable digest ([CTR-UA-07](#CTR-UA-07)) is **optional** in the call
 (owner 2026-10-25, UA-8 P8). Holders: single-key `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87` (owner 2026-11-04,
 [CTR-UA-39](#CTR-UA-39)), `fndsa1024` (owner 2026-11-04, [CTR-UA-40](#CTR-UA-40)), and an `msig` whose members of kinds other than `0x0130`–`0x0135` weigh less than its threshold ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12));
-every other kind, `slhdsa128s` and Zether included, reverts `UAPqzHolder`. An `msig` holder whose worst-case authorization plus `PqzSet.PQZ_DEBIT_MIN_GAS` (at least the cheapest PQZL debit, full relayed transaction, rounded up to 1,000: [pq-zero-knowledge.md](pq-zero-knowledge.md#debit-min-gas)) and the authorization's own calldata exceeds 2^24 (EIP-7825) reverts `UAPqzHolder` too, so that no holder is registrable but unable to spend ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12), review2 C0-5). A PQ-eligible `msig` always registers with
+every other kind, `slhdsa128s` and Zether included, reverts `UAPqzHolder`. **Change (owner 2026-11-15, MD-13 / F-1; BUILT on
+`3zh-mldsa`):** the debit bound below covers **every** holder kind: a single key counts its kind's cap `w` (`cfg >> 160`; gen 1's
+for a record gen 1 holds) and its signature's calldata (192 + the signature in words), `UAPqzHolder` where `w + w / 63 + margin
++ PQZ_DEBIT_MIN_GAS + 16 × bytes > 2^24`, so a kind that can receive PQZ credits can spend them. Arithmetic at the cached
+`mldsa87` cap 8,850,000: 16.37 / 16.59 / 16.80 / 17.04 M at the four sets, so a cached `mldsa87` is a signing kind everywhere but
+a PQZ holder only at `n2048-kmax1024` and `n2304-kmax4096` (`UARegistryPqzBound.t.sol` `test_register_cachedHolders_thisSet`
+per set); on its precompile (cap 250,000) and the cached `mldsa65` / `mldsa44` it is one at every set. Measured with a cached
+`mldsa87` holder (`PqzRollSignedGas.t.sol` `PqzRollSignedGasSol87Test`, stand-ins at the worst accepting gas): a signed rollover
+of 1–16 entries costs 14.68–16.04 M by `mtxExecute`, under 2^24 but over the 0.75 · 2^24 that sizes `ROLL_MAX`, and 20.6–22.0 M
+with a cached `mldsa65` fee UA (`uaExecute`): no rollover fits, so such a holder relays through an ECDSA envelope. An `msig` holder whose worst-case authorization plus `PqzSet.PQZ_DEBIT_MIN_GAS` (at least the cheapest PQZL debit, full relayed transaction, rounded up to 1,000: [pq-zero-knowledge.md](pq-zero-knowledge.md#debit-min-gas)) and the authorization's own calldata exceeds 2^24 (EIP-7825) reverts `UAPqzHolder` too, so that no holder is registrable but unable to spend ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12), review2 C0-5). A PQ-eligible `msig` always registers with
 its m-of-n `pop` (a squatter could otherwise fix it without a key forever). The PQZ key is not in the id. **Version 0 is written once, without exception** (owner 2026-11-06, group 3g: ruling
 R-cross-set's replacement of a key of another parameter set is retired; a second version 0 reverts `UAPqzKeySet` whatever its
 set): the `register` key, or, for a PQ signer registered without one, `setPqzKey(ua, 0, pqzKey, pqzPopHash, sig)` (controller
@@ -1663,7 +1735,7 @@ interface IUARegistry is IERC5267 {
     function keyOf(bytes32 ua) external view returns (bytes memory);         // stored key (MuSig2 Q, FROST Y, Zether Y, PQ pk), else empty
     /// ML-DSA without a precompile (P6c): part `part` of the expanded key the registry derives from pk, one tx each
     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua);
-    function expandedKeyOf(bytes32 ua) external view returns (address[2] memory);   // stored part pointers (0 = not yet)
+    function expandedKeyOf(bytes32 ua) external view returns (address[3] memory);   // stored part pointers (0 = not yet; 3 since 3zh)
     /// The per-kind list of registered UAs (CTR-UA-29): every kind, appended at registration
     function uaCount(uint16 kind) external view returns (uint256);
     function uaAt(uint16 kind, uint256 i) external view returns (bytes32);
@@ -1884,7 +1956,7 @@ native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by
 | `bls12381-minsig` | G1 sig (128) | `HashToCurve.hashToG1(ua_msg, DST)` with `DST_SIG = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"`, PoP uses `…_POP_`; sig in subgroup, ≠ O |
 | `bls-bn254-minsig` | G1 sig (64) | `mapToG1("SCAAS-UA-BLS-BN254-SIG-V1" ‖ ua_msg)` (POP label for PoP); pairing `0x08` |
 | `msig` | `auth.members`, `MemberSig{uint16 index; InnerSig[] members; bytes sig}` with strictly increasing `index`; the structure is read from the record ([CTR-UA-36](#CTR-UA-36)); a token's `bytes auth` until Part C: `abi.encode(keyData, sig)` with `sig` = `abi.encode(MemberSig[] sigs)` | for each: member `kind,id` from the structure; every `MemberSig.keyData` empty (else `UAUnauthorized`; [CTR-UA-33](#CTR-UA-33)); native ⇒ ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; registered (derived) ⇒ the key from the member's own record: `vk` at its `keyPtr` (stored kinds), else the key data in its registration blob (classical kinds; every member is registered, step 4, and records are immutable); a member of a kind gen 2 does not enable goes to gen 1 with the empty key data (gen 1 reads its record); verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound); an `auth` or `MemberSig[]` that does not ABI-decode reverts without data (fails closed) |
-| `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | ML-DSA: an EIP-8355 precompile if probed, else Solidity on the cached expanded key (`verifyCached`, parts by EXTCODECOPY; P6c); FN-DSA, SLH-DSA (on SHA-256 `0x02`): Solidity; `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context, Falcon `ua_msg` ([CTR-UA-23](#CTR-UA-23); verifiers BUILT, P6a; registry BUILT, P6c) |
+| `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | ML-DSA: an EIP-8355 precompile if probed, else Solidity on the cached expanded key (`verifyCached`, parts by EXTCODECOPY; P6c; never the uncached FIPS-key verify: an incomplete cache is `UAKeyNotCached`, [CTR-UA-23](#CTR-UA-23)); FN-DSA, SLH-DSA (on SHA-256 `0x02`): Solidity; `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context, Falcon `ua_msg` ([CTR-UA-23](#CTR-UA-23); verifiers BUILT, P6a; registry BUILT, P6c) |
 | `zether-bls12381` | `R ‖ z` (160) | Zether Schnorr with tag `SCAAS-ZETHER-SCHNORR-V1` over `ua_msg` — never the UA Schnorr tag, so a Zether key never produces a `schnorr-*` signature |
 
 Members of `msig` (kinds ∈ MEMBER) may be native EOAs, native contracts (Safe, `SmartKeyAccount`), or registered
@@ -1901,7 +1973,7 @@ Per-chain enablement:
 | `bls12381-*`, `schnorr-bls12381`, `zether-bls12381` | chains where the deploy-time `CurveCapability` probe passes (built as `script/UAPrecompileProbe.sol`, asked through `eth_call`: G1MSM/G2MSM return the point within the registry's key-check caps and refuse kinds.json's points outside the subgroup, returndata compared; a k = 2 PAIRING_CHECK within its EIP-2537 price; G1ADD 0x0b and MAP_FP_TO_G1 0x10 answer within their EIP-2537 prices) | EIP-2537 |
 | `bls-bn254-minsig` | every chain where the probe passes the bn254 G2 check (no chain-id lock, owner ruling 2026-10-31; [CTR-UA-23](#CTR-UA-23)) (0x08 refuses kinds.json's G2 point outside the subgroup within `PAIRING_GAS`; a k = 2 pairing within its EIP-1108 price) | ~100-bit pairing security |
 | `zether-bls12381` | every chain but Hedera where the EIP-2537 probe passes ([CTR-ZTH-52](zether.md#CTR-ZTH-52), owner ruling 2026-10-31) | classical Zether |
-| `mldsa44/65`, `fndsa512` | every EVM chain (owner); only ML-DSA probes (EIP-8355); enabled wherever the budget rule passes — `DeployBase` enables each on every chain where its cap is ≤ 66 % of the chain's `UA_VERIFY_BUDGET` (`cap * 100 <= budget * 66`; owner rulings 2026-10-31: no chain-id lock, no audit gate, 66 % instead of 50 %; unaudited label; all four on at 12 M and on Hedera's 10.5 M — there `mldsa65` plus a heavy operation such as relay fee + mandate can come close to the 15 M cap; on Hedera `mldsa44` is usable only if its expanded-key cache step fits Hedera's 15 M per-transaction cap — 12.76 M measured on an osaka anvil, not measured on Hedera), ML-DSA without a precompile on the cached expanded key | Solidity (measured, P6a): ML-DSA-44 / -65 11.4 / 18.9 M (FIPS 204 key; 4.1 / 5.8 M on an expanded key), FN-DSA-512 2.3 M; measured cap ≤ 66 % of the chain's `UA_VERIFY_BUDGET` (owner ruling 2026-10-31), else disabled on that chain ([CTR-UA-23](#CTR-UA-23)) |
+| `mldsa44/65/87`, `fndsa512` | every EVM chain (owner); only ML-DSA probes (EIP-8355); enabled wherever the budget rule passes — `DeployBase` enables each on every chain where its cap is ≤ 75 % of the chain's `UA_VERIFY_BUDGET` (`cap * 100 <= budget * 75`; owner 2026-11-15, was 66 % by the rulings of 2026-10-31: no chain-id lock, no audit gate; an ML-DSA kind on the cache also only where each cache part fits the block, MD-5 in [CTR-UA-23](#CTR-UA-23); `mldsa87` on the cache 8,850,000: on at 12 M, off at Hedera's 10.5 M; unaudited label; all four on at 12 M and on Hedera's 10.5 M — there `mldsa65` plus a heavy operation such as relay fee + mandate can come close to the 15 M cap; on Hedera `mldsa44` is usable only if its expanded-key cache step fits Hedera's 15 M per-transaction cap — 12.76 M measured on an osaka anvil, not measured on Hedera), ML-DSA without a precompile on the cached expanded key | Solidity (measured, P6a): ML-DSA-44 / -65 11.4 / 18.9 M (FIPS 204 key; 4.1 / 5.8 M on an expanded key), FN-DSA-512 2.3 M; measured cap ≤ 66 % of the chain's `UA_VERIFY_BUDGET` (owner ruling 2026-10-31), else disabled on that chain ([CTR-UA-23](#CTR-UA-23)) |
 | `slhdsa128s` | every EVM chain: the P6 gas gate passed; enabled wherever the budget rule passes, unaudited label, no audit gate (owner ruling 2026-10-31, [CTR-UA-23](#CTR-UA-23)); P6c: as `fndsa512` | pure Solidity on SHA-256 `0x02`: 0.79 M valid, 1.32 M worst case (measured, P6a) |
 | scheme `0x0142` `pqz-mlwe` (PQZ key of a PQ signer) | SCaaS testnet only (`PqzKeyVerifier` refuses other chains) | [CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01), [CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10) |
 
@@ -1924,7 +1996,11 @@ Their verifiers probe those precompiles in their constructors, which forge's EVM
 (`script/pq_verifiers.py`, e2e.py's builders) deploys them on the real chain by CREATE2 with `DEPLOY_SALT` and hands them to
 `DeployBase` (`PQZ_KEY_VERIFIER`, `MLDSA87_VERIFIER`; caps 4,500,000 and 250,000); a chain whose precompile does not answer
 skips the verifier by name and the gate requires nothing. Tests: `test/ua/UADeploy.t.sol` `test_gen1KindGate_pqKinds`,
-`test/governance/GovDeploy.t.sol` `test_deployPqzPublishesEveryKind`, `test_deployPqzRefusals`. Soroban (controller call, owner may override; no code): its kinds are
+`test/governance/GovDeploy.t.sol` `test_deployPqzPublishesEveryKind`, `test_deployPqzRefusals`. **Change (owner 2026-11-15, round
+3zh; BUILT on `3zh-mldsa`):** with `MLDSA_PRECOMPILE=on` the same for `mldsa44` 0x0130 / `mldsa65` 0x0131 (`MLDSA44_VERIFIER`,
+`MLDSA65_VERIFIER`; `PqPrecompileProbe` answers per level), the verifier required at its CREATE2 address (F-6), and a probe
+call that fails refuses the deploy (MD-15); with `off` the ML-DSA kinds are on the cache and no ML-DSA precompile is required
+([CTR-UA-23](#CTR-UA-23)'s Change; `UADeploy.t.sol` `test_mldsaPrecompileFlag`, `test_mldsaProbeFailureRefuses`). Soroban (controller call, owner may override; no code): its kinds are
 compiled in and it has no generations — a new kind is a new registry deployment with new tokens bound to it
 ([NET-SOR-17](../networks/soroban.md#NET-SOR-17)); the rule there is "a Soroban registry meant to stay (mainnet) is
 deployed from a build carrying every kind built for Soroban at that time" (so after `zether-soroban`). Tests:
@@ -2299,7 +2375,7 @@ live in the separate `ComplianceRegistry`. This interface was replaced by `IUARe
 | S19 | Credential correlation | dedicated identity UA; no anchor in v1; no personal data on chain; bbs only with per-verifier pseudonyms | presentations under one subject id are linkable by the relying parties that receive them |
 | S20 | Typo in a UA id; Zether UA as receiver | unregistered `to` refused; `to` ∈ native ∪ SIGNING (`UAKindNotAccepted`) | none |
 | S21 | ERC-20 replay of `Transfer` ≠ `balanceOf` | the `UA_POOL` sub-ledger: every native balance change emits `Transfer` | naive tools show one large `UA_POOL` holder |
-| S22 | Gas repricing pushes an enabled kind over budget after funds are held | caps ≤ ~50 % of the budget for the classical kinds, ≤ 66 % for the PQ kinds (owner ruling 2026-10-31); budget ≤ 70 % of the chain cap | a large repricing fork can still lock a PQ/ed25519 UA on that chain until a new generation and v3 version |
+| S22 | Gas repricing pushes an enabled kind over budget after funds are held | caps ≤ ~50 % of the budget for the classical kinds, ≤ 75 % for the PQ kinds (owner 2026-11-15; 66 % by the ruling of 2026-10-31); budget ≤ 70 % of the chain cap | a large repricing fork can still lock a PQ/ed25519 UA on that chain until a new generation and v3 version |
 | S23 | Raw-hash signing by EOAs (`eth_sign` drain) | native signers behind the registry sign EIP-712 `UAAuth` only, except an `msig` native member of a portable record (`pop` v2, `kem`, `pqz-key`), which signs the record's chain-free EIP-712 typed data ([CTR-UA-07](#CTR-UA-07)), never a raw hash; `uaCancelNonce` derived-only | the `secp256k1` kind (0x0108): its verifier checks ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (on-chain review W-J; owner 2026-10-19: recorded residual risk; an EIP-191 `personal_sign` variant after P6, with new vectors and the six clients) |
 | S24 | Native send to a derived id on non-EVM (keyless address) | derived ids shown only as URN, never in the chain's address format | a user who converts the URN by hand |
 | S25 | Membership shown as consent | app rules (members confirm off chain); the MuSig2 PoP proves participation | `msig`/FROST groups found on chain without member confirmations |
@@ -2341,9 +2417,9 @@ member handed to gen 1 — it includes reading the member's key bytes from its r
 | `bls12381-minsig` | 256 + 128 | ~159 k (measured, bounded self-call) | ~6 k (measured) | 200 k |
 | `msig` k-of-n | 4 + 36n + Σ member sig (no member key data, CTR-UA-33) | Σ member verifies (≤ `c` members, stop at threshold) + ~2 k; each member's key read from its record (EXTCODECOPY) | ~5 k | Σ of the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` ≤ `verifyBudget` |
 | `ed25519` | 32 + 64 | ~170 k (measured: 168 k valid, 171 k worst; SHA-512 30 k per block; early reject 2.7 k) | ~6 k (measured) | 210 k |
-| `mldsa44` | 2 420 sig | EIP-8355-class precompile / 11.4 M Solidity on the FIPS 204 key; on the cached expanded key `verifyCached` 4.11 M (measured P6c; `requireAuthorized` of the vector row 4,117,867) | ~7 k (one part pointer, no `pk` read) | 4,250,000 (P6c); ≈ 20 k with a precompile |
-| `mldsa65` | 3 309 sig | 9 k-class precompile / 18.9 M Solidity on the FIPS 204 key; cached 5.80 M (measured P6c; `requireAuthorized` 5,811,372) | ~8 k (as `mldsa44`) | 5,950,000 (P6c); 200,000 on chain 7622's precompile (P6g; `requireAuthorized` measured 301,776 incl. the transaction's intrinsic and calldata) |
-| `mldsa87` | 4 627 sig | precompile only ([CTR-UA-39](#CTR-UA-39)); Solidity would be 31.9 M on the FIPS 204 key, 8.64 M cached (measured, research `mldsa87-evm-gas.md`), over 66 % of the budget: disabled without a precompile | as `mldsa65` (no cache) | 250,000 on a precompile, **provisional estimate** (T-GAS on a chain) |
+| `mldsa44` | 2 420 sig | EIP-8355-class precompile / 11.4 M Solidity on the FIPS 204 key (never a registry path since 2026-11-15); worst accepting input on the cache 4,187,757 least working; on the cached expanded key `verifyCached` 4.11 M (measured P6c; `requireAuthorized` of the vector row 4,117,867) | ~7 k (one part pointer, no `pk` read) | 4,250,000 (P6c); ≈ 20 k with a precompile |
+| `mldsa65` | 3 309 sig | 9 k-class precompile / 18.9 M Solidity on the FIPS 204 key (19,299,937 as its own transaction, **over 2^24**: never a registry path, owner 2026-11-15); worst accepting input on the cache 5,910,464 least working (ω hints); cached 5.80 M (measured P6c; `requireAuthorized` 5,811,372) | ~8 k (as `mldsa44`) | 5,950,000 (P6c); 200,000 on chain 7622's precompile (P6g; `requireAuthorized` measured 301,776 incl. the transaction's intrinsic and calldata) |
+| `mldsa87` | 4 627 sig | precompile, or Solidity on the three-part cache ([CTR-UA-39](#CTR-UA-39), owner 2026-11-15): `verifyCached` 8.86 M as its own transaction, least working 8,772,934 at the worst accepting input (ω hints, three cold pointers); the uncached FIPS-key verify 32,553,838, **over 2^24** (never a registry path); each cache part 9.19 / 9.19 / 9.68 M regular, 33.2 / 33.2 / 34.8 M state; `register` after the cache 9,092,254 (measured 2026-11-15, `UARegistryPq.t.sol`, `PqGas.t.sol`) | ~9 k (three part pointers) | 8,850,000 on the cache; 250,000 on a precompile, **provisional estimate** (T-GAS on a chain) |
 | `fndsa1024` | 1 280 sig | 4.73 M Solidity on the UA row, 4.79–4.93 M on the NIST KAT messages (measured, research `fndsa1024-evm-gas.md`; [CTR-UA-40](#CTR-UA-40)) | as `fndsa512` (no cache) | 5,250,000, **provisional** until T-GAS |
 | `fndsa512` | 666 sig | 2.27–2.35 M Solidity (measured; the hash-to-point and the signature length vary with the message; `requireAuthorized` 2,343,443) | ~5 k + EXTCODECOPY ~1.5 k | 2,500,000 (P6c) |
 | `slhdsa128s` | 7 856 sig | 0.79–0.81 M valid (measured; WOTS+ steps vary with the message), 1.32 M worst; `requireAuthorized` 808,298 | ~5 k + EXTCODECOPY ~2.6 k | 1,400,000 (P6c) |

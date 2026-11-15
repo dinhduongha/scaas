@@ -657,15 +657,16 @@ are drawn from.
 
 <a id="authorization"></a>
 <a id="CTR-PQZ-12"></a>**CTR-PQZ-12** — **Only a PQ signing UA carries a PQZ key; it authorizes every spend** (owner). The holders are
-a registered single-key `mldsa65` / `mldsa44` / `mldsa87` UA (`mldsa87` where a precompile enables it, owner 2026-11-04,
-[CTR-UA-39](accounts.md#CTR-UA-39); `fndsa512` and `fndsa1024` where the registry enables them, the Falcon round-3 specification, owner 2026-11-04 for
+a registered single-key `mldsa65` / `mldsa44` / `mldsa87` UA (`mldsa87` on a precompile, or on the cache where MD-13's bound fits
+the set: `n2048-kmax1024` and `n2304-kmax4096`, owner 2026-11-04 and 2026-11-15, [CTR-UA-39](accounts.md#CTR-UA-39); `fndsa512` and `fndsa1024` where the registry enables them, the Falcon round-3 specification, owner 2026-11-04 for
 `fndsa1024`, [CTR-UA-40](accounts.md#CTR-UA-40)), or a UA `msig`
 whose non-PQ members' total weight is **below** its threshold — so no classical-only subset can authorize. That `msig`
 rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and the t-of-n ML-DSA form; the weight is summed over
 members whose kind is not 0x0130–0x0135 and that are not an `msig` PQ-eligible itself: a forger of every classical key cannot reach such an inner's threshold, so a classical-dominant inner counts its whole outer weight as classical ([CTR-UA-38](accounts.md#CTR-UA-38)) (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
 a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
-override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
+override; for every holder kind since 2026-11-15, owner, MD-13: a single key counts its kind's cap as `w` and
+`192 + ⌈sig / 32⌉ × 32` bytes, [CTR-UA-16](accounts.md#CTR-UA-16)'s Change):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
 (register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one; `setPqzKey` on a gen-2 host counts the native slots of a record gen 1 holds at 400 k, gen 1's clone cap, as a gen-1 inner's) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` plus 16 gas per byte of the authorization's calldata is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit), and so is `PQZ_DEBIT_MIN_GAS` + 64 per byte, the EIP-7976 floor. The bytes `a` are the largest `MemberSig[]` a quorum signs, both levels: a signing slot `192 + ⌈sig / 32⌉ × 32`, an `msig` slot 192 and its leaves, each `128 + ⌈sig / 32⌉ × 32`, a PQ signature at its size, every classical kind and native at 1,024 B. The debit figure holds one holder signature, which is counted again, on the safe side.
 <a id="debit-min-gas"></a>`PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: **at least** the full relayed transaction of the

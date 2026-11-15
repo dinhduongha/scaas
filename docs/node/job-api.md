@@ -634,6 +634,20 @@ global (a digest is the intent's identity; a call hash is not). An earlier key `
 with `allow_call` hold another tenant's retry at `409 DUPLICATE_CALL`. Two tenants may each queue the same call; the target
 refuses the second.
 
+<a id="NODE-JOB-29"></a>**NODE-JOB-29** (SPECIFIED, owner 2026-11-15, TODO 3zh MD-14; built in the ua-rs-sign port round) — **An ML-DSA
+registration on a registry without the precompile is preceded by its cache parts**
+([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)'s Change: `register` reverts `UAKeyNotCached` before every part is stored). For
+`POST /v1/ua/register` of kind 0x0130 / 0x0131 / 0x0134 on a chain whose registry's verifier of that kind has no precompile
+(`PRECOMPILE()` 0), the gateway queues the node's own `cacheExpandedKey` `call` jobs first, one per part (`PqUA.mldsaParts`:
+1 / 2 / 3), each with named fields `kind`, `pk` (the registration's key data), `part`; the node builds the calldata
+`cacheExpandedKey(uint16,bytes,uint256)` from them (no hex), sends each with an explicit gas limit ([NET-EVM-11](../networks/evm.md#NET-EVM-11):
+the measured regular + state × 1.05 within the block gas limit, 40–48 M), skips a part already stored (`expandedKeyOf`), and
+leases the `register` job only after every part landed. The row is `PERMISSIONLESS` (anyone may send a part; it writes only what
+the registry derives from `pk`); the allow-lists (`guard.rs`, `CALL_TABLE`, `typed.rs`) gain it in both directions against the
+contract's entries. `UAKeyNotCached(ua)` on a simulation or a receipt maps to `UA_KEY_NOT_CACHED` (the job stays `queued` while
+a part may still land, never `dead`). Clients (`clientkeys`, `ua-rs`) get a builder of the part transactions and the
+cache-then-register order for a subject that sends them itself.
+
 <a id="NODE-JOB-15"></a>**NODE-JOB-15** (open; default applied) — The namespace created for an ERP client that
 migrates from the legacy pull path gets `allow_call = true` (mandates and subject accounts need it).
 
