@@ -1,0 +1,19 @@
+# gate 3zh-core-g1c (set n2304-kmax4096): e33cfc758327c4b03c4bb18d9b68296951858f72, 2026-11-15T09:29Z
+set n2304-kmax4096
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== fnv
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== fuzz
+   ok
+gate 3zh-core-g1c (set n2304-kmax4096): PASS

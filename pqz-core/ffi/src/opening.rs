@@ -23,6 +23,12 @@
 //! scheme 1 with fixed randomness (`encaps` as ua-rs `wallet/kem.rs`); ML-KEM's implicit rejection and a small-order
 //! X25519 point both end in the same outcome. Timing: the check stops at the first failing step (local work only; the
 //! wallet reports nothing but the outcome).
+//!
+//! Wiping (best effort, as `pqzl::clear`): the explicit secrets are cleared on every exit; the ML-KEM decapsulation key,
+//! the KEK's AES-256 key schedule, the GHASH key and the X25519 types clear on drop (their crates' `zeroize` features).
+//! Not reached: the SHA3-256 / SHAKE256 / Keccak / HKDF-SHA256 states that absorbed `ss_M`, `ss_X`, `seed_leg` or
+//! `seed_enc` (`combine`, `coins`, `kek`, the `Sealer` key; the `sha3` / `sha2` / `hkdf` crates give no hook), copies
+//! passed by value, and register spills (3zh Fable F-5).
 use crate::pqzl::{self as pl, PK_BYTES};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -97,9 +103,15 @@ pub fn enc_split(
         return None;
     }
     let own = pl::enc(&[pk_f], &[d_f], seed_enc)?;
-    let seed_leg = leg_seed(seed_enc, to_ua, pk_t);
+    let mut seed_leg = leg_seed(seed_enc, to_ua, pk_t);
     let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(pk_t).chain(pk_a).collect();
-    let leg = pl::enc(&pks, &vec![d; pks.len()], &seed_leg)?;
+    let mut msgs = vec![d; pks.len()];
+    let leg = pl::enc(&pks, &msgs, &seed_leg);
+    msgs.iter_mut().for_each(|m| pl::clear(m)); // the amount's digits (review 3w-delta U2-1)
+    let Some(leg) = leg else {
+        pl::clear(&mut seed_leg); // an error exit before the clearing `Split` exists (U2-1)
+        return None;
+    };
     let s = Split { own, leg, seed_leg };
     (s.own.u != s.leg.u).then_some(s)
 }
@@ -131,8 +143,10 @@ fn sk_x(seed: &[u8; 96]) -> [u8; 32] {
 
 /// `kemPk = 0x01 ‖ ek ‖ X25519(sk_X, 9)` of an opening KEM seed.
 pub fn open_kem_pk(seed: &[u8; 96]) -> Vec<u8> {
-    let ek = dk_of(seed).encapsulation_key().to_bytes();
-    let pk_x = MontgomeryPoint::mul_base_clamped(sk_x(seed)).to_bytes();
+    let ek = dk_of(seed).encapsulation_key().to_bytes(); // the decapsulation key is cleared on drop (ml-kem `zeroize`)
+    let mut skx = sk_x(seed);
+    let pk_x = MontgomeryPoint::mul_base_clamped(skx).to_bytes();
+    pl::clear(&mut skx);
     [&[1u8][..], &ek, &pk_x].concat()
 }
 
@@ -211,23 +225,114 @@ pub fn seal(role: Role, c: &Credit, p: &Party, seed_leg: &[u8; 32]) -> Option<Ve
     let (ek, pk_x) = kem_pk[1..].split_at(EK);
     let ek = Ek::new(&ml_kem::Key::<Ek>::try_from(ek).ok()?).ok()?;
     let pk_x: [u8; 32] = pk_x.try_into().ok()?;
+    // the coins, the ML-KEM message m, the X25519 secret e and ss_X are cleared on every exit after this point
+    // (review 3w-delta U2-1); copies the compiler makes (e and m passed by value) are not reached
     let mut cn = coins(seed_leg, role, kem_pk);
-    let e: [u8; 32] = cn[32..].try_into().ok()?;
-    let ss_x = MontgomeryPoint(pk_x).mul_clamped(e).to_bytes();
-    let big_e = MontgomeryPoint::mul_base_clamped(e).to_bytes();
-    let m = ml_kem::B32::try_from(&cn[..32]).ok()?;
+    let mut e: [u8; 32] = cn[32..].try_into().expect("32 bytes");
+    let mut m = ml_kem::B32::try_from(&cn[..32]).expect("32 bytes");
     pl::clear(&mut cn);
-    if ss_x == [0; 32] {
-        return None;
+    let mut ss_x = MontgomeryPoint(pk_x).mul_clamped(e).to_bytes();
+    let big_e = MontgomeryPoint::mul_base_clamped(e).to_bytes();
+    pl::clear(&mut e);
+    let out = (ss_x != [0; 32]).then(|| {
+        let (ct, mut ss_m) = ek.encapsulate_deterministic(&m);
+        let mut ss = combine(&ss_m, &ss_x, &big_e, &pk_x);
+        pl::clear(&mut ss_m);
+        let mut k = kek(&ss);
+        pl::clear(&mut ss);
+        let sealed = Aes256Gcm::new_from_slice(&k).expect("32-byte key").encrypt(Nonce::from_slice(&[0; 12]), Payload { msg: seed_leg, aad: &aad(c, p) });
+        pl::clear(&mut k);
+        sealed.ok().map(|s| [&ct[..], &big_e, &s].concat())
+    });
+    pl::clear(&mut m);
+    pl::clear(&mut ss_x);
+    out.flatten()
+}
+
+/// Why [`Sealer::seal_leg`] refused (review 3w-delta, the seal-side `seed_enc` repeat guard; owner 2026-11-15).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SealError {
+    /// this `seed_enc` was sealed for another credit before (another amount, recipient, token, chain or key)
+    SeedReused,
+    /// the table holds [`SEALER_CAP`] seeds: it refuses, it never evicts
+    Full,
+    /// [`seal`]'s own refusal (`kemPk` not scheme 1, wrong length, ek >= q, small-order `pk_X`), no auditor copy for
+    /// [`Role::Auditor`], or a `seed_enc` whose leg expansion does not give the credit's `u` (K3-7 step 6's check: the
+    /// recipient would skip that credit; 3zh Fable F-8)
+    Refused,
+}
+
+/// The most `seed_enc` values one [`Sealer`] remembers. **Caller rule** (3zh Fable F-8): one `Sealer` per wallet
+/// process, kept for the process's life and used for every opening it builds; `Full` after 4,096 distinct seeds is
+/// permanent for that `Sealer` (the wallet then ends the process; a new `Sealer` inside the same process would forget
+/// every seed); across processes CTR-PQZ-19's fresh salt per build is the guarantee.
+pub const SEALER_CAP: usize = 4096;
+
+/// The sender's sealer with the `seed_enc` repeat guard: one `seed_enc` seals one credit only (its recipient's and
+/// its auditor's openings, as often as asked), never a second one, whose GCM key and nonce (K3-6's coins) and PQZ
+/// randomness (CTR-PQZ-19) would repeat. Caller-owned and in memory: it catches a repeat within one process only (a
+/// restart forgets; CTR-PQZ-19's fresh salt stays the guarantee across processes). It keeps `SHA3-256(label ‖
+/// seed_enc)` and the credit's fingerprint, never `seed_enc`. The openings are byte-identical to [`seal`]'s, which the
+/// holder check keeps using (K3-7 step 8 re-seals on purpose).
+#[derive(Default)]
+pub struct Sealer {
+    seen: std::collections::HashMap<[u8; 32], [u8; 32]>,
+}
+
+impl Sealer {
+    pub fn new() -> Sealer {
+        Sealer::default()
     }
-    let (ct, mut ss_m) = ek.encapsulate_deterministic(&m);
-    let mut ss = combine(&ss_m, &ss_x, &big_e, &pk_x);
-    pl::clear(&mut ss_m);
-    let mut k = kek(&ss);
-    pl::clear(&mut ss);
-    let sealed = Aes256Gcm::new_from_slice(&k).expect("32-byte key").encrypt(Nonce::from_slice(&[0; 12]), Payload { msg: seed_leg, aad: &aad(c, p) });
-    pl::clear(&mut k);
-    Some([&ct[..], &big_e, &sealed.ok()?].concat())
+
+    /// The opening of the leg of `c` for `role` (its recipient `c.to`, or its auditor), with `seed_leg` derived here
+    /// from `seed_enc` (K3-4), so it cannot drift from the credit's recipient and key; `own_u`, `own_v` are the sender's
+    /// own `u_f`, `v_f` of the same build (from `seed_enc` too). Fail closed: no opening on any error.
+    pub fn seal_leg(
+        &mut self,
+        seed_enc: &[u8; 32],
+        role: Role,
+        c: &Credit,
+        own_u: &[u8; PK_BYTES],
+        own_v: &[u8; 128],
+    ) -> Result<Vec<u8>, SealError> {
+        let p = match role {
+            Role::Recipient => c.to,
+            Role::Auditor => c.auditor.ok_or(SealError::Refused)?,
+        };
+        let mut h = Sha3_256::new();
+        Digest::update(&mut h, b"SCAAS-PQZ-SEAL-GUARD-SEED-V1");
+        Digest::update(&mut h, seed_enc);
+        let key: [u8; 32] = h.finalize().into();
+        let fp = credit_fingerprint(c, own_u, own_v);
+        match self.seen.get(&key) {
+            Some(f) if *f != fp => return Err(SealError::SeedReused),
+            None if self.seen.len() >= SEALER_CAP => return Err(SealError::Full),
+            _ => {}
+        }
+        let mut seed_leg = leg_seed(seed_enc, c.to.ua, c.to.pk);
+        // F-8: the seed must give the credit's u (K3-7 step 6), else the recipient skips the credit
+        let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(c.to.pk).chain(c.auditor.map(|a| a.pk)).collect();
+        let gives_u = pl::enc(&pks, &vec![[0u8; 16]; pks.len()], &seed_leg).is_some_and(|mut e| {
+            let ok = e.u[..] == c.u[..];
+            e.vs.iter_mut().for_each(|v| pl::clear(v)); // the credit's masks (U2-1)
+            ok
+        });
+        let out = if gives_u { seal(role, c, &p, &seed_leg) } else { None };
+        pl::clear(&mut seed_leg);
+        let out = out.ok_or(SealError::Refused)?;
+        self.seen.insert(key, fp);
+        Ok(out)
+    }
+}
+
+/// The credit's fingerprint (3zh Fable F-2): every input of the build `seed_enc` fixes, so its reuse with any other is
+/// a repeat: `keccak256("SCAAS-PQZ-SEAL-GUARD-V1" ‖ chainUid ‖ token ‖ P(u) ‖ party(to) ‖ [party(auditor)] ‖ P(u_f) ‖
+/// P(v_f))`, `party(p) = ua ‖ be8(keyVersion) ‖ keccak256(pk) ‖ keccak256(kemPk) ‖ P(v)` (each reader's AAD inputs and
+/// its key). Both roles of one credit share it.
+fn credit_fingerprint(c: &Credit, own_u: &[u8; PK_BYTES], own_v: &[u8; 128]) -> [u8; 32] {
+    let party = |p: &Party| [&p.ua[..], &p.key_version.to_be_bytes(), &keccak(&[&p.pk[..]]), &keccak(&[p.kem_pk]), &pack(&p.v[..])].concat();
+    let aud = c.auditor.map(|a| party(&a)).unwrap_or_default();
+    keccak(&[b"SCAAS-PQZ-SEAL-GUARD-V1", c.chain_uid, c.token, &pack(&c.u[..]), &party(&c.to), &aud, &pack(&own_u[..]), &pack(&own_v[..])])
 }
 
 /// K3-7 steps 3–4: decapsulate `p.opening` with the opening KEM seed and open the sealed seed.
@@ -239,11 +344,14 @@ fn open(seed: &[u8; 96], c: &Credit, p: &Party) -> Option<[u8; 32]> {
     let (eph, sealed) = rest.split_at(32);
     let eph: [u8; 32] = eph.try_into().ok()?;
     let ct = ml_kem::Ciphertext::<MlKem1024>::try_from(ct).ok()?;
-    let mut ss_x = MontgomeryPoint(eph).mul_clamped(sk_x(seed)).to_bytes();
+    let mut skx = sk_x(seed);
+    let mut ss_x = MontgomeryPoint(eph).mul_clamped(skx).to_bytes();
+    pl::clear(&mut skx);
     if ss_x == [0; 32] {
         return None; // a small-order E: the same outcome as any other failure
     }
-    let mut ss_m = dk_of(seed).decapsulate(&ct); // implicit rejection: a wrong ct gives another ss
+    // implicit rejection: a wrong ct gives another ss; the decapsulation key is cleared on drop (ml-kem `zeroize`)
+    let mut ss_m = dk_of(seed).decapsulate(&ct);
     let mut ss = combine(&ss_m, &ss_x, &eph, &p.kem_pk[1 + EK..]);
     pl::clear(&mut ss_m);
     pl::clear(&mut ss_x);
@@ -284,17 +392,21 @@ fn digits(v: &[u8; 128], v0: &[u8; 128]) -> Option<[u8; 16]> {
 fn verify_leg(c: &Credit, seed_leg: &[u8; 32]) -> Option<(Option<[u8; 16]>, Option<[u8; 16]>, bool, bool)> {
     let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(c.to.pk).chain(c.auditor.map(|a| a.pk)).collect();
     // step 5: the pinned sampler (resampled to the relation's norm bounds) with zero messages
-    let exp = pl::enc(&pks, &vec![[0u8; 16]; pks.len()], seed_leg)?;
-    if exp.u[..] != c.u[..] {
-        return None; // step 6: packed bytes, not values mod q
-    }
-    let d_t = digits(c.to.v, &exp.vs[0]); // step 7
-    let o_t = seal(Role::Recipient, c, &c.to, seed_leg).is_some_and(|o| o == c.to.opening); // step 8
-    let (d_a, o_a) = match c.auditor {
-        Some(a) => (digits(a.v, &exp.vs[1]), seal(Role::Auditor, c, &a, seed_leg).is_some_and(|o| o == a.opening)),
-        None => (None, true),
-    };
-    Some((d_t, d_a, o_t, o_a))
+    let mut exp = pl::enc(&pks, &vec![[0u8; 16]; pks.len()], seed_leg)?;
+    // step 6: packed bytes, not values mod q
+    let r = (exp.u[..] == c.u[..]).then(|| {
+        let d_t = digits(c.to.v, &exp.vs[0]); // step 7
+        let o_t = seal(Role::Recipient, c, &c.to, seed_leg).is_some_and(|o| o == c.to.opening); // step 8
+        let (d_a, o_a) = match c.auditor {
+            Some(a) => (digits(a.v, &exp.vs[1]), seal(Role::Auditor, c, &a, seed_leg).is_some_and(|o| o == a.opening)),
+            None => (None, true),
+        };
+        (d_t, d_a, o_t, o_a)
+    });
+    // the zero-message encryptions are the credit's masks (v - v0 = Δ·d): cleared on every exit (review 3w-delta
+    // U2-1); `Enc`'s drop clears r, e1, e2
+    exp.vs.iter_mut().for_each(|v| pl::clear(v));
+    r
 }
 
 /// K3-7 for the recipient, with its opening KEM seed of the key version the leg is encrypted to: the 16 digits of an

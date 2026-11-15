@@ -184,7 +184,7 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
     }
 }
 
-/// @notice The holder's ML-DSA-65 signature through its precompile at the gas table's 68,006 [estimate] (a `GasBurner`; its fee UA on
+/// @notice The holder's ML-DSA-65 signature through its precompile at the gas table's 100,006 [estimate] (a `GasBurner`; its fee UA on
 ///         `uaExecute` the same kind), for a single `mldsa65` holder and a 2-of-2 `mldsa65` `msig`.
 contract PqzRollSignedGasTest is PqzRollSignedGasBase {
     function setUp() public {
@@ -199,7 +199,7 @@ contract PqzRollSignedGasTest is PqzRollSignedGasBase {
     }
 
     function _burners() internal override {
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
     }
 
     function test_rollSigned_mldsa65_mtxExecute() public { _pinned("mldsa65 (precompile)", false, false, ML65_SIG); }

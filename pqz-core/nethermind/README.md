@@ -57,7 +57,7 @@ was the literal 393,216 of `n2048-kmax1024`).
 |---|---|---|---|
 | `0x000000000000000000000000000000005caa0f01` | `PQZ` | a proof of either proof system (PQZL or PQZH), through `pqz-ffi`'s C function `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` — the multi-recipient transfer (op 7) also `(M, auditorOn)` from header words 320 / 448 — + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
 | `0x000000000000000000000000000000005caa0012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image); never reverts: a short input or a `CryptographicException` from .NET is `…00` (review W-R); any other exception in the call is `PQZ-NODE-FAULT` and exit 120, as a managed exception in a `PQZ` call (D4, review 3w T-16) | `mldsa44Gas` (≥ 6,500; calibrated 59,000 on 2026-11-15, `MlDsa.Calibrated44Gas`; was 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
-| `0x000000000000000000000000000000005caa0013` | `MLDSA65` | the same for ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 68,000; measured 88,000–100,000 on 2026-11-15, deferred by the owner) + 6·⌈max(0, L − 5,261)/32⌉ |
+| `0x000000000000000000000000000000005caa0013` | `MLDSA65` | the same for ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 100,000 on 2026-11-15, `MlDsa.Calibrated65Gas`, TODO 3zg; was 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
 | `0x000000000000000000000000000000005caa0014` | `MLDSA87` | the same for ML-DSA-87 (CTR-UA-39, owner 2026-11-04); active only under a schedule that carries `mldsa87Gas` | `mldsa87Gas` (optional per schedule, ≥ 13,500; **135,000**, `MlDsa.Calibrated87Gas`, calibrated 2026-11-15, `runs/2026-11-15-mldsa87-calib.txt`; reset 1's schedule 1 carries the provisional 102,000) + 6·⌈max(0, L − 7,219)/32⌉ |
 
 How to read the gas column: `id` is the statement's `proofSystemId`, `stmtLen` its length in bytes and `len` the
@@ -269,6 +269,16 @@ throwaway container: a library with one appended byte gives `PQZ-REFUSE … != t
 allowlist) for `-f Dockerfile`; the default build sends 16 MB (`runs/2026-10-22-default-context-check.txt`). (e)
 `e2e.py burst` / `fill` pick the largest input under the calldata floor and size `tx.gas` by `intrinsic()` (M2; not
 run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3), timing / gas calibration.
+
+<a id="prices-calibrated-2026-11-15"></a>
+## Prices (calibrated 2026-11-15, the three-key ids)
+
+`chain/engine-pqz.json` = `runs/2026-11-15-3zh-calib-engine-pqz.json` (3zh-core, owner 2026-11-15): the 26
+`n2304-kmax4096` rows under the three-key ids (PQZH v4, PQZL v6), calibrated in the image `2.2.0-pqz10-calib` (library
+`f397d9c1…0f31`) by the method and rule below, unchanged: two runs in slices, one ecMul baseline 0.016 ms,
+`min(provisional, max(run 1, run 2))`; `selftestGas` 2,012,000. Rows and the three kept at the provisional price:
+`runs/2026-11-15-3zh-calib-rows.md`. It passes the start-up id check (`chain/check-provisional-ids.py`). Live on the
+SCaaS testnet from reset 5; until then the testnet runs `engine-pqz-provisional-n2304.json`.
 
 <a id="prices-calibrated-2026-10-31"></a>
 ## Prices (calibrated 2026-10-31)

@@ -10,18 +10,25 @@ import { keccak_256, shake256 } from '@noble/hashes/sha3.js';
 import { gcm } from '@noble/ciphers/aes.js';
 import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
 import { x25519 } from '@noble/curves/ed25519.js';
-import { concatBytes, utf8ToBytes } from './bytes.js';
+import { concatBytes, utf8ToBytes, fromHex } from './bytes.js';
 import { encaps, combine, checkKemPk, kemKey } from './pqchat.js';
 import { pqzOwnTag } from './evm.js';
 import { uaMessage, portableDomainSeparator } from './ua.js';
 import { isPqzWallet, pqzUnpack } from './pqzopenWasm.js';
 
+// review 3w-delta U4h-3: a malformed value is refused, never changed (an odd nibble, a non-hex pair, an out-of-range integer).
 const asBytes = (x, n, what) => {
-  const b = typeof x === 'string' ? Uint8Array.from((x.startsWith('0x') ? x.slice(2) : x).match(/../g) ?? [], (h) => parseInt(h, 16)) : x;
+  let b = x;
+  if (typeof x === 'string') {
+    try { b = fromHex(x); } catch { throw new Error(`${what}: not hex`); }
+  }
   if (!(b instanceof Uint8Array) || (n !== undefined && b.length !== n)) throw new Error(`${what}: ${n ?? 'some'} bytes`);
   return b;
 };
-const u32 = (x) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, x); return b; };
+const u32 = (x, what) => {
+  if (!Number.isInteger(x) || x < 0 || x > 0xffffffff) throw new Error(`${what} must be an integer in [0, 2^32)`);
+  const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, x); return b;
+};
 const be64 = (v) => {
   const x = BigInt(v);
   if (x < 0n || x >= 1n << 64n) throw new Error('version must be a uint64');
@@ -36,7 +43,7 @@ const be64 = (v) => {
 function scopedKeySeed(seed, { account, index, chainUid, token, version }) {
   asBytes(seed, 64, 'seed');
   const label = token === undefined ? 'scaas.ua.pqz-mlwe.offchain-shared.v1' : 'scaas.ua.pqz-mlwe.offchain-token.v1';
-  const info = concatBytes(utf8ToBytes(label), u32(account), u32(index), asBytes(chainUid, 32, 'chainUid'),
+  const info = concatBytes(utf8ToBytes(label), u32(account, 'account'), u32(index, 'index'), asBytes(chainUid, 32, 'chainUid'),
     token === undefined ? new Uint8Array(0) : asBytes(token, 20, 'token'), be64(version));
   return hkdf(sha256, seed, utf8ToBytes('scaas.ua.pq.v1'), info, 32);
 }
@@ -74,7 +81,7 @@ export function legSeed(seedEnc, toUA, pkT) {
 
 /** `legSeed` with `keccak256(pk_t)` given (the vectors carry the hash, a wallet the key). */
 export function legSeedOfKeyHash(seedEnc, toUA, pkTHash) {
-  return shake256(concatBytes(utf8ToBytes('SCAAS-PQZ-ENC-LEG-V1'), asBytes(seedEnc, 32, 'seed_enc'), u32(0),
+  return shake256(concatBytes(utf8ToBytes('SCAAS-PQZ-ENC-LEG-V1'), asBytes(seedEnc, 32, 'seed_enc'), u32(0, 'leg'),
     asBytes(toUA, 32, 'toUA'), asBytes(pkTHash, 32, 'keccak256(pk_t)')), { dkLen: 32 });
 }
 
@@ -132,7 +139,10 @@ export const SKIP = 1n << 63n;
 export const OPENING = 1648;
 const slotOf = (slot) => (typeof slot === 'bigint' ? slot : BigInt(hexOf(asBytes(slot, 32, 'slot'))));
 const hexOf = (b) => '0x' + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
-const w256 = (v) => { let x = BigInt(v); const o = new Uint8Array(32); for (let i = 31; i >= 0; i--) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
+const w256 = (v) => {
+  let x = BigInt(v);
+  if (x < 0n || x >= 1n << 256n) throw new Error('a uint256 word is in [0, 2^256)');
+  const o = new Uint8Array(32); for (let i = 31; i >= 0; i--) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
 /** The pending slot `blob(160) ‖ offset(16) ‖ length(16) ‖ block(64)` (a bigint, or 32 bytes / hex) is skip-marked. */
 export const pqzSlotMarked = (slot) => (slotOf(slot) & SKIP) !== 0n;
 /** … is a TRIVIAL entry (length 0, no blob). */
@@ -251,6 +261,7 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
   const live = () => { if (pqzSeed === null) refuse('this handle was wiped'); return pqzSeed; };
 
   function check(credit, verify) {
+    live(); // review 3w-delta U4h-4: a wiped handle refuses, it never yields a (markable) skip
     const slot = slotOf(credit.slot);
     if (pqzSlotTrivial(slot)) refuse('a TRIVIAL entry is accepted without a check');
     const code = asBytes(credit.code, undefined, 'code');

@@ -11,7 +11,9 @@ namespace Nethermind.Pqz;
 /// schedule's price (≥ EIP-8355's BASE) + 6·⌈max(0, L − PK − SIG)/32⌉. A <see cref="CryptographicException"/> from the
 /// import or the verify is 32 zero bytes too (review W-R, 2026-10-19: EIP-8355 never reverts; no input is known to
 /// raise one, the harness reached none). Any other exception is a fault of this node, never a verdict (D4, review 3w
-/// T-16): <see cref="PqzPrecompile.NodeFault(string, ReadOnlySpan{byte})"/>, exit 120.</summary>
+/// T-16): <see cref="PqzPrecompile.NodeFault(string, Exception, ReadOnlySpan{byte})"/>, exit 120. The whole operation,
+/// the output allocation included, is inside that boundary; the zero word's warning cannot change the word (review
+/// 3w-delta U3h-2).</summary>
 public static class MlDsa
 {
     public const long Base44 = 6_500, Base65 = 9_000, Base87 = 13_500;
@@ -24,6 +26,9 @@ public static class MlDsa
     /// <summary>Calibrated <c>mldsa44Gas</c> from the same two passes (owner 2026-11-15: the higher pass), 59,000 / 58,000
     /// (was 49,000, P6f 2026-10-15). The value <c>add-schedule.py --mldsa</c> writes; the plugin prices from the schedule.</summary>
     public const long Calibrated44Gas = 59_000;
+    /// <summary>Calibrated <c>mldsa65Gas</c> from the same two passes (owner 2026-11-15, TODO 3zg: the higher pass), 100,000 /
+    /// 88,000 (was 68,000, P6f 2026-10-15). The value <c>add-schedule.py --mldsa</c> writes; the plugin prices from the schedule.</summary>
+    public const long Calibrated65Gas = 100_000;
 
     public static long Gas(int len, int pk, int sig, long price) => price + 6L * ((Math.Max(0, len - pk - sig) + 31L) / 32);
 
@@ -34,22 +39,39 @@ public static class MlDsa
     /// <summary><paramref name="verify"/> is the seam the tests use to raise an exception.</summary>
     public static byte[] Verify(MLDsaAlgorithm alg, int pk, int sig, ReadOnlySpan<byte> input, VerifyFn verify)
     {
-        byte[] output = new byte[32];
-        if (input.Length < pk + sig) return output;
         try
         {
-            if (verify(alg, input[..pk], input.Slice(pk, sig), input[(pk + sig)..])) output[31] = 1;
-        }
-        catch (CryptographicException e)
-        {
-            if (PqzPrecompile.Log.IsWarn) PqzPrecompile.Log.Warn($"MLDSA-CRYPTO-EXCEPTION {alg.Name} len={input.Length}: {e.Message}: …00");
+            byte[] output = new byte[32];
+            if (input.Length < pk + sig) return output;
+            try
+            {
+                if (verify(alg, input[..pk], input.Slice(pk, sig), input[(pk + sig)..])) output[31] = 1;
+            }
+            catch (CryptographicException e)
+            {
+                WarnCrypto(alg, input.Length, e); // W-R: the zero word
+            }
+            return output;
         }
         catch (Exception e)
         {
-            PqzPrecompile.NodeFault($"{alg.Name} {e.GetType().Name}: {e.Message}", input);
+            PqzPrecompile.NodeFault(alg.Name + " ", e, input);
             throw; // not reached (NodeFault exits); a failed call, never a verdict
         }
-        return output;
+    }
+
+    /// <summary>W-R's warning, best effort: a logger (or a <c>Message</c>) that throws is swallowed, so the word stays
+    /// the zero word on every node (it does not depend on the log; review 3w-delta U3h-2).</summary>
+    private static void WarnCrypto(MLDsaAlgorithm alg, int len, CryptographicException e)
+    {
+        try
+        {
+            if (PqzPrecompile.Log.IsWarn) PqzPrecompile.Log.Warn($"MLDSA-CRYPTO-EXCEPTION {alg.Name} len={len}: {e.Message}: …00");
+        }
+        catch
+        {
+            // the word is the zero word regardless
+        }
     }
 
     private static bool VerifyPure(MLDsaAlgorithm alg, ReadOnlySpan<byte> pk, ReadOnlySpan<byte> sig, ReadOnlySpan<byte> msg)

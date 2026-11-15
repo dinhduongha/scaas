@@ -1,8 +1,9 @@
 # Spec: ML-DSA on the EVM, precompile or expanded-key cache
 
-2026-11-15. Status of every section: **SPECIFIED**. An uncommitted work-in-progress exists on branch `3zh-mldsa`
-(from `ua-mtx-merge` `ebd6eb4a9`); the measured figures below come from it (forge 1.8.5, Amsterdam, `isolate`, regular =
-`lastCallGas` × 64/63), the rest is marked [estimate]. Everything cryptographic is **UNAUDITED**. Rule ids here are local
+2026-11-15. Status: the contract sections (MD-1 .. MD-13, MD-15) **BUILT** on branch `3zh-mldsa` (`ba98edc41`, merged
+into `ua-mtx-merge` `0df1aea32`); MD-14 (the node job and the client builders) **SPECIFIED**, built in the `ua-rs-sign`
+port round. The measured figures below come from that build (forge 1.8.5, Amsterdam, `isolate`, regular =
+`lastCallGas` × 64/63; MD-13's re-measured in 3zh-core group 2), the rest is marked [estimate]. Everything cryptographic is **UNAUDITED**. Rule ids here are local
 (`MD-n`); the build round turns them into Changes of CTR-UA-23 / CTR-UA-39 and NET-EVM-06 / -11 and a `decisions.md`
 entry with §0 verbatim. **Scope: EVM.** A grep of every other family (soroban, solana, near, algorand, move, ton, cosmos)
 and of `scaas-node/src` finds no 66 % rule and no ML-DSA cap (ML-DSA appears only in Soroban's `spike/` and `runs/`):
@@ -124,7 +125,19 @@ verdict. An integrator calling it directly gets a meaningless verdict.
 `register` / `setPqzKey` refuses `UAPqzHolder` where `w + w/63 + margin + PQZ_DEBIT_MIN_GAS + calldata > 2^24`, so a kind
 that can receive PQZ credits can always spend them. Arithmetic at cap 8.8 M: 16.24 / 16.46 / 16.67 / 16.91 M at the four sets
 (`PQZ_DEBIT_MIN_GAS` 7.30 / 7.52 / 7.73 / 7.97 M): a cached mldsa87 is a signing kind everywhere but **not a PQZ holder at
-n2816-kmax65536** (and within 0.6 % at n2560): stated in CTR-UA-16 / CTR-PQZ-12. Tests per set: the cheapest debit and a
+n2816-kmax65536** (and within 0.6 % at n2560): stated in CTR-UA-16 / CTR-PQZ-12. Measured as built (3zh-mldsa, `DeployBase`'s
+cap 8,850,000, `test_register_cachedHolders_thisSet`): 16,372,788 / 16,588,788 / 16,801,788 / 17,042,788, a holder at n2048 and
+n2304 only. **Re-measured 3zh-core group 2 (2026-11-15)**, `PQZ_DEBIT_MIN_GAS` 7,364,000 / 6,074,000 / 7,793,000 / 8,033,000
+(ML-DSA-65 at 100,006; n2304 at its calibrated rows): the bound 16,436,788 / **15,146,788** / 16,865,788 / 17,105,788, the
+largest single mldsa87 cap that fits 9,185,109 / 10,454,953 / 8,762,812 / 8,526,562 (`test_register_singleHolderBoundary_mldsa87`);
+the 44 / 65 cached caps 11.73 / 13.47 M at n2048 … 12.40 / 14.14 M at n2816. **What fits per single kind is unchanged**: a
+cached mldsa87 is a PQZ holder at n2048-kmax1024 and n2304-kmax4096, not at n2560-kmax16384 / n2816-kmax65536. **One `msig`
+verdict changes at n2304-kmax4096**: the room for a holder's worst authorization grows from ≈ 9.26 M to ≈ 10.70 M, so
+`{fndsa512 × 4}, t = 4` (≈ 10.2 M) now fits there. Owner 2026-11-15 ("Ok, theo đề xuất"): the rule stays; the negative
+`test_register_msigHolderOverBound` takes a holder over the bound at every set (2-of-2 `fndsa1024` at 5,250,000: bound
+18,255,960 / 16,965,960 / 18,684,960 / 18,924,960, beside `{fndsa512 × 4, slhdsa128s}, t = 5`), its `UAPqzHolder` assertion
+unchanged; the new `test_register_msigHolder_fndsa512x4_perSet` states the per-set boundary: a PQZ holder at n2304-kmax4096,
+`UAPqzHolder` at the three other sets. Tests per set: the cheapest debit and a
 `ROLL_MAX` rollover with a cached mldsa87 holder and a cached ML-DSA fee signer, measured; the refusal where it does not fit.
 
 **MD-14 (who sends the cache parts; F-3, owner "như đề xuất") — SPECIFIED, built in the `ua-rs-sign` port round after 3zh,

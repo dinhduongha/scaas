@@ -338,7 +338,7 @@ contract UARegistryUA8Test is UARegistryBase {
         vcfg.push(UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44));
         MldsaVerifier m65 = new MldsaVerifier(0x0131, ML65, valid, new bytes(ML65_LEN));
         assertEq(m65.PRECOMPILE(), ML65);
-        vcfg.push(UARegistry.KindConfig(0x0131, address(m65), 100_000));
+        vcfg.push(UARegistry.KindConfig(0x0131, address(m65), 200_000));
         vcfg.push(UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), CAP_FNDSA));
         vcfg.push(UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), CAP_SLHDSA));
         string memory kat = vm.readFile("../vectors/ua/pq_kat.json");

@@ -21,7 +21,7 @@ import {MtxDigest} from "../helpers/MtxDigest.sol";
 /// measured. Each row is its own transaction (`isolate`) measured cold (a snapshot reverted around it): REGULAR gas (intrinsic,
 /// calldata or the EIP-7976 floor, execution) and EIP-8037 STATE gas apart, as `PqzStatePinGasTest`. Op 1 and the refresh are
 /// relayed full transactions with a FIXED outer fee of 7 on both paths (`mtxExecute`, ECDSA; `uaExecute`, an `mldsa65` fee UA);
-/// the holder's and the fee UA's ML-DSA-65 at 68,006 [estimate] (`GasBurner`), the verdict a real ECDSA `PqzVerdict` of the
+/// the holder's and the fee UA's ML-DSA-65 at 100,006 [estimate] (`GasBurner`), the verdict a real ECDSA `PqzVerdict` of the
 /// token's verifier, the proof pseudo-random bytes of the set's vector length (env `PQZ_PROOF_<FORM>`, set by the runner from
 /// `smartcontracts/vectors/pqz/<set>/proof_pqzl*.json`; defaults n2304-kmax4096's). A scoped key record and its stored `R_REG`
 /// proof are direct registry transactions, the `PQZ` op 3 at the set's provisional `REGISTER` row (`test/vectors/pqz-gas`).
@@ -122,7 +122,7 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
         }
         uint256 snap = vm.snapshotState();
         vm.clearMockedCalls();
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         vm.prank(RELAYER);
         uint256 g = _gasTo(address(t), call);
         _log(string.concat(row, ua ? " | uaExecute" : " | mtxExecute"), g);
@@ -186,7 +186,7 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
         (uint256 g1, uint256 s1) = _setRecord(ua, scope, kem, keccak256(pop));
         (uint256 g2, uint256 price) = _storePop(ua, scope, pop);
         string memory head = string.concat("GAS3K ", PqzSet.NAME, " | ", row);
-        console2.log(string.concat(head, " | setPqzScopedKey regular with ML-DSA 68,006 ", vm.toString(g1), " state ", vm.toString(s1)));
+        console2.log(string.concat(head, " | setPqzScopedKey regular with ML-DSA 100,006 ", vm.toString(g1), " state ", vm.toString(s1)));
         console2.log(string.concat(head, " | storePqzScopedPop (proof ", vm.toString(pop.length), " B, op 3 ", vm.toString(price),
             ") regular with the op 3 row ", vm.toString(g2), " state ", vm.toString(lastState)));
         console2.log(string.concat(head, " | sum total ", vm.toString(g1 + s1 + g2 + lastState)));
@@ -203,8 +203,8 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
         (rScope, rKem, rPopHash) = (scope, k, popHash);
         _setCall(ua);
         Vm.Gas memory g = vm.lastCallGas();
-        // the holder's ML-DSA-65 signature is the fixture's mock here: its price, 68,006 [estimate], added
-        return (g.gasTotalUsed + 68_006, uint256(int256(g.gasStateUsed)));
+        // the holder's ML-DSA-65 signature is the fixture's mock here: its price, 100,006 [estimate], added
+        return (g.gasTotalUsed + 100_006, uint256(int256(g.gasStateUsed)));
     }
 
     function _setCall(bytes32 ua) internal {

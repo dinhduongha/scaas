@@ -851,6 +851,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
     }
 
   explicit_bzero (expseed, sizeof (expseed)); /* PQZ (review round 2, Q-B): the z3 / z4 rejection and mask seeds */
+  explicit_bzero (tmpbytes__, sizeof (tmpbytes__)); /* PQZ (3zh Fable F-4): an evaluation at the witness (h_i = g_i + tmp) */
   polyvec_free (s);
   spolymat_free (R2t);
   spolyvec_free (r1t);
@@ -1805,6 +1806,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
             }
           intvec_mul_sgn_self (y3coeffs, beta3);
           intvec_add (z3coeffs, z3coeffs, y3coeffs);
+          explicit_bzero (beta3Rijs3jbytes__, sizeof (beta3Rijs3jbytes__)); /* PQZ (3w-delta U1h-1): a term of R s3 */
         }
 
       if (nprime > 0)
@@ -1844,6 +1846,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
             }
           intvec_mul_sgn_self (y4coeffs, beta4);
           intvec_add (z4coeffs, z4coeffs, y4coeffs);
+          explicit_bzero (beta4Rprimeijs4jbytes__, sizeof (beta4Rprimeijs4jbytes__)); /* PQZ (3w-delta U1h-1) */
         }
 
       /* rejection sampling */
@@ -1891,6 +1894,15 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
 
   /* cleanup */
   explicit_bzero (&rbits, sizeof (rbits)); /* PQZ (P6-D3): secret signs */
+  /* PQZ (review 3w-delta U1h-1, the class of T-06): the stack coefficient arrays behind s3, s4 (the witness images),
+     y3, y4 (the masks, then R s3 and R' s4) and z3_, z4_ (the last try's z3, z4: a rejected one on PQZ_ERR_REJECT); the
+     arena wipe of pqz_prove does not reach the stack */
+  explicit_bzero (s3coeffsbytes__, sizeof (s3coeffsbytes__));
+  explicit_bzero (s4coeffsbytes__, sizeof (s4coeffsbytes__));
+  explicit_bzero (y3coeffsbytes__, sizeof (y3coeffsbytes__));
+  explicit_bzero (y4coeffsbytes__, sizeof (y4coeffsbytes__));
+  explicit_bzero (z3coeffsbytes__, sizeof (z3coeffsbytes__));
+  explicit_bzero (z4coeffsbytes__, sizeof (z4coeffsbytes__));
   rng_clear (rstate_signs);
   rng_clear (rstate_rej);
   polyvec_free (s3);
