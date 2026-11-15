@@ -177,7 +177,7 @@ checkout. From `cd $L` on, the working directory is the live directory, so `gene
 ```sh
 L=~dockers/mba-chain-nethermind
 C=<repo>/pqz-core/nethermind/chain
-E=$C/engine-pqz.json
+E=$C/engine-pqz-provisional-n2304.json   # until the next calibration: engine-pqz.json holds retired ids (check-provisional-ids.py)
 TS=$(date +%Y%m%d-%H%M%S)
 B=~dockers/mba-chain-nethermind-backups/pqz-$TS          # dated, outside the repo and outside $L
 A="docker run --rm --memory 512m -v $L:/l -v $(dirname $B):/b alpine:3"
@@ -300,9 +300,10 @@ Success: the head hash equals the rollback head written down in step 1. Then rep
 - `OP_SELFTEST` (op 6) = `d6c01fbc…6f68d` (images `2.2.0-pqz5` / `2.2.0-pqz6` / `2.2.0-pqz7`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before).
 
 A node fault (plan D4) stops the node with exit code 120 and the tag `PQZ-NODE-FAULT` in its log. The block in
-progress is never sealed; a restart re-processes it. If a shutdown handler blocks after the fault (branch `3zh-core`,
-review 3w-delta U3h-2), the exit watchdog ends the process after 10 s with the runtime's abort status (134, not 120)
-and the line `PQZ-NODE-FAULT exit watchdog: …; FailFast`; treat 134 with that line exactly as 120. **Restart policy (owner ruling 2026-10-31): `restart:
+progress is never sealed; a restart re-processes it. Exit 134 with the line `PQZ-NODE-FAULT exit watchdog: …; FailFast` is the same
+fault ended by the exit watchdog (branch `3zh-core`; bound and codes:
+[CTR-PQZ-10](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-10)): treat it exactly as 120. Keep core dumps off on
+the sealer (compose `ulimits: core: 0`, no `DOTNET_DbgEnableMiniDump`): a FailFast dump would hold the signer key. **Restart policy (owner ruling 2026-10-31): `restart:
 unless-stopped` on every service of the stack, the sealer included**, so Docker restarts a node after exit 120 or any
 other crash by itself (by hand: `docker compose up -d sealer` or `rpc`). A deterministic fault caused by a pooled
 transaction can loop on the sealer: it restarts, `rpc` gossips the same transaction to it again, it faults again. So
@@ -550,7 +551,9 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
 
 1. Image `scaas/nethermind-pqz:2.2.0-pqz6` = `sha256:656d91d6…3e83` (`CALIB=1 build-image.sh pqz6`, 2026-10-30): library
    `dd0e7668…e5601` (byte-identical to pqz5's), plugin of plan 5h Task 8d part 2b, label `scaas.pqz.selftest` `d6c01fbc…`.
-2. Rows: `chain/engine-pqz.json` = `runs/2026-10-31-fs3-t13-rows-one-baseline-engine-pqz.json` (README § Prices).
+2. Rows: `chain/engine-pqz.json` = `runs/2026-10-31-fs3-t13-rows-one-baseline-engine-pqz.json` (README § Prices). (Record of
+   that reset; today `engine-pqz.json` carries ids the plugin refuses, so a rerun uses `engine-pqz-provisional-n2304.json`
+   until the next calibration, owner's go.)
 3. Backups (stack directory `L=~dockers/mba-chain-nethermind`): `genesis.json.bak-pre-pqz6-20261031`,
    `docker-compose.yml.bak-pre-pqz6-20261031`, and `backup-pqz5-20261031-0621/` (genesis, config, compose, password,
    keystore and the pqz5 chain data through `alpine:3 cp -a`; sha256 manifests of the 150 data files identical).

@@ -200,10 +200,11 @@ public class MlDsaTests
     /// <summary>Review 3w-delta U3h-2: the child (<c>Harness mldsa-fault &lt;variant&gt;</c>) within
     /// <paramref name="boundMs"/>; killed and failed past it, so a hang fails this test by its own bound. (exit code,
     /// stdout, stderr, elapsed ms)</summary>
-    private static (int Exit, string Out, string Err, long Ms) Child(string variant, int boundMs)
+    private static (int Exit, string Out, string Err, long Ms) Child(string variant, int boundMs, int? watchdogMs = null)
     {
         string harness = Path.Combine(AppContext.BaseDirectory, "Harness.dll");
         ProcessStartInfo psi = new("dotnet", [harness, "mldsa-fault", variant]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        if (watchdogMs is { } w) psi.Environment[PqzPrecompile.ExitWatchdogEnv] = w.ToString();
         Stopwatch sw = Stopwatch.StartNew();
         using Process p = Process.Start(psi)!;
         System.Threading.Tasks.Task<string> err = p.StandardError.ReadToEndAsync(), outp = p.StandardOutput.ReadToEndAsync();
@@ -243,6 +244,20 @@ public class MlDsaTests
         Assert.That(err, Does.Contain(PqzPrecompile.WatchdogLine));
         Assert.That(outp, Does.Not.Contain("must not happen"));
         Assert.That(ms, Is.GreaterThanOrEqualTo(PqzPrecompile.ExitWatchdogMs), "ended by the watchdog, not earlier");
+    }
+
+    /// <summary>3zh Fable F-1: a diagnostic that blocks (stderr, the logger) cannot hang the node: the watchdog starts
+    /// before the diagnostic and ends the child within its bound (here 3,000 ms through
+    /// <see cref="PqzPrecompile.ExitWatchdogEnv"/>, which this also checks; F-7), never a word.</summary>
+    [TestCase("blocking-stderr")]
+    [TestCase("blocking-logger")]
+    public void A_blocking_diagnostic_is_ended_by_the_watchdog(string variant)
+    {
+        var (exit, outp, err, ms) = Child(variant, 3_000 + 20_000, 3_000);
+        Assert.That(exit, Is.Not.EqualTo(0).And.Not.EqualTo(PqzPrecompile.ExitCode), variant);
+        Assert.That(err, Does.Contain(PqzPrecompile.WatchdogLine), variant);
+        Assert.That(outp, Does.Not.Contain("must not happen"), variant);
+        Assert.That(ms, Is.GreaterThanOrEqualTo(3_000), "ended by the watchdog, not earlier");
     }
 
     /// <summary>W-R kept (review 3w-delta U3h-2): a CryptographicException with a throwing logger is still the zero

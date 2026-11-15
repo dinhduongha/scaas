@@ -16,7 +16,7 @@ OLD_FAULT_BODY = """        string cause = e is null ? $"status={status}" : $"{w
         Terminate();
     }
 
-    /// <summary>The exit watchdog's bound"""
+    /// <summary>The exit watchdog's default bound (ms)."""
 MUT = [
  ("W1 watchdog thread not started", P, "            w.Start();", "            _ = w;"),
  ("F1 NodeFault without its boundary (the pre-fix order: diagnostic, then exit)", P,
@@ -34,26 +34,55 @@ MUT = [
  ("P1 PqzPrecompile.Run without its catch", P,
   """        try
         {
-            return RunUnguarded(input, s);
+            return RunUnguarded(input, s, call);
         }
         catch (Exception e) when (e is not DllNotFoundException)
         {
             NodeFault("", e, input); // the cause is built inside the fault boundary (review 3w-delta U3h-2)
             throw; // not reached (NodeFault exits)
         }""",
-  """        return RunUnguarded(input, s);"""),
+  """        return RunUnguarded(input, s, call);"""),
+ ("F1b the watchdog started after the diagnostic (F-1)", P,
+  ["""    {
+        StartWatchdog();
+        try
+        {
+            string cause""", """        finally
+        {
+            ExitNow();"""],
+  ["""    {
+        try
+        {
+            string cause""", """        finally
+        {
+            StartWatchdog();
+            ExitNow();"""]),
+ ("F6 the input-panic warning unguarded (F-6)", P,
+  ["""        try
+        {
+            if (Log.IsWarn) Log.Warn($"PQZ-INPUT-PANIC""", """        catch
+        {
+            // the word is …00 regardless
+        }"""],
+  ["""        {
+            if (Log.IsWarn) Log.Warn($"PQZ-INPUT-PANIC""", ""]),
 ]
 out = []
-env = dict(os.environ, PQZ_TEST_FILTER="FullyQualifiedName~MlDsaTests|FullyQualifiedName~A_failing_diagnostic_on_the_pqz_path")
+env = dict(os.environ, PQZ_TEST_FILTER="FullyQualifiedName~MlDsaTests|FullyQualifiedName~A_failing_diagnostic_on_the_pqz_path|FullyQualifiedName~An_input_panic_with")
+sel = sys.argv[3].split(",") if len(sys.argv) > 3 else None
 for name, f, a, b in MUT:
+    if sel and name.split()[0] not in sel:
+        continue
     p = root / f
     src = p.read_text()
     if a is None:  # F1: replace Fault's body from its try to the watchdog's summary
-        i, j = src.index("        try\n        {\n            string cause"), src.index("    /// <summary>The exit watchdog's bound")
-        mut = src[:i] + OLD_FAULT_BODY + src[j + len("    /// <summary>The exit watchdog's bound"):]
+        i, j = src.index("        try\n        {\n            string cause"), src.index("    /// <summary>The exit watchdog's default bound (ms).")
+        mut = src[:i] + OLD_FAULT_BODY + src[j + len("    /// <summary>The exit watchdog's default bound (ms)."):]
     else:
-        assert src.count(a) == 1, name
-        mut = src.replace(a, b)
+        mut = src
+        for x, y in (zip(a, b) if isinstance(a, list) else [(a, b)]):
+            assert mut.count(x) == 1, name
+            mut = mut.replace(x, y)
     p.write_text(mut)
     try:
         r = subprocess.run(["sh", str(root / "run-tests.sh")], env=env, capture_output=True, text=True)
@@ -64,8 +93,9 @@ for name, f, a, b in MUT:
     with log.open("a") as fh:
         fh.write(f"===== {name}\n{txt}\n")
     failed = [l.strip() for l in txt.splitlines() if l.strip().startswith(("Failed:", "Passed:", "Total tests"))]
-    red = r.returncode != 0 or any(l.startswith("Failed:") and l.split()[1] != "0" for l in failed)
-    print(f"{name}: {'RED' if red else 'GREEN (mutant survived)'}; {failed}", flush=True)
+    built = any(l.startswith("Total tests") for l in failed)
+    red = built and (r.returncode != 0 or any(l.startswith("Failed:") and l.split()[1] != "0" for l in failed))
+    print(f"{name}: {'RED' if red else 'GREEN (mutant survived)' if built else 'INVALID (no test ran: build failed?)'}; {failed}", flush=True)
     out.append(red)
 print(f"mutants red: {sum(out)}/{len(out)}")
 sys.exit(0 if all(out) else 1)

@@ -288,6 +288,29 @@ public class SpecTests
         Assert.DoesNotThrow(() => p.CheckIds(0, lib), f);
     }
 
+    /// <summary>3zh Fable F-9: <c>chain/engine-pqz.json</c> (the calibration's output, the default set's) either passes
+    /// the start-up id check or is refused with the check's named reason (today: its retired ids), never anything
+    /// else.</summary>
+    [Test]
+    public void Engine_pqz_json_passes_the_id_check_or_is_refused_by_name()
+    {
+        if (Repo.Set != "n2304-kmax4096") Assert.Ignore("engine-pqz.json is the default set's");
+        JsonObject sched = JsonNode.Parse(File.ReadAllText(Repo.Path_("pqz-core", "nethermind", "chain", "engine-pqz.json")))!.AsObject();
+        PqzChainSpecEngineParameters p = Load(g => g["engine"]!["Pqz"] = sched).EngineChainSpecParametersProvider
+            .GetChainSpecParameters<PqzChainSpecEngineParameters>();
+        string[] lib = [PqzSetIds.PqzlId, PqzSetIds.PqzhId];
+        try
+        {
+            p.CheckIds(0, lib);
+            TestContext.Progress.WriteLine("engine-pqz.json: passes the id check");
+        }
+        catch (ArgumentException e)
+        {
+            Assert.That(e.Message, Does.Contain("is not the library's"), "refused with the id check's reason");
+            TestContext.Progress.WriteLine($"engine-pqz.json: refused by name ({e.Message})");
+        }
+    }
+
     /// <summary>Plan 5h Task 8d part 2b: the head timestamp the id check reads (and <c>PQZ-START</c> logs) is the block
     /// tree head's when there is one, else the genesis timestamp (empty database), else 0.</summary>
     [Test]

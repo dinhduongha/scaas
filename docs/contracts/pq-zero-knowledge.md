@@ -2106,13 +2106,16 @@ plus a `PQZ-INPUT-PANIC keccak(input)` warning (a panic in either verifier, PQZL
 other ⇒ `PQZ-NODE-FAULT` (critical) and the process exits with code 120 — the block in progress is never sealed or
 imported and nothing is marked invalid; a restart re-processes it. The same exit for a managed exception in the
 plugin's `PQZ` path outside the library's statuses and, in an ML-DSA call, any exception but `CryptographicException`
-(which is `…00`, ruling W-R) (review 3w u4-1). **Termination is unconditional** (review 3w-delta U3h-2, owner 2026-11-15;
-BUILT on branch `3zh-core`, UNAUDITED): the whole ML-DSA operation (output allocation included) is inside the fault
-boundary; the `PQZ-NODE-FAULT` line is built and written inside a `try`, a failure there writes one fixed fallback line;
-`Environment.Exit(120)` runs from a `finally`, after starting the **exit watchdog** (`pqz-exit-watchdog`, a dedicated
-thread, 10,000 ms, then `Environment.FailFast`). **Exit code:** 120 normally; when a shutdown handler blocks and the
-watchdog fires, the runtime's abort status (134 on Linux), never a word and never a failed call. A logger that throws
-on the `CryptographicException` path is swallowed: the word stays `…00` (W-R kept). **v1 runs only on our Nethermind chain** (owner). Other chains (customer-run Besu/geth/reth, public chains)
+(which is `…00`, ruling W-R) (review 3w u4-1). **Termination is bounded** (review 3w-delta U3h-2 and its review, owner 2026-11-15; BUILT on branch `3zh-core`,
+UNAUDITED): on a fault the **exit watchdog** starts first (`pqz-exit-watchdog`, a dedicated thread; bound 10,000 ms,
+`PQZ_EXIT_WATCHDOG_MS` overrides it per node, consensus-irrelevant), then `Environment.FailFast` if the process still
+runs; the whole ML-DSA operation (output allocation included) is inside the fault boundary; the `PQZ-NODE-FAULT` line is
+built and written inside a `try`, a failure there writes one fixed fallback line; `Environment.Exit(120)` runs from a
+`finally`. So a diagnostic or a shutdown handler that throws or blocks cannot keep the node running. **Exit code:** 120
+normally; when the watchdog fires, the runtime's abort status (134 on Linux) with the line `PQZ-NODE-FAULT exit
+watchdog: …; FailFast`, never a word and never a failed call. A FailFast can write a core dump: keep core dumps off on
+a sealer (the dump would hold its signer key). A logger that throws on the `CryptographicException` or the input-panic
+(status 3) path is swallowed: the word stays `…00` (W-R kept). **v1 runs only on our Nethermind chain** (owner). Other chains (customer-run Besu/geth/reth, public chains)
 run PQZ without a client port in `OFFCHAIN` mode ([CTR-PQZ-27](#CTR-PQZ-27)); **no client ports in v1**. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
 call serially on one worker thread, only for a fixed stack), no floating point, no CPU-feature-dependent
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
@@ -2322,7 +2325,9 @@ covers the three levels.
 set; valid = the vectors + 20 fresh proofs per form; adversarial = 1,000 distinct proof bit flips, the form's
 `negative.json` rows and (PQZH) the statement's last word changed. `t_ecMul` = **17 µs** (Nethermind's own BN254 mul,
 median of 10,000) ⇒ **0.359 M gas per ms** (not the ≈ 0.12 M estimated above). Log `pqz-core/nethermind/runs/2026-10-15-calib.txt`;
-chainspec section `pqz-core/nethermind/chain/engine-pqz.json`.
+chainspec section of that calibration `pqz-core/nethermind/chain/engine-pqz.json` (its ids are retired: until the next
+calibration, owner's go, a chain starts on `chain/engine-pqz-provisional-<n>.json`, checked by
+`chain/check-provisional-ids.py`).
 
 | op | Form | id | `stmtLen` | p99 valid ms | p99 adversarial ms | `G_op` (gas) | Direct tx, largest honest input |
 |---|---|---|---|---|---|---|---|
@@ -2859,13 +2864,18 @@ transfers move for every class.
   `PqzAuth`, so no relayer can swap one. `sealedMemo` is unchanged.
 - The verifier cannot check an opening. A wrong `O_t`, or with the auditor on a wrong `O_a`, makes the credit unspendable for an
   honest wallet: the sender's loss (the debit stands, the units stay in `totalShielded`).
-- **Seal-side repeat guard** (review 3w-delta U2 point 2, owner 2026-11-15; BUILT on branch `3zh-core`, `pqz-ffi`
-  `opening::Sealer`, UNAUDITED): one `seed_enc` seals one credit only (fingerprint over `chainUid`, `token`, `toUA`,
-  `keccak256(pk_t)`, `P(u)`, `P(v_t)`, `[P(v_a)]`); another credit under it is `SeedReused`, since its GCM key and nonce
-  and its PQZ randomness would repeat. In memory and caller-owned, at most 4,096 seeds, then `Full` (never evicts);
-  `seal`'s own refusals are `Refused`; every error gives no opening. It keeps a SHA3-256 hash of `seed_enc` only. Limit:
-  one process; a restart forgets, and across processes [CTR-PQZ-19](#CTR-PQZ-19)'s fresh salt stays the guarantee.
-  Openings are byte-identical to `seal`'s, which the holder check keeps using.
+- **Seal-side repeat guard** (review 3w-delta U2 point 2 and its review, owner 2026-11-15; BUILT on branch `3zh-core`,
+  `pqz-ffi` `opening::Sealer`, UNAUDITED): one `seed_enc` seals one credit only; a second credit under it is
+  `SeedReused`, since its GCM key and nonce and its PQZ randomness (`u`, `u_f`, `v_f`) would repeat. The credit is its
+  fingerprint `keccak256("SCAAS-PQZ-SEAL-GUARD-V1" ‖ chainUid ‖ token ‖ P(u) ‖ party(to) ‖ [party(auditor)] ‖ P(u_f) ‖
+  P(v_f))`, `party = ua ‖ be8(keyVersion) ‖ keccak256(pk) ‖ keccak256(kemPk) ‖ P(v)`: every input the build's `seed_enc`
+  fixes; both openings of one credit share it. A `seed_enc` whose leg expansion does not give the credit's `u` is
+  `Refused` (K3-7 step 6), as are `seal`'s own refusals. In memory and caller-owned, at most 4,096 seeds, then `Full`
+  (never evicts); every error gives no opening; it keeps a SHA3-256 hash of `seed_enc` only. Caller rule: one `Sealer`
+  per wallet process, for its life. Limit: one process; a restart forgets, and across processes
+  [CTR-PQZ-19](#CTR-PQZ-19)'s fresh salt stays the guarantee. Openings are byte-identical to `seal`'s, which the holder
+  check keeps using. **Library API only: no wallet builder uses it yet** (clientkeys `sealOpening`, ua-rs: the
+  clients' round).
 
 <a id="CTR-PQZ-41"></a>**CTR-PQZ-41** — **On an opening token only the holder rolls, and the holder marks bad credits** (owner
 2026-11-13; spec K3-8). SPECIFIED.

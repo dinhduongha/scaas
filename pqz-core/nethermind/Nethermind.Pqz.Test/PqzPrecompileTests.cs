@@ -247,4 +247,24 @@ public class PqzPrecompileTests
         if (variant == "logger") Assert.That(err.Result, Does.Contain("PQZ-NODE-FAULT status=4"));
         if (variant == "message") Assert.That(err.Result, Does.Contain(PqzPrecompile.FallbackLine));
     }
+
+    /// <summary>3zh Fable F-6: the input-panic status with a throwing logger is still the word …00 and the node goes on
+    /// (exit 0), as ML-DSA's zero word.</summary>
+    [Test]
+    public void An_input_panic_with_a_throwing_logger_is_the_zero_word()
+    {
+        string harness = Path.Combine(AppContext.BaseDirectory, "Harness.dll");
+        ProcessStartInfo psi = new("dotnet", [harness, "fault", Repo.HooksDir, Repo.CorpusPath, "panic-logger"]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        using Process p = Process.Start(psi)!;
+        System.Threading.Tasks.Task<string> err = p.StandardError.ReadToEndAsync(), outp = p.StandardOutput.ReadToEndAsync();
+        if (!p.WaitForExit(120_000))
+        {
+            p.Kill(entireProcessTree: true);
+            Assert.Fail("panic-logger child: still running after 120 s (killed)");
+        }
+        p.WaitForExit();
+        TestContext.Progress.WriteLine($"panic-logger child: exit {p.ExitCode}; stdout: {outp.Result.Trim()}; stderr: {err.Result.Trim()}");
+        Assert.That(p.ExitCode, Is.EqualTo(0));
+        Assert.That(outp.Result, Does.Contain("word " + new string('0', 64)));
+    }
 }

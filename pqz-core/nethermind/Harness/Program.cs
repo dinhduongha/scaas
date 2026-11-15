@@ -19,11 +19,12 @@ using Nethermind.Serialization.Json;
 // PqzPrecompile.Run / MlDsa*Precompile.Run, never the C ABI directly.
 //   Harness run   <ffiDir> <corpus.jsonl> <repoRoot> [--minutes N] [--threads 8] [--seed S]
 //   Harness fault <hooksDir> <corpus.jsonl> [variant] (test child: status 4 through PqzPrecompile.Run ⇒ exit 120;
-//                                                   variants logger | stderr | message, review 3w-delta U3h-2)
+//                                                   variants logger | stderr | message | panic-logger, review 3w-delta
+//                                                   U3h-2, Fable F-6)
 //   Harness panic <hooksDir> <corpus.jsonl>        (test child: status 3 through PqzPrecompile.Run ⇒ …00, exit 0)
 //   Harness mldsa-fault [variant]                  (test child: a non-crypto exception in MlDsa.Verify ⇒ exit 120;
-//                                                   variants logger | stderr | message | blocking-exit | crypto-logger,
-//                                                   review 3w-delta U3h-2)
+//                                                   variants logger | stderr | message | blocking-exit | crypto-logger
+//                                                   | blocking-stderr | blocking-logger, review 3w-delta U3h-2, Fable F-1)
 return args.Length > 0 && args[0] == "fault" ? Fault.Exec(args) : args.Length > 0 && args[0] == "panic" ? Panic.Exec(args)
     : args.Length > 0 && args[0] == "mldsa-fault" ? MlDsaFault.Exec(args.Length > 1 ? args[1] : "") : Run.Exec(args);
 
@@ -46,6 +47,8 @@ static class MlDsaFault
             case "stderr": Console.SetError(new ThrowingWriter()); break;
             case "message": thrown = new MessageThrows(); break;
             case "blocking-exit": AppDomain.CurrentDomain.ProcessExit += (_, _) => Thread.Sleep(Timeout.Infinite); break;
+            case "blocking-stderr": Console.SetError(new BlockingWriter()); break; // F-1: the diagnostic itself blocks
+            case "blocking-logger": PqzPrecompile.Log = new ILogger(new BlockingLogger()); break;
             case "crypto-logger":
                 PqzPrecompile.Log = new ILogger(new ThrowingLogger());
                 thrown = new CryptographicException("seam");
@@ -88,6 +91,31 @@ sealed class ThrowingWriter : TextWriter
     public override void Write(string? value) => throw new IOException("stderr");
     public override void WriteLine(string? value) => throw new IOException("stderr");
     public override void Flush() => throw new IOException("stderr");
+}
+
+/// <summary>A stderr whose every write blocks forever (Fable F-1 control).</summary>
+sealed class BlockingWriter : TextWriter
+{
+    public override Encoding Encoding => Encoding.UTF8;
+    public override void Write(char value) => Thread.Sleep(Timeout.Infinite);
+    public override void Write(string? value) => Thread.Sleep(Timeout.Infinite);
+    public override void WriteLine(string? value) => Thread.Sleep(Timeout.Infinite);
+    public override void Flush() => Thread.Sleep(Timeout.Infinite);
+}
+
+/// <summary>A logger whose Error blocks forever (Fable F-1 control).</summary>
+sealed class BlockingLogger : InterfaceLogger
+{
+    public void Info(string text) { }
+    public void Warn(string text) { }
+    public void Debug(string text) { }
+    public void Trace(string text) { }
+    public void Error(string text, Exception? ex = null) => Thread.Sleep(Timeout.Infinite);
+    public bool IsInfo => false;
+    public bool IsWarn => true;
+    public bool IsDebug => false;
+    public bool IsTrace => false;
+    public bool IsError => true;
 }
 
 /// <summary>An exception whose Message getter throws (U3h-2 control: building the cause fails).</summary>
@@ -140,23 +168,34 @@ static class Fault
         byte[] input = corpus.First(r => r.kind == "honest" && r.id == "pqzl").input;
         Console.WriteLine($"fault child: before the hook {Convert.ToHexStringLower(PqzPrecompile.Run(input, s).Data!)}");
         // review 3w-delta U3h-2: logger = the worker fault with a throwing logger; stderr = with a throwing stderr;
-        // message = the input-panic status, whose Warn throws an exception with a throwing Message (Run's catch)
+        // message = the call seam throws an exception with a throwing Message (Run's catch); panic-logger (Fable F-6) =
+        // the input-panic status with a throwing logger: the word …00, exit 0
         string variant = a.Length > 3 ? a[3] : "";
         switch (variant)
         {
             case "": break;
             case "logger": PqzPrecompile.Log = new ILogger(new ThrowingLogger()); break;
             case "stderr": Console.SetError(new ThrowingWriter()); break;
-            case "message": PqzPrecompile.Log = new ILogger(new ThrowingLogger(() => new MessageThrows())); break;
+            case "message":
+                Console.WriteLine("fault child (message): the call seam throws MessageThrows");
+                PqzPrecompile.Run(input, s, (_, _) => throw new MessageThrows());
+                Console.WriteLine("fault child: returned (must not happen)");
+                return 1;
+            case "panic-logger": PqzPrecompile.Log = new ILogger(new ThrowingLogger()); break;
             default: Console.WriteLine($"fault child: unknown variant {variant}"); return 2;
         }
         IntPtr lib = NativeLibrary.Load(PqzNative.LibraryPath);
         unsafe
         {
-            var hook = (delegate* unmanaged<byte, void>)NativeLibrary.GetExport(lib, variant == "message" ? "pqz_test_panic" : "pqz_test_fail_worker");
+            var hook = (delegate* unmanaged<byte, void>)NativeLibrary.GetExport(lib, variant == "panic-logger" ? "pqz_test_panic" : "pqz_test_fail_worker");
             hook(1);
         }
-        Console.WriteLine($"fault child ({(variant == "" ? "plain" : variant)}): {(variant == "message" ? "TEST_PANIC" : "TEST_FAIL_WORKER")} on");
+        if (variant == "panic-logger")
+        {
+            Console.WriteLine($"fault child (panic-logger): TEST_PANIC on, word {Convert.ToHexStringLower(PqzPrecompile.Run(input, s).Data!)}");
+            return 0;
+        }
+        Console.WriteLine($"fault child ({(variant == "" ? "plain" : variant)}): TEST_FAIL_WORKER on");
         PqzPrecompile.Run(input, s);
         Console.WriteLine("fault child: returned (must not happen)");
         return 1;

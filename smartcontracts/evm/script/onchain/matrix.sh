@@ -161,7 +161,7 @@ local)
   if [ -z "$PQ_RPC" ] && [ -n "${COPY:-}" ] && [ "$PQZ" != off ]; then
     export COPY
     say "" "copy (Nethermind, PQZ and ML-DSA precompiles) …"
-    { sh "$CS/copy.sh" init && sh "$CS/copy.sh" genesis0 "${COPY_ENGINE:-$CS/engine-pqz.json}" && python3 -I script/onchain/copygen.py "$COPY" &&
+    { sh "$CS/copy.sh" init && sh "$CS/copy.sh" genesis0 "${COPY_ENGINE:-$CS/engine-pqz-provisional-n2304.json}" && python3 -I script/onchain/copygen.py "$COPY" &&
       CP=1 && sh "$CS/copy.sh" up "${COPY_IMAGE:-scaas/nethermind-pqz:2.2.0-pqz7}" genesis.pqz0.json; } \
       >> "$LOG" 2>&1 || fail "the copy did not start (copy.sh, see the log)"
     # the signer (no rate limit): its address read from docker-compose.copy.yml, the one copy (Fable D P3-6)

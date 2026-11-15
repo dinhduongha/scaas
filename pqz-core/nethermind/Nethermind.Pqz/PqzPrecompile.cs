@@ -47,11 +47,18 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
     /// <summary>A managed exception on this path (outside the library's statuses: loading or binding the library, the
     /// log line) is a fault of this node (D4, review 3w T-16): <see cref="NodeFault(string, Exception, ReadOnlySpan{byte})"/>,
     /// never Nethermind's failed call. <see cref="DllNotFoundException"/> stays Nethermind's own exit 110.</summary>
-    public static Result<byte[]> Run(ReadOnlySpan<byte> input, PqzSchedule? s)
+    public static Result<byte[]> Run(ReadOnlySpan<byte> input, PqzSchedule? s) => Run(input, s, PqzNative.Call);
+
+    /// <summary>The library call (<see cref="PqzNative.Call"/>); a seam for the fault-boundary tests, as
+    /// <see cref="MlDsa.VerifyFn"/>.</summary>
+    public delegate int CallFn(ReadOnlySpan<byte> input, Span<byte> output);
+
+    /// <summary><paramref name="call"/> is the seam the tests use to raise an exception inside the boundary.</summary>
+    public static Result<byte[]> Run(ReadOnlySpan<byte> input, PqzSchedule? s, CallFn call)
     {
         try
         {
-            return RunUnguarded(input, s);
+            return RunUnguarded(input, s, call);
         }
         catch (Exception e) when (e is not DllNotFoundException)
         {
@@ -60,7 +67,7 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
         }
     }
 
-    private static Result<byte[]> RunUnguarded(ReadOnlySpan<byte> input, PqzSchedule? s)
+    private static Result<byte[]> RunUnguarded(ReadOnlySpan<byte> input, PqzSchedule? s, CallFn call)
     {
         if (s is null) return Result<byte[]>.Fail("PQZ: no active schedule");
         if (input.Length > PqzNative.MaxInput) return Result<byte[]>.Fail("PQZ: input over MAX_INPUT");
@@ -68,7 +75,7 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
         if (!selftest && s.RowGas(input) is null) return new byte[32];
         byte[] output = new byte[32];
         Interlocked.Increment(ref _ffiCalls);
-        int status = PqzNative.Call(input, output);
+        int status = call(input, output);
         switch (status)
         {
             case PqzNative.Ok:
@@ -76,11 +83,25 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
             case PqzNative.Revert:
                 return Result<byte[]>.Fail("PQZ: input over MAX_INPUT");
             case PqzNative.InputPanic:
-                if (Log.IsWarn) Log.Warn($"PQZ-INPUT-PANIC keccak={Keccak.Compute(input)} len={input.Length}: a caught panic in the decoder / verifier (input-caused): …00");
+                WarnPanic(input);
                 return new byte[32];
             default:
                 NodeFault(status, input);
                 return Result<byte[]>.Fail("unreachable");
+        }
+    }
+
+    /// <summary>The input-panic warning, best effort (3zh Fable F-6, as <c>MlDsa.WarnCrypto</c>): a logger that throws is
+    /// swallowed, so the word stays <c>…00</c> on every node (it does not depend on the log).</summary>
+    private static void WarnPanic(ReadOnlySpan<byte> input)
+    {
+        try
+        {
+            if (Log.IsWarn) Log.Warn($"PQZ-INPUT-PANIC keccak={Keccak.Compute(input)} len={input.Length}: a caught panic in the decoder / verifier (input-caused): …00");
+        }
+        catch
+        {
+            // the word is …00 regardless
         }
     }
 
@@ -96,11 +117,13 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
     /// <summary>The fixed line written when building or writing the <c>PQZ-NODE-FAULT</c> diagnostic itself failed.</summary>
     public const string FallbackLine = "PQZ-NODE-FAULT (the diagnostic failed): a fault of this node, not of the input; exit 120";
 
-    /// <summary>Review 3w-delta U3h-2 (owner 2026-11-15): termination is unconditional. The cause, the line (Keccak of
-    /// the input), stderr and the logger are inside a <c>try</c>; any exception there is caught, the fixed
-    /// <see cref="FallbackLine"/> is tried once, and <see cref="Terminate"/> runs from the <c>finally</c>.</summary>
+    /// <summary>Review 3w-delta U3h-2 (owner 2026-11-15): the exit watchdog starts first (3zh Fable F-1: a diagnostic that
+    /// blocks cannot keep the process alive); then the cause, the line (Keccak of the input), stderr and the logger are
+    /// inside a <c>try</c>; any exception there is caught, the fixed <see cref="FallbackLine"/> is tried once, and
+    /// <see cref="ExitNow"/> runs from the <c>finally</c>.</summary>
     private static void Fault(string? where, Exception? e, int status, ReadOnlySpan<byte> input)
     {
+        StartWatchdog();
         try
         {
             string cause = e is null ? $"status={status}" : $"{where}{e.GetType().Name}: {e.Message}";
@@ -123,23 +146,28 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
         }
         finally
         {
-            Terminate();
+            ExitNow();
         }
     }
 
-    /// <summary>The exit watchdog's bound: <see cref="Terminate"/>'s dedicated thread calls
-    /// <see cref="Environment.FailFast(string)"/> if the process still runs this long after
-    /// <see cref="Environment.Exit(int)"/> began (a ProcessExit handler blocked, e.g. on the faulting thread).</summary>
-    public const int ExitWatchdogMs = 10_000;
+    /// <summary>The exit watchdog's default bound (ms).</summary>
+    public const int DefaultExitWatchdogMs = 10_000;
+
+    /// <summary>The environment variable that overrides the bound (ms, 1 .. 600,000; 3zh Fable F-7); anything else keeps
+    /// the default. Local to the node, consensus-irrelevant (it only decides when a stopping process is aborted).</summary>
+    public const string ExitWatchdogEnv = "PQZ_EXIT_WATCHDOG_MS";
+
+    /// <summary>The exit watchdog's bound: the dedicated thread calls <see cref="Environment.FailFast(string)"/> if the
+    /// process still runs this long after the fault began (a diagnostic or a ProcessExit handler blocked).</summary>
+    public static readonly int ExitWatchdogMs = int.TryParse(Environment.GetEnvironmentVariable(ExitWatchdogEnv), out int ms) && ms is > 0 and <= 600_000 ? ms : DefaultExitWatchdogMs;
 
     /// <summary>The watchdog's FailFast message.</summary>
     public const string WatchdogLine = "PQZ-NODE-FAULT exit watchdog: the process did not exit within the bound after exit 120; FailFast";
 
-    /// <summary>Review 3w-delta U3h-2 + T-20 (owner 2026-11-15, "thêm watchdog"): start the watchdog (a dedicated
-    /// background thread, not the thread pool), then <c>Environment.Exit(120)</c>; should Exit return or throw,
-    /// FailFast at once. Never returns. The watchdog's FailFast ends the process with the runtime's abort status, not
-    /// 120; a fault-handling path that hangs is the case it covers.</summary>
-    public static void Terminate()
+    /// <summary>Review 3w-delta U3h-2 + T-20 (owner 2026-11-15, the exit watchdog): a dedicated background thread
+    /// (<c>pqz-exit-watchdog</c>, not the thread pool) that sleeps <see cref="ExitWatchdogMs"/>, then FailFast. Its
+    /// FailFast ends the process with the runtime's abort status, not 120. A thread that cannot start is skipped.</summary>
+    private static void StartWatchdog()
     {
         try
         {
@@ -152,8 +180,13 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
         }
         catch
         {
-            // no watchdog thread: Exit below still runs
+            // no watchdog thread: Exit still runs
         }
+    }
+
+    /// <summary><c>Environment.Exit(120)</c>; should Exit return or throw, FailFast at once. Never returns.</summary>
+    private static void ExitNow()
+    {
         try
         {
             Environment.Exit(ExitCode);
@@ -162,6 +195,13 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
         {
             Environment.FailFast("PQZ-NODE-FAULT: Environment.Exit returned; FailFast");
         }
+    }
+
+    /// <summary>The watchdog, then exit 120 (<see cref="StartWatchdog"/>, <see cref="ExitNow"/>). Never returns.</summary>
+    public static void Terminate()
+    {
+        StartWatchdog();
+        ExitNow();
     }
 
     public const int ExitCode = 120;
