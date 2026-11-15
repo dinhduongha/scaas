@@ -260,34 +260,42 @@ if [ -n "$SCOPE" ]; then
   say "" "compile (scripts/capped) …"
   python3 -I script/onchain/zether_reg.py gen >> "$LOG" 2>&1
   sc=$SCOPE SCOPE=  # the compile steps run under capped, not under the scope
+  # `src` beside each script: forge script compiles every source under src/ with the script (forge build of the script
+  # alone compiled 120 files, forge script then 220 and was refused in the scope, reset 4b; reset 3's smoke3.sh saw 40 / 172)
   for g in $GROUPS; do
     case $g in
     tokens|gov|dex|liquidity|misc)
       G=$(echo "$g" | sed 's/^./\U&/')
-      step "/$g" "" "" ../../scripts/capped forge build "script/onchain/$G.s.sol" --out "out/onchain-$g" \
+      step "/$g" "" "" ../../scripts/capped forge build src "script/onchain/$G.s.sol" --out "out/onchain-$g" \
         --cache-path "cache/onchain-$g" || fail "forge build $G.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
     pqzkeys)
-      step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqzKeys.s.sol --out out/onchain-pqzkeys \
+      step "/$g" "" "" ../../scripts/capped forge build src script/onchain/PqzKeys.s.sol --out out/onchain-pqzkeys \
         --cache-path cache/onchain-pqzkeys || fail "forge build PqzKeys.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
     pqzwallet)  # the wallet tool (ua-rs's key handle over pqz-ffi) and the script
       step "/$g" "" "" ../../scripts/capped sh -c "cd script/pqz/wallet && cargo build --release -j 2" \
         || fail "cargo build script/pqz/wallet"
-      step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqzWallet.s.sol --out out/onchain-pqzkeys \
+      step "/$g" "" "" ../../scripts/capped forge build src script/onchain/PqzWallet.s.sol --out out/onchain-pqzkeys \
         --cache-path cache/onchain-pqzkeys || fail "forge build PqzWallet.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
+    pq|pqoff)  # e2e.py's prover, pqz-ffi's example pqz_prove (feature prove; cargo does nothing when it is current)
+      step "/$g" "" "" ../../scripts/capped sh -c "cd ../../pqz-core/ffi && cargo build --release --offline -j 2 --features prove --example pqz_prove" \
+        || fail "cargo build pqz_prove"
+      say "/$g" "compiled (${SECS}s)" ;;
     rescue)
-      step "/$g" "" "" ../../scripts/capped forge build script/onchain/Rescue.s.sol --out out/onchain-rescue \
+      step "/$g" "" "" ../../scripts/capped forge build src script/onchain/Rescue.s.sol --out out/onchain-rescue \
         --cache-path cache/onchain-rescue || fail "forge build Rescue.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
     pqchat)
-      step "/$g" "" "" ../../scripts/capped forge build script/onchain/PqChat.s.sol --out out/onchain-pqchat \
+      step "/$g" "" "" ../../scripts/capped forge build src script/onchain/PqChat.s.sol --out out/onchain-pqchat \
         --cache-path cache/onchain-pqchat || fail "forge build PqChat.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
-    zether)
+    zether)  # zether.sh's prover, clients/zether-prover's zether-cli (cargo does nothing when it is current)
+      step "/$g" "" "" ../../scripts/capped sh -c "cd ../../clients/zether-prover && cargo build --release --offline -j 2 --bin zether-cli" \
+        || fail "cargo build zether-cli"
       step "/$g" "" "" ../../scripts/capped env FOUNDRY_OUT=out/onchain-zether FOUNDRY_CACHE_PATH=cache/onchain-zether \
-        forge build script/ZetherE2E.s.sol script/onchain/ZetherMore.s.sol script/onchain/build/ZetherRegE2E.s.sol \
+        forge build src script/ZetherE2E.s.sol script/onchain/ZetherMore.s.sol script/onchain/build/ZetherRegE2E.s.sol \
         script/onchain/build/ZetherRegMore.s.sol || fail "forge build of the Zether scripts"
       say "/$g" "compiled (${SECS}s)" ;;
     esac
