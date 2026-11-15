@@ -250,7 +250,7 @@ fn clone_code(chain_uid: &[u8; 32], registry: &[u8; 20]) -> Vec<u8> {
     let tail = hex::decode("5af43d82803e903d91602b57fd5bf3").unwrap();
     [&head[..], &[0x11; 20], &tail, chain_uid, registry, &[0x33; 20], &[0x44; 20], &[0, 0, 0]].concat()
 }
-/// `_rec[token]` word 2 (T67), from the low end `contractClass(16) ‖ kind(16) ‖ version(64)`: class TOKEN, version 1.
+/// `_rec[token]` word 1 (T67; two words since round 3r R1), from the low end `contractClass(16) ‖ kind(16) ‖ version(64)`: class TOKEN, version 1.
 fn record(kind: u8) -> [u8; 32] {
     let mut w = [0u8; 32];
     w[31] = 1;
@@ -307,7 +307,7 @@ fn rpc_reading_layer_against_anvil() {
     let catalogue = |t: &str, kind: u8| {
         let mut k = [0u8; 32];
         k[12..].copy_from_slice(&hex::decode(&t[2..]).unwrap());
-        set(factory, &add(&keccak256(&[k, be(pin_slot(REC))].concat()), 2), &record(kind));
+        set(factory, &add(&keccak256(&[k, be(pin_slot(REC))].concat()), 1), &record(kind));
     };
     catalogue(token, 2);
     catalogue(pqz_token, 4);
@@ -565,7 +565,7 @@ fn decoys_against_anvil() {
     for (t, kind, r) in [(token, 2u8, reg), (pqz_token, 4, reg), (token2, 2, reg2), (token3, 2, reg3)] {
         let mut k = [0u8; 32];
         k[12..].copy_from_slice(&hex::decode(&t[2..]).unwrap());
-        set(factory, &add(&k2(&k, &be(pin_slot(REC))), 2), &record(kind));
+        set(factory, &add(&k2(&k, &be(pin_slot(REC))), 1), &record(kind));
         rpc(&url, "anvil_setCode", json!([t, hx(&clone_code(&uid, &hex::decode(&r[2..]).unwrap().try_into().unwrap()))]));
     }
     let seed = zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap();

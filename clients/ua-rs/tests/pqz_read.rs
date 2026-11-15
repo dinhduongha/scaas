@@ -190,14 +190,15 @@ impl Node {
         rpc(&self.url, "anvil_setCode", json!([hx(addr), code]));
         assert_eq!(&rpc(&self.url, "eth_getCode", json!([hx(addr), "latest"])), code);
     }
-    /// `OpenFactory._rec[token]` (the factory index, ua-mtx-merge T67; its slot from the layout pin): word 2, from the low end
+    /// `OpenFactory._rec[token]` (the factory index, ua-mtx-merge T67; its slot from the layout pin): word 1 (two words since round
+    /// 3r R1), from the low end
     /// `contractClass(16) ‖ kind(16) ‖ version(64)`; `exists` is class TOKEN (1), else 0 (not made here).
     fn catalogue(&self, factory: &[u8; 20], token: &[u8; 20], kind: u8, exists: bool) {
         let mut w = [0u8; 32];
         w[31] = exists as u8;
         w[29] = kind;
         w[27] = 1; // version 1
-        self.set(factory, &add(&k(&word_of(token), &be(rec_slot())), 2), &w);
+        self.set(factory, &add(&k(&word_of(token), &be(rec_slot())), 1), &w);
     }
     /// `token`'s code: a clone of a chain-neutral release (the EIP-1167 proxy of `implementation` with its `ChainEnv` appended;
     /// chain-neutral spec §2, the layout `create3_kat.json` pins), its env naming `registry` (owner 2026-11-08: the reader checks
