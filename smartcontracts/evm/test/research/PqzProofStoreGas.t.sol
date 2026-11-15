@@ -26,7 +26,7 @@ function _proofEvents(Vm vm_, address t) returns (uint256 n) {
 }
 
 /// Group 3h, T60 (spec 2026-11-06-pqz-proof-path §7, Codex C4; O11, O13): the measurement matrix of `proofStore` `NONE` / `LOG`,
-/// on `PqzStatePinGasTest`'s state and its gas-table method (the precompile at its schedule row, `RowBurner`; ML-DSA-65 at 68,006
+/// on `PqzStatePinGasTest`'s state and its gas-table method (the precompile at its schedule row, `RowBurner`; ML-DSA-65 at 100,006
 /// [estimate]; each row its own transaction under a snapshot; the proofs pseudo-random bytes of the set's largest length,
 /// `test/vectors/pqz-gas/<set>.json`): every debit form, direct and relayed (`mtxExecute`, `uaExecute`), PQZL and PQZH, the record
 /// narrow and wide, under both modes (slot 0 byte 23 written between them, as the bit-24 setter will), with `regular`, EIP-8037
@@ -56,7 +56,7 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
         uint256 row = vm.parseJsonUint(gj, string.concat(k, ".row"));
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(row)).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         if (relay) data = _envelopeVia(viaUA, data, 7);
         n = data.length;
         uint256 snap = vm.snapshotState();
@@ -188,7 +188,7 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
         _pair("pqzl", "BURN", "kind 5 unwrap 1 to the leg", address(w), uw, false);
         // the migration: carol's version 0 stale after a rotation, op 1 to herself, the credit in (carol, 1); the rotation's
         // consent by the ML-DSA-65 stand-in, its R_REG by the precompile's (both answer 1)
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
         reg.setPqzKey(carol, 1, _pk(60), keccak256("pqzver carol 1"), UACall.sig(new bytes(ML65_SIG)));
         reg.storePqzPop(carol, 1, "pqzver carol 1");
@@ -245,7 +245,7 @@ contract PqzProofStoreGas13Test is PqzRegFixture {
             noVerdict()));
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(vm.parseJsonUint(gj, string.concat(k, ".row")))).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code); // the subject's ML-DSA-65 authorization, as the gas table
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code); // the subject's ML-DSA-65 authorization, as the gas table
         for (uint8 m; m < 2; ++m) {
             uint256 snap = vm.snapshotState();
             _setMode(m);

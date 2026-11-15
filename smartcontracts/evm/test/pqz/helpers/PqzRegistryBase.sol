@@ -85,7 +85,7 @@ abstract contract PqzRegistryBase is PqzMock {
         mlv = new MldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
         pqv = _newPqzVerifier(PQZL_ID);
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](4);
-        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000);
         k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ);
         k[2] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhStandIn(790_000)), 1_400_000); // DeployBase's cap
         k[3] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new SlhStandIn(2_300_000)), 2_500_000);

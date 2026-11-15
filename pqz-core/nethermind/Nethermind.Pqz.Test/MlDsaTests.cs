@@ -313,6 +313,16 @@ public class MlDsaTests
         Assert.That(MlDsa44Precompile.Instance.DataGasCost(new byte[MlDsa.Pk44 + MlDsa.Sig44 + 32], spec.Spec), Is.EqualTo(59_006));
     }
 
+    /// <summary>TODO 3zg (owner 2026-11-15): the calibrated ML-DSA-65 price, written by <c>add-schedule.py --mldsa</c>,
+    /// prices the address at its own value + 6 per word above the split.</summary>
+    [Test]
+    public void Calibrated_mldsa65_price()
+    {
+        Assert.That(MlDsa.Calibrated65Gas, Is.EqualTo(100_000).And.GreaterThanOrEqualTo(MlDsa.Base65));
+        IReleaseSpecStub spec = new(PqzPrecompileTests.Schedule(mldsa65Gas: MlDsa.Calibrated65Gas));
+        Assert.That(MlDsa65Precompile.Instance.DataGasCost(new byte[MlDsa.Pk65 + MlDsa.Sig65 + 32], spec.Spec), Is.EqualTo(100_006));
+    }
+
     /// <summary>CTR-UA-39 Q4: EIP-8355's ML-DSA-87 base 13,500 + 6 per word above the split; a schedule without
     /// <c>mldsa87Gas</c> prices the address as no schedule does (it is not in that schedule's precompile set either:
     /// SpecTests), a schedule with it at its own value. The calibrated value (2026-11-15) is above the base.</summary>

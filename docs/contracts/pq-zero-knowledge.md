@@ -1232,8 +1232,8 @@ directly or through a relayer. **`ROLL_MAX` per set** (plan 5h Task 8d part 2b; 
 transaction on both relay paths** (`mtxExecute`, the ECDSA envelope, and `uaExecute`, an `mldsa65` fee UA; outer fee FIXED)
 on a prepared account with every entry from its own cold blob (every coefficient `q − 1`), fits `0.75 · 2^24 = 12,582,912`
 regular gas; the largest fitting multiple of 16 is measured and reported, not required. The costlier path, `uaExecute`,
-binds (3,360 B more calldata, the ML-DSA-65 verification at 68,006 [estimate], the fee UA's record and ledger: about
-159,000 gas more per rollover). `PqzStatePinGasTest.test_gas_rollMax_relayedFullTx` asserts the fit on both paths and logs
+binds (3,360 B more calldata, the ML-DSA-65 verification, the fee UA's record and ledger: about
+159,000 gas more per rollover, measured with ML-DSA-65 at 68,006; at the calibrated 100,006 of 2026-11-15, TODO 3zg, about 191,000). `PqzStatePinGasTest.test_gas_rollMax_relayedFullTx` asserts the fit on both paths and logs
 the largest fitting multiple of 16 (the linear fit through a `ROLL_MAX / 2` rollover; a larger value needs a build with a
 larger constant, since the token refuses `n > ROLL_MAX`) and the headroom; it stays red-capable: a build at
 `n2304-kmax4096` with `ROLL_MAX` 112 fails it (`mtxExecute` 13,483,008). The values 96 / 80 / 64 / 32 stood (owner
@@ -2241,7 +2241,7 @@ on the execution-bound PQZL rows (every PQZL form still fits 2^24, the largest o
 `n2048-kmax1024`), +215,040 (3,360 × 64, the floor) on the PQZH debits. Proofs: PQZL the set's vector proof length, PQZH the
 crate's bound; the `PQZ` precompile at its **provisional** testnet row + 3 per input word
 (`pqz-core/nethermind/chain/engine-pqz-provisional-<n>.json`; Task 9's calibration replaces them), ML-DSA-65 at 68,006
-[estimate]. Cells: regular gas / EIP-8037 state gas, in M; ✗ = over EIP-7825's 2^24 (= 16.78 M). Regular gas =
+[estimate] (the calibrated 100,000 of 2026-11-15, TODO 3zg, adds 32,000 per ML-DSA-65 verification; this table was measured before it). Cells: regular gas / EIP-8037 state gas, in M; ✗ = over EIP-7825's 2^24 (= 16.78 M). Regular gas =
 max(15,000 + standard calldata (4 / 16) + precompile + execution, EIP-7976 floor 15,000 + 64 per calldata byte); every
 PQZL row is execution-bound, every PQZH debit floor-bound. The per-row split into calldata (standard and floor),
 precompile and execution: `smartcontracts/evm/runs/2026-10-26-t8d2b-gas-<set>.txt` (test
@@ -2358,7 +2358,7 @@ estimates below predate this table.
 0.358 / 0.328 ms ⇒ 135,000 / 123,000 (9.8 % apart, inside the 15 %); `mldsa87Gas` = the larger, **135,000** (was the
 provisional 102,000). The p50 ratio to ML-DSA-65 is 1.52, the estimate's 1.5; the price is above it by the p99 tail, which
 the same passes show for 44 / 65 too. ML-DSA-44: p99 0.156 / 0.154 ms ⇒ 59,000 / 58,000, `mldsa44Gas` **59,000** (was
-49,000; owner 2026-11-15, the higher pass). ML-DSA-65 measured 88,000–100,000 in the same passes (over the 15 % bound against 68,000) and stays 68,000: deferred by the owner (2026-11-15) to the next pqz-core / set-parameter change and its full gate, because at 100,000 it passes the 100,000 fixture cap of the 65 precompile path and moves `debit_min_gas` at all four sets. Summary `pqz-core/nethermind/runs/2026-11-15-mldsa87-calib.txt`.
+49,000; owner 2026-11-15, the higher pass). ML-DSA-65: 100,000 / 88,000 in the same passes (over the 15 % bound against 68,000), `mldsa65Gas` **100,000** (was 68,000; owner 2026-11-15, TODO 3zg, the higher pass), moved with the next set-parameter change and its full gate (3zh-core group 2): the forge fixture caps of the 65 precompile path 100,000 → 200,000 (`DeployBase`'s `CAP_MLDSA65_PRECOMPILE`) and `debit_min_gas` at all four sets ([debit-min-gas](#debit-min-gas)). Summary `pqz-core/nethermind/runs/2026-11-15-mldsa87-calib.txt`.
 
 **Measured on the SCaaS testnet (P6g e2e, 2026-10-16, before plan 5h: hashes in state, `acc` and `inline` in calldata; real PQZL proofs, `gasUsed` of the transaction; log
 `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`).** Proofs from `pqz-ffi` (`examples/pqz_prove.rs`): transfer
@@ -2919,7 +2919,7 @@ transfers move for every class.
 - **`ROLL_MAX`** (decision 2026-11-14, controller under the owner's standing go; measured, `test/pqz/PqzRollSignedGas.t.sol`):
   the one code bound of the set (`set.toml` `roll_max`), now sized by the signed rollover: the largest multiple of 16 whose
   relayed full transaction, worst case `n` entries + `n` skip marks each from its own cold blob, an `mldsa65` holder or a
-  2-of-2 `mldsa65` `msig` with ML-DSA through its precompile (68,006 [estimate]), stays within `0.75 · 2^24 = 12,582,912`
+  2-of-2 `mldsa65` `msig` with ML-DSA through its precompile (100,006 since 2026-11-15, TODO 3zg; the table below measured at 68,006 [estimate]), stays within `0.75 · 2^24 = 12,582,912`
   regular gas on both relay paths (`mtxExecute`; `uaExecute` with an `mldsa65` fee UA; fee 7). The test asserts the fit at
   `ROLL_MAX` on all four precompile cases.
 
@@ -2939,7 +2939,7 @@ transfers move for every class.
 
 **Cost** (measured 2026-11-14, `test/pqz/PqzThreeKeysGas.t.sol` per set; each row ONE transaction, regular | state | sum;
 op 1 and the refresh relayed with fee 7 on `uaExecute`, the costlier path, proof bytes of the set's vectors, ML-DSA-65 at
-68,006 [estimate]; a record's `R_REG` check at the set's provisional op 3 row; UNAUDITED):
+68,006 [estimate], before the calibrated 100,000 of 2026-11-15 (TODO 3zg: +32,000 per ML-DSA-65 verification); a record's `R_REG` check at the set's provisional op 3 row; UNAUDITED):
 
 | Set | op 1, opening token, auditor off | op 1, opening token, auditor on | op 1, `offchain-token` without the opening, auditor on | refresh, opening token | `setPqzScopedKey` with `openKem` | `storePqzScopedPop` |
 |---|---|---|---|---|---|---|

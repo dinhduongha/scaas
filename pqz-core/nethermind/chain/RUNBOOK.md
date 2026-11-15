@@ -600,7 +600,7 @@ by `forge create` (`DeployBase` probes inside forge's EVM, which has no `MLDSA87
 `../runs/2026-11-15-mldsa87-calib.txt`). `add-schedule.py --mldsa87` writes it (`MLDSA87_GAS`, was `PROVISIONAL_MLDSA87_GAS`);
 the SCaaS testnet keeps 102,000 until reset 4. The probe of a chain at 135,000 expects 135,006 (the record script
 `../runs/2026-11-04-mldsa87-probe.py` checks 102,006: copy it with the new figure). The same passes move `mldsa44Gas`
-49,000 → **59,000** (owner 2026-11-15); `add-schedule.py --mldsa` writes 59,000 / 68,000 / 135,000 (44 / 65 / 87). ML-DSA-65 measured 88,000–100,000 in the same passes (over the 15 % bound against 68,000) and stays 68,000: deferred by the owner (2026-11-15) to the next pqz-core / set-parameter change and its full gate, because at 100,000 it passes the 100,000 fixture cap of the 65 precompile path and moves `debit_min_gas` at all four sets.
+49,000 → **59,000** (owner 2026-11-15); `mldsa65Gas` 68,000 → **100,000** (owner 2026-11-15, TODO 3zg: the higher of 100,000 / 88,000, moved with 3zh-core group 2); `add-schedule.py --mldsa` writes 59,000 / 100,000 / 135,000 (44 / 65 / 87). The SCaaS testnet takes them at reset 5.
 The plan as written before the run:
 
 The plugin of branch `mldsa87` adds `MLDSA87` at `0x000000000000000000000000000000005caa0014` (EIP-8355 layout, ML-DSA-87). The

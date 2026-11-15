@@ -86,7 +86,7 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         (bytes memory valid, bytes memory invalid) = _mockMlDsa();
         mlv = new MldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000);
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
         tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
@@ -686,11 +686,11 @@ contract RelayFeeRouterTest is PqzRegistryBase {
 
     /// Relay gas, logged (spec §7.1; CTR-MTX-27's estimate ≈ +200–230 k on Amsterdam with an ECDSA payer): the bare
     /// call (`mtxExecute` by the relayer), `relay` with an ECDSA payer (open mode, bound payee) and `relay` with an
-    /// `mldsa65` payer (the precompile at its EIP-8051 price, 68,006, as `MtxSplitOverhead.t.sol`), each from the same
+    /// `mldsa65` payer (the precompile at its calibrated price, 100,006, as `MtxSplitOverhead.t.sol`), each from the same
     /// state (snapshots), each its own transaction (`isolate`): regular / state (EIP-8037) gas.
     function test_relayGas_ecdsaAndMldsa65() public {
         vm.clearMockedCalls();
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         bytes memory cd = _call(0, address(0));
         bytes32 ref = _ref(address(target), cd);
         uint256 snap = vm.snapshotState();

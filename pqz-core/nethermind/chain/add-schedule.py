@@ -14,7 +14,7 @@ other price stays). Refuses a calibration file with other than one schedule, one
 / id that the last schedule has (that shape would become a miss), and a duplicate row (review W-F, 2026-10-19).
 --mldsa87 (CTR-UA-39, owner 2026-11-04) also sets the optional key mldsa87Gas, which activates MLDSA87 at 0x...5caa0014 from
 that schedule on, to MLDSA87_GAS: calibrated 2026-11-15 (TODO 3zd, ../runs/2026-11-15-mldsa87-calib.txt). --mldsa (owner
-2026-11-15) sets all three ML-DSA keys: MLDSA44_GAS and MLDSA87_GAS calibrated by the same passes, MLDSA65_GAS kept.
+2026-11-15) sets all three ML-DSA keys, each calibrated by the same passes (MLDSA65_GAS: owner 2026-11-15, TODO 3zg).
 add-schedule.py --check runs the self-check. Run with python3 -I."""
 import copy
 import json
@@ -31,9 +31,9 @@ KEY = lambda r: (r["op"], r["id"].lower(), r["stmtLen"], r.get("legs"), r.get("a
 # (../runs/2026-11-15-mldsa87-calib.txt); the plugin's MlDsa.Calibrated87Gas. Was the PROVISIONAL estimate 102,000.
 MLDSA87_GAS = 135_000
 # owner 2026-11-15: ML-DSA-44 from the same passes, the higher (59,000 / 58,000; was 49,000, P6f 2026-10-15), the plugin's
-# MlDsa.Calibrated44Gas. ML-DSA-65 kept at 68,000: it measured 88,000-100,000, deferred by the owner to
-# the next pqz-core / set-parameter change (at 100,000 it passes the 100,000 fixture cap and moves debit_min_gas).
-MLDSA44_GAS, MLDSA65_GAS = 59_000, 68_000
+# MlDsa.Calibrated44Gas. ML-DSA-65 likewise (TODO 3zg, owner 2026-11-15): 100,000 / 88,000, the higher (was 68,000), the
+# plugin's MlDsa.Calibrated65Gas; with it the forge fixture caps of the 65 precompile path and debit_min_gas moved.
+MLDSA44_GAS, MLDSA65_GAS = 59_000, 100_000
 
 
 def main(src, cal, ts, out, *flags):
@@ -120,7 +120,7 @@ def check():
         assert (g["engine"]["Pqz"]["schedules"][1]["mldsa44Gas"], g["engine"]["Pqz"]["schedules"][1]["mldsa65Gas"]) == (1, 2), g
         g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1", "--mldsa")
         s1 = g["engine"]["Pqz"]["schedules"][1]
-        assert (s1["mldsa44Gas"], s1["mldsa65Gas"], s1["mldsa87Gas"]) == (MLDSA44_GAS, MLDSA65_GAS, MLDSA87_GAS) == (59_000, 68_000, 135_000), g
+        assert (s1["mldsa44Gas"], s1["mldsa65Gas"], s1["mldsa87Gas"]) == (MLDSA44_GAS, MLDSA65_GAS, MLDSA87_GAS) == (59_000, 100_000, 135_000), g
         assert g["engine"]["Pqz"]["schedules"][0]["mldsa44Gas"] == 1, g
         for bad in (["--id", "pqzq"], ["--ops", "2"]):
             try:
