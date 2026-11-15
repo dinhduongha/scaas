@@ -30,3 +30,4 @@ scaas-node cargo test --test e2e -- --ignored | - | - | NOT RUN: needs CAPPED_ME
 nethermind run-tests.sh n2304-kmax4096 | da4f61d87 tree | 0 | 71 / 71 (item 1); n2048 / n2560 / n2816 filter Library_sha256 | Provisional_schedule 2 / 2 each (item 6)
 pqz-core gate.sh n2048-kmax1024 (label 3zh-g2-n2048-kmax1024) | aaa1aff90 | 0 | PASS, 13 / 13 steps
 pqz-core gate.sh n2304-kmax4096 (label 3zh-g2-n2304-kmax4096) | aaa1aff90 | 0 | PASS, 13 / 13 steps
+pqz-core gate.sh n2560-kmax16384 (label 3zh-g2-n2560-kmax16384) | aaa1aff90 | 1 | FAIL: 12 / 13 steps ok; rust: one part, rust/test-wipe (pqzl/rust/tests/wipe.rs rejected_z34_cleared_before_free, group 1's F-10 test): "the retry path was not exercised (mode 0 61, mode 4 57)", named buffers per prove [(0, 47), (0, 61), (4, 77), (4, 69), (4, 57)]; every freed secret buffer was clean (the dirty-buffer asserts passed), the test's retry-count heuristic fails at this set; split_row_cleared_before_free ok; reported, not changed
